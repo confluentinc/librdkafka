@@ -5,6 +5,9 @@ Copyright (c) 2012, [Magnus Edenhill](http://www.edenhill.se/), et.al.
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
+[![endorse](http://api.coderwall.com/edenhill/endorsecount.png)](http://coderwall.com/edenhill)
+
+
 **librdkafka** is a C implementation of the
 [Apache Kafka](http://incubator.apache.org/kafka/) protocol, containing both
 Producer and Consumer support.

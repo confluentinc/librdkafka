@@ -134,6 +134,7 @@ int main (int argc, char **argv) {
 		 * Producer
 		 */
 		char buf[1024];
+		int sendcnt = 0;
 
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, broker, NULL))) {
@@ -148,7 +149,18 @@ int main (int argc, char **argv) {
 			rd_kafka_produce(rk, topic, partition, 0, buf, len);
 			fprintf(stderr, "%% Sent %i bytes to topic "
 				"%s partition %i\n", len, topic, partition);
+			sendcnt++;
 		}
+
+		/* Wait for messaging to finish. */
+		while (rd_kafka_outq_len(rk) > 0)
+			usleep(50000);
+
+		/* Since there is no ack for produce messages in 0.7 
+		 * we wait some more for any packets to be sent.
+		 * This is fixed in protocol version 0.8 */
+		if (sendcnt > 0)
+			usleep(500000);
 
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);

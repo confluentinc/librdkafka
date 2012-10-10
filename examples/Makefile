@@ -1,7 +1,7 @@
 CC ?= cc
 CFLAGS += -g
 CFLAGS += -Wall -Werror -Wfloat-equal -Wpointer-arith -O2 -I../
-LDFLAGS += -L../ -lrdkafka
+LDFLAGS +=  ../librdkafka.a
 LDFLAGS += -lpthread -lrt -lz
 
 # Profiling
@@ -19,14 +19,14 @@ rdkafka_example: rdkafka_example.c
 	@echo "# $@ is ready"
 	@echo "#"
 	@echo "# Run producer (write messages on stdin)"
-	@echo "LD_LIBRARY_PATH=../ ./rdkafka_example -P -t <topic> -p <partition>"
+	@echo "./rdkafka_example -P -t <topic> -p <partition>"
 	@echo ""
 	@echo "# or consumer"
-	@echo "LD_LIBRARY_PATH=../ ./rdkafka_example -C -t <topic> -p <partition>"
+	@echo "./rdkafka_example -C -t <topic> -p <partition>"
 	@echo ""
 	@echo "#"
 	@echo "# More usage options:"
-	@echo "LD_LIBRARY_PATH=../ ./rdkafka_example --help"
+	@echo "./rdkafka_example --help"
 
 
 clean:

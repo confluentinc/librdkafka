@@ -147,7 +147,7 @@ int main (int argc, char **argv) {
 		while (run && (fgets(buf, sizeof(buf), stdin))) {
 			int len = strlen(buf);
 			char *opbuf = malloc(len + 1);
-			strncpy(opbuf, buf, len);
+			strncpy(opbuf, buf, len + 1);
 
 			/* Send/Produce message. */
 			rd_kafka_produce(rk, topic, partition, RD_KAFKA_OP_F_FREE, opbuf, len);

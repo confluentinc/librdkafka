@@ -130,6 +130,11 @@ int main (int argc, char **argv) {
 
 	signal(SIGINT, stop);
 
+	/* Socket hangups are gracefully handled in librdkafka on socket error
+	 * without the use of signals, so SIGPIPE should be ignored by the calling
+	 * program. */
+	signal(SIGPIPE, SIG_IGN);
+
 	if (mode == 'P') {
 		/*
 		 * Producer

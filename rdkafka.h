@@ -259,6 +259,8 @@ void        rd_kafka_destroy (rd_kafka_t *rk);
  * 'conf' is an optional struct that will be copied to replace rdkafka's
  * default configuration. See the 'rd_kafka_conf_t' type for more information.
  *
+ * NOTE: Make sure SIGPIPE is either ignored or handled by the calling application.
+ *
  *
  * Returns the Kafka handle.
  *

@@ -11,6 +11,7 @@ LDFLAGS += -lpthread -lrt -lz
 all:
 	@echo "# Examples are built individually, i.e.:"
 	@echo " make rdkafka_example"
+	@echo " make rdkafka_performance"
 
 
 rdkafka_example: rdkafka_example.c
@@ -29,5 +30,21 @@ rdkafka_example: rdkafka_example.c
 	@echo "./rdkafka_example --help"
 
 
+rdkafka_performance: rdkafka_performance.c
+	@(test $@ -nt $< || \
+	  $(CC) $(CFLAGS) $< -o $@ $(LDFLAGS))
+	@echo "# $@ is ready"
+	@echo "#"
+	@echo "# Run producer"
+	@echo "./$@ -P -t <topic> -p <partition> -s <msgsize>"
+	@echo ""
+	@echo "# or consumer"
+	@echo "./$@ -C -t <topic> -p <partition>"
+	@echo ""
+	@echo "#"
+	@echo "# More usage options:"
+	@echo "./$@ --help"
+
+
 clean:
-	rm -f rdkafka_example
+	rm -f rdkafka_example rdkafka_performance

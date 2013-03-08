@@ -244,10 +244,9 @@ static void rd_kafka_destroy0 (rd_kafka_t *rk) {
 
 
 void rd_kafka_destroy (rd_kafka_t *rk) {
-	(void)rd_atomic_sub(&rk->rk_refcnt, 1);
 	rk->rk_terminate = 1;
 
-	if (rk->rk_refcnt == 0)
+	if (rd_atomic_sub(&rk->rk_refcnt, 1) == 0)
 		rd_kafka_destroy0(rk);
 }
 

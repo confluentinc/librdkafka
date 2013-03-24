@@ -472,7 +472,7 @@ struct rd_kafkap_msg {
 	uint8_t  rkpm_magic;
 #define RD_KAFKAP_MSG_MAGIC_NO_COMPRESSION_ATTR   0  /* Not supported. */
 #define RD_KAFKAP_MSG_MAGIC_COMPRESSION_ATTR      1 
-	uint8_t  rkpm_compression;
+	/* No compression field in 0.6, but we retain the defines */
 #define RD_KAFKAP_MSG_COMPRESSION_NONE            0
 #define RD_KAFKAP_MSG_COMPRESSION_GZIP            1
 #define RD_KAFKAP_MSG_COMPRESSION_SNAPPY          2

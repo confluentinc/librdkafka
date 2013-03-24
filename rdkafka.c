@@ -728,8 +728,7 @@ static int rd_kafka_msg_parse (rd_kafka_t *rk, char *buf, int len,
 	payload = malloc(msg->rkpm_len);
 	memcpy(payload, msg+1, msg->rkpm_len);
 
-	rd_kafka_op_reply0(rk, rko, RD_KAFKA_OP_FETCH, 0,
-			   msg->rkpm_compression,
+	rd_kafka_op_reply0(rk, rko, RD_KAFKA_OP_FETCH, 0, 0,
 			   payload, msg->rkpm_len, offset_len);
 
 	return sizeof(*msg) + msg->rkpm_len;
@@ -824,8 +823,7 @@ static int rd_kafka_recv (rd_kafka_t *rk) {
 
 		rk->rk_consumer.offset += msg.rkpm_len + sizeof(msg);
 
-		rd_kafka_op_reply(rk, RD_KAFKA_OP_FETCH, 0,
-				  msg.rkpm_compression,
+		rd_kafka_op_reply(rk, RD_KAFKA_OP_FETCH, 0, 0,
 				  buf, msg.rkpm_len, rk->rk_consumer.offset);
 
 		replycnt++;
@@ -849,8 +847,7 @@ static int rd_kafka_recv (rd_kafka_t *rk) {
 static void rd_kafka_produce_send (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 	struct rd_kafkap_msg msg = {
 	rkpm_len: htonl(sizeof(msg) - sizeof(msg.rkpm_len) + rko->rko_len),
-	rkpm_magic: RD_KAFKAP_MSG_MAGIC_COMPRESSION_ATTR,
-	rkpm_compression: RD_KAFKAP_MSG_COMPRESSION_NONE,
+	rkpm_magic: 0,
 	rkpm_cksum: htonl(rd_crc32(rko->rko_payload, rko->rko_len)),
 	};
 	struct rd_kafkap_produce prod = {

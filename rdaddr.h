@@ -167,17 +167,10 @@ static const char *rd_family2str (int af) {
 		[AF_LOCAL]     = "local",
 		[AF_INET]      = "inet",
 		[AF_INET6]     = "inet6",
-		[AF_NETLINK]   = "netlink",
-		[AF_ROUTE]     = "route",
-		[AF_PACKET]    = "packet",
-		[AF_BLUETOOTH] = "bluetooth",
 	};
 
-	if (unlikely(af >= RD_ARRAYSIZE(names))) {
-		static __thread char tmp[16];
-		snprintf(tmp, sizeof(tmp), "af-%i", af);
-		return tmp;
-	}
+	if (unlikely(af < 0 || af >= RD_ARRAYSIZE(names) || !names[af]))
+		return "af?";
 
 	return names[af];
 }

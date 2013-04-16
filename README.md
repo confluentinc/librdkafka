@@ -1,7 +1,7 @@
 librdkafka - Apache Kafka C client library
 ==========================================
 
-Copyright (c) 2012, [Magnus Edenhill](http://www.edenhill.se/), et.al.
+Copyright (c) 2012-2013, [Magnus Edenhill](http://www.edenhill.se/), et.al.
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
@@ -11,11 +11,14 @@ Copyright (c) 2012, [Magnus Edenhill](http://www.edenhill.se/), et.al.
 **librdkafka** is a C implementation of the
 [Apache Kafka](http://incubator.apache.org/kafka/) protocol, containing both
 Producer and Consumer support.
-It currently supports Apache Kafka version 0.7.* (and possibly earlier).
+It currently supports Apache Kafka version 0.7.* (and possibly earlier), version 0.8 support will be available Q2 2013.
+**librdkafka** has been in use in production since 2012.
 
 ZooKeeper integration is planned but currently not available.
 
 **librdkafka** is licensed under the 2-clause BSD license.
+
+And finally, dont hesitate to tell me if you are using librdkafka.
 
 
 # Usage

@@ -326,6 +326,17 @@ int rd_kafka_offset_store (rd_kafka_t *rk, uint64_t offset);
 /**
  * Produce and send a single message to the broker.
  *
+ * There are two alternatives for 'payload':
+ *   1) static data that will not change or go away during the lifetime
+ *      of the rd_kafka_t handle. *This is uncommon*.
+ *
+ *   2) malloc():ed data that librdkafka will free when done with it,
+ *      this requires the RD_KAFKA_OP_F_FREE flag to be set in msgflags.
+ *
+ * There is currently no way for the application to know when librdkafka is
+ * done with the payload, so the control of freeing the payload must be left
+ * to librdkafka as described in alternative 2) above.
+ *
  * Locality: application thread
  */
 void        rd_kafka_produce (rd_kafka_t *rk, char *topic, uint32_t partition,

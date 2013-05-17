@@ -1,7 +1,7 @@
 // rdkafka.h
 
-#ifndef RD_KAFKA_H
-#define RD_KAFKA_H
+#ifndef RD_KAFKACPP_H
+#define RD_KAFKACPP_H
 
 
 extern "C"{
@@ -52,16 +52,15 @@ Kafka::~Kafka(){
 	}
 }
 
-/// @todo uncomment this!!!!
 bool Kafka::setHandle(rd_kafka_type_t type,const char * broker,const rd_kafka_conf_t *conf){
 	return (rk = rd_kafka_new(type, broker, conf))!=NULL;
 }
 
 void Kafka::produce(char *topic, uint32_t partition,int msgflags, char *payload, size_t len){
-	rd_kafka_produce(rk, topic, partition, RD_KAFKA_OP_F_FREE, payload, len);
+	rd_kafka_produce(rk, topic, partition, msgflags, payload, len);
 }
 
 }
 
-#endif // RD_KAFKA_H
+#endif // RD_KAFKACPP_H
 

@@ -27,8 +27,8 @@
  */
 
 /**
- * Apache Kafka consumer & producer example programs
- * using the Kafka driver from librdkafka
+ * Apache Kafka C++ consumer & producer example programs
+ * using the C++ Kafka driver wrapper from librdkafka
  * (https://github.com/edenhill/librdkafka)
  */
 

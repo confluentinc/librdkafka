@@ -3,7 +3,6 @@ CXX ?= g++
 CFLAGS += -g
 CFLAGS += -Wall -Werror -Wfloat-equal -Wpointer-arith -O2 -I../
 CXXFLAGS += $(CFLAGS)
-CXX ?= g++
 LDFLAGS +=  ../librdkafka.a
 LDFLAGS += -lpthread -lrt -lz
 

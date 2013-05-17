@@ -163,18 +163,6 @@ void rd_sockaddr_list_destroy (rd_sockaddr_list_t *rsal);
  */
 static const char *rd_family2str (int af) RD_UNUSED;
 static const char *rd_family2str (int af) {
-	#ifndef __cplusplus
-	static const char *names[] = {
-		[AF_LOCAL]     = "local",
-		[AF_INET]      = "inet",
-		[AF_INET6]     = "inet6",
-	};
-
-	if (unlikely(af < 0 || af >= RD_ARRAYSIZE(names) || !names[af]))
-		return "af?";
-
-	return names[af];
-	#else
 	switch(af){
 		case AF_LOCAL:
 			return "local";
@@ -185,6 +173,4 @@ static const char *rd_family2str (int af) {
 		default:
 			return "af?";
 	};
-	#endif
-	
 }

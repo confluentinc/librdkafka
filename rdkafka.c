@@ -1228,10 +1228,16 @@ rd_kafka_op_t *rd_kafka_consume (rd_kafka_t *rk, int timeout_ms) {
  *
  * Locality: application thread
  */
-void rd_kafka_produce (rd_kafka_t *rk, char *topic, uint32_t partition,
-		       int msgflags,
-		       char *payload, size_t len) {
+int rd_kafka_produce (rd_kafka_t *rk, char *topic, uint32_t partition,
+		      int msgflags,
+		      char *payload, size_t len) {
 	rd_kafka_op_t *rko;
+
+	if (rk->rk_conf.producer.max_outq_msg_cnt &&
+	    rk->rk_op.rkq_qlen >= rk->rk_conf.producer.max_outq_msg_cnt) {
+		errno = ENOBUFS;
+		return -1;
+	}
 
 	rko = calloc(1, sizeof(*rko));
 
@@ -1243,6 +1249,8 @@ void rd_kafka_produce (rd_kafka_t *rk, char *topic, uint32_t partition,
 	rko->rko_len       = len;
 
 	rd_kafka_q_enq(&rk->rk_op, rko);
+
+	return 0;
 }
 
 

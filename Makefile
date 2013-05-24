@@ -23,7 +23,7 @@ ifndef WITH_LIBRD
 SRCS+=rdcrc32.c rdgz.c rdaddr.c rdrand.c rdfile.c
 endif
 
-HDRS=	rdkafka.h rdkafkacpp.h 
+HDRS=	rdkafka.h rdkafkacpp.h rdtypes.h rd.h rdaddr.h 
 
 OBJS=	$(SRCS:.c=.o)
 DEPS=	${OBJS:%.o=%.d}

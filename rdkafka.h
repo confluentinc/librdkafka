@@ -82,10 +82,6 @@ typedef enum {
  * See comment below for rd_kafka_defaultconf use.
  */
 typedef struct rd_kafka_conf_s {
-	uint64_t max_payload_size;  /* Maximum payload size sum.
-				       * This is a safety precaution to prevent oom
-				       * caused by producer */
-
 	int max_msg_size;             /* Maximum receive message size.
 				       * This is a safety precaution to
 				       * avoid memory exhaustion in case of

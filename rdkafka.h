@@ -186,6 +186,7 @@ typedef struct rd_kafka_q_s {
 	pthread_cond_t  rkq_cond;
 	TAILQ_HEAD(, rd_kafka_op_s) rkq_q;
 	int             rkq_qlen;
+	uint64_t        rkq_payload_sz;
 } rd_kafka_q_t;
 
 

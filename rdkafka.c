@@ -112,6 +112,7 @@ const rd_kafka_conf_t rd_kafka_defaultconf = {
 		replyq_low_thres: 1,
 		max_size: 500000,
 	},
+	max_payload_size: 10737418240, /* 10 GB*/
 	max_msg_size: 4000000,
 };
 
@@ -532,6 +533,7 @@ static inline void rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 	pthread_mutex_lock(&rkq->rkq_lock);
 	TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
 	(void)rd_atomic_add(&rkq->rkq_qlen, 1);
+	rkq->rkq_payload_sz += rko->rko_len;
 	pthread_cond_signal(&rkq->rkq_cond);
 	pthread_mutex_unlock(&rkq->rkq_lock);
 }
@@ -568,6 +570,7 @@ static rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms) {
 	if (rko) {
 		TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
 		(void)rd_atomic_sub(&rkq->rkq_qlen, 1);
+		rkq->rkq_payload_sz -= rko->rko_len;
 	}
 
 	pthread_mutex_unlock(&rkq->rkq_lock);
@@ -575,6 +578,24 @@ static rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms) {
 	return rko;
 }
 
+
+/**
+ * Get queue length
+ */
+static inline int rd_kafka_q_len (rd_kafka_q_t *rkq) {
+	return rkq->rkq_qlen;
+}
+
+/**
+ * Get queue payload size
+ */
+static inline uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
+	uint64_t sz = 0;
+	pthread_mutex_lock(&rkq->rkq_lock);
+	sz = rkq->rkq_payload_sz;
+	pthread_mutex_unlock(&rkq->rkq_lock);
+	return sz;
+}
 
 
 /**
@@ -1242,7 +1263,11 @@ void rd_kafka_produce (rd_kafka_t *rk, char *topic, uint32_t partition,
 	rko->rko_payload   = payload;
 	rko->rko_len       = len;
 
-	rd_kafka_q_enq(&rk->rk_op, rko);
+	if (rd_kafka_q_size(&rk->rk_op) + len <= rk->rk_conf.max_payload_size) {
+		rd_kafka_q_enq(&rk->rk_op, rko);
+	} else {
+		rd_kafka_op_destroy(rk, rko);
+	}
 }
 
 

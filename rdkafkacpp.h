@@ -30,7 +30,7 @@ public:
 	const char * getTopic()const{return topic;}
 	*/
 
-	void produce(char *topic, uint32_t partition,int msgflags, char *payload, size_t len);
+	int produce(char *topic, uint32_t partition,int msgflags, char *payload, size_t len);
 
 private:
 	rd_kafka_t *rk;
@@ -56,8 +56,8 @@ bool Kafka::setHandle(rd_kafka_type_t type,const char * broker,const rd_kafka_co
 	return (rk = rd_kafka_new(type, broker, conf))!=NULL;
 }
 
-void Kafka::produce(char *topic, uint32_t partition,int msgflags, char *payload, size_t len){
-	rd_kafka_produce(rk, topic, partition, msgflags, payload, len);
+int Kafka::produce(char *topic, uint32_t partition,int msgflags, char *payload, size_t len){
+	return rd_kafka_produce(rk, topic, partition, msgflags, payload, len);
 }
 
 }

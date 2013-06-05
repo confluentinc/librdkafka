@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012, Magnus Edenhill
+ * Copyright (c) 2012-2013 Magnus Edenhill
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -26,26 +26,26 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * Apache Kafka consumer & producer
+ */
+
 #pragma once
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <fcntl.h>
-#include <sys/queue.h>
+#include <stdio.h>
+#include <inttypes.h>
 
-#ifndef WITH_LIBRD
 
-#include "rd.h"
-#include "rdaddr.h"
-
-#define RD_POLL_INFINITE  -1
-#define RD_POLL_NOWAIT     0
-
-#else
-
-#include <librd/rd.h>
-#include <librd/rdaddr.h>
-#endif
+/**
+ * librdkafka version
+ *
+ * interpreted as MM.mm.rr.xx:
+ *   MM = Major
+ *   mm = minor
+ *   rr = revision
+ *   xx = currently unused
+ */
+#define RD_KAFKA_VERSION  0x00080000
 
 #define RD_KAFKA_TOPIC_MAXLEN  256
 
@@ -54,26 +54,56 @@ typedef enum {
 	RD_KAFKA_CONSUMER,
 } rd_kafka_type_t;
 
-typedef enum {
-	RD_KAFKA_STATE_DOWN,
-	RD_KAFKA_STATE_CONNECTING,
-	RD_KAFKA_STATE_UP,
-} rd_kafka_state_t;
 
 
+typedef struct rd_kafka_s rd_kafka_t;
+typedef struct rd_kafka_topic_s rd_kafka_topic_t;
+
+/**
+ * Kafka protocol error codes (version 0.8)
+ */
 typedef enum {
 	/* Internal errors to rdkafka: */
-	RD_KAFKA_RESP_ERR__BAD_MSG = -199,
-	RD_KAFKA_RESP_ERR__BAD_COMPRESSION = -198,
-	RD_KAFKA_RESP_ERR__FAIL = -197,  /* See rko_payload for error string */
+	RD_KAFKA_RESP_ERR__BEGIN = -200,     /* begin internal error codes */
+	RD_KAFKA_RESP_ERR__BAD_MSG = -199,   /* Received message is incorrect */
+	RD_KAFKA_RESP_ERR__BAD_COMPRESSION = -198, /* Bad/unknown compression */
+	RD_KAFKA_RESP_ERR__DESTROY = -197,   /* Broker is going away */
+	RD_KAFKA_RESP_ERR__FAIL = -196,      /* Generic failure */
+	RD_KAFKA_RESP_ERR__TRANSPORT = -195, /* Broker transport error */
+	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
+
 	/* Standard Kafka errors: */
 	RD_KAFKA_RESP_ERR_UNKNOWN = -1,
 	RD_KAFKA_RESP_ERR_NO_ERROR = 0,
 	RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE = 1,
 	RD_KAFKA_RESP_ERR_INVALID_MSG = 2,
-	RD_KAFKA_RESP_ERR_WRONG_PARTITION = 3,
-	RD_KAFKA_RESP_ERR_INVALID_FETCH_SIZE = 4,
+	RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART = 3,
+	RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE = 4,
+	RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE = 5,
+	RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION = 6,
+	RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT = 7,
+	RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE = 8,
+	RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE = 9,
+	RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE = 10,
+	RD_KAFKA_RESP_ERR_STALE_CTRL_EPOCH = 11,
+	RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE = 12,
 } rd_kafka_resp_err_t;
+
+/**
+ * Returns a human readable representation of a kafka error.
+ */
+const char *rd_kafka_err2str (rd_kafka_t *rk, rd_kafka_resp_err_t err);
+
+
+
+/**
+ * MessageSet compression codecs
+ */
+typedef enum {
+	RD_KAFKA_COMPRESSION_NONE,
+	RD_KAFKA_COMPRESSION_GZIP,   /* FIXME: not supported */
+	RD_KAFKA_COMPRESSION_SNAPPY, /* FIXME: not supported */
+} rd_kafka_compression_t;
 
 
 /**
@@ -81,27 +111,45 @@ typedef enum {
  * See head of rdkafka.c for defaults.
  * See comment below for rd_kafka_defaultconf use.
  */
+/* FIXME: mimic this: http://kafka.apache.org/08/configuration.html */
 typedef struct rd_kafka_conf_s {
-	int max_msg_size;             /* Maximum receive message size.
-				       * This is a safety precaution to
-				       * avoid memory exhaustion in case of
-				       * protocol hickups. */
+	/* Client identifier */
+	char   *clientid;
 
-	int flags;
-#define RD_KAFKA_CONF_F_APP_OFFSET_STORE  0x1  /* No automatic offset storage
-						* will be performed. The
-						* application needs to
-						* call rd_kafka_offset_store()
-						* explicitly.
-						* This may be used to make sure
-						* a message is properly handled
-						* before storing the offset.
-						* If not set, and an offset
-						* storage is available, the
-						* offset will be stored
-						* just prior to passing the
-						* message to the application.*/
+         /* Maximum receive message size.
+	  * This is a safety precaution to avoid memory exhaustion in case of
+	  * protocol hickups. */
+	int     max_msg_size;  
 
+	/* Non-topic request timeout in milliseconds.
+	 * This is for metadata requests, etc. */
+	int     request_timeout_ms;
+
+	/* Boolean flags: RD_KAFKA_CONF_F_... */
+	int     flags;
+
+	/* No automatic offset storage will be performed.
+	 * The application needs to call rd_kafka_offset_store() explicitly.
+	 * This may be used to make sure a message is properly handled
+	 * before storing the offset.
+	 * If not set, and an offset storage is available, the
+	 * offset will be stored just prior to passing the
+	 * message to the application.*/
+#define RD_KAFKA_CONF_F_APP_OFFSET_STORE  0x1  
+
+
+	/* How long to cache the broker address resolving results. */
+	int     broker_addr_lifetime; 
+
+	/* Error callback */
+	void  (*error_cb) (rd_kafka_t *rk, int err,
+			   const char *reason, void *opaque);
+
+	/* Opaque passed to all registered callbacks. */
+	void   *opaque;
+
+	/* Consumer configuration */
+	/* FIXME: 0.8 consumer not yet implemented */
 	struct {
 		int poll_interval;    /* Time in milliseconds to sleep before
 				       * trying to FETCH again if the broker
@@ -141,116 +189,170 @@ typedef struct rd_kafka_conf_s {
 	} consumer;
 
 
+	/* Producer configuration */
 	struct {
-		int max_outq_msg_cnt;  /* Maximum number of messages allowed
-					* in the output queue.
-					* If this number is exceeded the
-					* rd_kafka_produce() call will
-					* return with -1 and errno
-					* set to ENOBUFS. */
+		/* Maximum number of messages allowed on the producer queue. */
+		int max_messages;
+
+		/* Maximum time, in milliseconds, for buffering data
+		 * on the producer queue. */
+		int buffering_max_ms;
+
+		/* Topic metadata refresh interval in milliseconds.
+		 * The metadata is automatically refreshed on
+		 * error and connect.
+		 * FIXME: Not implemented. */
+		/* FIXME: This should be controlled by the 'rk'
+		 *        and only assigned to one broker at the time. */
+		int metadata_refresh_interval_ms;
+
+		/* How many times to retry sending a failing MessageSet.
+		 * Note: retrying can cause reordering. */
+		int max_retries;
+
+		/* The backoff time in milliseconds before retrying. */
+		int retry_backoff_ms;
+
+		/* Specify compression codec for all data generated by
+		 * this produced. */
+		/* FIXME: Not implemented */
+		rd_kafka_compression_t compression_codec;
+
+		/* Message enqueue timeout:
+		 *  0   Messages will be enqueued immediately or dropped 
+		 *      if the queue is full.
+		 * <0   Enqueue will block indefinately if the queue is full.
+		 * >0   Enqueue will block up to this many milliseconds if
+		 *      the queue is full. */
+		/* FIXME: Not implemented */
+		int enqueue_timeout_ms;
+
+		/* Maximum number of messages batched in one MessageSet. */
+		int batch_num_messages;
+
+		/* Message delivery report callback.
+		 * Called once for each produced message, either on
+		 * succesful and acknowledged delivery to the broker in which
+		 * case 'err' is 0, or if the message could not be delivered
+		 * in which case 'err' is non-zero (use rd_kafka_err2str()
+		 * to obtain a human-readable error reason).
+		 *
+		 * If the message was produced with neither RD_KAFKA_MSG_F_FREE
+		 * or RD_KAFKA_MSG_F_COPY set then 'payload' is the original
+		 * pointer provided to rd_kafka_produce().
+		 * rdkafka will not perform any further actions on 'payload'
+		 * at this point and the application may free the payload data
+		 * at this point.
+		 *
+		 * 'opaque' is 'conf.opaque', while 'msg_opaque' is
+		 * the opaque pointer provided in the rd_kafka_produce() call.
+		 */
+		void (*dr_cb) (rd_kafka_t *rk,
+			       void *payload, size_t len,
+			       rd_kafka_resp_err_t err,
+			       void *opaque, void *msg_opaque);
+
 	} producer;
 
 } rd_kafka_conf_t;
 
 
+typedef struct rd_kafka_topic_conf_s {
+	/* This field indicates how many acknowledgements the brokers
+	 * should receive before responding to the request:
+	 *  0   The broker does not send any response.
+	 *  1   The broker will wait until the data is written to the 
+	 *      local log before sending a response.
+	 * -1   The broker will block until the message is committed by all
+	 *      in sync replicas before sending a response.
+	 * >1   For any number > 1 the broker will block waiting for this
+	 *      number of acknowledgements to occur
+	 *      (but the server will never wait for more acknowledgements
+	 *       than there are in-sync replicas). */
+	int16_t required_acks;
 
-typedef enum {
-	RD_KAFKA_OP_PRODUCE,  /* Application  -> Kafka thread */
-	RD_KAFKA_OP_FETCH,    /* Kafka thread -> Application */
-	RD_KAFKA_OP_ERR,      /* Kafka thread -> Application */
-} rd_kafka_op_type_t;
+	/* The ack timeout of the producer request in milliseconds.
+	 * This value is only enforced by the broker and relies
+	 * on required_acks being > 0. */
+	int32_t request_timeout_ms;
 
-typedef struct rd_kafka_op_s {
-	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
-	rd_kafka_op_type_t rko_type;
-	char     *rko_topic;
-	uint32_t  rko_partition;
-	int       rko_flags;
-#define RD_KAFKA_OP_F_FREE       0x1  /* Free the payload when done with it. */
-#define RD_KAFKA_OP_F_FREE_TOPIC 0x2  /* Free the topic when done with it. */
-	/* For PRODUCE and ERR */
-	char     *rko_payload;
-	int       rko_len;
-	/* For FETCH */
-	uint64_t  rko_offset;
-#define           rko_max_size rko_len
-	/* For replies */
-	rd_kafka_resp_err_t rko_err;
-	int8_t    rko_compression;
-	int64_t   rko_offset_len;  /* Length to use to advance the offset. */
-} rd_kafka_op_t;
+	/* Local message timeout.
+	 * This value is only enforced locally and limits the time a
+	 * produced message waits for succesful delivery. */
+	int     message_timeout_ms;
 
+	/* Application provided message partitioner.
+	 * The partitioner may be called in any thread at any time,
+	 * it may be called multiple times for the same key.
+	 * Partitioner function constraints:
+	 *    - MUST NOT call any rd_kafka_*() functions
+	 *    - MUST NOT block or execute for prolonged periods of time.
+	 *    - MUST return a value between 0 and partition_cnt-1, or the
+	 *      special RD_KAFKA_PARTITION_UA value if partitioning
+	 *      could not be performed.
+	 */
 
-typedef struct rd_kafka_q_s {
-	pthread_mutex_t rkq_lock;
-	pthread_cond_t  rkq_cond;
-	TAILQ_HEAD(, rd_kafka_op_s) rkq_q;
-	int             rkq_qlen;
-} rd_kafka_q_t;
+	int32_t (*partitioner) (const void *keydata,
+					 size_t keylen,
+					 int32_t partition_cnt,
+					 void *rkt_opaque,
+					 void *msg_opaque);
 
+	/* Application provided opaque pointer (this is rkt_opaque) */
+	void   *opaque;
+} rd_kafka_topic_conf_t;
 
-
-
-
-/**
- * Kafka handle.
- */
-typedef struct rd_kafka_s {
-	rd_kafka_q_t rk_op;    /* application -> kafka operation queue */
-	rd_kafka_q_t rk_rep;   /* kafka -> application reply queue */
-	struct {
-		char                name[128];
-		rd_sockaddr_list_t *rsal;
-		int                 curr_addr;
-		int                 s;  /* TCP socket */
-		struct {
-			uint64_t tx_bytes;
-			uint64_t tx;    /* Kafka-messages (not payload msgs) */
-			uint64_t rx_bytes;
-			uint64_t rx;    /* Kafka messages (not payload msgs) */
-		} stats;
-	} rk_broker;
-	rd_kafka_conf_t  rk_conf;
-	int              rk_flags;
-	int              rk_terminate;
-	pthread_t        rk_thread;
-	pthread_mutex_t  rk_lock;
-	int              rk_refcnt;
-	rd_kafka_type_t  rk_type;
-	rd_kafka_state_t rk_state;
-	struct timeval   rk_tv_state_change;
-	union {
-		struct {
-			char    *topic;
-			uint32_t partition;
-			uint64_t offset;
-			uint64_t app_offset;
-			int      offset_file_fd;
-		} consumer;
-	} rk_u;
-#define rk_consumer rk_u.consumer
-	struct {
-		char msg[512];
-		int  err;  /* errno */
-	} rk_err;
-} rd_kafka_t;
-
+/*******************************************************************
+ * Partitioners provided by rdkafka                                *
+ *******************************************************************/
 
 /**
- * Accessor functions.
+ * Random partitioner.
+ * This is the default partitioner.
  *
- * Locality: any thread
+ * Returns a random partition between 0 and 'partition_cnt'-1.
+ *
  */
-#define rd_kafka_name(rk)  ((rk)->rk_broker.name)
-#define rd_kafka_state(rk) ((rk)->rk_state)
+int32_t rd_kafka_msg_partitioner_random (const void *key,
+					 size_t keylen,
+					 int32_t partition_cnt,
+					 void *opaque, void *msg_opaque);
+
 
 
 /**
- * Destroy the Kafka handle.
- * 
- * Locality: application thread
+ * The default configuration.
+ * When providing your own configuration to the rd_kafka_*_new_*() calls
+ * its advisable to base it on these default configurations and only
+ * change the relevant parts.
+ * I.e.:
+ *
+ *   rd_kafka_conf_t myconf;
+ *   rd_kafka_defaultconf_set(&myconf);
+ *   myconf.consumer.offset_file = "/var/kafka/offsets/";
+ *   rk = rd_kafka_new_consumer(, ... &myconf);
+ *
+ * Please see rdkafka_defaultconf.c for the default settings.
  */
-void        rd_kafka_destroy (rd_kafka_t *rk);
+void rd_kafka_defaultconf_set (rd_kafka_conf_t *conf);
+
+
+/**
+ * Topic default configuration
+ *
+ * Same semantics as for rd_kafka_defaultconf_set().
+ */
+void rd_kafka_topic_defaultconf_set (rd_kafka_topic_conf_t *topic_conf);
+
+
+
+
+
+
+
+
+
+
 
 
 /**
@@ -276,139 +378,137 @@ void        rd_kafka_destroy (rd_kafka_t *rk);
  *
  * To destroy the Kafka handle, use rd_kafka_destroy().
  * 
- * Locality: application thread
- */
-rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, const char *broker,
-			  const rd_kafka_conf_t *conf);
-
-/**
- * Creates a new Kafka consumer handle and sets it up for fetching messages
- * from 'topic' + 'partion', beginning at 'offset'.
- *
- * If 'conf->consumer.offset_file' is non-NULL then the 'offset' parameter is
- * ignored and the file's offset is used instead.
- *
- * Returns the Kafka handle.
- *
- * To destroy the Kafka handle, use rd_kafka_destroy().
- *
- * Locality: application thread
- */
-rd_kafka_t *rd_kafka_new_consumer (const char *broker,
-				   const char *topic,
-				   uint32_t partition,
-				   uint64_t offset,
-				   const rd_kafka_conf_t *conf);
-
-/**
- * Fetches kafka messages from the internal reply queue that the kafka
- * thread tries to keep populated.
- *
- * Will block until 'timeout_ms' expires (milliseconds, RD_POLL_NOWAIT or
- * RD_POLL_INFINITE) or until a message is returned.
- *
- * The caller must check the reply's rko_err (RD_KAFKA_ERR_*) to distinguish
- * between errors and actual data messages.
- *
- * Communication failure propagation:
- * If rko_err is RD_KAFKA_ERR__FAIL it means a critical error has occured
- * and the connection to the broker has been torn down. The application
- * does not need to take any action but should log the contents of
- * rko->rko_payload.
- *
- * Returns NULL on timeout or an 'rd_kafka_op_t *' reply on success.
- *
- * Locality: application thread
- */
-rd_kafka_op_t *rd_kafka_consume (rd_kafka_t *rk, int timeout_ms);
-
-/**
- * Stores the current offset in whatever storage the handle has defined.
- * Must only be called by the application if RD_KAFKA_CONF_F_APP_OFFSET_STORE
- * is set in conf.flags.
- *
  * Locality: any thread
  */
-int rd_kafka_offset_store (rd_kafka_t *rk, uint64_t offset);
+rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, const rd_kafka_conf_t *conf,
+			  char *errstr, size_t errstr_size);
+
+
+/**
+ * Destroy the Kafka handle.
+ * 
+ * Locality: any thread
+ */
+void        rd_kafka_destroy (rd_kafka_t *rk);
+
+
+/**
+ * Returns the kafka handle name.
+ */
+const char *rd_kafka_name (rd_kafka_t *rk);
+
+
+
+/**
+ * Creates a new topic handle for topic named 'topic'.
+ *
+ * 'conf' is an optional configuration for the topic
+ * (see rd_kafka_topic_t above).
+ *
+ * Returns the new topic handle or NULL on error (see errno).
+ */
+rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
+				      const rd_kafka_topic_conf_t *conf);
+
+
+
+/**
+ * Destroy a topic handle previously created with rd_kafka_topic_new().
+ */
+void rd_kafka_topic_destroy (rd_kafka_topic_t *rkt);
+
+
+/**
+ * Returns the name for a topic.
+ */
+const char *rd_kafka_topic_name (const rd_kafka_topic_t *rkt);
+
+
+/**
+ * Unassigned partition.
+ */
+#define RD_KAFKA_PARTITION_UA  ((int32_t)-1)  
 
 
 
 /**
  * Produce and send a single message to the broker.
  *
- * There are two alternatives for 'payload':
- *   1) static data that will not change or go away during the lifetime
- *      of the rd_kafka_t handle. *This is uncommon*.
+ * 'rkt' is the target topic which must have been previously created with
+ * rd_kafka_topic_new().
  *
- *   2) malloc():ed data that librdkafka will free when done with it,
- *      this requires the RD_KAFKA_OP_F_FREE flag to be set in msgflags.
+ * 'partition' is the target partition, either:
+ *   - RD_KAFKA_PARTITION_UA (unassigned) for
+ *     automatic partitioning using the topic's partitioner function, or
+ *   - a fixed partition (0..N)
  *
- * There is currently no way for the application to know when librdkafka is
- * done with the payload, so the control of freeing the payload must be left
- * to librdkafka as described in alternative 2) above.
+ * 'msgflags' is zero or more of the following flags OR:ed together:
+ *    RD_KAFKA_MSG_F_FREE - rdkafka will free(3) 'payload' when it is done
+ *                          with it.
+ *    RD_KAFKA_MSG_F_COPY - the 'payload' data will be copied and the 'payload'
+ *                          pointer will not be used by rdkafka after the
+ *                          call returns.
+ *
+ *    .._F_FREE and .._F_COPY are mutually exclusive.
+ *    (FIXME: describe freeing)   
+ *
+ * 'payload' is the message payload of size 'len' bytes.
+ *
+ * 'key' is an optional message key of size 'keylen' bytes, if non-NULL it
+ * will be passed to the topic partitioner as well as be sent with the
+ * message to the broker.
+ *
+ * 'msg_opaque' is an optional application-provided per-message opaque
+ * pointer that will provided in callbacks functions referencing this message.
+ * (i.e., the delivery report).
  *
  *
- * Returns 0 on success or -1 on error (see errno for details)
+ * Returns 0 on success or -1 if the maximum number of outstanding messages
+ * (conf.producer.max_messages) has been reached.
  *
- * errno:
- *   ENOBUFS - The conf.producer.max_outq_msg_cnt would be exceeded.
- *
- * Locality: application thread
  */
-int         rd_kafka_produce (rd_kafka_t *rk, char *topic, uint32_t partition,
-			      int msgflags, char *payload, size_t len);
 
-/**
- * Destroys an op as returned by rd_kafka_consume().
- *
- * Locality: any thread
- */
-void        rd_kafka_op_destroy (rd_kafka_t *rk, rd_kafka_op_t *rko);
+#define RD_KAFKA_MSG_F_FREE  0x1  /* Delegate freeing of payload to rdkafka. */
+#define RD_KAFKA_MSG_F_COPY  0x2  /* rdkafka will make a copy of the payload. */
 
-
-/**
- * Returns a human readable representation of a kafka error.
- */
-const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
+int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
+		      int msgflags,
+		      char *payload, size_t len,
+		      const void *key, size_t keylen,
+		      void *msg_opaque);
 
 
-/**
- * Returns the current out queue length (ops waiting to be sent to the broker).
- *
- * Locality: any thread
- */
-static inline int rd_kafka_outq_len (rd_kafka_t *rk) __attribute__((unused));
-static inline int rd_kafka_outq_len (rd_kafka_t *rk) {
-	return rk->rk_op.rkq_qlen;
-}
-
-
-/**
- * Returns the current reply queue length (messages from the broker waiting
- * for the application thread to consume).
- *
- * Locality: any thread
- */
-static inline int rd_kafka_replyq_len (rd_kafka_t *rk) __attribute__((unused));
-static inline int rd_kafka_replyq_len (rd_kafka_t *rk) {
-	return rk->rk_rep.rkq_qlen;
-}
 
 
 
 
 /**
- * The default configuration.
- * When providing your own configuration to the rd_kafka_new_*() calls
- * its advisable to base it on this default configuration and only
- * change the relevant parts.
- * I.e.:
+ * Adds a one or more brokers to the kafka handle's list of initial brokers.
+ * Additional brokers will be discovered automatically as soon as rdkafka
+ * connects to a broker by querying the broker metadata.
  *
- *   rd_kafka_conf_t myconf = rd_kafka_defaultconf;
- *   myconf.consumer.offset_file = "/var/kafka/offsets/";
- *   rk = rd_kafka_new_consumer(, ... &myconf);
- */ 
-extern const rd_kafka_conf_t rd_kafka_defaultconf;
+ * 'brokerlist' is a ,-separated list of brokers in the format:
+ *   <host1>[:<port1>],<host2>[:<port2>]...
+ *
+ * Returns the number of brokers succesfully added.
+ */
+int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist);
+
+
+/**
+ * Polls the provided kafka handle for events.
+ *
+ * Events will cause application provided callbacks to be called.
+ *
+ * The 'timeout_ms' argument specifies the minimum amount of time
+ * (in milliseconds) that the call will block waiting for events.
+ * For non-blocking calls, provide 0 as 'timeout_ms'.
+ * To wait indefinately for an event, provide -1.
+ *
+ * Returns the number of events served.
+ */
+int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms);
+
 
 
 /**
@@ -438,110 +538,27 @@ void rd_kafka_set_logger (void (*func) (const rd_kafka_t *rk, int level,
 					const char *fac, const char *buf));
 
 
-
-#ifdef NEED_RD_KAFKAPROTO_DEF
-/*
- * Kafka protocol definitions.
- * This is kept as an opt-in ifdef-space to avoid name space cluttering
- * for the application while still keeping the implementation to
- * just two files for easy inclusion in applications in case the library
- * variant is not desired.
- */
-
-
-#define RD_KAFKA_PORT      9092
-#define RD_KAFKA_PORT_STR "9092"
-
 /**
- * Generic Request header.
+ * Enable/disable rdkafka internal debugging
  */
-struct rd_kafkap_req {
-	uint32_t rkpr_len;
-	uint16_t rkpr_type;
-#define RD_KAFKAP_PRODUCE       0
-#define RD_KAFKAP_FETCH         1
-#define RD_KAFKAP_MULTIFETCH    2
-#define RD_KAFKAP_MULTIPRODUCE  3
-#define RD_KAFKAP_OFFSETS       4
-	uint16_t rkpr_topic_len;
-	char     rkpr_topic[0]; /* TOPIC and PARTITION follows */
-} RD_PACKED;
-
-
-/**
- * Generic Multi-Request header.
- */
-struct rd_kafkap_multireq {
-	uint32_t rkpmr_len;
-	uint16_t rkpmr_type;
-	uint16_t rkpmr_topicpart_cnt;
-
-	uint32_t rkpr_topic_len;
-	char     rkpr_topic[0]; /* TOPIC and PARTITION follows */
-} RD_PACKED;
-
-
-/**
- * Generic Response header.
- */
-struct rd_kafkap_resp {
-	uint32_t rkprp_len;
-	int16_t  rkprp_error;  /* rd_kafka_resp_err_t */
-} RD_PACKED;
+void rd_kafka_dbg_set (rd_kafka_t *rk, int onoff);
 
 
 
-/**
- * MESSAGE header
- */
-struct rd_kafkap_msg {
-	uint32_t rkpm_len;
-	uint8_t  rkpm_magic;
-#define RD_KAFKAP_MSG_MAGIC_NO_COMPRESSION_ATTR   0  /* Not supported. */
-#define RD_KAFKAP_MSG_MAGIC_COMPRESSION_ATTR      1 
-	uint8_t  rkpm_compression;
-#define RD_KAFKAP_MSG_COMPRESSION_NONE            0
-#define RD_KAFKAP_MSG_COMPRESSION_GZIP            1
-#define RD_KAFKAP_MSG_COMPRESSION_SNAPPY          2
-	uint32_t rkpm_cksum;
-	char     rkpm_payload[0];
-} RD_PACKED;
-
-/**
- * PRODUCE header, directly follows the request header.
- */
-struct rd_kafkap_produce {
-	uint32_t             rkpp_msgs_len;
-	struct rd_kafkap_msg rkpp_msgs[0];
-} RD_PACKED;
-
-
-/**
- * FETCH request header, directly follows the request header.
- */
-struct rd_kafkap_fetch_req {
-	uint64_t rkpfr_offset;
-	uint32_t rkpfr_max_size;
-} RD_PACKED;
-
-/**
- * FETCH response header, directly follows the response header.
- */
-struct rd_kafkap_fetch_resp {
-	struct rd_kafkap_msg rkpfrp_msgs[0];
-} RD_PACKED;
 
 
 
 
 /**
- * Helper struct containing a protocol-encoded topic+partition.
+ * Returns the current out queue length:
+ * messages waiting to be sent to, or acknowledged by, the broker.
  */
-struct rd_kafkap_topicpart {
-	int  rkptp_len;
-	char rkptp_buf[0];
-};
+int         rd_kafka_outq_len (rd_kafka_t *rk);
 
 
-#endif /* NEED_KAFKAPROTO_DEF */
 
+/**
+ * Dumps rdkafka's internal state for handle 'rk' to stream 'fp'
+ * This is only useful for debugging rdkafka.
+ */
+void rd_kafka_dump (FILE *fp, rd_kafka_t *rk);

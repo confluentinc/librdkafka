@@ -35,8 +35,10 @@
 #include <ctype.h>
 #include <signal.h>
 #include <string.h>
+#include <unistd.h>
+#include <stdlib.h>
 
-/* Typical include path would be <librdkafka/rdkafkah>, but this program
+/* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"  /* for Kafka driver */
 
@@ -48,6 +50,7 @@ static void stop (int sig) {
 }
 
 
+#if 0
 static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 	const char *p = (const char *)ptr;
 	int of = 0;
@@ -73,17 +76,50 @@ static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 			of, hexen, charen);
 	}
 }
+#endif
 
 
+/**
+ * Message delivery report callback.
+ * Called once for each message.
+ * See rdkafka.h for more information.
+ */
+static void msg_delivered (rd_kafka_t *rk,
+			   void *payload, size_t len,
+			   int error_code,
+			   void *opaque, void *msg_opaque) {
+
+	if (error_code)
+		printf("%% Message delivery failed: %s\n",
+		       rd_kafka_err2str(rk, error_code));
+	else
+		printf("%% Message delivered (%zd bytes)\n", len);
+}
 
 
 int main (int argc, char **argv) {
 	rd_kafka_t *rk;
-	char *broker = NULL;
+	rd_kafka_topic_t *rkt;
+	char *brokers = "localhost:9092";
 	char mode = 'C';
 	char *topic = NULL;
-	int partition = 0;
+	int partition = RD_KAFKA_PARTITION_UA;
 	int opt;
+	rd_kafka_conf_t conf;
+	rd_kafka_topic_conf_t topic_conf;
+	char errstr[512];
+
+	/* Kafka configuration
+	 * Base configuration on the default config. */
+	rd_kafka_defaultconf_set(&conf);
+	/* Set up a message delivery report callback.
+	 * It will be called once for each message, either on succesful
+	 * delivery to broker, or upon failure to deliver to broker. */
+	conf.producer.dr_cb = msg_delivered;
+
+	/* Topic configuration
+	 * Base topic configuration on the default topic config. */
+	rd_kafka_topic_defaultconf_set(&topic_conf);
 
 
 	while ((opt = getopt(argc, argv, "PCt:p:b:")) != -1) {
@@ -99,7 +135,7 @@ int main (int argc, char **argv) {
 			partition = atoi(optarg);
 			break;
 		case 'b':
-			broker = optarg;
+			brokers = optarg;
 			break;
 		default:
 			goto usage;
@@ -110,13 +146,13 @@ int main (int argc, char **argv) {
 	usage:
 		fprintf(stderr,
 			"Usage: %s [-C|-P] -t <topic> "
-			"[-p <partition>] [-b <broker>]\n"
+			"[-p <partition>] [-b <host1:port1,host2:port2,..>]\n"
 			"\n"
 			" Options:\n"
-			"  -C | -P      Consumer or Producer mode\n"
-			"  -t <topic>   Topic to fetch / produce\n"
-			"  -p <num>     Partition (defaults to 0)\n"
-			"  -b <broker>  Broker address (localhost:9092)\n"
+			"  -C | -P         Consumer or Producer mode\n"
+			"  -t <topic>      Topic to fetch / produce\n"
+			"  -p <num>        Partition (random partitioner)\n"
+			"  -b <brokers>    Broker address (localhost:9092)\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  writes fetched messages to stdout\n"
@@ -131,8 +167,8 @@ int main (int argc, char **argv) {
 	signal(SIGINT, stop);
 
 	/* Socket hangups are gracefully handled in librdkafka on socket error
-	 * without the use of signals, so SIGPIPE should be ignored by the calling
-	 * program. */
+	 * without the use of signals, so SIGPIPE should be ignored by
+	 * the calling program. */
 	signal(SIGPIPE, SIG_IGN);
 
 	if (mode == 'P') {
@@ -143,34 +179,52 @@ int main (int argc, char **argv) {
 		int sendcnt = 0;
 
 		/* Create Kafka handle */
-		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, broker, NULL))) {
-			perror("kafka_new producer");
+		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, &conf,
+					errstr, sizeof(errstr)))) {
+			fprintf(stderr,
+				"%% Failed to create new producer: %s\n",
+				errstr);
 			exit(1);
 		}
 
-		fprintf(stderr, "%% Type stuff and hit enter to send\n");
-		while (run && (fgets(buf, sizeof(buf), stdin))) {
-			int len = strlen(buf);
-			char *opbuf = malloc(len + 1);
-			strncpy(opbuf, buf, len + 1);
-
-			/* Send/Produce message. */
-			rd_kafka_produce(rk, topic, partition, RD_KAFKA_OP_F_FREE, opbuf, len);
-			fprintf(stderr, "%% Sent %i bytes to topic "
-				"%s partition %i\n", len, topic, partition);
-			sendcnt++;
+		if (rd_kafka_brokers_add(rk, brokers) == 0) {
+			fprintf(stderr, "%% No valid brokers specified\n");
+			exit(1);
 		}
 
-		/* Wait for messaging to finish. */
-		while (rd_kafka_outq_len(rk) > 0)
-			usleep(50000);
+		/* Create topic */
+		rkt = rd_kafka_topic_new(rk, topic, &topic_conf);
 
-		/* Since there is no ack for produce messages in 0.7 
-		 * we wait some more for any packets to be sent.
-		 * This is fixed in protocol version 0.8 */
-		if (sendcnt > 0)
-			usleep(500000);
+		fprintf(stderr, "%% Type stuff and hit enter to send\n");
+		while (run && (fgets(buf, sizeof(buf), stdin))) {
+			size_t len = strlen(buf);
 
+			/* Send/Produce message. */
+			rd_kafka_produce(rkt, partition,
+					 RD_KAFKA_MSG_F_COPY,
+					 /* Payload and length */
+					 buf, len,
+					 /* Optional key and its length */
+					 NULL, 0,
+					 /* Message opaque, provided in
+					  * delivery report callback as
+					  * msg_opaque. */
+					 NULL);
+			fprintf(stderr, "%% Sent %zd bytes to topic "
+				"%s partition %i\n",
+				len, rd_kafka_topic_name(rkt), partition);
+			sendcnt++;
+			/* Poll to handle delivery reports */
+			rd_kafka_poll(rk, 10);
+		}
+
+		/* Poll to handle delivery reports */
+		rd_kafka_poll(rk, 0);
+
+		/* Wait for messages to be delivered */
+		while (run && rd_kafka_poll(rk, 1000) != -1)
+			continue;
+			
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
 
@@ -178,6 +232,7 @@ int main (int argc, char **argv) {
 		/*
 		 * Consumer
 		 */
+#if 0 /* FIXME: Not implemented */
 		rd_kafka_op_t *rko;
 		/* Base our configuration on the default config. */
 		rd_kafka_conf_t conf = rd_kafka_defaultconf;
@@ -240,6 +295,7 @@ int main (int argc, char **argv) {
 
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
+#endif
 	}
 
 	return 0;

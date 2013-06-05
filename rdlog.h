@@ -1,7 +1,7 @@
 /*
  * librd - Rapid Development C library
  *
- * Copyright (c) 2012, Magnus Edenhill
+ * Copyright (c) 2012-2013, Magnus Edenhill
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -28,61 +28,16 @@
 
 #pragma once
 
-#include <unistd.h>
-#include <limits.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+void rdputs0 (const char *file, const char *func, int line,
+	      const char *fmt, ...)
+	__attribute__((format (printf, 4, 5)));
+
+#define rdbg(fmt...) rdputs0(__FILE__,__FUNCTION__,__LINE__,fmt)
+
+void rd_dbg_ctx_push (const char *fmt, ...);
+void rd_dbg_ctx_pop (void);
+void rd_dbg_ctx_clear (void);
+void rd_dbg_set (int onoff);
 
 
-/**
- * Behaves pretty much like basename(3) but does not alter the
- * input string in any way.
- */
-const char *rd_basename (const char *path);
-
-/**
- * Returns the current directory in a static buffer.
- */
-const char *rd_pwd (void);
-
-
-/**
- * Returns the size of the file, or -1 on failure.
- */
-ssize_t rd_file_size (const char *path);
-
-/**
- * Returns the size of the file already opened, or -1 on failure.
- */
-ssize_t rd_file_size_fd (int fd);
-
-
-/**
- * Performs stat(2) on 'path' and returns 'struct stat.st_mode' on success
- * or 0 on failure.
- *
- * Example usage:
- *  if (S_ISDIR(rd_file_mode(mypath)))
- *     ..
- */
-mode_t rd_file_mode (const char *path);
-
-
-/**
- * Opens the specified file and reads the entire content into a malloced
- * buffer which is null-terminated. The actual length of the buffer, without
- * the conveniant null-terminator, is returned in '*lenp'.
- * The buffer is returned, or NULL on failure.
- */
-char *rd_file_read (const char *path, int *lenp);
-
-
-/**
- * Writes 'buf' of 'len' bytes to 'path'.
- * Hint: Use O_APPEND or O_TRUNC in 'flags'.
- * Returns 0 on success or -1 on error.
- * See open(2) for more info.
- */
-int rd_file_write (const char *path, const char *buf, int len,
-		   int flags, mode_t mode);
+void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len);

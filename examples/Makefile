@@ -1,4 +1,5 @@
 CC ?= cc
+CFLAGS += -g -rdynamic
 CXX ?= g++
 CFLAGS += -g
 CFLAGS += -Wall -Werror -Wfloat-equal -Wpointer-arith -O2 -I../

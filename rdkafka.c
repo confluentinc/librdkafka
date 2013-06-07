@@ -1101,6 +1101,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, const char *broker,
 			if (mode == 0) {
 				/* Error: bail out. */
 				int errno_save = errno;
+				/* Avoid free of non-strdup:ed pointer */
+				rk->rk_conf.consumer.offset_file = NULL;
 				rd_kafka_destroy0(rk);
 				errno = errno_save;
 				return NULL;

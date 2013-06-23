@@ -365,6 +365,12 @@ typedef struct rd_kafka_s {
 	} rk_u;
 #define rk_consumer rk_u.consumer
 #define rk_producer rk_u.producer
+
+	void (*rk_log_cb) (const rd_kafka_t *rk, int level,
+			   const char *fac,
+			   const char *buf);
+	int    rk_log_level;
+
 	struct {
 		char msg[512];
 		int  err;  /* errno */

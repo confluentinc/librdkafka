@@ -312,7 +312,8 @@ int main (int argc, char **argv) {
 			exit(1);
 		}
 
-		rd_kafka_dbg_set(rk, debug);
+		if (debug)
+			rd_kafka_set_log_level(rk, 7);
 
 		/* Add broker(s) */
 		if (rd_kafka_brokers_add(rk, brokers) < 1) {

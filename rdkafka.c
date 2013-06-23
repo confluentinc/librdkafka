@@ -41,9 +41,6 @@
 
 static pthread_once_t rd_kafka_global_init_once = PTHREAD_ONCE_INIT;
 
-static void (*rd_kafka_log_cb) (const rd_kafka_t *rk, int level,
-				const char *fac,
-				const char *buf) = rd_kafka_log_print;
 
 
 
@@ -79,7 +76,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	va_list ap;
 	int elen = 0;
 
-	if (!rd_kafka_log_cb)
+	if (!rk->rk_log_cb || level > rk->rk_log_level)
 		return;
 
 	if (extra) {
@@ -92,7 +89,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	vsnprintf(buf+elen, sizeof(buf)-elen, fmt, ap);
 	va_end(ap);
 
-	rd_kafka_log_cb(rk, level, fac, buf);
+	rk->rk_log_cb(rk, level, fac, buf);
 }
 
 
@@ -122,10 +119,18 @@ void rd_kafka_log_syslog (const rd_kafka_t *rk, int level,
 }
 
 
-void rd_kafka_set_logger (void (*func) (const rd_kafka_t *rk, int level,
+void rd_kafka_set_logger (rd_kafka_t *rk,
+			  void (*func) (const rd_kafka_t *rk, int level,
 					const char *fac, const char *buf)) {
-	rd_kafka_log_cb = func;
+	rk->rk_log_cb = func;
 }
+
+void rd_kafka_set_log_level (rd_kafka_t *rk, int level) {
+	rk->rk_log_level = level;
+}
+
+
+
 
 
 
@@ -460,6 +465,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, const rd_kafka_conf_t *conf,
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
 
+	rk->rk_log_cb = rd_kafka_log_print;
+	rk->rk_log_level = 6;
+
+
 	switch (rk->rk_type)
 	{
 	case RD_KAFKA_CONSUMER:
@@ -588,11 +597,6 @@ int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
 				rd_kafka_poll_cb, rk);
 }
 
-
-
-void rd_kafka_dbg_set (rd_kafka_t *rk, int onoff) {
-	rd_dbg_set(onoff);
-}
 
 
 static void rd_kafka_toppar_dump (FILE *fp, const char *indent,

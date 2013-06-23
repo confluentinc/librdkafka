@@ -607,14 +607,17 @@ void rd_kafka_log_syslog (const rd_kafka_t *rk, int level,
  *
  * NOTE: 'rk' may be passed as NULL.
  */
-void rd_kafka_set_logger (void (*func) (const rd_kafka_t *rk, int level,
+void rd_kafka_set_logger (rd_kafka_t *rk,
+			  void (*func) (const rd_kafka_t *rk, int level,
 					const char *fac, const char *buf));
 
 
 /**
- * Enable/disable rdkafka internal debugging
+ * Specifies the maximum logging level produced by
+ * internal kafka logging and debugging.
+ * Set to LOG_DEBUG (7) to enable debugging.
  */
-void rd_kafka_dbg_set (rd_kafka_t *rk, int onoff);
+void rd_kafka_set_log_level (rd_kafka_t *rk, int level);
 
 
 

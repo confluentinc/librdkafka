@@ -1,3 +1,4 @@
+EXAMPLES ?= rdkafka_example rdkafka_performance
 CC ?= cc
 CFLAGS += -g -rdynamic
 CXX ?= g++
@@ -11,12 +12,7 @@ LDFLAGS += -lpthread -lrt -lz
 #CFLAGS += -O0 -pg
 #LDFLAGS += -pg
 
-all:
-	@echo "# Examples are built individually, i.e.:"
-	@echo " make rdkafka_example"
-	@echo " make rdkafka_example_cpp"
-	@echo " make rdkafka_performance"
-
+all: $(EXAMPLES)
 
 rdkafka_example: rdkafka_example.c
 	@(test $@ -nt $< || \

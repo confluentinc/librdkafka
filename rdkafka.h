@@ -432,22 +432,17 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
  * Creates a new Kafka handle and starts its operation according to the
  * specified 'type'.
  *
- * The 'broker' argument depicts the address to the Kafka broker (sorry,
- * no ZooKeeper support at this point) in the standard "<host>[:<port>]" format
- *
- * If 'broker' is NULL it defaults to "localhost:9092".
- *
- * If the 'broker' node name resolves to multiple addresses (and possibly
- * address families) all will be used for connection attempts in
- * round-robin fashion.
- *
  * 'conf' is an optional struct that will be copied to replace rdkafka's
  * default configuration. See the 'rd_kafka_conf_t' type for more information.
  *
- * NOTE: Make sure SIGPIPE is either ignored or handled by the calling application.
+ * 'errstr' must be a pointer to memory of at least size 'errstr_size' where
+ * rd_kafka_new() may write a human readable error message in case the
+ * creation of a new handle fails. In which case the function returns NULL.
  *
+ * NOTE: Make sure SIGPIPE is either ignored or handled by the
+ *       calling application.
  *
- * Returns the Kafka handle.
+ * Returns the Kafka handle on success or NULL on error.
  *
  * To destroy the Kafka handle, use rd_kafka_destroy().
  * 
@@ -559,6 +554,10 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
  * Adds a one or more brokers to the kafka handle's list of initial brokers.
  * Additional brokers will be discovered automatically as soon as rdkafka
  * connects to a broker by querying the broker metadata.
+ *
+ * If a broker name resolves to multiple addresses (and possibly
+ * address families) all will be used for connection attempts in
+ * round-robin fashion.
  *
  * 'brokerlist' is a ,-separated list of brokers in the format:
  *   <host1>[:<port1>],<host2>[:<port2>]...

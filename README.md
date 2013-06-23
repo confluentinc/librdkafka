@@ -93,13 +93,15 @@ See `examples/rdkafka_performance.c` for an example producer
 
       /* Produce message */
       if (rd_kafka_produce(rkt, RD_KAFKA_PARTITION_UA /* random partition */,
-      		           RD_KAFKA_MSG_F_COPY,
-		           mydata, mydata_len,
-		           mykey, mykey_len,
-		           per_message_opaque) == -1) {
-	    /* Try again in a short while if queue is full */
-	    if (errno == ENOBUFS)
-	        ... retry message later ...
+                           RD_KAFKA_MSG_F_COPY,
+                           mydata, mydata_len,
+                           mykey, mykey_len,
+                           per_message_opaque) == -1) {
+            /* Try again in a short while if queue is full, or drop,
+	     * decision is left to the application. /
+            if (errno == ENOBUFS)
+               ... retry message later ...
+      }
 
  
       ...

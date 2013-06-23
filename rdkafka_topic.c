@@ -171,12 +171,12 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	rd_kafka_topic_t *rkt;
 
 	/* Verify configuration */
-	if (conf->message_timeout_ms <= 0 ||
+	if (!topic ||
+	    conf->message_timeout_ms <= 0 ||
 	    conf->request_timeout_ms <= 0) {
 		errno = EINVAL;
 		return NULL;
 	}
-
 
 	if ((rkt = rd_kafka_topic_find(rk, topic))) {
 		rd_kafka_topic_keep(rkt); /* one refcnt for caller */

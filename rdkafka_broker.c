@@ -424,7 +424,7 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 
 	rkbuf = rd_kafka_buf_new(1, flags & RD_KAFKA_OP_F_FREE ? 0 : size);
 	rkbuf->rkbuf_ts_timeout = rd_clock() + 
-		rkb->rkb_rk->rk_conf.request_timeout_ms * 1000;
+		rkb->rkb_rk->rk_conf.metadata_request_timeout_ms * 1000;
 	rkbuf->rkbuf_flags |= flags;
 
 	if (size > 0) {

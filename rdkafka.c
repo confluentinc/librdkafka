@@ -485,6 +485,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, const rd_kafka_conf_t *conf,
 	/* Construct clientid kafka string */
 	rk->rk_clientid = rd_kafkap_str_new(rk->rk_conf.clientid);
 
+	/* Add initial list of brokers from configuration */
+	if (rk->rk_conf.brokerlist)
+		rd_kafka_brokers_add(rk, rk->rk_conf.brokerlist);
+
 	return rk;
 }
 

@@ -26,7 +26,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <string.h>
+#include <stdlib.h>
+
 #include "rdkafka.h"
+#include "rd.h"
 
 /**
  * rd_kafka_conf_t default configuration.
@@ -36,7 +40,7 @@
 static const rd_kafka_conf_t rd_kafka_defaultconf = {
 	/* common settings */
 	max_msg_size: 4000000,
-	request_timeout_ms: 1000 * 60,  /* 1 minute */
+	metadata_request_timeout_ms: 1000 * 60,  /* 1 minute */
 
 	/* consumer settings */
 	consumer: {
@@ -72,4 +76,168 @@ void rd_kafka_defaultconf_set (rd_kafka_conf_t *conf) {
 
 void rd_kafka_topic_defaultconf_set (rd_kafka_topic_conf_t *topic_conf) {
 	*topic_conf = rd_kafka_topic_defaultconf;
+}
+
+
+
+struct rd_kafka_property {
+	const char *name;
+	enum {
+		_RK_C_STR,
+		_RK_C_INT,
+		_RK_C_S2I,
+	} type;
+	void *ptr;
+	int   vmin;
+	int   vmax;
+	const char *s2i[10];
+};
+
+
+static int rd_kafka_anyconf_set (struct rd_kafka_property *properties,
+				 const char *name, const char *value,
+				 char *errstr, size_t errstr_size) {
+	int i;
+
+	if (value && !*value)
+		value = NULL;
+
+	for (i = 0 ; properties[i].name ; i++) {
+		if (strcmp(properties[i].name, name))
+			continue;
+
+		switch (properties[i].type)
+		{
+		case _RK_C_STR:
+			*(char **)properties[i].ptr = strdup(value);
+			return RD_KAFKA_CONF_OK;
+
+		case _RK_C_INT:
+		{
+			int ival;
+
+			if (!value) {
+				snprintf(errstr, errstr_size,
+					 "Integer configuration "
+					 "property \"%s\" cannot be set "
+					 "to empty value", name);
+				return RD_KAFKA_CONF_INVALID;
+			}
+
+			ival = atoi(value);
+			if (ival < properties[i].vmin ||
+			    ival > properties[i].vmax) {
+				snprintf(errstr, errstr_size,
+					 "Configuration property \"%s\" value "
+					 "%i is outside allowed range %i..%i\n",
+					 name, ival,
+					 properties[i].vmin,
+					 properties[i].vmax);
+				return RD_KAFKA_CONF_INVALID;
+			}
+
+
+			*(int *)properties[i].ptr = ival;
+			return RD_KAFKA_CONF_OK;
+		}
+
+		case _RK_C_S2I:
+		{
+			int j;
+
+			if (!value) {
+				snprintf(errstr, errstr_size,
+					 "Configuration "
+					 "property \"%s\" cannot be set "
+					 "to empty value", name);
+				return RD_KAFKA_CONF_INVALID;
+			}
+			
+
+			for (j = 0 ; RD_ARRAYSIZE(properties[i].s2i) ; j++) {
+				if (!properties[i].s2i[j] ||
+				    strcmp(properties[i].s2i[j], value))
+					continue;
+
+				*(int *)properties[i].ptr = j;
+				return RD_KAFKA_CONF_OK;
+			}
+
+			snprintf(errstr, errstr_size,
+				 "Invalid value for configuration property "
+				 "\"%s\"", name);
+			return RD_KAFKA_CONF_INVALID;
+		}
+		
+		}
+
+	}
+
+	snprintf(errstr, errstr_size,
+		 "No such configuration property: \"%s\"", name);
+
+	return RD_KAFKA_CONF_UNKNOWN;
+}
+
+
+rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
+				       const char *name,
+				       const char *value,
+				       char *errstr, size_t errstr_size) {
+	struct rd_kafka_property properties[] = {
+		{ "client.id", _RK_C_STR, &conf->clientid },
+		{ "metadata.broker.list", _RK_C_STR, &conf->brokerlist },
+		{ "message.max.bytes", _RK_C_INT,
+		  &conf->max_msg_size, 1000, 100000000 },
+		{ "metadata.request.timeout.ms", _RK_C_INT,
+		  &conf->metadata_request_timeout_ms, 10, 900*1000 },
+		{ "queue.buffering.max.messages", _RK_C_INT,
+		  &conf->producer.max_messages, 1, 1001000000 },
+		{ "queue.buffering.max.ms", _RK_C_INT,
+		  &conf->producer.buffering_max_ms, 1, 900*1000 },
+		{ "topic.metadata.refresh.interval.ms", _RK_C_INT,
+		  &conf->producer.metadata_refresh_interval_ms,
+		  1000, 3600*1000 },
+		{ "message.send.max.retries", _RK_C_INT,
+		  &conf->producer.max_retries, 0, 100 },
+		{ "retry.backoff.ms", _RK_C_INT,
+		  &conf->producer.retry_backoff_ms, 1, 900*1000 },
+		{ "compression.codec", _RK_C_S2I,
+		  &conf->producer.compression_codec,
+		  s2i: {
+			[RD_KAFKA_COMPRESSION_NONE] = "none",
+			[RD_KAFKA_COMPRESSION_GZIP] = "gzip",
+			[RD_KAFKA_COMPRESSION_SNAPPY] = "snappy",
+			} },
+		{ "queue.enqueue.timeout.ms", _RK_C_INT,
+		  &conf->producer.enqueue_timeout_ms, -1, 60*1000 },
+		{ "batch.num.messages", _RK_C_INT,
+		  &conf->producer.batch_num_messages, 1, 1000000 },
+		{ },
+	};
+
+	return rd_kafka_anyconf_set(properties, name, value,
+				    errstr, errstr_size);
+}
+
+
+rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
+					     const char *name,
+					     const char *value,
+					     char *errstr, size_t errstr_size) {
+	struct rd_kafka_property properties[] = {
+		{ "request.required.acks", _RK_C_INT,
+		  &conf->required_acks, -1, 100 },
+		{ "request.timeout.ms", _RK_C_INT,
+		  &conf->request_timeout_ms, 1, 900*1000 },
+		{ "message.timeout.ms", _RK_C_INT,
+		  &conf->message_timeout_ms, 1, 900*1000 },
+		{ }
+	};
+
+	if (!strncmp(name, "topic.", strlen("topic.")))
+		name += strlen("topic.");
+
+	return rd_kafka_anyconf_set(properties, name, value,
+				    errstr, errstr_size);
 }

@@ -42,7 +42,7 @@ And finally, dont hesitate to tell me if you are using librdkafka.
       sudo make install
       # or to install in another location than /usr/local, set DESTDIR env
       # to the filesystem root of your choice.
-      DESTDIR=/my/prefix make install
+      sudo make DESTDIR=/usr make install
 
 
 ### Usage in code

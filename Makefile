@@ -43,6 +43,8 @@ $(LIBNAME).a:	$(OBJS)
 install:
 	if [ "$(DESTDIR)" != "/usr/local" ]; then \
 		DESTDIR="$(DESTDIR)/usr"; \
+	else \
+		DESTDIR="$(DESTDIR)" ; \
 	fi ; \
 	install -d $$DESTDIR/include/librdkafka $$DESTDIR/lib ; \
 	install -t $$DESTDIR/include/$(LIBNAME) $(HDRS) ; \

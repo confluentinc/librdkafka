@@ -38,15 +38,14 @@
 #include "rd.h"
 #include "rdaddr.h"
 
-#define RD_POLL_INFINITE  -1
-#define RD_POLL_NOWAIT     0
-
 #else
 
 #include <librd/rd.h>
 #include <librd/rdaddr.h>
 #endif
 
+#define RD_POLL_INFINITE  -1
+#define RD_POLL_NOWAIT     0
 #define RD_KAFKA_TOPIC_MAXLEN  256
 
 typedef enum {

@@ -128,7 +128,6 @@ static void rd_kafka_op_reply (rd_kafka_t *rk,
 			       uint64_t offset_len);
 
 
-#ifndef WITH_LIBRD
 /**
  * Minimalistic replacement for rd_tsprintf() in case librd is not available.
  */
@@ -168,8 +167,6 @@ static int pthread_cond_timedwait_ms (pthread_cond_t *cond,
 
 	return pthread_cond_timedwait(cond, mutex, &ts);
 }
-
-#endif
 
 
 static void rd_kafka_log (const rd_kafka_t *rk, int level,

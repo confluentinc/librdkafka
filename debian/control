@@ -1,0 +1,30 @@
+Source: librdkafka
+Priority: optional
+Maintainer: Faidon Liambotis <paravoid@debian.org>
+Build-Depends: debhelper (>= 9), zlib1g-dev
+Standards-Version: 3.9.4
+Section: libs
+Homepage: https://github.com/edenhill/librdkafka
+Vcs-Git: git://github.com/paravoid/librdkafka.git
+Vcs-Browser: https://github.com/paravoid/librdkafka
+
+Package: librdkafka1
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: library implementing the Apache Kafka protocol
+ librdkafka is a C implementation of the Apache Kafka protocol, containing both
+ Producer and Consumer support.
+ .
+ More information about Apache Kafka can be found at http://kafka.apache.org/
+
+Package: librdkafka-dev
+Section: libdevel
+Architecture: any
+Depends: librdkafka1 (= ${binary:Version}), ${misc:Depends}
+Description: library implementing the Apache Kafka protocol (development headers)
+ librdkafka is a C implementation of the Apache Kafka protocol, containing both
+ Producer and Consumer support.
+ .
+ More information about Apache Kafka can be found at http://kafka.apache.org/
+ .
+ This package contains the development headers.

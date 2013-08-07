@@ -1,0 +1,5 @@
+librdkafka (0.8~wip20130807-1) unstable; urgency=low
+
+  * Initial release. (Closes: #710271)
+
+ -- Faidon Liambotis <paravoid@debian.org>  Wed, 07 Aug 2013 19:55:39 +0300

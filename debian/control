@@ -30,3 +30,17 @@ Description: library implementing the Apache Kafka protocol (development headers
  More information about Apache Kafka can be found at http://kafka.apache.org/
  .
  This package contains the development headers.
+
+Package: librdkafka1-dbg
+Section: debug
+Priority: extra
+Architecture: any
+Depends: librdkafka1 (= ${binary:Version}), ${misc:Depends}
+Description: library implementing the Apache Kafka protocol (development headers)
+ librdkafka is a C implementation of the Apache Kafka protocol. It currently
+ implements the 0.8 version of the protocol and has support only for the
+ producer side.
+ .
+ More information about Apache Kafka can be found at http://kafka.apache.org/
+ .
+ This package contains the debugging symbols.

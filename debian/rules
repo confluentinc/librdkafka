@@ -5,3 +5,8 @@
 
 %:
 	dh $@
+
+override_dh_strip:
+	dh_strip --dbg-package=librdkafka1-dbg
+
+.PHONY: override_dh_strip

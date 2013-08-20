@@ -229,6 +229,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 				  const char *fmt, ...) {
 	va_list ap;
 	int errno_save = errno;
+	rd_kafka_toppar_t *rktp;
 
 	pthread_mutex_lock(&rkb->rkb_lock);
 
@@ -246,7 +247,13 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rkb->rkb_s = -1;
 		rkb->rkb_pfd.fd = rkb->rkb_s;
 	}
-	
+
+	/* The caller may omit the format if it thinks this is a recurring
+	 * failure, in which case the following things are omitted:
+	 *  - log message
+	 *  - application OP_ERR
+	 *  - metadata request
+	 */
 	if (fmt) {
 		int of;
 
@@ -272,6 +279,28 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	rd_kafka_broker_waitresp_purge(rkb, err);
 
 	pthread_mutex_unlock(&rkb->rkb_lock);
+
+	/* Undelegate all toppars from this broker. */
+	rd_kafka_broker_toppars_wrlock(rkb);
+	while ((rktp = TAILQ_FIRST(&rkb->rkb_toppars))) {
+		rd_kafka_broker_toppars_unlock(rkb);
+		rd_rkb_dbg(rkb, "BRKTP",
+			   "Undelegating %.*s [%"PRId32"]",
+			   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+			   rktp->rktp_partition);
+
+		/* Undelegate */
+		rd_kafka_topic_wrlock(rktp->rktp_rkt);
+		rd_kafka_toppar_broker_delegate(rktp, NULL);
+		rd_kafka_topic_unlock(rktp->rktp_rkt);
+
+		rd_kafka_broker_toppars_wrlock(rkb);
+	}
+	rd_kafka_broker_toppars_unlock(rkb);
+
+	/* Query for the topic leaders (async) */
+	if (fmt)
+		rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
 }
 
 static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
@@ -1054,9 +1083,7 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 	return 1;
 
 err:
-	/* FIXME */
-	rd_kafka_dbg(rkb->rkb_rk, "RECV", "Receive failed");
-	rd_kafka_broker_fail(rkb, err_code, "%s", errstr);
+	rd_kafka_broker_fail(rkb, err_code, "Receive failed: %s", errstr);
 	return -1;
 }
 
@@ -1096,7 +1123,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 					     RD_SOCKADDR2STR_F_FAMILY),
 			     strerror(errno));
 		/* Avoid duplicate log messages */
-		if (rkb->rkb_err.err == errno && 0/*FIXME*/)
+		if (rkb->rkb_err.err == errno)
 			rd_kafka_broker_fail(rkb,
 					     RD_KAFKA_RESP_ERR__FAIL, NULL);
 		else
@@ -1132,8 +1159,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rkb->rkb_pfd.events = EPOLLIN;
 
 	/* Request metadata (async) */
-	rd_kafka_broker_metadata_req(rkb, 1 /*all topics*/, NULL);
-
+	rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL);
 	return 0;
 }
 

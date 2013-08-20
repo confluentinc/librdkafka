@@ -231,8 +231,8 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *rkt) {
  *
  * Locks: Caller must have topic_lock held.
  */
-static void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
-					     rd_kafka_broker_t *rkb) {
+void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
+				      rd_kafka_broker_t *rkb) {
 
 	if (rktp->rktp_leader == rkb)
 		return;
@@ -259,7 +259,7 @@ static void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 
 	if (rkb) {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, "BRKDELGT",
-			     "Broker %s is leader for topic %.*s "
+			     "Broker %s is now leader for topic %.*s "
 			     "[%"PRId32"] with %i messages "
 			     "(%"PRIu64" bytes) queued",
 			     rkb->rkb_name,
@@ -314,6 +314,9 @@ void rd_kafka_topic_update (rd_kafka_t *rk,
 		/* Topic lost its leader */
 		rd_kafka_toppar_broker_delegate(rktp, NULL);
 		rd_kafka_topic_unlock(rkt);
+
+		/* Query for the topic leader (async) */
+		rd_kafka_topic_leader_query(rk, rkt);
 		return;
 	}
 

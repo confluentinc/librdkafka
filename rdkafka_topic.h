@@ -37,6 +37,8 @@ void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 #define rd_kafka_topic_keep(rkt)  rd_atomic_add(&(rkt->rkt_refcnt), 1)
 void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt);
 
+void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
+				      rd_kafka_broker_t *rkb);
 
 void rd_kafka_topic_update (rd_kafka_t *rk,
 			    const char *topic, int32_t partition,

@@ -79,6 +79,14 @@ static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 }
 #endif
 
+/**
+ * Kafka logger callback (optional)
+ */
+static void logger (const rd_kafka_t *rk, int level,
+		    const char *fac, const char *buf) {
+	fprintf(stderr, "RDKAFKA-%i-%s: %s: %s\n",
+		level, fac, rd_kafka_name(rk), buf);
+}
 
 /**
  * Message delivery report callback.
@@ -111,6 +119,7 @@ int main (int argc, char **argv) {
 	rd_kafka_conf_t conf;
 	rd_kafka_topic_conf_t topic_conf;
 	char errstr[512];
+	int log_level = 6;
 
 	/* Kafka configuration
 	 * Base configuration on the default config. */
@@ -125,7 +134,7 @@ int main (int argc, char **argv) {
 	rd_kafka_topic_defaultconf_set(&topic_conf);
 
 
-	while ((opt = getopt(argc, argv, "PCt:p:b:")) != -1) {
+	while ((opt = getopt(argc, argv, "PCt:p:b:d")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -139,6 +148,9 @@ int main (int argc, char **argv) {
 			break;
 		case 'b':
 			brokers = optarg;
+			break;
+		case 'd':
+			log_level = 7;
 			break;
 		default:
 			goto usage;
@@ -156,6 +168,7 @@ int main (int argc, char **argv) {
 			"  -t <topic>      Topic to fetch / produce\n"
 			"  -p <num>        Partition (random partitioner)\n"
 			"  -b <brokers>    Broker address (localhost:9092)\n"
+			"  -d              Enable rdkafka debugging\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  writes fetched messages to stdout\n"
@@ -190,6 +203,9 @@ int main (int argc, char **argv) {
 				errstr);
 			exit(1);
 		}
+
+		rd_kafka_set_log_level(rk, log_level);
+		rd_kafka_set_logger(rk, logger);
 
 		if (rd_kafka_brokers_add(rk, brokers) == 0) {
 			fprintf(stderr, "%% No valid brokers specified\n");

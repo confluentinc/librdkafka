@@ -127,7 +127,11 @@ int main (int argc, char **argv) {
 			strncpy(opbuf, buf, len + 1);
 
 			/* Send/Produce message. */
-			kafka.produce(topic, partition, RD_KAFKA_OP_F_FREE, opbuf, len);
+			if (kafka.produce(topic, partition,
+				RD_KAFKA_OP_F_FREE, opbuf, len) == -1){
+				free(opbuf);
+				continue;
+			}
 			fprintf(stderr, "%% Sent %i bytes to topic "
 				"%s partition %i\n", len, topic, partition);
 			sendcnt++;

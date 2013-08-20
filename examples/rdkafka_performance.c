@@ -36,44 +36,137 @@
 #include <signal.h>
 #include <string.h>
 
-/* Typical include path would be <librdkafka/rdkafkah>, but this program
- * is builtin from within the librdkafka source tree and thus differs. */
+/* Typical include path would be <librdkafka/rdkafka.h>, but this program
+ * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"  /* for Kafka driver */
+/* Do not include these defines from your program, they will not be
+ * provided by librdkafka. */
+#include "rd.h"
 #include "rdtime.h"
 
 static int run = 1;
+static int dispintvl = 1000;
+static int do_seq = 0;
+static int exit_after = 0;
 
 static void stop (int sig) {
 	run = 0;
 }
 
+static long int msgs_wait_cnt = 0;
+static int msgs_failed = 0;
 
+static rd_ts_t t_end;
+
+static void err_cb (rd_kafka_t *rk, int err, const char *reason, void *opaque) {
+	printf("ERROR CALLBACK: %s: %s: %s\n",
+	       rd_kafka_name(rk), rd_kafka_err2str(rk, err), reason);
+}
+
+
+static void msg_delivered (rd_kafka_t *rk,
+			   void *payload, size_t len,
+			   int error_code,
+			   void *opaque, void *msg_opaque) {
+	long int msgid = (long int)msg_opaque;
+	static rd_ts_t last;
+	rd_ts_t now = rd_clock();
+	static int msgs;
+
+	msgs++;
+
+	msgs_wait_cnt--;
+
+	if (error_code)
+		msgs_failed++;
+
+
+	if ((error_code &&
+	     (msgs_failed < 50 || !(msgs_failed % (dispintvl / 1000)))) ||
+	    !last || msgs_wait_cnt < 5 ||
+	    !(msgs_wait_cnt % (dispintvl / 1000)) || 
+	    (now - last) >= dispintvl * 1000) {
+		if (error_code)
+			printf("Message %ld delivered failed: %s (%li remain)",
+			       msgid, rd_kafka_err2str(rk, error_code),
+			       msgs_wait_cnt);
+		else
+			printf("Message %ld delivered: %li remain\n",
+			       msgid, msgs_wait_cnt);
+		if (do_seq)
+			printf(" --> \"%.*s\"\n", (int)len, (char *)payload);
+		last = now;
+	}
+
+	if (msgs_wait_cnt == 0) {
+		printf("All messages delivered!\n");
+		t_end = rd_clock();
+		run = 0;
+	}
+
+	if (exit_after && exit_after <= msgs) {
+		printf("%% Hard exit after %i messages, as requested\n",
+		       exit_after);
+		exit(0);
+	}
+		
+}
+
+rd_kafka_t *rk;
+
+static void sig_usr1 (int sig) {
+	rd_kafka_dump(stdout, rk);
+}
 
 int main (int argc, char **argv) {
-	rd_kafka_t *rk;
-	char *broker = NULL;
+	char *brokers = "localhost";
 	char mode = 'C';
 	char *topic = NULL;
-	int partition = 0;
+	const char *key = NULL;
+	int partition = RD_KAFKA_PARTITION_UA; /* random */
 	int opt;
-	int msgsize = 1024;
 	int msgcnt = -1;
 	int sendflags = 0;
-	int dispintvl = 1000;
+	char *msgpattern = "librdkafka_performance testing!";
+	int msgsize = strlen(msgpattern);
 	struct {
 		rd_ts_t  t_start;
 		rd_ts_t  t_end;
 		rd_ts_t  t_end_send;
 		uint64_t msgs;
 		uint64_t bytes;
+		uint64_t tx;
+		uint64_t tx_err;
 		rd_ts_t  t_latency;
 		rd_ts_t  t_last;
 		rd_ts_t  t_total;
 	} cnt = {};
 	rd_ts_t now;
 	char *dirstr = "";
+	char errstr[512];
+	int debug = 0;
+	uint64_t seq = 0;
+	int seed = time(NULL);
+	rd_kafka_conf_t conf;
+	rd_kafka_topic_conf_t topic_conf;
+		
+	/* Kafka configuration
+	 * Base configuration on the default config. */
+	rd_kafka_defaultconf_set(&conf);
+	conf.error_cb                  = err_cb;
+	conf.opaque                    = NULL;
+	conf.producer.dr_cb            = msg_delivered;
+	conf.producer.max_messages     = 500000;
+	conf.producer.max_retries      = 3;
+	conf.producer.retry_backoff_ms = 2000;
 
-	while ((opt = getopt(argc, argv, "PCt:p:b:s:c:fi:D")) != -1) {
+	/* Topic configuration
+	 * Base topic configuration on the default topic config. */
+	rd_kafka_topic_defaultconf_set(&topic_conf);
+	topic_conf.message_timeout_ms  = 5000;
+
+	while ((opt = getopt(argc, argv,
+			     "PCt:p:b:s:k:c:fi:Ddm:S:x:R:a:")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -86,19 +179,41 @@ int main (int argc, char **argv) {
 			partition = atoi(optarg);
 			break;
 		case 'b':
-			broker = optarg;
+			brokers = optarg;
 			break;
 		case 's':
 			msgsize = atoi(optarg);
+			break;
+		case 'k':
+			key = optarg;
 			break;
 		case 'c':
 			msgcnt = atoi(optarg);
 			break;
 		case 'D':
-			sendflags |= RD_KAFKA_OP_F_FREE;
+			sendflags |= RD_KAFKA_MSG_F_FREE;
 			break;
 		case 'i':
 			dispintvl = atoi(optarg);
+			break;
+		case 'm':
+			msgpattern = optarg;
+			break;
+		case 'S':
+			seq = strtoull(optarg, NULL, 10);
+			do_seq = 1;
+			break;
+		case 'x':
+			exit_after = atoi(optarg);
+			break;
+		case 'R':
+			seed = atoi(optarg);
+			break;
+		case 'a':
+			topic_conf.required_acks = atoi(optarg);
+			break;
+		case 'd':
+			debug++;
 			break;
 		default:
 			goto usage;
@@ -109,17 +224,26 @@ int main (int argc, char **argv) {
 	usage:
 		fprintf(stderr,
 			"Usage: %s [-C|-P] -t <topic> "
-			"[-p <partition>] [-b <broker>] [options..]\n"
+			"[-p <partition>] [-b <broker,broker..>] [options..]\n"
 			"\n"
 			" Options:\n"
 			"  -C | -P      Consumer or Producer mode\n"
 			"  -t <topic>   Topic to fetch / produce\n"
-			"  -p <num>     Partition (defaults to 0)\n"
-			"  -b <broker>  Broker address (localhost:9092)\n"
+			"  -p <num>     Partition (defaults to random)\n"
+			"  -b <brokers> Broker address list (host[:port],..)\n"
+			"  -c <cnt>     Message count\n"
 			"  -s <size>    Message size (producer)\n"
+			"  -k <key>     Message key (producer)\n"
 			"  -c <cnt>     Messages to transmit/receive\n"
 			"  -D           Copy/Duplicate data buffer (producer)\n"
 			"  -i <ms>      Display interval\n"
+			"  -m <msg>     Message payload pattern\n"
+			"  -S <start>   Send a sequence number starting at "
+			"<start> as payload\n"
+			"  -R <seed>    Random seed value (defaults to time)\n"
+			"  -a <acks>    Required acks (producer): "
+			"-1, 0, 1, >1\n"
+			"  -d           Enable debugging\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  consumes messages and prints thruput\n"
@@ -132,7 +256,11 @@ int main (int argc, char **argv) {
 
 	dispintvl *= 1000; /* us */
 
+	printf("%% Using random seed %i\n", seed);
+	srand(seed);
 	signal(SIGINT, stop);
+	signal(SIGUSR1, sig_usr1);
+
 
 	/* Socket hangups are gracefully handled in librdkafka on socket error
 	 * without the use of signals, so SIGPIPE should be ignored by the
@@ -143,94 +271,154 @@ int main (int argc, char **argv) {
 		/*
 		 * Producer
 		 */
-		char *sbuf = malloc(msgsize);
-		int endwait;
+		char *sbuf;
+		char *pbuf;
 		int outq;
 		int i;
+		rd_kafka_topic_t *rkt;
+		int keylen = key ? strlen(key) : 0;
+		off_t rof = 0;
+		size_t plen = strlen(msgpattern);
 
-		memset(sbuf, 'R', msgsize);
+		if (do_seq) {
+			if (msgsize < strlen("18446744073709551615: ")+1)
+				msgsize = strlen("18446744073709551615: ")+1;
+			/* Force duplication of payload */
+			sendflags |= RD_KAFKA_MSG_F_FREE;
+		}
+
+		sbuf = malloc(msgsize);
+
+		/* Copy payload content to new buffer */
+		while (rof < msgsize) {
+			size_t xlen = RD_MIN(msgsize-rof, plen);
+			memcpy(sbuf+rof, msgpattern, xlen);
+			rof += xlen;
+		}
 
 		if (msgcnt == -1)
 			printf("%% Sending messages of size %i bytes\n",
 			       msgsize);
 		else
 			printf("%% Sending %i messages of size %i bytes\n",
-			       msgcnt ,msgsize);
+			       msgcnt, msgsize);
 
 		/* Create Kafka handle */
-		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, broker, NULL))) {
-			perror("kafka_new producer");
+		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, &conf,
+ 					errstr, sizeof(errstr)))) {
+			fprintf(stderr,
+				"%% Failed to create Kafka producer: %s\n",
+				errstr);
 			exit(1);
 		}
 
+		if (debug)
+			rd_kafka_set_log_level(rk, 7);
+
+		/* Add broker(s) */
+		if (rd_kafka_brokers_add(rk, brokers) < 1) {
+			fprintf(stderr, "%% No valid brokers specified\n");
+			exit(1);
+		}
+
+		/* Explicitly create topic to avoid per-msg lookups. */
+		rkt = rd_kafka_topic_new(rk, topic, &topic_conf);
+
 		cnt.t_start = rd_clock();
 
+		msgs_wait_cnt = msgcnt;
+		
 		while (run && (msgcnt == -1 || cnt.msgs < msgcnt)) {
-			char *pbuf = sbuf;
 			/* Send/Produce message. */
 
-			if (sendflags & RD_KAFKA_OP_F_FREE) {
+			if (do_seq) {
+				snprintf(sbuf, msgsize-1, "%"PRIu64": ", seq);
+				seq++;
+			}
+
+			if (sendflags & RD_KAFKA_MSG_F_FREE) {
 				/* Duplicate memory */
 				pbuf = malloc(msgsize);
 				memcpy(pbuf, sbuf, msgsize);
+			} else
+				pbuf = sbuf;
+
+			cnt.tx++;
+			while (rd_kafka_produce(rkt, partition,
+						sendflags, pbuf, msgsize,
+						key, keylen,
+						(void *)cnt.msgs) == -1) {
+				printf("produce: %s\n", strerror(errno));
+				cnt.tx_err++;
+				now = rd_clock();
+				if (cnt.t_last + dispintvl <= now) {
+					printf("%% Backpressure %i/%i "
+					       "(tx %"PRIu64", "
+					       "txerr %"PRIu64")\n",
+					       rd_kafka_outq_len(rk),
+					       conf.producer.max_messages,
+					       cnt.tx, cnt.tx_err);
+					cnt.t_last = now;
+				}
+				/* Poll to handle delivery reports */
+				rd_kafka_poll(rk, 10);
 			}
 
-			rd_kafka_produce(rk, topic, partition,
-					 sendflags, pbuf, msgsize);
 			cnt.msgs++;
 			cnt.bytes += msgsize;
 			
 			now = rd_clock();
-			if (cnt.t_last + dispintvl <= now) {
+			if (cnt.t_last + dispintvl <= now &&
+			    now - cnt.t_start > 0) {
 				printf("%% %"PRIu64" messages and %"PRIu64 
 				       "bytes: %"PRIu64" msgs/s and "
 				       "%.2f Mb/s\n",
 				       cnt.msgs, cnt.bytes,
-				       (cnt.msgs / (now - cnt.t_start)) *
-				       1000000,
+				       ((cnt.msgs * 1000000000) /
+					(now - cnt.t_start)),
 				       (float)(cnt.bytes /
 					       (now - cnt.t_start)));
 				cnt.t_last = now;
 			}
 
+			/* Must poll to handle delivery reports */
+			rd_kafka_poll(rk, 0);
+			
 		}
 
+		printf("All messages produced, "
+		       "now waiting for %li deliveries\n",
+		       msgs_wait_cnt);
+		rd_kafka_dump(stdout, rk);
 
+		// cnt.t_end_send = rd_clock();
 
-		/* Wait for messaging to finish. */
+		/* Wait for messages to be delivered */
 		i = 0;
-		while (run && rd_kafka_outq_len(rk) > 0) {
+		while (run && rd_kafka_poll(rk, 1000) != -1) {
 			if (!(i++ % (dispintvl/1000)))
-				printf("%% Waiting for %i messages in outq "
+				printf("%% Waiting for %li, "
+				       "%i messages in outq "
 				       "to be sent. Abort with Ctrl-c\n",
+				       msgs_wait_cnt,
 				       rd_kafka_outq_len(rk));
-			usleep(1000);
 		}
 
-		cnt.t_end_send = rd_clock();
 
 		outq = rd_kafka_outq_len(rk);
+		printf("%% %i messages in outq\n", outq);
 		cnt.msgs -= outq;
 		cnt.bytes -= msgsize * outq;
 
-		cnt.t_end = rd_clock();
+		cnt.t_end = t_end;
 
-		/* Since there is no ack for produce messages in 0.7 
-		 * we wait some more for any packets in the socket buffers
-		 * to be sent.
-		 * This is fixed in protocol version 0.8 */
-		endwait = cnt.msgs * 10;
-		printf("%% Test timers stopped, but waiting %ims more "
-		       "for the %"PRIu64 " messages to be transmitted from "
-		       "socket buffers.\n"
-		       "%% End with Ctrl-c\n",
-		       endwait / 1000,
-		       cnt.msgs);
-		run = 1;
-		while (run && endwait > 0) {
-			usleep(10000);
-			endwait -= 10000;
-		}
+		if (cnt.tx_err > 0)
+			printf("%% %"PRIu64" backpressures for %"PRIu64
+			       " produce calls: %.3f%% backpressure rate\n",
+			       cnt.tx_err, cnt.tx,
+			       ((double)cnt.tx_err / (double)cnt.tx) * 100.0);
+
+		rd_kafka_dump(stdout, rk);
 
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
@@ -238,6 +426,7 @@ int main (int argc, char **argv) {
 		dirstr = "sent";
 
 	} else if (mode == 'C') {
+#if 0
 		/*
 		 * Consumer
 		 */
@@ -325,7 +514,7 @@ int main (int argc, char **argv) {
 
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
-
+#endif
 		dirstr = "received";
 	}
 
@@ -334,13 +523,18 @@ int main (int argc, char **argv) {
 	else
 		cnt.t_total = cnt.t_end - cnt.t_start;
 
-	printf("%% %"PRIu64" messages and %"PRIu64" bytes "
-	       "%s in %"PRIu64"ms: %"PRIu64" msgs/s and %.02f Mb/s\n",
-	       cnt.msgs, cnt.bytes,
-	       dirstr,
-	       cnt.t_total / 1000,
-	       (cnt.msgs / (cnt.t_total / 1000)) * 1000,
-	       (float)(cnt.bytes / (cnt.t_total / 1000)));
+	printf("Result:\n");
+	if (cnt.t_total > 0) {
+		printf("%% %"PRIu64" messages and %"PRIu64" bytes "
+		       "%s in %"PRIu64"ms: %"PRIu64" msgs/s and %.02f Mb, "
+		       "%i messages failed\n",
+		       cnt.msgs, cnt.bytes,
+		       dirstr,
+		       cnt.t_total / 1000,
+		       ((cnt.msgs * 1000000) / cnt.t_total),
+		       (float)((cnt.bytes) / (float)cnt.t_total),
+		       msgs_failed);
+	}
 
 	if (cnt.t_latency)
 		printf("%% Average application fetch latency: %"PRIu64"us\n",

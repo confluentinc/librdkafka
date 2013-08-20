@@ -1,35 +1,19 @@
 
 LIBNAME=librdkafka
-LIBVER=0
-LIBVER_FULL=$(LIBVER).0.0
+LIBVER=1
 
+DESTDIR?=/usr/local
 
-PREFIX?=/usr/local
-
-# The preferred way to compile is to have a separate checkout of librd
-# and link with it. If that is not desirable or possible the required librd
-# functionality is included with librdkafka for compile-time inclusion.
-# Define WITH_LIBRD to use an external librd, or leave undefined for the
-# integrated version.
-#WITH_LIBRD=1
-
-# Use gcc as ld to avoid __stack_chk_fail_error symbol error.
-LD=gcc
-
-
-SRCS=	rdkafka.c
-
-ifndef WITH_LIBRD
-SRCS+=rdcrc32.c rdgz.c rdaddr.c rdrand.c rdfile.c
-endif
-
-HDRS=	rdkafka.h rdkafkacpp.h rdtypes.h rd.h rdaddr.h 
+SRCS=	rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
+	rdkafka_defaultconf.c
+SRCS+=  rdcrc32.c rdgz.c rdaddr.c rdrand.c rdthread.c rdqueue.c rdlog.c
+HDRS=	rdkafka.h
 
 OBJS=	$(SRCS:.c=.o)
 DEPS=	${OBJS:%.o=%.d}
 
 CFLAGS+=-O2 -Wall -Werror -Wfloat-equal -Wpointer-arith -fPIC -I.
-CFLAGS+=-g
+CFLAGS+=-g -rdynamic
 
 # Profiling
 #CFLAGS+=-O0
@@ -42,27 +26,34 @@ LDFLAGS+=-shared -g -fPIC -lpthread -lrt -lz -lc
 
 all: libs
 
-libs: $(LIBNAME).so $(LIBNAME).a
+libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a
 
 %.o: %.c
 	$(CC) -MD -MP $(CFLAGS) -c $<
 
-$(LIBNAME).so:	$(OBJS)
-	$(LD) -shared -Wl,-soname,$(LIBNAME).so.$(LIBVER) \
-		$(LDFLAGS) $(OBJS) -o $@
-	ln -fs $(LIBNAME).so $(LIBNAME).so.$(LIBVER)
+
+$(LIBNAME).so.$(LIBVER): $(OBJS)
+	$(LD) -shared -soname $@ $(LDFLAGS) \
+		--version-script=librdkafka.lds \
+		$(OBJS) -o $@
 
 $(LIBNAME).a:	$(OBJS)
 	$(AR) rcs $@ $(OBJS)
 
 install:
-	install -d $(PREFIX)/include/librdkafka $(PREFIX)/lib
-	install -t $(PREFIX)/include/$(LIBNAME) $(HDRS)
-	install -t $(PREFIX)/lib $(LIBNAME).so
-	install -t $(PREFIX)/lib $(LIBNAME).so.$(LIBVER)
-	install -t $(PREFIX)/lib $(LIBNAME).a
+	if [ "$(DESTDIR)" != "/usr/local" ]; then \
+		DESTDIR="$(DESTDIR)/usr"; \
+	else \
+		DESTDIR="$(DESTDIR)" ; \
+	fi ; \
+	install -d $$DESTDIR/include/librdkafka $$DESTDIR/lib ; \
+	install -t $$DESTDIR/include/$(LIBNAME) $(HDRS) ; \
+	install -t $$DESTDIR/lib $(LIBNAME).a ; \
+	install -t $$DESTDIR/lib $(LIBNAME).so.$(LIBVER) ; \
+	(cd $$DESTDIR/lib && ln -sf $(LIBNAME).so.$(LIBVER) $(LIBNAME).so)
 
 clean:
-	rm -f $(OBJS) $(DEPS) $(LIBNAME)*.a $(LIBNAME)*.so $(LIBNAME)*.so.?
+	rm -f $(OBJS) $(DEPS) \
+		$(LIBNAME)*.a $(LIBNAME)*.so $(LIBNAME)*.so.$(LIBVER)
 
 -include $(DEPS)

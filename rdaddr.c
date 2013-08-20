@@ -159,8 +159,12 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 		defsvc = svc;
 		
 	if ((r = getaddrinfo(node, defsvc, &hints, &ais))) {
-		*errstr = gai_strerror(r);
-		errno = EFAULT;
+		if (r == EAI_SYSTEM)
+			*errstr = strerror(errno);
+		else {
+			*errstr = gai_strerror(r);
+			errno = EFAULT;
+		}
 		return NULL;
 	}
 	

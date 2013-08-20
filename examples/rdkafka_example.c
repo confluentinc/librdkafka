@@ -48,6 +48,7 @@ static rd_kafka_t *rk;
 
 static void stop (int sig) {
 	run = 0;
+	fclose(stdin); /* abort fgets() */
 }
 
 
@@ -216,7 +217,7 @@ int main (int argc, char **argv) {
 		rkt = rd_kafka_topic_new(rk, topic, &topic_conf);
 
 		fprintf(stderr, "%% Type stuff and hit enter to send\n");
-		while (run && (fgets(buf, sizeof(buf), stdin))) {
+		while (run && fgets(buf, sizeof(buf), stdin)) {
 			size_t len = strlen(buf);
 
 			/* Send/Produce message. */

@@ -335,10 +335,10 @@ typedef struct rd_kafka_topic_conf_s {
 	 */
 
 	int32_t (*partitioner) (const void *keydata,
-					 size_t keylen,
-					 int32_t partition_cnt,
-					 void *rkt_opaque,
-					 void *msg_opaque);
+				size_t keylen,
+				int32_t partition_cnt,
+				void *rkt_opaque,
+				void *msg_opaque);
 
 	/* Application provided opaque pointer (this is rkt_opaque) */
 	void   *opaque;

@@ -658,7 +658,7 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 
 
 
-const char *rd_kafka_name (rd_kafka_t *rk) {
+const char *rd_kafka_name (const rd_kafka_t *rk) {
 	return rk->rk_name;
 }
 

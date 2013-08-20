@@ -463,7 +463,7 @@ void        rd_kafka_destroy (rd_kafka_t *rk);
 /**
  * Returns the kafka handle name.
  */
-const char *rd_kafka_name (rd_kafka_t *rk);
+const char *rd_kafka_name (const rd_kafka_t *rk);
 
 
 

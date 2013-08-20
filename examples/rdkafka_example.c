@@ -44,6 +44,7 @@
 
 
 static int run = 1;
+static rd_kafka_t *rk;
 
 static void stop (int sig) {
 	run = 0;
@@ -96,9 +97,11 @@ static void msg_delivered (rd_kafka_t *rk,
 		printf("%% Message delivered (%zd bytes)\n", len);
 }
 
+static void sig_usr1 (int sig) {
+	rd_kafka_dump(stdout, rk);
+}
 
 int main (int argc, char **argv) {
-	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	char *brokers = "localhost:9092";
 	char mode = 'C';
@@ -165,6 +168,7 @@ int main (int argc, char **argv) {
 
 
 	signal(SIGINT, stop);
+	signal(SIGUSR1, sig_usr1);
 
 	/* Socket hangups are gracefully handled in librdkafka on socket error
 	 * without the use of signals, so SIGPIPE should be ignored by

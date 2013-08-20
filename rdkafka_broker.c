@@ -47,7 +47,7 @@
 
 
 
-static const char *rd_kafka_broker_state_names[] = {
+const char *rd_kafka_broker_state_names[] = {
 	"DOWN",
 	"CONNECTING",
 	"UP"

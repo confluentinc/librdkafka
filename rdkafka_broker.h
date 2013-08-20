@@ -28,6 +28,7 @@
 
 #pragma once
 
+extern const char *rd_kafka_broker_state_names[];
 
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 						   int32_t nodeid);

@@ -36,6 +36,7 @@
 
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
+#include "rdkafka_broker.h"
 
 #include "rdthread.h"
 
@@ -617,8 +618,10 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 
 	fprintf(fp, " brokers:\n");
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-		fprintf(fp, " rd_kafka_broker_t %p: %s NodeId %"PRId32"\n",
-			rkb, rkb->rkb_name, rkb->rkb_nodeid);
+		fprintf(fp, " rd_kafka_broker_t %p: %s NodeId %"PRId32
+			" in state %s\n",
+			rkb, rkb->rkb_name, rkb->rkb_nodeid,
+			rd_kafka_broker_state_names[rkb->rkb_state]);
 		fprintf(fp, "  outbuf_cnt: %i waitresp_cnt: %i\n",
 			rkb->rkb_outbuf_cnt, rkb->rkb_waitresp_cnt);
 		fprintf(fp, 

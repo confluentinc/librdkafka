@@ -1,30 +1,57 @@
 librdkafka - Apache Kafka C client library
 ==========================================
 
-Copyright (c) 2012-2013, [Magnus Edenhill](http://www.edenhill.se/), et.al.
+Copyright (c) 2012-2013, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
 **librdkafka** is a C library implementation of the
-[Apache Kafka](http://incubator.apache.org/kafka/) protocol, containing both
-Producer and Consumer support.
-
-**WORK IN PROGRESS**
-
-**NOTE: This is a development branch for Kafka protocol 0.8 support.**
-
-**It is functional but comes with the following limitations:**
-
-  * Only producer support, no consumer support.
-  * No compression support
-  * Only supports protocol 0.8, not 0.7.
-  * API is not compatible with librdkafka 0.7
-  * Work in progress, APIs may change.
-
+[Apache Kafka](http://kafka.apache.org/) protocol, containing both
+Producer and Consumer support. It was designed with high performance (current figures around 150000msgs/second) and message delivery reliability in mind.
 
 **librdkafka** is licensed under the 2-clause BSD license.
 
-And finally, dont hesitate to tell me if you are using librdkafka.
+
+**Apache Kafka 0.8 support:**
+
+  * Branch: master
+  * Producer: supported
+  * Consumer: not yet implemented
+  * Compression: work in progress
+  * Debian package: [work in progress by paravoid](https://github.com/paravoid/librdkafka/tree/debian)
+  * ZooKeeper: not supported
+  * API: not backwards compatible
+  * Status: Testing, APIs subject to change.
+
+
+**Apache Kafka 0.7 support:**
+
+  * Branch: 0.7
+  * Producer: supported
+  * Consumer: supported
+  * Compression: not supported
+  * ZooKeeper: not supported
+  * API: backwards compatible with 0.6
+  * Status: Stable
+
+
+**Apache Kafka 0.6 support:**
+
+  * Branch: 0.6
+  * Producer: supported
+  * Consumer: supported
+  * Compression: not supported
+  * ZooKeeper: not supported
+  * Status: Testing
+
+
+
+
+**Applications using librdkafka:**
+
+  * [Wikimedia's varnishkafka](https://github.com/wikimedia/operations-software-varnish-varnishkafka)
+  * *Let me know if you are using librdkafka*
+
 
 
 # Usage

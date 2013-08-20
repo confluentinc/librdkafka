@@ -98,6 +98,8 @@ typedef enum {
 	RD_KAFKA_OP_DR,       /* Kafka thread -> Application
 			       * Produce message delivery report */
 
+	RD_KAFKA_OP_METADATA_REQ, /* any -> Broker thread: request metadata */
+
 	/* Internal librdkafka ops */
 	RD_KAFKA_OP_REPLY,    /* Kafka thread: reply received from broker */
 } rd_kafka_op_type_t;
@@ -420,6 +422,25 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 
 #define rd_rkb_dbg(rkb,fac,fmt...)					\
 	rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name, LOG_DEBUG, fac, fmt)
+
+
+void rd_kafka_q_init (rd_kafka_q_t *rkq);
+
+/**
+ * Enqueue the 'rko' op at the tail of the queue 'rkq'.
+ *
+ * Locality: any thread.
+ */
+static inline RD_UNUSED
+void rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
+	pthread_mutex_lock(&rkq->rkq_lock);
+	TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
+	(void)rd_atomic_add(&rkq->rkq_qlen, 1);
+	pthread_cond_signal(&rkq->rkq_cond);
+	pthread_mutex_unlock(&rkq->rkq_lock);
+}
+
+#define rd_kafka_q_len(rkq) ((rkq)->rkq_qlen)
 
 rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms);
 

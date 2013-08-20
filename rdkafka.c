@@ -181,7 +181,7 @@ void rd_kafka_op_destroy (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 /**
  * Initialize a queue.
  */
-static void rd_kafka_q_init (rd_kafka_q_t *rkq) {
+void rd_kafka_q_init (rd_kafka_q_t *rkq) {
 	TAILQ_INIT(&rkq->rkq_q);
 	rkq->rkq_qlen = 0;
 	
@@ -189,18 +189,6 @@ static void rd_kafka_q_init (rd_kafka_q_t *rkq) {
 	pthread_cond_init(&rkq->rkq_cond, NULL);
 }
 
-/**
- * Enqueue the 'rko' op at the tail of the queue 'rkq'.
- *
- * Locality: any thread.
- */
-static inline void rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
-	pthread_mutex_lock(&rkq->rkq_lock);
-	TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
-	(void)rd_atomic_add(&rkq->rkq_qlen, 1);
-	pthread_cond_signal(&rkq->rkq_cond);
-	pthread_mutex_unlock(&rkq->rkq_lock);
-}
 
 
 /**

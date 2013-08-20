@@ -714,6 +714,19 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	size_t tnamelen = 0;
 	rd_kafka_topic_t *rkt;
 
+	rd_rkb_dbg(rkb, "METADATA", "Request metadata");
+
+	/* If called from other thread than the broker's own post an
+	 * op for the broker's thread instead since all transmissions must
+	 * be performed by the broker thread. */
+	if (pthread_self() != rkb->rkb_thread) {
+		rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_REQ);
+		rko->rko_rkt = only_rkt;
+		rd_kafka_q_enq(&rkb->rkb_ops, rko);
+		rd_rkb_dbg(rkb, "METADATA", "Not in own thread");
+		return;
+	}
+
 	/* FIXME: Use iovs and ..next here */
 
 	rd_kafka_dbg(rkb->rkb_rk, "METADATA",
@@ -726,7 +739,7 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 		arrsize = rkb->rkb_rk->rk_topic_cnt;
 
 		rd_kafka_lock(rkb->rkb_rk);
-		/* Calculate size to hold all topics */
+		/* Calculate size to hold all known topics */
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
 			if (only_rkt && only_rkt != rkt)
 				continue;
@@ -781,6 +794,7 @@ static rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
 
 /**
  * Trigger broker metadata query for topic leader.
+ * 'rkt' may be NULL to query for all topics.
  */
 void rd_kafka_topic_leader_query (rd_kafka_t *rk, rd_kafka_topic_t *rkt) {
 	rd_kafka_broker_t *rkb;
@@ -793,6 +807,8 @@ void rd_kafka_topic_leader_query (rd_kafka_t *rk, rd_kafka_topic_t *rkt) {
 	rd_kafka_unlock(rk);
 
 	rd_kafka_broker_metadata_req(rkb, 0, rkt);
+
+	/* Release refcnt from rd_kafka_broker_any() */
 	rd_kafka_broker_destroy(rkb);
 }
 
@@ -1553,9 +1569,45 @@ static int rd_kafka_broker_send_toppar (rd_kafka_broker_t *rkb,
 	return cnt;
 }
 
+/**
+ * Serve a broker op (an op posted by another thread to be handled by
+ * this broker's thread).
+ */
+static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
+				      rd_kafka_op_t *rko) {
+
+	assert(pthread_self() == rkb->rkb_thread);
+
+	rd_kafka_dbg(rkb->rkb_rk, "BRKOP",
+		     "%s: Serve broker op type %i",
+		     rkb->rkb_name, rko->rko_type);
+
+	switch (rko->rko_type)
+	{
+	case RD_KAFKA_OP_METADATA_REQ:
+		if (rko->rko_rkt)
+			rd_kafka_broker_metadata_req(rkb, 0, rko->rko_rkt);
+		else
+			rd_kafka_broker_metadata_req(rkb, 1 /*all topics*/,
+						     NULL);
+		break;
+
+	default:
+		assert(!*"unhandled op type");
+	}
+
+	rd_kafka_op_destroy(rkb->rkb_rk, rko);
+}
+
 
 static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
+	rd_kafka_op_t *rko;
 
+	/* Serve broker ops */
+	if (unlikely(rd_kafka_q_len(&rkb->rkb_ops) > 0))
+		while ((rko = rd_kafka_q_pop(&rkb->rkb_ops, RD_POLL_NOWAIT)))
+			rd_kafka_broker_op_serve(rkb, rko);
+	
 	if (rkb->rkb_outbuf_cnt > 0)
 		rkb->rkb_pfd.events |= EPOLLOUT;
 	else
@@ -1766,6 +1818,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	TAILQ_INIT(&rkb->rkb_outbufs);
 	TAILQ_INIT(&rkb->rkb_waitresps);
 	TAILQ_INIT(&rkb->rkb_retrybufs);
+	rd_kafka_q_init(&rkb->rkb_ops);
 	rd_kafka_broker_keep(rkb);
 	
 	if ((err = pthread_create(&rkb->rkb_thread, NULL,

@@ -203,7 +203,8 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms) {
 	pthread_mutex_lock(&rkq->rkq_lock);
 
 	/* FIXME: concat queue to local queue without lock. */
-	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) && timeout_ms != 0) {
+	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
+	       timeout_ms != RD_POLL_NOWAIT) {
 
 		if (timeout_ms != RD_POLL_INFINITE) {
 			if (pthread_cond_timedwait_ms(&rkq->rkq_cond,

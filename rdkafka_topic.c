@@ -213,6 +213,9 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
 	rd_kafka_topic_keep(rkt); /* one refcnt for caller */
 
+	/* Query for the topic leader (async) */
+	rd_kafka_topic_leader_query(rk, rkt);
+
 	return rkt;
 }
 

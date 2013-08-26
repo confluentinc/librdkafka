@@ -296,7 +296,7 @@ void rd_kafka_topic_update (rd_kafka_t *rk,
 	rd_kafka_broker_t *rkb;
 
 	if (!(rkt = rd_kafka_topic_find(rk, topic))) {
-		rd_kafka_dbg(rk, TOPIC, "TOPICUPD",
+		rd_kafka_dbg(rk, METADATA, "TOPICUPD",
 			     "Ignoring topic %s: not found locally", topic);
 		return;
 	}
@@ -375,7 +375,7 @@ void rd_kafka_topic_partition_cnt_update (rd_kafka_t *rk,
 	int32_t i;
 
 	if (!(rkt = rd_kafka_topic_find(rk, topic))) {
-		rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+		rd_kafka_dbg(rk, METADATA, "PARTCNT",
 			     "Ignore unknown topic %s", topic);
 		return; /* Ignore topics that we dont have locally. */
 	}
@@ -445,7 +445,7 @@ void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic) {
 	int cnt;
 
 	if (!(rkt = rd_kafka_topic_find(rk, topic))) {
-		rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+		rd_kafka_dbg(rk, METADATA, "PARTCNT",
 			     "Ignore unknown topic %s", topic);
 		return; /* Ignore topics that we dont have locally. */
 	}

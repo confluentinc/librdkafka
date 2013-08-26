@@ -152,6 +152,24 @@ typedef struct rd_kafka_conf_s {
 	 * error and connect.
 	 * A negative value disables the intervalled refresh. */
 	int metadata_refresh_interval_ms;
+
+	/* Property: topic.metadata.refresh.fast.cnt
+	 *
+	 * Following a topic without leader error this many
+	 * metadata requests are sent with
+	 * 'topic.metadata.refresh.fash.interval.ms' interval disregarding
+	 * the topic.metadata.refresh.interval.ms value.
+	 * This is used to recover fast from transitioning leader brokers.
+	 * Default value: 10 */
+	int metadata_refresh_fast_cnt;
+
+	/* Property: topic.metadata.refresh.fast.interval.ms
+	 *
+	 * See 'topic.metadata.refresh.fast.cnt' description.
+	 * Default value: 250ms */
+	int metadata_refresh_fast_interval_ms;
+
+
 	/* Boolean flags: RD_KAFKA_CONF_F_... */
 	int     flags;
 

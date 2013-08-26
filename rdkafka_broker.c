@@ -44,7 +44,7 @@
 #include "rdtime.h"
 #include "rdthread.h"
 #include "rdcrc32.h"
-
+#include "rdrand.h"
 
 
 const char *rd_kafka_broker_state_names[] = {
@@ -764,9 +764,29 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 		   "Requesting metadata for %stopics",
 		   all_topics ? "all ": "known ");
 
-	if (all_topics)
+	if (all_topics) {
 		arrsize = 0;
-	else {
+
+		/* Push the next intervalled metadata refresh forward since
+		 * we are performing one now (which might be intervalled). */
+		if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0) {
+			if (rkb->rkb_metadata_fast_poll_cnt > 0) {
+				/* Fast poll after topic loosings its leader */
+				rkb->rkb_metadata_fast_poll_cnt--;
+				rkb->rkb_ts_metadata_poll = rd_clock() +
+					(rkb->rkb_rk->rk_conf.
+					 metadata_refresh_fast_interval_ms *
+					 1000);
+			} else {
+				/* According to configured poll interval */
+				rkb->rkb_ts_metadata_poll = rd_clock() +
+					(rkb->rkb_rk->rk_conf.
+					 metadata_refresh_interval_ms * 1000);
+			}
+		}
+
+
+	} else {
 		arrsize = rkb->rkb_rk->rk_topic_cnt;
 
 		rd_kafka_lock(rkb->rkb_rk);
@@ -837,7 +857,7 @@ void rd_kafka_topic_leader_query (rd_kafka_t *rk, rd_kafka_topic_t *rkt) {
 	}
 	rd_kafka_unlock(rk);
 
-	rd_kafka_broker_metadata_req(rkb, 0, rkt);
+	rd_kafka_broker_metadata_req(rkb, 0, rkt, "leader query");
 
 	/* Release refcnt from rd_kafka_broker_any() */
 	rd_kafka_broker_destroy(rkb);
@@ -1322,7 +1342,10 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 		case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
 		case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
 			/* Request metadata information update */
+			rkb->rkb_metadata_fast_poll_cnt =
+				rkb->rkb_rk->rk_conf.metadata_refresh_fast_cnt;
 			rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
+			/* FALLTHRU */
 
 		case RD_KAFKA_RESP_ERR__TRANSPORT:
 		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
@@ -1613,11 +1636,17 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
 static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 	rd_kafka_op_t *rko;
+	rd_ts_t now = rd_clock();
 
 	/* Serve broker ops */
 	if (unlikely(rd_kafka_q_len(&rkb->rkb_ops) > 0))
 		while ((rko = rd_kafka_q_pop(&rkb->rkb_ops, RD_POLL_NOWAIT)))
 			rd_kafka_broker_op_serve(rkb, rko);
+
+	/* Periodic metadata poll */
+	if (unlikely(now >= rkb->rkb_ts_metadata_poll))
+		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
+					     "periodic refresh");
 	
 	if (rkb->rkb_outbuf_cnt > 0)
 		rkb->rkb_pfd.events |= EPOLLOUT;
@@ -1829,6 +1858,16 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_q_init(&rkb->rkb_ops);
 	rd_kafka_broker_keep(rkb);
 	
+	/* Set next intervalled metadata refresh, offset by a random
+	 * value to avoid all brokers to be queried simultaneously. */
+	if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0)
+		rkb->rkb_ts_metadata_poll = rd_clock() +
+			(rkb->rkb_rk->rk_conf.
+			 metadata_refresh_interval_ms * 1000) +
+			(rd_jitter(500,1500) * 1000);
+	else /* disabled */
+		rkb->rkb_ts_metadata_poll = UINT64_MAX;
+
 	if ((err = pthread_create(&rkb->rkb_thread, NULL,
 				  rd_kafka_broker_thread_main, rkb))) {
 		rd_kafka_log(rk, LOG_CRIT, "THREAD",

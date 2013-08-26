@@ -232,6 +232,9 @@ typedef struct rd_kafka_broker_s {
 		uint64_t rx_err;
 	} rkb_c;
 
+	rd_ts_t             rkb_ts_metadata_poll; /* Next metadata poll time */
+	int                 rkb_metadata_fast_poll_cnt; /* Perform fast
+							 * metadata polls. */
 	int                 rkb_terminate;
 	pthread_mutex_t     rkb_lock;
 	pthread_t           rkb_thread;

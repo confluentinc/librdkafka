@@ -43,6 +43,9 @@ static const rd_kafka_conf_t rd_kafka_defaultconf = {
 	/* common settings */
 	max_msg_size: 4000000,
 	metadata_request_timeout_ms: 1000 * 60,  /* 1 minute */
+	metadata_refresh_interval_ms: 10000,     /* 10s */
+	metadata_refresh_fast_cnt: 10,
+	metadata_refresh_fast_interval_ms: 250,  /* 250ms */
 
 	/* consumer settings */
 	consumer: {
@@ -55,7 +58,6 @@ static const rd_kafka_conf_t rd_kafka_defaultconf = {
 	producer: {
 	max_messages: 1000000,
 	buffering_max_ms: 1000,
-	metadata_refresh_interval_ms: 10000,
 	max_retries: 0,
 	retry_backoff_ms: 100,
 	batch_num_messages: 1000,
@@ -258,8 +260,12 @@ rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
 		{ "queue.buffering.max.ms", _RK_C_INT,
 		  &conf->producer.buffering_max_ms, 1, 900*1000 },
 		{ "topic.metadata.refresh.interval.ms", _RK_C_INT,
-		  &conf->producer.metadata_refresh_interval_ms,
+		  &conf->metadata_refresh_interval_ms,
 		  1000, 3600*1000 },
+		{ "topic.metadata.refresh.fast.cnt", _RK_C_INT,
+		  &conf->metadata_refresh_fast_cnt, 0, 1000 },
+		{ "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
+		  &conf->metadata_refresh_fast_interval_ms, 1, 60000 },
 		{ "message.send.max.retries", _RK_C_INT,
 		  &conf->producer.max_retries, 0, 100 },
 		{ "retry.backoff.ms", _RK_C_INT,

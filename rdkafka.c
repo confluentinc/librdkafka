@@ -595,6 +595,7 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_toppar_t *rktp;
 
+	rd_kafka_lock(rk);
 	fprintf(fp, "rd_kafka_t %p: %s\n", rk, rk->rk_name);
 
 	fprintf(fp, " rk_op request queue: %i ops\n", rk->rk_op.rkq_qlen);
@@ -602,6 +603,7 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 
 	fprintf(fp, " brokers:\n");
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+		rd_kafka_broker_lock(rkb);
 		fprintf(fp, " rd_kafka_broker_t %p: %s NodeId %"PRId32
 			" in state %s\n",
 			rkb, rkb->rkb_name, rkb->rkb_nodeid,
@@ -622,14 +624,13 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 
 		fprintf(fp, "  %i toppars:\n", rkb->rkb_toppar_cnt);
 		rd_kafka_broker_toppars_rdlock(rkb);
-		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
+		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink)
 			rd_kafka_toppar_dump(fp, "   ", rktp);
 		rd_kafka_broker_toppars_unlock(rkb);
-		}
+		rd_kafka_broker_unlock(rkb);
 	}
 
 	fprintf(fp, " topics:\n");
-	rd_kafka_lock(rk);
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		fprintf(fp, "  %.*s with %"PRId32" partitions\n",
 			RD_KAFKAP_STR_PR(rkt->rkt_topic),

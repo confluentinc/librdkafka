@@ -92,6 +92,10 @@ static size_t rd_kafka_msghdr_size (const struct msghdr *msg) {
 	return tot;
 }
 
+/**
+ * Locks: rd_kafka_broker_lock() MUST be held.
+ * Locality: broker thread
+ */
 static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
 				       int state) {
 	if (rkb->rkb_state == state)
@@ -829,15 +833,22 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 
 
+/**
+ * Locks: rd_kafka_lock(rk) MUST be held.
+ * Locality: any thread
+ */
 static rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
 	rd_kafka_broker_t *rkb;
 
-	/* FIXME: lock */
-	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link)
+	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+		rd_kafka_broker_lock(rkb);
 		if (rkb->rkb_state == state) {
 			rd_kafka_broker_keep(rkb);
+			rd_kafka_broker_unlock(rkb);
 			return rkb;
 		}
+		rd_kafka_broker_unlock(rkb);
+	}
 
 	return NULL;
 }
@@ -1133,7 +1144,9 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 		return -1;
 	}
 
+	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_CONNECTING);
+	rd_kafka_broker_unlock(rkb);
 
 	if (connect(rkb->rkb_s, (struct sockaddr *)sinx,
 		    RD_SOCKADDR_INX_LEN(sinx)) == -1) {
@@ -1161,8 +1174,10 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "connected to %s",
 		   rd_sockaddr2str(sinx, RD_SOCKADDR2STR_F_NICE));
 
+	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
 	rkb->rkb_err.err = 0;
+	rd_kafka_broker_unlock(rkb);
 
 	rkb->rkb_pfd.fd = rkb->rkb_s;
 	rkb->rkb_pfd.events = EPOLLIN;

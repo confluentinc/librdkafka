@@ -144,6 +144,14 @@ typedef struct rd_kafka_conf_s {
 	 * This is for metadata requests, etc. */
 	int     metadata_request_timeout_ms;
 
+
+	/* Property: topic.metadata.refresh.interval.ms
+	 *
+	 * Topic metadata refresh interval in milliseconds.
+	 * The metadata is automatically refreshed on
+	 * error and connect.
+	 * A negative value disables the intervalled refresh. */
+	int metadata_refresh_interval_ms;
 	/* Boolean flags: RD_KAFKA_CONF_F_... */
 	int     flags;
 
@@ -230,16 +238,6 @@ typedef struct rd_kafka_conf_s {
 		 * Maximum time, in milliseconds, for buffering data
 		 * on the producer queue. */
 		int buffering_max_ms;
-
-		/* Property: topic.metadata.refresh.interval.ms
-		 *
-		 * Topic metadata refresh interval in milliseconds.
-		 * The metadata is automatically refreshed on
-		 * error and connect.
-		 * FIXME: Not implemented. */
-		/* FIXME: This should be controlled by the 'rk'
-		 *        and only assigned to one broker at the time. */
-		int metadata_refresh_interval_ms;
 
 		/* Property: message.send.max.retries
 		 *

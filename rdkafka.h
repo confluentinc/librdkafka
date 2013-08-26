@@ -167,6 +167,16 @@ typedef struct rd_kafka_conf_s {
 	/* Opaque passed to all registered callbacks. */
 	void   *opaque;
 
+
+	/* Property: debug
+	 *
+	 * A comma-separated list of debug contexts to enable:
+	 */
+#define RD_KAFKA_DEBUG_CONTEXTS \
+	"all,generic,broker,topic,metadata,producer,queue,msg"
+	int     debug;
+
+
 	/* Consumer configuration */
 	/* FIXME: 0.8 consumer not yet implemented */
 	struct {

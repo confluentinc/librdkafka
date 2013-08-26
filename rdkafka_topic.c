@@ -196,7 +196,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	if (!rkt->rkt_conf.partitioner)
 		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_random;
 
-	rd_kafka_dbg(rk, "TOPIC", "new topic: %.*s",
+	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));
 
 	rd_kafka_topic_keep(rkt); /* one refcnt for rk */
@@ -244,7 +244,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 	if (rktp->rktp_leader) {
 		rd_kafka_broker_t *old_rkb = rktp->rktp_leader;
 
-		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, "BRKDELGT",
+		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
 			     "Broker %s no longer leader "
 			     "for topic %.*s [%"PRId32"]",
 			     rktp->rktp_leader->rkb_name,
@@ -261,7 +261,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 	}
 
 	if (rkb) {
-		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, "BRKDELGT",
+		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
 			     "Broker %s is now leader for topic %.*s "
 			     "[%"PRId32"] with %i messages "
 			     "(%"PRIu64" bytes) queued",
@@ -279,7 +279,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 
 		
 	} else {
-		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, "BRKDELGT",
+		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
 			     "No broker is leader for topic %.*s [%"PRId32"]",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition);
@@ -296,7 +296,7 @@ void rd_kafka_topic_update (rd_kafka_t *rk,
 	rd_kafka_broker_t *rkb;
 
 	if (!(rkt = rd_kafka_topic_find(rk, topic))) {
-		rd_kafka_dbg(rk, "TOPICUPD",
+		rd_kafka_dbg(rk, TOPIC, "TOPICUPD",
 			     "Ignoring topic %s: not found locally", topic);
 		return;
 	}
@@ -341,7 +341,7 @@ void rd_kafka_topic_update (rd_kafka_t *rk,
 	if (rktp->rktp_leader) {
 		if (rktp->rktp_leader == rkb) {
 			/* No change in broker */
-			rd_kafka_dbg(rk, "TOPICUPD",
+			rd_kafka_dbg(rk, TOPIC, "TOPICUPD",
 				     "No leader change for topic %s "
 				     "[%"PRId32"] with leader %"PRId32,
 				     topic, partition, leader);
@@ -351,7 +351,7 @@ void rd_kafka_topic_update (rd_kafka_t *rk,
 			return;
 		}
 
-		rd_kafka_dbg(rk, "TOPICUPD",
+		rd_kafka_dbg(rk, TOPIC, "TOPICUPD",
 			     "Topic %s [%"PRId32"] migrated from "
 			     "broker %"PRId32" to %"PRId32,
 			     topic, partition, rktp->rktp_leader->rkb_nodeid,
@@ -375,24 +375,31 @@ void rd_kafka_topic_partition_cnt_update (rd_kafka_t *rk,
 	int32_t i;
 
 	if (!(rkt = rd_kafka_topic_find(rk, topic))) {
-		rd_kafka_dbg(rk, "PARTCNT", "Ignore unknown topic %s", topic);
+		rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+			     "Ignore unknown topic %s", topic);
 		return; /* Ignore topics that we dont have locally. */
 	}
 
 	if (rkt->rkt_partition_cnt == partition_cnt) {
-		rd_kafka_dbg(rk, "PARTCNT",
+		rd_kafka_dbg(rk, TOPIC, "PARTCNT",
 			     "No change in partition count for topic %s",
 			     topic);
 		return; /* No change in partition count */
 	}
 
-	rd_kafka_log(rk,
-		     rkt->rkt_partition_cnt == 0 ? LOG_DEBUG : LOG_NOTICE,
-		     "PARTCNT",
-		     "Topic %.*s partition count changed "
-		     "from %"PRId32" to %"PRId32,
-		     RD_KAFKAP_STR_PR(rkt->rkt_topic),
-		     rkt->rkt_partition_cnt, partition_cnt);
+	if (unlikely(rkt->rkt_partition_cnt != 0))
+		rd_kafka_log(rk, LOG_NOTICE, "PARTCNT",
+			     "Topic %.*s partition count changed "
+			     "from %"PRId32" to %"PRId32,
+			     RD_KAFKAP_STR_PR(rkt->rkt_topic),
+			     rkt->rkt_partition_cnt, partition_cnt);
+	else
+		rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+			     "Topic %.*s partition count changed "
+			     "from %"PRId32" to %"PRId32,
+			     RD_KAFKAP_STR_PR(rkt->rkt_topic),
+			     rkt->rkt_partition_cnt, partition_cnt);
+
 
 	/* Create and assign new partition list */
 	if (partition_cnt > 0)
@@ -438,12 +445,13 @@ void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic) {
 	int cnt;
 
 	if (!(rkt = rd_kafka_topic_find(rk, topic))) {
-		rd_kafka_dbg(rk, "PARTCNT", "Ignore unknown topic %s", topic);
+		rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+			     "Ignore unknown topic %s", topic);
 		return; /* Ignore topics that we dont have locally. */
 	}
 
 	/* Assign all unassigned messages to new topics. */
-	rd_kafka_dbg(rk, "PARTCNT",
+	rd_kafka_dbg(rk, TOPIC, "PARTCNT",
 		     "Partitioning %i unassigned messages in topic %.*s to "
 		     "%"PRId32" partitions",
 		     rkt->rkt_ua->rktp_msgq.rkmq_msg_cnt, 
@@ -462,14 +470,14 @@ void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic) {
 		}
 	}
 
-	rd_kafka_dbg(rk, "UAS",
+	rd_kafka_dbg(rk, TOPIC, "UAS",
 		     "%i/%i messages were partitioned",
 		     cnt - failed.rkmq_msg_cnt, cnt);
 
 	if (failed.rkmq_msg_cnt > 0) {
 		/* Add the messages to the UA partition's head to
 		 * preserve some message order. */
-		rd_kafka_dbg(rk, "UAS",
+		rd_kafka_dbg(rk, TOPIC, "UAS",
 			     "%i/%i messages failed partitioning",
 			     uas.rkmq_msg_cnt, cnt);
 		rd_kafka_toppar_lock(rkt->rkt_ua);

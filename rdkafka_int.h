@@ -409,19 +409,37 @@ void        rd_kafka_op_destroy (rd_kafka_t *rk, rd_kafka_op_t *rko);
 
 
 
-/* FIXME: NEW */
+/**
+ * Debug contexts
+ */
+#define RD_KAFKA_DBG_GENERIC    0x1
+#define RD_KAFKA_DBG_BROKER     0x2
+#define RD_KAFKA_DBG_TOPIC      0x4
+#define RD_KAFKA_DBG_METADATA   0x8
+#define RD_KAFKA_DBG_PRODUCER   0x10
+#define RD_KAFKA_DBG_QUEUE      0x20
+#define RD_KAFKA_DBG_MSG        0x40
+#define RD_KAFKA_DBG_ALL        0xff
+
 
 void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 		   const char *fac, const char *fmt, ...)
 	__attribute__((format (printf, 5, 6)));
 #define rd_kafka_log(rk,level,fac,fmt...) rd_kafka_log0(rk,NULL,level,fac,fmt)
-#define rd_kafka_dbg(rk,fac,fmt...)  rd_kafka_log0(rk,NULL,LOG_DEBUG,fac,fmt)
+#define rd_kafka_dbg(rk,ctx,fac,fmt...) do {				  \
+		if (unlikely((rk)->rk_conf.debug & RD_KAFKA_DBG_ ## ctx)) \
+			rd_kafka_log0(rk,NULL,LOG_DEBUG,fac,fmt);	  \
+	} while (0)
 
 #define rd_rkb_log(rkb,level,fac,fmt...)				\
 	rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name, level, fac, fmt)
 
-#define rd_rkb_dbg(rkb,fac,fmt...)					\
-	rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name, LOG_DEBUG, fac, fmt)
+#define rd_rkb_dbg(rkb,ctx,fac,fmt...) do {				\
+		if (unlikely((rkb)->rkb_rk->rk_conf.debug &		\
+			     RD_KAFKA_DBG_ ## ctx))			\
+			rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name,	\
+				      LOG_DEBUG, fac, fmt);		\
+	} while (0)
 
 
 void rd_kafka_q_init (rd_kafka_q_t *rkq);

@@ -284,8 +284,7 @@ int rd_kafka_q_serve (rd_kafka_t *rk,
 
 	pthread_mutex_unlock(&rkq->rkq_lock);
 
-	if (0)
-	rd_kafka_dbg(rk, "QSERVE", "Serving %i ops", localq.rkq_qlen);
+	rd_kafka_dbg(rk, QUEUE, "QSERVE", "Serving %i ops", localq.rkq_qlen);
 
 	/* Call callback for each op */
 	TAILQ_FOREACH_SAFE(rko, tmp, &localq.rkq_q, rko_link) {
@@ -458,22 +457,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, const rd_kafka_conf_t *conf,
 	rk->rk_log_cb = rd_kafka_log_print;
 	rk->rk_log_level = 6;
 
-
-	switch (rk->rk_type)
-	{
-	case RD_KAFKA_CONSUMER:
-		/* Set up consumer specifics. */
-
-		/* FIXME */
-		// rd_kafka_consumer_init(rk);
-		break;
-	case RD_KAFKA_PRODUCER:
-		// FIXME
-		// rd_kafka_producer_init(rk);
-		break;
-	}
-
-
 	/* Construct a client id if none is given. */
 	if (!rk->rk_conf.clientid)
 		rk->rk_conf.clientid = "default";
@@ -531,7 +514,7 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 	switch (rko->rko_type)
 	{
 	case RD_KAFKA_OP_FETCH:
-		rd_kafka_dbg(rk, "POLL", "fixme: fetch cb");
+		rd_kafka_dbg(rk, QUEUE, "POLL", "fixme: fetch cb");
 		break;
 
 	case RD_KAFKA_OP_ERR:
@@ -569,13 +552,13 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 		rd_kafka_msgq_init(&rko->rko_msgq);
 
 		if (!(dcnt % 1000))
-			rd_kafka_dbg(rk, "POLL",
+			rd_kafka_dbg(rk, MSG, "POLL",
 				     "Now %i messages delivered to app", dcnt);
 						  
 		break;
 
 	default:
-		rd_kafka_dbg(rk, "POLLCB",
+		rd_kafka_dbg(rk, ALL, "POLLCB",
 			     "cant handle op %i here", rko->rko_type);
 		assert(!*"cant handle op type");
 		break;

@@ -148,10 +148,10 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
 	rd_kafka_topic_rdlock(rkt);
 
 	if (unlikely(rkt->rkt_partition_cnt == 0)) {
-		if (0)
-		rd_kafka_dbg(rkt->rkt_rk, "PART", "%.*s has no partitions",
+		rd_kafka_dbg(rkt->rkt_rk, TOPIC, "PART",
+			     "%.*s has no partitions",
 			     RD_KAFKAP_STR_PR(rkt->rkt_topic));
-			partition = RD_KAFKA_PARTITION_UA;
+		partition = RD_KAFKA_PARTITION_UA;
 	} else if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
 		partition = rkt->rkt_conf.partitioner(rkm->rkm_key->data,
 						      ntohl(rkm->rkm_key->len),
@@ -162,22 +162,24 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
 		partition = rkm->rkm_partition;
 
 	if (partition >= rkt->rkt_partition_cnt) {
-		if (1)
-		rd_kafka_dbg(rkt->rkt_rk, "PART",
+		rd_kafka_dbg(rkt->rkt_rk, TOPIC, "PART",
 			     "%.*s partition [%"PRId32"] not "
 			     "currently available",
-			     RD_KAFKAP_STR_PR(rkt->rkt_topic), partition);
+			     RD_KAFKAP_STR_PR(rkt->rkt_topic),
+			     partition);
 		partition = RD_KAFKA_PARTITION_UA;
 	}
 
 	if (0)
-	rd_kafka_dbg(rkt->rkt_rk, "PART",
-		     "Message %p assigned to %.*s partition [%"PRId32"] "
-		     "(previously [%"PRId32"], fixed [%"PRId32"])",
-		     rkm, 
-		     RD_KAFKAP_STR_PR(rkt->rkt_topic), partition,
-		     rktp_curr ? rktp_curr->rktp_partition : -2,
-		     rkm->rkm_partition);
+		rd_kafka_dbg(rkt->rkt_rk, MSG, "PART",
+			     "Message %p assigned to %.*s "
+			     "partition [%"PRId32"]/%"PRId32" "
+			     "(previously [%"PRId32"], fixed [%"PRId32"])",
+			     rkm, 
+			     RD_KAFKAP_STR_PR(rkt->rkt_topic), partition,
+			     rkt->rkt_partition_cnt,
+			     rktp_curr ? rktp_curr->rktp_partition : -2,
+			     rkm->rkm_partition);
 
 	if (rktp_curr) {
 		if (rktp_curr->rktp_partition == partition) {

@@ -129,6 +129,7 @@ int main (int argc, char **argv) {
 	int sendflags = 0;
 	char *msgpattern = "librdkafka_performance testing!";
 	int msgsize = strlen(msgpattern);
+	const char *debug = NULL;
 	struct {
 		rd_ts_t  t_start;
 		rd_ts_t  t_end;
@@ -144,7 +145,6 @@ int main (int argc, char **argv) {
 	rd_ts_t now;
 	char *dirstr = "";
 	char errstr[512];
-	int debug = 0;
 	uint64_t seq = 0;
 	int seed = time(NULL);
 	rd_kafka_conf_t conf;
@@ -166,7 +166,7 @@ int main (int argc, char **argv) {
 	topic_conf.message_timeout_ms  = 5000;
 
 	while ((opt = getopt(argc, argv,
-			     "PCt:p:b:s:k:c:fi:Ddm:S:x:R:a:")) != -1) {
+			     "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -213,7 +213,7 @@ int main (int argc, char **argv) {
 			topic_conf.required_acks = atoi(optarg);
 			break;
 		case 'd':
-			debug++;
+			debug = optarg;
 			break;
 		default:
 			goto usage;
@@ -231,7 +231,6 @@ int main (int argc, char **argv) {
 			"  -t <topic>   Topic to fetch / produce\n"
 			"  -p <num>     Partition (defaults to random)\n"
 			"  -b <brokers> Broker address list (host[:port],..)\n"
-			"  -c <cnt>     Message count\n"
 			"  -s <size>    Message size (producer)\n"
 			"  -k <key>     Message key (producer)\n"
 			"  -c <cnt>     Messages to transmit/receive\n"
@@ -243,14 +242,16 @@ int main (int argc, char **argv) {
 			"  -R <seed>    Random seed value (defaults to time)\n"
 			"  -a <acks>    Required acks (producer): "
 			"-1, 0, 1, >1\n"
-			"  -d           Enable debugging\n"
+			"  -d [facs..]  Enable debugging contexts:\n"
+			"               %s\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  consumes messages and prints thruput\n"
 			" In Producer mode:\n"
 			"  writes messages of size -s <..> and prints thruput\n"
 			"\n",
-			argv[0]);
+			argv[0],
+			RD_KAFKA_DEBUG_CONTEXTS);
 		exit(1);
 	}
 
@@ -261,6 +262,14 @@ int main (int argc, char **argv) {
 	signal(SIGINT, stop);
 	signal(SIGUSR1, sig_usr1);
 
+
+	if (debug &&
+	    rd_kafka_conf_set(&conf, "debug", debug, errstr, sizeof(errstr)) !=
+	    RD_KAFKA_CONF_OK) {
+		printf("%% Debug configuration failed: %s: %s\n",
+		       errstr, debug);
+		exit(1);
+	}
 
 	/* Socket hangups are gracefully handled in librdkafka on socket error
 	 * without the use of signals, so SIGPIPE should be ignored by the
@@ -348,7 +357,9 @@ int main (int argc, char **argv) {
 						sendflags, pbuf, msgsize,
 						key, keylen,
 						(void *)cnt.msgs) == -1) {
-				printf("produce: %s\n", strerror(errno));
+				printf("produce error: %s%s\n",
+				       strerror(errno),
+				       errno == ENOBUFS ? " (backpressure)":"");
 				cnt.tx_err++;
 				now = rd_clock();
 				if (cnt.t_last + dispintvl <= now) {

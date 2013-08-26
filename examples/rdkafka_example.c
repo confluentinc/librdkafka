@@ -37,6 +37,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <syslog.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
@@ -120,7 +121,7 @@ int main (int argc, char **argv) {
 	rd_kafka_conf_t conf;
 	rd_kafka_topic_conf_t topic_conf;
 	char errstr[512];
-	int log_level = 6;
+	const char *debug = NULL;
 
 	/* Kafka configuration
 	 * Base configuration on the default config. */
@@ -135,7 +136,7 @@ int main (int argc, char **argv) {
 	rd_kafka_topic_defaultconf_set(&topic_conf);
 
 
-	while ((opt = getopt(argc, argv, "PCt:p:b:d")) != -1) {
+	while ((opt = getopt(argc, argv, "PCt:p:b:d:")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -151,7 +152,7 @@ int main (int argc, char **argv) {
 			brokers = optarg;
 			break;
 		case 'd':
-			log_level = 7;
+			debug = optarg;
 			break;
 		default:
 			goto usage;
@@ -169,14 +170,16 @@ int main (int argc, char **argv) {
 			"  -t <topic>      Topic to fetch / produce\n"
 			"  -p <num>        Partition (random partitioner)\n"
 			"  -b <brokers>    Broker address (localhost:9092)\n"
-			"  -d              Enable rdkafka debugging\n"
+			"  -d [facs..]     Enable debugging contexts:\n"
+			"                  %s\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  writes fetched messages to stdout\n"
 			" In Producer mode:\n"
 			"  reads messages from stdin and sends to broker\n"
 			"\n",
-			argv[0]);
+			argv[0],
+			RD_KAFKA_DEBUG_CONTEXTS);
 		exit(1);
 	}
 
@@ -189,12 +192,21 @@ int main (int argc, char **argv) {
 	 * the calling program. */
 	signal(SIGPIPE, SIG_IGN);
 
+	if (debug &&
+	    rd_kafka_conf_set(&conf, "debug", debug, errstr, sizeof(errstr)) !=
+	    RD_KAFKA_CONF_OK) {
+		printf("%% Debug configuration failed: %s: %s\n",
+		       errstr, debug);
+		exit(1);
+	}
+
 	if (mode == 'P') {
 		/*
 		 * Producer
 		 */
 		char buf[2048];
 		int sendcnt = 0;
+
 
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, &conf,
@@ -205,8 +217,9 @@ int main (int argc, char **argv) {
 			exit(1);
 		}
 
-		rd_kafka_set_log_level(rk, log_level);
 		rd_kafka_set_logger(rk, logger);
+		if (debug)
+			rd_kafka_set_log_level(rk, LOG_DEBUG);
 
 		if (rd_kafka_brokers_add(rk, brokers) == 0) {
 			fprintf(stderr, "%% No valid brokers specified\n");

@@ -28,8 +28,10 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #include "rdkafka.h"
+#include "rdkafka_int.h"
 #include "rd.h"
 
 /**
@@ -85,12 +87,16 @@ struct rd_kafka_property {
 	enum {
 		_RK_C_STR,
 		_RK_C_INT,
-		_RK_C_S2I,
+		_RK_C_S2I,  /* String to Integer mapping */
+		_RK_C_S2F,  /* CSV String to Integer flag mapping (OR:ed) */
 	} type;
 	void *ptr;
 	int   vmin;
 	int   vmax;
-	const char *s2i[10];
+	struct {
+		int val;
+		const char *str;
+	} s2i[10];  /* _RK_C_S2I and _RK_C_S2F */
 };
 
 
@@ -142,8 +148,10 @@ static int rd_kafka_anyconf_set (struct rd_kafka_property *properties,
 		}
 
 		case _RK_C_S2I:
+		case _RK_C_S2F:
 		{
 			int j;
+			const char *next;
 
 			if (!value) {
 				snprintf(errstr, errstr_size,
@@ -154,19 +162,73 @@ static int rd_kafka_anyconf_set (struct rd_kafka_property *properties,
 			}
 			
 
-			for (j = 0 ; RD_ARRAYSIZE(properties[i].s2i) ; j++) {
-				if (!properties[i].s2i[j] ||
-				    strcmp(properties[i].s2i[j], value))
+			next = value;
+			while (next && *next) {
+				const char *s, *t;
+
+				s = next;
+
+				if (properties[i].type == _RK_C_S2F &&
+				    (t = strchr(s, ','))) {
+					/* CSV flag field */
+					next = t+1;
+				} else {
+					/* Single string */
+					t = s+strlen(s);
+					next = NULL;
+				}
+
+
+				/* Left trim */
+				while (s < t && isspace(*s))
+					s++;
+
+				/* Right trim */
+				while (t > s && isspace(*t))
+					t--;
+
+				/* Empty string? */
+				if (s == t)
 					continue;
 
-				*(int *)properties[i].ptr = j;
-				return RD_KAFKA_CONF_OK;
-			}
+				/* Match string to s2i table entry */
+				for (j = 0 ;
+				     j < RD_ARRAYSIZE(properties[i].s2i) ;
+				     j++) {
+					if (!properties[i].s2i[j].str ||
+					    strlen(properties[i].s2i[j].str) !=
+					    (int)(t-s) ||
+					    strncmp(properties[i].s2i[j].str,
+						    s, (int)(t-s)))
+						continue;
 
-			snprintf(errstr, errstr_size,
-				 "Invalid value for configuration property "
-				 "\"%s\"", name);
-			return RD_KAFKA_CONF_INVALID;
+					if (properties[i].type == _RK_C_S2F) {
+						/* Flags: OR it in */
+						*(int *)properties[i].ptr |=
+							properties[i].s2i[j].
+							val;
+						break;
+					} else {
+						/* Single assignment */
+						*(int *)properties[i].ptr =
+							properties[i].s2i[j].
+							val;
+						return RD_KAFKA_CONF_OK;
+					}
+				}
+				
+				/* S2F: Good match: continue with next */
+				if (j < RD_ARRAYSIZE(properties[i].s2i))
+					continue;
+
+				/* No match */
+				snprintf(errstr, errstr_size,
+					 "Invalid value for "
+					 "configuration property \"%s\"", name);
+				return RD_KAFKA_CONF_INVALID;
+
+			}
+			return RD_KAFKA_CONF_OK;
 		}
 		
 		}
@@ -205,14 +267,26 @@ rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
 		{ "compression.codec", _RK_C_S2I,
 		  &conf->producer.compression_codec,
 		  s2i: {
-			[RD_KAFKA_COMPRESSION_NONE] = "none",
-			[RD_KAFKA_COMPRESSION_GZIP] = "gzip",
-			[RD_KAFKA_COMPRESSION_SNAPPY] = "snappy",
+				{ RD_KAFKA_COMPRESSION_NONE,   "none" },
+				{ RD_KAFKA_COMPRESSION_GZIP,   "gzip" },
+				{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
 			} },
 		{ "queue.enqueue.timeout.ms", _RK_C_INT,
 		  &conf->producer.enqueue_timeout_ms, -1, 60*1000 },
 		{ "batch.num.messages", _RK_C_INT,
 		  &conf->producer.batch_num_messages, 1, 1000000 },
+		{ "debug", _RK_C_S2F,
+		  &conf->debug,
+		  s2i: {
+				{ RD_KAFKA_DBG_GENERIC,  "generic" },
+				{ RD_KAFKA_DBG_BROKER,   "broker" },
+				{ RD_KAFKA_DBG_TOPIC,    "topic" },
+				{ RD_KAFKA_DBG_METADATA, "metadata" },
+				{ RD_KAFKA_DBG_PRODUCER, "producer" },
+				{ RD_KAFKA_DBG_QUEUE,    "queue" },
+				{ RD_KAFKA_DBG_MSG,      "msg" },
+				{ RD_KAFKA_DBG_ALL,      "all" },
+			} },
 		{ },
 	};
 

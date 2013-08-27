@@ -2,6 +2,7 @@ librdkafka.so.1 librdkafka1 #MINVER#
 * Build-Depends-Package: librdkafka-dev
  rd_kafka_broker_destroy@Base 0.8~wip20130807
  rd_kafka_broker_find_by_nodeid@Base 0.8~wip20130807
+ rd_kafka_broker_state_names@Base 0.8~wip20130827
  rd_kafka_brokers_add@Base 0.8~wip20130807
  rd_kafka_brokers_init@Base 0.8~wip20130807
  rd_kafka_conf_set@Base 0.8~wip20130807
@@ -27,6 +28,7 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_outq_len@Base 0.8~wip20130807
  rd_kafka_poll@Base 0.8~wip20130807
  rd_kafka_produce@Base 0.8~wip20130807
+ rd_kafka_q_init@Base 0.8~wip20130827
  rd_kafka_q_pop@Base 0.8~wip20130807
  rd_kafka_q_serve@Base 0.8~wip20130807
  rd_kafka_set_log_level@Base 0.8~wip20130807
@@ -41,6 +43,7 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_topic_new@Base 0.8~wip20130807
  rd_kafka_topic_partition_cnt_update@Base 0.8~wip20130807
  rd_kafka_topic_update@Base 0.8~wip20130807
+ rd_kafka_toppar_broker_delegate@Base 0.8~wip20130827
  rd_kafka_toppar_deq_msg@Base 0.8~wip20130807
  rd_kafka_toppar_destroy0@Base 0.8~wip20130807
  rd_kafka_toppar_enq_msg@Base 0.8~wip20130807

@@ -20,7 +20,8 @@ CFLAGS+=-g -rdynamic
 #CFLAGS += -pg
 #LDFLAGS += -pg
 
-LDFLAGS+=-shared -g -fPIC -lpthread -lrt -lz -lc
+LDFLAGS+=-g -fPIC
+LIBS=-lpthread -lrt -lz -lc
 
 .PHONY:
 
@@ -33,9 +34,9 @@ libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a
 
 
 $(LIBNAME).so.$(LIBVER): $(OBJS)
-	$(LD) -shared -soname $@ $(LDFLAGS) \
-		--version-script=librdkafka.lds \
-		$(OBJS) -o $@
+	$(CC) -shared $(LDFLAGS) \
+		-Wl,-soname=$@ -Wl,--version-script=librdkafka.lds \
+		$(OBJS) -o $@ $(LIBS)
 
 $(LIBNAME).a:	$(OBJS)
 	$(AR) rcs $@ $(OBJS)

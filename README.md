@@ -20,7 +20,7 @@ reliability in mind.
   * Producer: supported
   * Consumer: not yet implemented
   * Compression: work in progress
-  * Debian package: [work in progress by paravoid](https://github.com/paravoid/librdkafka/tree/debian)
+  * Debian package: work in progress (separate "debian" branch)
   * ZooKeeper: not supported
   * API: not backwards compatible
   * Status: Testing, APIs subject to change.
@@ -51,7 +51,7 @@ reliability in mind.
 
 **Applications using librdkafka:**
 
-  * [Wikimedia's varnishkafka](https://github.com/wikimedia/operations-software-varnish-varnishkafka)
+  * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka)
   * *Let me know if you are using librdkafka*
 
 

@@ -270,8 +270,8 @@ typedef struct rd_kafka_broker_s {
 #define rd_kafka_broker_lock(rkb)   pthread_mutex_lock(&(rkb)->rkb_lock)
 #define rd_kafka_broker_unlock(rkb) pthread_mutex_unlock(&(rkb)->rkb_lock)
 
-
-typedef struct rd_kafka_topic_s {
+/* rd_kafka_topic_t */
+struct rd_kafka_topic_s {
 	TAILQ_ENTRY(rd_kafka_topic_s) rkt_link;
 
 	pthread_rwlock_t   rkt_lock;
@@ -285,7 +285,7 @@ typedef struct rd_kafka_topic_s {
 	struct rd_kafka_s *rkt_rk;
 
 	rd_kafka_topic_conf_t rkt_conf;
-} rd_kafka_topic_t;
+};
 
 #define rd_kafka_topic_rdlock(rkt)     pthread_rwlock_rdlock(&(rkt)->rkt_lock)
 #define rd_kafka_topic_wrlock(rkt)     pthread_rwlock_wrlock(&(rkt)->rkt_lock)
@@ -337,9 +337,9 @@ static const char *rd_kafka_toppar_name (const rd_kafka_toppar_t *rktp) {
 
 
 /**
- * Kafka handle.
+ * Kafka handle. (rd_kafka_t)
  */
-typedef struct rd_kafka_s {
+struct rd_kafka_s {
 	rd_kafka_q_t rk_op;    /* application -> kafka operation queue */
 	rd_kafka_q_t rk_rep;   /* kafka -> application reply queue */
 
@@ -380,7 +380,7 @@ typedef struct rd_kafka_s {
 		char msg[512];
 		int  err;  /* errno */
 	} rk_err;
-} rd_kafka_t;
+};
 
 #define rd_kafka_lock(rk)    pthread_mutex_lock(&(rk)->rk_lock)
 #define rd_kafka_unlock(rk)  pthread_mutex_unlock(&(rk)->rk_lock)

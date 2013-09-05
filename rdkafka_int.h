@@ -306,6 +306,8 @@ typedef struct rd_kafka_toppar_s {
 	rd_kafka_msgq_t    rktp_msgq;      /* application->rdkafka queue.
 					    * protected by rktp_lock */
 	rd_kafka_msgq_t    rktp_xmit_msgq; /* internal broker xmit queue */
+
+	rd_ts_t            rktp_ts_last_xmit;
 	
 	struct {
 		uint64_t tx_msgs;

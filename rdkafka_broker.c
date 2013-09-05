@@ -1941,6 +1941,24 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb) {
 							       &timedout,
 							       now);
 
+				if (rktp->rktp_xmit_msgq.rkmq_msg_cnt == 0)
+					continue;
+
+				/* Attempt to fill the batch size, but limit
+				 * our waiting to queue.buffering.max.ms
+				 * and batch.num.messages. */
+				if (rktp->rktp_ts_last_xmit +
+				    (rkb->rkb_rk->rk_conf.producer.
+				     buffering_max_ms * 1000) > now &&
+				    rktp->rktp_xmit_msgq.rkmq_msg_cnt <
+				    rkb->rkb_rk->rk_conf.producer.
+				    batch_num_messages) {
+					/* Wait for more messages */
+					continue;
+				}
+
+				rktp->rktp_ts_last_xmit = now;
+
 				while (rktp->rktp_xmit_msgq.rkmq_msg_cnt > 0) {
 					int r;
 					r = rd_kafka_broker_send_toppar(rkb,

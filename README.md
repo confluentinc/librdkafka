@@ -19,7 +19,7 @@ reliability in mind.
   * Branch: master
   * Producer: supported
   * Consumer: not yet implemented
-  * Compression: work in progress
+  * Compression: snappy and gzip
   * Debian package: work in progress (separate "debian" branch)
   * ZooKeeper: not supported
   * API: not backwards compatible

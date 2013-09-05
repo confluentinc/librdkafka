@@ -136,7 +136,7 @@ int main (int argc, char **argv) {
 	rd_kafka_topic_defaultconf_set(&topic_conf);
 
 
-	while ((opt = getopt(argc, argv, "PCt:p:b:d:")) != -1) {
+	while ((opt = getopt(argc, argv, "PCt:p:b:z:d:")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -150,6 +150,15 @@ int main (int argc, char **argv) {
 			break;
 		case 'b':
 			brokers = optarg;
+			break;
+		case 'z':
+			if (rd_kafka_conf_set(&conf, "compression.codec",
+					      optarg,
+					      errstr, sizeof(errstr)) !=
+			    RD_KAFKA_CONF_OK) {
+				fprintf(stderr, "%% %s\n", errstr);
+				exit(1);
+			}
 			break;
 		case 'd':
 			debug = optarg;
@@ -170,6 +179,8 @@ int main (int argc, char **argv) {
 			"  -t <topic>      Topic to fetch / produce\n"
 			"  -p <num>        Partition (random partitioner)\n"
 			"  -b <brokers>    Broker address (localhost:9092)\n"
+			"  -z <codec>      Enable compression:\n"
+			"                  none|gzip|snappy\n"
 			"  -d [facs..]     Enable debugging contexts:\n"
 			"                  %s\n"
 			"\n"

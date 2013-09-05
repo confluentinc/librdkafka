@@ -149,7 +149,12 @@ int main (int argc, char **argv) {
 	int seed = time(NULL);
 	rd_kafka_conf_t conf;
 	rd_kafka_topic_conf_t topic_conf;
-		
+	static const char *compression_names[] = {
+		"no",
+		"gzip",
+		"snappy"
+	};
+
 	/* Kafka configuration
 	 * Base configuration on the default config. */
 	rd_kafka_defaultconf_set(&conf);
@@ -166,7 +171,7 @@ int main (int argc, char **argv) {
 	topic_conf.message_timeout_ms  = 5000;
 
 	while ((opt = getopt(argc, argv,
-			     "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:")) != -1) {
+			     "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:z:")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -212,6 +217,15 @@ int main (int argc, char **argv) {
 		case 'a':
 			topic_conf.required_acks = atoi(optarg);
 			break;
+		case 'z':
+			if (rd_kafka_conf_set(&conf, "compression.codec",
+					      optarg,
+					      errstr, sizeof(errstr)) !=
+			    RD_KAFKA_CONF_OK) {
+				fprintf(stderr, "%% %s\n", errstr);
+				exit(1);
+			}
+			break;
 		case 'd':
 			debug = optarg;
 			break;
@@ -242,6 +256,8 @@ int main (int argc, char **argv) {
 			"  -R <seed>    Random seed value (defaults to time)\n"
 			"  -a <acks>    Required acks (producer): "
 			"-1, 0, 1, >1\n"
+			"  -z <codec>   Enable compression:\n"
+			"               none|gzip|snappy\n"
 			"  -d [facs..]  Enable debugging contexts:\n"
 			"               %s\n"
 			"\n"
@@ -537,14 +553,15 @@ int main (int argc, char **argv) {
 	printf("Result:\n");
 	if (cnt.t_total > 0) {
 		printf("%% %"PRIu64" messages and %"PRIu64" bytes "
-		       "%s in %"PRIu64"ms: %"PRIu64" msgs/s and %.02f Mb, "
-		       "%i messages failed\n",
+		       "%s in %"PRIu64"ms: %"PRIu64" msgs/s and %.02f Mb/s, "
+		       "%i messages failed, %s compression\n",
 		       cnt.msgs, cnt.bytes,
 		       dirstr,
 		       cnt.t_total / 1000,
 		       ((cnt.msgs * 1000000) / cnt.t_total),
 		       (float)((cnt.bytes) / (float)cnt.t_total),
-		       msgs_failed);
+		       msgs_failed,
+		       compression_names[conf.producer.compression_codec]);
 	}
 
 	if (cnt.t_latency)

@@ -150,13 +150,12 @@ typedef struct rd_kafka_buf_s {
 	struct msghdr rkbuf_msg;
 	struct iovec *rkbuf_iov;
 	int           rkbuf_iovcnt;
-	size_t        rkbuf_iovof; /* byte offset for beginning of current iov*/
 	size_t  rkbuf_of;          /* recv/send: byte offset */
 	size_t  rkbuf_len;         /* send: total length */
 	size_t  rkbuf_size;        /* allocated size */
 
-	char   *rkbuf_buf;
-	char   *rkbuf_buf2;
+	char   *rkbuf_buf;         /* Main buffer */
+	char   *rkbuf_buf2;        /* Aux buffer */
 	struct rd_kafkap_reqhdr rkbuf_reqhdr;
 	struct rd_kafkap_reshdr rkbuf_reshdr;
 

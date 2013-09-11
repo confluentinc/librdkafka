@@ -13,6 +13,10 @@ reliability in mind.
 
 **librdkafka** is licensed under the 2-clause BSD license.
 
+For an introduction to the performance and usage of librdkafka, see
+[INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md)
+
+
 
 **Apache Kafka 0.8 support:**
 

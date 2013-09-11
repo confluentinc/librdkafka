@@ -8,7 +8,7 @@ Copyright (c) 2012-2013, [Magnus Edenhill](http://www.edenhill.se/).
 **librdkafka** is a C library implementation of the
 [Apache Kafka](http://kafka.apache.org/) protocol, containing both
 Producer and Consumer support. It was designed with high performance
-(current figures around 150000 msgs/second) and message delivery
+(current figures exceeds 800000 msgs/second) and message delivery
 reliability in mind.
 
 **librdkafka** is licensed under the 2-clause BSD license.

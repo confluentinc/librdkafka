@@ -92,6 +92,7 @@
 
 
 #ifndef be64toh
+#ifndef __APPLE__
 #include <byteswap.h>
 
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -103,6 +104,7 @@
 #endif
 
 #define htobe64(x) be64toh(x)
+#endif
 #endif
 
 

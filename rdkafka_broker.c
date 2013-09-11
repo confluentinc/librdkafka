@@ -34,7 +34,6 @@
 #include <stdarg.h>
 #include <syslog.h>
 #include <string.h>
-#include <sys/epoll.h>
 
 #include <zlib.h>
 
@@ -1082,20 +1081,22 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 			return 0;
 		}
 
-		rkbuf->rkbuf_len = ntohl(rkbuf->rkbuf_reshdr.Size) -4/*CorrId*/;
+		rkbuf->rkbuf_len = ntohl(rkbuf->rkbuf_reshdr.Size);
 		rkbuf->rkbuf_reshdr.CorrId = ntohl(rkbuf->rkbuf_reshdr.CorrId);
 
 		/* Make sure message size is within tolerable limits */
-		if (rkbuf->rkbuf_len < 0 ||
-		    rkbuf->rkbuf_len > rkb->rkb_rk->rk_conf.max_msg_size) {
+		if (rkbuf->rkbuf_len < 4/*CorrId*/ ||
+		    rkbuf->rkbuf_len - 4 > rkb->rkb_rk->rk_conf.max_msg_size) {
 			snprintf(errstr, sizeof(errstr),
 				 "Invalid message size %zd (0..%i)",
-				 rkbuf->rkbuf_len,
+				 rkbuf->rkbuf_len-4,
 				 rkb->rkb_rk->rk_conf.max_msg_size);
 			rkb->rkb_c.rx_err++;
 			err_code = RD_KAFKA_RESP_ERR__BAD_MSG;
 			goto err;
 		}
+
+		rkbuf->rkbuf_len -= 4; /*CorrId*/
 
 		if (rkbuf->rkbuf_len > 0) {
 			/* Allocate another buffer that fits all data (short of
@@ -1185,7 +1186,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rd_kafka_broker_unlock(rkb);
 
 	rkb->rkb_pfd.fd = rkb->rkb_s;
-	rkb->rkb_pfd.events = EPOLLIN;
+	rkb->rkb_pfd.events = POLLIN;
 
 	/* Request metadata (async) */
 	rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
@@ -1862,15 +1863,15 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 					     "periodic refresh");
 	
 	if (rkb->rkb_outbuf_cnt > 0)
-		rkb->rkb_pfd.events |= EPOLLOUT;
+		rkb->rkb_pfd.events |= POLLOUT;
 	else
-		rkb->rkb_pfd.events &= ~EPOLLOUT;
+		rkb->rkb_pfd.events &= ~POLLOUT;
 
 	if (poll(&rkb->rkb_pfd, 1,
 		 rkb->rkb_rk->rk_conf.producer.buffering_max_ms) <= 0)
 		return;
 	
-	if (rkb->rkb_pfd.revents & EPOLLIN)
+	if (rkb->rkb_pfd.revents & POLLIN)
 		while (rd_kafka_recv(rkb) > 0)
 			;
 
@@ -1878,7 +1879,7 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 		return rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
 					    "Connection closed");
 	
-	if (rkb->rkb_pfd.revents & EPOLLOUT)
+	if (rkb->rkb_pfd.revents & POLLOUT)
 		while (rd_kafka_send(rkb) > 0)
 			;
 }

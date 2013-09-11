@@ -45,6 +45,30 @@
 #define RD_POLL_NOWAIT     0
 
 
+/*
+ * Portability
+ */
+
+/* MacOSX does not have strndupa() */
+#ifndef strndupa
+#define strndupa(PTR,LEN) ({ int _L = (LEN); char *_x = alloca(_L+1); \
+      memcpy(_x, (PTR), _L); *(_x+_L) = 0; _x;})
+#endif
+
+#ifndef strdupa
+#define strdupa(PTR) ({ const char *_P = (PTR); int _L = strlen(_P); \
+      char *_x = alloca(_L+1); memcpy(_x, _P, _L); *(_x+_L) = 0; _x;})
+#endif
+
+/* Some versions of MacOSX dont have IOV_MAX */
+#ifndef IOV_MAX
+#define IOV_MAX 1024
+#endif
+
+
+
+
+
 #include "rdkafka_proto.h"
 
 

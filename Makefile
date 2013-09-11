@@ -13,8 +13,8 @@ HDRS=	rdkafka.h
 OBJS=	$(SRCS:.c=.o)
 DEPS=	${OBJS:%.o=%.d}
 
-CFLAGS+=-O2 -Wall -Werror -Wfloat-equal -Wpointer-arith -fPIC -I.
-CFLAGS+=-g -rdynamic
+CFLAGS+=-O2 -Wall -Werror -Wfloat-equal -Wpointer-arith -Wno-gnu-designator -fPIC -I.
+CFLAGS+=-g
 # Enable iovecs in snappy
 CFLAGS+=-DSG
 
@@ -24,7 +24,6 @@ CFLAGS+=-DSG
 #LDFLAGS += -pg
 
 LDFLAGS+=-g -fPIC
-LIBS=-lpthread -lrt -lz -lc
 
 .PHONY:
 
@@ -37,9 +36,14 @@ libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a
 
 
 $(LIBNAME).so.$(LIBVER): $(OBJS)
-	$(CC) -shared $(LDFLAGS) \
-		-Wl,-soname=$@ -Wl,--version-script=librdkafka.lds \
-		$(OBJS) -o $@ $(LIBS)
+	@(if [ "`uname -s`" = "Linux" ]; then \
+		$(CC) $(LDFLAGS) \
+			-shared -Wl,-soname,$@ -Wl,--version-script=librdkafka.lds \
+			$(OBJS) -o $@ -lpthread -lrt -lz -lc ; \
+	elif [ "`uname -s`" = "Darwin" ]; then \
+		$(CC) $(LDFLAGS) \
+			$(OBJS) -dynamiclib -o $@ -lpthread -lz -lc ; \
+	fi)
 
 $(LIBNAME).a:	$(OBJS)
 	$(AR) rcs $@ $(OBJS)

@@ -1620,7 +1620,7 @@ static int rd_kafka_broker_send_toppar (rd_kafka_broker_t *rkb,
 
 		switch (rkb->rkb_rk->rk_conf.producer.compression_codec) {
 		case RD_KAFKA_COMPRESSION_NONE:
-			assert(!*"unreachable");
+			abort(); /* unreachable */
 			break;
 		case RD_KAFKA_COMPRESSION_GZIP:
 			memset(&strm, 0, sizeof(strm));

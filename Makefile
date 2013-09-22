@@ -38,7 +38,8 @@ libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a
 $(LIBNAME).so.$(LIBVER): $(OBJS)
 	@(if [ "`uname -s`" = "Linux" ]; then \
 		$(CC) $(LDFLAGS) \
-			-shared -Wl,-soname,$@ -Wl,--version-script=librdkafka.lds \
+			-shared -Wl,-soname,$@ \
+			-Wl,--version-script=librdkafka.lds \
 			$(OBJS) -o $@ -lpthread -lrt -lz -lc ; \
 	elif [ "`uname -s`" = "Darwin" ]; then \
 		$(CC) $(LDFLAGS) \

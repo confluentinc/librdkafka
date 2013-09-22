@@ -129,6 +129,38 @@ void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 	rd_kafka_toppar_unlock(rktp);
 }
 
+/**
+ * Inserts all messages from 'rkmq' at head of toppar 'rktp's queue.
+ * 'rkmq' will be cleared.
+ */
+void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
+				  rd_kafka_msgq_t *rkmq) {
+	rd_kafka_toppar_lock(rktp);
+	rd_kafka_msgq_concat(rkmq, &rktp->rktp_msgq);
+	rd_kafka_msgq_move(&rktp->rktp_msgq, rkmq);
+	rd_kafka_toppar_unlock(rktp);
+}
+
+/**
+ * Move all messages in 'rkmq' to the unassigned partition, if any.
+ * Returns 0 on success or -1 if there was no UA partition.
+ */
+int rd_kafka_toppar_ua_move (rd_kafka_topic_t *rkt, rd_kafka_msgq_t *rkmq) {
+	rd_kafka_toppar_t *rktp_ua;
+
+	rd_kafka_topic_rdlock(rkt);
+	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA);
+	rd_kafka_topic_unlock(rkt);
+
+	if (unlikely(rktp_ua == NULL))
+		return -1;
+
+	rd_kafka_msgq_concat(&rktp_ua->rktp_msgq, rkmq);
+
+	rd_kafka_toppar_destroy(rktp_ua);
+
+	return 0;
+}
 
 
 void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {

@@ -1387,6 +1387,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 					   rd_kafka_buf_t *reply,
 					   rd_kafka_buf_t *request,
 					   void *opaque) {
+	rd_kafka_toppar_t *rktp = opaque;
 
 	rd_rkb_dbg(rkb, MSG, "MSGSET",
 		   "MessageSet with %i message(s) %sdelivered",
@@ -1400,18 +1401,9 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 
 		switch (err)
 		{
-		case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-		case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
-		case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
-		case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
-		case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
-			/* Request metadata information update */
-			rkb->rkb_metadata_fast_poll_cnt =
-				rkb->rkb_rk->rk_conf.metadata_refresh_fast_cnt;
-			rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
-			/* FALLTHRU */
+		case RD_KAFKA_RESP_ERR__DESTROY:
+			break;
 
-		case RD_KAFKA_RESP_ERR__TRANSPORT:
 		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
 			/* Try again */
 			if (++request->rkbuf_retries <
@@ -1425,15 +1417,36 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 			}
 			break;
 
+		case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+		case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
+		case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
+		case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
+		case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
+		case RD_KAFKA_RESP_ERR__TRANSPORT:
 		default:
-			break;
+			/* Request metadata information update */
+			rkb->rkb_metadata_fast_poll_cnt =
+				rkb->rkb_rk->rk_conf.metadata_refresh_fast_cnt;
+			rd_kafka_topic_leader_query(rkb->rkb_rk,
+						    rktp->rktp_rkt);
+
+			/* FIXME: Should message retries be incremented? */
+
+			/* Move messages (in the rkbuf) back to the partition's
+			 * queue head. They will be resent when a new leader
+			 * is delegated. */
+			rd_kafka_toppar_insert_msgq(rktp, &request->rkbuf_msgq);
+			goto done;
 		}
 
 		/* FALLTHRU */
 	}
 
+
+	/* Enqueue messages for delivery report */
 	rd_kafka_dr_msgq(rkb->rkb_rk, &request->rkbuf_msgq, err);
 
+done:
 	rd_kafka_toppar_destroy(rktp); /* from send_toppar() */
 
 	rd_kafka_buf_destroy(request);

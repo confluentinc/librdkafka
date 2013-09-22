@@ -99,9 +99,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	}
 
 
-	rd_kafka_msg_partitioner(rkt, NULL, rkm);
-
-	return 0;
+	return rd_kafka_msg_partitioner(rkt, NULL, rkm);
 }
 
 
@@ -144,6 +142,7 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
 			      rd_kafka_toppar_t *rktp_curr,
 			      rd_kafka_msg_t *rkm) {
 	int32_t partition;
+	rd_kafka_toppar_t *rktp_new;
 
 	rd_kafka_topic_rdlock(rkt);
 
@@ -190,11 +189,13 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
 		rd_kafka_toppar_deq_msg(rktp_curr, rkm);
 	}
 
-	if (unlikely(partition == RD_KAFKA_PARTITION_UA))
-		rd_kafka_toppar_enq_msg(rkt->rkt_ua, rkm);
-	else
-		rd_kafka_toppar_enq_msg(rkt->rkt_p[partition], rkm);
+	if (likely((rktp_new = rd_kafka_toppar_get(rkt, partition)) != NULL))
+		rd_kafka_toppar_enq_msg(rktp_new, rkm);
+
 	rd_kafka_topic_unlock(rkt);
+
+	if (rktp_new)
+		rd_kafka_toppar_destroy(rktp_new); /* from _get() */
 
 	return 0;
 }

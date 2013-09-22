@@ -204,11 +204,17 @@ typedef struct rd_kafka_buf_s {
 } rd_kafka_buf_t;
 
 
+typedef struct rd_kafka_bufq_s {
+	TAILQ_HEAD(, rd_kafka_buf_s) rkbq_bufs;
+	int                          rkbq_cnt;
+} rd_kafka_bufq_t;
+
+
 typedef enum {
 	RD_KAFKA_CONFIGURED,
 	RD_KAFKA_LEARNED,
 } rd_kafka_confsource_t;
-	
+
 
 typedef struct rd_kafka_broker_s {
 	TAILQ_ENTRY(rd_kafka_broker_s) rkb_link;
@@ -258,7 +264,6 @@ typedef struct rd_kafka_broker_s {
 	rd_ts_t             rkb_ts_metadata_poll; /* Next metadata poll time */
 	int                 rkb_metadata_fast_poll_cnt; /* Perform fast
 							 * metadata polls. */
-	int                 rkb_terminate;
 	pthread_mutex_t     rkb_lock;
 	pthread_t           rkb_thread;
 
@@ -273,14 +278,9 @@ typedef struct rd_kafka_broker_s {
 
 	rd_kafka_buf_t     *rkb_recv_buf;
 
-	TAILQ_HEAD(, rd_kafka_buf_s) rkb_outbufs;
-	int                 rkb_outbuf_cnt;
-
-	TAILQ_HEAD(, rd_kafka_buf_s) rkb_waitresps;
-	int                 rkb_waitresp_cnt;
-
-	TAILQ_HEAD(, rd_kafka_buf_s) rkb_retrybufs;
-	int                 rkb_retrybuf_cnt;
+	rd_kafka_bufq_t     rkb_outbufs;
+	rd_kafka_bufq_t     rkb_waitresps;
+	rd_kafka_bufq_t     rkb_retrybufs;
 
 	char                rkb_name[128];      /* Display name */
 	char                rkb_nodename[128];  /* host:port */
@@ -289,7 +289,6 @@ typedef struct rd_kafka_broker_s {
 } rd_kafka_broker_t;
 
 #define rd_kafka_broker_keep(rkb) rd_atomic_add(&(rkb)->rkb_refcnt, 1)
-
 #define rd_kafka_broker_lock(rkb)   pthread_mutex_lock(&(rkb)->rkb_lock)
 #define rd_kafka_broker_unlock(rkb) pthread_mutex_unlock(&(rkb)->rkb_lock)
 
@@ -342,8 +341,8 @@ typedef struct rd_kafka_toppar_s {
 #define rd_kafka_toppar_keep(rktp) rd_atomic_add(&(rktp)->rktp_refcnt, 1)
 
 #define rd_kafka_toppar_destroy(rktp) do {				\
-		if (rd_atomic_sub(&(rktp)->rktp_refcnt, 1) == 0)	\
-			rd_kafka_toppar_destroy0(rktp);			\
+	if (rd_atomic_sub(&(rktp)->rktp_refcnt, 1) == 0)		\
+		rd_kafka_toppar_destroy0(rktp);				\
 	} while (0)
 #define rd_kafka_toppar_lock(rktp)     pthread_mutex_lock(&(rktp)->rktp_lock)
 #define rd_kafka_toppar_unlock(rktp)   pthread_mutex_unlock(&(rktp)->rktp_lock)
@@ -504,7 +503,12 @@ void rd_kafka_op_reply (rd_kafka_t *rk,
 			void *payload, int len,
 			uint64_t offset_len);
 
+#define rd_kafka_keep(rk) rd_atomic_add(&(rk)->rk_refcnt, 1)
+void rd_kafka_destroy0 (rd_kafka_t *rk);
 
+void rd_kafka_conf_destroy (rd_kafka_conf_t *conf);
+void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf);
 
+extern int rd_kafka_thread_cnt_curr;
 
 #define RD_KAFKA_SEND_END -1

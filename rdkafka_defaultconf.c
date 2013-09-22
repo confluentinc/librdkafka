@@ -321,3 +321,23 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
 	return rd_kafka_anyconf_set(properties, name, value,
 				    errstr, errstr_size);
 }
+
+
+
+/**
+ * Destroys a conf object.
+ * The 'conf' pointer itself is not freed.
+ */
+void rd_kafka_conf_destroy (rd_kafka_conf_t *conf) {
+#define IF_FREE(p) if (p) free(p)
+	IF_FREE(conf->clientid);
+	IF_FREE(conf->brokerlist);
+}
+
+
+/**
+ * Destroys a topic conf object.
+ * The 'topic_conf' pointer itself is not freed.
+ */
+void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf) {
+}

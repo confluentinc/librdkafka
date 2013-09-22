@@ -33,9 +33,11 @@ void rd_kafka_toppar_insert_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 
-
-#define rd_kafka_topic_keep(rkt)  rd_atomic_add(&(rkt->rkt_refcnt), 1)
+#define rd_kafka_topic_keep(rkt) rd_atomic_add(&(rkt->rkt_refcnt), 1)
 void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt);
+
+rd_kafka_toppar_t *rd_kafka_toppar_get (rd_kafka_topic_t *rkt,
+					int32_t partition);
 
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 				      rd_kafka_broker_t *rkb);
@@ -46,7 +48,8 @@ void rd_kafka_topic_update (rd_kafka_t *rk,
 
 void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic);
 
+void rd_kafka_topic_partitions_remove (rd_kafka_topic_t *rkt);
 
-void rd_kafka_topic_partition_cnt_update (rd_kafka_t *rk,
+int  rd_kafka_topic_partition_cnt_update (rd_kafka_t *rk,
 					  const char *topic,
 					  int32_t partition_cnt);

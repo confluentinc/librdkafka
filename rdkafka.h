@@ -70,6 +70,9 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__DESTROY = -197,   /* Broker is going away */
 	RD_KAFKA_RESP_ERR__FAIL = -196,      /* Generic failure */
 	RD_KAFKA_RESP_ERR__TRANSPORT = -195, /* Broker transport error */
+	RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE = -194, /* Critical system resource
+						      * failure */
+	RD_KAFKA_RESP_ERR__RESOLVE = -193,   /* Failed to resolve broker */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -663,3 +666,12 @@ int         rd_kafka_outq_len (rd_kafka_t *rk);
  * This is only useful for debugging rdkafka.
  */
 void rd_kafka_dump (FILE *fp, rd_kafka_t *rk);
+
+
+
+
+/**
+ * Retrieve the current number of threads in use by librdkafka.
+ * Used by regression tests.
+ */
+int rd_kafka_thread_cnt (void);

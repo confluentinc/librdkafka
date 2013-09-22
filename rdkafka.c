@@ -37,12 +37,19 @@
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
 #include "rdkafka_broker.h"
-
-#include "rdthread.h"
+#include "rdkafka_topic.h"
 
 static pthread_once_t rd_kafka_global_init_once = PTHREAD_ONCE_INIT;
 
 
+/**
+ * Current number of threads created by rdkafka.
+ * This is used in regression tests.
+ */
+int rd_kafka_thread_cnt_curr = 0;
+int rd_kafka_thread_cnt (void) {
+	return rd_kafka_thread_cnt_curr;
+}
 
 
 /**
@@ -141,30 +148,6 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 
 	return rko;
 }
-
-
-static void rd_kafka_destroy0 (rd_kafka_t *rk) {
-	switch (rk->rk_type)
-	{
-	case RD_KAFKA_CONSUMER:
-		/* FIXME */
-		break;
-	case RD_KAFKA_PRODUCER:
-		/* FIXME */
-		break;
-	}
-
-	free(rk);
-}
-
-
-void rd_kafka_destroy (rd_kafka_t *rk) {
-	rk->rk_terminate = 1;
-
-	if (rd_atomic_sub(&rk->rk_refcnt, 1) == 0)
-		rd_kafka_destroy0(rk);
-}
-
 
 
 void rd_kafka_op_destroy (rd_kafka_t *rk, rd_kafka_op_t *rko) {
@@ -378,6 +361,10 @@ const char *rd_kafka_err2str (rd_kafka_t *rk, rd_kafka_resp_err_t err) {
 		return "Local: Communication failure with broker";
 	case RD_KAFKA_RESP_ERR__TRANSPORT:
 		return "Local: Broker transport failure";
+	case RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE:
+		return "Local: Critical system resource failure";
+	case RD_KAFKA_RESP_ERR__RESOLVE:
+		return "Local: Host resolution failure";
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
 		return "Unknown error";
 	case RD_KAFKA_RESP_ERR_NO_ERROR:
@@ -416,6 +403,43 @@ const char *rd_kafka_err2str (rd_kafka_t *rk, rd_kafka_resp_err_t err) {
 
 
 
+
+void rd_kafka_destroy0 (rd_kafka_t *rk) {
+	if (rd_atomic_sub(&rk->rk_refcnt, 1) > 0)
+		return;
+
+	rd_kafkap_str_destroy(rk->rk_clientid);
+	rd_kafka_conf_destroy(&rk->rk_conf);
+
+	pthread_mutex_destroy(&rk->rk_lock);
+
+	free(rk);
+}
+
+
+/* NOTE: Must only be called by application.
+ *       librdkafka itself must use rd_kafka_destroy0(). */
+void rd_kafka_destroy (rd_kafka_t *rk) {
+	rd_kafka_topic_t *rkt, *rkt_tmp;
+
+	rd_kafka_dbg(rk, GENERIC, "DESTROY", "Terminating instance");
+	rd_atomic_add(&rk->rk_terminate, 1);
+
+	/* Decommission all topics */
+	rd_kafka_lock(rk);
+	TAILQ_FOREACH_SAFE(rkt, rkt_tmp, &rk->rk_topics, rkt_link) {
+		rd_kafka_unlock(rk);
+		rd_kafka_topic_partitions_remove(rkt);
+		rd_kafka_lock(rk);
+	}
+	rd_kafka_unlock(rk);
+
+	/* Brokers pick up on rk_terminate automatically. */
+
+	rd_kafka_destroy0(rk);
+}
+
+
 static void rd_kafka_global_init (void) {
 }
 
@@ -438,10 +462,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, const rd_kafka_conf_t *conf,
 	else
 		rd_kafka_defaultconf_set(&rk->rk_conf);
 
-	rk->rk_refcnt = 2; /* One for caller, one for us. */
-
-	if (rk->rk_type == RD_KAFKA_CONSUMER)
-		rk->rk_refcnt++; /* Add another refcount for recv thread */
+	rd_kafka_keep(rk);
 
 	pthread_mutex_init(&rk->rk_lock, NULL);
 
@@ -452,11 +473,15 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, const rd_kafka_conf_t *conf,
 	TAILQ_INIT(&rk->rk_topics);
 
 	rk->rk_log_cb = rd_kafka_log_print;
-	rk->rk_log_level = 6;
+
+	if (rk->rk_conf.debug)
+		rd_kafka_set_log_level(rk, LOG_DEBUG);
+	else
+		rk->rk_log_level = LOG_INFO;
 
 	/* Construct a client id if none is given. */
 	if (!rk->rk_conf.clientid)
-		rk->rk_conf.clientid = "default";
+		rk->rk_conf.clientid = strdup("default");
 	
 	snprintf(rk->rk_name, sizeof(rk->rk_name), "%s#%s-%i",
 		 rk->rk_conf.clientid, rd_kafka_type2str(rk->rk_type), rkid++);
@@ -579,9 +604,11 @@ static void rd_kafka_toppar_dump (FILE *fp, const char *indent,
 		rktp->rktp_leader ?
 		rktp->rktp_leader->rkb_name : "none");
 	fprintf(fp,
+		"%s refcnt %i\n"
 		"%s msgq:      %i messages\n"
 		"%s xmit_msgq: %i messages\n"
 		"%s total:     %"PRIu64" messages, %"PRIu64" bytes\n",
+		indent, rktp->rktp_refcnt,
 		indent, rktp->rktp_msgq.rkmq_msg_cnt,
 		indent, rktp->rktp_xmit_msgq.rkmq_msg_cnt,
 		indent, rktp->rktp_c.tx_msgs, rktp->rktp_c.tx_bytes);
@@ -595,6 +622,7 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 	rd_kafka_lock(rk);
 	fprintf(fp, "rd_kafka_t %p: %s\n", rk, rk->rk_name);
 
+	fprintf(fp, " refcnt %i\n", rk->rk_refcnt);
 	fprintf(fp, " rk_op request queue: %i ops\n", rk->rk_op.rkq_qlen);
 	fprintf(fp, " rk_rep reply queue: %i ops\n", rk->rk_rep.rkq_qlen);
 
@@ -605,8 +633,9 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 			" in state %s\n",
 			rkb, rkb->rkb_name, rkb->rkb_nodeid,
 			rd_kafka_broker_state_names[rkb->rkb_state]);
+		fprintf(fp, "  refcnt %i\n", rkb->rkb_refcnt);
 		fprintf(fp, "  outbuf_cnt: %i waitresp_cnt: %i\n",
-			rkb->rkb_outbuf_cnt, rkb->rkb_waitresp_cnt);
+			rkb->rkb_outbufs.rkbq_cnt, rkb->rkb_waitresps.rkbq_cnt);
 		fprintf(fp, 
 			"  %"PRIu64 " messages sent, %"PRIu64" bytes, "
 			"%"PRIu64" errors\n"
@@ -629,10 +658,11 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 
 	fprintf(fp, " topics:\n");
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
-		fprintf(fp, "  %.*s with %"PRId32" partitions\n",
+		fprintf(fp, "  %.*s with %"PRId32" partitions, refcnt %i\n",
 			RD_KAFKAP_STR_PR(rkt->rkt_topic),
-			rkt->rkt_partition_cnt);
-		rd_kafka_toppar_dump(fp, "   ", rkt->rkt_ua);
+			rkt->rkt_partition_cnt, rkt->rkt_refcnt);
+		if (rkt->rkt_ua)
+			rd_kafka_toppar_dump(fp, "   ", rkt->rkt_ua);
 	}
 	rd_kafka_unlock(rk);
 	

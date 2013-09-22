@@ -101,12 +101,9 @@ void rd_kafka_log_print (const rd_kafka_t *rk, int level,
 
 	gettimeofday(&tv, NULL);
 
-	rd_currthread_get();
-
-	fprintf(stderr, "%%%i|%u.%03u|%s|%s|%s| %s\n",
+	fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n",
 		level, (int)tv.tv_sec, (int)(tv.tv_usec / 1000),
-		fac, rd_currthread->rdt_name,
-		rk ? rk->rk_name : "", buf);
+		fac, rk ? rk->rk_name : "", buf);
 }
 
 void rd_kafka_log_syslog (const rd_kafka_t *rk, int level,

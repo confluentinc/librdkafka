@@ -27,6 +27,7 @@ For an introduction to the performance and usage of librdkafka, see
   * Debian package: work in progress (separate "debian" branch)
   * ZooKeeper: not supported
   * API: not backwards compatible
+  * Tests: Regression tests in `tests/` directory.
   * Status: Testing, APIs subject to change.
 
 
@@ -161,3 +162,6 @@ The API is documented in `rdkafka.h`
 See the `examples/`sub-directory.
 
 
+## Tests
+
+See the `tests/`sub-directory.

@@ -1,0 +1,9 @@
+# Copy this file to test.conf and set up according to your configuration.
+
+# Bootstrap broker(s)
+metadata.broker.list=localhost:9092
+
+# Debugging
+#debug=metadata,topic,msg,broker
+
+# Any other librdkafka configuration property.

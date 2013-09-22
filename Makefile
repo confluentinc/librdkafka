@@ -60,8 +60,12 @@ install:
 	install -t $$DESTDIR/lib $(LIBNAME).so.$(LIBVER) ; \
 	(cd $$DESTDIR/lib && ln -sf $(LIBNAME).so.$(LIBVER) $(LIBNAME).so)
 
+tests: .PHONY
+	make -C tests
+
 clean:
 	rm -f $(OBJS) $(DEPS) \
 		$(LIBNAME)*.a $(LIBNAME)*.so $(LIBNAME)*.so.$(LIBVER)
+	make -C tests clean
 
 -include $(DEPS)

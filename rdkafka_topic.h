@@ -37,9 +37,18 @@ void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
 
 #define rd_kafka_topic_keep(rkt) rd_atomic_add(&(rkt->rkt_refcnt), 1)
 void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt);
-
 rd_kafka_toppar_t *rd_kafka_toppar_get (rd_kafka_topic_t *rkt,
-					int32_t partition);
+					int32_t partition,
+					int ua_on_miss);
+rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
+					 const rd_kafkap_str_t *topic,
+					 int32_t partition,
+					 int ua_on_miss);
+
+rd_kafka_topic_t *rd_kafka_topic_find (rd_kafka_t *rk,
+				       const char *topic);
+rd_kafka_topic_t *rd_kafka_topic_find0 (rd_kafka_t *rk,
+					const rd_kafkap_str_t *topic);
 
 int rd_kafka_toppar_ua_move (rd_kafka_topic_t *rkt, rd_kafka_msgq_t *rkmq);
 

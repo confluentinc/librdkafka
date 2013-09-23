@@ -54,7 +54,6 @@ static void stop (int sig) {
 }
 
 
-#if 0
 static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 	const char *p = (const char *)ptr;
 	int of = 0;
@@ -80,7 +79,6 @@ static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 			of, hexen, charen);
 	}
 }
-#endif
 
 /**
  * Kafka logger callback (optional)
@@ -111,6 +109,22 @@ static void msg_delivered (rd_kafka_t *rk,
 		printf("%% Message delivered (%zd bytes)\n", len);
 }
 
+
+static void msg_consume (rd_kafka_topic_t *rkt, int32_t partition,
+			 void *payload, size_t len,
+			 void *key, size_t key_len,
+			 int64_t next_offset,
+			 void *opaque) {
+	printf("%% Message (next offset %"PRId64", %zd bytes):\n",
+	       next_offset, len);
+
+	if (key_len)
+		hexdump(stdout, "Message Key", key, key_len);
+
+	hexdump(stdout, "Message Payload", payload, len);
+}
+
+
 static void sig_usr1 (int sig) {
 	rd_kafka_dump(stdout, rk);
 }
@@ -122,25 +136,19 @@ int main (int argc, char **argv) {
 	char *topic = NULL;
 	int partition = RD_KAFKA_PARTITION_UA;
 	int opt;
-	rd_kafka_conf_t conf;
-	rd_kafka_topic_conf_t topic_conf;
+	rd_kafka_conf_t *conf;
+	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
 	const char *debug = NULL;
+	int64_t start_offset = 0;
 
-	/* Kafka configuration
-	 * Base configuration on the default config. */
-	rd_kafka_defaultconf_set(&conf);
-	/* Set up a message delivery report callback.
-	 * It will be called once for each message, either on succesful
-	 * delivery to broker, or upon failure to deliver to broker. */
-	conf.producer.dr_cb = msg_delivered;
+	/* Kafka configuration */
+	conf = rd_kafka_conf_new();
 
-	/* Topic configuration
-	 * Base topic configuration on the default topic config. */
-	rd_kafka_topic_defaultconf_set(&topic_conf);
+	/* Topic configuration */
+	topic_conf = rd_kafka_topic_conf_new();
 
-
-	while ((opt = getopt(argc, argv, "PCt:p:b:z:d:")) != -1) {
+	while ((opt = getopt(argc, argv, "PCt:p:b:z:d:o:")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -156,13 +164,16 @@ int main (int argc, char **argv) {
 			brokers = optarg;
 			break;
 		case 'z':
-			if (rd_kafka_conf_set(&conf, "compression.codec",
+			if (rd_kafka_conf_set(conf, "compression.codec",
 					      optarg,
 					      errstr, sizeof(errstr)) !=
 			    RD_KAFKA_CONF_OK) {
 				fprintf(stderr, "%% %s\n", errstr);
 				exit(1);
 			}
+			break;
+		case 'o':
+			start_offset = strtoll(optarg, NULL, 10);
 			break;
 		case 'd':
 			debug = optarg;
@@ -185,6 +196,7 @@ int main (int argc, char **argv) {
 			"  -b <brokers>    Broker address (localhost:9092)\n"
 			"  -z <codec>      Enable compression:\n"
 			"                  none|gzip|snappy\n"
+			"  -o <offset>     Start offset (consumer)\n"
 			"  -d [facs..]     Enable debugging contexts:\n"
 			"                  %s\n"
 			"\n"
@@ -208,7 +220,7 @@ int main (int argc, char **argv) {
 	signal(SIGPIPE, SIG_IGN);
 
 	if (debug &&
-	    rd_kafka_conf_set(&conf, "debug", debug, errstr, sizeof(errstr)) !=
+	    rd_kafka_conf_set(conf, "debug", debug, errstr, sizeof(errstr)) !=
 	    RD_KAFKA_CONF_OK) {
 		printf("%% Debug configuration failed: %s: %s\n",
 		       errstr, debug);
@@ -222,9 +234,13 @@ int main (int argc, char **argv) {
 		char buf[2048];
 		int sendcnt = 0;
 
+		/* Set up a message delivery report callback.
+		 * It will be called once for each message, either on succesful
+		 * delivery to broker, or upon failure to deliver to broker. */
+		rd_kafka_conf_set_dr_cb(conf, msg_delivered);
 
 		/* Create Kafka handle */
-		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, &conf,
+		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
 					errstr, sizeof(errstr)))) {
 			fprintf(stderr,
 				"%% Failed to create new producer: %s\n",
@@ -242,7 +258,7 @@ int main (int argc, char **argv) {
 		}
 
 		/* Create topic */
-		rkt = rd_kafka_topic_new(rk, topic, &topic_conf);
+		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
 		fprintf(stderr, "%% Type stuff and hit enter to send\n");
 		while (run && fgets(buf, sizeof(buf), stdin)) {
@@ -281,6 +297,40 @@ int main (int argc, char **argv) {
 		/*
 		 * Consumer
 		 */
+
+		/* Create Kafka handle */
+		if (!(rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf,
+					errstr, sizeof(errstr)))) {
+			fprintf(stderr,
+				"%% Failed to create new producer: %s\n",
+				errstr);
+			exit(1);
+		}
+
+		rd_kafka_set_logger(rk, logger);
+		if (debug)
+			rd_kafka_set_log_level(rk, LOG_DEBUG);
+
+		if (rd_kafka_brokers_add(rk, brokers) == 0) {
+			fprintf(stderr, "%% No valid brokers specified\n");
+			exit(1);
+		}
+
+		/* Create topic */
+		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+
+		rd_kafka_consume_start(rkt, 0, start_offset);
+
+		while (run) {
+			int cnt;
+			cnt = rd_kafka_consume_callback(rkt, partition, 1000,
+							msg_consume, NULL);
+			fprintf(stderr, "%% %i messages consumed\n", cnt);
+		}
+
+		rd_kafka_destroy(rk);
+
+
 #if 0 /* FIXME: Not implemented */
 		rd_kafka_op_t *rko;
 		/* Base our configuration on the default config. */
@@ -308,7 +358,7 @@ int main (int argc, char **argv) {
 		 * to create a Kafka handle. */
 		if (!(rk = rd_kafka_new_consumer(broker, topic,
 						 (uint32_t)partition,
-						 0, &conf))) {
+						 0, conf))) {
 			perror("kafka_new_consumer");
 			exit(1);
 		}

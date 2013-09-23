@@ -360,6 +360,31 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
 
 
 
+/**
+ * Consumes messages from topic 'rkt', waiting at most 'timeout_ms'
+ * milliseconds for one or more messages to arrive.
+ *
+ * Calls consume_cb() for each message with the following arguments:
+ *     * rkt,partition - Topic and partition
+ *     * payload,len   - Message payload. The memory belogns to librdkafka
+ *                       and must not be referenced after the callback returns.
+ *     * key,key_len   - Message key if any.
+ *     * next_offset   - The offset of the next message.
+ *     * opaque        - Application 'opaque' pointer.
+ *
+ * Returns the number of messages processed.
+ */
+int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
+			       int timeout_ms,
+			       void (*consume_cb) (rd_kafka_topic_t *rkt,
+						   int32_t partition,
+						   void *payload, size_t len,
+						   void *key, size_t key_len,
+						   int64_t next_offset,
+						   void *opaque),
+			       void *opaque);
+
+
 
 /**
  * Adds a one or more brokers to the kafka handle's list of initial brokers.
@@ -451,9 +476,13 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk);
 
 
 
-
 /**
  * Retrieve the current number of threads in use by librdkafka.
  * Used by regression tests.
  */
 int rd_kafka_thread_cnt (void);
+
+
+/* FIXME */
+void rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
+			     int64_t offset);

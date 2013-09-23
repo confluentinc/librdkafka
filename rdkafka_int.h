@@ -399,54 +399,6 @@ typedef struct rd_kafka_msgq_s {
 	TAILQ_FOREACH(elm, &(head)->rkmq_msgs, rkm_link)
 
 
-typedef enum {
-	RD_KAFKA_OP_PRODUCE,  /* Application  -> Kafka thread */
-	RD_KAFKA_OP_FETCH,    /* Kafka thread -> Application */
-	RD_KAFKA_OP_ERR,      /* Kafka thread -> Application */
-	RD_KAFKA_OP_DR,       /* Kafka thread -> Application
-			       * Produce message delivery report */
-
-	RD_KAFKA_OP_METADATA_REQ, /* any -> Broker thread: request metadata */
-
-	/* Internal librdkafka ops */
-	RD_KAFKA_OP_REPLY,    /* Kafka thread: reply received from broker */
-} rd_kafka_op_type_t;
-
-typedef struct rd_kafka_op_s {
-	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
-	rd_kafka_op_type_t rko_type;
-	struct rd_kafka_topic_s *rko_rkt;
-	int       rko_flags;
-#define RD_KAFKA_OP_F_FREE        0x1  /* Free the payload when done with it. */
-#define RD_KAFKA_OP_F_FLASH       0x2  /* Internal: insert at head of queue */
-#define RD_KAFKA_OP_F_NOCOPY      0x4  /* Do not copy the payload, point to it*/
-#define RD_KAFKA_OP_F_NO_RESPONSE 0x8  /* rkbuf: Not expecting a response */
-	rd_kafka_msgq_t rko_msgq;
-
-	/* For PRODUCE */
-	rd_kafka_msg_t *rko_rkm;
-	/* For ERR */
-	char *rko_payload;
-	int   rko_len;
-	/* For FETCH */
-	uint64_t  rko_offset;
-#define           rko_max_size rko_len
-	/* For replies */
-	rd_kafka_resp_err_t rko_err;
-	int8_t    rko_compression;
-	int64_t   rko_offset_len;  /* Length to use to advance the offset. */
-} rd_kafka_op_t;
-
-
-typedef struct rd_kafka_q_s {
-	pthread_mutex_t rkq_lock;
-	pthread_cond_t  rkq_cond;
-	TAILQ_HEAD(, rd_kafka_op_s) rkq_q;
-	int             rkq_qlen;
-} rd_kafka_q_t;
-
-
-
 typedef struct rd_kafka_buf_s {
 	TAILQ_ENTRY(rd_kafka_buf_s) rkbuf_link;
 
@@ -475,7 +427,8 @@ typedef struct rd_kafka_buf_s {
 			   struct rd_kafka_buf_s *reprkbuf,
 			   struct rd_kafka_buf_s *reqrkbuf,
 			   void *opaque);
-	
+
+	int     rkbuf_refcnt;
 	void   *rkbuf_opaque;
 
 	int     rkbuf_retries;
@@ -492,6 +445,57 @@ typedef struct rd_kafka_bufq_s {
 	TAILQ_HEAD(, rd_kafka_buf_s) rkbq_bufs;
 	int                          rkbq_cnt;
 } rd_kafka_bufq_t;
+
+
+typedef enum {
+	RD_KAFKA_OP_FETCH,    /* Kafka thread -> Application */
+	RD_KAFKA_OP_ERR,      /* Kafka thread -> Application */
+	RD_KAFKA_OP_DR,       /* Kafka thread -> Application
+			       * Produce message delivery report */
+
+	RD_KAFKA_OP_METADATA_REQ, /* any -> Broker thread: request metadata */
+} rd_kafka_op_type_t;
+
+typedef struct rd_kafka_op_s {
+	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
+	rd_kafka_op_type_t rko_type;
+	int       rko_flags;
+#define RD_KAFKA_OP_F_FREE        0x1  /* Free the payload when done with it. */
+#define RD_KAFKA_OP_F_FLASH       0x2  /* Internal: insert at head of queue */
+#define RD_KAFKA_OP_F_NOCOPY      0x4  /* Do not copy the payload, point to it*/
+#define RD_KAFKA_OP_F_NO_RESPONSE 0x8  /* rkbuf: Not expecting a response */
+	rd_kafka_msgq_t rko_msgq;
+
+	/* For PRODUCE */
+	rd_kafka_msg_t *rko_rkm;
+
+	/* For FETCH and ERR */
+	char *rko_payload;
+	int   rko_len;
+	struct rd_kafka_toppar_s *rko_rktp;
+
+	/* For FETCH */
+	rd_kafka_buf_t    *rko_rkbuf;
+	rd_kafkap_bytes_t *rko_key;
+	uint64_t           rko_next_offset;
+
+	/* For METADATA */
+	struct rd_kafka_topic_s *rko_rkt;
+
+	/* For replies */
+	rd_kafka_resp_err_t rko_err;
+} rd_kafka_op_t;
+
+
+typedef struct rd_kafka_q_s {
+	pthread_mutex_t rkq_lock;
+	pthread_cond_t  rkq_cond;
+	TAILQ_HEAD(, rd_kafka_op_s) rkq_q;
+	int             rkq_qlen;
+} rd_kafka_q_t;
+
+
+
 
 
 typedef enum {
@@ -519,6 +523,9 @@ typedef struct rd_kafka_broker_s {
 	TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;
 	pthread_rwlock_t    rkb_toppar_lock;
 	int                 rkb_toppar_cnt;
+
+	rd_ts_t             rkb_ts_fetch_backoff;
+	int                 rkb_fetching;
 
 #define rd_kafka_broker_toppars_rdlock(rkb) \
 	pthread_rwlock_rdlock(&(rkb)->rkb_toppar_lock)
@@ -605,7 +612,6 @@ typedef struct rd_kafka_toppar_s {
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rkblink; /* rd_kafka_broker_t link*/
 	rd_kafka_topic_t  *rktp_rkt;
 	int32_t            rktp_partition;
-	/* Partition is unassigned */
 	rd_kafka_broker_t *rktp_leader;  /* Leader broker */
 	int                rktp_refcnt;
 	pthread_mutex_t    rktp_lock;
@@ -615,7 +621,17 @@ typedef struct rd_kafka_toppar_s {
 	rd_kafka_msgq_t    rktp_xmit_msgq; /* internal broker xmit queue */
 
 	rd_ts_t            rktp_ts_last_xmit;
-	
+
+	int                rktp_flags;
+	#define RD_KAFKA_TOPPAR_F_CONSUMING  0x1
+
+	/* Consumer */
+	rd_kafka_q_t       rktp_fetchq;          /* Queue of fetched messages
+						  * from broker. */
+	int64_t            rktp_next_offset;     /* Next offset to fetch */
+	int64_t            rktp_app_offset;      /* Last offset delivered to
+						  * application */
+	int64_t            rktp_commited_offset; /* Last commited offset */
 	struct {
 		uint64_t tx_msgs;
 		uint64_t tx_bytes;
@@ -623,7 +639,6 @@ typedef struct rd_kafka_toppar_s {
 } rd_kafka_toppar_t;
 
 #define rd_kafka_toppar_keep(rktp) rd_atomic_add(&(rktp)->rktp_refcnt, 1)
-
 #define rd_kafka_toppar_destroy(rktp) do {				\
 	if (rd_atomic_sub(&(rktp)->rktp_refcnt, 1) == 0)		\
 		rd_kafka_toppar_destroy0(rktp);				\
@@ -769,6 +784,21 @@ void rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 	pthread_mutex_unlock(&rkq->rkq_lock);
 }
 
+/**
+ * Concat all elements of 'srcq' onto tail of 'rkq'.
+ * 'dstq' will be be locked, but 'srcq' will not.
+ *
+ * Locality: any thread.
+ */
+static inline RD_UNUSED
+void rd_kafka_q_concat (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq) {
+	pthread_mutex_lock(&rkq->rkq_lock);
+	TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
+	(void)rd_atomic_add(&rkq->rkq_qlen, srcq->rkq_qlen);
+	pthread_cond_signal(&rkq->rkq_cond);
+	pthread_mutex_unlock(&rkq->rkq_lock);
+}
+
 #define rd_kafka_q_len(rkq) ((rkq)->rkq_qlen)
 
 rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms);
@@ -779,13 +809,11 @@ void rd_kafka_op_reply2 (rd_kafka_t *rk, rd_kafka_op_t *rko);
 void rd_kafka_op_reply0 (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			 rd_kafka_op_type_t type,
 			 rd_kafka_resp_err_t err, uint8_t compression,
-			 void *payload, int len,
-			 uint64_t offset_len);
+			 void *payload, int len);
 void rd_kafka_op_reply (rd_kafka_t *rk,
 			rd_kafka_op_type_t type,
 			rd_kafka_resp_err_t err, uint8_t compression,
-			void *payload, int len,
-			uint64_t offset_len);
+			void *payload, int len);
 
 #define rd_kafka_keep(rk) rd_atomic_add(&(rk)->rk_refcnt, 1)
 void rd_kafka_destroy0 (rd_kafka_t *rk);

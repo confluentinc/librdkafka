@@ -46,6 +46,7 @@
 #include "rdthread.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
+#include "rdgz.h"
 #include "snappy.h"
 
 const char *rd_kafka_broker_state_names[] = {
@@ -113,7 +114,10 @@ static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
 
 
 
-static void rd_kafka_buf_destroy (rd_kafka_buf_t *rkbuf) {
+void rd_kafka_buf_destroy (rd_kafka_buf_t *rkbuf) {
+
+	if (rd_atomic_sub(&rkbuf->rkbuf_refcnt, 1) > 0)
+		return;
 
 	if (rkbuf->rkbuf_buf2)
 		free(rkbuf->rkbuf_buf2);
@@ -144,7 +148,7 @@ static struct iovec *rd_kafka_buf_iov_next (rd_kafka_buf_t *rkbuf) {
  * Pushes 'buf' & 'len' onto the previously allocated iov stack for 'rkbuf'.
  */
 static void rd_kafka_buf_push (rd_kafka_buf_t *rkbuf, int flags,
-			      void *buf, size_t len) {
+			       void *buf, size_t len) {
 	struct iovec *iov;
 
 	iov = rd_kafka_buf_iov_next(rkbuf);
@@ -180,6 +184,26 @@ static rd_kafka_buf_t *rd_kafka_buf_new (int iovcnt, size_t size) {
 	rkbuf->rkbuf_buf = ((char *)(rkbuf+1))+iovsize;
 
 	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
+
+	rd_kafka_buf_keep(rkbuf);
+
+	return rkbuf;
+}
+
+/**
+ * Create new rkbuf shadowing a memory region in rkbuf_buf2.
+ */
+static rd_kafka_buf_t *rd_kafka_buf_new_shadow (void *ptr, size_t size) {
+	rd_kafka_buf_t *rkbuf;
+
+	rkbuf = calloc(1, sizeof(*rkbuf));
+
+	rkbuf->rkbuf_buf2 = ptr;
+	rkbuf->rkbuf_len  = size;
+
+	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
+
+	rd_kafka_buf_keep(rkbuf);
 
 	return rkbuf;
 }
@@ -283,6 +307,11 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rkb->rkb_pfd.fd = rkb->rkb_s;
 	}
 
+	if (rkb->rkb_recv_buf) {
+		rd_kafka_buf_destroy(rkb->rkb_recv_buf);
+		rkb->rkb_recv_buf = NULL;
+	}
+
 	/* The caller may omit the format if it thinks this is a recurring
 	 * failure, in which case the following things are omitted:
 	 *  - log message
@@ -308,7 +337,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rd_kafka_op_reply(rkb->rkb_rk, RD_KAFKA_OP_ERR,
 				  RD_KAFKA_RESP_ERR__FAIL, 0,
 				  strdup(rkb->rkb_err.msg),
-				  strlen(rkb->rkb_err.msg), 0);
+				  strlen(rkb->rkb_err.msg));
 	}
 
 	rd_kafka_bufq_purge(rkb, &rkb->rkb_waitresps, err);
@@ -499,7 +528,7 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 
 	rkbuf = rd_kafka_buf_new(1, flags & RD_KAFKA_OP_F_FREE ? 0 : size);
 	rkbuf->rkbuf_ts_timeout = rd_clock() + 
-		rkb->rkb_rk->rk_conf.metadata_request_timeout_ms * 1000;
+		rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
 	rkbuf->rkbuf_flags |= flags;
 
 	if (size > 0) {
@@ -520,18 +549,50 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 }
 
 
+/**
+ * Memory reading helper macros to be used when parsing network responses.
+ *
+ * Assumptions:
+ *   - data base pointer is in 'char *buf'
+ *   - data total size is in 'size_t size'
+ *   - current read offset is in 'size_t of' which must be initialized to 0.
+ *   - the broker the message was received from must be 'rkb'
+ *   - an 'err:' label must be available for error bailouts.
+ */
 
-/* FIXME: error handling */
-#define _CHECK_LEN(len) do {			\
-	if (of + (len) > size)			\
-		goto err;			\
+#define _FAIL(fmt...) do {						\
+		rd_rkb_dbg(rkb, BROKER, "PROTOERR",			\
+			   "Protocol parse failure at %s:%i", \
+			   __FUNCTION__, __LINE__);			\
+		rd_rkb_dbg(rkb, BROKER, "PROTOERR", fmt);		\
+		goto err;						\
 	} while (0)
-	
+
+#define _REMAIN() (size - of)
+
+#define _CHECK_LEN(len) do {						\
+		int _LEN = (int)(len);					\
+	if (unlikely(_LEN > _REMAIN())) {				\
+		_FAIL("expected %i bytes > %i remaining bytes",		\
+		      _LEN, (int)_REMAIN());				\
+		goto err;						\
+	}								\
+	} while (0)
+
+#define _SKIP(len) do {				\
+		_CHECK_LEN(len);		\
+		of += (len);			\
+	} while (0)
 
 #define _READ(dstptr,len) do {			\
 		_CHECK_LEN(len);		\
 		memcpy((dstptr), buf+(of), (len));	\
 		of += (len);				\
+	} while (0)
+
+#define _READ_I64(dstptr) do {						\
+		_READ(dstptr, 8);					\
+		*(int64_t *)(dstptr) = be64toh(*(int64_t *)(dstptr));	\
 	} while (0)
 
 #define _READ_I32(dstptr) do {						\
@@ -544,19 +605,31 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 		*(int16_t *)(dstptr) = ntohs(*(int16_t *)(dstptr));	\
 	} while (0)
 
-#define _READ_STR(kstr) do {			\
-	_CHECK_LEN(2);				\
-	kstr = (rd_kafkap_str_t *)(buf+of);	\
-	if (ntohs((kstr)->len) == -1)		\
-		(kstr)->len = 0;		\
-	_CHECK_LEN(ntohs((kstr)->len));		\
-	of += 2 + ntohs((kstr)->len);		\
+/* Read Kafka String representation (2+N) */
+#define _READ_STR(kstr) do {					\
+		int _klen;					\
+		_CHECK_LEN(2);					\
+		kstr = (rd_kafkap_str_t *)((char *)buf+of);	\
+		_klen = RD_KAFKAP_STR_SIZE(kstr);		\
+		of += _klen;					\
 	} while (0)
 
-#define _FAIL(reason...) do {					\
-		rd_rkb_dbg(rkb, METADATA, "METADATA", reason);	\
-		goto err;					\
+/* Read Kafka Bytes representation (4+N) */
+#define _READ_BYTES(kbytes) do {				\
+		int32_t _klen;					\
+		_CHECK_LEN(4);					\
+		kbytes = (rd_kafkap_bytes_t *)((char *)buf+of);	\
+		_klen = RD_KAFKAP_BYTES_SIZE(kbytes);		\
+		of += (_klen);					\
 	} while (0)
+
+/* Reference memory, dont copy it */
+#define _READ_REF(dstptr,len) do {			\
+		_CHECK_LEN(len);			\
+		(dstptr) = (void *)((char *)buf+of);	\
+		of += (len);				\
+	} while(0)
+
 
 
 /**
@@ -931,6 +1004,9 @@ void rd_kafka_topic_leader_query (rd_kafka_t *rk, rd_kafka_topic_t *rkt) {
 
 
 
+/**
+ * Find a waitresp (rkbuf awaiting response) by the correlation id.
+ */
 static rd_kafka_buf_t *rd_kafka_waitresp_find (rd_kafka_broker_t *rkb,
 					       int32_t corrid) {
 	rd_kafka_buf_t *rkbuf;
@@ -1135,15 +1211,18 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 		rkbuf->rkbuf_len = ntohl(rkbuf->rkbuf_reshdr.Size);
 		rkbuf->rkbuf_reshdr.CorrId = ntohl(rkbuf->rkbuf_reshdr.CorrId);
 
-		/* Make sure message size is within tolerable limits */
+		/* Make sure message size is within tolerable limits.
+		 * Allow an extra 100 bytes for headers. */
 		if (rkbuf->rkbuf_len < 4/*CorrId*/ ||
-		    rkbuf->rkbuf_len - 4 > rkb->rkb_rk->rk_conf.max_msg_size) {
+		    rkbuf->rkbuf_len >
+		    rkb->rkb_rk->rk_conf.max_msg_size + 100) {
 			snprintf(errstr, sizeof(errstr),
 				 "Invalid message size %zd (0..%i)",
 				 rkbuf->rkbuf_len-4,
 				 rkb->rkb_rk->rk_conf.max_msg_size);
 			rkb->rkb_c.rx_err++;
 			err_code = RD_KAFKA_RESP_ERR__BAD_MSG;
+
 			goto err;
 		}
 
@@ -1455,8 +1534,11 @@ done:
 }
 
 
-static int rd_kafka_broker_send_toppar (rd_kafka_broker_t *rkb,
-					rd_kafka_toppar_t *rktp) {
+/**
+ * Produce messages from 'rktp's queue.
+ */
+static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
+					   rd_kafka_toppar_t *rktp) {
 	int cnt;
 	rd_kafka_msg_t *rkm;
 	int msgcnt;
@@ -1679,14 +1761,15 @@ static int rd_kafka_broker_send_toppar (rd_kafka_broker_t *rkb,
 		case RD_KAFKA_COMPRESSION_NONE:
 			abort(); /* unreachable */
 			break;
+
 		case RD_KAFKA_COMPRESSION_GZIP:
-			memset(&strm, 0, sizeof(strm));
 			/* Initialize gzip compression */
+			memset(&strm, 0, sizeof(strm));
 			r = deflateInit2(&strm, Z_DEFAULT_COMPRESSION,
 					 Z_DEFLATED, 15+16,
 					 8, Z_DEFAULT_STRATEGY);
 			if (r != Z_OK) {
-				rd_rkb_log(rkb, LOG_ERR, "SNAPPY",
+				rd_rkb_log(rkb, LOG_ERR, "GZIP",
 					   "Failed to initialize gzip for "
 					   "compressing %"PRId32" bytes in "
 					   "topic %.*s [%"PRId32"]: %s (%i): "
@@ -1721,7 +1804,7 @@ static int rd_kafka_broker_send_toppar (rd_kafka_broker_t *rkb,
 
 				/* Compress message */
 				if ((r = deflate(&strm, Z_NO_FLUSH) != Z_OK)) {
-					rd_rkb_log(rkb, LOG_ERR, "SNAPPY",
+					rd_rkb_log(rkb, LOG_ERR, "GZIP",
 						   "Failed to gzip-compress"
 						   "%zd bytes for "
 						   "topic %.*s [%"PRId32"]: "
@@ -1744,7 +1827,7 @@ static int rd_kafka_broker_send_toppar (rd_kafka_broker_t *rkb,
 
 			/* Finish the compression */
 			if ((r = deflate(&strm, Z_FINISH)) != Z_STREAM_END) {
-				rd_rkb_log(rkb, LOG_ERR, "SNAPPY",
+				rd_rkb_log(rkb, LOG_ERR, "GZIP",
 					   "Failed to finish gzip compression "
 					   " of %"PRId32" bytes for "
 					   "topic %.*s [%"PRId32"]: "
@@ -1943,7 +2026,6 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 }
 
 
-
 /**
  * Idle function for unassigned brokers
  */
@@ -1953,7 +2035,11 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb) {
 		rd_kafka_broker_io_serve(rkb);
 }
 
-static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb) {
+
+/**
+ * Producer serving
+ */
+static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 	rd_ts_t last_timeout_scan = rd_clock();
 	rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
 
@@ -1980,6 +2066,7 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb) {
 			cnt = 0;
 			
 			TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
+
 				rd_rkb_dbg(rkb, TOPIC, "TOPPAR",
 					   "%.*s [%"PRId32"] %i+%i msgs",
 					   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
@@ -2004,7 +2091,6 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb) {
 
 				if (rktp->rktp_xmit_msgq.rkmq_msg_cnt == 0)
 					continue;
-
 				/* Attempt to fill the batch size, but limit
 				 * our waiting to queue.buffering.max.ms
 				 * and batch.num.messages. */
@@ -2020,10 +2106,10 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb) {
 
 				rktp->rktp_ts_last_xmit = now;
 
+				/* Send Produce requests for this toppar */
 				while (rktp->rktp_xmit_msgq.rkmq_msg_cnt > 0) {
-					int r;
-					r = rd_kafka_broker_send_toppar(rkb,
-									rktp);
+					int r = rd_kafka_broker_produce_toppar(
+						rkb, rktp);
 					if (r > 0)
 						cnt += r;
 				}
@@ -2059,8 +2145,532 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb) {
 }
 
 
+
+/**
+ * Parsers a MessageSet and enqueues internal ops on the local 
+ * application queue for each Message.
+ */
+static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
+						       rd_kafka_toppar_t *rktp,
+						       rd_kafka_q_t *rkq,
+						       rd_kafka_buf_t *rkbuf,
+						       void *buf, size_t size) {
+	size_t of = 0;
+	rd_kafka_buf_t *rkbufz;
+
+	if (_REMAIN() == 0)
+		_FAIL("empty messageset");
+
+	while (_REMAIN() > 0) {
+		struct {
+			int64_t Offset;
+			int32_t MessageSize;
+			int32_t Crc;
+			int8_t  MagicByte;
+			int8_t  Attributes;
+		} RD_PACKED *hdr;
+		rd_kafkap_bytes_t *Key;
+		rd_kafkap_bytes_t *Value;
+		int32_t Value_len;
+		rd_kafka_op_t *rko;
+
+		_READ_REF(hdr, sizeof(*hdr));
+		hdr->Offset      = be64toh(hdr->Offset);
+		hdr->MessageSize = ntohl(hdr->MessageSize);
+		_CHECK_LEN(hdr->MessageSize - 6/*Crc+Magic+Attr*/);
+		/* Ignore CRC (for now) */
+
+		/* Extract key */
+		_READ_BYTES(Key);
+		
+		/* Extract Value */
+		_READ_BYTES(Value);
+
+		/* Skip empty messages */
+		if (unlikely((Value_len = RD_KAFKAP_BYTES_LEN(Value)) == 0))
+			continue;
+
+		/* Check for message compression.
+		 * The Key is ignored for compressed messages. */
+		switch (hdr->Attributes & 0x3)
+		{
+		case RD_KAFKA_COMPRESSION_NONE:
+			/* Pure uncompressed message, this is the innermost
+			 * handler after all compression and cascaded
+			 * messagesets have been peeled off. */
+
+			/* Create op and push on temporary queue. */
+			rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH);
+			rko->rko_next_offset = hdr->Offset + 1;
+			rko->rko_key         = Key;
+			rko->rko_payload     = Value->data;
+			rko->rko_len         = Value_len;
+			rko->rko_rktp        = rktp;
+
+			rktp->rktp_next_offset = rko->rko_next_offset;
+
+			/* Since all the ops share the same payload buffer
+			 * (rkbuf->rkbuf_buf2) a refcnt is used on the rkbuf
+			 * that makes sure all consume_cb() will have been
+			 * called for each of these ops before the rkbuf
+			 * and its rkbuf_buf2 are freed. */
+			rko->rko_rkbuf = rkbuf;
+			rd_kafka_buf_keep(rkbuf);
+
+			if (0)
+			rd_rkb_dbg(rkb, MSG, "MSG",
+				   "Pushed message at offset %"PRId64
+				   " onto queue", hdr->Offset);
+				   
+			TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
+			rkq->rkq_qlen++;
+			break;
+
+
+		case RD_KAFKA_COMPRESSION_GZIP:
+		{
+			uint64_t outlen;
+			void *outbuf;
+
+			/* Decompress Message payload */
+			outbuf = rd_gz_decompress(Value->data, Value_len,
+						  &outlen);
+			if (unlikely(!outbuf)) {
+				rd_rkb_dbg(rkb, MSG, "GZIP",
+					   "Failed to decompress Gzip "
+					   "message at offset %"PRId64
+					   " of %"PRId32" bytes: "
+					   "ignoring message",
+					   hdr->Offset, Value_len);
+				continue;
+			}
+
+			/* With a new allocated buffer (outbuf) we need
+			 * a separate rkbuf for it to allow multiple fetch ops
+			 * to share the same payload buffer. */
+			rkbufz = rd_kafka_buf_new_shadow(outbuf,
+							 (size_t)outlen);
+
+			/* Now parse the contained Messages */
+			if (rd_kafka_messageset_handle(rkb, rktp, rkq, rkbufz,
+						       outbuf, outlen) != 0)
+				rd_kafka_buf_destroy(rkbufz);
+		}
+		break;
+
+		case RD_KAFKA_COMPRESSION_SNAPPY:
+		{
+			size_t outlen;
+			void *outbuf;
+			char *inbuf = Value->data;
+			int r;
+			static const char snappy_java_magic[] =
+				{ 0x82, 'S','N','A','P','P','Y', 0 };
+			static const int snappy_java_hdrlen = 8+4+4+4;
+
+			/* snappy-java adds its own header (SnappyCodec)
+			 * which is not compatible with the official Snappy
+			 * implementation. Skip it.
+			 *   8: magic, 4: version, 4: compatible, 4: unknown? */
+			if (likely(Value_len > snappy_java_hdrlen &&
+				   !memcmp(inbuf, snappy_java_magic, 8))) {
+				inbuf = inbuf + snappy_java_hdrlen;
+				Value_len -= snappy_java_hdrlen;
+			}
+			    
+
+			/* Acquire uncompressed length */
+			if (unlikely(!snappy_uncompressed_length(inbuf,
+								 Value_len,
+								 &outlen))) {
+				rd_rkb_dbg(rkb, MSG, "SNAPPY",
+					   "Failed to get length of Snappy "
+					   "compressed payload "
+					   "for message at offset %"PRId64
+					   " (%"PRId32" bytes): "
+					   "ignoring message",
+					   hdr->Offset, Value_len);
+				continue;
+			}
+			
+			rd_rkb_dbg(rkb, MSG, "SNAPPY",
+				   "Uncompressed length %zd for %"PRId32
+				   " compressed bytes at offset %"PRId64,
+				   outlen, Value_len, hdr->Offset);
+				   
+			/* Allocate output buffer for uncompressed data */
+			outbuf = malloc(outlen);
+
+			/* Uncompress to outbuf */
+			if (unlikely((r = snappy_uncompress(inbuf,
+							    Value_len,
+							    outbuf)))) {
+				rd_rkb_dbg(rkb, MSG, "SNAPPY",
+					   "Failed to decompress Snappy "
+					   "payload for message at offset "
+					   "%"PRId64
+					   " (%"PRId32" bytes): %s: "
+					   "ignoring message",
+					   hdr->Offset, Value_len,
+					   strerror(-r/*negative errno*/));
+				free(outbuf);
+				continue;
+			}
+
+			/* With a new allocated buffer (outbuf) we need
+			 * a separate rkbuf for it to allow multiple fetch ops
+			 * to share the same payload buffer. */
+			rkbufz = rd_kafka_buf_new_shadow(outbuf, outlen);
+			
+			/* Now parse the contained Messages */
+			if (unlikely(rd_kafka_messageset_handle(rkb, rktp, rkq,
+								rkbufz,
+								outbuf,
+								outlen) != 0))
+				rd_kafka_buf_destroy(rkbufz);
+		}
+		break;
+		}
+	}
+
+	return 0;
+
+err:
+	/* "A Guide To The Kafka Protocol" states:
+	 *   "As an optimization the server is allowed to return a partial
+	 *    message at the end of the message set.
+	 *    Clients should handle this case."
+	 * We're handling it by not passing the error upstream. */
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * Parses and handles a Fetch reply.
+ * Returns 0 on success or an error code on failure.
+ */
+static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
+							rd_kafka_buf_t *rkbuf) {
+	char *buf = rkbuf->rkbuf_buf2;
+	size_t size = rkbuf->rkbuf_len;
+	size_t of = 0;
+	int32_t TopicArrayCnt;
+	int i;
+
+	_READ_I32(&TopicArrayCnt);
+	/* Verify that TopicArrayCnt seems to be in line with remaining size */
+	_CHECK_LEN(TopicArrayCnt * (3/*topic min size*/ +
+				    4/*PartitionArrayCnt*/ +
+				    4+2+8+4/*inner header*/));
+
+	for (i = 0 ; i < TopicArrayCnt ; i++) {
+		rd_kafkap_str_t *topic;
+		rd_kafka_toppar_t *rktp;
+		int32_t PartitionArrayCnt;
+		struct {
+			int32_t Partition;
+			int16_t ErrorCode;
+			int64_t HighwaterMarkOffset;
+			int32_t MessageSetSize;
+		} RD_PACKED *hdr;
+		rd_kafka_resp_err_t err2;
+		int j;
+
+		_READ_STR(topic);
+		_READ_I32(&PartitionArrayCnt);
+
+		_CHECK_LEN(PartitionArrayCnt * (4+2+8+4/*inner header*/));
+
+		for (j = 0 ; j < PartitionArrayCnt ; j++) {
+			rd_kafka_q_t tmp_opq; /* Temporary queue for ops */
+
+			_READ_REF(hdr, sizeof(*hdr));
+			hdr->Partition = ntohl(hdr->Partition);
+			hdr->ErrorCode = ntohs(hdr->ErrorCode);
+			hdr->HighwaterMarkOffset = be64toh(hdr->
+							   HighwaterMarkOffset);
+			hdr->MessageSetSize = ntohl(hdr->MessageSetSize);
+
+			/* Look up topic+partition */
+			rktp = rd_kafka_toppar_get2(rkb->rkb_rk, topic,
+						    hdr->Partition, 0);
+			if (unlikely(!rktp)) {
+				rd_rkb_dbg(rkb, TOPIC, "UNKTOPIC",
+					   "Received Fetch response "
+					   "(error %hu) for unknown topic "
+					   "%.*s [%"PRId32"]: ignoring",
+					   hdr->ErrorCode,
+					   RD_KAFKAP_STR_PR(topic),
+					   hdr->Partition);
+				_SKIP(hdr->MessageSetSize);
+				continue;
+			}
+
+			/* FIXME: Handle ErrorCode */
+
+		
+			rd_rkb_dbg(rkb, MSG, "FETCH",
+				   "Topic %.*s [%"PRId32"] MessageSet "
+				   "size %"PRId32", error \"%s\", "
+				   "MaxOffset %"PRId64,
+				   RD_KAFKAP_STR_PR(topic), hdr->Partition,
+				   hdr->MessageSetSize,
+				   rd_kafka_err2str(rkb->rkb_rk,hdr->ErrorCode),
+				   hdr->HighwaterMarkOffset);
+
+			if (hdr->MessageSetSize <= 0)
+				continue;
+
+			/* All parsed messages are put on this temporary op
+			 * queue first and then moved in one go to the
+			 * real op queue. */
+			rd_kafka_q_init(&tmp_opq);
+
+			/* Parse and handle the message set */
+			err2 = rd_kafka_messageset_handle(rkb, rktp, &tmp_opq,
+							  rkbuf, buf+of,
+							  hdr->MessageSetSize);
+			if (err2)
+				_FAIL("messageset handle failed");
+
+			/* Concat all messages onto the real op queue */
+			rd_rkb_dbg(rkb, MSG, "CONSUME",
+				   "Enqueue %i messages on %s [%"PRId32"] "
+				   "fetch queue (%i)",
+				   tmp_opq.rkq_qlen,
+				   rktp->rktp_rkt->rkt_topic->str,
+				   rktp->rktp_partition,
+				   rd_kafka_q_len(&rktp->rktp_fetchq));
+
+			if (tmp_opq.rkq_qlen > 0)
+				rd_kafka_q_concat(&rktp->rktp_fetchq,
+						  &tmp_opq);
+
+			_SKIP(hdr->MessageSetSize);
+		}
+	}
+
+	if (_REMAIN() != 0)
+		_FAIL("Remaining data after message set parse: %zd bytes",
+		      _REMAIN());
+
+	return 0;
+
+err:
+	return RD_KAFKA_RESP_ERR__BAD_MSG;
+}
+
+static void rd_kafka_broker_fetch_reply (rd_kafka_broker_t *rkb,
+					 rd_kafka_resp_err_t err,
+					 rd_kafka_buf_t *reply,
+					 rd_kafka_buf_t *request,
+					 void *opaque) {
+	assert(rkb->rkb_fetching > 0);
+	rkb->rkb_fetching = 0;
+
+	/* Parse and handle the messages (unless the request errored) */
+	if (!err)
+		err = rd_kafka_fetch_reply_handle(rkb, reply);
+
+	rd_rkb_dbg(rkb, MSG, "FETCH", "Fetch reply: %s",
+		   rd_kafka_err2str(rkb->rkb_rk, err));
+
+	if (0)
+	rd_hexdump(stdout, "FetchReply", reply->rkbuf_buf2, reply->rkbuf_len);
+
+	if (unlikely(err)) {
+		switch (err)
+		{
+		case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+		case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
+		case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
+		case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
+		case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
+			/* Request metadata information update */
+			rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
+			/* FALLTHRU */
+
+		case RD_KAFKA_RESP_ERR__TRANSPORT:
+		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+			/* Try again */
+			if (++request->rkbuf_retries <
+			    /* FIXME: producer? */
+			    rkb->rkb_rk->rk_conf.producer.max_retries) {
+
+				if (reply)
+					rd_kafka_buf_destroy(reply);
+							
+				rd_kafka_broker_buf_retry(rkb, request);
+				return;
+			}
+			break;
+
+		default:
+			break;
+		}
+
+		rkb->rkb_ts_fetch_backoff = rd_clock() +
+			(rkb->rkb_rk->rk_conf.
+			 consumer.fetch_error_backoff_ms*1000);
+
+		/* FALLTHRU */
+	}
+
+
+
+	rd_kafka_buf_destroy(request);
+	if (reply)
+		rd_kafka_buf_destroy(reply);
+}
+
+
+/**
+ * Build and send a Fetch request message for all underflowed toppars
+ * for a specific broker.
+ */
+static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
+	struct rd_kafkap_FetchRequest *fr;
+	struct { /* Per toppar header */
+		int32_t PartitionArrayCnt;
+		int32_t Partition;
+		int64_t FetchOffset;
+		int32_t MaxBytes;
+	} RD_PACKED *tp;
+	rd_kafka_toppar_t *rktp;
+	char *next;
+	int cnt = 0;
+	rd_kafka_buf_t *rkbuf;
+
+	/* Create buffer and iovecs:
+	 *   1 x part1 header
+	 *   N x topic name
+	 *   N x tp header
+	 * where N = number of toppars */
+
+	rkbuf = rd_kafka_buf_new(1 + (rkb->rkb_toppar_cnt * (1 + 1)),
+				 sizeof(*fr) +
+				 (sizeof(*tp) * rkb->rkb_toppar_cnt));
+
+	/* Set up header from pre-built header */
+	fr = (void *)rkbuf->rkbuf_buf;
+	*fr = rkb->rkb_rk->rk_conf.consumer.FetchRequest;
+	rd_kafka_buf_push(rkbuf, 0, fr, sizeof(*fr));
+	next = (void *)(fr+1);
+
+	rd_rkb_dbg(rkb, MSG, "HDR",
+		   "Fetch header MaxWaitTime %"PRId32", MinBytes %"PRId32,
+		   ntohl(fr->MaxWaitTime), ntohl(fr->MinBytes));
+
+	rd_kafka_broker_toppars_rdlock(rkb);
+
+	TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
+		/* Skip toppars who's local message queue is already above
+		 * the lower threshold. */
+		if (rd_kafka_q_len(&rktp->rktp_fetchq) >=
+		    rkb->rkb_rk->rk_conf.consumer.queued_min_msgs)
+			continue;
+
+		/* Push topic name onto buffer stack. */
+		rd_kafka_buf_push(rkbuf, 0, rktp->rktp_rkt->rkt_topic,
+				  RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->
+						     rkt_topic));
+		
+		/* Set up toppar header and push it */
+		tp = (void *)next;
+		tp->PartitionArrayCnt = htonl(1);
+		tp->Partition = htonl(rktp->rktp_partition);
+		tp->FetchOffset = htobe64(rktp->rktp_next_offset);
+		tp->MaxBytes = htonl(rkb->rkb_rk->rk_conf.max_msg_size);
+		rd_kafka_buf_push(rkbuf, 0, tp, sizeof(*tp));
+		next = (void *)(tp+1);
+
+		rd_rkb_dbg(rkb, TOPIC, "FETCH",
+			   "Fetch topic %.*s [%"PRId32"] at offset %"PRId64,
+			   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+			   rktp->rktp_partition,
+			   rktp->rktp_next_offset);
+
+		cnt++;
+	}
+
+	rd_kafka_broker_toppars_unlock(rkb);
+
+
+	rd_rkb_dbg(rkb, MSG, "CONSUME",
+		   "consume from %i toppar(s)", cnt);
+
+	if (!cnt) {
+		rd_kafka_buf_destroy(rkbuf);
+		return cnt;
+	}
+
+	fr->TopicArrayCnt = htonl(cnt);
+
+
+	/* Use configured timeout */
+	rkbuf->rkbuf_ts_timeout = rd_clock() +
+		((rkb->rkb_rk->rk_conf.socket_timeout_ms +
+		  rkb->rkb_rk->rk_conf.consumer.fetch_wait_max_ms) * 1000);
+
+
+	rkb->rkb_fetching = 1;
+	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_Fetch, rkbuf,
+				 rd_kafka_broker_fetch_reply, NULL);
+
+	return cnt;
+}
+
+
+
+
+/**
+ * Consumer serving
+ */
+static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
+
+	assert(pthread_self() == rkb->rkb_thread);
+
+	rd_kafka_broker_lock(rkb);
+
+	while (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
+		int cnt = 0;
+		rd_ts_t now;
+		int do_timeout_scan = 1; /* FIXME */
+
+		now = rd_clock();
+
+		/* Send Fetch request message for all underflowed toppars */
+		if (!rkb->rkb_fetching && rkb->rkb_ts_fetch_backoff < now)
+			cnt = rd_kafka_broker_fetch_toppars(rkb);
+
+		rd_rkb_dbg(rkb, BROKER, "FETCH",
+			   "Fetch for %i toppars, fetching=%i",
+			   cnt, rkb->rkb_fetching);
+
+		/* Check and move retry buffers */
+		if (unlikely(rkb->rkb_retrybuf_cnt) > 0)
+			rd_kafka_broker_retry_bufs_move(rkb);
+
+		rd_kafka_broker_unlock(rkb);
+
+		/* Serve IO */
+		rd_kafka_broker_io_serve(rkb);
+
+		/* Scan wait-response queue
+		 * Note: 'now' may be a bit outdated by now. */
+		if (do_timeout_scan)
+			rd_kafka_broker_waitresp_timeout_scan(rkb, now);
+		
+		rd_kafka_broker_lock(rkb);
+	}
+
+	rd_kafka_broker_unlock(rkb);
+}
+
+
 static void *rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_t *rkb = arg;
+	rd_kafka_t *rk = rkb->rkb_rk;
 
 	rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
 
@@ -2093,9 +2703,10 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 		case RD_KAFKA_BROKER_STATE_UP:
 			if (rkb->rkb_nodeid == RD_KAFKA_NODEID_UA)
 				rd_kafka_broker_ua_idle(rkb);
-			else
-				rd_kafka_broker_serve(rkb);
-			
+			else if (rk->rk_type == RD_KAFKA_PRODUCER)
+				rd_kafka_broker_producer_serve(rkb);
+			else if (rk->rk_type == RD_KAFKA_CONSUMER)
+				rd_kafka_broker_consumer_serve(rkb);
 			break;
 		}
 

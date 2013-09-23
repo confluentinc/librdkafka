@@ -154,6 +154,10 @@ void rd_kafka_op_destroy (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 	
 	if (rko->rko_payload && rko->rko_flags & RD_KAFKA_OP_F_FREE)
 		free(rko->rko_payload);
+
+	/* Decrease refcount on rkbuf to eventually free the shared buffer */
+	if (rko->rko_rkbuf)
+		rd_kafka_buf_destroy(rko->rko_rkbuf);
 	
 	free(rko);
 }
@@ -182,7 +186,6 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms) {
 
 	pthread_mutex_lock(&rkq->rkq_lock);
 
-	/* FIXME: concat queue to local queue without lock. */
 	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
 	       timeout_ms != RD_POLL_NOWAIT) {
 
@@ -284,16 +287,13 @@ int rd_kafka_q_serve (rd_kafka_t *rk,
 void rd_kafka_op_reply0 (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			 rd_kafka_op_type_t type,
 			 rd_kafka_resp_err_t err, uint8_t compression,
-			 void *payload, int len,
-			 uint64_t offset_len) {
+			 void *payload, int len) {
 
 	rko->rko_type        = type;
 	rko->rko_flags      |= RD_KAFKA_OP_F_FREE;
 	rko->rko_payload     = payload;
 	rko->rko_len         = len;
 	rko->rko_err         = err;
-	rko->rko_compression = compression;
-	rko->rko_offset      = offset_len;
 }
 
 
@@ -305,8 +305,7 @@ void rd_kafka_op_reply0 (rd_kafka_t *rk, rd_kafka_op_t *rko,
 void rd_kafka_op_reply (rd_kafka_t *rk,
 			rd_kafka_op_type_t type,
 			rd_kafka_resp_err_t err, uint8_t compression,
-			void *payload, int len,
-			uint64_t offset_len) {
+			void *payload, int len) {
 	rd_kafka_op_t *rko;
 
 	rko = calloc(1, sizeof(*rko));
@@ -328,7 +327,7 @@ void rd_kafka_op_reply (rd_kafka_t *rk,
 	}
 
 	rd_kafka_op_reply0(rk, rko, type, err, compression,
-			   payload, len, offset_len);
+			   payload, len);
 	rd_kafka_q_enq(&rk->rk_rep, rko);
 }
 
@@ -490,6 +489,15 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	/* Construct clientid kafka string */
 	rk->rk_clientid = rd_kafkap_str_new(rk->rk_conf.clientid);
 
+	if (rk->rk_type == RD_KAFKA_CONSUMER) {
+		/* Pre-build RequestHeader */
+		rk->rk_conf.consumer.FetchRequest.ReplicaId = htonl(-1);
+		rk->rk_conf.consumer.FetchRequest.MaxWaitTime =
+			htonl(rk->rk_conf.consumer.fetch_wait_max_ms);
+		rk->rk_conf.consumer.FetchRequest.MinBytes =
+			htonl(rk->rk_conf.consumer.fetch_min_bytes);
+	}
+
 	/* Add initial list of brokers from configuration */
 	if (rk->rk_conf.brokerlist)
 		rd_kafka_brokers_add(rk, rk->rk_conf.brokerlist);
@@ -514,7 +522,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
  * errnos:
  *    ENOBUFS - conf.producer.max_msg_cnt would be exceeded.
  *
- * Locality: application thread
+ * Locality: any application thread
  */
 int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
 		      int msgflags,
@@ -529,6 +537,149 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
 
 
 
+/**
+ * Start consuming messages for topic+partition starting at specified offset.
+ *
+ * librdkafka will attempt to keep the local queue of fetched messages
+ * from the broker above the "queued.max.message.chunks" configuration property.
+ *
+ * The application reads the consumed messages by registering a message callback
+ * when creating the rd_kafka_t object, and then calling rd_kafka_poll()
+ * at intervals which will make librdkafka call the callback for each message.
+ *
+ * rd_kafka_consume_start() may be called multiple times (with or without
+ * interleaved rd_kafka_consume_stop()) calls to modify the next offset
+ * to fetch. Note that this is not required to naturally step offset to the
+ * next set of messages, that is handled automatically by librdkafka.
+ *
+ * Automatic fetching is stopped by calling rd_kafka_consume_stop().
+ */
+void rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
+			     int64_t offset) {
+	rd_kafka_toppar_t *rktp;
+
+	/* FIXME: fake */
+	rd_kafka_topic_partition_cnt_update(rkt->rkt_rk,
+					    rd_kafkap_strdupa(rkt->rkt_topic),
+					    partition+1);
+	rd_kafka_topic_wrlock(rkt);
+	rktp = rd_kafka_toppar_get(rkt, partition, 1);
+
+	/* FIXME: Thread safe? */
+	rktp->rktp_next_offset = offset;
+
+	rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_CONSUMING;
+
+	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "CONSUMER",
+		     "Start consuming %.*s [%"PRId32"] at "
+		     "offset %"PRId64,
+		     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+		     rktp->rktp_partition, offset);
+
+	rd_kafka_topic_unlock(rkt);
+}
+
+/**
+ * Stop consuming messages for topic+partition which has been previously
+ * started with a rd_kafka_consume_start() call.
+ *
+ * FIXME:
+ * Any locally queued messages for the topic+partition will be purged.
+ */
+void rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
+	rd_kafka_toppar_t *rktp;
+
+	rd_kafka_topic_wrlock(rkt);
+	if (!(rktp = rd_kafka_toppar_get(rkt, partition, 0))) {
+		rd_kafka_topic_unlock(rkt);
+		return;
+	}
+
+	rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_CONSUMING;
+
+	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "CONSUMER",
+		     "Stop consuming %.*s [%"PRId32"] currently at offset "
+		     "%"PRId64"-1",
+		     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+		     rktp->rktp_partition,
+		     rktp->rktp_next_offset);
+
+	rd_kafka_topic_unlock(rkt);
+
+}
+
+
+
+struct consume_ctx {
+	void (*consume_cb) (rd_kafka_topic_t *rkt,
+			    int32_t partition,
+			    void *payload, size_t len,
+			    void *key, size_t key_len,
+			    int64_t next_offset,
+			    void *opaque);
+	void *opaque;
+};
+
+/**
+ * Trampoline for application's consume_cb()
+ */
+static void rd_kafka_consume_cb (rd_kafka_op_t *rko, void *opaque) {
+	struct consume_ctx *ctx = opaque;
+	
+	ctx->consume_cb(rko->rko_rktp->rktp_rkt,
+			rko->rko_rktp->rktp_partition,
+			rko->rko_payload, rko->rko_len,
+			(RD_KAFKAP_BYTES_IS_NULL(rko->rko_key) ?
+			 NULL : rko->rko_key->data),
+			RD_KAFKAP_BYTES_LEN(rko->rko_key),
+			rko->rko_next_offset, ctx->opaque);
+}
+
+int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
+			       int timeout_ms,
+			       void (*consume_cb) (rd_kafka_topic_t *rkt,
+						   int32_t partition,
+						   void *payload, size_t len,
+						   void *key, size_t key_len,
+						   int64_t next_offset,
+						   void *opaque),
+			       void *opaque) {
+	rd_kafka_toppar_t *rktp;
+	struct consume_ctx ctx = { consume_cb: consume_cb, opaque: opaque };
+	int r;
+
+	rd_kafka_topic_rdlock(rkt);
+	rktp = rd_kafka_toppar_get(rkt, partition, 0/*no ua on miss*/);
+	rd_kafka_topic_unlock(rkt);
+
+	if (!rktp) {
+		errno = ENOENT;
+		return -1;
+	}
+
+	r = rd_kafka_q_serve(rkt->rkt_rk, &rktp->rktp_fetchq, timeout_ms,
+			     rd_kafka_consume_cb, &ctx);
+
+	rd_kafka_toppar_destroy(rktp);
+
+	return r;
+}
+
+
+/**
+ * Consume a single message from topic 'rkt' and 'partition'.
+ * 
+ * 'timeout_ms' is maximum amount of time to wait for a message to be received.
+ *
+ * Returns a message on success or NULL on failure.
+ *
+ * NOTE: How this works internally:
+ *       The first time the rd_kafka_consume() is called for a specific
+ *       topic+partition it's toppar is marked for consumption and
+ *       librdkafka will strive to keep at least FIXME
+ *
+ * Locality: any application thread
+ */
 static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 	rd_kafka_t *rk = opaque;
 	rd_kafka_msg_t *rkm;
@@ -537,7 +688,7 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 	switch (rko->rko_type)
 	{
 	case RD_KAFKA_OP_FETCH:
-		rd_kafka_dbg(rk, QUEUE, "POLL", "fixme: fetch cb");
+		/* FIXME */
 		break;
 
 	case RD_KAFKA_OP_ERR:

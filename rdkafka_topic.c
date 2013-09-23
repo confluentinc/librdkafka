@@ -47,6 +47,8 @@ static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);
 	pthread_mutex_init(&rktp->rktp_lock, NULL);
 
+	rd_kafka_q_init(&rktp->rktp_fetchq);
+
 	rd_kafka_toppar_keep(rktp);
 	rd_kafka_topic_keep(rkt);
 
@@ -67,19 +69,47 @@ void rd_kafka_toppar_destroy0 (rd_kafka_toppar_t *rktp) {
  *  rd_kafka_toppar_destroy().
  * May return NULL.
  *
+ * If 'ua_on_miss' is true the UA (unassigned) toppar is returned if
+ * 'partition' was not known locally, else NULL is returned.
+ *
  * NOTE: Caller must hold rd_kafka_topic_*lock()
  */
 rd_kafka_toppar_t *rd_kafka_toppar_get (rd_kafka_topic_t *rkt,
-					int32_t partition) {
+					int32_t partition,
+					int ua_on_miss) {
 	rd_kafka_toppar_t *rktp;
 
-	if (partition < 0 || partition >= rkt->rkt_partition_cnt)
+	if (partition >= 0 && partition < rkt->rkt_partition_cnt)
+		rktp = rkt->rkt_p[partition];
+	else if (ua_on_miss)
 		rktp = rkt->rkt_ua;
 	else
-		rktp = rkt->rkt_p[partition];
+		return NULL;
 
 	if (rktp)
 		rd_kafka_toppar_keep(rktp);
+
+	return rktp;
+}
+
+
+/**
+ * Same as rd_kafka_toppar_get() but no need for locking and
+ * looks up the topic first.
+ */
+rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
+					 const rd_kafkap_str_t *topic,
+					 int32_t partition,
+					 int ua_on_miss) {
+	rd_kafka_topic_t *rkt;
+	rd_kafka_toppar_t *rktp;
+
+	if (unlikely(!(rkt = rd_kafka_topic_find0(rk, topic))))
+		return NULL;
+
+	rd_kafka_topic_rdlock(rkt);
+	rktp = rd_kafka_toppar_get(rkt, partition, ua_on_miss);
+	rd_kafka_topic_unlock(rkt);
 
 	return rktp;
 }
@@ -163,7 +193,7 @@ int rd_kafka_toppar_ua_move (rd_kafka_topic_t *rkt, rd_kafka_msgq_t *rkmq) {
 }
 
 
-void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {
+static void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {
 
 	if (likely(rd_atomic_sub(&rkt->rkt_refcnt, 1) > 0))
 		return;
@@ -192,15 +222,39 @@ void rd_kafka_topic_destroy (rd_kafka_topic_t *rkt) {
 
 
 /**
- * NOTE: The topic's refcnt is increased with 1.
- *       Use rd_kafka_topic_destroy() to release. */
-static rd_kafka_topic_t *rd_kafka_topic_find (rd_kafka_t *rk,
-					      const char *topic) {
+ * Finds and returns a topic based on its name, or NULL if not found.
+ * The 'rkt' refcount is increased by one and the caller must call
+ * rd_kafka_topic_destroy() when it is done with the topic to decrease
+ * the refcount.
+ *
+ * Locality: any thread
+ */
+rd_kafka_topic_t *rd_kafka_topic_find (rd_kafka_t *rk,
+				       const char *topic) {
 	rd_kafka_topic_t *rkt;
 
 	rd_kafka_lock(rk);
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		if (!rd_kafkap_str_cmp_str(rkt->rkt_topic, topic)) {
+			rd_kafka_topic_keep(rkt);
+			break;
+		}
+	}
+	rd_kafka_unlock(rk);
+
+	return rkt;
+}
+
+/**
+ * Same semantics as ..find() but takes a Kafka protocol string instead.
+ */
+rd_kafka_topic_t *rd_kafka_topic_find0 (rd_kafka_t *rk,
+					const rd_kafkap_str_t *topic) {
+	rd_kafka_topic_t *rkt;
+
+	rd_kafka_lock(rk);
+	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+		if (!rd_kafkap_str_cmp(rkt->rkt_topic, topic)) {
 			rd_kafka_topic_keep(rkt);
 			break;
 		}
@@ -217,7 +271,7 @@ static rd_kafka_topic_t *rd_kafka_topic_find (rd_kafka_t *rk,
  * Locality: application thread
  */
 rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
-				      const rd_kafka_topic_conf_t *conf) {
+				      rd_kafka_topic_conf_t *conf) {
 	rd_kafka_topic_t *rkt;
 
 	/* Verify configuration */
@@ -235,10 +289,11 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
 	rkt->rkt_topic     = rd_kafkap_str_new(topic);
 	rkt->rkt_rk        = rk;
-	if (conf)
-		rkt->rkt_conf = *conf;
-	else
-		rd_kafka_topic_defaultconf_set(&rkt->rkt_conf);
+
+	if (!conf)
+		conf = rd_kafka_topic_conf_new();
+	rkt->rkt_conf = *conf;
+	free(conf);
 
 	/* Default partitioner: random */
 	if (!rkt->rkt_conf.partitioner)
@@ -268,7 +323,12 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
 
 /**
- * Returns the name of a topic
+ * Returns the name of a topic.
+ * NOTE:
+ *   The topic Kafka String representation is crafted with an extra byte
+ *   at the end for the Nul that is not included in the length, this way
+ *   we can use the topic's String directly.
+ *   This is not true for Kafka Strings read from the network.
  */
 const char *rd_kafka_topic_name (const rd_kafka_topic_t *rkt) {
 	return rkt->rkt_topic->str;
@@ -362,9 +422,8 @@ void rd_kafka_topic_update (rd_kafka_t *rk,
 
 	rd_kafka_topic_wrlock(rkt);
 
-	rktp = rd_kafka_toppar_get(rkt, partition);
-
-	assert(rktp->rktp_partition != RD_KAFKA_PARTITION_UA);
+	rktp = rd_kafka_toppar_get(rkt, partition, 0);
+	assert(rktp);
 
 	if (leader == -1) {
 		/* Topic lost its leader */

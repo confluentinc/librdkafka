@@ -1,4 +1,6 @@
 language: c
-compiler: gcc
+compiler:
+  - gcc
+  - clang
 
-script: make
+script: make all examples

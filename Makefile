@@ -13,8 +13,12 @@ HDRS=	rdkafka.h
 OBJS=	$(SRCS:.c=.o)
 DEPS=	${OBJS:%.o=%.d}
 
-CFLAGS+=-O2 -Wall -Werror -Wfloat-equal -Wpointer-arith -Wno-gnu-designator -fPIC -I.
+CFLAGS+=-O2 -Wall -Werror -Wfloat-equal -Wpointer-arith -fPIC -I.
 CFLAGS+=-g
+
+# Clang warnings to ignore
+CFLAGS+=-Wno-gnu-designator
+
 # Enable iovecs in snappy
 CFLAGS+=-DSG
 
@@ -48,6 +52,9 @@ $(LIBNAME).so.$(LIBVER): $(OBJS)
 
 $(LIBNAME).a:	$(OBJS)
 	$(AR) rcs $@ $(OBJS)
+
+examples: .PHONY
+	make -C $@
 
 install:
 	if [ "$(DESTDIR)" != "/usr/local" ]; then \

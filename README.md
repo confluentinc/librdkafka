@@ -54,9 +54,11 @@ For an introduction to the performance and usage of librdkafka, see
 
 
 
-**Applications using librdkafka:**
+**Users of librdkafka:**
 
   * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka)
+  * [redBorder](http://www.redborder.net)
+  * [Headweb](http://www.headweb.com/)
   * *Let me know if you are using librdkafka*
 
 

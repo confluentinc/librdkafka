@@ -46,12 +46,14 @@ static const rd_kafka_conf_t rd_kafka_defaultconf = {
 	metadata_refresh_interval_ms: 10000,     /* 10s */
 	metadata_refresh_fast_cnt: 10,
 	metadata_refresh_fast_interval_ms: 250,  /* 250ms */
+	socket_timeout_ms: 1000 * 60,
 
 	/* consumer settings */
 	consumer: {
-	poll_interval: 1000 /* 1s */,
-	replyq_low_thres: 1,
-	max_size: 500000,
+	queued_min_msgs: 100,
+	fetch_wait_max_ms: 100,
+	fetch_min_bytes: 1,
+	fetch_error_backoff_ms: 500,
 	},
 
 	/* producer settings */
@@ -74,14 +76,17 @@ message_timeout_ms: 1000 * 60 * 5, /* 5 minutes */
 };
 
 
-void rd_kafka_defaultconf_set (rd_kafka_conf_t *conf) {
+rd_kafka_conf_t *rd_kafka_conf_new (void) {
+	rd_kafka_conf_t *conf = calloc(1, sizeof(*conf));
 	*conf = rd_kafka_defaultconf;
+	return conf;
 }
 
-void rd_kafka_topic_defaultconf_set (rd_kafka_topic_conf_t *topic_conf) {
-	*topic_conf = rd_kafka_topic_defaultconf;
+rd_kafka_topic_conf_t *rd_kafka_topic_conf_new (void) {
+	rd_kafka_topic_conf_t *tconf = calloc(1, sizeof(*tconf));
+	*tconf = rd_kafka_topic_defaultconf;
+	return tconf;
 }
-
 
 
 struct rd_kafka_property {
@@ -106,6 +111,12 @@ static int rd_kafka_anyconf_set (struct rd_kafka_property *properties,
 				 const char *name, const char *value,
 				 char *errstr, size_t errstr_size) {
 	int i;
+	char estmp[1];
+
+	if (!errstr) {
+		errstr = estmp;
+		errstr_size = 0;
+	}
 
 	if (value && !*value)
 		value = NULL;
@@ -249,6 +260,7 @@ rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
 				       const char *value,
 				       char *errstr, size_t errstr_size) {
 	struct rd_kafka_property properties[] = {
+		/* Common properties */
 		{ "client.id", _RK_C_STR, &conf->clientid },
 		{ "metadata.broker.list", _RK_C_STR, &conf->brokerlist },
 		{ "message.max.bytes", _RK_C_INT,
@@ -266,6 +278,14 @@ rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
 		  &conf->metadata_refresh_fast_cnt, 0, 1000 },
 		{ "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
 		  &conf->metadata_refresh_fast_interval_ms, 1, 60000 },
+		/* Consumer properties */
+		{ "queued.min.messages", _RK_C_INT,
+		  &conf->consumer.queued_min_msgs, 1, 10000000 },
+		{ "fetch.wait.max.ms", _RK_C_INT,
+		  &conf->consumer.fetch_wait_max_ms, 0, 3600000 },
+		{ "fetch.min.bytes", _RK_C_INT,
+		  &conf->consumer.fetch_min_bytes, 1, 100000000 },
+		/* Producer properties */
 		{ "message.send.max.retries", _RK_C_INT,
 		  &conf->producer.max_retries, 0, 100 },
 		{ "retry.backoff.ms", _RK_C_INT,
@@ -341,3 +361,26 @@ void rd_kafka_conf_destroy (rd_kafka_conf_t *conf) {
  */
 void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf) {
 }
+
+
+void rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
+			      void (*dr_cb) (rd_kafka_t *rk,
+					     void *payload, size_t len,
+					     rd_kafka_resp_err_t err,
+					     void *opaque, void *msg_opaque)) {
+	conf->producer.dr_cb = dr_cb;
+}
+
+
+void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
+				 void  (*error_cb) (rd_kafka_t *rk, int err,
+						    const char *reason,
+						    void *opaque)) {
+	conf->error_cb = error_cb;
+}
+
+void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
+	conf->opaque = opaque;
+}
+
+

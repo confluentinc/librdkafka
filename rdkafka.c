@@ -443,7 +443,7 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 static void rd_kafka_global_init (void) {
 }
 
-rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, const rd_kafka_conf_t *conf,
+rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			  char *errstr, size_t errstr_size) {
 	rd_kafka_t *rk;
 	static int rkid = 0;
@@ -457,10 +457,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, const rd_kafka_conf_t *conf,
 
 	rk->rk_type = type;
 
-	if (conf)
-		rk->rk_conf = *conf;
-	else
-		rd_kafka_defaultconf_set(&rk->rk_conf);
+	if (!conf)
+		conf = rd_kafka_conf_new();
+
+	rk->rk_conf = *conf;
+	free(conf);
 
 	rd_kafka_keep(rk);
 

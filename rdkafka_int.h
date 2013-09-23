@@ -89,6 +89,290 @@ struct rd_kafka_toppar_s;
 struct rd_kafka_topic_s;
 struct rd_kafka_msg_s;
 struct rd_kafka_broker_s;
+struct rd_kafka_conf_s;
+struct rd_kafka_topic_conf_s;
+
+
+
+/**
+ * MessageSet compression codecs
+ */
+typedef enum {
+	RD_KAFKA_COMPRESSION_NONE,
+	RD_KAFKA_COMPRESSION_GZIP,   /* FIXME: not supported */
+	RD_KAFKA_COMPRESSION_SNAPPY, /* FIXME: not supported */
+} rd_kafka_compression_t;
+
+
+/**
+ * Optional configuration struct passed to rd_kafka_new*().
+ *
+ * The struct can also be populated through string properties
+ * by calling rd_kafka_conf_set().
+ *
+ * The properties are identical to the Apache Kafka configuration properties
+ * whenever possible.
+ *
+ * See rdkafka_defaultconf.c for defaults.
+ * See rd_kafka_defaultconf_set() for usage.
+ * See rd_kafka_conf_set().
+ */
+struct rd_kafka_conf_s {
+	/* Property: client.id
+	 *
+	 * Client identifier */
+	char   *clientid;
+
+	/* Property: metadata.broker.list
+	 *
+	 * Initial list of brokers.
+	 * The application may also use rd_kafka_brokers_add() */
+	char   *brokerlist;
+
+         /* Property: message.max.bytes
+	  *
+	  * Maximum receive message size.
+	  * This is a safety precaution to avoid memory exhaustion in case of
+	  * protocol hickups. */
+	int     max_msg_size;  
+
+	/* Property: metadata.request.timeout.ms
+	 *
+	 * Non-topic request timeout in milliseconds.
+	 * This is for metadata requests, etc. */
+	int     metadata_request_timeout_ms;
+
+
+	/* Property: topic.metadata.refresh.interval.ms
+	 *
+	 * Topic metadata refresh interval in milliseconds.
+	 * The metadata is automatically refreshed on
+	 * error and connect.
+	 * A negative value disables the intervalled refresh. */
+	int metadata_refresh_interval_ms;
+
+	/* Property: topic.metadata.refresh.fast.cnt
+	 *
+	 * Following a topic without leader error this many
+	 * metadata requests are sent with
+	 * 'topic.metadata.refresh.fash.interval.ms' interval disregarding
+	 * the topic.metadata.refresh.interval.ms value.
+	 * This is used to recover fast from transitioning leader brokers.
+	 * Default value: 10 */
+	int metadata_refresh_fast_cnt;
+
+	/* Property: topic.metadata.refresh.fast.interval.ms
+	 *
+	 * See 'topic.metadata.refresh.fast.cnt' description.
+	 * Default value: 250ms */
+	int metadata_refresh_fast_interval_ms;
+
+
+	/* Boolean flags: RD_KAFKA_CONF_F_... */
+	int     flags;
+
+	/* No automatic offset storage will be performed.
+	 * The application needs to call rd_kafka_offset_store() explicitly.
+	 * This may be used to make sure a message is properly handled
+	 * before storing the offset.
+	 * If not set, and an offset storage is available, the
+	 * offset will be stored just prior to passing the
+	 * message to the application.*/
+#define RD_KAFKA_CONF_F_APP_OFFSET_STORE  0x1  
+
+
+	/* How long to cache the broker address resolving results. */
+	int     broker_addr_lifetime; 
+
+	/* Error callback */
+	void  (*error_cb) (rd_kafka_t *rk, int err,
+			   const char *reason, void *opaque);
+
+	/* Opaque passed to all registered callbacks. */
+	void   *opaque;
+
+
+	/* Property: debug
+	 *
+	 * A comma-separated list of debug contexts to enable.
+	 * See RD_KAFKA_DEBUG_CONTEXTS for supported values.
+	 */
+	int     debug;
+
+
+	/* Property: socket.timeout.ms
+	 *
+	 * Timeout for network requests. */
+	int     socket_timeout_ms;
+
+	/* Consumer configuration */
+	struct {
+		/* Property: queued.min.messages
+		 *
+		 * Minimum number of messages that should to be available
+		 * for consumption by application. */
+		int queued_min_msgs;
+
+		/* Property: fetch.wait.max.ms
+		 *
+		 * Maximum time the broker may wait to fill the response
+		 * with fetch.min.bytes. */
+		int fetch_wait_max_ms;
+
+		/* Property: fetch.min.bytes
+		 *
+		 * Minimum number of bytes the broker responds with.
+		 * If fetch.wait.max.ms expires the accumulated data will
+		 * be sent to the client regardless of this setting. */
+		int fetch_min_bytes;
+
+		/* Property: fetch.error.backoff.ms
+		 *
+		 * How long to postpone the next fetch request for a
+		 * topic+partition in case of a fetch error. */
+		int fetch_error_backoff_ms;
+
+		/* FIXME */
+		char *offset_file;    /* File to read/store current
+				       * offset from/in.
+				       * If the path is a directory then a
+				       * filename is generated (including
+				       * the topic and partition) and
+				       * appended. */
+		int offset_file_flags; /* open(2) flags. */
+#define RD_KAFKA_OFFSET_FILE_FLAGMASK (O_SYNC|O_ASYNC)
+		
+		/* Internal.
+		 * Pre-built Fetch request header. */
+		struct rd_kafkap_FetchRequest FetchRequest;
+	} consumer;
+
+
+	/* Producer configuration */
+	struct {
+		/* Property: queue.buffering.max.messages
+		 *
+		 * Maximum number of messages allowed on the producer queue. */
+		int max_messages;
+
+		/* Property: queue.buffering.max.ms
+		 *
+		 * Maximum time, in milliseconds, for buffering data
+		 * on the producer queue. */
+		int buffering_max_ms;
+
+		/* Property: message.send.max.retries
+		 *
+		 * How many times to retry sending a failing MessageSet.
+		 * Note: retrying can cause reordering. */
+		int max_retries;
+
+		/* Property: retry.backoff.ms
+		 *
+		 * The backoff time in milliseconds before retrying. */
+		int retry_backoff_ms;
+
+		/* Property: compression.codec
+		 *
+		 * Specify compression codec for all data generated by
+		 * this produced. */
+		rd_kafka_compression_t compression_codec;
+
+		/* Property: queue.enqueue.timeout.ms
+		 *
+		 * Message enqueue timeout:
+		 *  0   Messages will be enqueued immediately or dropped 
+		 *      if the queue is full.
+		 * <0   Enqueue will block indefinately if the queue is full.
+		 * >0   Enqueue will block up to this many milliseconds if
+		 *      the queue is full. */
+		/* FIXME: Not implemented */
+		int enqueue_timeout_ms;
+
+		/* Property: batch.num.messages
+		 *
+		 * Maximum number of messages batched in one MessageSet. */
+		int batch_num_messages;
+
+		/* Message delivery report callback.
+		 * Called once for each produced message, either on
+		 * succesful and acknowledged delivery to the broker in which
+		 * case 'err' is 0, or if the message could not be delivered
+		 * in which case 'err' is non-zero (use rd_kafka_err2str()
+		 * to obtain a human-readable error reason).
+		 *
+		 * If the message was produced with neither RD_KAFKA_MSG_F_FREE
+		 * or RD_KAFKA_MSG_F_COPY set then 'payload' is the original
+		 * pointer provided to rd_kafka_produce().
+		 * rdkafka will not perform any further actions on 'payload'
+		 * at this point and the application may free the payload data
+		 * at this point.
+		 *
+		 * 'opaque' is 'conf.opaque', while 'msg_opaque' is
+		 * the opaque pointer provided in the rd_kafka_produce() call.
+		 */
+		void (*dr_cb) (rd_kafka_t *rk,
+			       void *payload, size_t len,
+			       rd_kafka_resp_err_t err,
+			       void *opaque, void *msg_opaque);
+
+	} producer;
+
+};
+
+
+
+struct rd_kafka_topic_conf_s {
+	/* Property: request.required.acks
+	 *
+	 * This field indicates how many acknowledgements the brokers
+	 * should receive before responding to the request:
+	 *  0   The broker does not send any response.
+	 *  1   The broker will wait until the data is written to the 
+	 *      local log before sending a response.
+	 * -1   The broker will block until the message is committed by all
+	 *      in sync replicas before sending a response.
+	 * >1   For any number > 1 the broker will block waiting for this
+	 *      number of acknowledgements to occur
+	 *      (but the server will never wait for more acknowledgements
+	 *       than there are in-sync replicas). */
+	int16_t required_acks;
+
+	/* Property: request.timeout.ms
+	 *
+	 * The ack timeout of the producer request in milliseconds.
+	 * This value is only enforced by the broker and relies
+	 * on required_acks being > 0. */
+	int32_t request_timeout_ms;
+
+	/* Property: message.timeout.ms
+	 *
+	 * Local message timeout.
+	 * This value is only enforced locally and limits the time a
+	 * produced message waits for succesful delivery. */
+	int     message_timeout_ms;
+
+	/* Application provided message partitioner.
+	 * The partitioner may be called in any thread at any time,
+	 * it may be called multiple times for the same key.
+	 * Partitioner function constraints:
+	 *    - MUST NOT call any rd_kafka_*() functions
+	 *    - MUST NOT block or execute for prolonged periods of time.
+	 *    - MUST return a value between 0 and partition_cnt-1, or the
+	 *      special RD_KAFKA_PARTITION_UA value if partitioning
+	 *      could not be performed.
+	 */
+
+	int32_t (*partitioner) (const void *keydata,
+				size_t keylen,
+				int32_t partition_cnt,
+				void *rkt_opaque,
+				void *msg_opaque);
+
+	/* Application provided opaque pointer (this is rkt_opaque) */
+	void   *opaque;
+};
+
 
 
 typedef struct rd_kafka_msg_s {

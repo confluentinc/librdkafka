@@ -38,6 +38,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <syslog.h>
+#include <sys/time.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
@@ -86,7 +87,10 @@ static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
  */
 static void logger (const rd_kafka_t *rk, int level,
 		    const char *fac, const char *buf) {
-	fprintf(stderr, "RDKAFKA-%i-%s: %s: %s\n",
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	fprintf(stderr, "%u.%03u RDKAFKA-%i-%s: %s: %s\n",
+		(int)tv.tv_sec, (int)(tv.tv_usec / 1000),
 		level, fac, rd_kafka_name(rk), buf);
 }
 

@@ -48,7 +48,6 @@ int main (int argc, char **argv) {
 	int i;
 	const int NUM_ITER = 100;
 	struct rlimit rlim = {};
-	int r;
 
 	/* Socket hangups are gracefully handled in librdkafka on socket error
 	 * without the use of signals, so SIGPIPE should be ignored by the
@@ -110,17 +109,7 @@ int main (int argc, char **argv) {
 
 	/* Wait for everything to be cleaned up since broker destroys are
 	 * handled in its own thread. */
-	i = 0;
-	while ((r = rd_kafka_thread_cnt()) > 0 && i++ < 10) {
-		TEST_SAY("%i thread(s) in use by librdkafka, waiting...\n", r);
-		sleep(1);
-	}
-	TEST_SAY("%i thread(s) in use by librdkafka\n", r);
-
-	if (r > 0) {
-		assert(0);
-		TEST_FAIL("%i thread(s) still active in librdkafka", r);
-	}
+	test_wait_exit(10);
 
 	/* If we havent failed at this point then
 	 * there were no threads leaked */

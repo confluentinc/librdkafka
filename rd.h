@@ -89,6 +89,7 @@
 #define rd_atomic_add_prev(PTR,VAL)  __sync_fetch_and_add(PTR,VAL)
 #define rd_atomic_sub_prev(PTR,VAL)  __sync_fetch_and_sub(PTR,VAL)
 
+#define rd_atomic_set(PTR,VAL) __sync_lock_test_and_set(PTR,VAL)
 
 
 #ifndef be64toh

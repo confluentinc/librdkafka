@@ -171,18 +171,25 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 }
 
 
-void rd_kafka_op_destroy (rd_kafka_t *rk, rd_kafka_op_t *rko) {
+void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 	
-	if (rko->rko_payload && rko->rko_flags & RD_KAFKA_OP_F_FREE)
-		free(rko->rko_payload);
-
 	/* Decrease refcount on rkbuf to eventually free the shared buffer */
 	if (rko->rko_rkbuf)
 		rd_kafka_buf_destroy(rko->rko_rkbuf);
+	else if (rko->rko_payload && rko->rko_flags & RD_KAFKA_OP_F_FREE)
+		free(rko->rko_payload);
 	
 	free(rko);
 }
 
+/**
+ * Destroy a queue. The queue must be empty.
+ */
+void rd_kafka_q_destroy (rd_kafka_q_t *rkq) {
+	assert(TAILQ_EMPTY(&rkq->rkq_q));
+	pthread_mutex_destroy(&rkq->rkq_lock);
+	pthread_cond_destroy(&rkq->rkq_cond);
+}
 
 /**
  * Initialize a queue.
@@ -195,6 +202,62 @@ void rd_kafka_q_init (rd_kafka_q_t *rkq) {
 	pthread_cond_init(&rkq->rkq_cond, NULL);
 }
 
+
+/**
+ * Purge all entries from a queue.
+ */
+void rd_kafka_q_purge (rd_kafka_q_t *rkq) {
+	rd_kafka_op_t *rko, *next;
+
+	pthread_mutex_lock(&rkq->rkq_lock);
+	next = TAILQ_FIRST(&rkq->rkq_q);
+	while ((rko = next)) {
+		next = TAILQ_NEXT(next, rko_link);
+		rd_kafka_op_destroy(rko);
+	}
+
+	TAILQ_INIT(&rkq->rkq_q);
+	rd_atomic_set(&rkq->rkq_qlen, 0);
+
+	pthread_mutex_unlock(&rkq->rkq_lock);
+}
+
+
+/**
+ * Move 'cnt' entries from 'srcq' to 'dstq'.
+ * Returns the number of entries moved.
+ */
+size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
+			    size_t cnt) {
+	rd_kafka_op_t *rko;
+	size_t mcnt = 0;
+
+	pthread_mutex_lock(&srcq->rkq_lock);
+	pthread_mutex_lock(&dstq->rkq_lock);
+
+	/* Optimization, if 'cnt' is equal/larger than all items of 'srcq'
+	 * we can move the entire queue. */
+	if (cnt >= srcq->rkq_qlen) {
+		mcnt = srcq->rkq_qlen;
+		TAILQ_CONCAT(&dstq->rkq_q, &srcq->rkq_q, rko_link);
+		TAILQ_INIT(&srcq->rkq_q);
+		rd_atomic_set(&srcq->rkq_qlen, 0);
+		rd_atomic_add(&dstq->rkq_qlen, mcnt);
+	} else {
+		while (mcnt < cnt && (rko = TAILQ_FIRST(&srcq->rkq_q))) {
+			TAILQ_REMOVE(&srcq->rkq_q, rko, rko_link);
+			TAILQ_INSERT_TAIL(&dstq->rkq_q, rko, rko_link);
+			rd_atomic_sub(&dstq->rkq_qlen, 1);
+			rd_atomic_add(&dstq->rkq_qlen, 1);
+			mcnt++;
+		}
+	}
+
+	pthread_mutex_unlock(&dstq->rkq_lock);
+	pthread_mutex_unlock(&srcq->rkq_lock);
+
+	return mcnt;
+}
 
 
 /**
@@ -284,8 +347,7 @@ int rd_kafka_q_serve (rd_kafka_t *rk,
 
 	/* Reset real queue */
 	TAILQ_INIT(&rkq->rkq_q);
-	rkq->rkq_qlen = 0;
-
+	rd_atomic_set(&rkq->rkq_qlen, 0);
 	pthread_mutex_unlock(&rkq->rkq_lock);
 
 	rd_kafka_dbg(rk, QUEUE, "QSERVE", "Serving %i ops", localq.rkq_qlen);
@@ -293,7 +355,7 @@ int rd_kafka_q_serve (rd_kafka_t *rk,
 	/* Call callback for each op */
 	TAILQ_FOREACH_SAFE(rko, tmp, &localq.rkq_q, rko_link) {
 		callback(rko, opaque);
-		rd_kafka_op_destroy(rk, rko);
+		rd_kafka_op_destroy(rko);
 	}
 
 	return localq.rkq_qlen;
@@ -432,6 +494,9 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
 	if (rd_atomic_sub(&rk->rk_refcnt, 1) > 0)
 		return;
 
+	/* Purge op-queue */
+	rd_kafka_q_purge(&rk->rk_rep);
+
 	rd_kafkap_str_destroy(rk->rk_clientid);
 	rd_kafka_conf_destroy(&rk->rk_conf);
 
@@ -517,11 +582,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	rk->rk_conf = *conf;
 	free(conf);
 
-	rd_kafka_keep(rk);
+	rd_kafka_keep(rk); /* application refcnt */
 
 	pthread_mutex_init(&rk->rk_lock, NULL);
 
-	rd_kafka_q_init(&rk->rk_op);
 	rd_kafka_q_init(&rk->rk_rep);
 
 	TAILQ_INIT(&rk->rk_brokers);
@@ -959,7 +1023,6 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 	fprintf(fp, "rd_kafka_t %p: %s\n", rk, rk->rk_name);
 
 	fprintf(fp, " refcnt %i\n", rk->rk_refcnt);
-	fprintf(fp, " rk_op request queue: %i ops\n", rk->rk_op.rkq_qlen);
 	fprintf(fp, " rk_rep reply queue: %i ops\n", rk->rk_rep.rkq_qlen);
 
 	fprintf(fp, " brokers:\n");

@@ -1969,7 +1969,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 		assert(!*"unhandled op type");
 	}
 
-	rd_kafka_op_destroy(rkb->rkb_rk, rko);
+	rd_kafka_op_destroy(rko);
 }
 
 

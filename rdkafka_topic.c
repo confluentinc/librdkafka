@@ -59,6 +59,17 @@ static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 
 
 void rd_kafka_toppar_destroy0 (rd_kafka_toppar_t *rktp) {
+	rd_kafka_toppar_lock(rktp);
+
+	/* Clear queues */
+	rd_kafka_dr_msgq(rktp->rktp_rkt->rkt_rk, &rktp->rktp_xmit_msgq,
+			 RD_KAFKA_RESP_ERR__DESTROY);
+	rd_kafka_dr_msgq(rktp->rktp_rkt->rkt_rk, &rktp->rktp_msgq,
+			 RD_KAFKA_RESP_ERR__DESTROY);
+	rd_kafka_q_purge(&rktp->rktp_fetchq);
+
+	rd_kafka_toppar_unlock(rktp);
+
 	rd_kafka_topic_destroy(rktp->rktp_rkt);
 	pthread_mutex_destroy(&rktp->rktp_lock);
 	free(rktp);

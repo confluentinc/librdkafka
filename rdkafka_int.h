@@ -502,7 +502,6 @@ static const char *rd_kafka_toppar_name (const rd_kafka_toppar_t *rktp) {
  * Kafka handle. (rd_kafka_t)
  */
 struct rd_kafka_s {
-	rd_kafka_q_t rk_op;    /* application -> kafka operation queue */
 	rd_kafka_q_t rk_rep;   /* kafka -> application reply queue */
 
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
@@ -556,19 +555,6 @@ struct rd_kafka_s {
 
 
 
-/**
- * Destroys an op as returned by rd_kafka_consume().
- *
- * Locality: any thread
- */
-void        rd_kafka_op_destroy (rd_kafka_t *rk, rd_kafka_op_t *rko);
-
-
-
-
-
-
-
 
 
 
@@ -610,6 +596,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 
 
 void rd_kafka_q_init (rd_kafka_q_t *rkq);
+void rd_kafka_q_destroy (rd_kafka_q_t *rkq);
 
 /**
  * Enqueue the 'rko' op at the tail of the queue 'rkq'.
@@ -644,7 +631,13 @@ void rd_kafka_q_concat (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq) {
 
 rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms);
 
+void rd_kafka_q_purge (rd_kafka_q_t *rkq);
 
+size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
+			    size_t cnt);
+
+
+void rd_kafka_op_destroy (rd_kafka_op_t *rko);
 rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type);
 void rd_kafka_op_reply2 (rd_kafka_t *rk, rd_kafka_op_t *rko);
 void rd_kafka_op_reply0 (rd_kafka_t *rk, rd_kafka_op_t *rko,

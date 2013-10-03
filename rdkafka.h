@@ -113,10 +113,13 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE = 12,
 } rd_kafka_resp_err_t;
 
+
 /**
  * Returns a human readable representation of a kafka error.
  */
-const char *rd_kafka_err2str (rd_kafka_t *rk, rd_kafka_resp_err_t err);
+const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
+
+
 
 
 

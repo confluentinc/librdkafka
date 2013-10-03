@@ -40,7 +40,7 @@ static void sig_alarm (int sig) {
 
 static void test_error_cb (rd_kafka_t *rk, int err,
 			   const char *reason, void *opaque) {
-	TEST_FAIL("rdkafka error: %s: %s", rd_kafka_err2str(rk, err), reason);
+	TEST_FAIL("rdkafka error: %s: %s", rd_kafka_err2str(err), reason);
 }
 
 

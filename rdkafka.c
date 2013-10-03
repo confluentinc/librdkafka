@@ -400,11 +400,11 @@ void rd_kafka_op_reply (rd_kafka_t *rk,
 		if (err == RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE) {
 			char tmp[512];
 			snprintf(tmp, sizeof(tmp), "%s (%"PRIu64")",
-				 rd_kafka_err2str(rk, err),
+				 rd_kafka_err2str(err),
 				 rk->rk_consumer.offset);
 			payload = strdup(tmp);
 		} else
-			payload = strdup(rd_kafka_err2str(rk, err));
+			payload = strdup(rd_kafka_err2str(err));
 
 		len = strlen(payload);
 	}
@@ -429,7 +429,7 @@ static const char *rd_kafka_type2str (rd_kafka_type_t type) {
 	return types[type];
 }
 
-const char *rd_kafka_err2str (rd_kafka_t *rk, rd_kafka_resp_err_t err) {
+const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 	static __thread char ret[32];
 	switch (err)
 	{
@@ -949,8 +949,9 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 			rd_kafka_log(rk, LOG_ERR, "ERROR",
 				     "%s: %s: %.*s",
 				     rk->rk_name,
-				     rd_kafka_err2str(rk, rko->rko_err),
-				     rko->rko_len, rko->rko_payload);
+				     rd_kafka_err2str(rko->rko_err),
+				     (int)rko->rko_len,
+				     (char *)rko->rko_payload);
 		break;
 
 	case RD_KAFKA_OP_DR:

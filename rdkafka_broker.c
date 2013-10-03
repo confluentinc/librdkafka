@@ -292,7 +292,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 	rd_kafka_dbg(rkb->rkb_rk, BROKER, "BROKERFAIL",
 		     "%s: failed: err: %s: (errno: %s)",
-		     rkb->rkb_name, rd_kafka_err2str(rkb->rkb_rk, err),
+		     rkb->rkb_name, rd_kafka_err2str(err),
 		     strerror(errno_save));
 
 	rkb->rkb_err.err = errno_save;
@@ -1470,7 +1470,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 		rd_rkb_dbg(rkb, MSG, "MSGSET", "MessageSet with %i message(s) "
 			   "encountered error: %s",
 			   request->rkbuf_msgq.rkmq_msg_cnt,
-			   rd_kafka_err2str(rkb->rkb_rk, err));
+			   rd_kafka_err2str(err));
 
 		switch (err)
 		{

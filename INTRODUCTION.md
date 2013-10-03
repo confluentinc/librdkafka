@@ -177,7 +177,7 @@ header file, including the supported configuration properties.
 
 ### Initialization
 
-The application needs to instantiate a top-level object `rd_kafka_t`) which is
+The application needs to instantiate a top-level object `rd_kafka_t` which is
 the base container, providing global configuration and shared state.
 It is created by calling `rd_kafka_new()`.
 

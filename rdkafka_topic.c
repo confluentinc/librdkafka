@@ -809,3 +809,50 @@ void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic) {
 	rd_kafka_toppar_destroy(rktp_ua); /* from get() */
 	rd_kafka_topic_destroy(rkt); /* from find() */
 }
+
+/**
+ * Scan all topics and partitions for timed out messages.
+ */
+int rd_kafka_topic_age_scan_all (rd_kafka_t *rk, rd_ts_t now) {
+	rd_kafka_topic_t *rkt;
+	rd_kafka_toppar_t *rktp;
+	rd_kafka_msgq_t timedout;
+	int tpcnt = 0;
+	int totcnt;
+
+	rd_kafka_msgq_init(&timedout);
+
+	rd_kafka_lock(rk);
+	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+		int p;
+		rd_kafka_topic_rdlock(rkt);
+		for (p = RD_KAFKA_PARTITION_UA ;
+		     p < rkt->rkt_partition_cnt ; p++) {
+			if (!(rktp = rd_kafka_toppar_get(rkt, p, 0)))
+				continue;
+
+			rd_kafka_toppar_lock(rktp);
+
+			/* Scan toppar's message queue for timeouts */
+			if (rd_kafka_msgq_age_scan(&rktp->rktp_msgq,
+						   &timedout, now) > 0)
+				tpcnt++;
+
+			rd_kafka_toppar_unlock(rktp);
+			rd_kafka_toppar_destroy(rktp);
+		}
+		rd_kafka_topic_unlock(rkt);
+	}
+	rd_kafka_unlock(rk);
+
+	if ((totcnt = timedout.rkmq_msg_cnt) > 0) {
+		rd_kafka_dbg(rk, MSG, "TIMEOUT",
+			     "%i message(s) from %i toppar(s) timed out",
+			     timedout.rkmq_msg_cnt, tpcnt);
+		rd_kafka_dr_msgq(rk, &timedout,
+				 RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
+	}
+
+	return totcnt;
+}
+

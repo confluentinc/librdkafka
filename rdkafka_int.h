@@ -716,6 +716,8 @@ struct rd_kafka_s {
 			   const char *buf);
 	int    rk_log_level;
 
+	pthread_t rk_thread;
+
 	struct {
 		char msg[512];
 		int  err;  /* errno */

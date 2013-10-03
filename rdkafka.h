@@ -80,6 +80,7 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE = -194, /* Critical system resource
 						      * failure */
 	RD_KAFKA_RESP_ERR__RESOLVE = -193,   /* Failed to resolve broker */
+	RD_KAFKA_RESP_ERR__MSG_TIMED_OUT = -192, /* Produced message timed out*/
 	RD_KAFKA_RESP_ERR__PARTITION_EOF = -191, /* Reached the end of the
 						  * topic+partition queue on
 						  * the broker.

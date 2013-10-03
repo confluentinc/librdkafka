@@ -104,6 +104,10 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 
 
 
+/**
+ * Scan 'rkmq' for messages that have timed out and remove them from
+ * 'rkmq' and add to 'timedout'.
+ */
 int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_kafka_msgq_t *timedout,
 			    rd_ts_t now) {
@@ -116,7 +120,6 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			break;
 
 		rd_kafka_msgq_deq(rkmq, rkm, 1);
-
 		rd_kafka_msgq_enq(timedout, rkm);
 	}
 

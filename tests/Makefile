@@ -1,4 +1,4 @@
-TESTS ?= 0001-multiobj.test
+TESTS ?= 0001-multiobj.test 0002-msgtimeout.test
 CC ?= cc
 CXX ?= g++
 CFLAGS += -g -Wall -Werror -Wfloat-equal -Wpointer-arith -O2 -I../
@@ -15,7 +15,7 @@ endif
 
 
 all: $(TESTS)
-	for i in $^ ; do ./run-test.sh $$i ; done
+	for i in $^ ; do ./run-test.sh $$i || exit 1 ; done
 
 %.test: ../librdkafka.a test.o %.c
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)

@@ -39,6 +39,8 @@
 #include "rdkafka_broker.h"
 #include "rdkafka_topic.h"
 
+#include "rdtime.h"
+
 static pthread_once_t rd_kafka_global_init_once = PTHREAD_ONCE_INIT;
 
 
@@ -49,6 +51,25 @@ static pthread_once_t rd_kafka_global_init_once = PTHREAD_ONCE_INIT;
 int rd_kafka_thread_cnt_curr = 0;
 int rd_kafka_thread_cnt (void) {
 	return rd_kafka_thread_cnt_curr;
+}
+
+/**
+ * Wait for all rd_kafka_t objects to be destroyed.
+ * Returns 0 if all kafka objects are now destroyed, or -1 if the
+ * timeout was reached.
+ */
+int rd_kafka_wait_destroyed (int timeout_ms) {
+	rd_ts_t timeout = rd_clock() + (timeout_ms * 1000);
+
+	while (rd_kafka_thread_cnt() > 0) {
+		if (rd_clock() >= timeout) {
+			errno = ETIMEDOUT;
+			return -1;
+		}
+		usleep(25000); /* 25ms */
+	}
+
+	return 0;
 }
 
 
@@ -364,6 +385,8 @@ const char *rd_kafka_err2str (rd_kafka_t *rk, rd_kafka_resp_err_t err) {
 		return "Local: Critical system resource failure";
 	case RD_KAFKA_RESP_ERR__RESOLVE:
 		return "Local: Host resolution failure";
+	case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
+		return "Local: Message timed out";
 	case RD_KAFKA_RESP_ERR__PARTITION_EOF:
 		return "Broker: No more messages";
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
@@ -441,6 +464,34 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 }
 
 
+/**
+ * Main loop for Kafka handler thread.
+ */
+static void *rd_kafka_thread_main (void *arg) {
+	rd_kafka_t *rk = arg;
+	rd_ts_t last_timeout_scan = rd_clock();
+
+	rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
+
+	while (likely(rk->rk_terminate == 0)) {
+		rd_ts_t now = rd_clock();
+
+		if (unlikely(last_timeout_scan + 1000000 <= now)) {
+			rd_kafka_topic_age_scan_all(rk, now);
+			last_timeout_scan = now;
+		}
+
+		sleep(1);
+	}
+
+	rd_kafka_destroy0(rk); /* destroy handler thread's refcnt */
+
+	rd_atomic_sub(&rd_kafka_thread_cnt_curr, 1);
+
+	return NULL;
+}
+
+
 static void rd_kafka_global_init (void) {
 }
 
@@ -448,6 +499,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			  char *errstr, size_t errstr_size) {
 	rd_kafka_t *rk;
 	static int rkid = 0;
+	pthread_attr_t attr;
+	int err;
 
 	pthread_once(&rd_kafka_global_init_once, rd_kafka_global_init);
 
@@ -499,6 +552,24 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		rk->rk_conf.FetchRequest.MinBytes =
 			htonl(rk->rk_conf.fetch_min_bytes);
 	}
+
+
+	/* Create handler thread */
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+	rd_kafka_keep(rk); /* one refcnt for handler thread */
+	if ((err = pthread_create(&rk->rk_thread, &attr,
+				  rd_kafka_thread_main, rk))) {
+		if (errstr)
+			snprintf(errstr, errstr_size,
+				 "Failed to create thread: %s", strerror(err));
+		rd_kafka_destroy0(rk); /* handler thread */
+		rd_kafka_destroy0(rk); /* application refcnt */
+		errno = err;
+		return NULL;
+	}
+
 
 	/* Add initial list of brokers from configuration */
 	if (rk->rk_conf.brokerlist)

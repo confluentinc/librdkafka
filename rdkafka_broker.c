@@ -260,7 +260,7 @@ static void rd_kafka_broker_waitresp_timeout_scan (rd_kafka_broker_t *rkb,
 		if (likely(rkbuf->rkbuf_ts_timeout > now))
 			continue;
 
-		rd_kafka_bufq_enq(&rkb->rkb_waitresps, rkbuf);
+		rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
 
 		rkbuf->rkbuf_cb(rkb, RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT,
 				NULL, rkbuf, rkbuf->rkbuf_opaque);
@@ -2039,7 +2039,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 		int do_timeout_scan = 0;
 
 		now = rd_clock();
-		if (unlikely(last_timeout_scan * 1000000 < now)) {
+		if (unlikely(last_timeout_scan + 1000000 < now)) {
 			do_timeout_scan = 1;
 			last_timeout_scan = now;
 		}

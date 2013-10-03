@@ -80,6 +80,10 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE = -194, /* Critical system resource
 						      * failure */
 	RD_KAFKA_RESP_ERR__RESOLVE = -193,   /* Failed to resolve broker */
+	RD_KAFKA_RESP_ERR__PARTITION_EOF = -191, /* Reached the end of the
+						  * topic+partition queue on
+						  * the broker.
+						  * Not really an error. */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -311,8 +315,185 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *rkt);
 
 
 
+
+/*******************************************************************
+ *								   *
+ * Kafka messages                                                  *
+ *								   *
+ *******************************************************************/
+
+
 /**
- * Produce and send a single message to the broker.
+ * A Kafka message as returned by the `rd_kafka_consume*()` family
+ * of functions.
+ *
+ * This object has two purposes:
+ *  - provide the application with a consumed message. ('err' == 0)
+ *  - report per-topic+partition consumer errors ('err' != 0)
+ *
+ * The application must check 'err' to decide what action to take.
+ *
+ * When the application is finished with a message it must call
+ * `rd_kafka_message_destroy()`.
+ */
+typedef struct rd_kafka_message_s {
+	rd_kafka_resp_err_t err;   /* Non-zero for error signaling. */
+	rd_kafka_topic_t *rkt;     /* Topic */
+	int32_t partition;         /* Partition */
+	void   *payload;           /* err==0: Message payload
+				    * err!=0: Error string */
+	size_t  len;               /* err==0: Message payload length
+				    * err!=0: Error string length */
+	void   *key;               /* err==0: Optional message key */
+	size_t  key_len;           /* err==0: Optional message key length */
+	int64_t offset;            /* Message offset (or offset for error
+				    * if err!=0 if applicable). */
+	void  *_private;           /* rdkafka private pointer: DO NOT MODIFY */
+} rd_kafka_message_t;
+
+
+/**
+ * Frees resources for 'rkmessage' and hands ownership back to rdkafka.
+ */
+void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage);
+
+
+/**
+ * Returns the error string for an errored rd_kafka_message_t or NULL if
+ * there was no error.
+ */
+static inline const char * 
+__attribute__((unused))
+rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
+	if (!rkmessage->err)
+		return NULL;
+
+	if (rkmessage->payload)
+		return rkmessage->payload;
+
+	return rd_kafka_err2str(rkmessage->err);
+}
+
+
+
+
+/*******************************************************************
+ *								   *
+ * Consumer API                                                    *
+ *								   *
+ *******************************************************************/
+
+
+#define RD_KAFKA_OFFSET_BEGINNING -2  /* Start consuming from beginning of
+				       * kafka partition queue: oldest msg */
+#define RD_KAFKA_OFFSET_END       -1  /* Start consuming from end of kafka
+				       * partition queue: next msg */
+
+
+/**
+ * Start consuming messages for topic 'rkt' and 'partition'
+ * at offset 'offset' which may either be a proper offset (0..N)
+ * or one of the the special offsets:
+ *  `RD_KAFKA_OFFSET_BEGINNING` or `RD_KAFKA_OFFSET_END`.
+ *
+ * rdkafka will attempt to keep 'queued.min.messages' (config property)
+ * messages in the local queue by repeatedly fetching batches of messages
+ * from the broker until the threshold is reached.
+ *
+ * The application shall use one of the `rd_kafka_consume*()` functions
+ * to consume messages from the local queue, each kafka message being
+ * represented as a `rd_kafka_message_t *` object.
+ *
+ * `rd_kafka_consume_start()` must not be called multiple times without
+ * stopping consumption first with `rd_kafka_consume_stop()`.
+ *
+ * Returns 0 on success or -1 on error (see `errno`).
+ */
+int rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
+			     int64_t offset);
+
+/**
+ * Stop consuming messages for topic 'rkt' and 'partition', purging
+ * all messages currently in the local queue.
+ *
+ * The application needs to be stop all consumers before calling
+ * `rd_kafka_destroy()` on the main object handle.
+ *
+ * Returns 0 on success or -1 on error (see `errno`).
+ */
+int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition);
+
+
+
+/**
+ * Consume a single message from topic 'rkt' and 'partition'.
+ *
+ * 'timeout_ms' is maximum amount of time to wait for a message to be received.
+ * Consumer must have been previously started with `rd_kafka_consume_start()`.
+ *
+ * Returns a message object on success and NULL on error.
+ *
+ * Errors (when returning NULL):
+ *   ETIMEDOUT - 'timeout_ms' was reached with no new messages fetched.
+ *   ENOENT    - 'rkt'+'partition' is unknown.
+ *                (no prior `rd_kafka_consume_start()` call)
+ *
+ * The returned message's '..->err' must be checked for errors.
+ */
+rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *rkt, int32_t partition,
+				      int timeout_ms);
+
+
+
+/**
+ * Consume up to 'rkmessages_size' from topic 'rkt' and 'partition',
+ * putting a pointer to each message in the application provided
+ * array 'rkmessages' (of size 'rkmessages_size' entries).
+ *
+ * `rd_kafka_consume_batch()` provides higher throughput performance
+ * than `rd_kafka_consume()`.
+ *
+ * 'timeout_ms' is the maximum amount of time to wait for all of
+ * 'rkmessages_size' messages to be put into 'rkmessages'.
+ * This differs somewhat from `rd_kafka_consume()`.
+ *
+ * Returns the number of rkmessages added in 'rkmessages',
+ * or -1 on error (same error codes as for `rd_kafka_consume()`.
+ */
+ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
+				int min_wait_ms,
+				rd_kafka_message_t **rkmessages,
+				size_t rkmessages_size);
+
+
+
+/**
+ * Consumes messages from topic 'rkt' and 'partition', calling
+ * the provided callback for each consumed messsage.
+ *
+ * `rd_kafka_consume_callback()` provides higher throughput performance
+ * than both `rd_kafka_consume()` and `rd_kafka_consume_batch()`.
+ *
+ * 'timeout_ms' is the maximum amount of time to wait for one or more messages
+ * to arrive.
+ *
+ * The provided 'consume_cb' function is called for each message,
+ * the application must not call `rd_kafka_message_destroy()` on the provided
+ * 'rkmessage'.
+ *
+ * The 'opaque' argument is passed to the 'consume_cb' as 'opaque'.
+ *
+ * Returns the number of messages processed or -1 on error.
+ */
+int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
+			       int timeout_ms,
+			       void (*consume_cb) (rd_kafka_message_t
+						   *rkmessage,
+						   void *opaque),
+			       void *opaque);
+
+
+
  *
  * 'rkt' is the target topic which must have been previously created with
  * rd_kafka_topic_new().
@@ -483,6 +664,3 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk);
 int rd_kafka_thread_cnt (void);
 
 
-/* FIXME */
-void rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
-			     int64_t offset);

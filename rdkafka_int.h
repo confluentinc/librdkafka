@@ -458,32 +458,29 @@ typedef enum {
 
 typedef struct rd_kafka_op_s {
 	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
+
 	rd_kafka_op_type_t rko_type;
 	int       rko_flags;
 #define RD_KAFKA_OP_F_FREE        0x1  /* Free the payload when done with it. */
 #define RD_KAFKA_OP_F_FLASH       0x2  /* Internal: insert at head of queue */
-#define RD_KAFKA_OP_F_NOCOPY      0x4  /* Do not copy the payload, point to it*/
-#define RD_KAFKA_OP_F_NO_RESPONSE 0x8  /* rkbuf: Not expecting a response */
+#define RD_KAFKA_OP_F_NO_RESPONSE 0x4  /* rkbuf: Not expecting a response */
 	rd_kafka_msgq_t rko_msgq;
 
 	/* For PRODUCE */
 	rd_kafka_msg_t *rko_rkm;
 
-	/* For FETCH and ERR */
-	char *rko_payload;
-	int   rko_len;
-	struct rd_kafka_toppar_s *rko_rktp;
+	/* For ERR */
+#define rko_err     rko_rkmessage.err
+#define rko_payload rko_rkmessage.payload
+#define rko_len     rko_rkmessage.len
 
 	/* For FETCH */
+	rd_kafka_message_t rko_rkmessage;
 	rd_kafka_buf_t    *rko_rkbuf;
-	rd_kafkap_bytes_t *rko_key;
-	uint64_t           rko_next_offset;
 
 	/* For METADATA */
-	struct rd_kafka_topic_s *rko_rkt;
+#define rko_rkt  rko_rkmessage.rkt
 
-	/* For replies */
-	rd_kafka_resp_err_t rko_err;
 } rd_kafka_op_t;
 
 
@@ -587,13 +584,17 @@ typedef struct rd_kafka_broker_s {
 struct rd_kafka_topic_s {
 	TAILQ_ENTRY(rd_kafka_topic_s) rkt_link;
 
+	int                rkt_refcnt;
+
 	pthread_rwlock_t   rkt_lock;
 	rd_kafkap_str_t   *rkt_topic;
 	struct rd_kafka_toppar_s  *rkt_ua;  /* unassigned partition */
 	struct rd_kafka_toppar_s **rkt_p;
 	int32_t            rkt_partition_cnt;
 
-	int                rkt_refcnt;
+	TAILQ_HEAD(, rd_kafka_toppar_s) rkt_desp; /* Desired partitions
+						   * that are not yet seen
+						   * in the cluster. */
 
 	struct rd_kafka_s *rkt_rk;
 
@@ -610,6 +611,7 @@ struct rd_kafka_topic_s {
 typedef struct rd_kafka_toppar_s {
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rklink;  /* rd_kafka_t link */
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rkblink; /* rd_kafka_broker_t link*/
+	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rktlink; /* rd_kafka_topic_t link */
 	rd_kafka_topic_t  *rktp_rkt;
 	int32_t            rktp_partition;
 	rd_kafka_broker_t *rktp_leader;  /* Leader broker */
@@ -622,16 +624,31 @@ typedef struct rd_kafka_toppar_s {
 
 	rd_ts_t            rktp_ts_last_xmit;
 
-	int                rktp_flags;
-	#define RD_KAFKA_TOPPAR_F_CONSUMING  0x1
-
 	/* Consumer */
 	rd_kafka_q_t       rktp_fetchq;          /* Queue of fetched messages
 						  * from broker. */
+
+	enum {
+		RD_KAFKA_TOPPAR_FETCH_NONE = 0,
+		RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
+		RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
+		RD_KAFKA_TOPPAR_FETCH_ACTIVE,
+	} rktp_fetch_state;
+
+	rd_ts_t            rktp_ts_offset_req_next;
+	int64_t            rktp_query_offset;
 	int64_t            rktp_next_offset;     /* Next offset to fetch */
 	int64_t            rktp_app_offset;      /* Last offset delivered to
 						  * application */
 	int64_t            rktp_commited_offset; /* Last commited offset */
+	int64_t            rktp_eof_offset;      /* The last offset we reported
+						  * EOF for. */
+
+	int                rktp_flags;
+#define RD_KAFKA_TOPPAR_F_DESIRED  0x1      /* This partition is desired
+					     * by a consumer. */
+#define RD_KAFKA_TOPPAR_F_UNKNOWN  0x2      /* Topic is (not yet) seen on
+					     * a broker. */
 	struct {
 		uint64_t tx_msgs;
 		uint64_t tx_bytes;

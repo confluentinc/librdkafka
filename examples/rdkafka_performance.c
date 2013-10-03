@@ -35,6 +35,7 @@
 #include <ctype.h>
 #include <signal.h>
 #include <string.h>
+#include <errno.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
@@ -48,6 +49,7 @@ static int run = 1;
 static int dispintvl = 1000;
 static int do_seq = 0;
 static int exit_after = 0;
+static int exit_eof = 0;
 
 static void stop (int sig) {
 	run = 0;
@@ -55,8 +57,9 @@ static void stop (int sig) {
 
 static long int msgs_wait_cnt = 0;
 static int msgs_failed = 0;
-
 static rd_ts_t t_end;
+static rd_kafka_t *rk;
+
 
 static struct {
 	rd_ts_t  t_start;
@@ -74,7 +77,7 @@ static struct {
 
 static void err_cb (rd_kafka_t *rk, int err, const char *reason, void *opaque) {
 	printf("ERROR CALLBACK: %s: %s: %s\n",
-	       rd_kafka_name(rk), rd_kafka_err2str(rk, err), reason);
+	       rd_kafka_name(rk), rd_kafka_err2str(err), reason);
 }
 
 
@@ -102,7 +105,7 @@ static void msg_delivered (rd_kafka_t *rk,
 	    (now - last) >= dispintvl * 1000) {
 		if (error_code)
 			printf("Message %ld delivered failed: %s (%li remain)",
-			       msgid, rd_kafka_err2str(rk, error_code),
+			       msgid, rd_kafka_err2str(error_code),
 			       msgs_wait_cnt);
 		else
 			printf("Message %ld delivered: %li remain\n",
@@ -127,27 +130,45 @@ static void msg_delivered (rd_kafka_t *rk,
 }
 
 
-/* FIXME: Add 'err' argument, and signal errors that way.
- *        Dont fetch more messages until rd_kafka_topic_clear_err(rkt, part)
- *        is called? */
-static void msg_consume (rd_kafka_topic_t *rkt, int32_t partition,
-			 void *payload, size_t len,
-			 void *key, size_t key_len,
-			 int64_t next_offset,
-			 void *opaque) {
+static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
+
+	if (rkmessage->err) {
+		if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+			printf("%% Consumer reached end of %s [%"PRId32"] "
+			       "message queue at offset %"PRId64"\n",
+			       rd_kafka_topic_name(rkmessage->rkt),
+			       rkmessage->partition, rkmessage->offset);
+
+			if (exit_eof)
+				run = 0;
+
+			return;
+		}
+
+		printf("%% Consume error for topic \"%s\" [%"PRId32"] "
+		       "offset %"PRId64": %s\n",
+		       rd_kafka_topic_name(rkmessage->rkt),
+		       rkmessage->partition,
+		       rkmessage->offset,
+		       rd_kafka_message_errstr(rkmessage));
+
+		msgs_failed++;
+		return;
+	}
+
 	cnt.msgs++;
-	cnt.bytes += len;
+	cnt.bytes += rkmessage->len;
 
 	if (!(cnt.msgs % 1000000))
 		printf("@%"PRId64": %.*s\n",
-		       next_offset, (int)len, (char *)payload);
+		       rkmessage->offset,
+		       (int)rkmessage->len, (char *)rkmessage->payload);
 		
-#if 0
-	/* rko_offset contains the offset of the _next_
-	 * message. We store it when we're done processing
+#if 0 /* Future API */
+	/* We store offset when we're done processing
 	 * the current message. */
-	if (rko->rko_offset)
-		rd_kafka_offset_store(rk, rko->rko_offset);
+	rd_kafka_offset_store(rkmessage->rkt, rkmessage->partition,
+			      rd_kafka_offset_next(rkmessage));
 #endif
 
 }
@@ -181,8 +202,6 @@ static void print_stats (int mode, int force_show, const char *compression) {
 }
 
 
-rd_kafka_t *rk;
-
 static void sig_usr1 (int sig) {
 	rd_kafka_dump(stdout, rk);
 }
@@ -208,6 +227,7 @@ int main (int argc, char **argv) {
 	rd_kafka_topic_conf_t *topic_conf;
 	const char *compression = "no";
 	int64_t start_offset = 0;
+	int batch_size = 0;
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -221,11 +241,14 @@ int main (int argc, char **argv) {
 	rd_kafka_conf_set(conf, "retry.backoff.ms", "500", NULL, 0);
 	
 	/* Consumer config */
-	/* Tell rdkafka to (try to) maintain 10000 messages
+	/* Tell rdkafka to (try to) maintain 1M messages
 	 * in its internal receive buffers. This is to avoid
 	 * application -> rdkafka -> broker  per-message ping-pong
-	 * latency. */
-	rd_kafka_conf_set(conf, "queued.min.messages", "10000", NULL, 0);
+	 * latency.
+	 * The larger the local queue, the higher the performance.
+	 * Try other values with: ... -X queued.min.messages=1000
+	 */
+	rd_kafka_conf_set(conf, "queued.min.messages", "1000000", NULL, 0);
 
 
 
@@ -234,8 +257,9 @@ int main (int argc, char **argv) {
 	rd_kafka_topic_conf_set(topic_conf, "message.timeout.ms", "5000",
 				NULL, 0);
 
-	while ((opt = getopt(argc, argv,
-			     "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:z:o:X:")) != -1) {
+	while ((opt =
+		getopt(argc, argv,
+		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:z:o:X:B:e")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -288,6 +312,9 @@ int main (int argc, char **argv) {
 				exit(1);
 			}
 			break;
+		case 'B':
+			batch_size = atoi(optarg);
+			break;
 		case 'z':
 			if (rd_kafka_conf_set(conf, "compression.codec",
 					      optarg,
@@ -301,6 +328,9 @@ int main (int argc, char **argv) {
 		case 'o':
 			start_offset = strtoll(optarg, NULL, 10);
 			break;
+		case 'e':
+			exit_eof = 1;
+			break;
 		case 'd':
 			debug = optarg;
 			break;
@@ -308,6 +338,12 @@ int main (int argc, char **argv) {
 		{
 			char *name, *val;
 			rd_kafka_conf_res_t res;
+
+			if (!strcmp(optarg, "list") ||
+			    !strcmp(optarg, "help")) {
+				rd_kafka_conf_properties_show(stdout);
+				exit(0);
+			}
 
 			name = optarg;
 			if (!(val = strchr(name, '='))) {
@@ -363,6 +399,7 @@ int main (int argc, char **argv) {
 			"  -R <seed>    Random seed value (defaults to time)\n"
 			"  -a <acks>    Required acks (producer): "
 			"-1, 0, 1, >1\n"
+			"  -B <size>    Consume batch size (# of msgs)\n"
 			"  -z <codec>   Enable compression:\n"
 			"               none|gzip|snappy\n"
 			"  -o <offset>  Start offset (consumer)\n"
@@ -372,9 +409,14 @@ int main (int argc, char **argv) {
 			"configuration property\n"
 			"               Properties prefixed with \"topic.\" "
 			"will be set on topic object.\n"
+			"               Use '-X list' to see the full list\n"
+			"               of supported properties.\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  consumes messages and prints thruput\n"
+			"  If -B <..> is supplied the batch consumer\n"
+			"  mode is used, else the callback mode is used.\n"
+			"\n"
 			" In Producer mode:\n"
 			"  writes messages of size -s <..> and prints thruput\n"
 			"\n",
@@ -517,8 +559,6 @@ int main (int argc, char **argv) {
 		       msgs_wait_cnt);
 		rd_kafka_dump(stdout, rk);
 
-		// cnt.t_end_send = rd_clock();
-
 		/* Wait for messages to be delivered */
 		i = 0;
 		while (run && rd_kafka_poll(rk, 1000) != -1) {
@@ -554,7 +594,9 @@ int main (int argc, char **argv) {
 		 * Consumer
 		 */
 
-#if 0
+		rd_kafka_message_t **rkmessages;
+
+#if 0 /* Future API */
 		/* The offset storage file is optional but its presence
 		 * avoids starting all over from offset 0 again when
 		 * the program restarts.
@@ -592,23 +634,50 @@ int main (int argc, char **argv) {
 		/* Create topic to consume from */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
-		/* Start consuming FIXME */
-		rd_kafka_consume_start(rkt, partition, start_offset);
+		/* Batch consumer */
+		if (batch_size)
+			rkmessages = malloc(sizeof(*rkmessages) * batch_size);
+
+		/* Start consuming */
+		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
+			fprintf(stderr, "%% Failed to start consuming: %s\n",
+				strerror(errno));
+			exit(1);
+		}
 		
 		cnt.t_start = rd_clock();
 		while (run && (msgcnt == -1 || msgcnt > cnt.msgs)) {
-			/* Fetch an "op" which is one of:
-			 *  - a kafka message (if rko_len>0 && rko_err==0)
-			 *  - an error (if rko_err)
+			/* Consume messages.
+			 * A message may either be a real message, or
+			 * an error signaling (if rkmessage->err is set).
 			 */
 			uint64_t latency;
 			int r;
 
 			latency = rd_clock();
 			
-			r = rd_kafka_consume_callback(rkt, partition,
-						      1000/*timeout ms*/,
-						      msg_consume, NULL);
+			if (batch_size) {
+				int i;
+
+				/* Batch fetch mode */
+				r = rd_kafka_consume_batch(rkt, partition,
+							   1000,
+							   rkmessages,
+							   batch_size);
+				if (r != -1) {
+					for (i = 0 ; i < r ; i++) {
+						msg_consume(rkmessages[i],NULL);
+						rd_kafka_message_destroy(
+							rkmessages[i]);
+					}
+				}
+			} else {
+				/* Callback mode */
+				r = rd_kafka_consume_callback(rkt, partition,
+							      1000/*timeout*/,
+							      msg_consume,
+							      NULL);
+			}
 
 			cnt.t_latency += rd_clock() - latency;
 			
@@ -619,6 +688,15 @@ int main (int argc, char **argv) {
 			print_stats(mode, 0, compression);
 		}
 		cnt.t_end = rd_clock();
+
+		/* Stop consuming */
+		rd_kafka_consume_stop(rkt, partition);
+
+		/* Destroy topic */
+		rd_kafka_topic_destroy(rkt);
+
+		if (batch_size)
+			free(rkmessages);
 
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
@@ -631,6 +709,8 @@ int main (int argc, char **argv) {
 		printf("%% Average application fetch latency: %"PRIu64"us\n",
 		       cnt.t_latency / cnt.msgs);
 
+	/* Let background threads clean up and terminate cleanly. */
+	rd_kafka_wait_destroyed(2000);
 
 	return 0;
 }

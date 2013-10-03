@@ -45,6 +45,12 @@ rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
 					 int32_t partition,
 					 int ua_on_miss);
 
+rd_kafka_toppar_t *rd_kafka_toppar_desired_get (rd_kafka_topic_t *rkt,
+						int32_t partition);
+rd_kafka_toppar_t *rd_kafka_toppar_desired_add (rd_kafka_topic_t *rkt,
+						int32_t partition);
+void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp);
+
 rd_kafka_topic_t *rd_kafka_topic_find (rd_kafka_t *rk,
 				       const char *topic);
 rd_kafka_topic_t *rd_kafka_topic_find0 (rd_kafka_t *rk,

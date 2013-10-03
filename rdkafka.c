@@ -364,6 +364,8 @@ const char *rd_kafka_err2str (rd_kafka_t *rk, rd_kafka_resp_err_t err) {
 		return "Local: Critical system resource failure";
 	case RD_KAFKA_RESP_ERR__RESOLVE:
 		return "Local: Host resolution failure";
+	case RD_KAFKA_RESP_ERR__PARTITION_EOF:
+		return "Broker: No more messages";
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
 		return "Unknown error";
 	case RD_KAFKA_RESP_ERR_NO_ERROR:
@@ -491,11 +493,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	if (rk->rk_type == RD_KAFKA_CONSUMER) {
 		/* Pre-build RequestHeader */
-		rk->rk_conf.consumer.FetchRequest.ReplicaId = htonl(-1);
-		rk->rk_conf.consumer.FetchRequest.MaxWaitTime =
-			htonl(rk->rk_conf.consumer.fetch_wait_max_ms);
-		rk->rk_conf.consumer.FetchRequest.MinBytes =
-			htonl(rk->rk_conf.consumer.fetch_min_bytes);
+		rk->rk_conf.FetchRequest.ReplicaId = htonl(-1);
+		rk->rk_conf.FetchRequest.MaxWaitTime =
+			htonl(rk->rk_conf.fetch_wait_max_ms);
+		rk->rk_conf.FetchRequest.MinBytes =
+			htonl(rk->rk_conf.fetch_min_bytes);
 	}
 
 	/* Add initial list of brokers from configuration */
@@ -537,38 +539,28 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
 
 
 
-/**
- * Start consuming messages for topic+partition starting at specified offset.
- *
- * librdkafka will attempt to keep the local queue of fetched messages
- * from the broker above the "queued.max.message.chunks" configuration property.
- *
- * The application reads the consumed messages by registering a message callback
- * when creating the rd_kafka_t object, and then calling rd_kafka_poll()
- * at intervals which will make librdkafka call the callback for each message.
- *
- * rd_kafka_consume_start() may be called multiple times (with or without
- * interleaved rd_kafka_consume_stop()) calls to modify the next offset
- * to fetch. Note that this is not required to naturally step offset to the
- * next set of messages, that is handled automatically by librdkafka.
- *
- * Automatic fetching is stopped by calling rd_kafka_consume_stop().
- */
-void rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
-			     int64_t offset) {
+int rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
+			    int64_t offset) {
 	rd_kafka_toppar_t *rktp;
 
-	/* FIXME: fake */
-	rd_kafka_topic_partition_cnt_update(rkt->rkt_rk,
-					    rd_kafkap_strdupa(rkt->rkt_topic),
-					    partition+1);
+	if (partition == RD_KAFKA_PARTITION_UA) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	rd_kafka_topic_wrlock(rkt);
-	rktp = rd_kafka_toppar_get(rkt, partition, 1);
+	rktp = rd_kafka_toppar_desired_add(rkt, partition);
+	rd_kafka_topic_unlock(rkt);
 
-	/* FIXME: Thread safe? */
-	rktp->rktp_next_offset = offset;
-
-	rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_CONSUMING;
+	rd_kafka_toppar_lock(rktp);
+	if (offset < 0) {
+		rktp->rktp_query_offset = offset;
+		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
+	} else {
+		rktp->rktp_next_offset = offset;
+		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_ACTIVE;
+	}
+	rd_kafka_toppar_unlock(rktp);
 
 	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "CONSUMER",
 		     "Start consuming %.*s [%"PRId32"] at "
@@ -576,83 +568,178 @@ void rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
 		     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 		     rktp->rktp_partition, offset);
 
-	rd_kafka_topic_unlock(rkt);
+	return 0;
 }
 
-/**
- * Stop consuming messages for topic+partition which has been previously
- * started with a rd_kafka_consume_start() call.
- *
- * FIXME:
- * Any locally queued messages for the topic+partition will be purged.
- */
-void rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
+
+int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
 	rd_kafka_toppar_t *rktp;
 
-	rd_kafka_topic_wrlock(rkt);
-	if (!(rktp = rd_kafka_toppar_get(rkt, partition, 0))) {
-		rd_kafka_topic_unlock(rkt);
-		return;
+	if (partition == RD_KAFKA_PARTITION_UA) {
+		errno = EINVAL;
+		return -1;
 	}
 
-	rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_CONSUMING;
+	rd_kafka_topic_wrlock(rkt);
+	if (!(rktp = rd_kafka_toppar_get(rkt, partition, 0)) &&
+	    !(rktp = rd_kafka_toppar_desired_get(rkt, partition))) {
+		rd_kafka_topic_unlock(rkt);
+		errno = ENOENT;
+		return -1;
+	}
+
+	rd_kafka_toppar_desired_del(rktp);
+	rd_kafka_topic_unlock(rkt);
+
+	rd_kafka_toppar_lock(rktp);
+	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
+
+	/* Purge receive queue. */
+	rd_kafka_q_purge(&rktp->rktp_fetchq);
 
 	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "CONSUMER",
 		     "Stop consuming %.*s [%"PRId32"] currently at offset "
-		     "%"PRId64"-1",
+		     "%"PRId64,
 		     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 		     rktp->rktp_partition,
 		     rktp->rktp_next_offset);
+	rd_kafka_toppar_unlock(rktp);
 
-	rd_kafka_topic_unlock(rkt);
+	rd_kafka_toppar_destroy(rktp); /* .._get() */
 
+	return 0;
+}
+
+
+void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
+	rd_kafka_op_t *rko;
+
+	if (likely((rko = (rd_kafka_op_t *)rkmessage->_private) != NULL))
+		rd_kafka_op_destroy(rko);
+	else
+		free(rkmessage);
+}
+
+
+static rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
+	rd_kafka_message_t *rkmessage;
+
+	if (rko) {
+		rkmessage = &rko->rko_rkmessage;
+		rkmessage->_private = rko;
+	} else
+		rkmessage = calloc(1, sizeof(*rkmessage));
+
+	return rkmessage;
 }
 
 
 
+
+
+ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
+				int timeout_ms,
+				rd_kafka_message_t **rkmessages,
+				size_t rkmessages_size) {
+	rd_kafka_toppar_t *rktp;
+	struct timeval tv;
+	struct timespec ts;
+	ssize_t cnt = 0;
+
+	gettimeofday(&tv, NULL);
+	TIMEVAL_TO_TIMESPEC(&tv, &ts);
+	ts.tv_sec  += timeout_ms / 1000;
+	ts.tv_nsec += (timeout_ms % 1000) * 1000000;
+	if (ts.tv_nsec > 1000000000) {
+		ts.tv_sec++;
+		ts.tv_nsec -= 1000000000;
+	}
+
+	/* Get toppar */
+	rd_kafka_topic_rdlock(rkt);
+	rktp = rd_kafka_toppar_get(rkt, partition, 0/*no ua on miss*/);
+	if (unlikely(!rktp))
+		rktp = rd_kafka_toppar_desired_get(rkt, partition);
+	rd_kafka_topic_unlock(rkt);
+
+	if (unlikely(!rktp)) {
+		/* No such toppar known */
+		errno = ENOENT;
+		return -1;
+	}
+
+	/* Populate application's rkmessages array. */
+	while (cnt < rkmessages_size) {
+		rd_kafka_op_t *rko;
+
+		pthread_mutex_lock(&rktp->rktp_fetchq.rkq_lock);
+
+		while (!(rko = TAILQ_FIRST(&rktp->rktp_fetchq.rkq_q))) {
+			if (pthread_cond_timedwait(&rktp->rktp_fetchq.rkq_cond,
+						   &rktp->rktp_fetchq.rkq_lock,
+						   &ts) == ETIMEDOUT)
+				break;
+		}
+
+		if (!rko) {
+			/* Timed out */
+			pthread_mutex_unlock(&rktp->rktp_fetchq.rkq_lock);
+			break;
+		}
+
+		TAILQ_REMOVE(&rktp->rktp_fetchq.rkq_q, rko, rko_link);
+		rd_atomic_sub(&rktp->rktp_fetchq.rkq_qlen, 1);
+
+		pthread_mutex_unlock(&rktp->rktp_fetchq.rkq_lock);
+
+		/* Get rkmessage from rko and append to array. */
+		rkmessages[cnt++] = rd_kafka_message_get(rko);
+	}
+
+	rd_kafka_toppar_destroy(rktp); /* refcnt from .._get() */
+
+	return cnt;
+}
+
+
 struct consume_ctx {
-	void (*consume_cb) (rd_kafka_topic_t *rkt,
-			    int32_t partition,
-			    void *payload, size_t len,
-			    void *key, size_t key_len,
-			    int64_t next_offset,
-			    void *opaque);
+	void (*consume_cb) (rd_kafka_message_t *rkmessage, void *opaque);
 	void *opaque;
 };
+
 
 /**
  * Trampoline for application's consume_cb()
  */
 static void rd_kafka_consume_cb (rd_kafka_op_t *rko, void *opaque) {
 	struct consume_ctx *ctx = opaque;
-	
-	ctx->consume_cb(rko->rko_rktp->rktp_rkt,
-			rko->rko_rktp->rktp_partition,
-			rko->rko_payload, rko->rko_len,
-			(RD_KAFKAP_BYTES_IS_NULL(rko->rko_key) ?
-			 NULL : rko->rko_key->data),
-			RD_KAFKAP_BYTES_LEN(rko->rko_key),
-			rko->rko_next_offset, ctx->opaque);
+	rd_kafka_message_t *rkmessage;
+
+	rkmessage = rd_kafka_message_get(rko);
+	ctx->consume_cb(rkmessage, ctx->opaque);
 }
+
+
 
 int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 			       int timeout_ms,
-			       void (*consume_cb) (rd_kafka_topic_t *rkt,
-						   int32_t partition,
-						   void *payload, size_t len,
-						   void *key, size_t key_len,
-						   int64_t next_offset,
+			       void (*consume_cb) (rd_kafka_message_t
+						   *rkmessage,
 						   void *opaque),
 			       void *opaque) {
 	rd_kafka_toppar_t *rktp;
 	struct consume_ctx ctx = { consume_cb: consume_cb, opaque: opaque };
 	int r;
 
+	/* Get toppar */
 	rd_kafka_topic_rdlock(rkt);
 	rktp = rd_kafka_toppar_get(rkt, partition, 0/*no ua on miss*/);
+	if (unlikely(!rktp))
+		rktp = rd_kafka_toppar_desired_get(rkt, partition);
 	rd_kafka_topic_unlock(rkt);
 
-	if (!rktp) {
+	if (unlikely(!rktp)) {
+		/* No such toppar known */
 		errno = ENOENT;
 		return -1;
 	}
@@ -666,20 +753,46 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 }
 
 
-/**
- * Consume a single message from topic 'rkt' and 'partition'.
- * 
- * 'timeout_ms' is maximum amount of time to wait for a message to be received.
- *
- * Returns a message on success or NULL on failure.
- *
- * NOTE: How this works internally:
- *       The first time the rd_kafka_consume() is called for a specific
- *       topic+partition it's toppar is marked for consumption and
- *       librdkafka will strive to keep at least FIXME
- *
- * Locality: any application thread
- */
+
+rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *rkt, int32_t partition,
+				      int timeout_ms) {
+	rd_kafka_op_t *rko;
+	rd_kafka_toppar_t *rktp;
+	rd_kafka_message_t *rkmessage;
+
+	rd_kafka_topic_rdlock(rkt);
+	rktp = rd_kafka_toppar_get(rkt, partition, 0/*no ua on miss*/);
+	if (unlikely(!rktp))
+		rktp = rd_kafka_toppar_desired_get(rkt, partition);
+	rd_kafka_topic_unlock(rkt);
+
+	if (unlikely(!rktp)) {
+		/* No such toppar known */
+		errno = ENOENT;
+		return NULL;
+	}
+
+	/* Pop op from queue. May either be an error or a message. */
+	rko = rd_kafka_q_pop(&rktp->rktp_fetchq, timeout_ms);
+	if (!rko) {
+		/* Timeout reached with no op returned. */
+		rd_kafka_toppar_destroy(rktp); /* refcnt from .._get() */
+		errno = ETIMEDOUT;
+		return NULL;
+	}
+
+	/* Get rkmessage from rko */
+	rkmessage = rd_kafka_message_get(rko);
+
+	return rkmessage;
+}
+
+
+
+
+
+
+
 static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 	rd_kafka_t *rk = opaque;
 	rd_kafka_msg_t *rkm;

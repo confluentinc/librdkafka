@@ -22,7 +22,7 @@ For an introduction to the performance and usage of librdkafka, see
 
   * Branch: master
   * Producer: supported
-  * Consumer: not yet implemented
+  * Consumer: supported
   * Compression: snappy and gzip
   * Debian package: work in progress (separate "debian" branch)
   * ZooKeeper: not supported

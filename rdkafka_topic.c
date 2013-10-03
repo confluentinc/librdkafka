@@ -87,14 +87,14 @@ void rd_kafka_toppar_destroy0 (rd_kafka_toppar_t *rktp) {
  *
  * NOTE: Caller must hold rd_kafka_topic_*lock()
  */
-rd_kafka_toppar_t *rd_kafka_toppar_get (rd_kafka_topic_t *rkt,
+rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_topic_t *rkt,
 					int32_t partition,
 					int ua_on_miss) {
 	rd_kafka_toppar_t *rktp;
 
 	if (partition >= 0 && partition < rkt->rkt_partition_cnt)
 		rktp = rkt->rkt_p[partition];
-	else if (ua_on_miss)
+	else if (partition == RD_KAFKA_PARTITION_UA || ua_on_miss)
 		rktp = rkt->rkt_ua;
 	else
 		return NULL;
@@ -292,7 +292,7 @@ int rd_kafka_toppar_ua_move (rd_kafka_topic_t *rkt, rd_kafka_msgq_t *rkmq) {
 	rd_kafka_toppar_t *rktp_ua;
 
 	rd_kafka_topic_rdlock(rkt);
-	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA);
+	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA, 0);
 	rd_kafka_topic_unlock(rkt);
 
 	if (unlikely(rktp_ua == NULL))
@@ -515,9 +515,9 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 
 
 
-void rd_kafka_topic_update (rd_kafka_t *rk,
-			    const char *topic, int32_t partition,
-			    int32_t leader) {
+void rd_kafka_topic_leader_update (rd_kafka_t *rk,
+				   const char *topic, int32_t partition,
+				   int32_t leader) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_toppar_t *rktp;
 	rd_kafka_broker_t *rkb;
@@ -616,7 +616,7 @@ void rd_kafka_topic_partitions_remove (rd_kafka_topic_t *rkt) {
 	/* Remove all partitions */
 	for (i = 0 ; i < rkt->rkt_partition_cnt ; i++) {
 
-		if (!(rktp = rd_kafka_toppar_get(rkt, i)))
+		if (!(rktp = rd_kafka_toppar_get(rkt, i, 0)))
 			continue;
 
 		rd_kafka_toppar_lock(rktp);
@@ -632,7 +632,7 @@ void rd_kafka_topic_partitions_remove (rd_kafka_topic_t *rkt) {
 	rkt->rkt_p = NULL;
 	rkt->rkt_partition_cnt = 0;
 
-	if ((rktp = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA))) {
+	if ((rktp = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA, 0))) {
 		rd_kafka_toppar_lock(rktp);
 		rd_kafka_msgq_purge(rkt->rkt_rk, &rktp->rktp_msgq);
 		rkt->rkt_ua = NULL;
@@ -775,7 +775,7 @@ void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic) {
 		return; /* Ignore topics that we dont have locally. */
 	}
 
-	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA);
+	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA, 0);
 	if (unlikely(!rktp_ua)) {
 		rd_kafka_dbg(rk, TOPIC, "ASSIGNUA",
 			     "No UnAssigned partition available for %s", topic);
@@ -820,6 +820,8 @@ void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic) {
 	rd_kafka_toppar_destroy(rktp_ua); /* from get() */
 	rd_kafka_topic_destroy(rkt); /* from find() */
 }
+
+
 
 /**
  * Scan all topics and partitions for timed out messages.
@@ -867,3 +869,23 @@ int rd_kafka_topic_age_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	return totcnt;
 }
 
+
+/**
+ * Locks: rd_kafka_topic_*lock() must be held.
+ */
+int rd_kafka_topic_partition_available (const rd_kafka_topic_t *rkt,
+					int32_t partition) {
+	int avail;
+	rd_kafka_toppar_t *rktp;
+
+	rktp = rd_kafka_toppar_get(rkt, partition, 0/*no ua-on-miss*/);
+	if (unlikely(!rktp))
+		return 0;
+
+	rd_kafka_toppar_lock(rktp);
+	avail = rktp->rktp_leader ? 1 : 0;
+	rd_kafka_toppar_unlock(rktp);
+
+	rd_kafka_toppar_destroy(rktp);
+	return avail;
+}

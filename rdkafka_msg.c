@@ -130,12 +130,16 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 
 
 
-int32_t rd_kafka_msg_partitioner_random (const void *key,
-					 size_t keylen,
+int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
+					 const void *key, size_t keylen,
 					 int32_t partition_cnt,
 					 void *rkt_opaque,
 					 void *msg_opaque) {
-	return rd_jitter(0, partition_cnt-1);
+	int32_t p = rd_jitter(0, partition_cnt-1);
+	if (unlikely(!rd_kafka_topic_partition_available(rkt, p)))
+		return rd_jitter(0, partition_cnt-1);
+	else
+		return p;
 }
 
 /**
@@ -195,7 +199,7 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
 		rd_kafka_toppar_deq_msg(rktp_curr, rkm);
 	}
 
-	if (likely((rktp_new = rd_kafka_toppar_get(rkt, partition)) != NULL))
+	if (likely((rktp_new = rd_kafka_toppar_get(rkt, partition, 1)) != NULL))
 		rd_kafka_toppar_enq_msg(rktp_new, rkm);
 
 	rd_kafka_topic_unlock(rkt);

@@ -37,7 +37,8 @@ void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
 
 #define rd_kafka_topic_keep(rkt) rd_atomic_add(&(rkt->rkt_refcnt), 1)
 void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt);
-rd_kafka_toppar_t *rd_kafka_toppar_get (rd_kafka_topic_t *rkt,
+
+rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_topic_t *rkt,
 					int32_t partition,
 					int ua_on_miss);
 rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
@@ -61,9 +62,9 @@ int rd_kafka_toppar_ua_move (rd_kafka_topic_t *rkt, rd_kafka_msgq_t *rkmq);
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 				      rd_kafka_broker_t *rkb);
 
-void rd_kafka_topic_update (rd_kafka_t *rk,
-			    const char *topic, int32_t partition,
-			    int32_t leader);
+void rd_kafka_topic_leader_update (rd_kafka_t *rk,
+				   const char *topic, int32_t partition,
+				   int32_t leader);
 
 void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic);
 

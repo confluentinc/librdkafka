@@ -307,6 +307,11 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
 
 
 
+/*******************************************************************
+ *								   *
+ * Kafka object handle                                             *
+ *								   *
+ *******************************************************************/
 
 
 
@@ -314,36 +319,35 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
  * Creates a new Kafka handle and starts its operation according to the
  * specified 'type'.
  *
- * 'conf' is an optional struct that will be copied to replace rdkafka's
- * default configuration. See the 'rd_kafka_conf_t' type for more information.
+ * 'conf' is an optional struct created with `rd_kafka_conf_new()` that will
+ * be used instead of the default configuration.
+ * See `rd_kafka_conf_set()` et.al for more information.
  *
  * 'errstr' must be a pointer to memory of at least size 'errstr_size' where
- * rd_kafka_new() may write a human readable error message in case the
+ * `rd_kafka_new()` may write a human readable error message in case the
  * creation of a new handle fails. In which case the function returns NULL.
  *
- * NOTE: Make sure SIGPIPE is either ignored or handled by the
+ * NOTE: Make sure the SIGPIPE signal is either ignored or handled by the
  *       calling application.
  *
  * Returns the Kafka handle on success or NULL on error.
  *
  * To destroy the Kafka handle, use rd_kafka_destroy().
- * 
- * Locality: any thread
  */
 rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			  char *errstr, size_t errstr_size);
 
 
 /**
- * Destroy the Kafka handle.
+ * Destroy Kafka handle.
  * 
- * Locality: any thread
  */
 void        rd_kafka_destroy (rd_kafka_t *rk);
 
 
+
 /**
- * Returns the kafka handle name.
+ * Returns Kafka handle name.
  */
 const char *rd_kafka_name (const rd_kafka_t *rk);
 
@@ -352,10 +356,12 @@ const char *rd_kafka_name (const rd_kafka_t *rk);
 /**
  * Creates a new topic handle for topic named 'topic'.
  *
- * 'conf' is an optional configuration for the topic
- * (see rd_kafka_topic_t above).
+ * 'conf' is an optional configuration for the topic created with
+ * `rd_kafka_topic_conf_new()` that will be used instead of the default
+ * topic configuration.
+ * See `rd_kafka_topic_conf_set()` et.al for more information.
  *
- * Returns the new topic handle or NULL on error (see errno).
+ * Returns the new topic handle or NULL on error (see `errno`).
  */
 rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 				      rd_kafka_topic_conf_t *conf);
@@ -363,19 +369,22 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
 
 /**
- * Destroy a topic handle previously created with rd_kafka_topic_new().
+ * Destroy topic handle previously created with `rd_kafka_topic_new()`.
  */
 void rd_kafka_topic_destroy (rd_kafka_topic_t *rkt);
 
 
 /**
- * Returns the name for a topic.
+ * Returns the topic name.
  */
 const char *rd_kafka_topic_name (const rd_kafka_topic_t *rkt);
 
 
 /**
  * Unassigned partition.
+ *
+ * The unassigned partition is used by the producer API for messages
+ * that should be partitioned using the configured or default partitioner.
  */
 #define RD_KAFKA_PARTITION_UA  ((int32_t)-1)  
 
@@ -560,9 +569,25 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 
 
 
+
+
+
+
+
+/*******************************************************************
+ *								   *
+ * Producer API                                                    *
+ *								   *
+ *******************************************************************/
+
+
+/**
+ * Produce and send a single message to broker.
  *
  * 'rkt' is the target topic which must have been previously created with
- * rd_kafka_topic_new().
+ * `rd_kafka_topic_new()`.
+ *
+ * `rd_kafka_produce()` is an asynch non-blocking API.
  *
  * 'partition' is the target partition, either:
  *   - RD_KAFKA_PARTITION_UA (unassigned) for
@@ -582,15 +607,14 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
  *
  * 'key' is an optional message key of size 'keylen' bytes, if non-NULL it
  * will be passed to the topic partitioner as well as be sent with the
- * message to the broker.
+ * message to the broker and passed on to the consumer.
  *
  * 'msg_opaque' is an optional application-provided per-message opaque
- * pointer that will provided in callbacks functions referencing this message.
- * (i.e., the delivery report).
- *
+ * pointer that will provided in the delivery report callback (`dr_cb`) for
+ * referencing this message.
  *
  * Returns 0 on success or -1 if the maximum number of outstanding messages
- * (conf.producer.max_messages) has been reached.
+ * (conf.producer.max_messages) has been reached (`errno==ENOBUFS`).
  *
  */
 
@@ -607,30 +631,30 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
 
 
 
-/**
- * Consumes messages from topic 'rkt', waiting at most 'timeout_ms'
- * milliseconds for one or more messages to arrive.
- *
- * Calls consume_cb() for each message with the following arguments:
- *     * rkt,partition - Topic and partition
- *     * payload,len   - Message payload. The memory belogns to librdkafka
- *                       and must not be referenced after the callback returns.
- *     * key,key_len   - Message key if any.
- *     * next_offset   - The offset of the next message.
- *     * opaque        - Application 'opaque' pointer.
- *
- * Returns the number of messages processed.
- */
-int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
-			       int timeout_ms,
-			       void (*consume_cb) (rd_kafka_topic_t *rkt,
-						   int32_t partition,
-						   void *payload, size_t len,
-						   void *key, size_t key_len,
-						   int64_t next_offset,
-						   void *opaque),
-			       void *opaque);
 
+/*******************************************************************
+ *								   *
+ * Misc API                                                        *
+ *								   *
+ *******************************************************************/
+
+/**
+ * Polls the provided kafka handle for events.
+ *
+ * Events will cause application provided callbacks to be called.
+ *
+ * The 'timeout_ms' argument specifies the minimum amount of time
+ * (in milliseconds) that the call will block waiting for events.
+ * For non-blocking calls, provide 0 as 'timeout_ms'.
+ * To wait indefinately for an event, provide -1.
+ *
+ * Events:
+ *   - delivery report callbacks  (if dr_cb is configured) [producer]
+ *   - error callbacks (if error_cb is configured) [producer & consumer]
+ *
+ * Returns the number of events served.
+ */
+int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms);
 
 
 /**
@@ -646,38 +670,13 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
  *   <host1>[:<port1>],<host2>[:<port2>]...
  *
  * Returns the number of brokers succesfully added.
+ *
+ * NOTE: Brokers may also be defined with the 'metadata.broker.list'
+ *       configuration property.
  */
 int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist);
 
 
-/**
- * Polls the provided kafka handle for events.
- *
- * Events will cause application provided callbacks to be called.
- *
- * The 'timeout_ms' argument specifies the minimum amount of time
- * (in milliseconds) that the call will block waiting for events.
- * For non-blocking calls, provide 0 as 'timeout_ms'.
- * To wait indefinately for an event, provide -1.
- *
- * Returns the number of events served.
- */
-int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms);
-
-
-
-/**
- * Builtin (default) log sink: print to stderr
- */
-void rd_kafka_log_print (const rd_kafka_t *rk, int level,
-			 const char *fac, const char *buf);
-
-
-/**
- * Builtin log sink: print to syslog.
- */
-void rd_kafka_log_syslog (const rd_kafka_t *rk, int level,
-			  const char *fac, const char *buf);
 
 
 /**
@@ -697,14 +696,24 @@ void rd_kafka_set_logger (rd_kafka_t *rk,
 /**
  * Specifies the maximum logging level produced by
  * internal kafka logging and debugging.
- * Set to LOG_DEBUG (7) to enable debugging.
+ * If the 'debug' configuration property is set the level is automatically
+ * adjusted to LOG_DEBUG (7).
  */
 void rd_kafka_set_log_level (rd_kafka_t *rk, int level);
 
 
+/**
+ * Builtin (default) log sink: print to stderr
+ */
+void rd_kafka_log_print (const rd_kafka_t *rk, int level,
+			 const char *fac, const char *buf);
 
 
-
+/**
+ * Builtin log sink: print to syslog.
+ */
+void rd_kafka_log_syslog (const rd_kafka_t *rk, int level,
+			  const char *fac, const char *buf);
 
 
 /**
@@ -717,7 +726,8 @@ int         rd_kafka_outq_len (rd_kafka_t *rk);
 
 /**
  * Dumps rdkafka's internal state for handle 'rk' to stream 'fp'
- * This is only useful for debugging rdkafka.
+ * This is only useful for debugging rdkafka, showing state and statistics
+ * for brokers, topics, partitions, etc.
  */
 void rd_kafka_dump (FILE *fp, rd_kafka_t *rk);
 
@@ -728,5 +738,16 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk);
  * Used by regression tests.
  */
 int rd_kafka_thread_cnt (void);
+
+
+/**
+ * Wait for all rd_kafka_t objects to be destroyed.
+ * Returns 0 if all kafka objects are now destroyed, or -1 if the
+ * timeout was reached.
+ * Since `rd_kafka_destroy()` is an asynch operation the 
+ * `rd_kafka_wait_destroyed()` function can be used for applications where
+ * a clean shutdown is required.
+ */
+int rd_kafka_wait_destroyed (int timeout_ms);
 
 

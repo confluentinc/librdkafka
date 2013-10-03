@@ -190,8 +190,7 @@ It is created by calling `rd_kafka_topic_new()`.
 Both `rd_kafka_t` and `rd_kafka_topic_t` comes with a configuration API which
 is optional.
 Not using the API will cause librdkafka to use its default values which are
-documented
-in *`rdkafka_defaultconf.c`*.
+documented *`CONFIGURATION.md`*.
 
 **Note**: An application may create multiple `rd_kafka_t` objects and
 	they share no state.
@@ -211,21 +210,20 @@ Configuration is applied prior to object creation using the
 `rd_kafka_conf_set()` and `rd_kafka_topic_conf_set()` APIs.
 
 **Note**: The `rd_kafka.._conf_t` objects are not reusable after have been
-	passed to `rd_kafka.._new()` and must be re-initialized with
-	`rd_kafka_defaultconf_set()` priot to reuse.
+	passed to `rd_kafka.._new()`.
 	The application does not need to free any config resources after a
 	`rd_kafka.._new()` call.
 
 #### Example
 
-    rd_kafka_conf_t conf;
+    rd_kafka_conf_t *conf;
     char errstr[512];
     
-    rd_kafka_defaultconf_set(&conf);
-    rd_kafka_conf_set(&conf, "compression.codec", "snappy", errstr, sizeof(errstr));
-    rd_kafka_conf_set(&conf, "batch.num.messages", "100", errstr, sizeof(errstr));
+    conf = rd_kafka_conf_new();
+    rd_kafka_conf_set(conf, "compression.codec", "snappy", errstr, sizeof(errstr));
+    rd_kafka_conf_set(conf, "batch.num.messages", "100", errstr, sizeof(errstr));
     
-    rd_kafka_new(RD_KAFKA_PRODUCER, &conf);
+    rd_kafka_new(RD_KAFKA_PRODUCER, conf);
 
 
 ### Threads and callbacks

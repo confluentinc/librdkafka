@@ -536,7 +536,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	/* Construct a client id if none is given. */
 	if (!rk->rk_conf.clientid)
-		rk->rk_conf.clientid = strdup("default");
+		rk->rk_conf.clientid = strdup("rdkafka");
 	
 	snprintf(rk->rk_name, sizeof(rk->rk_name), "%s#%s-%i",
 		 rk->rk_conf.clientid, rd_kafka_type2str(rk->rk_type), rkid++);
@@ -897,12 +897,12 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 
 			dcnt++;
 
-			rk->rk_conf.producer.dr_cb(rk,
-						   rkm->rkm_payload,
-						   rkm->rkm_len,
-						   rko->rko_err,
-						   rk->rk_conf.opaque,
-						   rkm->rkm_opaque);
+			rk->rk_conf.dr_cb(rk,
+					  rkm->rkm_payload,
+					  rkm->rkm_len,
+					  rko->rko_err,
+					  rk->rk_conf.opaque,
+					  rkm->rkm_opaque);
 
 			rd_kafka_msg_destroy(rk, rkm);
 		}

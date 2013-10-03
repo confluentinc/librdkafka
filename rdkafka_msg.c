@@ -65,7 +65,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	
 	assert(len > 0);
 	if (unlikely(rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
-		     rkt->rkt_rk->rk_conf.producer.max_messages)) {
+		     rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
 		rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
 		errno = ENOBUFS;
 		return -1;
@@ -155,11 +155,14 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
 			     RD_KAFKAP_STR_PR(rkt->rkt_topic));
 		partition = RD_KAFKA_PARTITION_UA;
 	} else if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
-		partition = rkt->rkt_conf.partitioner(rkm->rkm_key->data,
-						      ntohl(rkm->rkm_key->len),
-						      rkt->rkt_partition_cnt,
-						      rkt->rkt_conf.opaque,
-						      rkm->rkm_opaque);
+		partition =
+			rkt->rkt_conf.partitioner(rkt,
+						  rkm->rkm_key->data,
+						  RD_KAFKAP_BYTES_LEN(rkm->
+								      rkm_key),
+						  rkt->rkt_partition_cnt,
+						  rkt->rkt_conf.opaque,
+						  rkm->rkm_opaque);
 	else /* Partition specified by the application */
 		partition = rkm->rkm_partition;
 

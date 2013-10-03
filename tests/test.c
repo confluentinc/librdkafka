@@ -48,7 +48,7 @@ static void test_error_cb (rd_kafka_t *rk, int err,
  * Creates and sets up kafka configuration objects.
  * Will read "test.conf" file if it exists.
  */
-void test_conf_init (rd_kafka_conf_t *conf, rd_kafka_topic_conf_t *topic_conf,
+void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		     int timeout) {
 	FILE *fp;
 	char buf[512];
@@ -60,10 +60,10 @@ void test_conf_init (rd_kafka_conf_t *conf, rd_kafka_topic_conf_t *topic_conf,
 	alarm(timeout);
 	signal(SIGALRM, sig_alarm);
 
-	rd_kafka_defaultconf_set(conf);
-	rd_kafka_topic_defaultconf_set(topic_conf);
+	*conf = rd_kafka_conf_new();
+	*topic_conf = rd_kafka_topic_conf_new();
 
-	conf->error_cb = test_error_cb;
+	rd_kafka_conf_set_error_cb(*conf, test_error_cb);
 
 	/* Open and read optional local test configuration file, if any. */
 	if (!(fp = fopen(test_conf, "r"))) {
@@ -97,11 +97,11 @@ void test_conf_init (rd_kafka_conf_t *conf, rd_kafka_topic_conf_t *topic_conf,
 		
 		if (!strncmp(name, "topic.", strlen("topic."))) {
 			name += strlen("topic.");
-			res = rd_kafka_topic_conf_set(topic_conf,
+			res = rd_kafka_topic_conf_set(*topic_conf,
 						      name, val,
 						      errstr, sizeof(errstr));
 		} else
-			res = rd_kafka_conf_set(conf,
+			res = rd_kafka_conf_set(*conf,
 						name, val,
 						errstr, sizeof(errstr));
 
@@ -111,4 +111,24 @@ void test_conf_init (rd_kafka_conf_t *conf, rd_kafka_topic_conf_t *topic_conf,
 	}
 
 	fclose(fp);
+}
+
+
+/**
+ * Wait 'timeout' seconds for rdkafka to kill all its threads and clean up.
+ */
+void test_wait_exit (int timeout) {
+	int r;
+
+	while ((r = rd_kafka_thread_cnt()) && timeout-- >= 0) {
+		TEST_SAY("%i thread(s) in use by librdkafka, waiting...\n", r);
+		sleep(1);
+	}
+
+	TEST_SAY("%i thread(s) in use by librdkafka\n", r);
+
+	if (r > 0) {
+		assert(0);
+		TEST_FAIL("%i thread(s) still active in librdkafka", r);
+	}
 }

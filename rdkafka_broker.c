@@ -402,7 +402,7 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 	const char *errstr;
 
 	if (rkb->rkb_rsal &&
-	    rkb->rkb_t_rsal_last + rkb->rkb_rk->rk_conf.broker_addr_lifetime <
+	    rkb->rkb_t_rsal_last + rkb->rkb_rk->rk_conf.broker_addr_ttl <
 	    time(NULL)) {
 		/* Address list has expired. */
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
@@ -1038,7 +1038,7 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 	if (unlikely(!(req =
 		       rd_kafka_waitresp_find(rkb,
 					      rkbuf->rkbuf_reshdr.CorrId)))) {
-		/* FIXME: unknown response */
+		/* FIXME: unknown response. probably due to request timeout */
 		rd_rkb_dbg(rkb, BROKER, "RESPONSE",
 			   "Unknown response for CorrId %"PRId32,
 			   rkbuf->rkbuf_reshdr.CorrId);
@@ -1399,7 +1399,7 @@ static void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb,
 	rkb->rkb_c.tx_retries++;
 
 	rkbuf->rkbuf_ts_retry = rd_clock() +
-		(rkb->rkb_rk->rk_conf.producer.retry_backoff_ms * 1000);
+		(rkb->rkb_rk->rk_conf.retry_backoff_ms * 1000);
 	/* Reset send offset */
 	rkbuf->rkbuf_of = 0;
 
@@ -1427,12 +1427,12 @@ static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb) {
 	
 
 /**
- * Propagate delivery report for message queue.
+ * Propagate delivery report for entire message queue.
  */
-static void rd_kafka_dr_msgq (rd_kafka_t *rk,
-			      rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err) {
+void rd_kafka_dr_msgq (rd_kafka_t *rk,
+		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err) {
 
-	if (rk->rk_conf.producer.dr_cb) {
+	if (rk->rk_conf.dr_cb) {
 		/* Pass all messages to application thread in one op. */
 		rd_kafka_op_t *rko;
 
@@ -1480,7 +1480,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
 			/* Try again */
 			if (++request->rkbuf_retries <
-			    rkb->rkb_rk->rk_conf.producer.max_retries) {
+			    rkb->rkb_rk->rk_conf.max_retries) {
 
 				if (reply)
 					rd_kafka_buf_destroy(reply);
@@ -1584,7 +1584,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	if (rktp->rktp_xmit_msgq.rkmq_msg_cnt > 0)
 		assert(TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs));
 	msgcnt = RD_MIN(rktp->rktp_xmit_msgq.rkmq_msg_cnt,
-			rkb->rkb_rk->rk_conf.producer.batch_num_messages);
+			rkb->rkb_rk->rk_conf.batch_num_messages);
 	assert(msgcnt > 0);
 	iovcnt = 3 + (4 * msgcnt);
 
@@ -1723,7 +1723,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	}
 
 	/* Compress the messages */
-	if (rkb->rkb_rk->rk_conf.producer.compression_codec) {
+	if (rkb->rkb_rk->rk_conf.compression_codec) {
 		int    siovlen = 1;
 		size_t coutlen;
 		int r;
@@ -1742,7 +1742,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		z_stream strm;
 		int i;
 
-		switch (rkb->rkb_rk->rk_conf.producer.compression_codec) {
+		switch (rkb->rkb_rk->rk_conf.compression_codec) {
 		case RD_KAFKA_COMPRESSION_NONE:
 			abort(); /* unreachable */
 			break;
@@ -1884,7 +1884,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		msghdr2->MessageSize = htonl(4+1+1+4+4 + coutlen);
 		msghdr2->MagicByte   = 0;
 		msghdr2->Attributes  = rkb->rkb_rk->rk_conf.
-			producer.compression_codec & 0x7;
+			compression_codec & 0x7;
 		msghdr2->Key_len = htonl(-1);
 		msghdr2->Value_len = htonl(coutlen);
 		msghdr2->Crc = rd_crc32_init();
@@ -1993,7 +1993,7 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 		rkb->rkb_pfd.events &= ~POLLOUT;
 
 	if (poll(&rkb->rkb_pfd, 1,
-		 rkb->rkb_rk->rk_conf.producer.buffering_max_ms) <= 0)
+		 rkb->rkb_rk->rk_conf.buffering_max_ms) <= 0)
 		return;
 	
 	if (rkb->rkb_pfd.revents & POLLIN)
@@ -2079,10 +2079,10 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 				 * our waiting to queue.buffering.max.ms
 				 * and batch.num.messages. */
 				if (rktp->rktp_ts_last_xmit +
-				    (rkb->rkb_rk->rk_conf.producer.
+				    (rkb->rkb_rk->rk_conf.
 				     buffering_max_ms * 1000) > now &&
 				    rktp->rktp_xmit_msgq.rkmq_msg_cnt <
-				    rkb->rkb_rk->rk_conf.producer.
+				    rkb->rkb_rk->rk_conf.
 				    batch_num_messages) {
 					/* Wait for more messages */
 					continue;

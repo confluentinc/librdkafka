@@ -28,6 +28,10 @@
 
 /**
  * Apache Kafka consumer & producer
+ *
+ * rdkafka.h contains the public API for librdkafka.
+ * The API isdocumented in this file as comments prefixing the function, type,
+ * enum, define, etc.
  */
 
 #pragma once
@@ -47,24 +51,29 @@
  */
 #define RD_KAFKA_VERSION  0x00080000
 
-#define RD_KAFKA_TOPIC_MAXLEN  256
 
+/**
+ * rd_kafka_t handle type
+ */
 typedef enum {
 	RD_KAFKA_PRODUCER,
 	RD_KAFKA_CONSUMER,
 } rd_kafka_type_t;
 
 
-/* Supported debug contexts (CSV "debug" configuration property) */
+/**
+ * Supported debug contexts (CSV "debug" configuration property)
+ */
 #define RD_KAFKA_DEBUG_CONTEXTS \
 	"all,generic,broker,topic,metadata,producer,queue,msg"
 
 
-
+/* Private types to provide ABI compatibility */
 typedef struct rd_kafka_s rd_kafka_t;
 typedef struct rd_kafka_topic_s rd_kafka_topic_t;
 typedef struct rd_kafka_conf_s rd_kafka_conf_t;
 typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
+
 
 /**
  * Kafka protocol error codes (version 0.8)
@@ -113,40 +122,14 @@ const char *rd_kafka_err2str (rd_kafka_t *rk, rd_kafka_resp_err_t err);
 
 
 /*******************************************************************
- * Partitioners provided by rdkafka                                *
+ *								   *
+ * Main configuration property interface			   *
+ *								   *
  *******************************************************************/
 
 /**
- * Random partitioner.
- * This is the default partitioner.
- *
- * Returns a random partition between 0 and 'partition_cnt'-1.
- *
+ * Configuration result type
  */
-int32_t rd_kafka_msg_partitioner_random (const void *key,
-					 size_t keylen,
-					 int32_t partition_cnt,
-					 void *opaque, void *msg_opaque);
-
-
-
-/**
- * The default configuration.
- * When providing your own configuration to the rd_kafka_*_new_*() calls
- * the rd_kafka_conf_t objects needs to be created with this function
- * which will set up the defaults.
- * I.e.:
- *
- *   rd_kafka_conf_t *myconf;
- *   myconf = rd_kafka_conf_new();
- *   rd_kafka_conf_set(myconf, "socket.timeout.ms", "600");
- *   
- *   rk = rd_kafka_new_consumer(, ... myconf);
- *
- * Please see rdkafka_defaultconf.c for the default settings.
- */
-rd_kafka_conf_t *rd_kafka_conf_new (void);
-
 typedef enum {
 	RD_KAFKA_CONF_UNKNOWN = -2, /* Unknown configuration name. */
 	RD_KAFKA_CONF_INVALID = -1, /* Invalid configuration value. */
@@ -155,8 +138,36 @@ typedef enum {
 
 
 /**
- * Sets a single rd_kafka_conf_t value by property name.
- * 'conf' must have been previously set up with rd_kafka_conf_new().
+ * Create configuration object.
+ * When providing your own configuration to the rd_kafka_*_new_*() calls
+ * the rd_kafka_conf_t objects needs to be created with this function
+ * which will set up the defaults.
+ * I.e.:
+ *
+ *   rd_kafka_conf_t *myconf;
+ *   rd_kafka_conf_res_t res;
+ *
+ *   myconf = rd_kafka_conf_new();
+ *   res = rd_kafka_conf_set(myconf, "socket.timeout.ms", "600",
+ *                           errstr, sizeof(errstr));
+ *   if (res != RD_KAFKA_CONF_OK)
+ *      die("%s\n", errstr);
+ *   
+ *   rk = rd_kafka_new(..., myconf);
+ *
+ * Please see CONFIGURATION.md for the default settings or use
+ * `rd_kafka_conf_properties_show()` to provide the information at runtime.
+ *
+ * The properties are identical to the Apache Kafka configuration properties
+ * whenever possible.
+ */
+rd_kafka_conf_t *rd_kafka_conf_new (void);
+
+
+
+/**
+ * Sets a configuration property.
+ * 'conf' must have been previously created with rd_kafka_conf_new().
  *
  * Returns rd_kafka_conf_res_t to indicate success or failure.
  * In case of failure 'errstr' is updated to contain a human readable
@@ -191,29 +202,25 @@ void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 
 
 /**
- * Sets the application's opaque pointer that will be passed to all callbacks
- * as the 'opaque' argument.
- *
- * FIXME: exception consume_callback
+ * Sets the application's opaque pointer that will be passed to `dr_cb`
+ * and `error_cb_` callbacks as the 'opaque' argument.
  */
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque);
 
 
-
 /**
- * Consumer:
- * Set consume callback in provided conf object.
+ * Prints a table to 'fp' of all supported configuration properties,
+ * their default values as well as a description.
  */
-void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
-				   void (*consume_cb) (rd_kafka_t *rk,
-						       rd_kafka_topic_t *rkt,
-						       int32_t partition,
-						       void *payload,
-						       size_t len,
-						       void *key,
-						       size_t key_len,
-						       int64_t offset,
-						       void *opaque));
+void rd_kafka_conf_properties_show (FILE *fp);
+
+
+
+/*******************************************************************
+ *								   *
+ * Topic configuration property interface			   *
+ *								   *
+ *******************************************************************/
 
 /**
  * Create topic configuration object
@@ -225,7 +232,7 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_new (void);
 /**
  * Sets a single rd_kafka_topic_conf_t value by property name.
  * 'topic_conf' should have been previously set up
- *  with rd_kafka_topic_conf_new().
+ *  with `rd_kafka_topic_conf_new()`.
  *
  * Returns rd_kafka_conf_res_t to indicate success or failure.
  */
@@ -234,10 +241,65 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
 					     const char *value,
 					     char *errstr, size_t errstr_size);
 
+/**
+ * Sets the application's opaque pointer that will be passed to all topic
+ * callbacks as the 'rkt_opaque' argument.
+ */
+void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *conf, void *opaque);
 
 
+/**
+ * Producer:
+ * Set partitioner callback in provided topic conf object.
+ *
+ * The partitioner may be called in any thread at any time,
+ * it may be called multiple times for the same message/key.
+ *
+ * Partitioner function constraints:
+ *    - MUST NOT call any rd_kafka_*() functions except:
+ *        rd_kafka_topic_partition_available()
+ *    - MUST NOT block or execute for prolonged periods of time.
+ *    - MUST return a value between 0 and partition_cnt-1, or the
+ *      special RD_KAFKA_PARTITION_UA value if partitioning
+ *      could not be performed.
+ */
+void
+rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
+					int32_t (*partitioner) (
+						const rd_kafka_topic_t *rkt,
+						const void *keydata,
+						size_t keylen,
+						int32_t partition_cnt,
+						void *rkt_opaque,
+						void *msg_opaque));
+
+/**
+ * Check if partition is available (has a leader broker).
+ *
+ * Returns 1 if the partition is available, else 0.
+ *
+ * NOTE: This function must only be called from inside a partitioner function.
+ */
+int rd_kafka_topic_partition_available (const rd_kafka_topic_t *rkt,
+					int32_t partition);
 
 
+/*******************************************************************
+ *								   *
+ * Partitioners provided by rdkafka                                *
+ *								   *
+ *******************************************************************/
+
+/**
+ * Random partitioner.
+ * This is the default partitioner.
+ *
+ * Returns a random partition between 0 and 'partition_cnt'-1.
+ */
+int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
+					 const void *key, size_t keylen,
+					 int32_t partition_cnt,
+					 void *opaque, void *msg_opaque);
 
 
 

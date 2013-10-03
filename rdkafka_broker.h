@@ -38,3 +38,6 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 
 void rd_kafka_topic_leader_query (rd_kafka_t *rk, rd_kafka_topic_t *rkt);
 void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb);
+
+void rd_kafka_dr_msgq (rd_kafka_t *rk,
+		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);

@@ -68,14 +68,14 @@ int main (int argc, char **argv) {
 	for (i = 0 ; i < NUM_ITER ; i++) {
 		rd_kafka_t *rk;
 		rd_kafka_topic_t *rkt;
-		rd_kafka_conf_t conf;
-		rd_kafka_topic_conf_t topic_conf;
+		rd_kafka_conf_t *conf;
+		rd_kafka_topic_conf_t *topic_conf;
 		char errstr[512];
 		char msg[128];
 
 		test_conf_init(&conf, &topic_conf, 30);
 
-		rk = rd_kafka_new(RD_KAFKA_PRODUCER, &conf,
+		rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
 				  errstr, sizeof(errstr));
 		if (!rk)
 			TEST_FAIL("Failed to create rdkafka instance #%i: %s\n",
@@ -83,7 +83,7 @@ int main (int argc, char **argv) {
 
 		TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
-		rkt = rd_kafka_topic_new(rk, topic, &topic_conf);
+		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 		if (!rkt)
 			TEST_FAIL("Failed to create topic for "
 				  "rdkafka instance #%i: %s\n",

@@ -26,5 +26,7 @@
 
 #define TEST_SAY(what...) fprintf(stderr, what)
 
-void test_conf_init (rd_kafka_conf_t *conf, rd_kafka_topic_conf_t *topic_conf,
+void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		     int timeout);
+
+

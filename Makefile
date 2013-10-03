@@ -33,7 +33,7 @@ LDFLAGS+=-g -fPIC
 
 all: libs
 
-libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a
+libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a CONFIGURATION.md
 
 %.o: %.c
 	$(CC) -MD -MP $(CFLAGS) -c $<
@@ -52,6 +52,13 @@ $(LIBNAME).so.$(LIBVER): $(OBJS)
 
 $(LIBNAME).a:	$(OBJS)
 	$(AR) rcs $@ $(OBJS)
+
+
+CONFIGURATION.md: rdkafka.h examples
+	examples/rdkafka_performance -X list > CONFIGURATION.md.tmp
+	cmp CONFIGURATION.md CONFIGURATION.md.tmp || \
+		mv CONFIGURATION.md.tmp CONFIGURATION.md
+	rm -f CONFIGURATION.md.tmp
 
 examples: .PHONY
 	make -C $@

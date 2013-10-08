@@ -110,9 +110,8 @@ int main (int argc, char **argv) {
 
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
-		TEST_FAIL("Failed to create topic for "
-			  "rdkafka instance #%i: %s\n",
-			  i, strerror(errno));
+		TEST_FAIL("Failed to create topic: %s\n",
+			  strerror(errno));
 
 	/* Produce a message */
 	for (i = 0 ; i < msgcnt ; i++) {

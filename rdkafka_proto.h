@@ -78,17 +78,25 @@ typedef struct rd_kafkap_str_s {
 	char    str[0]; /* allocated dynamically */
 } RD_PACKED rd_kafkap_str_t;
 
-#define RD_KAFKAP_KEY_LEN_NULL -1
+#define RD_KAFKAP_STR_LEN_NULL -1
 /* Returns the actual size of a kafka protocol string representation. */
 #define RD_KAFKAP_STR_SIZE(kstr) (int16_t)(sizeof((kstr)->len) +	\
 					   (ntohs((kstr)->len) ==	\
-					    RD_KAFKAP_KEY_LEN_NULL ?	\
+					    RD_KAFKAP_STR_LEN_NULL ?	\
 					    0 : ntohs((kstr)->len)))
+/* Returns the length of the string of a kafka protocol string representation */
+#define RD_KAFKAP_STR_LEN(kstr) (int)((ntohs((kstr)->len) ==		\
+				       RD_KAFKAP_STR_LEN_NULL ?		\
+				       0 : ntohs((kstr)->len)))
+
 
 /* Macro suitable for "%.*s" printing. */
 #define RD_KAFKAP_STR_PR(kstr)  \
-	(ntohs((kstr)->len) == RD_KAFKAP_KEY_LEN_NULL ?	\
+	(ntohs((kstr)->len) == RD_KAFKAP_STR_LEN_NULL ?	\
 	 0 : (int)ntohs((kstr)->len)), (kstr)->str
+
+#define RD_KAFKAP_STR_IS_NULL(kstr) \
+	(ntohs((kstr)->len) == RD_KAFKAP_STR_LEN_NULL)
 
 static inline int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
 				     const rd_kafkap_str_t *b) RD_UNUSED;
@@ -129,7 +137,7 @@ static inline rd_kafkap_str_t *rd_kafkap_str_new (const char *str) {
 		kstr->len = ntohs(len);
 		memcpy(kstr->str, str, len+1);
 	} else
-		kstr->len = ntohs(RD_KAFKAP_KEY_LEN_NULL);
+		kstr->len = ntohs(RD_KAFKAP_STR_LEN_NULL);
 
 	return kstr;
 }
@@ -152,12 +160,20 @@ typedef struct rd_kafkap_bytes_s {
 	char    data[0]; /* allocated dynamically */
 } RD_PACKED rd_kafkap_bytes_t;
 
-#define RD_KAFKAP_KEY_LEN_NULL -1
+#define RD_KAFKAP_BYTES_LEN_NULL -1
 /* Returns the actual size of a kafka protocol bytes representation. */
 #define RD_KAFKAP_BYTES_SIZE(kbytes) (int32_t)(sizeof((kbytes)->len) +	\
 					       (ntohl((kbytes)->len) ==	\
-						RD_KAFKAP_KEY_LEN_NULL ? \
+						RD_KAFKAP_BYTES_LEN_NULL ? \
 						0 : ntohl((kbytes)->len)))
+/* Returns the length of the string of a kafka protocol bytes representation */
+#define RD_KAFKAP_BYTES_LEN(kbytes) (int32_t)((ntohl((kbytes)->len) ==	\
+					       RD_KAFKAP_BYTES_LEN_NULL ? \
+					       0 : ntohl((kbytes)->len)))
+
+#define RD_KAFKAP_BYTES_IS_NULL(kbytes) \
+	(ntohs((kbytes)->len) == RD_KAFKAP_STR_LEN_NULL)
+
 
 static inline int rd_kafkap_bytes_cmp (const rd_kafkap_bytes_t *a,
 				       const rd_kafkap_bytes_t *b) RD_UNUSED;
@@ -191,10 +207,18 @@ static inline rd_kafkap_bytes_t *rd_kafkap_bytes_new (const void *data,
 		kbytes->len = ntohl(datalen);
 		memcpy(kbytes->data, data, datalen);
 	} else
-		kbytes->len = ntohl(RD_KAFKAP_KEY_LEN_NULL);
+		kbytes->len = ntohl(RD_KAFKAP_BYTES_LEN_NULL);
 	
 	return kbytes;
 }
 
 #define rd_kafkap_bytes_destroy(kbytes) free(kbytes)
 
+
+
+struct rd_kafkap_FetchRequest {
+	int32_t ReplicaId;
+	int32_t MaxWaitTime;
+	int32_t MinBytes;
+	int32_t TopicArrayCnt;
+} RD_PACKED;

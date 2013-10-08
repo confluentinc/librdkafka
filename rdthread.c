@@ -32,7 +32,9 @@
 #include "rdevent.h"
 #include "rdlog.h"
 
+#ifdef __linux__
 #include <sys/prctl.h>
+#endif
 #include <stdarg.h>
 
 rd_thread_t *rd_mainthread;

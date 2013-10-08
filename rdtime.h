@@ -62,7 +62,6 @@ static inline rd_ts_t rd_clock (void) {
 	/* No monotonic clock on Darwin */
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	TIMEVAL_TO_TIMESPEC(&tv, &ts);
 	return ((rd_ts_t)tv.tv_sec * 1000000LLU) + (rd_ts_t)tv.tv_usec;
 #else
 	struct timespec ts;

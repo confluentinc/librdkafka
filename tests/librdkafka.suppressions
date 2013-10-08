@@ -1,0 +1,52 @@
+# Valgrind suppression file for librdkafka
+{
+   allocate_tls_despite_detached_1
+   Memcheck:Leak
+   fun:calloc
+   fun:_dl_allocate_tls
+   fun:pthread_create@@GLIBC_2.2.5
+   fun:rd_kafka_broker_add
+}
+{
+   libc_gethostbyname_1
+   Helgrind:Race
+   fun:_nss_files_gethostbyname2_r
+   fun:gethostbyname2_r@@GLIBC_2.2.5
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+}
+{
+   errno_tls_read_1
+   Helgrind:Race
+   fun:rd_kafka_broker_fail
+   fun:rd_kafka_broker_thread_main
+   obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+{
+   rkb_fields_cleared_in_caller_thread_1
+   drd:ConflictingAccess
+   fun:connect
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+{
+   rkb_fields_cleared_in_caller_thread_2
+   drd:ConflictingAccess
+   fun:sendmsg
+   fun:rd_kafka_broker_send
+   fun:rd_kafka_send
+   fun:rd_kafka_broker_io_serve
+   fun:rd_kafka_broker_serve
+   fun:rd_kafka_broker_thread_main
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+

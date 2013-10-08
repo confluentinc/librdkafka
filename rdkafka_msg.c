@@ -65,7 +65,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	
 	assert(len > 0);
 	if (unlikely(rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
-		     rkt->rkt_rk->rk_conf.producer.max_messages)) {
+		     rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
 		rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
 		errno = ENOBUFS;
 		return -1;
@@ -99,13 +99,15 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	}
 
 
-	rd_kafka_msg_partitioner(rkt, NULL, rkm);
-
-	return 0;
+	return rd_kafka_msg_partitioner(rkt, NULL, rkm);
 }
 
 
 
+/**
+ * Scan 'rkmq' for messages that have timed out and remove them from
+ * 'rkmq' and add to 'timedout'.
+ */
 int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_kafka_msgq_t *timedout,
 			    rd_ts_t now) {
@@ -118,7 +120,6 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			break;
 
 		rd_kafka_msgq_deq(rkmq, rkm, 1);
-
 		rd_kafka_msgq_enq(timedout, rkm);
 	}
 
@@ -129,12 +130,16 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 
 
 
-int32_t rd_kafka_msg_partitioner_random (const void *key,
-					 size_t keylen,
+int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
+					 const void *key, size_t keylen,
 					 int32_t partition_cnt,
 					 void *rkt_opaque,
 					 void *msg_opaque) {
-	return rd_jitter(0, partition_cnt-1);
+	int32_t p = rd_jitter(0, partition_cnt-1);
+	if (unlikely(!rd_kafka_topic_partition_available(rkt, p)))
+		return rd_jitter(0, partition_cnt-1);
+	else
+		return p;
 }
 
 /**
@@ -144,6 +149,7 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
 			      rd_kafka_toppar_t *rktp_curr,
 			      rd_kafka_msg_t *rkm) {
 	int32_t partition;
+	rd_kafka_toppar_t *rktp_new;
 
 	rd_kafka_topic_rdlock(rkt);
 
@@ -153,11 +159,14 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
 			     RD_KAFKAP_STR_PR(rkt->rkt_topic));
 		partition = RD_KAFKA_PARTITION_UA;
 	} else if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
-		partition = rkt->rkt_conf.partitioner(rkm->rkm_key->data,
-						      ntohl(rkm->rkm_key->len),
-						      rkt->rkt_partition_cnt,
-						      rkt->rkt_conf.opaque,
-						      rkm->rkm_opaque);
+		partition =
+			rkt->rkt_conf.partitioner(rkt,
+						  rkm->rkm_key->data,
+						  RD_KAFKAP_BYTES_LEN(rkm->
+								      rkm_key),
+						  rkt->rkt_partition_cnt,
+						  rkt->rkt_conf.opaque,
+						  rkm->rkm_opaque);
 	else /* Partition specified by the application */
 		partition = rkm->rkm_partition;
 
@@ -190,11 +199,13 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
 		rd_kafka_toppar_deq_msg(rktp_curr, rkm);
 	}
 
-	if (unlikely(partition == RD_KAFKA_PARTITION_UA))
-		rd_kafka_toppar_enq_msg(rkt->rkt_ua, rkm);
-	else
-		rd_kafka_toppar_enq_msg(rkt->rkt_p[partition], rkm);
+	if (likely((rktp_new = rd_kafka_toppar_get(rkt, partition, 1)) != NULL))
+		rd_kafka_toppar_enq_msg(rktp_new, rkm);
+
 	rd_kafka_topic_unlock(rkt);
+
+	if (rktp_new)
+		rd_kafka_toppar_destroy(rktp_new); /* from _get() */
 
 	return 0;
 }

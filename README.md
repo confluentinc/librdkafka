@@ -7,22 +7,27 @@ Copyright (c) 2012-2013, [Magnus Edenhill](http://www.edenhill.se/).
 
 **librdkafka** is a C library implementation of the
 [Apache Kafka](http://kafka.apache.org/) protocol, containing both
-Producer and Consumer support. It was designed with high performance
-(current figures around 150000 msgs/second) and message delivery
-reliability in mind.
+Producer and Consumer support. It was designed with message delivery reliability
+and high performance in mind, current figures exceed 800000 msgs/second for
+the producer and 3 million msgs/second for the consumer.
 
 **librdkafka** is licensed under the 2-clause BSD license.
+
+For an introduction to the performance and usage of librdkafka, see
+[INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md)
+
 
 
 **Apache Kafka 0.8 support:**
 
   * Branch: master
   * Producer: supported
-  * Consumer: not yet implemented
-  * Compression: work in progress
-  * Debian package: [work in progress by paravoid](https://github.com/paravoid/librdkafka/tree/debian)
+  * Consumer: supported
+  * Compression: snappy and gzip
+  * Debian package: work in progress (separate "debian" branch)
   * ZooKeeper: not supported
   * API: not backwards compatible
+  * Tests: Regression tests in `tests/` directory.
   * Status: Testing, APIs subject to change.
 
 
@@ -49,10 +54,12 @@ reliability in mind.
 
 
 
-**Applications using librdkafka:**
+#Users of librdkafka#
 
-  * [Wikimedia's varnishkafka](https://github.com/wikimedia/operations-software-varnish-varnishkafka)
-  * *Let me know if you are using librdkafka*
+  * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka)
+  * [redBorder](http://www.redborder.net)
+  * [Headweb](http://www.headweb.com/)
+  * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
 
 
@@ -76,74 +83,7 @@ reliability in mind.
 
 ### Usage in code
 
-See `examples/rdkafka_performance.c` for an example producer
-
-
-      #include <librdkafka/rdkafka.h>
-
-      ..
-
-      rd_kafka_t *rk;
-      rd_kafka_conf_t conf;
-      rd_kafka_topic_t *rkt;
-      rd_kafka_topic_conf_t topic_conf;
-      char errstr[512];
-
-      /* Base our Kafka configuration on the default configuration */
-      rd_kafka_defaultconf_set(&conf);
-      conf.error_cb       = error_cb;
-      conf.producer.dr_cb = msg_delivered_cb;
-
-      if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, &conf,
-                              errstr, sizeof(errstr)))) {
-            printf("Kafka initialization failed: %s\n", errstr);
-            exit(1);
-      }
-
-      /* Base our topic configuration on the default topic configuration */
-      rd_kafka_topic_defaultconf_set(&topic_conf);
-      topic_conf.required_acks      = 2;
-      topic_conf.message_timeout_ms = 1000*5*60; /* 5 minutes */
-
-      /* Create local handle for topic "testtopic" */
-      if (!(rkt = rd_kafka_topic_new(rk, "testtopic", &topic_conf))) {
-       	    printf("Failed to add topic: %s\n", strerror(errno));
-	    exit(1);
-      }
-
-      /* Add list of initial brokers. All brokers will eventually be
-       * discovered by quering these brokers for the full list of brokers. */
-      if (!rd_kafka_brokers_add(rk, "localhost,remotehost1,remotehost2:9099")) {
-            printf("No valid brokers specified\n");
-            exit(1);
-      }
-
-      ...
-
-      /* Produce message */
-      if (rd_kafka_produce(rkt, RD_KAFKA_PARTITION_UA /* random partition */,
-                           RD_KAFKA_MSG_F_COPY,
-                           mydata, mydata_len,
-                           mykey, mykey_len,
-                           per_message_opaque) == -1) {
-            /* Try again in a short while if queue is full, or drop,
-	     * decision is left to the application. /
-            if (errno == ENOBUFS)
-               ... retry message later ...
-      }
-
- 
-      ...
-
-      /* Serve kafka events (error and delivery report callbacks) */
-      rd_kafka_poll(rk, 1000/*ms*/);
-      
-      ...
-
-      /* Decommission kafka handle */
-      rd_kafka_destroy(rk);
-
-    
+See [examples/rdkafka_example.c](https://github.com/edenhill/librdkafka/blob/master/examples/rdkafka_example.c) for an example producer and consumer.
 
 Link your program with `-lrdkafka -lz -lpthread -lrt`.
 
@@ -152,8 +92,33 @@ Link your program with `-lrdkafka -lz -lpthread -lrt`.
 
 The API is documented in `rdkafka.h`
 
+Configuration properties are documented in
+[CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+
+For a librdkafka introduction, see
+[INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md)
+
+
 ## Examples
 
 See the `examples/`sub-directory.
 
 
+## Tests
+
+See the `tests/`sub-directory.
+
+
+## Support
+
+File bug reports, feature requests and questions using
+[GitHub Issues](https://github.com/edenhill/librdkafka/issues)
+
+
+Questions and discussions are also welcome on irc.freenode.org, #kafka,
+nickname Snaps.
+
+
+### Commerical support
+
+Commercial support is available from [Edenhill services](http://www.edenhill.se)

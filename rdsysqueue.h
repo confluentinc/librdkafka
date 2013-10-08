@@ -125,6 +125,12 @@
         (*(((struct headname *)((elm)->field.tqe_prev))->tqh_last))
 #endif
 
+#ifdef TAILQ_FOREACH_SAFE
+#ifdef __APPLE__
+/* Apple's .._SAFE macro has the temporary variable at the end. */
+#undef TAILQ_FOREACH_SAFE
+#endif
+#endif
 
 #ifndef TAILQ_FOREACH_SAFE
 /*

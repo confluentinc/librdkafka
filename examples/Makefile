@@ -1,12 +1,13 @@
 EXAMPLES ?= rdkafka_example rdkafka_performance
 CC ?= cc
-CFLAGS += -g -rdynamic
 CXX ?= g++
-CFLAGS += -g
-CFLAGS += -Wall -Werror -Wfloat-equal -Wpointer-arith -O2 -I../
+CFLAGS += -g -Wall -Werror -Wfloat-equal -Wpointer-arith -O2 -I../
 CXXFLAGS += $(CFLAGS)
 LDFLAGS +=  ../librdkafka.a
-LDFLAGS += -lpthread -lrt -lz
+LDFLAGS += -lpthread -lz
+ifeq ($(shell uname -s), Linux)
+	LDFLAGS += -lrt
+endif
 
 # Profiling
 #CFLAGS += -O0 -pg

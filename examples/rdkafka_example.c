@@ -38,6 +38,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <syslog.h>
+#include <sys/time.h>
+#include <errno.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
@@ -46,6 +48,7 @@
 
 static int run = 1;
 static rd_kafka_t *rk;
+static int exit_eof = 0;
 
 static void stop (int sig) {
 	run = 0;
@@ -53,7 +56,6 @@ static void stop (int sig) {
 }
 
 
-#if 0
 static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 	const char *p = (const char *)ptr;
 	int of = 0;
@@ -79,14 +81,16 @@ static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 			of, hexen, charen);
 	}
 }
-#endif
 
 /**
  * Kafka logger callback (optional)
  */
 static void logger (const rd_kafka_t *rk, int level,
 		    const char *fac, const char *buf) {
-	fprintf(stderr, "RDKAFKA-%i-%s: %s: %s\n",
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	fprintf(stderr, "%u.%03u RDKAFKA-%i-%s: %s: %s\n",
+		(int)tv.tv_sec, (int)(tv.tv_usec / 1000),
 		level, fac, rd_kafka_name(rk), buf);
 }
 
@@ -102,10 +106,46 @@ static void msg_delivered (rd_kafka_t *rk,
 
 	if (error_code)
 		printf("%% Message delivery failed: %s\n",
-		       rd_kafka_err2str(rk, error_code));
+		       rd_kafka_err2str(error_code));
 	else
 		printf("%% Message delivered (%zd bytes)\n", len);
 }
+
+
+static void msg_consume (rd_kafka_message_t *rkmessage,
+			 void *opaque) {
+	if (rkmessage->err) {
+		if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+			printf("%% Consumer reached end of %s [%"PRId32"] "
+			       "message queue at offset %"PRId64"\n",
+			       rd_kafka_topic_name(rkmessage->rkt),
+			       rkmessage->partition, rkmessage->offset);
+
+			if (exit_eof)
+				run = 0;
+
+			return;
+		}
+
+		printf("%% Consume error for topic \"%s\" [%"PRId32"] "
+		       "offset %"PRId64": %s\n",
+		       rd_kafka_topic_name(rkmessage->rkt),
+		       rkmessage->partition,
+		       rkmessage->offset,
+		       rd_kafka_message_errstr(rkmessage));
+		return;
+	}
+
+	printf("%% Message (offset %"PRId64", %zd bytes):\n",
+	       rkmessage->offset, rkmessage->len);
+
+	if (rkmessage->key_len)
+		hexdump(stdout, "Message Key",
+			rkmessage->key, rkmessage->key_len);
+
+	hexdump(stdout, "Message Payload", rkmessage->payload, rkmessage->len);
+}
+
 
 static void sig_usr1 (int sig) {
 	rd_kafka_dump(stdout, rk);
@@ -118,25 +158,19 @@ int main (int argc, char **argv) {
 	char *topic = NULL;
 	int partition = RD_KAFKA_PARTITION_UA;
 	int opt;
-	rd_kafka_conf_t conf;
-	rd_kafka_topic_conf_t topic_conf;
+	rd_kafka_conf_t *conf;
+	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
 	const char *debug = NULL;
+	int64_t start_offset = 0;
 
-	/* Kafka configuration
-	 * Base configuration on the default config. */
-	rd_kafka_defaultconf_set(&conf);
-	/* Set up a message delivery report callback.
-	 * It will be called once for each message, either on succesful
-	 * delivery to broker, or upon failure to deliver to broker. */
-	conf.producer.dr_cb = msg_delivered;
+	/* Kafka configuration */
+	conf = rd_kafka_conf_new();
 
-	/* Topic configuration
-	 * Base topic configuration on the default topic config. */
-	rd_kafka_topic_defaultconf_set(&topic_conf);
+	/* Topic configuration */
+	topic_conf = rd_kafka_topic_conf_new();
 
-
-	while ((opt = getopt(argc, argv, "PCt:p:b:d:")) != -1) {
+	while ((opt = getopt(argc, argv, "PCt:p:b:z:d:o:e")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -150,6 +184,21 @@ int main (int argc, char **argv) {
 			break;
 		case 'b':
 			brokers = optarg;
+			break;
+		case 'z':
+			if (rd_kafka_conf_set(conf, "compression.codec",
+					      optarg,
+					      errstr, sizeof(errstr)) !=
+			    RD_KAFKA_CONF_OK) {
+				fprintf(stderr, "%% %s\n", errstr);
+				exit(1);
+			}
+			break;
+		case 'o':
+			start_offset = strtoll(optarg, NULL, 10);
+			break;
+		case 'e':
+			exit_eof = 1;
 			break;
 		case 'd':
 			debug = optarg;
@@ -170,6 +219,11 @@ int main (int argc, char **argv) {
 			"  -t <topic>      Topic to fetch / produce\n"
 			"  -p <num>        Partition (random partitioner)\n"
 			"  -b <brokers>    Broker address (localhost:9092)\n"
+			"  -z <codec>      Enable compression:\n"
+			"                  none|gzip|snappy\n"
+			"  -o <offset>     Start offset (consumer)\n"
+			"  -e              Exit consumer when last message\n"
+			"                  in partition has been received.\n"
 			"  -d [facs..]     Enable debugging contexts:\n"
 			"                  %s\n"
 			"\n"
@@ -193,7 +247,7 @@ int main (int argc, char **argv) {
 	signal(SIGPIPE, SIG_IGN);
 
 	if (debug &&
-	    rd_kafka_conf_set(&conf, "debug", debug, errstr, sizeof(errstr)) !=
+	    rd_kafka_conf_set(conf, "debug", debug, errstr, sizeof(errstr)) !=
 	    RD_KAFKA_CONF_OK) {
 		printf("%% Debug configuration failed: %s: %s\n",
 		       errstr, debug);
@@ -207,9 +261,13 @@ int main (int argc, char **argv) {
 		char buf[2048];
 		int sendcnt = 0;
 
+		/* Set up a message delivery report callback.
+		 * It will be called once for each message, either on succesful
+		 * delivery to broker, or upon failure to deliver to broker. */
+		rd_kafka_conf_set_dr_cb(conf, msg_delivered);
 
 		/* Create Kafka handle */
-		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, &conf,
+		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
 					errstr, sizeof(errstr)))) {
 			fprintf(stderr,
 				"%% Failed to create new producer: %s\n",
@@ -217,17 +275,18 @@ int main (int argc, char **argv) {
 			exit(1);
 		}
 
+		/* Set logger */
 		rd_kafka_set_logger(rk, logger);
-		if (debug)
-			rd_kafka_set_log_level(rk, LOG_DEBUG);
+		rd_kafka_set_log_level(rk, LOG_DEBUG);
 
+		/* Add brokers */
 		if (rd_kafka_brokers_add(rk, brokers) == 0) {
 			fprintf(stderr, "%% No valid brokers specified\n");
 			exit(1);
 		}
 
 		/* Create topic */
-		rkt = rd_kafka_topic_new(rk, topic, &topic_conf);
+		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
 		fprintf(stderr, "%% Type stuff and hit enter to send\n");
 		while (run && fgets(buf, sizeof(buf), stdin)) {
@@ -266,71 +325,62 @@ int main (int argc, char **argv) {
 		/*
 		 * Consumer
 		 */
-#if 0 /* FIXME: Not implemented */
-		rd_kafka_op_t *rko;
-		/* Base our configuration on the default config. */
-		rd_kafka_conf_t conf = rd_kafka_defaultconf;
 
+		/* Create Kafka handle */
+		if (!(rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf,
+					errstr, sizeof(errstr)))) {
+			fprintf(stderr,
+				"%% Failed to create new producer: %s\n",
+				errstr);
+			exit(1);
+		}
 
-		/* The offset storage file is optional but its presence
-		 * avoids starting all over from offset 0 again when
-		 * the program restarts.
-		 * ZooKeeper functionality will be implemented in future
-		 * versions and then the offset will be stored there instead. */
-		conf.consumer.offset_file = "."; /* current directory */
+		/* Set logger */
+		rd_kafka_set_logger(rk, logger);
+		rd_kafka_set_log_level(rk, LOG_DEBUG);
 
-		/* Indicate to rdkafka that the application is responsible
-		 * for storing the offset. This allows the application to
-		 * succesfully handle a message before storing the offset.
-		 * If this flag is not set rdkafka will store the offset
-		 * just prior to returning the message from rd_kafka_consume().
-		 */
-		conf.flags |= RD_KAFKA_CONF_F_APP_OFFSET_STORE;
+		/* Add brokers */
+		if (rd_kafka_brokers_add(rk, brokers) == 0) {
+			fprintf(stderr, "%% No valid brokers specified\n");
+			exit(1);
+		}
 
+		/* Create topic */
+		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
-
-		/* Use the consumer convenience function
-		 * to create a Kafka handle. */
-		if (!(rk = rd_kafka_new_consumer(broker, topic,
-						 (uint32_t)partition,
-						 0, &conf))) {
-			perror("kafka_new_consumer");
+		/* Start consuming */
+		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
+			fprintf(stderr, "%% Failed to start consuming: %s\n",
+				strerror(errno));
 			exit(1);
 		}
 
 		while (run) {
-			/* Fetch an "op" which is one of:
-			 *  - a kafka message (if rko_len>0 && rko_err==0)
-			 *  - an error (if rko_err)
-			 */
-			if (!(rko = rd_kafka_consume(rk, 1000/*timeout ms*/)))
+			rd_kafka_message_t *rkmessage;
+
+			/* Consume single message.
+			 * See rdkafka_performance.c for high speed
+			 * consuming of messages. */
+			rkmessage = rd_kafka_consume(rkt, partition, 1000);
+			if (!rkmessage) /* timeout */
 				continue;
-			
-			if (rko->rko_err)
-				fprintf(stderr, "%% Error: %.*s\n",
-					rko->rko_len, rko->rko_payload);
-			else if (rko->rko_len) {
-				fprintf(stderr, "%% Message with "
-					"next-offset %"PRIu64" is %i bytes\n",
-					rko->rko_offset, rko->rko_len);
-				hexdump(stdout, "Message",
-					rko->rko_payload, rko->rko_len);
-			}
 
-			/* rko_offset contains the offset of the _next_
-			 * message. We store it when we're done processing
-			 * the current message. */
-			if (rko->rko_offset)
-				rd_kafka_offset_store(rk, rko->rko_offset);
+			msg_consume(rkmessage, NULL);
 
-			/* Destroy the op */
-			rd_kafka_op_destroy(rk, rko);
+			/* Return message to rdkafka */
+			rd_kafka_message_destroy(rkmessage);
 		}
 
-		/* Destroy the handle */
+		/* Stop consuming */
+		rd_kafka_consume_stop(rkt, partition);
+
+		rd_kafka_topic_destroy(rkt);
+
 		rd_kafka_destroy(rk);
-#endif
 	}
+
+	/* Let background threads clean up and terminate cleanly. */
+	rd_kafka_wait_destroyed(2000);
 
 	return 0;
 }

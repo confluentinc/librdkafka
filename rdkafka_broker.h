@@ -30,8 +30,14 @@
 
 extern const char *rd_kafka_broker_state_names[];
 
+#define rd_kafka_buf_keep(rkbuf) rd_atomic_add(&(rkbuf)->rkbuf_refcnt, 1)
+void rd_kafka_buf_destroy (rd_kafka_buf_t *rkbuf);
+
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 						   int32_t nodeid);
 
 void rd_kafka_topic_leader_query (rd_kafka_t *rk, rd_kafka_topic_t *rkt);
 void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb);
+
+void rd_kafka_dr_msgq (rd_kafka_t *rk,
+		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);

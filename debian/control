@@ -13,8 +13,8 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: library implementing the Apache Kafka protocol
  librdkafka is a C implementation of the Apache Kafka protocol. It currently
- implements the 0.8 version of the protocol and has support only for the
- producer side.
+ implements the 0.8 version of the protocol and can be used to develop both
+ Producers and Consumers.
  .
  More information about Apache Kafka can be found at http://kafka.apache.org/
 
@@ -24,8 +24,8 @@ Architecture: any
 Depends: librdkafka1 (= ${binary:Version}), ${misc:Depends}
 Description: library implementing the Apache Kafka protocol (development headers)
  librdkafka is a C implementation of the Apache Kafka protocol. It currently
- implements the 0.8 version of the protocol and has support only for the
- producer side.
+ implements the 0.8 version of the protocol and can be used to develop both
+ Producers and Consumers.
  .
  More information about Apache Kafka can be found at http://kafka.apache.org/
  .
@@ -36,10 +36,10 @@ Section: debug
 Priority: extra
 Architecture: any
 Depends: librdkafka1 (= ${binary:Version}), ${misc:Depends}
-Description: library implementing the Apache Kafka protocol (development headers)
+Description: library implementing the Apache Kafka protocol (debugging symbols)
  librdkafka is a C implementation of the Apache Kafka protocol. It currently
- implements the 0.8 version of the protocol and has support only for the
- producer side.
+ implements the 0.8 version of the protocol and can be used to develop both
+ Producers and Consumers.
  .
  More information about Apache Kafka can be found at http://kafka.apache.org/
  .

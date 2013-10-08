@@ -30,5 +30,5 @@ Property                                 |       Default | Description
 -----------------------------------------|--------------:|--------------------------
 request.required.acks                    |             1 | This field indicates how many acknowledgements the leader broker must receive from ISR brokers before responding to the request: *0*=broker does not send any response, *1*=broker will wait until the data is written to local log before sending a response, *-1*=broker will block until message is committed by all in sync replicas (ISRs) before sending response. *>1*=for any number > 1 the broker will block waiting for this number of acknowledgements to be received (but the broker will never wait for more acknowledgements than there are ISRs).
 request.timeout.ms                       |          5000 | The ack timeout of the producer request in milliseconds. This value is only enforced by the broker and relies on `request.required.acks` being > 0.
-message.timeout.ms                       |        300000 | Local message timeout. This value is only enforced locally and limits the time a produced message waits for succesful delivery.
+message.timeout.ms                       |        300000 | Local message timeout. This value is only enforced locally and limits the time a produced message waits for successful delivery.
 

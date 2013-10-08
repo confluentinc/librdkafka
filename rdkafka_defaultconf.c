@@ -213,7 +213,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(message_timeout_ms),
 	  "Local message timeout. "
 	  "This value is only enforced locally and limits the time a "
-	  "produced message waits for succesful delivery.",
+	  "produced message waits for successful delivery.",
 	  1, 900*1000, 300*1000 },
 	
 

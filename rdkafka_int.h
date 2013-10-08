@@ -150,7 +150,7 @@ struct rd_kafka_conf_s {
 
 	/* Message delivery report callback.
 	 * Called once for each produced message, either on
-	 * succesful and acknowledged delivery to the broker in which
+	 * successful and acknowledged delivery to the broker in which
 	 * case 'err' is 0, or if the message could not be delivered
 	 * in which case 'err' is non-zero (use rd_kafka_err2str()
 	 * to obtain a human-readable error reason).

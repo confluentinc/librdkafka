@@ -157,7 +157,7 @@ int main (int argc, char **argv) {
 
 		/* Indicate to rdkafka that the application is responsible
 		 * for storing the offset. This allows the application to
-		 * succesfully handle a message before storing the offset.
+		 * successfully handle a message before storing the offset.
 		 * If this flag is not set rdkafka will store the offset
 		 * just prior to returning the message from rd_kafka_consume().
 		 */

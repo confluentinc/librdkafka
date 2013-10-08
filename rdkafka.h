@@ -669,7 +669,7 @@ int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms);
  * 'brokerlist' is a ,-separated list of brokers in the format:
  *   <host1>[:<port1>],<host2>[:<port2>]...
  *
- * Returns the number of brokers succesfully added.
+ * Returns the number of brokers successfully added.
  *
  * NOTE: Brokers may also be defined with the 'metadata.broker.list'
  *       configuration property.

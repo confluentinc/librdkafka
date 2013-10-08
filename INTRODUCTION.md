@@ -155,7 +155,7 @@ to report the status of message delivery:
 
   * If `error_code` is non-zero the message delivery failed and the error_code
     indicates the nature of the failure (`rd_kafka_resp_err_t` enum).
-  * If `error_code` is zero the message has been succesfully delivered.
+  * If `error_code` is zero the message has been successfully delivered.
 
 See Producer API chapter for more details on delivery report callback usage.
 

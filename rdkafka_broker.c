@@ -1530,7 +1530,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 	rd_kafka_dr_msgq(rkb->rkb_rk, &request->rkbuf_msgq, err);
 
 done:
-	rd_kafka_toppar_destroy(rktp); /* from send_toppar() */
+	rd_kafka_toppar_destroy(rktp); /* from produce_toppar() */
 
 	rd_kafka_buf_destroy(request);
 	if (reply)

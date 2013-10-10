@@ -413,6 +413,13 @@ The application should provide its own consumer group management until
 librdkafka adds support for it.
 
 
+### Topics
+
+#### Topic auto creation
+
+Topic auto creation is supported by librdkafka.
+The broker needs to be configured with "auto.create.topics.enable=true".
+
 
 ## Appendix
 

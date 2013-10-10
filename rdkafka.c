@@ -534,16 +534,16 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
  */
 static void *rd_kafka_thread_main (void *arg) {
 	rd_kafka_t *rk = arg;
-	rd_ts_t last_timeout_scan = rd_clock();
+	rd_ts_t last_topic_scan = rd_clock();
 
 	rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
 
 	while (likely(rk->rk_terminate == 0)) {
 		rd_ts_t now = rd_clock();
 
-		if (unlikely(last_timeout_scan + 1000000 <= now)) {
-			rd_kafka_topic_age_scan_all(rk, now);
-			last_timeout_scan = now;
+		if (unlikely(last_topic_scan + 1000000 <= now)) {
+			rd_kafka_topic_scan_all(rk, now);
+			last_topic_scan = now;
 		}
 
 		sleep(1);

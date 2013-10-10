@@ -876,7 +876,10 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	rd_kafka_topic_t *rkt;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
-		   "Request metadata: %s", reason ? : "");
+		   "Request metadata for %s: %s",
+		   only_rkt ? only_rkt->rkt_topic->str :
+		   (all_topics ? "all topics" : "locally known topics"),
+		   reason ? : "");
 
 	/* If called from other thread than the broker's own then post an
 	 * op for the broker's thread instead since all transmissions must
@@ -941,7 +944,7 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	of += 4;
 
 
-	if (!all_topics) {
+	if (only_rkt || !all_topics) {
 		/* Just our locally known topics */
 			
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
@@ -989,15 +992,19 @@ static rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
  * Trigger broker metadata query for topic leader.
  * 'rkt' may be NULL to query for all topics.
  */
-void rd_kafka_topic_leader_query (rd_kafka_t *rk, rd_kafka_topic_t *rkt) {
+void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+				   int do_rk_lock) {
 	rd_kafka_broker_t *rkb;
 
-	rd_kafka_lock(rk);
+	if (do_rk_lock)
+		rd_kafka_lock(rk);
 	if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP))) {
-		rd_kafka_unlock(rk);
+		if (do_rk_lock)
+			rd_kafka_unlock(rk);
 		return; /* No brokers are up */
 	}
-	rd_kafka_unlock(rk);
+	if (do_rk_lock)
+		rd_kafka_unlock(rk);
 
 	rd_kafka_broker_metadata_req(rkb, 0, rkt, "leader query");
 

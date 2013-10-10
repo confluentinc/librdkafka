@@ -74,4 +74,4 @@ int  rd_kafka_topic_partition_cnt_update (rd_kafka_t *rk,
 					  const char *topic,
 					  int32_t partition_cnt);
 
-int rd_kafka_topic_age_scan_all (rd_kafka_t *rk, rd_ts_t now);
+int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);

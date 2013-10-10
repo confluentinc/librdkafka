@@ -355,13 +355,19 @@ int main (int argc, char **argv) {
 			*val = '\0';
 			val++;
 
-			if (!strncmp(name, "topic.", strlen("topic."))) {
-				name += strlen("topic.");
+			res = RD_KAFKA_CONF_UNKNOWN;
+			/* Try "topic." prefixed properties on topic
+			 * conf first, and then fall through to global if
+			 * it didnt match a topic configuration property. */
+			if (!strncmp(name, "topic.", strlen("topic.")))
 				res = rd_kafka_topic_conf_set(topic_conf,
-							      name, val,
+							      name+
+							      strlen("topic"),
+							      val,
 							      errstr,
 							      sizeof(errstr));
-			} else
+
+			if (res == RD_KAFKA_CONF_UNKNOWN)
 				res = rd_kafka_conf_set(conf, name, val,
 							errstr, sizeof(errstr));
 

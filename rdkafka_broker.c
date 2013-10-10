@@ -896,9 +896,8 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 		   "Requesting metadata for %stopics",
 		   all_topics ? "all ": "known ");
 
-	if (all_topics) {
-		arrsize = 0;
 
+	if (!only_rkt) {
 		/* Push the next intervalled metadata refresh forward since
 		 * we are performing one now (which might be intervalled). */
 		if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0) {
@@ -916,7 +915,11 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 					 metadata_refresh_interval_ms * 1000);
 			}
 		}
+	}
 
+
+	if (all_topics) {
+		arrsize = 0;
 
 	} else {
 		arrsize = rkb->rkb_rk->rk_topic_cnt;

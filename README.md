@@ -28,6 +28,7 @@ For an introduction to the performance and usage of librdkafka, see
   * ZooKeeper: not supported
   * API: not backwards compatible
   * Tests: Regression tests in `tests/` directory.
+  * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
   * Status: Testing, APIs subject to change.
 
 
@@ -59,6 +60,7 @@ For an introduction to the performance and usage of librdkafka, see
   * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka)
   * [redBorder](http://www.redborder.net)
   * [Headweb](http://www.headweb.com/)
+  * [node-kafka](https://github.com/sutoiku/node-kafka)
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
 

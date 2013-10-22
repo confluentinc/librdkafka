@@ -12,6 +12,7 @@ topic.metadata.refresh.fast.interval.ms  |           250 | See `topic.metadata.r
 debug                                    |               | A comma-separated list of debug contexts to enable: all,generic,broker,topic,metadata,producer,queue,msg
 socket.timeout.ms                        |         60000 | Timeout for network requests.
 broker.address.ttl                       |        300000 | How long to cache the broker address resolving results.
+statistics.interval.ms                   |             0 | librdkafka statistics emit interval. The application also needs to register a stats callback using `rd_kafka_conf_set_stats_cb()`. The granularity is 1000ms.
 queued.min.messages                      |        100000 | Minimum number of messages that should to be available for consumption by application.
 fetch.wait.max.ms                        |           100 | Maximum time the broker may wait to fill the response with fetch.min.bytes.
 fetch.min.bytes                          |             1 | Minimum number of bytes the broker responds with. If fetch.wait.max.ms expires the accumulated data will be sent to the client regardless of this setting.

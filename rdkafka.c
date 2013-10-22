@@ -528,21 +528,216 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 }
 
 
+
+/* Stats buffer printf */
+#define _st_printf(fmt...) do {					\
+		ssize_t r;					\
+		ssize_t rem = size-of;				\
+		r = snprintf(buf+of, rem, fmt);			\
+		if (r > rem) {					\
+			size *= 2;				\
+			buf = realloc(buf, size);		\
+			r = snprintf(buf+of, size-of, fmt);	\
+		}						\
+		of += r;					\
+	} while (0)
+
+/**
+ * Emit stats for toppar
+ */
+static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
+					       int *ofp,
+					       rd_kafka_toppar_t *rktp,
+					       int first) {
+	char *buf = *bufp;
+	size_t size = *sizep;
+	int of = *ofp;
+
+	_st_printf("%s{ "
+		   "\"partition\":%"PRId32", "
+		   "\"leader\":%"PRId32", "
+		   "\"desired\":%s, "
+		   "\"unknown\":%s, "
+		   "\"msgq_cnt\":%i, "
+		   "\"msgq_bytes\":%"PRIu64", "
+		   "\"xmit_msgq_cnt\":%i, "
+		   "\"xmit_msgq_bytes\":%"PRIu64", "
+		   "\"fetchq_cnt\":%i, "
+		   "\"fetch_state\":\"%s\", "
+		   "\"query_offset\":%"PRId64", "
+		   "\"next_offset\":%"PRId64", "
+		   "\"app_offset\":%"PRId64", "
+		   "\"commited_offset\":%"PRId64", "
+		   "\"eof_offset\":%"PRId64", "
+		   "\"txmsgs\":%"PRIu64", "
+		   "\"txbytes\":%"PRIu64" "
+		   "} ",
+		   first ? "" : ", ",
+		   rktp->rktp_partition,
+		   rktp->rktp_leader ? rktp->rktp_leader->rkb_nodeid : -1,
+		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_DESIRED)?"true":"false",
+		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_UNKNOWN)?"true":"false",
+		   rktp->rktp_msgq.rkmq_msg_cnt,
+		   rktp->rktp_msgq.rkmq_msg_bytes,
+		   rktp->rktp_xmit_msgq.rkmq_msg_cnt,
+		   rktp->rktp_xmit_msgq.rkmq_msg_bytes,
+		   rktp->rktp_fetchq.rkq_qlen,
+		   rd_kafka_fetch_states[rktp->rktp_fetch_state],
+		   rktp->rktp_query_offset,
+		   rktp->rktp_next_offset,
+		   rktp->rktp_app_offset,
+		   rktp->rktp_commited_offset,
+		   rktp->rktp_eof_offset,
+		   rktp->rktp_c.tx_msgs,
+		   rktp->rktp_c.tx_bytes);
+
+	*bufp = buf;
+	*sizep = size;
+	*ofp = of;
+}
+
+/**
+ * Emit all statistics
+ */
+static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
+	char  *buf;
+	size_t size = 1024*rk->rk_refcnt;
+	int    of = 0;
+	rd_kafka_broker_t *rkb;
+	rd_kafka_topic_t *rkt;
+	rd_kafka_toppar_t *rktp;
+	rd_ts_t now;
+
+	buf = malloc(size);
+
+
+	rd_kafka_lock(rk);
+
+	now = rd_clock();
+	_st_printf("{ "
+		   "\"ts\":%"PRIu64", "
+		   "\"time\":%lli, "
+		   "\"replyq\":%i, "
+		   "\"brokers\":[ "/*open brokers*/,
+		   now,
+		   (signed long long)time(NULL),
+		   rk->rk_rep.rkq_qlen);
+
+
+	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+		rd_kafka_broker_lock(rkb);
+		_st_printf("%s{ "/*open broker*/
+			   "\"name\":\"%s\", "
+			   "\"nodeid\":%"PRId32", "
+			   "\"state\":\"%s\", "
+			   "\"outbuf_cnt\":%i, "
+			   "\"waitresp_cnt\":%i, "
+			   "\"tx\":%"PRIu64", "
+			   "\"txbytes\":%"PRIu64", "
+			   "\"txerrs\":%"PRIu64", "
+			   "\"txretries\":%"PRIu64", "
+			   "\"rx\":%"PRIu64", "
+			   "\"rxbytes\":%"PRIu64", "
+			   "\"rxerrs\":%"PRIu64", "
+			   "\"toppars\":[ "/*open toppars*/,
+			   rkb == TAILQ_FIRST(&rk->rk_brokers) ? "" : ", ",
+			   rkb->rkb_name,
+			   rkb->rkb_nodeid,
+			   rd_kafka_broker_state_names[rkb->rkb_state],
+			   rkb->rkb_outbufs.rkbq_cnt,
+			   rkb->rkb_waitresps.rkbq_cnt,
+			   rkb->rkb_c.tx,
+			   rkb->rkb_c.tx_bytes,
+			   rkb->rkb_c.tx_err,
+			   rkb->rkb_c.tx_retries,
+			   rkb->rkb_c.rx,
+			   rkb->rkb_c.rx_bytes,
+			   rkb->rkb_c.rx_err);
+
+		rd_kafka_broker_toppars_rdlock(rkb);
+		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
+			_st_printf("%s{ "
+				   "\"topic\":\"%.*s\", "
+				   "\"partition\":%"PRId32"} ",
+				   rktp==TAILQ_FIRST(&rkb->rkb_toppars)?"":", ",
+				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+				   rktp->rktp_partition);
+		}
+		rd_kafka_broker_toppars_unlock(rkb);
+
+		rd_kafka_broker_unlock(rkb);
+
+		_st_printf("] "/*close toppars*/
+			   "} "/*close broker*/);
+	}
+
+
+	_st_printf("], " /* close "brokers" array */
+		   "\"topics\":[ ");
+
+	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+		int i;
+
+		rd_kafka_topic_rdlock(rkt);
+		_st_printf("%s{ "
+			   "\"topic\":\"%.*s\", "
+			   "\"partitions\":[ " /*open partitions*/,
+			   rkt==TAILQ_FIRST(&rk->rk_topics)?"":", ",
+			   RD_KAFKAP_STR_PR(rkt->rkt_topic));
+
+		for (i = 0 ; i < rkt->rkt_partition_cnt ; i++)
+			rd_kafka_stats_emit_toppar(&buf, &size, &of,
+						   rkt->rkt_p[i],
+						   i == 0);
+
+		TAILQ_FOREACH(rktp, &rkt->rkt_desp, rktp_rktlink)
+			rd_kafka_stats_emit_toppar(&buf, &size, &of, rktp,
+						   i++ == 0);
+
+		if (rkt->rkt_ua)
+			rd_kafka_stats_emit_toppar(&buf, &size, &of,
+						   rkt->rkt_ua, i++ == 0);
+		rd_kafka_topic_unlock(rkt);
+
+		_st_printf("] "/*close partitions*/
+			   "} "/*close topic*/);
+
+	}
+
+	rd_kafka_unlock(rk);
+
+	_st_printf("] "/*close topics*/
+		   "}"/*close object*/);
+
+
+	/* Enqueue op for application */
+	rd_kafka_op_reply(rk, RD_KAFKA_OP_STATS, 0, buf, of);
+}
+
+
+
 /**
  * Main loop for Kafka handler thread.
  */
 static void *rd_kafka_thread_main (void *arg) {
 	rd_kafka_t *rk = arg;
 	rd_ts_t last_topic_scan = rd_clock();
+	rd_ts_t last_stats_emit = last_topic_scan;
 
 	rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
 
 	while (likely(rk->rk_terminate == 0)) {
 		rd_ts_t now = rd_clock();
 
-		if (unlikely(last_topic_scan + 1000000 <= now)) {
+		if (last_topic_scan + 1000000 <= now) {
 			rd_kafka_topic_scan_all(rk, now);
 			last_topic_scan = now;
+		}
+
+		if (now >
+		    last_stats_emit + (rk->rk_conf.stats_interval_ms*1000)) {
+			rd_kafka_stats_emit_all(rk);
+			last_stats_emit = now;
 		}
 
 		sleep(1);
@@ -977,6 +1172,14 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 			rd_kafka_dbg(rk, MSG, "POLL",
 				     "Now %i messages delivered to app", dcnt);
 						  
+		break;
+
+	case RD_KAFKA_OP_STATS:
+		/* Statistics */
+		if (rk->rk_conf.stats_cb &&
+		    rk->rk_conf.stats_cb(rk, rko->rko_json, rko->rko_json_len,
+					 rk->rk_conf.opaque) == 1)
+			rko->rko_json = NULL; /* Application wanted json ptr */
 		break;
 
 	default:

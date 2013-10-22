@@ -2851,10 +2851,11 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 
 			/* Skip this toppar until its state changes */
 			rd_rkb_dbg(rkb, TOPIC, "FETCH",
-				   "Skipping topic %s [%"PRId32"] in state %i",
+				   "Skipping topic %s [%"PRId32"] in state %s",
 				   rktp->rktp_rkt->rkt_topic->str,
 				   rktp->rktp_partition,
-				   rktp->rktp_fetch_state);
+				   rd_kafka_fetch_states[rktp->
+							 rktp_fetch_state]);
 			continue;
 		}
 

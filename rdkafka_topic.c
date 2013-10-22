@@ -35,6 +35,14 @@
 #include "rdsysqueue.h"
 #include "rdtime.h"
 
+
+const char *rd_kafka_fetch_states[] = {
+	"none",
+	"offset-query",
+	"offset-wait",
+	"active"
+};
+
 static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 					       int32_t partition) {
 	rd_kafka_toppar_t *rktp;

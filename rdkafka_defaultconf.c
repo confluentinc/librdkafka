@@ -126,7 +126,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(broker_addr_ttl),
 	  "How long to cache the broker address resolving results.",
 	  0, 86400*1000, 300*1000 },
-
+	{ _RK_GLOBAL, "statistics.interval.ms", _RK_C_INT,
+	  _RK(stats_interval_ms),
+	  "librdkafka statistics emit interval. The application also needs to "
+	  "register a stats callback using `rd_kafka_conf_set_stats_cb()`. "
+	  "The granularity is 1000ms.",
+	  0, 86400*1000, 0 },
 
 	/* Global consumer properties */
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
@@ -541,6 +546,16 @@ void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 						    void *opaque)) {
 	conf->error_cb = error_cb;
 }
+
+
+void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
+				 int (*stats_cb) (rd_kafka_t *rk,
+						  char *json,
+						  size_t json_len,
+						  void *opaque)) {
+	conf->stats_cb = stats_cb;
+}
+
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 	conf->opaque = opaque;

@@ -28,6 +28,8 @@
 
 #pragma once
 
+extern const char *rd_kafka_fetch_states[];
+
 void rd_kafka_toppar_destroy0 (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_insert_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);

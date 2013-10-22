@@ -203,6 +203,27 @@ void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 						    const char *reason,
 						    void *opaque));
 
+/**
+ * Set statistics callback in provided conf object.
+ * The statistics callback is called from `rd_kafka_poll()` every
+ * `statistics.interval.ms` (needs to be configured separately).
+ * Function arguments:
+ *   'rk' - Kafka handle
+ *   'json' - String containing the statistics data in JSON format
+ *   'json_len' - Length of 'json' string.
+ *   'opaque' - Application-provided opaque.
+ *
+ * If the application wishes to hold on to the 'json' pointer and free
+ * it at a later time it must return 1 from the `stats_cb`.
+ * If the application returns 0 from the `stats_cb` then librdkafka
+ * will immediately free the 'json' pointer.
+ */
+void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
+				 int (*stats_cb) (rd_kafka_t *rk,
+						  char *json,
+						  size_t json_len,
+						  void *opaque));
+
 
 /**
  * Sets the application's opaque pointer that will be passed to `dr_cb`

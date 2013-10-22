@@ -173,6 +173,13 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 
 }
 
+
+static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
+		     void *opaque) {
+	printf("%s\n", json);
+	return 0;
+}
+
 static void print_stats (int mode, int force_show, const char *compression) {
 	rd_ts_t now = rd_clock();
 	rd_ts_t t_total;
@@ -259,7 +266,7 @@ int main (int argc, char **argv) {
 
 	while ((opt =
 		getopt(argc, argv,
-		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:z:o:X:B:e")) != -1) {
+		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:z:o:X:B:eT:q")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -378,6 +385,17 @@ int main (int argc, char **argv) {
 		}
 		break;
 
+		case 'T':
+			if (rd_kafka_conf_set(conf, "statistics.interval.ms",
+					      optarg, errstr, sizeof(errstr)) !=
+			    RD_KAFKA_CONF_OK) {
+				fprintf(stderr, "%% %s\n", errstr);
+				exit(1);
+			}
+			rd_kafka_conf_set_stats_cb(conf, stats_cb);
+			break;
+
+		case 'q':
 		default:
 			goto usage;
 		}
@@ -417,6 +435,9 @@ int main (int argc, char **argv) {
 			"will be set on topic object.\n"
 			"               Use '-X list' to see the full list\n"
 			"               of supported properties.\n"
+			"  -T <intvl>   Enable statistics from librdkafka at "
+			"specified interval (ms)\n"
+			"  -q           Be more quiet\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  consumes messages and prints thruput\n"

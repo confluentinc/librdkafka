@@ -642,11 +642,11 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type);
 void rd_kafka_op_reply2 (rd_kafka_t *rk, rd_kafka_op_t *rko);
 void rd_kafka_op_reply0 (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			 rd_kafka_op_type_t type,
-			 rd_kafka_resp_err_t err, uint8_t compression,
+			 rd_kafka_resp_err_t err,
 			 void *payload, int len);
 void rd_kafka_op_reply (rd_kafka_t *rk,
 			rd_kafka_op_type_t type,
-			rd_kafka_resp_err_t err, uint8_t compression,
+			rd_kafka_resp_err_t err,
 			void *payload, int len);
 
 #define rd_kafka_keep(rk) rd_atomic_add(&(rk)->rk_refcnt, 1)

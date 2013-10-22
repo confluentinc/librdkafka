@@ -369,7 +369,7 @@ int rd_kafka_q_serve (rd_kafka_t *rk,
  */
 void rd_kafka_op_reply0 (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			 rd_kafka_op_type_t type,
-			 rd_kafka_resp_err_t err, uint8_t compression,
+			 rd_kafka_resp_err_t err,
 			 void *payload, int len) {
 
 	rko->rko_type        = type;
@@ -387,7 +387,7 @@ void rd_kafka_op_reply0 (rd_kafka_t *rk, rd_kafka_op_t *rko,
  */
 void rd_kafka_op_reply (rd_kafka_t *rk,
 			rd_kafka_op_type_t type,
-			rd_kafka_resp_err_t err, uint8_t compression,
+			rd_kafka_resp_err_t err,
 			void *payload, int len) {
 	rd_kafka_op_t *rko;
 
@@ -409,8 +409,7 @@ void rd_kafka_op_reply (rd_kafka_t *rk,
 		len = strlen(payload);
 	}
 
-	rd_kafka_op_reply0(rk, rko, type, err, compression,
-			   payload, len);
+	rd_kafka_op_reply0(rk, rko, type, err, payload, len);
 	rd_kafka_q_enq(&rk->rk_rep, rko);
 }
 

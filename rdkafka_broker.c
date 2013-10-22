@@ -333,7 +333,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 		/* Send ERR op back to application for processing. */
 		rd_kafka_op_reply(rkb->rkb_rk, RD_KAFKA_OP_ERR,
-				  RD_KAFKA_RESP_ERR__FAIL, 0,
+				  RD_KAFKA_RESP_ERR__FAIL,
 				  strdup(rkb->rkb_err.msg),
 				  strlen(rkb->rkb_err.msg));
 	}
@@ -427,7 +427,7 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 
 			/* Send ERR op back to application for processing. */
 			rd_kafka_op_reply(rkb->rkb_rk, RD_KAFKA_OP_ERR,
-					  RD_KAFKA_RESP_ERR__RESOLVE, 0,
+					  RD_KAFKA_RESP_ERR__RESOLVE,
 					  strdup(tmp), strlen(tmp));
 
 			rd_rkb_log(rkb, LOG_ERR, "GETADDR", "%s", tmp);
@@ -3101,7 +3101,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 		/* Send ERR op back to application for processing. */
 		rd_kafka_op_reply(rk, RD_KAFKA_OP_ERR,
-				  RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE, 0,
+				  RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
 				  strdup(tmp), strlen(tmp));
 		free(rkb);
 		rd_kafka_destroy(rk);

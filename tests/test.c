@@ -34,6 +34,8 @@
 #include "rdkafka.h"
 
 
+int test_level = 2;
+
 static void sig_alarm (int sig) {
 	TEST_FAIL("Test timed out");
 }
@@ -55,10 +57,14 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 	int line = 0;
 	const char *test_conf = getenv("RDKAFKA_TEST_CONF") ? : "test.conf";
 	char errstr[512];
+	char *tmp;
 
 	/* Limit the test run time. */
 	alarm(timeout);
 	signal(SIGALRM, sig_alarm);
+
+	if ((tmp = getenv("TEST_LEVEL")))
+		test_level = atoi(tmp);
 
 	*conf = rd_kafka_conf_new();
 	*topic_conf = rd_kafka_topic_conf_new();

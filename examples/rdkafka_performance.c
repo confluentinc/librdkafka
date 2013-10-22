@@ -46,6 +46,7 @@
 #include "rdtime.h"
 
 static int run = 1;
+static int forever = 1;
 static int dispintvl = 1000;
 static int do_seq = 0;
 static int exit_after = 0;
@@ -116,8 +117,9 @@ static void msg_delivered (rd_kafka_t *rk,
 		last = now;
 	}
 
-	if (msgs_wait_cnt == 0) {
-		printf("All messages delivered!\n");
+	if (msgs_wait_cnt == 0 && !forever) {
+		if (!quiet)
+			printf("All messages delivered!\n");
 		t_end = rd_clock();
 		run = 0;
 	}
@@ -478,6 +480,9 @@ int main (int argc, char **argv) {
 	 * calling program. */
 	signal(SIGPIPE, SIG_IGN);
 
+	if (msgcnt != -1)
+		forever = 0;
+
 	if (mode == 'P') {
 		/*
 		 * Producer
@@ -536,8 +541,6 @@ int main (int argc, char **argv) {
 
 		cnt.t_start = rd_clock();
 
-		msgs_wait_cnt = msgcnt;
-		
 		while (run && (msgcnt == -1 || cnt.msgs < msgcnt)) {
 			/* Send/Produce message. */
 
@@ -554,7 +557,8 @@ int main (int argc, char **argv) {
 				pbuf = sbuf;
 
 			cnt.tx++;
-			while (rd_kafka_produce(rkt, partition,
+			while (run &&
+			       rd_kafka_produce(rkt, partition,
 						sendflags, pbuf, msgsize,
 						key, keylen,
 						(void *)cnt.msgs) == -1) {
@@ -577,6 +581,7 @@ int main (int argc, char **argv) {
 				rd_kafka_poll(rk, 10);
 			}
 
+			msgs_wait_cnt++;
 			cnt.msgs++;
 			cnt.bytes += msgsize;
 
@@ -587,6 +592,7 @@ int main (int argc, char **argv) {
 			
 		}
 
+		forever = 0;
 		printf("All messages produced, "
 		       "now waiting for %li deliveries\n",
 		       msgs_wait_cnt);

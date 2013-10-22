@@ -63,6 +63,8 @@ int main (int argc, char **argv) {
 	rlim.rlim_cur = rlim.rlim_max = NUM_ITER * 5;
 	setrlimit(RLIMIT_NOFILE, &rlim); /* best effort, fails under valgrind */
 
+	TEST_SAY("Creating and destroying %i kafka instances\n", NUM_ITER);
+
 	/* Create, use and destroy NUM_ITER kafka instances. */
 	for (i = 0 ; i < NUM_ITER ; i++) {
 		rd_kafka_t *rk;
@@ -79,8 +81,6 @@ int main (int argc, char **argv) {
 		if (!rk)
 			TEST_FAIL("Failed to create rdkafka instance #%i: %s\n",
 				  i, errstr);
-
-		TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 		if (!rkt)
@@ -103,7 +103,6 @@ int main (int argc, char **argv) {
 		rd_kafka_topic_destroy(rkt);
 		
 		/* Destroy rdkafka instance */
-		TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
 		rd_kafka_destroy(rk);
 	}
 

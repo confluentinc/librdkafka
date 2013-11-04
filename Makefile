@@ -82,5 +82,6 @@ clean:
 	rm -f $(OBJS) $(DEPS) \
 		$(LIBNAME)*.a $(LIBNAME)*.so $(LIBNAME)*.so.$(LIBVER)
 	make -C tests clean
+	make -C examples clean
 
 -include $(DEPS)

@@ -46,10 +46,12 @@
 #include "rdtime.h"
 
 static int run = 1;
+static int forever = 1;
 static int dispintvl = 1000;
 static int do_seq = 0;
 static int exit_after = 0;
 static int exit_eof = 0;
+static int quiet = 0;
 
 static void stop (int sig) {
 	run = 0;
@@ -104,19 +106,20 @@ static void msg_delivered (rd_kafka_t *rk,
 	    !(msgs_wait_cnt % (dispintvl / 1000)) || 
 	    (now - last) >= dispintvl * 1000) {
 		if (error_code)
-			printf("Message %ld delivered failed: %s (%li remain)",
+			printf("Message %ld delivey failed: %s (%li remain)\n",
 			       msgid, rd_kafka_err2str(error_code),
 			       msgs_wait_cnt);
-		else
+		else if (!quiet)
 			printf("Message %ld delivered: %li remain\n",
 			       msgid, msgs_wait_cnt);
-		if (do_seq)
+		if (!quiet && do_seq)
 			printf(" --> \"%.*s\"\n", (int)len, (char *)payload);
 		last = now;
 	}
 
-	if (msgs_wait_cnt == 0) {
-		printf("All messages delivered!\n");
+	if (msgs_wait_cnt == 0 && !forever) {
+		if (!quiet)
+			printf("All messages delivered!\n");
 		t_end = rd_clock();
 		run = 0;
 	}
@@ -171,6 +174,13 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 			      rd_kafka_offset_next(rkmessage));
 #endif
 
+}
+
+
+static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
+		     void *opaque) {
+	printf("%s\n", json);
+	return 0;
 }
 
 static void print_stats (int mode, int force_show, const char *compression) {
@@ -259,7 +269,7 @@ int main (int argc, char **argv) {
 
 	while ((opt =
 		getopt(argc, argv,
-		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:z:o:X:B:e")) != -1) {
+		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:z:o:X:B:eT:q")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -355,13 +365,19 @@ int main (int argc, char **argv) {
 			*val = '\0';
 			val++;
 
-			if (!strncmp(name, "topic.", strlen("topic."))) {
-				name += strlen("topic.");
+			res = RD_KAFKA_CONF_UNKNOWN;
+			/* Try "topic." prefixed properties on topic
+			 * conf first, and then fall through to global if
+			 * it didnt match a topic configuration property. */
+			if (!strncmp(name, "topic.", strlen("topic.")))
 				res = rd_kafka_topic_conf_set(topic_conf,
-							      name, val,
+							      name+
+							      strlen("topic"),
+							      val,
 							      errstr,
 							      sizeof(errstr));
-			} else
+
+			if (res == RD_KAFKA_CONF_UNKNOWN)
 				res = rd_kafka_conf_set(conf, name, val,
 							errstr, sizeof(errstr));
 
@@ -371,6 +387,20 @@ int main (int argc, char **argv) {
 			}
 		}
 		break;
+
+		case 'T':
+			if (rd_kafka_conf_set(conf, "statistics.interval.ms",
+					      optarg, errstr, sizeof(errstr)) !=
+			    RD_KAFKA_CONF_OK) {
+				fprintf(stderr, "%% %s\n", errstr);
+				exit(1);
+			}
+			rd_kafka_conf_set_stats_cb(conf, stats_cb);
+			break;
+
+		case 'q':
+			quiet = 1;
+			break;
 
 		default:
 			goto usage;
@@ -411,6 +441,9 @@ int main (int argc, char **argv) {
 			"will be set on topic object.\n"
 			"               Use '-X list' to see the full list\n"
 			"               of supported properties.\n"
+			"  -T <intvl>   Enable statistics from librdkafka at "
+			"specified interval (ms)\n"
+			"  -q           Be more quiet\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  consumes messages and prints thruput\n"
@@ -446,6 +479,9 @@ int main (int argc, char **argv) {
 	 * without the use of signals, so SIGPIPE should be ignored by the
 	 * calling program. */
 	signal(SIGPIPE, SIG_IGN);
+
+	if (msgcnt != -1)
+		forever = 0;
 
 	if (mode == 'P') {
 		/*
@@ -505,8 +541,6 @@ int main (int argc, char **argv) {
 
 		cnt.t_start = rd_clock();
 
-		msgs_wait_cnt = msgcnt;
-		
 		while (run && (msgcnt == -1 || cnt.msgs < msgcnt)) {
 			/* Send/Produce message. */
 
@@ -523,13 +557,16 @@ int main (int argc, char **argv) {
 				pbuf = sbuf;
 
 			cnt.tx++;
-			while (rd_kafka_produce(rkt, partition,
+			while (run &&
+			       rd_kafka_produce(rkt, partition,
 						sendflags, pbuf, msgsize,
 						key, keylen,
 						(void *)cnt.msgs) == -1) {
-				printf("produce error: %s%s\n",
-				       strerror(errno),
-				       errno == ENOBUFS ? " (backpressure)":"");
+				if (!quiet || errno != ENOBUFS)
+					printf("produce error: %s%s\n",
+					       strerror(errno),
+					       errno == ENOBUFS ?
+					       " (backpressure)":"");
 				cnt.tx_err++;
 				now = rd_clock();
 				if (cnt.t_last + dispintvl <= now) {
@@ -544,6 +581,7 @@ int main (int argc, char **argv) {
 				rd_kafka_poll(rk, 10);
 			}
 
+			msgs_wait_cnt++;
 			cnt.msgs++;
 			cnt.bytes += msgsize;
 
@@ -554,6 +592,7 @@ int main (int argc, char **argv) {
 			
 		}
 
+		forever = 0;
 		printf("All messages produced, "
 		       "now waiting for %li deliveries\n",
 		       msgs_wait_cnt);
@@ -606,7 +645,7 @@ int main (int argc, char **argv) {
 
 		/* Indicate to rdkafka that the application is responsible
 		 * for storing the offset. This allows the application to
-		 * succesfully handle a message before storing the offset.
+		 * successfully handle a message before storing the offset.
 		 * If this flag is not set rdkafka will store the offset
 		 * just prior to returning the message from rd_kafka_consume().
 		 */

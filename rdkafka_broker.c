@@ -333,7 +333,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 		/* Send ERR op back to application for processing. */
 		rd_kafka_op_reply(rkb->rkb_rk, RD_KAFKA_OP_ERR,
-				  RD_KAFKA_RESP_ERR__FAIL, 0,
+				  RD_KAFKA_RESP_ERR__FAIL,
 				  strdup(rkb->rkb_err.msg),
 				  strlen(rkb->rkb_err.msg));
 	}
@@ -427,7 +427,7 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 
 			/* Send ERR op back to application for processing. */
 			rd_kafka_op_reply(rkb->rkb_rk, RD_KAFKA_OP_ERR,
-					  RD_KAFKA_RESP_ERR__RESOLVE, 0,
+					  RD_KAFKA_RESP_ERR__RESOLVE,
 					  strdup(tmp), strlen(tmp));
 
 			rd_rkb_log(rkb, LOG_ERR, "GETADDR", "%s", tmp);
@@ -876,7 +876,10 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	rd_kafka_topic_t *rkt;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
-		   "Request metadata: %s", reason ? : "");
+		   "Request metadata for %s: %s",
+		   only_rkt ? only_rkt->rkt_topic->str :
+		   (all_topics ? "all topics" : "locally known topics"),
+		   reason ? : "");
 
 	/* If called from other thread than the broker's own then post an
 	 * op for the broker's thread instead since all transmissions must
@@ -896,9 +899,8 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 		   "Requesting metadata for %stopics",
 		   all_topics ? "all ": "known ");
 
-	if (all_topics) {
-		arrsize = 0;
 
+	if (!only_rkt) {
 		/* Push the next intervalled metadata refresh forward since
 		 * we are performing one now (which might be intervalled). */
 		if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0) {
@@ -916,7 +918,11 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 					 metadata_refresh_interval_ms * 1000);
 			}
 		}
+	}
 
+
+	if (all_topics) {
+		arrsize = 0;
 
 	} else {
 		arrsize = rkb->rkb_rk->rk_topic_cnt;
@@ -938,7 +944,7 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	of += 4;
 
 
-	if (!all_topics) {
+	if (only_rkt || !all_topics) {
 		/* Just our locally known topics */
 			
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
@@ -986,15 +992,19 @@ static rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
  * Trigger broker metadata query for topic leader.
  * 'rkt' may be NULL to query for all topics.
  */
-void rd_kafka_topic_leader_query (rd_kafka_t *rk, rd_kafka_topic_t *rkt) {
+void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+				   int do_rk_lock) {
 	rd_kafka_broker_t *rkb;
 
-	rd_kafka_lock(rk);
+	if (do_rk_lock)
+		rd_kafka_lock(rk);
 	if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP))) {
-		rd_kafka_unlock(rk);
+		if (do_rk_lock)
+			rd_kafka_unlock(rk);
 		return; /* No brokers are up */
 	}
-	rd_kafka_unlock(rk);
+	if (do_rk_lock)
+		rd_kafka_unlock(rk);
 
 	rd_kafka_broker_metadata_req(rkb, 0, rkt, "leader query");
 
@@ -1520,7 +1530,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 	rd_kafka_dr_msgq(rkb->rkb_rk, &request->rkbuf_msgq, err);
 
 done:
-	rd_kafka_toppar_destroy(rktp); /* from send_toppar() */
+	rd_kafka_toppar_destroy(rktp); /* from produce_toppar() */
 
 	rd_kafka_buf_destroy(request);
 	if (reply)
@@ -2841,10 +2851,11 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 
 			/* Skip this toppar until its state changes */
 			rd_rkb_dbg(rkb, TOPIC, "FETCH",
-				   "Skipping topic %s [%"PRId32"] in state %i",
+				   "Skipping topic %s [%"PRId32"] in state %s",
 				   rktp->rktp_rkt->rkt_topic->str,
 				   rktp->rktp_partition,
-				   rktp->rktp_fetch_state);
+				   rd_kafka_fetch_states[rktp->
+							 rktp_fetch_state]);
 			continue;
 		}
 
@@ -3091,7 +3102,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 		/* Send ERR op back to application for processing. */
 		rd_kafka_op_reply(rk, RD_KAFKA_OP_ERR,
-				  RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE, 0,
+				  RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
 				  strdup(tmp), strlen(tmp));
 		free(rkb);
 		rd_kafka_destroy(rk);

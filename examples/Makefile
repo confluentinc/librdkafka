@@ -30,19 +30,6 @@ rdkafka_example: rdkafka_example.c
 	@echo "# More usage options:"
 	@echo "./rdkafka_example --help"
 
-rdkafka_example_cpp: rdkafka_example.cpp
-	@(test $@ -nt $< || \
-	  $(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS))
-	@echo "# $@ is ready"
-	@echo "#"
-	@echo "# Run producer (write messages on stdin)"
-	@echo "./$@ -P -t <topic> -p <partition>"
-	@echo ""
-	@echo "#"
-	@echo "# More usage options:"
-	@echo "./$@ --help"
-
-
 rdkafka_performance: rdkafka_performance.c
 	@(test $@ -nt $< || \
 	  $(CC) $(CFLAGS) $< -o $@ $(LDFLAGS))

@@ -1,6 +1,11 @@
 #!/bin/bash
 #
 
+RED='\e[31m'
+GREEN='\e[32m'
+CYAN='\e[36m'
+CCLR='\e[0m'
+
 if [ -z "$1" ]; then
     echo "Usage: $0 <00xx-...test> [modes..]"
     echo ""
@@ -29,10 +34,10 @@ VALGRIND_ARGS="--error-exitcode=3"
 # Enable vgdb on valgrind errors.
 #VALGRIND_ARGS="$VALGRIND_ARGS --vgdb-error=1"
 
-echo "############## $TEST ################"
+echo -e "${CYAN}############## $TEST ################${CCLR}"
 
 for mode in $MODES; do
-    echo "### Running test $TEST in $mode mode ###"
+    echo -e "${CYAN}### Running test $TEST in $mode mode ###${CCLR}"
     case "$mode" in
 	valgrind)
 	    valgrind $VALGRIND_ARGS --leak-check=full $SUPP $GEN_SUPP \
@@ -54,20 +59,20 @@ for mode in $MODES; do
 	    RET=$?
 	    ;;
 	*)
-	    echo "### Unknown mode $mode for $TEST ###"
+	    echo -e "${RED}### Unknown mode $mode for $TEST ###${CCLR}"
 	    RET=1
 	    ;;
     esac
 
     if [ $RET -gt 0 ]; then
-	echo "###"
-	echo "### Test $TEST in $mode mode FAILED! ###"
-	echo "###"
+	echo -e "${RED}###"
+	echo -e "### Test $TEST in $mode mode FAILED! ###"
+	echo -e "###${CCLR}"
 	FAILED=1
     else
-	echo "###"
-	echo "### $Test $TEST in $mode mode PASSED! ###"
-	echo "###"
+	echo -e "${GREEN}###"
+	echo -e "### $Test $TEST in $mode mode PASSED! ###"
+	echo -e "###${CCLR}"
     fi
 done
 

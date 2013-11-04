@@ -35,6 +35,14 @@
 #include "rdsysqueue.h"
 #include "rdtime.h"
 
+
+const char *rd_kafka_fetch_states[] = {
+	"none",
+	"offset-query",
+	"offset-wait",
+	"active"
+};
+
 static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 					       int32_t partition) {
 	rd_kafka_toppar_t *rktp;
@@ -824,9 +832,11 @@ void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic) {
 
 
 /**
- * Scan all topics and partitions for timed out messages.
+ * Scan all topics and partitions for:
+ *  - timed out messages.
+ *  - topics that needs to be created on the broker.
  */
-int rd_kafka_topic_age_scan_all (rd_kafka_t *rk, rd_ts_t now) {
+int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_toppar_t *rktp;
 	rd_kafka_msgq_t timedout;
@@ -838,7 +848,20 @@ int rd_kafka_topic_age_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	rd_kafka_lock(rk);
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		int p;
+
 		rd_kafka_topic_rdlock(rkt);
+
+		if (rkt->rkt_partition_cnt == 0) {
+			/* If this partition is unknown by brokers try
+			 * to create it by sending a topic-specific
+			 * metadata request.
+			 * This requires "auto.create.topics.enable=true"
+			 * on the brokers. */
+			rd_kafka_topic_unlock(rkt);
+			rd_kafka_topic_leader_query0(rk, rkt, 0/*no_rk_lock*/);
+			rd_kafka_topic_rdlock(rkt);
+		}
+
 		for (p = RD_KAFKA_PARTITION_UA ;
 		     p < rkt->rkt_partition_cnt ; p++) {
 			if (!(rktp = rd_kafka_toppar_get(rkt, p, 0)))

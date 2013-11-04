@@ -262,7 +262,7 @@ int main (int argc, char **argv) {
 		int sendcnt = 0;
 
 		/* Set up a message delivery report callback.
-		 * It will be called once for each message, either on succesful
+		 * It will be called once for each message, either on successful
 		 * delivery to broker, or upon failure to deliver to broker. */
 		rd_kafka_conf_set_dr_cb(conf, msg_delivered);
 

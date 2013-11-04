@@ -125,6 +125,7 @@ struct rd_kafka_conf_s {
 	int     socket_timeout_ms;
 	char   *clientid;
 	char   *brokerlist;
+	int     stats_interval_ms;
 
 	/*
 	 * Consumer configuration
@@ -150,7 +151,7 @@ struct rd_kafka_conf_s {
 
 	/* Message delivery report callback.
 	 * Called once for each produced message, either on
-	 * succesful and acknowledged delivery to the broker in which
+	 * successful and acknowledged delivery to the broker in which
 	 * case 'err' is 0, or if the message could not be delivered
 	 * in which case 'err' is non-zero (use rd_kafka_err2str()
 	 * to obtain a human-readable error reason).
@@ -173,6 +174,13 @@ struct rd_kafka_conf_s {
 	/* Error callback */
 	void (*error_cb) (rd_kafka_t *rk, int err,
 			  const char *reason, void *opaque);
+
+	/* Stats callback */
+	int (*stats_cb) (rd_kafka_t *rk,
+			 char *json,
+			 size_t json_len,
+			 void *opaque);
+
 
 	/* Opaque passed to callbacks. */
 	void  *opaque;
@@ -274,6 +282,7 @@ typedef enum {
 	RD_KAFKA_OP_ERR,      /* Kafka thread -> Application */
 	RD_KAFKA_OP_DR,       /* Kafka thread -> Application
 			       * Produce message delivery report */
+	RD_KAFKA_OP_STATS,    /* Kafka thread -> Application */
 
 	RD_KAFKA_OP_METADATA_REQ, /* any -> Broker thread: request metadata */
 } rd_kafka_op_type_t;
@@ -302,6 +311,10 @@ typedef struct rd_kafka_op_s {
 
 	/* For METADATA */
 #define rko_rkt  rko_rkmessage.rkt
+
+	/* For STATS */
+#define rko_json      rko_rkmessage.payload
+#define rko_json_len  rko_rkmessage.len
 
 } rd_kafka_op_t;
 
@@ -642,11 +655,11 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type);
 void rd_kafka_op_reply2 (rd_kafka_t *rk, rd_kafka_op_t *rko);
 void rd_kafka_op_reply0 (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			 rd_kafka_op_type_t type,
-			 rd_kafka_resp_err_t err, uint8_t compression,
+			 rd_kafka_resp_err_t err,
 			 void *payload, int len);
 void rd_kafka_op_reply (rd_kafka_t *rk,
 			rd_kafka_op_type_t type,
-			rd_kafka_resp_err_t err, uint8_t compression,
+			rd_kafka_resp_err_t err,
 			void *payload, int len);
 
 #define rd_kafka_keep(rk) rd_atomic_add(&(rk)->rk_refcnt, 1)

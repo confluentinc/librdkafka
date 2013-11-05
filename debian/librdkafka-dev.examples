@@ -1,1 +1,2 @@
-examples/*
+examples/rdkafka_example.c
+examples/rdkafka_performance.c

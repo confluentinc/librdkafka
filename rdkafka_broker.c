@@ -3169,10 +3169,11 @@ static rd_kafka_broker_t *rd_kafka_broker_find (rd_kafka_t *rk,
 
 int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist) {
 	char *s = strdupa(brokerlist);
-	char *t, *n;
+	char *t, *t2, *n;
 	int cnt = 0;
 	rd_kafka_broker_t *rkb;
 
+	/* Parse comma-separated list of brokers. */
 	while (*s) {
 		uint16_t port = 0;
 
@@ -3186,7 +3187,17 @@ int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist) {
 		else
 			n = s + strlen(s)-1;
 
-		if ((t = strchr(s, ':'))) {
+		/* Check if port has been specified, but try to identify IPv6
+		 * addresses first:
+		 *  t = last ':' in string
+		 *  t2 = first ':' in string
+		 *  If t and t2 are equal then only one ":" exists in name
+		 *  and thus an IPv4 address with port specified.
+		 *  Else if not equal and t is prefixed with "]" then it's an
+		 *  IPv6 address with port specified.
+		 *  Else no port specified. */
+		if ((t = strrchr(s, ':')) &&
+		    ((t2 = strchr(s, ':')) == t || *(t-1) == ']')) {
 			*t = '\0';
 			port = atoi(t+1);
 		}

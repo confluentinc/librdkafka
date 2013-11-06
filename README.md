@@ -117,10 +117,10 @@ File bug reports, feature requests and questions using
 [GitHub Issues](https://github.com/edenhill/librdkafka/issues)
 
 
-Questions and discussions are also welcome on irc.freenode.org, #kafka,
+Questions and discussions are also welcome on irc.freenode.org, #apache-kafka,
 nickname Snaps.
 
 
-### Commerical support
+### Commercial support
 
 Commercial support is available from [Edenhill services](http://www.edenhill.se)

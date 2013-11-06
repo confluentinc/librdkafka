@@ -24,12 +24,12 @@ For an introduction to the performance and usage of librdkafka, see
   * Producer: supported
   * Consumer: supported
   * Compression: snappy and gzip
-  * Debian package: work in progress (separate "debian" branch)
+  * Debian package: "debian" branch ([ITP #710271](http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=710271))
   * ZooKeeper: not supported
-  * API: not backwards compatible
+  * API: Stable, not backwards compatible
   * Tests: Regression tests in `tests/` directory.
   * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
-  * Status: Testing, APIs subject to change.
+  * Status: Stable
 
 
 **Apache Kafka 0.7 support:**

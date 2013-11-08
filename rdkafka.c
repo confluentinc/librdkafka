@@ -842,17 +842,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 /**
  * Produce a single message.
- *
- * If 'partition' is unassigned (RD_KAFKA_PARTITION_UA) the configured or
- * default partitioner will be used to designate the target partition.
- *
- * See rdkafka.h for 'msgflags'.
- *
- * Returns: 0 on success or -1 on error (see errno for details)
- *
- * errnos:
- *    ENOBUFS - conf.producer.max_msg_cnt would be exceeded.
- *
  * Locality: any application thread
  */
 int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,

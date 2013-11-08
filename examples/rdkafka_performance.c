@@ -568,6 +568,10 @@ int main (int argc, char **argv) {
 					       errno == ENOBUFS ?
 					       " (backpressure)":"");
 				cnt.tx_err++;
+				if (errno != ENOBUFS) {
+					run = 0;
+					break;
+				}
 				now = rd_clock();
 				if (cnt.t_last + dispintvl <= now) {
 					printf("%% Backpressure %i "

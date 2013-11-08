@@ -71,6 +71,11 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 		return -1;
 	}
 
+	if (unlikely(len + keylen > rkt->rkt_rk->rk_conf.max_msg_size)) {
+		errno = EMSGSIZE;
+		return -1;
+	}
+
 	/* If we are to make a copy of the payload, allocate space for it too */
 	if (msgflags & RD_KAFKA_MSG_F_COPY) {
 		msgflags &= ~RD_KAFKA_MSG_F_FREE;

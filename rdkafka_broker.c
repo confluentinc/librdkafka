@@ -1732,6 +1732,12 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		msghdr++;
 	}
 
+	/* No messages added, bail out early. */
+	if (unlikely(rkbuf->rkbuf_msgq.rkmq_msg_cnt == 0)) {
+		rd_kafka_buf_destroy(rkbuf);
+		return -1;
+	}
+
 	/* Compress the messages */
 	if (rkb->rkb_rk->rk_conf.compression_codec) {
 		int    siovlen = 1;
@@ -2104,8 +2110,10 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 				while (rktp->rktp_xmit_msgq.rkmq_msg_cnt > 0) {
 					int r = rd_kafka_broker_produce_toppar(
 						rkb, rktp);
-					if (r > 0)
+					if (likely(r > 0))
 						cnt += r;
+					else
+						break;
 				}
 			}
 

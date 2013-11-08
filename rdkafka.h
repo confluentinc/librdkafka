@@ -634,8 +634,11 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
  * pointer that will provided in the delivery report callback (`dr_cb`) for
  * referencing this message.
  *
- * Returns 0 on success or -1 if the maximum number of outstanding messages
- * (conf.producer.max_messages) has been reached (`errno==ENOBUFS`).
+ * Returns 0 on success or -1 on error in which case errno is set accordingly:
+ *   ENOBUFS  - maximum number of outstanding messages has been reached:
+ *              "queue.buffering.max.message"
+ *   EMSGSIZE - message is larger than configured max size:
+ *              "messages.max.bytes".
  *
  */
 

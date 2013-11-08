@@ -1,4 +1,4 @@
-TESTS ?= 0001-multiobj.test 0002-msgtimeout.test
+TESTS ?= 0001-multiobj.test 0002-msgtimeout.test 0003-msgmaxsize.test
 CC ?= cc
 CXX ?= g++
 CFLAGS += -g -Wall -Werror -Wfloat-equal -Wpointer-arith -O2 -I../

@@ -64,15 +64,16 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	size_t mlen = sizeof(*rkm);
 	
 	assert(len > 0);
+
+	if (unlikely(len + keylen > rkt->rkt_rk->rk_conf.max_msg_size)) {
+		errno = EMSGSIZE;
+		return -1;
+	}
+
 	if (unlikely(rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
 		     rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
 		rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
 		errno = ENOBUFS;
-		return -1;
-	}
-
-	if (unlikely(len + keylen > rkt->rkt_rk->rk_conf.max_msg_size)) {
-		errno = EMSGSIZE;
 		return -1;
 	}
 

@@ -637,7 +637,7 @@ int main (int argc, char **argv) {
 		 * Consumer
 		 */
 
-		rd_kafka_message_t **rkmessages;
+		rd_kafka_message_t **rkmessages = NULL;
 
 #if 0 /* Future API */
 		/* The offset storage file is optional but its presence

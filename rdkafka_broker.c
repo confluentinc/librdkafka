@@ -262,7 +262,7 @@ static void rd_kafka_broker_waitresp_timeout_scan (rd_kafka_broker_t *rkb,
 
 		rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
 
-		rkbuf->rkbuf_cb(rkb, RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT,
+		rkbuf->rkbuf_cb(rkb, RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
 				NULL, rkbuf, rkbuf->rkbuf_opaque);
 		cnt++;
 	}
@@ -2122,7 +2122,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 		/* Trigger delivery report for timed out messages */
 		if (unlikely(timedout.rkmq_msg_cnt > 0))
 			rd_kafka_dr_msgq(rkb->rkb_rk, &timedout,
-					 RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT);
+					 RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
 
 		rd_kafka_broker_toppars_unlock(rkb);
 

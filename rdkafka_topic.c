@@ -528,7 +528,7 @@ void rd_kafka_topic_leader_update (rd_kafka_t *rk,
 				   int32_t leader) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_toppar_t *rktp;
-	rd_kafka_broker_t *rkb;
+	rd_kafka_broker_t *rkb = NULL;
 
 	if (!(rkt = rd_kafka_topic_find(rk, topic))) {
 		rd_kafka_dbg(rk, METADATA, "TOPICUPD",
@@ -537,40 +537,35 @@ void rd_kafka_topic_leader_update (rd_kafka_t *rk,
 	}
 
 	/* Find broker */
-	rd_kafka_lock(rk);
-	rkb = rd_kafka_broker_find_by_nodeid(rk, leader);
-	rd_kafka_unlock(rk);
-
+	if (leader != -1) {
+		rd_kafka_lock(rk);
+		rkb = rd_kafka_broker_find_by_nodeid(rk, leader);
+		rd_kafka_unlock(rk);
+	}
 
 	rd_kafka_topic_wrlock(rkt);
 
 	rktp = rd_kafka_toppar_get(rkt, partition, 0);
 	assert(rktp);
 
-	if (leader == -1) {
-		/* Topic lost its leader */
-		rd_kafka_toppar_broker_delegate(rktp, NULL);
-		rd_kafka_topic_unlock(rkt);
-
-		/* Query for the topic leader (async) */
-		rd_kafka_topic_leader_query(rk, rkt);
-
-		rd_kafka_toppar_destroy(rktp); /* from get() */
-		rd_kafka_topic_destroy(rkt); /* from find() */
-		return;
-	}
-
-
 	if (!rkb) {
-		rd_kafka_log(rk, LOG_NOTICE, "TOPICBRK",
-			     "Topic %s [%"PRId32"] migrated to unknown "
-			     "broker %"PRId32": requesting metadata update",
-			     topic, partition, leader);
+		int had_leader = rktp->rktp_leader ? 1 : 0;
+
+		if (leader == -1)
+			/* Topic lost its leader */;
+		else
+			rd_kafka_log(rk, LOG_NOTICE, "TOPICBRK",
+				     "Topic %s [%"PRId32"] migrated to unknown "
+				     "broker %"PRId32": "
+				     "requesting metadata update",
+				     topic, partition, leader);
+
 		rd_kafka_toppar_broker_delegate(rktp, NULL);
 		rd_kafka_topic_unlock(rkt);
 
 		/* Query for the topic leader (async) */
-		rd_kafka_topic_leader_query(rk, rkt);
+		if (had_leader)
+			rd_kafka_topic_leader_query(rk, rkt);
 
 		rd_kafka_toppar_destroy(rktp); /* from get() */
 		rd_kafka_topic_destroy(rkt); /* from find() */

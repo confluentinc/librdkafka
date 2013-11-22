@@ -729,6 +729,9 @@ int main (int argc, char **argv) {
 					strerror(errno));
 
 			print_stats(mode, 0, compression);
+
+			/* Poll to handle stats callbacks */
+			rd_kafka_poll(rk, 0);
 		}
 		cnt.t_end = rd_clock();
 

@@ -553,7 +553,7 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 	size_t size = *sizep;
 	int of = *ofp;
 
-	_st_printf("%s{ "
+	_st_printf("%s\"%"PRId32"\": { "
 		   "\"partition\":%"PRId32", "
 		   "\"leader\":%"PRId32", "
 		   "\"desired\":%s, "
@@ -573,6 +573,7 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   "\"txbytes\":%"PRIu64" "
 		   "} ",
 		   first ? "" : ", ",
+		   rktp->rktp_partition,
 		   rktp->rktp_partition,
 		   rktp->rktp_leader ? rktp->rktp_leader->rkb_nodeid : -1,
 		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_DESIRED)?"true":"false",
@@ -618,7 +619,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		   "\"ts\":%"PRIu64", "
 		   "\"time\":%lli, "
 		   "\"replyq\":%i, "
-		   "\"brokers\":[ "/*open brokers*/,
+		   "\"brokers\":{ "/*open brokers*/,
 		   now,
 		   (signed long long)time(NULL),
 		   rk->rk_rep.rkq_qlen);
@@ -627,7 +628,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
 		rd_kafka_avg_rollover(&rkb->rkb_rtt_last, &rkb->rkb_rtt_curr);
-		_st_printf("%s{ "/*open broker*/
+		_st_printf("%s\"%s\": { "/*open broker*/
 			   "\"name\":\"%s\", "
 			   "\"nodeid\":%"PRId32", "
 			   "\"state\":\"%s\", "
@@ -646,8 +647,9 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   " \"avg\":%"PRIu64","
 			   " \"cnt\":%i "
 			   "}, "
-			   "\"toppars\":[ "/*open toppars*/,
+			   "\"toppars\":{ "/*open toppars*/,
 			   rkb == TAILQ_FIRST(&rk->rk_brokers) ? "" : ", ",
+			   rkb->rkb_name,
 			   rkb->rkb_name,
 			   rkb->rkb_nodeid,
 			   rd_kafka_broker_state_names[rkb->rkb_state],
@@ -667,10 +669,11 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 		rd_kafka_broker_toppars_rdlock(rkb);
 		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
-			_st_printf("%s{ "
+			_st_printf("%s\"%.*s\": { "
 				   "\"topic\":\"%.*s\", "
 				   "\"partition\":%"PRId32"} ",
 				   rktp==TAILQ_FIRST(&rkb->rkb_toppars)?"":", ",
+				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 				   rktp->rktp_partition);
 		}
@@ -678,22 +681,23 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 		rd_kafka_broker_unlock(rkb);
 
-		_st_printf("] "/*close toppars*/
+		_st_printf("} "/*close toppars*/
 			   "} "/*close broker*/);
 	}
 
 
-	_st_printf("], " /* close "brokers" array */
-		   "\"topics\":[ ");
+	_st_printf("}, " /* close "brokers" array */
+		   "\"topics\":{ ");
 
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		int i;
 
 		rd_kafka_topic_rdlock(rkt);
-		_st_printf("%s{ "
+		_st_printf("%s\"%.*s\": { "
 			   "\"topic\":\"%.*s\", "
-			   "\"partitions\":[ " /*open partitions*/,
+			   "\"partitions\":{ " /*open partitions*/,
 			   rkt==TAILQ_FIRST(&rk->rk_topics)?"":", ",
+			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic));
 
 		for (i = 0 ; i < rkt->rkt_partition_cnt ; i++)
@@ -710,14 +714,14 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 						   rkt->rkt_ua, i++ == 0);
 		rd_kafka_topic_unlock(rkt);
 
-		_st_printf("] "/*close partitions*/
+		_st_printf("} "/*close partitions*/
 			   "} "/*close topic*/);
 
 	}
 
 	rd_kafka_unlock(rk);
 
-	_st_printf("] "/*close topics*/
+	_st_printf("} "/*close topics*/
 		   "}"/*close object*/);
 
 

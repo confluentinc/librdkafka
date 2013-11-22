@@ -1020,11 +1020,15 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 static rd_kafka_buf_t *rd_kafka_waitresp_find (rd_kafka_broker_t *rkb,
 					       int32_t corrid) {
 	rd_kafka_buf_t *rkbuf;
+	rd_ts_t now = rd_clock();
 
 	assert(pthread_self() == rkb->rkb_thread);
 
 	TAILQ_FOREACH(rkbuf, &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link)
 		if (rkbuf->rkbuf_corrid == corrid) {
+			rd_kafka_avg_add(&rkb->rkb_rtt_curr,
+					 now - rkbuf->rkbuf_ts_sent);
+
 			rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
 			return rkbuf;
 		}
@@ -1380,6 +1384,9 @@ static int rd_kafka_send (rd_kafka_broker_t *rkb) {
 
 		/* Entire buffer sent, unlink from outbuf */
 		rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
+
+		/* Store time for RTT calculation */
+		rkbuf->rkbuf_ts_sent = rd_clock();
 
 		/* Put buffer on response wait list unless we are not
 		 * expecting a response (required_acks=0). */

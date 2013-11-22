@@ -205,6 +205,43 @@ struct rd_kafka_topic_conf_s {
 
 
 
+typedef struct rd_kafka_avg_s {
+	rd_ts_t ra_max;
+	rd_ts_t ra_min;
+	rd_ts_t ra_avg;
+	rd_ts_t ra_sum;
+	int     ra_cnt;
+} rd_kafka_avg_t;
+
+/**
+ * Add timestamp 'ts' to averager 'ra'.
+ */
+static RD_UNUSED void rd_kafka_avg_add (rd_kafka_avg_t *ra, rd_ts_t ts) {
+	if (ts > ra->ra_max)
+		ra->ra_max = ts;
+	if (ra->ra_min == 0 || ts < ra->ra_min)
+		ra->ra_min = ts;
+	ra->ra_sum += ts;
+	ra->ra_cnt++;
+}
+
+/**
+ * Rolls over statistics in 'src' and stores the average in 'dst'.
+ * 'src' is cleared and ready to be reused.
+ */
+static RD_UNUSED void rd_kafka_avg_rollover (rd_kafka_avg_t *dst,
+					     rd_kafka_avg_t *src) {
+	*dst = *src;
+	if (dst->ra_cnt)
+		dst->ra_avg = dst->ra_sum / dst->ra_cnt;
+	else
+		dst->ra_avg = 0;
+
+	memset(src, 0, sizeof(*src));
+}
+
+
+
 typedef struct rd_kafka_msg_s {
 	TAILQ_ENTRY(rd_kafka_msg_s)  rkm_link;
 	int        rkm_flags;
@@ -404,6 +441,9 @@ typedef struct rd_kafka_broker_s {
 	rd_kafka_bufq_t     rkb_outbufs;
 	rd_kafka_bufq_t     rkb_waitresps;
 	rd_kafka_bufq_t     rkb_retrybufs;
+
+	rd_kafka_avg_t      rkb_rtt_curr;       /* Current averaging period */
+	rd_kafka_avg_t      rkb_rtt_last;       /* Last averaging period */
 
 	char                rkb_name[128];      /* Display name */
 	char                rkb_nodename[128];  /* host:port */

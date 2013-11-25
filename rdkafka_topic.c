@@ -799,7 +799,7 @@ void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic) {
 	cnt = uas.rkmq_msg_cnt;
 	rd_kafka_toppar_unlock(rktp_ua);
 
-	TAILQ_FOREACH_SAFE(rkm, tmp, &uas.rkmq_msgs, rkm_link) {
+	TAILQ_FOREACH_SAFE(rkm, &uas.rkmq_msgs, rkm_link, tmp) {
 		if (unlikely(rd_kafka_msg_partitioner(rkt, NULL, rkm) == -1)) {
 			/* Desired partition not available */
 			rd_kafka_msgq_enq(&failed, rkm);

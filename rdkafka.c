@@ -353,7 +353,7 @@ int rd_kafka_q_serve (rd_kafka_t *rk,
 	rd_kafka_dbg(rk, QUEUE, "QSERVE", "Serving %i ops", localq.rkq_qlen);
 
 	/* Call callback for each op */
-	TAILQ_FOREACH_SAFE(rko, tmp, &localq.rkq_q, rko_link) {
+	TAILQ_FOREACH_SAFE(rko, &localq.rkq_q, rko_link, tmp) {
 		callback(rko, opaque);
 		rd_kafka_op_destroy(rko);
 	}
@@ -515,7 +515,7 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 
 	/* Decommission all topics */
 	rd_kafka_lock(rk);
-	TAILQ_FOREACH_SAFE(rkt, rkt_tmp, &rk->rk_topics, rkt_link) {
+	TAILQ_FOREACH_SAFE(rkt, &rk->rk_topics, rkt_link, rkt_tmp) {
 		rd_kafka_unlock(rk);
 		rd_kafka_topic_partitions_remove(rkt);
 		rd_kafka_lock(rk);

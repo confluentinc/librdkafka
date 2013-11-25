@@ -125,13 +125,6 @@
         (*(((struct headname *)((elm)->field.tqe_prev))->tqh_last))
 #endif
 
-#ifdef TAILQ_FOREACH_SAFE
-#ifdef __APPLE__
-/* Apple's .._SAFE macro has the temporary variable at the end. */
-#undef TAILQ_FOREACH_SAFE
-#endif
-#endif
-
 #ifndef TAILQ_FOREACH_SAFE
 /*
  * TAILQ_FOREACH_SAFE() provides a traversal where the current iterated element
@@ -139,7 +132,7 @@
  * It does not allow freeing or modifying any other element in the list,
  * at least not the next element.
  */
-#define TAILQ_FOREACH_SAFE(elm,tmpelm,head,field)			\
+#define TAILQ_FOREACH_SAFE(elm,head,field,tmpelm)			\
 	for ((elm) = TAILQ_FIRST(head) ;				\
 	     (elm) && ((tmpelm) = TAILQ_NEXT((elm), field), 1) ;	\
 	     (elm) = (tmpelm))

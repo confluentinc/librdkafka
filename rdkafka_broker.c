@@ -1096,7 +1096,8 @@ static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
 			printf(" #%i/%zd and %zd: of %jd, len %zd, "
 			       "vof %jd: iov %zd\n",
 			       i, src->msg_iovlen, dst->msg_iovlen,
-			       of, len, vof, src->msg_iov[i].iov_len);
+			       (intmax_t)of, len, (intmax_t)vof,
+			       src->msg_iov[i].iov_len);
 		if (vof < 0)
 			vof = 0;
 

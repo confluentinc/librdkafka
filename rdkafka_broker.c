@@ -72,7 +72,7 @@ static void msghdr_print (rd_kafka_t *rk,
 	int i;
 
 	rd_kafka_dbg(rk, MSG, "MSG", "%s: iovlen %zd",
-		     what, msg->msg_iovlen);
+		     what, (size_t)msg->msg_iovlen);
 
 	for (i = 0 ; i < msg->msg_iovlen ; i++) {
 		rd_kafka_dbg(rk, MSG, what,
@@ -382,7 +382,7 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 
 		rd_kafka_dbg(rkb->rkb_rk, BROKER, "BRKSEND",
 			     "sendmsg FAILED for iovlen %zd (%i)",
-			     msg->msg_iovlen,
+			     (size_t)msg->msg_iovlen,
 			     IOV_MAX);
 		rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
 				     "Send failed: %s", strerror(errno));
@@ -1095,7 +1095,9 @@ static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
 		if (0)
 			printf(" #%i/%zd and %zd: of %jd, len %zd, "
 			       "vof %jd: iov %zd\n",
-			       i, src->msg_iovlen, dst->msg_iovlen,
+			       i,
+			       (size_t)src->msg_iovlen,
+			       (size_t)dst->msg_iovlen,
 			       (intmax_t)of, len, (intmax_t)vof,
 			       src->msg_iov[i].iov_len);
 		if (vof < 0)

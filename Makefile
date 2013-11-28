@@ -17,7 +17,9 @@ CFLAGS+=-O2 -Wall -Werror -Wfloat-equal -Wpointer-arith -fPIC -I.
 CFLAGS+=-g
 
 # Clang warnings to ignore
-CFLAGS+=-Wno-gnu-designator
+ifeq ($(CC),clang)
+	CFLAGS+=-Wno-gnu-designator
+endif
 
 # Enable iovecs in snappy
 CFLAGS+=-DSG

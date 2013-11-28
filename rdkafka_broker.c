@@ -72,7 +72,7 @@ static void msghdr_print (rd_kafka_t *rk,
 	int i;
 
 	rd_kafka_dbg(rk, MSG, "MSG", "%s: iovlen %zd",
-		     what, msg->msg_iovlen);
+		     what, (size_t)msg->msg_iovlen);
 
 	for (i = 0 ; i < msg->msg_iovlen ; i++) {
 		rd_kafka_dbg(rk, MSG, what,
@@ -240,7 +240,7 @@ static void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 
 	rd_rkb_dbg(rkb, QUEUE, "BUFQ", "Purging bufq");
 
-	TAILQ_FOREACH_SAFE(rkbuf, tmp, &tmpq.rkbq_bufs, rkbuf_link)
+	TAILQ_FOREACH_SAFE(rkbuf, &tmpq.rkbq_bufs, rkbuf_link, tmp)
 		rkbuf->rkbuf_cb(rkb, err, NULL, rkbuf, rkbuf->rkbuf_opaque);
 }
 
@@ -255,8 +255,8 @@ static void rd_kafka_broker_waitresp_timeout_scan (rd_kafka_broker_t *rkb,
 
 	assert(pthread_self() == rkb->rkb_thread);
 
-	TAILQ_FOREACH_SAFE(rkbuf, tmp,
-			   &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link) {
+	TAILQ_FOREACH_SAFE(rkbuf,
+			   &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link, tmp) {
 		if (likely(rkbuf->rkbuf_ts_timeout > now))
 			continue;
 
@@ -382,7 +382,7 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 
 		rd_kafka_dbg(rkb->rkb_rk, BROKER, "BRKSEND",
 			     "sendmsg FAILED for iovlen %zd (%i)",
-			     msg->msg_iovlen,
+			     (size_t)msg->msg_iovlen,
 			     IOV_MAX);
 		rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
 				     "Send failed: %s", strerror(errno));
@@ -1093,10 +1093,13 @@ static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
 		off_t vof = of - len;
 
 		if (0)
-			printf(" #%i/%zd and %zd: of %zd, len %zd, "
-			       "vof %zd: iov %zd\n",
-			       i, src->msg_iovlen, dst->msg_iovlen,
-			       of, len, vof, src->msg_iov[i].iov_len);
+			printf(" #%i/%zd and %zd: of %jd, len %zd, "
+			       "vof %jd: iov %zd\n",
+			       i,
+			       (size_t)src->msg_iovlen,
+			       (size_t)dst->msg_iovlen,
+			       (intmax_t)of, len, (intmax_t)vof,
+			       src->msg_iov[i].iov_len);
 		if (vof < 0)
 			vof = 0;
 
@@ -1613,7 +1616,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	if (0)
 		rd_rkb_dbg(rkb, MSG, "PRODUCE",
 			   "Serve %i/%i messages (%i iovecs) "
-			   "for %.*s [%"PRId32"] (%zd bytes)",
+			   "for %.*s [%"PRId32"] (%"PRIu64" bytes)",
 			   msgcnt, rktp->rktp_msgq.rkmq_msg_cnt,
 			   iovcnt,
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic),

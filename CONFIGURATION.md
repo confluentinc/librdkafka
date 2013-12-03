@@ -11,6 +11,8 @@ topic.metadata.refresh.fast.cnt          |            10 | When a topic looses i
 topic.metadata.refresh.fast.interval.ms  |           250 | See `topic.metadata.refresh.fast.cnt` description
 debug                                    |               | A comma-separated list of debug contexts to enable: all,generic,broker,topic,metadata,producer,queue,msg
 socket.timeout.ms                        |         60000 | Timeout for network requests.
+socket.send.buffer.bytes                 |             0 | Broker socket send buffer size. System default is used if 0.
+socket.receive.buffer.bytes              |             0 | Broker socket receive buffer size. System default is used if 0.
 broker.address.ttl                       |        300000 | How long to cache the broker address resolving results.
 statistics.interval.ms                   |             0 | librdkafka statistics emit interval. The application also needs to register a stats callback using `rd_kafka_conf_set_stats_cb()`. The granularity is 1000ms.
 queued.min.messages                      |        100000 | Minimum number of messages that should to be available for consumption by application.

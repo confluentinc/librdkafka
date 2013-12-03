@@ -1338,6 +1338,32 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "connected to %s",
 		   rd_sockaddr2str(sinx, RD_SOCKADDR2STR_F_NICE));
 
+	/* Set socket send & receive buffer sizes if configuerd */
+	if (rkb->rkb_rk->rk_conf.socket_sndbuf_size != 0) {
+		if (setsockopt(rkb->rkb_s, SOL_SOCKET, SO_SNDBUF,
+			       &rkb->rkb_rk->rk_conf.socket_sndbuf_size,
+			       sizeof(rkb->rkb_rk->rk_conf.
+				      socket_sndbuf_size)) == -1)
+			rd_rkb_log(rkb, LOG_WARNING, "SNDBUF",
+				   "Failed to set socket send "
+				   "buffer size to %i: %s",
+				   rkb->rkb_rk->rk_conf.socket_sndbuf_size,
+				   strerror(errno));
+	}
+
+	if (rkb->rkb_rk->rk_conf.socket_rcvbuf_size != 0) {
+		if (setsockopt(rkb->rkb_s, SOL_SOCKET, SO_RCVBUF,
+			       &rkb->rkb_rk->rk_conf.socket_rcvbuf_size,
+			       sizeof(rkb->rkb_rk->rk_conf.
+				      socket_rcvbuf_size)) == -1)
+			rd_rkb_log(rkb, LOG_WARNING, "RCVBUF",
+				   "Failed to set socket receive "
+				   "buffer size to %i: %s",
+				   rkb->rkb_rk->rk_conf.socket_rcvbuf_size,
+				   strerror(errno));
+	}
+
+
 	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
 	rkb->rkb_err.err = 0;

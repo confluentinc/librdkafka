@@ -407,8 +407,8 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 		return -1;
 	}
 
-	rkb->rkb_c.tx_bytes += r;
-	rkb->rkb_c.tx++;
+	rd_atomic_add(&rkb->rkb_c.tx_bytes, r);
+	rd_atomic_add(&rkb->rkb_c.tx, 1);
 	return r;
 }
 
@@ -1272,8 +1272,8 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 	if (rkbuf->rkbuf_of == rkbuf->rkbuf_len + sizeof(rkbuf->rkbuf_reshdr)) {
 		/* Message is complete, pass it on to the original requester. */
 		rkb->rkb_recv_buf = NULL;
-		rkb->rkb_c.rx++;
-		rkb->rkb_c.rx_bytes += rkbuf->rkbuf_of;
+		rd_atomic_add(&rkb->rkb_c.rx, 1);
+		rd_atomic_add(&rkb->rkb_c.rx_bytes, rkbuf->rkbuf_of);
 		rd_kafka_req_response(rkb, rkbuf);
 	}
 
@@ -1956,8 +1956,8 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 do_send:
 
-	rktp->rktp_c.tx_msgs  += rkbuf->rkbuf_msgq.rkmq_msg_cnt;
-	rktp->rktp_c.tx_bytes += prodhdr->part2.MessageSetSize;
+	rd_atomic_add(&rktp->rktp_c.tx_msgs, rkbuf->rkbuf_msgq.rkmq_msg_cnt);
+	rd_atomic_add(&rktp->rktp_c.tx_bytes, prodhdr->part2.MessageSetSize);
 
 	prodhdr->part2.MessageSetSize =
 		htonl(prodhdr->part2.MessageSetSize);

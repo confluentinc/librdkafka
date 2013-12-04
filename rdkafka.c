@@ -1283,3 +1283,21 @@ const char *rd_kafka_name (const rd_kafka_t *rk) {
 int rd_kafka_outq_len (rd_kafka_t *rk) {
 	return rk->rk_producer.msg_cnt;
 }
+
+
+int rd_kafka_version (void) {
+	return RD_KAFKA_VERSION;
+}
+
+const char *rd_kafka_version_str (void) {
+	static char ret[64];
+	int ver = rd_kafka_version();
+
+	if (!*ret)
+		snprintf(ret, sizeof(ret), "%i.%i.%i",
+			 (ver >> 24) & 0xff,
+			 (ver >> 16) & 0xff,
+			 (ver >> 8) & 0xff);
+
+	return ret;
+}

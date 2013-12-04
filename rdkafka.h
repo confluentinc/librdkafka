@@ -43,13 +43,25 @@
 /**
  * librdkafka version
  *
- * interpreted as MM.mm.rr.xx:
+ * Interpreted as hex MM.mm.rr.xx:
  *   MM = Major
  *   mm = minor
  *   rr = revision
  *   xx = currently unused
+ *
+ * I.e.: 0x00080100 = 0.8.1
  */
-#define RD_KAFKA_VERSION  0x00080000
+#define RD_KAFKA_VERSION  0x00080100
+
+/**
+ * Returns the librdkafka version as integer.
+ */
+int rd_kafka_version (void);
+
+/**
+ * Returns the librdkafka version as string.
+ */
+const char *rd_kafka_version_str (void);
 
 
 /**

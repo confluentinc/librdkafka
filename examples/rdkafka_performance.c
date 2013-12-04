@@ -412,6 +412,8 @@ int main (int argc, char **argv) {
 			"Usage: %s [-C|-P] -t <topic> "
 			"[-p <partition>] [-b <broker,broker..>] [options..]\n"
 			"\n"
+			"librdkafka version %s (0x%08x)\n"
+			"\n"
 			" Options:\n"
 			"  -C | -P      Consumer or Producer mode\n"
 			"  -t <topic>   Topic to fetch / produce\n"
@@ -453,6 +455,7 @@ int main (int argc, char **argv) {
 			"  writes messages of size -s <..> and prints thruput\n"
 			"\n",
 			argv[0],
+			rd_kafka_version_str(), rd_kafka_version(),
 			RD_KAFKA_DEBUG_CONTEXTS);
 		exit(1);
 	}

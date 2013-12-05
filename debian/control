@@ -9,7 +9,7 @@ Vcs-Git: git://github.com/edenhill/librdkafka.git -b debian
 Vcs-Browser: https://github.com/edenhill/librdkafka/tree/debian
 
 Package: librdkafka1
-Architecture: any
+Architecture: i386 amd64 x32 ia64 armel armhf arm64 ppc64 sparc64 s390x kfreebsd-i386 kfreebsd-amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: library implementing the Apache Kafka protocol
  librdkafka is a C implementation of the Apache Kafka protocol. It currently
@@ -20,7 +20,7 @@ Description: library implementing the Apache Kafka protocol
 
 Package: librdkafka-dev
 Section: libdevel
-Architecture: any
+Architecture: i386 amd64 x32 ia64 armel armhf arm64 ppc64 sparc64 s390x kfreebsd-i386 kfreebsd-amd64
 Depends: librdkafka1 (= ${binary:Version}), ${misc:Depends}
 Description: library implementing the Apache Kafka protocol (development headers)
  librdkafka is a C implementation of the Apache Kafka protocol. It currently
@@ -34,7 +34,7 @@ Description: library implementing the Apache Kafka protocol (development headers
 Package: librdkafka1-dbg
 Section: debug
 Priority: extra
-Architecture: any
+Architecture: i386 amd64 x32 ia64 armel armhf arm64 ppc64 sparc64 s390x kfreebsd-i386 kfreebsd-amd64
 Depends: librdkafka1 (= ${binary:Version}), ${misc:Depends}
 Description: library implementing the Apache Kafka protocol (debugging symbols)
  librdkafka is a C implementation of the Apache Kafka protocol. It currently

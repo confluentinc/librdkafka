@@ -84,4 +84,6 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_toppar_insert_msg@Base 0.8.0
  rd_kafka_toppar_insert_msgq@Base 0.8.0
  rd_kafka_toppar_ua_move@Base 0.8.0
+ rd_kafka_version@Base 0.8.1
+ rd_kafka_version_str@Base 0.8.1
  rd_kafka_wait_destroyed@Base 0.8.0

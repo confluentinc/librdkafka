@@ -353,7 +353,7 @@ int rd_kafka_q_serve (rd_kafka_t *rk,
 	rd_kafka_dbg(rk, QUEUE, "QSERVE", "Serving %i ops", localq.rkq_qlen);
 
 	/* Call callback for each op */
-	TAILQ_FOREACH_SAFE(rko, tmp, &localq.rkq_q, rko_link) {
+	TAILQ_FOREACH_SAFE(rko, &localq.rkq_q, rko_link, tmp) {
 		callback(rko, opaque);
 		rd_kafka_op_destroy(rko);
 	}
@@ -515,7 +515,7 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 
 	/* Decommission all topics */
 	rd_kafka_lock(rk);
-	TAILQ_FOREACH_SAFE(rkt, rkt_tmp, &rk->rk_topics, rkt_link) {
+	TAILQ_FOREACH_SAFE(rkt, &rk->rk_topics, rkt_link, rkt_tmp) {
 		rd_kafka_unlock(rk);
 		rd_kafka_topic_partitions_remove(rkt);
 		rd_kafka_lock(rk);
@@ -553,7 +553,7 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 	size_t size = *sizep;
 	int of = *ofp;
 
-	_st_printf("%s{ "
+	_st_printf("%s\"%"PRId32"\": { "
 		   "\"partition\":%"PRId32", "
 		   "\"leader\":%"PRId32", "
 		   "\"desired\":%s, "
@@ -573,6 +573,7 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   "\"txbytes\":%"PRIu64" "
 		   "} ",
 		   first ? "" : ", ",
+		   rktp->rktp_partition,
 		   rktp->rktp_partition,
 		   rktp->rktp_leader ? rktp->rktp_leader->rkb_nodeid : -1,
 		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_DESIRED)?"true":"false",
@@ -618,7 +619,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		   "\"ts\":%"PRIu64", "
 		   "\"time\":%lli, "
 		   "\"replyq\":%i, "
-		   "\"brokers\":[ "/*open brokers*/,
+		   "\"brokers\":{ "/*open brokers*/,
 		   now,
 		   (signed long long)time(NULL),
 		   rk->rk_rep.rkq_qlen);
@@ -626,7 +627,8 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
-		_st_printf("%s{ "/*open broker*/
+		rd_kafka_avg_rollover(&rkb->rkb_rtt_last, &rkb->rkb_rtt_curr);
+		_st_printf("%s\"%s\": { "/*open broker*/
 			   "\"name\":\"%s\", "
 			   "\"nodeid\":%"PRId32", "
 			   "\"state\":\"%s\", "
@@ -639,8 +641,15 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"rx\":%"PRIu64", "
 			   "\"rxbytes\":%"PRIu64", "
 			   "\"rxerrs\":%"PRIu64", "
-			   "\"toppars\":[ "/*open toppars*/,
+			   "\"rtt\": {"
+			   " \"min\":%"PRIu64","
+			   " \"max\":%"PRIu64","
+			   " \"avg\":%"PRIu64","
+			   " \"cnt\":%i "
+			   "}, "
+			   "\"toppars\":{ "/*open toppars*/,
 			   rkb == TAILQ_FIRST(&rk->rk_brokers) ? "" : ", ",
+			   rkb->rkb_name,
 			   rkb->rkb_name,
 			   rkb->rkb_nodeid,
 			   rd_kafka_broker_state_names[rkb->rkb_state],
@@ -652,14 +661,19 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rkb->rkb_c.tx_retries,
 			   rkb->rkb_c.rx,
 			   rkb->rkb_c.rx_bytes,
-			   rkb->rkb_c.rx_err);
+			   rkb->rkb_c.rx_err,
+			   rkb->rkb_rtt_last.ra_min,
+			   rkb->rkb_rtt_last.ra_max,
+			   rkb->rkb_rtt_last.ra_avg,
+			   rkb->rkb_rtt_last.ra_cnt);
 
 		rd_kafka_broker_toppars_rdlock(rkb);
 		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
-			_st_printf("%s{ "
+			_st_printf("%s\"%.*s\": { "
 				   "\"topic\":\"%.*s\", "
 				   "\"partition\":%"PRId32"} ",
 				   rktp==TAILQ_FIRST(&rkb->rkb_toppars)?"":", ",
+				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 				   rktp->rktp_partition);
 		}
@@ -667,22 +681,23 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 		rd_kafka_broker_unlock(rkb);
 
-		_st_printf("] "/*close toppars*/
+		_st_printf("} "/*close toppars*/
 			   "} "/*close broker*/);
 	}
 
 
-	_st_printf("], " /* close "brokers" array */
-		   "\"topics\":[ ");
+	_st_printf("}, " /* close "brokers" array */
+		   "\"topics\":{ ");
 
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		int i;
 
 		rd_kafka_topic_rdlock(rkt);
-		_st_printf("%s{ "
+		_st_printf("%s\"%.*s\": { "
 			   "\"topic\":\"%.*s\", "
-			   "\"partitions\":[ " /*open partitions*/,
+			   "\"partitions\":{ " /*open partitions*/,
 			   rkt==TAILQ_FIRST(&rk->rk_topics)?"":", ",
+			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic));
 
 		for (i = 0 ; i < rkt->rkt_partition_cnt ; i++)
@@ -699,14 +714,14 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 						   rkt->rkt_ua, i++ == 0);
 		rd_kafka_topic_unlock(rkt);
 
-		_st_printf("] "/*close partitions*/
+		_st_printf("} "/*close partitions*/
 			   "} "/*close topic*/);
 
 	}
 
 	rd_kafka_unlock(rk);
 
-	_st_printf("] "/*close topics*/
+	_st_printf("} "/*close topics*/
 		   "}"/*close object*/);
 
 
@@ -842,17 +857,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 /**
  * Produce a single message.
- *
- * If 'partition' is unassigned (RD_KAFKA_PARTITION_UA) the configured or
- * default partitioner will be used to designate the target partition.
- *
- * See rdkafka.h for 'msgflags'.
- *
- * Returns: 0 on success or -1 on error (see errno for details)
- *
- * errnos:
- *    ENOBUFS - conf.producer.max_msg_cnt would be exceeded.
- *
  * Locality: any application thread
  */
 int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
@@ -1278,4 +1282,22 @@ const char *rd_kafka_name (const rd_kafka_t *rk) {
 
 int rd_kafka_outq_len (rd_kafka_t *rk) {
 	return rk->rk_producer.msg_cnt;
+}
+
+
+int rd_kafka_version (void) {
+	return RD_KAFKA_VERSION;
+}
+
+const char *rd_kafka_version_str (void) {
+	static char ret[64];
+	int ver = rd_kafka_version();
+
+	if (!*ret)
+		snprintf(ret, sizeof(ret), "%i.%i.%i",
+			 (ver >> 24) & 0xff,
+			 (ver >> 16) & 0xff,
+			 (ver >> 8) & 0xff);
+
+	return ret;
 }

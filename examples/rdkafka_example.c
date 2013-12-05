@@ -214,6 +214,8 @@ int main (int argc, char **argv) {
 			"Usage: %s [-C|-P] -t <topic> "
 			"[-p <partition>] [-b <host1:port1,host2:port2,..>]\n"
 			"\n"
+			"librdkafka version %s (0x%08x)\n"
+			"\n"
 			" Options:\n"
 			"  -C | -P         Consumer or Producer mode\n"
 			"  -t <topic>      Topic to fetch / produce\n"
@@ -231,8 +233,11 @@ int main (int argc, char **argv) {
 			"  writes fetched messages to stdout\n"
 			" In Producer mode:\n"
 			"  reads messages from stdin and sends to broker\n"
+			"\n"
+			"\n"
 			"\n",
 			argv[0],
+			rd_kafka_version_str(), rd_kafka_version(),
 			RD_KAFKA_DEBUG_CONTEXTS);
 		exit(1);
 	}

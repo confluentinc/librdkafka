@@ -136,7 +136,7 @@ configuration ("request.required.acks" and "message.send.max.retries", etc).
 
 If the topic configuration property "request.required.acks" is set to wait
 for message commit acknowledgements from brokers (any value but 0, see
-[`rdkafka.h`](https://github.com/edenhill/librdkafka/blob/master/rdkafka.h)
+[`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
 for specifics) then librdkafka will hold on to the message until
 all expected acks have been received, gracefully handling the following events:
      
@@ -172,8 +172,8 @@ The delivery report callback is optional.
 
 The librdkafka API is documented in the
 [`rdkafka.h`](https://github.com/edenhill/librdkafka/blob/master/rdkafka.h)
-header file, including the supported configuration properties.
-
+header file, the configuration properties are documented in 
+[`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
 
 ### Initialization
 

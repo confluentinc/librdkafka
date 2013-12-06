@@ -276,7 +276,7 @@ Broker names are specified as "host[:port]" where the port is optional
 address.
 If host resolves to multiple addresses librdkafka will round-robin the
 addresses for each connection attempt.
-A DNS recording containing all broker address can thus be used to provide a
+A DNS record containing all broker address can thus be used to provide a
 reliable bootstrap broker.
 
 

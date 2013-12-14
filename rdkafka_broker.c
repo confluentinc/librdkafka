@@ -888,7 +888,7 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 					  const char *reason) {
 	char *buf;
 	size_t of = 0;
-	int32_t arrsize;
+	int32_t arrsize = 0;
 	size_t tnamelen = 0;
 	rd_kafka_topic_t *rkt;
 
@@ -938,21 +938,18 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	}
 
 
-	if (all_topics) {
-		arrsize = 0;
-
-	} else {
-		arrsize = rkb->rkb_rk->rk_topic_cnt;
-
+	if (only_rkt || !all_topics) {
 		rd_kafka_lock(rkb->rkb_rk);
+
 		/* Calculate size to hold all known topics */
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
 			if (only_rkt && only_rkt != rkt)
 				continue;
 
+			arrsize++;
 			tnamelen += RD_KAFKAP_STR_SIZE(rkt->rkt_topic);
 		}
-
+		assert(arrsize == rkb->rkb_rk->rk_topic_cnt);
 	}
 	
 	buf = malloc(sizeof(arrsize) + tnamelen);

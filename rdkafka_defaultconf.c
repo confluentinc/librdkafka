@@ -138,7 +138,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(stats_interval_ms),
 	  "librdkafka statistics emit interval. The application also needs to "
 	  "register a stats callback using `rd_kafka_conf_set_stats_cb()`. "
-	  "The granularity is 1000ms.",
+	  "The granularity is 1000ms. A value of 0 disables statistics.",
 	  0, 86400*1000, 0 },
 
 	/* Global consumer properties */

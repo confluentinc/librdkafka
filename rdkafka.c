@@ -749,7 +749,8 @@ static void *rd_kafka_thread_main (void *arg) {
 			last_topic_scan = now;
 		}
 
-		if (now >
+		if (rk->rk_conf.stats_interval_ms &&
+		    now >
 		    last_stats_emit + (rk->rk_conf.stats_interval_ms*1000)) {
 			rd_kafka_stats_emit_all(rk);
 			last_stats_emit = now;

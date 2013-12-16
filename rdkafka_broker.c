@@ -949,7 +949,6 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 			arrsize++;
 			tnamelen += RD_KAFKAP_STR_SIZE(rkt->rkt_topic);
 		}
-		assert(arrsize == rkb->rkb_rk->rk_topic_cnt);
 	}
 	
 	buf = malloc(sizeof(arrsize) + tnamelen);

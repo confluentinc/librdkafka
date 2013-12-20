@@ -862,7 +862,8 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
 	if (unlikely(err)) {
 		/* FIXME: handle error */
 		rd_rkb_log(rkb, LOG_WARNING, "METADATA",
-			   "Metadata request failed: %i", err);
+			   "Metadata request failed: %s",
+			   rd_kafka_err2str(err));
 	} else {
 		rd_kafka_metadata_handle(rkb,
 					 reply->rkbuf_buf2,

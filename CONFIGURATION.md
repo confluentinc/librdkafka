@@ -14,7 +14,7 @@ socket.timeout.ms                        |         60000 | Timeout for network r
 socket.send.buffer.bytes                 |             0 | Broker socket send buffer size. System default is used if 0.
 socket.receive.buffer.bytes              |             0 | Broker socket receive buffer size. System default is used if 0.
 broker.address.ttl                       |        300000 | How long to cache the broker address resolving results.
-statistics.interval.ms                   |             0 | librdkafka statistics emit interval. The application also needs to register a stats callback using `rd_kafka_conf_set_stats_cb()`. The granularity is 1000ms.
+statistics.interval.ms                   |             0 | librdkafka statistics emit interval. The application also needs to register a stats callback using `rd_kafka_conf_set_stats_cb()`. The granularity is 1000ms. A value of 0 disables statistics.
 queued.min.messages                      |        100000 | Minimum number of messages that should to be available for consumption by application.
 fetch.wait.max.ms                        |           100 | Maximum time the broker may wait to fill the response with fetch.min.bytes.
 fetch.min.bytes                          |             1 | Minimum number of bytes the broker responds with. If fetch.wait.max.ms expires the accumulated data will be sent to the client regardless of this setting.

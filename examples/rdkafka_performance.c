@@ -237,6 +237,7 @@ int main (int argc, char **argv) {
 	const char *compression = "no";
 	int64_t start_offset = 0;
 	int batch_size = 0;
+	int idle = 0;
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -268,7 +269,7 @@ int main (int argc, char **argv) {
 
 	while ((opt =
 		getopt(argc, argv,
-		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:z:o:X:B:eT:q")) != -1) {
+		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:z:o:X:B:eT:qI")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -401,6 +402,10 @@ int main (int argc, char **argv) {
 			quiet = 1;
 			break;
 
+		case 'I':
+			idle = 1;
+			break;
+
 		default:
 			goto usage;
 		}
@@ -445,6 +450,7 @@ int main (int argc, char **argv) {
 			"  -T <intvl>   Enable statistics from librdkafka at "
 			"specified interval (ms)\n"
 			"  -q           Be more quiet\n"
+			"  -I           Idle: dont produce any messages\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  consumes messages and prints thruput\n"
@@ -545,6 +551,11 @@ int main (int argc, char **argv) {
 
 		while (run && (msgcnt == -1 || cnt.msgs < msgcnt)) {
 			/* Send/Produce message. */
+
+			if (idle) {
+				rd_kafka_poll(rk, 1000);
+				continue;
+			}
 
 			if (do_seq) {
 				snprintf(sbuf, msgsize-1, "%"PRIu64": ", seq);

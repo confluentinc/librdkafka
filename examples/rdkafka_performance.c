@@ -105,7 +105,7 @@ static void msg_delivered (rd_kafka_t *rk,
 	    !(msgs_wait_cnt % (dispintvl / 1000)) || 
 	    (now - last) >= dispintvl * 1000) {
 		if (error_code)
-			printf("Message delivey failed: %s (%li remain)\n",
+			printf("Message delivery failed: %s (%li remain)\n",
 			       rd_kafka_err2str(error_code),
 			       msgs_wait_cnt);
 		else if (!quiet)

@@ -477,7 +477,7 @@ rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
 		return NULL;
 
 	if (rkmessage->payload)
-		return rkmessage->payload;
+		return (const char *)rkmessage->payload;
 
 	return rd_kafka_err2str(rkmessage->err);
 }

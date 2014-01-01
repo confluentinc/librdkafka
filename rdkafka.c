@@ -862,7 +862,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
  */
 int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
 		      int msgflags,
-		      char *payload, size_t len,
+		      void *payload, size_t len,
 		      const void *key, size_t keylen,
 		      void *msg_opaque) {
 

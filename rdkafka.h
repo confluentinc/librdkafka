@@ -659,7 +659,7 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 
 int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
 		      int msgflags,
-		      char *payload, size_t len,
+		      void *payload, size_t len,
 		      const void *key, size_t keylen,
 		      void *msg_opaque);
 

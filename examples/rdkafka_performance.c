@@ -672,7 +672,7 @@ int main (int argc, char **argv) {
 		if (!(rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf,
 					errstr, sizeof(errstr)))) {
 			fprintf(stderr,
-				"%% Failed to create Kafka producer: %s\n",
+				"%% Failed to create Kafka consumer: %s\n",
 				errstr);
 			exit(1);
 		}

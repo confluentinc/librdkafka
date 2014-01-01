@@ -579,6 +579,7 @@ int main (int argc, char **argv) {
 					       strerror(errno),
 					       errno == ENOBUFS ?
 					       " (backpressure)":"");
+				msgs_failed++;
 				cnt.tx_err++;
 				if (errno != ENOBUFS) {
 					run = 0;

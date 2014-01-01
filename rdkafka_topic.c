@@ -397,8 +397,9 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
 	/* Verify configuration */
 	if (!topic ||
-	    conf->message_timeout_ms <= 0 ||
-	    conf->request_timeout_ms <= 0) {
+	    (conf &&
+	     (conf->message_timeout_ms <= 0 ||
+	      conf->request_timeout_ms <= 0))) {
 		errno = EINVAL;
 		return NULL;
 	}

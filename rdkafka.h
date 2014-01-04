@@ -515,13 +515,14 @@ rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
  * to consume messages from the local queue, each kafka message being
  * represented as a `rd_kafka_message_t *` object.
  *
- * `rd_kafka_consume_start()` must not be called multiple times without
- * stopping consumption first with `rd_kafka_consume_stop()`.
+ * `rd_kafka_consume_start()` must not be called multiple times for the same
+ * topic and partition without stopping consumption first with
+ * `rd_kafka_consume_stop()`.
  *
  * Returns 0 on success or -1 on error (see `errno`).
  */
 int rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
-			     int64_t offset);
+			    int64_t offset);
 
 /**
  * Stop consuming messages for topic 'rkt' and 'partition', purging
@@ -572,7 +573,7 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *rkt, int32_t partition,
  * or -1 on error (same error codes as for `rd_kafka_consume()`.
  */
 ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
-				int min_wait_ms,
+				int timeout_ms,
 				rd_kafka_message_t **rkmessages,
 				size_t rkmessages_size);
 

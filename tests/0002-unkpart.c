@@ -27,8 +27,8 @@
  */
 
 /**
- * Tests "message.timeout.ms"
- * Issue #21
+ * Tests that producing to unknown partitions fails.
+ * Issue #39
  */
 
 #define _GNU_SOURCE
@@ -64,7 +64,7 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 
 	msgs_wait &= ~(1 << msgid);
 
-	if (err != RD_KAFKA_RESP_ERR__MSG_TIMED_OUT)
+	if (err != RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
 		TEST_FAIL("Message #%i failed with unexpected error %s\n",
 			  msgid, rd_kafka_err2str(err));
 }
@@ -81,7 +81,6 @@ int main (int argc, char **argv) {
 	char errstr[512];
 	char msg[128];
 	int msgcnt = 10;
-	time_t t_start, t_spent;
 	int i;
 
 	/* Socket hangups are gracefully handled in librdkafka on socket error
@@ -91,11 +90,6 @@ int main (int argc, char **argv) {
 
 
 	test_conf_init(&conf, &topic_conf, 10);
-
-	/* Set message.timeout.ms configuration for topic */
-	if (rd_kafka_topic_conf_set(topic_conf, "message.timeout.ms", "2000",
-				    errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
-		TEST_FAIL("%s\n", errstr);
 
 	/* Set delivery report callback */
 	rd_kafka_conf_set_dr_cb(conf, dr_cb);
@@ -117,29 +111,37 @@ int main (int argc, char **argv) {
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
 		*msgidp = i;
-		msgs_wait |= (1 << i);
 		snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
 		r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
 				     msg, strlen(msg), NULL, 0, msgidp);
-		if (r == -1)
-			TEST_FAIL("Failed to produce message #%i: %s\n",
-				  i, strerror(errno));
-	}
+		if (r == -1) {
+			if (errno == ESRCH)
+				TEST_SAY("Failed to produce message #%i: "
+					 "unknown partition: good!\n", i);
+			else
+				TEST_FAIL("Failed to produce message #%i: %s\n",
+					  i, strerror(errno));
+		} else {
+			if (i > 5)
+				TEST_FAIL("Message #%i produced: "
+					  "should've failed\n", i);
+			msgs_wait |= (1 << i);
+		}
 
-	t_start = time(NULL);
+		/* After half the messages: sleep to allow the metadata
+		 * to be fetched from broker and update the actual partition
+		 * count: this will make subsequent produce() calls fail
+		 * immediately. */
+		if (i == 5)
+			sleep(2);
+	}
 
 	/* Wait for messages to time out */
 	while (rd_kafka_outq_len(rk) > 0)
 		rd_kafka_poll(rk, 50);
 
-	t_spent = time(NULL) - t_start;
-
 	if (msgs_wait != 0)
 		TEST_FAIL("Still waiting for messages: 0x%x\n", msgs_wait);
-
-	if (t_spent > 5 /* 2000ms+cruft*/)
-		TEST_FAIL("Messages timed out too slowly (%i seconds > 5)\n",
-			  (int)t_spent);
 
 	/* Destroy topic */
 	rd_kafka_topic_destroy(rkt);

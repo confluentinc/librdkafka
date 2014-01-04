@@ -74,7 +74,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	/* Global properties */
 	{ _RK_GLOBAL, "client.id", _RK_C_STR, _RK(clientid),
 	  "Client identifier.",
-	  sdef: "rdkafka" },
+	  .sdef =  "rdkafka" },
 	{ _RK_GLOBAL, "metadata.broker.list", _RK_C_STR, _RK(brokerlist),
 	  "Initial list of brokers. "
 	  "The application may also use `rd_kafka_brokers_add()` to add "
@@ -109,7 +109,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
 	  "A comma-separated list of debug contexts to enable: "
 	  RD_KAFKA_DEBUG_CONTEXTS,
-	  s2i: {
+	  .s2i = {
 			{ RD_KAFKA_DBG_GENERIC,  "generic" },
 			{ RD_KAFKA_DBG_BROKER,   "broker" },
 			{ RD_KAFKA_DBG_TOPIC,    "topic" },
@@ -187,8 +187,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),
 	  "Compression codec to use for compressing message sets.",
-	  vdef: RD_KAFKA_COMPRESSION_NONE,
-	  s2i: {
+	  .vdef = RD_KAFKA_COMPRESSION_NONE,
+	  .s2i = {
 			{ RD_KAFKA_COMPRESSION_NONE,   "none" },
 			{ RD_KAFKA_COMPRESSION_GZIP,   "gzip" },
 			{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },

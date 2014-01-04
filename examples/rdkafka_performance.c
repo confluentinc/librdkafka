@@ -574,7 +574,10 @@ int main (int argc, char **argv) {
 			       rd_kafka_produce(rkt, partition,
 						sendflags, pbuf, msgsize,
 						key, keylen, NULL) == -1) {
-				if (!quiet || errno != ENOBUFS)
+				if (errno == ESRCH)
+					printf("No such partition: %"PRId32"\n",
+					       partition);
+				else if (!quiet || errno != ENOBUFS)
 					printf("produce error: %s%s\n",
 					       strerror(errno),
 					       errno == ENOBUFS ?

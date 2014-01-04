@@ -468,10 +468,12 @@ struct rd_kafka_topic_s {
 	struct rd_kafka_toppar_s  *rkt_ua;  /* unassigned partition */
 	struct rd_kafka_toppar_s **rkt_p;
 	int32_t            rkt_partition_cnt;
-
 	TAILQ_HEAD(, rd_kafka_toppar_s) rkt_desp; /* Desired partitions
 						   * that are not yet seen
 						   * in the cluster. */
+
+	rd_ts_t            rkt_ts_metadata; /* Timestamp of last metadata
+					     * update for this topic. */
 
 	struct rd_kafka_s *rkt_rk;
 

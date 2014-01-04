@@ -671,6 +671,9 @@ int rd_kafka_topic_partition_cnt_update (rd_kafka_t *rk,
 	}
 
 	rd_kafka_topic_wrlock(rkt);
+
+	rkt->rkt_ts_metadata = rd_clock();
+
 	if (rkt->rkt_partition_cnt == partition_cnt) {
 		rd_kafka_dbg(rk, TOPIC, "PARTCNT",
 			     "No change in partition count for topic %s",
@@ -801,7 +804,7 @@ void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic) {
 	rd_kafka_toppar_unlock(rktp_ua);
 
 	TAILQ_FOREACH_SAFE(rkm, &uas.rkmq_msgs, rkm_link, tmp) {
-		if (unlikely(rd_kafka_msg_partitioner(rkt, NULL, rkm) == -1)) {
+		if (unlikely(rd_kafka_msg_partitioner(rkt, rkm) != 0)) {
 			/* Desired partition not available */
 			rd_kafka_msgq_enq(&failed, rkm);
 		}
@@ -812,13 +815,12 @@ void rd_kafka_topic_assign_uas (rd_kafka_t *rk, const char *topic) {
 		     cnt - failed.rkmq_msg_cnt, cnt);
 
 	if (failed.rkmq_msg_cnt > 0) {
-		/* Add the messages to the UA partition's head to
-		 * preserve some message order. */
+		/* Fail the messages */
 		rd_kafka_dbg(rk, TOPIC, "UAS",
 			     "%i/%i messages failed partitioning",
 			     uas.rkmq_msg_cnt, cnt);
-		rd_kafka_msgq_concat(&failed, &rktp_ua->rktp_msgq);
-		rd_kafka_msgq_move(&rktp_ua->rktp_msgq, &failed);
+		rd_kafka_dr_msgq(rk, &failed,
+				 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
 	}
 
 	rd_kafka_toppar_destroy(rktp_ua); /* from get() */

@@ -106,6 +106,9 @@ typedef enum {
 						  * topic+partition queue on
 						  * the broker.
 						  * Not really an error. */
+	RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION = -190, /* Permanent:
+						      * Partition does not
+						      * exist in cluster. */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -651,6 +654,7 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
  *              "queue.buffering.max.message"
  *   EMSGSIZE - message is larger than configured max size:
  *              "messages.max.bytes".
+ *   ESRCH    - requested 'partition' is unknown in the Kafka cluster.
  *
  */
 

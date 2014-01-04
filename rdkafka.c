@@ -450,6 +450,9 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 		return "Local: Message timed out";
 	case RD_KAFKA_RESP_ERR__PARTITION_EOF:
 		return "Broker: No more messages";
+	case RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION:
+		return "Local: Unknown partition";
+
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
 		return "Unknown error";
 	case RD_KAFKA_RESP_ERR_NO_ERROR:

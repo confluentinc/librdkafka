@@ -99,8 +99,8 @@ struct rd_kafka_topic_conf_s;
  */
 typedef enum {
 	RD_KAFKA_COMPRESSION_NONE,
-	RD_KAFKA_COMPRESSION_GZIP,   /* FIXME: not supported */
-	RD_KAFKA_COMPRESSION_SNAPPY, /* FIXME: not supported */
+	RD_KAFKA_COMPRESSION_GZIP,
+	RD_KAFKA_COMPRESSION_SNAPPY,
 } rd_kafka_compression_t;
 
 

@@ -186,7 +186,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  1, 300*1000, 100 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),
-	  "Compression codec to use for compressing message sets.",
+	  "Compression codec to use for compressing message sets: "
+	  "none, gzip or snappy",
 	  .vdef = RD_KAFKA_COMPRESSION_NONE,
 	  .s2i = {
 			{ RD_KAFKA_COMPRESSION_NONE,   "none" },

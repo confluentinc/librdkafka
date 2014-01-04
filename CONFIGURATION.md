@@ -23,7 +23,7 @@ queue.buffering.max.messages             |        100000 | Maximum number of mes
 queue.buffering.max.ms                   |          1000 | Maximum time, in milliseconds, for buffering data on the producer queue.
 message.send.max.retries                 |             2 | How many times to retry sending a failing MessageSet. **Note:** retrying may cause reordering.
 retry.backoff.ms                         |           100 | The backoff time in milliseconds before retrying a message send.
-compression.codec                        |          none | Compression codec to use for compressing message sets.
+compression.codec                        |          none | Compression codec to use for compressing message sets: none, gzip or snappy
 batch.num.messages                       |          1000 | Maximum number of messages batched in one MessageSet.
 
 

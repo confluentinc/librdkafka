@@ -48,6 +48,7 @@
 #include "rdrand.h"
 #include "rdgz.h"
 #include "snappy.h"
+#include "endian_compat.h"
 
 const char *rd_kafka_broker_state_names[] = {
 	"DOWN",

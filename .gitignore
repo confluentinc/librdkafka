@@ -6,3 +6,4 @@
 *.a
 *.d
 core
+*dSYM/

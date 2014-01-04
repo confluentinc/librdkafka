@@ -1062,7 +1062,7 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 						   void *opaque),
 			       void *opaque) {
 	rd_kafka_toppar_t *rktp;
-	struct consume_ctx ctx = { consume_cb: consume_cb, opaque: opaque };
+	struct consume_ctx ctx = { .consume_cb = consume_cb, .opaque = opaque };
 	int r;
 
 	/* Get toppar */

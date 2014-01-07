@@ -2342,7 +2342,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 		case RD_KAFKA_COMPRESSION_GZIP:
 		{
-			uint64_t outlenx;
+			uint64_t outlenx = 0;
 
 			/* Decompress Message payload */
 			outbuf = rd_gz_decompress(Value->data, Value_len,

@@ -46,7 +46,7 @@ libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a CONFIGURATION.md
 
 
 $(LIBNAME).so.$(LIBVER): $(OBJS)
-	@(if [ "`uname -s`" = "Linux" ]; then \
+	@(if [ "`uname -s`" = "Linux" -o "`uname -o`" = "Cygwin" ]; then \
 		$(CC) $(LDFLAGS) \
 			-shared -Wl,-soname,$@ \
 			-Wl,--version-script=librdkafka.lds \

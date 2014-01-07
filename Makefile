@@ -76,9 +76,9 @@ install:
 		DESTDIR="$(DESTDIR)" ; \
 	fi ; \
 	install -d $$DESTDIR/include/librdkafka $$DESTDIR/lib ; \
-	install -t $$DESTDIR/include/$(LIBNAME) $(HDRS) ; \
-	install -t $$DESTDIR/lib $(LIBNAME).a ; \
-	install -t $$DESTDIR/lib $(LIBNAME).so.$(LIBVER) ; \
+	install $(HDRS) $$DESTDIR/include/$(LIBNAME) ; \
+	install $(LIBNAME).a $$DESTDIR/lib ; \
+	install $(LIBNAME).so.$(LIBVER) $$DESTDIR/lib ; \
 	(cd $$DESTDIR/lib && ln -sf $(LIBNAME).so.$(LIBVER) $(LIBNAME).so)
 
 tests: .PHONY

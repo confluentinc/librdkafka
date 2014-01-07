@@ -28,16 +28,4 @@
 
 #pragma once
 
-void rdputs0 (const char *file, const char *func, int line,
-	      const char *fmt, ...)
-	__attribute__((format (printf, 4, 5)));
-
-#define rdbg(fmt...) rdputs0(__FILE__,__FUNCTION__,__LINE__,fmt)
-
-void rd_dbg_ctx_push (const char *fmt, ...);
-void rd_dbg_ctx_pop (void);
-void rd_dbg_ctx_clear (void);
-void rd_dbg_set (int onoff);
-
-
 void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len);

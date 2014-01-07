@@ -30,6 +30,8 @@
   #include <sys/endian.h>
 #elif defined __linux__
   #include <endian.h>
+#elif defined __CYGWIN__
+ #include <endian.h>
 #elif defined __BSD__
   #include <sys/endian.h>
 #elif defined __APPLE__

@@ -13,7 +13,7 @@ HDRS=	rdkafka.h
 OBJS=	$(SRCS:.c=.o)
 DEPS=	${OBJS:%.o=%.d}
 
-CFLAGS+=-O2 -Wall -Werror -Wfloat-equal -Wpointer-arith -fPIC -I.
+CFLAGS+=-O2 -Wall -Werror -Wfloat-equal -Wpointer-arith -I.
 CFLAGS+=-g
 
 # Clang warnings to ignore
@@ -29,7 +29,11 @@ CFLAGS+=-DSG
 #CFLAGS += -pg
 #LDFLAGS += -pg
 
-LDFLAGS+=-g -fPIC
+LDFLAGS+= -g
+ifneq ($(shell uname -o),Cygwin)
+	LDFLAGS+=-fPIC
+	CFLAGS+=-fPIC
+endif
 
 .PHONY:
 

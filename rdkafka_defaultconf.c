@@ -240,12 +240,12 @@ static rd_kafka_conf_res_t
 rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			    const struct rd_kafka_property *prop,
 			    const char *istr, int ival) {
-#define _PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
+#define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
 	switch (prop->type)
 	{
 	case _RK_C_STR:
 	{
-		char **str = _PTR(char **, conf, prop->offset);
+		char **str = _RK_PTR(char **, conf, prop->offset);
 		if (*str)
 			free(*str);
 		*str = strdup(istr);
@@ -255,7 +255,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 	case _RK_C_S2I:
 	case _RK_C_S2F:
 	{
-		int *val = _PTR(int *, conf, prop->offset);
+		int *val = _RK_PTR(int *, conf, prop->offset);
 
 		if (prop->type == _RK_C_S2F) {
 			/* Flags: OR it in */
@@ -272,7 +272,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 		assert(!*"unknown conf type");
 	}
 
-#undef PTR
+#undef _RK_PTR
 
 	/* unreachable */
 	return RD_KAFKA_CONF_INVALID;
@@ -351,11 +351,11 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 
 
 			/* Left trim */
-			while (s < t && isspace(*s))
+			while (s < t && isspace((int)*s))
 				s++;
 
 			/* Right trim */
-			while (t > s && isspace(*t))
+			while (t > s && isspace((int)*t))
 				t--;
 
 			/* Empty string? */
@@ -490,12 +490,12 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
 static void rd_kafka_anyconf_clear (void *conf,
 				    const struct rd_kafka_property *prop) {
 
-#define _PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
+#define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
 	switch (prop->type)
 	{
 	case _RK_C_STR:
 	{
-		char **str = _PTR(char **, conf, prop->offset);
+		char **str = _RK_PTR(char **, conf, prop->offset);
 		if (*str) {
 			free(*str);
 			*str = NULL;
@@ -506,7 +506,7 @@ static void rd_kafka_anyconf_clear (void *conf,
 	default:
 		break;
 	}
-#undef _PTR
+#undef _RK_PTR
 
 }
 

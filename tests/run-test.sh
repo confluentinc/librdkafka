@@ -17,7 +17,9 @@ TEST=$1
 if [ ! -z "$2" ]; then
     MODES=$2
 else
-    MODES="bare valgrind"
+    MODES="bare"
+    # Enable valgrind:
+    #MODES="bare valgrind"
 fi
 
 FAILED=0

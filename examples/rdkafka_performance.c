@@ -616,7 +616,8 @@ int main (int argc, char **argv) {
 		printf("All messages produced, "
 		       "now waiting for %li deliveries\n",
 		       msgs_wait_cnt);
-		rd_kafka_dump(stdout, rk);
+		if (debug)
+			rd_kafka_dump(stdout, rk);
 
 		/* Wait for messages to be delivered */
 		i = 0;
@@ -643,7 +644,8 @@ int main (int argc, char **argv) {
 			       cnt.tx_err, cnt.tx,
 			       ((double)cnt.tx_err / (double)cnt.tx) * 100.0);
 
-		rd_kafka_dump(stdout, rk);
+		if (debug)
+			rd_kafka_dump(stdout, rk);
 
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);

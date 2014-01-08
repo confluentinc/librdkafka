@@ -63,6 +63,7 @@ For an introduction to the performance and usage of librdkafka, see
   * [redBorder](http://www.redborder.net)
   * [Headweb](http://www.headweb.com/)
   * [node-kafka](https://github.com/sutoiku/node-kafka)
+  * [Produban's log2kafka](https://github.com/Produban/log2kafka)
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
 

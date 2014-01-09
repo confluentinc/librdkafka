@@ -1,4 +1,3 @@
-
 LIBNAME=librdkafka
 LIBVER=1
 
@@ -30,7 +29,9 @@ CFLAGS+=-DSG
 #LDFLAGS += -pg
 
 LDFLAGS+= -g
-ifneq ($(shell uname -o),Cygwin)
+UNAME_S := $(shell uname -s)
+CYGWIN := $(UNAME 1 6)
+ifneq ($(CYGWIN), CYGWIN)
 	LDFLAGS+=-fPIC
 	CFLAGS+=-fPIC
 endif
@@ -46,12 +47,12 @@ libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a CONFIGURATION.md
 
 
 $(LIBNAME).so.$(LIBVER): $(OBJS)
-	@(if [ "`uname -s`" = "Linux" -o "`uname -o`" = "Cygwin" ]; then \
+    @(if [ $(UNAME_S) = "Linux" -o $(CYGWIN) = CYGWIN ]; then \	
 		$(CC) $(LDFLAGS) \
 			-shared -Wl,-soname,$@ \
 			-Wl,--version-script=librdkafka.lds \
 			$(OBJS) -o $@ -lpthread -lrt -lz -lc ; \
-	elif [ "`uname -s`" = "Darwin" ]; then \
+	elif [ $(UNAME_S) = "Darwin" ]; then \
 		$(CC) $(LDFLAGS) \
 			$(OBJS) -dynamiclib -o $@ -lpthread -lz -lc ; \
 	fi)

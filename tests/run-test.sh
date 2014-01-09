@@ -1,10 +1,10 @@
 #!/bin/bash
 #
 
-RED='\e[31m'
-GREEN='\e[32m'
-CYAN='\e[36m'
-CCLR='\e[0m'
+RED='\033[31m'
+GREEN='\033[32m'
+CYAN='\033[36m'
+CCLR='\033[0m'
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <00xx-...test> [modes..]"

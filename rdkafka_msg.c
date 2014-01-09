@@ -38,7 +38,7 @@
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
 	assert(rk->rk_producer.msg_cnt > 0);
-	rd_atomic_sub(&rk->rk_producer.msg_cnt, 1);
+	(void)rd_atomic_sub(&rk->rk_producer.msg_cnt, 1);
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE)
 		free(rkm->rkm_payload);
@@ -73,7 +73,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 
 	if (unlikely(rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
 		     rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
-		rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+		(void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
 		errno = ENOBUFS;
 		return -1;
 	}

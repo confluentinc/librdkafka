@@ -37,7 +37,7 @@ void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
 				  rd_kafka_msgq_t *rkmq);
 
-#define rd_kafka_topic_keep(rkt) rd_atomic_add(&(rkt->rkt_refcnt), 1)
+#define rd_kafka_topic_keep(rkt) (void)rd_atomic_add(&(rkt->rkt_refcnt), 1)
 void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt);
 
 rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_topic_t *rkt,

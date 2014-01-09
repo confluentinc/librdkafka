@@ -41,6 +41,8 @@
 #include "rdlog.h"
 
 
+#include "rdsysqueue.h"
+
 #define RD_POLL_INFINITE  -1
 #define RD_POLL_NOWAIT     0
 

@@ -30,7 +30,7 @@
 
 extern const char *rd_kafka_broker_state_names[];
 
-#define rd_kafka_buf_keep(rkbuf) rd_atomic_add(&(rkbuf)->rkbuf_refcnt, 1)
+#define rd_kafka_buf_keep(rkbuf) (void)rd_atomic_add(&(rkbuf)->rkbuf_refcnt, 1)
 void rd_kafka_buf_destroy (rd_kafka_buf_t *rkbuf);
 
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,

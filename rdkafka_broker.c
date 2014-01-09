@@ -209,13 +209,13 @@ static rd_kafka_buf_t *rd_kafka_buf_new_shadow (void *ptr, size_t size) {
 
 static void rd_kafka_bufq_enq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
 	TAILQ_INSERT_TAIL(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
-	rd_atomic_add(&rkbufq->rkbq_cnt, 1);
+	(void)rd_atomic_add(&rkbufq->rkbq_cnt, 1);
 }
 
 static void rd_kafka_bufq_deq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
 	TAILQ_REMOVE(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
 	assert(rkbufq->rkbq_cnt > 0);
-	rd_atomic_sub(&rkbufq->rkbq_cnt, 1);
+	(void)rd_atomic_sub(&rkbufq->rkbq_cnt, 1);
 }
 
 static void rd_kafka_bufq_init (rd_kafka_bufq_t *rkbufq) {
@@ -228,7 +228,7 @@ static void rd_kafka_bufq_init (rd_kafka_bufq_t *rkbufq) {
  */
 static void rd_kafka_bufq_concat (rd_kafka_bufq_t *dst, rd_kafka_bufq_t *src) {
 	TAILQ_CONCAT(&dst->rkbq_bufs, &src->rkbq_bufs, rkbuf_link);
-	rd_atomic_add(&dst->rkbq_cnt, src->rkbq_cnt);
+	(void)rd_atomic_add(&dst->rkbq_cnt, src->rkbq_cnt);
 	rd_kafka_bufq_init(src);
 }
 
@@ -408,8 +408,8 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 		return -1;
 	}
 
-	rd_atomic_add(&rkb->rkb_c.tx_bytes, r);
-	rd_atomic_add(&rkb->rkb_c.tx, 1);
+	(void)rd_atomic_add(&rkb->rkb_c.tx_bytes, r);
+	(void)rd_atomic_add(&rkb->rkb_c.tx, 1);
 	return r;
 }
 
@@ -482,7 +482,7 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 				  rkbuf, rkbuf_link);
 	}
 
-	rd_atomic_add(&rkb->rkb_outbufs.rkbq_cnt, 1);
+	(void)rd_atomic_add(&rkb->rkb_outbufs.rkbq_cnt, 1);
 }
 
 
@@ -1270,8 +1270,8 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 	if (rkbuf->rkbuf_of == rkbuf->rkbuf_len + sizeof(rkbuf->rkbuf_reshdr)) {
 		/* Message is complete, pass it on to the original requester. */
 		rkb->rkb_recv_buf = NULL;
-		rd_atomic_add(&rkb->rkb_c.rx, 1);
-		rd_atomic_add(&rkb->rkb_c.rx_bytes, rkbuf->rkbuf_of);
+		(void)rd_atomic_add(&rkb->rkb_c.rx, 1);
+		(void)rd_atomic_add(&rkb->rkb_c.rx_bytes, rkbuf->rkbuf_of);
 		rd_kafka_req_response(rkb, rkbuf);
 	}
 
@@ -2031,8 +2031,8 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 do_send:
 
-	rd_atomic_add(&rktp->rktp_c.tx_msgs, rkbuf->rkbuf_msgq.rkmq_msg_cnt);
-	rd_atomic_add(&rktp->rktp_c.tx_bytes, prodhdr->part2.MessageSetSize);
+	(void)rd_atomic_add(&rktp->rktp_c.tx_msgs, rkbuf->rkbuf_msgq.rkmq_msg_cnt);
+	(void)rd_atomic_add(&rktp->rktp_c.tx_bytes, prodhdr->part2.MessageSetSize);
 
 	prodhdr->part2.MessageSetSize =
 		htonl(prodhdr->part2.MessageSetSize);
@@ -3203,7 +3203,7 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_t *rkb = arg;
 	rd_kafka_t *rk = rkb->rkb_rk;
 
-	rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
+	(void)rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
 
 	rd_thread_sigmask(SIG_BLOCK,
 			  SIGHUP, SIGINT, SIGTERM, SIGUSR1, SIGUSR2,
@@ -3249,7 +3249,7 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__DESTROY, NULL);
 	rd_kafka_broker_destroy(rkb);
 
-	rd_atomic_sub(&rd_kafka_thread_cnt_curr, 1);
+	(void)rd_atomic_sub(&rd_kafka_thread_cnt_curr, 1);
 
 	return NULL;
 }

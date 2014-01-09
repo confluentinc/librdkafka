@@ -217,7 +217,7 @@ void rd_kafka_q_purge (rd_kafka_q_t *rkq) {
 	}
 
 	TAILQ_INIT(&rkq->rkq_q);
-	rd_atomic_set(&rkq->rkq_qlen, 0);
+	(void)rd_atomic_set(&rkq->rkq_qlen, 0);
 
 	pthread_mutex_unlock(&rkq->rkq_lock);
 }
@@ -241,14 +241,14 @@ size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 		mcnt = srcq->rkq_qlen;
 		TAILQ_CONCAT(&dstq->rkq_q, &srcq->rkq_q, rko_link);
 		TAILQ_INIT(&srcq->rkq_q);
-		rd_atomic_set(&srcq->rkq_qlen, 0);
-		rd_atomic_add(&dstq->rkq_qlen, mcnt);
+		(void)rd_atomic_set(&srcq->rkq_qlen, 0);
+		(void)rd_atomic_add(&dstq->rkq_qlen, mcnt);
 	} else {
 		while (mcnt < cnt && (rko = TAILQ_FIRST(&srcq->rkq_q))) {
 			TAILQ_REMOVE(&srcq->rkq_q, rko, rko_link);
 			TAILQ_INSERT_TAIL(&dstq->rkq_q, rko, rko_link);
-			rd_atomic_sub(&dstq->rkq_qlen, 1);
-			rd_atomic_add(&dstq->rkq_qlen, 1);
+			(void)rd_atomic_sub(&dstq->rkq_qlen, 1);
+			(void)rd_atomic_add(&dstq->rkq_qlen, 1);
 			mcnt++;
 		}
 	}
@@ -347,7 +347,7 @@ int rd_kafka_q_serve (rd_kafka_t *rk,
 
 	/* Reset real queue */
 	TAILQ_INIT(&rkq->rkq_q);
-	rd_atomic_set(&rkq->rkq_qlen, 0);
+	(void)rd_atomic_set(&rkq->rkq_qlen, 0);
 	pthread_mutex_unlock(&rkq->rkq_lock);
 
 	rd_kafka_dbg(rk, QUEUE, "QSERVE", "Serving %i ops", localq.rkq_qlen);
@@ -514,7 +514,7 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 	rd_kafka_topic_t *rkt, *rkt_tmp;
 
 	rd_kafka_dbg(rk, GENERIC, "DESTROY", "Terminating instance");
-	rd_atomic_add(&rk->rk_terminate, 1);
+	(void)rd_atomic_add(&rk->rk_terminate, 1);
 
 	/* Decommission all topics */
 	rd_kafka_lock(rk);
@@ -742,7 +742,7 @@ static void *rd_kafka_thread_main (void *arg) {
 	rd_ts_t last_topic_scan = rd_clock();
 	rd_ts_t last_stats_emit = last_topic_scan;
 
-	rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
+	(void)rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
 
 	while (likely(rk->rk_terminate == 0)) {
 		rd_ts_t now = rd_clock();
@@ -764,7 +764,7 @@ static void *rd_kafka_thread_main (void *arg) {
 
 	rd_kafka_destroy0(rk); /* destroy handler thread's refcnt */
 
-	rd_atomic_sub(&rd_kafka_thread_cnt_curr, 1);
+	(void)rd_atomic_sub(&rd_kafka_thread_cnt_curr, 1);
 
 	return NULL;
 }
@@ -1025,7 +1025,7 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
 		}
 
 		TAILQ_REMOVE(&rktp->rktp_fetchq.rkq_q, rko, rko_link);
-		rd_atomic_sub(&rktp->rktp_fetchq.rkq_qlen, 1);
+		(void)rd_atomic_sub(&rktp->rktp_fetchq.rkq_qlen, 1);
 
 		pthread_mutex_unlock(&rktp->rktp_fetchq.rkq_lock);
 

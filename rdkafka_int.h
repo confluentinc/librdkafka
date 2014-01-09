@@ -41,6 +41,8 @@
 #include "rdlog.h"
 
 
+#include "rdsysqueue.h"
+
 #define RD_POLL_INFINITE  -1
 #define RD_POLL_NOWAIT     0
 
@@ -453,7 +455,7 @@ typedef struct rd_kafka_broker_s {
 
 } rd_kafka_broker_t;
 
-#define rd_kafka_broker_keep(rkb) rd_atomic_add(&(rkb)->rkb_refcnt, 1)
+#define rd_kafka_broker_keep(rkb) (void)rd_atomic_add(&(rkb)->rkb_refcnt, 1)
 #define rd_kafka_broker_lock(rkb)   pthread_mutex_lock(&(rkb)->rkb_lock)
 #define rd_kafka_broker_unlock(rkb) pthread_mutex_unlock(&(rkb)->rkb_lock)
 
@@ -534,7 +536,7 @@ typedef struct rd_kafka_toppar_s {
 	} rktp_c;
 } rd_kafka_toppar_t;
 
-#define rd_kafka_toppar_keep(rktp) rd_atomic_add(&(rktp)->rktp_refcnt, 1)
+#define rd_kafka_toppar_keep(rktp) (void)rd_atomic_add(&(rktp)->rktp_refcnt, 1)
 #define rd_kafka_toppar_destroy(rktp) do {				\
 	if (rd_atomic_sub(&(rktp)->rktp_refcnt, 1) == 0)		\
 		rd_kafka_toppar_destroy0(rktp);				\
@@ -706,7 +708,7 @@ void rd_kafka_op_reply (rd_kafka_t *rk,
 			rd_kafka_resp_err_t err,
 			void *payload, int len);
 
-#define rd_kafka_keep(rk) rd_atomic_add(&(rk)->rk_refcnt, 1)
+#define rd_kafka_keep(rk) (void)rd_atomic_add(&(rk)->rk_refcnt, 1)
 void rd_kafka_destroy0 (rd_kafka_t *rk);
 
 void rd_kafka_conf_destroy (rd_kafka_conf_t *conf);

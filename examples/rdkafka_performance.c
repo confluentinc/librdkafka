@@ -336,7 +336,14 @@ int main (int argc, char **argv) {
 			compression = optarg;
 			break;
 		case 'o':
-			start_offset = strtoll(optarg, NULL, 10);
+			if (!strcmp(optarg, "end"))
+				start_offset = RD_KAFKA_OFFSET_END;
+			else if (!strcmp(optarg, "beginning"))
+				start_offset = RD_KAFKA_OFFSET_BEGINNING;
+			else if (!strcmp(optarg, "stored"))
+				start_offset = RD_KAFKA_OFFSET_STORED;
+			else
+				start_offset = strtoll(optarg, NULL, 10);
 			break;
 		case 'e':
 			exit_eof = 1;

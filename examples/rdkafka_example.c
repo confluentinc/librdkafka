@@ -170,7 +170,7 @@ int main (int argc, char **argv) {
 	/* Topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();
 
-	while ((opt = getopt(argc, argv, "PCt:p:b:z:d:o:e")) != -1) {
+	while ((opt = getopt(argc, argv, "PCt:p:b:z:d:o:eX:")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -203,6 +203,50 @@ int main (int argc, char **argv) {
 		case 'd':
 			debug = optarg;
 			break;
+		case 'X':
+		{
+			char *name, *val;
+			rd_kafka_conf_res_t res;
+
+			if (!strcmp(optarg, "list") ||
+			    !strcmp(optarg, "help")) {
+				rd_kafka_conf_properties_show(stdout);
+				exit(0);
+			}
+
+			name = optarg;
+			if (!(val = strchr(name, '='))) {
+				fprintf(stderr, "%% Expected "
+					"-X property=value, not %s\n", name);
+				exit(1);
+			}
+
+			*val = '\0';
+			val++;
+
+			res = RD_KAFKA_CONF_UNKNOWN;
+			/* Try "topic." prefixed properties on topic
+			 * conf first, and then fall through to global if
+			 * it didnt match a topic configuration property. */
+			if (!strncmp(name, "topic.", strlen("topic.")))
+				res = rd_kafka_topic_conf_set(topic_conf,
+							      name+
+							      strlen("topic."),
+							      val,
+							      errstr,
+							      sizeof(errstr));
+
+			if (res == RD_KAFKA_CONF_UNKNOWN)
+				res = rd_kafka_conf_set(conf, name, val,
+							errstr, sizeof(errstr));
+
+			if (res != RD_KAFKA_CONF_OK) {
+				fprintf(stderr, "%% %s\n", errstr);
+				exit(1);
+			}
+		}
+		break;
+
 		default:
 			goto usage;
 		}
@@ -228,6 +272,12 @@ int main (int argc, char **argv) {
 			"                  in partition has been received.\n"
 			"  -d [facs..]     Enable debugging contexts:\n"
 			"                  %s\n"
+			"  -X <prop=name> Set arbitrary librdkafka "
+			"configuration property\n"
+			"               Properties prefixed with \"topic.\" "
+			"will be set on topic object.\n"
+			"               Use '-X list' to see the full list\n"
+			"               of supported properties.\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  writes fetched messages to stdout\n"

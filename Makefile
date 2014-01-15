@@ -47,14 +47,14 @@ libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a CONFIGURATION.md
 
 
 $(LIBNAME).so.$(LIBVER): $(OBJS)
-    @(if [ $(UNAME_S) = "Linux" -o $(CYGWIN) = CYGWIN ]; then \	
+	@(if [ $(UNAME_S) = "Darwin" ]; then \
+		$(CC) $(LDFLAGS) \
+			$(OBJS) -dynamiclib -o $@ -lpthread -lz -lc ; \
+	else \
 		$(CC) $(LDFLAGS) \
 			-shared -Wl,-soname,$@ \
 			-Wl,--version-script=librdkafka.lds \
 			$(OBJS) -o $@ -lpthread -lrt -lz -lc ; \
-	elif [ $(UNAME_S) = "Darwin" ]; then \
-		$(CC) $(LDFLAGS) \
-			$(OBJS) -dynamiclib -o $@ -lpthread -lz -lc ; \
 	fi)
 
 $(LIBNAME).a:	$(OBJS)

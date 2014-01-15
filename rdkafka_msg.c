@@ -64,8 +64,6 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	size_t mlen = sizeof(*rkm);
 	rd_kafka_resp_err_t err;
 
-	assert(len > 0);
-
 	if (unlikely(len + keylen > rkt->rkt_rk->rk_conf.max_msg_size)) {
 		errno = EMSGSIZE;
 		return -1;

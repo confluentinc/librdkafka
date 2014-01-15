@@ -2406,9 +2406,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		/* Extract Value */
 		_READ_BYTES(Value);
 
-		/* Skip empty messages */
-		if (unlikely((Value_len = RD_KAFKAP_BYTES_LEN(Value)) == 0))
-			continue;
+		Value_len = RD_KAFKAP_BYTES_LEN(Value);
 
 		/* Check for message compression.
 		 * The Key is ignored for compressed messages. */

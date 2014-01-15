@@ -64,6 +64,7 @@ For an introduction to the performance and usage of librdkafka, see
   * [Headweb](http://www.headweb.com/)
   * [node-kafka](https://github.com/sutoiku/node-kafka)
   * [Produban's log2kafka](https://github.com/Produban/log2kafka)
+  * [phpkafka](https://github.com/salebab/phpkafka)
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
 

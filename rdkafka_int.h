@@ -634,6 +634,8 @@ struct rd_kafka_s {
 #define RD_KAFKA_DBG_ALL        0xff
 
 
+void rd_kafka_log_buf (const rd_kafka_t *rk, int level,
+		       const char *fac, const char *buf);
 void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 		   const char *fac, const char *fmt, ...)
 	__attribute__((format (printf, 5, 6)));
@@ -707,6 +709,8 @@ void rd_kafka_op_reply (rd_kafka_t *rk,
 			rd_kafka_op_type_t type,
 			rd_kafka_resp_err_t err,
 			void *payload, int len);
+void rd_kafka_op_err (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+		      const char *fmt, ...);
 
 #define rd_kafka_keep(rk) (void)rd_atomic_add(&(rk)->rk_refcnt, 1)
 void rd_kafka_destroy0 (rd_kafka_t *rk);

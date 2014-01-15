@@ -340,10 +340,8 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rd_rkb_log(rkb, LOG_ERR, "FAIL", "%s", rkb->rkb_err.msg);
 
 		/* Send ERR op back to application for processing. */
-		rd_kafka_op_reply(rkb->rkb_rk, RD_KAFKA_OP_ERR,
-				  RD_KAFKA_RESP_ERR__FAIL,
-				  strdup(rkb->rkb_err.msg),
-				  strlen(rkb->rkb_err.msg));
+		rd_kafka_op_err(rkb->rkb_rk, RD_KAFKA_RESP_ERR__FAIL,
+				"%s", rkb->rkb_err.msg);
 	}
 
 	/*
@@ -444,9 +442,8 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 				 rkb->rkb_nodename, errstr);
 
 			/* Send ERR op back to application for processing. */
-			rd_kafka_op_reply(rkb->rkb_rk, RD_KAFKA_OP_ERR,
-					  RD_KAFKA_RESP_ERR__RESOLVE,
-					  strdup(tmp), strlen(tmp));
+			rd_kafka_op_err(rkb->rkb_rk,RD_KAFKA_RESP_ERR__RESOLVE,
+					"%s", tmp);
 
 			rd_rkb_log(rkb, LOG_ERR, "GETADDR", "%s", tmp);
 			return -1;
@@ -3337,9 +3334,9 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 		rd_kafka_log(rk, LOG_CRIT, "THREAD", "%s", tmp);
 
 		/* Send ERR op back to application for processing. */
-		rd_kafka_op_reply(rk, RD_KAFKA_OP_ERR,
-				  RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
-				  strdup(tmp), strlen(tmp));
+		rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
+				"%s", tmp);
+
 		free(rkb);
 		rd_kafka_destroy(rk);
 		return NULL;

@@ -99,6 +99,15 @@ static int pthread_cond_timedwait_ms (pthread_cond_t *cond,
 }
 
 
+void rd_kafka_log_buf (const rd_kafka_t *rk, int level,
+		       const char *fac, const char *buf) {
+
+	if (!rk->rk_log_cb || level > rk->rk_log_level)
+		return;
+
+	rk->rk_log_cb(rk, level, fac, buf);
+}
+
 void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 		   const char *fac, const char *fmt, ...) {
 	char buf[2048];
@@ -418,6 +427,27 @@ void rd_kafka_op_reply2 (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 	rd_kafka_q_enq(&rk->rk_rep, rko);
 }
 
+
+/**
+ * Propogate an error event to the application.
+ * If no error_cb has been set by the application the error will 
+ * be logged instead.
+ */
+void rd_kafka_op_err (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+		      const char *fmt, ...) {
+	va_list ap;
+	char buf[2048];
+
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+
+	if (rk->rk_conf.error_cb)
+		rd_kafka_op_reply(rk, RD_KAFKA_OP_ERR, err,
+				  strdup(buf), strlen(buf));
+	else
+		rd_kafka_log_buf(rk, LOG_ERR, "ERROR", buf);
+}
 
 
 static const char *rd_kafka_type2str (rd_kafka_type_t type) {

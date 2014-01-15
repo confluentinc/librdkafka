@@ -764,32 +764,32 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 
 
+static void rd_kafka_topic_scan_tmr_cb (rd_kafka_t *rk, void *arg) {
+	rd_kafka_topic_scan_all(rk, rd_clock());
+}
+
+static void rd_kafka_stats_emit_tmr_cb (rd_kafka_t *rk, void *arg) {
+	rd_kafka_stats_emit_all(rk);
+}
+
 /**
  * Main loop for Kafka handler thread.
  */
 static void *rd_kafka_thread_main (void *arg) {
 	rd_kafka_t *rk = arg;
-	rd_ts_t last_topic_scan = rd_clock();
-	rd_ts_t last_stats_emit = last_topic_scan;
+	rd_kafka_timer_t tmr_topic_scan = {};
+	rd_kafka_timer_t tmr_stats_emit = {};
 
 	(void)rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
 
+	rd_kafka_timer_start(rk, &tmr_topic_scan, 1000000,
+			     rd_kafka_topic_scan_tmr_cb, NULL);
+	rd_kafka_timer_start(rk, &tmr_stats_emit,
+			     rk->rk_conf.stats_interval_ms * 1000,
+			     rd_kafka_stats_emit_tmr_cb, NULL);
+
 	while (likely(rk->rk_terminate == 0)) {
-		rd_ts_t now = rd_clock();
-
-		if (last_topic_scan + 1000000 <= now) {
-			rd_kafka_topic_scan_all(rk, now);
-			last_topic_scan = now;
-		}
-
-		if (rk->rk_conf.stats_interval_ms &&
-		    now >
-		    last_stats_emit + (rk->rk_conf.stats_interval_ms*1000)) {
-			rd_kafka_stats_emit_all(rk);
-			last_stats_emit = now;
-		}
-
-		sleep(1);
+		rd_kafka_timers_run(rk, 1000000);
 	}
 
 	rd_kafka_destroy0(rk); /* destroy handler thread's refcnt */
@@ -833,6 +833,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
+	TAILQ_INIT(&rk->rk_timers);
+	pthread_mutex_init(&rk->rk_timers_lock, NULL);
+	pthread_cond_init(&rk->rk_timers_cond, NULL);
 
 	rk->rk_log_cb = rd_kafka_log_print;
 

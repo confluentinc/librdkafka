@@ -40,6 +40,7 @@
 #include "rdaddr.h"
 #include "rdlog.h"
 
+#include "rdkafka_timer.h"
 
 #include "rdsysqueue.h"
 
@@ -591,6 +592,10 @@ struct rd_kafka_s {
 #define rk_consumer rk_u.consumer
 #define rk_producer rk_u.producer
 
+	TAILQ_HEAD(, rd_kafka_timer_s) rk_timers;
+	pthread_mutex_t                rk_timers_lock;
+	pthread_cond_t                 rk_timers_cond;
+
 	void (*rk_log_cb) (const rd_kafka_t *rk, int level,
 			   const char *fac,
 			   const char *buf);
@@ -721,3 +726,9 @@ void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf);
 extern int rd_kafka_thread_cnt_curr;
 
 #define RD_KAFKA_SEND_END -1
+
+
+
+int pthread_cond_timedwait_ms (pthread_cond_t *cond,
+			       pthread_mutex_t *mutex,
+			       int timeout_ms);

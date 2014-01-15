@@ -52,6 +52,7 @@ static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 	rktp->rktp_partition = partition;
 	rktp->rktp_rkt = rkt;
 	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
+	rktp->rktp_offset_fd = -1;
 
 	rd_kafka_msgq_init(&rktp->rktp_msgq);
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);

@@ -4,7 +4,7 @@ LIBVER=1
 DESTDIR?=/usr/local
 
 SRCS=	rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
-	rdkafka_defaultconf.c
+	rdkafka_defaultconf.c rdkafka_timer.c rdkafka_offset.c
 SRCS+=  rdcrc32.c rdgz.c rdaddr.c rdrand.c rdthread.c rdqueue.c rdlog.c
 SRCS+=	snappy.c
 HDRS=	rdkafka.h

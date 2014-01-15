@@ -110,6 +110,7 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION = -190, /* Permanent:
 						      * Partition does not
 						      * exist in cluster. */
+	RD_KAFKA_RESP_ERR__FS = -189,        /* File or filesystem error */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -500,6 +501,8 @@ rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
 				       * kafka partition queue: oldest msg */
 #define RD_KAFKA_OFFSET_END       -1  /* Start consuming from end of kafka
 				       * partition queue: next msg */
+#define RD_KAFKA_OFFSET_STORED -1000  /* Start consuming from offset retrieved
+				       * from offset store */
 
 
 /**
@@ -537,7 +540,6 @@ int rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
 int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition);
 
 
-
 /**
  * Consume a single message from topic 'rkt' and 'partition'.
  *
@@ -545,6 +547,8 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition);
  * Consumer must have been previously started with `rd_kafka_consume_start()`.
  *
  * Returns a message object on success and NULL on error.
+ * The message object must be destroyed with `rd_kafka_message_destroy()`
+ * when the application is done with it.
  *
  * Errors (when returning NULL):
  *   ETIMEDOUT - 'timeout_ms' was reached with no new messages fetched.
@@ -608,6 +612,29 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 
 
 
+
+
+
+/**
+ * Topic+partition offset store.
+ *
+ * If auto.commit.enable is true the offset is stored automatically prior to
+ * returning of the message(s) in each of the rd_kafka_consume*() functions
+ * above.
+ */
+
+
+/**
+ * Store offset 'offset' for topic 'rkt' partition 'partition'.
+ * The offset will be commited (written) to the offset store according
+ * to `auto.commit.interval.ms`.
+ *
+ * NOTE: `auto.commit.enable` must be set to "false" when using this API.
+ *
+ * Returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
+ */
+rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
+					   int32_t partition, int64_t offset);
 
 
 

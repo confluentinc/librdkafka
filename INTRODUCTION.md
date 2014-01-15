@@ -348,7 +348,8 @@ for a given partition by calling `rd_kafka_consume_start()`.
 	     `RD_KAFKA_OFFSET_BEGINNING` to start consuming from the beginning
 	     of the partition's queue (oldest message), or
 	     `RD_KAFKA_OFFSET_END` to start consuming at the next message to be
-	     produced to the partition.
+	     produced to the partition, or
+	     `RD_KAFKA_OFFSET_STORED` to use the offset store.
 
 After a topic+partition consumer has been started librdkafka will attempt
 to keep "queued.min.messages" messages in the local queue by repeatedly
@@ -400,9 +401,17 @@ purge any messages currently in the local queue.
 
 #### Offset management
 
-There is currently no built-in offset persistence.
-The application should provide its own offset persistance or use ZooKeeper
-until librdkafka adds support for it.
+Offset management is available through a local offset file store, where the
+offset is periodically written to a local file for each topic+partition
+according to the following topic configuration properties:
+
+  * `auto.commit.enable`
+  * `auto.commit.interval.ms`
+  * `offset.store.path`
+  * `offset.store.sync.interval.ms`
+
+There is currently no support for offset management with ZooKeeper.
+
 
 
 #### Consumer groups

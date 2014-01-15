@@ -42,6 +42,7 @@
 #include "rdkafka_msg.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_broker.h"
+#include "rdkafka_offset.h"
 #include "rdtime.h"
 #include "rdthread.h"
 #include "rdcrc32.h"
@@ -2686,8 +2687,14 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					break;
 
 					/* Application errors */
-				case RD_KAFKA_RESP_ERR__PARTITION_EOF:
 				case RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE:
+					rd_kafka_offset_reset(rktp,
+							      rktp->
+							      rktp_next_offset,
+							      hdr->ErrorCode,
+							      "Fetch response");
+					break;
+				case RD_KAFKA_RESP_ERR__PARTITION_EOF:
 				case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
 				default: /* and all other errors */
 					rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);

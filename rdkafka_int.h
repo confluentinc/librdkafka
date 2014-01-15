@@ -84,7 +84,7 @@
 #define RD_KAFKAP_PARTITIONS_MAX  1000
 
 
-
+#define RD_KAFKA_OFFSET_ERROR    -1001
 
 
 struct rd_kafka_s;
@@ -203,6 +203,12 @@ struct rd_kafka_topic_conf_s {
 				int32_t partition_cnt,
 				void *rkt_opaque,
 				void *msg_opaque);
+
+	int     auto_commit;
+	int     auto_commit_interval_ms;
+	int     auto_offset_reset;
+	char   *offset_store_path;
+	int     offset_store_sync_interval_ms;
 
 	/* Application provided opaque pointer (this is rkt_opaque) */
 	void   *opaque;
@@ -522,9 +528,18 @@ typedef struct rd_kafka_toppar_s {
 	int64_t            rktp_next_offset;     /* Next offset to fetch */
 	int64_t            rktp_app_offset;      /* Last offset delivered to
 						  * application */
+	int64_t            rktp_stored_offset;   /* Last stored offset, but
+						  * maybe not commited yet. */
 	int64_t            rktp_commited_offset; /* Last commited offset */
+	rd_ts_t            rktp_ts_commited_offset; /* Timestamp of last
+						     * commit */
 	int64_t            rktp_eof_offset;      /* The last offset we reported
 						  * EOF for. */
+
+	char              *rktp_offset_path;     /* Path to offset file */
+	int                rktp_offset_fd;       /* Offset file fd */
+	rd_kafka_timer_t   rktp_offset_commit_tmr; /* Offste commit timer */
+	rd_kafka_timer_t   rktp_offset_sync_tmr; /* Offset file sync timer */
 
 	int                rktp_flags;
 #define RD_KAFKA_TOPPAR_F_DESIRED  0x1      /* This partition is desired
@@ -583,7 +598,6 @@ struct rd_kafka_s {
 			int32_t  partition;
 			uint64_t offset;
 			uint64_t app_offset;
-			int      offset_file_fd;
 		} consumer;
 		struct {
 			int msg_cnt;  /* current message count */

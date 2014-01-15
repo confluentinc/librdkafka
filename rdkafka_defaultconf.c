@@ -49,6 +49,7 @@ struct rd_kafka_property {
 		_RK_C_INT,
 		_RK_C_S2I,  /* String to Integer mapping */
 		_RK_C_S2F,  /* CSV String to Integer flag mapping (OR:ed) */
+		_RK_C_BOOL,
 	} type;
 	int   offset;
 	const char *desc;
@@ -201,8 +202,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	
 	  
 
-	/**
-	 * Topic properties */
+	/* Topic properties */
 	{ _RK_TOPIC|_RK_PRODUCER, "request.required.acks", _RK_C_INT,
 	  _RKT(required_acks),
 	  "This field indicates how many acknowledgements the leader broker "
@@ -229,7 +229,50 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "This value is only enforced locally and limits the time a "
 	  "produced message waits for successful delivery.",
 	  1, 900*1000, 300*1000 },
-	
+
+	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.enable", _RK_C_BOOL,
+	  _RKT(auto_commit),
+	  "If true, periodically commit offset of the last message handed "
+	  "to the application. This commited offset will be used when the "
+	  "process restarts to pick up where it left off. "
+	  "If false, the application will have to call "
+	  "`rd_kafka_offset_store()` to store an offset (optional). "
+	  "**NOTE:** There is currently no zookeeper integration, offsets "
+	  "will be written to local file according to offset.store.path.",
+	  0, 1, 1 },
+	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
+	  _RKT(auto_commit_interval_ms),
+	  "The frequency in milliseconds that the consumer offsets "
+	  "are commited (written) to offset storage.",
+	  10, 86400*1000, 60*1000 },
+	{ _RK_TOPIC|_RK_CONSUMER, "auto.offset.reset", _RK_C_S2I,
+	  _RKT(auto_offset_reset),
+	  "Action to take when there is no initial offset in offset store "
+	  "or the desired offset is out of range: "
+	  "'smallest' - automatically reset the offset to the smallest offset, "
+	  "'largest' - automatically reset the offset to the largest offset, "
+	  "'error' - trigger an error which is retrieved by consuming messages "
+	  "and checking 'message->err'.",
+	  .vdef = RD_KAFKA_OFFSET_END,
+	  .s2i = {
+			{ RD_KAFKA_OFFSET_BEGINNING, "smallest" },
+			{ RD_KAFKA_OFFSET_END, "largest" },
+			{ RD_KAFKA_OFFSET_ERROR, "error" },
+		}
+	},
+	{ _RK_TOPIC|_RK_CONSUMER, "offset.store.path", _RK_C_STR,
+	  _RKT(offset_store_path),
+	  "Path to local file for storing offsets. If the path is a directory "
+	  "a filename will be automatically generated in that directory based "
+	  "on the topic and partition.",
+	  .sdef = "." },
+
+	{ _RK_TOPIC|_RK_CONSUMER, "offset.store.sync.interval.ms", _RK_C_INT,
+	  _RKT(offset_store_sync_interval_ms),
+	  "fsync() interval for the offset file, in milliseconds. "
+	  "Use -1 to disable syncing, and 0 for immediate sync after "
+	  "each write.",
+	  -1, 86400*1000, -1 },
 
 	{ /* End */ }
 };
@@ -251,6 +294,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 		*str = strdup(istr);
 		return RD_KAFKA_CONF_OK;
 	}
+	case _RK_C_BOOL:
 	case _RK_C_INT:
 	case _RK_C_S2I:
 	case _RK_C_S2F:
@@ -283,6 +327,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			   const struct rd_kafka_property *prop,
 			   const char *value,
 			   char *errstr, size_t errstr_size) {
+	int ival;
 
 	switch (prop->type)
 	{
@@ -290,10 +335,32 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		rd_kafka_anyconf_set_prop0(scope, conf, prop, value, 0);
 		return RD_KAFKA_CONF_OK;
 
-	case _RK_C_INT:
-	{
-		int ival;
+	case _RK_C_BOOL:
+		if (!value) {
+			snprintf(errstr, errstr_size,
+				 "Bool configuration property \"%s\" cannot "
+				 "be set to empty value", prop->name);
+			return RD_KAFKA_CONF_INVALID;
+		}
 
+		if (!strcasecmp(value, "true") ||
+		    !strcasecmp(value, "t") ||
+		    !strcmp(value, "1"))
+			ival = 1;
+		else if (!strcasecmp(value, "false") ||
+			 !strcasecmp(value, "f") ||
+			 !strcmp(value, "0"))
+			ival = 0;
+		else {
+			snprintf(errstr, errstr_size,
+				 "Expected bool value for \"%s\": "
+				 "true or false", prop->name);
+			return RD_KAFKA_CONF_INVALID;
+		}
+
+		return RD_KAFKA_CONF_OK;
+
+	case _RK_C_INT:
 		if (!value) {
 			snprintf(errstr, errstr_size,
 				 "Integer configuration "
@@ -316,7 +383,6 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 
 		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival);
 		return RD_KAFKA_CONF_OK;
-	}
 
 	case _RK_C_S2I:
 	case _RK_C_S2F:
@@ -594,6 +660,7 @@ void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *topic_conf,
 void rd_kafka_conf_properties_show (FILE *fp) {
 	const struct rd_kafka_property *prop;
 	int last = 0;
+	int j;
 	const char *dash80 = "----------------------------------------"
 		"----------------------------------------";
 
@@ -622,11 +689,21 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 		case _RK_C_STR:
 			fprintf(fp, "%13s", prop->sdef ? : "");
 			break;
+		case _RK_C_BOOL:
+			fprintf(fp, "%13s", prop->vdef ? "true" : "false");
+			break;
 		case _RK_C_INT:
 			fprintf(fp, "%13i", prop->vdef);
 			break;
 		case _RK_C_S2I:
-			fprintf(fp, "%13s", prop->s2i[prop->vdef].str);
+			for (j = 0 ; j < RD_ARRAYSIZE(prop->s2i); j++) {
+				if (prop->s2i[j].val == prop->vdef) {
+					fprintf(fp, "%13s", prop->s2i[j].str);
+					break;
+				}
+			}
+			if (j == RD_ARRAYSIZE(prop->s2i))
+				fprintf(fp, "%13s", " ");
 			break;
 		case _RK_C_S2F:
 		default:

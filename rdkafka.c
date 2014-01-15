@@ -38,6 +38,7 @@
 #include "rdkafka_msg.h"
 #include "rdkafka_broker.h"
 #include "rdkafka_topic.h"
+#include "rdkafka_offset.h"
 
 #include "rdtime.h"
 
@@ -78,9 +79,9 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
  * for delta timeouts.
  * `timeout_ms' is the delta timeout in milliseconds.
  */
-static int pthread_cond_timedwait_ms (pthread_cond_t *cond,
-				      pthread_mutex_t *mutex,
-				      int timeout_ms) {
+int pthread_cond_timedwait_ms (pthread_cond_t *cond,
+			       pthread_mutex_t *mutex,
+			       int timeout_ms) {
 	struct timeval tv;
 	struct timespec ts;
 
@@ -430,7 +431,7 @@ void rd_kafka_op_reply2 (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 
 /**
  * Propogate an error event to the application.
- * If no error_cb has been set by the application the error will 
+ * If no error_cb has been set by the application the error will
  * be logged instead.
  */
 void rd_kafka_op_err (rd_kafka_t *rk, rd_kafka_resp_err_t err,
@@ -482,6 +483,8 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 		return "Broker: No more messages";
 	case RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION:
 		return "Local: Unknown partition";
+	case RD_KAFKA_RESP_ERR__FS:
+		return "Local: File or filesystem error";
 
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
 		return "Unknown error";
@@ -923,13 +926,27 @@ int rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
 	rd_kafka_topic_unlock(rkt);
 
 	rd_kafka_toppar_lock(rktp);
-	if (offset < 0) {
+	switch (offset)
+	{
+	case RD_KAFKA_OFFSET_BEGINNING:
+	case RD_KAFKA_OFFSET_END:
 		rktp->rktp_query_offset = offset;
 		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
-	} else {
+		break;
+	case RD_KAFKA_OFFSET_STORED:
+		if (!rkt->rkt_conf.auto_commit) {
+			rd_kafka_toppar_unlock(rktp);
+			rd_kafka_toppar_destroy(rktp);
+			errno = EINVAL;
+			return -1;
+		}
+		rd_kafka_offset_store_init(rktp);
+		break;
+	default:
 		rktp->rktp_next_offset = offset;
 		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_ACTIVE;
 	}
+
 	rd_kafka_toppar_unlock(rktp);
 
 	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "CONSUMER",
@@ -963,6 +980,9 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
 
 	rd_kafka_toppar_lock(rktp);
 	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
+
+	if (rktp->rktp_offset_path)
+		rd_kafka_offset_store_term(rktp);
 
 	/* Purge receive queue. */
 	rd_kafka_q_purge(&rktp->rktp_fetchq);
@@ -1066,6 +1086,11 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
 		rkmessages[cnt++] = rd_kafka_message_get(rko);
 	}
 
+	/* Auto store offset of last message in batch, if enabled */
+	if (cnt > 0 && rkt->rkt_conf.auto_commit)
+		rd_kafka_offset_store0(rktp, rkmessages[cnt-1]->offset,
+				       1/*lock*/);
+
 	rd_kafka_toppar_destroy(rktp); /* refcnt from .._get() */
 
 	return cnt;
@@ -1075,6 +1100,7 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
 struct consume_ctx {
 	void (*consume_cb) (rd_kafka_message_t *rkmessage, void *opaque);
 	void *opaque;
+	rd_kafka_toppar_t *rktp;
 };
 
 
@@ -1086,6 +1112,8 @@ static void rd_kafka_consume_cb (rd_kafka_op_t *rko, void *opaque) {
 	rd_kafka_message_t *rkmessage;
 
 	rkmessage = rd_kafka_message_get(rko);
+	if (ctx->rktp->rktp_rkt->rkt_conf.auto_commit)
+		rd_kafka_offset_store0(ctx->rktp, rkmessage->offset, 1/*lock*/);
 	ctx->consume_cb(rkmessage, ctx->opaque);
 }
 
@@ -1113,6 +1141,8 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 		errno = ENOENT;
 		return -1;
 	}
+
+	ctx.rktp = rktp;
 
 	r = rd_kafka_q_serve(rkt->rkt_rk, &rktp->rktp_fetchq, timeout_ms,
 			     rd_kafka_consume_cb, &ctx);
@@ -1153,6 +1183,12 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *rkt, int32_t partition,
 
 	/* Get rkmessage from rko */
 	rkmessage = rd_kafka_message_get(rko);
+
+	/* Store offset */
+	if (rktp->rktp_rkt->rkt_conf.auto_commit)
+		rd_kafka_offset_store0(rktp, rkmessage->offset, 1/*lock*/);
+
+	rd_kafka_toppar_destroy(rktp); /* refcnt from .._get() */
 
 	return rkmessage;
 }

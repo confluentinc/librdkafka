@@ -372,7 +372,7 @@ int main (int argc, char **argv) {
 			if (!strncmp(name, "topic.", strlen("topic.")))
 				res = rd_kafka_topic_conf_set(topic_conf,
 							      name+
-							      strlen("topic"),
+							      strlen("topic."),
 							      val,
 							      errstr,
 							      sizeof(errstr));

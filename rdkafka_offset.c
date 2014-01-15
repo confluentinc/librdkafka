@@ -205,7 +205,8 @@ static int rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp,
 			continue;
 		}
 
-		(void)ftruncate(rktp->rktp_offset_fd, len);
+		if (ftruncate(rktp->rktp_offset_fd, len) == -1)
+			; /* Ignore truncate failures */
 
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
 			     "%s [%"PRId32"]: wrote offset %"PRId64" to "

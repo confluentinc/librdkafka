@@ -121,7 +121,7 @@ static inline int log2_floor(u32 n)
 	return n == 0 ? -1 : 31 ^ __builtin_clz(n);
 }
 
-static inline int find_lsb_set_non_zero(u32 n)
+static inline __attribute__((unused)) int find_lsb_set_non_zero(u32 n)
 {
 	return __builtin_ctz(n);
 }

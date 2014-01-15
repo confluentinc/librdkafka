@@ -392,7 +392,7 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 	assert(rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP);
 	assert(rkb->rkb_s != -1);
 
-	r = sendmsg(rkb->rkb_s, msg, MSG_DONTWAIT);
+	r = sendmsg(rkb->rkb_s, msg, MSG_DONTWAIT|MSG_NOSIGNAL);
 	if (r == -1) {
 		if (errno == EAGAIN)
 			return 0;

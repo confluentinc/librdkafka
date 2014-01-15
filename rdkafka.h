@@ -365,9 +365,6 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
  * `rd_kafka_new()` may write a human readable error message in case the
  * creation of a new handle fails. In which case the function returns NULL.
  *
- * NOTE: Make sure the SIGPIPE signal is either ignored or handled by the
- *       calling application.
- *
  * Returns the Kafka handle on success or NULL on error.
  *
  * To destroy the Kafka handle, use rd_kafka_destroy().

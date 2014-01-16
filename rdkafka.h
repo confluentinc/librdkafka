@@ -183,6 +183,16 @@ typedef enum {
  */
 rd_kafka_conf_t *rd_kafka_conf_new (void);
 
+/**
+ * Destroys a conf object.
+ */
+void rd_kafka_conf_destroy (rd_kafka_conf_t *conf);
+
+
+/**
+ * Creates a copy/duplicate of configuration object 'conf'.
+ */
+rd_kafka_conf_t *rd_kafka_conf_dup (const rd_kafka_conf_t *conf);
 
 
 /**
@@ -250,6 +260,32 @@ void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque);
 
 
 /**
+ * Dump the configuration properties and values of `conf` to an array
+ * with "key", "value" pairs. The number of entries in the array is
+ * returned in `*cntp`.
+ *
+ * The dump must be freed with `rd_kafka_conf_dump_free()`.
+ */
+const char **rd_kafka_conf_dump (rd_kafka_conf_t *conf, size_t *cntp);
+
+
+/**
+ * Dump the topic configuration properties and values of `conf` to an array
+ * with "key", "value" pairs. The number of entries in the array is
+ * returned in `*cntp`.
+ *
+ * The dump must be freed with `rd_kafka_conf_dump_free()`.
+ */
+const char **rd_kafka_topic_conf_dump (rd_kafka_topic_conf_t *conf,
+				       size_t *cntp);
+
+/**
+ * Frees a configuration dump returned from `rd_kafka_conf_dump()` or
+ * `rd_kafka_topic_conf_dump().
+ */
+void rd_kafka_conf_dump_free (const char **arr, size_t cnt);
+
+/**
  * Prints a table to 'fp' of all supported configuration properties,
  * their default values as well as a description.
  */
@@ -269,6 +305,20 @@ void rd_kafka_conf_properties_show (FILE *fp);
  * Same semantics as for rd_kafka_conf_new().
  */
 rd_kafka_topic_conf_t *rd_kafka_topic_conf_new (void);
+
+
+/**
+ * Creates a copy/duplicate of topic configuration object 'conf'.
+ */
+rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
+						*conf);
+
+
+/**
+ * Destroys a topic conf object.
+ */
+void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf);
+
 
 /**
  * Sets a single rd_kafka_topic_conf_t value by property name.
@@ -359,6 +409,8 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
  *
  * 'conf' is an optional struct created with `rd_kafka_conf_new()` that will
  * be used instead of the default configuration.
+ * The 'conf' object is freed by this function and shall not be destroyed
+ * by the application.
  * See `rd_kafka_conf_set()` et.al for more information.
  *
  * 'errstr' must be a pointer to memory of at least size 'errstr_size' where
@@ -394,6 +446,8 @@ const char *rd_kafka_name (const rd_kafka_t *rk);
  * 'conf' is an optional configuration for the topic created with
  * `rd_kafka_topic_conf_new()` that will be used instead of the default
  * topic configuration.
+ * The 'conf' object is freed by this function and shall not be destroyed
+ * by the application.
  * See `rd_kafka_topic_conf_set()` et.al for more information.
  *
  * Returns the new topic handle or NULL on error (see `errno`).
@@ -747,7 +801,7 @@ int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist);
 
 /**
  * Set logger function.
- * The default is to print to stderr, but a syslog is also available,
+ * The default is to print to stderr, but a syslog logger is also available,
  * see rd_kafka_log_(print|syslog) for the builtin alternatives.
  * Alternatively the application may provide its own logger callback.
  * Or pass 'func' as NULL to disable logging.

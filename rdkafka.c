@@ -533,7 +533,7 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
 	rd_kafka_q_purge(&rk->rk_rep);
 
 	rd_kafkap_str_destroy(rk->rk_clientid);
-	rd_kafka_conf_destroy(&rk->rk_conf);
+	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
 
 	pthread_mutex_destroy(&rk->rk_lock);
 
@@ -824,7 +824,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	if (!conf)
 		conf = rd_kafka_conf_new();
-
 	rk->rk_conf = *conf;
 	free(conf);
 

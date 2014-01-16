@@ -331,7 +331,7 @@ void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {
 
 	rd_kafka_destroy0(rkt->rkt_rk);
 
-	rd_kafka_topic_conf_destroy(&rkt->rkt_conf);
+	rd_kafka_anyconf_destroy(_RK_TOPIC, &rkt->rkt_conf);
 
 	pthread_rwlock_destroy(&rkt->rkt_lock);
 

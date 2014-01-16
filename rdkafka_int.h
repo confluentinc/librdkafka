@@ -734,8 +734,14 @@ void rd_kafka_op_err (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 #define rd_kafka_keep(rk) (void)rd_atomic_add(&(rk)->rk_refcnt, 1)
 void rd_kafka_destroy0 (rd_kafka_t *rk);
 
-void rd_kafka_conf_destroy (rd_kafka_conf_t *conf);
-void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf);
+typedef	enum {
+	_RK_GLOBAL = 0x1,
+	_RK_PRODUCER = 0x2,
+	_RK_CONSUMER = 0x4,
+	_RK_TOPIC = 0x8
+} rd_kafka_conf_scope_t;
+
+void rd_kafka_anyconf_destroy (int scope, void *conf);
 
 extern int rd_kafka_thread_cnt_curr;
 

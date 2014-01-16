@@ -163,6 +163,7 @@ int main (int argc, char **argv) {
 	char errstr[512];
 	const char *debug = NULL;
 	int64_t start_offset = 0;
+	int do_conf_dump = 0;
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -221,6 +222,11 @@ int main (int argc, char **argv) {
 				exit(0);
 			}
 
+			if (!strcmp(optarg, "dump")) {
+				do_conf_dump = 1;
+				continue;
+			}
+
 			name = optarg;
 			if (!(val = strchr(name, '='))) {
 				fprintf(stderr, "%% Expected "
@@ -258,6 +264,37 @@ int main (int argc, char **argv) {
 			goto usage;
 		}
 	}
+
+
+	if (do_conf_dump) {
+		const char **arr;
+		size_t cnt;
+		int pass;
+
+		for (pass = 0 ; pass < 2 ; pass++) {
+			int i;
+
+			if (pass == 0) {
+				arr = rd_kafka_conf_dump(conf, &cnt);
+				printf("# Global config\n");
+			} else {
+				printf("# Topic config\n");
+				arr = rd_kafka_topic_conf_dump(topic_conf,
+							       &cnt);
+			}
+
+			for (i = 0 ; i < cnt ; i += 2)
+				printf("%s = %s\n",
+				       arr[i], arr[i+1]);
+
+			printf("\n");
+
+			rd_kafka_conf_dump_free(arr, cnt);
+		}
+
+		exit(0);
+	}
+
 
 	if (!topic || optind != argc) {
 	usage:

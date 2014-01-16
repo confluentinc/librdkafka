@@ -32,7 +32,6 @@
  */
 
 #define _GNU_SOURCE
-#include <signal.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -82,12 +81,6 @@ int main (int argc, char **argv) {
 	char msg[100000];
 	int msgcnt = 10;
 	int i;
-
-	/* Socket hangups are gracefully handled in librdkafka on socket error
-	 * without the use of signals, so SIGPIPE should be ignored by the
-	 * calling program. */
-	signal(SIGPIPE, SIG_IGN);
-
 
 	test_conf_init(&conf, &topic_conf, 10);
 

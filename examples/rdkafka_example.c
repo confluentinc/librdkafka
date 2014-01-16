@@ -340,11 +340,6 @@ int main (int argc, char **argv) {
 	signal(SIGINT, stop);
 	signal(SIGUSR1, sig_usr1);
 
-	/* Socket hangups are gracefully handled in librdkafka on socket error
-	 * without the use of signals, so SIGPIPE should be ignored by
-	 * the calling program. */
-	signal(SIGPIPE, SIG_IGN);
-
 	if (debug &&
 	    rd_kafka_conf_set(conf, "debug", debug, errstr, sizeof(errstr)) !=
 	    RD_KAFKA_CONF_OK) {

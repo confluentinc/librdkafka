@@ -32,7 +32,6 @@
  */
 
 #define _GNU_SOURCE
-#include <signal.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
@@ -48,12 +47,6 @@ int main (int argc, char **argv) {
 	int i;
 	const int NUM_ITER = 100;
 	struct rlimit rlim = {};
-
-	/* Socket hangups are gracefully handled in librdkafka on socket error
-	 * without the use of signals, so SIGPIPE should be ignored by the
-	 * calling program. */
-	signal(SIGPIPE, SIG_IGN);
-
 
 	/*
 	 * Put some limits to catch bad cleanups by librdkafka (issue #20)

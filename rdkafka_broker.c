@@ -51,6 +51,14 @@
 #include "snappy.h"
 #include "endian_compat.h"
 
+// MSG_NOSIGNAL does not exists on OS X
+#if defined(__APPLE__) || defined(__MACH__)
+#    ifndef MSG_NOSIGNAL
+#        define MSG_NOSIGNAL SO_NOSIGPIPE
+#    endif
+#endif
+
+
 const char *rd_kafka_broker_state_names[] = {
 	"DOWN",
 	"CONNECTING",

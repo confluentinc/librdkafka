@@ -1911,6 +1911,10 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 			/* Iterate through each message and compress it. */
 			for (i = iov_firstmsg ;
 			     i < rkbuf->rkbuf_msg.msg_iovlen ; i++) {
+
+				if (rkbuf->rkbuf_msg.msg_iov[i].iov_len == 0)
+					continue;
+
 				strm.next_in = rkbuf->rkbuf_msg.
 					msg_iov[i].iov_base;
 				strm.avail_in = rkbuf->rkbuf_msg.
@@ -1919,7 +1923,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 				/* Compress message */
 				if ((r = deflate(&strm, Z_NO_FLUSH) != Z_OK)) {
 					rd_rkb_log(rkb, LOG_ERR, "GZIP",
-						   "Failed to gzip-compress"
+						   "Failed to gzip-compress "
 						   "%zd bytes for "
 						   "topic %.*s [%"PRId32"]: "
 						   "%s (%i): "

@@ -3,4 +3,4 @@ compiler:
   - gcc
   - clang
 
-script: make all examples
+script: make all examples check

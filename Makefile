@@ -82,8 +82,22 @@ install:
 	install $(LIBNAME).so.$(LIBVER) $$DESTDIR/lib ; \
 	(cd $$DESTDIR/lib && ln -sf $(LIBNAME).so.$(LIBVER) $(LIBNAME).so)
 
-tests: .PHONY
+tests: .PHONY check
 	make -C tests
+
+check:
+	@(RET=true ; \
+	 for f in librdkafka.so.1 librdkafka.a CONFIGURATION.md \
+		examples/rdkafka_example examples/rdkafka_performance ; do \
+		printf "%-30s " $$f ; \
+		if [ -f "$$f" ]; then \
+			echo "\033[32mOK\033[0m"; \
+		else \
+			echo "\033[31mMISSING\033[0m"; \
+			RET=false ; \
+		fi; \
+	done ; \
+	$$($$RET))
 
 clean:
 	rm -f $(OBJS) $(DEPS) \

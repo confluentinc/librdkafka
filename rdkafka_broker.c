@@ -392,7 +392,11 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 	assert(rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP);
 	assert(rkb->rkb_s != -1);
 
-	r = sendmsg(rkb->rkb_s, msg, MSG_DONTWAIT|MSG_NOSIGNAL);
+	r = sendmsg(rkb->rkb_s, msg, MSG_DONTWAIT
+#ifdef MSG_NOSIGNAL
+		    |MSG_NOSIGNAL
+#endif
+		);
 	if (r == -1) {
 		if (errno == EAGAIN)
 			return 0;
@@ -1283,6 +1287,7 @@ err:
 
 static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rd_sockaddr_inx_t *sinx;
+	int one __attribute__((unused)) = 1;
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECT",
 		   "broker in state %s connecting",
@@ -1303,6 +1308,14 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 				     strerror(errno));
 		return -1;
 	}
+
+#ifdef SO_NOSIGPIPE
+	/* Disable SIGPIPE signalling for this socket on OSX */
+	if (setsockopt(rkb->rkb_s, SOL_SOCKET, SO_NOSIGPIPE,
+		       &one, sizeof(one) == -1)
+	    rd_rkb_dbg(rkb, BROKER, "SOCKET", "Failed to set SO_NOSIGPIPE: %s",
+		       strerror(errno));
+#endif
 
 	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_CONNECTING);

@@ -15,9 +15,9 @@ endif
 
 all: $(EXAMPLES)
 
-rdkafka_example: rdkafka_example.c
+rdkafka_example: ../librdkafka.a rdkafka_example.c
 	@(test $@ -nt $< || \
-	  $(CC) $(CFLAGS) $< -o $@ $(LDFLAGS))
+	  $(CC) $(CFLAGS) rdkafka_example.c -o $@ $(LDFLAGS))
 	@echo "# $@ is ready"
 	@echo "#"
 	@echo "# Run producer (write messages on stdin)"
@@ -30,9 +30,9 @@ rdkafka_example: rdkafka_example.c
 	@echo "# More usage options:"
 	@echo "./rdkafka_example --help"
 
-rdkafka_performance: rdkafka_performance.c
+rdkafka_performance: ../librdkafka.a rdkafka_performance.c
 	@(test $@ -nt $< || \
-	  $(CC) $(CFLAGS) $< -o $@ $(LDFLAGS))
+	  $(CC) $(CFLAGS) rdkafka_performance.c -o $@ $(LDFLAGS))
 	@echo "# $@ is ready"
 	@echo "#"
 	@echo "# Run producer"

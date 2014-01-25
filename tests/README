@@ -1,0 +1,33 @@
+Automated regression tests for librdkafka
+=========================================
+
+A local configuration file needs to be created to specify the broker address,
+and possibly other rdkafka configuration properties:
+
+    cp test.conf.example test.conf
+    $EDITOR test.conf
+
+
+To run tests:
+
+    make
+
+
+To run specific test(s):
+
+    TESTS=0004-conf.test make
+
+
+
+All tests in the 0000-0999 series are run automatically with 'make'.
+
+Tests 1000-1999 are subject to specific non-standard setups or broker
+configuration, these tests are run with "TESTS=1xxx-yyyyy.test make".
+See comments in the test's source file for specific requirements.
+
+
+The run-test.sh script can be modified to run tests in one or more of
+the following modes:
+ * bare  (default)
+ * valgrind
+ * helgrind

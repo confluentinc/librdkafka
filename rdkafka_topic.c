@@ -327,6 +327,7 @@ void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {
 
 	rd_kafka_lock(rkt->rkt_rk);
 	TAILQ_REMOVE(&rkt->rkt_rk->rk_topics, rkt, rkt_link);
+	rkt->rkt_rk->rk_topic_cnt--;
 	rd_kafka_unlock(rkt->rkt_rk);
 
 	rd_kafka_destroy0(rkt->rkt_rk);

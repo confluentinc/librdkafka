@@ -27,5 +27,5 @@ test.o: test.c
 
 
 clean:
-	rm -f $(TESTS)
+	rm -f *.test
 

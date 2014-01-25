@@ -150,4 +150,5 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_ts_t now);
 
 
-int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm);
+int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
+			      int do_lock);

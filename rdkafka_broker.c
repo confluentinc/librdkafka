@@ -364,6 +364,9 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	/* Undelegate all toppars from this broker. */
 	rd_kafka_broker_toppars_wrlock(rkb);
 	while ((rktp = TAILQ_FIRST(&rkb->rkb_toppars))) {
+		rd_kafka_topic_t *rkt = rktp->rktp_rkt;
+
+		rd_kafka_topic_keep(rkt); /* Hold on to rkt */
 		rd_kafka_toppar_keep(rktp);
 		rd_kafka_broker_toppars_unlock(rkb);
 		rd_rkb_dbg(rkb, TOPIC, "BRKTP",
@@ -371,13 +374,16 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			   rktp->rktp_partition);
 
-		/* Undelegate */
 		rd_kafka_topic_wrlock(rktp->rktp_rkt);
+		/* Undelegate */
 		rd_kafka_toppar_broker_delegate(rktp, NULL);
 		rd_kafka_topic_unlock(rktp->rktp_rkt);
 
-		rd_kafka_broker_toppars_wrlock(rkb);
 		rd_kafka_toppar_destroy(rktp);
+		rd_kafka_topic_destroy(rkt); /* Let go of rkt */
+
+		rd_kafka_broker_toppars_wrlock(rkb);
+
 	}
 	rd_kafka_broker_toppars_unlock(rkb);
 
@@ -654,10 +660,12 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 
 /**
  * Handle a Metadata response message.
+ * If 'rkt' is non-NULL the metadata originated from a topic-specific request.
  *
  * Locality: broker thread
  */
 static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
+				      rd_kafka_topic_t *req_rkt,
 				      const char *buf, size_t size) {
 	struct {
 		int32_t          NodeId;
@@ -665,30 +673,15 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 		int32_t          Port;
 	}      *Brokers = NULL;
 	int32_t Broker_cnt;
-
-	struct {
-		int16_t          ErrorCode;
-		rd_kafkap_str_t *Name;
-		struct {
-			int16_t  ErrorCode;
-			int32_t  PartitionId;
-			int32_t  Leader;
-			int32_t *Replicas;
-			int32_t  Replicas_cnt;
-			int32_t *Isr;
-			int32_t  Isr_cnt;
-		}  *PartitionMetadata;
-		int32_t PartitionMetadata_cnt;
-	}      *TopicMetadata = NULL;
+	struct rd_kafka_TopicMetadata *TopicMetadata = NULL;
 	int32_t TopicMetadata_cnt;
 	int i, j, k;
 	int of = 0;
-
+	int req_rkt_seen = 0;
 
 
 	/* Read Brokers */
 	_READ_I32(&Broker_cnt);
-	rd_rkb_dbg(rkb, METADATA, "METADATA", "%"PRId32" brokers", Broker_cnt);
 	if (Broker_cnt > RD_KAFKAP_BROKERS_MAX)
 		_FAIL("Broker_cnt %"PRId32" > BROKERS_MAX %i",
 		      Broker_cnt, RD_KAFKAP_BROKERS_MAX);
@@ -705,6 +698,9 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 
 	/* Read TopicMetadata */
 	_READ_I32(&TopicMetadata_cnt);
+	rd_rkb_dbg(rkb, METADATA, "METADATA", "%"PRId32" brokers, "
+		   "%"PRId32" topics", Broker_cnt, TopicMetadata_cnt);
+
 	if (TopicMetadata_cnt > RD_KAFKAP_TOPICS_MAX)
 		_FAIL("TopicMetadata_cnt %"PRId32" > TOPICS_MAX %i",
 		      TopicMetadata_cnt, RD_KAFKAP_TOPICS_MAX);
@@ -800,42 +796,24 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 				       Brokers[i].NodeId);
 	}
 
-	/* Update Leader for each topic we know about */
+	/* Update partition count and leader for each topic we know about */
 	for (i = 0 ; i < TopicMetadata_cnt ; i++) {
-		const char *topic = rd_kafkap_strdupa(TopicMetadata[i].Name);
-		int upd;
-		
-		upd = rd_kafka_topic_partition_cnt_update(rkb->rkb_rk, topic,
-							  TopicMetadata[i].
-							  PartitionMetadata_cnt);
+		if (req_rkt &&
+		    !rd_kafkap_str_cmp(TopicMetadata[i].Name,
+				       req_rkt->rkt_topic))
+			req_rkt_seen++;
 
-		for (j = 0 ;
-		     j < TopicMetadata[i].PartitionMetadata_cnt ; j++) {
-			rd_rkb_dbg(rkb, METADATA, "METADATA",
-				   "  Topic #%i/%i: %s partition %"PRId32
-				   " Leader %"PRId32,
-				   i, TopicMetadata_cnt,
-				   topic,
-				   TopicMetadata[i].
-				   PartitionMetadata[j].PartitionId,
-				   TopicMetadata[i].
-				   PartitionMetadata[j].Leader);
-			if (upd == -1)
-				continue;
+		rd_kafka_topic_metadata_update(rkb, &TopicMetadata[i]);
+	}
 
-			rd_kafka_topic_leader_update(rkb->rkb_rk,
-						     topic,
-						     TopicMetadata[i].
-						     PartitionMetadata[j].
-						     PartitionId,
-						     TopicMetadata[i].
-						     PartitionMetadata[j].
-						     Leader);
-		}
 
-		/* Try to assign unassigned messages to new partitions */
-		if (upd != -1)
-			rd_kafka_topic_assign_uas(rkb->rkb_rk, topic);
+	/* Requested topics not seen in metadata? Propogate to topic code. */
+	if (req_rkt) {
+		rd_rkb_dbg(rkb, TOPIC, "METADATA",
+			   "Requested topic %s %sseen in metadata",
+			   req_rkt->rkt_topic->str, req_rkt_seen ? "" : "not ");
+		if (!req_rkt_seen)
+			rd_kafka_topic_metadata_none(req_rkt);
 	}
 
 
@@ -852,6 +830,7 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
 					    rd_kafka_buf_t *reply,
 					    rd_kafka_buf_t *request,
 					    void *opaque) {
+	rd_kafka_topic_t *rkt = opaque;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
 		   "===== Received metadata from %s =====",
@@ -867,12 +846,15 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
 			   "Metadata request failed: %s",
 			   rd_kafka_err2str(err));
 	} else {
-		rd_kafka_metadata_handle(rkb,
+		rd_kafka_metadata_handle(rkb, rkt,
 					 reply->rkbuf_buf2,
 					 reply->rkbuf_len);
 	}
 
 done:
+	if (rkt)
+		rd_kafka_topic_destroy(rkt);
+
 	rd_kafka_buf_destroy(request);
 	if (reply)
 		rd_kafka_buf_destroy(reply);
@@ -975,10 +957,13 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	}
 
 
+	if (only_rkt)
+		rd_kafka_topic_keep(only_rkt);
+
 	rd_kafka_broker_buf_enq(rkb, RD_KAFKAP_Metadata,
 				buf, of,
 				RD_KAFKA_OP_F_FREE|RD_KAFKA_OP_F_FLASH,
-				rd_kafka_broker_metadata_reply, NULL);
+				rd_kafka_broker_metadata_reply, only_rkt);
 }
 
 

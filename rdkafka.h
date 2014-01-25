@@ -111,6 +111,9 @@ typedef enum {
 						      * Partition does not
 						      * exist in cluster. */
 	RD_KAFKA_RESP_ERR__FS = -189,        /* File or filesystem error */
+	RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC = -188, /* Permanent:
+						  * Topic does not exist
+						  * in cluster. */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -734,6 +737,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
  *              "queue.buffering.max.message"
  *   EMSGSIZE - message is larger than configured max size:
  *              "messages.max.bytes".
+ *   ENOENT   - topic is unknown in the Kafka cluster.
  *   ESRCH    - requested 'partition' is unknown in the Kafka cluster.
  *
  */

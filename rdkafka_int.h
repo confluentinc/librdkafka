@@ -484,6 +484,12 @@ struct rd_kafka_topic_s {
 	rd_ts_t            rkt_ts_metadata; /* Timestamp of last metadata
 					     * update for this topic. */
 
+	enum {
+		RD_KAFKA_TOPIC_S_INIT,
+		RD_KAFKA_TOPIC_S_EXISTS,
+		RD_KAFKA_TOPIC_S_UNKNOWN,
+	} rkt_state;
+
 	struct rd_kafka_s *rkt_rk;
 
 	rd_kafka_topic_conf_t rkt_conf;

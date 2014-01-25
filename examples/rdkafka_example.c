@@ -49,6 +49,11 @@
 static int run = 1;
 static rd_kafka_t *rk;
 static int exit_eof = 0;
+static int quiet = 0;
+static 	enum {
+	OUTPUT_HEXDUMP,
+	OUTPUT_RAW,
+} output = OUTPUT_HEXDUMP;
 
 static void stop (int sig) {
 	run = 0;
@@ -105,10 +110,11 @@ static void msg_delivered (rd_kafka_t *rk,
 			   void *opaque, void *msg_opaque) {
 
 	if (error_code)
-		printf("%% Message delivery failed: %s\n",
-		       rd_kafka_err2str(error_code));
-	else
-		printf("%% Message delivered (%zd bytes)\n", len);
+		fprintf(stderr, "%% Message delivery failed: %s\n",
+			rd_kafka_err2str(error_code));
+	else if (!quiet)
+		fprintf(stderr, "%% Message delivered (%zd bytes)\n", len);
+	fprintf(stderr, "Delivered: %.*s\n", (int)len, (char *)payload);
 }
 
 
@@ -116,7 +122,8 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 			 void *opaque) {
 	if (rkmessage->err) {
 		if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
-			printf("%% Consumer reached end of %s [%"PRId32"] "
+			fprintf(stderr,
+				"%% Consumer reached end of %s [%"PRId32"] "
 			       "message queue at offset %"PRId64"\n",
 			       rd_kafka_topic_name(rkmessage->rkt),
 			       rkmessage->partition, rkmessage->offset);
@@ -127,7 +134,7 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 			return;
 		}
 
-		printf("%% Consume error for topic \"%s\" [%"PRId32"] "
+		fprintf(stderr, "%% Consume error for topic \"%s\" [%"PRId32"] "
 		       "offset %"PRId64": %s\n",
 		       rd_kafka_topic_name(rkmessage->rkt),
 		       rkmessage->partition,
@@ -136,14 +143,25 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 		return;
 	}
 
-	printf("%% Message (offset %"PRId64", %zd bytes):\n",
-	       rkmessage->offset, rkmessage->len);
+	if (!quiet)
+		fprintf(stdout, "%% Message (offset %"PRId64", %zd bytes):\n",
+			rkmessage->offset, rkmessage->len);
 
-	if (rkmessage->key_len)
-		hexdump(stdout, "Message Key",
-			rkmessage->key, rkmessage->key_len);
+	if (rkmessage->key_len) {
+		if (output == OUTPUT_HEXDUMP)
+			hexdump(stdout, "Message Key",
+				rkmessage->key, rkmessage->key_len);
+		else
+			printf("Key: %.*s\n",
+			       (int)rkmessage->key_len, (char *)rkmessage->key);
+	}
 
-	hexdump(stdout, "Message Payload", rkmessage->payload, rkmessage->len);
+	if (output == OUTPUT_HEXDUMP)
+		hexdump(stdout, "Message Payload",
+			rkmessage->payload, rkmessage->len);
+	else
+		printf("%.*s\n",
+		       (int)rkmessage->len, (char *)rkmessage->payload);
 }
 
 
@@ -165,13 +183,15 @@ int main (int argc, char **argv) {
 	int64_t start_offset = 0;
 	int do_conf_dump = 0;
 
+	quiet = !isatty(STDIN_FILENO);
+
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
 
 	/* Topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();
 
-	while ((opt = getopt(argc, argv, "PCt:p:b:z:d:o:eX:")) != -1) {
+	while ((opt = getopt(argc, argv, "PCt:p:b:z:qd:o:eX:A")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -210,6 +230,12 @@ int main (int argc, char **argv) {
 			break;
 		case 'd':
 			debug = optarg;
+			break;
+		case 'q':
+			quiet = 1;
+			break;
+		case 'A':
+			output = OUTPUT_RAW;
 			break;
 		case 'X':
 		{
@@ -315,6 +341,8 @@ int main (int argc, char **argv) {
 			"  -e              Exit consumer when last message\n"
 			"                  in partition has been received.\n"
 			"  -d [facs..]     Enable debugging contexts:\n"
+			"  -q              Be quiet\n"
+			"  -A              Raw payload output (consumer)\n"
 			"                  %s\n"
 			"  -X <prop=name> Set arbitrary librdkafka "
 			"configuration property\n"
@@ -343,8 +371,8 @@ int main (int argc, char **argv) {
 	if (debug &&
 	    rd_kafka_conf_set(conf, "debug", debug, errstr, sizeof(errstr)) !=
 	    RD_KAFKA_CONF_OK) {
-		printf("%% Debug configuration failed: %s: %s\n",
-		       errstr, debug);
+		fprintf(stderr, "%% Debug configuration failed: %s: %s\n",
+			errstr, debug);
 		exit(1);
 	}
 
@@ -382,35 +410,52 @@ int main (int argc, char **argv) {
 		/* Create topic */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
-		fprintf(stderr, "%% Type stuff and hit enter to send\n");
+		if (!quiet)
+			fprintf(stderr,
+				"%% Type stuff and hit enter to send\n");
+
 		while (run && fgets(buf, sizeof(buf), stdin)) {
 			size_t len = strlen(buf);
+			if (buf[len-1] == '\n')
+				buf[--len] = '\0';
 
 			/* Send/Produce message. */
-			rd_kafka_produce(rkt, partition,
-					 RD_KAFKA_MSG_F_COPY,
-					 /* Payload and length */
-					 buf, len,
-					 /* Optional key and its length */
-					 NULL, 0,
-					 /* Message opaque, provided in
-					  * delivery report callback as
-					  * msg_opaque. */
-					 NULL);
-			fprintf(stderr, "%% Sent %zd bytes to topic "
-				"%s partition %i\n",
+			if (rd_kafka_produce(rkt, partition,
+					     RD_KAFKA_MSG_F_COPY,
+					     /* Payload and length */
+					     buf, len,
+					     /* Optional key and its length */
+					     NULL, 0,
+					     /* Message opaque, provided in
+					      * delivery report callback as
+					      * msg_opaque. */
+					     NULL) == -1) {
+				fprintf(stderr,
+					"%% Failed to produce to topic %s "
+					"partition %i: %s\n",
+					rd_kafka_topic_name(rkt), partition,
+					strerror(errno));
+				/* Poll to handle delivery reports */
+				rd_kafka_poll(rk, 0);
+				continue;
+			}
+
+			if (!quiet)
+				fprintf(stderr, "%% Sent %zd bytes to topic "
+					"%s partition %i\n",
 				len, rd_kafka_topic_name(rkt), partition);
+			fprintf(stderr, "Sent: %s\n", buf);
 			sendcnt++;
 			/* Poll to handle delivery reports */
-			rd_kafka_poll(rk, 10);
+			rd_kafka_poll(rk, 0);
 		}
 
 		/* Poll to handle delivery reports */
 		rd_kafka_poll(rk, 0);
 
 		/* Wait for messages to be delivered */
-		while (run && rd_kafka_poll(rk, 1000) != -1)
-			continue;
+		while (run && rd_kafka_outq_len(rk) > 0)
+			rd_kafka_poll(rk, 100);
 			
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);

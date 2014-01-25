@@ -58,6 +58,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 	const char *test_conf = getenv("RDKAFKA_TEST_CONF") ? : "test.conf";
 	char errstr[512];
 	char *tmp;
+	int seed;
 
 	/* Limit the test run time. */
 	alarm(timeout);
@@ -65,6 +66,13 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 
 	if ((tmp = getenv("TEST_LEVEL")))
 		test_level = atoi(tmp);
+	if ((tmp = getenv("TEST_SEED")))
+		seed = atoi(tmp);
+	else
+		seed = test_clock() & 0xffffffff;
+
+	TEST_SAY("Using random seed %i\n", seed);
+	srand(seed);
 
 	*conf = rd_kafka_conf_new();
 	*topic_conf = rd_kafka_topic_conf_new();

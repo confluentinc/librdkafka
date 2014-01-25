@@ -3289,6 +3289,9 @@ void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
 	if (rkb->rkb_rsal)
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
 
+	rd_kafka_q_purge(&rkb->rkb_ops);
+	rd_kafka_q_destroy(&rkb->rkb_ops);
+
 	rd_kafka_destroy0(rkb->rkb_rk);
 
 	pthread_rwlock_destroy(&rkb->rkb_toppar_lock);

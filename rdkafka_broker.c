@@ -338,7 +338,8 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			  sizeof(rkb->rkb_err.msg)-of, fmt, ap);
 		va_end(ap);
 
-		rd_rkb_log(rkb, LOG_ERR, "FAIL", "%s", rkb->rkb_err.msg);
+		rd_kafka_log(rkb->rkb_rk, LOG_ERR, "FAIL",
+			     "%s", rkb->rkb_err.msg);
 
 		/* Send ERR op back to application for processing. */
 		rd_kafka_op_err(rkb->rkb_rk, RD_KAFKA_RESP_ERR__FAIL,

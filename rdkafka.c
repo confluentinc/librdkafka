@@ -849,7 +849,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	/* Construct a client id if none is given. */
 	if (!rk->rk_conf.clientid)
 		rk->rk_conf.clientid = strdup("rdkafka");
-	
+
 	snprintf(rk->rk_name, sizeof(rk->rk_name), "%s#%s-%i",
 		 rk->rk_conf.clientid, rd_kafka_type2str(rk->rk_type), rkid++);
 
@@ -1247,7 +1247,6 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 		if (!(dcnt % 1000))
 			rd_kafka_dbg(rk, MSG, "POLL",
 				     "Now %i messages delivered to app", dcnt);
-						  
 		break;
 
 	case RD_KAFKA_OP_STATS:
@@ -1343,7 +1342,6 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 			rd_kafka_toppar_dump(fp, "   ", rkt->rkt_ua);
 	}
 	rd_kafka_unlock(rk);
-	
 }
 
 

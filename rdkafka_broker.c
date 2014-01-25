@@ -567,6 +567,7 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 }
 
 
+
 /**
  * Memory reading helper macros to be used when parsing network responses.
  *
@@ -710,7 +711,7 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 	TopicMetadata = malloc(sizeof(*TopicMetadata) * TopicMetadata_cnt);
 
 	for (i = 0 ; i < TopicMetadata_cnt ; i++) {
-	       
+
 		_READ_I16(&TopicMetadata[i].ErrorCode);
 		_READ_STR(TopicMetadata[i].Name);
 
@@ -726,7 +727,7 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 		TopicMetadata[i].PartitionMetadata =
 			alloca(sizeof(*TopicMetadata[i].PartitionMetadata) *
 			       TopicMetadata[i].PartitionMetadata_cnt);
-		
+
 		for (j = 0 ; j < TopicMetadata[i].PartitionMetadata_cnt ; j++) {
 			_READ_I16(&TopicMetadata[i].PartitionMetadata[j].
 				  ErrorCode);
@@ -753,7 +754,7 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 					      PartitionMetadata[j].Replicas)
 				       * TopicMetadata[i].PartitionMetadata[j].
 				       Replicas_cnt);
-			
+
 			for (k = 0 ; k < TopicMetadata[i].PartitionMetadata[j].
 				     Replicas_cnt ; k++)
 				_READ_I32(&TopicMetadata[i].
@@ -783,11 +784,8 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 				     Isr_cnt ; k++)
 				_READ_I32(&TopicMetadata[i].
 					  PartitionMetadata[j].Isr[k]);
-			
 		}
 	}
-	
-	
 
 	/* Update our list of brokers. */
 	for (i = 0 ; i < Broker_cnt ; i++) {
@@ -2118,7 +2116,7 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 	if (unlikely(now >= rkb->rkb_ts_metadata_poll))
 		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
 					     "periodic refresh");
-	
+
 	if (rkb->rkb_outbufs.rkbq_cnt > 0)
 		rkb->rkb_pfd.events |= POLLOUT;
 	else
@@ -2127,7 +2125,7 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 	if (poll(&rkb->rkb_pfd, 1,
 		 rkb->rkb_rk->rk_conf.buffering_max_ms) <= 0)
 		return;
-	
+
 	if (rkb->rkb_pfd.revents & POLLIN)
 		while (rd_kafka_recv(rkb) > 0)
 			;
@@ -2135,7 +2133,7 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 	if (rkb->rkb_pfd.revents & POLLHUP)
 		return rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
 					    "Connection closed");
-	
+
 	if (rkb->rkb_pfd.revents & POLLOUT)
 		while (rd_kafka_send(rkb) > 0)
 			;
@@ -2180,7 +2178,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 
 		do {
 			cnt = 0;
-			
+
 			TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
 
 				rd_rkb_dbg(rkb, TOPIC, "TOPPAR",
@@ -3209,7 +3207,7 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
 		 * Note: 'now' may be a bit outdated by now. */
 		if (do_timeout_scan)
 			rd_kafka_broker_waitresp_timeout_scan(rkb, now);
-		
+
 		rd_kafka_broker_lock(rkb);
 	}
 
@@ -3332,7 +3330,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_bufq_init(&rkb->rkb_retrybufs);
 	rd_kafka_q_init(&rkb->rkb_ops);
 	rd_kafka_broker_keep(rkb);
-	
+
 	/* Set next intervalled metadata refresh, offset by a random
 	 * value to avoid all brokers to be queried simultaneously. */
 	if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0)

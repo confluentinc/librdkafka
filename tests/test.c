@@ -96,11 +96,11 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		if (!(t = strchr(b, '=')))
 			TEST_FAIL("%s:%i: expected name=value format\n",
 				  test_conf, line);
-		
+
 		name = b;
 		*t = '\0';
 		val = t+1;
-		
+
 		if (!strncmp(name, "topic.", strlen("topic."))) {
 			name += strlen("topic.");
 			res = rd_kafka_topic_conf_set(*topic_conf,

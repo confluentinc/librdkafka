@@ -134,7 +134,7 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_ts_t now) {
 	rd_kafka_msg_t *rkm, *tmp;
 	int cnt = timedout->rkmq_msg_cnt;
-	
+
 	/* Assume messages are added in time sequencial order */
 	TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp) {
 		if (likely(rkm->rkm_ts_timeout > now))

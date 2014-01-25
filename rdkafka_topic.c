@@ -48,7 +48,7 @@ static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 	rd_kafka_toppar_t *rktp;
 
 	rktp = calloc(1, sizeof(*rktp));
-							
+
 	rktp->rktp_partition = partition;
 	rktp->rktp_rkt = rkt;
 	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
@@ -407,7 +407,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
 	if ((rkt = rd_kafka_topic_find(rk, topic)))
 		return rkt;
-	
+
 	rkt = calloc(1, sizeof(*rkt));
 
 	rkt->rkt_topic     = rd_kafkap_str_new(topic);
@@ -512,7 +512,6 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 		rd_kafka_broker_keep(rkb);
 		rd_kafka_broker_toppars_unlock(rkb);
 
-		
 	} else {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
 			     "No broker is leader for topic %.*s [%"PRId32"]",
@@ -911,3 +910,4 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *rkt,
 	rd_kafka_toppar_destroy(rktp);
 	return avail;
 }
+

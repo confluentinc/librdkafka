@@ -2044,8 +2044,10 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 do_send:
 
-	(void)rd_atomic_add(&rktp->rktp_c.tx_msgs, rkbuf->rkbuf_msgq.rkmq_msg_cnt);
-	(void)rd_atomic_add(&rktp->rktp_c.tx_bytes, prodhdr->part2.MessageSetSize);
+	(void)rd_atomic_add(&rktp->rktp_c.tx_msgs,
+			    rkbuf->rkbuf_msgq.rkmq_msg_cnt);
+	(void)rd_atomic_add(&rktp->rktp_c.tx_bytes,
+			    prodhdr->part2.MessageSetSize);
 
 	prodhdr->part2.MessageSetSize =
 		htonl(prodhdr->part2.MessageSetSize);

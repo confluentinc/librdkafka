@@ -487,6 +487,8 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 		return "Local: File or filesystem error";
 	case RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC:
 		return "Local: Unknown topic";
+	case RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN:
+		return "Local: All broker connections are down";
 
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
 		return "Unknown error";

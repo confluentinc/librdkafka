@@ -415,8 +415,8 @@ typedef struct rd_kafka_broker_s {
 	pthread_rwlock_unlock(&(rkb)->rkb_toppar_lock)
 
 	enum {
+		RD_KAFKA_BROKER_STATE_INIT,
 		RD_KAFKA_BROKER_STATE_DOWN,
-		RD_KAFKA_BROKER_STATE_CONNECTING,
 		RD_KAFKA_BROKER_STATE_UP,
 	} rkb_state;
 
@@ -586,6 +586,8 @@ struct rd_kafka_s {
 	rd_kafka_q_t rk_rep;   /* kafka -> application reply queue */
 
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
+	int              rk_broker_cnt;       /* atomic */
+	int              rk_broker_down_cnt;  /* atomic */
 	TAILQ_HEAD(, rd_kafka_topic_s)  rk_topics;
 	int              rk_topic_cnt;
 

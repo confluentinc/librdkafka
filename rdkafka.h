@@ -114,6 +114,9 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC = -188, /* Permanent:
 						  * Topic does not exist
 						  * in cluster. */
+	RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN = -187, /* All broker connections
+						     * are down. */
+
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */

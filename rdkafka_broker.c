@@ -52,8 +52,8 @@
 #include "endian_compat.h"
 
 const char *rd_kafka_broker_state_names[] = {
+	"INIT",
 	"DOWN",
-	"CONNECTING",
 	"UP"
 };
 
@@ -106,10 +106,21 @@ static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
 		return;
 
 	rd_kafka_dbg(rkb->rkb_rk, BROKER, "STATE",
-		     "%s: Broker changed state %s -> %s", 
+		     "%s: Broker changed state %s -> %s",
 		     rkb->rkb_name,
 		     rd_kafka_broker_state_names[rkb->rkb_state],
 		     rd_kafka_broker_state_names[state]);
+
+	if (state == RD_KAFKA_BROKER_STATE_DOWN) {
+		if (rd_atomic_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
+		    rkb->rkb_rk->rk_broker_cnt)
+			rd_kafka_op_err(rkb->rkb_rk,
+					RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
+					"%i/%i brokers are down",
+					rkb->rkb_rk->rk_broker_down_cnt,
+					rkb->rkb_rk->rk_broker_cnt);
+	} else if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN)
+		rd_atomic_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
 
 	rkb->rkb_state = state;
 }
@@ -1300,10 +1311,6 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	    rd_rkb_dbg(rkb, BROKER, "SOCKET", "Failed to set SO_NOSIGPIPE: %s",
 		       strerror(errno));
 #endif
-
-	rd_kafka_broker_lock(rkb);
-	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_CONNECTING);
-	rd_kafka_broker_unlock(rkb);
 
 	if (connect(rkb->rkb_s, (struct sockaddr *)sinx,
 		    RD_SOCKADDR_INX_LEN(sinx)) == -1) {
@@ -3219,6 +3226,10 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 	while (!rkb->rkb_rk->rk_terminate) {
 		switch (rkb->rkb_state)
 		{
+		case RD_KAFKA_BROKER_STATE_INIT:
+			/* The INIT state exists so that an initial connection
+			 * failure triggers a state transition which might
+			 * trigger a ALL_BROKERS_DOWN error. */
 		case RD_KAFKA_BROKER_STATE_DOWN:
 			/* ..connect() will block until done (or failure) */
 			if (rd_kafka_broker_connect(rkb) == -1) {
@@ -3231,9 +3242,6 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 				    rkb->rkb_rsal->rsal_cnt)
 					sleep(1);
 			}
-			break;
-
-		case RD_KAFKA_BROKER_STATE_CONNECTING:
 			break;
 
 		case RD_KAFKA_BROKER_STATE_UP:
@@ -3250,6 +3258,7 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 
 	rd_kafka_lock(rkb->rkb_rk);
 	TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
+	rd_atomic_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
 	rd_kafka_unlock(rkb->rkb_rk);
 	rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__DESTROY, NULL);
 	rd_kafka_broker_destroy(rkb);
@@ -3354,6 +3363,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	}
 
 	TAILQ_INSERT_TAIL(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
+	rd_atomic_add(&rkb->rkb_rk->rk_broker_cnt, 1);
 
 	rd_rkb_dbg(rkb, BROKER, "BROKER",
 		   "Added new broker with NodeId %"PRId32,

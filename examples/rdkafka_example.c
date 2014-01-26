@@ -114,7 +114,6 @@ static void msg_delivered (rd_kafka_t *rk,
 			rd_kafka_err2str(error_code));
 	else if (!quiet)
 		fprintf(stderr, "%% Message delivered (%zd bytes)\n", len);
-	fprintf(stderr, "Delivered: %.*s\n", (int)len, (char *)payload);
 }
 
 
@@ -444,7 +443,6 @@ int main (int argc, char **argv) {
 				fprintf(stderr, "%% Sent %zd bytes to topic "
 					"%s partition %i\n",
 				len, rd_kafka_topic_name(rkt), partition);
-			fprintf(stderr, "Sent: %s\n", buf);
 			sendcnt++;
 			/* Poll to handle delivery reports */
 			rd_kafka_poll(rk, 0);
@@ -456,7 +454,7 @@ int main (int argc, char **argv) {
 		/* Wait for messages to be delivered */
 		while (run && rd_kafka_outq_len(rk) > 0)
 			rd_kafka_poll(rk, 100);
-			
+
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
 

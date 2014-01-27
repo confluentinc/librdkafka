@@ -353,7 +353,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			     "%s", rkb->rkb_err.msg);
 
 		/* Send ERR op back to application for processing. */
-		rd_kafka_op_err(rkb->rkb_rk, RD_KAFKA_RESP_ERR__FAIL,
+		rd_kafka_op_err(rkb->rkb_rk, err,
 				"%s", rkb->rkb_err.msg);
 	}
 

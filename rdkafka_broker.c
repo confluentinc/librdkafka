@@ -1307,7 +1307,8 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 
 #ifdef SO_NOSIGPIPE
 	/* Disable SIGPIPE signalling for this socket on OSX */
-	if (setsockopt(rkb->rkb_s, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one)) == -1)
+	if (setsockopt(rkb->rkb_s, SOL_SOCKET, SO_NOSIGPIPE,
+		       &one, sizeof(one)) == -1)
 	    rd_rkb_dbg(rkb, BROKER, "SOCKET", "Failed to set SO_NOSIGPIPE: %s",
 		       strerror(errno));
 #endif

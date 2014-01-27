@@ -489,6 +489,12 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 		return "Local: Unknown topic";
 	case RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN:
 		return "Local: All broker connections are down";
+	case RD_KAFKA_RESP_ERR__INVALID_ARG:
+		return "Local: Invalid argument or configuration";
+	case RD_KAFKA_RESP_ERR__TIMED_OUT:
+		return "Local: Timed out";
+	case RD_KAFKA_RESP_ERR__QUEUE_FULL:
+		return "Local: Queue full";
 
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
 		return "Unknown error";
@@ -525,8 +531,31 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 }
 
 
+rd_kafka_resp_err_t rd_kafka_errno2err (int errnox) {
+	switch (errnox)
+	{
+	case EINVAL:
+		return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
+	case ENOENT:
+		return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 
+	case ESRCH:
+		return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+
+	case ETIMEDOUT:
+		return RD_KAFKA_RESP_ERR__TIMED_OUT;
+
+	case EMSGSIZE:
+		return RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
+
+	case ENOBUFS:
+		return RD_KAFKA_RESP_ERR__QUEUE_FULL;
+
+	default:
+		return RD_KAFKA_RESP_ERR__FAIL;
+	}
+}
 
 
 void rd_kafka_destroy0 (rd_kafka_t *rk) {
@@ -974,7 +1003,7 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
 	if (!(rktp = rd_kafka_toppar_get(rkt, partition, 0)) &&
 	    !(rktp = rd_kafka_toppar_desired_get(rkt, partition))) {
 		rd_kafka_topic_unlock(rkt);
-		errno = ENOENT;
+		errno = ESRCH;
 		return -1;
 	}
 
@@ -1057,7 +1086,7 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
 
 	if (unlikely(!rktp)) {
 		/* No such toppar known */
-		errno = ENOENT;
+		errno = ESRCH;
 		return -1;
 	}
 
@@ -1141,7 +1170,7 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 
 	if (unlikely(!rktp)) {
 		/* No such toppar known */
-		errno = ENOENT;
+		errno = ESRCH;
 		return -1;
 	}
 
@@ -1171,7 +1200,7 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *rkt, int32_t partition,
 
 	if (unlikely(!rktp)) {
 		/* No such toppar known */
-		errno = ENOENT;
+		errno = ESRCH;
 		return NULL;
 	}
 

@@ -116,7 +116,10 @@ typedef enum {
 						  * in cluster. */
 	RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN = -187, /* All broker connections
 						     * are down. */
-
+	RD_KAFKA_RESP_ERR__INVALID_ARG = -186,  /* Invalid argument, or
+						 * invalid configuration */
+	RD_KAFKA_RESP_ERR__TIMED_OUT = -185,    /* Operation timed out */
+	RD_KAFKA_RESP_ERR__QUEUE_FULL = -184,   /* Queue is full */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -143,7 +146,18 @@ typedef enum {
 const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
 
 
-
+/**
+ * Converts `errno` to a `rd_kafka_resp_err_t` error code
+ * upon failure from the following functions:
+ *  - rd_kafka_topic_new()
+ *  - rd_kafka_consume_start()
+ *  - rd_kafka_consume_stop()
+ *  - rd_kafka_consume()
+ *  - rd_kafka_consume_batch()
+ *  - rd_kafka_consume_callback()
+ *  - rd_kafka_produce()
+ */
+rd_kafka_resp_err_t rd_kafka_errno2err (int errnox);
 
 
 
@@ -738,11 +752,16 @@ rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
  * Returns 0 on success or -1 on error in which case errno is set accordingly:
  *   ENOBUFS  - maximum number of outstanding messages has been reached:
  *              "queue.buffering.max.message"
+ *              (RD_KAFKA_RESP_ERR__QUEUE_FULL)
  *   EMSGSIZE - message is larger than configured max size:
  *              "messages.max.bytes".
- *   ENOENT   - topic is unknown in the Kafka cluster.
+ *              (RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE)
  *   ESRCH    - requested 'partition' is unknown in the Kafka cluster.
+ *              (RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
+ *   ENOENT   - topic is unknown in the Kafka cluster.
+ *              (RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
  *
+ * NOTE: Use `rd_kafka_errno2err()` to convert `errno` to rdkafka error code.
  */
 
 #define RD_KAFKA_MSG_F_FREE  0x1  /* Delegate freeing of payload to rdkafka. */

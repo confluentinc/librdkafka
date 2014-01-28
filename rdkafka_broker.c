@@ -317,8 +317,6 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 	rkb->rkb_err.err = errno_save;
 
-	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
-
 	if (rkb->rkb_s != -1) {
 		close(rkb->rkb_s);
 		rkb->rkb_s = -1;
@@ -356,6 +354,9 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rd_kafka_op_err(rkb->rkb_rk, err,
 				"%s", rkb->rkb_err.msg);
 	}
+
+	/* Set broker state */
+	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
 
 	/*
 	 * Purge all buffers

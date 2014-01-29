@@ -433,7 +433,8 @@ int main (int argc, char **argv) {
 					"%% Failed to produce to topic %s "
 					"partition %i: %s\n",
 					rd_kafka_topic_name(rkt), partition,
-					strerror(errno));
+					rd_kafka_err2str(
+						rd_kafka_errno2err(errno)));
 				/* Poll to handle delivery reports */
 				rd_kafka_poll(rk, 0);
 				continue;
@@ -488,7 +489,7 @@ int main (int argc, char **argv) {
 		/* Start consuming */
 		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
 			fprintf(stderr, "%% Failed to start consuming: %s\n",
-				strerror(errno));
+				rd_kafka_err2str(rd_kafka_errno2err(errno)));
 			exit(1);
 		}
 

@@ -582,7 +582,9 @@ int main (int argc, char **argv) {
 					       partition);
 				else if (!quiet || errno != ENOBUFS)
 					printf("produce error: %s%s\n",
-					       strerror(errno),
+					       rd_kafka_err2str(
+						       rd_kafka_errno2err(
+							       errno)),
 					       errno == ENOBUFS ?
 					       " (backpressure)":"");
 				msgs_failed++;
@@ -705,7 +707,7 @@ int main (int argc, char **argv) {
 		/* Start consuming */
 		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
 			fprintf(stderr, "%% Failed to start consuming: %s\n",
-				strerror(errno));
+				rd_kafka_err2str(rd_kafka_errno2err(errno)));
 			exit(1);
 		}
 		
@@ -747,7 +749,8 @@ int main (int argc, char **argv) {
 			
 			if (r == -1)
 				fprintf(stderr, "%% Error: %s\n",
-					strerror(errno));
+					rd_kafka_err2str(
+						rd_kafka_errno2err(errno)));
 
 			print_stats(mode, 0, compression);
 

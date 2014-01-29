@@ -948,8 +948,8 @@ int rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
 			    int64_t offset) {
 	rd_kafka_toppar_t *rktp;
 
-	if (partition == RD_KAFKA_PARTITION_UA) {
-		errno = EINVAL;
+	if (partition < 0) {
+		errno = ESRCH;
 		return -1;
 	}
 

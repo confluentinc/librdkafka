@@ -29,9 +29,8 @@ CFLAGS+=-DSG
 #LDFLAGS += -pg
 
 LDFLAGS+= -g
-UNAME_S := $(shell uname -s)
-CYGWIN := $(UNAME 1 6)
-ifneq ($(CYGWIN), CYGWIN)
+UNAME_S = $(shell uname -s)
+ifneq ($(findstring CYGWIN,$(UNAME_S)),CYGWIN)
 	LDFLAGS+=-fPIC
 	CFLAGS+=-fPIC
 endif

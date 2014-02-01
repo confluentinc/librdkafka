@@ -112,8 +112,11 @@ static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
 		     rd_kafka_broker_state_names[state]);
 
 	if (state == RD_KAFKA_BROKER_STATE_DOWN) {
+		/* Propagate ALL_BROKERS_DOWN event if all brokers are
+		 * now down, unless we're terminating. */
 		if (rd_atomic_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
-		    rkb->rkb_rk->rk_broker_cnt)
+		    rkb->rkb_rk->rk_broker_cnt &&
+		    !rkb->rkb_rk->rk_terminate)
 			rd_kafka_op_err(rkb->rkb_rk,
 					RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
 					"%i/%i brokers are down",

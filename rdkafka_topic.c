@@ -76,7 +76,7 @@ void rd_kafka_toppar_destroy0 (rd_kafka_toppar_t *rktp) {
 			 RD_KAFKA_RESP_ERR__DESTROY);
 	rd_kafka_q_purge(&rktp->rktp_fetchq);
 
-	rd_kafka_topic_destroy(rktp->rktp_rkt);
+	rd_kafka_topic_destroy0(rktp->rktp_rkt);
 
 	pthread_mutex_destroy(&rktp->rktp_lock);
 	free(rktp);
@@ -130,6 +130,8 @@ rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
 	rd_kafka_topic_rdlock(rkt);
 	rktp = rd_kafka_toppar_get(rkt, partition, ua_on_miss);
 	rd_kafka_topic_unlock(rkt);
+
+        rd_kafka_topic_destroy0(rkt);
 
 	return rktp;
 }
@@ -554,10 +556,8 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 		rd_kafka_toppar_broker_delegate(rktp, NULL);
 
 		/* Query for the topic leader (async) */
-		if (had_leader) {
-			rd_kafka_topic_keep(rkt);
+		if (had_leader)
 			rd_kafka_topic_leader_query(rk, rkt);
-		}
 
 		rd_kafka_toppar_unlock(rktp);
 		rd_kafka_toppar_destroy(rktp); /* from get() */
@@ -633,7 +633,7 @@ void rd_kafka_topic_partitions_remove (rd_kafka_topic_t *rkt) {
 	}
 
 	rd_kafka_topic_unlock(rkt);
-	rd_kafka_topic_destroy(rkt);
+	rd_kafka_topic_destroy0(rkt);
 }
 
 
@@ -902,7 +902,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 		rd_kafka_topic_assign_uas(rkt);
 
 	rd_kafka_topic_unlock(rkt);
-	rd_kafka_topic_destroy(rkt); /* from find() */
+	rd_kafka_topic_destroy0(rkt); /* from find() */
 
 	/* Drop broker references */
 	for (j = 0 ; j < tm->PartitionMetadata_cnt ; j++)

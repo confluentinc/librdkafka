@@ -395,7 +395,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rd_kafka_topic_unlock(rktp->rktp_rkt);
 
 		rd_kafka_toppar_destroy(rktp);
-		rd_kafka_topic_destroy(rkt); /* Let go of rkt */
+		rd_kafka_topic_destroy0(rkt); /* Let go of rkt */
 
 		rd_kafka_broker_toppars_wrlock(rkb);
 
@@ -868,7 +868,7 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
 
 done:
 	if (rkt)
-		rd_kafka_topic_destroy(rkt);
+		rd_kafka_topic_destroy0(rkt);
 
 	rd_kafka_buf_destroy(request);
 	if (reply)
@@ -904,6 +904,7 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	if (pthread_self() != rkb->rkb_thread) {
 		rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_REQ);
 		rko->rko_rkt = only_rkt;
+                rd_kafka_topic_keep(only_rkt);
 		rd_kafka_q_enq(&rkb->rkb_ops, rko);
 		rd_rkb_dbg(rkb, METADATA, "METADATA",
 			   "Request metadata: scheduled: not in broker thread");
@@ -2088,10 +2089,12 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 	switch (rko->rko_type)
 	{
 	case RD_KAFKA_OP_METADATA_REQ:
-		if (rko->rko_rkt)
+		if (rko->rko_rkt) {
 			rd_kafka_broker_metadata_req(rkb, 0, rko->rko_rkt,
 						     NULL);
-		else
+                        /* Loose refcnt from op enq */
+                        rd_kafka_topic_destroy0(rko->rko_rkt);
+		} else
 			rd_kafka_broker_metadata_req(rkb, 1 /*all topics*/,
 						     NULL, NULL);
 		break;
@@ -3275,6 +3278,7 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 
 
 void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
+        rd_kafka_op_t *rko;
 
 	if (rd_atomic_sub(&rkb->rkb_refcnt, 1) > 0)
 		return;
@@ -3287,6 +3291,19 @@ void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
 
 	if (rkb->rkb_rsal)
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
+
+        /* Clean up any references in the op queue before purging it */
+        TAILQ_FOREACH(rko, &rkb->rkb_ops.rkq_q, rko_link) {
+                switch (rko->rko_type)
+                {
+                case RD_KAFKA_OP_METADATA_REQ:
+                        if (rko->rko_rkt)
+                                rd_kafka_topic_destroy0(rko->rko_rkt);
+                        break;
+                default:
+                        break;
+                }
+        }
 
 	rd_kafka_q_purge(&rkb->rkb_ops);
 	rd_kafka_q_destroy(&rkb->rkb_ops);

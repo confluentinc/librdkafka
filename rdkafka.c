@@ -1385,6 +1385,12 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 			rkt->rkt_partition_cnt, rkt->rkt_refcnt);
 		if (rkt->rkt_ua)
 			rd_kafka_toppar_dump(fp, "   ", rkt->rkt_ua);
+                if (!TAILQ_EMPTY(&rkt->rkt_desp)) {
+                        fprintf(fp, "   desired partitions:");
+                        TAILQ_FOREACH(rktp, &rkt->rkt_desp, rktp_rktlink)
+                                fprintf(fp, " %"PRId32, rktp->rktp_partition);
+                        fprintf(fp, "\n");
+                }
 	}
 	rd_kafka_unlock(rk);
 }

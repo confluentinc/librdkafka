@@ -55,6 +55,13 @@ int rd_kafka_thread_cnt (void) {
 }
 
 /**
+ * Current number of live rd_kafka_t handles.
+ * This is used by rd_kafka_wait_destroyed() to know when the library
+ * has fully cleaned up after itself.
+ */
+static int rd_kafka_handle_cnt_curr = 0; /* atomic */
+
+/**
  * Wait for all rd_kafka_t objects to be destroyed.
  * Returns 0 if all kafka objects are now destroyed, or -1 if the
  * timeout was reached.
@@ -62,7 +69,8 @@ int rd_kafka_thread_cnt (void) {
 int rd_kafka_wait_destroyed (int timeout_ms) {
 	rd_ts_t timeout = rd_clock() + (timeout_ms * 1000);
 
-	while (rd_kafka_thread_cnt() > 0) {
+	while (rd_kafka_thread_cnt() > 0 ||
+               rd_kafka_handle_cnt_curr > 0) {
 		if (rd_clock() >= timeout) {
 			errno = ETIMEDOUT;
 			return -1;
@@ -571,6 +579,8 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
 	pthread_mutex_destroy(&rk->rk_lock);
 
 	free(rk);
+
+        rd_atomic_sub(&rd_kafka_handle_cnt_curr, 1);
 }
 
 
@@ -919,6 +929,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	/* Add initial list of brokers from configuration */
 	if (rk->rk_conf.brokerlist)
 		rd_kafka_brokers_add(rk, rk->rk_conf.brokerlist);
+
+        rd_atomic_add(&rd_kafka_handle_cnt_curr, 1);
 
 	return rk;
 }

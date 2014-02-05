@@ -5,7 +5,7 @@ CC ?= cc
 CXX ?= g++
 CFLAGS += -g -Wall -Werror -Wfloat-equal -Wpointer-arith -O2 -I../
 CXXFLAGS += $(CFLAGS)
-LDFLAGS +=  ../librdkafka.a
+LDFLAGS +=  -L../ -lrdkafka
 LDFLAGS += -lpthread -lz
 ifeq ($(shell uname -s), Linux)
 	LDFLAGS += -lrt
@@ -20,7 +20,9 @@ endif
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 all: $(TESTS)
-	for i in $^ ; do ./run-test.sh $$i || exit 1 ; done
+	for i in $^ ; do \
+	 LD_LIBRARY_PATH=../ ./run-test.sh $$i || exit 1 ; \
+	done
 
 test.o: test.c
 	$(CC) $(CFLAGS) -c $<

@@ -37,7 +37,7 @@ endif
 
 .PHONY:
 
-all: libs
+all: libs check
 
 libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a CONFIGURATION.md
 
@@ -45,10 +45,11 @@ libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a CONFIGURATION.md
 	$(CC) -MD -MP $(CFLAGS) -c $<
 
 librdkafka.lds: rdkafka.h
-	@echo "Generating linker script"
-	./lds-gen.pl > $@
+	@echo "\033[33mGenerating linker script $@\033[0m"
+	@./lds-gen.pl > $@
 
 $(LIBNAME).so.$(LIBVER): $(OBJS) librdkafka.lds
+	@echo "\033[33mCreating shared library $@\033[0m"
 	@(if [ $(UNAME_S) = "Darwin" ]; then \
 		$(CC) $(LDFLAGS) \
 			$(OBJS) -dynamiclib -o $@ -lpthread -lz -lc ; \
@@ -60,19 +61,22 @@ $(LIBNAME).so.$(LIBVER): $(OBJS) librdkafka.lds
 	fi)
 
 $(LIBNAME).a:	$(OBJS)
+	@echo "\033[33mCreating static library $@\033[0m"
 	$(AR) rcs $@ $(OBJS)
 
 
 CONFIGURATION.md: rdkafka.h examples
-	examples/rdkafka_performance -X list > CONFIGURATION.md.tmp
+	@echo "\033[33mUpdating $@\033[0m"
+	@(examples/rdkafka_performance -X list > CONFIGURATION.md.tmp; \
 	cmp CONFIGURATION.md CONFIGURATION.md.tmp || \
-		mv CONFIGURATION.md.tmp CONFIGURATION.md
-	rm -f CONFIGURATION.md.tmp
+		mv CONFIGURATION.md.tmp CONFIGURATION.md; \
+	rm -f CONFIGURATION.md.tmp)
 
 examples: .PHONY
 	make -C $@
 
 install:
+	@echo "\033[33mInstall to root $(DESTDIR)\033[0m"
 	if [ "$(DESTDIR)" != "/usr/local" ]; then \
 		DESTDIR="$(DESTDIR)/usr"; \
 	else \
@@ -88,6 +92,7 @@ tests: .PHONY check
 	make -C tests
 
 check:
+	@echo "\033[33mChecking integrity\033[0m"
 	@(RET=true ; \
 	 for f in librdkafka.so.1 librdkafka.a CONFIGURATION.md \
 		examples/rdkafka_example examples/rdkafka_performance ; do \
@@ -100,6 +105,14 @@ check:
 		fi; \
 	done ; \
 	$$($$RET))
+
+	@(printf "%-30s " "Symbol visibility" ; \
+	((nm -D librdkafka.so.1 | grep -q rd_kafka_new) && \
+	  (nm -D librdkafka.so.1 | grep -vq rd_kafka_destroy) && \
+		echo "\033[32mOK\033[0m") || \
+	  echo "\033[31mFAILED\033[0m")
+
+
 
 clean:
 	rm -f $(OBJS) $(DEPS) \

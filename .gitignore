@@ -5,6 +5,7 @@
 *.so.?
 *.a
 *.d
+librdkafka.lds
 core
 *dSYM/
 *.offset

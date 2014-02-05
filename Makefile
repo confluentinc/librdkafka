@@ -44,8 +44,11 @@ libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a CONFIGURATION.md
 %.o: %.c
 	$(CC) -MD -MP $(CFLAGS) -c $<
 
+librdkafka.lds: rdkafka.h
+	@echo "Generating linker script"
+	./lds-gen.pl > $@
 
-$(LIBNAME).so.$(LIBVER): $(OBJS)
+$(LIBNAME).so.$(LIBVER): $(OBJS) librdkafka.lds
 	@(if [ $(UNAME_S) = "Darwin" ]; then \
 		$(CC) $(LDFLAGS) \
 			$(OBJS) -dynamiclib -o $@ -lpthread -lz -lc ; \
@@ -100,7 +103,8 @@ check:
 
 clean:
 	rm -f $(OBJS) $(DEPS) \
-		$(LIBNAME)*.a $(LIBNAME)*.so $(LIBNAME)*.so.$(LIBVER)
+		$(LIBNAME)*.a $(LIBNAME)*.so $(LIBNAME)*.so.$(LIBVER) \
+		librdkafka.lds
 	make -C tests clean
 	make -C examples clean
 

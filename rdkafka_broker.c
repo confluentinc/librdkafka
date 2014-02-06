@@ -1240,11 +1240,12 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 		rkbuf->rkbuf_reshdr.CorrId = ntohl(rkbuf->rkbuf_reshdr.CorrId);
 
 		/* Make sure message size is within tolerable limits.
-		 * Allow an extra 1000 bytes for headers.
-                 * Seen as much as 207 bytes overhead so far. */
+		 * Allow extra space for header overhead.
+                 * For example, a fetch response for 10 partitions
+                 * will have an overhead of the (framing headers * 10). */
 		if (rkbuf->rkbuf_len < 4/*CorrId*/ ||
 		    rkbuf->rkbuf_len >
-		    rkb->rkb_rk->rk_conf.max_msg_size + 1000) {
+		    rkb->rkb_rk->rk_conf.max_msg_size + 100000) {
 			snprintf(errstr, sizeof(errstr),
 				 "Invalid message size %zd (0..%i): "
 				 "increase message.max.bytes",

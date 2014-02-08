@@ -35,6 +35,7 @@
 
 
 int test_level = 2;
+int test_seed;
 
 static void sig_alarm (int sig) {
 	TEST_FAIL("Test timed out");
@@ -71,8 +72,8 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 	else
 		seed = test_clock() & 0xffffffff;
 
-	TEST_SAY("Using random seed %i\n", seed);
 	srand(seed);
+        test_seed = seed;
 
 	*conf = rd_kafka_conf_new();
 	*topic_conf = rd_kafka_topic_conf_new();

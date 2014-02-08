@@ -1071,27 +1071,19 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 	if (unlikely(!(req =
 		       rd_kafka_waitresp_find(rkb,
 					      rkbuf->rkbuf_reshdr.CorrId)))) {
-		/* FIXME: unknown response. probably due to request timeout */
+		/* unknown response. probably due to request timeout */
+                rkb->rkb_c.rx_corrid_err++;
 		rd_rkb_dbg(rkb, BROKER, "RESPONSE",
-			   "Unknown response for CorrId %"PRId32,
+			   "Response for unknown CorrId %"PRId32" (timed out?)",
 			   rkbuf->rkbuf_reshdr.CorrId);
-		goto err;
+                rd_kafka_buf_destroy(rkbuf);
+                return -1;
 	}
-
 
 	/* Call callback. Ownership of 'rkbuf' is delegated to callback. */
 	req->rkbuf_cb(rkb, 0, rkbuf, req, req->rkbuf_opaque);
 
 	return 0;
-
-err:
-	/* FIXME */
-	rd_rkb_dbg(rkb, BROKER, "RESP",
-		   "Response error for corrid %"PRId32,
-		   rkbuf->rkbuf_reshdr.CorrId);
-
-	rd_kafka_buf_destroy(rkbuf);
-	return -1;
 }
 
 

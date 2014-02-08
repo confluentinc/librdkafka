@@ -432,6 +432,7 @@ typedef struct rd_kafka_broker_s {
 		uint64_t rx_bytes;
 		uint64_t rx;    /* Kafka messages (not payload msgs) */
 		uint64_t rx_err;
+                uint64_t rx_corrid_err; /* CorrId misses */
 	} rkb_c;
 
 	rd_ts_t             rkb_ts_metadata_poll; /* Next metadata poll time */

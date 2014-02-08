@@ -1580,7 +1580,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 		   request->rkbuf_msgq.rkmq_msg_cnt, err ? "not ": "");
 
 	/* Parse Produce reply (unless the request errored) */
-	if (!err)
+	if (!err && reply)
 		err = rd_kafka_produce_reply_handle(rkb, reply);
 
 
@@ -2796,7 +2796,7 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_broker_t *rkb,
 	rkb->rkb_fetching = 0;
 
 	/* Parse and handle the messages (unless the request errored) */
-	if (!err)
+	if (!err && reply)
 		err = rd_kafka_fetch_reply_handle(rkb, reply);
 
 	rd_rkb_dbg(rkb, MSG, "FETCH", "Fetch reply: %s",
@@ -2933,7 +2933,7 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 	rd_kafka_toppar_t *rktp = opaque;
 	rd_kafka_op_t *rko;
 
-	if (likely(!err))
+	if (likely(!err && reply))
 		err = rd_kafka_toppar_offset_reply_handle(rkb, reply, rktp);
 
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",

@@ -492,6 +492,9 @@ struct rd_kafka_topic_s {
 		RD_KAFKA_TOPIC_S_UNKNOWN,
 	} rkt_state;
 
+        int                rkt_flags;
+#define RD_KAFKA_TOPIC_F_LEADER_QUERY  0x1 /* There is an outstanding
+                                            * leader query for this topic */
 	struct rd_kafka_s *rkt_rk;
 
 	rd_kafka_topic_conf_t rkt_conf;

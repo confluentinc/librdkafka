@@ -867,8 +867,12 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
 	}
 
 done:
-	if (rkt)
+	if (rkt) {
+                rd_kafka_topic_wrlock(rkt);
+                rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_QUERY;
+                rd_kafka_topic_unlock(rkt);
 		rd_kafka_topic_destroy0(rkt);
+        }
 
 	rd_kafka_buf_destroy(request);
 	if (reply)
@@ -1024,6 +1028,19 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	}
 	if (do_rk_lock)
 		rd_kafka_unlock(rk);
+
+        if (rkt) {
+                rd_kafka_topic_wrlock(rkt);
+                /* Avoid multiple leader queries if there is already
+                 * an outstanding one waiting for reply. */
+                if (rkt->rkt_flags & RD_KAFKA_TOPIC_F_LEADER_QUERY) {
+                        rd_kafka_topic_unlock(rkt);
+                        rd_kafka_broker_destroy(rkb);
+                        return;
+                }
+                rkt->rkt_flags |= RD_KAFKA_TOPIC_F_LEADER_QUERY;
+                rd_kafka_topic_unlock(rkt);
+        }
 
 	rd_kafka_broker_metadata_req(rkb, 0, rkt, "leader query");
 
@@ -2075,9 +2092,6 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 				      rd_kafka_op_t *rko) {
 
 	assert(pthread_self() == rkb->rkb_thread);
-
-	rd_rkb_dbg(rkb, BROKER, "BRKOP",
-		   "Serve broker op type %i", rko->rko_type);
 
 	switch (rko->rko_type)
 	{

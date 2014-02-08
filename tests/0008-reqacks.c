@@ -27,7 +27,7 @@
  */
 
 /**
- * Tests producer basics.
+ * Tests request.required.acks (issue #75)
  */
 
 #define _GNU_SOURCE

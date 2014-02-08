@@ -1246,7 +1246,7 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 		    rkbuf->rkbuf_len > rkb->rkb_rk->rk_conf.recv_max_msg_size) {
 			snprintf(errstr, sizeof(errstr),
 				 "Invalid message size %zd (0..%i): "
-				 "increase message.max.bytes",
+				 "increase receive.message.max.bytes",
 				 rkbuf->rkbuf_len-4,
 				 rkb->rkb_rk->rk_conf.max_msg_size);
 			rkb->rkb_c.rx_err++;

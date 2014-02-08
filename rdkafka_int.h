@@ -151,7 +151,6 @@ struct rd_kafka_conf_s {
 	int    queue_buffering_max_msgs;
 	int    buffering_max_ms;
 	int    max_retries;
-	int    msg_send_max_retries;
 	int    retry_backoff_ms;
 	int    batch_num_messages;
 	rd_kafka_compression_t compression_codec;

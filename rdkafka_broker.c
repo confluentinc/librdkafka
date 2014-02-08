@@ -1590,13 +1590,14 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 			break;
 
 		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
 			/* Try again */
 			if (++request->rkbuf_retries <
 			    rkb->rkb_rk->rk_conf.max_retries) {
 
 				if (reply)
 					rd_kafka_buf_destroy(reply);
-							
+
 				rd_kafka_broker_buf_retry(rkb, request);
 				return;
 			}
@@ -2806,7 +2807,10 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_broker_t *rkb,
 
 		case RD_KAFKA_RESP_ERR__TRANSPORT:
 		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
 			/* Try again */
+                        /* FIXME: Not sure we should retry here, the fetch
+                         *        is already intervalled. */
 			if (++request->rkbuf_retries <
 			    /* FIXME: producer? */
 			    rkb->rkb_rk->rk_conf.max_retries) {
@@ -2946,6 +2950,7 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 
 		case RD_KAFKA_RESP_ERR__TRANSPORT:
 		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
 			/* Try again */
 			if (++request->rkbuf_retries <
 			    /* FIXME: producer? */

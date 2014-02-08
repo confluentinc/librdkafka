@@ -193,7 +193,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "on the producer queue.",
 	  1, 900*1000, 1000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "message.send.max.retries", _RK_C_INT,
-	  _RK(msg_send_max_retries),
+	  _RK(max_retries),
 	  "How many times to retry sending a failing MessageSet. "
 	  "**Note:** retrying may cause reordering.",
 	  0, 100, 2 },

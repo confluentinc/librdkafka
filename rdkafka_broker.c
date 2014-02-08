@@ -903,8 +903,10 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	 * be performed by the broker thread. */
 	if (pthread_self() != rkb->rkb_thread) {
 		rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_REQ);
-		rko->rko_rkt = only_rkt;
-                rd_kafka_topic_keep(only_rkt);
+                if (only_rkt) {
+                        rko->rko_rkt = only_rkt;
+                        rd_kafka_topic_keep(only_rkt);
+                }
 		rd_kafka_q_enq(&rkb->rkb_ops, rko);
 		rd_rkb_dbg(rkb, METADATA, "METADATA",
 			   "Request metadata: scheduled: not in broker thread");

@@ -4,7 +4,8 @@ Property                                 |       Default | Description
 -----------------------------------------|--------------:|--------------------------
 client.id                                |       rdkafka | Client identifier.
 metadata.broker.list                     |               | Initial list of brokers. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime.
-message.max.bytes                        |       4000000 | Maximum receive message size. This is a safety precaution to avoid memory exhaustion in case of protocol hickups.
+message.max.bytes                        |       4000000 | Maximum transmit message size.
+receive.message.max.bytes                |     100000000 | Maximum receive message size. This is a safety precaution to avoid memory exhaustion in case of protocol hickups. The value should be at least fetch.message.max.bytes * number of partitions consumed from.
 metadata.request.timeout.ms              |         60000 | Non-topic request timeout in milliseconds. This is for metadata requests, etc.
 topic.metadata.refresh.interval.ms       |         10000 | Topic metadata refresh interval in milliseconds. The metadata is automatically refreshed on error and connect. Use -1 to disable the intervalled refresh.
 topic.metadata.refresh.fast.cnt          |            10 | When a topic looses its leader this number of metadata requests are sent with `topic.metadata.refresh.fast.interval.ms` interval disregarding the `topic.metadata.refresh.interval.ms` value. This is used to recover quickly from transitioning leader brokers.
@@ -20,6 +21,7 @@ stats_cb                                 |               | Statistics callback (
 opaque                                   |               | Application opaque (set with rd_kafka_conf_set_opaque())
 queued.min.messages                      |        100000 | Minimum number of messages that should to be available for consumption by application.
 fetch.wait.max.ms                        |           100 | Maximum time the broker may wait to fill the response with fetch.min.bytes.
+fetch.message.max.bytes                  |       1048576 | Maximum number of bytes per topic+partition to request when fetching messages from the broker.
 fetch.min.bytes                          |             1 | Minimum number of bytes the broker responds with. If fetch.wait.max.ms expires the accumulated data will be sent to the client regardless of this setting.
 fetch.error.backoff.ms                   |           500 | How long to postpone the next fetch request for a topic+partition in case of a fetch error.
 queue.buffering.max.messages             |        100000 | Maximum number of messages allowed on the producer queue.

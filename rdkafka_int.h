@@ -119,6 +119,7 @@ struct rd_kafka_conf_s {
 	 * Generic configuration
 	 */
 	int     max_msg_size;
+        int     recv_max_msg_size;
 	int     metadata_request_timeout_ms;
 	int     metadata_refresh_interval_ms;
 	int     metadata_refresh_fast_cnt;
@@ -137,6 +138,7 @@ struct rd_kafka_conf_s {
 	 */
 	int    queued_min_msgs;
 	int    fetch_wait_max_ms;
+        int    fetch_msg_max_bytes;
 	int    fetch_min_bytes;
 	int    fetch_error_backoff_ms;
 	/* Pre-built Fetch request header. */

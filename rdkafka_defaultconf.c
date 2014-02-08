@@ -77,10 +77,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The application may also use `rd_kafka_brokers_add()` to add "
 	  "brokers during runtime." },
 	{ _RK_GLOBAL, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
+	  "Maximum transmit message size.",
+	  1000, 1000000000, 4000000 },
+	{ _RK_GLOBAL, "receive.message.max.bytes", _RK_C_INT,
+          _RK(recv_max_msg_size),
 	  "Maximum receive message size. "
 	  "This is a safety precaution to avoid memory exhaustion in case of "
-	  "protocol hickups.",
-	  1000, 1000000000, 4000000 },
+	  "protocol hickups. "
+          "The value should be at least fetch.message.max.bytes * number of "
+          "partitions consumed from.",
+	  1000, 1000000000, 100000000 },
 	{ _RK_GLOBAL, "metadata.request.timeout.ms", _RK_C_INT,
 	  _RK(metadata_request_timeout_ms),
 	  "Non-topic request timeout in milliseconds. "
@@ -158,6 +164,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Maximum time the broker may wait to fill the response "
 	  "with fetch.min.bytes.",
 	  0, 300*1000, 100 },
+        { _RK_GLOBAL|_RK_CONSUMER, "fetch.message.max.bytes", _RK_C_INT,
+          _RK(fetch_msg_max_bytes),
+          "Maximum number of bytes per topic+partition to request when "
+          "fetching messages from the broker.",
+          1, 1000000000, 1024*1024 },
 	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.min.bytes", _RK_C_INT,
 	  _RK(fetch_min_bytes),
 	  "Minimum number of bytes the broker responds with. "

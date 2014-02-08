@@ -1241,13 +1241,9 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 		rkbuf->rkbuf_len = ntohl(rkbuf->rkbuf_reshdr.Size);
 		rkbuf->rkbuf_reshdr.CorrId = ntohl(rkbuf->rkbuf_reshdr.CorrId);
 
-		/* Make sure message size is within tolerable limits.
-		 * Allow extra space for header overhead.
-                 * For example, a fetch response for 10 partitions
-                 * will have an overhead of the (framing headers * 10). */
+		/* Make sure message size is within tolerable limits. */
 		if (rkbuf->rkbuf_len < 4/*CorrId*/ ||
-		    rkbuf->rkbuf_len >
-		    rkb->rkb_rk->rk_conf.max_msg_size + 100000) {
+		    rkbuf->rkbuf_len > rkb->rkb_rk->rk_conf.recv_max_msg_size) {
 			snprintf(errstr, sizeof(errstr),
 				 "Invalid message size %zd (0..%i): "
 				 "increase message.max.bytes",
@@ -3135,7 +3131,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 		tp->PartitionArrayCnt = htonl(1);
 		tp->Partition = htonl(rktp->rktp_partition);
 		tp->FetchOffset = htobe64(rktp->rktp_next_offset);
-		tp->MaxBytes = htonl(rkb->rkb_rk->rk_conf.max_msg_size);
+		tp->MaxBytes = htonl(rkb->rkb_rk->rk_conf.fetch_msg_max_bytes);
 		rd_kafka_buf_push(rkbuf, tp, sizeof(*tp));
 		next = (void *)(tp+1);
 

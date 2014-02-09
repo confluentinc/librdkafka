@@ -47,7 +47,7 @@ rdkafka_performance: ../librdkafka.a rdkafka_performance.c
 
 
 rdkafka_example_cpp: ../librdkafka.a rdkafka_example.cpp
-	$(CXX) $(CXXFLAGS) rdkafka_example.cpp -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) rdkafka_example.cpp -o $@ $(LDFLAGS) -lstdc++
 
 clean:
 	rm -f $(EXAMPLES)

@@ -448,6 +448,23 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
 
 /**
+ * Sets the state for topic.
+ * NOTE: rd_kafka_topic_wrlock(rkt) MUST be held
+ */
+static void rd_kafka_topic_set_state (rd_kafka_topic_t *rkt, int state) {
+        static const char *state_names[] = { "INIT", "EXISTS", "UNKNOWN" };
+
+        if (rkt->rkt_state == state)
+                return;
+
+        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "STATE",
+                     "Topic %s changed state %s -> %s",
+                     rkt->rkt_topic->str,
+                     state_names[rkt->rkt_state], state_names[state]);
+        rkt->rkt_state = state;
+}
+
+/**
  * Returns the name of a topic.
  * NOTE:
  *   The topic Kafka String representation is crafted with an extra byte
@@ -815,7 +832,7 @@ void rd_kafka_topic_metadata_none (rd_kafka_topic_t *rkt) {
 
 	rkt->rkt_ts_metadata = rd_clock();
 
-	rkt->rkt_state = RD_KAFKA_TOPIC_S_UNKNOWN;
+        rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
 
 	/* Update number of partitions */
 	rd_kafka_topic_partition_cnt_update(rkt, 0);
@@ -871,9 +888,9 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 	/* Set topic state */
 	if (tm->ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
-		rkt->rkt_state = RD_KAFKA_TOPIC_S_UNKNOWN;
-	else
-		rkt->rkt_state = RD_KAFKA_TOPIC_S_EXISTS;
+                rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
+        else
+                rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
 
 	/* Update number of partitions */
 	upd += rd_kafka_topic_partition_cnt_update(rkt,

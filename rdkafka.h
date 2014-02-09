@@ -827,6 +827,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
  * Events:
  *   - delivery report callbacks  (if dr_cb is configured) [producer]
  *   - error callbacks (if error_cb is configured) [producer & consumer]
+ *   - stats callbacks (if stats_cb is configured) [producer & consumer]
  *
  * Returns the number of events served.
  */

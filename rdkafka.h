@@ -85,7 +85,6 @@ typedef struct rd_kafka_s rd_kafka_t;
 typedef struct rd_kafka_topic_s rd_kafka_topic_t;
 typedef struct rd_kafka_conf_s rd_kafka_conf_t;
 typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
-typedef struct rd_kafka_message_s rd_kafka_message_t;
 
 
 /**
@@ -158,6 +157,66 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
  *  - rd_kafka_produce()
  */
 rd_kafka_resp_err_t rd_kafka_errno2err (int errnox);
+
+
+
+/*******************************************************************
+ *								   *
+ * Kafka messages                                                  *
+ *								   *
+ *******************************************************************/
+
+
+/**
+ * A Kafka message as returned by the `rd_kafka_consume*()` family
+ * of functions.
+ *
+ * This object has two purposes:
+ *  - provide the application with a consumed message. ('err' == 0)
+ *  - report per-topic+partition consumer errors ('err' != 0)
+ *
+ * The application must check 'err' to decide what action to take.
+ *
+ * When the application is finished with a message it must call
+ * `rd_kafka_message_destroy()`.
+ */
+typedef struct rd_kafka_message_s {
+	rd_kafka_resp_err_t err;   /* Non-zero for error signaling. */
+	rd_kafka_topic_t *rkt;     /* Topic */
+	int32_t partition;         /* Partition */
+	void   *payload;           /* err==0: Message payload
+				    * err!=0: Error string */
+	size_t  len;               /* err==0: Message payload length
+				    * err!=0: Error string length */
+	void   *key;               /* err==0: Optional message key */
+	size_t  key_len;           /* err==0: Optional message key length */
+	int64_t offset;            /* Message offset (or offset for error
+				    * if err!=0 if applicable). */
+	void  *_private;           /* rdkafka private pointer: DO NOT MODIFY */
+} rd_kafka_message_t;
+
+
+/**
+ * Frees resources for 'rkmessage' and hands ownership back to rdkafka.
+ */
+void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage);
+
+
+/**
+ * Returns the error string for an errored rd_kafka_message_t or NULL if
+ * there was no error.
+ */
+static inline const char *
+__attribute__((unused))
+rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
+	if (!rkmessage->err)
+		return NULL;
+
+	if (rkmessage->payload)
+		return (const char *)rkmessage->payload;
+
+	return rd_kafka_err2str(rkmessage->err);
+}
 
 
 
@@ -530,63 +589,6 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *rkt);
 
 
 
-/*******************************************************************
- *								   *
- * Kafka messages                                                  *
- *								   *
- *******************************************************************/
-
-
-/**
- * A Kafka message as returned by the `rd_kafka_consume*()` family
- * of functions.
- *
- * This object has two purposes:
- *  - provide the application with a consumed message. ('err' == 0)
- *  - report per-topic+partition consumer errors ('err' != 0)
- *
- * The application must check 'err' to decide what action to take.
- *
- * When the application is finished with a message it must call
- * `rd_kafka_message_destroy()`.
- */
-typedef struct rd_kafka_message_s {
-	rd_kafka_resp_err_t err;   /* Non-zero for error signaling. */
-	rd_kafka_topic_t *rkt;     /* Topic */
-	int32_t partition;         /* Partition */
-	void   *payload;           /* err==0: Message payload
-				    * err!=0: Error string */
-	size_t  len;               /* err==0: Message payload length
-				    * err!=0: Error string length */
-	void   *key;               /* err==0: Optional message key */
-	size_t  key_len;           /* err==0: Optional message key length */
-	int64_t offset;            /* Message offset (or offset for error
-				    * if err!=0 if applicable). */
-	void  *_private;           /* rdkafka private pointer: DO NOT MODIFY */
-} rd_kafka_message_t;
-
-
-/**
- * Frees resources for 'rkmessage' and hands ownership back to rdkafka.
- */
-void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage);
-
-
-/**
- * Returns the error string for an errored rd_kafka_message_t or NULL if
- * there was no error.
- */
-static inline const char * 
-__attribute__((unused))
-rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
-	if (!rkmessage->err)
-		return NULL;
-
-	if (rkmessage->payload)
-		return (const char *)rkmessage->payload;
-
-	return rd_kafka_err2str(rkmessage->err);
-}
 
 
 

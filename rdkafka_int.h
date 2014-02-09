@@ -187,6 +187,11 @@ struct rd_kafka_conf_s {
 			 size_t json_len,
 			 void *opaque);
 
+        /* Log callback */
+        void (*log_cb) (const rd_kafka_t *rk, int level,
+                        const char *fac, const char *buf);
+        int    log_level;
+
 
 	/* Opaque passed to callbacks. */
 	void  *opaque;
@@ -622,11 +627,6 @@ struct rd_kafka_s {
 	TAILQ_HEAD(, rd_kafka_timer_s) rk_timers;
 	pthread_mutex_t                rk_timers_lock;
 	pthread_cond_t                 rk_timers_cond;
-
-	void (*rk_log_cb) (const rd_kafka_t *rk, int level,
-			   const char *fac,
-			   const char *buf);
-	int    rk_log_level;
 
 	pthread_t rk_thread;
 

@@ -52,7 +52,8 @@ struct rd_kafka_property {
 	int   vmin;
 	int   vmax;
 	int   vdef;        /* Default value (int) */
-	const char *sdef;  /* Defalut value (string) */
+	const char *sdef;  /* Default value (string) */
+        void  *pdef;       /* Default value (pointer) */
 	struct {
 		int val;
 		const char *str;
@@ -149,6 +150,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "stats_cb", _RK_C_PTR,
 	  _RK(stats_cb),
 	  "Statistics callback (set with rd_kafka_conf_set_stats_cb())" },
+	{ _RK_GLOBAL, "log_cb", _RK_C_PTR,
+	  _RK(log_cb),
+	  "Log callback (set with rd_kafka_conf_set_log_cb())",
+          .pdef = rd_kafka_log_print },
+        { _RK_GLOBAL, "log_level", _RK_C_INT,
+          _RK(log_level),
+          "Logging level (syslog(3) levels)",
+          0, 7, 6 },
 	{ _RK_GLOBAL, "opaque", _RK_C_PTR,
 	  _RK(opaque),
 	  "Application opaque (set with rd_kafka_conf_set_opaque())" },
@@ -517,9 +526,10 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
 		if (!(prop->scope & scope))
 			continue;
 
-		if (prop->sdef || prop->vdef)
+		if (prop->sdef || prop->vdef || prop->pdef)
 			rd_kafka_anyconf_set_prop0(scope, conf, prop,
-						   prop->sdef, prop->vdef);
+						   prop->sdef ? : prop->pdef,
+                                                   prop->vdef);
 	}
 }
 
@@ -702,6 +712,13 @@ void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 						    const char *reason,
 						    void *opaque)) {
 	conf->error_cb = error_cb;
+}
+
+
+void rd_kafka_conf_set_log_cb (rd_kafka_conf_t *conf,
+			  void (*log_cb) (const rd_kafka_t *rk, int level,
+                                          const char *fac, const char *buf)) {
+	conf->log_cb = log_cb;
 }
 
 

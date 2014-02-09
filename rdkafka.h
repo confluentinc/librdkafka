@@ -250,6 +250,21 @@ void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 						    const char *reason,
 						    void *opaque));
 
+
+/**
+ * Set logger callback.
+ * The default is to print to stderr, but a syslog logger is also available,
+ * see rd_kafka_log_(print|syslog) for the builtin alternatives.
+ * Alternatively the application may provide its own logger callback.
+ * Or pass 'func' as NULL to disable logging.
+ *
+ * This is the configuration alternative to `rd_kafka_set_logger()`.
+ */
+void rd_kafka_conf_set_log_cb (rd_kafka_conf_t *conf,
+			  void (*log_cb) (const rd_kafka_t *rk, int level,
+                                          const char *fac, const char *buf));
+
+
 /**
  * Set statistics callback in provided conf object.
  * The statistics callback is called from `rd_kafka_poll()` every
@@ -832,7 +847,7 @@ int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist);
  * Alternatively the application may provide its own logger callback.
  * Or pass 'func' as NULL to disable logging.
  *
- * NOTE: 'rk' may be passed as NULL.
+ * NOTE: 'rk' may be passed as NULL in the callback.
  */
 void rd_kafka_set_logger (rd_kafka_t *rk,
 			  void (*func) (const rd_kafka_t *rk, int level,

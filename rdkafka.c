@@ -111,10 +111,10 @@ int pthread_cond_timedwait_ms (pthread_cond_t *cond,
 void rd_kafka_log_buf (const rd_kafka_t *rk, int level,
 		       const char *fac, const char *buf) {
 
-	if (!rk->rk_log_cb || level > rk->rk_log_level)
+	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level)
 		return;
 
-	rk->rk_log_cb(rk, level, fac, buf);
+	rk->rk_conf.log_cb(rk, level, fac, buf);
 }
 
 void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
@@ -123,7 +123,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	va_list ap;
 	int elen = 0;
 
-	if (!rk->rk_log_cb || level > rk->rk_log_level)
+	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level)
 		return;
 
 	if (extra) {
@@ -136,7 +136,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	vsnprintf(buf+elen, sizeof(buf)-elen, fmt, ap);
 	va_end(ap);
 
-	rk->rk_log_cb(rk, level, fac, buf);
+	rk->rk_conf.log_cb(rk, level, fac, buf);
 }
 
 
@@ -166,11 +166,11 @@ void rd_kafka_log_syslog (const rd_kafka_t *rk, int level,
 void rd_kafka_set_logger (rd_kafka_t *rk,
 			  void (*func) (const rd_kafka_t *rk, int level,
 					const char *fac, const char *buf)) {
-	rk->rk_log_cb = func;
+	rk->rk_conf.log_cb = func;
 }
 
 void rd_kafka_set_log_level (rd_kafka_t *rk, int level) {
-	rk->rk_log_level = level;
+	rk->rk_conf.log_level = level;
 }
 
 
@@ -884,16 +884,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	pthread_mutex_init(&rk->rk_timers_lock, NULL);
 	pthread_cond_init(&rk->rk_timers_cond, NULL);
 
-	rk->rk_log_cb = rd_kafka_log_print;
-
 	if (rk->rk_conf.debug)
-		rd_kafka_set_log_level(rk, LOG_DEBUG);
-	else
-		rk->rk_log_level = LOG_INFO;
-
-	/* Construct a client id if none is given. */
-	if (!rk->rk_conf.clientid)
-		rk->rk_conf.clientid = strdup("rdkafka");
+                rk->rk_conf.log_level = LOG_DEBUG;
 
 	snprintf(rk->rk_name, sizeof(rk->rk_name), "%s#%s-%i",
 		 rk->rk_conf.clientid, rd_kafka_type2str(rk->rk_type), rkid++);

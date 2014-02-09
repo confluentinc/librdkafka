@@ -17,7 +17,7 @@ For an introduction to the performance and usage of librdkafka, see
 [INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md)
 
 
-**NOTE**: A fully fledged C++ interface will be available end of January 2014.
+**NOTE**: A C++ interface is currently in testing, see the `c++` branch.
 
 
 **Apache Kafka 0.8 support:**

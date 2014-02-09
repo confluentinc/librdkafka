@@ -177,6 +177,9 @@ struct rd_kafka_conf_s {
 		       rd_kafka_resp_err_t err,
 		       void *opaque, void *msg_opaque);
 
+        void (*dr_msg_cb) (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
+                           void *opaque);
+
 	/* Error callback */
 	void (*error_cb) (rd_kafka_t *rk, int err,
 			  const char *reason, void *opaque);

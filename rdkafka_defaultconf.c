@@ -227,8 +227,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "dr_cb", _RK_C_PTR,
 	  _RK(dr_cb),
 	  "Delivery report callback (set with rd_kafka_conf_set_dr_cb())" },
-	
-	  
+	{ _RK_GLOBAL|_RK_PRODUCER, "dr_msg_cb", _RK_C_PTR,
+	  _RK(dr_msg_cb),
+	  "Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())" },
 
 	/* Topic properties */
 	{ _RK_TOPIC|_RK_PRODUCER, "request.required.acks", _RK_C_INT,
@@ -705,6 +706,16 @@ void rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
 					     void *opaque, void *msg_opaque)) {
 	conf->dr_cb = dr_cb;
 }
+
+
+void rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
+                                  void (*dr_msg_cb) (rd_kafka_t *rk,
+                                                     const rd_kafka_message_t *
+                                                     rkmessage,
+                                                     void *opaque)) {
+        conf->dr_msg_cb = dr_msg_cb;
+}
+
 
 
 void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,

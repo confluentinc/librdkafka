@@ -80,12 +80,12 @@ typedef enum {
 #define RD_KAFKA_DEBUG_CONTEXTS \
 	"all,generic,broker,topic,metadata,producer,queue,msg"
 
-
 /* Private types to provide ABI compatibility */
 typedef struct rd_kafka_s rd_kafka_t;
 typedef struct rd_kafka_topic_s rd_kafka_topic_t;
 typedef struct rd_kafka_conf_s rd_kafka_conf_t;
 typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
+typedef struct rd_kafka_message_s rd_kafka_message_t;
 
 
 /**
@@ -239,6 +239,16 @@ void rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
 					     void *payload, size_t len,
 					     rd_kafka_resp_err_t err,
 					     void *opaque, void *msg_opaque));
+
+/**
+ * Producer:
+ * Set delivery report callback in provided conf object.
+ */
+void rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
+                                  void (*dr_msg_cb) (rd_kafka_t *rk,
+                                                     const rd_kafka_message_t *
+                                                     rkmessage,
+                                                     void *opaque));
 
 /**
  * Set error callback in provided conf object.

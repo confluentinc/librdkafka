@@ -1271,12 +1271,37 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 
 			dcnt++;
 
-			rk->rk_conf.dr_cb(rk,
-					  rkm->rkm_payload,
-					  rkm->rkm_len,
-					  rko->rko_err,
-					  rk->rk_conf.opaque,
-					  rkm->rkm_opaque);
+                        if (rk->rk_conf.dr_msg_cb) {
+                                rd_kafka_message_t rkmessage = {
+                                        .payload    = rkm->rkm_payload,
+                                        .len        = rkm->rkm_len,
+                                        .err        = rko->rko_err,
+                                        /* FIXME: partition */
+                                        .partition  = rkm->rkm_partition,
+                                        ._private   = rkm->rkm_opaque,
+                                        /* FIXME: .rkt ? */
+                                };
+
+                                if (rkm->rkm_key &&
+                                    !RD_KAFKAP_BYTES_IS_NULL(rkm->rkm_key)) {
+                                        rkmessage.key = rkm->rkm_key->data;
+                                        rkmessage.key_len =
+                                                RD_KAFKAP_BYTES_LEN(
+                                                        rkm->rkm_key);
+                                }
+
+                                rk->rk_conf.dr_msg_cb(rk, &rkmessage,
+                                                      rk->rk_conf.opaque);
+
+                        } else {
+
+                                rk->rk_conf.dr_cb(rk,
+                                                  rkm->rkm_payload,
+                                                  rkm->rkm_len,
+                                                  rko->rko_err,
+                                                  rk->rk_conf.opaque,
+                                                  rkm->rkm_opaque);
+                        }
 
 			rd_kafka_msg_destroy(rk, rkm);
 		}

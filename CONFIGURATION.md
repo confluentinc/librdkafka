@@ -33,6 +33,7 @@ retry.backoff.ms                         |           100 | The backoff time in m
 compression.codec                        |          none | Compression codec to use for compressing message sets: none, gzip or snappy
 batch.num.messages                       |          1000 | Maximum number of messages batched in one MessageSet.
 dr_cb                                    |               | Delivery report callback (set with rd_kafka_conf_set_dr_cb())
+dr_msg_cb                                |               | Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())
 
 
 ## Topic configuration properties

@@ -7,13 +7,23 @@ SRCS=	rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 	rdkafka_defaultconf.c rdkafka_timer.c rdkafka_offset.c
 SRCS+=  rdcrc32.c rdgz.c rdaddr.c rdrand.c rdthread.c rdqueue.c rdlog.c
 SRCS+=	snappy.c
-HDRS=	rdkafka.h
 
-OBJS=	$(SRCS:.c=.o)
-DEPS=	${OBJS:%.o=%.d}
+HDRS=	rdkafka.h
 
 CFLAGS+=-O2 -Wall -Werror -Wfloat-equal -Wpointer-arith -I.
 CFLAGS+=-g
+
+# C++ interface
+CXXSRCS+=	RdKafka/RdKafka.cpp RdKafka/ConfImpl.cpp RdKafka/HandleImpl.cpp \
+		RdKafka/ConsumerImpl.cpp RdKafka/ProducerImpl.cpp \
+		RdKafka/TopicImpl.cpp RdKafka/MessageImpl.cpp
+HDRS+=		RdKafka/rdkafkacpp.h
+CXXFLAGS+=	-O2 -Wall -Werror -g -fPIC -std=c++03
+
+OBJS=	$(SRCS:.c=.o)
+OBJS+=	$(CXXSRCS:%.cpp=%.o)
+DEPS=	$(OBJS:%.o=%.d)
+
 
 # Clang warnings to ignore
 ifeq ($(CC),clang)
@@ -43,6 +53,8 @@ libs: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a CONFIGURATION.md
 
 %.o: %.c
 	$(CC) -MD -MP $(CFLAGS) -c $<
+%.o: %.cpp
+	$(CXX) -MD -MP $(CXXFLAGS) -c $< -o $@
 
 librdkafka.lds: rdkafka.h
 	@echo "\033[33mGenerating linker script $@\033[0m"

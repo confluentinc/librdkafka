@@ -1,4 +1,4 @@
-EXAMPLES ?= rdkafka_example rdkafka_performance
+EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp
 CC ?= cc
 CXX ?= g++
 CFLAGS += -g -Wall -Werror -Wfloat-equal -Wpointer-arith -O2 -I../
@@ -46,5 +46,9 @@ rdkafka_performance: ../librdkafka.a rdkafka_performance.c
 	@echo "./$@ --help"
 
 
+rdkafka_example_cpp: ../librdkafka.a rdkafka_example.cpp
+	$(CXX) $(CXXFLAGS) rdkafka_example.cpp -o $@ $(LDFLAGS)
+
 clean:
-	rm -f rdkafka_example rdkafka_performance
+	rm -f $(EXAMPLES)
+

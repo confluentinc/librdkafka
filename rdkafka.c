@@ -1420,6 +1420,12 @@ const char *rd_kafka_name (const rd_kafka_t *rk) {
 	return rk->rk_name;
 }
 
+
+void *rd_kafka_opaque (const rd_kafka_t *rk) {
+        return rk->rk_conf.opaque;
+}
+
+
 int rd_kafka_outq_len (rd_kafka_t *rk) {
 	return rk->rk_producer.msg_cnt;
 }

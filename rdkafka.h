@@ -303,6 +303,11 @@ void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
  */
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque);
 
+/**
+ * Retrieves the opaque pointer previously set with rd_kafka_conf_set_opaque()
+ */
+void *rd_kafka_opaque (const rd_kafka_t *rk);
+
 
 /**
  * Dump the configuration properties and values of `conf` to an array

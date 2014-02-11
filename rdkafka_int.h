@@ -195,10 +195,26 @@ struct rd_kafka_conf_s {
                         const char *fac, const char *buf);
         int    log_level;
 
+        /* Socket creation callback */
+        int (*socket_cb) (int domain, int type, int protocol, void *opaque);
+
+        /* File open callback */
+        int (*open_cb) (const char *pathname, int flags, mode_t mode,
+                        void *opaque);
+
 
 	/* Opaque passed to callbacks. */
 	void  *opaque;
 };
+
+int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);
+int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
+                                void *opaque);
+int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
+                            void *opaque);
+int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
+                              void *opaque);
+
 
 
 

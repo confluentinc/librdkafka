@@ -47,6 +47,9 @@ void error_cb_trampoline (rd_kafka_t *rk, int err, const char *reason,
                           void *opaque);
 int stats_cb_trampoline (rd_kafka_t *rk, char *json, size_t json_len,
                          void *opaque);
+int socket_cb_trampoline (int domain, int type, int protocol, void *opaque);
+int open_cb_trampoline (const char *pathname, int flags, mode_t mode,
+                        void *opaque);
 
 
 
@@ -187,10 +190,46 @@ class ConfImpl : public Conf {
   }
 
 
+  Conf::ConfResult set (const std::string &name, SocketCb *socket_cb,
+                        std::string &errstr) {
+    if (name != "socket_cb") {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rkt_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_TOPIC object";
+      return Conf::CONF_INVALID;
+    }
+
+    socket_cb_ = socket_cb;
+    return Conf::CONF_OK;
+  }
+
+
+  Conf::ConfResult set (const std::string &name, OpenCb *open_cb,
+                        std::string &errstr) {
+    if (name != "open_cb") {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rkt_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_TOPIC object";
+      return Conf::CONF_INVALID;
+    }
+
+    open_cb_ = open_cb;
+    return Conf::CONF_OK;
+  }
+
+
   std::list<std::string> *dump ();
 
   DeliveryReportCb *dr_cb_;
   EventCb *event_cb_;
+  SocketCb *socket_cb_;
+  OpenCb *open_cb_;
   PartitionerCb *partitioner_cb_;
   ConfType conf_type_;
   rd_kafka_conf_t *rk_conf_;
@@ -215,6 +254,8 @@ class HandleImpl : virtual public Handle {
    * ProducerImpl and ConsumerImpl classes cannot be safely directly cast to
    * HandleImpl due to the skewed diamond inheritance. */
   EventCb *event_cb_;
+  SocketCb *socket_cb_;
+  OpenCb *open_cb_;
   DeliveryReportCb *dr_cb_;
   PartitionerCb *partitioner_cb_;
 };

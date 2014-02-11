@@ -356,6 +356,42 @@ void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
 						  void *opaque));
 
 
+
+/**
+ * Set socket callback.
+ * The socket callback is responsible for opening a socket
+ * according to the supplied domain, type and protocol.
+ * The socket shall be created with CLOEXEC set in a racefree fashion, if
+ * possible.
+ *
+ * Default:
+ *  on linux: racefree CLOEXEC
+ *  others  : non-racefree CLOEXEC
+ */
+void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
+                                  int (*socket_cb) (int domain, int type,
+                                                    int protocol,
+                                                    void *opaque));
+
+
+/**
+ * Set open callback.
+ * The open callback is responsible for opening the file specified by
+ * pathname, flags and mode.
+ * The file shall be opened with CLOEXEC set in a racefree fashion, if
+ * possible.
+ *
+ * Default:
+ *  on linux: racefree CLOEXEC
+ *  others  : non-racefree CLOEXEC
+ */
+void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
+                                int (*open_cb) (const char *pathname,
+                                                int flags, mode_t mode,
+                                                void *opaque));
+
+
+
 /**
  * Sets the application's opaque pointer that will be passed to `dr_cb`
  * and `error_cb_` callbacks as the 'opaque' argument.

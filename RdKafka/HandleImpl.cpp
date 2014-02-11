@@ -85,6 +85,21 @@ int RdKafka::stats_cb_trampoline (rd_kafka_t *rk, char *json, size_t json_len,
 }
 
 
+int RdKafka::socket_cb_trampoline (int domain, int type, int protocol,
+                                   void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+
+  return handle->socket_cb_->socket_cb(domain, type, protocol);
+}
+
+
+int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
+                                 void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+
+  return handle->open_cb_->open_cb(pathname, flags, static_cast<int>(mode));
+}
+
 
 void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
 
@@ -97,4 +112,16 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
                                RdKafka::stats_cb_trampoline);
     event_cb_ = confimpl->event_cb_;
   }
+
+  if (confimpl->socket_cb_) {
+    rd_kafka_conf_set_socket_cb(confimpl->rk_conf_,
+                                RdKafka::socket_cb_trampoline);
+    socket_cb_ = confimpl->socket_cb_;
+  }
+
+  if (confimpl->open_cb_) {
+    rd_kafka_conf_set_open_cb(confimpl->rk_conf_, RdKafka::open_cb_trampoline);
+    open_cb_ = confimpl->open_cb_;
+  }
+
 }

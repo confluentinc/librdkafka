@@ -860,6 +860,24 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	pthread_once(&rd_kafka_global_init_once, rd_kafka_global_init);
 
+	if (!conf)
+		conf = rd_kafka_conf_new();
+
+        /* Verify mandatory configuration */
+        if (!conf->socket_cb) {
+                snprintf(errstr, errstr_size,
+                         "Mandatory config property 'socket_cb' not set");
+                rd_kafka_conf_destroy(conf);
+                return NULL;
+        }
+
+        if (!conf->open_cb) {
+                snprintf(errstr, errstr_size,
+                         "Mandatory config property 'open_cb' not set");
+                rd_kafka_conf_destroy(conf);
+                return NULL;
+        }
+
 	/*
 	 * Set up the handle.
 	 */
@@ -867,8 +885,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	rk->rk_type = type;
 
-	if (!conf)
-		conf = rd_kafka_conf_new();
 	rk->rk_conf = *conf;
 	free(conf);
 

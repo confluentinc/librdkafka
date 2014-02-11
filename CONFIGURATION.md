@@ -20,6 +20,8 @@ error_cb                                 |               | Error callback (set w
 stats_cb                                 |               | Statistics callback (set with rd_kafka_conf_set_stats_cb())
 log_cb                                   |               | Log callback (set with rd_kafka_conf_set_log_cb())
 log_level                                |             6 | Logging level (syslog(3) levels)
+socket_cb                                |               | Socket creation callback to provide race-free CLOEXEC
+open_cb                                  |               | File open callback to provide race-free CLOEXEC
 opaque                                   |               | Application opaque (set with rd_kafka_conf_set_opaque())
 queued.min.messages                      |        100000 | Minimum number of messages that should to be available for consumption by application.
 fetch.wait.max.ms                        |           100 | Maximum time the broker may wait to fill the response with fetch.min.bytes.

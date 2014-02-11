@@ -1295,6 +1295,32 @@ err:
 }
 
 
+/**
+ * Linux version of socket_cb providing racefree CLOEXEC.
+ */
+int rd_kafka_socket_cb_linux (int domain, int type, int protocol,
+                              void *opaque) {
+        return socket(domain, type | SOCK_CLOEXEC, protocol);
+}
+
+/**
+ * Fallback version of socket_cb NOT providing racefree CLOEXEC,
+ * but setting CLOEXEC after socket creation (if FD_CLOEXEC is defined).
+ */
+int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
+                                void *opaque) {
+        int s;
+        int on = 1;
+        s = socket(domain, type | SOCK_CLOEXEC, protocol);
+        if (s == -1)
+                return -1;
+#ifdef FD_CLOEXEC
+        fcntl(s, F_SETFD, FD_CLOEXEC, &on);
+#endif
+        return s;
+}
+
+
 static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rd_sockaddr_inx_t *sinx;
 	int one __attribute__((unused)) = 1;
@@ -1310,8 +1336,10 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 
 	assert(rkb->rkb_s == -1);
 
-	if ((rkb->rkb_s = socket(sinx->sinx_family,
-				 SOCK_STREAM, IPPROTO_TCP)) == -1) {
+        if ((rkb->rkb_s =
+             rkb->rkb_rk->rk_conf.socket_cb(
+                     sinx->sinx_family, SOCK_STREAM, IPPROTO_TCP,
+                     rkb->rkb_rk->rk_conf.opaque)) == -1) {
 		rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__FAIL,
 				     "Failed to create %s socket: %s",
 				     rd_family2str(sinx->sinx_family),

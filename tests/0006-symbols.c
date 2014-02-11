@@ -54,6 +54,8 @@ int main (int argc, char **argv) {
                 rd_kafka_conf_set_error_cb(NULL, NULL);
                 rd_kafka_conf_set_stats_cb(NULL, NULL);
                 rd_kafka_conf_set_log_cb(NULL, NULL);
+                rd_kafka_conf_set_socket_cb(NULL, NULL);
+                rd_kafka_conf_set_open_cb(NULL, NULL);
                 rd_kafka_conf_set_opaque(NULL, NULL);
                 rd_kafka_opaque(NULL);
                 rd_kafka_conf_dump(NULL, NULL);

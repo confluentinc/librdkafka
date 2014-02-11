@@ -168,6 +168,24 @@ class PartitionerCb {
 
 
 /**
+ * SocketCb callback class
+ */
+class SocketCb {
+ public:
+  virtual int socket_cb (int domain, int type, int protocol) = 0;
+};
+
+
+/**
+ * OpenCb callback class
+ */
+class OpenCb {
+ public:
+  virtual int open_cb (const std::string &path, int flags, int mode) = 0;
+};
+
+
+/**
  * Event callback class
  * Events propogate errors, stats and logs to the application.
  */
@@ -261,6 +279,15 @@ class Conf {
   virtual Conf::ConfResult set (const std::string &name,
                                 PartitionerCb *partitioner_cb,
                                 std::string &errstr) = 0;
+
+  /* Use with 'name' = "socket_cb" */
+  virtual Conf::ConfResult set (const std::string &name, SocketCb *socket_cb,
+                                std::string &errstr) = 0;
+
+  /* Use with 'name' = "open_cb" */
+  virtual Conf::ConfResult set (const std::string &name, OpenCb *open_cb,
+                                std::string &errstr) = 0;
+
 
   /**
    * Dump configuration names and values to list containing name,value tuples

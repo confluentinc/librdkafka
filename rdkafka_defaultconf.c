@@ -158,6 +158,26 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(log_level),
           "Logging level (syslog(3) levels)",
           0, 7, 6 },
+        { _RK_GLOBAL, "socket_cb", _RK_C_PTR,
+          _RK(socket_cb),
+          "Socket creation callback to provide race-free CLOEXEC",
+          .pdef =
+#ifdef __linux__
+          rd_kafka_socket_cb_linux
+#else
+          rd_kafka_socket_cb_generic
+#endif
+        },
+        { _RK_GLOBAL, "open_cb", _RK_C_PTR,
+          _RK(open_cb),
+          "File open callback to provide race-free CLOEXEC",
+          .pdef =
+#ifdef __linux__
+          rd_kafka_open_cb_linux
+#else
+          rd_kafka_open_cb_generic
+#endif
+        },
 	{ _RK_GLOBAL, "opaque", _RK_C_PTR,
 	  _RK(opaque),
 	  "Application opaque (set with rd_kafka_conf_set_opaque())" },
@@ -741,6 +761,20 @@ void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
 	conf->stats_cb = stats_cb;
 }
 
+void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
+                                  int (*socket_cb) (int domain, int type,
+                                                    int protocol,
+                                                    void *opaque)) {
+        conf->socket_cb = socket_cb;
+}
+
+
+void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
+                                int (*open_cb) (const char *pathname,
+                                                int flags, mode_t mode,
+                                                void *opaque)) {
+        conf->open_cb = open_cb;
+}
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 	conf->opaque = opaque;

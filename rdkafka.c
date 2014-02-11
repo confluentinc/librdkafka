@@ -33,6 +33,7 @@
 #include <stdarg.h>
 #include <syslog.h>
 #include <pthread.h>
+#include <signal.h>
 
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
@@ -856,6 +857,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	rd_kafka_t *rk;
 	static int rkid = 0;
 	pthread_attr_t attr;
+        sigset_t newset, oldset;
 	int err;
 
 	pthread_once(&rd_kafka_global_init_once, rd_kafka_global_init);
@@ -910,6 +912,14 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			htonl(rk->rk_conf.fetch_min_bytes);
 	}
 
+        /* Block all signals in newly created thread.
+         * To avoid race condition we block all signals in the calling
+         * thread, which the new thread will inherit its sigmask from,
+         * and then restore the original sigmask of the calling thread when
+         * we're done creating the thread. */
+        sigemptyset(&oldset);
+        sigfillset(&newset);
+        pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 
 	/* Create handler thread */
 	pthread_attr_init(&attr);
@@ -923,6 +933,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 				 "Failed to create thread: %s", strerror(err));
 		rd_kafka_destroy0(rk); /* handler thread */
 		rd_kafka_destroy0(rk); /* application refcnt */
+                /* Restore sigmask of caller */
+                pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 		errno = err;
 		return NULL;
 	}
@@ -933,6 +945,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		rd_kafka_brokers_add(rk, rk->rk_conf.brokerlist);
 
         rd_atomic_add(&rd_kafka_handle_cnt_curr, 1);
+
+        /* Restore sigmask of caller */
+        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 
 	return rk;
 }

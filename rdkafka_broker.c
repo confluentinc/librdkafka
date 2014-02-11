@@ -3236,10 +3236,6 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 
 	(void)rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
 
-	rd_thread_sigmask(SIG_BLOCK,
-			  SIGHUP, SIGINT, SIGTERM, SIGUSR1, SIGUSR2,
-			  RD_SIG_END);
-
 	rd_rkb_dbg(rkb, BROKER, "BRKMAIN", "Enter main broker thread");
 
 	while (!rkb->rkb_rk->rk_terminate) {
@@ -3339,6 +3335,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_broker_t *rkb;
 	int err;
 	pthread_attr_t attr;
+        sigset_t newset, oldset;
 
 	rd_kafka_keep(rk);
 
@@ -3375,6 +3372,15 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	else /* disabled */
 		rkb->rkb_ts_metadata_poll = UINT64_MAX;
 
+        /* Block all signals in newly created thread.
+         * To avoid race condition we block all signals in the calling
+         * thread, which the new thread will inherit its sigmask from,
+         * and then restore the original sigmask of the calling thread when
+         * we're done creating the thread. */
+        sigemptyset(&oldset);
+        sigfillset(&newset);
+        pthread_sigmask(SIG_SETMASK, &newset, &oldset);
+
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
@@ -3392,6 +3398,8 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 		free(rkb);
 		rd_kafka_destroy(rk);
+                /* Restore sigmask of caller */
+                pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 		return NULL;
 	}
 
@@ -3401,6 +3409,9 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_rkb_dbg(rkb, BROKER, "BROKER",
 		   "Added new broker with NodeId %"PRId32,
 		   rkb->rkb_nodeid);
+
+        /* Restore sigmask of caller */
+        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 
 	return rkb;
 }

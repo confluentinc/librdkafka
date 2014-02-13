@@ -35,6 +35,12 @@ ifneq ($(findstring CYGWIN,$(UNAME_S)),CYGWIN)
 	CFLAGS+=-fPIC
 endif
 
+ifeq ($(UNAME_S),Darwin)
+        NM = otool -TV
+else
+        NM = nm -D
+endif
+
 .PHONY:
 
 all: libs check
@@ -107,8 +113,8 @@ check:
 	$$($$RET))
 
 	@(printf "%-30s " "Symbol visibility" ; \
-	((nm -D librdkafka.so.1 | grep -q rd_kafka_new) && \
-	  (nm -D librdkafka.so.1 | grep -vq rd_kafka_destroy) && \
+	((NM librdkafka.so.1 | grep -q rd_kafka_new) && \
+	  (NM librdkafka.so.1 | grep -vq rd_kafka_destroy) && \
 		echo "\033[32mOK\033[0m") || \
 	  echo "\033[31mFAILED\033[0m")
 

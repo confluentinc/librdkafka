@@ -1,12 +1,10 @@
 librdkafka.so.1 librdkafka1 #MINVER#
 * Build-Depends-Package: librdkafka-dev
- rd_kafka_broker_destroy@Base 0.8.0
- rd_kafka_broker_find_by_nodeid@Base 0.8.0
- rd_kafka_broker_state_names@Base 0.8.0
  rd_kafka_brokers_add@Base 0.8.0
- rd_kafka_brokers_init@Base 0.8.0
- rd_kafka_buf_destroy@Base 0.8.0
  rd_kafka_conf_destroy@Base 0.8.0
+ rd_kafka_conf_dump@Base 0.8.3
+ rd_kafka_conf_dump_free@Base 0.8.3
+ rd_kafka_conf_dup@Base 0.8.3
  rd_kafka_conf_new@Base 0.8.0
  rd_kafka_conf_properties_show@Base 0.8.0
  rd_kafka_conf_set@Base 0.8.0
@@ -19,71 +17,34 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_consume_callback@Base 0.8.0
  rd_kafka_consume_start@Base 0.8.0
  rd_kafka_consume_stop@Base 0.8.0
- rd_kafka_destroy0@Base 0.8.0
  rd_kafka_destroy@Base 0.8.0
- rd_kafka_dr_msgq@Base 0.8.0
  rd_kafka_dump@Base 0.8.0
  rd_kafka_err2str@Base 0.8.0
- rd_kafka_fetch_states@Base 0.8.0
- rd_kafka_log0@Base 0.8.0
+ rd_kafka_errno2err@Base 0.8.3
  rd_kafka_log_print@Base 0.8.0
  rd_kafka_log_syslog@Base 0.8.0
  rd_kafka_message_destroy@Base 0.8.0
- rd_kafka_msg_destroy@Base 0.8.0
- rd_kafka_msg_new@Base 0.8.0
- rd_kafka_msg_partitioner@Base 0.8.0
  rd_kafka_msg_partitioner_random@Base 0.8.0
- rd_kafka_msgq_age_scan@Base 0.8.0
  rd_kafka_name@Base 0.8.0
  rd_kafka_new@Base 0.8.0
- rd_kafka_op_destroy@Base 0.8.0
- rd_kafka_op_new@Base 0.8.0
- rd_kafka_op_reply0@Base 0.8.0
- rd_kafka_op_reply2@Base 0.8.0
- rd_kafka_op_reply@Base 0.8.0
+ rd_kafka_offset_store@Base 0.8.3
  rd_kafka_outq_len@Base 0.8.0
  rd_kafka_poll@Base 0.8.0
  rd_kafka_produce@Base 0.8.0
- rd_kafka_q_destroy@Base 0.8.0
- rd_kafka_q_init@Base 0.8.0
- rd_kafka_q_move_cnt@Base 0.8.0
- rd_kafka_q_pop@Base 0.8.0
- rd_kafka_q_purge@Base 0.8.0
- rd_kafka_q_serve@Base 0.8.0
  rd_kafka_set_log_level@Base 0.8.0
  rd_kafka_set_logger@Base 0.8.0
  rd_kafka_thread_cnt@Base 0.8.0
- rd_kafka_thread_cnt_curr@Base 0.8.0
- rd_kafka_topic_assign_uas@Base 0.8.0
  rd_kafka_topic_conf_destroy@Base 0.8.0
+ rd_kafka_topic_conf_dump@Base 0.8.3
+ rd_kafka_topic_conf_dup@Base 0.8.3
  rd_kafka_topic_conf_new@Base 0.8.0
  rd_kafka_topic_conf_set@Base 0.8.0
  rd_kafka_topic_conf_set_opaque@Base 0.8.0
  rd_kafka_topic_conf_set_partitioner_cb@Base 0.8.0
- rd_kafka_topic_destroy0@Base 0.8.0
  rd_kafka_topic_destroy@Base 0.8.0
- rd_kafka_topic_find0@Base 0.8.0
- rd_kafka_topic_find@Base 0.8.0
- rd_kafka_topic_leader_query0@Base 0.8.0
- rd_kafka_topic_leader_update@Base 0.8.0
  rd_kafka_topic_name@Base 0.8.0
  rd_kafka_topic_new@Base 0.8.0
  rd_kafka_topic_partition_available@Base 0.8.0
- rd_kafka_topic_partition_cnt_update@Base 0.8.0
- rd_kafka_topic_partitions_remove@Base 0.8.0
- rd_kafka_topic_scan_all@Base 0.8.0
- rd_kafka_toppar_broker_delegate@Base 0.8.0
- rd_kafka_toppar_deq_msg@Base 0.8.0
- rd_kafka_toppar_desired_add@Base 0.8.0
- rd_kafka_toppar_desired_del@Base 0.8.0
- rd_kafka_toppar_desired_get@Base 0.8.0
- rd_kafka_toppar_destroy0@Base 0.8.0
- rd_kafka_toppar_enq_msg@Base 0.8.0
- rd_kafka_toppar_get2@Base 0.8.0
- rd_kafka_toppar_get@Base 0.8.0
- rd_kafka_toppar_insert_msg@Base 0.8.0
- rd_kafka_toppar_insert_msgq@Base 0.8.0
- rd_kafka_toppar_ua_move@Base 0.8.0
  rd_kafka_version@Base 0.8.1
  rd_kafka_version_str@Base 0.8.1
  rd_kafka_wait_destroyed@Base 0.8.0

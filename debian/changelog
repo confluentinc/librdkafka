@@ -1,8 +1,11 @@
 librdkafka (0.8.3-1) unstable; urgency=medium
 
   * New upstream release.
+    - Multiple internal symbols hidden; breaks ABI without a SONAME bump, but
+      these were internal and should not break any applications, packaged or
+      not.
 
- -- Faidon Liambotis <paravoid@debian.org>  Tue, 18 Feb 2014 02:09:37 +0200
+ -- Faidon Liambotis <paravoid@debian.org>  Tue, 18 Feb 2014 02:17:49 +0200
 
 librdkafka (0.8.1-1) unstable; urgency=medium
 

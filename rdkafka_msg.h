@@ -52,8 +52,8 @@ static inline RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
 static inline RD_UNUSED void rd_kafka_msgq_concat (rd_kafka_msgq_t *dst,
 						   rd_kafka_msgq_t *src) {
 	TAILQ_CONCAT(&dst->rkmq_msgs, &src->rkmq_msgs, rkm_link);
-	rd_atomic_add(&dst->rkmq_msg_cnt, src->rkmq_msg_cnt);
-	rd_atomic_add(&dst->rkmq_msg_bytes, src->rkmq_msg_bytes);
+	(void)rd_atomic_add(&dst->rkmq_msg_cnt, src->rkmq_msg_cnt);
+	(void)rd_atomic_add(&dst->rkmq_msg_bytes, src->rkmq_msg_bytes);
 	rd_kafka_msgq_init(src);
 }
 
@@ -99,8 +99,8 @@ rd_kafka_msg_t *rd_kafka_msgq_deq (rd_kafka_msgq_t *rkmq,
 	if (likely(do_count)) {
 		assert(rkmq->rkmq_msg_cnt > 0);
 		assert(rkmq->rkmq_msg_bytes - rkm->rkm_len >= 0);
-		rd_atomic_sub(&rkmq->rkmq_msg_cnt, 1);
-		rd_atomic_sub(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
+		(void)rd_atomic_sub(&rkmq->rkmq_msg_cnt, 1);
+		(void)rd_atomic_sub(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
 	}
 
 	TAILQ_REMOVE(&rkmq->rkmq_msgs, rkm, rkm_link);
@@ -124,8 +124,8 @@ rd_kafka_msg_t *rd_kafka_msgq_pop (rd_kafka_msgq_t *rkmq) {
 static inline RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
 						   rd_kafka_msg_t *rkm) {
 	TAILQ_INSERT_HEAD(&rkmq->rkmq_msgs, rkm, rkm_link);
-	rd_atomic_add(&rkmq->rkmq_msg_cnt, 1);
-	rd_atomic_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
+	(void)rd_atomic_add(&rkmq->rkmq_msg_cnt, 1);
+	(void)rd_atomic_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
 }
 
 /**
@@ -134,8 +134,8 @@ static inline RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
 static inline RD_UNUSED void rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
 						rd_kafka_msg_t *rkm) {
 	TAILQ_INSERT_TAIL(&rkmq->rkmq_msgs, rkm, rkm_link);
-	rd_atomic_add(&rkmq->rkmq_msg_cnt, 1);
-	rd_atomic_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
+	(void)rd_atomic_add(&rkmq->rkmq_msg_cnt, 1);
+	(void)rd_atomic_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
 }
 
 
@@ -150,6 +150,5 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_ts_t now);
 
 
-int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
-			      rd_kafka_toppar_t *rktp_curr,
-			      rd_kafka_msg_t *rkm);
+int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
+			      int do_lock);

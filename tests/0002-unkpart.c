@@ -27,8 +27,8 @@
  */
 
 /**
- * Tests "message.bytes.max"
- * Issue #24
+ * Tests that producing to unknown partitions fails.
+ * Issue #39
  */
 
 #define _GNU_SOURCE
@@ -54,10 +54,6 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 
 	free(msg_opaque);
 
-	if (err)
-		TEST_FAIL("Unexpected delivery error for message #%i: %s\n",
-			  msgid, rd_kafka_err2str(err));
-
 	if (!(msgs_wait & (1 << msgid)))
 		TEST_FAIL("Unwanted delivery report for message #%i "
 			  "(waiting for 0x%x)\n", msgid, msgs_wait);
@@ -66,28 +62,27 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 		 msgid, rd_kafka_err2str(err));
 
 	msgs_wait &= ~(1 << msgid);
+
+	if (err != RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
+		TEST_FAIL("Message #%i failed with unexpected error %s\n",
+			  msgid, rd_kafka_err2str(err));
 }
 
 
 int main (int argc, char **argv) {
 	char *topic = "rdkafkatest1";
-	int partition = 0;
+	int partition = 99; /* non-existent */
 	int r;
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
-	char msg[100000];
+	char msg[128];
 	int msgcnt = 10;
 	int i;
 
 	test_conf_init(&conf, &topic_conf, 10);
-
-	/* Set a small maximum message size. */
-	if (rd_kafka_conf_set(conf, "message.max.bytes", "100000",
-			      errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
-		TEST_FAIL("%s\n", errstr);
 
 	/* Set delivery report callback */
 	rd_kafka_conf_set_dr_cb(conf, dr_cb);
@@ -105,40 +100,36 @@ int main (int argc, char **argv) {
 		TEST_FAIL("Failed to create topic: %s\n",
 			  strerror(errno));
 
-	memset(msg, 0, sizeof(msg));
-
-	/* Produce 'msgcnt' messages, size odd ones larger than max.bytes,
-	 * and even ones smaller than max.bytes. */
+	/* Produce a message */
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
-		size_t len;
-		int toobig = i & 1;
-
 		*msgidp = i;
-		if (toobig) {
-			/* Too big */
-			len = 200000;
+		snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
+		r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
+				     msg, strlen(msg), NULL, 0, msgidp);
+		if (r == -1) {
+			if (errno == ESRCH)
+				TEST_SAY("Failed to produce message #%i: "
+					 "unknown partition: good!\n", i);
+			else
+				TEST_FAIL("Failed to produce message #%i: %s\n",
+					  i, strerror(errno));
 		} else {
-			/* Good size */
-			len = 5000;
+			if (i > 5)
+				TEST_FAIL("Message #%i produced: "
+					  "should've failed\n", i);
 			msgs_wait |= (1 << i);
 		}
 
-		snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
-		r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
-				     msg, len, NULL, 0, msgidp);
-
-		if (toobig) {
-			if (r != -1)
-				TEST_FAIL("Succeeded to produce too "
-					  "large message #%i\n", i);
-			free(msgidp);
-		} else if (r == -1)
-			TEST_FAIL("Failed to produce message #%i: %s\n",
-				  i, strerror(errno));
+		/* After half the messages: sleep to allow the metadata
+		 * to be fetched from broker and update the actual partition
+		 * count: this will make subsequent produce() calls fail
+		 * immediately. */
+		if (i == 5)
+			sleep(2);
 	}
 
-	/* Wait for messages to be delivered. */
+	/* Wait for messages to time out */
 	while (rd_kafka_outq_len(rk) > 0)
 		rd_kafka_poll(rk, 50);
 

@@ -42,16 +42,18 @@
 #include "rdkafka_msg.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_broker.h"
+#include "rdkafka_offset.h"
 #include "rdtime.h"
 #include "rdthread.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
 #include "rdgz.h"
 #include "snappy.h"
+#include "endian_compat.h"
 
 const char *rd_kafka_broker_state_names[] = {
+	"INIT",
 	"DOWN",
-	"CONNECTING",
 	"UP"
 };
 
@@ -104,10 +106,24 @@ static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
 		return;
 
 	rd_kafka_dbg(rkb->rkb_rk, BROKER, "STATE",
-		     "%s: Broker changed state %s -> %s", 
+		     "%s: Broker changed state %s -> %s",
 		     rkb->rkb_name,
 		     rd_kafka_broker_state_names[rkb->rkb_state],
 		     rd_kafka_broker_state_names[state]);
+
+	if (state == RD_KAFKA_BROKER_STATE_DOWN) {
+		/* Propagate ALL_BROKERS_DOWN event if all brokers are
+		 * now down, unless we're terminating. */
+		if (rd_atomic_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
+		    rkb->rkb_rk->rk_broker_cnt &&
+		    !rkb->rkb_rk->rk_terminate)
+			rd_kafka_op_err(rkb->rkb_rk,
+					RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
+					"%i/%i brokers are down",
+					rkb->rkb_rk->rk_broker_down_cnt,
+					rkb->rkb_rk->rk_broker_cnt);
+	} else if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN)
+		rd_atomic_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
 
 	rkb->rkb_state = state;
 }
@@ -208,13 +224,13 @@ static rd_kafka_buf_t *rd_kafka_buf_new_shadow (void *ptr, size_t size) {
 
 static void rd_kafka_bufq_enq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
 	TAILQ_INSERT_TAIL(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
-	rd_atomic_add(&rkbufq->rkbq_cnt, 1);
+	(void)rd_atomic_add(&rkbufq->rkbq_cnt, 1);
 }
 
 static void rd_kafka_bufq_deq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
 	TAILQ_REMOVE(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
 	assert(rkbufq->rkbq_cnt > 0);
-	rd_atomic_sub(&rkbufq->rkbq_cnt, 1);
+	(void)rd_atomic_sub(&rkbufq->rkbq_cnt, 1);
 }
 
 static void rd_kafka_bufq_init (rd_kafka_bufq_t *rkbufq) {
@@ -227,7 +243,7 @@ static void rd_kafka_bufq_init (rd_kafka_bufq_t *rkbufq) {
  */
 static void rd_kafka_bufq_concat (rd_kafka_bufq_t *dst, rd_kafka_bufq_t *src) {
 	TAILQ_CONCAT(&dst->rkbq_bufs, &src->rkbq_bufs, rkbuf_link);
-	rd_atomic_add(&dst->rkbq_cnt, src->rkbq_cnt);
+	(void)rd_atomic_add(&dst->rkbq_cnt, src->rkbq_cnt);
 	rd_kafka_bufq_init(src);
 }
 
@@ -304,8 +320,6 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 	rkb->rkb_err.err = errno_save;
 
-	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
-
 	if (rkb->rkb_s != -1) {
 		close(rkb->rkb_s);
 		rkb->rkb_s = -1;
@@ -336,14 +350,16 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			  sizeof(rkb->rkb_err.msg)-of, fmt, ap);
 		va_end(ap);
 
-		rd_rkb_log(rkb, LOG_ERR, "FAIL", "%s", rkb->rkb_err.msg);
+		rd_kafka_log(rkb->rkb_rk, LOG_ERR, "FAIL",
+			     "%s", rkb->rkb_err.msg);
 
 		/* Send ERR op back to application for processing. */
-		rd_kafka_op_reply(rkb->rkb_rk, RD_KAFKA_OP_ERR,
-				  RD_KAFKA_RESP_ERR__FAIL,
-				  strdup(rkb->rkb_err.msg),
-				  strlen(rkb->rkb_err.msg));
+		rd_kafka_op_err(rkb->rkb_rk, err,
+				"%s", rkb->rkb_err.msg);
 	}
+
+	/* Set broker state */
+	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
 
 	/*
 	 * Purge all buffers
@@ -363,6 +379,9 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	/* Undelegate all toppars from this broker. */
 	rd_kafka_broker_toppars_wrlock(rkb);
 	while ((rktp = TAILQ_FIRST(&rkb->rkb_toppars))) {
+		rd_kafka_topic_t *rkt = rktp->rktp_rkt;
+
+		rd_kafka_topic_keep(rkt); /* Hold on to rkt */
 		rd_kafka_toppar_keep(rktp);
 		rd_kafka_broker_toppars_unlock(rkb);
 		rd_rkb_dbg(rkb, TOPIC, "BRKTP",
@@ -370,13 +389,16 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			   rktp->rktp_partition);
 
-		/* Undelegate */
 		rd_kafka_topic_wrlock(rktp->rktp_rkt);
+		/* Undelegate */
 		rd_kafka_toppar_broker_delegate(rktp, NULL);
 		rd_kafka_topic_unlock(rktp->rktp_rkt);
 
-		rd_kafka_broker_toppars_wrlock(rkb);
 		rd_kafka_toppar_destroy(rktp);
+		rd_kafka_topic_destroy0(rkt); /* Let go of rkt */
+
+		rd_kafka_broker_toppars_wrlock(rkb);
+
 	}
 	rd_kafka_broker_toppars_unlock(rkb);
 
@@ -392,7 +414,11 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 	assert(rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP);
 	assert(rkb->rkb_s != -1);
 
-	r = sendmsg(rkb->rkb_s, msg, MSG_DONTWAIT);
+	r = sendmsg(rkb->rkb_s, msg, MSG_DONTWAIT
+#ifdef MSG_NOSIGNAL
+		    |MSG_NOSIGNAL
+#endif
+		);
 	if (r == -1) {
 		if (errno == EAGAIN)
 			return 0;
@@ -407,8 +433,8 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 		return -1;
 	}
 
-	rd_atomic_add(&rkb->rkb_c.tx_bytes, r);
-	rd_atomic_add(&rkb->rkb_c.tx, 1);
+	(void)rd_atomic_add(&rkb->rkb_c.tx_bytes, r);
+	(void)rd_atomic_add(&rkb->rkb_c.tx, 1);
 	return r;
 }
 
@@ -443,9 +469,8 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 				 rkb->rkb_nodename, errstr);
 
 			/* Send ERR op back to application for processing. */
-			rd_kafka_op_reply(rkb->rkb_rk, RD_KAFKA_OP_ERR,
-					  RD_KAFKA_RESP_ERR__RESOLVE,
-					  strdup(tmp), strlen(tmp));
+			rd_kafka_op_err(rkb->rkb_rk,RD_KAFKA_RESP_ERR__RESOLVE,
+					"%s", tmp);
 
 			rd_rkb_log(rkb, LOG_ERR, "GETADDR", "%s", tmp);
 			return -1;
@@ -481,7 +506,7 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 				  rkbuf, rkbuf_link);
 	}
 
-	rd_atomic_add(&rkb->rkb_outbufs.rkbq_cnt, 1);
+	(void)rd_atomic_add(&rkb->rkb_outbufs.rkbq_cnt, 1);
 }
 
 
@@ -562,6 +587,7 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 
 	rd_kafka_broker_buf_enq1(rkb, ApiKey, rkbuf, reply_cb, opaque);
 }
+
 
 
 /**
@@ -649,10 +675,12 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 
 /**
  * Handle a Metadata response message.
+ * If 'rkt' is non-NULL the metadata originated from a topic-specific request.
  *
  * Locality: broker thread
  */
 static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
+				      rd_kafka_topic_t *req_rkt,
 				      const char *buf, size_t size) {
 	struct {
 		int32_t          NodeId;
@@ -660,30 +688,15 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 		int32_t          Port;
 	}      *Brokers = NULL;
 	int32_t Broker_cnt;
-
-	struct {
-		int16_t          ErrorCode;
-		rd_kafkap_str_t *Name;
-		struct {
-			int16_t  ErrorCode;
-			int32_t  PartitionId;
-			int32_t  Leader;
-			int32_t *Replicas;
-			int32_t  Replicas_cnt;
-			int32_t *Isr;
-			int32_t  Isr_cnt;
-		}  *PartitionMetadata;
-		int32_t PartitionMetadata_cnt;
-	}      *TopicMetadata = NULL;
+	struct rd_kafka_TopicMetadata *TopicMetadata = NULL;
 	int32_t TopicMetadata_cnt;
 	int i, j, k;
 	int of = 0;
-
+	int req_rkt_seen = 0;
 
 
 	/* Read Brokers */
 	_READ_I32(&Broker_cnt);
-	rd_rkb_dbg(rkb, METADATA, "METADATA", "%"PRId32" brokers", Broker_cnt);
 	if (Broker_cnt > RD_KAFKAP_BROKERS_MAX)
 		_FAIL("Broker_cnt %"PRId32" > BROKERS_MAX %i",
 		      Broker_cnt, RD_KAFKAP_BROKERS_MAX);
@@ -700,6 +713,9 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 
 	/* Read TopicMetadata */
 	_READ_I32(&TopicMetadata_cnt);
+	rd_rkb_dbg(rkb, METADATA, "METADATA", "%"PRId32" brokers, "
+		   "%"PRId32" topics", Broker_cnt, TopicMetadata_cnt);
+
 	if (TopicMetadata_cnt > RD_KAFKAP_TOPICS_MAX)
 		_FAIL("TopicMetadata_cnt %"PRId32" > TOPICS_MAX %i",
 		      TopicMetadata_cnt, RD_KAFKAP_TOPICS_MAX);
@@ -707,7 +723,7 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 	TopicMetadata = malloc(sizeof(*TopicMetadata) * TopicMetadata_cnt);
 
 	for (i = 0 ; i < TopicMetadata_cnt ; i++) {
-	       
+
 		_READ_I16(&TopicMetadata[i].ErrorCode);
 		_READ_STR(TopicMetadata[i].Name);
 
@@ -723,7 +739,7 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 		TopicMetadata[i].PartitionMetadata =
 			alloca(sizeof(*TopicMetadata[i].PartitionMetadata) *
 			       TopicMetadata[i].PartitionMetadata_cnt);
-		
+
 		for (j = 0 ; j < TopicMetadata[i].PartitionMetadata_cnt ; j++) {
 			_READ_I16(&TopicMetadata[i].PartitionMetadata[j].
 				  ErrorCode);
@@ -750,7 +766,7 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 					      PartitionMetadata[j].Replicas)
 				       * TopicMetadata[i].PartitionMetadata[j].
 				       Replicas_cnt);
-			
+
 			for (k = 0 ; k < TopicMetadata[i].PartitionMetadata[j].
 				     Replicas_cnt ; k++)
 				_READ_I32(&TopicMetadata[i].
@@ -780,11 +796,8 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 				     Isr_cnt ; k++)
 				_READ_I32(&TopicMetadata[i].
 					  PartitionMetadata[j].Isr[k]);
-			
 		}
 	}
-	
-	
 
 	/* Update our list of brokers. */
 	for (i = 0 ; i < Broker_cnt ; i++) {
@@ -798,42 +811,24 @@ static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 				       Brokers[i].NodeId);
 	}
 
-	/* Update Leader for each topic we know about */
+	/* Update partition count and leader for each topic we know about */
 	for (i = 0 ; i < TopicMetadata_cnt ; i++) {
-		const char *topic = rd_kafkap_strdupa(TopicMetadata[i].Name);
-		int upd;
-		
-		upd = rd_kafka_topic_partition_cnt_update(rkb->rkb_rk, topic,
-							  TopicMetadata[i].
-							  PartitionMetadata_cnt);
+		if (req_rkt &&
+		    !rd_kafkap_str_cmp(TopicMetadata[i].Name,
+				       req_rkt->rkt_topic))
+			req_rkt_seen++;
 
-		for (j = 0 ;
-		     j < TopicMetadata[i].PartitionMetadata_cnt ; j++) {
-			rd_rkb_dbg(rkb, METADATA, "METADATA",
-				   "  Topic #%i/%i: %s partition %"PRId32
-				   " Leader %"PRId32,
-				   i, TopicMetadata_cnt,
-				   topic,
-				   TopicMetadata[i].
-				   PartitionMetadata[j].PartitionId,
-				   TopicMetadata[i].
-				   PartitionMetadata[j].Leader);
-			if (upd == -1)
-				continue;
+		rd_kafka_topic_metadata_update(rkb, &TopicMetadata[i]);
+	}
 
-			rd_kafka_topic_leader_update(rkb->rkb_rk,
-						     topic,
-						     TopicMetadata[i].
-						     PartitionMetadata[j].
-						     PartitionId,
-						     TopicMetadata[i].
-						     PartitionMetadata[j].
-						     Leader);
-		}
 
-		/* Try to assign unassigned messages to new partitions */
-		if (upd != -1)
-			rd_kafka_topic_assign_uas(rkb->rkb_rk, topic);
+	/* Requested topics not seen in metadata? Propogate to topic code. */
+	if (req_rkt) {
+		rd_rkb_dbg(rkb, TOPIC, "METADATA",
+			   "Requested topic %s %sseen in metadata",
+			   req_rkt->rkt_topic->str, req_rkt_seen ? "" : "not ");
+		if (!req_rkt_seen)
+			rd_kafka_topic_metadata_none(req_rkt);
 	}
 
 
@@ -850,6 +845,7 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
 					    rd_kafka_buf_t *reply,
 					    rd_kafka_buf_t *request,
 					    void *opaque) {
+	rd_kafka_topic_t *rkt = opaque;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
 		   "===== Received metadata from %s =====",
@@ -862,14 +858,22 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
 	if (unlikely(err)) {
 		/* FIXME: handle error */
 		rd_rkb_log(rkb, LOG_WARNING, "METADATA",
-			   "Metadata request failed: %i", err);
+			   "Metadata request failed: %s",
+			   rd_kafka_err2str(err));
 	} else {
-		rd_kafka_metadata_handle(rkb,
+		rd_kafka_metadata_handle(rkb, rkt,
 					 reply->rkbuf_buf2,
 					 reply->rkbuf_len);
 	}
 
 done:
+	if (rkt) {
+                rd_kafka_topic_wrlock(rkt);
+                rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_QUERY;
+                rd_kafka_topic_unlock(rkt);
+		rd_kafka_topic_destroy0(rkt);
+        }
+
 	rd_kafka_buf_destroy(request);
 	if (reply)
 		rd_kafka_buf_destroy(reply);
@@ -888,7 +892,7 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 					  const char *reason) {
 	char *buf;
 	size_t of = 0;
-	int32_t arrsize;
+	int32_t arrsize = 0;
 	size_t tnamelen = 0;
 	rd_kafka_topic_t *rkt;
 
@@ -903,7 +907,10 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	 * be performed by the broker thread. */
 	if (pthread_self() != rkb->rkb_thread) {
 		rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_REQ);
-		rko->rko_rkt = only_rkt;
+                if (only_rkt) {
+                        rko->rko_rkt = only_rkt;
+                        rd_kafka_topic_keep(only_rkt);
+                }
 		rd_kafka_q_enq(&rkb->rkb_ops, rko);
 		rd_rkb_dbg(rkb, METADATA, "METADATA",
 			   "Request metadata: scheduled: not in broker thread");
@@ -938,21 +945,17 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	}
 
 
-	if (all_topics) {
-		arrsize = 0;
-
-	} else {
-		arrsize = rkb->rkb_rk->rk_topic_cnt;
-
+	if (only_rkt || !all_topics) {
 		rd_kafka_lock(rkb->rkb_rk);
+
 		/* Calculate size to hold all known topics */
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
 			if (only_rkt && only_rkt != rkt)
 				continue;
 
+			arrsize++;
 			tnamelen += RD_KAFKAP_STR_SIZE(rkt->rkt_topic);
 		}
-
 	}
 	
 	buf = malloc(sizeof(arrsize) + tnamelen);
@@ -976,10 +979,13 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	}
 
 
+	if (only_rkt)
+		rd_kafka_topic_keep(only_rkt);
+
 	rd_kafka_broker_buf_enq(rkb, RD_KAFKAP_Metadata,
 				buf, of,
 				RD_KAFKA_OP_F_FREE|RD_KAFKA_OP_F_FLASH,
-				rd_kafka_broker_metadata_reply, NULL);
+				rd_kafka_broker_metadata_reply, only_rkt);
 }
 
 
@@ -1022,6 +1028,19 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	}
 	if (do_rk_lock)
 		rd_kafka_unlock(rk);
+
+        if (rkt) {
+                rd_kafka_topic_wrlock(rkt);
+                /* Avoid multiple leader queries if there is already
+                 * an outstanding one waiting for reply. */
+                if (rkt->rkt_flags & RD_KAFKA_TOPIC_F_LEADER_QUERY) {
+                        rd_kafka_topic_unlock(rkt);
+                        rd_kafka_broker_destroy(rkb);
+                        return;
+                }
+                rkt->rkt_flags |= RD_KAFKA_TOPIC_F_LEADER_QUERY;
+                rd_kafka_topic_unlock(rkt);
+        }
 
 	rd_kafka_broker_metadata_req(rkb, 0, rkt, "leader query");
 
@@ -1069,27 +1088,19 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 	if (unlikely(!(req =
 		       rd_kafka_waitresp_find(rkb,
 					      rkbuf->rkbuf_reshdr.CorrId)))) {
-		/* FIXME: unknown response. probably due to request timeout */
+		/* unknown response. probably due to request timeout */
+                rkb->rkb_c.rx_corrid_err++;
 		rd_rkb_dbg(rkb, BROKER, "RESPONSE",
-			   "Unknown response for CorrId %"PRId32,
+			   "Response for unknown CorrId %"PRId32" (timed out?)",
 			   rkbuf->rkbuf_reshdr.CorrId);
-		goto err;
+                rd_kafka_buf_destroy(rkbuf);
+                return -1;
 	}
-
 
 	/* Call callback. Ownership of 'rkbuf' is delegated to callback. */
 	req->rkbuf_cb(rkb, 0, rkbuf, req, req->rkbuf_opaque);
 
 	return 0;
-
-err:
-	/* FIXME */
-	rd_rkb_dbg(rkb, BROKER, "RESP",
-		   "Response error for corrid %"PRId32,
-		   rkbuf->rkbuf_reshdr.CorrId);
-
-	rd_kafka_buf_destroy(rkbuf);
-	return -1;
 }
 
 
@@ -1239,13 +1250,12 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 		rkbuf->rkbuf_len = ntohl(rkbuf->rkbuf_reshdr.Size);
 		rkbuf->rkbuf_reshdr.CorrId = ntohl(rkbuf->rkbuf_reshdr.CorrId);
 
-		/* Make sure message size is within tolerable limits.
-		 * Allow an extra 100 bytes for headers. */
+		/* Make sure message size is within tolerable limits. */
 		if (rkbuf->rkbuf_len < 4/*CorrId*/ ||
-		    rkbuf->rkbuf_len >
-		    rkb->rkb_rk->rk_conf.max_msg_size + 100) {
+		    rkbuf->rkbuf_len > rkb->rkb_rk->rk_conf.recv_max_msg_size) {
 			snprintf(errstr, sizeof(errstr),
-				 "Invalid message size %zd (0..%i)",
+				 "Invalid message size %zd (0..%i): "
+				 "increase receive.message.max.bytes",
 				 rkbuf->rkbuf_len-4,
 				 rkb->rkb_rk->rk_conf.max_msg_size);
 			rkb->rkb_c.rx_err++;
@@ -1272,8 +1282,8 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 	if (rkbuf->rkbuf_of == rkbuf->rkbuf_len + sizeof(rkbuf->rkbuf_reshdr)) {
 		/* Message is complete, pass it on to the original requester. */
 		rkb->rkb_recv_buf = NULL;
-		rd_atomic_add(&rkb->rkb_c.rx, 1);
-		rd_atomic_add(&rkb->rkb_c.rx_bytes, rkbuf->rkbuf_of);
+		(void)rd_atomic_add(&rkb->rkb_c.rx, 1);
+		(void)rd_atomic_add(&rkb->rkb_c.rx_bytes, rkbuf->rkbuf_of);
 		rd_kafka_req_response(rkb, rkbuf);
 	}
 
@@ -1287,6 +1297,7 @@ err:
 
 static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rd_sockaddr_inx_t *sinx;
+	int one __attribute__((unused)) = 1;
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECT",
 		   "broker in state %s connecting",
@@ -1308,9 +1319,13 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 		return -1;
 	}
 
-	rd_kafka_broker_lock(rkb);
-	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_CONNECTING);
-	rd_kafka_broker_unlock(rkb);
+#ifdef SO_NOSIGPIPE
+	/* Disable SIGPIPE signalling for this socket on OSX */
+	if (setsockopt(rkb->rkb_s, SOL_SOCKET, SO_NOSIGPIPE,
+		       &one, sizeof(one)) == -1)
+	    rd_rkb_dbg(rkb, BROKER, "SOCKET", "Failed to set SO_NOSIGPIPE: %s",
+		       strerror(errno));
+#endif
 
 	if (connect(rkb->rkb_s, (struct sockaddr *)sinx,
 		    RD_SOCKADDR_INX_LEN(sinx)) == -1) {
@@ -1515,6 +1530,48 @@ void rd_kafka_dr_msgq (rd_kafka_t *rk,
 }
 
 
+
+/**
+ * Parses a Produce reply.
+ * Returns 0 on success or an error code on failure.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
+	char *buf = rkbuf->rkbuf_buf2;
+	size_t size = rkbuf->rkbuf_len;
+	size_t of = 0;
+	int32_t TopicArrayCnt;
+	rd_kafkap_str_t *topic;
+	int32_t PartitionArrayCnt;
+	struct {
+		int32_t Partition;
+		int16_t ErrorCode;
+		int64_t Offset;
+	} RD_PACKED *hdr;
+
+	_READ_I32(&TopicArrayCnt);
+	if (TopicArrayCnt != 1)
+		goto err;
+
+	/* Since we only produce to one single topic+partition in each
+	 * request we assume that the reply only contains one topic+partition
+	 * and that it is the same that we requested.
+	 * If not the broker is buggy. */
+	_READ_STR(topic);
+	_READ_I32(&PartitionArrayCnt);
+
+	if (PartitionArrayCnt != 1)
+		goto err;
+
+	_READ_REF(hdr, sizeof(*hdr));
+
+	return ntohs(hdr->ErrorCode);
+
+err:
+	return RD_KAFKA_RESP_ERR__BAD_MSG;
+}
+
+
 /**
  * Locality: io thread
  */
@@ -1529,6 +1586,11 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 		   "MessageSet with %i message(s) %sdelivered",
 		   request->rkbuf_msgq.rkmq_msg_cnt, err ? "not ": "");
 
+	/* Parse Produce reply (unless the request errored) */
+	if (!err && reply)
+		err = rd_kafka_produce_reply_handle(rkb, reply);
+
+
 	if (err) {
 		rd_rkb_dbg(rkb, MSG, "MSGSET", "MessageSet with %i message(s) "
 			   "encountered error: %s",
@@ -1538,16 +1600,21 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 		switch (err)
 		{
 		case RD_KAFKA_RESP_ERR__DESTROY:
+		case RD_KAFKA_RESP_ERR_INVALID_MSG:
+		case RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE:
+		case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
+			/* Fatal errors: no message transmission retries */
 			break;
 
 		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
 			/* Try again */
 			if (++request->rkbuf_retries <
 			    rkb->rkb_rk->rk_conf.max_retries) {
 
 				if (reply)
 					rd_kafka_buf_destroy(reply);
-							
+
 				rd_kafka_broker_buf_retry(rkb, request);
 				return;
 			}
@@ -1851,6 +1918,10 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 			/* Iterate through each message and compress it. */
 			for (i = iov_firstmsg ;
 			     i < rkbuf->rkbuf_msg.msg_iovlen ; i++) {
+
+				if (rkbuf->rkbuf_msg.msg_iov[i].iov_len == 0)
+					continue;
+
 				strm.next_in = rkbuf->rkbuf_msg.
 					msg_iov[i].iov_base;
 				strm.avail_in = rkbuf->rkbuf_msg.
@@ -1859,7 +1930,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 				/* Compress message */
 				if ((r = deflate(&strm, Z_NO_FLUSH) != Z_OK)) {
 					rd_rkb_log(rkb, LOG_ERR, "GZIP",
-						   "Failed to gzip-compress"
+						   "Failed to gzip-compress "
 						   "%zd bytes for "
 						   "topic %.*s [%"PRId32"]: "
 						   "%s (%i): "
@@ -1982,8 +2053,10 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 do_send:
 
-	rd_atomic_add(&rktp->rktp_c.tx_msgs, rkbuf->rkbuf_msgq.rkmq_msg_cnt);
-	rd_atomic_add(&rktp->rktp_c.tx_bytes, prodhdr->part2.MessageSetSize);
+	(void)rd_atomic_add(&rktp->rktp_c.tx_msgs,
+			    rkbuf->rkbuf_msgq.rkmq_msg_cnt);
+	(void)rd_atomic_add(&rktp->rktp_c.tx_bytes,
+			    prodhdr->part2.MessageSetSize);
 
 	prodhdr->part2.MessageSetSize =
 		htonl(prodhdr->part2.MessageSetSize);
@@ -2020,16 +2093,15 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
 	assert(pthread_self() == rkb->rkb_thread);
 
-	rd_rkb_dbg(rkb, BROKER, "BRKOP",
-		   "Serve broker op type %i", rko->rko_type);
-
 	switch (rko->rko_type)
 	{
 	case RD_KAFKA_OP_METADATA_REQ:
-		if (rko->rko_rkt)
+		if (rko->rko_rkt) {
 			rd_kafka_broker_metadata_req(rkb, 0, rko->rko_rkt,
 						     NULL);
-		else
+                        /* Loose refcnt from op enq */
+                        rd_kafka_topic_destroy0(rko->rko_rkt);
+		} else
 			rd_kafka_broker_metadata_req(rkb, 1 /*all topics*/,
 						     NULL, NULL);
 		break;
@@ -2055,7 +2127,7 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 	if (unlikely(now >= rkb->rkb_ts_metadata_poll))
 		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
 					     "periodic refresh");
-	
+
 	if (rkb->rkb_outbufs.rkbq_cnt > 0)
 		rkb->rkb_pfd.events |= POLLOUT;
 	else
@@ -2064,7 +2136,7 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 	if (poll(&rkb->rkb_pfd, 1,
 		 rkb->rkb_rk->rk_conf.buffering_max_ms) <= 0)
 		return;
-	
+
 	if (rkb->rkb_pfd.revents & POLLIN)
 		while (rd_kafka_recv(rkb) > 0)
 			;
@@ -2072,7 +2144,7 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 	if (rkb->rkb_pfd.revents & POLLHUP)
 		return rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
 					    "Connection closed");
-	
+
 	if (rkb->rkb_pfd.revents & POLLOUT)
 		while (rd_kafka_send(rkb) > 0)
 			;
@@ -2117,7 +2189,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 
 		do {
 			cnt = 0;
-			
+
 			TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
 
 				rd_rkb_dbg(rkb, TOPIC, "TOPPAR",
@@ -2200,9 +2272,125 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 }
 
 
+/**
+ * Decompress Snappy message with Snappy-java framing.
+ * Returns a malloced buffer with the uncompressed data, or NULL on failure.
+ */
+static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
+					      int64_t Offset,
+					      const char *inbuf,
+					      size_t inlen,
+					      size_t *outlenp) {
+	int pass;
+	char *outbuf = NULL;
+
+	/**
+	 * Traverse all chunks in two passes:
+	 *  pass 1: calculate total uncompressed length
+	 *  pass 2: uncompress
+	 *
+	 * Each chunk is prefixed with 4: length */
+
+	for (pass = 1 ; pass <= 2 ; pass++) {
+		ssize_t of = 0;  /* inbuf offset */
+		ssize_t uof = 0; /* outbuf offset */
+
+		while (of + 4 <= inlen) {
+			/* compressed length */
+			uint32_t clen = ntohl(*(uint32_t *)(inbuf+of));
+			/* uncompressed length */
+			size_t ulen;
+			int r;
+
+			of += 4;
+
+			if (unlikely(clen > inlen - of)) {
+				rd_rkb_dbg(rkb, MSG, "SNAPPY",
+					   "Invalid snappy-java chunk length for "
+					   "message at offset %"PRId64" "
+					   "(%"PRIu32">%zd: ignoring message",
+					   Offset, clen, inlen - of);
+				return NULL;
+			}
+
+			/* Acquire uncompressed length */
+			if (unlikely(!snappy_uncompressed_length(inbuf+of,
+								 clen, &ulen))) {
+				rd_rkb_dbg(rkb, MSG, "SNAPPY",
+					   "Failed to get length of "
+					   "(snappy-java framed) Snappy "
+					   "compressed payload for message at "
+					   "offset %"PRId64" (%"PRId32" bytes): "
+					   "ignoring message",
+					   Offset, clen);
+				return NULL;
+			}
+
+			if (pass == 1) {
+				/* pass 1: calculate total length */
+				of  += clen;
+				uof += ulen;
+				continue;
+			}
+
+			/* pass 2: Uncompress to outbuf */
+			if (unlikely((r = snappy_uncompress(inbuf+of, clen,
+							    outbuf+uof)))) {
+				rd_rkb_dbg(rkb, MSG, "SNAPPY",
+					   "Failed to decompress Snappy-java framed "
+					   "payload for message at offset %"PRId64
+					   " (%"PRId32" bytes): %s: ignoring message",
+					   Offset, clen,
+					   strerror(-r/*negative errno*/));
+				free(outbuf);
+				return NULL;
+			}
+
+			of  += clen;
+			uof += ulen;
+		}
+
+		if (unlikely(of != inlen)) {
+			rd_rkb_dbg(rkb, MSG, "SNAPPY",
+				   "%zd trailing bytes in Snappy-java framed compressed "
+				   "data at offset %"PRId64": ignoring message",
+				   inlen - of, Offset);
+			return NULL;
+		}
+
+		if (pass == 1) {
+			if (uof <= 0) {
+				rd_rkb_dbg(rkb, MSG, "SNAPPY",
+					   "Empty Snappy-java framed data "
+					   "at offset %"PRId64" (%zd bytes): "
+					   "ignoring message",
+					   Offset, uof);
+				return NULL;
+			}
+
+			/* Allocate memory for uncompressed data */
+			outbuf = malloc(uof);
+			if (unlikely(!outbuf)) {
+				rd_rkb_dbg(rkb, MSG, "SNAPPY",
+					   "Failed to allocate memory for uncompressed "
+					   "Snappy data at offset %"PRId64
+					   " (%zd bytes): %s",
+					   Offset, uof, strerror(errno));
+				return NULL;
+			}
+
+		} else {
+			/* pass 2 */
+			*outlenp = uof;
+		}
+	}
+
+	return outbuf;
+}
+
 
 /**
- * Parsers a MessageSet and enqueues internal ops on the local 
+ * Parses a MessageSet and enqueues internal ops on the local
  * application queue for each Message.
  */
 static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
@@ -2243,9 +2431,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		/* Extract Value */
 		_READ_BYTES(Value);
 
-		/* Skip empty messages */
-		if (unlikely((Value_len = RD_KAFKAP_BYTES_LEN(Value)) == 0))
-			continue;
+		Value_len = RD_KAFKAP_BYTES_LEN(Value);
 
 		/* Check for message compression.
 		 * The Key is ignored for compressed messages. */
@@ -2293,7 +2479,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 		case RD_KAFKA_COMPRESSION_GZIP:
 		{
-			uint64_t outlenx;
+			uint64_t outlenx = 0;
 
 			/* Decompress Message payload */
 			outbuf = rd_gz_decompress(Value->data, Value_len,
@@ -2318,56 +2504,66 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			int r;
 			static const char snappy_java_magic[] =
 				{ 0x82, 'S','N','A','P','P','Y', 0 };
-			static const int snappy_java_hdrlen = 8+4+4+4;
+			static const int snappy_java_hdrlen = 8+4+4;
 
 			/* snappy-java adds its own header (SnappyCodec)
 			 * which is not compatible with the official Snappy
-			 * implementation. Skip it.
-			 *   8: magic, 4: version, 4: compatible, 4: unknown? */
-			if (likely(Value_len > snappy_java_hdrlen &&
+			 * implementation.
+			 *   8: magic, 4: version, 4: compatible
+			 * followed by any number of chunks:
+			 *   4: length
+			 * ...: snappy-compressed data. */
+			if (likely(Value_len > snappy_java_hdrlen + 4 &&
 				   !memcmp(inbuf, snappy_java_magic, 8))) {
+				/* snappy-java framing */
+
 				inbuf = inbuf + snappy_java_hdrlen;
 				Value_len -= snappy_java_hdrlen;
-			}
-			    
+				outbuf = rd_kafka_snappy_java_decompress(rkb,
+									 hdr->Offset,
+									 inbuf,
+									 Value_len,
+									 &outlen);
+				if (unlikely(!outbuf))
+					continue;
 
-			/* Acquire uncompressed length */
-			if (unlikely(!snappy_uncompressed_length(inbuf,
-								 Value_len,
-								 &outlen))) {
-				rd_rkb_dbg(rkb, MSG, "SNAPPY",
-					   "Failed to get length of Snappy "
-					   "compressed payload "
-					   "for message at offset %"PRId64
-					   " (%"PRId32" bytes): "
-					   "ignoring message",
-					   hdr->Offset, Value_len);
-				continue;
-			}
-			
-			rd_rkb_dbg(rkb, MSG, "SNAPPY",
-				   "Uncompressed length %zd for %"PRId32
-				   " compressed bytes at offset %"PRId64,
-				   outlen, Value_len, hdr->Offset);
-				   
-			/* Allocate output buffer for uncompressed data */
-			outbuf = malloc(outlen);
+			} else {
+				/* no framing */
 
-			/* Uncompress to outbuf */
-			if (unlikely((r = snappy_uncompress(inbuf,
-							    Value_len,
-							    outbuf)))) {
-				rd_rkb_dbg(rkb, MSG, "SNAPPY",
-					   "Failed to decompress Snappy "
-					   "payload for message at offset "
-					   "%"PRId64
-					   " (%"PRId32" bytes): %s: "
-					   "ignoring message",
-					   hdr->Offset, Value_len,
-					   strerror(-r/*negative errno*/));
-				free(outbuf);
-				continue;
+				/* Acquire uncompressed length */
+				if (unlikely(!snappy_uncompressed_length(inbuf,
+									 Value_len,
+									 &outlen))) {
+					rd_rkb_dbg(rkb, MSG, "SNAPPY",
+						   "Failed to get length of Snappy "
+						   "compressed payload "
+						   "for message at offset %"PRId64
+						   " (%"PRId32" bytes): "
+						   "ignoring message",
+						   hdr->Offset, Value_len);
+					continue;
+				}
+
+				/* Allocate output buffer for uncompressed data */
+				outbuf = malloc(outlen);
+
+				/* Uncompress to outbuf */
+				if (unlikely((r = snappy_uncompress(inbuf,
+								    Value_len,
+								    outbuf)))) {
+					rd_rkb_dbg(rkb, MSG, "SNAPPY",
+						   "Failed to decompress Snappy "
+						   "payload for message at offset "
+						   "%"PRId64
+						   " (%"PRId32" bytes): %s: "
+						   "ignoring message",
+						   hdr->Offset, Value_len,
+						   strerror(-r/*negative errno*/));
+					free(outbuf);
+					continue;
+				}
 			}
+
 		}
 		break;
 		}
@@ -2514,8 +2710,14 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					break;
 
 					/* Application errors */
-				case RD_KAFKA_RESP_ERR__PARTITION_EOF:
 				case RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE:
+					rd_kafka_offset_reset(rktp,
+							      rktp->
+							      rktp_next_offset,
+							      hdr->ErrorCode,
+							      "Fetch response");
+					break;
+				case RD_KAFKA_RESP_ERR__PARTITION_EOF:
 				case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
 				default: /* and all other errors */
 					rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
@@ -2599,7 +2801,7 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_broker_t *rkb,
 	rkb->rkb_fetching = 0;
 
 	/* Parse and handle the messages (unless the request errored) */
-	if (!err)
+	if (!err && reply)
 		err = rd_kafka_fetch_reply_handle(rkb, reply);
 
 	rd_rkb_dbg(rkb, MSG, "FETCH", "Fetch reply: %s",
@@ -2619,7 +2821,10 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_broker_t *rkb,
 
 		case RD_KAFKA_RESP_ERR__TRANSPORT:
 		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
 			/* Try again */
+                        /* FIXME: Not sure we should retry here, the fetch
+                         *        is already intervalled. */
 			if (++request->rkbuf_retries <
 			    /* FIXME: producer? */
 			    rkb->rkb_rk->rk_conf.max_retries) {
@@ -2736,7 +2941,7 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 	rd_kafka_toppar_t *rktp = opaque;
 	rd_kafka_op_t *rko;
 
-	if (likely(!err))
+	if (likely(!err && reply))
 		err = rd_kafka_toppar_offset_reply_handle(rkb, reply, rktp);
 
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
@@ -2759,6 +2964,7 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 
 		case RD_KAFKA_RESP_ERR__TRANSPORT:
 		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
 			/* Try again */
 			if (++request->rkbuf_retries <
 			    /* FIXME: producer? */
@@ -2936,7 +3142,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 		tp->PartitionArrayCnt = htonl(1);
 		tp->Partition = htonl(rktp->rktp_partition);
 		tp->FetchOffset = htobe64(rktp->rktp_next_offset);
-		tp->MaxBytes = htonl(rkb->rkb_rk->rk_conf.max_msg_size);
+		tp->MaxBytes = htonl(rkb->rkb_rk->rk_conf.fetch_msg_max_bytes);
 		rd_kafka_buf_push(rkbuf, tp, sizeof(*tp));
 		next = (void *)(tp+1);
 
@@ -3016,7 +3222,7 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
 		 * Note: 'now' may be a bit outdated by now. */
 		if (do_timeout_scan)
 			rd_kafka_broker_waitresp_timeout_scan(rkb, now);
-		
+
 		rd_kafka_broker_lock(rkb);
 	}
 
@@ -3028,7 +3234,7 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_t *rkb = arg;
 	rd_kafka_t *rk = rkb->rkb_rk;
 
-	rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
+	(void)rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
 
 	rd_thread_sigmask(SIG_BLOCK,
 			  SIGHUP, SIGINT, SIGTERM, SIGUSR1, SIGUSR2,
@@ -3039,6 +3245,10 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 	while (!rkb->rkb_rk->rk_terminate) {
 		switch (rkb->rkb_state)
 		{
+		case RD_KAFKA_BROKER_STATE_INIT:
+			/* The INIT state exists so that an initial connection
+			 * failure triggers a state transition which might
+			 * trigger a ALL_BROKERS_DOWN error. */
 		case RD_KAFKA_BROKER_STATE_DOWN:
 			/* ..connect() will block until done (or failure) */
 			if (rd_kafka_broker_connect(rkb) == -1) {
@@ -3051,9 +3261,6 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 				    rkb->rkb_rsal->rsal_cnt)
 					sleep(1);
 			}
-			break;
-
-		case RD_KAFKA_BROKER_STATE_CONNECTING:
 			break;
 
 		case RD_KAFKA_BROKER_STATE_UP:
@@ -3070,17 +3277,19 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 
 	rd_kafka_lock(rkb->rkb_rk);
 	TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
+	rd_atomic_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
 	rd_kafka_unlock(rkb->rkb_rk);
 	rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__DESTROY, NULL);
 	rd_kafka_broker_destroy(rkb);
 
-	rd_atomic_sub(&rd_kafka_thread_cnt_curr, 1);
+	(void)rd_atomic_sub(&rd_kafka_thread_cnt_curr, 1);
 
 	return NULL;
 }
 
 
 void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
+        rd_kafka_op_t *rko;
 
 	if (rd_atomic_sub(&rkb->rkb_refcnt, 1) > 0)
 		return;
@@ -3093,6 +3302,22 @@ void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
 
 	if (rkb->rkb_rsal)
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
+
+        /* Clean up any references in the op queue before purging it */
+        TAILQ_FOREACH(rko, &rkb->rkb_ops.rkq_q, rko_link) {
+                switch (rko->rko_type)
+                {
+                case RD_KAFKA_OP_METADATA_REQ:
+                        if (rko->rko_rkt)
+                                rd_kafka_topic_destroy0(rko->rko_rkt);
+                        break;
+                default:
+                        break;
+                }
+        }
+
+	rd_kafka_q_purge(&rkb->rkb_ops);
+	rd_kafka_q_destroy(&rkb->rkb_ops);
 
 	rd_kafka_destroy0(rkb->rkb_rk);
 
@@ -3139,7 +3364,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_bufq_init(&rkb->rkb_retrybufs);
 	rd_kafka_q_init(&rkb->rkb_ops);
 	rd_kafka_broker_keep(rkb);
-	
+
 	/* Set next intervalled metadata refresh, offset by a random
 	 * value to avoid all brokers to be queried simultaneously. */
 	if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0)
@@ -3162,15 +3387,16 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 		rd_kafka_log(rk, LOG_CRIT, "THREAD", "%s", tmp);
 
 		/* Send ERR op back to application for processing. */
-		rd_kafka_op_reply(rk, RD_KAFKA_OP_ERR,
-				  RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
-				  strdup(tmp), strlen(tmp));
+		rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
+				"%s", tmp);
+
 		free(rkb);
 		rd_kafka_destroy(rk);
 		return NULL;
 	}
 
 	TAILQ_INSERT_TAIL(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
+	rd_atomic_add(&rkb->rkb_rk->rk_broker_cnt, 1);
 
 	rd_rkb_dbg(rkb, BROKER, "BROKER",
 		   "Added new broker with NodeId %"PRId32,

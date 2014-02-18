@@ -17,6 +17,8 @@ For an introduction to the performance and usage of librdkafka, see
 [INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md)
 
 
+**NOTE**: A C++ interface is currently in testing, see the `c++` branch.
+
 
 **Apache Kafka 0.8 support:**
 
@@ -24,7 +26,7 @@ For an introduction to the performance and usage of librdkafka, see
   * Producer: supported
   * Consumer: supported
   * Compression: snappy and gzip
-  * Debian package: "debian" branch ([ITP #710271](http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=710271))
+  * Debian package: librdkafka1 and librdkafka-dev in Debian testing and unstable
   * ZooKeeper: not supported
   * API: Stable, not backwards compatible
   * Tests: Regression tests in `tests/` directory.
@@ -61,6 +63,8 @@ For an introduction to the performance and usage of librdkafka, see
   * [redBorder](http://www.redborder.net)
   * [Headweb](http://www.headweb.com/)
   * [node-kafka](https://github.com/sutoiku/node-kafka)
+  * [Produban's log2kafka](https://github.com/Produban/log2kafka)
+  * [phpkafka](https://github.com/salebab/phpkafka)
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
 

@@ -40,6 +40,9 @@
 #include "rdaddr.h"
 #include "rdlog.h"
 
+#include "rdkafka_timer.h"
+
+#include "rdsysqueue.h"
 
 #define RD_POLL_INFINITE  -1
 #define RD_POLL_NOWAIT     0
@@ -81,7 +84,7 @@
 #define RD_KAFKAP_PARTITIONS_MAX  1000
 
 
-
+#define RD_KAFKA_OFFSET_ERROR    -1001
 
 
 struct rd_kafka_s;
@@ -99,8 +102,8 @@ struct rd_kafka_topic_conf_s;
  */
 typedef enum {
 	RD_KAFKA_COMPRESSION_NONE,
-	RD_KAFKA_COMPRESSION_GZIP,   /* FIXME: not supported */
-	RD_KAFKA_COMPRESSION_SNAPPY, /* FIXME: not supported */
+	RD_KAFKA_COMPRESSION_GZIP,
+	RD_KAFKA_COMPRESSION_SNAPPY,
 } rd_kafka_compression_t;
 
 
@@ -116,6 +119,7 @@ struct rd_kafka_conf_s {
 	 * Generic configuration
 	 */
 	int     max_msg_size;
+        int     recv_max_msg_size;
 	int     metadata_request_timeout_ms;
 	int     metadata_refresh_interval_ms;
 	int     metadata_refresh_fast_cnt;
@@ -134,6 +138,7 @@ struct rd_kafka_conf_s {
 	 */
 	int    queued_min_msgs;
 	int    fetch_wait_max_ms;
+        int    fetch_msg_max_bytes;
 	int    fetch_min_bytes;
 	int    fetch_error_backoff_ms;
 	/* Pre-built Fetch request header. */
@@ -146,7 +151,6 @@ struct rd_kafka_conf_s {
 	int    queue_buffering_max_msgs;
 	int    buffering_max_ms;
 	int    max_retries;
-	int    msg_send_max_retries;
 	int    retry_backoff_ms;
 	int    batch_num_messages;
 	rd_kafka_compression_t compression_codec;
@@ -200,6 +204,12 @@ struct rd_kafka_topic_conf_s {
 				int32_t partition_cnt,
 				void *rkt_opaque,
 				void *msg_opaque);
+
+	int     auto_commit;
+	int     auto_commit_interval_ms;
+	int     auto_offset_reset;
+	char   *offset_store_path;
+	int     offset_store_sync_interval_ms;
 
 	/* Application provided opaque pointer (this is rkt_opaque) */
 	void   *opaque;
@@ -262,7 +272,7 @@ typedef struct rd_kafka_msgq_s {
 } rd_kafka_msgq_t;
 
 #define RD_KAFKA_MSGQ_INITIALIZER(rkmq) \
-	{ rkmq_msgs: TAILQ_HEAD_INITIALIZER((rkmq).rkmq_msgs) }
+	{ .rkmq_msgs = TAILQ_HEAD_INITIALIZER((rkmq).rkmq_msgs) }
 
 #define RD_KAFKA_MSGQ_FOREACH(elm,head) \
 	TAILQ_FOREACH(elm, &(head)->rkmq_msgs, rkm_link)
@@ -406,8 +416,8 @@ typedef struct rd_kafka_broker_s {
 	pthread_rwlock_unlock(&(rkb)->rkb_toppar_lock)
 
 	enum {
+		RD_KAFKA_BROKER_STATE_INIT,
 		RD_KAFKA_BROKER_STATE_DOWN,
-		RD_KAFKA_BROKER_STATE_CONNECTING,
 		RD_KAFKA_BROKER_STATE_UP,
 	} rkb_state;
 
@@ -421,6 +431,7 @@ typedef struct rd_kafka_broker_s {
 		uint64_t rx_bytes;
 		uint64_t rx;    /* Kafka messages (not payload msgs) */
 		uint64_t rx_err;
+                uint64_t rx_corrid_err; /* CorrId misses */
 	} rkb_c;
 
 	rd_ts_t             rkb_ts_metadata_poll; /* Next metadata poll time */
@@ -453,7 +464,7 @@ typedef struct rd_kafka_broker_s {
 
 } rd_kafka_broker_t;
 
-#define rd_kafka_broker_keep(rkb) rd_atomic_add(&(rkb)->rkb_refcnt, 1)
+#define rd_kafka_broker_keep(rkb) (void)rd_atomic_add(&(rkb)->rkb_refcnt, 1)
 #define rd_kafka_broker_lock(rkb)   pthread_mutex_lock(&(rkb)->rkb_lock)
 #define rd_kafka_broker_unlock(rkb) pthread_mutex_unlock(&(rkb)->rkb_lock)
 
@@ -468,11 +479,22 @@ struct rd_kafka_topic_s {
 	struct rd_kafka_toppar_s  *rkt_ua;  /* unassigned partition */
 	struct rd_kafka_toppar_s **rkt_p;
 	int32_t            rkt_partition_cnt;
-
 	TAILQ_HEAD(, rd_kafka_toppar_s) rkt_desp; /* Desired partitions
 						   * that are not yet seen
 						   * in the cluster. */
 
+	rd_ts_t            rkt_ts_metadata; /* Timestamp of last metadata
+					     * update for this topic. */
+
+	enum {
+		RD_KAFKA_TOPIC_S_INIT,
+		RD_KAFKA_TOPIC_S_EXISTS,
+		RD_KAFKA_TOPIC_S_UNKNOWN,
+	} rkt_state;
+
+        int                rkt_flags;
+#define RD_KAFKA_TOPIC_F_LEADER_QUERY  0x1 /* There is an outstanding
+                                            * leader query for this topic */
 	struct rd_kafka_s *rkt_rk;
 
 	rd_kafka_topic_conf_t rkt_conf;
@@ -517,9 +539,18 @@ typedef struct rd_kafka_toppar_s {
 	int64_t            rktp_next_offset;     /* Next offset to fetch */
 	int64_t            rktp_app_offset;      /* Last offset delivered to
 						  * application */
+	int64_t            rktp_stored_offset;   /* Last stored offset, but
+						  * maybe not commited yet. */
 	int64_t            rktp_commited_offset; /* Last commited offset */
+	rd_ts_t            rktp_ts_commited_offset; /* Timestamp of last
+						     * commit */
 	int64_t            rktp_eof_offset;      /* The last offset we reported
 						  * EOF for. */
+
+	char              *rktp_offset_path;     /* Path to offset file */
+	int                rktp_offset_fd;       /* Offset file fd */
+	rd_kafka_timer_t   rktp_offset_commit_tmr; /* Offste commit timer */
+	rd_kafka_timer_t   rktp_offset_sync_tmr; /* Offset file sync timer */
 
 	int                rktp_flags;
 #define RD_KAFKA_TOPPAR_F_DESIRED  0x1      /* This partition is desired
@@ -532,7 +563,7 @@ typedef struct rd_kafka_toppar_s {
 	} rktp_c;
 } rd_kafka_toppar_t;
 
-#define rd_kafka_toppar_keep(rktp) rd_atomic_add(&(rktp)->rktp_refcnt, 1)
+#define rd_kafka_toppar_keep(rktp) (void)rd_atomic_add(&(rktp)->rktp_refcnt, 1)
 #define rd_kafka_toppar_destroy(rktp) do {				\
 	if (rd_atomic_sub(&(rktp)->rktp_refcnt, 1) == 0)		\
 		rd_kafka_toppar_destroy0(rktp);				\
@@ -560,6 +591,8 @@ struct rd_kafka_s {
 	rd_kafka_q_t rk_rep;   /* kafka -> application reply queue */
 
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
+	int              rk_broker_cnt;       /* atomic */
+	int              rk_broker_down_cnt;  /* atomic */
 	TAILQ_HEAD(, rd_kafka_topic_s)  rk_topics;
 	int              rk_topic_cnt;
 
@@ -578,7 +611,6 @@ struct rd_kafka_s {
 			int32_t  partition;
 			uint64_t offset;
 			uint64_t app_offset;
-			int      offset_file_fd;
 		} consumer;
 		struct {
 			int msg_cnt;  /* current message count */
@@ -586,6 +618,10 @@ struct rd_kafka_s {
 	} rk_u;
 #define rk_consumer rk_u.consumer
 #define rk_producer rk_u.producer
+
+	TAILQ_HEAD(, rd_kafka_timer_s) rk_timers;
+	pthread_mutex_t                rk_timers_lock;
+	pthread_cond_t                 rk_timers_cond;
 
 	void (*rk_log_cb) (const rd_kafka_t *rk, int level,
 			   const char *fac,
@@ -630,6 +666,8 @@ struct rd_kafka_s {
 #define RD_KAFKA_DBG_ALL        0xff
 
 
+void rd_kafka_log_buf (const rd_kafka_t *rk, int level,
+		       const char *fac, const char *buf);
 void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 		   const char *fac, const char *fmt, ...)
 	__attribute__((format (printf, 5, 6)));
@@ -703,13 +741,27 @@ void rd_kafka_op_reply (rd_kafka_t *rk,
 			rd_kafka_op_type_t type,
 			rd_kafka_resp_err_t err,
 			void *payload, int len);
+void rd_kafka_op_err (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+		      const char *fmt, ...);
 
-#define rd_kafka_keep(rk) rd_atomic_add(&(rk)->rk_refcnt, 1)
+#define rd_kafka_keep(rk) (void)rd_atomic_add(&(rk)->rk_refcnt, 1)
 void rd_kafka_destroy0 (rd_kafka_t *rk);
 
-void rd_kafka_conf_destroy (rd_kafka_conf_t *conf);
-void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf);
+typedef	enum {
+	_RK_GLOBAL = 0x1,
+	_RK_PRODUCER = 0x2,
+	_RK_CONSUMER = 0x4,
+	_RK_TOPIC = 0x8
+} rd_kafka_conf_scope_t;
+
+void rd_kafka_anyconf_destroy (int scope, void *conf);
 
 extern int rd_kafka_thread_cnt_curr;
 
 #define RD_KAFKA_SEND_END -1
+
+
+
+int pthread_cond_timedwait_ms (pthread_cond_t *cond,
+			       pthread_mutex_t *mutex,
+			       int timeout_ms);

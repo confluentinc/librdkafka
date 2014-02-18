@@ -1,5 +1,5 @@
 /*
- * librd - Rapid Development C library
+ * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2013, Magnus Edenhill
  * All rights reserved.
@@ -28,4 +28,24 @@
 
 #pragma once
 
-void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len);
+#include "rd.h"
+
+typedef struct rd_kafka_timer_s {
+	TAILQ_ENTRY(rd_kafka_timer_s)  rtmr_link;
+	
+	rd_ts_t rtmr_next;
+	int     rtmr_interval;   /* interval in microseconds */
+	
+	void  (*rtmr_callback) (struct rd_kafka_s *rk, void *arg);
+	void   *rtmr_arg;
+} rd_kafka_timer_t;
+
+
+
+void rd_kafka_timer_stop (rd_kafka_t *rk, rd_kafka_timer_t *rtmr, int lock);
+void rd_kafka_timer_start (rd_kafka_t *rk,
+			   rd_kafka_timer_t *rtmr, int interval,
+			   void (*callback) (struct rd_kafka_s *rk, void *arg),
+			   void *arg);
+
+void rd_kafka_timers_run (rd_kafka_t *rk, int timeout);

@@ -17,11 +17,15 @@
  */
 extern int test_level;
 
+extern int test_seed;
+
 #define TEST_FAIL(reason...) do {					\
 		fprintf(stderr, "### Test failed at %s:%i:%s(): ###\n", \
 			__FILE__,__LINE__,__FUNCTION__);		\
 		fprintf(stderr, reason);				\
 		fprintf(stderr, "\n");					\
+                fprintf(stderr, "### Test random seed was %i ###\n",    \
+                        test_seed);                                     \
 		exit(1);						\
 	} while (0)
 

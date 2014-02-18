@@ -91,8 +91,11 @@ void *rd_gz_decompress (void *compressed, int compressed_len,
 				goto fail;
 			}
 
-			p += len - strm.avail_out;
-			len -= len - strm.avail_out;
+			if (pass == 2) {
+				/* Advance output pointer (in pass 2). */
+				p += len - strm.avail_out;
+				len -= len - strm.avail_out;
+			}
 
 		} while (strm.avail_out == 0 && r != Z_STREAM_END);
 

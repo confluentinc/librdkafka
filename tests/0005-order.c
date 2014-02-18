@@ -27,8 +27,7 @@
  */
 
 /**
- * Tests "message.bytes.max"
- * Issue #24
+ * Tests messages are produced in order.
  */
 
 #define _GNU_SOURCE
@@ -42,10 +41,11 @@
 #include "rdkafka.h"  /* for Kafka driver */
 
 
-static int msgs_wait = 0; /* bitmask */
+static int msgid_next = 0;
+static int fails = 0;
 
 /**
- * Delivery report callback.
+ * Delivery reported callback.
  * Called for each message once to signal its delivery status.
  */
 static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
@@ -54,18 +54,18 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 
 	free(msg_opaque);
 
-	if (err)
-		TEST_FAIL("Unexpected delivery error for message #%i: %s\n",
-			  msgid, rd_kafka_err2str(err));
+	if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+		TEST_FAIL("Message delivery failed: %s\n",
+			  rd_kafka_err2str(err));
 
-	if (!(msgs_wait & (1 << msgid)))
-		TEST_FAIL("Unwanted delivery report for message #%i "
-			  "(waiting for 0x%x)\n", msgid, msgs_wait);
+	if (msgid != msgid_next) {
+		fails++;
+		TEST_FAIL("Delivered msg %i, expected %i\n",
+			 msgid, msgid_next);
+		return;
+	}
 
-	TEST_SAY("Delivery report for message #%i: %s\n",
-		 msgid, rd_kafka_err2str(err));
-
-	msgs_wait &= ~(1 << msgid);
+	msgid_next = msgid+1;
 }
 
 
@@ -78,16 +78,11 @@ int main (int argc, char **argv) {
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
-	char msg[100000];
-	int msgcnt = 10;
+	char msg[128];
+	int msgcnt = 100000;
 	int i;
 
 	test_conf_init(&conf, &topic_conf, 10);
-
-	/* Set a small maximum message size. */
-	if (rd_kafka_conf_set(conf, "message.max.bytes", "100000",
-			      errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
-		TEST_FAIL("%s\n", errstr);
 
 	/* Set delivery report callback */
 	rd_kafka_conf_set_dr_cb(conf, dr_cb);
@@ -105,49 +100,34 @@ int main (int argc, char **argv) {
 		TEST_FAIL("Failed to create topic: %s\n",
 			  strerror(errno));
 
-	memset(msg, 0, sizeof(msg));
-
-	/* Produce 'msgcnt' messages, size odd ones larger than max.bytes,
-	 * and even ones smaller than max.bytes. */
+	/* Produce a message */
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
-		size_t len;
-		int toobig = i & 1;
-
 		*msgidp = i;
-		if (toobig) {
-			/* Too big */
-			len = 200000;
-		} else {
-			/* Good size */
-			len = 5000;
-			msgs_wait |= (1 << i);
-		}
-
 		snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
 		r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
-				     msg, len, NULL, 0, msgidp);
-
-		if (toobig) {
-			if (r != -1)
-				TEST_FAIL("Succeeded to produce too "
-					  "large message #%i\n", i);
-			free(msgidp);
-		} else if (r == -1)
+				     msg, strlen(msg), NULL, 0, msgidp);
+		if (r == -1)
 			TEST_FAIL("Failed to produce message #%i: %s\n",
 				  i, strerror(errno));
 	}
 
-	/* Wait for messages to be delivered. */
+	TEST_SAY("Produced %i messages, waiting for deliveries\n", msgcnt);
+
+	/* Wait for messages to time out */
 	while (rd_kafka_outq_len(rk) > 0)
 		rd_kafka_poll(rk, 50);
 
-	if (msgs_wait != 0)
-		TEST_FAIL("Still waiting for messages: 0x%x\n", msgs_wait);
+	if (fails)
+		TEST_FAIL("%i failures, see previous errors", fails);
+
+	if (msgid_next != msgcnt)
+		TEST_FAIL("Still waiting for messages: next %i != end %i\n",
+			  msgid_next, msgcnt);
 
 	/* Destroy topic */
 	rd_kafka_topic_destroy(rkt);
-		
+
 	/* Destroy rdkafka instance */
 	TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
 	rd_kafka_destroy(rk);

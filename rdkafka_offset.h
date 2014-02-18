@@ -1,7 +1,7 @@
 /*
- * librd - Rapid Development C library
+ * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2013, Magnus Edenhill
+ * Copyright (c) 2012,2013 Magnus Edenhill
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -28,4 +28,31 @@
 
 #pragma once
 
-void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len);
+
+
+/**
+ * Stores the offset for the toppar 'rktp'.
+ * The actual commit of the offset to backing store is performed
+ * from the main rdkafka thread.
+ * See head of rdkafka_offset.c for more information.
+ *
+ * NOTE: toppar_lock(rktp) must be held.
+ */
+static inline RD_UNUSED
+void rd_kafka_offset_store0 (rd_kafka_toppar_t *rktp, int64_t offset,
+			     int lock) {
+	if (lock)
+		rd_kafka_toppar_lock(rktp);
+	rktp->rktp_stored_offset = offset;
+	if (lock)
+		rd_kafka_toppar_unlock(rktp);
+}
+
+rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
+					   int32_t partition, int64_t offset);
+
+void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp);
+void rd_kafka_offset_store_init (rd_kafka_toppar_t *rktp);
+
+void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
+			    rd_kafka_resp_err_t err, const char *reason);

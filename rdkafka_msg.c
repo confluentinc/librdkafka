@@ -38,7 +38,7 @@
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
 	assert(rk->rk_producer.msg_cnt > 0);
-	rd_atomic_sub(&rk->rk_producer.msg_cnt, 1);
+	(void)rd_atomic_sub(&rk->rk_producer.msg_cnt, 1);
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE)
 		free(rkm->rkm_payload);
@@ -62,8 +62,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 		      void *msg_opaque) {
 	rd_kafka_msg_t *rkm;
 	size_t mlen = sizeof(*rkm);
-	
-	assert(len > 0);
+	rd_kafka_resp_err_t err;
 
 	if (unlikely(len + keylen > rkt->rkt_rk->rk_conf.max_msg_size)) {
 		errno = EMSGSIZE;
@@ -72,7 +71,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 
 	if (unlikely(rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
 		     rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
-		rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+		(void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
 		errno = ENOBUFS;
 		return -1;
 	}
@@ -105,7 +104,25 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	}
 
 
-	return rd_kafka_msg_partitioner(rkt, NULL, rkm);
+	err = rd_kafka_msg_partitioner(rkt, rkm, 1);
+	if (likely(!err))
+		return 0;
+
+	/* Handle partitioner failures: it only fails when the application
+	 * attempts to force a destination partition that does not exist
+	 * in the cluster. */
+
+	rd_kafka_msg_destroy(rkt->rkt_rk, rkm);
+
+	/* Translate error codes to errnos. */
+	if (err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
+		errno = ESRCH;
+	else if (err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
+		errno = ENOENT;
+	else
+		errno = EINVAL; /* NOTREACHED */
+
+	return -1;
 }
 
 
@@ -119,7 +136,7 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_ts_t now) {
 	rd_kafka_msg_t *rkm, *tmp;
 	int cnt = timedout->rkmq_msg_cnt;
-	
+
 	/* Assume messages are added in time sequencial order */
 	TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp) {
 		if (likely(rkm->rkm_ts_timeout > now))
@@ -150,19 +167,41 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
 
 /**
  * Assigns a message to a topic partition using a partitioner.
+ * Returns RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION or .._UNKNOWN_TOPIC if
+ * partitioning failed, or 0 on success.
  */
-int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
-			      rd_kafka_toppar_t *rktp_curr,
-			      rd_kafka_msg_t *rkm) {
+int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
+			      int do_lock) {
 	int32_t partition;
 	rd_kafka_toppar_t *rktp_new;
+	rd_kafka_resp_err_t err;
 
-	rd_kafka_topic_rdlock(rkt);
+	if (do_lock)
+		rd_kafka_topic_rdlock(rkt);
+
+	/* Fast path for failing messages with forced partition
+	 * when the partition is not available.
+	 * Only fail the message if its forced partition does not
+	 * exist in the Kafka cluster, given that the topic's metadata
+	 * can be trusted (is not older than 3 times the metadata
+	 * refresh interval). */
+	if (unlikely((rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN ||
+		      (rkm->rkm_partition != RD_KAFKA_PARTITION_UA &&
+		       (rkm->rkm_partition >= rkt->rkt_partition_cnt ))) &&
+		     rd_clock() < rkt->rkt_ts_metadata +
+		     (rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms *
+		      3 * 1000))) {
+		if (rkt->rkt_partition_cnt == 0)
+			err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+		else
+			err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+
+		if (do_lock)
+			rd_kafka_topic_unlock(rkt);
+		return err;
+	}
 
 	if (unlikely(rkt->rkt_partition_cnt == 0)) {
-		rd_kafka_dbg(rkt->rkt_rk, TOPIC, "PART",
-			     "%.*s has no partitions",
-			     RD_KAFKAP_STR_PR(rkt->rkt_topic));
 		partition = RD_KAFKA_PARTITION_UA;
 	} else if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
 		partition =
@@ -177,41 +216,49 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt,
 		partition = rkm->rkm_partition;
 
 	if (partition >= rkt->rkt_partition_cnt) {
+		/* Partition is unknown (locally) */
+
+		/* Temporary error, assign to UA partition for now */
 		rd_kafka_dbg(rkt->rkt_rk, TOPIC, "PART",
 			     "%.*s partition [%"PRId32"] not "
 			     "currently available",
 			     RD_KAFKAP_STR_PR(rkt->rkt_topic),
 			     partition);
 		partition = RD_KAFKA_PARTITION_UA;
+
+		/* FALLTHRU */
 	}
 
 	if (0)
 		rd_kafka_dbg(rkt->rkt_rk, MSG, "PART",
 			     "Message %p assigned to %.*s "
 			     "partition [%"PRId32"]/%"PRId32" "
-			     "(previously [%"PRId32"], fixed [%"PRId32"])",
+			     "(fixed [%"PRId32"])",
 			     rkm, 
 			     RD_KAFKAP_STR_PR(rkt->rkt_topic), partition,
 			     rkt->rkt_partition_cnt,
-			     rktp_curr ? rktp_curr->rktp_partition : -2,
 			     rkm->rkm_partition);
 
-	if (rktp_curr) {
-		if (rktp_curr->rktp_partition == partition) {
-			rd_kafka_topic_unlock(rkt);
-			return -1;
-		}
+	/* Get new partition */
+	rktp_new = rd_kafka_toppar_get(rkt, partition, 0);
 
-		rd_kafka_toppar_deq_msg(rktp_curr, rkm);
+	if (likely(!rktp_new)) {
+		/* Unknown topic or partition */
+		if (rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN)
+			err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+		else
+			err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+
+		if (do_lock)
+			rd_kafka_topic_unlock(rkt);
+
+		return  err;
 	}
 
-	if (likely((rktp_new = rd_kafka_toppar_get(rkt, partition, 1)) != NULL))
-		rd_kafka_toppar_enq_msg(rktp_new, rkm);
-
-	rd_kafka_topic_unlock(rkt);
-
-	if (rktp_new)
-		rd_kafka_toppar_destroy(rktp_new); /* from _get() */
-
+	/* Partition is available: enqueue msg on partition's queue */
+	rd_kafka_toppar_enq_msg(rktp_new, rkm);
+	if (do_lock)
+		rd_kafka_topic_unlock(rkt);
+	rd_kafka_toppar_destroy(rktp_new); /* from _get() */
 	return 0;
 }

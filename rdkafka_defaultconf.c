@@ -37,18 +37,15 @@
 
 
 struct rd_kafka_property {
-	enum {
-		_RK_GLOBAL = 0x1,
-		_RK_PRODUCER = 0x2,
-		_RK_CONSUMER = 0x4,
-		_RK_TOPIC = 0x8
-	} scope;
+	rd_kafka_conf_scope_t scope;
 	const char *name;
 	enum {
 		_RK_C_STR,
 		_RK_C_INT,
 		_RK_C_S2I,  /* String to Integer mapping */
 		_RK_C_S2F,  /* CSV String to Integer flag mapping (OR:ed) */
+		_RK_C_BOOL,
+		_RK_C_PTR,  /* Only settable through special set functions */
 	} type;
 	int   offset;
 	const char *desc;
@@ -74,16 +71,22 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	/* Global properties */
 	{ _RK_GLOBAL, "client.id", _RK_C_STR, _RK(clientid),
 	  "Client identifier.",
-	  sdef: "rdkafka" },
+	  .sdef =  "rdkafka" },
 	{ _RK_GLOBAL, "metadata.broker.list", _RK_C_STR, _RK(brokerlist),
 	  "Initial list of brokers. "
 	  "The application may also use `rd_kafka_brokers_add()` to add "
 	  "brokers during runtime." },
 	{ _RK_GLOBAL, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
+	  "Maximum transmit message size.",
+	  1000, 1000000000, 4000000 },
+	{ _RK_GLOBAL, "receive.message.max.bytes", _RK_C_INT,
+          _RK(recv_max_msg_size),
 	  "Maximum receive message size. "
 	  "This is a safety precaution to avoid memory exhaustion in case of "
-	  "protocol hickups.",
-	  1000, 1000000000, 4000000 },
+	  "protocol hickups. "
+          "The value should be at least fetch.message.max.bytes * number of "
+          "partitions consumed from.",
+	  1000, 1000000000, 100000000 },
 	{ _RK_GLOBAL, "metadata.request.timeout.ms", _RK_C_INT,
 	  _RK(metadata_request_timeout_ms),
 	  "Non-topic request timeout in milliseconds. "
@@ -109,7 +112,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
 	  "A comma-separated list of debug contexts to enable: "
 	  RD_KAFKA_DEBUG_CONTEXTS,
-	  s2i: {
+	  .s2i = {
 			{ RD_KAFKA_DBG_GENERIC,  "generic" },
 			{ RD_KAFKA_DBG_BROKER,   "broker" },
 			{ RD_KAFKA_DBG_TOPIC,    "topic" },
@@ -138,8 +141,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(stats_interval_ms),
 	  "librdkafka statistics emit interval. The application also needs to "
 	  "register a stats callback using `rd_kafka_conf_set_stats_cb()`. "
-	  "The granularity is 1000ms.",
+	  "The granularity is 1000ms. A value of 0 disables statistics.",
 	  0, 86400*1000, 0 },
+	{ _RK_GLOBAL, "error_cb", _RK_C_PTR,
+	  _RK(error_cb),
+	  "Error callback (set with rd_kafka_conf_set_error_cb())" },
+	{ _RK_GLOBAL, "stats_cb", _RK_C_PTR,
+	  _RK(stats_cb),
+	  "Statistics callback (set with rd_kafka_conf_set_stats_cb())" },
+	{ _RK_GLOBAL, "opaque", _RK_C_PTR,
+	  _RK(opaque),
+	  "Application opaque (set with rd_kafka_conf_set_opaque())" },
 
 	/* Global consumer properties */
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
@@ -152,6 +164,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Maximum time the broker may wait to fill the response "
 	  "with fetch.min.bytes.",
 	  0, 300*1000, 100 },
+        { _RK_GLOBAL|_RK_CONSUMER, "fetch.message.max.bytes", _RK_C_INT,
+          _RK(fetch_msg_max_bytes),
+          "Maximum number of bytes per topic+partition to request when "
+          "fetching messages from the broker.",
+          1, 1000000000, 1024*1024 },
 	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.min.bytes", _RK_C_INT,
 	  _RK(fetch_min_bytes),
 	  "Minimum number of bytes the broker responds with. "
@@ -176,7 +193,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "on the producer queue.",
 	  1, 900*1000, 1000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "message.send.max.retries", _RK_C_INT,
-	  _RK(msg_send_max_retries),
+	  _RK(max_retries),
 	  "How many times to retry sending a failing MessageSet. "
 	  "**Note:** retrying may cause reordering.",
 	  0, 100, 2 },
@@ -186,9 +203,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  1, 300*1000, 100 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),
-	  "Compression codec to use for compressing message sets.",
-	  vdef: RD_KAFKA_COMPRESSION_NONE,
-	  s2i: {
+	  "Compression codec to use for compressing message sets: "
+	  "none, gzip or snappy",
+	  .vdef = RD_KAFKA_COMPRESSION_NONE,
+	  .s2i = {
 			{ RD_KAFKA_COMPRESSION_NONE,   "none" },
 			{ RD_KAFKA_COMPRESSION_GZIP,   "gzip" },
 			{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
@@ -197,11 +215,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(batch_num_messages),
 	  "Maximum number of messages batched in one MessageSet.",
 	  1, 1000000, 1000 },
+	{ _RK_GLOBAL|_RK_PRODUCER, "dr_cb", _RK_C_PTR,
+	  _RK(dr_cb),
+	  "Delivery report callback (set with rd_kafka_conf_set_dr_cb())" },
 	
 	  
 
-	/**
-	 * Topic properties */
+	/* Topic properties */
 	{ _RK_TOPIC|_RK_PRODUCER, "request.required.acks", _RK_C_INT,
 	  _RKT(required_acks),
 	  "This field indicates how many acknowledgements the leader broker "
@@ -228,7 +248,58 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "This value is only enforced locally and limits the time a "
 	  "produced message waits for successful delivery.",
 	  1, 900*1000, 300*1000 },
-	
+	{ _RK_TOPIC|_RK_PRODUCER, "partitioner", _RK_C_PTR,
+	  _RKT(partitioner),
+	  "Partitioner callback "
+	  "(set with rd_kafka_topic_conf_set_partitioner_cb())" },
+	{ _RK_TOPIC, "opaque", _RK_C_PTR,
+	  _RKT(opaque),
+	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
+
+
+	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.enable", _RK_C_BOOL,
+	  _RKT(auto_commit),
+	  "If true, periodically commit offset of the last message handed "
+	  "to the application. This commited offset will be used when the "
+	  "process restarts to pick up where it left off. "
+	  "If false, the application will have to call "
+	  "`rd_kafka_offset_store()` to store an offset (optional). "
+	  "**NOTE:** There is currently no zookeeper integration, offsets "
+	  "will be written to local file according to offset.store.path.",
+	  0, 1, 1 },
+	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
+	  _RKT(auto_commit_interval_ms),
+	  "The frequency in milliseconds that the consumer offsets "
+	  "are commited (written) to offset storage.",
+	  10, 86400*1000, 60*1000 },
+	{ _RK_TOPIC|_RK_CONSUMER, "auto.offset.reset", _RK_C_S2I,
+	  _RKT(auto_offset_reset),
+	  "Action to take when there is no initial offset in offset store "
+	  "or the desired offset is out of range: "
+	  "'smallest' - automatically reset the offset to the smallest offset, "
+	  "'largest' - automatically reset the offset to the largest offset, "
+	  "'error' - trigger an error which is retrieved by consuming messages "
+	  "and checking 'message->err'.",
+	  .vdef = RD_KAFKA_OFFSET_END,
+	  .s2i = {
+			{ RD_KAFKA_OFFSET_BEGINNING, "smallest" },
+			{ RD_KAFKA_OFFSET_END, "largest" },
+			{ RD_KAFKA_OFFSET_ERROR, "error" },
+		}
+	},
+	{ _RK_TOPIC|_RK_CONSUMER, "offset.store.path", _RK_C_STR,
+	  _RKT(offset_store_path),
+	  "Path to local file for storing offsets. If the path is a directory "
+	  "a filename will be automatically generated in that directory based "
+	  "on the topic and partition.",
+	  .sdef = "." },
+
+	{ _RK_TOPIC|_RK_CONSUMER, "offset.store.sync.interval.ms", _RK_C_INT,
+	  _RKT(offset_store_sync_interval_ms),
+	  "fsync() interval for the offset file, in milliseconds. "
+	  "Use -1 to disable syncing, and 0 for immediate sync after "
+	  "each write.",
+	  -1, 86400*1000, -1 },
 
 	{ /* End */ }
 };
@@ -239,22 +310,29 @@ static rd_kafka_conf_res_t
 rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			    const struct rd_kafka_property *prop,
 			    const char *istr, int ival) {
-#define _PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
+#define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
 	switch (prop->type)
 	{
 	case _RK_C_STR:
 	{
-		char **str = _PTR(char **, conf, prop->offset);
+		char **str = _RK_PTR(char **, conf, prop->offset);
 		if (*str)
 			free(*str);
-		*str = strdup(istr);
+		if (istr)
+			*str = strdup(istr);
+		else
+			*str = NULL;
 		return RD_KAFKA_CONF_OK;
 	}
+	case _RK_C_PTR:
+		*_RK_PTR(const void **, conf, prop->offset) = istr;
+		return RD_KAFKA_CONF_OK;
+	case _RK_C_BOOL:
 	case _RK_C_INT:
 	case _RK_C_S2I:
 	case _RK_C_S2F:
 	{
-		int *val = _PTR(int *, conf, prop->offset);
+		int *val = _RK_PTR(int *, conf, prop->offset);
 
 		if (prop->type == _RK_C_S2F) {
 			/* Flags: OR it in */
@@ -271,8 +349,6 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 		assert(!*"unknown conf type");
 	}
 
-#undef PTR
-
 	/* unreachable */
 	return RD_KAFKA_CONF_INVALID;
 }
@@ -282,6 +358,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			   const struct rd_kafka_property *prop,
 			   const char *value,
 			   char *errstr, size_t errstr_size) {
+	int ival;
 
 	switch (prop->type)
 	{
@@ -289,10 +366,39 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		rd_kafka_anyconf_set_prop0(scope, conf, prop, value, 0);
 		return RD_KAFKA_CONF_OK;
 
-	case _RK_C_INT:
-	{
-		int ival;
+	case _RK_C_PTR:
+		snprintf(errstr, errstr_size,
+			 "Property \"%s\" must be set through dedicated "
+			 ".._set_..() function", prop->name);
+		return RD_KAFKA_CONF_INVALID;
 
+	case _RK_C_BOOL:
+		if (!value) {
+			snprintf(errstr, errstr_size,
+				 "Bool configuration property \"%s\" cannot "
+				 "be set to empty value", prop->name);
+			return RD_KAFKA_CONF_INVALID;
+		}
+
+		if (!strcasecmp(value, "true") ||
+		    !strcasecmp(value, "t") ||
+		    !strcmp(value, "1"))
+			ival = 1;
+		else if (!strcasecmp(value, "false") ||
+			 !strcasecmp(value, "f") ||
+			 !strcmp(value, "0"))
+			ival = 0;
+		else {
+			snprintf(errstr, errstr_size,
+				 "Expected bool value for \"%s\": "
+				 "true or false", prop->name);
+			return RD_KAFKA_CONF_INVALID;
+		}
+
+		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival);
+		return RD_KAFKA_CONF_OK;
+
+	case _RK_C_INT:
 		if (!value) {
 			snprintf(errstr, errstr_size,
 				 "Integer configuration "
@@ -315,7 +421,6 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 
 		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival);
 		return RD_KAFKA_CONF_OK;
-	}
 
 	case _RK_C_S2I:
 	case _RK_C_S2F:
@@ -350,11 +455,11 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 
 
 			/* Left trim */
-			while (s < t && isspace(*s))
+			while (s < t && isspace((int)*s))
 				s++;
 
 			/* Right trim */
-			while (t > s && isspace(*t))
+			while (t > s && isspace((int)*t))
 				t--;
 
 			/* Empty string? */
@@ -488,13 +593,11 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
 
 static void rd_kafka_anyconf_clear (void *conf,
 				    const struct rd_kafka_property *prop) {
-
-#define _PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
 	switch (prop->type)
 	{
 	case _RK_C_STR:
 	{
-		char **str = _PTR(char **, conf, prop->offset);
+		char **str = _RK_PTR(char **, conf, prop->offset);
 		if (*str) {
 			free(*str);
 			*str = NULL;
@@ -505,11 +608,10 @@ static void rd_kafka_anyconf_clear (void *conf,
 	default:
 		break;
 	}
-#undef _PTR
 
 }
 
-static void rd_kafka_anyconf_destroy (int scope, void *conf) {
+void rd_kafka_anyconf_destroy (int scope, void *conf) {
 	const struct rd_kafka_property *prop;
 
 	for (prop = rd_kafka_properties; prop->name ; prop++) {
@@ -521,21 +623,68 @@ static void rd_kafka_anyconf_destroy (int scope, void *conf) {
 }
 
 
-/**
- * Destroys a conf object.
- * The 'conf' pointer itself is not freed.
- */
 void rd_kafka_conf_destroy (rd_kafka_conf_t *conf) {
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, conf);
+	free(conf);
 }
 
 	
-/**
- * Destroys a topic conf object.
- * The 'topic_conf' pointer itself is not freed.
- */
 void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf) {
 	rd_kafka_anyconf_destroy(_RK_TOPIC, topic_conf);
+	free(topic_conf);
+}
+
+
+
+static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
+	const struct rd_kafka_property *prop;
+
+	for (prop = rd_kafka_properties ; prop->name ; prop++) {
+		const char *val = NULL;
+		int ival = 0;
+
+		if (!(prop->scope & scope))
+			continue;
+
+		switch (prop->type)
+		{
+		case _RK_C_STR:
+		case _RK_C_PTR:
+			val = *_RK_PTR(const char **, src, prop->offset);
+			break;
+
+		case _RK_C_BOOL:
+		case _RK_C_INT:
+		case _RK_C_S2I:
+		case _RK_C_S2F:
+			ival = *_RK_PTR(const int *, src, prop->offset);
+			break;
+
+		default:
+			continue;
+		}
+
+		rd_kafka_anyconf_set_prop0(scope, dst, prop, val, ival);
+	}
+}
+
+
+rd_kafka_conf_t *rd_kafka_conf_dup (const rd_kafka_conf_t *conf) {
+	rd_kafka_conf_t *new = rd_kafka_conf_new();
+
+	rd_kafka_anyconf_copy(_RK_GLOBAL, new, conf);
+
+	return new;
+}
+
+
+rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
+						*conf) {
+	rd_kafka_topic_conf_t *new = rd_kafka_topic_conf_new();
+
+	rd_kafka_anyconf_copy(_RK_TOPIC, new, conf);
+
+	return new;
 }
 
 
@@ -589,10 +738,94 @@ void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *topic_conf,
 }
 
 
+static const char **rd_kafka_anyconf_dump (int scope, void *conf,
+					   size_t *cntp) {
+	const struct rd_kafka_property *prop;
+	char **arr;
+	int cnt = 0;
+
+	arr = calloc(sizeof(char *), RD_ARRAYSIZE(rd_kafka_properties)*2);
+
+	for (prop = rd_kafka_properties; prop->name ; prop++) {
+		char tmp[22];
+		const char *val = NULL;
+		int j;
+
+		if (!(prop->scope & scope))
+			continue;
+
+
+		switch (prop->type)
+		{
+		case _RK_C_STR:
+			val = *_RK_PTR(const char **, conf, prop->offset);
+			break;
+
+		case _RK_C_PTR:
+			val = *_RK_PTR(const void **, conf, prop->offset);
+			if (val) {
+				snprintf(tmp, sizeof(tmp), "%p", (void *)val);
+				val = tmp;
+			}
+			break;
+
+		case _RK_C_BOOL:
+			val = (*_RK_PTR(int *, conf, prop->offset) ?
+			       "true":"false");
+			break;
+		case _RK_C_INT:
+			snprintf(tmp, sizeof(tmp), "%i",
+				 *_RK_PTR(int *, conf, prop->offset));
+			val = tmp;
+			break;
+		case _RK_C_S2I:
+			for (j = 0 ; j < RD_ARRAYSIZE(prop->s2i); j++)
+				if (prop->s2i[j].val ==
+				    *_RK_PTR(int *, conf, prop->offset))
+					val = prop->s2i[j].str;
+			break;
+		case _RK_C_S2F:
+			/* FIXME: ignore for now, just used with "debug" */
+		default:
+			break;
+		}
+
+		if (val) {
+			arr[cnt++] = strdup(prop->name);
+			arr[cnt++] = strdup(val);
+		}
+	}
+
+	*cntp = cnt;
+
+	return (const char **)arr;
+}
+
+
+const char **rd_kafka_conf_dump (rd_kafka_conf_t *conf, size_t *cntp) {
+	return rd_kafka_anyconf_dump(_RK_GLOBAL, conf, cntp);
+}
+
+const char **rd_kafka_topic_conf_dump (rd_kafka_topic_conf_t *conf,
+				       size_t *cntp) {
+	return rd_kafka_anyconf_dump(_RK_TOPIC, conf, cntp);
+}
+
+void rd_kafka_conf_dump_free (const char **arr, size_t cnt) {
+	char **_arr = (char **)arr;
+	int i;
+
+	for (i = 0 ; i < cnt ; i++)
+		if (_arr[i])
+			free(_arr[i]);
+
+	free(_arr);
+}
 
 void rd_kafka_conf_properties_show (FILE *fp) {
 	const struct rd_kafka_property *prop;
 	int last = 0;
+	int j;
 	const char *dash80 = "----------------------------------------"
 		"----------------------------------------";
 
@@ -621,11 +854,21 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 		case _RK_C_STR:
 			fprintf(fp, "%13s", prop->sdef ? : "");
 			break;
+		case _RK_C_BOOL:
+			fprintf(fp, "%13s", prop->vdef ? "true" : "false");
+			break;
 		case _RK_C_INT:
 			fprintf(fp, "%13i", prop->vdef);
 			break;
 		case _RK_C_S2I:
-			fprintf(fp, "%13s", prop->s2i[prop->vdef].str);
+			for (j = 0 ; j < RD_ARRAYSIZE(prop->s2i); j++) {
+				if (prop->s2i[j].val == prop->vdef) {
+					fprintf(fp, "%13s", prop->s2i[j].str);
+					break;
+				}
+			}
+			if (j == RD_ARRAYSIZE(prop->s2i))
+				fprintf(fp, "%13s", " ");
 			break;
 		case _RK_C_S2F:
 		default:

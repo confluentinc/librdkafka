@@ -38,6 +38,7 @@
 
 #include <stdio.h>
 #include <inttypes.h>
+#include <sys/types.h>
 
 
 /**
@@ -51,7 +52,7 @@
  *
  * I.e.: 0x00080100 = 0.8.1
  */
-#define RD_KAFKA_VERSION  0x00080100
+#define RD_KAFKA_VERSION  0x00080300
 
 /**
  * Returns the librdkafka version as integer.
@@ -106,6 +107,19 @@ typedef enum {
 						  * topic+partition queue on
 						  * the broker.
 						  * Not really an error. */
+	RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION = -190, /* Permanent:
+						      * Partition does not
+						      * exist in cluster. */
+	RD_KAFKA_RESP_ERR__FS = -189,        /* File or filesystem error */
+	RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC = -188, /* Permanent:
+						  * Topic does not exist
+						  * in cluster. */
+	RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN = -187, /* All broker connections
+						     * are down. */
+	RD_KAFKA_RESP_ERR__INVALID_ARG = -186,  /* Invalid argument, or
+						 * invalid configuration */
+	RD_KAFKA_RESP_ERR__TIMED_OUT = -185,    /* Operation timed out */
+	RD_KAFKA_RESP_ERR__QUEUE_FULL = -184,   /* Queue is full */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -132,7 +146,18 @@ typedef enum {
 const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
 
 
-
+/**
+ * Converts `errno` to a `rd_kafka_resp_err_t` error code
+ * upon failure from the following functions:
+ *  - rd_kafka_topic_new()
+ *  - rd_kafka_consume_start()
+ *  - rd_kafka_consume_stop()
+ *  - rd_kafka_consume()
+ *  - rd_kafka_consume_batch()
+ *  - rd_kafka_consume_callback()
+ *  - rd_kafka_produce()
+ */
+rd_kafka_resp_err_t rd_kafka_errno2err (int errnox);
 
 
 
@@ -178,6 +203,16 @@ typedef enum {
  */
 rd_kafka_conf_t *rd_kafka_conf_new (void);
 
+/**
+ * Destroys a conf object.
+ */
+void rd_kafka_conf_destroy (rd_kafka_conf_t *conf);
+
+
+/**
+ * Creates a copy/duplicate of configuration object 'conf'.
+ */
+rd_kafka_conf_t *rd_kafka_conf_dup (const rd_kafka_conf_t *conf);
 
 
 /**
@@ -245,6 +280,32 @@ void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque);
 
 
 /**
+ * Dump the configuration properties and values of `conf` to an array
+ * with "key", "value" pairs. The number of entries in the array is
+ * returned in `*cntp`.
+ *
+ * The dump must be freed with `rd_kafka_conf_dump_free()`.
+ */
+const char **rd_kafka_conf_dump (rd_kafka_conf_t *conf, size_t *cntp);
+
+
+/**
+ * Dump the topic configuration properties and values of `conf` to an array
+ * with "key", "value" pairs. The number of entries in the array is
+ * returned in `*cntp`.
+ *
+ * The dump must be freed with `rd_kafka_conf_dump_free()`.
+ */
+const char **rd_kafka_topic_conf_dump (rd_kafka_topic_conf_t *conf,
+				       size_t *cntp);
+
+/**
+ * Frees a configuration dump returned from `rd_kafka_conf_dump()` or
+ * `rd_kafka_topic_conf_dump().
+ */
+void rd_kafka_conf_dump_free (const char **arr, size_t cnt);
+
+/**
  * Prints a table to 'fp' of all supported configuration properties,
  * their default values as well as a description.
  */
@@ -264,6 +325,20 @@ void rd_kafka_conf_properties_show (FILE *fp);
  * Same semantics as for rd_kafka_conf_new().
  */
 rd_kafka_topic_conf_t *rd_kafka_topic_conf_new (void);
+
+
+/**
+ * Creates a copy/duplicate of topic configuration object 'conf'.
+ */
+rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
+						*conf);
+
+
+/**
+ * Destroys a topic conf object.
+ */
+void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf);
+
 
 /**
  * Sets a single rd_kafka_topic_conf_t value by property name.
@@ -354,14 +429,13 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
  *
  * 'conf' is an optional struct created with `rd_kafka_conf_new()` that will
  * be used instead of the default configuration.
+ * The 'conf' object is freed by this function and shall not be destroyed
+ * by the application.
  * See `rd_kafka_conf_set()` et.al for more information.
  *
  * 'errstr' must be a pointer to memory of at least size 'errstr_size' where
  * `rd_kafka_new()` may write a human readable error message in case the
  * creation of a new handle fails. In which case the function returns NULL.
- *
- * NOTE: Make sure the SIGPIPE signal is either ignored or handled by the
- *       calling application.
  *
  * Returns the Kafka handle on success or NULL on error.
  *
@@ -392,6 +466,8 @@ const char *rd_kafka_name (const rd_kafka_t *rk);
  * 'conf' is an optional configuration for the topic created with
  * `rd_kafka_topic_conf_new()` that will be used instead of the default
  * topic configuration.
+ * The 'conf' object is freed by this function and shall not be destroyed
+ * by the application.
  * See `rd_kafka_topic_conf_set()` et.al for more information.
  *
  * Returns the new topic handle or NULL on error (see `errno`).
@@ -477,7 +553,7 @@ rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
 		return NULL;
 
 	if (rkmessage->payload)
-		return rkmessage->payload;
+		return (const char *)rkmessage->payload;
 
 	return rd_kafka_err2str(rkmessage->err);
 }
@@ -496,6 +572,8 @@ rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
 				       * kafka partition queue: oldest msg */
 #define RD_KAFKA_OFFSET_END       -1  /* Start consuming from end of kafka
 				       * partition queue: next msg */
+#define RD_KAFKA_OFFSET_STORED -1000  /* Start consuming from offset retrieved
+				       * from offset store */
 
 
 /**
@@ -512,13 +590,14 @@ rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
  * to consume messages from the local queue, each kafka message being
  * represented as a `rd_kafka_message_t *` object.
  *
- * `rd_kafka_consume_start()` must not be called multiple times without
- * stopping consumption first with `rd_kafka_consume_stop()`.
+ * `rd_kafka_consume_start()` must not be called multiple times for the same
+ * topic and partition without stopping consumption first with
+ * `rd_kafka_consume_stop()`.
  *
  * Returns 0 on success or -1 on error (see `errno`).
  */
 int rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
-			     int64_t offset);
+			    int64_t offset);
 
 /**
  * Stop consuming messages for topic 'rkt' and 'partition', purging
@@ -532,7 +611,6 @@ int rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
 int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition);
 
 
-
 /**
  * Consume a single message from topic 'rkt' and 'partition'.
  *
@@ -540,6 +618,8 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition);
  * Consumer must have been previously started with `rd_kafka_consume_start()`.
  *
  * Returns a message object on success and NULL on error.
+ * The message object must be destroyed with `rd_kafka_message_destroy()`
+ * when the application is done with it.
  *
  * Errors (when returning NULL):
  *   ETIMEDOUT - 'timeout_ms' was reached with no new messages fetched.
@@ -569,7 +649,7 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *rkt, int32_t partition,
  * or -1 on error (same error codes as for `rd_kafka_consume()`.
  */
 ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
-				int min_wait_ms,
+				int timeout_ms,
 				rd_kafka_message_t **rkmessages,
 				size_t rkmessages_size);
 
@@ -603,6 +683,29 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 
 
 
+
+
+
+/**
+ * Topic+partition offset store.
+ *
+ * If auto.commit.enable is true the offset is stored automatically prior to
+ * returning of the message(s) in each of the rd_kafka_consume*() functions
+ * above.
+ */
+
+
+/**
+ * Store offset 'offset' for topic 'rkt' partition 'partition'.
+ * The offset will be commited (written) to the offset store according
+ * to `auto.commit.interval.ms`.
+ *
+ * NOTE: `auto.commit.enable` must be set to "false" when using this API.
+ *
+ * Returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
+ */
+rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
+					   int32_t partition, int64_t offset);
 
 
 
@@ -649,9 +752,16 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
  * Returns 0 on success or -1 on error in which case errno is set accordingly:
  *   ENOBUFS  - maximum number of outstanding messages has been reached:
  *              "queue.buffering.max.message"
+ *              (RD_KAFKA_RESP_ERR__QUEUE_FULL)
  *   EMSGSIZE - message is larger than configured max size:
  *              "messages.max.bytes".
+ *              (RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE)
+ *   ESRCH    - requested 'partition' is unknown in the Kafka cluster.
+ *              (RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
+ *   ENOENT   - topic is unknown in the Kafka cluster.
+ *              (RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
  *
+ * NOTE: Use `rd_kafka_errno2err()` to convert `errno` to rdkafka error code.
  */
 
 #define RD_KAFKA_MSG_F_FREE  0x1  /* Delegate freeing of payload to rdkafka. */
@@ -659,7 +769,7 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 
 int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
 		      int msgflags,
-		      char *payload, size_t len,
+		      void *payload, size_t len,
 		      const void *key, size_t keylen,
 		      void *msg_opaque);
 
@@ -717,7 +827,7 @@ int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist);
 
 /**
  * Set logger function.
- * The default is to print to stderr, but a syslog is also available,
+ * The default is to print to stderr, but a syslog logger is also available,
  * see rd_kafka_log_(print|syslog) for the builtin alternatives.
  * Alternatively the application may provide its own logger callback.
  * Or pass 'func' as NULL to disable logging.

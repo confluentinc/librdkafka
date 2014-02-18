@@ -27,12 +27,14 @@
  */
 
 /**
- * Tests "message.timeout.ms"
- * Issue #21
+ * Tests that producing to unknown topic fails.
+ * Issue #39
+ *
+ * NOTE! This test requires auto.create.topics.enable=false to be
+ *       configured on the broker!
  */
 
 #define _GNU_SOURCE
-#include <signal.h>
 #include <sys/time.h>
 #include <time.h>
 
@@ -64,15 +66,15 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 
 	msgs_wait &= ~(1 << msgid);
 
-	if (err != RD_KAFKA_RESP_ERR__MSG_TIMED_OUT)
+	if (err != RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
 		TEST_FAIL("Message #%i failed with unexpected error %s\n",
 			  msgid, rd_kafka_err2str(err));
 }
 
 
 int main (int argc, char **argv) {
-	char *topic = "rdkafkatest1";
-	int partition = 99; /* non-existent */
+	char topic[64];
+	int partition = 0;
 	int r;
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
@@ -81,21 +83,17 @@ int main (int argc, char **argv) {
 	char errstr[512];
 	char msg[128];
 	int msgcnt = 10;
-	time_t t_start, t_spent;
 	int i;
 
-	/* Socket hangups are gracefully handled in librdkafka on socket error
-	 * without the use of signals, so SIGPIPE should be ignored by the
-	 * calling program. */
-	signal(SIGPIPE, SIG_IGN);
-
-
+	/* Generate unique topic name */
 	test_conf_init(&conf, &topic_conf, 10);
 
-	/* Set message.timeout.ms configuration for topic */
-	if (rd_kafka_topic_conf_set(topic_conf, "message.timeout.ms", "2000",
-				    errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
-		TEST_FAIL("%s\n", errstr);
+	snprintf(topic, sizeof(topic), "rdkafkatest1_unk_%x%x",
+		 rand(), rand());
+
+	TEST_SAY("\033[33mNOTE! This test requires "
+		 "auto.create.topics.enable=false to be configured on "
+		 "the broker!\033[0m\n");
 
 	/* Set delivery report callback */
 	rd_kafka_conf_set_dr_cb(conf, dr_cb);
@@ -117,33 +115,41 @@ int main (int argc, char **argv) {
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
 		*msgidp = i;
-		msgs_wait |= (1 << i);
 		snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
 		r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
 				     msg, strlen(msg), NULL, 0, msgidp);
-		if (r == -1)
-			TEST_FAIL("Failed to produce message #%i: %s\n",
-				  i, strerror(errno));
-	}
+		if (r == -1) {
+			if (errno == ENOENT)
+				TEST_SAY("Failed to produce message #%i: "
+					 "unknown topic: good!\n", i);
+			else
+				TEST_FAIL("Failed to produce message #%i: %s\n",
+					  i, strerror(errno));
+		} else {
+			if (i > 5)
+				TEST_FAIL("Message #%i produced: "
+					  "should've failed\n", i);
+			msgs_wait |= (1 << i);
+		}
 
-	t_start = time(NULL);
+		/* After half the messages: sleep to allow the metadata
+		 * to be fetched from broker and update the actual partition
+		 * count: this will make subsequent produce() calls fail
+		 * immediately. */
+		if (i == 5)
+			sleep(2);
+	}
 
 	/* Wait for messages to time out */
 	while (rd_kafka_outq_len(rk) > 0)
 		rd_kafka_poll(rk, 50);
 
-	t_spent = time(NULL) - t_start;
-
 	if (msgs_wait != 0)
 		TEST_FAIL("Still waiting for messages: 0x%x\n", msgs_wait);
 
-	if (t_spent > 5 /* 2000ms+cruft*/)
-		TEST_FAIL("Messages timed out too slowly (%i seconds > 5)\n",
-			  (int)t_spent);
-
 	/* Destroy topic */
 	rd_kafka_topic_destroy(rkt);
-		
+
 	/* Destroy rdkafka instance */
 	TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
 	rd_kafka_destroy(rk);

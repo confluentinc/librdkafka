@@ -1,23 +1,3 @@
-#ifdef __FreeBSD__
-#  include <sys/endian.h>
-#elif defined(__APPLE_CC_) || defined(__MACH__)  /* MacOS/X support */
-#  include <machine/endian.h>
-
-#if    __DARWIN_BYTE_ORDER == __DARWIN_LITTLE_ENDIAN
-#  define	htole16(x) (x)
-#  define	le32toh(x) (x)
-#elif  __DARWIN_BYTE_ORDER == __DARWIN_BIG_ENDIAN
-#  define	htole16(x) __DARWIN_OSSwapInt16(x)
-#  define	le32toh(x) __DARWIN_OSSwapInt32(x)
-#else
-#  error "Endianness is undefined"
-#endif
-
-
-#else
-#  include <endian.h>
-#endif
-
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
@@ -25,6 +5,8 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <sys/uio.h>
+
+#include "endian_compat.h"
 
 #if defined(__arm__) && \
 	!defined(__ARM_ARCH_4__) &&		\
@@ -40,6 +22,16 @@
 	!defined(__ARM_ARCH_6ZK__) &&		\
 	!defined(__ARM_ARCH_6T2__)
 #define  UNALIGNED64_REALLYS_SLOW 1
+#endif
+
+#ifndef htole16
+# if __BYTE_ORDER == __LITTLE_ENDIAN
+#  define htole16(x) (x)
+#  define le32toh(x) (x)
+# else
+#  define htole16(x) __bswap_16 (x)
+#  define le32toh(x) __bswap_32 (x)
+#endif
 #endif
 
 typedef unsigned char u8;

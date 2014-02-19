@@ -98,7 +98,7 @@ rd_kafka_msg_t *rd_kafka_msgq_deq (rd_kafka_msgq_t *rkmq,
 				   int do_count) {
 	if (likely(do_count)) {
 		assert(rkmq->rkmq_msg_cnt > 0);
-		assert(rkmq->rkmq_msg_bytes - rkm->rkm_len >= 0);
+		assert(rkmq->rkmq_msg_bytes >= rkm->rkm_len);
 		(void)rd_atomic_sub(&rkmq->rkmq_msg_cnt, 1);
 		(void)rd_atomic_sub(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
 	}

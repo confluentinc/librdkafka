@@ -986,6 +986,8 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 				buf, of,
 				RD_KAFKA_OP_F_FREE|RD_KAFKA_OP_F_FLASH,
 				rd_kafka_broker_metadata_reply, only_rkt);
+
+	free(buf);
 }
 
 

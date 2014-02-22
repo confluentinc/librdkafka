@@ -52,6 +52,7 @@ static int do_seq = 0;
 static int exit_after = 0;
 static int exit_eof = 0;
 static int quiet = 0;
+static FILE *stats_fp;
 
 static void stop (int sig) {
 	run = 0;
@@ -178,7 +179,8 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 
 static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
 		     void *opaque) {
-	printf("%s\n", json);
+        if (stats_fp)
+                fprintf(stats_fp, "%s\n", json);
 	return 0;
 }
 
@@ -238,6 +240,7 @@ int main (int argc, char **argv) {
 	int64_t start_offset = 0;
 	int batch_size = 0;
 	int idle = 0;
+        const char *stats_cmd = NULL;
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -269,7 +272,8 @@ int main (int argc, char **argv) {
 
 	while ((opt =
 		getopt(argc, argv,
-		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:R:a:z:o:X:B:eT:qI")) != -1) {
+		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:"
+                       "R:a:z:o:X:B:eT:G:qI")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -404,6 +408,9 @@ int main (int argc, char **argv) {
 			}
 			rd_kafka_conf_set_stats_cb(conf, stats_cb);
 			break;
+                case 'G':
+                        stats_cmd = optarg;
+                        break;
 
 		case 'q':
 			quiet = 1;
@@ -456,6 +463,7 @@ int main (int argc, char **argv) {
 			"               of supported properties.\n"
 			"  -T <intvl>   Enable statistics from librdkafka at "
 			"specified interval (ms)\n"
+                        "  -G <command> Pipe statistics to <command>\n"
 			"  -q           Be more quiet\n"
 			"  -I           Idle: dont produce any messages\n"
 			"\n"
@@ -490,6 +498,14 @@ int main (int argc, char **argv) {
 		exit(1);
 	}
 
+        if (stats_cmd) {
+                if (!(stats_fp = popen(stats_cmd, "we"))) {
+                        fprintf(stderr, "%% Failed to start stats command: "
+                                "%s: %s", stats_cmd, strerror(errno));
+                        exit(1);
+                }
+        } else
+                stats_fp = stdout;
 
 	if (msgcnt != -1)
 		forever = 0;
@@ -778,6 +794,11 @@ int main (int argc, char **argv) {
 	if (cnt.t_latency && cnt.msgs)
 		printf("%% Average application fetch latency: %"PRIu64"us\n",
 		       cnt.t_latency / cnt.msgs);
+
+        if (stats_cmd) {
+                pclose(stats_fp);
+                stats_fp = NULL;
+        }
 
 	/* Let background threads clean up and terminate cleanly. */
 	rd_kafka_wait_destroyed(2000);

@@ -156,9 +156,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	/* Global consumer properties */
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
 	  _RK(queued_min_msgs),
-	  "Minimum number of messages that should to be available "
-	  "for consumption by application.",
+	  "Minimum number of messages per topic+partition in the "
+          "local consumer queue.",
 	  1, 10000000, 100000 },
+	{ _RK_GLOBAL|_RK_CONSUMER, "queued.max.messages.kbytes", _RK_C_INT,
+	  _RK(queued_max_msg_kbytes),
+          "Maximum number of kilobytes per topic+partition in the "
+          "local consumer queue. "
+          "This value may be overshot by fetch.message.max.bytes.",
+          1, 1000000000, 1000000 /* 1 Gig */ },
 	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.wait.max.ms", _RK_C_INT,
 	  _RK(fetch_wait_max_ms),
 	  "Maximum time the broker may wait to fill the response "

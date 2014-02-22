@@ -215,8 +215,9 @@ void rd_kafka_q_destroy (rd_kafka_q_t *rkq) {
  */
 void rd_kafka_q_init (rd_kafka_q_t *rkq) {
 	TAILQ_INIT(&rkq->rkq_q);
-	rkq->rkq_qlen = 0;
-	
+	rkq->rkq_qlen  = 0;
+        rkq->rkq_qsize = 0;
+
 	pthread_mutex_init(&rkq->rkq_lock, NULL);
 	pthread_cond_init(&rkq->rkq_cond, NULL);
 }
@@ -237,6 +238,7 @@ void rd_kafka_q_purge (rd_kafka_q_t *rkq) {
 
 	TAILQ_INIT(&rkq->rkq_q);
 	(void)rd_atomic_set(&rkq->rkq_qlen, 0);
+	(void)rd_atomic_set(&rkq->rkq_qsize, 0);
 
 	pthread_mutex_unlock(&rkq->rkq_lock);
 }
@@ -249,7 +251,7 @@ void rd_kafka_q_purge (rd_kafka_q_t *rkq) {
 size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 			    size_t cnt) {
 	rd_kafka_op_t *rko;
-	size_t mcnt = 0;
+        size_t mcnt = 0;
 
 	pthread_mutex_lock(&srcq->rkq_lock);
 	pthread_mutex_lock(&dstq->rkq_lock);
@@ -257,17 +259,21 @@ size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 	/* Optimization, if 'cnt' is equal/larger than all items of 'srcq'
 	 * we can move the entire queue. */
 	if (cnt >= srcq->rkq_qlen) {
-		mcnt = srcq->rkq_qlen;
 		TAILQ_CONCAT(&dstq->rkq_q, &srcq->rkq_q, rko_link);
 		TAILQ_INIT(&srcq->rkq_q);
+                mcnt = srcq->rkq_qlen;
+		(void)rd_atomic_add(&dstq->rkq_qlen, srcq->rkq_qlen);
+		(void)rd_atomic_add(&dstq->rkq_qsize, srcq->rkq_qsize);
 		(void)rd_atomic_set(&srcq->rkq_qlen, 0);
-		(void)rd_atomic_add(&dstq->rkq_qlen, mcnt);
+		(void)rd_atomic_set(&srcq->rkq_qsize, 0);
 	} else {
 		while (mcnt < cnt && (rko = TAILQ_FIRST(&srcq->rkq_q))) {
 			TAILQ_REMOVE(&srcq->rkq_q, rko, rko_link);
 			TAILQ_INSERT_TAIL(&dstq->rkq_q, rko, rko_link);
-			(void)rd_atomic_sub(&dstq->rkq_qlen, 1);
+			(void)rd_atomic_sub(&srcq->rkq_qlen, 1);
 			(void)rd_atomic_add(&dstq->rkq_qlen, 1);
+			(void)rd_atomic_sub(&srcq->rkq_qsize, rko->rko_len);
+			(void)rd_atomic_add(&dstq->rkq_qsize, rko->rko_len);
 			mcnt++;
 		}
 	}
@@ -308,6 +314,7 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms) {
 	if (rko) {
 		TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
 		(void)rd_atomic_sub(&rkq->rkq_qlen, 1);
+		(void)rd_atomic_sub(&rkq->rkq_qsize, rko->rko_len);
 	}
 
 	pthread_mutex_unlock(&rkq->rkq_lock);
@@ -363,10 +370,12 @@ int rd_kafka_q_serve (rd_kafka_t *rk,
 	/* Move all ops to local queue */
 	TAILQ_CONCAT(&localq.rkq_q, &rkq->rkq_q, rko_link);
 	localq.rkq_qlen = rkq->rkq_qlen;
+        localq.rkq_qsize = rkq->rkq_qsize;
 
 	/* Reset real queue */
 	TAILQ_INIT(&rkq->rkq_q);
 	(void)rd_atomic_set(&rkq->rkq_qlen, 0);
+	(void)rd_atomic_set(&rkq->rkq_qsize, 0);
 	pthread_mutex_unlock(&rkq->rkq_lock);
 
 	rd_kafka_dbg(rk, QUEUE, "QSERVE", "Serving %i ops", localq.rkq_qlen);
@@ -643,6 +652,7 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   "\"xmit_msgq_cnt\":%i, "
 		   "\"xmit_msgq_bytes\":%"PRIu64", "
 		   "\"fetchq_cnt\":%i, "
+		   "\"fetchq_size\":%"PRIu64", "
 		   "\"fetch_state\":\"%s\", "
 		   "\"query_offset\":%"PRId64", "
 		   "\"next_offset\":%"PRId64", "
@@ -663,6 +673,7 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rktp->rktp_xmit_msgq.rkmq_msg_cnt,
 		   rktp->rktp_xmit_msgq.rkmq_msg_bytes,
 		   rktp->rktp_fetchq.rkq_qlen,
+		   rktp->rktp_fetchq.rkq_qsize,
 		   rd_kafka_fetch_states[rktp->rktp_fetch_state],
 		   rktp->rktp_query_offset,
 		   rktp->rktp_next_offset,
@@ -903,6 +914,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	/* Construct clientid kafka string */
 	rk->rk_clientid = rd_kafkap_str_new(rk->rk_conf.clientid);
 
+        /* Config fixups */
+        rk->rk_conf.queued_max_msg_bytes =
+                (int64_t)rk->rk_conf.queued_max_msg_kbytes * 1000ll;
+
 	if (rk->rk_type == RD_KAFKA_CONSUMER) {
 		/* Pre-build RequestHeader */
 		rk->rk_conf.FetchRequest.ReplicaId = htonl(-1);
@@ -1140,6 +1155,7 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
 
 		TAILQ_REMOVE(&rktp->rktp_fetchq.rkq_q, rko, rko_link);
 		(void)rd_atomic_sub(&rktp->rktp_fetchq.rkq_qlen, 1);
+		(void)rd_atomic_sub(&rktp->rktp_fetchq.rkq_qsize, rko->rko_len);
 
 		pthread_mutex_unlock(&rktp->rktp_fetchq.rkq_lock);
 

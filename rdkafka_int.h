@@ -137,6 +137,8 @@ struct rd_kafka_conf_s {
 	 * Consumer configuration
 	 */
 	int    queued_min_msgs;
+        int    queued_max_msg_kbytes;
+        int64_t queued_max_msg_bytes;
 	int    fetch_wait_max_ms;
         int    fetch_msg_max_bytes;
 	int    fetch_min_bytes;
@@ -373,6 +375,7 @@ typedef struct rd_kafka_q_s {
 	pthread_cond_t  rkq_cond;
 	TAILQ_HEAD(, rd_kafka_op_s) rkq_q;
 	int             rkq_qlen;
+        uint64_t        rkq_qsize;
 } rd_kafka_q_t;
 
 
@@ -701,6 +704,7 @@ void rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 	pthread_mutex_lock(&rkq->rkq_lock);
 	TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
 	(void)rd_atomic_add(&rkq->rkq_qlen, 1);
+        (void)rd_atomic_add(&rkq->rkq_qsize, rko->rko_len);
 	pthread_cond_signal(&rkq->rkq_cond);
 	pthread_mutex_unlock(&rkq->rkq_lock);
 }
@@ -716,11 +720,15 @@ void rd_kafka_q_concat (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq) {
 	pthread_mutex_lock(&rkq->rkq_lock);
 	TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
 	(void)rd_atomic_add(&rkq->rkq_qlen, srcq->rkq_qlen);
+        (void)rd_atomic_add(&rkq->rkq_qsize, srcq->rkq_qsize);
 	pthread_cond_signal(&rkq->rkq_cond);
 	pthread_mutex_unlock(&rkq->rkq_lock);
 }
 
-#define rd_kafka_q_len(rkq) ((rkq)->rkq_qlen)
+/* Returns the number of elements in the queue */
+#define rd_kafka_q_len(rkq)  ((rkq)->rkq_qlen)
+/* Returns the total size of elements in the queue */
+#define rd_kafka_q_size(rkq) ((rkq)->rkq_qsize)
 
 rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms);
 

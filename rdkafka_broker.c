@@ -3129,14 +3129,37 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 		/* Skip toppars who's local message queue is already above
 		 * the lower threshold. */
 		if (rd_kafka_q_len(&rktp->rktp_fetchq) >=
-		    rkb->rkb_rk->rk_conf.queued_min_msgs)
+		    rkb->rkb_rk->rk_conf.queued_min_msgs) {
+			rd_rkb_dbg(rkb, TOPIC, "FETCH",
+				   "Skipping topic %s [%"PRId32"]: "
+                                   "threshold queued.min.messages=%i "
+                                   "exceeded: %i messages in queue",
+				   rktp->rktp_rkt->rkt_topic->str,
+				   rktp->rktp_partition,
+                                   rkb->rkb_rk->rk_conf.queued_min_msgs,
+                                   rd_kafka_q_len(&rktp->rktp_fetchq));
 			continue;
+                }
+
+                if (rd_kafka_q_size(&rktp->rktp_fetchq) >=
+                    rkb->rkb_rk->rk_conf.queued_max_msg_bytes) {
+			rd_rkb_dbg(rkb, TOPIC, "FETCH",
+				   "Skipping topic %s [%"PRId32"]: "
+                                   "threshold queued.max.messages.kbytes=%i "
+                                   "exceeded: %"PRId64" bytes in queue",
+				   rktp->rktp_rkt->rkt_topic->str,
+				   rktp->rktp_partition,
+                                   rkb->rkb_rk->rk_conf.queued_max_msg_kbytes,
+                                   rd_kafka_q_size(&rktp->rktp_fetchq));
+			continue;
+                }
+
 
 		/* Push topic name onto buffer stack. */
 		rd_kafka_buf_push(rkbuf, rktp->rktp_rkt->rkt_topic,
 				  RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->
 						     rkt_topic));
-		
+
 		/* Set up toppar header and push it */
 		tp = (void *)next;
 		tp->PartitionArrayCnt = htonl(1);

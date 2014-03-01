@@ -137,6 +137,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(broker_addr_ttl),
 	  "How long to cache the broker address resolving results.",
 	  0, 86400*1000, 300*1000 },
+        { _RK_GLOBAL, "broker.address.family", _RK_C_S2I,
+          _RK(broker_addr_family),
+          "Allowed broker IP address families: any, v4, v6",
+          .vdef = AF_UNSPEC,
+          .s2i = {
+                        { AF_UNSPEC, "any" },
+                        { AF_INET, "v4" },
+                        { AF_INET6, "v6" },
+                } },
 	{ _RK_GLOBAL, "statistics.interval.ms", _RK_C_INT,
 	  _RK(stats_interval_ms),
 	  "librdkafka statistics emit interval. The application also needs to "

@@ -126,6 +126,7 @@ struct rd_kafka_conf_s {
 	int     metadata_refresh_fast_interval_ms;
 	int     debug;
 	int     broker_addr_ttl;
+        int     broker_addr_family;
 	int     socket_timeout_ms;
 	int     socket_sndbuf_size;
 	int     socket_rcvbuf_size;

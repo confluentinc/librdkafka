@@ -429,8 +429,8 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
  *
  * 'conf' is an optional struct created with `rd_kafka_conf_new()` that will
  * be used instead of the default configuration.
- * The 'conf' object is freed by this function and shall not be destroyed
- * by the application.
+ * The 'conf' object is freed by this function and must not be used or
+ * destroyed by the application sub-sequently.
  * See `rd_kafka_conf_set()` et.al for more information.
  *
  * 'errstr' must be a pointer to memory of at least size 'errstr_size' where
@@ -466,8 +466,8 @@ const char *rd_kafka_name (const rd_kafka_t *rk);
  * 'conf' is an optional configuration for the topic created with
  * `rd_kafka_topic_conf_new()` that will be used instead of the default
  * topic configuration.
- * The 'conf' object is freed by this function and shall not be destroyed
- * by the application.
+ * The 'conf' object is freed by this function and must not be used or
+ * destroyed by the application sub-sequently.
  * See `rd_kafka_topic_conf_set()` et.al for more information.
  *
  * Returns the new topic handle or NULL on error (see `errno`).

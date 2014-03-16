@@ -4,5 +4,4 @@ compiler:
   - clang
 
 script:
-  ./configure
-  make all examples check
+  ./configure && make all examples check

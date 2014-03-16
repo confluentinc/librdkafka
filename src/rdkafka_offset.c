@@ -72,7 +72,11 @@ static void rd_kafka_offset_file_close (rd_kafka_toppar_t *rktp) {
  */
 int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
                             void *opaque) {
+#ifdef O_CLOEXEC
         return open(pathname, flags|O_CLOEXEC, mode);
+#else
+        return rd_kafka_open_cb_generic(pathname, flags, mode, opaque);
+#endif
 }
 
 /**

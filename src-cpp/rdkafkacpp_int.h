@@ -35,7 +35,7 @@
 #include "rdkafkacpp.h"
 
 extern "C" {
-#include "../rdkafka.h"
+#include "../src/rdkafka.h"
 };
 
 namespace RdKafka {

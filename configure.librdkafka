@@ -1,0 +1,33 @@
+#!/bin/bash
+#
+
+mkl_require lib
+mkl_require pic
+mkl_require atomics must pass
+mkl_require good_cflags
+
+# Generate version variables from rdkafka.h hex version define
+# so we can use it as string version when generating a pkg-config file.
+verdef=$(grep -E '^#define +RD_KAFKA_VERSION +0x' src/rdkafka.h | sed -r 's/^#define +RD_KAFKA_VERSION +(0x[a-f0-9]+)\.*$/\1/')
+mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
+
+mkl_require gen-pkg-config "rdkafka" "The Apache Kafka C/C++ library" \
+    "Full Apache Kafka 0.8 protocol support, including producer and consumer" \
+    "\$RDKAFKA_VERSION_STR"
+
+function checks {
+
+    # required libs
+    mkl_lib_check "libpthread" "" fail CC "-lpthread"
+    mkl_lib_check "zlib" "" fail CC "-lz"
+
+    # -lrt is needed on linux for clock_gettime: link it if it exists.
+    mkl_lib_check "librt" "" cont CC "-lrt"
+
+    # SG turns on scatter-gather support in snappy.c, which we need.
+    mkl_mkvar_append CFLAGS CFLAGS "-DSG"
+
+    # Older g++ (<=4.1?) gives invalid warnings for the C++ code.
+    mkl_mkvar_append CXXFLAGS CXXFLAGS "-Wno-non-virtual-dtor"
+}
+

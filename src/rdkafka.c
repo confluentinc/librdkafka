@@ -235,7 +235,7 @@ void rd_kafka_q_purge (rd_kafka_q_t *rkq) {
 	}
 
 	TAILQ_INIT(&rkq->rkq_q);
-	(void)rd_atomic_set(&rkq->rkq_qlen, 0);
+        rkq->rkq_qlen = 0;
 
 	pthread_mutex_unlock(&rkq->rkq_lock);
 }
@@ -259,7 +259,7 @@ size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 		mcnt = srcq->rkq_qlen;
 		TAILQ_CONCAT(&dstq->rkq_q, &srcq->rkq_q, rko_link);
 		TAILQ_INIT(&srcq->rkq_q);
-		(void)rd_atomic_set(&srcq->rkq_qlen, 0);
+                srcq->rkq_qlen = 0;
 		(void)rd_atomic_add(&dstq->rkq_qlen, mcnt);
 	} else {
 		while (mcnt < cnt && (rko = TAILQ_FIRST(&srcq->rkq_q))) {
@@ -365,7 +365,7 @@ int rd_kafka_q_serve (rd_kafka_t *rk,
 
 	/* Reset real queue */
 	TAILQ_INIT(&rkq->rkq_q);
-	(void)rd_atomic_set(&rkq->rkq_qlen, 0);
+        rkq->rkq_qlen = 0;
 	pthread_mutex_unlock(&rkq->rkq_lock);
 
 	rd_kafka_dbg(rk, QUEUE, "QSERVE", "Serving %i ops", localq.rkq_qlen);
@@ -580,7 +580,7 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
 
 	free(rk);
 
-        rd_atomic_sub(&rd_kafka_handle_cnt_curr, 1);
+        (void)rd_atomic_sub(&rd_kafka_handle_cnt_curr, 1);
 }
 
 
@@ -940,7 +940,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	if (rk->rk_conf.brokerlist)
 		rd_kafka_brokers_add(rk, rk->rk_conf.brokerlist);
 
-        rd_atomic_add(&rd_kafka_handle_cnt_curr, 1);
+        (void)rd_atomic_add(&rd_kafka_handle_cnt_curr, 1);
 
 	return rk;
 }

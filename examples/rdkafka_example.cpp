@@ -46,7 +46,7 @@
  * Typically include path in a real application would be
  * #include <librdkafka/rdkafkacpp.h>
  */
-#include "../RdKafka/rdkafkacpp.h"
+#include "rdkafkacpp.h"
 
 
 

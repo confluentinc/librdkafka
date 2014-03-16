@@ -1,6 +1,8 @@
 #!/bin/bash
 #
-
+#
+# mklove base configure module, implements the mklove configure framework
+#
 
 MKL_MODULES="base"
 MKL_CACHEVARS=""
@@ -745,7 +747,7 @@ function mkl_meta_get {
 # variables itself (which is not recommended, but desired sometimes).
 #
 # Arguments:
-#  [ --verb "verb.." ]  (replace "checking for ")
+#  [ --verb "verb.." ]  (replace "checking for")
 #  config name
 #  define name
 #  action  (fail,cont,disable or no-cache)
@@ -855,7 +857,10 @@ source: $6"
         local ret=0
     fi
 
-    rm -f $srcfile*
+    # OSX XCode toolchain creates dSYM directories when -g set set,
+    # delete them specifically.
+    rm -rf "$srcfile" "$srcfile*dSYM"
+
     return $ret
 }
 
@@ -967,7 +972,8 @@ function mkl_command_check {
     out=$($4 2>&1)
     if [[ $? != 0 ]]; then
         mkl_dbg "$1: $2: $4 failed: $out"
-        mkl_check_failed "$1" "$2" "$3" "command '$4' failed"
+        mkl_check_failed "$1" "$2" "$3" "command '$4' failed:
+$out"
         return 1
     fi
 
@@ -975,6 +981,31 @@ function mkl_command_check {
 
     return 0
 }
+
+
+# Check that a program is executable, but will not execute it.
+# Arguments:
+#  config name
+#  define name (optional, can be empty)
+#  action
+#  program name  (e.g, objdump)
+function mkl_prog_check {
+    mkl_check_begin --verb "checking executable" "$1" "$2" "$3" "$1" && return $?
+
+    local out=
+    out=$(command -v "$4" 2>&1)
+    if [[ $? != 0 ]]; then
+        mkl_dbg "$1: $2: $4 is not executable: $out"
+        mkl_check_failed "$1" "$2" "$3" "$4 is not executable"
+        return 1
+    fi
+
+    mkl_check_done "$1" "$2" "$3" "ok"
+
+    return 0
+}
+
+
 
 
 # Checks that the check for the given config name passed.

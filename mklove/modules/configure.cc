@@ -48,7 +48,7 @@ function checks {
 
         [[ -z ${!tenv} ]] && mkl_env_set "$tenv" "$t"
 
-        if mkl_command_check "$t" "" fail "${!tenv} --version" ; then
+        if mkl_prog_check "$t" "" fail "${!tenv}" ; then
             export "$tenv"="${!tenv}"
             mkl_mkvar_set $tenv $tenv "${!tenv}"
         fi

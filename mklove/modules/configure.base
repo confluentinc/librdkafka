@@ -436,7 +436,15 @@ function mkl_generate {
     mkl_write_mk "# Config variables"
     local n=
     for n in $MKL_MKVARS ; do
-        mkl_write_mk "$n=\t${!n}"
+	# Some special variables should be prefixable by the caller, so
+	# define them in the makefile as appends.
+	local op="="
+	case $n in
+	    CFLAGS|CPPFLAGS|CXXFLAGS|LDFLAGS|LIBS)
+		op="+="
+		;;
+	esac
+        mkl_write_mk "$n$op\t${!n}"
     done
     mkl_write_mk "# End of config variables"
 
@@ -859,7 +867,7 @@ source: $6"
 
     # OSX XCode toolchain creates dSYM directories when -g set set,
     # delete them specifically.
-    rm -rf "$srcfile" "$srcfile*dSYM"
+    rm -rf "$srcfile" "${srcfile}.o" "$srcfile*dSYM"
 
     return $ret
 }
@@ -1281,7 +1289,7 @@ function mkl_usage {
     done
 
     echo "Honoured environment variables:
-  CC, CPP, CXX, CFLAGS, CPPFLAGS, CXXFLAGS, LDFLAGS,
+  CC, CPP, CXX, CFLAGS, CPPFLAGS, CXXFLAGS, LDFLAGS, LIBS,
   LD, NM, OBJDUMP, STRIP, PKG_CONFIG, PKG_CONFIG_PATH
 
 "

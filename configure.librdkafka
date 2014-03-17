@@ -8,7 +8,15 @@ mkl_require good_cflags
 
 # Generate version variables from rdkafka.h hex version define
 # so we can use it as string version when generating a pkg-config file.
-verdef=$(grep -E '^#define +RD_KAFKA_VERSION +0x' src/rdkafka.h | sed -E 's/^#define +RD_KAFKA_VERSION +(0x[a-f0-9]+)\.*$/\1/')
+
+# Check if sed takes the -r or -E option for extended regexp.
+if $(echo foo | sed -r s/foo// > /dev/null 2>&1); then
+    ESED="sed -r"
+else
+    ESED="sed -E"
+fi
+
+verdef=$(grep -E '^#define +RD_KAFKA_VERSION +0x' src/rdkafka.h | $ESED 's/^#define +RD_KAFKA_VERSION +(0x[a-f0-9]+)\.*$/\1/')
 mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
 
 mkl_require gen-pkg-config "rdkafka" "The Apache Kafka C/C++ library" \

@@ -30,7 +30,8 @@ function checks {
     # Older g++ (<=4.1?) gives invalid warnings for the C++ code.
     mkl_mkvar_append CXXFLAGS CXXFLAGS "-Wno-non-virtual-dtor"
 
-    # Figure out what tool to use for dumping public symbols
+    # Figure out what tool to use for dumping public symbols.
+    # We rely on configure.cc setting up $NM if it exists.
     if mkl_prog_check "otool" "" cont "otool"; then
 	# OSX XCode
 	mkl_mkvar_set SYMDUMPER SYMDUMPER "otool -TV"

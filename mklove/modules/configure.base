@@ -8,6 +8,7 @@ MKL_MODULES="base"
 MKL_CACHEVARS=""
 MKL_MKVARS=""
 MKL_CHECKS=""
+MKL_LOAD_STACK=""
 
 MKL_IDNEXT=1
 
@@ -1237,7 +1238,7 @@ function mkl_require {
             mkl_err "  $lmod required by $cmod"
             lmod=$cmod
         done
-        mkl_fail "Cyclic dependency detected while loading module $mod"
+        mkl_fail base "" fail "Cyclic dependency detected while loading module $mod"
         return 1
     fi
 

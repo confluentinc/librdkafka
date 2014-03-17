@@ -45,12 +45,15 @@ function checks {
     for t in LD:ld NM:nm OBJDUMP:objdump STRIP:strip ; do
         local tenv=${t%:*}
         t=${t#*:}
+	local tval="${!tenv}"
 
-        [[ -z ${!tenv} ]] && mkl_env_set "$tenv" "$t"
+        [[ -z $tval ]] && tval="$t"
 
-        if mkl_prog_check "$t" "" disable "${!tenv}" ; then
-            export "$tenv"="${!tenv}"
-            mkl_mkvar_set $tenv $tenv "${!tenv}"
+        if mkl_prog_check "$t" "" disable "$tval" ; then
+            if [[ $tval != ${!tenv} ]]; then
+		export "$tenv"="$tval"
+	    fi
+            mkl_mkvar_set $tenv $tenv "$tval"
         fi
     done
 

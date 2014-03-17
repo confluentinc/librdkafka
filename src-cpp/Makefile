@@ -14,7 +14,10 @@ OBJS=		$(CXXSRCS:%.cpp=%.o)
 
 all: lib check
 
+
+LIBS = -L../src -lrdkafka
 include ../mklove/Makefile.base
+LIBS += -lstdc++
 
 CHECK_FILES+= $(LIBNAME).so.$(LIBVER) $(LIBNAME).a
 

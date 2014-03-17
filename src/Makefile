@@ -22,8 +22,8 @@ CHECK_FILES+= $(LIBNAME).so.$(LIBVER) $(LIBNAME).a
 
 check: file-check
 	@(printf "%-30s " "Symbol visibility" ; \
-	((nm -D librdkafka.so.1 | grep -q rd_kafka_new) && \
-	  (nm -D librdkafka.so.1 | grep -vq rd_kafka_destroy) && \
+	(($(SYMDUMPER) librdkafka.so.1 | grep -q rd_kafka_new) && \
+	  ($(SYMDUMPER) librdkafka.so.1 | grep -vq rd_kafka_destroy) && \
 		echo "\033[32mOK\033[0m") || \
 	  echo "\033[31mFAILED\033[0m")
 

@@ -264,11 +264,8 @@ int main (int argc, char **argv) {
 	rd_kafka_conf_set(conf, "queued.min.messages", "1000000", NULL, 0);
 
 
-
 	/* Kafka topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();
-	rd_kafka_topic_conf_set(topic_conf, "message.timeout.ms", "5000",
-				NULL, 0);
 
 	while ((opt =
 		getopt(argc, argv,

@@ -590,7 +590,7 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
 
 	free(rk);
 
-        rd_atomic_sub(&rd_kafka_handle_cnt_curr, 1);
+	(void)rd_atomic_sub(&rd_kafka_handle_cnt_curr, 1);
 }
 
 
@@ -959,7 +959,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	if (rk->rk_conf.brokerlist)
 		rd_kafka_brokers_add(rk, rk->rk_conf.brokerlist);
 
-        rd_atomic_add(&rd_kafka_handle_cnt_curr, 1);
+	(void)rd_atomic_add(&rd_kafka_handle_cnt_curr, 1);
 
         /* Restore sigmask of caller */
         pthread_sigmask(SIG_SETMASK, &oldset, NULL);

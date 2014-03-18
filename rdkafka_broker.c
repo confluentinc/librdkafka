@@ -123,7 +123,7 @@ static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
 					rkb->rkb_rk->rk_broker_down_cnt,
 					rkb->rkb_rk->rk_broker_cnt);
 	} else if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN)
-		rd_atomic_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
+		(void)rd_atomic_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
 
 	rkb->rkb_state = state;
 }
@@ -3298,7 +3298,7 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 
 	rd_kafka_lock(rkb->rkb_rk);
 	TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
-	rd_atomic_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
+	(void)rd_atomic_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
 	rd_kafka_unlock(rkb->rkb_rk);
 	rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__DESTROY, NULL);
 	rd_kafka_broker_destroy(rkb);
@@ -3429,7 +3429,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	}
 
 	TAILQ_INSERT_TAIL(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
-	rd_atomic_add(&rkb->rkb_rk->rk_broker_cnt, 1);
+	(void)rd_atomic_add(&rkb->rkb_rk->rk_broker_cnt, 1);
 
 	rd_rkb_dbg(rkb, BROKER, "BROKER",
 		   "Added new broker with NodeId %"PRId32,

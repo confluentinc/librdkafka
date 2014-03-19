@@ -10,7 +10,7 @@ rdkafka.pc
 *.so.?
 *.a
 *.d
-librdkafka.lds
+librdkafka*.lds
 core
 *dSYM/
 *.offset

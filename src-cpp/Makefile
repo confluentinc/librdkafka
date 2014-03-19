@@ -27,8 +27,13 @@ install: lib-install
 
 clean: lib-clean
 
+ifeq ($(WITH_LDS),y)
+# Enable linker script if supported by platform
+LIB_LDFLAGS+= -Wl,--version-script=$(LIBNAME).lds
+endif
+
 $(LIBNAME).lds: $(HDRS)
 	@(echo "$(MKL_YELLOW)Generating linker script $@ from $(HDRS)$(MKL_CLR_RESET)" ; \
-	  cat $(HDRS) | ../lds-gen.pl > $@)
+	  cat ../src/rdkafka.h | ../lds-gen.pl > $@)
 
 -include $(DEPS)

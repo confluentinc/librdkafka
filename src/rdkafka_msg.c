@@ -37,7 +37,7 @@
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
-	assert(rk->rk_producer.msg_cnt > 0);
+	rd_kafka_assert(rk, rk->rk_producer.msg_cnt > 0);
 	(void)rd_atomic_sub(&rk->rk_producer.msg_cnt, 1);
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE)

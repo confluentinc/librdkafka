@@ -33,6 +33,7 @@
 #include <stdarg.h>
 #include <syslog.h>
 #include <pthread.h>
+#include <stdlib.h>
 
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
@@ -204,7 +205,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
  * Destroy a queue. The queue must be empty.
  */
 void rd_kafka_q_destroy (rd_kafka_q_t *rkq) {
-	assert(TAILQ_EMPTY(&rkq->rkq_q));
+	rd_kafka_assert(NULL, TAILQ_EMPTY(&rkq->rkq_q));
 	pthread_mutex_destroy(&rkq->rkq_lock);
 	pthread_cond_destroy(&rkq->rkq_cond);
 }
@@ -1340,7 +1341,7 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 	default:
 		rd_kafka_dbg(rk, ALL, "POLLCB",
 			     "cant handle op %i here", rko->rko_type);
-		assert(!*"cant handle op type");
+		rd_kafka_assert(rk, !*"cant handle op type");
 		break;
 	}
 }
@@ -1372,12 +1373,13 @@ static void rd_kafka_toppar_dump (FILE *fp, const char *indent,
 		indent, rktp->rktp_c.tx_msgs, rktp->rktp_c.tx_bytes);
 }
 
-void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
+static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
 	rd_kafka_broker_t *rkb;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_toppar_t *rktp;
 
-	rd_kafka_lock(rk);
+	if (locks)
+                rd_kafka_lock(rk);
 	fprintf(fp, "rd_kafka_t %p: %s\n", rk, rk->rk_name);
 
 	fprintf(fp, " refcnt %i\n", rk->rk_refcnt);
@@ -1385,7 +1387,8 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 
 	fprintf(fp, " brokers:\n");
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-		rd_kafka_broker_lock(rkb);
+                if (locks)
+                        rd_kafka_broker_lock(rkb);
 		fprintf(fp, " rd_kafka_broker_t %p: %s NodeId %"PRId32
 			" in state %s\n",
 			rkb, rkb->rkb_name, rkb->rkb_nodeid,
@@ -1406,11 +1409,14 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
 			rkb->rkb_c.tx_retries);
 
 		fprintf(fp, "  %i toppars:\n", rkb->rkb_toppar_cnt);
-		rd_kafka_broker_toppars_rdlock(rkb);
+                if (locks)
+                        rd_kafka_broker_toppars_rdlock(rkb);
 		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink)
 			rd_kafka_toppar_dump(fp, "   ", rktp);
-		rd_kafka_broker_toppars_unlock(rkb);
-		rd_kafka_broker_unlock(rkb);
+                if (locks) {
+                        rd_kafka_broker_toppars_unlock(rkb);
+                        rd_kafka_broker_unlock(rkb);
+                }
 	}
 
 	fprintf(fp, " topics:\n");
@@ -1427,7 +1433,12 @@ void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
                         fprintf(fp, "\n");
                 }
 	}
-	rd_kafka_unlock(rk);
+        if (locks)
+                rd_kafka_unlock(rk);
+}
+
+void rd_kafka_dump (FILE *fp, rd_kafka_t *rk) {
+        return rd_kafka_dump0(fp, rk, 1/*locks*/);
 }
 
 
@@ -1462,4 +1473,19 @@ const char *rd_kafka_version_str (void) {
 			 (ver >> 8) & 0xff);
 
 	return ret;
+}
+
+
+/**
+ * Assert trampoline to print some debugging information on crash.
+ */
+void
+__attribute__((noreturn))
+rd_kafka_crash (const char *file, int line, const char *function,
+                rd_kafka_t *rk, const char *reason) {
+        fprintf(stderr, "*** %s:%i:%s: %s ***\n",
+                file, line, function, reason);
+        if (rk)
+                rd_kafka_dump0(stderr, rk, 0/*no locks*/);
+        abort();
 }

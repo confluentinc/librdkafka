@@ -784,3 +784,15 @@ extern int rd_kafka_thread_cnt_curr;
 int pthread_cond_timedwait_ms (pthread_cond_t *cond,
 			       pthread_mutex_t *mutex,
 			       int timeout_ms);
+
+
+#define rd_kafka_assert(rk, cond) do {                                  \
+                if (unlikely(!(cond)))                                  \
+                        rd_kafka_crash(__FILE__,__LINE__, __FUNCTION__, \
+                                       (rk), "assert: " # cond);        \
+        } while (0)
+
+void
+__attribute__((noreturn))
+rd_kafka_crash (const char *file, int line, const char *function,
+                rd_kafka_t *rk, const char *reason);

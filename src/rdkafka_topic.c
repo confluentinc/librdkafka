@@ -320,7 +320,7 @@ void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {
 	if (likely(rd_atomic_sub(&rkt->rkt_refcnt, 1) > 0))
 		return;
 
-	assert(rkt->rkt_refcnt == 0);
+	rd_kafka_assert(rkt->rkt_rk, rkt->rkt_refcnt == 0);
 
 	if (rkt->rkt_topic)
 		rd_kafkap_str_destroy(rkt->rkt_topic);
@@ -556,7 +556,7 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 	rd_kafka_toppar_t *rktp;
 
 	rktp = rd_kafka_toppar_get(rkt, partition, 0);
-	assert(rktp);
+	rd_kafka_assert(rkt->rkt_rk, rktp);
 
 	if (!rkb) {
 		int had_leader = rktp->rktp_leader ? 1 : 0;
@@ -733,7 +733,9 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_topic_t *rkt,
 		if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_DESIRED) {
 			/* Reinsert on desp list since the partition
 			 * is no longer known. */
-			assert(!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_UNKNOWN));
+			rd_kafka_assert(rkt->rkt_rk,
+                                        !(rktp->rktp_flags &
+                                          RD_KAFKA_TOPPAR_F_UNKNOWN));
 			rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
 			TAILQ_INSERT_TAIL(&rkt->rkt_desp, rktp, rktp_rktlink);
 		}

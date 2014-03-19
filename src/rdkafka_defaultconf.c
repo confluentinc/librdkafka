@@ -376,7 +376,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 		return RD_KAFKA_CONF_OK;
 	}
 	default:
-		assert(!*"unknown conf type");
+		rd_kafka_assert(NULL, !*"unknown conf type");
 	}
 
 	/* unreachable */
@@ -531,7 +531,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 	}
 
 	default:
-		assert(!*"unknown conf type");
+                rd_kafka_assert(NULL, !*"unknown conf type");
 	}
 
 	/* not reachable */

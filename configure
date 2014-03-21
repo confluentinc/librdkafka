@@ -1,6 +1,8 @@
 #!/bin/bash
 #
 
+MKL_CONFIGURE_ARGS="$0 $*"
+
 # Load base module
 source mklove/modules/configure.base
 

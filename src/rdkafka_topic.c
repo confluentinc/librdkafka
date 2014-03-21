@@ -320,7 +320,7 @@ void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {
 	if (likely(rd_atomic_sub(&rkt->rkt_refcnt, 1) > 0))
 		return;
 
-	assert(rkt->rkt_refcnt == 0);
+	rd_kafka_assert(rkt->rkt_rk, rkt->rkt_refcnt == 0);
 
 	if (rkt->rkt_topic)
 		rd_kafkap_str_destroy(rkt->rkt_topic);
@@ -448,6 +448,23 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
 
 /**
+ * Sets the state for topic.
+ * NOTE: rd_kafka_topic_wrlock(rkt) MUST be held
+ */
+static void rd_kafka_topic_set_state (rd_kafka_topic_t *rkt, int state) {
+        static const char *state_names[] = { "INIT", "EXISTS", "UNKNOWN" };
+
+        if (rkt->rkt_state == state)
+                return;
+
+        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "STATE",
+                     "Topic %s changed state %s -> %s",
+                     rkt->rkt_topic->str,
+                     state_names[rkt->rkt_state], state_names[state]);
+        rkt->rkt_state = state;
+}
+
+/**
  * Returns the name of a topic.
  * NOTE:
  *   The topic Kafka String representation is crafted with an extra byte
@@ -539,7 +556,7 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 	rd_kafka_toppar_t *rktp;
 
 	rktp = rd_kafka_toppar_get(rkt, partition, 0);
-	assert(rktp);
+	rd_kafka_assert(rkt->rkt_rk, rktp);
 
 	if (!rkb) {
 		int had_leader = rktp->rktp_leader ? 1 : 0;
@@ -716,7 +733,9 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_topic_t *rkt,
 		if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_DESIRED) {
 			/* Reinsert on desp list since the partition
 			 * is no longer known. */
-			assert(!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_UNKNOWN));
+			rd_kafka_assert(rkt->rkt_rk,
+                                        !(rktp->rktp_flags &
+                                          RD_KAFKA_TOPPAR_F_UNKNOWN));
 			rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
 			TAILQ_INSERT_TAIL(&rkt->rkt_desp, rktp, rktp_rktlink);
 		}
@@ -815,7 +834,7 @@ void rd_kafka_topic_metadata_none (rd_kafka_topic_t *rkt) {
 
 	rkt->rkt_ts_metadata = rd_clock();
 
-	rkt->rkt_state = RD_KAFKA_TOPIC_S_UNKNOWN;
+        rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
 
 	/* Update number of partitions */
 	rd_kafka_topic_partition_cnt_update(rkt, 0);
@@ -871,9 +890,9 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 	/* Set topic state */
 	if (tm->ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
-		rkt->rkt_state = RD_KAFKA_TOPIC_S_UNKNOWN;
-	else
-		rkt->rkt_state = RD_KAFKA_TOPIC_S_EXISTS;
+                rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
+        else
+                rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
 
 	/* Update number of partitions */
 	upd += rd_kafka_topic_partition_cnt_update(rkt,

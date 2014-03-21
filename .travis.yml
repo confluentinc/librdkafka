@@ -3,4 +3,5 @@ compiler:
   - gcc
   - clang
 
-script: make all examples check
+script:
+  ./configure && make all examples check

@@ -50,9 +50,14 @@ int main (int argc, char **argv) {
                 rd_kafka_conf_dup(NULL);
                 rd_kafka_conf_set(NULL, NULL, NULL, NULL, 0);
                 rd_kafka_conf_set_dr_cb(NULL, NULL);
+                rd_kafka_conf_set_dr_msg_cb(NULL, NULL);
                 rd_kafka_conf_set_error_cb(NULL, NULL);
                 rd_kafka_conf_set_stats_cb(NULL, NULL);
+                rd_kafka_conf_set_log_cb(NULL, NULL);
+                rd_kafka_conf_set_socket_cb(NULL, NULL);
+                rd_kafka_conf_set_open_cb(NULL, NULL);
                 rd_kafka_conf_set_opaque(NULL, NULL);
+                rd_kafka_opaque(NULL);
                 rd_kafka_conf_dump(NULL, NULL);
                 rd_kafka_topic_conf_dump(NULL, NULL);
                 rd_kafka_conf_dump_free(NULL, 0);

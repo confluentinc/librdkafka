@@ -1,3 +1,8 @@
+config.h
+config.log*
+config.cache
+Makefile.config
+rdkafka.pc
 *~
 \#*
 *.o
@@ -5,7 +10,7 @@
 *.so.?
 *.a
 *.d
-librdkafka.lds
+librdkafka*.lds
 core
 *dSYM/
 *.offset

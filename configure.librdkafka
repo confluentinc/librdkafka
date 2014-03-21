@@ -1,0 +1,54 @@
+#!/bin/bash
+#
+
+mkl_require lib
+mkl_require pic
+mkl_require atomics must pass
+mkl_require good_cflags
+
+# Generate version variables from rdkafka.h hex version define
+# so we can use it as string version when generating a pkg-config file.
+
+# Check if sed takes the -r or -E option for extended regexp.
+if $(echo foo | sed -r s/foo// > /dev/null 2>&1); then
+    ESED="sed -r"
+else
+    ESED="sed -E"
+fi
+
+verdef=$(grep -E '^#define +RD_KAFKA_VERSION +0x' src/rdkafka.h | $ESED 's/^#define +RD_KAFKA_VERSION +(0x[a-f0-9]+)\.*$/\1/')
+mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
+
+mkl_require gen-pkg-config "rdkafka" "The Apache Kafka C/C++ library" \
+    "Full Apache Kafka 0.8 protocol support, including producer and consumer" \
+    "\$RDKAFKA_VERSION_STR"
+
+function checks {
+
+    # required libs
+    mkl_lib_check "libpthread" "" fail CC "-lpthread"
+    mkl_lib_check "zlib" "" fail CC "-lz"
+
+    # -lrt is needed on linux for clock_gettime: link it if it exists.
+    mkl_lib_check "librt" "" cont CC "-lrt"
+
+    # SG turns on scatter-gather support in snappy.c, which we need.
+    mkl_mkvar_append CFLAGS CFLAGS "-DSG"
+
+    # Older g++ (<=4.1?) gives invalid warnings for the C++ code.
+    mkl_mkvar_append CXXFLAGS CXXFLAGS "-Wno-non-virtual-dtor"
+
+    # Figure out what tool to use for dumping public symbols.
+    # We rely on configure.cc setting up $NM if it exists.
+    if mkl_prog_check "otool" "" cont "otool"; then
+	# OSX XCode
+	mkl_mkvar_set SYMDUMPER SYMDUMPER "otool -TV"
+    elif mkl_env_check "nm" "" cont "NM" ; then
+	# nm by future mk var
+	mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -D'
+    else
+	# Fake symdumper
+	mkl_mkvar_set SYMDUMPER SYMDUMPER 'echo'
+    fi
+}
+

@@ -68,12 +68,45 @@ static void rd_kafka_offset_file_close (rd_kafka_toppar_t *rktp) {
 
 
 /**
+ * Linux version of open callback providing racefree CLOEXEC.
+ */
+int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
+                            void *opaque) {
+#ifdef O_CLOEXEC
+        return open(pathname, flags|O_CLOEXEC, mode);
+#else
+        return rd_kafka_open_cb_generic(pathname, flags, mode, opaque);
+#endif
+}
+
+/**
+ * Fallback version of open_cb NOT providing racefree CLOEXEC,
+ * but setting CLOEXEC after file open (if FD_CLOEXEC is defined).
+ */
+int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
+                              void *opaque) {
+        int fd;
+        int on = 1;
+        fd = open(pathname, flags, mode);
+        if (fd == -1)
+                return -1;
+#ifdef FD_CLOEXEC
+        fcntl(fd, F_SETFD, FD_CLOEXEC, &on);
+#endif
+        return fd;
+}
+
+
+/**
  * NOTE: toppar_lock(rktp) must be held
  */
 static int rd_kafka_offset_file_open (rd_kafka_toppar_t *rktp) {
+        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
 	int fd;
 
-	if ((fd = open(rktp->rktp_offset_path, O_CREAT|O_RDWR, 0644)) == -1) {
+	if ((fd = rk->rk_conf.open_cb(rktp->rktp_offset_path,
+                                      O_CREAT|O_RDWR, 0644,
+                                      rk->rk_conf.opaque)) == -1) {
 		rd_kafka_op_err(rktp->rktp_rkt->rkt_rk,
 				RD_KAFKA_RESP_ERR__FS,
 				"%s [%"PRId32"]: "

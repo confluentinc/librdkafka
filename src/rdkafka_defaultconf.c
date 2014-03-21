@@ -52,7 +52,8 @@ struct rd_kafka_property {
 	int   vmin;
 	int   vmax;
 	int   vdef;        /* Default value (int) */
-	const char *sdef;  /* Defalut value (string) */
+	const char *sdef;  /* Default value (string) */
+        void  *pdef;       /* Default value (pointer) */
 	struct {
 		int val;
 		const char *str;
@@ -158,6 +159,34 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "stats_cb", _RK_C_PTR,
 	  _RK(stats_cb),
 	  "Statistics callback (set with rd_kafka_conf_set_stats_cb())" },
+	{ _RK_GLOBAL, "log_cb", _RK_C_PTR,
+	  _RK(log_cb),
+	  "Log callback (set with rd_kafka_conf_set_log_cb())",
+          .pdef = rd_kafka_log_print },
+        { _RK_GLOBAL, "log_level", _RK_C_INT,
+          _RK(log_level),
+          "Logging level (syslog(3) levels)",
+          0, 7, 6 },
+        { _RK_GLOBAL, "socket_cb", _RK_C_PTR,
+          _RK(socket_cb),
+          "Socket creation callback to provide race-free CLOEXEC",
+          .pdef =
+#ifdef __linux__
+          rd_kafka_socket_cb_linux
+#else
+          rd_kafka_socket_cb_generic
+#endif
+        },
+        { _RK_GLOBAL, "open_cb", _RK_C_PTR,
+          _RK(open_cb),
+          "File open callback to provide race-free CLOEXEC",
+          .pdef =
+#ifdef __linux__
+          rd_kafka_open_cb_linux
+#else
+          rd_kafka_open_cb_generic
+#endif
+        },
 	{ _RK_GLOBAL, "opaque", _RK_C_PTR,
 	  _RK(opaque),
 	  "Application opaque (set with rd_kafka_conf_set_opaque())" },
@@ -233,8 +262,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "dr_cb", _RK_C_PTR,
 	  _RK(dr_cb),
 	  "Delivery report callback (set with rd_kafka_conf_set_dr_cb())" },
-	
-	  
+	{ _RK_GLOBAL|_RK_PRODUCER, "dr_msg_cb", _RK_C_PTR,
+	  _RK(dr_msg_cb),
+	  "Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())" },
 
 	/* Topic properties */
 	{ _RK_TOPIC|_RK_PRODUCER, "request.required.acks", _RK_C_INT,
@@ -361,7 +391,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 		return RD_KAFKA_CONF_OK;
 	}
 	default:
-		assert(!*"unknown conf type");
+		rd_kafka_assert(NULL, !*"unknown conf type");
 	}
 
 	/* unreachable */
@@ -516,7 +546,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 	}
 
 	default:
-		assert(!*"unknown conf type");
+                rd_kafka_assert(NULL, !*"unknown conf type");
 	}
 
 	/* not reachable */
@@ -532,9 +562,10 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
 		if (!(prop->scope & scope))
 			continue;
 
-		if (prop->sdef || prop->vdef)
+		if (prop->sdef || prop->vdef || prop->pdef)
 			rd_kafka_anyconf_set_prop0(scope, conf, prop,
-						   prop->sdef, prop->vdef);
+						   prop->sdef ? : prop->pdef,
+                                                   prop->vdef);
 	}
 }
 
@@ -712,11 +743,28 @@ void rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
 }
 
 
+void rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
+                                  void (*dr_msg_cb) (rd_kafka_t *rk,
+                                                     const rd_kafka_message_t *
+                                                     rkmessage,
+                                                     void *opaque)) {
+        conf->dr_msg_cb = dr_msg_cb;
+}
+
+
+
 void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 				 void  (*error_cb) (rd_kafka_t *rk, int err,
 						    const char *reason,
 						    void *opaque)) {
 	conf->error_cb = error_cb;
+}
+
+
+void rd_kafka_conf_set_log_cb (rd_kafka_conf_t *conf,
+			  void (*log_cb) (const rd_kafka_t *rk, int level,
+                                          const char *fac, const char *buf)) {
+	conf->log_cb = log_cb;
 }
 
 
@@ -728,6 +776,20 @@ void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
 	conf->stats_cb = stats_cb;
 }
 
+void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
+                                  int (*socket_cb) (int domain, int type,
+                                                    int protocol,
+                                                    void *opaque)) {
+        conf->socket_cb = socket_cb;
+}
+
+
+void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
+                                int (*open_cb) (const char *pathname,
+                                                int flags, mode_t mode,
+                                                void *opaque)) {
+        conf->open_cb = open_cb;
+}
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 	conf->opaque = opaque;

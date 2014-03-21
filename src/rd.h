@@ -41,6 +41,8 @@
 #include <assert.h>
 #include <pthread.h>
 
+#include "../config.h"
+
 #include "rdtypes.h"
 
 
@@ -83,13 +85,12 @@
 	((val) < (low) ? low : ((val) > (hi) ? (hi) : (val)))
 
 
-#define rd_atomic_add(PTR,VAL)  __sync_add_and_fetch(PTR,VAL)
-#define rd_atomic_sub(PTR,VAL)  __sync_sub_and_fetch(PTR,VAL)
+#define rd_atomic_add(PTR,VAL)  ATOMIC_OP(add,fetch,PTR,VAL)
+#define rd_atomic_sub(PTR,VAL)  ATOMIC_OP(sub,fetch,PTR,VAL)
 
-#define rd_atomic_add_prev(PTR,VAL)  __sync_fetch_and_add(PTR,VAL)
-#define rd_atomic_sub_prev(PTR,VAL)  __sync_fetch_and_sub(PTR,VAL)
+#define rd_atomic_add_prev(PTR,VAL)  ATOMIC_OP(fetch,add,PTR,VAL)
+#define rd_atomic_sub_prev(PTR,VAL)  ATOMIC_OP(fetch,sub,PTR,VAL)
 
-#define rd_atomic_set(PTR,VAL) __sync_lock_test_and_set(PTR,VAL)
 
 
 #ifndef be64toh

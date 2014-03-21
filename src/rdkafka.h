@@ -80,7 +80,6 @@ typedef enum {
 #define RD_KAFKA_DEBUG_CONTEXTS \
 	"all,generic,broker,topic,metadata,producer,queue,msg"
 
-
 /* Private types to provide ABI compatibility */
 typedef struct rd_kafka_s rd_kafka_t;
 typedef struct rd_kafka_topic_s rd_kafka_topic_t;
@@ -158,6 +157,66 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
  *  - rd_kafka_produce()
  */
 rd_kafka_resp_err_t rd_kafka_errno2err (int errnox);
+
+
+
+/*******************************************************************
+ *								   *
+ * Kafka messages                                                  *
+ *								   *
+ *******************************************************************/
+
+
+/**
+ * A Kafka message as returned by the `rd_kafka_consume*()` family
+ * of functions.
+ *
+ * This object has two purposes:
+ *  - provide the application with a consumed message. ('err' == 0)
+ *  - report per-topic+partition consumer errors ('err' != 0)
+ *
+ * The application must check 'err' to decide what action to take.
+ *
+ * When the application is finished with a message it must call
+ * `rd_kafka_message_destroy()`.
+ */
+typedef struct rd_kafka_message_s {
+	rd_kafka_resp_err_t err;   /* Non-zero for error signaling. */
+	rd_kafka_topic_t *rkt;     /* Topic */
+	int32_t partition;         /* Partition */
+	void   *payload;           /* err==0: Message payload
+				    * err!=0: Error string */
+	size_t  len;               /* err==0: Message payload length
+				    * err!=0: Error string length */
+	void   *key;               /* err==0: Optional message key */
+	size_t  key_len;           /* err==0: Optional message key length */
+	int64_t offset;            /* Message offset (or offset for error
+				    * if err!=0 if applicable). */
+	void  *_private;           /* rdkafka private pointer: DO NOT MODIFY */
+} rd_kafka_message_t;
+
+
+/**
+ * Frees resources for 'rkmessage' and hands ownership back to rdkafka.
+ */
+void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage);
+
+
+/**
+ * Returns the error string for an errored rd_kafka_message_t or NULL if
+ * there was no error.
+ */
+static inline const char *
+__attribute__((unused))
+rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
+	if (!rkmessage->err)
+		return NULL;
+
+	if (rkmessage->payload)
+		return (const char *)rkmessage->payload;
+
+	return rd_kafka_err2str(rkmessage->err);
+}
 
 
 
@@ -241,6 +300,16 @@ void rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
 					     void *opaque, void *msg_opaque));
 
 /**
+ * Producer:
+ * Set delivery report callback in provided conf object.
+ */
+void rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
+                                  void (*dr_msg_cb) (rd_kafka_t *rk,
+                                                     const rd_kafka_message_t *
+                                                     rkmessage,
+                                                     void *opaque));
+
+/**
  * Set error callback in provided conf object.
  * The error callback is used by librdkafka to signal critical errors
  * back to the application.
@@ -249,6 +318,21 @@ void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 				 void  (*error_cb) (rd_kafka_t *rk, int err,
 						    const char *reason,
 						    void *opaque));
+
+
+/**
+ * Set logger callback.
+ * The default is to print to stderr, but a syslog logger is also available,
+ * see rd_kafka_log_(print|syslog) for the builtin alternatives.
+ * Alternatively the application may provide its own logger callback.
+ * Or pass 'func' as NULL to disable logging.
+ *
+ * This is the configuration alternative to `rd_kafka_set_logger()`.
+ */
+void rd_kafka_conf_set_log_cb (rd_kafka_conf_t *conf,
+			  void (*log_cb) (const rd_kafka_t *rk, int level,
+                                          const char *fac, const char *buf));
+
 
 /**
  * Set statistics callback in provided conf object.
@@ -272,11 +356,52 @@ void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
 						  void *opaque));
 
 
+
+/**
+ * Set socket callback.
+ * The socket callback is responsible for opening a socket
+ * according to the supplied domain, type and protocol.
+ * The socket shall be created with CLOEXEC set in a racefree fashion, if
+ * possible.
+ *
+ * Default:
+ *  on linux: racefree CLOEXEC
+ *  others  : non-racefree CLOEXEC
+ */
+void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
+                                  int (*socket_cb) (int domain, int type,
+                                                    int protocol,
+                                                    void *opaque));
+
+
+/**
+ * Set open callback.
+ * The open callback is responsible for opening the file specified by
+ * pathname, flags and mode.
+ * The file shall be opened with CLOEXEC set in a racefree fashion, if
+ * possible.
+ *
+ * Default:
+ *  on linux: racefree CLOEXEC
+ *  others  : non-racefree CLOEXEC
+ */
+void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
+                                int (*open_cb) (const char *pathname,
+                                                int flags, mode_t mode,
+                                                void *opaque));
+
+
+
 /**
  * Sets the application's opaque pointer that will be passed to `dr_cb`
  * and `error_cb_` callbacks as the 'opaque' argument.
  */
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque);
+
+/**
+ * Retrieves the opaque pointer previously set with rd_kafka_conf_set_opaque()
+ */
+void *rd_kafka_opaque (const rd_kafka_t *rk);
 
 
 /**
@@ -500,63 +625,6 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *rkt);
 
 
 
-/*******************************************************************
- *								   *
- * Kafka messages                                                  *
- *								   *
- *******************************************************************/
-
-
-/**
- * A Kafka message as returned by the `rd_kafka_consume*()` family
- * of functions.
- *
- * This object has two purposes:
- *  - provide the application with a consumed message. ('err' == 0)
- *  - report per-topic+partition consumer errors ('err' != 0)
- *
- * The application must check 'err' to decide what action to take.
- *
- * When the application is finished with a message it must call
- * `rd_kafka_message_destroy()`.
- */
-typedef struct rd_kafka_message_s {
-	rd_kafka_resp_err_t err;   /* Non-zero for error signaling. */
-	rd_kafka_topic_t *rkt;     /* Topic */
-	int32_t partition;         /* Partition */
-	void   *payload;           /* err==0: Message payload
-				    * err!=0: Error string */
-	size_t  len;               /* err==0: Message payload length
-				    * err!=0: Error string length */
-	void   *key;               /* err==0: Optional message key */
-	size_t  key_len;           /* err==0: Optional message key length */
-	int64_t offset;            /* Message offset (or offset for error
-				    * if err!=0 if applicable). */
-	void  *_private;           /* rdkafka private pointer: DO NOT MODIFY */
-} rd_kafka_message_t;
-
-
-/**
- * Frees resources for 'rkmessage' and hands ownership back to rdkafka.
- */
-void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage);
-
-
-/**
- * Returns the error string for an errored rd_kafka_message_t or NULL if
- * there was no error.
- */
-static inline const char * 
-__attribute__((unused))
-rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
-	if (!rkmessage->err)
-		return NULL;
-
-	if (rkmessage->payload)
-		return (const char *)rkmessage->payload;
-
-	return rd_kafka_err2str(rkmessage->err);
-}
 
 
 
@@ -797,6 +865,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
  * Events:
  *   - delivery report callbacks  (if dr_cb is configured) [producer]
  *   - error callbacks (if error_cb is configured) [producer & consumer]
+ *   - stats callbacks (if stats_cb is configured) [producer & consumer]
  *
  * Returns the number of events served.
  */
@@ -832,7 +901,7 @@ int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist);
  * Alternatively the application may provide its own logger callback.
  * Or pass 'func' as NULL to disable logging.
  *
- * NOTE: 'rk' may be passed as NULL.
+ * NOTE: 'rk' may be passed as NULL in the callback.
  */
 void rd_kafka_set_logger (rd_kafka_t *rk,
 			  void (*func) (const rd_kafka_t *rk, int level,

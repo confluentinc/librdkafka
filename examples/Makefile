@@ -1,23 +1,15 @@
-EXAMPLES ?= rdkafka_example rdkafka_performance
-CC ?= cc
-CXX ?= g++
-CFLAGS += -g -Wall -Werror -Wfloat-equal -Wpointer-arith -O2 -I../
-CXXFLAGS += $(CFLAGS)
-LDFLAGS +=  ../librdkafka.a
-LDFLAGS += -lpthread -lz
-ifeq ($(shell uname -s), Linux)
-	LDFLAGS += -lrt
-endif
-
-# Profiling
-#CFLAGS += -O0 -pg
-#LDFLAGS += -pg
+EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp
 
 all: $(EXAMPLES)
 
-rdkafka_example: ../librdkafka.a rdkafka_example.c
-	@(test $@ -nt $< || \
-	  $(CC) $(CFLAGS) rdkafka_example.c -o $@ $(LDFLAGS))
+include ../mklove/Makefile.base
+
+CFLAGS += -I../src
+CXXFLAGS += -I../src-cpp
+
+rdkafka_example: ../src/librdkafka.a rdkafka_example.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) rdkafka_example.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
 	@echo "# $@ is ready"
 	@echo "#"
 	@echo "# Run producer (write messages on stdin)"
@@ -30,9 +22,9 @@ rdkafka_example: ../librdkafka.a rdkafka_example.c
 	@echo "# More usage options:"
 	@echo "./rdkafka_example --help"
 
-rdkafka_performance: ../librdkafka.a rdkafka_performance.c
-	@(test $@ -nt $< || \
-	  $(CC) $(CFLAGS) rdkafka_performance.c -o $@ $(LDFLAGS))
+rdkafka_performance: ../src/librdkafka.a rdkafka_performance.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) rdkafka_performance.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
 	@echo "# $@ is ready"
 	@echo "#"
 	@echo "# Run producer"
@@ -46,5 +38,10 @@ rdkafka_performance: ../librdkafka.a rdkafka_performance.c
 	@echo "./$@ --help"
 
 
+rdkafka_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_example.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) rdkafka_example.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS) -lstdc++
+
 clean:
-	rm -f rdkafka_example rdkafka_performance
+	rm -f $(EXAMPLES)
+

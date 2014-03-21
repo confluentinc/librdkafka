@@ -1,5 +1,5 @@
-librdkafka - Apache Kafka C client library
-==========================================
+librdkafka - Apache Kafka C/C++ client library
+==============================================
 
 Copyright (c) 2012-2013, [Magnus Edenhill](http://www.edenhill.se/).
 
@@ -16,9 +16,7 @@ the producer and 3 million msgs/second for the consumer.
 For an introduction to the performance and usage of librdkafka, see
 [INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md)
 
-
-**NOTE**: A C++ interface is currently in testing, see the `c++` branch.
-
+**NOTE**: The `master` branch is actively developed, use latest release for production use.
 
 **Apache Kafka 0.8 support:**
 
@@ -28,7 +26,8 @@ For an introduction to the performance and usage of librdkafka, see
   * Compression: snappy and gzip
   * Debian package: librdkafka1 and librdkafka-dev in Debian testing and unstable
   * ZooKeeper: not supported
-  * API: Stable, not backwards compatible
+  * C API: Stable, ABI safe, not backwards compatible with 0.7
+  * C++ API: Testing
   * Tests: Regression tests in `tests/` directory.
   * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
   * Status: Stable
@@ -41,7 +40,7 @@ For an introduction to the performance and usage of librdkafka, see
   * Consumer: supported
   * Compression: not supported
   * ZooKeeper: not supported
-  * API: backwards compatible with 0.6
+  * C API: backwards compatible with 0.6
   * Status: Stable
 
 
@@ -80,11 +79,9 @@ For an introduction to the performance and usage of librdkafka, see
 
 ### Building
 
-      make all
+      ./configure
+      make
       sudo make install
-      # or to install in another location than /usr/local, set DESTDIR env
-      # to the filesystem root of your choice.
-      sudo make DESTDIR=/usr make install
 
 
 ### Usage in code
@@ -96,7 +93,9 @@ Link your program with `-lrdkafka -lz -lpthread -lrt`.
 
 ## Documentation
 
-The API is documented in `rdkafka.h`
+The **C** API is documented in [src/rdkafka.h](src/rdkafka.h)
+
+The **C++** API is documented in [src-cpp/rdkafkacpp.h](src-cpp/rdkafkacpp.h)
 
 Configuration properties are documented in
 [CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)

@@ -180,6 +180,9 @@ struct rd_kafka_conf_s {
 		       rd_kafka_resp_err_t err,
 		       void *opaque, void *msg_opaque);
 
+        void (*dr_msg_cb) (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
+                           void *opaque);
+
 	/* Error callback */
 	void (*error_cb) (rd_kafka_t *rk, int err,
 			  const char *reason, void *opaque);
@@ -190,10 +193,31 @@ struct rd_kafka_conf_s {
 			 size_t json_len,
 			 void *opaque);
 
+        /* Log callback */
+        void (*log_cb) (const rd_kafka_t *rk, int level,
+                        const char *fac, const char *buf);
+        int    log_level;
+
+        /* Socket creation callback */
+        int (*socket_cb) (int domain, int type, int protocol, void *opaque);
+
+        /* File open callback */
+        int (*open_cb) (const char *pathname, int flags, mode_t mode,
+                        void *opaque);
+
 
 	/* Opaque passed to callbacks. */
 	void  *opaque;
 };
+
+int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);
+int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
+                                void *opaque);
+int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
+                            void *opaque);
+int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
+                              void *opaque);
+
 
 
 
@@ -627,11 +651,6 @@ struct rd_kafka_s {
 	pthread_mutex_t                rk_timers_lock;
 	pthread_cond_t                 rk_timers_cond;
 
-	void (*rk_log_cb) (const rd_kafka_t *rk, int level,
-			   const char *fac,
-			   const char *buf);
-	int    rk_log_level;
-
 	pthread_t rk_thread;
 
 	struct {
@@ -774,3 +793,15 @@ extern int rd_kafka_thread_cnt_curr;
 int pthread_cond_timedwait_ms (pthread_cond_t *cond,
 			       pthread_mutex_t *mutex,
 			       int timeout_ms);
+
+
+#define rd_kafka_assert(rk, cond) do {                                  \
+                if (unlikely(!(cond)))                                  \
+                        rd_kafka_crash(__FILE__,__LINE__, __FUNCTION__, \
+                                       (rk), "assert: " # cond);        \
+        } while (0)
+
+void
+__attribute__((noreturn))
+rd_kafka_crash (const char *file, int line, const char *function,
+                rd_kafka_t *rk, const char *reason);

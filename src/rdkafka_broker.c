@@ -1064,7 +1064,7 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find (rd_kafka_broker_t *rkb,
 
 	TAILQ_FOREACH(rkbuf, &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link)
 		if (rkbuf->rkbuf_corrid == corrid) {
-			rd_kafka_avg_add(&rkb->rkb_rtt_curr,
+			rd_kafka_avg_add(&rkb->rkb_avg_rtt,
 					 now - rkbuf->rkbuf_ts_sent);
 
 			rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
@@ -3375,6 +3375,8 @@ void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
 	rd_kafka_q_purge(&rkb->rkb_ops);
 	rd_kafka_q_destroy(&rkb->rkb_ops);
 
+        rd_kafka_avg_destroy(&rkb->rkb_avg_rtt);
+
 	rd_kafka_destroy0(rkb->rkb_rk);
 
 	pthread_rwlock_destroy(&rkb->rkb_toppar_lock);
@@ -3420,6 +3422,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_bufq_init(&rkb->rkb_waitresps);
 	rd_kafka_bufq_init(&rkb->rkb_retrybufs);
 	rd_kafka_q_init(&rkb->rkb_ops);
+        rd_kafka_avg_init(&rkb->rkb_avg_rtt, RD_KAFKA_AVG_GAUGE);
 	rd_kafka_broker_keep(rkb);
 
 	/* Set next intervalled metadata refresh, offset by a random

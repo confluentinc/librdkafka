@@ -722,8 +722,9 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_kafka_avg_t rtt;
 		rd_kafka_broker_lock(rkb);
-		rd_kafka_avg_rollover(&rkb->rkb_rtt_last, &rkb->rkb_rtt_curr);
+		rd_kafka_avg_rollover(&rtt, &rkb->rkb_avg_rtt);
 		_st_printf("%s\"%s\": { "/*open broker*/
 			   "\"name\":\"%s\", "
 			   "\"nodeid\":%"PRId32", "
@@ -739,9 +740,10 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"rxerrs\":%"PRIu64", "
                            "\"rxcorriderrs\":%"PRIu64", "
 			   "\"rtt\": {"
-			   " \"min\":%"PRIu64","
-			   " \"max\":%"PRIu64","
-			   " \"avg\":%"PRIu64","
+			   " \"min\":%"PRId64","
+			   " \"max\":%"PRId64","
+			   " \"avg\":%"PRId64","
+			   " \"sum\":%"PRId64","
 			   " \"cnt\":%i "
 			   "}, "
 			   "\"toppars\":{ "/*open toppars*/,
@@ -760,10 +762,11 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rkb->rkb_c.rx_bytes,
 			   rkb->rkb_c.rx_err,
                            rkb->rkb_c.rx_corrid_err,
-			   rkb->rkb_rtt_last.ra_min,
-			   rkb->rkb_rtt_last.ra_max,
-			   rkb->rkb_rtt_last.ra_avg,
-			   rkb->rkb_rtt_last.ra_cnt);
+			   rtt.ra_v.minv,
+			   rtt.ra_v.maxv,
+			   rtt.ra_v.avg,
+			   rtt.ra_v.sum,
+			   rtt.ra_v.cnt);
 
 		rd_kafka_broker_toppars_rdlock(rkb);
 		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {

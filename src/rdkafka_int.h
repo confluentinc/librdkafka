@@ -39,6 +39,7 @@
 #include "rd.h"
 #include "rdaddr.h"
 #include "rdlog.h"
+#include "rdtime.h"
 
 #include "rdkafka_timer.h"
 
@@ -245,23 +246,34 @@ struct rd_kafka_topic_conf_s {
 
 
 typedef struct rd_kafka_avg_s {
-	rd_ts_t ra_max;
-	rd_ts_t ra_min;
-	rd_ts_t ra_avg;
-	rd_ts_t ra_sum;
-	int     ra_cnt;
+        struct {
+                int64_t maxv;
+                int64_t minv;
+                int64_t avg;
+                int64_t sum;
+                int     cnt;
+                rd_ts_t start;
+        } ra_v;
+        pthread_mutex_t ra_lock;
+        enum {
+                RD_KAFKA_AVG_GAUGE,
+                RD_KAFKA_AVG_COUNTER,
+        } ra_type;
 } rd_kafka_avg_t;
+
 
 /**
  * Add timestamp 'ts' to averager 'ra'.
  */
-static RD_UNUSED void rd_kafka_avg_add (rd_kafka_avg_t *ra, rd_ts_t ts) {
-	if (ts > ra->ra_max)
-		ra->ra_max = ts;
-	if (ra->ra_min == 0 || ts < ra->ra_min)
-		ra->ra_min = ts;
-	ra->ra_sum += ts;
-	ra->ra_cnt++;
+static RD_UNUSED void rd_kafka_avg_add (rd_kafka_avg_t *ra, int64_t v) {
+        pthread_mutex_lock(&ra->ra_lock);
+	if (v > ra->ra_v.maxv)
+		ra->ra_v.maxv = v;
+	if (ra->ra_v.minv == 0 || v < ra->ra_v.minv)
+		ra->ra_v.minv = v;
+	ra->ra_v.sum += v;
+	ra->ra_v.cnt++;
+        pthread_mutex_unlock(&ra->ra_lock);
 }
 
 /**
@@ -270,14 +282,52 @@ static RD_UNUSED void rd_kafka_avg_add (rd_kafka_avg_t *ra, rd_ts_t ts) {
  */
 static RD_UNUSED void rd_kafka_avg_rollover (rd_kafka_avg_t *dst,
 					     rd_kafka_avg_t *src) {
-	*dst = *src;
-	if (dst->ra_cnt)
-		dst->ra_avg = dst->ra_sum / dst->ra_cnt;
-	else
-		dst->ra_avg = 0;
+        rd_ts_t now = rd_clock();
 
-	memset(src, 0, sizeof(*src));
+        pthread_mutex_lock(&src->ra_lock);
+        dst->ra_type = src->ra_type;
+	dst->ra_v    = src->ra_v;
+	memset(&src->ra_v, 0, sizeof(src->ra_v));
+        src->ra_v.start = now;
+        pthread_mutex_unlock(&src->ra_lock);
+
+        if (dst->ra_type == RD_KAFKA_AVG_GAUGE) {
+                if (dst->ra_v.cnt)
+                        dst->ra_v.avg = dst->ra_v.sum / dst->ra_v.cnt;
+                else
+                        dst->ra_v.avg = 0;
+        } else {
+                rd_ts_t elapsed = now - dst->ra_v.start;
+
+                if (elapsed)
+                        dst->ra_v.avg = (dst->ra_v.sum * 1000000llu) / elapsed;
+                else
+                        dst->ra_v.avg = 0;
+
+                dst->ra_v.start = elapsed;
+        }
 }
+
+
+/**
+ * Initialize an averager
+ */
+static RD_UNUSED void rd_kafka_avg_init (rd_kafka_avg_t *ra, int type) {
+        rd_kafka_avg_t dummy;
+        memset(ra, 0, sizeof(*ra));
+        pthread_mutex_init(&ra->ra_lock, NULL);
+        ra->ra_type = type;
+
+        rd_kafka_avg_rollover(&dummy, ra);
+}
+
+/**
+ * Destroy averager
+ */
+static RD_UNUSED void rd_kafka_avg_destroy (rd_kafka_avg_t *ra) {
+        pthread_mutex_destroy(&ra->ra_lock);
+}
+
 
 
 
@@ -483,8 +533,7 @@ typedef struct rd_kafka_broker_s {
 	rd_kafka_bufq_t     rkb_waitresps;
 	rd_kafka_bufq_t     rkb_retrybufs;
 
-	rd_kafka_avg_t      rkb_rtt_curr;       /* Current averaging period */
-	rd_kafka_avg_t      rkb_rtt_last;       /* Last averaging period */
+	rd_kafka_avg_t      rkb_avg_rtt;        /* Current averaging period */
 
 	char                rkb_name[128];      /* Display name */
 	char                rkb_nodename[128];  /* host:port */

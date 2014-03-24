@@ -662,7 +662,8 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   "\"committed_offset\":%"PRId64", "
 		   "\"eof_offset\":%"PRId64", "
 		   "\"txmsgs\":%"PRIu64", "
-		   "\"txbytes\":%"PRIu64" "
+		   "\"txbytes\":%"PRIu64", "
+                   "\"msgs\": %"PRIu64" "
 		   "} ",
 		   first ? "" : ", ",
 		   rktp->rktp_partition,
@@ -684,7 +685,8 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rktp->rktp_commited_offset,
 		   rktp->rktp_eof_offset,
 		   rktp->rktp_c.tx_msgs,
-		   rktp->rktp_c.tx_bytes);
+		   rktp->rktp_c.tx_bytes,
+		   rktp->rktp_c.msgs);
 
 	*bufp = buf;
 	*sizep = size;

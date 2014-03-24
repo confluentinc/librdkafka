@@ -588,7 +588,9 @@ typedef struct rd_kafka_toppar_s {
 	struct {
 		uint64_t tx_msgs;
 		uint64_t tx_bytes;
+                uint64_t msgs;
 	} rktp_c;
+
 } rd_kafka_toppar_t;
 
 #define rd_kafka_toppar_keep(rktp) (void)rd_atomic_add(&(rktp)->rktp_refcnt, 1)

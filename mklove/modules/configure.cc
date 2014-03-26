@@ -87,6 +87,14 @@ function checks {
         export INSTALL
     fi
     mkl_mkvar_set "install" INSTALL $INSTALL
+
+
+    # Enable profiling if desired
+    if [[ $WITH_PROFILING == y ]]; then
+        mkl_allvar_set "" "WITH_PROFILING" "y"
+        mkl_mkvar_append CPPFLAGS CPPFLAGS "-pg"
+        mkl_mkvar_append LDFLAGS LDFLAGS   "-pg"
+    fi
 }
 
 
@@ -103,10 +111,3 @@ done
 mkl_option "Compiler" "env:PKG_CONFIG_PATH" "--pkg-config-path" "Extra paths for pkg-config"
 
 mkl_option "Compiler" "WITH_PROFILING" "--enable-profiling" "Enable profiling"
-function opt_enable-profiling {
-    if [[ $2 == "y" ]]; then
-        mkl_allvar_set "" "WITH_PROFILING" "y"
-        mkl_mkvar_append CPPFLAGS CPPFLAGS "-pg"
-        mkl_mkvar_append LDFLAGS LDFLAGS   "-pg"
-    fi
-}

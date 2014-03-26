@@ -844,6 +844,91 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
 
 
 
+/*******************************************************************
+ *								   *
+ * Metadata API                                                    *
+ *								   *
+ *******************************************************************/
+
+
+/**
+ * Metadata: Broker information
+ */
+struct rd_kafka_metadata_broker {
+        int32_t     id;             /* Broker Id */
+        char       *host;           /* Broker hostname */
+        int         port;           /* Broker listening port */
+};
+
+/**
+ * Metadata: Partition information
+ */
+struct rd_kafka_metadata_partition {
+        int32_t     id;             /* Partition Id */
+        rd_kafka_resp_err_t err;    /* Partition error reported by broker */
+        int32_t     leader;         /* Leader broker */
+        int         replica_cnt;    /* Number of brokers in 'replicas' */
+        int32_t    *replicas;       /* Replica brokers */
+        int         isr_cnt;        /* Number of ISR brokers in 'isrs' */
+        int32_t    *isrs;           /* In-Sync-Replica brokers */
+};
+
+/**
+ * Metadata: Topic information
+ */
+struct rd_kafka_metadata_topic {
+        char       *topic;          /* Topic name */
+        int         partition_cnt;  /* Number of partitions in 'partitions' */
+        struct rd_kafka_metadata_partition *partitions; /* Partitions */
+        rd_kafka_resp_err_t err;    /* Topic error reported by broker */
+};
+
+
+/**
+ * Metadata container
+ */
+struct rd_kafka_metadata {
+        int         broker_cnt;     /* Number of brokers in 'brokers' */
+        struct rd_kafka_metadata_broker *brokers;  /* Brokers */
+
+        int         topic_cnt;      /* Number of topics in 'topics' */
+        struct rd_kafka_metadata_topic *topics;    /* Topics */
+
+        int32_t     orig_broker_id; /* Broker originating this metadata */
+};
+
+
+/**
+ * Request Metadata from broker.
+ *
+ *  all_topics - if non-zero: request info about all topics in cluster,
+ *               if zero: only request info about locally known topics.
+ *  only_rkt   - only request info about this topic
+ *  metadatap  - pointer to hold metadata result.
+ *               The '*metadatap' pointer must be released
+ *               with rd_kafka_metadata_destroy().
+ *  timeout_ms - maximum response time before failing.
+ *
+ * Returns RD_KAFKA_RESP_ERR_NO_ERROR on success (in which case *metadatap)
+ * will be set, else RD_KAFKA_RESP_ERR__TIMED_OUT on timeout or
+ * other error code on error.
+ */
+rd_kafka_resp_err_t
+rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
+                   rd_kafka_topic_t *only_rkt,
+                   const struct rd_kafka_metadata **metadatap,
+                   int timeout_ms);
+
+/**
+ * Release metadata memory.
+ */
+void rd_kafka_metadata_destroy (const struct rd_kafka_metadata *metadata);
+
+
+
+
+
+
 
 
 /*******************************************************************

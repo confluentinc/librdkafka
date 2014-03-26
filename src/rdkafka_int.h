@@ -72,7 +72,6 @@
 
 
 
-
 #include "rdkafka_proto.h"
 
 
@@ -403,6 +402,19 @@ typedef struct rd_kafka_bufq_s {
 } rd_kafka_bufq_t;
 
 
+
+typedef struct rd_kafka_q_s {
+	pthread_mutex_t rkq_lock;
+	pthread_cond_t  rkq_cond;
+	TAILQ_HEAD(, rd_kafka_op_s) rkq_q;
+	int             rkq_qlen;      /* Number of entries in queue */
+        uint64_t        rkq_qsize;     /* Size of all entries in queue */
+        int             rkq_refcnt;
+        int             rkq_flags;
+#define RD_KAFKA_Q_F_ALLOCATED  0x1  /* Allocated: free on destroy */
+} rd_kafka_q_t;
+
+
 typedef enum {
 	RD_KAFKA_OP_FETCH,    /* Kafka thread -> Application */
 	RD_KAFKA_OP_ERR,      /* Kafka thread -> Application */
@@ -421,7 +433,12 @@ typedef struct rd_kafka_op_s {
 #define RD_KAFKA_OP_F_FREE        0x1  /* Free the payload when done with it. */
 #define RD_KAFKA_OP_F_FLASH       0x2  /* Internal: insert at head of queue */
 #define RD_KAFKA_OP_F_NO_RESPONSE 0x4  /* rkbuf: Not expecting a response */
+
+        /* Generic fields */
 	rd_kafka_msgq_t rko_msgq;
+        rd_kafka_q_t   *rko_replyq;    /* Indicates request: enq reply
+                                        * on this queue. */
+        int             rko_intarg;    /* Generic integer argument */
 
 	/* For PRODUCE */
 	rd_kafka_msg_t *rko_rkm;
@@ -436,7 +453,10 @@ typedef struct rd_kafka_op_s {
 	rd_kafka_buf_t    *rko_rkbuf;
 
 	/* For METADATA */
-#define rko_rkt  rko_rkmessage.rkt
+#define rko_rkt         rko_rkmessage.rkt
+#define rko_all_topics  rko_intarg
+#define rko_reason      rko_rkmessage.payload
+        struct rd_kafka_metadata *rko_metadata;
 
 	/* For STATS */
 #define rko_json      rko_rkmessage.payload
@@ -445,13 +465,6 @@ typedef struct rd_kafka_op_s {
 } rd_kafka_op_t;
 
 
-typedef struct rd_kafka_q_s {
-	pthread_mutex_t rkq_lock;
-	pthread_cond_t  rkq_cond;
-	TAILQ_HEAD(, rd_kafka_op_s) rkq_q;
-	int             rkq_qlen;
-        uint64_t        rkq_qsize;
-} rd_kafka_q_t;
 
 
 
@@ -763,7 +776,9 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 
 
 void rd_kafka_q_init (rd_kafka_q_t *rkq);
+rd_kafka_q_t *rd_kafka_q_new (void);
 void rd_kafka_q_destroy (rd_kafka_q_t *rkq);
+#define rd_kafka_q_keep(rkq) ((void)rd_atomic_add(&(rkq)->rkq_refcnt, 1))
 
 /**
  * Enqueue the 'rko' op at the tail of the queue 'rkq'.

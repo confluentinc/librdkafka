@@ -36,6 +36,8 @@ void rd_kafka_buf_destroy (rd_kafka_buf_t *rkbuf);
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 						   int32_t nodeid);
 
+rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state);
+
 void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 				   int do_rk_lock);
 #define rd_kafka_topic_leader_query(rk,rkt) \
@@ -44,3 +46,10 @@ void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb);
 
 void rd_kafka_dr_msgq (rd_kafka_t *rk,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);
+
+
+void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
+                                   int all_topics,
+                                   rd_kafka_topic_t *only_rkt,
+                                   rd_kafka_q_t *replyq,
+                                   const char *reason);

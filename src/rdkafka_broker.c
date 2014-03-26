@@ -59,9 +59,7 @@ const char *rd_kafka_broker_state_names[] = {
 
 
 static void rd_kafka_broker_update (rd_kafka_t *rk,
-				    const char *name,
-				    uint16_t port,
-				    uint32_t nodeid);
+                                    const struct rd_kafka_metadata_broker *mdb);
 
 static int rd_kafka_send (rd_kafka_broker_t *rkb);
 
@@ -604,10 +602,10 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
  */
 
 #define _FAIL(fmt...) do {						\
-		rd_rkb_dbg(rkb, BROKER, "PROTOERR",			\
+		rd_rkb_log(rkb, LOG_WARNING, "PROTOERR",                \
 			   "Protocol parse failure at %s:%i", \
 			   __FUNCTION__, __LINE__);			\
-		rd_rkb_dbg(rkb, BROKER, "PROTOERR", fmt);		\
+		rd_rkb_log(rkb, LOG_WARNING, "PROTOERR", fmt);		\
 		goto err;						\
 	} while (0)
 
@@ -627,6 +625,18 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 		of += (len);			\
 	} while (0)
 
+/* Advance/allocate used space in marshall buffer.
+ * Point PTR to available space of size LEN on success. */
+#define _MSH_ALLOC(PTR,LEN)  do {                                      \
+                int __LEN = (LEN);                                      \
+                if (msh_of + __LEN >= msh_size)                         \
+                        _FAIL("Not enough room in marshall buffer: "    \
+                              "%i+%i > %i",                             \
+                              msh_of, __LEN, msh_size);                 \
+                (PTR) = (void *)(msh_buf+msh_of);                       \
+                msh_of += __LEN;                                        \
+        } while(0)
+
 #define _READ(dstptr,len) do {			\
 		_CHECK_LEN(len);		\
 		memcpy((dstptr), buf+(of), (len));	\
@@ -643,10 +653,25 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 		*(int32_t *)(dstptr) = ntohl(*(int32_t *)(dstptr));	\
 	} while (0)
 
+/* Same as _READ_I32 but does a direct assignment.
+ * dst is assumed to be a scalar, not pointer. */
+#define _READ_I32A(dst) do {                                            \
+                int32_t _v;                                             \
+		_READ(&_v, 4);                                          \
+		dst = (typeof(dst))(int32_t) ntohl(_v);                 \
+	} while (0)
+
 #define _READ_I16(dstptr) do {						\
 		_READ(dstptr, 2);					\
 		*(int16_t *)(dstptr) = ntohs(*(int16_t *)(dstptr));	\
 	} while (0)
+
+#define _READ_I16A(dst) do {                                            \
+                int16_t _v;                                             \
+		_READ(&_v, 2);                                          \
+                dst = (typeof(dst))(int16_t)ntohs(_v);                 \
+	} while (0)
+
 
 /* Read Kafka String representation (2+N) */
 #define _READ_STR(kstr) do {					\
@@ -655,6 +680,20 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 		kstr = (rd_kafkap_str_t *)((char *)buf+of);	\
 		_klen = RD_KAFKAP_STR_SIZE(kstr);		\
 		of += _klen;					\
+	} while (0)
+
+/* Read Kafka String representation (2+N) into nul-terminated C string.
+ * Depends on a marshalling environment. */
+#define _READ_STR_MSH(dst) do {                                 \
+                rd_kafkap_str_t *_kstr;                         \
+		int _klen;					\
+		_CHECK_LEN(2);					\
+		_kstr = (rd_kafkap_str_t *)((char *)buf+of);	\
+		_klen = RD_KAFKAP_STR_SIZE(_kstr);		\
+		of += _klen;					\
+                _MSH_ALLOC(dst, _klen+1);                       \
+                memcpy(dst, _kstr->str, _klen);                  \
+                dst[_klen] = '\0';                              \
 	} while (0)
 
 /* Read Kafka Bytes representation (4+N) */
@@ -679,166 +718,176 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
  * Handle a Metadata response message.
  * If 'rkt' is non-NULL the metadata originated from a topic-specific request.
  *
+ * The metadata will be marshalled into 'struct rd_kafka_metadata*' structs.
+ *
+ * Returns the marshalled metadata, or NULL on parse error.
+ *
  * Locality: broker thread
  */
-static void rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
-				      rd_kafka_topic_t *req_rkt,
-				      const char *buf, size_t size) {
-	struct {
-		int32_t          NodeId;
-		rd_kafkap_str_t *Host;
-		int32_t          Port;
-	}      *Brokers = NULL;
-	int32_t Broker_cnt;
-	struct rd_kafka_TopicMetadata *TopicMetadata = NULL;
-	int32_t TopicMetadata_cnt;
+static struct rd_kafka_metadata *
+rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
+                          rd_kafka_op_t *rko, const char *buf, size_t size) {
 	int i, j, k;
 	int of = 0;
 	int req_rkt_seen = 0;
+        char *msh_buf = NULL;
+        int   msh_of  = 0;
+        int   msh_size;
+        struct rd_kafka_metadata *md = NULL;
 
+        /* We assume that the marshalled representation is
+         * no more than 4 times larger than the wire representation. */
+        msh_size = sizeof(*md) + (size * 4);
+        msh_buf = malloc(msh_size);
+
+        _MSH_ALLOC(md, sizeof(*md));
+        md->orig_broker_id = rkb->rkb_nodeid;
 
 	/* Read Brokers */
-	_READ_I32(&Broker_cnt);
-	if (Broker_cnt > RD_KAFKAP_BROKERS_MAX)
-		_FAIL("Broker_cnt %"PRId32" > BROKERS_MAX %i",
-		      Broker_cnt, RD_KAFKAP_BROKERS_MAX);
+	_READ_I32A(md->broker_cnt);
+	if (md->broker_cnt > RD_KAFKAP_BROKERS_MAX)
+		_FAIL("Broker_cnt %i > BROKERS_MAX %i",
+		      md->broker_cnt, RD_KAFKAP_BROKERS_MAX);
 
-	Brokers = malloc(sizeof(*Brokers) * Broker_cnt);
+        _MSH_ALLOC(md->brokers, md->broker_cnt * sizeof(*md->brokers));
 
-	for (i = 0 ; i < Broker_cnt ; i++) {
-		_READ_I32(&Brokers[i].NodeId);
-		_READ_STR(Brokers[i].Host);
-		_READ_I32(&Brokers[i].Port);
+	for (i = 0 ; i < md->broker_cnt ; i++) {
+                _READ_I32A(md->brokers[i].id);
+                _READ_STR_MSH(md->brokers[i].host);
+		_READ_I32A(md->brokers[i].port);
 	}
-
 
 
 	/* Read TopicMetadata */
-	_READ_I32(&TopicMetadata_cnt);
-	rd_rkb_dbg(rkb, METADATA, "METADATA", "%"PRId32" brokers, "
-		   "%"PRId32" topics", Broker_cnt, TopicMetadata_cnt);
+	_READ_I32A(md->topic_cnt);
+	rd_rkb_dbg(rkb, METADATA, "METADATA", "%i brokers, %i topics",
+                   md->broker_cnt, md->topic_cnt);
 
-	if (TopicMetadata_cnt > RD_KAFKAP_TOPICS_MAX)
+	if (md->topic_cnt > RD_KAFKAP_TOPICS_MAX)
 		_FAIL("TopicMetadata_cnt %"PRId32" > TOPICS_MAX %i",
-		      TopicMetadata_cnt, RD_KAFKAP_TOPICS_MAX);
+		      md->topic_cnt, RD_KAFKAP_TOPICS_MAX);
 
-	TopicMetadata = malloc(sizeof(*TopicMetadata) * TopicMetadata_cnt);
+        _MSH_ALLOC(md->topics, md->topic_cnt * sizeof(*md->topics));
 
-	for (i = 0 ; i < TopicMetadata_cnt ; i++) {
+	for (i = 0 ; i < md->topic_cnt ; i++) {
 
-		_READ_I16(&TopicMetadata[i].ErrorCode);
-		_READ_STR(TopicMetadata[i].Name);
+		_READ_I16A(md->topics[i].err);
+		_READ_STR_MSH(md->topics[i].topic);
 
 		/* PartitionMetadata */
-		_READ_I32(&TopicMetadata[i].PartitionMetadata_cnt);
-		if (TopicMetadata[i].PartitionMetadata_cnt >
-		    RD_KAFKAP_PARTITIONS_MAX)
-			_FAIL("TopicMetadata[%i].PartitionMetadata_cnt "
-			      "%"PRId32" > PARTITIONS_MAX %i",
-			      i, TopicMetadata[i].PartitionMetadata_cnt,
+                _READ_I32A(md->topics[i].partition_cnt);
+		if (md->topics[i].partition_cnt > RD_KAFKAP_PARTITIONS_MAX)
+			_FAIL("TopicMetadata[%i].PartitionMetadata_cnt %i "
+			      "> PARTITIONS_MAX %i",
+			      i, md->topics[i].partition_cnt,
 			      RD_KAFKAP_PARTITIONS_MAX);
 
-		TopicMetadata[i].PartitionMetadata =
-			alloca(sizeof(*TopicMetadata[i].PartitionMetadata) *
-			       TopicMetadata[i].PartitionMetadata_cnt);
+                _MSH_ALLOC(md->topics[i].partitions,
+                           md->topics[i].partition_cnt *
+                           sizeof(*md->topics[i].partitions));
 
-		for (j = 0 ; j < TopicMetadata[i].PartitionMetadata_cnt ; j++) {
-			_READ_I16(&TopicMetadata[i].PartitionMetadata[j].
-				  ErrorCode);
-			_READ_I32(&TopicMetadata[i].PartitionMetadata[j].
-				  PartitionId);
-			_READ_I32(&TopicMetadata[i].PartitionMetadata[j].
-				  Leader);
+		for (j = 0 ; j < md->topics[i].partition_cnt ; j++) {
+			_READ_I16A(md->topics[i].partitions[j].err);
+			_READ_I32A(md->topics[i].partitions[j].id);
+			_READ_I32A(md->topics[i].partitions[j].leader);
 
 			/* Replicas */
-			_READ_I32(&TopicMetadata[i].PartitionMetadata[j].
-				  Replicas_cnt);
-			if (TopicMetadata[i].PartitionMetadata[j].Replicas_cnt >
+			_READ_I32A(md->topics[i].partitions[j].replica_cnt);
+			if (md->topics[i].partitions[j].replica_cnt >
 			    RD_KAFKAP_BROKERS_MAX)
 				_FAIL("TopicMetadata[%i]."
-				      "PartitionMetadata[%i].Replicas_cnt "
-				      "%"PRId32" > BROKERS_MAX %i",
+				      "PartitionMetadata[%i].Replica_cnt "
+				      "%i > BROKERS_MAX %i",
 				      i, j,
-				      TopicMetadata[i].PartitionMetadata[j].
-				      Replicas_cnt,
+                                      md->topics[i].partitions[j].replica_cnt,
 				      RD_KAFKAP_BROKERS_MAX);
 
-			TopicMetadata[i].PartitionMetadata[j].Replicas =
-				alloca(sizeof(*TopicMetadata[i].
-					      PartitionMetadata[j].Replicas)
-				       * TopicMetadata[i].PartitionMetadata[j].
-				       Replicas_cnt);
+                        _MSH_ALLOC(md->topics[i].partitions[j].replicas,
+                                   md->topics[i].partitions[j].replica_cnt *
+                                   sizeof(*md->topics[i].partitions[j].
+                                          replicas));
 
-			for (k = 0 ; k < TopicMetadata[i].PartitionMetadata[j].
-				     Replicas_cnt ; k++)
-				_READ_I32(&TopicMetadata[i].
-					  PartitionMetadata[j].Replicas[k]);
+                        for (k = 0 ;
+                             k < md->topics[i].partitions[j].replica_cnt; k++)
+				_READ_I32A(md->topics[i].partitions[j].
+                                           replicas[k]);
 
-
-			/* Isr */
-			_READ_I32(&TopicMetadata[i].PartitionMetadata[j].
-				  Isr_cnt);
-			if (TopicMetadata[i].PartitionMetadata[j].Isr_cnt >
+			/* Isrs */
+			_READ_I32A(md->topics[i].partitions[j].isr_cnt);
+			if (md->topics[i].partitions[j].isr_cnt >
 			    RD_KAFKAP_BROKERS_MAX)
 				_FAIL("TopicMetadata[%i]."
-				      "PartitionMetadata[%i].Isr_cnt %"PRId32
-				      " > BROKERS_MAX %i",
+				      "PartitionMetadata[%i].Isr_cnt "
+				      "%i > BROKERS_MAX %i",
 				      i, j,
-				      TopicMetadata[i].
-				      PartitionMetadata[j].Isr_cnt,
+                                      md->topics[i].partitions[j].isr_cnt,
 				      RD_KAFKAP_BROKERS_MAX);
 
-			TopicMetadata[i].PartitionMetadata[j].Isr =
-				alloca(sizeof(*TopicMetadata[i].
-					      PartitionMetadata[j].Isr) *
-				       TopicMetadata[i].
-				       PartitionMetadata[j].Isr_cnt);
+                        _MSH_ALLOC(md->topics[i].partitions[j].isrs,
+                                   md->topics[i].partitions[j].isr_cnt *
+                                   sizeof(*md->topics[i].partitions[j].isrs));
+                        for (k = 0 ;
+                             k < md->topics[i].partitions[j].isr_cnt; k++)
+				_READ_I32A(md->topics[i].partitions[j].
+                                           isrs[k]);
 
-			for (k = 0 ; k < TopicMetadata[i].PartitionMetadata[j].
-				     Isr_cnt ; k++)
-				_READ_I32(&TopicMetadata[i].
-					  PartitionMetadata[j].Isr[k]);
 		}
 	}
 
+        /* Entire Metadata response now parsed without errors:
+         * now update our internal state according to the response. */
+
 	/* Update our list of brokers. */
-	for (i = 0 ; i < Broker_cnt ; i++) {
+	for (i = 0 ; i < md->broker_cnt ; i++) {
 		rd_rkb_dbg(rkb, METADATA, "METADATA",
-			   "  Broker #%i/%i: %.*s:%"PRId32" NodeId %"PRId32,
-			   i, Broker_cnt, RD_KAFKAP_STR_PR(Brokers[i].Host),
-			   Brokers[i].Port, Brokers[i].NodeId);
-		rd_kafka_broker_update(rkb->rkb_rk,
-				       rd_kafkap_strdupa(Brokers[i].Host),
-				       Brokers[i].Port,
-				       Brokers[i].NodeId);
+			   "  Broker #%i/%i: %s:%i NodeId %"PRId32,
+			   i, md->broker_cnt,
+                           md->brokers[i].host,
+                           md->brokers[i].port,
+                           md->brokers[i].id);
+		rd_kafka_broker_update(rkb->rkb_rk, &md->brokers[i]);
 	}
 
 	/* Update partition count and leader for each topic we know about */
-	for (i = 0 ; i < TopicMetadata_cnt ; i++) {
-		if (req_rkt &&
-		    !rd_kafkap_str_cmp(TopicMetadata[i].Name,
-				       req_rkt->rkt_topic))
+	for (i = 0 ; i < md->topic_cnt ; i++) {
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "  Topic #%i/%i: %s with %i partitions%s%s",
+                           i, md->topic_cnt, md->topics[i].topic,
+                           md->topics[i].partition_cnt,
+                           md->topics[i].err ? ": " : "",
+                           md->topics[i].err ?
+                           rd_kafka_err2str(md->topics[i].err) : "");
+
+
+		if (rko->rko_rkt &&
+		    !rd_kafkap_str_cmp_str(rko->rko_rkt->rkt_topic,
+                                           md->topics[i].topic))
 			req_rkt_seen++;
 
-		rd_kafka_topic_metadata_update(rkb, &TopicMetadata[i]);
+		rd_kafka_topic_metadata_update(rkb, &md->topics[i]);
 	}
 
 
 	/* Requested topics not seen in metadata? Propogate to topic code. */
-	if (req_rkt) {
+	if (rko->rko_rkt) {
 		rd_rkb_dbg(rkb, TOPIC, "METADATA",
 			   "Requested topic %s %sseen in metadata",
-			   req_rkt->rkt_topic->str, req_rkt_seen ? "" : "not ");
+			   rko->rko_rkt->rkt_topic->str,
+                           req_rkt_seen ? "" : "not ");
 		if (!req_rkt_seen)
-			rd_kafka_topic_metadata_none(req_rkt);
+			rd_kafka_topic_metadata_none(rko->rko_rkt);
 	}
 
 
+        /* This metadata request was triggered by someone wanting
+         * the metadata information back as a reply, so send that reply now.
+         * In this case we must not free the metadata memory here,
+         * the requestee will do. */
+        return md;
+
 err:
-	if (Brokers)
-		free(Brokers);
-	if (TopicMetadata)
-		free(TopicMetadata);
+        free(md);
+        return NULL;
 }
 
 
@@ -847,7 +896,9 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
 					    rd_kafka_buf_t *reply,
 					    rd_kafka_buf_t *request,
 					    void *opaque) {
-	rd_kafka_topic_t *rkt = opaque;
+        rd_kafka_op_t *rko = opaque;
+        struct rd_kafka_metadata *md = NULL;
+        rd_kafka_q_t *replyq;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
 		   "===== Received metadata from %s =====",
@@ -855,25 +906,40 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
 
 	/* Avoid metadata updates when we're terminating. */
 	if (rkb->rkb_rk->rk_terminate)
-		goto done;
+                err = RD_KAFKA_RESP_ERR__DESTROY;
 
 	if (unlikely(err)) {
 		/* FIXME: handle error */
-		rd_rkb_log(rkb, LOG_WARNING, "METADATA",
-			   "Metadata request failed: %s",
-			   rd_kafka_err2str(err));
+                if (err != RD_KAFKA_RESP_ERR__DESTROY)
+                        rd_rkb_log(rkb, LOG_WARNING, "METADATA",
+                                   "Metadata request failed: %s",
+                                   rd_kafka_err2str(err));
 	} else {
-		rd_kafka_metadata_handle(rkb, rkt,
-					 reply->rkbuf_buf2,
-					 reply->rkbuf_len);
+		md = rd_kafka_metadata_handle(rkb, rko,
+                                              reply->rkbuf_buf2,
+                                              reply->rkbuf_len);
 	}
 
-done:
-	if (rkt) {
-                rd_kafka_topic_wrlock(rkt);
-                rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_QUERY;
-                rd_kafka_topic_unlock(rkt);
-		rd_kafka_topic_destroy0(rkt);
+        if (rko->rko_rkt) {
+                rd_kafka_topic_wrlock(rko->rko_rkt);
+                rko->rko_rkt->rkt_flags &=
+                        ~RD_KAFKA_TOPIC_F_LEADER_QUERY;
+                rd_kafka_topic_unlock(rko->rko_rkt);
+        }
+
+        if ((replyq = rko->rko_replyq)) {
+                /* Reply to metadata requester, passing on the metadata.
+                 * Reuse requesting rko for the reply. */
+                rko->rko_err = err;
+                rko->rko_replyq = NULL;
+                rko->rko_metadata = md;
+                rd_kafka_q_enq(replyq, rko);
+                /* Drop refcount to queue */
+                rd_kafka_q_destroy(replyq);
+        } else {
+                if (md)
+                        free(md);
+                rd_kafka_op_destroy(rko);
         }
 
 	rd_kafka_buf_destroy(request);
@@ -883,15 +949,8 @@ done:
 
 
 
-/**
- * all_topics := if 1: retreive all topics&partitions from the broker
- *               if 0: just retrieve the topics we know about.
- * rkt        := all_topics=0 && only_rkt is set: only ask for specified topic.
- */
-static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
-					  int all_topics,
-					  rd_kafka_topic_t *only_rkt,
-					  const char *reason) {
+static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
+                                             rd_kafka_op_t *rko) {
 	char *buf;
 	size_t of = 0;
 	int32_t arrsize = 0;
@@ -900,22 +959,17 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
 		   "Request metadata for %s: %s",
-		   only_rkt ? only_rkt->rkt_topic->str :
-		   (all_topics ? "all topics" : "locally known topics"),
-		   reason ? : "");
+		   rko->rko_rkt ? rko->rko_rkt->rkt_topic->str :
+		   (rko->rko_all_topics ? "all topics":"locally known topics"),
+                   (char *)rko->rko_reason ? : "");
 
 	/* If called from other thread than the broker's own then post an
 	 * op for the broker's thread instead since all transmissions must
 	 * be performed by the broker thread. */
 	if (pthread_self() != rkb->rkb_thread) {
-		rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_REQ);
-                if (only_rkt) {
-                        rko->rko_rkt = only_rkt;
-                        rd_kafka_topic_keep(only_rkt);
-                }
-		rd_kafka_q_enq(&rkb->rkb_ops, rko);
-		rd_rkb_dbg(rkb, METADATA, "METADATA",
-			   "Request metadata: scheduled: not in broker thread");
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "Request metadata: scheduled: not in broker thread");
+                rd_kafka_q_enq(&rkb->rkb_ops, rko);
 		return;
 	}
 
@@ -923,10 +977,10 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
 		   "Requesting metadata for %stopics",
-		   all_topics ? "all ": "known ");
+		   rko->rko_all_topics ? "all ": "known ");
 
 
-	if (!only_rkt) {
+	if (!rko->rko_rkt) {
 		/* Push the next intervalled metadata refresh forward since
 		 * we are performing one now (which might be intervalled). */
 		if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0) {
@@ -947,31 +1001,31 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	}
 
 
-	if (only_rkt || !all_topics) {
+	if (rko->rko_rkt || !rko->rko_all_topics) {
 		rd_kafka_lock(rkb->rkb_rk);
 
 		/* Calculate size to hold all known topics */
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
-			if (only_rkt && only_rkt != rkt)
+			if (rko->rko_rkt && rko->rko_rkt != rkt)
 				continue;
 
 			arrsize++;
 			tnamelen += RD_KAFKAP_STR_SIZE(rkt->rkt_topic);
 		}
 	}
-	
+
 	buf = malloc(sizeof(arrsize) + tnamelen);
 	arrsize = htonl(arrsize);
 	memcpy(buf+of, &arrsize, 4);
 	of += 4;
 
 
-	if (only_rkt || !all_topics) {
+	if (rko->rko_rkt || !rko->rko_all_topics) {
 		/* Just our locally known topics */
-			
+
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
 			int tlen;
-			if (only_rkt && only_rkt != rkt)
+			if (rko->rko_rkt && rko->rko_rkt != rkt)
 				continue;
 			tlen = RD_KAFKAP_STR_SIZE(rkt->rkt_topic);
 			memcpy(buf+of, rkt->rkt_topic, tlen);
@@ -981,22 +1035,60 @@ static void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 	}
 
 
-	if (only_rkt)
-		rd_kafka_topic_keep(only_rkt);
-
 	rd_kafka_broker_buf_enq(rkb, RD_KAFKAP_Metadata,
 				buf, of,
 				RD_KAFKA_OP_F_FREE|RD_KAFKA_OP_F_FLASH,
-				rd_kafka_broker_metadata_reply, only_rkt);
+				rd_kafka_broker_metadata_reply, rko);
 }
 
+
+/**
+ * Initiate metadata request
+ *
+ * all_topics - if true, all topics in cluster will be requested, else only
+ *              the ones known locally.
+ * only_rkt   - only request this specific topic (optional)
+ * replyq     - enqueue reply op on this queue (optional)
+ * reason     - metadata request reason
+ *
+ */
+void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
+                                   int all_topics,
+                                   rd_kafka_topic_t *only_rkt,
+                                   rd_kafka_q_t *replyq,
+                                   const char *reason) {
+        rd_kafka_op_t *rko;
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_REQ);
+        rko->rko_all_topics = all_topics;
+        rko->rko_rkt        = only_rkt;
+        if (rko->rko_rkt)
+                rd_kafka_topic_keep(rko->rko_rkt);
+
+        rko->rko_replyq     = replyq;
+
+        if (RD_IS_CONSTANT(reason))
+                rko->rko_reason = (void *)reason;
+        else {
+                rko->rko_reason = strdup(reason);
+                rko->rko_flags |= RD_KAFKA_OP_F_FREE;
+        }
+
+        rd_kafka_broker_metadata_req_op(rkb, rko);
+}
+
+/**
+ * all_topics := if 1: retreive all topics&partitions from the broker
+ *               if 0: just retrieve the topics we know about.
+ * rkt        := all_topics=0 && only_rkt is set: only ask for specified topic.
+ */
 
 
 /**
  * Locks: rd_kafka_lock(rk) MUST be held.
  * Locality: any thread
  */
-static rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
+rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
 	rd_kafka_broker_t *rkb;
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -1044,7 +1136,7 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                 rd_kafka_topic_unlock(rkt);
         }
 
-	rd_kafka_broker_metadata_req(rkb, 0, rkt, "leader query");
+	rd_kafka_broker_metadata_req(rkb, 0, rkt, NULL, "leader query");
 
 	/* Release refcnt from rd_kafka_broker_any() */
 	rd_kafka_broker_destroy(rkb);
@@ -1423,7 +1515,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rkb->rkb_pfd.events = POLLIN;
 
 	/* Request metadata (async) */
-	rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
+	rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL, NULL,
 				     "connected");
 	return 0;
 }
@@ -2133,21 +2225,16 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 	switch (rko->rko_type)
 	{
 	case RD_KAFKA_OP_METADATA_REQ:
-		if (rko->rko_rkt) {
-			rd_kafka_broker_metadata_req(rkb, 0, rko->rko_rkt,
-						     NULL);
-                        /* Loose refcnt from op enq */
-                        rd_kafka_topic_destroy0(rko->rko_rkt);
-		} else
-			rd_kafka_broker_metadata_req(rkb, 1 /*all topics*/,
-						     NULL, NULL);
+                rd_kafka_broker_metadata_req_op(rkb, rko);
+                rko = NULL; /* metadata_req assumes rko ownership */
 		break;
 
 	default:
 		rd_kafka_assert(rkb->rkb_rk, !*"unhandled op type");
 	}
 
-	rd_kafka_op_destroy(rko);
+        if (rko)
+                rd_kafka_op_destroy(rko);
 }
 
 
@@ -2163,7 +2250,7 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 	/* Periodic metadata poll */
 	if (unlikely(now >= rkb->rkb_ts_metadata_poll))
 		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
-					     "periodic refresh");
+                                             NULL, "periodic refresh");
 
 	if (rkb->rkb_outbufs.rkbq_cnt > 0)
 		rkb->rkb_pfd.events |= POLLOUT;
@@ -2459,12 +2546,17 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		_READ_REF(hdr, sizeof(*hdr));
 		hdr->Offset      = be64toh(hdr->Offset);
 		hdr->MessageSize = ntohl(hdr->MessageSize);
-		_CHECK_LEN(hdr->MessageSize - 6/*Crc+Magic+Attr*/);
+
+                if (hdr->MessageSize - 6 > _REMAIN()) {
+                        /* Broker may send partial messages.
+                         * Bail out silently. */
+                        goto err;
+                }
 		/* Ignore CRC (for now) */
 
 		/* Extract key */
 		_READ_BYTES(Key);
-		
+
 		/* Extract Value */
 		_READ_BYTES(Value);
 
@@ -2494,6 +2586,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rko->rko_rkmessage.offset    = hdr->Offset;
 			rko->rko_rkmessage.rkt       = rktp->rktp_rkt;
 			rko->rko_rkmessage.partition = rktp->rktp_partition;
+                        rd_kafka_topic_keep(rko->rko_rkmessage.rkt);
 
 			rktp->rktp_next_offset = hdr->Offset + 1;
 
@@ -2509,7 +2602,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rd_rkb_dbg(rkb, MSG, "MSG",
 				   "Pushed message at offset %"PRId64
 				   " onto queue", hdr->Offset);
-				   
+
 			rd_kafka_q_enq(rkq, rko);
 			break;
 
@@ -2766,6 +2859,8 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					rko->rko_rkmessage.rkt = rktp->rktp_rkt;
 					rko->rko_rkmessage.partition =
 						rktp->rktp_partition;
+                                        rd_kafka_topic_keep(rko->rko_rkmessage.
+                                                            rkt);
 
 					rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
 					break;
@@ -3029,6 +3124,7 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 		rko->rko_rkmessage.offset    = rktp->rktp_query_offset;
 		rko->rko_rkmessage.rkt       = rktp->rktp_rkt;
 		rko->rko_rkmessage.partition = rktp->rktp_partition;
+                rd_kafka_topic_keep(rko->rko_rkmessage.rkt);
 		rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
 
 		/* FALLTHRU */
@@ -3345,7 +3441,6 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 
 
 void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
-        rd_kafka_op_t *rko;
 
 	if (rd_atomic_sub(&rkb->rkb_refcnt, 1) > 0)
 		return;
@@ -3358,19 +3453,6 @@ void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
 
 	if (rkb->rkb_rsal)
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
-
-        /* Clean up any references in the op queue before purging it */
-        TAILQ_FOREACH(rko, &rkb->rkb_ops.rkq_q, rko_link) {
-                switch (rko->rko_type)
-                {
-                case RD_KAFKA_OP_METADATA_REQ:
-                        if (rko->rko_rkt)
-                                rd_kafka_topic_destroy0(rko->rko_rkt);
-                        break;
-                default:
-                        break;
-                }
-        }
 
 	rd_kafka_q_purge(&rkb->rkb_ops);
 	rd_kafka_q_destroy(&rkb->rkb_ops);
@@ -3587,20 +3669,19 @@ int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist) {
 /**
  * Adds a new broker or updates an existing one.
  */
-static void rd_kafka_broker_update (rd_kafka_t *rk,
-				    const char *name,
-				    uint16_t port,
-				    uint32_t nodeid) {
+static void
+rd_kafka_broker_update (rd_kafka_t *rk,
+                        const struct rd_kafka_metadata_broker *mdb) {
 	rd_kafka_broker_t *rkb;
 
 	rd_kafka_lock(rk);
-	if ((rkb = rd_kafka_broker_find_by_nodeid(rk, nodeid)))
+	if ((rkb = rd_kafka_broker_find_by_nodeid(rk, mdb->id)))
 		rd_kafka_broker_destroy(rkb);
 	else
 		rd_kafka_broker_add(rk, RD_KAFKA_LEARNED,
-				    name, port, nodeid);
+				    mdb->host, mdb->port, mdb->id);
 	rd_kafka_unlock(rk);
-		
+
 	/* FIXME: invalidate Leader if required. */
 }
 

@@ -852,34 +852,36 @@ void rd_kafka_topic_metadata_none (rd_kafka_topic_t *rkt) {
  * topic is unknown.
  */
 int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
-				     const struct rd_kafka_TopicMetadata *tm) {
+                                    const struct rd_kafka_metadata_topic *mdt) {
 	rd_kafka_topic_t *rkt;
 	int upd = 0;
 	int j;
+        rd_kafka_broker_t **partbrokers;
 
-	if (!(rkt = rd_kafka_topic_find(rkb->rkb_rk,
-					rd_kafkap_strdupa(tm->Name))))
+	if (!(rkt = rd_kafka_topic_find(rkb->rkb_rk, mdt->topic)))
 		return -1; /* Ignore topics that we dont have locally. */
 
-	if (tm->ErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR)
+	if (mdt->err != RD_KAFKA_RESP_ERR_NO_ERROR)
 		rd_rkb_dbg(rkb, TOPIC, "METADATA",
 			   "Error in metadata reply for "
-			   "topic %s (PartCnt %"PRId32"): %s",
-			   rkt->rkt_topic->str, tm->PartitionMetadata_cnt,
-			   rd_kafka_err2str(tm->ErrorCode));
+			   "topic %s (PartCnt %i): %s",
+			   rkt->rkt_topic->str, mdt->partition_cnt,
+			   rd_kafka_err2str(mdt->err));
+
+        partbrokers = alloca(mdt->partition_cnt * sizeof(*partbrokers));
 
 	/* Look up brokers before acquiring rkt lock to preserve lock order */
 	rd_kafka_lock(rkb->rkb_rk);
-	for (j = 0 ; j < tm->PartitionMetadata_cnt ; j++) {
-		if (tm->PartitionMetadata[j].Leader == -1) {
-			tm->PartitionMetadata[j].rkb = NULL;
+	for (j = 0 ; j < mdt->partition_cnt ; j++) {
+		if (mdt->partitions[j].leader == -1) {
+                        partbrokers[j] = NULL;
 			continue;
 		}
 
-		tm->PartitionMetadata[j].rkb =
-			rd_kafka_broker_find_by_nodeid(rkb->rkb_rk,
-						       tm->PartitionMetadata[j].
-						       Leader);
+                partbrokers[j] =
+                        rd_kafka_broker_find_by_nodeid(rkb->rkb_rk,
+                                                       mdt->partitions[j].
+                                                       leader);
 	}
 	rd_kafka_unlock(rkb->rkb_rk);
 
@@ -889,31 +891,32 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 	rkt->rkt_ts_metadata = rd_clock();
 
 	/* Set topic state */
-	if (tm->ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+	if (mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
         else
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
 
 	/* Update number of partitions */
-	upd += rd_kafka_topic_partition_cnt_update(rkt,
-						   tm->PartitionMetadata_cnt);
+	upd += rd_kafka_topic_partition_cnt_update(rkt, mdt->partition_cnt);
 
 	/* Update leader for each partition */
-	for (j = 0 ; j < tm->PartitionMetadata_cnt ; j++) {
+	for (j = 0 ; j < mdt->partition_cnt ; j++) {
 		rd_rkb_dbg(rkb, METADATA, "METADATA",
-			   "  Topic %s partition %"PRId32" Leader %"PRId32,
+			   "  Topic %s partition %i Leader %"PRId32,
 			   rkt->rkt_topic->str,
-			   tm->PartitionMetadata[j].PartitionId,
-			   tm->PartitionMetadata[j].Leader);
+			   mdt->partitions[j].id,
+			   mdt->partitions[j].leader);
 
 		/* Update leader for partition */
 		upd += rd_kafka_topic_leader_update(rkt,
-						    tm->PartitionMetadata[j].
-						    PartitionId,
-						    tm->PartitionMetadata[j].
-						    Leader,
-						    tm->PartitionMetadata[j].
-						    rkb);
+                                                    mdt->partitions[j].id,
+                                                    mdt->partitions[j].leader,
+                                                    partbrokers[j]);
+
+                /* Drop reference to broker (from find()) */
+                if (partbrokers[j])
+			rd_kafka_broker_destroy(partbrokers[j]);
+
 	}
 
 	/* Try to assign unassigned messages to new partitions, or fail them */
@@ -922,11 +925,6 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 	rd_kafka_topic_unlock(rkt);
 	rd_kafka_topic_destroy0(rkt); /* from find() */
-
-	/* Drop broker references */
-	for (j = 0 ; j < tm->PartitionMetadata_cnt ; j++)
-		if (tm->PartitionMetadata[j].rkb)
-			rd_kafka_broker_destroy(tm->PartitionMetadata[j].rkb);
 
 	return upd;
 }

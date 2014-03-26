@@ -164,6 +164,64 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 }
 
 
+static void metadata_print (const char *topic,
+                            const struct rd_kafka_metadata *metadata) {
+        int i, j, k;
+
+        printf("Metadata for %s (from broker %"PRId32"):\n",
+               topic ? : "all topics",
+               metadata->orig_broker_id);
+
+
+        /* Iterate brokers */
+        printf(" %i brokers:\n", metadata->broker_cnt);
+        for (i = 0 ; i < metadata->broker_cnt ; i++)
+                printf("  broker %"PRId32" at %s:%i\n",
+                       metadata->brokers[i].id,
+                       metadata->brokers[i].host,
+                       metadata->brokers[i].port);
+
+        /* Iterate topics */
+        printf(" %i topics:\n", metadata->topic_cnt);
+        for (i = 0 ; i < metadata->topic_cnt ; i++) {
+                const struct rd_kafka_metadata_topic *t = &metadata->topics[i];
+                printf("  topic \"%s\" with %i partitions:",
+                       t->topic,
+                       t->partition_cnt);
+                if (t->err) {
+                        printf(" %s", rd_kafka_err2str(t->err));
+                        if (t->err == RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE)
+                                printf(" (try again)");
+                }
+                printf("\n");
+
+                /* Iterate topic's partitions */
+                for (j = 0 ; j < t->partition_cnt ; j++) {
+                        const struct rd_kafka_metadata_partition *p;
+                        p = &t->partitions[j];
+                        printf("    partition %"PRId32", "
+                               "leader %"PRId32", replicas: ",
+                               p->id, p->leader);
+
+                        /* Iterate partition's replicas */
+                        for (k = 0 ; k < p->replica_cnt ; k++)
+                                printf("%s%"PRId32,
+                                       k > 0 ? ",":"", p->replicas[k]);
+
+                        /* Iterate partition's ISRs */
+                        printf(", isrs: ");
+                        for (k = 0 ; k < p->isr_cnt ; k++)
+                                printf("%s%"PRId32,
+                                       k > 0 ? ",":"", p->isrs[k]);
+                        if (p->err)
+                                printf(", %s\n", rd_kafka_err2str(p->err));
+                        else
+                                printf("\n");
+                }
+        }
+}
+
+
 static void sig_usr1 (int sig) {
 	rd_kafka_dump(stdout, rk);
 }
@@ -190,10 +248,11 @@ int main (int argc, char **argv) {
 	/* Topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();
 
-	while ((opt = getopt(argc, argv, "PCt:p:b:z:qd:o:eX:A")) != -1) {
+	while ((opt = getopt(argc, argv, "PCLt:p:b:z:qd:o:eX:A")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
+                case 'L':
 			mode = opt;
 			break;
 		case 't':
@@ -321,16 +380,17 @@ int main (int argc, char **argv) {
 	}
 
 
-	if (!topic || optind != argc) {
+	if (optind != argc || (mode != 'L' && !topic)) {
 	usage:
 		fprintf(stderr,
-			"Usage: %s [-C|-P] -t <topic> "
+			"Usage: %s -C|-P|-L -t <topic> "
 			"[-p <partition>] [-b <host1:port1,host2:port2,..>]\n"
 			"\n"
 			"librdkafka version %s (0x%08x)\n"
 			"\n"
 			" Options:\n"
 			"  -C | -P         Consumer or Producer mode\n"
+                        "  -L              Metadata list mode\n"
 			"  -t <topic>      Topic to fetch / produce\n"
 			"  -p <num>        Partition (random partitioner)\n"
 			"  -b <brokers>    Broker address (localhost:9092)\n"
@@ -354,6 +414,9 @@ int main (int argc, char **argv) {
 			"  writes fetched messages to stdout\n"
 			" In Producer mode:\n"
 			"  reads messages from stdin and sends to broker\n"
+                        " In List mode:\n"
+                        "  queries broker for metadata information, "
+                        "topic is optional.\n"
 			"\n"
 			"\n"
 			"\n",
@@ -515,7 +578,62 @@ int main (int argc, char **argv) {
 		rd_kafka_topic_destroy(rkt);
 
 		rd_kafka_destroy(rk);
-	}
+
+        } else if (mode == 'L') {
+                rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+		/* Create Kafka handle */
+		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
+					errstr, sizeof(errstr)))) {
+			fprintf(stderr,
+				"%% Failed to create new producer: %s\n",
+				errstr);
+			exit(1);
+		}
+
+		/* Set logger */
+		rd_kafka_set_logger(rk, logger);
+		rd_kafka_set_log_level(rk, LOG_DEBUG);
+
+		/* Add brokers */
+		if (rd_kafka_brokers_add(rk, brokers) == 0) {
+			fprintf(stderr, "%% No valid brokers specified\n");
+			exit(1);
+		}
+
+                /* Create topic */
+                if (topic)
+                        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+                else
+                        rkt = NULL;
+
+                while (run) {
+                        const struct rd_kafka_metadata *metadata;
+
+                        /* Fetch metadata */
+                        err = rd_kafka_metadata(rk, rkt ? 0 : 1, rkt,
+                                                &metadata, 5000);
+                        if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+                                fprintf(stderr,
+                                        "%% Failed to acquire metadata: %s\n",
+                                        rd_kafka_err2str(err));
+                                run = 0;
+                                break;
+                        }
+
+                        metadata_print(topic, metadata);
+
+                        rd_kafka_metadata_destroy(metadata);
+                        run = 0;
+                }
+
+		/* Destroy the handle */
+		rd_kafka_destroy(rk);
+
+                /* Exit right away, dont wait for background cleanup, we haven't
+                 * done anything important anyway. */
+                exit(err ? 2 : 0);
+        }
 
 	/* Let background threads clean up and terminate cleanly. */
 	rd_kafka_wait_destroyed(2000);

@@ -309,7 +309,6 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	rd_kafka_bufq_t tmpq;
 
 	rd_kafka_assert(rkb->rkb_rk, pthread_self() == rkb->rkb_thread);
-	rd_kafka_broker_lock(rkb);
 
 	rd_kafka_dbg(rkb->rkb_rk, BROKER, "BROKERFAIL",
 		     "%s: failed: err: %s: (errno: %s)",
@@ -355,6 +354,8 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rd_kafka_op_err(rkb->rkb_rk, err,
 				"%s", rkb->rkb_err.msg);
 	}
+
+	rd_kafka_broker_lock(rkb);
 
 	/* Set broker state */
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);

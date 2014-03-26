@@ -576,7 +576,6 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 		if (had_leader)
 			rd_kafka_topic_leader_query(rk, rkt);
 
-		rd_kafka_toppar_unlock(rktp);
 		rd_kafka_toppar_destroy(rktp); /* from get() */
 
 		return had_leader ? 1 : 0;

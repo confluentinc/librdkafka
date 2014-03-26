@@ -95,6 +95,8 @@ int main (int argc, char **argv) {
                 rd_kafka_dump(NULL, NULL);
                 rd_kafka_thread_cnt();
                 rd_kafka_wait_destroyed(0);
+                rd_kafka_metadata(NULL, 0, NULL, NULL, 0);
+                rd_kafka_metadata_destroy(NULL);
         }
 
 

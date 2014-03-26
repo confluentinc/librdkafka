@@ -51,15 +51,17 @@ static int dispintvl = 1000;
 static int do_seq = 0;
 static int exit_after = 0;
 static int exit_eof = 0;
-static int quiet = 0;
 static FILE *stats_fp;
+static int dr_disp_div;
+static int verbosity = 1;
 
 static void stop (int sig) {
+        if (!run)
+                exit(0);
 	run = 0;
 }
 
 static long int msgs_wait_cnt = 0;
-static int msgs_failed = 0;
 static rd_ts_t t_end;
 static rd_kafka_t *rk;
 
@@ -69,17 +71,22 @@ static struct {
 	rd_ts_t  t_end;
 	rd_ts_t  t_end_send;
 	uint64_t msgs;
+        uint64_t msgs_dr_ok;
+        uint64_t msgs_dr_err;
+        uint64_t bytes_dr_ok;
 	uint64_t bytes;
 	uint64_t tx;
 	uint64_t tx_err;
+        uint64_t avg_rtt;
 	rd_ts_t  t_latency;
 	rd_ts_t  t_last;
+        rd_ts_t  t_enobufs_last;
 	rd_ts_t  t_total;
 } cnt = {};
 
 
 static void err_cb (rd_kafka_t *rk, int err, const char *reason, void *opaque) {
-	printf("ERROR CALLBACK: %s: %s: %s\n",
+	printf("%% ERROR CALLBACK: %s: %s: %s\n",
 	       rd_kafka_name(rk), rd_kafka_err2str(err), reason);
 }
 
@@ -97,28 +104,34 @@ static void msg_delivered (rd_kafka_t *rk,
 	msgs_wait_cnt--;
 
 	if (error_code)
-		msgs_failed++;
+                cnt.msgs_dr_err++;
+        else {
+                cnt.msgs_dr_ok++;
+                cnt.bytes_dr_ok += len;
+        }
 
 
 	if ((error_code &&
-	     (msgs_failed < 50 || !(msgs_failed % (dispintvl / 1000)))) ||
+	     (cnt.msgs_dr_err < 50 ||
+              !(cnt.msgs_dr_err % (dispintvl / 1000)))) ||
 	    !last || msgs_wait_cnt < 5 ||
-	    !(msgs_wait_cnt % (dispintvl / 1000)) || 
-	    (now - last) >= dispintvl * 1000) {
-		if (error_code)
-			printf("Message delivery failed: %s (%li remain)\n",
+	    !(msgs_wait_cnt % dr_disp_div) || 
+	    (now - last) >= dispintvl * 1000 ||
+            verbosity >= 3) {
+		if (error_code && verbosity >= 2)
+			printf("%% Message delivery failed: %s (%li remain)\n",
 			       rd_kafka_err2str(error_code),
 			       msgs_wait_cnt);
-		else if (!quiet)
-			printf("Message delivered: %li remain\n",
+		else if (verbosity >= 2)
+			printf("%% Message delivered: %li remain\n",
 			       msgs_wait_cnt);
-		if (!quiet && do_seq)
+		if (verbosity >= 3 && do_seq)
 			printf(" --> \"%.*s\"\n", (int)len, (char *)payload);
 		last = now;
 	}
 
 	if (msgs_wait_cnt == 0 && !forever) {
-		if (!quiet)
+		if (verbosity >= 2)
 			printf("All messages delivered!\n");
 		t_end = rd_clock();
 		run = 0;
@@ -155,7 +168,7 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 		       rkmessage->offset,
 		       rd_kafka_message_errstr(rkmessage));
 
-		msgs_failed++;
+                cnt.msgs_dr_err++;
 		return;
 	}
 
@@ -177,19 +190,97 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 }
 
 
+/**
+ * Find and extract single value from a two-level search.
+ * First find 'field1', then find 'field2' and extract its value.
+ * Returns 0 on miss else the value.
+ */
+static uint64_t json_parse_fields (const char *json, const char **end,
+                                   const char *field1, const char *field2) {
+        const char *t = json;
+        const char *t2;
+        int len1 = strlen(field1);
+        int len2 = strlen(field2);
+
+        while ((t2 = strstr(t, field1))) {
+                uint64_t v;
+
+                t = t2;
+                t += len1;
+
+                /* Find field */
+                if (!(t2 = strstr(t, field2)))
+                        continue;
+                t2 += len2;
+
+                while (isspace((int)*t2))
+                        t2++;
+
+                v = strtoull(t2, (char **)&t, 10);
+                if (t2 == t)
+                        continue;
+
+                *end = t;
+                return v;
+        }
+
+        *end = t + strlen(t);
+        return 0;
+}
+
+/**
+ * Parse various values from rdkafka stats
+ */
+static void json_parse_stats (const char *json) {
+        const char *t;
+        const int max_avgs = 100; /* max number of brokers to scan for rtt */
+        uint64_t avg_rtt[max_avgs+1];
+        int avg_rtt_i     = 0;
+
+        /* Store totals at end of array */
+        avg_rtt[max_avgs]     = 0;
+
+        /* Extract all broker RTTs */
+        t = json;
+        while (avg_rtt_i < max_avgs && *t) {
+                avg_rtt[avg_rtt_i] = json_parse_fields(t, &t,
+                                                       "\"rtt\":",
+                                                       "\"avg\":");
+
+                /* Skip low RTT values, means no messages are passing */
+                if (avg_rtt[avg_rtt_i] < 100 /*0.1ms*/)
+                        continue;
+
+
+                avg_rtt[max_avgs] += avg_rtt[avg_rtt_i];
+                avg_rtt_i++;
+        }
+
+        if (avg_rtt_i > 0)
+                avg_rtt[max_avgs] /= avg_rtt_i;
+
+        cnt.avg_rtt = avg_rtt[max_avgs];
+}
+
+
 static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
 		     void *opaque) {
+
+        /* Extract values for our own stats */
+        json_parse_stats(json);
+
         if (stats_fp)
                 fprintf(stats_fp, "%s\n", json);
 	return 0;
 }
 
-static void print_stats (int mode, int force_show, const char *compression) {
+static void print_stats (int mode, int end_credits, const char *compression) {
 	rd_ts_t now = rd_clock();
 	rd_ts_t t_total;
 
-	if (!force_show &&
-	    cnt.t_last + dispintvl > now)
+	if (!end_credits &&
+            (verbosity == 0 ||
+             cnt.t_last + dispintvl > now))
 		return;
 
 	if (cnt.t_end_send)
@@ -199,15 +290,76 @@ static void print_stats (int mode, int force_show, const char *compression) {
 	else
 		t_total = now - cnt.t_start;
 
-	printf("%% %"PRIu64" messages and %"PRIu64" bytes "
-	       "%s in %"PRIu64"ms: %"PRIu64" msgs/s and %.02f Mb/s, "
-	       "%i messages failed, %s compression\n",
-	       cnt.msgs, cnt.bytes,
-	       mode == 'P' ? "produced" : "consumed",
-	       t_total / 1000,
-	       ((cnt.msgs * 1000000) / t_total),
-	       (float)((cnt.bytes) / (float)t_total),
-	       msgs_failed, compression);
+        if (mode == 'P') {
+                static int rows_written = 0;
+
+#define ROW_START()        do {} while (0)
+#define COL_HDR(NAME)      printf("| %10.10s ", (NAME))
+#define COL_PR64(NAME,VAL) printf("| %10"PRIu64" ", (VAL))
+#define COL_PRF(NAME,VAL)  printf("| %10.2f ", (VAL))
+#define ROW_END()          do {                 \
+                        printf("\n");           \
+                        rows_written++;         \
+                } while (0)
+
+                if (!(rows_written % 20)) {
+                        /* First time, print header */
+                        ROW_START();
+                        COL_HDR("elapsed");
+                        COL_HDR("msgs");
+                        COL_HDR("bytes");
+                        COL_HDR("rtt");
+                        COL_HDR("dr");
+                        COL_HDR("dr_m/s");
+                        COL_HDR("dr_MB/s");
+                        COL_HDR("dr_err");
+                        COL_HDR("tx_err");
+                        COL_HDR("outq");
+                        ROW_END();
+                }
+
+                ROW_START();
+                COL_PR64("elapsed", t_total / 1000);
+                COL_PR64("msgs", cnt.msgs);
+                COL_PR64("bytes", cnt.bytes);
+                COL_PR64("rtt", cnt.avg_rtt);
+                COL_PR64("dr", cnt.msgs_dr_ok);
+                COL_PR64("dr_m/s",
+                         ((cnt.msgs_dr_ok * 1000000) / t_total));
+                COL_PRF("dr_MB/s",
+                        (float)((cnt.bytes_dr_ok) / (float)t_total));
+                COL_PR64("dr_err", cnt.msgs_dr_err);
+                COL_PR64("tx_err", cnt.tx_err);
+                COL_PR64("outq", (uint64_t)rd_kafka_outq_len(rk));
+                ROW_END();
+
+                if (end_credits)
+                        printf("%% %"PRIu64" messages produced "
+                               "(%"PRIu64" bytes), "
+                               "%"PRIu64" delivered (%"PRIu64" failed) "
+                               "in %"PRIu64"ms: %"PRIu64" msgs/s and "
+                               "%.02f Mb/s, "
+                               "%"PRIu64" produce failures, %i in queue, "
+                               "%s compression\n",
+                               cnt.msgs, cnt.bytes,
+                               cnt.msgs_dr_ok, cnt.msgs_dr_err,
+                               t_total / 1000,
+                               ((cnt.msgs_dr_ok * 1000000) / t_total),
+                               (float)((cnt.bytes_dr_ok) / (float)t_total),
+                               cnt.tx_err, rd_kafka_outq_len(rk), compression);
+        } else {
+                if (end_credits)
+                        printf("%% %"PRIu64" messages and %"PRIu64" bytes "
+                               "%s in %"PRIu64"ms: %"PRIu64" msgs/s and "
+                               "%.02f Mb/s, "
+                               "%i messages failed, %s compression\n",
+                               cnt.msgs, cnt.bytes,
+                               mode == 'P' ? "produced" : "consumed",
+                               t_total / 1000,
+                               ((cnt.msgs * 1000000) / t_total),
+                               (float)((cnt.bytes) / (float)t_total),
+                               0/*FIXME*/, compression);
+        }
 
 	cnt.t_last = now;
 }
@@ -241,6 +393,8 @@ int main (int argc, char **argv) {
 	int batch_size = 0;
 	int idle = 0;
         const char *stats_cmd = NULL;
+        char *stats_intvlstr = NULL;
+        char tmp[128];
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -270,7 +424,7 @@ int main (int argc, char **argv) {
 	while ((opt =
 		getopt(argc, argv,
 		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:"
-                       "R:a:z:o:X:B:eT:G:qI")) != -1) {
+                       "R:a:z:o:X:B:eT:G:qvI")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -397,20 +551,18 @@ int main (int argc, char **argv) {
 		break;
 
 		case 'T':
-			if (rd_kafka_conf_set(conf, "statistics.interval.ms",
-					      optarg, errstr, sizeof(errstr)) !=
-			    RD_KAFKA_CONF_OK) {
-				fprintf(stderr, "%% %s\n", errstr);
-				exit(1);
-			}
-			rd_kafka_conf_set_stats_cb(conf, stats_cb);
+                        stats_intvlstr = optarg;
 			break;
                 case 'G':
                         stats_cmd = optarg;
                         break;
 
 		case 'q':
-			quiet = 1;
+                        verbosity--;
+			break;
+
+		case 'v':
+                        verbosity++;
 			break;
 
 		case 'I':
@@ -461,8 +613,9 @@ int main (int argc, char **argv) {
 			"  -T <intvl>   Enable statistics from librdkafka at "
 			"specified interval (ms)\n"
                         "  -G <command> Pipe statistics to <command>\n"
-			"  -q           Be more quiet\n"
 			"  -I           Idle: dont produce any messages\n"
+			"  -q           Decrease verbosity\n"
+                        "  -v           Increase verbosity (default 1)\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  consumes messages and prints thruput\n"
@@ -481,7 +634,8 @@ int main (int argc, char **argv) {
 
 	dispintvl *= 1000; /* us */
 
-	printf("%% Using random seed %i\n", seed);
+	printf("%% Using random seed %i, verbosity level %i\n",
+               seed, verbosity);
 	srand(seed);
 	signal(SIGINT, stop);
 	signal(SIGUSR1, sig_usr1);
@@ -495,14 +649,37 @@ int main (int argc, char **argv) {
 		exit(1);
 	}
 
-        if (stats_cmd) {
-                if (!(stats_fp = popen(stats_cmd, "we"))) {
-                        fprintf(stderr, "%% Failed to start stats command: "
-                                "%s: %s", stats_cmd, strerror(errno));
-                        exit(1);
-                }
-        } else
-                stats_fp = stdout;
+        /* Always enable stats (for RTT extraction), and if user supplied
+         * the -T <intvl> option we let her take part of the stats aswell. */
+        rd_kafka_conf_set_stats_cb(conf, stats_cb);
+
+        if (!stats_intvlstr) {
+                /* if no user-desired stats, adjust stats interval
+                 * to the display interval. */
+                snprintf(tmp, sizeof(tmp), "%i", dispintvl / 1000);
+        }
+
+        if (rd_kafka_conf_set(conf, "statistics.interval.ms",
+                              stats_intvlstr ? : tmp,
+                              errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%% %s\n", errstr);
+                exit(1);
+        }
+
+        if (stats_intvlstr) {
+                /* User enabled stats (-T) */
+
+                if (stats_cmd) {
+                        if (!(stats_fp = popen(stats_cmd, "we"))) {
+                                fprintf(stderr,
+                                        "%% Failed to start stats command: "
+                                        "%s: %s", stats_cmd, strerror(errno));
+                                exit(1);
+                        }
+                } else
+                        stats_fp = stdout;
+        }
 
 	if (msgcnt != -1)
 		forever = 0;
@@ -514,7 +691,6 @@ int main (int argc, char **argv) {
 		char *sbuf;
 		char *pbuf;
 		int outq;
-		int i;
 		int keylen = key ? strlen(key) : 0;
 		off_t rof = 0;
 		size_t plen = strlen(msgpattern);
@@ -563,6 +739,11 @@ int main (int argc, char **argv) {
 		/* Explicitly create topic to avoid per-msg lookups. */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
+
+                dr_disp_div = msgcnt / 50;
+                if (dr_disp_div == 0)
+                        dr_disp_div = 10;
+
 		cnt.t_start = rd_clock();
 
 		while (run && (msgcnt == -1 || cnt.msgs < msgcnt)) {
@@ -591,66 +772,65 @@ int main (int argc, char **argv) {
 						sendflags, pbuf, msgsize,
 						key, keylen, NULL) == -1) {
 				if (errno == ESRCH)
-					printf("No such partition: %"PRId32"\n",
-					       partition);
-				else if (!quiet || errno != ENOBUFS)
-					printf("produce error: %s%s\n",
+					printf("%% No such partition: "
+                                               "%"PRId32"\n", partition);
+				else if ((errno != ENOBUFS && verbosity >= 1) ||
+                                         verbosity >= 3)
+					printf("%% produce error: %s%s\n",
 					       rd_kafka_err2str(
 						       rd_kafka_errno2err(
 							       errno)),
 					       errno == ENOBUFS ?
 					       " (backpressure)":"");
-				msgs_failed++;
+
 				cnt.tx_err++;
 				if (errno != ENOBUFS) {
 					run = 0;
 					break;
 				}
 				now = rd_clock();
-				if (cnt.t_last + dispintvl <= now) {
+				if (verbosity >= 2 &&
+                                    cnt.t_enobufs_last + dispintvl <= now) {
 					printf("%% Backpressure %i "
 					       "(tx %"PRIu64", "
 					       "txerr %"PRIu64")\n",
 					       rd_kafka_outq_len(rk),
 					       cnt.tx, cnt.tx_err);
-					cnt.t_last = now;
+					cnt.t_enobufs_last = now;
 				}
+
 				/* Poll to handle delivery reports */
 				rd_kafka_poll(rk, 10);
+
+                                print_stats(mode, 0, compression);
 			}
 
 			msgs_wait_cnt++;
 			cnt.msgs++;
 			cnt.bytes += msgsize;
 
-			print_stats(mode, 0, compression);
-
 			/* Must poll to handle delivery reports */
 			rd_kafka_poll(rk, 0);
-			
+
+			print_stats(mode, 0, compression);
 		}
 
 		forever = 0;
-		printf("All messages produced, "
-		       "now waiting for %li deliveries\n",
-		       msgs_wait_cnt);
+                if (verbosity >= 2)
+                        printf("%% All messages produced, "
+                               "now waiting for %li deliveries\n",
+                               msgs_wait_cnt);
 		if (debug)
 			rd_kafka_dump(stdout, rk);
 
 		/* Wait for messages to be delivered */
-		i = 0;
-		while (run && rd_kafka_poll(rk, 1000) != -1) {
-			if (!(i++ % (dispintvl/1000)))
-				printf("%% Waiting for %li, "
-				       "%i messages in outq "
-				       "to be sent. Abort with Ctrl-c\n",
-				       msgs_wait_cnt,
-				       rd_kafka_outq_len(rk));
-		}
+                while (run && rd_kafka_poll(rk, 1000) != -1)
+			print_stats(mode, 0, compression);
 
 
 		outq = rd_kafka_outq_len(rk);
-		printf("%% %i messages in outq\n", outq);
+                if (verbosity >= 2)
+                        printf("%% %i messages in outq\n", outq);
 		cnt.msgs -= outq;
 		cnt.bytes -= msgsize * outq;
 

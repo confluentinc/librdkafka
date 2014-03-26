@@ -55,6 +55,7 @@
 
 #define RD_UNUSED   __attribute__((unused))
 #define RD_PACKED   __attribute__((packed))
+#define RD_IS_CONSTANT(p)  __builtin_constant_p((p))
 
 #define RD_ARRAY_SIZE(A)          (sizeof((A)) / sizeof(*(A)))
 #define RD_ARRAYSIZE(A)           RD_ARRAY_SIZE(A)

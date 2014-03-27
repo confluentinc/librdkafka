@@ -63,6 +63,10 @@ static void rd_kafka_broker_update (rd_kafka_t *rk,
 
 static int rd_kafka_send (rd_kafka_broker_t *rkb);
 
+static void rd_kafka_toppar_offsetcommit_request (rd_kafka_broker_t *rkb,
+                                                  rd_kafka_toppar_t *rktp,
+                                                  int64_t offset);
+
 static void msghdr_print (rd_kafka_t *rk,
 			  const char *what, const struct msghdr *msg,
 			  int hexdump) RD_UNUSED;
@@ -170,6 +174,60 @@ static void rd_kafka_buf_push (rd_kafka_buf_t *rkbuf, void *buf, size_t len) {
 	iov->iov_len = len;
 }
 
+/**
+ * Simply pushes the write-buffer onto the iovec stack.
+ * This is to be used when the rd_kafka_buf_write*() set of functions
+ * are used to construct a buffer rather than individual rd_kafka_buf_push()es.
+ */
+static void rd_kafka_buf_autopush (rd_kafka_buf_t *rkbuf) {
+        rd_kafka_buf_push(rkbuf, rkbuf->rkbuf_wbuf, rkbuf->rkbuf_wof);
+        rkbuf->rkbuf_wbuf += rkbuf->rkbuf_wof;
+        rkbuf->rkbuf_wof = 0;
+}
+
+
+/**
+ * Write (copy) data to buffer at current write-buffer position.
+ * There must be enough space allocated in the rkbuf.
+ */
+static inline void rd_kafka_buf_write (rd_kafka_buf_t *rkbuf,
+                                       const void *ptr, size_t len) {
+        /* Make sure there's enough room */
+        rd_kafka_assert(NULL,
+                        (rkbuf->rkbuf_wbuf + rkbuf->rkbuf_wof + len <=
+                         rkbuf->rkbuf_buf + rkbuf->rkbuf_size));
+
+        memcpy(rkbuf->rkbuf_wbuf + rkbuf->rkbuf_wof, ptr, len);
+        rkbuf->rkbuf_wof += len;
+}
+
+/**
+ * Write int32_t to buffer.
+ * The value will be endian-swapped before write.
+ */
+static inline void rd_kafka_buf_write_i32 (rd_kafka_buf_t *rkbuf, int32_t v) {
+        v = htonl(v);
+        return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
+}
+
+/**
+ * Write int64_t to buffer.
+ * The value will be endian-swapped before write.
+ */
+static inline void rd_kafka_buf_write_i64 (rd_kafka_buf_t *rkbuf, int64_t v) {
+        v = htobe64(v);
+        return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
+}
+
+
+/**
+ * Write (copy) Kafka string to buffer.
+ */
+static inline void rd_kafka_buf_write_kstr (rd_kafka_buf_t *rkbuf,
+                                            const rd_kafkap_str_t *kstr) {
+        return rd_kafka_buf_write(rkbuf, kstr, RD_KAFKAP_STR_SIZE(kstr));
+}
+
 
 #define RD_KAFKA_HEADERS_IOV_CNT   2
 #define RD_KAFKA_PAYLOAD_IOV_MAX  (IOV_MAX-RD_KAFKA_HEADERS_IOV_CNT)
@@ -194,6 +252,7 @@ static rd_kafka_buf_t *rd_kafka_buf_new (int iovcnt, size_t size) {
 
 	rkbuf->rkbuf_size = size;
 	rkbuf->rkbuf_buf = ((char *)(rkbuf+1))+iovsize;
+        rkbuf->rkbuf_wbuf = rkbuf->rkbuf_buf;
 
 	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
 
@@ -2233,6 +2292,12 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 rko = NULL; /* metadata_req assumes rko ownership */
 		break;
 
+        case RD_KAFKA_OP_OFFSET_COMMIT:
+                rd_kafka_toppar_offsetcommit_request(rkb,
+                                                     rko->rko_rktp,
+                                                     rko->rko_offset);
+                break;
+
 	default:
 		rd_kafka_assert(rkb->rkb_rk, !*"unhandled op type");
 	}
@@ -2967,7 +3032,7 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_broker_t *rkb,
 
 				if (reply)
 					rd_kafka_buf_destroy(reply);
-							
+
 				rd_kafka_broker_buf_retry(rkb, request);
 				return;
 			}
@@ -2986,6 +3051,317 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_broker_t *rkb,
 	rd_kafka_buf_destroy(request);
 	if (reply)
 		rd_kafka_buf_destroy(reply);
+}
+
+
+
+/**
+ * Parse and handle an OffsetCommitResponse message.
+ * Returns an error code.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_toppar_offsetcommit_reply_handle (rd_kafka_broker_t *rkb,
+                                           rd_kafka_buf_t *rkbuf,
+                                           rd_kafka_toppar_t *rktp,
+                                           int64_t offset) {
+	char *buf = rkbuf->rkbuf_buf2;
+	size_t size = rkbuf->rkbuf_len;
+	size_t of = 0;
+	int32_t TopicArrayCnt;
+	int i;
+
+	_READ_I32(&TopicArrayCnt);
+	for (i = 0 ; i < TopicArrayCnt ; i++) {
+		rd_kafkap_str_t *topic;
+		int32_t PartitionArrayCnt;
+		int j;
+
+		_READ_STR(topic);
+		_READ_I32(&PartitionArrayCnt);
+
+		for (j = 0 ; j < PartitionArrayCnt ; j++) {
+			int32_t Partition;
+			int16_t ErrorCode;
+
+			_READ_I32(&Partition);
+			_READ_I16(&ErrorCode);
+
+			/* Skip toppars we didnt ask for. */
+			if (unlikely(rktp->rktp_partition != Partition
+				     || rd_kafkap_str_cmp(rktp->
+							  rktp_rkt->
+							  rkt_topic,
+							  topic)))
+				continue;
+
+			if (unlikely(ErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR))
+				return ErrorCode;
+
+                        rktp->rktp_commited_offset = offset;
+
+			rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+				   "OffsetCommitResponse "
+                                   "for topic %s [%"PRId32"]: "
+				   "offset %"PRId64" commited",
+				   rktp->rktp_rkt->rkt_topic->str,
+				   rktp->rktp_partition,
+				   offset);
+
+			/* We just commited one toppar, so
+			 * we're probably done now. */
+			return RD_KAFKA_RESP_ERR_NO_ERROR;
+		}
+	}
+
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err:
+	return RD_KAFKA_RESP_ERR__BAD_MSG;
+}
+
+
+
+/**
+ * Parses and handles an OffsetCommitResponse.
+ */
+static void rd_kafka_toppar_offsetcommit_reply (rd_kafka_broker_t *rkb,
+                                                rd_kafka_resp_err_t err,
+                                                rd_kafka_buf_t *reply,
+                                                rd_kafka_buf_t *request,
+                                                void *opaque) {
+	rd_kafka_toppar_t *rktp = opaque;
+	rd_kafka_op_t *rko;
+
+	if (likely(!err && reply))
+		err = rd_kafka_toppar_offsetcommit_reply_handle(rkb,
+                                                                reply, rktp,
+                                                                request->
+                                                                rkbuf_offset);
+
+	rd_rkb_dbg(rkb, TOPIC, "OFFSETCI",
+		   "OffsetCommitResponse (%"PRId64") "
+                   "for topic %s [%"PRId32"]: %s",
+                   rktp->rktp_committing_offset,
+		   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+		   rd_kafka_err2str(err));
+
+	if (unlikely(err)) {
+		switch (err)
+		{
+		case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+		case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
+		case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
+		case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
+		case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
+			/* Request metadata information update */
+			rd_kafka_topic_leader_query(rkb->rkb_rk,
+						    rktp->rktp_rkt);
+			/* FALLTHRU */
+
+		case RD_KAFKA_RESP_ERR__TRANSPORT:
+		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
+			/* Try again */
+			if (++request->rkbuf_retries <
+			    /* FIXME: producer? */
+			    rkb->rkb_rk->rk_conf.max_retries) {
+
+				if (reply)
+					rd_kafka_buf_destroy(reply);
+
+				rd_kafka_broker_buf_retry(rkb, request);
+				return;
+			}
+			break;
+
+		default:
+			break;
+		}
+
+		/* Signal error back to application */
+		rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
+		rko->rko_err = err;
+                /* FIXME: signal type of error */
+		rko->rko_rkmessage.offset    = request->rkbuf_offset;
+		rko->rko_rkmessage.rkt       = rktp->rktp_rkt;
+		rko->rko_rkmessage.partition = rktp->rktp_partition;
+                rd_kafka_topic_keep(rko->rko_rkmessage.rkt);
+		rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
+
+		/* FALLTHRU */
+	}
+
+	rd_kafka_toppar_destroy(rktp); /* refcnt from request */
+
+	rd_kafka_buf_destroy(request);
+	if (reply)
+		rd_kafka_buf_destroy(reply);
+}
+
+
+
+/**
+ * Send OffsetCommitRequest for toppar.
+ */
+static void rd_kafka_toppar_offsetcommit_request (rd_kafka_broker_t *rkb,
+                                                  rd_kafka_toppar_t *rktp,
+                                                  int64_t offset) {
+	rd_kafka_buf_t *rkbuf;
+        static const rd_kafkap_str_t metadata = { .len = (uint16_t)-1 };
+
+	rkbuf = rd_kafka_buf_new(1,
+                                 /* How much memory to allocate for buffer: */
+                                 /* static fields */
+                                 4 + 4 + 4 + 8 +
+                                 /* dynamic fields */
+                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_rk->
+                                                    rk_conf.group_id) +
+                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_topic) +
+                                 RD_KAFKAP_STR_SIZE(&metadata));
+
+        rd_kafka_toppar_lock(rktp);
+
+        /* ConsumerGroup */
+        rd_kafka_buf_write_kstr(rkbuf,
+                                rktp->rktp_rkt->rkt_rk->rk_conf.group_id);
+        /* TopicArrayCnt */
+        rd_kafka_buf_write_i32(rkbuf, 1);
+        /* TopicName */
+        rd_kafka_buf_write_kstr(rkbuf, rktp->rktp_rkt->rkt_topic);
+        /* PartitionArrayCnt */
+        rd_kafka_buf_write_i32(rkbuf, 1);
+        /* Partition */
+        rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
+        /* Offset */
+        rd_kafka_buf_write_i64(rkbuf, offset);
+        /* Metadata (always empty for now) */
+        rd_kafka_buf_write_kstr(rkbuf, &metadata);
+
+        /* Push write-buffer onto iovec stack */
+        rd_kafka_buf_autopush(rkbuf);
+
+        rkbuf->rkbuf_offset = offset;
+        rktp->rktp_committing_offset = offset;
+
+        rd_kafka_toppar_keep(rktp);
+        rd_kafka_toppar_unlock(rktp);
+
+	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+		   "OffsetCommitRequest (%"PRId64") for topic %s [%"PRId32"]",
+                   offset,
+		   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+
+	rkbuf->rkbuf_ts_timeout = rd_clock() +
+		rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
+
+
+	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_OffsetCommit, rkbuf,
+				 rd_kafka_toppar_offsetcommit_reply, rktp);
+
+}
+
+
+
+/**
+ * Commit toppar's offset on broker.
+ * This is an asynch operation, this function simply enqueues an op
+ * on the broker's operations queue, if available.
+ * NOTE: rd_kafka_toppar_lock(rktp) MUST be held.
+ */
+rd_kafka_resp_err_t rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp,
+                                                   int64_t offset) {
+        rd_kafka_op_t *rko;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT);
+        rko->rko_offset = offset;
+        rko->rko_rktp = rktp;
+        rd_kafka_toppar_keep(rko->rko_rktp);
+
+        if (rktp->rktp_leader)
+                rd_kafka_q_enq(&rktp->rktp_leader->rkb_ops, rko);
+        else {
+                rd_kafka_op_destroy(rko);
+                err = RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
+        }
+
+        return err;
+}
+
+
+
+
+
+
+
+/**
+ * Parse and handle an OffsetFetchResponse message.
+ * Returns an error code.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_toppar_offsetfetch_reply_handle (rd_kafka_broker_t *rkb,
+                                          rd_kafka_buf_t *rkbuf,
+                                          rd_kafka_toppar_t *rktp) {
+	char *buf = rkbuf->rkbuf_buf2;
+	size_t size = rkbuf->rkbuf_len;
+	size_t of = 0;
+	int32_t TopicArrayCnt;
+	int i;
+
+        rd_hexdump(stdout, "pkt", buf, size);
+
+	_READ_I32(&TopicArrayCnt);
+	for (i = 0 ; i < TopicArrayCnt ; i++) {
+		rd_kafkap_str_t *topic;
+		int32_t PartitionArrayCnt;
+		int j;
+
+		_READ_STR(topic);
+		_READ_I32(&PartitionArrayCnt);
+
+		for (j = 0 ; j < PartitionArrayCnt ; j++) {
+			int32_t Partition;
+                        int64_t Offset;
+                        rd_kafkap_str_t *Metadata;
+			int16_t ErrorCode;
+
+			_READ_I32(&Partition);
+                        _READ_I64(&Offset);
+                        _READ_STR(Metadata);
+			_READ_I16(&ErrorCode);
+
+			/* Skip toppars we didnt ask for. */
+			if (unlikely(rktp->rktp_partition != Partition
+				     || rd_kafkap_str_cmp(rktp->
+							  rktp_rkt->
+							  rkt_topic,
+							  topic)))
+				continue;
+
+			if (unlikely(ErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR))
+				return ErrorCode;
+
+			rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+				   "OffsetFetchResponse "
+                                   "for topic %s [%"PRId32"]: "
+				   "offset %"PRId64": activating fetch",
+				   rktp->rktp_rkt->rkt_topic->str,
+				   rktp->rktp_partition,
+				   Offset);
+
+			rktp->rktp_next_offset = Offset;
+			rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_ACTIVE;
+
+			/* We just commited one toppar, so
+			 * we're probably done now. */
+			return RD_KAFKA_RESP_ERR_NO_ERROR;
+		}
+	}
+
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err:
+	return RD_KAFKA_RESP_ERR__BAD_MSG;
 }
 
 
@@ -3066,8 +3442,9 @@ err:
 	return RD_KAFKA_RESP_ERR__BAD_MSG;
 }
 
+
 /**
- * Parses and handles an OffsetRequest reply.
+ * Parses and handles Offset and OffsetFetch replies.
  */
 static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 					  rd_kafka_resp_err_t err,
@@ -3077,15 +3454,27 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 	rd_kafka_toppar_t *rktp = opaque;
 	rd_kafka_op_t *rko;
 
-	if (likely(!err && reply))
-		err = rd_kafka_toppar_offset_reply_handle(rkb, reply, rktp);
-
-	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-		   "OffsetReply for topic %s [%"PRId32"]: %s",
-		   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-		   rd_kafka_err2str(err));
+	if (likely(!err && reply)) {
+                if (ntohs(request->rkbuf_reqhdr.ApiKey) ==
+                    RD_KAFKAP_OffsetFetch)
+                        err = rd_kafka_toppar_offsetfetch_reply_handle(rkb,
+                                                                       reply,
+                                                                       rktp);
+                else
+                        err = rd_kafka_toppar_offset_reply_handle(rkb, reply,
+                                                                  rktp);
+        }
 
 	if (unlikely(err)) {
+
+                rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+                           "Offset (type %hd) reply for "
+                           "topic %s [%"PRId32"]: %s",
+                           ntohs(request->rkbuf_reqhdr.ApiKey),
+                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                           rd_kafka_err2str(err));
+
+
 		switch (err)
 		{
 		case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
@@ -3142,6 +3531,61 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 }
 
 
+/**
+ * Send OffsetFetchRequest for toppar.
+ */
+static void rd_kafka_toppar_offsetfetch_request (rd_kafka_broker_t *rkb,
+                                                 rd_kafka_toppar_t *rktp) {
+	rd_kafka_buf_t *rkbuf;
+
+	rkbuf = rd_kafka_buf_new(1,
+                                 /* How much memory to allocate for buffer: */
+                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_rk->
+                                                    rk_conf.group_id) +
+                                 4 +
+                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_topic) +
+                                 4 + 4);
+
+
+        rd_kafka_toppar_lock(rktp);
+
+        /* ConsumerGroup */
+        rd_kafka_buf_write_kstr(rkbuf,
+                                rktp->rktp_rkt->rkt_rk->rk_conf.group_id);
+        /* TopicArrayCnt */
+        rd_kafka_buf_write_i32(rkbuf, 1);
+        /* TopicName */
+        rd_kafka_buf_write_kstr(rkbuf, rktp->rktp_rkt->rkt_topic);
+        /* PartitionArrayCnt */
+        rd_kafka_buf_write_i32(rkbuf, 1);
+        /* Partition */
+        rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
+
+        /* Push write-buffer onto iovec stack */
+        rd_kafka_buf_autopush(rkbuf);
+
+	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT;
+
+        rd_kafka_toppar_keep(rktp);
+        rd_kafka_toppar_unlock(rktp);
+
+	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+		   "OffsetFetchRequest for topic %s [%"PRId32"]",
+		   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+
+	rkbuf->rkbuf_ts_timeout = rd_clock() +
+		rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
+
+	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_OffsetFetch, rkbuf,
+				 rd_kafka_toppar_offset_reply, rktp);
+
+}
+
+
+
+
+
+
 
 /**
  * Send OffsetRequest for toppar.
@@ -3160,6 +3604,10 @@ static void rd_kafka_toppar_offset_request (rd_kafka_broker_t *rkb,
 		int32_t MaxNumberOfOffsets;
 	} RD_PACKED *part2;
 	rd_kafka_buf_t *rkbuf;
+
+        if (rktp->rktp_rkt->rkt_conf.offset_store_method ==
+            RD_KAFKA_OFFSET_METHOD_BROKER)
+                return rd_kafka_toppar_offsetfetch_request(rkb, rktp);
 
 	rkbuf = rd_kafka_buf_new(3/*part1,topic,part2*/,
 				 sizeof(*part1) + sizeof(*part2));
@@ -3197,7 +3645,6 @@ static void rd_kafka_toppar_offset_request (rd_kafka_broker_t *rkb,
 				 rd_kafka_toppar_offset_reply, rktp);
 
 }
-
 
 
 /**

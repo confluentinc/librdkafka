@@ -30,6 +30,7 @@ fetch.wait.max.ms                        |           100 | Maximum time the brok
 fetch.message.max.bytes                  |       1048576 | Maximum number of bytes per topic+partition to request when fetching messages from the broker.
 fetch.min.bytes                          |             1 | Minimum number of bytes the broker responds with. If fetch.wait.max.ms expires the accumulated data will be sent to the client regardless of this setting.
 fetch.error.backoff.ms                   |           500 | How long to postpone the next fetch request for a topic+partition in case of a fetch error.
+group.id                                 |               | Consumer group id string. All clients sharing the same group.id belong to the same consumer group.
 queue.buffering.max.messages             |        100000 | Maximum number of messages allowed on the producer queue.
 queue.buffering.max.ms                   |          1000 | Maximum time, in milliseconds, for buffering data on the producer queue.
 message.send.max.retries                 |             2 | How many times to retry sending a failing MessageSet. **Note:** retrying may cause reordering.
@@ -54,4 +55,5 @@ auto.commit.interval.ms                  |         60000 | The frequency in mill
 auto.offset.reset                        |       largest | Action to take when there is no initial offset in offset store or the desired offset is out of range: 'smallest' - automatically reset the offset to the smallest offset, 'largest' - automatically reset the offset to the largest offset, 'error' - trigger an error which is retrieved by consuming messages and checking 'message->err'.
 offset.store.path                        |             . | Path to local file for storing offsets. If the path is a directory a filename will be automatically generated in that directory based on the topic and partition.
 offset.store.sync.interval.ms            |            -1 | fsync() interval for the offset file, in milliseconds. Use -1 to disable syncing, and 0 for immediate sync after each write.
+offset.store.method                      |          file | Offset commit store method: 'file' - local file store (offset.store.path, et.al), 'broker' - broker commit store (requires Apache Kafka 0.8.1 or later on the broker).
 

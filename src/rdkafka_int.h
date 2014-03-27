@@ -86,7 +86,7 @@
 
 #define RD_KAFKA_OFFSET_ERROR    -1001
 
-
+/* Forward declarations */
 struct rd_kafka_s;
 struct rd_kafka_toppar_s;
 struct rd_kafka_topic_s;
@@ -146,6 +146,10 @@ struct rd_kafka_conf_s {
 	int    fetch_error_backoff_ms;
 	/* Pre-built Fetch request header. */
 	struct rd_kafkap_FetchRequest FetchRequest;
+        char  *group_id_str;
+        rd_kafkap_str_t   *group_id;    /* Consumer group id */
+
+
 
 
 	/*
@@ -237,6 +241,10 @@ struct rd_kafka_topic_conf_s {
 	int     auto_offset_reset;
 	char   *offset_store_path;
 	int     offset_store_sync_interval_ms;
+        enum {
+                RD_KAFKA_OFFSET_METHOD_FILE,
+                RD_KAFKA_OFFSET_METHOD_BROKER,
+        } offset_store_method;
 
 	/* Application provided opaque pointer (this is rkt_opaque) */
 	void   *opaque;
@@ -358,7 +366,7 @@ typedef struct rd_kafka_buf_s {
 	TAILQ_ENTRY(rd_kafka_buf_s) rkbuf_link;
 
 	int32_t rkbuf_corrid;
-	
+
 	rd_ts_t rkbuf_ts_retry;    /* Absolute send retry time */
 
 	int     rkbuf_flags; /* RD_KAFKA_OP_F */
@@ -371,6 +379,10 @@ typedef struct rd_kafka_buf_s {
 
 	char   *rkbuf_buf;         /* Main buffer */
 	char   *rkbuf_buf2;        /* Aux buffer */
+
+        char   *rkbuf_wbuf;        /* Write buffer pointer (into rkbuf_buf) */
+        size_t  rkbuf_wof;         /* Write buffer offset */
+
 	struct rd_kafkap_reqhdr rkbuf_reqhdr;
 	struct rd_kafkap_reshdr rkbuf_reshdr;
 
@@ -391,6 +403,8 @@ typedef struct rd_kafka_buf_s {
 	rd_ts_t rkbuf_ts_enq;
 	rd_ts_t rkbuf_ts_sent;
 	rd_ts_t rkbuf_ts_timeout;
+
+        int64_t rkbuf_offset;  /* Used by OffsetCommit */
 
 	rd_kafka_msgq_t rkbuf_msgq;
 } rd_kafka_buf_t;
@@ -423,6 +437,7 @@ typedef enum {
 	RD_KAFKA_OP_STATS,    /* Kafka thread -> Application */
 
 	RD_KAFKA_OP_METADATA_REQ, /* any -> Broker thread: request metadata */
+        RD_KAFKA_OP_OFFSET_COMMIT /* any -> toppar's Broker thread */
 } rd_kafka_op_type_t;
 
 typedef struct rd_kafka_op_s {
@@ -461,6 +476,10 @@ typedef struct rd_kafka_op_s {
 	/* For STATS */
 #define rko_json      rko_rkmessage.payload
 #define rko_json_len  rko_rkmessage.len
+
+        /* For OFFSET_COMMIT */
+        struct rd_kafka_toppar_s *rko_rktp;
+#define rko_offset    rko_rkmessage.offset
 
 } rd_kafka_op_t;
 
@@ -631,6 +650,8 @@ typedef struct rd_kafka_toppar_s {
 						  * application */
 	int64_t            rktp_stored_offset;   /* Last stored offset, but
 						  * maybe not commited yet. */
+        int64_t            rktp_committing_offset; /* Offset currently being
+                                                    * commited */
 	int64_t            rktp_commited_offset; /* Last commited offset */
 	rd_ts_t            rktp_ts_commited_offset; /* Timestamp of last
 						     * commit */
@@ -647,6 +668,7 @@ typedef struct rd_kafka_toppar_s {
 					     * by a consumer. */
 #define RD_KAFKA_TOPPAR_F_UNKNOWN  0x2      /* Topic is (not yet) seen on
 					     * a broker. */
+#define RD_KAFKA_TOPPAR_F_OFFSET_STORE 0x4  /* Offset store is active */
 	struct {
 		uint64_t tx_msgs;
 		uint64_t tx_bytes;

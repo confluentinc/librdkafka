@@ -200,6 +200,8 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 		free(rko->rko_payload);
         if (rko->rko_rkt)
                 rd_kafka_topic_destroy0(rko->rko_rkt);
+        if (rko->rko_rktp)
+                rd_kafka_toppar_destroy(rko->rko_rktp);
         if (rko->rko_metadata)
                 rd_kafka_metadata_destroy(rko->rko_metadata);
 
@@ -652,6 +654,7 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
 	rd_kafka_q_purge(&rk->rk_rep);
 
 	rd_kafkap_str_destroy(rk->rk_clientid);
+        rd_kafkap_str_destroy(rk->rk_conf.group_id);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
 
 	pthread_mutex_destroy(&rk->rk_lock);
@@ -997,6 +1000,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	/* Construct clientid kafka string */
 	rk->rk_clientid = rd_kafkap_str_new(rk->rk_conf.clientid);
 
+        /* Convert group.id to kafka string (may be NULL) */
+        rk->rk_conf.group_id = rd_kafkap_str_new(rk->rk_conf.group_id_str);
+
         /* Config fixups */
         rk->rk_conf.queued_max_msg_bytes =
                 (int64_t)rk->rk_conf.queued_max_msg_kbytes * 1000ll;
@@ -1140,8 +1146,7 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
 	rd_kafka_toppar_lock(rktp);
 	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
 
-	if (rktp->rktp_offset_path)
-		rd_kafka_offset_store_term(rktp);
+        rd_kafka_offset_store_term(rktp);
 
 	/* Purge receive queue. */
 	rd_kafka_q_purge(&rktp->rktp_fetchq);

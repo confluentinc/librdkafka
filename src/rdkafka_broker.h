@@ -53,3 +53,6 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
                                    rd_kafka_topic_t *only_rkt,
                                    rd_kafka_q_t *replyq,
                                    const char *reason);
+
+rd_kafka_resp_err_t rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp,
+                                                   int64_t offset);

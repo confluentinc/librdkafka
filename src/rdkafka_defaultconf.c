@@ -271,7 +271,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(dr_msg_cb),
 	  "Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())" },
 
-	/* Topic properties */
+	/*
+         * Topic properties
+         */
+
+        /* Topic producer properties */
 	{ _RK_TOPIC|_RK_PRODUCER, "request.required.acks", _RK_C_INT,
 	  _RKT(required_acks),
 	  "This field indicates how many acknowledgements the leader broker "
@@ -307,6 +311,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
 
 
+        /* Topic consumer properties */
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.enable", _RK_C_BOOL,
 	  _RKT(auto_commit),
 	  "If true, periodically commit offset of the last message handed "
@@ -350,6 +355,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Use -1 to disable syncing, and 0 for immediate sync after "
 	  "each write.",
 	  -1, 86400*1000, -1 },
+
+        { _RK_TOPIC|_RK_CONSUMER, "offset.store.method", _RK_C_S2I,
+          _RKT(offset_store_method),
+          "Offset commit store method: "
+          "'file' - local file store (offset.store.path, et.al), "
+          "'broker' - broker commit store "
+          "(requires Apache Kafka 0.8.1 or later on the broker).",
+          .vdef = RD_KAFKA_OFFSET_METHOD_FILE,
+          .s2i = {
+                        { RD_KAFKA_OFFSET_METHOD_FILE, "file" },
+                        { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
+                }
+        },
 
 	{ /* End */ }
 };

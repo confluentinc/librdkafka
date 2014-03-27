@@ -49,8 +49,8 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_Metadata      3
 #define RD_KAFKAP_LeaderAndIsr  4
 #define RD_KAFKAP_StopReplica   5
-#define RD_KAFKAP_OffsetCommit  6
-#define RD_KAFKAP_OffsetFetch   7
+#define RD_KAFKAP_OffsetCommit  8
+#define RD_KAFKAP_OffsetFetch   9
 	int16_t  ApiVersion;
 	int32_t  CorrId;
 	/* ClientId follows */

@@ -28,9 +28,10 @@
 
 /**
  * This file implements the consumer offset storage.
- * It currently only supports local file storage, not zookeeper.
+ * It currently supports local file storage and broker OffsetCommit storage,
+ * not zookeeper.
  *
- * Regardless of commit method (file, zookeeper, ..) this is how it works:
+ * Regardless of commit method (file, broker, ..) this is how it works:
  *  - When rdkafka, or the application, depending on if auto.offset.commit
  *    is enabled or not, calls rd_kafka_offset_store() with an offset to store,
  *    all it does is set rktp->rktp_stored_offset to this value.
@@ -38,11 +39,11 @@
  *  - The actual commit/write of the offset to its backing store (filesystem)
  *    is performed by the main rdkafka thread and scheduled at the configured
  *    auto.commit.interval.ms interval.
- *  - The write is performed in the main rdkafka thread in a blocking manner
- *    and once the write has succeeded rktp->rktp_commited_offset is updated
- *    to the new value.
+ *  - The write is performed in the main rdkafka thread (in a blocking manner
+ *    for file based offsets) and once the write has
+ *    succeeded rktp->rktp_commited_offset is updated to the new value.
  *  - If offset.store.sync.interval.ms is configured the main rdkafka thread
- *    will also make sure to fsync() each offset file accordingly.
+ *    will also make sure to fsync() each offset file accordingly. (file)
  */
 
 #include <stdio.h>
@@ -54,6 +55,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_topic.h"
+#include "rdkafka_broker.h"
 
 /**
  * NOTE: toppar_lock(rktp) must be held
@@ -457,12 +459,78 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 }
 
 
+
+/**
+ * Broker offset commit timer callback.
+ */
+static void rd_kafka_offset_broker_commit_tmr_cb (rd_kafka_t *rk, void *arg) {
+	rd_kafka_toppar_t *rktp = arg;
+
+	rd_kafka_toppar_lock(rktp);
+
+	rd_kafka_dbg(rk, TOPIC, "OFFSET",
+		     "%s [%"PRId32"]: periodic commit: "
+		     "stored offset %"PRId64" > commited offset %"PRId64" ?",
+		     rktp->rktp_rkt->rkt_topic->str,
+		     rktp->rktp_partition,
+		     rktp->rktp_stored_offset, rktp->rktp_commited_offset);
+
+	if (rktp->rktp_stored_offset > rktp->rktp_committing_offset &&
+            rktp->rktp_stored_offset > rktp->rktp_commited_offset)
+		rd_kafka_toppar_offset_commit(rktp, rktp->rktp_stored_offset);
+
+	rd_kafka_toppar_unlock(rktp);
+}
+
+/**
+ * Terminate broker offset store
+ */
+static void rd_kafka_offset_broker_term (rd_kafka_toppar_t *rktp) {
+        rd_kafka_timer_stop(rktp->rktp_rkt->rkt_rk,
+                            &rktp->rktp_offset_commit_tmr, 1/*lock*/);
+
+	if (rktp->rktp_stored_offset > rktp->rktp_commited_offset)
+                rd_kafka_toppar_offset_commit(rktp, rktp->rktp_stored_offset);
+}
+
+
+/**
+ * Prepare a toppar for using broker offset commit (broker 0.8.1 or later).
+ *
+ * NOTE: toppar_lock(rktp) must be held.
+ */
+static void rd_kafka_offset_broker_init (rd_kafka_toppar_t *rktp) {
+	rd_kafka_timer_start(rktp->rktp_rkt->rkt_rk,
+			     &rktp->rktp_offset_commit_tmr,
+			     rktp->rktp_rkt->rkt_conf.auto_commit_interval_ms *
+			     1000,
+			     rd_kafka_offset_broker_commit_tmr_cb, rktp);
+
+        /* Read offset from broker */
+        rktp->rktp_commited_offset = 0;
+        rd_kafka_offset_reset(rktp, RD_KAFKA_OFFSET_ERROR,
+                              RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE,
+                              "waiting for broker offset");
+}
+
+
 /**
  * Terminates toppar's offset store.
  * NOTE: toppar_lock(rktp) must be held.
  */
 void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp) {
-	rd_kafka_offset_file_term(rktp);
+        if (!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_OFFSET_STORE))
+                return;
+
+        switch (rktp->rktp_rkt->rkt_conf.offset_store_method)
+        {
+        case RD_KAFKA_OFFSET_METHOD_FILE:
+                rd_kafka_offset_file_term(rktp);
+                break;
+        case RD_KAFKA_OFFSET_METHOD_BROKER:
+                rd_kafka_offset_broker_term(rktp);
+                break;
+        }
 }
 
 
@@ -471,5 +539,27 @@ void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp) {
  * NOTE: toppar_lock(rktp) must be held.
  */
 void rd_kafka_offset_store_init (rd_kafka_toppar_t *rktp) {
-	rd_kafka_offset_file_init(rktp);
+        static const char *store_names[] = { "file", "broker" };
+
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
+                     "%s [%"PRId32"]: using offset store method: %s",
+                     rktp->rktp_rkt->rkt_topic->str,
+                     rktp->rktp_partition,
+                     store_names[rktp->rktp_rkt->rkt_conf.offset_store_method]);
+
+        switch (rktp->rktp_rkt->rkt_conf.offset_store_method)
+        {
+        case RD_KAFKA_OFFSET_METHOD_FILE:
+                rd_kafka_offset_file_init(rktp);
+                break;
+        case RD_KAFKA_OFFSET_METHOD_BROKER:
+                rd_kafka_offset_broker_init(rktp);
+                break;
+        default:
+                /* NOTREACHED */
+                return;
+        }
+
+        rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_OFFSET_STORE;
 }
+

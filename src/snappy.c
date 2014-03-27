@@ -36,6 +36,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef SG
+#define SG /* Scatter-Gather / iovec support in Snappy */
+#endif
+
 #ifdef __KERNEL__
 #include <linux/kernel.h>
 #ifdef SG

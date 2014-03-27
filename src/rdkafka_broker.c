@@ -680,6 +680,7 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 		_CHECK_LEN(2);					\
 		kstr = (rd_kafkap_str_t *)((char *)buf+of);	\
 		_klen = RD_KAFKAP_STR_SIZE(kstr);		\
+                _CHECK_LEN(_klen);                              \
 		of += _klen;					\
 	} while (0)
 
@@ -691,6 +692,7 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 		_CHECK_LEN(2);					\
 		_kstr = (rd_kafkap_str_t *)((char *)buf+of);	\
 		_klen = RD_KAFKAP_STR_SIZE(_kstr);		\
+                _CHECK_LEN(_klen);                              \
 		of += _klen;					\
                 _MSH_ALLOC(dst, _klen+1);                       \
                 memcpy(dst, _kstr->str, _klen);                  \
@@ -703,6 +705,7 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 		_CHECK_LEN(4);					\
 		kbytes = (rd_kafkap_bytes_t *)((char *)buf+of);	\
 		_klen = RD_KAFKAP_BYTES_SIZE(kbytes);		\
+                _CHECK_LEN(_klen);                              \
 		of += (_klen);					\
 	} while (0)
 

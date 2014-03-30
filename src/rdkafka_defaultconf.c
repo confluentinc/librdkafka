@@ -879,10 +879,13 @@ static const char **rd_kafka_anyconf_dump (int scope, void *conf,
 			val = tmp;
 			break;
 		case _RK_C_S2I:
-			for (j = 0 ; j < RD_ARRAYSIZE(prop->s2i); j++)
+			for (j = 0 ; j < RD_ARRAYSIZE(prop->s2i); j++) {
 				if (prop->s2i[j].val ==
-				    *_RK_PTR(int *, conf, prop->offset))
+				    *_RK_PTR(int *, conf, prop->offset)) {
 					val = prop->s2i[j].str;
+                                        break;
+                                }
+                        }
 			break;
 		case _RK_C_S2F:
 			/* FIXME: ignore for now, just used with "debug" */

@@ -895,6 +895,7 @@ struct rd_kafka_metadata {
         struct rd_kafka_metadata_topic *topics;    /* Topics */
 
         int32_t     orig_broker_id; /* Broker originating this metadata */
+        char       *orig_broker_name; /* Name of originating broker */
 };
 
 

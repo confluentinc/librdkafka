@@ -797,14 +797,17 @@ rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
         int   msh_of  = 0;
         int   msh_size;
         struct rd_kafka_metadata *md = NULL;
+        int rkb_namelen = strlen(rkb->rkb_name)+1;
 
         /* We assume that the marshalled representation is
          * no more than 4 times larger than the wire representation. */
-        msh_size = sizeof(*md) + (size * 4);
+        msh_size = sizeof(*md) + rkb_namelen + (size * 4);
         msh_buf = malloc(msh_size);
 
         _MSH_ALLOC(md, sizeof(*md));
         md->orig_broker_id = rkb->rkb_nodeid;
+        _MSH_ALLOC(md->orig_broker_name, rkb_namelen);
+        memcpy(md->orig_broker_name, rkb->rkb_name, rkb_namelen);
 
 	/* Read Brokers */
 	_READ_I32A(md->broker_cnt);

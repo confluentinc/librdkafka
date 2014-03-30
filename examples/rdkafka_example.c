@@ -168,9 +168,10 @@ static void metadata_print (const char *topic,
                             const struct rd_kafka_metadata *metadata) {
         int i, j, k;
 
-        printf("Metadata for %s (from broker %"PRId32"):\n",
+        printf("Metadata for %s (from broker %"PRId32": %s):\n",
                topic ? : "all topics",
-               metadata->orig_broker_id);
+               metadata->orig_broker_id,
+               metadata->orig_broker_name);
 
 
         /* Iterate brokers */

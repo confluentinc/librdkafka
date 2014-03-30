@@ -224,8 +224,8 @@ function mkl_define_set {
     if [[ $val == code:* ]]; then
         # Code block, copy verbatim without quotes, strip code: prefix
         val=${val#code:}
-    elif [[ ! ( "$val" =~ '^[0-9]+([lL]?[lL][dDuU]?)?$' || \
-        "$val" =~ '^0x[0-9a-fA-F]+([lL]?[lL][dDuU]?)?$' ) ]]; then
+    elif [[ ! ( "$val" =~ ^[0-9]+([lL]?[lL][dDuU]?)?$ || \
+        "$val" =~ ^0x[0-9a-fA-F]+([lL]?[lL][dDuU]?)?$ ) ]]; then
         # String: quote
         val="\"$val\""
     fi

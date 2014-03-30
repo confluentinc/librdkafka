@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 
+mkl_require cxx
 mkl_require lib
 mkl_require pic
 mkl_require atomics must pass

@@ -1,4 +1,5 @@
-
+# Base Makefile providing various standard targets
+# Part of mklove suite but may be used independently.
 
 MKL_RED=\033[031m
 MKL_GREEN=\033[032m
@@ -71,6 +72,11 @@ $(LIBNAME).a:	$(OBJS)
 	$(AR) rcs $@ $(OBJS)
 
 
+$(BIN): $(OBJS)
+	@echo "$(MKL_YELLOW)Creating program $@$(MKL_CLR_RESET)"
+	$(CC) $(CPPFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(LIBS)
+
+
 file-check:
 	@(echo "$(MKL_YELLOW)Checking $(LIBNAME) integrity$(MKL_CLR_RESET)" ; \
 	 RET=true ; \
@@ -104,6 +110,17 @@ lib-uninstall:
 	rm -f $$DESTDIR$(libdir)/$(LIBNAME).so
 	rmdir $$DESTDIR$(includedir)/$(PKGNAME) || true
 
+
+bin-install:
+	@echo "$(MKL_YELLOW)Install $(BIN) to $$DESTDIR$(prefix)$(MKL_CLR_RESET)"
+	$(INSTALL) -d $$DESTDIR$(bindir) && \
+	$(INSTALL) $(BIN) $$DESTDIR/$(bindir) 
+
+bin-uninstall:
+	@echo "$(MKL_YELLOW)Uninstall $(BIN) from $$DESTDIR$(prefix)$(MKL_CLR_RESET)"
+	rm -f $$DESTDIR$(bindir)/$(BIN)
+
+
 generic-clean:
 	rm -f $(OBJS) $(DEPS)
 
@@ -112,3 +129,4 @@ lib-clean: generic-clean
 		$(LIBNAME).lds
 
 bin-clean: generic-clean
+	rm -f $(BIN)

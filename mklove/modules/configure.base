@@ -496,7 +496,7 @@ Configuration summary:"
     local n=
     for n in $MKL_MKVARS ; do
         # Skip the boring booleans
-        if [[ $n == WITH_* || $n == HAVE_* ]]; then
+        if [[ $n == WITH_* || $n == WITHOUT_* || $n == HAVE_* ]]; then
             continue
         fi
         printf "  %-24s %s\n" "$n" "${!n}"

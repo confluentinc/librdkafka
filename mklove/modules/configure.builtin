@@ -37,7 +37,7 @@ mkl_option "Configure tool" env:MKL_CLEAN "--clean" "Remove generated configure 
 mkl_option "Configure tool" "" "--reconfigure" "Rerun configure with same arguments as last run"
 mkl_option "Configure tool" env:MKL_NO_DOWNLOAD "--no-download" "Disable downloads of required mklove modules"
 mkl_option "Configure tool" env:MKL_UPDATE_MODS "--update-modules" "Update modules from global repository"
-mkl_option "Configure tool" env:MKL_MODULES_REPO_URL "--repo-url=URL_OR_PATH" "Override mklove modules repo URL" "$MKL_MODULES_REPO_URL"
+mkl_option "Configure tool" env:MKL_REPO_URL "--repo-url=URL_OR_PATH" "Override mklove modules repo URL" "$MKL_REPO_URL"
 mkl_option "Configure tool" "" "--help" "Show configure usage"
 
 

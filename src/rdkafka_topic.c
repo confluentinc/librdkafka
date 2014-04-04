@@ -43,6 +43,12 @@ const char *rd_kafka_fetch_states[] = {
 	"active"
 };
 
+const char *rd_kafka_topic_state_names[] = {
+        "unknown",
+        "exists",
+        "notexists"
+};
+
 static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 					       int32_t partition) {
 	rd_kafka_toppar_t *rktp;
@@ -452,7 +458,6 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
  * NOTE: rd_kafka_topic_wrlock(rkt) MUST be held
  */
 static void rd_kafka_topic_set_state (rd_kafka_topic_t *rkt, int state) {
-        static const char *state_names[] = { "INIT", "EXISTS", "UNKNOWN" };
 
         if (rkt->rkt_state == state)
                 return;
@@ -460,7 +465,8 @@ static void rd_kafka_topic_set_state (rd_kafka_topic_t *rkt, int state) {
         rd_kafka_dbg(rkt->rkt_rk, TOPIC, "STATE",
                      "Topic %s changed state %s -> %s",
                      rkt->rkt_topic->str,
-                     state_names[rkt->rkt_state], state_names[state]);
+                     rd_kafka_topic_state_names[rkt->rkt_state],
+                     rd_kafka_topic_state_names[state]);
         rkt->rkt_state = state;
 }
 
@@ -794,7 +800,7 @@ static void rd_kafka_topic_assign_uas (rd_kafka_topic_t *rkt) {
 		/* Fast-path for failing messages with forced partition */
 		if (rkm->rkm_partition != RD_KAFKA_PARTITION_UA &&
 		    rkm->rkm_partition >= rkt->rkt_partition_cnt &&
-		    rkt->rkt_state != RD_KAFKA_TOPIC_S_INIT) {
+		    rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN) {
 			rd_kafka_msgq_enq(&failed, rkm);
 			continue;
 		}
@@ -815,7 +821,7 @@ static void rd_kafka_topic_assign_uas (rd_kafka_topic_t *rkt) {
 			     "%i/%i messages failed partitioning in topic %s",
 			     uas.rkmq_msg_cnt, cnt, rkt->rkt_topic->str);
 		rd_kafka_dr_msgq(rk, &failed,
-				 rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN ?
+				 rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS ?
 				 RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC :
 				 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
 	}
@@ -833,7 +839,7 @@ void rd_kafka_topic_metadata_none (rd_kafka_topic_t *rkt) {
 
 	rkt->rkt_ts_metadata = rd_clock();
 
-        rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
+        rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_NOTEXISTS);
 
 	/* Update number of partitions */
 	rd_kafka_topic_partition_cnt_update(rkt, 0);
@@ -891,7 +897,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 	/* Set topic state */
 	if (mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
-                rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
+                rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_NOTEXISTS);
         else
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
 
@@ -919,7 +925,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 	}
 
 	/* Try to assign unassigned messages to new partitions, or fail them */
-	if (upd > 0 || rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN)
+	if (upd > 0 || rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
 		rd_kafka_topic_assign_uas(rkt);
 
 	rd_kafka_topic_unlock(rkt);
@@ -934,6 +940,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
  * Scan all topics and partitions for:
  *  - timed out messages.
  *  - topics that needs to be created on the broker.
+ *  - topics who's metadata is too old.
  */
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	rd_kafka_topic_t *rkt;
@@ -948,7 +955,25 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		int p;
 
-		rd_kafka_topic_rdlock(rkt);
+		rd_kafka_topic_wrlock(rkt);
+
+                /* Check if metadata information has timed out:
+                 * older than 3 times the metadata.refresh.interval.ms */
+                if (rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN &&
+                    rd_clock() > rkt->rkt_ts_metadata +
+                    (rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms *
+                     1000 * 3)) {
+                        rd_kafka_dbg(rk, TOPIC, "NOINFO",
+                                     "Topic %s metadata information timed out "
+                                     "(%"PRIu64"ms old)",
+                                     rkt->rkt_topic->str,
+                                     (rd_clock() - rkt->rkt_ts_metadata)/1000);
+                        rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
+                }
+
+                /* Just need a read-lock from here on. */
+                rd_kafka_topic_unlock(rkt);
+                rd_kafka_topic_rdlock(rkt);
 
 		if (rkt->rkt_partition_cnt == 0) {
 			/* If this partition is unknown by brokers try

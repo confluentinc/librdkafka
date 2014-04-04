@@ -1531,9 +1531,12 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
 
 	fprintf(fp, " topics:\n");
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
-		fprintf(fp, "  %.*s with %"PRId32" partitions, refcnt %i\n",
+		fprintf(fp, "  %.*s with %"PRId32" partitions, state %s, "
+                        "refcnt %i\n",
 			RD_KAFKAP_STR_PR(rkt->rkt_topic),
-			rkt->rkt_partition_cnt, rkt->rkt_refcnt);
+			rkt->rkt_partition_cnt,
+                        rd_kafka_topic_state_names[rkt->rkt_state],
+                        rkt->rkt_refcnt);
 		if (rkt->rkt_ua)
 			rd_kafka_toppar_dump(fp, "   ", rkt->rkt_ua);
                 if (!TAILQ_EMPTY(&rkt->rkt_desp)) {

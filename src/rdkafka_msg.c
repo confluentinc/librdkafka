@@ -179,72 +179,59 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
 	if (do_lock)
 		rd_kafka_topic_rdlock(rkt);
 
-	/* Fast path for failing messages with forced partition
-	 * when the partition is not available.
-	 * Only fail the message if its forced partition does not
-	 * exist in the Kafka cluster, given that the topic's metadata
-	 * can be trusted (is not older than 3 times the metadata
-	 * refresh interval). */
-	if (unlikely((rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN ||
-		      (rkm->rkm_partition != RD_KAFKA_PARTITION_UA &&
-		       (rkm->rkm_partition >= rkt->rkt_partition_cnt ))) &&
-		     rd_clock() < rkt->rkt_ts_metadata +
-		     (rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms *
-		      3 * 1000))) {
-		if (rkt->rkt_partition_cnt == 0)
-			err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
-		else
-			err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+        switch (rkt->rkt_state)
+        {
+        case RD_KAFKA_TOPIC_S_UNKNOWN:
+                /* No metadata received from cluster yet.
+                 * Put message in UA partition and re-run partitioner when
+                 * cluster comes up. */
+		partition = RD_KAFKA_PARTITION_UA;
+                break;
 
+        case RD_KAFKA_TOPIC_S_NOTEXISTS:
+                /* Topic not found in cluster.
+                 * Fail message immediately. */
+                err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 		if (do_lock)
 			rd_kafka_topic_unlock(rkt);
-		return err;
-	}
+                return err;
 
-	if (unlikely(rkt->rkt_partition_cnt == 0)) {
-		partition = RD_KAFKA_PARTITION_UA;
-	} else if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
-		partition =
-			rkt->rkt_conf.partitioner(rkt,
-						  rkm->rkm_key->data,
-						  RD_KAFKAP_BYTES_LEN(rkm->
-								      rkm_key),
-						  rkt->rkt_partition_cnt,
-						  rkt->rkt_conf.opaque,
-						  rkm->rkm_opaque);
-	else /* Partition specified by the application */
-		partition = rkm->rkm_partition;
+        case RD_KAFKA_TOPIC_S_EXISTS:
+                /* Topic exists in cluster. */
 
-	if (partition >= rkt->rkt_partition_cnt) {
-		/* Partition is unknown (locally) */
+                /* Partition not assigned, run partitioner. */
+                if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
+                        partition = rkt->rkt_conf.
+                                partitioner(rkt,
+                                            rkm->rkm_key->data,
+                                            RD_KAFKAP_BYTES_LEN(rkm->
+                                                                rkm_key),
+                                            rkt->rkt_partition_cnt,
+                                            rkt->rkt_conf.opaque,
+                                            rkm->rkm_opaque);
+                else
+                        partition = rkm->rkm_partition;
 
-		/* Temporary error, assign to UA partition for now */
-		rd_kafka_dbg(rkt->rkt_rk, TOPIC, "PART",
-			     "%.*s partition [%"PRId32"] not "
-			     "currently available",
-			     RD_KAFKAP_STR_PR(rkt->rkt_topic),
-			     partition);
-		partition = RD_KAFKA_PARTITION_UA;
+                /* Check that partition exists. */
+                if (partition >= rkt->rkt_partition_cnt) {
+                        err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                        if (do_lock)
+                                rd_kafka_topic_unlock(rkt);
+                        return err;
+                }
+                break;
 
-		/* FALLTHRU */
-	}
-
-	if (0)
-		rd_kafka_dbg(rkt->rkt_rk, MSG, "PART",
-			     "Message %p assigned to %.*s "
-			     "partition [%"PRId32"]/%"PRId32" "
-			     "(fixed [%"PRId32"])",
-			     rkm, 
-			     RD_KAFKAP_STR_PR(rkt->rkt_topic), partition,
-			     rkt->rkt_partition_cnt,
-			     rkm->rkm_partition);
+        default:
+                rd_kafka_assert(rkt->rkt_rk, !*"NOTREACHED");
+                break;
+        }
 
 	/* Get new partition */
 	rktp_new = rd_kafka_toppar_get(rkt, partition, 0);
 
-	if (likely(!rktp_new)) {
+	if (unlikely(!rktp_new)) {
 		/* Unknown topic or partition */
-		if (rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN)
+		if (rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
 			err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 		else
 			err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;

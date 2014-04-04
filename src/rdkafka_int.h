@@ -596,9 +596,9 @@ struct rd_kafka_topic_s {
 					     * update for this topic. */
 
 	enum {
-		RD_KAFKA_TOPIC_S_INIT,
-		RD_KAFKA_TOPIC_S_EXISTS,
-		RD_KAFKA_TOPIC_S_UNKNOWN,
+		RD_KAFKA_TOPIC_S_UNKNOWN,   /* No cluster information yet */
+		RD_KAFKA_TOPIC_S_EXISTS,    /* Topic exists in cluster */
+		RD_KAFKA_TOPIC_S_NOTEXISTS, /* Topic is not known in cluster */
 	} rkt_state;
 
         int                rkt_flags;

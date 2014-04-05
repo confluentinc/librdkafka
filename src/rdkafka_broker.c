@@ -2261,7 +2261,7 @@ do_send:
 		   "(%"PRId32" bytes)",
 		   rkbuf->rkbuf_msgq.rkmq_msg_cnt,
 		   ntohl(prodhdr->part2.MessageSetSize));
-	
+
 	cnt = rkbuf->rkbuf_msgq.rkmq_msg_cnt;
 
 	if (!rkt->rkt_conf.required_acks)
@@ -2363,6 +2363,7 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb) {
 static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 	rd_ts_t last_timeout_scan = rd_clock();
 	rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
+        rd_kafka_msgq_t isrfailed = RD_KAFKA_MSGQ_INITIALIZER(isrfailed);
 
 	rd_kafka_assert(rkb->rkb_rk, pthread_self() == rkb->rkb_thread);
 
@@ -2397,6 +2398,14 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 					   rktp->rktp_xmit_msgq.rkmq_msg_cnt);
 
 				rd_kafka_toppar_lock(rktp);
+
+                                /* Enforce request.required.acks (if set) */
+                                if (unlikely(rktp->rktp_rkt->rkt_conf.
+                                             enforce_required_acks >
+                                             rktp->rktp_metadata.isr_cnt))
+                                        rd_kafka_msgq_concat(&isrfailed,
+                                                             &rktp->rktp_msgq);
+
 				if (rktp->rktp_msgq.rkmq_msg_cnt > 0)
 					rd_kafka_msgq_concat(&rktp->
 							     rktp_xmit_msgq,
@@ -2439,6 +2448,11 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 			}
 
 		} while (cnt);
+
+		/* Trigger delivery report for ISR failed messages */
+		if (unlikely(isrfailed.rkmq_msg_cnt > 0))
+			rd_kafka_dr_msgq(rkb->rkb_rk, &isrfailed,
+					 RD_KAFKA_RESP_ERR__ISR_INSUFF);
 
 		/* Trigger delivery report for timed out messages */
 		if (unlikely(timedout.rkmq_msg_cnt > 0))

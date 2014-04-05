@@ -226,7 +226,8 @@ int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
 
 
 struct rd_kafka_topic_conf_s {
-	int16_t required_acks;
+	int     required_acks;
+        int     enforce_required_acks;
 	int32_t request_timeout_ms;
 	int     message_timeout_ms;
 
@@ -632,6 +633,8 @@ typedef struct rd_kafka_toppar_s {
 
 	rd_ts_t            rktp_ts_last_xmit;
 
+        struct rd_kafka_metadata_partition rktp_metadata; /* Last known metadata
+                                                           * for this toppar. */
 	/* Consumer */
 	rd_kafka_q_t       rktp_fetchq;          /* Queue of fetched messages
 						  * from broker. */

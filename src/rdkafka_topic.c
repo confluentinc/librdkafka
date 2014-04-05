@@ -429,6 +429,15 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	if (!rkt->rkt_conf.partitioner)
 		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_random;
 
+        /* If enforce.required.acks is enabled, set it to the number
+         * of required acks to make producer code simpler. */
+        if (rkt->rkt_conf.enforce_required_acks &&
+            rkt->rkt_conf.required_acks > 0)
+                rkt->rkt_conf.enforce_required_acks =
+                        rkt->rkt_conf.required_acks;
+        else
+                rkt->rkt_conf.enforce_required_acks = 0;
+
 	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));
 
@@ -555,26 +564,33 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
  * NOTE: rd_kafka_topic_wrlock(rkt) MUST be held.
  */
 static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
-					 int32_t partition,
-					 int32_t leader,
+                                         const struct
+                                         rd_kafka_metadata_partition *mdp,
 					 rd_kafka_broker_t *rkb) {
 	rd_kafka_t *rk = rkt->rkt_rk;
 	rd_kafka_toppar_t *rktp;
 
-	rktp = rd_kafka_toppar_get(rkt, partition, 0);
+	rktp = rd_kafka_toppar_get(rkt, mdp->id, 0);
 	rd_kafka_assert(rkt->rkt_rk, rktp);
+
+        /* Store a copy of the metadata for this partition.
+         * The sub-arrays are NULLed to avoid extra alloc. */
+        rktp->rktp_metadata          = *mdp;
+        rktp->rktp_metadata.replicas = NULL;
+        rktp->rktp_metadata.isrs     = NULL;
 
 	if (!rkb) {
 		int had_leader = rktp->rktp_leader ? 1 : 0;
 
-		if (leader == -1)
+		if (mdp->leader == -1)
 			/* Topic lost its leader */;
 		else
 			rd_kafka_log(rk, LOG_NOTICE, "TOPICBRK",
 				     "Topic %s [%"PRId32"] migrated to unknown "
 				     "broker %"PRId32": "
 				     "requesting metadata update",
-				     rkt->rkt_topic->str, partition, leader);
+				     rkt->rkt_topic->str, mdp->id,
+                                     mdp->leader);
 
 		rd_kafka_toppar_broker_delegate(rktp, NULL);
 
@@ -594,7 +610,8 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 			rd_kafka_dbg(rk, TOPIC, "TOPICUPD",
 				     "No leader change for topic %s "
 				     "[%"PRId32"] with leader %"PRId32,
-				     rkt->rkt_topic->str, partition, leader);
+				     rkt->rkt_topic->str,
+                                     mdp->id, mdp->leader);
 			rd_kafka_toppar_destroy(rktp); /* from get() */
 			return 0;
 		}
@@ -602,7 +619,7 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 		rd_kafka_dbg(rk, TOPIC, "TOPICUPD",
 			     "Topic %s [%"PRId32"] migrated from "
 			     "broker %"PRId32" to %"PRId32,
-			     rkt->rkt_topic->str, partition,
+			     rkt->rkt_topic->str, mdp->id,
 			     rktp->rktp_leader->rkb_nodeid,
 			     rkb->rkb_nodeid);
 	}
@@ -914,8 +931,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 		/* Update leader for partition */
 		upd += rd_kafka_topic_leader_update(rkt,
-                                                    mdt->partitions[j].id,
-                                                    mdt->partitions[j].leader,
+                                                    &mdt->partitions[j],
                                                     partbrokers[j]);
 
                 /* Drop reference to broker (from find()) */

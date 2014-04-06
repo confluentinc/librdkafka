@@ -2399,9 +2399,9 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 
 				rd_kafka_toppar_lock(rktp);
 
-                                /* Enforce request.required.acks (if set) */
+                                /* Enforce ISR cnt (if set) */
                                 if (unlikely(rktp->rktp_rkt->rkt_conf.
-                                             enforce_required_acks >
+                                             enforce_isr_cnt >
                                              rktp->rktp_metadata.isr_cnt))
                                         rd_kafka_msgq_concat(&isrfailed,
                                                              &rktp->rktp_msgq);

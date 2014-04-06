@@ -27,7 +27,7 @@
  */
 
 /**
- * Tests enforce.request.required.acks (issue #91)
+ * Tests enforce.isr.cnt (issue #91)
  */
 
 #define _GNU_SOURCE
@@ -103,14 +103,8 @@ int main (int argc, char **argv) {
 
                 test_conf_init(&conf, &topic_conf, 10);
                 if (rd_kafka_topic_conf_set(topic_conf,
-                                            "request.required.acks", "5",
-                                            errstr, sizeof(errstr)) !=
-                    RD_KAFKA_CONF_OK)
-                        TEST_FAIL("%s", errstr);
-
-                if (rd_kafka_topic_conf_set(topic_conf,
-                                            "enforce.required.acks",
-                                            enforce ? "true" : "false",
+                                            "enforce.isr.cnt",
+                                            enforce ? "5" : "0",
                                             errstr, sizeof(errstr)) !=
                     RD_KAFKA_CONF_OK)
                         TEST_FAIL("%s", errstr);

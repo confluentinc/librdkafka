@@ -227,7 +227,7 @@ int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
 
 struct rd_kafka_topic_conf_s {
 	int     required_acks;
-        int     enforce_required_acks;
+        int     enforce_isr_cnt;
 	int32_t request_timeout_ms;
 	int     message_timeout_ms;
 

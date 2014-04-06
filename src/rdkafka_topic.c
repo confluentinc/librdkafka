@@ -429,15 +429,6 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	if (!rkt->rkt_conf.partitioner)
 		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_random;
 
-        /* If enforce.required.acks is enabled, set it to the number
-         * of required acks to make producer code simpler. */
-        if (rkt->rkt_conf.enforce_required_acks &&
-            rkt->rkt_conf.required_acks > 0)
-                rkt->rkt_conf.enforce_required_acks =
-                        rkt->rkt_conf.required_acks;
-        else
-                rkt->rkt_conf.enforce_required_acks = 0;
-
 	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));
 

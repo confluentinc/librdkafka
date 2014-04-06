@@ -289,16 +289,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "number of acknowledgements to be received (but the broker "
 	  "will never wait for more acknowledgements than there are ISRs).",
 	  -1, 1000, 1 },
-        { _RK_TOPIC|_RK_PRODUCER, "enforce.required.acks", _RK_C_BOOL,
-          _RKT(enforce_required_acks),
+        { _RK_TOPIC|_RK_PRODUCER, "enforce.isr.cnt", _RK_C_INT,
+          _RKT(enforce_isr_cnt),
           "Fail messages locally if the currently known ISR count for a "
-          "partition is less than `request.required.acks`. "
-          "`request.required.acks` must be greater than zero for this "
-          "configuration to have effect. "
+          "partition is less than this value. "
           "**NOTE**: The ISR count is fetched from the broker at "
           "regular intervals (`topic.metadata.refresh.interval.ms`) and "
           "might thus be outdated.",
-          0, 0, 0 },
+          0, 1000, 0 },
 
 	{ _RK_TOPIC|_RK_PRODUCER, "request.timeout.ms", _RK_C_INT,
 	  _RKT(request_timeout_ms),

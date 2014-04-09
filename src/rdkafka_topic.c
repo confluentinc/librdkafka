@@ -331,7 +331,7 @@ void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {
 	if (rkt->rkt_topic)
 		rd_kafkap_str_destroy(rkt->rkt_topic);
 
-	rd_kafka_lock(rkt->rkt_rk);
+	rd_kafka_wrlock(rkt->rkt_rk);
 	TAILQ_REMOVE(&rkt->rkt_rk->rk_topics, rkt, rkt_link);
 	rkt->rkt_rk->rk_topic_cnt--;
 	rd_kafka_unlock(rkt->rkt_rk);
@@ -362,7 +362,7 @@ rd_kafka_topic_t *rd_kafka_topic_find (rd_kafka_t *rk,
 				       const char *topic) {
 	rd_kafka_topic_t *rkt;
 
-	rd_kafka_lock(rk);
+	rd_kafka_rdlock(rk);
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		if (!rd_kafkap_str_cmp_str(rkt->rkt_topic, topic)) {
 			rd_kafka_topic_keep(rkt);
@@ -381,7 +381,7 @@ rd_kafka_topic_t *rd_kafka_topic_find0 (rd_kafka_t *rk,
 					const rd_kafkap_str_t *topic) {
 	rd_kafka_topic_t *rkt;
 
-	rd_kafka_lock(rk);
+	rd_kafka_rdlock(rk);
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		if (!rd_kafkap_str_cmp(rkt->rkt_topic, topic)) {
 			rd_kafka_topic_keep(rkt);
@@ -441,7 +441,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	/* Create unassigned partition */
 	rkt->rkt_ua = rd_kafka_toppar_new(rkt, RD_KAFKA_PARTITION_UA);
 
-	rd_kafka_lock(rk);
+	rd_kafka_wrlock(rk);
 	TAILQ_INSERT_TAIL(&rk->rk_topics, rkt, rkt_link);
 	rk->rk_topic_cnt++;
 	rd_kafka_unlock(rk);
@@ -884,7 +884,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
         partbrokers = alloca(mdt->partition_cnt * sizeof(*partbrokers));
 
 	/* Look up brokers before acquiring rkt lock to preserve lock order */
-	rd_kafka_lock(rkb->rkb_rk);
+	rd_kafka_rdlock(rkb->rkb_rk);
 	for (j = 0 ; j < mdt->partition_cnt ; j++) {
 		if (mdt->partitions[j].leader == -1) {
                         partbrokers[j] = NULL;
@@ -958,7 +958,7 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 
 	rd_kafka_msgq_init(&timedout);
 
-	rd_kafka_lock(rk);
+	rd_kafka_rdlock(rk);
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		int p;
 

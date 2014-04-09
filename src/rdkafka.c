@@ -659,7 +659,7 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
         rd_kafkap_str_destroy(rk->rk_conf.group_id);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
 
-	pthread_mutex_destroy(&rk->rk_lock);
+	pthread_rwlock_destroy(&rk->rk_lock);
 
 	free(rk);
 
@@ -676,11 +676,11 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 	(void)rd_atomic_add(&rk->rk_terminate, 1);
 
 	/* Decommission all topics */
-	rd_kafka_lock(rk);
+	rd_kafka_rdlock(rk);
 	TAILQ_FOREACH_SAFE(rkt, &rk->rk_topics, rkt_link, rkt_tmp) {
 		rd_kafka_unlock(rk);
 		rd_kafka_topic_partitions_remove(rkt);
-		rd_kafka_lock(rk);
+		rd_kafka_rdlock(rk);
 	}
 	rd_kafka_unlock(rk);
 
@@ -780,7 +780,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 	buf = malloc(size);
 
 
-	rd_kafka_lock(rk);
+	rd_kafka_rdlock(rk);
 
 	now = rd_clock();
 	_st_printf("{ "
@@ -983,7 +983,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	rd_kafka_keep(rk); /* application refcnt */
 
-	pthread_mutex_init(&rk->rk_lock, NULL);
+	pthread_rwlock_init(&rk->rk_lock, NULL);
 
 	rd_kafka_q_init(&rk->rk_rep);
 
@@ -1491,7 +1491,7 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
 	rd_kafka_toppar_t *rktp;
 
 	if (locks)
-                rd_kafka_lock(rk);
+                rd_kafka_rdlock(rk);
 	fprintf(fp, "rd_kafka_t %p: %s\n", rk, rk->rk_name);
 
 	fprintf(fp, " refcnt %i\n", rk->rk_refcnt);
@@ -1617,7 +1617,7 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
 
         /* Query any broker that is up, and if none are up pick the first one,
          * if we're lucky it will be up before the timeout */
-        rd_kafka_lock(rk);
+        rd_kafka_rdlock(rk);
         if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP))) {
                 rkb = TAILQ_FIRST(&rk->rk_brokers);
                 if (rkb)

@@ -718,7 +718,7 @@ struct rd_kafka_s {
 	rd_kafka_conf_t  rk_conf;
 	int              rk_flags;
 	int              rk_terminate;
-	pthread_mutex_t  rk_lock;
+	pthread_rwlock_t rk_lock;
 	int              rk_refcnt;
 	rd_kafka_type_t  rk_type;
 	struct timeval   rk_tv_state_change;
@@ -748,8 +748,9 @@ struct rd_kafka_s {
 	} rk_err;
 };
 
-#define rd_kafka_lock(rk)    pthread_mutex_lock(&(rk)->rk_lock)
-#define rd_kafka_unlock(rk)  pthread_mutex_unlock(&(rk)->rk_lock)
+#define rd_kafka_wrlock(rk)    pthread_rwlock_wrlock(&(rk)->rk_lock)
+#define rd_kafka_rdlock(rk)    pthread_rwlock_rdlock(&(rk)->rk_lock)
+#define rd_kafka_unlock(rk)    pthread_rwlock_unlock(&(rk)->rk_lock)
 
 
 

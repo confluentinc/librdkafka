@@ -1068,7 +1068,7 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
 
 
 	if (rko->rko_rkt || !rko->rko_all_topics) {
-		rd_kafka_lock(rkb->rkb_rk);
+		rd_kafka_rdlock(rkb->rkb_rk);
 
 		/* Calculate size to hold all known topics */
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
@@ -1151,7 +1151,7 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 
 /**
- * Locks: rd_kafka_lock(rk) MUST be held.
+ * Locks: rd_kafka_rdlock(rk) MUST be held.
  * Locality: any thread
  */
 rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
@@ -1180,7 +1180,7 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	rd_kafka_broker_t *rkb;
 
 	if (do_rk_lock)
-		rd_kafka_lock(rk);
+		rd_kafka_rdlock(rk);
 	if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP))) {
 		if (do_rk_lock)
 			rd_kafka_unlock(rk);
@@ -3884,7 +3884,7 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 
 	}
 
-	rd_kafka_lock(rkb->rkb_rk);
+	rd_kafka_wrlock(rkb->rkb_rk);
 	TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
 	(void)rd_atomic_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
 	rd_kafka_unlock(rkb->rkb_rk);
@@ -3927,7 +3927,7 @@ void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
 
 /**
  *
- * Locks: rd_kafka_lock(rk) must be held
+ * Locks: rd_kafka_wrlock(rk) must be held
  */
 static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					       rd_kafka_confsource_t source,
@@ -4019,7 +4019,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 }
 
 /**
- * Locks: rd_kafka_lock()
+ * Locks: rd_kafka_rdlock()
  * NOTE: caller must release rkb reference by rd_kafka_broker_destroy()
  */
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
@@ -4042,7 +4042,7 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 }
 
 /**
- * Locks: rd_kafka_lock(rk) must be held
+ * Locks: rd_kafka_rdlock(rk) must be held
  */
 static rd_kafka_broker_t *rd_kafka_broker_find (rd_kafka_t *rk,
 						const char *name,
@@ -4105,7 +4105,7 @@ int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist) {
 		if (!port)
 			port = RD_KAFKA_PORT;
 
-		rd_kafka_lock(rk);
+		rd_kafka_wrlock(rk);
 
 		if ((rkb = rd_kafka_broker_find(rk, s, port)) &&
 		    rkb->rkb_source == RD_KAFKA_CONFIGURED) {
@@ -4131,7 +4131,7 @@ rd_kafka_broker_update (rd_kafka_t *rk,
                         const struct rd_kafka_metadata_broker *mdb) {
 	rd_kafka_broker_t *rkb;
 
-	rd_kafka_lock(rk);
+	rd_kafka_wrlock(rk);
 	if ((rkb = rd_kafka_broker_find_by_nodeid(rk, mdb->id)))
 		rd_kafka_broker_destroy(rkb);
 	else

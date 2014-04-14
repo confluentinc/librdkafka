@@ -199,6 +199,14 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
         case RD_KAFKA_TOPIC_S_EXISTS:
                 /* Topic exists in cluster. */
 
+                /* Topic exists but has no partitions.
+                 * This is usually an transient state following the
+                 * auto-creation of a topic. */
+                if (unlikely(rkt->rkt_partition_cnt == 0)) {
+                        partition = RD_KAFKA_PARTITION_UA;
+                        break;
+                }
+
                 /* Partition not assigned, run partitioner. */
                 if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
                         partition = rkt->rkt_conf.

@@ -2210,6 +2210,11 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 			/* Free snappy environment */
 			snappy_free_env(&senv);
+			break;
+
+		default:
+			rd_kafka_assert(rkb->rkb_rk, !*"notreached: compression.codec");
+			break;
 
 		}
 
@@ -4000,8 +4005,13 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 		free(rkb);
 		rd_kafka_destroy(rk);
-                /* Restore sigmask of caller */
-                pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+
+		/* Restore sigmask of caller */
+		pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+
+		/* Release thread attribute storage */
+		pthread_attr_destroy(&attr);
+
 		return NULL;
 	}
 
@@ -4012,8 +4022,11 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 		   "Added new broker with NodeId %"PRId32,
 		   rkb->rkb_nodeid);
 
-        /* Restore sigmask of caller */
-        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+	/* Restore sigmask of caller */
+	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+
+	/* Release thread attribute storage */
+	pthread_attr_destroy(&attr);
 
 	return rkb;
 }

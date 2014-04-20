@@ -42,6 +42,21 @@ rdkafka_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_examp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) rdkafka_example.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS) -lstdc++
 
+rdkafka_zookeeper_example: ../src/librdkafka.a rdkafka_zookeeper_example.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -I/usr/include/zookeeper rdkafka_zookeeper_example.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS) -lzookeeper_mt -ljansson
+	@echo "# $@ is ready"
+	@echo "#"
+	@echo "# Run producer (write messages on stdin)"
+	@echo "./rdkafka_zookeeper_example -P -t <topic> -p <partition>"
+	@echo ""
+	@echo "# or consumer"
+	@echo "./rdkafka_zookeeper_example -C -t <topic> -p <partition>"
+	@echo ""
+	@echo "#"
+	@echo "# More usage options:"
+	@echo "./rdkafka_zookeeper_example --help"
+
 clean:
 	rm -f $(EXAMPLES)
 

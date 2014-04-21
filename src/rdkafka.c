@@ -1039,12 +1039,13 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 				 "Failed to create thread: %s", strerror(err));
 		rd_kafka_destroy0(rk); /* handler thread */
 		rd_kafka_destroy0(rk); /* application refcnt */
-                /* Restore sigmask of caller */
-                pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+		/* Restore sigmask of caller */
+		pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+		/* Release thread attribute storage */
+		pthread_attr_destroy(&attr);
 		errno = err;
 		return NULL;
 	}
-
 
 	/* Add initial list of brokers from configuration */
 	if (rk->rk_conf.brokerlist)
@@ -1052,8 +1053,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	(void)rd_atomic_add(&rd_kafka_handle_cnt_curr, 1);
 
-        /* Restore sigmask of caller */
-        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+	/* Restore sigmask of caller */
+	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+
+	/* Release thread attribute storage */
+	pthread_attr_destroy(&attr);
 
 	return rk;
 }

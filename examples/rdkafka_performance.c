@@ -666,6 +666,7 @@ int main (int argc, char **argv) {
 			"  -I           Idle: dont produce any messages\n"
 			"  -q           Decrease verbosity\n"
                         "  -v           Increase verbosity (default 1)\n"
+                        "  -u           Output stats in table format\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  consumes messages and prints thruput\n"

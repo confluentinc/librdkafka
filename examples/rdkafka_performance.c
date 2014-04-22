@@ -440,7 +440,10 @@ int main (int argc, char **argv) {
         const char *stats_cmd = NULL;
         char *stats_intvlstr = NULL;
         char tmp[128];
+        char *tmp2;
         int otype = _OTYPE_SUMMARY;
+        double dtmp;
+        int rate_sleep = 0;
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -452,7 +455,7 @@ int main (int argc, char **argv) {
 			  NULL, 0);
 	rd_kafka_conf_set(conf, "message.send.max.retries", "3", NULL, 0);
 	rd_kafka_conf_set(conf, "retry.backoff.ms", "500", NULL, 0);
-	
+
 	/* Consumer config */
 	/* Tell rdkafka to (try to) maintain 1M messages
 	 * in its internal receive buffers. This is to avoid
@@ -470,7 +473,7 @@ int main (int argc, char **argv) {
 	while ((opt =
 		getopt(argc, argv,
 		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:"
-                       "R:a:z:o:X:B:eT:G:qvIu")) != -1) {
+                       "R:a:z:o:X:B:eT:G:qvIur:")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -619,6 +622,18 @@ int main (int argc, char **argv) {
                         otype = _OTYPE_TAB;
                         break;
 
+                case 'r':
+                        dtmp = strtod(optarg, &tmp2);
+                        if (tmp2 == optarg ||
+                            (dtmp >= -0.001 && dtmp <= 0.001)) {
+                                fprintf(stderr, "%% Invalid rate: %s\n",
+                                        optarg);
+                                exit(1);
+                        }
+
+                        rate_sleep = (int)(1000000.0 / dtmp);
+                        break;
+
 		default:
 			goto usage;
 		}
@@ -667,6 +682,7 @@ int main (int argc, char **argv) {
 			"  -q           Decrease verbosity\n"
                         "  -v           Increase verbosity (default 1)\n"
                         "  -u           Output stats in table format\n"
+                        "  -r <rate>    Producer msg/s limit\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  consumes messages and prints thruput\n"
@@ -791,6 +807,11 @@ int main (int argc, char **argv) {
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
 
+                if (rate_sleep && verbosity >= 2)
+                        fprintf(stderr,
+                                "%% Inter message rate limiter sleep %ius\n",
+                                rate_sleep);
+
                 dr_disp_div = msgcnt / 50;
                 if (dr_disp_div == 0)
                         dr_disp_div = 10;
@@ -859,6 +880,9 @@ int main (int argc, char **argv) {
 			msgs_wait_cnt++;
 			cnt.msgs++;
 			cnt.bytes += msgsize;
+
+                        if (rate_sleep)
+                                usleep(rate_sleep);
 
 			/* Must poll to handle delivery reports */
 			rd_kafka_poll(rk, 0);

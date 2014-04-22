@@ -90,8 +90,12 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	rkm->rkm_opaque     = msg_opaque;
 	rkm->rkm_key        = rd_kafkap_bytes_new(key, keylen);
 	rkm->rkm_partition  = force_partition;
-	rkm->rkm_ts_timeout = rd_clock() +
-		rkt->rkt_conf.message_timeout_ms * 1000;
+	if (rkt->rkt_conf.message_timeout_ms == 0) {
+		rkm->rkm_ts_timeout = INT64_MAX;
+	} else {
+		rkm->rkm_ts_timeout = rd_clock() +
+			rkt->rkt_conf.message_timeout_ms * 1000;
+	}
 
 	if (msgflags & RD_KAFKA_MSG_F_COPY) {
 		/* Copy payload to space following the ..msg_t */

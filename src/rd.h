@@ -95,8 +95,21 @@
 
 
 #ifndef be64toh
+
+#ifdef sun
+# if __BYTE_ORDER == __BIG_ENDIAN
+#define be64toh(x) (x)
+# else
+#  if __BYTE_ORDER == __LITTLE_ENDIAN
+#define be64toh(x)  ntohll(x)
+#  endif
+# endif
+#endif /* sun */
+
 #ifndef __APPLE__
+#ifndef sun
 #include <byteswap.h>
+#endif
 
 #if __BYTE_ORDER == __BIG_ENDIAN
 #define be64toh(x) (x)

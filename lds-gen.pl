@@ -6,8 +6,22 @@
 #
 
 @funcs = ();
+my $last_line = "";
 while (<>) {
-    push(@funcs, $2) if /^(\S+.*\s+\**)?(rd_kafka_\S+)\s+\(/;
+    chomp;
+
+    if (/^(\S+.*\s+\**)?(rd_kafka_\S+)\s+\(/) {
+	$sym = $2;
+	# Ignore functions marked as unused since they wont generate
+	# any symbols and the Solaris linker warns about that.
+	if ("$last_line.$_" !~ /__attribute__\(\(unused\)\)/) {
+	    push(@funcs, $sym);
+	}
+	$last_line = "";
+
+    } else {
+	$last_line = $_;
+    }
 }
 
 

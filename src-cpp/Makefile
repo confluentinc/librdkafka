@@ -29,7 +29,7 @@ clean: lib-clean
 
 ifeq ($(WITH_LDS),y)
 # Enable linker script if supported by platform
-LIB_LDFLAGS+= -Wl,--version-script=$(LIBNAME).lds
+LIB_LDFLAGS+= $(LDFLAG_LINKERSCRIPT)$(LIBNAME).lds
 endif
 
 $(LIBNAME).lds: $(HDRS)

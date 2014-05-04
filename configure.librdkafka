@@ -6,18 +6,12 @@ mkl_require lib
 mkl_require pic
 mkl_require atomics must pass
 mkl_require good_cflags
+mkl_require socket
 
 # Generate version variables from rdkafka.h hex version define
 # so we can use it as string version when generating a pkg-config file.
 
-# Check if sed takes the -r or -E option for extended regexp.
-if $(echo foo | sed -r s/foo// > /dev/null 2>&1); then
-    ESED="sed -r"
-else
-    ESED="sed -E"
-fi
-
-verdef=$(grep -E '^#define +RD_KAFKA_VERSION +0x' src/rdkafka.h | $ESED 's/^#define +RD_KAFKA_VERSION +(0x[a-f0-9]+)\.*$/\1/')
+verdef=$(grep '^#define  *RD_KAFKA_VERSION  *0x' src/rdkafka.h | sed 's/^#define  *RD_KAFKA_VERSION  *\(0x[a-f0-9]*\)\.*$/\1/')
 mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
 
 mkl_require gen-pkg-config "rdkafka" "The Apache Kafka C/C++ library" \
@@ -35,6 +29,11 @@ function checks {
 
     # Older g++ (<=4.1?) gives invalid warnings for the C++ code.
     mkl_mkvar_append CXXFLAGS CXXFLAGS "-Wno-non-virtual-dtor"
+
+    # Required on SunOS
+    if [[ $MKL_DISTRO == "SunOS" ]]; then
+	mkl_mkvar_append CPPFLAGS CPPFLAGS "-D_POSIX_PTHREAD_SEMANTICS"
+    fi
 
     # Figure out what tool to use for dumping public symbols.
     # We rely on configure.cc setting up $NM if it exists.

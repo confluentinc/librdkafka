@@ -18,11 +18,31 @@ function checks {
 	"-shared -Wl,-soname,mkltest.0" "" ; then
 	# GNU linker
 	mkl_mkvar_append LIB_LDFLAGS LIB_LDFLAGS '-Wl,-soname,$(LIBNAME).so.$(LIBVER)'
-	mkl_mkvar_set gnulib_lds WITH_LDS y
 
     elif mkl_compile_check osxlib WITH_OSXLD cont CC \
 	"-dynamiclib -Wl,-install_name,/tmp/mkltest.so.0" ; then
 	# OSX linker
         mkl_mkvar_append LIB_LDFLAGS LIB_LDFLAGS '-dynamiclib -Wl,-install_name,$(DESTDIR)$(libdir)/$(LIBNAME).so.$(LIBVER)'
     fi
+
+    # Check what argument is needed for passing linker script.
+    local ldsfile=$(mktemp _mkltmpXXXX.lds)
+    echo "{
+ global:
+  *;
+};
+" > $ldsfile
+
+    mkl_meta_set ldsflagvs name "linker-script ld flag"
+    if mkl_compile_check ldsflagvs "" cont CC \
+	"-shared -Wl,--version-script=$ldsfile"; then
+	mkl_mkvar_set ldsflagvs LDFLAG_LINKERSCRIPT "-Wl,--version-script="
+	mkl_mkvar_set gnulib_lds WITH_LDS y
+    elif mkl_compile_check ldsflagvs ""  ignore CC \
+	"-shared -Wl,-M$ldsfile"; then
+	mkl_mkvar_set ldsflagvs LDFLAG_LINKERSCRIPT "-Wl,-M"
+	mkl_mkvar_set gnulib_lds WITH_LDS y
+    fi
+
+    rm -f "$ldsfile"
 }

@@ -72,6 +72,7 @@ For an introduction to the performance and usage of librdkafka, see
 
 ## Requirements
 	The GNU toolchain
+	GNU make
    	pthreads
 	zlib
 

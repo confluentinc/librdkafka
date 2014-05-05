@@ -472,6 +472,10 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 	rd_kafka_assert(rkb->rkb_rk, rkb->rkb_state>=RD_KAFKA_BROKER_STATE_UP);
 	rd_kafka_assert(rkb->rkb_rk, rkb->rkb_s != -1);
 
+#ifdef sun
+	/* See recvmsg() comment. Setting it here to be safe. */
+	errno = EAGAIN;
+#endif
 	r = sendmsg(rkb->rkb_s, msg, MSG_DONTWAIT
 #ifdef MSG_NOSIGNAL
 		    |MSG_NOSIGNAL
@@ -1379,6 +1383,11 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 
 	rd_kafka_assert(rkb->rkb_rk, rd_kafka_msghdr_size(&msg) > 0);
 
+#ifdef sun
+	/* SunOS doesn't seem to set errno when recvmsg() fails
+	 * due to no data and MSG_DONTWAIT is set. */
+	errno = EAGAIN;
+#endif
 	if ((r = recvmsg(rkb->rkb_s, &msg, MSG_DONTWAIT)) == -1) {
 		if (errno == EAGAIN)
 			return 0;

@@ -137,8 +137,13 @@ static inline rd_thread_t *rd_currthread_get (void) {
 
 	if (unlikely(!rd_currthread)) {
 		pthread_t thr = pthread_self();
-		char thrname[16];
-		snprintf(thrname, sizeof(thrname), "%p", (void *)thr);
+		char thrname[32];
+                char *p = (char *)(void *)&thr;
+                int of = 0, i;
+                /* Construct thread name from the id in a portable fashion */
+                for (i = 0 ; i < sizeof(thr) && of < sizeof(thrname) ; i++)
+                        of += snprintf(thrname+of, sizeof(thrname)-of,
+                                       "%02x", (unsigned int)p[i]);
 		rd_currthread = rd_thread_create0(thrname, &thr);
 	}
 

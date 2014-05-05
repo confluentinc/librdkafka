@@ -101,6 +101,10 @@
 #define be64toh(x) (x)
 #define htobe64(x) (x)
 # else
+#  ifndef ntohll
+#define ntohll(x) BSWAP_64(x)
+#define htonll(x) ntohll(x)
+#  endif
 #define be64toh(x)  ntohll(x)
 #define htobe64(x)  htonll(x)
 # endif

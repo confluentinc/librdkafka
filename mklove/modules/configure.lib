@@ -33,15 +33,16 @@ function checks {
 };
 " > $ldsfile
 
-    mkl_meta_set ldsflagvs name "linker-script ld flag"
+    mkl_meta_set ldsflagvs name "GNU linker-script ld flag"
+    mkl_meta_set ldsflagm name "Solaris linker-script ld flag"
     if mkl_compile_check ldsflagvs "" cont CC \
 	"-shared -Wl,--version-script=$ldsfile"; then
 	mkl_mkvar_set ldsflagvs LDFLAG_LINKERSCRIPT "-Wl,--version-script="
-	mkl_mkvar_set gnulib_lds WITH_LDS y
-    elif mkl_compile_check ldsflagvs ""  ignore CC \
+	mkl_mkvar_set lib_lds WITH_LDS y
+    elif mkl_compile_check ldsflagm ""  ignore CC \
 	"-shared -Wl,-M$ldsfile"; then
-	mkl_mkvar_set ldsflagvs LDFLAG_LINKERSCRIPT "-Wl,-M"
-	mkl_mkvar_set gnulib_lds WITH_LDS y
+	mkl_mkvar_set ldsflagm LDFLAG_LINKERSCRIPT "-Wl,-M"
+	mkl_mkvar_set lib_lds WITH_LDS y
     fi
 
     rm -f "$ldsfile"

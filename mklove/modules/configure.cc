@@ -82,7 +82,14 @@ function checks {
 
     # install
     if [ -z "$INSTALL" ]; then
-        INSTALL=install
+	if [[ $MKL_DISTRO == "SunOS" ]]; then
+	    mkl_meta_set ginstall name "GNU install"
+	    if mkl_command_check ginstall "" ignore "ginstall --version"; then
+		INSTALL=ginstall
+	    else
+		INSTALL=install
+	    fi
+	fi
     fi
 
     if mkl_command_check "install" "WITH_INSTALL" cont "$INSTALL --version"; then

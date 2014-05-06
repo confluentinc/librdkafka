@@ -3675,6 +3675,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 	int cnt = 0;
 	rd_kafka_buf_t *rkbuf;
 	rd_ts_t now = rd_clock();
+        int max_cnt;
 
 	/* Create buffer and iovecs:
 	 *   1 x part1 header
@@ -3684,7 +3685,12 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 
 	rd_kafka_broker_toppars_rdlock(rkb);
 
-	rkbuf = rd_kafka_buf_new(1 + (rkb->rkb_toppar_cnt * (1 + 1)),
+        /* FIXME: Workaround for clusters with more than 500 partitions.
+         *        This has no negative impact as long as the application
+         *        does not consume from more than 500 partitions from a
+         *        single broker. */
+        max_cnt = RD_MIN(rkb->rkb_toppar_cnt, 500);
+	rkbuf = rd_kafka_buf_new(1 + (max_cnt * (1 + 1)),
 				 sizeof(*fr) +
 				 (sizeof(*tp) * rkb->rkb_toppar_cnt));
 
@@ -3749,6 +3755,13 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 			continue;
                 }
 
+                if (cnt >= max_cnt) {
+                        rd_rkb_dbg(rkb, TOPIC, "FETCH",
+                                   "FIXME: Fetching too many "
+                                   "partitions (>%i), see issue #110",
+                                   max_cnt);
+                        break;
+                }
 
 		/* Push topic name onto buffer stack. */
 		rd_kafka_buf_push(rkbuf, rktp->rktp_rkt->rkt_topic,

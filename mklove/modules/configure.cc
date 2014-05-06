@@ -2,7 +2,7 @@
 #
 # Compiler detection
 # Sets:
-#  CC, CXX, CFLAGS, CPPFLAGS, LDFLAGS, PKG_CONFIG, instALL
+#  CC, CXX, CFLAGS, CPPFLAGS, LDFLAGS, ARFLAGS, PKG_CONFIG, INSTALL, MBITS
 
 
 mkl_require host
@@ -42,6 +42,19 @@ function checks {
         mkl_mkvar_set "CXX" CXX $CXX
     fi
 
+    # Handle machine bits, if specified.
+    if [[ ! -z "$MBITS" ]]; then
+	mkl_meta_set mbits_m name "mbits compiler flag (-m$MBITS)"
+	if mkl_compile_check mbits_m "" ignore CC "-m$MBITS"; then
+	    mkl_mkvar_append CPPFLAGS CPPFLAGS "-m$MBITS"
+	    mkl_mkvar_append LDFLAGS LDFLAGS "-m$MBITS"
+	fi
+	if [[ $MBITS == 64 && $MKL_DISTRO == "SunOS" ]]; then
+	    # Turn on 64-bit archives on SunOS
+	    mkl_mkvar_append ARFLAGS ARFLAGS "S"
+	fi
+    fi
+
     # Provide prefix and checks for various other build tools.
     local t=
     for t in LD:ld NM:nm OBJDUMP:objdump STRIP:strip ; do
@@ -60,10 +73,11 @@ function checks {
     done
 
     # Compiler and linker flags
-    [[ ! -z $CFLAGS ]]   && mkl_mkvar_append "CFLAGS" "CFLAGS" $CFLAGS
-    [[ ! -z $CPPFLAGS ]] && mkl_mkvar_append "CPPFLAGS" "CPPFLAGS" $CPPFLAGS
-    [[ ! -z $CXXFLAGS ]] && mkl_mkvar_append "CFLAGS" "CXXFLAGS" $CXXFLAGS
-    [[ ! -z $LDFLAGS ]]  && mkl_mkvar_append "CFLAGS" "LDFLAGS" $LDFLAGS
+    [[ ! -z $CFLAGS ]]   && mkl_mkvar_set "CFLAGS" "CFLAGS" "$CFLAGS"
+    [[ ! -z $CPPFLAGS ]] && mkl_mkvar_set "CPPFLAGS" "CPPFLAGS" "$CPPFLAGS"
+    [[ ! -z $CXXFLAGS ]] && mkl_mkvar_set "CXXFLAGS" "CXXFLAGS" "$CXXFLAGS"
+    [[ ! -z $LDFLAGS ]]  && mkl_mkvar_set "LDFLAGS" "LDFLAGS" "$LDFLAGS"
+    [[ ! -z $ARFLAGS ]]  && mkl_mkvar_set "ARFLAGS" "ARFLAGS" "$ARFLAGS"
 
     mkl_mkvar_append CPPFLAGS CPPFLAGS "-g"
 
@@ -127,9 +141,9 @@ mkl_option "Compiler" "env:CC" "--cc=CC" "Build using C compiler CC" "\$CC"
 mkl_option "Compiler" "env:CXX" "--cxx=CXX" "Build using C++ compiler CXX" "\$CXX"
 mkl_option "Compiler" "ARCH" "--arch=ARCH" "Build for architecture" "$(uname -m)"
 mkl_option "Compiler" "CPU" "--cpu=CPU" "Build and optimize for specific CPU" "generic"
+mkl_option "Compiler" "MBITS" "--mbits=BITS" "Machine bits (32 or 64)" ""
 
-
-for n in CFLAGS CPPFLAGS CXXFLAGS LDFLAGS; do
+for n in CFLAGS CPPFLAGS CXXFLAGS LDFLAGS ARFLAGS; do
     mkl_option "Compiler" "mk:$n" "--$n=$n" "Add $n flags"
 done
 

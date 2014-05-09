@@ -50,30 +50,26 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 }
 
 /**
- * Produce: creates a new message, runs the partitioner and enqueues
- *          into on the selected partition.
+ * Create a new message.
  *
  * Returns 0 on success or -1 on error.
+ * Both errno and 'errp' are set appropriately.
  */
-int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
-		      int msgflags,
-		      char *payload, size_t len,
-		      const void *key, size_t keylen,
-		      void *msg_opaque) {
+static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
+                                          int32_t force_partition,
+                                          int msgflags,
+                                          char *payload, size_t len,
+                                          const void *key, size_t keylen,
+                                          void *msg_opaque,
+                                          rd_kafka_resp_err_t *errp,
+                                          rd_ts_t now) {
 	rd_kafka_msg_t *rkm;
 	size_t mlen = sizeof(*rkm);
-	rd_kafka_resp_err_t err;
 
 	if (unlikely(len + keylen > rkt->rkt_rk->rk_conf.max_msg_size)) {
-		errno = EMSGSIZE;
-		return -1;
-	}
-
-	if (unlikely(rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
-		     rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
-		(void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
-		errno = ENOBUFS;
-		return -1;
+                *errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
+                errno = EMSGSIZE;
+		return NULL;
 	}
 
 	/* If we are to make a copy of the payload, allocate space for it too */
@@ -93,7 +89,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	if (rkt->rkt_conf.message_timeout_ms == 0) {
 		rkm->rkm_ts_timeout = INT64_MAX;
 	} else {
-		rkm->rkm_ts_timeout = rd_clock() +
+		rkm->rkm_ts_timeout = now +
 			rkt->rkt_conf.message_timeout_ms * 1000;
 	}
 
@@ -107,7 +103,43 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 		rkm->rkm_payload = payload;
 	}
 
+        return rkm;
+}
 
+
+/**
+ * Produce: creates a new message, runs the partitioner and enqueues
+ *          into on the selected partition.
+ *
+ * Returns 0 on success or -1 on error.
+ */
+int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
+		      int msgflags,
+		      char *payload, size_t len,
+		      const void *key, size_t keylen,
+		      void *msg_opaque) {
+	rd_kafka_msg_t *rkm;
+	rd_kafka_resp_err_t err;
+
+	if (unlikely(rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
+		     rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
+		(void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+		errno = ENOBUFS;
+		return -1;
+	}
+
+        /* Create message */
+        rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
+                                payload, len, key, keylen, msg_opaque, &err,
+                                rd_clock());
+        if (unlikely(!rkm)) {
+                /* errno is already set by msg_new() */
+                rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+                return -1;
+        }
+
+
+        /* Partition the message */
 	err = rd_kafka_msg_partitioner(rkt, rkm, 1);
 	if (likely(!err))
 		return 0;
@@ -130,6 +162,116 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 }
 
 
+
+
+/**
+ * Produce a batch of messages.
+ * Returns the number of messages succesfully queued for producing.
+ * Each message's .err will be set accordingly.
+ */
+int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
+                            int msgflags,
+                            rd_kafka_message_t *rkmessages, int message_cnt) {
+        rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
+        int i;
+        rd_ts_t now = rd_clock();
+        int good = 0;
+        rd_kafka_toppar_t *rktp = NULL;
+        rd_kafka_resp_err_t all_err = 0;
+
+        /* For partitioner; hold lock for entire run,
+         * for one partition: release it after toppar lookup. */
+        rd_kafka_topic_rdlock(rkt);
+
+        /* If not using partitioner, get the toppar right away. */
+        if (partition != RD_KAFKA_PARTITION_UA) {
+                rktp = rd_kafka_toppar_get_avail(rkt, partition,
+                                                 1/*ua on miss*/, &all_err);
+                rd_kafka_topic_unlock(rkt);
+        }
+
+        for (i = 0 ; i < message_cnt ; i++) {
+                rd_kafka_msg_t *rkm;
+
+                /* Propagate error for all messages. */
+                if (unlikely(all_err)) {
+                        rkmessages[i].err = all_err;
+                        continue;
+                }
+
+                /* buffering.max.messages reached */
+                if (unlikely(rkt->rkt_rk->rk_producer.msg_cnt +
+                             /* For partitioner: msg_cnt is increased per
+                              *                  message,
+                              * For single partition: msg_cnt is increased
+                              *                       just once at the end */
+                             (partition == RD_KAFKA_PARTITION_UA ? 0 : good)
+                             + 1 >
+                             rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
+                        all_err = RD_KAFKA_RESP_ERR__QUEUE_FULL;
+                        rkmessages[i].err = all_err;
+                        continue;
+                }
+
+                /* Create message */
+                rkm = rd_kafka_msg_new0(rkt,
+                                        partition , msgflags,
+                                        rkmessages[i].payload,
+                                        rkmessages[i].len,
+                                        rkmessages[i].key,
+                                        rkmessages[i].key_len,
+                                        rkmessages[i]._private,
+                                        &rkmessages[i].err,
+                                        now);
+                if (!rkm)
+                        continue;
+
+                /* Two cases here:
+                 *  partition==UA:     run the partitioner (slow)
+                 *  fixed partition:   simply concatenate the queue to partit */
+                if (partition == RD_KAFKA_PARTITION_UA) {
+                        (void)rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt,
+                                            1);
+
+                        /* Partition the message */
+                        rkmessages[i].err =
+                                rd_kafka_msg_partitioner(rkt, rkm,
+                                                         0/*already locked*/);
+
+                        if (unlikely(rkmessages[i].err)) {
+                                rd_kafka_msg_destroy(rkt->rkt_rk, rkm);
+                                continue;
+                        }
+
+
+                } else {
+                        /* Single destination partition, enqueue message
+                         * on temporary queue for later queue concat. */
+                        rd_kafka_msgq_enq(&tmpq, rkm);
+                }
+
+                rkmessages[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                good++;
+        }
+
+
+        if (partition == RD_KAFKA_PARTITION_UA)
+                rd_kafka_topic_unlock(rkt);
+        else {
+                /* Concatenate tmpq onto partition queue. */
+                if (likely(rktp != NULL)) {
+                        if (good > 0)
+                                (void)rd_atomic_add(&rkt->rkt_rk->
+                                                    rk_producer.msg_cnt, good);
+
+                        (void)rd_atomic_add(&rktp->rktp_c.msgs, good);
+                        rd_kafka_toppar_concat_msgq(rktp, &tmpq);
+                        rd_kafka_toppar_destroy(rktp);
+                }
+        }
+
+        return good;
+}
 
 /**
  * Scan 'rkmq' for messages that have timed out and remove them from

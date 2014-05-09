@@ -37,6 +37,8 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
 				  rd_kafka_msgq_t *rkmq);
+void rd_kafka_toppar_concat_msgq (rd_kafka_toppar_t *rktp,
+				  rd_kafka_msgq_t *rkmq);
 
 #define rd_kafka_topic_keep(rkt) (void)rd_atomic_add(&(rkt->rkt_refcnt), 1)
 void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt);
@@ -48,6 +50,10 @@ rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
 					 const rd_kafkap_str_t *topic,
 					 int32_t partition,
 					 int ua_on_miss);
+rd_kafka_toppar_t *rd_kafka_toppar_get_avail (const rd_kafka_topic_t *rkt,
+                                              int32_t partition,
+                                              int ua_on_miss,
+                                              rd_kafka_resp_err_t *errp);
 
 rd_kafka_toppar_t *rd_kafka_toppar_desired_get (rd_kafka_topic_t *rkt,
 						int32_t partition);

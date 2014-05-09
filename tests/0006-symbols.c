@@ -85,6 +85,7 @@ int main (int argc, char **argv) {
                 rd_kafka_consume_callback(NULL, 0, 0, NULL, NULL);
                 rd_kafka_offset_store(NULL, 0, 0);
                 rd_kafka_produce(NULL, 0, 0, NULL, 0, NULL, 0, NULL);
+                rd_kafka_produce_batch(NULL, 0, 0, NULL, 0);
                 rd_kafka_poll(NULL, 0);
                 rd_kafka_brokers_add(NULL, NULL);
                 rd_kafka_set_logger(NULL, NULL);

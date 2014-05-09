@@ -844,6 +844,33 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
 
 
 
+/**
+ * Produce multiple messages.
+ *
+ * If partition is RD_KAFKA_PARTITION_UA the configured partitioner will
+ * be run for each message (slower), otherwise the messages will be enqueued
+ * to the specified partition directly (faster).
+ *
+ * The messages are provided in the array `rkmessages` of count `message_cnt`
+ * elements.
+ * The `partition` and `msgflags` are used for all provided messages.
+ *
+ * Honoured `rkmessages[]` fields are:
+ *   payload,len     - Message payload and length
+ *   key,key_len     - Optional message key
+ *   _private        - Message opaque pointer (msg_opaque)
+ *   err             - Will be set according to success or failure.
+ *                     Application only needs to check for errors if
+ *                     return value != `message_cnt`.
+ *
+ * Returns the number of messages succesfully enqueued for producing.
+ */
+int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
+                            int msgflags,
+                            rd_kafka_message_t *rkmessages, int message_cnt);
+
+
+
 
 /*******************************************************************
  *								   *

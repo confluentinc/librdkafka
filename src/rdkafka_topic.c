@@ -144,6 +144,71 @@ rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
 
 
 /**
+ * Returns a toppar if it is available in the cluster.
+ * '*errp' is set to the error-code if lookup fails.
+ */
+rd_kafka_toppar_t *rd_kafka_toppar_get_avail (const rd_kafka_topic_t *rkt,
+                                              int32_t partition,
+                                              int ua_on_miss,
+                                              rd_kafka_resp_err_t *errp) {
+	rd_kafka_toppar_t *rktp;
+
+        switch (rkt->rkt_state)
+        {
+        case RD_KAFKA_TOPIC_S_UNKNOWN:
+                /* No metadata received from cluster yet.
+                 * Put message in UA partition and re-run partitioner when
+                 * cluster comes up. */
+		partition = RD_KAFKA_PARTITION_UA;
+                break;
+
+        case RD_KAFKA_TOPIC_S_NOTEXISTS:
+                /* Topic not found in cluster.
+                 * Fail message immediately. */
+                *errp = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+                return NULL;
+
+        case RD_KAFKA_TOPIC_S_EXISTS:
+                /* Topic exists in cluster. */
+
+                /* Topic exists but has no partitions.
+                 * This is usually an transient state following the
+                 * auto-creation of a topic. */
+                if (unlikely(rkt->rkt_partition_cnt == 0)) {
+                        partition = RD_KAFKA_PARTITION_UA;
+                        break;
+                }
+
+                /* Check that partition exists. */
+                if (partition >= rkt->rkt_partition_cnt) {
+                        *errp = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                        return NULL;
+                }
+                break;
+
+        default:
+                rd_kafka_assert(rkt->rkt_rk, !*"NOTREACHED");
+                break;
+        }
+
+	/* Get new partition */
+	rktp = rd_kafka_toppar_get(rkt, partition, 0);
+
+	if (unlikely(!rktp)) {
+		/* Unknown topic or partition */
+		if (rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
+			*errp = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+		else
+			*errp = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+
+		return NULL;
+	}
+
+	return rktp;
+}
+
+
+/**
  * Looks for partition 'i' in topic 'rkt's desired list.
  *
  * The desired partition list is the list of partitions that are desired
@@ -296,6 +361,18 @@ void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
 	rd_kafka_toppar_lock(rktp);
 	rd_kafka_msgq_concat(rkmq, &rktp->rktp_msgq);
 	rd_kafka_msgq_move(&rktp->rktp_msgq, rkmq);
+	rd_kafka_toppar_unlock(rktp);
+}
+
+
+/**
+ * Concats all messages from 'rkmq' at tail of toppar 'rktp's queue.
+ * 'rkmq' will be cleared.
+ */
+void rd_kafka_toppar_concat_msgq (rd_kafka_toppar_t *rktp,
+				  rd_kafka_msgq_t *rkmq) {
+	rd_kafka_toppar_lock(rktp);
+	rd_kafka_msgq_concat(&rktp->rktp_msgq, rkmq);
 	rd_kafka_toppar_unlock(rktp);
 }
 

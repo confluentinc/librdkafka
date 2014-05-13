@@ -34,6 +34,11 @@
  #include <endian.h>
 #elif defined __BSD__
   #include <sys/endian.h>
+#elif defined sun
+  #include <sys/byteorder.h>
+  #define __bswap_64(x)      BSWAP_64(x)
+  #define __bswap_32(x)      BSWAP_32(x)
+  #define __bswap_16(x)      BSWAP_16(x)
 #elif defined __APPLE__
   #include <sys/_endian.h>
   #include <libkern/OSByteOrder.h>

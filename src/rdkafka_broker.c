@@ -472,6 +472,10 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 	rd_kafka_assert(rkb->rkb_rk, rkb->rkb_state>=RD_KAFKA_BROKER_STATE_UP);
 	rd_kafka_assert(rkb->rkb_rk, rkb->rkb_s != -1);
 
+#ifdef sun
+	/* See recvmsg() comment. Setting it here to be safe. */
+	errno = EAGAIN;
+#endif
 	r = sendmsg(rkb->rkb_s, msg, MSG_DONTWAIT
 #ifdef MSG_NOSIGNAL
 		    |MSG_NOSIGNAL
@@ -590,11 +594,11 @@ static void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
 	rkbuf->rkbuf_reqhdr.ApiVersion = 0;
 	rkbuf->rkbuf_reqhdr.CorrId = htonl(rkbuf->rkbuf_corrid);
 
-	rkbuf->rkbuf_iov[0].iov_base = &rkbuf->rkbuf_reqhdr;
+	rkbuf->rkbuf_iov[0].iov_base = (void *)&rkbuf->rkbuf_reqhdr;
 	rkbuf->rkbuf_iov[0].iov_len  = sizeof(rkbuf->rkbuf_reqhdr);
 
 	/* Header ClientId */
-	rkbuf->rkbuf_iov[1].iov_base = rkb->rkb_rk->rk_clientid;
+	rkbuf->rkbuf_iov[1].iov_base = (void *)rkb->rkb_rk->rk_clientid;
 	rkbuf->rkbuf_iov[1].iov_len =
 		RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_clientid);
 
@@ -1357,9 +1361,9 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 
 		rkbuf = rd_kafka_buf_new(0, 0);
 
-		rkbuf->rkbuf_iov[0].iov_base = &rkbuf->rkbuf_reshdr;
+		rkbuf->rkbuf_iov[0].iov_base = (void *)&rkbuf->rkbuf_reshdr;
 		rkbuf->rkbuf_iov[0].iov_len = sizeof(rkbuf->rkbuf_reshdr);
-		
+
 		rkbuf->rkbuf_msg.msg_iov = rkbuf->rkbuf_iov;
 		rkbuf->rkbuf_msg.msg_iovlen = 1;
 
@@ -1379,6 +1383,11 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 
 	rd_kafka_assert(rkb->rkb_rk, rd_kafka_msghdr_size(&msg) > 0);
 
+#ifdef sun
+	/* SunOS doesn't seem to set errno when recvmsg() fails
+	 * due to no data and MSG_DONTWAIT is set. */
+	errno = EAGAIN;
+#endif
 	if ((r = recvmsg(rkb->rkb_s, &msg, MSG_DONTWAIT)) == -1) {
 		if (errno == EAGAIN)
 			return 0;
@@ -2106,7 +2115,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 			msghdr2 = malloc(sizeof(*msghdr2) + siov.iov_len);
 			siov.iov_base = (void *)(msghdr2+1);
 
-			strm.next_out = siov.iov_base;
+			strm.next_out = (void *)siov.iov_base;
 			strm.avail_out = siov.iov_len;
 
 			/* Iterate through each message and compress it. */
@@ -2116,7 +2125,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 				if (rkbuf->rkbuf_msg.msg_iov[i].iov_len == 0)
 					continue;
 
-				strm.next_in = rkbuf->rkbuf_msg.
+				strm.next_in = (void *)rkbuf->rkbuf_msg.
 					msg_iov[i].iov_base;
 				strm.avail_in = rkbuf->rkbuf_msg.
 					msg_iov[i].iov_len;
@@ -2232,7 +2241,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 					       (void *)&msghdr2->MagicByte,
 					       1+1+4+4);
 		msghdr2->Crc = rd_crc32_update(msghdr2->Crc,
-					       siov.iov_base, coutlen);
+					       (void *)siov.iov_base, coutlen);
 		msghdr2->Crc = htonl(rd_crc32_finalize(msghdr2->Crc));
 
 		/* Update enveloping MessageSet's length. */

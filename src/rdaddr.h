@@ -164,8 +164,6 @@ void rd_sockaddr_list_destroy (rd_sockaddr_list_t *rsal);
 static const char *rd_family2str (int af) RD_UNUSED;
 static const char *rd_family2str (int af) {
 	switch(af){
-		case AF_LOCAL:
-			return "local";
 		case AF_INET:
 			return "inet";
 		case AF_INET6:

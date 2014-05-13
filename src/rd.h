@@ -94,9 +94,27 @@
 
 
 
+#ifdef sun
+#include <sys/isa_defs.h>
+#include <sys/byteorder.h>
+# if _BIG_ENDIAN
+#define be64toh(x) (x)
+#define htobe64(x) (x)
+# else
+#  ifndef ntohll
+#define ntohll(x) BSWAP_64(x)
+#define htonll(x) ntohll(x)
+#  endif
+#define be64toh(x)  ntohll(x)
+#define htobe64(x)  htonll(x)
+# endif
+#endif /* sun */
+
 #ifndef be64toh
 #ifndef __APPLE__
+#ifndef sun
 #include <byteswap.h>
+#endif
 
 #if __BYTE_ORDER == __BIG_ENDIAN
 #define be64toh(x) (x)

@@ -5,7 +5,7 @@ Property                                 |       Default | Description
 client.id                                |       rdkafka | Client identifier.
 metadata.broker.list                     |               | Initial list of brokers. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime.
 message.max.bytes                        |       4000000 | Maximum transmit message size.
-receive.message.max.bytes                |     100000000 | Maximum receive message size. This is a safety precaution to avoid memory exhaustion in case of protocol hickups. The value should be at least fetch.message.max.bytes * number of partitions consumed from.
+receive.message.max.bytes                |     100000000 | Maximum receive message size. This is a safety precaution to avoid memory exhaustion in case of protocol hickups. The value should be at least fetch.message.max.bytes * number of partitions consumed from + messaging overhead (e.g. 200000 bytes).
 metadata.request.timeout.ms              |         60000 | Non-topic request timeout in milliseconds. This is for metadata requests, etc.
 topic.metadata.refresh.interval.ms       |         10000 | Topic metadata refresh interval in milliseconds. The metadata is automatically refreshed on error and connect. Use -1 to disable the intervalled refresh.
 topic.metadata.refresh.fast.cnt          |            10 | When a topic looses its leader this number of metadata requests are sent with `topic.metadata.refresh.fast.interval.ms` interval disregarding the `topic.metadata.refresh.interval.ms` value. This is used to recover quickly from transitioning leader brokers.

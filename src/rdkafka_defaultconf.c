@@ -86,7 +86,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "This is a safety precaution to avoid memory exhaustion in case of "
 	  "protocol hickups. "
           "The value should be at least fetch.message.max.bytes * number of "
-          "partitions consumed from.",
+          "partitions consumed from + messaging overhead (e.g. 200000 bytes).",
 	  1000, 1000000000, 100000000 },
 	{ _RK_GLOBAL, "metadata.request.timeout.ms", _RK_C_INT,
 	  _RK(metadata_request_timeout_ms),

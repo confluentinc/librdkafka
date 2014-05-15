@@ -1426,7 +1426,7 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 				 "Invalid message size %zd (0..%i): "
 				 "increase receive.message.max.bytes",
 				 rkbuf->rkbuf_len-4,
-				 rkb->rkb_rk->rk_conf.max_msg_size);
+				 rkb->rkb_rk->rk_conf.recv_max_msg_size);
 			rkb->rkb_c.rx_err++;
 			err_code = RD_KAFKA_RESP_ERR__BAD_MSG;
 
@@ -2626,7 +2626,8 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 	rd_kafka_buf_t *rkbufz;
 
 	if (_REMAIN() == 0)
-		_FAIL("empty messageset");
+		_FAIL("%s [%"PRId32"] empty messageset",
+		      rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
 
 	while (_REMAIN() > 0) {
 		struct {
@@ -2824,6 +2825,10 @@ err:
 	 *    message at the end of the message set.
 	 *    Clients should handle this case."
 	 * We're handling it by not passing the error upstream. */
+	rd_rkb_log(rkb, LOG_WARNING, "PROTOERR",
+		   "Previous parsing error for topic %s [%"PRId32"]",
+		   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 

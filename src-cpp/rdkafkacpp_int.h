@@ -102,7 +102,12 @@ class MessageImpl : public Message {
   }
 
   std::string         errstr() const {
-    const char *es = rd_kafka_message_errstr(rkmessage_);
+    /* FIXME: If there is a error string in payload (for consume_cb)
+     *        it wont be shown since 'payload' is reused for errstr
+     *        and we cant distinguish between consumer and producer.
+     *        For the producer case the payload needs to be the original
+     *        payload pointer. */
+    const char *es = rd_kafka_err2str(rkmessage_->err);
     return std::string(es ? : "");
   }
 

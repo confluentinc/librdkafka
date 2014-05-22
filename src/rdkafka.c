@@ -807,6 +807,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"txbytes\":%"PRIu64", "
 			   "\"txerrs\":%"PRIu64", "
 			   "\"txretries\":%"PRIu64", "
+			   "\"req_timeouts\":%"PRIu64", "
 			   "\"rx\":%"PRIu64", "
 			   "\"rxbytes\":%"PRIu64", "
 			   "\"rxerrs\":%"PRIu64", "
@@ -830,6 +831,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rkb->rkb_c.tx_bytes,
 			   rkb->rkb_c.tx_err,
 			   rkb->rkb_c.tx_retries,
+                           rkb->rkb_c.req_timeouts,
 			   rkb->rkb_c.rx,
 			   rkb->rkb_c.rx_bytes,
 			   rkb->rkb_c.rx_err,
@@ -1516,10 +1518,10 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
 			"  %"PRIu64 " messages sent, %"PRIu64" bytes, "
 			"%"PRIu64" errors\n"
 			"  %"PRIu64 " messages received, %"PRIu64" bytes, "
-			"%"PRIu64" errors\n"
+			"%"PRIu64" errors, %"PRIu64" timeouts\n"
 			"  %"PRIu64 " messageset transmissions were retried\n",
 			rkb->rkb_c.tx, rkb->rkb_c.tx_bytes,
-			rkb->rkb_c.tx_err,
+			rkb->rkb_c.tx_err, rkb->rkb_c.req_timeouts,
 			rkb->rkb_c.rx, rkb->rkb_c.rx_bytes,
 			rkb->rkb_c.rx_err,
 			rkb->rkb_c.tx_retries);

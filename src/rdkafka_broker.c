@@ -324,32 +324,6 @@ static void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 }
 
 
-/**
- * Scan the wait-response queue for message timeouts.
- */
-static void rd_kafka_broker_waitresp_timeout_scan (rd_kafka_broker_t *rkb,
-						   rd_ts_t now) {
-	rd_kafka_buf_t *rkbuf, *tmp;
-	int cnt = 0;
-
-	rd_kafka_assert(rkb->rkb_rk, pthread_self() == rkb->rkb_thread);
-
-	TAILQ_FOREACH_SAFE(rkbuf,
-			   &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link, tmp) {
-		if (likely(rkbuf->rkbuf_ts_timeout > now))
-			continue;
-
-		rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
-
-		rkbuf->rkbuf_cb(rkb, RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
-				NULL, rkbuf, rkbuf->rkbuf_opaque);
-		cnt++;
-	}
-
-	if (cnt > 0)
-		rd_rkb_dbg(rkb, MSG, "REQTMOUT", "Timed out %i requests", cnt);
-}
-
 
 /**
  * Failure propagation to application.
@@ -381,6 +355,8 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rkb->rkb_s = -1;
 		rkb->rkb_pfd.fd = rkb->rkb_s;
 	}
+
+        rkb->rkb_req_timeouts = 0;
 
 	if (rkb->rkb_recv_buf) {
 		rd_kafka_buf_destroy(rkb->rkb_recv_buf);
@@ -464,6 +440,55 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY)
 		rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
 }
+
+
+/**
+ * Scan the wait-response queue for message timeouts.
+ *
+ * Locality: Broker thread
+ */
+static void rd_kafka_broker_waitresp_timeout_scan (rd_kafka_broker_t *rkb,
+						   rd_ts_t now) {
+	rd_kafka_buf_t *rkbuf, *tmp;
+	int cnt = 0;
+
+	rd_kafka_assert(rkb->rkb_rk, pthread_self() == rkb->rkb_thread);
+
+	TAILQ_FOREACH_SAFE(rkbuf,
+			   &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link, tmp) {
+		if (likely(rkbuf->rkbuf_ts_timeout > now))
+			continue;
+
+		rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
+
+		rkbuf->rkbuf_cb(rkb, RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
+				NULL, rkbuf, rkbuf->rkbuf_opaque);
+		cnt++;
+	}
+
+	if (cnt > 0) {
+		rd_rkb_dbg(rkb, MSG, "REQTMOUT", "Timed out %i requests", cnt);
+
+                /* Fail the broker if socket.max.fails is configured and
+                 * now exceeded. */
+                rkb->rkb_req_timeouts   += cnt;
+                rkb->rkb_c.req_timeouts += cnt;
+
+                if (rkb->rkb_rk->rk_conf.socket_max_fails &&
+                    rkb->rkb_req_timeouts >
+                    rkb->rkb_rk->rk_conf.socket_max_fails &&
+                    rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
+                        errno = ETIMEDOUT;
+                        rd_kafka_broker_fail(rkb,
+                                             RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
+                                             "%i request(s) timed out: "
+                                             "disconnect",
+                                             rkb->rkb_req_timeouts);
+                }
+        }
+}
+
+
 
 static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 				     const struct msghdr *msg) {
@@ -2382,9 +2407,23 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
  * Idle function for unassigned brokers
  */
 static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb) {
+	rd_ts_t last_timeout_scan = rd_clock();
+
 	while (!rkb->rkb_rk->rk_terminate &&
-	       rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP)
+	       rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
+		rd_ts_t now;
+
 		rd_kafka_broker_io_serve(rkb);
+
+                now = rd_clock();
+
+		if (unlikely(last_timeout_scan + 1000000 < now)) {
+                        /* Scan wait-response queue */
+                        rd_kafka_broker_waitresp_timeout_scan(rkb, now);
+			last_timeout_scan = now;
+		}
+        }
+
 }
 
 

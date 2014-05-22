@@ -138,6 +138,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(socket_keepalive),
           "Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets",
           0, 1, 0 },
+        { _RK_GLOBAL, "socket.max.fails", _RK_C_INT,
+          _RK(socket_max_fails),
+          "Maximum number of send failures (e.g., timed out requests) before "
+          "disconnecting from the broker and reconnecting. Disable with 0.",
+          0, 1000000, 0 },
 	{ _RK_GLOBAL, "broker.address.ttl", _RK_C_INT,
 	  _RK(broker_addr_ttl),
 	  "How long to cache the broker address resolving results.",

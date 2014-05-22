@@ -131,6 +131,7 @@ struct rd_kafka_conf_s {
 	int     socket_sndbuf_size;
 	int     socket_rcvbuf_size;
         int     socket_keepalive;
+        int     socket_max_fails;
 	char   *clientid;
 	char   *brokerlist;
 	int     stats_interval_ms;
@@ -539,12 +540,15 @@ typedef struct rd_kafka_broker_s {
 		uint64_t tx;    /* Kafka-messages (not payload msgs) */
 		uint64_t tx_err;
 		uint64_t tx_retries;
+                uint64_t req_timeouts;  /* Accumulated value */
 
 		uint64_t rx_bytes;
 		uint64_t rx;    /* Kafka messages (not payload msgs) */
 		uint64_t rx_err;
                 uint64_t rx_corrid_err; /* CorrId misses */
 	} rkb_c;
+
+        int                 rkb_req_timeouts;  /* Current value */
 
 	rd_ts_t             rkb_ts_metadata_poll; /* Next metadata poll time */
 	int                 rkb_metadata_fast_poll_cnt; /* Perform fast

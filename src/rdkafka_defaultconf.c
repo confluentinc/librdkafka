@@ -140,8 +140,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           0, 1, 0 },
         { _RK_GLOBAL, "socket.max.fails", _RK_C_INT,
           _RK(socket_max_fails),
-          "Maximum number of send failures (e.g., timed out requests) before "
-          "disconnecting from the broker and reconnecting. Disable with 0.",
+          "Disconnect from broker when this number of send failures "
+          "(e.g., timed out requests) is reached. Disable with 0. "
+          "NOTE: The connection is automatically re-established.",
           0, 1000000, 0 },
 	{ _RK_GLOBAL, "broker.address.ttl", _RK_C_INT,
 	  _RK(broker_addr_ttl),

@@ -475,7 +475,7 @@ static void rd_kafka_broker_waitresp_timeout_scan (rd_kafka_broker_t *rkb,
                 rkb->rkb_c.req_timeouts += cnt;
 
                 if (rkb->rkb_rk->rk_conf.socket_max_fails &&
-                    rkb->rkb_req_timeouts >
+                    rkb->rkb_req_timeouts >=
                     rkb->rkb_rk->rk_conf.socket_max_fails &&
                     rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
                         errno = ETIMEDOUT;

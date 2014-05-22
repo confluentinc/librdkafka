@@ -45,7 +45,7 @@ function checks {
     # Handle machine bits, if specified.
     if [[ ! -z "$MBITS" ]]; then
 	mkl_meta_set mbits_m name "mbits compiler flag (-m$MBITS)"
-	if mkl_compile_check mbits_m "" ignore CC "-m$MBITS"; then
+	if mkl_compile_check mbits_m "" fail CC "-m$MBITS"; then
 	    mkl_mkvar_append CPPFLAGS CPPFLAGS "-m$MBITS"
 	    mkl_mkvar_append LDFLAGS LDFLAGS "-m$MBITS"
 	fi

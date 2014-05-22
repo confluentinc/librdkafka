@@ -14,6 +14,7 @@ debug                                    |               | A comma-separated lis
 socket.timeout.ms                        |         60000 | Timeout for network requests.
 socket.send.buffer.bytes                 |             0 | Broker socket send buffer size. System default is used if 0.
 socket.receive.buffer.bytes              |             0 | Broker socket receive buffer size. System default is used if 0.
+socket.keepalive.enable                  |         false | Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets
 broker.address.ttl                       |        300000 | How long to cache the broker address resolving results.
 broker.address.family                    |           any | Allowed broker IP address families: any, v4, v6
 statistics.interval.ms                   |             0 | librdkafka statistics emit interval. The application also needs to register a stats callback using `rd_kafka_conf_set_stats_cb()`. The granularity is 1000ms. A value of 0 disables statistics.

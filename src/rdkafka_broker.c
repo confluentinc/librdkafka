@@ -1498,6 +1498,7 @@ int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
 static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rd_sockaddr_inx_t *sinx;
 	int one __attribute__((unused)) = 1;
+        int on = 1;
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECT",
 		   "broker in state %s connecting",
@@ -1529,6 +1530,22 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 		       strerror(errno));
 #endif
 
+        /* Enable TCP keep-alives, if configured. */
+        if (rkb->rkb_rk->rk_conf.socket_keepalive) {
+#ifdef SO_KEEPALIVE
+                if (setsockopt(rkb->rkb_s, SOL_SOCKET, SO_KEEPALIVE,
+                               &on, sizeof(on)) == -1)
+                        rd_rkb_dbg(rkb, BROKER, "SOCKET",
+                                   "Failed to set SO_KEEPALIVE: %s",
+                                   strerror(errno));
+#else
+                rd_rkb_dbg(rkb, BROKER, "SOCKET",
+                           "System does not support "
+                           "socket.keepalive.enable (SO_KEEPALIVE)");
+#endif
+        }
+
+        /* Connect to broker */
 	if (connect(rkb->rkb_s, (struct sockaddr *)sinx,
 		    RD_SOCKADDR_INX_LEN(sinx)) == -1) {
 		rd_rkb_dbg(rkb, BROKER, "CONNECT",

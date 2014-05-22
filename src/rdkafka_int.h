@@ -130,6 +130,7 @@ struct rd_kafka_conf_s {
 	int     socket_timeout_ms;
 	int     socket_sndbuf_size;
 	int     socket_rcvbuf_size;
+        int     socket_keepalive;
 	char   *clientid;
 	char   *brokerlist;
 	int     stats_interval_ms;

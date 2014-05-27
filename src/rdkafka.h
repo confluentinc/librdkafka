@@ -820,7 +820,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
  *
  * Returns 0 on success or -1 on error in which case errno is set accordingly:
  *   ENOBUFS  - maximum number of outstanding messages has been reached:
- *              "queue.buffering.max.message"
+ *              "queue.buffering.max.messages"
  *              (RD_KAFKA_RESP_ERR__QUEUE_FULL)
  *   EMSGSIZE - message is larger than configured max size:
  *              "messages.max.bytes".

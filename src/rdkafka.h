@@ -882,16 +882,16 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
 /**
  * Metadata: Broker information
  */
-struct rd_kafka_metadata_broker {
+typedef struct rd_kafka_metadata_broker {
         int32_t     id;             /* Broker Id */
         char       *host;           /* Broker hostname */
         int         port;           /* Broker listening port */
-};
+} rd_kafka_metadata_broker_t;
 
 /**
  * Metadata: Partition information
  */
-struct rd_kafka_metadata_partition {
+typedef struct rd_kafka_metadata_partition {
         int32_t     id;             /* Partition Id */
         rd_kafka_resp_err_t err;    /* Partition error reported by broker */
         int32_t     leader;         /* Leader broker */
@@ -899,23 +899,23 @@ struct rd_kafka_metadata_partition {
         int32_t    *replicas;       /* Replica brokers */
         int         isr_cnt;        /* Number of ISR brokers in 'isrs' */
         int32_t    *isrs;           /* In-Sync-Replica brokers */
-};
+} rd_kafka_metadata_partition_t;
 
 /**
  * Metadata: Topic information
  */
-struct rd_kafka_metadata_topic {
+typedef struct rd_kafka_metadata_topic {
         char       *topic;          /* Topic name */
         int         partition_cnt;  /* Number of partitions in 'partitions' */
         struct rd_kafka_metadata_partition *partitions; /* Partitions */
         rd_kafka_resp_err_t err;    /* Topic error reported by broker */
-};
+} rd_kafka_metadata_topic_t;
 
 
 /**
  * Metadata container
  */
-struct rd_kafka_metadata {
+typedef struct rd_kafka_metadata {
         int         broker_cnt;     /* Number of brokers in 'brokers' */
         struct rd_kafka_metadata_broker *brokers;  /* Brokers */
 
@@ -924,7 +924,7 @@ struct rd_kafka_metadata {
 
         int32_t     orig_broker_id; /* Broker originating this metadata */
         char       *orig_broker_name; /* Name of originating broker */
-};
+} rd_kafka_metadata_t;
 
 
 /**

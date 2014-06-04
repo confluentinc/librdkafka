@@ -49,7 +49,7 @@ function checks {
 	    mkl_mkvar_append CPPFLAGS CPPFLAGS "-m$MBITS"
 	    mkl_mkvar_append LDFLAGS LDFLAGS "-m$MBITS"
 	fi
-	if [[ $MBITS == 64 && $MKL_DISTRO == "SunOS" ]]; then
+	if [[ -z "$ARFLAGS" && $MBITS == 64 && $MKL_DISTRO == "SunOS" ]]; then
 	    # Turn on 64-bit archives on SunOS
 	    mkl_mkvar_append ARFLAGS ARFLAGS "S"
 	fi

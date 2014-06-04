@@ -68,9 +68,9 @@ const char *rd_kafka_version_str (void);
 /**
  * rd_kafka_t handle type
  */
-typedef enum {
+typedef enum rd_kafka_type_t {
 	RD_KAFKA_PRODUCER,
-	RD_KAFKA_CONSUMER,
+	RD_KAFKA_CONSUMER
 } rd_kafka_type_t;
 
 
@@ -136,7 +136,7 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE = 9,
 	RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE = 10,
 	RD_KAFKA_RESP_ERR_STALE_CTRL_EPOCH = 11,
-	RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE = 12,
+	RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE = 12
 } rd_kafka_resp_err_t;
 
 
@@ -233,7 +233,7 @@ rd_kafka_message_errstr (const rd_kafka_message_t *rkmessage) {
 typedef enum {
 	RD_KAFKA_CONF_UNKNOWN = -2, /* Unknown configuration name. */
 	RD_KAFKA_CONF_INVALID = -1, /* Invalid configuration value. */
-	RD_KAFKA_CONF_OK = 0,  /* Configuration okay */
+	RD_KAFKA_CONF_OK = 0        /* Configuration okay */
 } rd_kafka_conf_res_t;
 
 

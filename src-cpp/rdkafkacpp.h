@@ -119,7 +119,7 @@ enum ErrorCode {
   ERR_REPLICA_NOT_AVAILABLE = 9,
   ERR_MSG_SIZE_TOO_LARGE = 10,
   ERR_STALE_CTRL_EPOCH = 11,
-  ERR_OFFSET_METADATA_TOO_LARGE = 12,
+  ERR_OFFSET_METADATA_TOO_LARGE = 12
 };
 
 
@@ -203,7 +203,7 @@ class Event {
   enum Type {
     EVENT_ERROR,
     EVENT_STATS,
-    EVENT_LOG,
+    EVENT_LOG
   };
 
   enum Severity {
@@ -215,7 +215,7 @@ class Event {
     EVENT_SEVERITY_WARNING = 4,
     EVENT_SEVERITY_NOTICE = 5,
     EVENT_SEVERITY_INFO = 6,
-    EVENT_SEVERITY_DEBUG = 7,
+    EVENT_SEVERITY_DEBUG = 7
   };
 
   ~Event () {};
@@ -238,13 +238,13 @@ class Conf {
  public:
   enum ConfType {
     CONF_GLOBAL,
-    CONF_TOPIC,
+    CONF_TOPIC
   };
 
   enum ConfResult {
     CONF_UNKNOWN = -2,
     CONF_INVALID = -1,
-    CONF_OK = 0,
+    CONF_OK = 0
   };
 
   static const std::string DEBUG_CONTEXTS;

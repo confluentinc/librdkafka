@@ -801,6 +801,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"name\":\"%s\", "
 			   "\"nodeid\":%"PRId32", "
 			   "\"state\":\"%s\", "
+                           "\"stateage\":%"PRId64", "
 			   "\"outbuf_cnt\":%i, "
 			   "\"waitresp_cnt\":%i, "
 			   "\"tx\":%"PRIu64", "
@@ -825,6 +826,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rkb->rkb_name,
 			   rkb->rkb_nodeid,
 			   rd_kafka_broker_state_names[rkb->rkb_state],
+                           rkb->rkb_ts_state ? now - rkb->rkb_ts_state : 0,
 			   rkb->rkb_outbufs.rkbq_cnt,
 			   rkb->rkb_waitresps.rkbq_cnt,
 			   rkb->rkb_c.tx,
@@ -1508,17 +1510,20 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
                 if (locks)
                         rd_kafka_broker_lock(rkb);
 		fprintf(fp, " rd_kafka_broker_t %p: %s NodeId %"PRId32
-			" in state %s\n",
+			" in state %s (for %.3fs)\n",
 			rkb, rkb->rkb_name, rkb->rkb_nodeid,
-			rd_kafka_broker_state_names[rkb->rkb_state]);
+			rd_kafka_broker_state_names[rkb->rkb_state],
+                        rkb->rkb_ts_state ?
+                        (float)(rd_clock() - rkb->rkb_ts_state) / 1000000.0f :
+                        0.0f);
 		fprintf(fp, "  refcnt %i\n", rkb->rkb_refcnt);
 		fprintf(fp, "  outbuf_cnt: %i waitresp_cnt: %i\n",
 			rkb->rkb_outbufs.rkbq_cnt, rkb->rkb_waitresps.rkbq_cnt);
-		fprintf(fp, 
+		fprintf(fp,
 			"  %"PRIu64 " messages sent, %"PRIu64" bytes, "
-			"%"PRIu64" errors\n"
-			"  %"PRIu64 " messages received, %"PRIu64" bytes, "
 			"%"PRIu64" errors, %"PRIu64" timeouts\n"
+			"  %"PRIu64 " messages received, %"PRIu64" bytes, "
+			"%"PRIu64" errors\n"
 			"  %"PRIu64 " messageset transmissions were retried\n",
 			rkb->rkb_c.tx, rkb->rkb_c.tx_bytes,
 			rkb->rkb_c.tx_err, rkb->rkb_c.req_timeouts,

@@ -534,6 +534,9 @@ typedef struct rd_kafka_broker_s {
 		RD_KAFKA_BROKER_STATE_UP,
 	} rkb_state;
 
+        rd_ts_t             rkb_ts_state;        /* Timestamp of last
+                                                  * state change */
+
 	rd_kafka_confsource_t  rkb_source;
 	struct {
 		uint64_t tx_bytes;

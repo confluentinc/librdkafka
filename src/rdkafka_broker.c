@@ -128,6 +128,7 @@ static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
 		(void)rd_atomic_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
 
 	rkb->rkb_state = state;
+        rkb->rkb_ts_state = rd_clock();
 }
 
 

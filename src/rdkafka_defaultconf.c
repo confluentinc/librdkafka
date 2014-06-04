@@ -143,7 +143,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Disconnect from broker when this number of send failures "
           "(e.g., timed out requests) is reached. Disable with 0. "
           "NOTE: The connection is automatically re-established.",
-          0, 1000000, 0 },
+          0, 1000000, 3 },
 	{ _RK_GLOBAL, "broker.address.ttl", _RK_C_INT,
 	  _RK(broker_addr_ttl),
 	  "How long to cache the broker address resolving results.",

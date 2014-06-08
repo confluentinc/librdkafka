@@ -2707,8 +2707,16 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
                 if (hdr->MessageSize - 6 > _REMAIN()) {
                         /* Broker may send partial messages.
-                         * Bail out silently. */
-                        goto err;
+                         * Bail out silently.
+			 * "A Guide To The Kafka Protocol" states:
+			 *   "As an optimization the server is allowed to
+			 *    return a partial message at the end of the
+			 *    message set.
+			 *    Clients should handle this case."
+			 * We're handling it by not passing the error upstream.
+			 */
+			rkb->rkb_c.rx_partial++;
+			return 0;
                 }
 		/* Ignore CRC (for now) */
 
@@ -2877,11 +2885,6 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 	return 0;
 
 err:
-	/* "A Guide To The Kafka Protocol" states:
-	 *   "As an optimization the server is allowed to return a partial
-	 *    message at the end of the message set.
-	 *    Clients should handle this case."
-	 * We're handling it by not passing the error upstream. */
 	rd_rkb_log(rkb, LOG_WARNING, "PROTOERR",
 		   "Previous parsing error for topic %s [%"PRId32"]",
 		   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);

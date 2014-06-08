@@ -813,6 +813,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"rxbytes\":%"PRIu64", "
 			   "\"rxerrs\":%"PRIu64", "
                            "\"rxcorriderrs\":%"PRIu64", "
+                           "\"rxpartial\":%"PRIu64", "
 			   "\"rtt\": {"
 			   " \"min\":%"PRId64","
 			   " \"max\":%"PRId64","
@@ -838,6 +839,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rkb->rkb_c.rx_bytes,
 			   rkb->rkb_c.rx_err,
                            rkb->rkb_c.rx_corrid_err,
+                           rkb->rkb_c.rx_partial,
 			   rtt.ra_v.minv,
 			   rtt.ra_v.maxv,
 			   rtt.ra_v.avg,

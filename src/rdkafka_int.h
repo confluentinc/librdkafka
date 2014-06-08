@@ -549,6 +549,8 @@ typedef struct rd_kafka_broker_s {
 		uint64_t rx;    /* Kafka messages (not payload msgs) */
 		uint64_t rx_err;
                 uint64_t rx_corrid_err; /* CorrId misses */
+		uint64_t rx_partial;    /* Partial messages received
+					 * and dropped. */
 	} rkb_c;
 
         int                 rkb_req_timeouts;  /* Current value */

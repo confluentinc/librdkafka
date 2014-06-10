@@ -17,6 +17,10 @@ all: lib check
 
 LIBS = -L../src -lrdkafka
 include ../mklove/Makefile.base
+
+# No linker script/symbol hiding for C++ library
+WITH_LDS=n
+
 LIBS += -lstdc++
 
 CHECK_FILES+= $(LIBNAME).so.$(LIBVER) $(LIBNAME).a

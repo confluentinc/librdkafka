@@ -951,7 +951,7 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 		"----------------------------------------";
 
 	for (prop = rd_kafka_properties; prop->name ; prop++) {
-		
+
 		if (!(prop->scope & last)) {
 			fprintf(fp,
 				"%s## %s configuration properties\n\n",
@@ -959,16 +959,20 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 				prop->scope == _RK_GLOBAL ? "Global": "Topic");
 
 			fprintf(fp,
-				"%-40s | %13s | %-25s\n"
-				"%.*s-|-%.*s:|-%.*s\n",
-				"Property", "Default", "Description",
-				40, dash80, 13, dash80, 25, dash80);
+				"%-40s | %3s | %13s | %-25s\n"
+				"%.*s-|-%.*s-|-%.*s:|-%.*s\n",
+				"Property", "C/P", "Default", "Description",
+				40, dash80, 3, dash80, 13, dash80, 25, dash80);
 
 			last = prop->scope & (_RK_GLOBAL|_RK_TOPIC);
 
 		}
 
-		fprintf(fp, "%-40s | ", prop->name);
+		fprintf(fp, "%-40s | %3s | ", prop->name,
+                        (!(prop->scope & _RK_PRODUCER) ==
+                         !(prop->scope & _RK_CONSUMER) ? " * " :
+                         ((prop->scope & _RK_PRODUCER) ? " P " :
+                          (prop->scope & _RK_CONSUMER) ? " C " : "")));
 
 		switch (prop->type)
 		{
@@ -1001,5 +1005,5 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 		fprintf(fp, " | %s\n", prop->desc);
 	}
 	fprintf(fp, "\n");
-
+        fprintf(fp, "### C/P legend: C = Consumer, P = Producer, * = both\n");
 }

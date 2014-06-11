@@ -103,6 +103,7 @@ enum ErrorCode {
                                   * invalid configuration */
   ERR__TIMED_OUT = -185,         /* Operation timed out */
   ERR__QUEUE_FULL = -184,        /* Queue is full */
+  ERR__ISR_INSUFF = -183,        /* ISR count < required.acks */
   ERR__END = -100,               /* end internal error codes */
 
   /* Standard Kafka errors: */

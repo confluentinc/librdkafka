@@ -79,7 +79,19 @@ function checks {
     [[ ! -z $LDFLAGS ]]  && mkl_mkvar_set "LDFLAGS" "LDFLAGS" "$LDFLAGS"
     [[ ! -z $ARFLAGS ]]  && mkl_mkvar_set "ARFLAGS" "ARFLAGS" "$ARFLAGS"
 
-    mkl_mkvar_append CPPFLAGS CPPFLAGS "-g"
+
+    # Add debug symbol flag (-g)
+    # OSX 10.9 requires -gstrict-dwarf for some reason.
+    mkl_meta_set cc_g_dwarf name "debug symbols compiler flag (-g...)"
+    if [[ $MKL_DISTRO == "osx" ]]; then
+	if mkl_compile_check cc_g_dwarf "" cont CC "-gstrict-dwarf"; then
+	    mkl_mkvar_append CPPFLAGS CPPFLAGS "-gstrict-dwarf"
+	else
+	    mkl_mkvar_append CPPFLAGS CPPFLAGS "-g"
+	fi
+    else
+	mkl_mkvar_append CPPFLAGS CPPFLAGS "-g"
+    fi
 
 
     # pkg-config

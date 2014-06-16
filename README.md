@@ -24,7 +24,7 @@ For an introduction to the performance and usage of librdkafka, see
   * Producer: supported
   * Consumer: supported
   * Compression: snappy and gzip
-  * Debian package: librdkafka1 and librdkafka-dev in Debian testing and unstable
+  * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
   * ZooKeeper: not supported
   * C API: Stable, ABI safe, not backwards compatible with 0.7
   * C++ API: Testing
@@ -58,12 +58,16 @@ For an introduction to the performance and usage of librdkafka, see
 
 #Users of librdkafka#
 
-  * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka)
+  * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka) - Varnish cache web log producer
+  * [kafkacat](https://github.com/edenhill/kafkacat) - Apache Kafka swiss army knife
   * [redBorder](http://www.redborder.net)
   * [Headweb](http://www.headweb.com/)
-  * [node-kafka](https://github.com/sutoiku/node-kafka)
-  * [Produban's log2kafka](https://github.com/Produban/log2kafka)
-  * [phpkafka](https://github.com/salebab/phpkafka)
+  * [Produban's log2kafka](https://github.com/Produban/log2kafka) - Web log producer
+  * [phpkafka](https://github.com/salebab/phpkafka) - PHP
+  * [node-kafka](https://github.com/sutoiku/node-kafka) - Node.js
+  * [node-kafkacat](https://github.com/Rafflecopter/node-kafkacat) - Node.js
+  * [haskakafka](https://github.com/cosbynator/haskakafka) - Haskell
+  * [haskell-kafka](https://github.com/yanatan16/haskell-kafka) - Haskell
   * large unnamed financial institution
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 

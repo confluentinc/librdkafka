@@ -239,6 +239,8 @@ struct rd_kafka_topic_conf_s {
 				void *rkt_opaque,
 				void *msg_opaque);
 
+        int     produce_offset_report;
+
 	int     auto_commit;
 	int     auto_commit_interval_ms;
 	int     auto_offset_reset;
@@ -349,6 +351,7 @@ typedef struct rd_kafka_msg_s {
 	void      *rkm_opaque;
 	int32_t    rkm_partition;  /* partition specified */
 	rd_kafkap_bytes_t *rkm_key;
+        int64_t    rkm_offset;
 	rd_ts_t    rkm_ts_timeout;
 } rd_kafka_msg_t;
 

@@ -318,8 +318,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(message_timeout_ms),
 	  "Local message timeout. "
 	  "This value is only enforced locally and limits the time a "
-	  "produced message waits for successful delivery. A time of 0 is infinite.",
+	  "produced message waits for successful delivery. "
+          "A time of 0 is infinite.",
 	  0, 900*1000, 300*1000 },
+        { _RK_TOPIC|_RK_PRODUCER, "produce.offset.report", _RK_C_BOOL,
+          _RKT(produce_offset_report),
+          "Report offset of produced message back to application. "
+          "The application must be use the `dr_msg_cb` to retrieve the offset "
+          "from `rd_kafka_message_t.offset`.",
+          0, 1, 0 },
 	{ _RK_TOPIC|_RK_PRODUCER, "partitioner", _RK_C_PTR,
 	  _RKT(partitioner),
 	  "Partitioner callback "

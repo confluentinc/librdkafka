@@ -1784,7 +1784,8 @@ void rd_kafka_dr_msgq (rd_kafka_t *rk,
  * Returns 0 on success or an error code on failure.
  */
 static rd_kafka_resp_err_t
-rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
+rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf,
+                               int64_t *offsetp) {
 	char *buf = rkbuf->rkbuf_buf2;
 	size_t size = rkbuf->rkbuf_len;
 	size_t of = 0;
@@ -1814,6 +1815,8 @@ rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
 	_READ_REF(hdr, sizeof(*hdr));
 
+        *offsetp = be64toh(hdr->Offset);
+
 	return ntohs(hdr->ErrorCode);
 
 err:
@@ -1830,6 +1833,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 					   rd_kafka_buf_t *request,
 					   void *opaque) {
 	rd_kafka_toppar_t *rktp = opaque;
+        int64_t offset = -1;
 
 	rd_rkb_dbg(rkb, MSG, "MSGSET",
 		   "MessageSet with %i message(s) %sdelivered",
@@ -1837,7 +1841,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 
 	/* Parse Produce reply (unless the request errored) */
 	if (!err && reply)
-		err = rd_kafka_produce_reply_handle(rkb, reply);
+		err = rd_kafka_produce_reply_handle(rkb, reply, &offset);
 
 
 	if (err) {
@@ -1894,6 +1898,12 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 		/* FALLTHRU */
 	}
 
+        /* produce.offset.report: Propagate assigned offset back to app. */
+        if (offset != -1 && rktp->rktp_rkt->rkt_conf.produce_offset_report) {
+                rd_kafka_msg_t *rkm;
+                TAILQ_FOREACH(rkm, &request->rkbuf_msgq.rkmq_msgs, rkm_link)
+                        rkm->rkm_offset = offset++;
+        }
 
 	/* Enqueue messages for delivery report */
 	rd_kafka_dr_msgq(rkb->rkb_rk, &request->rkbuf_msgq, err);

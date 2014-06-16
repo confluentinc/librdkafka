@@ -116,6 +116,17 @@ static void msg_delivered (rd_kafka_t *rk,
 		fprintf(stderr, "%% Message delivered (%zd bytes)\n", len);
 }
 
+static void msg_delivered2 (rd_kafka_t *rk,
+                            const rd_kafka_message_t *rkmessage, void *opaque) {
+        if (rkmessage->err)
+		fprintf(stderr, "%% Message delivery failed: %s\n",
+                        rd_kafka_message_errstr(rkmessage));
+	else if (!quiet)
+		fprintf(stderr,
+                        "%% Message delivered (%zd bytes, offset %"PRId64")\n",
+                        rkmessage->len, rkmessage->offset);
+}
+
 
 static void msg_consume (rd_kafka_message_t *rkmessage,
 			 void *opaque) {
@@ -239,6 +250,7 @@ int main (int argc, char **argv) {
 	char errstr[512];
 	const char *debug = NULL;
 	int64_t start_offset = 0;
+        int report_offsets = 0;
 	int do_conf_dump = 0;
 
 	quiet = !isatty(STDIN_FILENO);
@@ -281,6 +293,8 @@ int main (int argc, char **argv) {
 				start_offset = RD_KAFKA_OFFSET_BEGINNING;
 			else if (!strcmp(optarg, "stored"))
 				start_offset = RD_KAFKA_OFFSET_STORED;
+                        else if (!strcmp(optarg, "report"))
+                                report_offsets = 1;
 			else
 				start_offset = strtoll(optarg, NULL, 10);
 			break;
@@ -398,6 +412,7 @@ int main (int argc, char **argv) {
 			"  -z <codec>      Enable compression:\n"
 			"                  none|gzip|snappy\n"
 			"  -o <offset>     Start offset (consumer)\n"
+                        "  -o report       Report message offsets (producer)\n"
 			"  -e              Exit consumer when last message\n"
 			"                  in partition has been received.\n"
 			"  -d [facs..]     Enable debugging contexts:\n"
@@ -449,7 +464,16 @@ int main (int argc, char **argv) {
 		/* Set up a message delivery report callback.
 		 * It will be called once for each message, either on successful
 		 * delivery to broker, or upon failure to deliver to broker. */
-		rd_kafka_conf_set_dr_cb(conf, msg_delivered);
+
+                /* If offset reporting (-o report) is enabled, use the
+                 * richer dr_msg_cb instead. */
+                if (report_offsets) {
+                        rd_kafka_topic_conf_set(topic_conf,
+                                                "produce.offset.report",
+                                                "true", errstr, sizeof(errstr));
+                        rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered2);
+                } else
+                        rd_kafka_conf_set_dr_cb(conf, msg_delivered);
 
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,

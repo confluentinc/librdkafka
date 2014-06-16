@@ -68,6 +68,7 @@ For an introduction to the performance and usage of librdkafka, see
   * [node-kafkacat](https://github.com/Rafflecopter/node-kafkacat) - Node.js
   * [haskakafka](https://github.com/cosbynator/haskakafka) - Haskell
   * [haskell-kafka](https://github.com/yanatan16/haskell-kafka) - Haskell
+  * [Hermann](https://github.com/stancampbell3/Hermann) - Ruby
   * large unnamed financial institution
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 

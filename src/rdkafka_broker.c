@@ -4064,6 +4064,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rkb->rkb_nodeid = nodeid;
 
 	rkb->rkb_s = -1;
+	pthread_mutex_init(&rkb->rkb_lock, NULL);
 	pthread_rwlock_init(&rkb->rkb_toppar_lock, NULL);
 	TAILQ_INIT(&rkb->rkb_toppars);
 	rd_kafka_bufq_init(&rkb->rkb_outbufs);

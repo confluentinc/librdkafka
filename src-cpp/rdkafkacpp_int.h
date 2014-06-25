@@ -134,6 +134,12 @@ class MessageImpl : public Message {
 
 class ConfImpl : public Conf {
  public:
+  ConfImpl()
+    :dr_cb_(NULL),
+    event_cb_(NULL),
+    socket_cb_(NULL),
+    open_cb_(NULL),
+    partitioner_cb_(NULL){}
   ~ConfImpl () {
     if (rk_conf_)
       rd_kafka_conf_destroy(rk_conf_);

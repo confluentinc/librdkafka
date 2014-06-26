@@ -7,6 +7,10 @@ include ../mklove/Makefile.base
 CFLAGS += -I../src
 CXXFLAGS += -I../src-cpp
 
+# librdkafka must be compiled with -gstrict-dwarf, but rdkafka_example must not,
+# due to some clang bug on OSX 10.9
+CPPFLAGS := $(subst strict-dwarf,,$(CPPFLAGS))
+
 rdkafka_example: ../src/librdkafka.a rdkafka_example.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) rdkafka_example.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)

@@ -641,11 +641,13 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 	rktp = rd_kafka_toppar_get(rkt, mdp->id, 0);
 	rd_kafka_assert(rkt->rkt_rk, rktp);
 
+        rd_kafka_toppar_lock(rktp);
         /* Store a copy of the metadata for this partition.
          * The sub-arrays are NULLed to avoid extra alloc. */
         rktp->rktp_metadata          = *mdp;
         rktp->rktp_metadata.replicas = NULL;
         rktp->rktp_metadata.isrs     = NULL;
+        rd_kafka_toppar_unlock(rktp);
 
 	if (!rkb) {
 		int had_leader = rktp->rktp_leader ? 1 : 0;

@@ -754,11 +754,6 @@ struct rd_kafka_s {
 	pthread_cond_t                 rk_timers_cond;
 
 	pthread_t rk_thread;
-
-	struct {
-		char msg[512];
-		int  err;  /* errno */
-	} rk_err;
 };
 
 #define rd_kafka_wrlock(rk)    pthread_rwlock_wrlock(&(rk)->rk_lock)

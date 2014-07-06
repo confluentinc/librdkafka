@@ -116,6 +116,9 @@ static void msg_delivered (rd_kafka_t *rk,
 		fprintf(stderr, "%% Message delivered (%zd bytes)\n", len);
 }
 
+/**
+ * Message delivery report callback using the richer rd_kafka_message_t object.
+ */
 static void msg_delivered2 (rd_kafka_t *rk,
                             const rd_kafka_message_t *rkmessage, void *opaque) {
         if (rkmessage->err)

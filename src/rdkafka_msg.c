@@ -134,7 +134,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
                                 rd_clock());
         if (unlikely(!rkm)) {
                 /* errno is already set by msg_new() */
-                rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+                (void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
                 return -1;
         }
 

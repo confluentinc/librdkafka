@@ -85,7 +85,7 @@ typedef struct rd_kafka_s rd_kafka_t;
 typedef struct rd_kafka_topic_s rd_kafka_topic_t;
 typedef struct rd_kafka_conf_s rd_kafka_conf_t;
 typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
-
+typedef struct rd_kafka_queue_s rd_kafka_queue_t;
 
 /**
  * Kafka protocol error codes (version 0.8)
@@ -628,6 +628,28 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *rkt);
 
 
 
+/*******************************************************************
+ *								   *
+ * Queue API                                                       *
+ *								   *
+ *******************************************************************/
+
+/**
+ * Create a new message queue.
+ * Message queues allows the application to re-route consumed messages
+ * from multiple topic+partitions into one single queue point.
+ * This queue point, containing messages from a number of topic+partitions,
+ * may then be served by a single rd_kafka_consume*_queue() call,
+ * rather than one per topic+partition combination.
+ *
+ * See rd_kafka_consume_start_queue(), rd_kafka_consume_queue(), et.al.
+ */
+rd_kafka_queue_t *rd_kafka_queue_new (rd_kafka_t *rk);
+
+/**
+ * Destroy a queue, purging all of its enqueued messages.
+ */
+void rd_kafka_queue_destroy (rd_kafka_queue_t *rkqu);
 
 
 /*******************************************************************
@@ -667,6 +689,22 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *rkt);
  */
 int rd_kafka_consume_start (rd_kafka_topic_t *rkt, int32_t partition,
 			    int64_t offset);
+
+/**
+ * Same as rd_kafka_consume_start() but re-routes incoming messages to
+ * the provided queue 'rkqu' (which must have been previously allocated
+ * with `rd_kafka_queue_new()`.
+ * The application must use one of the `rd_kafka_consume_*_queue()` functions
+ * to receive fetched messages.
+ *
+ * `rd_kafka_consume_start_queue()` must not be called multiple times for the
+ * same topic and partition without stopping consumption first with
+ * `rd_kafka_consume_stop()`.
+ * `rd_kafka_consume_start()` and `rd_kafka_consume_start_queue()` must not
+ * be combined for the same topic and partition.
+ */
+int rd_kafka_consume_start_queue (rd_kafka_topic_t *rkt, int32_t partition,
+				  int64_t offset, rd_kafka_queue_t *rkqu);
 
 /**
  * Stop consuming messages for topic 'rkt' and 'partition', purging
@@ -749,6 +787,39 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 						   void *opaque),
 			       void *opaque);
 
+
+/**
+ *
+ * The following `..._queue()` functions are analogue to the functions above
+ * but reads messages from the provided queue `rkqu` instead.
+ * `rkqu` must have been previously created with `rd_kafka_queue_new()`
+ * and the topic consumer must have been started with
+ * `rd_kafka_consume_start_queue()` utilising the the same queue.
+ */
+
+/**
+ * See `rd_kafka_consume()` above.
+ */
+rd_kafka_message_t *rd_kafka_consume_queue (rd_kafka_queue_t *rkqu,
+					    int timeout_ms);
+
+/**
+ * See `rd_kafka_consume_batch()` above.
+ */
+ssize_t rd_kafka_consume_batch_queue (rd_kafka_queue_t *rkqu,
+				      int timeout_ms,
+				      rd_kafka_message_t **rkmessages,
+				      size_t rkmessages_size);
+
+/**
+ * See `rd_kafka_consume_callback()` above.
+ */
+int rd_kafka_consume_callback_queue (rd_kafka_queue_t *rkqu,
+				     int timeout_ms,
+				     void (*consume_cb) (rd_kafka_message_t
+							 *rkmessage,
+							 void *opaque),
+				     void *opaque);
 
 
 

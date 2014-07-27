@@ -426,6 +426,9 @@ typedef struct rd_kafka_bufq_s {
 typedef struct rd_kafka_q_s {
 	pthread_mutex_t rkq_lock;
 	pthread_cond_t  rkq_cond;
+	struct rd_kafka_q_s *rkq_fwdq; /* Forwarded/Routed queue.
+					* Used in place of this queue
+					* for all operations. */
 	TAILQ_HEAD(, rd_kafka_op_s) rkq_q;
 	int             rkq_qlen;      /* Number of entries in queue */
         uint64_t        rkq_qsize;     /* Size of all entries in queue */
@@ -488,8 +491,6 @@ typedef struct rd_kafka_op_s {
 #define rko_offset    rko_rkmessage.offset
 
 } rd_kafka_op_t;
-
-
 
 
 
@@ -811,7 +812,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 
 void rd_kafka_q_init (rd_kafka_q_t *rkq);
 rd_kafka_q_t *rd_kafka_q_new (void);
-void rd_kafka_q_destroy (rd_kafka_q_t *rkq);
+int rd_kafka_q_destroy (rd_kafka_q_t *rkq);
 #define rd_kafka_q_keep(rkq) ((void)rd_atomic_add(&(rkq)->rkq_refcnt, 1))
 
 /**
@@ -822,33 +823,70 @@ void rd_kafka_q_destroy (rd_kafka_q_t *rkq);
 static inline RD_UNUSED
 void rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 	pthread_mutex_lock(&rkq->rkq_lock);
-	TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
-	(void)rd_atomic_add(&rkq->rkq_qlen, 1);
-        (void)rd_atomic_add(&rkq->rkq_qsize, rko->rko_len);
-	pthread_cond_signal(&rkq->rkq_cond);
+	if (!rkq->rkq_fwdq) {
+		TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
+		(void)rd_atomic_add(&rkq->rkq_qlen, 1);
+		(void)rd_atomic_add(&rkq->rkq_qsize, rko->rko_len);
+		pthread_cond_signal(&rkq->rkq_cond);
+	} else
+		rd_kafka_q_enq(rkq->rkq_fwdq, rko);
+
 	pthread_mutex_unlock(&rkq->rkq_lock);
 }
 
 /**
  * Concat all elements of 'srcq' onto tail of 'rkq'.
- * 'dstq' will be be locked, but 'srcq' will not.
+ * 'dstq' will be be locked (if 'do_lock'==1), but 'srcq' will not.
  *
  * Locality: any thread.
  */
 static inline RD_UNUSED
-void rd_kafka_q_concat (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq) {
-	pthread_mutex_lock(&rkq->rkq_lock);
-	TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
-	(void)rd_atomic_add(&rkq->rkq_qlen, srcq->rkq_qlen);
-        (void)rd_atomic_add(&rkq->rkq_qsize, srcq->rkq_qsize);
-	pthread_cond_signal(&rkq->rkq_cond);
-	pthread_mutex_unlock(&rkq->rkq_lock);
+void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
+			 int do_lock) {
+	if (do_lock)
+		pthread_mutex_lock(&rkq->rkq_lock);
+	if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
+		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
+		(void)rd_atomic_add(&rkq->rkq_qlen, srcq->rkq_qlen);
+		(void)rd_atomic_add(&rkq->rkq_qsize, srcq->rkq_qsize);
+		pthread_cond_signal(&rkq->rkq_cond);
+	} else
+		rd_kafka_q_concat0(rkq->rkq_fwdq ? : rkq,
+				   srcq->rkq_fwdq ? : srcq,
+				   do_lock);
+	if (do_lock)
+		pthread_mutex_unlock(&rkq->rkq_lock);
 }
 
+#define rd_kafka_q_concat(dstq,srcq) rd_kafka_q_concat0(dstq,srcq,1/*lock*/)
+
+
 /* Returns the number of elements in the queue */
-#define rd_kafka_q_len(rkq)  ((rkq)->rkq_qlen)
+static inline RD_UNUSED
+int rd_kafka_q_len (rd_kafka_q_t *rkq) {
+	int qlen;
+	pthread_mutex_lock(&rkq->rkq_lock);
+	if (!rkq->rkq_fwdq)
+		qlen = rkq->rkq_qlen;
+	else
+		qlen = rd_kafka_q_len(rkq->rkq_fwdq);
+	pthread_mutex_unlock(&rkq->rkq_lock);
+	return qlen;
+}
+
 /* Returns the total size of elements in the queue */
-#define rd_kafka_q_size(rkq) ((rkq)->rkq_qsize)
+static inline RD_UNUSED
+uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
+	uint64_t sz;
+	pthread_mutex_lock(&rkq->rkq_lock);
+	if (!rkq->rkq_fwdq)
+		sz = rkq->rkq_qsize;
+	else
+		sz = rd_kafka_q_size(rkq->rkq_fwdq);
+	pthread_mutex_unlock(&rkq->rkq_lock);
+	return sz;
+}
+
 
 rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms);
 
@@ -856,6 +894,13 @@ void rd_kafka_q_purge (rd_kafka_q_t *rkq);
 
 size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 			    size_t cnt);
+
+
+struct rd_kafka_queue_s {
+	rd_kafka_q_t rkqu_q;
+};
+
+
 
 
 void rd_kafka_op_destroy (rd_kafka_op_t *rko);

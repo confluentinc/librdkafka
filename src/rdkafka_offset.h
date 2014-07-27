@@ -35,8 +35,6 @@
  * The actual commit of the offset to backing store is performed
  * from the main rdkafka thread.
  * See head of rdkafka_offset.c for more information.
- *
- * NOTE: toppar_lock(rktp) must be held.
  */
 static inline RD_UNUSED
 void rd_kafka_offset_store0 (rd_kafka_toppar_t *rktp, int64_t offset,

@@ -2769,6 +2769,9 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rko->rko_rkmessage.partition = rktp->rktp_partition;
                         rd_kafka_topic_keep(rko->rko_rkmessage.rkt);
 
+			rko->rko_rktp = rktp;
+			rd_kafka_toppar_keep(rktp);
+
 			rktp->rktp_next_offset = hdr->Offset + 1;
 
 			/* Since all the ops share the same payload buffer

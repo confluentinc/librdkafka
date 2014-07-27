@@ -920,6 +920,9 @@ int main (int argc, char **argv) {
 		if (debug)
 			rd_kafka_dump(stdout, rk);
 
+		/* Destroy topic */
+		rd_kafka_topic_destroy(rkt);
+
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
 

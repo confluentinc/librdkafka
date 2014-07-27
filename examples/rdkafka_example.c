@@ -547,6 +547,9 @@ int main (int argc, char **argv) {
 		while (run && rd_kafka_outq_len(rk) > 0)
 			rd_kafka_poll(rk, 100);
 
+		/* Destroy topic */
+		rd_kafka_topic_destroy(rkt);
+
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
 
@@ -603,8 +606,10 @@ int main (int argc, char **argv) {
 		/* Stop consuming */
 		rd_kafka_consume_stop(rkt, partition);
 
+		/* Destroy topic */
 		rd_kafka_topic_destroy(rkt);
 
+		/* Destroy handle */
 		rd_kafka_destroy(rk);
 
         } else if (mode == 'L') {
@@ -654,6 +659,10 @@ int main (int argc, char **argv) {
                         rd_kafka_metadata_destroy(metadata);
                         run = 0;
                 }
+
+		/* Destroy topic */
+		if (rkt)
+			rd_kafka_topic_destroy(rkt);
 
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);

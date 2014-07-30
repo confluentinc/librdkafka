@@ -789,6 +789,7 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 
 
 /**
+ * Queue consumers
  *
  * The following `..._queue()` functions are analogue to the functions above
  * but reads messages from the provided queue `rkqu` instead.

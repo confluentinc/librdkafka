@@ -661,7 +661,7 @@ typedef struct rd_kafka_toppar_s {
 	} rktp_fetch_state;
 
 	rd_ts_t            rktp_ts_offset_req_next;
-	int64_t            rktp_query_offset;
+	int64_t            rktp_query_offset;    /* Offset to query broker for*/
 	int64_t            rktp_next_offset;     /* Next offset to fetch */
 	int64_t            rktp_app_offset;      /* Last offset delivered to
 						  * application */

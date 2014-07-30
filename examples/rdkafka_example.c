@@ -298,8 +298,12 @@ int main (int argc, char **argv) {
 				start_offset = RD_KAFKA_OFFSET_STORED;
                         else if (!strcmp(optarg, "report"))
                                 report_offsets = 1;
-			else
+			else {
 				start_offset = strtoll(optarg, NULL, 10);
+
+				if (start_offset < 0)
+					start_offset = RD_KAFKA_OFFSET_TAIL(-start_offset);
+			}
 			break;
 		case 'e':
 			exit_eof = 1;
@@ -414,7 +418,8 @@ int main (int argc, char **argv) {
 			"  -b <brokers>    Broker address (localhost:9092)\n"
 			"  -z <codec>      Enable compression:\n"
 			"                  none|gzip|snappy\n"
-			"  -o <offset>     Start offset (consumer)\n"
+			"  -o <offset>     Start offset (consumer):\n"
+			"                  beginning, end, NNNNN or -NNNNN\n"
                         "  -o report       Report message offsets (producer)\n"
 			"  -e              Exit consumer when last message\n"
 			"                  in partition has been received.\n"

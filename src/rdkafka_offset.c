@@ -364,16 +364,16 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 			    rd_kafka_resp_err_t err, const char *reason) {
 	int64_t offset = RD_KAFKA_OFFSET_ERROR;
 	rd_kafka_op_t *rko;
+	int64_t offset_reset = rktp->rktp_rkt->rkt_conf.auto_offset_reset;
 
-	switch (rktp->rktp_rkt->rkt_conf.auto_offset_reset)
-	{
-	case RD_KAFKA_OFFSET_END:
-	case RD_KAFKA_OFFSET_BEGINNING:
+	if (offset_reset == RD_KAFKA_OFFSET_END ||
+	    offset_reset == RD_KAFKA_OFFSET_BEGINNING ||
+	    (offset_reset & RD_KAFKA_OFFSET_TAIL_TOK)) {
 		offset = rktp->rktp_rkt->rkt_conf.auto_offset_reset;
 		rktp->rktp_query_offset = offset;
 		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
-		break;
-	case RD_KAFKA_OFFSET_ERROR:
+
+	} else if (offset_reset == RD_KAFKA_OFFSET_ERROR) {
 		rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
 
 		rko->rko_err                 = err;
@@ -387,7 +387,6 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 
 		rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
 		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
-		break;
 	}
 
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",

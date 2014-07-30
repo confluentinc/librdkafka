@@ -546,8 +546,13 @@ int main (int argc, char **argv) {
 				start_offset = RD_KAFKA_OFFSET_BEGINNING;
 			else if (!strcmp(optarg, "stored"))
 				start_offset = RD_KAFKA_OFFSET_STORED;
-			else
+			else {
 				start_offset = strtoll(optarg, NULL, 10);
+
+				if (start_offset < 0)
+					start_offset = RD_KAFKA_OFFSET_TAIL(-start_offset);
+			}
+
 			break;
 		case 'e':
 			exit_eof = 1;
@@ -667,6 +672,7 @@ int main (int argc, char **argv) {
 			"  -z <codec>   Enable compression:\n"
 			"               none|gzip|snappy\n"
 			"  -o <offset>  Start offset (consumer)\n"
+			"               beginning, end, NNNNN or -NNNNN\n"
 			"  -d [facs..]  Enable debugging contexts:\n"
 			"               %s\n"
 			"  -X <prop=name> Set arbitrary librdkafka "

@@ -1273,14 +1273,15 @@ static int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
 	rd_kafka_topic_unlock(rkt);
 
 	rd_kafka_toppar_lock(rktp);
-	switch (offset)
-	{
-	case RD_KAFKA_OFFSET_BEGINNING:
-	case RD_KAFKA_OFFSET_END:
+
+	if (offset == RD_KAFKA_OFFSET_BEGINNING ||
+	    offset == RD_KAFKA_OFFSET_END ||
+	    (offset & RD_KAFKA_OFFSET_TAIL_TOK)) {
 		rktp->rktp_query_offset = offset;
 		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
-		break;
-	case RD_KAFKA_OFFSET_STORED:
+
+	} else if (offset == RD_KAFKA_OFFSET_STORED) {
+
 		if (!rkt->rkt_conf.auto_commit) {
 			rd_kafka_toppar_unlock(rktp);
 			rd_kafka_toppar_destroy(rktp);
@@ -1288,8 +1289,14 @@ static int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
 			return -1;
 		}
 		rd_kafka_offset_store_init(rktp);
-		break;
-	default:
+
+	} else if (offset < 0) {
+		rd_kafka_toppar_unlock(rktp);
+		rd_kafka_toppar_destroy(rktp);
+		errno = EINVAL;
+		return -1;
+
+	} else {
 		rktp->rktp_next_offset = offset;
 		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_ACTIVE;
 	}

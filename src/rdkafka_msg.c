@@ -180,15 +180,9 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
         rd_kafka_resp_err_t all_err = 0;
 
         /* For partitioner; hold lock for entire run,
-         * for one partition: release it after toppar lookup. */
-        rd_kafka_topic_rdlock(rkt);
-
-        /* If not using partitioner, get the toppar right away. */
-        if (partition != RD_KAFKA_PARTITION_UA) {
-                rktp = rd_kafka_toppar_get_avail(rkt, partition,
-                                                 1/*ua on miss*/, &all_err);
-                rd_kafka_topic_unlock(rkt);
-        }
+         * for one partition: only acquire when needed at the end. */
+	if (partition == RD_KAFKA_PARTITION_UA)
+		rd_kafka_topic_rdlock(rkt);
 
         for (i = 0 ; i < message_cnt ; i++) {
                 rd_kafka_msg_t *rkm;
@@ -255,9 +249,13 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
         }
 
 
-        if (partition == RD_KAFKA_PARTITION_UA)
-                rd_kafka_topic_unlock(rkt);
-        else {
+
+	/* Specific partition */
+        if (partition != RD_KAFKA_PARTITION_UA) {
+		rd_kafka_topic_rdlock(rkt);
+
+                rktp = rd_kafka_toppar_get_avail(rkt, partition,
+                                                 1/*ua on miss*/, &all_err);
                 /* Concatenate tmpq onto partition queue. */
                 if (likely(rktp != NULL)) {
                         if (good > 0)
@@ -269,6 +267,8 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
                         rd_kafka_toppar_destroy(rktp);
                 }
         }
+
+	rd_kafka_topic_unlock(rkt);
 
         return good;
 }

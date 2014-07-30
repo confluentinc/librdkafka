@@ -35,7 +35,7 @@
 
 
 int test_level = 2;
-int test_seed;
+int test_seed = 0;
 
 static void sig_alarm (int sig) {
 	TEST_FAIL("Test timed out");
@@ -44,6 +44,24 @@ static void sig_alarm (int sig) {
 static void test_error_cb (rd_kafka_t *rk, int err,
 			   const char *reason, void *opaque) {
 	TEST_FAIL("rdkafka error: %s: %s", rd_kafka_err2str(err), reason);
+}
+
+static void test_init (void) {
+	int seed;
+	char *tmp;
+
+	if (test_seed)
+		return;
+
+	if ((tmp = getenv("TEST_LEVEL")))
+		test_level = atoi(tmp);
+	if ((tmp = getenv("TEST_SEED")))
+		seed = atoi(tmp);
+	else
+		seed = test_clock() & 0xffffffff;
+
+	srand(seed);
+	test_seed = seed;
 }
 
 
@@ -58,22 +76,12 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 	int line = 0;
 	const char *test_conf = getenv("RDKAFKA_TEST_CONF") ? : "test.conf";
 	char errstr[512];
-	char *tmp;
-	int seed;
+
+	test_init();
 
 	/* Limit the test run time. */
 	alarm(timeout);
 	signal(SIGALRM, sig_alarm);
-
-	if ((tmp = getenv("TEST_LEVEL")))
-		test_level = atoi(tmp);
-	if ((tmp = getenv("TEST_SEED")))
-		seed = atoi(tmp);
-	else
-		seed = test_clock() & 0xffffffff;
-
-	srand(seed);
-        test_seed = seed;
 
 	*conf = rd_kafka_conf_new();
 	*topic_conf = rd_kafka_topic_conf_new();
@@ -146,4 +154,13 @@ void test_wait_exit (int timeout) {
 		assert(0);
 		TEST_FAIL("%i thread(s) still active in librdkafka", r);
 	}
+}
+
+
+/**
+ * Generate a "unique" test id.
+ */
+uint64_t test_id_generate (void) {
+	test_init();
+	return (((uint64_t)rand()) << 32) | (uint64_t)rand();
 }

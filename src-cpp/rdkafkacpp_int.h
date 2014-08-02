@@ -143,7 +143,7 @@ class ConfImpl : public Conf {
   ~ConfImpl () {
     if (rk_conf_)
       rd_kafka_conf_destroy(rk_conf_);
-    else
+    else if (rkt_conf_)
       rd_kafka_topic_conf_destroy(rkt_conf_);
   }
 

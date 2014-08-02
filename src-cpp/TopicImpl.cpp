@@ -58,12 +58,14 @@ RdKafka::Topic *RdKafka::Topic::create (Handle *base,
 					std::string &errstr) {
   RdKafka::ConfImpl *confimpl = static_cast<RdKafka::ConfImpl *>(conf);
   rd_kafka_topic_t *rkt;
-  rd_kafka_topic_conf_t *rkt_conf = confimpl ? confimpl->rkt_conf_ : NULL;
+  rd_kafka_topic_conf_t *rkt_conf;
 
   RdKafka::TopicImpl *topic = new RdKafka::TopicImpl();
 
-  if (!rkt_conf)
+  if (!confimpl)
     rkt_conf = rd_kafka_topic_conf_new();
+  else /* Make a copy of conf struct to allow Conf reuse. */
+    rkt_conf = rd_kafka_topic_conf_dup(confimpl->rkt_conf_);
 
   /* Set topic opaque to the topic so that we can reach our topic object
    * from whatever callbacks get registered.
@@ -84,15 +86,11 @@ RdKafka::Topic *RdKafka::Topic::create (Handle *base,
 				 topic_str.c_str(), rkt_conf))) {
     errstr = rd_kafka_err2str(rd_kafka_errno2err(errno));
     delete topic;
-    if (!confimpl)
-      rd_kafka_topic_conf_destroy(rkt_conf);
+    rd_kafka_topic_conf_destroy(rkt_conf);
     return NULL;
   }
 
   topic->rkt_ = rkt;
-
-  if (!confimpl)
-    rd_kafka_topic_conf_destroy(rkt_conf);
 
   return topic;
 

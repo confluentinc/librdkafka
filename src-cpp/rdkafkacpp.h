@@ -361,6 +361,7 @@ class Topic {
    *
    * 'conf' is an optional configuration for the topic  that will be used 
    * instead of the default topic configuration.
+   * The 'conf' object is reusable after this call.
    *
    * Returns the new topic handle or NULL on error (see `errstr`).
    */
@@ -425,6 +426,7 @@ class Consumer : public virtual Handle {
    *
    * 'conf' is an optional object that will be used instead of the default
    * configuration.
+   * The 'conf' object is reusable after this call.
    *
    * Returns the new handle on success or NULL on error in which case
    * 'errstr' is set to a human readable error message.
@@ -500,6 +502,7 @@ class Producer : public virtual Handle {
    *
    * 'conf' is an optional object that will be used instead of the default
    * configuration.
+   * The 'conf' object is reusable after this call.
    *
    * Returns the new handle on success or NULL on error in which case
    * 'errstr' is set to a human readable error message.

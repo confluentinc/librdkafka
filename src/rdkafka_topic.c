@@ -639,7 +639,16 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 	rd_kafka_toppar_t *rktp;
 
 	rktp = rd_kafka_toppar_get(rkt, mdp->id, 0);
-	rd_kafka_assert(rkt->rkt_rk, rktp);
+        if (unlikely(!rktp)) {
+                /* Have only seen this in issue #132.
+                 * Probably caused by corrupt broker state. */
+                rd_kafka_log(rk, LOG_WARNING, "LEADER",
+                             "Topic %s: partition [%"PRId32"] is unknown "
+                             "(partition_cnt %i)",
+                             rkt->rkt_topic->str, mdp->id,
+                             rkt->rkt_partition_cnt);
+                return -1;
+        }
 
         rd_kafka_toppar_lock(rktp);
         /* Store a copy of the metadata for this partition.

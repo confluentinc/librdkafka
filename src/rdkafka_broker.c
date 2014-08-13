@@ -3525,10 +3525,11 @@ rd_kafka_toppar_offset_reply_handle (rd_kafka_broker_t *rkb,
 			_READ_I64(&Offset);
 
 			/* Adjust by TAIL count if, if wanted */
-			if (rktp->rktp_query_offset & RD_KAFKA_OFFSET_TAIL_TOK){
+			if (rktp->rktp_query_offset <=
+                            RD_KAFKA_OFFSET_TAIL_BASE) {
 				int64_t tail_cnt =
-					llabs(rktp->rktp_query_offset &
-					      ~RD_KAFKA_OFFSET_TAIL_TOK);
+					llabs(rktp->rktp_query_offset -
+                                              RD_KAFKA_OFFSET_TAIL_BASE);
 
 				rd_rkb_dbg(rkb, TOPIC, "OFFSET",
 					   "OffsetReply for "
@@ -3642,8 +3643,11 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 		/* Signal error back to application */
 		rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
 		rko->rko_err = err;
-		rko->rko_rkmessage.offset    = (rktp->rktp_query_offset &
-						~RD_KAFKA_OFFSET_TAIL_TOK);
+                if (rktp->rktp_query_offset <= RD_KAFKA_OFFSET_TAIL_BASE)
+                        rko->rko_rkmessage.offset = rktp->rktp_query_offset -
+                                RD_KAFKA_OFFSET_TAIL_BASE;
+                else
+                        rko->rko_rkmessage.offset    = rktp->rktp_query_offset;
 		rko->rko_rkmessage.rkt       = rktp->rktp_rkt;
 		rko->rko_rkmessage.partition = rktp->rktp_partition;
                 rd_kafka_topic_keep(rko->rko_rkmessage.rkt);
@@ -3753,7 +3757,7 @@ static void rd_kafka_toppar_offset_request (rd_kafka_broker_t *rkb,
 	part2 = (void *)(part1+1);
 	part2->PartitionArrayCnt  = htonl(1);
 	part2->Partition          = htonl(rktp->rktp_partition);
-	if (rktp->rktp_query_offset & RD_KAFKA_OFFSET_TAIL_TOK)
+	if (rktp->rktp_query_offset <= RD_KAFKA_OFFSET_TAIL_BASE)
 		part2->Time       = htobe64(RD_KAFKA_OFFSET_END);
 	else
 		part2->Time       = htobe64(rktp->rktp_query_offset);

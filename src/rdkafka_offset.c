@@ -368,7 +368,7 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 
 	if (offset_reset == RD_KAFKA_OFFSET_END ||
 	    offset_reset == RD_KAFKA_OFFSET_BEGINNING ||
-	    (offset_reset & RD_KAFKA_OFFSET_TAIL_TOK)) {
+            offset_reset <= RD_KAFKA_OFFSET_TAIL_BASE) {
 		offset = rktp->rktp_rkt->rkt_conf.auto_offset_reset;
 		rktp->rktp_query_offset = offset;
 		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;

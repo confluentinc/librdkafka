@@ -1276,7 +1276,7 @@ static int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
 
 	if (offset == RD_KAFKA_OFFSET_BEGINNING ||
 	    offset == RD_KAFKA_OFFSET_END ||
-	    (offset & RD_KAFKA_OFFSET_TAIL_TOK)) {
+            offset <= RD_KAFKA_OFFSET_TAIL_BASE) {
 		rktp->rktp_query_offset = offset;
 		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
 

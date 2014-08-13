@@ -666,12 +666,12 @@ void rd_kafka_queue_destroy (rd_kafka_queue_t *rkqu);
 #define RD_KAFKA_OFFSET_STORED -1000  /* Start consuming from offset retrieved
 				       * from offset store */
 
-#define RD_KAFKA_OFFSET_TAIL_TOK (-(1llu << 62)) /* internal: do not use */
+#define RD_KAFKA_OFFSET_TAIL_BASE -2000 /* internal: do not use */
 
 /* Start consuming `CNT` messages from topic's current `.._END` offset.
  * That is, if current end offset is 12345 and `CNT` is 200, it will start
  * consuming from offset 12345-200 = 12145. */
-#define RD_KAFKA_OFFSET_TAIL(CNT)  (RD_KAFKA_OFFSET_TAIL_TOK | (CNT))
+#define RD_KAFKA_OFFSET_TAIL(CNT)  (RD_KAFKA_OFFSET_TAIL_BASE - (CNT))
 
 /**
  * Start consuming messages for topic 'rkt' and 'partition'

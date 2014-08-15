@@ -23,7 +23,7 @@ WITH_LDS=n
 
 LIBS += -lstdc++
 
-CHECK_FILES+= $(LIBNAME).so.$(LIBVER) $(LIBNAME).a
+CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 
 check: file-check
 

@@ -19,6 +19,15 @@ ARFLAGS=
 
 -include $(TOPDIR)/Makefile.config
 
+_UNAME_S := $(shell uname -s)
+ifeq ($(_UNAME_S),Darwin)
+	LIBFILENAME=$(LIBNAME).$(LIBVER).dylib
+	LIBFILENAMELINK=$(LIBNAME).dylib
+else
+	LIBFILENAME=$(LIBNAME).so.$(LIBVER)
+	LIBFILENAMELINK=$(LIBNAME).so
+endif
+
 INSTALL?=		install
 INSTALL_PROGRAM?=	$(INSTALL)
 INSTALL_DATA?=		$(INSTALL) -m 644
@@ -64,9 +73,10 @@ mklove-check:
 	$(CXX) -MD -MP $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 
-lib: $(LIBNAME).so.$(LIBVER) $(LIBNAME).a
+lib: $(LIBFILENAME) $(LIBNAME).a
 
-$(LIBNAME).so.$(LIBVER): $(OBJS) $(LIBNAME).lds
+$(LIBFILENAME): $(OBJS) $(LIBNAME).lds
+	echo "uname is $(_UNAME_S);"
 	@echo "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)"
 	$(CC) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS)
 
@@ -101,16 +111,16 @@ lib-install:
 	$(INSTALL) -d $$DESTDIR$(libdir) ; \
 	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME) ; \
 	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir) ; \
-	$(INSTALL) $(LIBNAME).so.$(LIBVER) $$DESTDIR$(libdir) ; \
-	(cd $$DESTDIR$(libdir) && ln -sf $(LIBNAME).so.$(LIBVER) $(LIBNAME).so)
+	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir) ; \
+	(cd $$DESTDIR$(libdir) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
 
 lib-uninstall:
 	@echo "$(MKL_YELLOW)Uninstall $(LIBNAME) from $$DESTDIR$(prefix)$(MKL_CLR_RESET)"
 	for hdr in $(HDRS) ; do \
 		rm -f $$DESTDIR$(includedir)/$(PKGNAME)/$$hdr ; done
 	rm -f $$DESTDIR$(libdir)/$(LIBNAME).a
-	rm -f $$DESTDIR$(libdir)/$(LIBNAME).so.$(LIBVER)
-	rm -f $$DESTDIR$(libdir)/$(LIBNAME).so
+	rm -f $$DESTDIR$(libdir)/$(LIBFILENAME)
+	rm -f $$DESTDIR$(libdir)/$(LIBFILENAMELINK)
 	rmdir $$DESTDIR$(includedir)/$(PKGNAME) || true
 
 
@@ -128,7 +138,7 @@ generic-clean:
 	rm -f $(OBJS) $(DEPS)
 
 lib-clean: generic-clean
-	rm -f $(LIBNAME)*.a $(LIBNAME)*.so $(LIBNAME)*.so.$(LIBVER) \
+	rm -f $(LIBNAME)*.a $(LIBFILENAME) $(LIBFILENAMELINK) \
 		$(LIBNAME).lds
 
 bin-clean: generic-clean

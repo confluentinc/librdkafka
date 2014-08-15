@@ -8,6 +8,7 @@ rdkafka.pc
 *.o
 *.so
 *.so.?
+*.dylib
 *.a
 *.d
 librdkafka*.lds

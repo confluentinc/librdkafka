@@ -37,12 +37,13 @@ function checks {
 
     # Figure out what tool to use for dumping public symbols.
     # We rely on configure.cc setting up $NM if it exists.
-    if mkl_prog_check "otool" "" cont "otool"; then
-	# OSX XCode
-	mkl_mkvar_set SYMDUMPER SYMDUMPER "otool -TV"
-    elif mkl_env_check "nm" "" cont "NM" ; then
+    if mkl_env_check "nm" "" cont "NM" ; then
 	# nm by future mk var
-	mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -D'
+	if [[ $MKL_DISTRO == "osx" ]]; then
+	    mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -g'
+	else
+	    mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -D'
+	fi
     else
 	# Fake symdumper
 	mkl_mkvar_set SYMDUMPER SYMDUMPER 'echo'

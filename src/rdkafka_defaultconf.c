@@ -121,6 +121,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ RD_KAFKA_DBG_PRODUCER, "producer" },
 			{ RD_KAFKA_DBG_QUEUE,    "queue" },
 			{ RD_KAFKA_DBG_MSG,      "msg" },
+			{ RD_KAFKA_DBG_PROTOCOL, "protocol" },
 			{ RD_KAFKA_DBG_ALL,      "all" },
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),

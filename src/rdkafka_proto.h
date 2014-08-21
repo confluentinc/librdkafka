@@ -51,6 +51,7 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_StopReplica   5
 #define RD_KAFKAP_OffsetCommit  8
 #define RD_KAFKAP_OffsetFetch   9
+#define RD_KAFKAP_ConsumerMetadata 10
 	int16_t  ApiVersion;
 	int32_t  CorrId;
 	/* ClientId follows */
@@ -64,6 +65,30 @@ struct rd_kafkap_reshdr {
 	int32_t  CorrId;
 } RD_PACKED;
 
+
+
+static RD_UNUSED
+const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
+	static const char *names[] = {
+		[RD_KAFKAP_Produce] = "Produce",
+		[RD_KAFKAP_Fetch] = "Fetch",
+		[RD_KAFKAP_Offset] = "Offset",
+		[RD_KAFKAP_Metadata] = "Metadata",
+		[RD_KAFKAP_LeaderAndIsr] = "LeaderAndIsr",
+		[RD_KAFKAP_StopReplica] = "StopReplica",
+		[RD_KAFKAP_OffsetCommit] = "OffsetCommit",
+		[RD_KAFKAP_OffsetFetch] = "OffsetFetch",
+		[RD_KAFKAP_ConsumerMetadata] = "ConsumerMetadata"
+	};
+	static __thread char ret[32];
+
+	if (ApiKey < 0 || ApiKey >= RD_ARRAYSIZE(names)) {
+		snprintf(ret, sizeof(ret), "Unknown-%hd?", ApiKey);
+		return ret;
+	}
+
+	return names[ApiKey];
+}
 
 
 

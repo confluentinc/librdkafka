@@ -78,7 +78,7 @@ typedef enum rd_kafka_type_t {
  * Supported debug contexts (CSV "debug" configuration property)
  */
 #define RD_KAFKA_DEBUG_CONTEXTS \
-	"all,generic,broker,topic,metadata,producer,queue,msg"
+	"all,generic,broker,topic,metadata,producer,queue,msg,protocol"
 
 /* Private types to provide ABI compatibility */
 typedef struct rd_kafka_s rd_kafka_t;

@@ -785,6 +785,7 @@ struct rd_kafka_s {
 #define RD_KAFKA_DBG_PRODUCER   0x10
 #define RD_KAFKA_DBG_QUEUE      0x20
 #define RD_KAFKA_DBG_MSG        0x40
+#define RD_KAFKA_DBG_PROTOCOL   0x80
 #define RD_KAFKA_DBG_ALL        0xff
 
 

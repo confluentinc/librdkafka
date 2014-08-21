@@ -1290,6 +1290,11 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
                 return -1;
 	}
 
+	rd_rkb_dbg(rkb, PROTOCOL, "RECV",
+		   "Received %sResponse (%zd bytes, CorrId %"PRId32")",
+		   rd_kafka_ApiKey2str(ntohs(req->rkbuf_reqhdr.ApiKey)),
+		   rkbuf->rkbuf_len, rkbuf->rkbuf_reshdr.CorrId);
+
 	/* Call callback. Ownership of 'rkbuf' is delegated to callback. */
 	req->rkbuf_cb(rkb, 0, rkbuf, req, req->rkbuf_opaque);
 
@@ -1690,6 +1695,12 @@ static int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		if (rkbuf->rkbuf_of < rkbuf->rkbuf_len) {
 			return 0;
 		}
+
+		rd_rkb_dbg(rkb, PROTOCOL, "SEND",
+			   "Sent %sRequest (%zd bytes, CorrId %"PRId32")",
+			   rd_kafka_ApiKey2str(ntohs(rkbuf->rkbuf_reqhdr.
+						     ApiKey)),
+			   rkbuf->rkbuf_len, rkbuf->rkbuf_corrid);
 
 		/* Entire buffer sent, unlink from outbuf */
 		rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);

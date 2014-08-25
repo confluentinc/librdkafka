@@ -1641,8 +1641,12 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rkb->rkb_pfd.events = POLLIN;
 
 	/* Request metadata (async) */
-	rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL, NULL,
-				     "connected");
+        rd_kafka_broker_metadata_req(rkb,
+                                     rkb->rkb_rk->rk_conf.
+                                     metadata_refresh_sparse ?
+                                     0 /* known topics */ : 1 /* all topics */,
+                                     NULL, NULL, "connected");
+
 	return 0;
 }
 
@@ -2402,7 +2406,8 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 			rd_kafka_broker_op_serve(rkb, rko);
 
 	/* Periodic metadata poll */
-	if (unlikely(now >= rkb->rkb_ts_metadata_poll))
+	if (unlikely(!rkb->rkb_rk->rk_conf.metadata_refresh_sparse &&
+                     now >= rkb->rkb_ts_metadata_poll))
 		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
                                              NULL, "periodic refresh");
 

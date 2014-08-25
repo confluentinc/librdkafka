@@ -110,6 +110,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(metadata_refresh_fast_interval_ms),
 	  "See `topic.metadata.refresh.fast.cnt` description",
 	  1, 60*1000, 250 },
+        { _RK_GLOBAL, "topic.metadata.refresh.sparse", _RK_C_BOOL,
+          _RK(metadata_refresh_sparse),
+          "Sparse metadata requests (consumes less network bandwidth)",
+          0, 1, 0 },
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
 	  "A comma-separated list of debug contexts to enable: "
 	  RD_KAFKA_DEBUG_CONTEXTS,

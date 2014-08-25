@@ -108,7 +108,6 @@ static void conf_cmp (const char *desc,
 
 
 int main (int argc, char **argv) {
-	char *topic = "rdkafkatest1";
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *ignore_conf, *conf, *conf2;
@@ -117,6 +116,7 @@ int main (int argc, char **argv) {
 	const char **arr_orig, **arr_dup;
 	size_t cnt_orig, cnt_dup;
 	int i;
+        const char *topic;
 	static const char *gconfs[] = {
 		"message.max.bytes", "12345", /* int property */
 		"client.id", "my id", /* string property */
@@ -135,6 +135,8 @@ int main (int argc, char **argv) {
 	test_conf_init(&ignore_conf, &ignore_topic_conf, 10);
 	rd_kafka_conf_destroy(ignore_conf);
 	rd_kafka_topic_conf_destroy(ignore_topic_conf);
+
+        topic = test_mk_topic_name("generic", 0);
 
 	/* Set up a global config object */
 	conf = rd_kafka_conf_new();

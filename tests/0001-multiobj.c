@@ -42,11 +42,11 @@
 #include "rdkafka.h"  /* for Kafka driver */
 
 int main (int argc, char **argv) {
-	char *topic = "rdkafkatest1";
 	int partition = RD_KAFKA_PARTITION_UA; /* random */
 	int i;
 	const int NUM_ITER = 100;
 	struct rlimit rlim = {};
+        const char *topic = NULL;
 
 	/*
 	 * Put some limits to catch bad cleanups by librdkafka (issue #20)
@@ -68,6 +68,9 @@ int main (int argc, char **argv) {
 		char msg[128];
 
 		test_conf_init(&conf, &topic_conf, 30);
+
+                if (!topic)
+                        topic = test_mk_topic_name("generic", 0);
 
 		rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
 				  errstr, sizeof(errstr));

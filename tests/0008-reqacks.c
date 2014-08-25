@@ -70,7 +70,6 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 
 
 int main (int argc, char **argv) {
-	char *topic = "rdkafkatest1";
 	int partition = 0;
 	int r;
 	rd_kafka_t *rk;
@@ -83,12 +82,23 @@ int main (int argc, char **argv) {
 	int i;
         int reqacks;
         int idbase = 0;
+        const char *topic = NULL;
+
+	TEST_SAY("\033[33mNOTE! This test requires at "
+                 "least 3 brokers!\033[0m\n");
+
+	TEST_SAY("\033[33mNOTE! This test requires "
+		 "default.replication.factor=3 to be configured on "
+		 "all brokers!\033[0m\n");
 
         /* Try different request.required.acks settings (issue #75) */
         for (reqacks = -1 ; reqacks <= 2 ; reqacks++) {
                 char tmp[10];
 
                 test_conf_init(&conf, &topic_conf, 10);
+
+                if (!topic)
+                        topic = test_mk_topic_name("generic", 0);
 
                 snprintf(tmp, sizeof(tmp), "%i", reqacks);
 

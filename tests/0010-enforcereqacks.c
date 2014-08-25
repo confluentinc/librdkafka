@@ -74,7 +74,6 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 
 
 int main (int argc, char **argv) {
-	char *topic = "rdkafkatest1";
 	int partition = 0;
 	int r;
 	rd_kafka_t *rk;
@@ -87,6 +86,7 @@ int main (int argc, char **argv) {
 	int i;
         int idbase = 0;
         int pass;
+        const char *topic = NULL;
 
         for (pass = 0 ; pass < 2 ; pass++) {
                 int enforce;
@@ -102,6 +102,10 @@ int main (int argc, char **argv) {
                 }
 
                 test_conf_init(&conf, &topic_conf, 10);
+
+                if (!topic)
+                        topic = test_mk_topic_name("generic", 0);
+
                 if (rd_kafka_topic_conf_set(topic_conf,
                                             "enforce.isr.cnt",
                                             enforce ? "5" : "0",

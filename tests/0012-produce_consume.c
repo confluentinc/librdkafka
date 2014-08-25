@@ -86,6 +86,11 @@ static void produce_messages (uint64_t testid, const char *topic,
 
 	rd_kafka_conf_set_dr_cb(conf, dr_cb);
 
+        /* Make sure all replicas are in-sync after producing
+         * so that consume test wont fail. */
+        rd_kafka_topic_conf_set(topic_conf, "request.required.acks", "-1",
+                                errstr, sizeof(errstr));
+
 	/* Create kafka instance */
 	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
 			       errstr, sizeof(errstr));
@@ -465,16 +470,20 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
  * Consume with queue interface from both, simultanously.
  */
 static void test_produce_consume (void) {
-	const char *topic = "rdkafkatest0012";
 	int msgcnt = 10000;
 	int partition_cnt = 2;
 	int i;
 	uint64_t testid;
 	int msg_base = 0;
+        const char *topic;
 
 	/* Generate a testid so we can differentiate messages
 	 * from other tests */
 	testid = test_id_generate();
+
+        /* Read test.conf to configure topic name */
+        test_conf_init(NULL, NULL, 20);
+        topic = test_mk_topic_name("0012", 0);
 
 	TEST_SAY("Topic %s, testid %"PRIu64"\n", topic, testid);
 

@@ -70,7 +70,6 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 
 
 int main (int argc, char **argv) {
-	char *topic = "rdkafkatest1";
 	int partition = 99; /* non-existent */
 	int r;
 	rd_kafka_t *rk;
@@ -81,6 +80,7 @@ int main (int argc, char **argv) {
 	char msg[128];
 	int msgcnt = 10;
 	int i;
+        const struct rd_kafka_metadata *metadata;
 
 	test_conf_init(&conf, &topic_conf, 10);
 
@@ -95,7 +95,8 @@ int main (int argc, char **argv) {
 
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
-	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("generic", 0),
+                                 topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
 			  strerror(errno));

@@ -101,6 +101,15 @@ int main (int argc, char **argv) {
 		TEST_FAIL("Failed to create topic: %s\n",
 			  strerror(errno));
 
+        /* Request metadata so that we know the cluster is up before producing
+         * messages, otherwise erroneous partitions will not fail immediately.*/
+        if ((r = rd_kafka_metadata(rk, 0, rkt, &metadata, 2000)) !=
+            RD_KAFKA_RESP_ERR_NO_ERROR)
+                TEST_FAIL("Failed to acquire metadata: %s\n",
+                          rd_kafka_err2str(r));
+
+        rd_kafka_metadata_destroy(metadata);
+
 	/* Produce a message */
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));

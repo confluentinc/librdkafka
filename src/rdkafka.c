@@ -1100,7 +1100,7 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_t *rk, void *arg) {
 
         if (rk->rk_conf.metadata_refresh_sparse)
                 rd_kafka_broker_metadata_req(rkb, 0 /* known topics */, NULL,
-                                             NULL, "sparse peridioc refresh");
+                                             NULL, "sparse periodic refresh");
         else
                 rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
                                              NULL, "periodic refresh");

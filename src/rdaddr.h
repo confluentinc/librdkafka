@@ -32,6 +32,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#ifdef __FreeBSD__
+#include <sys/socket.h>
+#endif
+
 /**
  * rd_sockaddr_inx_t is a union for either ipv4 or ipv6 sockaddrs.
  * It provides conveniant abstraction of AF_INET* agnostic operations.

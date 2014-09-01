@@ -408,7 +408,8 @@ typedef struct rd_kafka_buf_s {
 	int     rkbuf_retries;
 
 	rd_ts_t rkbuf_ts_enq;
-	rd_ts_t rkbuf_ts_sent;
+	rd_ts_t rkbuf_ts_sent;    /* Initially: Absolute time of transmission,
+				   * after response: RTT. */
 	rd_ts_t rkbuf_ts_timeout;
 
         int64_t rkbuf_offset;  /* Used by OffsetCommit */

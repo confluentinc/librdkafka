@@ -1255,8 +1255,10 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find (rd_kafka_broker_t *rkb,
 
 	TAILQ_FOREACH(rkbuf, &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link)
 		if (rkbuf->rkbuf_corrid == corrid) {
+			/* Convert ts_sent to RTT */
+			rkbuf->rkbuf_ts_sent = now - rkbuf->rkbuf_ts_sent;
 			rd_kafka_avg_add(&rkb->rkb_avg_rtt,
-					 now - rkbuf->rkbuf_ts_sent);
+					 rkbuf->rkbuf_ts_sent);
 
 			rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
 			return rkbuf;
@@ -1291,9 +1293,11 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 	}
 
 	rd_rkb_dbg(rkb, PROTOCOL, "RECV",
-		   "Received %sResponse (%zd bytes, CorrId %"PRId32")",
+		   "Received %sResponse (%zd bytes, CorrId %"PRId32
+		   ", rtt %.2fms)",
 		   rd_kafka_ApiKey2str(ntohs(req->rkbuf_reqhdr.ApiKey)),
-		   rkbuf->rkbuf_len, rkbuf->rkbuf_reshdr.CorrId);
+		   rkbuf->rkbuf_len, rkbuf->rkbuf_reshdr.CorrId,
+		   (float)req->rkbuf_ts_sent / 1000.0f);
 
 	/* Call callback. Ownership of 'rkbuf' is delegated to callback. */
 	req->rkbuf_cb(rkb, 0, rkbuf, req, req->rkbuf_opaque);

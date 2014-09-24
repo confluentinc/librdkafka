@@ -101,7 +101,7 @@
 #ifdef sun
 #include <sys/isa_defs.h>
 #include <sys/byteorder.h>
-# if _BIG_ENDIAN
+# ifdef _BIG_ENDIAN
 #define be64toh(x) (x)
 #define htobe64(x) (x)
 # else

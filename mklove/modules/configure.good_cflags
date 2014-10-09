@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# Provides some known-good CFLAGS
+# Sets:
+#  CFLAGS
+#  CXXFLAGS
+#  CPPFLAGS
+
+
+function checks {
+    mkl_mkvar_append CPPFLAGS CPPFLAGS \
+        "-Wall -Werror -Wfloat-equal -Wpointer-arith"
+}

@@ -45,6 +45,11 @@
  * is builtin from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"  /* for Kafka driver */
 
+#include <zookeeper.h>
+#include <zookeeper.jute.h>
+#include <jansson.h>
+
+#define BROKER_PATH "/brokers/ids"
 
 static int run = 1;
 static rd_kafka_t *rk;
@@ -114,20 +119,6 @@ static void msg_delivered (rd_kafka_t *rk,
 			rd_kafka_err2str(error_code));
 	else if (!quiet)
 		fprintf(stderr, "%% Message delivered (%zd bytes)\n", len);
-}
-
-/**
- * Message delivery report callback using the richer rd_kafka_message_t object.
- */
-static void msg_delivered2 (rd_kafka_t *rk,
-                            const rd_kafka_message_t *rkmessage, void *opaque) {
-        if (rkmessage->err)
-		fprintf(stderr, "%% Message delivery failed: %s\n",
-                        rd_kafka_message_errstr(rkmessage));
-	else if (!quiet)
-		fprintf(stderr,
-                        "%% Message delivered (%zd bytes, offset %"PRId64")\n",
-                        rkmessage->len, rkmessage->offset);
 }
 
 
@@ -237,13 +228,100 @@ static void metadata_print (const char *topic,
 }
 
 
+static void set_brokerlist_from_zookeeper(zhandle_t *zzh, char *brokers)
+{
+	if (zzh)
+	{
+		struct String_vector brokerlist;
+		if (zoo_get_children(zzh, BROKER_PATH, 1, &brokerlist) != ZOK)
+		{
+			fprintf(stderr, "No brokers found on path %s\n", BROKER_PATH);
+			return;
+		}
+
+		int i;
+		char *brokerptr = brokers;
+		for (i = 0; i < brokerlist.count; i++)
+		{
+			char path[255], cfg[1024];
+			sprintf(path, "/brokers/ids/%s", brokerlist.data[i]);
+			int len = sizeof(cfg);
+			zoo_get(zzh, path, 0, cfg, &len, NULL);
+
+			if (len > 0)
+			{
+				cfg[len] = '\0';
+				json_error_t jerror;
+				json_t *jobj = json_loads(cfg, 0, &jerror);
+				if (jobj)
+				{
+					json_t *jhost = json_object_get(jobj, "host");
+					json_t *jport = json_object_get(jobj, "port");
+
+					if (jhost && jport)
+					{
+						const char *host = json_string_value(jhost);
+						const int   port = json_integer_value(jport);
+						sprintf(brokerptr, "%s:%d", host, port);
+
+						brokerptr += strlen(brokerptr);
+						if (i < brokerlist.count - 1)
+						{
+							*brokerptr++ = ',';
+						}
+					}
+					json_decref(jobj);
+				}
+			}
+		}
+		deallocate_String_vector(&brokerlist);
+		printf("Found brokers %s\n", brokers);
+	}
+}
+
+
+static void watcher(zhandle_t *zh, int type, int state, const char *path, void *watcherCtx)
+{
+	char brokers[1024];
+	if (type == ZOO_CHILD_EVENT && strncmp(path, BROKER_PATH, sizeof(BROKER_PATH) - 1) == 0)
+	{
+		brokers[0] = '\0';
+		set_brokerlist_from_zookeeper(zh, brokers);
+		if (brokers[0] != '\0' && rk != NULL)
+		{
+			rd_kafka_brokers_add(rk, brokers);
+			rd_kafka_poll(rk, 10);
+		}
+	}
+}
+
+
+static zhandle_t* initialize_zookeeper(const char * zookeeper, const int debug)
+{
+	zhandle_t *zh;
+	if (debug)
+	{
+		zoo_set_debug_level(ZOO_LOG_LEVEL_DEBUG);
+	}
+	zh = zookeeper_init(zookeeper, watcher, 10000, 0, 0, 0);
+	if (zh == NULL)
+	{
+		fprintf(stderr, "Zookeeper connection not established.");
+		exit(1);
+	}
+	return zh;
+}
+
+
 static void sig_usr1 (int sig) {
 	rd_kafka_dump(stdout, rk);
 }
 
 int main (int argc, char **argv) {
 	rd_kafka_topic_t *rkt;
-	char *brokers = "localhost:9092";
+	char *zookeeper = "localhost:2181";
+	zhandle_t *zh = NULL;
+	char brokers[1024];
 	char mode = 'C';
 	char *topic = NULL;
 	int partition = RD_KAFKA_PARTITION_UA;
@@ -253,9 +331,9 @@ int main (int argc, char **argv) {
 	char errstr[512];
 	const char *debug = NULL;
 	int64_t start_offset = 0;
-        int report_offsets = 0;
 	int do_conf_dump = 0;
 
+	memset(brokers, 0, sizeof(brokers));
 	quiet = !isatty(STDIN_FILENO);
 
 	/* Kafka configuration */
@@ -264,7 +342,7 @@ int main (int argc, char **argv) {
 	/* Topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();
 
-	while ((opt = getopt(argc, argv, "PCLt:p:b:z:qd:o:eX:A")) != -1) {
+	while ((opt = getopt(argc, argv, "PCLt:p:k:z:qd:o:eX:A")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -277,8 +355,8 @@ int main (int argc, char **argv) {
 		case 'p':
 			partition = atoi(optarg);
 			break;
-		case 'b':
-			brokers = optarg;
+		case 'k':
+			zookeeper = optarg;
 			break;
 		case 'z':
 			if (rd_kafka_conf_set(conf, "compression.codec",
@@ -296,14 +374,8 @@ int main (int argc, char **argv) {
 				start_offset = RD_KAFKA_OFFSET_BEGINNING;
 			else if (!strcmp(optarg, "stored"))
 				start_offset = RD_KAFKA_OFFSET_STORED;
-                        else if (!strcmp(optarg, "report"))
-                                report_offsets = 1;
-			else {
+			else
 				start_offset = strtoll(optarg, NULL, 10);
-
-				if (start_offset < 0)
-					start_offset = RD_KAFKA_OFFSET_TAIL(-start_offset);
-			}
 			break;
 		case 'e':
 			exit_eof = 1;
@@ -415,12 +487,10 @@ int main (int argc, char **argv) {
                         "  -L              Metadata list mode\n"
 			"  -t <topic>      Topic to fetch / produce\n"
 			"  -p <num>        Partition (random partitioner)\n"
-			"  -b <brokers>    Broker address (localhost:9092)\n"
+			"  -k <zookeepers> Zookeeper address (localhost:2181)\n"
 			"  -z <codec>      Enable compression:\n"
 			"                  none|gzip|snappy\n"
-			"  -o <offset>     Start offset (consumer):\n"
-			"                  beginning, end, NNNNN or -NNNNN\n"
-                        "  -o report       Report message offsets (producer)\n"
+			"  -o <offset>     Start offset (consumer)\n"
 			"  -e              Exit consumer when last message\n"
 			"                  in partition has been received.\n"
 			"  -d [facs..]     Enable debugging contexts:\n"
@@ -462,6 +532,16 @@ int main (int argc, char **argv) {
 		exit(1);
 	}
 
+	/** Initialize zookeeper */
+	zh = initialize_zookeeper(zookeeper, debug != NULL);
+
+	/* Add brokers */
+	set_brokerlist_from_zookeeper(zh, brokers);
+
+	if (debug) {
+		printf("Broker list from zookeeper cluster %s: %s\n", zookeeper, brokers);
+	}
+
 	if (mode == 'P') {
 		/*
 		 * Producer
@@ -472,16 +552,7 @@ int main (int argc, char **argv) {
 		/* Set up a message delivery report callback.
 		 * It will be called once for each message, either on successful
 		 * delivery to broker, or upon failure to deliver to broker. */
-
-                /* If offset reporting (-o report) is enabled, use the
-                 * richer dr_msg_cb instead. */
-                if (report_offsets) {
-                        rd_kafka_topic_conf_set(topic_conf,
-                                                "produce.offset.report",
-                                                "true", errstr, sizeof(errstr));
-                        rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered2);
-                } else
-                        rd_kafka_conf_set_dr_cb(conf, msg_delivered);
+		rd_kafka_conf_set_dr_cb(conf, msg_delivered);
 
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
@@ -495,12 +566,6 @@ int main (int argc, char **argv) {
 		/* Set logger */
 		rd_kafka_set_logger(rk, logger);
 		rd_kafka_set_log_level(rk, LOG_DEBUG);
-
-		/* Add brokers */
-		if (rd_kafka_brokers_add(rk, brokers) == 0) {
-			fprintf(stderr, "%% No valid brokers specified\n");
-			exit(1);
-		}
 
 		/* Create topic */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
@@ -552,9 +617,6 @@ int main (int argc, char **argv) {
 		while (run && rd_kafka_outq_len(rk) > 0)
 			rd_kafka_poll(rk, 100);
 
-		/* Destroy topic */
-		rd_kafka_topic_destroy(rkt);
-
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
 
@@ -575,12 +637,6 @@ int main (int argc, char **argv) {
 		/* Set logger */
 		rd_kafka_set_logger(rk, logger);
 		rd_kafka_set_log_level(rk, LOG_DEBUG);
-
-		/* Add brokers */
-		if (rd_kafka_brokers_add(rk, brokers) == 0) {
-			fprintf(stderr, "%% No valid brokers specified\n");
-			exit(1);
-		}
 
 		/* Create topic */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
@@ -611,14 +667,12 @@ int main (int argc, char **argv) {
 		/* Stop consuming */
 		rd_kafka_consume_stop(rkt, partition);
 
-		/* Destroy topic */
 		rd_kafka_topic_destroy(rkt);
 
-		/* Destroy handle */
 		rd_kafka_destroy(rk);
 
-        } else if (mode == 'L') {
-                rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+	} else if (mode == 'L') {
+		rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
@@ -633,52 +687,45 @@ int main (int argc, char **argv) {
 		rd_kafka_set_logger(rk, logger);
 		rd_kafka_set_log_level(rk, LOG_DEBUG);
 
-		/* Add brokers */
-		if (rd_kafka_brokers_add(rk, brokers) == 0) {
-			fprintf(stderr, "%% No valid brokers specified\n");
-			exit(1);
+		/* Create topic */
+		if (topic)
+			rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+		else
+			rkt = NULL;
+
+		while (run) {
+				const struct rd_kafka_metadata *metadata;
+
+				/* Fetch metadata */
+				err = rd_kafka_metadata(rk, rkt ? 0 : 1, rkt,
+										&metadata, 5000);
+				if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+						fprintf(stderr,
+								"%% Failed to acquire metadata: %s\n",
+								rd_kafka_err2str(err));
+						run = 0;
+						break;
+				}
+
+				metadata_print(topic, metadata);
+
+				rd_kafka_metadata_destroy(metadata);
+				run = 0;
 		}
-
-                /* Create topic */
-                if (topic)
-                        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
-                else
-                        rkt = NULL;
-
-                while (run) {
-                        const struct rd_kafka_metadata *metadata;
-
-                        /* Fetch metadata */
-                        err = rd_kafka_metadata(rk, rkt ? 0 : 1, rkt,
-                                                &metadata, 5000);
-                        if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
-                                fprintf(stderr,
-                                        "%% Failed to acquire metadata: %s\n",
-                                        rd_kafka_err2str(err));
-                                run = 0;
-                                break;
-                        }
-
-                        metadata_print(topic, metadata);
-
-                        rd_kafka_metadata_destroy(metadata);
-                        run = 0;
-                }
-
-		/* Destroy topic */
-		if (rkt)
-			rd_kafka_topic_destroy(rkt);
 
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
 
-                /* Exit right away, dont wait for background cleanup, we haven't
-                 * done anything important anyway. */
-                exit(err ? 2 : 0);
-        }
+		/* Exit right away, dont wait for background cleanup, we haven't
+		 * done anything important anyway. */
+		exit(err ? 2 : 0);
+	}
 
 	/* Let background threads clean up and terminate cleanly. */
 	rd_kafka_wait_destroyed(2000);
+
+	/** Free the zookeeper data. */
+	zookeeper_close(zh);
 
 	return 0;
 }

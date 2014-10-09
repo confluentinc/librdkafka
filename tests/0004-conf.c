@@ -132,7 +132,7 @@ int main (int argc, char **argv) {
 		NULL
 	};
 
-	test_conf_init(&ignore_conf, &ignore_topic_conf, 2);
+	test_conf_init(&ignore_conf, &ignore_topic_conf, 10);
 	rd_kafka_conf_destroy(ignore_conf);
 	rd_kafka_topic_conf_destroy(ignore_topic_conf);
 

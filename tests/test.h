@@ -51,6 +51,8 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 
 void test_wait_exit (int timeout);
 
+uint64_t test_id_generate (void);
+
 
 /**
  * A microsecond monotonic clock

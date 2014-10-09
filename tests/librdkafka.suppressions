@@ -50,3 +50,18 @@
    fun:clone
 }
 
+{
+   <stats_are_unprotected1>
+   Helgrind:Race
+   fun:rd_kafka_stats_emit_tmr_cb
+   ...
+}
+{
+   <stats_are_unprotected2>
+   drd:ConflictingAccess
+   fun:rd_kafka_stats_emit_tmr_cb
+   fun:rd_kafka_timers_run
+   fun:rd_kafka_thread_main
+   ...
+}
+

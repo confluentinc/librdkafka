@@ -2932,7 +2932,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 err:
         /* Count all errors as partial message errors. */
-        rkb->rkb_c.rx_partial++;
+        rd_atomic_add(&rkb->rkb_c.rx_partial, 1);
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 

@@ -238,7 +238,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(fetch_error_backoff_ms),
 	  "How long to postpone the next fetch request for a "
 	  "topic+partition in case of a fetch error.",
-	  1, 300*1000, 500 },
+	  0, 300*1000, 500 },
         { _RK_GLOBAL|_RK_CONSUMER, "group.id", _RK_C_STR,
           _RK(group_id_str),
           "Consumer group id string. All clients sharing the same group.id "

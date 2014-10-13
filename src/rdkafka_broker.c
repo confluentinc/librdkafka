@@ -1184,23 +1184,31 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 
 /**
+ * Returns a random broker (with refcnt increased) in state 'state'.
+ * Uses Reservoir sampling.
+ *
  * Locks: rd_kafka_rdlock(rk) MUST be held.
  * Locality: any thread
  */
 rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
-	rd_kafka_broker_t *rkb;
+	rd_kafka_broker_t *rkb, *good = NULL;
+        int cnt = 0;
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
 		if (rkb->rkb_state == state) {
-			rd_kafka_broker_keep(rkb);
-			rd_kafka_broker_unlock(rkb);
-			return rkb;
-		}
+                        if (cnt < 1 || rd_jitter(0, cnt) < 1) {
+                                if (good)
+                                        rd_kafka_broker_destroy(good);
+                                rd_kafka_broker_keep(rkb);
+                                good = rkb;
+                        }
+                        cnt += 1;
+                }
 		rd_kafka_broker_unlock(rkb);
 	}
 
-	return NULL;
+        return good;
 }
 
 

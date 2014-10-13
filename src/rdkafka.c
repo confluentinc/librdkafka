@@ -1123,9 +1123,11 @@ static void *rd_kafka_thread_main (void *arg) {
 	rd_kafka_timer_start(rk, &tmr_stats_emit,
 			     rk->rk_conf.stats_interval_ms * 1000,
 			     rd_kafka_stats_emit_tmr_cb, NULL);
-        rd_kafka_timer_start(rk, &tmr_metadata_refresh,
-                             rk->rk_conf.metadata_refresh_interval_ms * 1000,
-                             rd_kafka_metadata_refresh_cb, NULL);
+        if (rk->rk_conf.metadata_refresh_interval_ms >= 0)
+                rd_kafka_timer_start(rk, &tmr_metadata_refresh,
+                                     rk->rk_conf.metadata_refresh_interval_ms *
+                                     1000,
+                                     rd_kafka_metadata_refresh_cb, NULL);
 
 	while (likely(rk->rk_terminate == 0)) {
 		rd_kafka_timers_run(rk, 1000000);

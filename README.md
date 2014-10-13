@@ -70,6 +70,7 @@ For an introduction to the performance and usage of librdkafka, see
   * [haskell-kafka](https://github.com/yanatan16/haskell-kafka) - Haskell
   * [Hermann](https://github.com/stancampbell3/Hermann) - Ruby
   * large unnamed financial institution
+  * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
 

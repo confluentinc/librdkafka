@@ -101,7 +101,7 @@ int pthread_cond_timedwait_ms (pthread_cond_t *cond,
 	ts.tv_sec  += timeout_ms / 1000;
 	ts.tv_nsec += (timeout_ms % 1000) * 1000000;
 
-	if (ts.tv_nsec > 1000000000) {
+	if (ts.tv_nsec >= 1000000000) {
 		ts.tv_sec++;
 		ts.tv_nsec -= 1000000000;
 	}
@@ -530,7 +530,7 @@ static int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 	TIMEVAL_TO_TIMESPEC(&tv, &ts);
 	ts.tv_sec  += timeout_ms / 1000;
 	ts.tv_nsec += (timeout_ms % 1000) * 1000000;
-	if (ts.tv_nsec > 1000000000) {
+	if (ts.tv_nsec >= 1000000000) {
 		ts.tv_sec++;
 		ts.tv_nsec -= 1000000000;
 	}

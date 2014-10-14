@@ -47,7 +47,7 @@
 #define TS_TO_TIMESPEC(ts,tsx) do {			\
 	(ts)->tv_sec  = (tsx) / 1000000;		\
         (ts)->tv_nsec = ((tsx) % 1000000) * 1000;	\
-	if ((ts)->tv_nsec > 1000000000LLU) {		\
+	if ((ts)->tv_nsec >= 1000000000LLU) {		\
 	   (ts)->tv_sec++;				\
 	   (ts)->tv_nsec -= 1000000000LLU;		\
 	}						\

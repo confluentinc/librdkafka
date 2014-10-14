@@ -227,7 +227,7 @@ static int rd_cond_timedwait_ms (rd_cond_t *cond,
 	ts.tv_sec  += timeout_ms / 1000;
 	ts.tv_nsec += (timeout_ms % 1000) * 1000000;
 
-	if (ts.tv_nsec > 1000000000) {
+	if (ts.tv_nsec >= 1000000000) {
 		ts.tv_sec++;
 		ts.tv_nsec -= 1000000000;
 	}

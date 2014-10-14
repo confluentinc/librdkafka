@@ -3440,8 +3440,6 @@ rd_kafka_toppar_offsetfetch_reply_handle (rd_kafka_broker_t *rkb,
 	int i;
         const int log_decode_errors = 1;
 
-        rd_hexdump(stdout, "pkt", buf, size);
-
 	_READ_I32(&TopicArrayCnt);
 	for (i = 0 ; i < TopicArrayCnt ; i++) {
 		rd_kafkap_str_t *topic;

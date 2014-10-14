@@ -18,6 +18,8 @@ For an introduction to the performance and usage of librdkafka, see
 
 **NOTE**: The `master` branch is actively developed, use latest release for production use.
 
+[![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
+
 **Apache Kafka 0.8 support:**
 
   * Branch: master

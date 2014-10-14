@@ -1063,6 +1063,7 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                 /* Check if metadata information has timed out:
                  * older than 3 times the metadata.refresh.interval.ms */
                 if (rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN &&
+		    rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms >= 0 &&
                     rd_clock() > rkt->rkt_ts_metadata +
                     (rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms *
                      1000 * 3)) {

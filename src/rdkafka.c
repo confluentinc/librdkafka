@@ -1044,10 +1044,13 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		rd_kafka_topic_rdlock(rkt);
 		_st_printf("%s\"%.*s\": { "
 			   "\"topic\":\"%.*s\", "
+			   "\"metadata_age\":%"PRId64", "
 			   "\"partitions\":{ " /*open partitions*/,
 			   rkt==TAILQ_FIRST(&rk->rk_topics)?"":", ",
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
-			   RD_KAFKAP_STR_PR(rkt->rkt_topic));
+			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
+			   rkt->rkt_ts_metadata ?
+			   (rd_clock() - rkt->rkt_ts_metadata)/1000 : 0);
 
 		for (i = 0 ; i < rkt->rkt_partition_cnt ; i++)
 			rd_kafka_stats_emit_toppar(&buf, &size, &of,

@@ -126,9 +126,9 @@ void rd_kafka_timers_run (rd_kafka_t *rk, int timeout) {
 	rd_ts_t now = rd_clock();
 	rd_ts_t end = now + timeout;
 
-	rd_kafka_timers_lock(rk);
+        rd_kafka_timers_lock(rk);
 
-	while (now <= end) {
+	while (!rk->rk_terminate && now <= end) {
 		int64_t sleeptime;
 		rd_kafka_timer_t *rtmr;
 
@@ -151,9 +151,11 @@ void rd_kafka_timers_run (rd_kafka_t *rk, int timeout) {
 		       rtmr->rtmr_next <= now) {
 
 			rd_kafka_timer_unschedule(rk, rtmr);
+                        rd_kafka_timers_unlock(rk);
 
 			rtmr->rtmr_callback(rk, rtmr->rtmr_arg);
 
+                        rd_kafka_timers_lock(rk);
 			rd_kafka_timer_schedule(rk, rtmr);
 		}
 	}

@@ -521,6 +521,10 @@ void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp) {
         if (!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_OFFSET_STORE))
                 return;
 
+        if (rktp->rktp_stored_offset == 0 &&
+            rktp->rktp_eof_offset > 0)
+                rd_kafka_offset_store0(rktp, rktp->rktp_eof_offset,
+                                       0/*no lock*/);
         switch (rktp->rktp_rkt->rkt_conf.offset_store_method)
         {
         case RD_KAFKA_OFFSET_METHOD_FILE:

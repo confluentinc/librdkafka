@@ -28,7 +28,7 @@ Files: *
 Copyright: 2012-2013, Magnus Edenhill
 License: BSD-2-clause
 
-Files: rdcrc32.c rdcrc32.h
+Files: src/rdcrc32.c src/rdcrc32.h
 Copyright: 2006-2012, Thomas Pircher <tehpeh@gmx.net>
 License: MIT
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -49,7 +49,7 @@ License: MIT
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
 
-Files: snappy.c snappy.h snappy_compat.h
+Files: src/snappy.c src/snappy.h src/snappy_compat.h
 Copyright: 2005, Google Inc.
            2011, Intel Corporation
 License: BSD-3-clause

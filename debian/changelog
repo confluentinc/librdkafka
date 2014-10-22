@@ -1,3 +1,22 @@
+librdkafka (0.8.4-1) unstable; urgency=medium
+
+  * New upstream release, including a new build system.
+    - Add Build-Depends on perl, required by configure.
+    - Support multiarch library paths.
+    - Better detection of architecture atomic builtins, supporting more
+      architectures. (Closes: #739930)
+    - Various portability bugs fixed. (Closes: #730506)
+    - Update debian/librdkafka1.symbols.
+  * Convert to a multiarch package.
+  * Switch to Architecture: any, because of renewed upstream portability.
+  * Update debian/copyright to add src/ before Files: paths.
+  * Update Standards-Version to 3.9.6, no changes needed.
+  * Ship only the C library for now, not the new C++ library; the latter is
+    still in flux in some ways and will probably be shipped in a separate
+    package in a future release.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Wed, 22 Oct 2014 23:57:24 +0300
+
 librdkafka (0.8.3-1) unstable; urgency=medium
 
   * New upstream release.

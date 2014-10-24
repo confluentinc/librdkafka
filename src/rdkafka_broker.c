@@ -3878,6 +3878,17 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 			continue;
 		}
 
+                rd_rkb_dbg(rkb, QUEUE, "FETCH",
+                           "Topic %s [%"PRId32"] "
+                           "fetch queue %i (%"PRIu64"kb) >= queued.min.messages %i (queued.max.messages.kbytes %i)?",
+                           rktp->rktp_rkt->rkt_topic->str,
+                           rktp->rktp_partition,
+                           rd_kafka_q_len(&rktp->rktp_fetchq),
+                           rd_kafka_q_size(&rktp->rktp_fetchq) / 1024,
+                           rkb->rkb_rk->rk_conf.queued_min_msgs,
+                           rkb->rkb_rk->rk_conf.queued_max_msg_kbytes);
+
+
 		/* Skip toppars who's local message queue is already above
 		 * the lower threshold. */
 		if (rd_kafka_q_len(&rktp->rktp_fetchq) >=
@@ -3987,9 +3998,12 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
 		if (!rkb->rkb_fetching && rkb->rkb_ts_fetch_backoff < now)
 			cnt = rd_kafka_broker_fetch_toppars(rkb);
 
-		rd_rkb_dbg(rkb, BROKER, "FETCH",
-			   "Fetch for %i toppars, fetching=%i",
-			   cnt, rkb->rkb_fetching);
+		rd_rkb_dbg(rkb, QUEUE, "FETCH",
+			   "Fetch for %i toppars, fetching=%i, "
+                           "backoff=%"PRId64"ms",
+			   cnt, rkb->rkb_fetching,
+                           rkb->rkb_ts_fetch_backoff ?
+                           (rkb->rkb_ts_fetch_backoff - now)/1000 : 0);
 
 		/* Check and move retry buffers */
 		if (unlikely(rkb->rkb_retrybufs.rkbq_cnt) > 0)

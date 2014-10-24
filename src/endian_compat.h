@@ -28,7 +28,7 @@
 
 #ifdef __FreeBSD__
   #include <sys/endian.h>
-#elif defined __linux__
+#elif defined __GLIBC__
   #include <endian.h>
 #elif defined __CYGWIN__
  #include <endian.h>

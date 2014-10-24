@@ -1184,23 +1184,31 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 
 /**
+ * Returns a random broker (with refcnt increased) in state 'state'.
+ * Uses Reservoir sampling.
+ *
  * Locks: rd_kafka_rdlock(rk) MUST be held.
  * Locality: any thread
  */
 rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
-	rd_kafka_broker_t *rkb;
+	rd_kafka_broker_t *rkb, *good = NULL;
+        int cnt = 0;
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
 		if (rkb->rkb_state == state) {
-			rd_kafka_broker_keep(rkb);
-			rd_kafka_broker_unlock(rkb);
-			return rkb;
-		}
+                        if (cnt < 1 || rd_jitter(0, cnt) < 1) {
+                                if (good)
+                                        rd_kafka_broker_destroy(good);
+                                rd_kafka_broker_keep(rkb);
+                                good = rkb;
+                        }
+                        cnt += 1;
+                }
 		rd_kafka_broker_unlock(rkb);
 	}
 
-	return NULL;
+        return good;
 }
 
 
@@ -1255,8 +1263,10 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find (rd_kafka_broker_t *rkb,
 
 	TAILQ_FOREACH(rkbuf, &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link)
 		if (rkbuf->rkbuf_corrid == corrid) {
+			/* Convert ts_sent to RTT */
+			rkbuf->rkbuf_ts_sent = now - rkbuf->rkbuf_ts_sent;
 			rd_kafka_avg_add(&rkb->rkb_avg_rtt,
-					 now - rkbuf->rkbuf_ts_sent);
+					 rkbuf->rkbuf_ts_sent);
 
 			rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
 			return rkbuf;
@@ -1289,6 +1299,13 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_destroy(rkbuf);
                 return -1;
 	}
+
+	rd_rkb_dbg(rkb, PROTOCOL, "RECV",
+		   "Received %sResponse (%zd bytes, CorrId %"PRId32
+		   ", rtt %.2fms)",
+		   rd_kafka_ApiKey2str(ntohs(req->rkbuf_reqhdr.ApiKey)),
+		   rkbuf->rkbuf_len, rkbuf->rkbuf_reshdr.CorrId,
+		   (float)req->rkbuf_ts_sent / 1000.0f);
 
 	/* Call callback. Ownership of 'rkbuf' is delegated to callback. */
 	req->rkbuf_cb(rkb, 0, rkbuf, req, req->rkbuf_opaque);
@@ -1636,8 +1653,12 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rkb->rkb_pfd.events = POLLIN;
 
 	/* Request metadata (async) */
-	rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL, NULL,
-				     "connected");
+        rd_kafka_broker_metadata_req(rkb,
+                                     rkb->rkb_rk->rk_conf.
+                                     metadata_refresh_sparse ?
+                                     0 /* known topics */ : 1 /* all topics */,
+                                     NULL, NULL, "connected");
+
 	return 0;
 }
 
@@ -1690,6 +1711,12 @@ static int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		if (rkbuf->rkbuf_of < rkbuf->rkbuf_len) {
 			return 0;
 		}
+
+		rd_rkb_dbg(rkb, PROTOCOL, "SEND",
+			   "Sent %sRequest (%zd bytes, CorrId %"PRId32")",
+			   rd_kafka_ApiKey2str(ntohs(rkbuf->rkbuf_reqhdr.
+						     ApiKey)),
+			   rkbuf->rkbuf_len, rkbuf->rkbuf_corrid);
 
 		/* Entire buffer sent, unlink from outbuf */
 		rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
@@ -2391,7 +2418,8 @@ static void rd_kafka_broker_io_serve (rd_kafka_broker_t *rkb) {
 			rd_kafka_broker_op_serve(rkb, rko);
 
 	/* Periodic metadata poll */
-	if (unlikely(now >= rkb->rkb_ts_metadata_poll))
+	if (unlikely(!rkb->rkb_rk->rk_conf.metadata_refresh_sparse &&
+                     now >= rkb->rkb_ts_metadata_poll))
 		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
                                              NULL, "periodic refresh");
 
@@ -2904,7 +2932,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 err:
         /* Count all errors as partial message errors. */
-        rkb->rkb_c.rx_partial++;
+        rd_atomic_add(&rkb->rkb_c.rx_partial, 1);
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -3411,8 +3439,6 @@ rd_kafka_toppar_offsetfetch_reply_handle (rd_kafka_broker_t *rkb,
 	int32_t TopicArrayCnt;
 	int i;
         const int log_decode_errors = 1;
-
-        rd_hexdump(stdout, "pkt", buf, size);
 
 	_READ_I32(&TopicArrayCnt);
 	for (i = 0 ; i < TopicArrayCnt ; i++) {

@@ -10,7 +10,8 @@ metadata.request.timeout.ms              |  *  |         60000 | Non-topic reque
 topic.metadata.refresh.interval.ms       |  *  |         10000 | Topic metadata refresh interval in milliseconds. The metadata is automatically refreshed on error and connect. Use -1 to disable the intervalled refresh.
 topic.metadata.refresh.fast.cnt          |  *  |            10 | When a topic looses its leader this number of metadata requests are sent with `topic.metadata.refresh.fast.interval.ms` interval disregarding the `topic.metadata.refresh.interval.ms` value. This is used to recover quickly from transitioning leader brokers.
 topic.metadata.refresh.fast.interval.ms  |  *  |           250 | See `topic.metadata.refresh.fast.cnt` description
-debug                                    |  *  |               | A comma-separated list of debug contexts to enable: all,generic,broker,topic,metadata,producer,queue,msg
+topic.metadata.refresh.sparse            |  *  |         false | Sparse metadata requests (consumes less network bandwidth)
+debug                                    |  *  |               | A comma-separated list of debug contexts to enable: all,generic,broker,topic,metadata,producer,queue,msg,protocol
 socket.timeout.ms                        |  *  |         60000 | Timeout for network requests.
 socket.send.buffer.bytes                 |  *  |             0 | Broker socket send buffer size. System default is used if 0.
 socket.receive.buffer.bytes              |  *  |             0 | Broker socket receive buffer size. System default is used if 0.

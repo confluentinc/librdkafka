@@ -37,7 +37,11 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/time.h>
+
+#ifndef __FreeBSD__
+/* alloca(3) is in stdlib on FreeBSD */
 #include <alloca.h>
+#endif
 #include <assert.h>
 #include <pthread.h>
 
@@ -97,7 +101,7 @@
 #ifdef sun
 #include <sys/isa_defs.h>
 #include <sys/byteorder.h>
-# if _BIG_ENDIAN
+# ifdef _BIG_ENDIAN
 #define be64toh(x) (x)
 #define htobe64(x) (x)
 # else
@@ -109,6 +113,11 @@
 #define htobe64(x)  htonll(x)
 # endif
 #endif /* sun */
+
+#ifdef __FreeBSD__
+/* FreeBSD defines be64toh() in sys/endian.h */
+#include <sys/endian.h>
+#endif
 
 #ifndef be64toh
 #ifndef __APPLE__

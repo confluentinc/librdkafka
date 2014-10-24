@@ -37,6 +37,9 @@
 int test_level = 2;
 int test_seed = 0;
 
+static char test_topic_prefix[128] = "rdkafkatest";
+static int  test_topic_random = 0;
+
 static void sig_alarm (int sig) {
 	TEST_FAIL("Test timed out");
 }
@@ -65,6 +68,21 @@ static void test_init (void) {
 }
 
 
+const char *test_mk_topic_name (const char *suffix, int randomized) {
+        static __thread char ret[128];
+
+        if (test_topic_random || randomized)
+                snprintf(ret, sizeof(ret), "%s_%"PRIx64"_%s",
+                         test_topic_prefix, test_id_generate(), suffix);
+        else
+                snprintf(ret, sizeof(ret), "%s_%s", test_topic_prefix, suffix);
+
+        TEST_SAY("Using topic \"%s\"\n", ret);
+
+        return ret;
+}
+
+
 /**
  * Creates and sets up kafka configuration objects.
  * Will read "test.conf" file if it exists.
@@ -79,14 +97,12 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 
 	test_init();
 
-	/* Limit the test run time. */
-	alarm(timeout);
-	signal(SIGALRM, sig_alarm);
+        if (conf) {
+                *conf = rd_kafka_conf_new();
+                *topic_conf = rd_kafka_topic_conf_new();
 
-	*conf = rd_kafka_conf_new();
-	*topic_conf = rd_kafka_topic_conf_new();
-
-	rd_kafka_conf_set_error_cb(*conf, test_error_cb);
+                rd_kafka_conf_set_error_cb(*conf, test_error_cb);
+        }
 
 	/* Open and read optional local test configuration file, if any. */
 	if (!(fp = fopen(test_conf, "r"))) {
@@ -100,7 +116,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 	while (fgets(buf, sizeof(buf)-1, fp)) {
 		char *t;
 		char *b = buf;
-		rd_kafka_conf_res_t res;
+		rd_kafka_conf_res_t res = RD_KAFKA_CONF_UNKNOWN;
 		char *name, *val;
 
 		line++;
@@ -118,15 +134,40 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		*t = '\0';
 		val = t+1;
 
-		if (!strncmp(name, "topic.", strlen("topic."))) {
+                if (!strcmp(name, "test.timeout.multiplier")) {
+                        timeout = (float)timeout * strtod(val, NULL);
+                        res = RD_KAFKA_CONF_OK;
+                } else if (!strcmp(name, "test.topic.prefix")) {
+                        strncpy(test_topic_prefix, val,
+                                sizeof(test_topic_prefix)-1);
+                        res = RD_KAFKA_CONF_OK;
+                } else if (!strcmp(name, "test.topic.random")) {
+                        if (!strcmp(val, "true") ||
+                            !strcmp(val, "1"))
+                                test_topic_random = 1;
+                        else
+                                test_topic_random = 0;
+                        res = RD_KAFKA_CONF_OK;
+                } else if (!strncmp(name, "topic.", strlen("topic."))) {
 			name += strlen("topic.");
-			res = rd_kafka_topic_conf_set(*topic_conf,
-						      name, val,
-						      errstr, sizeof(errstr));
-		} else
-			res = rd_kafka_conf_set(*conf,
-						name, val,
-						errstr, sizeof(errstr));
+                        if (conf)
+                                res = rd_kafka_topic_conf_set(*topic_conf,
+                                                              name, val,
+                                                              errstr,
+                                                              sizeof(errstr));
+                        else
+                                res = RD_KAFKA_CONF_OK;
+                        name -= strlen("topic.");
+                }
+
+                if (res == RD_KAFKA_CONF_UNKNOWN) {
+                        if (conf)
+                                res = rd_kafka_conf_set(*conf,
+                                                        name, val,
+                                                        errstr, sizeof(errstr));
+                        else
+                                res = RD_KAFKA_CONF_OK;
+                }
 
 		if (res != RD_KAFKA_CONF_OK)
 			TEST_FAIL("%s:%i: %s\n",
@@ -134,6 +175,10 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 	}
 
 	fclose(fp);
+
+	/* Limit the test run time. */
+	alarm(timeout);
+	signal(SIGALRM, sig_alarm);
 }
 
 

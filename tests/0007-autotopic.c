@@ -72,7 +72,6 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 
 
 int main (int argc, char **argv) {
-	char topic[64];
 	int partition = 0;
 	int r;
 	rd_kafka_t *rk;
@@ -86,9 +85,6 @@ int main (int argc, char **argv) {
 
 	/* Generate unique topic name */
 	test_conf_init(&conf, &topic_conf, 10);
-
-	snprintf(topic, sizeof(topic), "rdkafkatest1_auto_%x%x",
-		 rand(), rand());
 
 	TEST_SAY("\033[33mNOTE! This test requires "
 		 "auto.create.topics.enable=true to be configured on "
@@ -105,7 +101,8 @@ int main (int argc, char **argv) {
 
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
-	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("autotopic", 1),
+                                 topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
 			  strerror(errno));

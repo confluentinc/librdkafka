@@ -124,6 +124,7 @@ struct rd_kafka_conf_s {
 	int     metadata_refresh_interval_ms;
 	int     metadata_refresh_fast_cnt;
 	int     metadata_refresh_fast_interval_ms;
+        int     metadata_refresh_sparse;
 	int     debug;
 	int     broker_addr_ttl;
         int     broker_addr_family;
@@ -407,7 +408,8 @@ typedef struct rd_kafka_buf_s {
 	int     rkbuf_retries;
 
 	rd_ts_t rkbuf_ts_enq;
-	rd_ts_t rkbuf_ts_sent;
+	rd_ts_t rkbuf_ts_sent;    /* Initially: Absolute time of transmission,
+				   * after response: RTT. */
 	rd_ts_t rkbuf_ts_timeout;
 
         int64_t rkbuf_offset;  /* Used by OffsetCommit */
@@ -785,6 +787,7 @@ struct rd_kafka_s {
 #define RD_KAFKA_DBG_PRODUCER   0x10
 #define RD_KAFKA_DBG_QUEUE      0x20
 #define RD_KAFKA_DBG_MSG        0x40
+#define RD_KAFKA_DBG_PROTOCOL   0x80
 #define RD_KAFKA_DBG_ALL        0xff
 
 

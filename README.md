@@ -18,6 +18,8 @@ For an introduction to the performance and usage of librdkafka, see
 
 **NOTE**: The `master` branch is actively developed, use latest release for production use.
 
+[![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
+
 **Apache Kafka 0.8 support:**
 
   * Branch: master
@@ -70,6 +72,7 @@ For an introduction to the performance and usage of librdkafka, see
   * [haskell-kafka](https://github.com/yanatan16/haskell-kafka) - Haskell
   * [Hermann](https://github.com/stancampbell3/Hermann) - Ruby
   * large unnamed financial institution
+  * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
 

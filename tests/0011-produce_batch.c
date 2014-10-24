@@ -71,7 +71,6 @@ static void dr_single_partition_cb (rd_kafka_t *rk, void *payload, size_t len,
 
 /* Produce a batch of messages to a single partition. */
 static void test_single_partition (void) {
-	char *topic = "rdkafkatest1";
 	int partition = 0;
 	int r;
 	rd_kafka_t *rk;
@@ -100,7 +99,8 @@ static void test_single_partition (void) {
 
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
-	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("generic", 0),
+                                 topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
 			  strerror(errno));
@@ -198,7 +198,6 @@ static void dr_partitioner_cb (rd_kafka_t *rk, void *payload, size_t len,
 
 /* Produce a batch of messages using random (default) partitioner */
 static void test_partitioner (void) {
-	char *topic = "rdkafkatest1";
 	int partition = RD_KAFKA_PARTITION_UA;
 	int r;
 	rd_kafka_t *rk;
@@ -227,7 +226,8 @@ static void test_partitioner (void) {
 
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
-	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("generic", 0),
+                                 topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
 			  strerror(errno));

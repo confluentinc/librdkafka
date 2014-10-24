@@ -101,7 +101,7 @@ int pthread_cond_timedwait_ms (pthread_cond_t *cond,
 	ts.tv_sec  += timeout_ms / 1000;
 	ts.tv_nsec += (timeout_ms % 1000) * 1000000;
 
-	if (ts.tv_nsec > 1000000000) {
+	if (ts.tv_nsec >= 1000000000) {
 		ts.tv_sec++;
 		ts.tv_nsec -= 1000000000;
 	}
@@ -530,7 +530,7 @@ static int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 	TIMEVAL_TO_TIMESPEC(&tv, &ts);
 	ts.tv_sec  += timeout_ms / 1000;
 	ts.tv_nsec += (timeout_ms % 1000) * 1000000;
-	if (ts.tv_nsec > 1000000000) {
+	if (ts.tv_nsec >= 1000000000) {
 		ts.tv_sec++;
 		ts.tv_nsec -= 1000000000;
 	}
@@ -1044,10 +1044,13 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		rd_kafka_topic_rdlock(rkt);
 		_st_printf("%s\"%.*s\": { "
 			   "\"topic\":\"%.*s\", "
+			   "\"metadata_age\":%"PRId64", "
 			   "\"partitions\":{ " /*open partitions*/,
 			   rkt==TAILQ_FIRST(&rk->rk_topics)?"":", ",
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
-			   RD_KAFKAP_STR_PR(rkt->rkt_topic));
+			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
+			   rkt->rkt_ts_metadata ?
+			   (rd_clock() - rkt->rkt_ts_metadata)/1000 : 0);
 
 		for (i = 0 ; i < rkt->rkt_partition_cnt ; i++)
 			rd_kafka_stats_emit_toppar(&buf, &size, &of,
@@ -1088,6 +1091,25 @@ static void rd_kafka_stats_emit_tmr_cb (rd_kafka_t *rk, void *arg) {
 	rd_kafka_stats_emit_all(rk);
 }
 
+static void rd_kafka_metadata_refresh_cb (rd_kafka_t *rk, void *arg) {
+        rd_kafka_broker_t *rkb;
+
+        rd_kafka_rdlock(rk);
+        rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP);
+        rd_kafka_unlock(rk);
+
+        if (!rkb)
+                return;
+
+        if (rk->rk_conf.metadata_refresh_sparse)
+                rd_kafka_broker_metadata_req(rkb, 0 /* known topics */, NULL,
+                                             NULL, "sparse periodic refresh");
+        else
+                rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
+                                             NULL, "periodic refresh");
+}
+
+
 /**
  * Main loop for Kafka handler thread.
  */
@@ -1095,6 +1117,7 @@ static void *rd_kafka_thread_main (void *arg) {
 	rd_kafka_t *rk = arg;
 	rd_kafka_timer_t tmr_topic_scan = {};
 	rd_kafka_timer_t tmr_stats_emit = {};
+	rd_kafka_timer_t tmr_metadata_refresh = {};
 
 	(void)rd_atomic_add(&rd_kafka_thread_cnt_curr, 1);
 
@@ -1103,6 +1126,11 @@ static void *rd_kafka_thread_main (void *arg) {
 	rd_kafka_timer_start(rk, &tmr_stats_emit,
 			     rk->rk_conf.stats_interval_ms * 1000,
 			     rd_kafka_stats_emit_tmr_cb, NULL);
+        if (rk->rk_conf.metadata_refresh_interval_ms >= 0)
+                rd_kafka_timer_start(rk, &tmr_metadata_refresh,
+                                     rk->rk_conf.metadata_refresh_interval_ms *
+                                     1000,
+                                     rd_kafka_metadata_refresh_cb, NULL);
 
 	while (likely(rk->rk_terminate == 0)) {
 		rd_kafka_timers_run(rk, 1000000);

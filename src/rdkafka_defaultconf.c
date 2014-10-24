@@ -110,6 +110,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(metadata_refresh_fast_interval_ms),
 	  "See `topic.metadata.refresh.fast.cnt` description",
 	  1, 60*1000, 250 },
+        { _RK_GLOBAL, "topic.metadata.refresh.sparse", _RK_C_BOOL,
+          _RK(metadata_refresh_sparse),
+          "Sparse metadata requests (consumes less network bandwidth)",
+          0, 1, 0 },
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
 	  "A comma-separated list of debug contexts to enable: "
 	  RD_KAFKA_DEBUG_CONTEXTS,
@@ -121,6 +125,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ RD_KAFKA_DBG_PRODUCER, "producer" },
 			{ RD_KAFKA_DBG_QUEUE,    "queue" },
 			{ RD_KAFKA_DBG_MSG,      "msg" },
+			{ RD_KAFKA_DBG_PROTOCOL, "protocol" },
 			{ RD_KAFKA_DBG_ALL,      "all" },
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
@@ -233,7 +238,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(fetch_error_backoff_ms),
 	  "How long to postpone the next fetch request for a "
 	  "topic+partition in case of a fetch error.",
-	  1, 300*1000, 500 },
+	  0, 300*1000, 500 },
         { _RK_GLOBAL|_RK_CONSUMER, "group.id", _RK_C_STR,
           _RK(group_id_str),
           "Consumer group id string. All clients sharing the same group.id "

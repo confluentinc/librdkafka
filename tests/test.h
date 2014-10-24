@@ -45,6 +45,8 @@ extern int test_seed;
 	} while(0)
 
 
+const char *test_mk_topic_name (const char *suffix, int randomized);
+
 void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		     int timeout);
 

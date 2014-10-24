@@ -76,7 +76,6 @@ mklove-check:
 lib: $(LIBFILENAME) $(LIBNAME).a
 
 $(LIBFILENAME): $(OBJS) $(LIBNAME).lds
-	echo "uname is $(_UNAME_S);"
 	@echo "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)"
 	$(CC) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS)
 

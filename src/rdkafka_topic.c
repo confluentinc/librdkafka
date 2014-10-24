@@ -436,17 +436,19 @@ void rd_kafka_topic_destroy (rd_kafka_topic_t *rkt) {
  * Locality: any thread
  */
 rd_kafka_topic_t *rd_kafka_topic_find (rd_kafka_t *rk,
-				       const char *topic) {
+				       const char *topic, int do_lock) {
 	rd_kafka_topic_t *rkt;
 
-	rd_kafka_rdlock(rk);
+        if (do_lock)
+                rd_kafka_rdlock(rk);
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		if (!rd_kafkap_str_cmp_str(rkt->rkt_topic, topic)) {
 			rd_kafka_topic_keep(rkt);
 			break;
 		}
 	}
-	rd_kafka_unlock(rk);
+        if (do_lock)
+                rd_kafka_unlock(rk);
 
 	return rkt;
 }
@@ -489,8 +491,11 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 		return NULL;
 	}
 
-	if ((rkt = rd_kafka_topic_find(rk, topic)))
+        rd_kafka_wrlock(rk);
+	if ((rkt = rd_kafka_topic_find(rk, topic, 0/*no lock*/))) {
+                rd_kafka_unlock(rk);
 		return rkt;
+        }
 
 	rkt = calloc(1, sizeof(*rkt));
 
@@ -518,7 +523,6 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	/* Create unassigned partition */
 	rkt->rkt_ua = rd_kafka_toppar_new(rkt, RD_KAFKA_PARTITION_UA);
 
-	rd_kafka_wrlock(rk);
 	TAILQ_INSERT_TAIL(&rk->rk_topics, rkt, rkt_link);
 	rk->rk_topic_cnt++;
 	rd_kafka_unlock(rk);
@@ -956,7 +960,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
         rd_kafka_broker_t **partbrokers;
         int query_leader = 0;
 
-	if (!(rkt = rd_kafka_topic_find(rkb->rkb_rk, mdt->topic)))
+	if (!(rkt = rd_kafka_topic_find(rkb->rkb_rk, mdt->topic, 1/*lock*/)))
 		return -1; /* Ignore topics that we dont have locally. */
 
 	if (mdt->err != RD_KAFKA_RESP_ERR_NO_ERROR)
@@ -1063,6 +1067,7 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                 /* Check if metadata information has timed out:
                  * older than 3 times the metadata.refresh.interval.ms */
                 if (rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN &&
+		    rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms >= 0 &&
                     rd_clock() > rkt->rkt_ts_metadata +
                     (rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms *
                      1000 * 3)) {

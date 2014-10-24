@@ -1,6 +1,6 @@
 Name:    librdkafka
 # NOTE: Make sure to update this to match rdkafka.h version
-Version: 0.8.4
+Version: 0.8.5
 Release: 0
 %define soname 1
 
@@ -80,6 +80,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Fri Oct 24 2014 Magnus Edenhill <rdkafka@edenhill.se> 0.8.5-0
+- 0.8.5 release
+
 * Mon Aug 18 2014 Magnus Edenhill <rdkafka@edenhill.se> 0.8.4-0
 - 0.8.4 release
 

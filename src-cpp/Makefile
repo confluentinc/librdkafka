@@ -15,7 +15,6 @@ OBJS=		$(CXXSRCS:%.cpp=%.o)
 all: lib check
 
 
-LIBS = -L../src -lrdkafka
 include ../mklove/Makefile.base
 
 # No linker script/symbol hiding for C++ library

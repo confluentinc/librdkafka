@@ -1,3 +1,11 @@
+librdkafka (0.8.5-1) unstable; urgency=medium
+
+  * New upstream release.
+    - Fixes kFreeBSD FTBFS.
+  * Ship rdkafka.pc pkg-config in librdkafka-dev.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Fri, 24 Oct 2014 18:03:22 +0300
+
 librdkafka (0.8.4-1) unstable; urgency=medium
 
   * New upstream release, including a new build system.

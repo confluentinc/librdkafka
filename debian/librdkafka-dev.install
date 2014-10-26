@@ -1,5 +1,3 @@
 usr/include/*/rdkafka.h
 usr/lib/*/librdkafka.a
 usr/lib/*/librdkafka.so
-
-rdkafka.pc	/usr/share/pkg-config

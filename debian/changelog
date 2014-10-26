@@ -1,3 +1,9 @@
+librdkafka (0.8.5-2) unstable; urgency=medium
+
+  * Install rdkafka.pc in the right, multiarch location. (Closes: #766759)
+
+ -- Faidon Liambotis <paravoid@debian.org>  Sun, 26 Oct 2014 06:47:07 +0200
+
 librdkafka (0.8.5-1) unstable; urgency=medium
 
   * New upstream release.

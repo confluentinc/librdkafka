@@ -3553,9 +3553,15 @@ rd_kafka_toppar_offset_reply_handle (rd_kafka_broker_t *rkb,
 			/* Adjust by TAIL count if, if wanted */
 			if (rktp->rktp_query_offset <=
                             RD_KAFKA_OFFSET_TAIL_BASE) {
+				int64_t orig_Offset = Offset;
 				int64_t tail_cnt =
 					llabs(rktp->rktp_query_offset -
                                               RD_KAFKA_OFFSET_TAIL_BASE);
+
+				if (tail_cnt > Offset)
+					Offset = 0;
+				else
+					Offset -= tail_cnt;
 
 				rd_rkb_dbg(rkb, TOPIC, "OFFSET",
 					   "OffsetReply for "
@@ -3565,13 +3571,8 @@ rd_kafka_toppar_offset_reply_handle (rd_kafka_broker_t *rkb,
 					   "effective offset %"PRId64,
 					   rktp->rktp_rkt->rkt_topic->str,
 					   rktp->rktp_partition,
-					   Offset, tail_cnt,
-					   Offset - tail_cnt);
-
-				if (tail_cnt > Offset)
-					return RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE;
-
-				Offset -= tail_cnt;
+					   orig_Offset, tail_cnt,
+					   Offset);
 			}
 
 			rd_rkb_dbg(rkb, TOPIC, "OFFSET",

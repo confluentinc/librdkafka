@@ -4163,9 +4163,12 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
          * To avoid race condition we block all signals in the calling
          * thread, which the new thread will inherit its sigmask from,
          * and then restore the original sigmask of the calling thread when
-         * we're done creating the thread. */
+         * we're done creating the thread.
+	 * NOTE: SIGIO remains unblocked since we use it on termination
+	 *       to quickly interrupt system calls. */
         sigemptyset(&oldset);
         sigfillset(&newset);
+	sigdelset(&newset, SIGIO);
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 
 	pthread_attr_init(&attr);

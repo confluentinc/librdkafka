@@ -841,6 +841,7 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
  *       librdkafka itself must use rd_kafka_destroy0(). */
 void rd_kafka_destroy (rd_kafka_t *rk) {
 	rd_kafka_topic_t *rkt, *rkt_tmp;
+	rd_kafka_broker_t *rkb;
 
 	rd_kafka_dbg(rk, GENERIC, "DESTROY", "Terminating instance");
 	(void)rd_atomic_add(&rk->rk_terminate, 1);
@@ -852,6 +853,12 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 		rd_kafka_topic_partitions_remove(rkt);
 		rd_kafka_rdlock(rk);
 	}
+
+	/* Interrupt all threads to speed up termination. */
+	pthread_kill(rk->rk_thread, SIGIO);
+	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link)
+		pthread_kill(rkb->rkb_thread, SIGIO);
+
 	rd_kafka_unlock(rk);
 
 	/* Brokers pick up on rk_terminate automatically. */
@@ -1226,9 +1233,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
          * To avoid race condition we block all signals in the calling
          * thread, which the new thread will inherit its sigmask from,
          * and then restore the original sigmask of the calling thread when
-         * we're done creating the thread. */
+         * we're done creating the thread.
+	 * NOTE: SIGIO remains unblocked since we use it on termination
+	 *       to quickly interrupt system calls. */
         sigemptyset(&oldset);
         sigfillset(&newset);
+	sigdelset(&newset, SIGIO);
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 
 	/* Create handler thread */

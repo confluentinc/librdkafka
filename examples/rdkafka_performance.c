@@ -540,6 +540,11 @@ int main (int argc, char **argv) {
 	rd_kafka_conf_set_error_cb(conf, err_cb);
 	rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered);
 
+	/* Quick termination */
+	snprintf(tmp, sizeof(tmp), "%i", SIGIO);
+	rd_kafka_conf_set(conf, "internal.termination.signal", tmp, NULL, 0);
+
+
 	/* Producer config */
 	rd_kafka_conf_set(conf, "queue.buffering.max.messages", "500000",
 			  NULL, 0);

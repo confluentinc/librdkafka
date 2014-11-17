@@ -205,6 +205,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "opaque", _RK_C_PTR,
 	  _RK(opaque),
 	  "Application opaque (set with rd_kafka_conf_set_opaque())" },
+	{ _RK_GLOBAL, "internal.termination.signal", _RK_C_INT,
+	  _RK(term_sig),
+	  "Signal that librdkafka will use to quickly terminate on "
+	  "rd_kafka_destroy(). If this signal is not set then there will be a "
+	  "delay before rd_kafka_wait_destroyed() returns true "
+	  "as internal threads are timing out their system calls. "
+	  "If this signal is set however the delay will be minimal. "
+	  "The application should mask this signal as an internal "
+	  "signal handler is installed.",
+	  0, 128, 0 },
 
 	/* Global consumer properties */
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,

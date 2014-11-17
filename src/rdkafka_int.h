@@ -136,6 +136,7 @@ struct rd_kafka_conf_s {
 	char   *clientid;
 	char   *brokerlist;
 	int     stats_interval_ms;
+	int     term_sig;
 
 	/*
 	 * Consumer configuration

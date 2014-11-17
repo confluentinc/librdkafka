@@ -854,10 +854,13 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 		rd_kafka_rdlock(rk);
 	}
 
-	/* Interrupt all threads to speed up termination. */
-	pthread_kill(rk->rk_thread, SIGIO);
-	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link)
-		pthread_kill(rkb->rkb_thread, SIGIO);
+	rd_kafka_timers_interrupt(rk);
+
+	/* Interrupt all IO threads to speed up termination. */
+	if (rk->rk_conf.term_sig) {
+		TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link)
+			pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
+	}
 
 	rd_kafka_unlock(rk);
 
@@ -1151,6 +1154,10 @@ static void *rd_kafka_thread_main (void *arg) {
 }
 
 
+static void rd_kafka_term_sig_handler (int sig) {
+	/* nop */
+}
+
 static void rd_kafka_global_init (void) {
 }
 
@@ -1233,12 +1240,15 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
          * To avoid race condition we block all signals in the calling
          * thread, which the new thread will inherit its sigmask from,
          * and then restore the original sigmask of the calling thread when
-         * we're done creating the thread.
-	 * NOTE: SIGIO remains unblocked since we use it on termination
-	 *       to quickly interrupt system calls. */
+         * we're done creating the thread. */
         sigemptyset(&oldset);
         sigfillset(&newset);
-	sigdelset(&newset, SIGIO);
+	if (rk->rk_conf.term_sig) {
+		struct sigaction sa_term = {
+			.sa_handler = rd_kafka_term_sig_handler
+		};
+		sigaction(rk->rk_conf.term_sig, &sa_term, NULL);
+	}
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 
 	/* Create handler thread */

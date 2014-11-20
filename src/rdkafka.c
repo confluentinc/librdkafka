@@ -910,6 +910,7 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   "\"query_offset\":%"PRId64", "
 		   "\"next_offset\":%"PRId64", "
 		   "\"app_offset\":%"PRId64", "
+		   "\"stored_offset\":%"PRId64", "
 		   "\"commited_offset\":%"PRId64", " /*FIXME: issue #80 */
 		   "\"committed_offset\":%"PRId64", "
 		   "\"eof_offset\":%"PRId64", "
@@ -933,6 +934,7 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rktp->rktp_query_offset,
 		   rktp->rktp_next_offset,
 		   rktp->rktp_app_offset,
+		   rktp->rktp_stored_offset,
 		   rktp->rktp_commited_offset, /* FIXME: issue #80 */
 		   rktp->rktp_commited_offset,
 		   rktp->rktp_eof_offset,

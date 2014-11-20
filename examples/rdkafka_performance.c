@@ -56,6 +56,7 @@ static int dr_disp_div;
 static int verbosity = 1;
 static int latency_mode = 0;
 static int report_offset = 0;
+static FILE *latency_fp = NULL;
 
 static void stop (int sig) {
         if (!run)
@@ -227,13 +228,15 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
                                 cnt.latency_last = ts;
                                 cnt.latency_cnt++;
                                 cnt.latency_sum += ts;
+				if (latency_fp)
+					fprintf(latency_fp, "%"PRIu64"\n", ts);
                         } else {
                                 if (verbosity >= 1)
                                         printf("Received latency timestamp is too far off: %"PRId64"us (message offset %"PRId64"): ignored\n",
                                                ts, rkmessage->offset);
                         }
-                } else
-                        printf("not a  LATENCY: %.*s\n",
+                } else if (verbosity > 1)
+                        printf("not a LATENCY payload: %.*s\n",
                                (int)rkmessage->len,
                                (char *)rkmessage->payload);
 
@@ -568,7 +571,7 @@ int main (int argc, char **argv) {
 	while ((opt =
 		getopt(argc, argv,
 		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:"
-                       "R:a:z:o:X:B:eT:G:qvIur:lO")) != -1) {
+                       "R:a:z:o:X:B:eT:G:qvIur:lA:O")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -737,6 +740,15 @@ int main (int argc, char **argv) {
 
                 case 'l':
                         latency_mode = 1;
+			break;
+
+		case 'A':
+			if (!(latency_fp = fopen(optarg, "w"))) {
+				fprintf(stderr,
+					"%% Cant open %s: %s\n",
+					optarg, strerror(errno));
+				exit(1);
+			}
                         break;
 
                 case 'O':
@@ -805,6 +817,8 @@ int main (int argc, char **argv) {
                         "               Needs two matching instances, one\n"
                         "               consumer and one producer, both\n"
                         "               running with the -l switch.\n"
+			"  -A <file>    Write per-message latency stats to "
+			"<file>. Requires -l\n"
                         "  -O           Report produced offset (producer)\n"
 			"\n"
 			" In Consumer mode:\n"
@@ -1185,6 +1199,9 @@ int main (int argc, char **argv) {
 	if (cnt.t_fetch_latency && cnt.msgs)
 		printf("%% Average application fetch latency: %"PRIu64"us\n",
 		       cnt.t_fetch_latency / cnt.msgs);
+
+	if (latency_fp)
+		fclose(latency_fp);
 
         if (stats_cmd) {
                 pclose(stats_fp);

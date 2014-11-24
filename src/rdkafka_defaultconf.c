@@ -270,7 +270,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(max_retries),
 	  "How many times to retry sending a failing MessageSet. "
 	  "**Note:** retrying may cause reordering.",
-	  0, 100, 2 },
+	  0, 10000000, 2 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "retry.backoff.ms", _RK_C_INT,
 	  _RK(retry_backoff_ms),
 	  "The backoff time in milliseconds before retrying a message send.",

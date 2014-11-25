@@ -259,6 +259,9 @@ class HandleImpl : virtual public Handle {
 
   void set_common_config (RdKafka::ConfImpl *confimpl);
 
+  RdKafka::ErrorCode metadata (bool all_topics,const Topic *only_rkt,
+            Metadata **metadatap, int timeout_ms);
+
 
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
@@ -300,8 +303,33 @@ class TopicImpl : public Topic {
 };
 
 
+class MetadataImpl : public Metadata {
+ public:
+  MetadataImpl(const rd_kafka_metadata_t *metadata);
+  ~MetadataImpl();
+  
+  const std::vector<const BrokerMetadata *> *brokers() const {
+    return &brokers_;
+  }
 
+  const std::vector<const TopicMetadata *>  *topics() const {
+    return &topics_;
+  }
 
+  const std::string orig_broker_name() const {
+    return std::string(metadata_->orig_broker_name);
+  }
+
+  int32_t orig_broker_id() const {
+    return metadata_->orig_broker_id;
+  } 
+ 
+ private:
+  const rd_kafka_metadata_t *metadata_;
+  std::vector<const BrokerMetadata *> brokers_;
+  std::vector<const TopicMetadata *> topics_;
+  std::string orig_broker_name_;
+};
 
 
 class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {

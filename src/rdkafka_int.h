@@ -403,6 +403,12 @@ typedef struct rd_kafka_buf_s {
 			   struct rd_kafka_buf_s *reqrkbuf,
 			   void *opaque);
 
+        /* Handler callback: called after response has been parsed.
+         * The arguments are not predefined but varies depending on
+         * response type. */
+        void  (*rkbuf_hndcb) (void *);
+        void   *rkbuf_hndopaque;
+
 	int     rkbuf_refcnt;
 	void   *rkbuf_opaque;
 
@@ -677,6 +683,9 @@ typedef struct rd_kafka_toppar_s {
 						     * commit */
 	int64_t            rktp_eof_offset;      /* The last offset we reported
 						  * EOF for. */
+        int64_t            rktp_lo_offset;       /* Current broker low offset */
+        int64_t            rktp_hi_offset;       /* Current broker hi offset */
+        rd_ts_t            rktp_ts_offset_lag;
 
 	char              *rktp_offset_path;     /* Path to offset file */
 	int                rktp_offset_fd;       /* Offset file fd */

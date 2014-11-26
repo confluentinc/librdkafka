@@ -894,6 +894,16 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 	char *buf = *bufp;
 	size_t size = *sizep;
 	int of = *ofp;
+        int64_t consumer_lag = -1;
+
+
+        if (rktp->rktp_hi_offset != -1 && rktp->rktp_next_offset > 0) {
+                if (rktp->rktp_next_offset > rktp->rktp_hi_offset)
+                        consumer_lag = 0;
+                else
+                        consumer_lag = rktp->rktp_hi_offset -
+                                rktp->rktp_next_offset;
+        }
 
 	_st_printf("%s\"%"PRId32"\": { "
 		   "\"partition\":%"PRId32", "
@@ -914,6 +924,9 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   "\"commited_offset\":%"PRId64", " /*FIXME: issue #80 */
 		   "\"committed_offset\":%"PRId64", "
 		   "\"eof_offset\":%"PRId64", "
+		   "\"lo_offset\":%"PRId64", "
+		   "\"hi_offset\":%"PRId64", "
+                   "\"consumer_lag\":%"PRId64", "
 		   "\"txmsgs\":%"PRIu64", "
 		   "\"txbytes\":%"PRIu64", "
                    "\"msgs\": %"PRIu64" "
@@ -938,6 +951,9 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rktp->rktp_commited_offset, /* FIXME: issue #80 */
 		   rktp->rktp_commited_offset,
 		   rktp->rktp_eof_offset,
+		   rktp->rktp_lo_offset,
+		   rktp->rktp_hi_offset,
+                   consumer_lag,
 		   rktp->rktp_c.tx_msgs,
 		   rktp->rktp_c.tx_bytes,
 		   rktp->rktp_c.msgs);

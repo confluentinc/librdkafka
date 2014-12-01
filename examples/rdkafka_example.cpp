@@ -48,61 +48,67 @@
  */
 #include "rdkafkacpp.h"
 
+
 static void metadata_print (const std::string &topic,
                             const RdKafka::Metadata *metadata) {
-        std::cout << "Metadata for " 
-                 << (topic.empty() ? "" : "all topics")
-                 << "(from broker "
-                 << metadata->orig_broker_id()
-                 << ":" << metadata->orig_broker_name()
-                 << std::endl;
+  std::cout << "Metadata for " << (topic.empty() ? "" : "all topics")
+           << "(from broker "  << metadata->orig_broker_id()
+           << ":" << metadata->orig_broker_name() << std::endl;
 
-        /* Iterate brokers */
-        std::cout << " " << metadata->brokers()->size() << " brokers:" << std::endl;
-        RdKafka::Metadata::BrokerMetadataIterator ib;
-        for (ib = metadata->brokers()->begin() ; ib != metadata->brokers()->end(); ++ib)
-                std::cout << "  broker " << (*ib)->id() 
-                         << " at "
-                         << (*ib)->host()
-                         << ":" 
-                         << (*ib)->port() << std::endl;
-        /* Iterate topics */        
-        std::cout << metadata->topics()->size() << " topics:" << std::endl;
-        RdKafka::Metadata::TopicMetadataIterator it;
-        for (it = metadata->topics()->begin() ; it != metadata->topics()->end() ; ++it) {
-                std::cout << "  topic "<< *(*it)->topic() << " with " 
-                         << (*it)->partitions()->size() << " partitions" << std::endl;
-                
-                if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
-                        std::cout << " " << err2str((*it)->err());
-                        if ((*it)->err() == RdKafka::ERR_LEADER_NOT_AVAILABLE)
-                                std::cout << " (try again)";
-                }
-                std::cout << std::endl;
+  /* Iterate brokers */
+  std::cout << " " << metadata->brokers()->size() << " brokers:" << std::endl;
+  RdKafka::Metadata::BrokerMetadataIterator ib;
+  for (ib = metadata->brokers()->begin(); 
+       ib != metadata->brokers()->end(); 
+       ++ib) {
+    std::cout << "  broker " << (*ib)->id() << " at " 
+              << (*ib)->host() << ":" << (*ib)->port() << std::endl;
+  }
+  /* Iterate topics */        
+  std::cout << metadata->topics()->size() << " topics:" << std::endl;
+  RdKafka::Metadata::TopicMetadataIterator it;
+  for (it = metadata->topics()->begin(); 
+       it != metadata->topics()->end(); 
+       ++it) {
+    std::cout << "  topic "<< *(*it)->topic() << " with " 
+             << (*it)->partitions()->size() << " partitions" << std::endl;
+    
+    if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
+      std::cout << " " << err2str((*it)->err());
+      if ((*it)->err() == RdKafka::ERR_LEADER_NOT_AVAILABLE)
+        std::cout << " (try again)";
+    }
+    std::cout << std::endl;
 
-                /* Iterate topic's partitions */
-                RdKafka::TopicMetadata::PartitionMetadataIterator ip;
-                for (ip = (*it)->partitions()->begin(); ip != (*it)->partitions()->end() ; ++ip) {
-                        std::cout << "    partition " << (*ip)->id()
-                                  << " leader " << (*ip)->leader()
-                                  << ", replicas: ";
+    /* Iterate topic's partitions */
+    RdKafka::TopicMetadata::PartitionMetadataIterator ip;
+    for (ip = (*it)->partitions()->begin(); 
+         ip != (*it)->partitions()->end() ; 
+         ++ip) {
+      std::cout << "    partition " << (*ip)->id()
+                << " leader " << (*ip)->leader()
+                << ", replicas: ";
 
-                        /* Iterate partition's replicas */
-                        RdKafka::PartitionMetadata::ReplicasIterator ir;
-                        for (ir = (*ip)->replicas()->begin(); ir != (*ip)->replicas()->end() ; ++ir)
-                                std::cout << (ir == (*ip)->replicas()->begin() ? ",":"") << *ir;
+      /* Iterate partition's replicas */
+      RdKafka::PartitionMetadata::ReplicasIterator ir;
+      for (ir = (*ip)->replicas()->begin(); 
+           ir != (*ip)->replicas()->end() ; 
+           ++ir) {
+        std::cout << (ir == (*ip)->replicas()->begin() ? ",":"") << *ir;
+      }
 
-                        /* Iterate partition's ISRs */
-                        std::cout << ", isrs: ";
-                        RdKafka::PartitionMetadata::ISRSIterator iis;
-                        for (iis = (*ip)->isrs()->begin(); iis != (*ip)->isrs()->end() ; ++iis)
-                                std::cout << (iis == (*ip)->isrs()->begin() ? ",":"") << *iis;
-                        if ((*ip)->err() != RdKafka::ERR_NO_ERROR)
-                                std::cout << ", " << RdKafka::err2str((*ip)->err()) << std::endl;
-                        else
-                                std::cout << std::endl;
-                }
-        }
+      /* Iterate partition's ISRs */
+      std::cout << ", isrs: ";
+      RdKafka::PartitionMetadata::ISRSIterator iis;
+      for (iis = (*ip)->isrs()->begin(); iis != (*ip)->isrs()->end() ; ++iis)
+        std::cout << (iis == (*ip)->isrs()->begin() ? ",":"") << *iis;
+
+      if ((*ip)->err() != RdKafka::ERR_NO_ERROR)
+        std::cout << ", " << RdKafka::err2str((*ip)->err()) << std::endl;
+      else
+        std::cout << std::endl;
+    }
+  }
 }
 
 static bool run = true;
@@ -292,44 +298,44 @@ int main (int argc, char **argv) {
 
   if (mode.empty() || optind != argc) {
   usage:
-    fprintf(stderr,
-            "Usage: %s [-C|-P] -t <topic> "
-            "[-p <partition>] [-b <host1:port1,host2:port2,..>]\n"
-            "\n"
-            "librdkafka version %s (0x%08x)\n"
-            "\n"
-            " Options:\n"
-            "  -C | -P         Consumer or Producer mode\n"
-            "  -t <topic>      Topic to fetch / produce\n"
-            "  -p <num>        Partition (random partitioner)\n"
-            "  -p <func>       Use partitioner:\n"
-            "                  random (default), hash\n"
-            "  -b <brokers>    Broker address (localhost:9092)\n"
-            "  -z <codec>      Enable compression:\n"
-            "                  none|gzip|snappy\n"
-            "  -o <offset>     Start offset (consumer)\n"
-            "  -e              Exit consumer when last message\n"
-            "                  in partition has been received.\n"
-            "  -d [facs..]     Enable debugging contexts:\n"
-            "                  %s\n"
-            "  -M <intervalms> Enable statistics\n"
-            "  -X <prop=name>  Set arbitrary librdkafka "
-            "configuration property\n"
-            "                  Properties prefixed with \"topic.\" "
-            "will be set on topic object.\n"
-            "                  Use '-X list' to see the full list\n"
-            "                  of supported properties.\n"
-            "\n"
-            " In Consumer mode:\n"
-            "  writes fetched messages to stdout\n"
-            " In Producer mode:\n"
-            "  reads messages from stdin and sends to broker\n"
-            "\n"
-            "\n"
-            "\n",
-	    argv[0],
-	    RdKafka::version_str().c_str(), RdKafka::version(),
-	    RdKafka::Conf::DEBUG_CONTEXTS.c_str());
+      std::cerr 
+        << "Usage: "<< argv[0] << " [-C|-P|-L] -t <topic> "
+        << "[-p <partition>] [-b <host1:port1,host2:port2,..>]" << std::endl
+        << std::endl
+        << "librdkafka version " << RdKafka::version_str() 
+        << " (0x" << RdKafka::version() << ")"
+        << std::endl
+        << " Options:" << std::endl
+        << "  -C | -P         Consumer or Producer mode" << std::endl
+        << "  -L              Metadata list mode" << std::endl
+        << "  -t <topic>      Topic to fetch / produce" << std::endl
+        << "  -p <num>        Partition (random partitioner)" << std::endl
+        << "  -p <func>       Use partitioner:" << std::endl
+        << "                  random (default), hash" << std::endl
+        << "  -b <brokers>    Broker address (localhost:9092)" << std::endl
+        << "  -z <codec>      Enable compression:" << std::endl
+        << "                  none|gzip|snappy" << std::endl
+        << "  -o <offset>     Start offset (consumer)" << std::endl
+        << "  -e              Exit consumer when last message" << std::endl
+        << "                  in partition has been received." << std::endl
+        << "  -d [facs..]     Enable debugging contexts:" << std::endl
+        << "                  "<<RdKafka::Conf::DEBUG_CONTEXTS.c_str() 
+                                                                << std::endl
+        << "  -M <intervalms> Enable statistics" << std::endl
+        << "  -X <prop=name>  Set arbitrary librdkafka "
+        << "configuration property" << std::endl
+        << "                  Properties prefixed with \"topic.\" "
+        << "will be set on topic object." << std::endl
+        << "                  Use '-X list' to see the full list" << std::endl
+        << "                  of supported properties." << std::endl
+        << "" << std::endl
+        << " In Consumer mode:" << std::endl
+        << "  writes fetched messages to stdout" << std::endl
+        << " In Producer mode:" << std::endl
+        << "  reads messages from stdin and sends to broker" << std::endl
+        << "" << std::endl
+        << "" << std::endl
+        << "" << std::endl;
     exit(1);
   }
 

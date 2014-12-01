@@ -43,7 +43,7 @@ class BrokerMetadataImpl : public BrokerMetadata {
   const std::string *host() const {return &host_;}
   int port() const {return broker_metadata_->port;}
 
-  ~BrokerMetadataImpl(){}
+  virtual ~BrokerMetadataImpl() {}
 
  private:
   const rd_kafka_metadata_broker_t *broker_metadata_;
@@ -53,7 +53,7 @@ class BrokerMetadataImpl : public BrokerMetadata {
 /**
  * Metadata: Partition information handler
  */
-class PartitionMetadataImpl : public PartitionMetadata{
+class PartitionMetadataImpl : public PartitionMetadata {
  public:
   // @TODO too much memory copy? maybe we should create a new vector class that read directly from C arrays?
   // @TODO use auto_ptr?
@@ -68,16 +68,20 @@ class PartitionMetadataImpl : public PartitionMetadata{
       isrs_.push_back(partition_metadata->isrs[i]);
   }
 
-  int32_t                    id() const {return partition_metadata_->id;}
-  int32_t                    leader() const {return partition_metadata_->leader;}
-  ErrorCode                  err() const  {
+  int32_t                    id() const {
+    return partition_metadata_->id;
+  }
+  int32_t                    leader() const {
+    return partition_metadata_->leader;
+  }
+  ErrorCode                  err() const {
     return static_cast<ErrorCode>(partition_metadata_->err);
   }
 
   const std::vector<int32_t> *replicas() const {return &replicas_;}
   const std::vector<int32_t> *isrs() const {return &isrs_;}
 
-  ~PartitionMetadataImpl(){};
+  ~PartitionMetadataImpl() {};
 
  private:
   const rd_kafka_metadata_partition_t *partition_metadata_;
@@ -93,7 +97,9 @@ class TopicMetadataImpl : public TopicMetadata{
   :topic_metadata_(topic_metadata),topic_(topic_metadata->topic) {
     partitions_.reserve(topic_metadata->partition_cnt);
     for(int i=0;i<topic_metadata->partition_cnt;++i)
-      partitions_.push_back(new PartitionMetadataImpl(&topic_metadata->partitions[i]));
+      partitions_.push_back(
+        new PartitionMetadataImpl(&topic_metadata->partitions[i])
+      );
   }
 
   ~TopicMetadataImpl(){
@@ -102,8 +108,10 @@ class TopicMetadataImpl : public TopicMetadata{
   }
 
   const std::string *topic() const {return &topic_;}
-  const std::vector<const PartitionMetadata *> *partitions() const{return &partitions_;}
-  ErrorCode err() const {return static_cast<ErrorCode>(topic_metadata_->err);;}
+  const std::vector<const PartitionMetadata *> *partitions() const {
+    return &partitions_;
+  }
+  ErrorCode err() const {return static_cast<ErrorCode>(topic_metadata_->err);}
 
  private:
   const rd_kafka_metadata_topic_t *topic_metadata_;

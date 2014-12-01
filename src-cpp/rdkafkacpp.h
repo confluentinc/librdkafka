@@ -439,7 +439,7 @@ class BrokerMetadata {
   virtual int32_t            id() const = 0;   /* Broker Id */
   virtual const std::string *host() const = 0; /* Broker hostname */
   virtual int                port() const = 0; /* Broker listening port */
-  virtual ~BrokerMetadata(){};
+  virtual ~BrokerMetadata() {};
 };
 
 /**

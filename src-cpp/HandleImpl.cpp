@@ -100,21 +100,21 @@ int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
   return handle->open_cb_->open_cb(pathname, flags, static_cast<int>(mode));
 }
 
-RdKafka::ErrorCode RdKafka::HandleImpl::metadata (bool all_topics,const Topic *only_rkt,
-            Metadata **metadatap, int timeout_ms) {
+RdKafka::ErrorCode RdKafka::HandleImpl::metadata (bool all_topics,
+                                                  const Topic *only_rkt,
+                                                  Metadata **metadatap, 
+                                                  int timeout_ms) {
 
   const rd_kafka_metadata_t *cmetadatap=NULL;
 
-  // @TODO metadatap use is not very cpp. Maybe:
-  //   Return a new Metadata* (is thin), and exception in case of error?
-  //   Use C++11, and reference swapping?
-  // @TODO static cast is dangerous. Better use dynamic cast and throw exception?
-  rd_kafka_topic_t *topic = only_rkt ? static_cast<const TopicImpl *>(only_rkt)->rkt_ : NULL;
+  rd_kafka_topic_t *topic = only_rkt ? 
+    static_cast<const TopicImpl *>(only_rkt)->rkt_ : NULL;
 
   const rd_kafka_resp_err_t rc = rd_kafka_metadata(rk_, all_topics, topic,
-        &cmetadatap,timeout_ms);
+                                                   &cmetadatap,timeout_ms);
 
-  *metadatap = (rc == RD_KAFKA_RESP_ERR_NO_ERROR) ? new RdKafka::MetadataImpl(cmetadatap) : NULL;
+  *metadatap = (rc == RD_KAFKA_RESP_ERR_NO_ERROR) ? 
+    new RdKafka::MetadataImpl(cmetadatap) : NULL;
 
   return static_cast<RdKafka::ErrorCode>(rc);
 }

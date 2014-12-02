@@ -30,6 +30,12 @@
 
 using namespace RdKafka;
 
+BrokerMetadata::~BrokerMetadata() {};
+PartitionMetadata::~PartitionMetadata() {};
+TopicMetadata::~TopicMetadata() {};
+Metadata::~Metadata() {};
+
+
 /**
  * Metadata: Broker information handler implementation
  */

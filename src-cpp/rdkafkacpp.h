@@ -439,7 +439,7 @@ class BrokerMetadata {
   virtual int32_t            id() const = 0;   /* Broker Id */
   virtual const std::string *host() const = 0; /* Broker hostname */
   virtual int                port() const = 0; /* Broker listening port */
-  virtual ~BrokerMetadata() {};
+  virtual ~BrokerMetadata() = 0;
 };
 
 /**
@@ -458,7 +458,7 @@ class PartitionMetadata {
   virtual int32_t                    leader() const = 0;     /* Leader broker */
   virtual const std::vector<int32_t> *replicas() const = 0;   /* Replica brokers */
   virtual const std::vector<int32_t> *isrs() const = 0;       /* In-Sync-Replica brokers */
-  virtual ~PartitionMetadata(){};
+  virtual ~PartitionMetadata() = 0;
 };
 
 /**
@@ -471,7 +471,7 @@ class TopicMetadata {
   virtual const std::string             *topic() const = 0;      /* Topic name */
   virtual const PartitionMetadataVector *partitions() const = 0; /* Partitions */
   virtual ErrorCode                      err() const = 0;        /* Topic error reported by broker */
-  virtual ~TopicMetadata(){};
+  virtual ~TopicMetadata() = 0;
 };
 
 
@@ -490,7 +490,7 @@ class Metadata {
   virtual const TopicMetadataVector  *topics() const = 0;   /* Topics */
   virtual int32_t                     orig_broker_id() const = 0; /* Broker originating this metadata */
   virtual const std::string           orig_broker_name() const = 0; /* Broker originating this metadata */
-  virtual ~Metadata(){};
+  virtual ~Metadata() = 0;
 };
 
 /**

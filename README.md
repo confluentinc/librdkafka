@@ -62,6 +62,8 @@ For an introduction to the performance and usage of librdkafka, see
 
   * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka) - Varnish cache web log producer
   * [kafkacat](https://github.com/edenhill/kafkacat) - Apache Kafka swiss army knife
+  * [syslog-ng](http://syslog-ng.org)
+  * [collectd](http://collectd.org)
   * [redBorder](http://www.redborder.net)
   * [Headweb](http://www.headweb.com/)
   * [Produban's log2kafka](https://github.com/Produban/log2kafka) - Web log producer
@@ -71,6 +73,7 @@ For an introduction to the performance and usage of librdkafka, see
   * [haskakafka](https://github.com/cosbynator/haskakafka) - Haskell
   * [haskell-kafka](https://github.com/yanatan16/haskell-kafka) - Haskell
   * [Hermann](https://github.com/stancampbell3/Hermann) - Ruby
+  * [fuse_kafka](https://github.com/yazgoo/fuse_kafka) - FUSE file system layer
   * large unnamed financial institution
   * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*

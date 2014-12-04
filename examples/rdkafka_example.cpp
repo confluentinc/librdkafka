@@ -303,8 +303,7 @@ int main (int argc, char **argv) {
         << "[-p <partition>] [-b <host1:port1,host2:port2,..>]" << std::endl
         << std::endl
         << "librdkafka version " << RdKafka::version_str() 
-        << " (0x" << RdKafka::version() << ")"
-        << std::endl
+        << " (0x" << RdKafka::version() << ")"  << std::endl
         << " Options:" << std::endl
         << "  -C | -P         Consumer or Producer mode" << std::endl
         << "  -L              Metadata list mode" << std::endl
@@ -319,23 +318,23 @@ int main (int argc, char **argv) {
         << "  -e              Exit consumer when last message" << std::endl
         << "                  in partition has been received." << std::endl
         << "  -d [facs..]     Enable debugging contexts:" << std::endl
-        << "                  "<<RdKafka::Conf::DEBUG_CONTEXTS.c_str() 
-                                                                << std::endl
+        << "                  " << RdKafka::Conf::DEBUG_CONTEXTS.c_str() 
+                                                            << std::endl
         << "  -M <intervalms> Enable statistics" << std::endl
-        << "  -X <prop=name>  Set arbitrary librdkafka "
-        << "configuration property" << std::endl
+        << "  -X <prop=name>  Set arbitrary librdkafka configuration property"
+                                                                  << std::endl
         << "                  Properties prefixed with \"topic.\" "
         << "will be set on topic object." << std::endl
         << "                  Use '-X list' to see the full list" << std::endl
         << "                  of supported properties." << std::endl
-        << "" << std::endl
+        << std::endl
         << " In Consumer mode:" << std::endl
         << "  writes fetched messages to stdout" << std::endl
         << " In Producer mode:" << std::endl
         << "  reads messages from stdin and sends to broker" << std::endl
-        << "" << std::endl
-        << "" << std::endl
-        << "" << std::endl;
+        << std::endl
+        << std::endl
+        << std::endl;
     exit(1);
   }
 

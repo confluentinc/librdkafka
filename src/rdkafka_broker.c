@@ -2783,6 +2783,12 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			 * handler after all compression and cascaded
 			 * messagesets have been peeled off. */
 
+                        /* MessageSets may contain offsets earlier than we
+                         * requested (compressed messagests in particular),
+                         * drop the earlier messages. */
+                        if (hdr->Offset < rktp->rktp_next_offset)
+                                continue;
+
 			/* Create op and push on temporary queue. */
 			rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH);
 

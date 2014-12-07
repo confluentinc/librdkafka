@@ -428,6 +428,7 @@ typedef struct rd_kafka_buf_s {
 typedef struct rd_kafka_bufq_s {
 	TAILQ_HEAD(, rd_kafka_buf_s) rkbq_bufs;
 	int                          rkbq_cnt;
+        int                          rkbq_msg_cnt;
 } rd_kafka_bufq_t;
 
 
@@ -586,6 +587,7 @@ typedef struct rd_kafka_broker_s {
 	rd_kafka_buf_t     *rkb_recv_buf;
 
 	rd_kafka_bufq_t     rkb_outbufs;
+        int                 rkb_outbuf_msgcnt;
 	rd_kafka_bufq_t     rkb_waitresps;
 	rd_kafka_bufq_t     rkb_retrybufs;
 

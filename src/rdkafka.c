@@ -982,13 +982,21 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 	now = rd_clock();
 	_st_printf("{ "
+                   "\"name\": \"%s\", "
+                   "\"type\": \"%s\", "
 		   "\"ts\":%"PRIu64", "
 		   "\"time\":%lli, "
 		   "\"replyq\":%i, "
+                   "\"msg_cnt\":%i, "
+                   "\"msg_max\":%i, "
 		   "\"brokers\":{ "/*open brokers*/,
+                   rk->rk_name,
+                   rd_kafka_type2str(rk->rk_type),
 		   now,
 		   (signed long long)time(NULL),
-		   rd_kafka_q_len(&rk->rk_rep));
+		   rd_kafka_q_len(&rk->rk_rep),
+                   rk->rk_producer.msg_cnt,
+                   rk->rk_conf.queue_buffering_max_msgs);
 
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -1001,7 +1009,9 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"state\":\"%s\", "
                            "\"stateage\":%"PRId64", "
 			   "\"outbuf_cnt\":%i, "
+			   "\"outbuf_msg_cnt\":%i, "
 			   "\"waitresp_cnt\":%i, "
+			   "\"waitresp_msg_cnt\":%i, "
 			   "\"tx\":%"PRIu64", "
 			   "\"txbytes\":%"PRIu64", "
 			   "\"txerrs\":%"PRIu64", "
@@ -1027,7 +1037,9 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rd_kafka_broker_state_names[rkb->rkb_state],
                            rkb->rkb_ts_state ? now - rkb->rkb_ts_state : 0,
 			   rkb->rkb_outbufs.rkbq_cnt,
+			   rkb->rkb_outbufs.rkbq_msg_cnt,
 			   rkb->rkb_waitresps.rkbq_cnt,
+			   rkb->rkb_waitresps.rkbq_msg_cnt,
 			   rkb->rkb_c.tx,
 			   rkb->rkb_c.tx_bytes,
 			   rkb->rkb_c.tx_err,

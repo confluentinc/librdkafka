@@ -286,17 +286,22 @@ static rd_kafka_buf_t *rd_kafka_buf_new_shadow (void *ptr, size_t size) {
 static void rd_kafka_bufq_enq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
 	TAILQ_INSERT_TAIL(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
 	(void)rd_atomic_add(&rkbufq->rkbq_cnt, 1);
+	(void)rd_atomic_add(&rkbufq->rkbq_msg_cnt,
+                            rkbuf->rkbuf_msgq.rkmq_msg_cnt);
 }
 
 static void rd_kafka_bufq_deq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
 	TAILQ_REMOVE(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
 	rd_kafka_assert(NULL, rkbufq->rkbq_cnt > 0);
 	(void)rd_atomic_sub(&rkbufq->rkbq_cnt, 1);
+	(void)rd_atomic_sub(&rkbufq->rkbq_msg_cnt,
+                            rkbuf->rkbuf_msgq.rkmq_msg_cnt);
 }
 
 static void rd_kafka_bufq_init (rd_kafka_bufq_t *rkbufq) {
 	TAILQ_INIT(&rkbufq->rkbq_bufs);
 	rkbufq->rkbq_cnt = 0;
+        rkbufq->rkbq_msg_cnt = 0;
 }
 
 /**
@@ -305,6 +310,7 @@ static void rd_kafka_bufq_init (rd_kafka_bufq_t *rkbufq) {
 static void rd_kafka_bufq_concat (rd_kafka_bufq_t *dst, rd_kafka_bufq_t *src) {
 	TAILQ_CONCAT(&dst->rkbq_bufs, &src->rkbq_bufs, rkbuf_link);
 	(void)rd_atomic_add(&dst->rkbq_cnt, src->rkbq_cnt);
+	(void)rd_atomic_add(&dst->rkbq_msg_cnt, src->rkbq_msg_cnt);
 	rd_kafka_bufq_init(src);
 }
 
@@ -600,6 +606,8 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 	}
 
 	(void)rd_atomic_add(&rkb->rkb_outbufs.rkbq_cnt, 1);
+	(void)rd_atomic_add(&rkb->rkb_outbufs.rkbq_msg_cnt,
+                            rkbuf->rkbuf_msgq.rkmq_msg_cnt);
 }
 
 
@@ -1723,6 +1731,8 @@ static int rd_kafka_send (rd_kafka_broker_t *rkb) {
 
 		/* Entire buffer sent, unlink from outbuf */
 		rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
+                (void)rd_atomic_sub(&rkb->rkb_outbuf_msgcnt,
+                                    rkbuf->rkbuf_msgq.rkmq_msg_cnt);
 
 		/* Store time for RTT calculation */
 		rkbuf->rkbuf_ts_sent = rd_clock();
@@ -3119,9 +3129,12 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   rktp->rktp_partition,
 				   rd_kafka_q_len(&rktp->rktp_fetchq));
 
-			if (tmp_opq.rkq_qlen > 0)
+			if (tmp_opq.rkq_qlen > 0) {
+                                (void)rd_atomic_add(&rktp->rktp_c.msgs,
+                                                    tmp_opq.rkq_qlen);
 				rd_kafka_q_concat(&rktp->rktp_fetchq,
 						  &tmp_opq);
+                        }
 
 			rd_kafka_toppar_destroy(rktp); /* from get2() */
 

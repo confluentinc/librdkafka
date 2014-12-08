@@ -360,7 +360,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "If false, the application will have to call "
 	  "`rd_kafka_offset_store()` to store an offset (optional). "
 	  "**NOTE:** There is currently no zookeeper integration, offsets "
-	  "will be written to local file according to offset.store.path.",
+	  "will be written to broker or local file according to "
+          "offset.store.method.",
 	  0, 1, 1 },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RKT(auto_commit_interval_ms),

@@ -1359,13 +1359,6 @@ static int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
 		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
 
 	} else if (offset == RD_KAFKA_OFFSET_STORED) {
-
-		if (!rkt->rkt_conf.auto_commit) {
-			rd_kafka_toppar_unlock(rktp);
-			rd_kafka_toppar_destroy(rktp);
-			errno = EINVAL;
-			return -1;
-		}
 		rd_kafka_offset_store_init(rktp);
 
 	} else if (offset < 0) {

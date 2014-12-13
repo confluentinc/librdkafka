@@ -508,6 +508,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 		conf = rd_kafka_topic_conf_new();
 	rkt->rkt_conf = *conf;
 	free(conf);
+	conf = NULL;
 
 	/* Default partitioner: random */
 	if (!rkt->rkt_conf.partitioner)

@@ -64,6 +64,7 @@ For an introduction to the performance and usage of librdkafka, see
   * [kafkacat](https://github.com/edenhill/kafkacat) - Apache Kafka swiss army knife
   * [syslog-ng](http://syslog-ng.org)
   * [collectd](http://collectd.org)
+  * [rsyslog](http://www.rsyslog.com)
   * [redBorder](http://www.redborder.net)
   * [Headweb](http://www.headweb.com/)
   * [Produban's log2kafka](https://github.com/Produban/log2kafka) - Web log producer

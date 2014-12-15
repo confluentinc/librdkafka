@@ -496,6 +496,8 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
         rd_kafka_wrlock(rk);
 	if ((rkt = rd_kafka_topic_find(rk, topic, 0/*no lock*/))) {
                 rd_kafka_unlock(rk);
+		if (conf)
+			rd_kafka_topic_conf_destroy(conf);
 		return rkt;
         }
 
@@ -507,8 +509,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	if (!conf)
 		conf = rd_kafka_topic_conf_new();
 	rkt->rkt_conf = *conf;
-	free(conf);
-	conf = NULL;
+	rd_kafka_topic_conf_destroy(conf);
 
 	/* Default partitioner: random */
 	if (!rkt->rkt_conf.partitioner)

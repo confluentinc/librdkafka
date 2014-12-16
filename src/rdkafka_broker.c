@@ -378,8 +378,10 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	 *  - log message
 	 *  - application OP_ERR
 	 *  - metadata request
+	 *
+	 * Dont log anything if this was the termination signal.
 	 */
-	if (fmt) {
+	if (fmt && !(errno_save == EINTR && rkb->rkb_rk->rk_terminate)) {
 		int of;
 
 		/* Insert broker name in log message if it fits. */

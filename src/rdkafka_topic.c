@@ -509,7 +509,10 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	if (!conf)
 		conf = rd_kafka_topic_conf_new();
 	rkt->rkt_conf = *conf;
-	rd_kafka_topic_conf_destroy(conf);
+	free(conf); /* explicitly not rd_kafka_topic_destroy()
+		     * since we dont want to free internal members,
+		     * just the placeholder. The internal members
+		     * were copied on the line above. */
 
 	/* Default partitioner: random */
 	if (!rkt->rkt_conf.partitioner)

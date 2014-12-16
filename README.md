@@ -16,6 +16,8 @@ the producer and 3 million msgs/second for the consumer.
 For an introduction to the performance and usage of librdkafka, see
 [INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md)
 
+See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
+
 **NOTE**: The `master` branch is actively developed, use latest release for production use.
 
 [![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)

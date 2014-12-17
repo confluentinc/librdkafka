@@ -165,6 +165,7 @@ struct rd_kafka_conf_s {
 	int    retry_backoff_ms;
 	int    batch_num_messages;
 	rd_kafka_compression_t compression_codec;
+	int    dr_err_only;
 
 	/* Message delivery report callback.
 	 * Called once for each produced message, either on

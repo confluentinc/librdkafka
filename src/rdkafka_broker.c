@@ -1800,7 +1800,8 @@ static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb) {
 void rd_kafka_dr_msgq (rd_kafka_t *rk,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err) {
 
-	if (rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) {
+	if ((rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) &&
+	    (!rk->rk_conf.dr_err_only || err)) {
 		/* Pass all messages to application thread in one op. */
 		rd_kafka_op_t *rko;
 

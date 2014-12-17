@@ -41,6 +41,7 @@ message.send.max.retries                 |  P  |             2 | How many times 
 retry.backoff.ms                         |  P  |           100 | The backoff time in milliseconds before retrying a message send.
 compression.codec                        |  P  |          none | Compression codec to use for compressing message sets: none, gzip or snappy
 batch.num.messages                       |  P  |          1000 | Maximum number of messages batched in one MessageSet.
+delivery.report.only.error               |  P  |         false | Only provide delivery reports for failed messages.
 dr_cb                                    |  P  |               | Delivery report callback (set with rd_kafka_conf_set_dr_cb())
 dr_msg_cb                                |  P  |               | Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())
 

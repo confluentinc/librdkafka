@@ -440,6 +440,9 @@ int main (int argc, char **argv) {
         case RdKafka::ERR_NO_ERROR:
 	  /* Real message */
 	  std::cerr << "Read msg at offset " << msg->offset() << std::endl;
+	  if (msg->key()) {
+		  std::cerr << "Key: " << *msg->key() << std::endl;
+	  }
           printf("%.*s\n",
                  static_cast<int>(msg->len()),
                  static_cast<const char *>(msg->payload()));

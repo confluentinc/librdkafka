@@ -84,18 +84,21 @@ class MessageImpl : public Message {
   };
 
   MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true) { }
+      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true),
+      key_(static_cast<char const*>(rkmessage->key), rkmessage->key_len) { }
 
   MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage,
                bool dofree):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree) { }
+      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree),
+      key_(static_cast<char const*>(rkmessage->key), rkmessage->key_len) { }
 
   MessageImpl (RdKafka::Topic *topic, const rd_kafka_message_t *rkmessage):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(false) { }
+      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(false),
+      key_(static_cast<char const*>(rkmessage->key), rkmessage->key_len) { }
 
   /* Create errored message */
   MessageImpl (RdKafka::Topic *topic, RdKafka::ErrorCode err):
-      topic_(topic), free_rkmessage_(false) {
+      topic_(topic), free_rkmessage_(false), key_() {
     rkmessage_ = &rkmessage_err_;
     memset(&rkmessage_err_, 0, sizeof(rkmessage_err_));
     rkmessage_err_.err = static_cast<rd_kafka_resp_err_t>(err);
@@ -119,7 +122,7 @@ class MessageImpl : public Message {
   int32_t             partition () const { return rkmessage_->partition; }
   void               *payload () const { return rkmessage_->payload; }
   size_t              len () const { return rkmessage_->len; }
-  const std::string  *key () const { return NULL; /* FIXME */ }
+  const std::string  *key () const { return key_.empty() ? NULL : &key_; }
   int64_t             offset () const { return rkmessage_->offset; }
   void               *msg_opaque () const { return rkmessage_->_private; };
 
@@ -129,6 +132,7 @@ class MessageImpl : public Message {
   /* For error signalling by the C++ layer the .._err_ message is
    * used as a place holder and rkmessage_ is set to point to it. */
   rd_kafka_message_t rkmessage_err_;
+  std::string key_;
 };
 
 

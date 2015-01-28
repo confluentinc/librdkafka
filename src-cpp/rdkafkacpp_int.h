@@ -81,21 +81,22 @@ class MessageImpl : public Message {
   ~MessageImpl () {
     if (free_rkmessage_)
       rd_kafka_message_destroy(const_cast<rd_kafka_message_t *>(rkmessage_));
+    delete key_;
   };
 
   MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true) { }
+      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) { }
 
   MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage,
                bool dofree):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree) { }
+      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree), key_(NULL) { }
 
   MessageImpl (RdKafka::Topic *topic, const rd_kafka_message_t *rkmessage):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(false) { }
+      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(false), key_(NULL) { }
 
   /* Create errored message */
   MessageImpl (RdKafka::Topic *topic, RdKafka::ErrorCode err):
-      topic_(topic), free_rkmessage_(false) {
+      topic_(topic), free_rkmessage_(false), key_(NULL) {
     rkmessage_ = &rkmessage_err_;
     memset(&rkmessage_err_, 0, sizeof(rkmessage_err_));
     rkmessage_err_.err = static_cast<rd_kafka_resp_err_t>(err);
@@ -119,7 +120,15 @@ class MessageImpl : public Message {
   int32_t             partition () const { return rkmessage_->partition; }
   void               *payload () const { return rkmessage_->payload; }
   size_t              len () const { return rkmessage_->len; }
-  const std::string  *key () const { return NULL; /* FIXME */ }
+  const std::string  *key () const {
+    if (key_) {
+      return key_;
+    } else if (rkmessage_->key) {
+      key_ = new std::string(static_cast<char const*>(rkmessage_->key), rkmessage_->key_len);
+      return key_;
+    }
+    return NULL;
+  }
   int64_t             offset () const { return rkmessage_->offset; }
   void               *msg_opaque () const { return rkmessage_->_private; };
 
@@ -129,6 +138,12 @@ class MessageImpl : public Message {
   /* For error signalling by the C++ layer the .._err_ message is
    * used as a place holder and rkmessage_ is set to point to it. */
   rd_kafka_message_t rkmessage_err_;
+  mutable std::string* key_; /* mutable because it's a cached value */
+
+private:
+  /* "delete" copy ctor + copy assignment, for safety of key_ */
+  MessageImpl(MessageImpl const&) /*= delete*/;
+  MessageImpl& operator=(MessageImpl const&) /*= delete*/;
 };
 
 

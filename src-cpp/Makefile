@@ -37,6 +37,7 @@ LIBS += -lstdc++
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 
 
+file-check: lib
 check: file-check
 
 install: lib-install

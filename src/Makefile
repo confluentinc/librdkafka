@@ -20,6 +20,7 @@ include ../mklove/Makefile.base
 
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 
+file-check: lib
 check: file-check
 	@(printf "%-30s " "Symbol visibility" ; \
 	(($(SYMDUMPER) $(LIBFILENAME) | grep -q rd_kafka_new) && \

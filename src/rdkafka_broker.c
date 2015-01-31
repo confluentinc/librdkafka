@@ -563,17 +563,12 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 					       IPPROTO_TCP, &errstr);
 
 		if (!rkb->rkb_rsal) {
-			char tmp[512];
-
-			snprintf(tmp, sizeof(tmp),
-				 "Failed to resolve '%s': %s",
-				 rkb->rkb_nodename, errstr);
-
-			/* Send ERR op back to application for processing. */
-			rd_kafka_op_err(rkb->rkb_rk,RD_KAFKA_RESP_ERR__RESOLVE,
-					"%s", tmp);
-
-			rd_rkb_log(rkb, LOG_ERR, "GETADDR", "%s", tmp);
+                        rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__RESOLVE,
+                                             /* Avoid duplicate log messages */
+                                             rkb->rkb_err.err == errno ?
+                                             NULL :
+                                             "Failed to resolve '%s': %s",
+                                             rkb->rkb_nodename, errstr);
 			return -1;
 		}
 	}

@@ -57,6 +57,7 @@ static int verbosity = 1;
 static int latency_mode = 0;
 static int report_offset = 0;
 static FILE *latency_fp = NULL;
+static int msgcnt = -1;
 
 static void stop (int sig) {
         if (!run)
@@ -242,6 +243,9 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
                                (char *)rkmessage->payload);
 
         }
+
+        if (msgcnt != -1 && cnt.msgs >= msgcnt)
+                run = 0;
 }
 
 
@@ -515,7 +519,6 @@ int main (int argc, char **argv) {
 	const char *key = NULL;
 	int partition = RD_KAFKA_PARTITION_UA; /* random */
 	int opt;
-	int msgcnt = -1;
 	int sendflags = 0;
 	char *msgpattern = "librdkafka_performance testing!";
 	int msgsize = strlen(msgpattern);

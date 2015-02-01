@@ -20,13 +20,14 @@ CONFIGURATION.md: src/rdkafka.h examples
 		mv CONFIGURATION.md.tmp CONFIGURATION.md; \
 	rm -f CONFIGURATION.md.tmp)
 
+file-check: CONFIGURATION.md examples
 check: file-check
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d $@ || exit $?; done)
 
 install:
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d $@ || exit $?; done)
 
-examples tests: .PHONY
+examples tests: .PHONY libs
 	$(MAKE) -C $@
 
 clean:

@@ -1207,7 +1207,7 @@ int main (int argc, char **argv) {
 	if (latency_fp)
 		fclose(latency_fp);
 
-        if (stats_cmd) {
+        if (stats_fp) {
                 pclose(stats_fp);
                 stats_fp = NULL;
         }

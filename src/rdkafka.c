@@ -1147,6 +1147,8 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_t *rk, void *arg) {
         else
                 rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
                                              NULL, "periodic refresh");
+
+		rd_kafka_broker_destroy(rkb);
 }
 
 

@@ -4321,6 +4321,7 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 
 /**
  * Locks: rd_kafka_rdlock(rk) must be held
+ * NOTE: caller must release rkb reference by rd_kafka_broker_destroy()
  */
 static rd_kafka_broker_t *rd_kafka_broker_find (rd_kafka_t *rk,
 						const char *name,
@@ -4391,6 +4392,11 @@ int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist) {
 		} else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED, s, port,
 					       RD_KAFKA_NODEID_UA) != NULL)
 			cnt++;
+
+		/* If rd_kafka_broker_find returned a broker its reference needs to be released 
+		 * See issue #193 */
+		if (rkb)
+			rd_kafka_broker_destroy(rkb);
 
 		rd_kafka_unlock(rk);
 

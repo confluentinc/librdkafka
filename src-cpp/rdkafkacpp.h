@@ -26,6 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#pragma once
+
 /**
  * Apache Kafka consumer & producer
  *

@@ -768,11 +768,14 @@ int main (int argc, char **argv) {
                         break;
 
 		default:
+                        fprintf(stderr, "Unknown option: %c\n", opt);
 			goto usage;
 		}
 	}
 
 	if (!topic || optind != argc) {
+                if (optind < argc)
+                        fprintf(stderr, "Unknown argument: %s\n", argv[optind]);
 	usage:
 		fprintf(stderr,
 			"Usage: %s [-C|-P] -t <topic> "

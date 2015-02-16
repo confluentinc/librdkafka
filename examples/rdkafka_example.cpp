@@ -367,7 +367,7 @@ int main (int argc, char **argv) {
        */
       RdKafka::ErrorCode resp =
 	producer->produce(topic, partition,
-			  RdKafka::Producer::MSG_COPY /* Copy payload */,
+			  RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
 			  const_cast<char *>(line.c_str()), line.size(),
 			  NULL, NULL);
       if (resp != RdKafka::ERR_NO_ERROR)

@@ -244,6 +244,9 @@ struct rd_kafka_topic_conf_s {
 
         int     produce_offset_report;
 
+        char   *group_id_str;
+        rd_kafkap_str_t *group_id;    /* Consumer group id in protocol format */
+
 	int     auto_commit;
 	int     auto_commit_interval_ms;
 	int     auto_offset_reset;

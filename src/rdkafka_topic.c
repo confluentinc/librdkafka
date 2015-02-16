@@ -417,6 +417,8 @@ void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {
 
 	rd_kafka_destroy0(rkt->rkt_rk);
 
+        rd_kafkap_str_destroy(rkt->rkt_conf.group_id);
+
 	rd_kafka_anyconf_destroy(_RK_TOPIC, &rkt->rkt_conf);
 
 	pthread_rwlock_destroy(&rkt->rkt_lock);
@@ -517,6 +519,12 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	/* Default partitioner: random */
 	if (!rkt->rkt_conf.partitioner)
 		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_random;
+
+        /* Convert group.id to kafka string (may be NULL).
+         * Either use from topic config object or parent rk handle */
+        rkt->rkt_conf.group_id =
+                rd_kafkap_str_new(rkt->rkt_conf.group_id_str ? :
+                                  rkt->rkt_rk->rk_conf.group_id_str);
 
 	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));

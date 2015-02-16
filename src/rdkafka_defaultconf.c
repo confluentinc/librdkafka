@@ -354,6 +354,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
 
         /* Topic consumer properties */
+        { _RK_TOPIC|_RK_CONSUMER, "group.id", _RK_C_STR,
+          _RKT(group_id_str),
+          "Consumer group id string. All clients sharing the same group.id "
+          "belong to the same consumer group. This takes precedence over "
+          "the global group.id." },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.enable", _RK_C_BOOL,
 	  _RKT(auto_commit),
 	  "If true, periodically commit offset of the last message handed "

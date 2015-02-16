@@ -13,7 +13,7 @@ void foo (void) {
    close(s);
 }"
     if ! mkl_compile_check socket "" cont CC "" "$src"; then
-	if mkl_compile_check socket_nsl "" fail CC "-lsocket -lnsl" "$src"; then
+	if mkl_compile_check --ldflags="-lsocket -lnsl" socket_nsl "" fail CC "" "$src"; then
 	    mkl_mkvar_append socket_nsl LIBS "-lsocket -lnsl"
 	fi
     fi

@@ -26,7 +26,7 @@ function checks {
     fi
 
     # Check what argument is needed for passing linker script.
-    local ldsfile=$(mktemp _mkltmpXXXX.lds)
+    local ldsfile=$(mktemp _mkltmpXXXXX)
     echo "{
  global:
   *;

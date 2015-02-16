@@ -57,6 +57,7 @@ static int verbosity = 1;
 static int latency_mode = 0;
 static int report_offset = 0;
 static FILE *latency_fp = NULL;
+static int msgcnt = -1;
 
 static void stop (int sig) {
         if (!run)
@@ -206,7 +207,8 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 	cnt.msgs++;
 	cnt.bytes += rkmessage->len;
 
-	if (verbosity >= 2 && !(cnt.msgs % 1000000))
+	if (verbosity >= 3 ||
+            (verbosity >= 2 && !(cnt.msgs % 1000000)))
 		printf("@%"PRId64": %.*s\n",
 		       rkmessage->offset,
 		       (int)rkmessage->len, (char *)rkmessage->payload);
@@ -241,6 +243,9 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
                                (char *)rkmessage->payload);
 
         }
+
+        if (msgcnt != -1 && cnt.msgs >= msgcnt)
+                run = 0;
 }
 
 
@@ -514,7 +519,6 @@ int main (int argc, char **argv) {
 	const char *key = NULL;
 	int partition = RD_KAFKA_PARTITION_UA; /* random */
 	int opt;
-	int msgcnt = -1;
 	int sendflags = 0;
 	char *msgpattern = "librdkafka_performance testing!";
 	int msgsize = strlen(msgpattern);
@@ -764,11 +768,14 @@ int main (int argc, char **argv) {
                         break;
 
 		default:
+                        fprintf(stderr, "Unknown option: %c\n", opt);
 			goto usage;
 		}
 	}
 
 	if (!topic || optind != argc) {
+                if (optind < argc)
+                        fprintf(stderr, "Unknown argument: %s\n", argv[optind]);
 	usage:
 		fprintf(stderr,
 			"Usage: %s [-C|-P] -t <topic> "
@@ -1203,7 +1210,7 @@ int main (int argc, char **argv) {
 	if (latency_fp)
 		fclose(latency_fp);
 
-        if (stats_cmd) {
+        if (stats_fp) {
                 pclose(stats_fp);
                 stats_fp = NULL;
         }

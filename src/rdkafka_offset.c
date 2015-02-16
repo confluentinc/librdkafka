@@ -398,6 +398,54 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 
 
 /**
+ * Escape any special characters in filename 'in' and write escaped
+ * string to 'out' (of max size out_size).
+ */
+static char *mk_esc_filename (const char *in, char *out, size_t out_size) {
+        const char *s = in;
+        char *o = out;
+
+        while (*s) {
+                const char *esc;
+                int esclen;
+
+                switch (*s)
+                {
+                case '/': /* linux */
+                        esc = "%2F";
+                        esclen = strlen(esc);
+                        break;
+                case ':': /* osx, windows */
+                        esc = "%3A";
+                        esclen = strlen(esc);
+                        break;
+                case '\\': /* windows */
+                        esc = "%5C";
+                        esclen = strlen(esc);
+                        break;
+                default:
+                        esc = s;
+                        esclen = 1;
+                        break;
+                }
+
+                if ((o + esclen + 1) - out >= out_size) {
+                        /* No more space in output string, truncate. */
+                        break;
+                }
+
+                while (esclen-- > 0)
+                        *(o++) = *(esc++);
+
+                s++;
+        }
+
+        *o = '\0';
+        return out;
+}
+
+
+/**
  * Prepare a toppar for using an offset file.
  *
  * NOTE: toppar_lock(rktp) must be held.
@@ -409,11 +457,29 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 	int64_t offset = -1;
 
 	if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
-		snprintf(spath, sizeof(spath),
-			 "%s%s%s-%"PRId32".offset",
-			 path, path[strlen(path)-1] == '/' ? "" : "/",
-			 rktp->rktp_rkt->rkt_topic->str,
-			 rktp->rktp_partition);
+                char tmpfile[1024];
+                char escfile[4096];
+
+                /* Include group.id in filename if configured. */
+                if (!RD_KAFKAP_STR_IS_NULL(rktp->rktp_rkt->rkt_conf.group_id))
+                        snprintf(tmpfile, sizeof(tmpfile),
+                                 "%s-%"PRId32"-%.*s.offset",
+                                 rktp->rktp_rkt->rkt_topic->str,
+                                 rktp->rktp_partition,
+                                 RD_KAFKAP_STR_PR(rktp->rktp_rkt->
+                                                  rkt_conf.group_id));
+                else
+                        snprintf(tmpfile, sizeof(tmpfile),
+                                 "%s-%"PRId32".offset",
+                                 rktp->rktp_rkt->rkt_topic->str,
+                                 rktp->rktp_partition);
+
+                /* Escape filename to make it safe. */
+                mk_esc_filename(tmpfile, escfile, sizeof(escfile));
+
+                snprintf(spath, sizeof(spath), "%s%s%s",
+                         path, path[strlen(path)-1] == '/' ? "" : "/", escfile);
+
 		path = spath;
 	}
 

@@ -3374,7 +3374,7 @@ static void rd_kafka_toppar_offsetcommit_request (rd_kafka_broker_t *rkb,
 
         /* ConsumerGroup */
         rd_kafka_buf_write_kstr(rkbuf,
-                                rktp->rktp_rkt->rkt_rk->rk_conf.group_id);
+                                rktp->rktp_rkt->rkt_conf.group_id);
         /* TopicArrayCnt */
         rd_kafka_buf_write_i32(rkbuf, 1);
         /* TopicName */
@@ -3710,8 +3710,8 @@ static void rd_kafka_toppar_offsetfetch_request (rd_kafka_broker_t *rkb,
 
 	rkbuf = rd_kafka_buf_new(1,
                                  /* How much memory to allocate for buffer: */
-                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_rk->
-                                                    rk_conf.group_id) +
+                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_conf.
+                                                    group_id) +
                                  4 +
                                  RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_topic) +
                                  4 + 4);
@@ -3721,7 +3721,7 @@ static void rd_kafka_toppar_offsetfetch_request (rd_kafka_broker_t *rkb,
 
         /* ConsumerGroup */
         rd_kafka_buf_write_kstr(rkbuf,
-                                rktp->rktp_rkt->rkt_rk->rk_conf.group_id);
+                                rktp->rktp_rkt->rkt_conf.group_id);
         /* TopicArrayCnt */
         rd_kafka_buf_write_i32(rkbuf, 1);
         /* TopicName */

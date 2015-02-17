@@ -514,6 +514,28 @@ class Consumer : public virtual Handle {
   virtual Message *consume (Topic *topic, int32_t partition,
                             int timeout_ms) = 0;
 
+  /**
+   * Consumes messages from 'topic' and 'partition', calling
+   * the provided callback for each consumed messsage.
+   *
+   * `consume_callback()` provides higher throughput performance
+   * than `consume()`.
+   *
+   * 'timeout_ms' is the maximum amount of time to wait for one or more messages
+   * to arrive.
+   *
+   * The provided 'consume_cb' function is called for each message,
+   * the application must not delete the provided 'message'.
+   *
+   * The 'opaque' argument is passed to the 'consume_cb' as 'opaque'.
+   *
+   * Returns the number of messages processed or -1 on error.
+   */
+  virtual int consume_callback (Topic *topic, int32_t partition,
+                                int timeout_ms,
+                                void (*consume_cb) (Message* message, void *opaque),
+                                void *opaque) = 0;
+
 };
 
 

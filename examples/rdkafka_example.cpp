@@ -118,6 +118,34 @@ class MyHashPartitionerCb : public RdKafka::PartitionerCb {
   }
 };
 
+void msg_consume(RdKafka::Message* message, void* opaque) {
+  switch (message->err()) {
+    case RdKafka::ERR__TIMED_OUT:
+      break;
+
+    case RdKafka::ERR_NO_ERROR:
+      /* Real message */
+      std::cerr << "Read msg at offset " << message->offset() << std::endl;
+      if (message->key()) {
+        std::cerr << "Key: " << *message->key() << std::endl;
+      }
+      printf("%.*s\n",
+        static_cast<int>(message->len()),
+        static_cast<const char *>(message->payload()));
+      break;
+
+    case RdKafka::ERR__PARTITION_EOF:
+      /* Last message */
+      break;
+
+    default:
+      /* Errors */
+      std::cerr << "Consume failed: " << message->errstr() << std::endl;
+      run = false;
+  }
+
+  delete message;
+}
 
 
 int main (int argc, char **argv) {
@@ -429,40 +457,20 @@ int main (int argc, char **argv) {
     /*
      * Consume messages
      */
-    while (run) {
-      RdKafka::Message *msg = consumer->consume(topic, partition, 1000);
-
-      switch (msg->err())
-      {
-        case RdKafka::ERR__TIMED_OUT:
-          break;
-
-        case RdKafka::ERR_NO_ERROR:
-	  /* Real message */
-	  std::cerr << "Read msg at offset " << msg->offset() << std::endl;
-	  if (msg->key()) {
-		  std::cerr << "Key: " << *msg->key() << std::endl;
-	  }
-          printf("%.*s\n",
-                 static_cast<int>(msg->len()),
-                 static_cast<const char *>(msg->payload()));
-	  break;
-
-	case RdKafka::ERR__PARTITION_EOF:
-	  /* Last message */
-	  if (exit_eof)
-	    run = false;
-	  break;
-
-	default:
-	  /* Errors */
-	  std::cerr << "Consume failed: " << msg->errstr() << std::endl;
-	  run = false;
-	}
-
-      delete msg;
-
-      consumer->poll(0);
+    if (exit_eof) {
+      // single-run mode uses the consumer_callback interface
+      int const count = consumer->consume_callback(topic, partition, 1000, msg_consume, NULL);
+      if (count == -1) {
+        std::cerr << "Consumer failed" << std::endl;
+      } else {
+        std::cerr << "Received " << count << "messages." << std::endl;
+      }
+    } else {
+      while (run) {
+        RdKafka::Message *msg = consumer->consume(topic, partition, 1000);
+        msg_consume(msg, NULL);
+        consumer->poll(0);
+      }
     }
 
     /*

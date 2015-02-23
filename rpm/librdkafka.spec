@@ -10,12 +10,12 @@ License: BSD-2-Clause
 URL:     https://github.com/edenhill/librdkafka
 Source:	 librdkafka-%{version}.tar.gz
 
-BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 %description
 librdkafka is a C/C++ library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
 It was designed with message delivery reliability and high performance in mind, current figures exceed 800000 msgs/second for the producer and 3 million msgs/second for the consumer.
+This version has been modified to use the zlib crc functions instead of the supplied rd_crc32 functions for a performance increase.
 
 
 %package -n %{name}%{soname}
@@ -37,6 +37,21 @@ librdkafka is a C/C++ library implementation of the Apache Kafka protocol, conta
 This package contains headers and libraries required to build applications
 using librdkafka.
 
+BuildRequires: zlib-devel libstdc++-devel 
+
+%if 0%{?rhel} < 6
+
+BuildRequires: gcc44, g++44, e2fsprogs-devel
+%define GCC "gcc44"
+%define GXX "g++44"
+
+%else
+
+BuildRequires: gcc, g++, libuuid-devel, libuuid
+%define GCC "gcc"
+%define GXX "g++"
+
+%endif
 
 %prep
 %setup -q
@@ -44,6 +59,8 @@ using librdkafka.
 %configure
 
 %build
+./configure --cc=%{GCC} --cxx=%{GXX} 
+
 make
 
 %install

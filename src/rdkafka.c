@@ -1840,6 +1840,11 @@ void *rd_kafka_opaque (const rd_kafka_t *rk) {
 }
 
 
+void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt) {
+	return rkt->rkt_conf.opaque;
+}
+
+
 int rd_kafka_outq_len (rd_kafka_t *rk) {
 	return rk->rk_producer.msg_cnt;
 }

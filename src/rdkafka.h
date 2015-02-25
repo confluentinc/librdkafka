@@ -484,11 +484,6 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
  */
 void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *conf, void *opaque);
 
-/**
- * Retrieves the opaque pointer set above.
- */
-void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
-
 
 /**
  * Producer:

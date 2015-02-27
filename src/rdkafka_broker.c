@@ -2096,12 +2096,12 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 			htonl(msghdr->part3.MessageSize);
 
 
-		msghdr->part3.Crc = rd_crc32_init();
+		msghdr->part3.Crc = crc32(0, NULL, 0);
 		msghdr->part3.MagicByte = 0;  /* FIXME: what? */
 		msghdr->part3.Attributes = 0; /* No compression */
 
 		msghdr->part3.Crc =
-			rd_crc32_update(msghdr->part3.Crc,
+			crc32(msghdr->part3.Crc,
 					(void *)
 					&msghdr->part3.MagicByte,
 					sizeof(msghdr->part3.
@@ -2115,7 +2115,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 		/* Key */
 		msghdr->part3.Crc =
-			rd_crc32_update(msghdr->part3.Crc,
+			crc32(msghdr->part3.Crc,
 					(void *)rkm->rkm_key,
 					RD_KAFKAP_BYTES_SIZE(rkm->
 							     rkm_key));
@@ -2127,7 +2127,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		/* Value(payload) length */
 		msghdr->part4.Value_len = htonl(rkm->rkm_len);
 		msghdr->part3.Crc =
-			rd_crc32_update(msghdr->part3.Crc,
+			crc32(msghdr->part3.Crc,
 					(void *)
 					&msghdr->part4.Value_len,
 					sizeof(msghdr->part4.
@@ -2138,7 +2138,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 		/* Payload */
 		msghdr->part3.Crc =
-			rd_crc32_update(msghdr->part3.Crc,
+			crc32(msghdr->part3.Crc,
 					rkm->rkm_payload,
 					rkm->rkm_len);
 		rd_kafka_buf_push(rkbuf, rkm->rkm_payload, rkm->rkm_len);
@@ -2146,7 +2146,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 		/* Finalize Crc */
 		msghdr->part3.Crc =
-			htonl(rd_crc32_finalize(msghdr->part3.Crc));
+			htonl(msghdr->part3.Crc);
 		msghdr++;
 	}
 
@@ -2331,13 +2331,12 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 			compression_codec & 0x7;
 		msghdr2->Key_len = htonl(-1);
 		msghdr2->Value_len = htonl(coutlen);
-		msghdr2->Crc = rd_crc32_init();
-		msghdr2->Crc = rd_crc32_update(msghdr2->Crc,
+		msghdr2->Crc = crc32(0, NULL, 0);
+		msghdr2->Crc = crc32(msghdr2->Crc,
 					       (void *)&msghdr2->MagicByte,
 					       1+1+4+4);
-		msghdr2->Crc = rd_crc32_update(msghdr2->Crc,
-					       (void *)siov.iov_base, coutlen);
-		msghdr2->Crc = htonl(rd_crc32_finalize(msghdr2->Crc));
+		msghdr2->Crc = crc32(msghdr2->Crc, (void *)siov.iov_base, coutlen);
+		msghdr2->Crc = htonl(msghdr2->Crc);
 
 		/* Update enveloping MessageSet's length. */
 		prodhdr->part2.MessageSetSize = ctotlen;

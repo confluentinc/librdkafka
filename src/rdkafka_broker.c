@@ -350,6 +350,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	int errno_save = errno;
 	rd_kafka_toppar_t *rktp;
 	rd_kafka_bufq_t tmpq;
+        int statechange;
 
 	rd_kafka_assert(rkb->rkb_rk, pthread_self() == rkb->rkb_thread);
 
@@ -405,6 +406,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	rd_kafka_broker_lock(rkb);
 
 	/* Set broker state */
+        statechange = rkb->rkb_state != RD_KAFKA_BROKER_STATE_DOWN;
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
 
 	/*
@@ -449,7 +451,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	rd_kafka_broker_toppars_unlock(rkb);
 
 	/* Query for the topic leaders (async) */
-	if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY)
+	if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY && statechange)
 		rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
 }
 

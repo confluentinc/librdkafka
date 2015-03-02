@@ -997,6 +997,9 @@ int main (int argc, char **argv) {
 			} else
 				pbuf = sbuf;
 
+                        if (msgsize == 0)
+                                pbuf = NULL;
+
 			cnt.tx++;
 			while (run &&
 			       rd_kafka_produce(rkt, partition,

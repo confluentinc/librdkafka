@@ -209,8 +209,9 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 
 	if (verbosity >= 3 ||
             (verbosity >= 2 && !(cnt.msgs % 1000000)))
-		printf("@%"PRId64": %.*s\n",
+		printf("@%"PRId64": %.*s: %.*s\n",
 		       rkmessage->offset,
+                       (int)rkmessage->key_len, (char *)rkmessage->key,
 		       (int)rkmessage->len, (char *)rkmessage->payload);
 
 

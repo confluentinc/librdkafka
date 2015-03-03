@@ -313,9 +313,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "*1*=broker will wait until the data is written to local "
 	  "log before sending a response, "
 	  "*-1*=broker will block until message is committed by all "
-	  "in sync replicas (ISRs) before sending response. "
-	  "*1*=Only the leader broker will need to ack the.",
-	  -1, 1, 1 },
+	  "in sync replicas (ISRs) or broker's `in.sync.replicas` setting before sending response. "
+	  "*1*=Only the leader broker will need to ack the message. ",
+	  -1, 1000, 1 },
         { _RK_TOPIC|_RK_PRODUCER, "enforce.isr.cnt", _RK_C_INT,
           _RKT(enforce_isr_cnt),
           "Fail messages locally if the currently known ISR count for a "

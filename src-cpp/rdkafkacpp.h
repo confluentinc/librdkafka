@@ -169,6 +169,19 @@ class PartitionerCb {
                                   void *msg_opaque) = 0;
 };
 
+/**
+ * Variant partitioner callback that gets the key as pointer and length
+ * instead of as a const std::string *.
+ */
+class PartitionerKeyPointerCb {
+ public:
+  virtual int32_t partitioner_cb (const Topic *topic,
+                                  const void *key,
+                                  size_t key_len,
+                                  int32_t partition_cnt,
+                                  void *msg_opaque) = 0;
+};
+
 
 /**
  * SocketCb callback class
@@ -281,6 +294,11 @@ class Conf {
   /* Use with 'name' = "partitioner_cb" */
   virtual Conf::ConfResult set (const std::string &name,
                                 PartitionerCb *partitioner_cb,
+                                std::string &errstr) = 0;
+
+  /* Use with 'name' = "partitioner_key_pointer_cb" */
+  virtual Conf::ConfResult set (const std::string &name,
+                                PartitionerKeyPointerCb *partitioner_kp_cb,
                                 std::string &errstr) = 0;
 
   /* Use with 'name' = "socket_cb" */
@@ -410,6 +428,8 @@ class Message {
   virtual void               *payload () const = 0 ;
   virtual size_t              len () const = 0;
   virtual const std::string  *key () const = 0;
+  virtual const void         *key_pointer () const = 0 ;
+  virtual size_t              key_len () const = 0;
   virtual int64_t             offset () const = 0;
   virtual void               *msg_opaque () const = 0;
   virtual ~Message () = 0;
@@ -567,6 +587,16 @@ class Producer : public virtual Handle {
                              int msgflags,
                              void *payload, size_t len,
                              const std::string *key,
+                             void *msg_opaque) = 0;
+
+  /**
+   * Variant produce() that passes the key as a pointer and length
+   * instead of as a const std::string *.
+   */
+  virtual ErrorCode produce (Topic *topic, int32_t partition,
+                             int msgflags,
+                             void *payload, size_t len,
+                             const void *key, size_t key_len,
                              void *msg_opaque) = 0;
 };
 

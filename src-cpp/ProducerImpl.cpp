@@ -108,3 +108,21 @@ RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
 
   return RdKafka::ERR_NO_ERROR;
 }
+
+
+RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
+                                                   int32_t partition,
+                                                   int msgflags,
+                                                   void *payload, size_t len,
+                                                   const void *key,
+                                                   size_t key_len,
+                                                   void *msg_opaque) {
+  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+
+  if (rd_kafka_produce(topicimpl->rkt_, partition, msgflags,
+                       payload, len, key, key_len,
+                       msg_opaque) == -1)
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+
+  return RdKafka::ERR_NO_ERROR;
+}

@@ -129,6 +129,9 @@ class MessageImpl : public Message {
     }
     return NULL;
   }
+  void               *key_pointer () const { return rkmessage_->key; }
+  size_t              key_len () const { return rkmessage_->key_len; }
+
   int64_t             offset () const { return rkmessage_->offset; }
   void               *msg_opaque () const { return rkmessage_->_private; };
 
@@ -342,6 +345,12 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                      int msgflags,
                      void *payload, size_t len,
                      const std::string *key,
+                     void *msg_opaque);
+
+  ErrorCode produce (Topic *topic, int32_t partition,
+                     int msgflags,
+                     void *payload, size_t len,
+                     void *key, size_t key_len,
                      void *msg_opaque);
 
   static Producer *create (Conf *conf, std::string &errstr);

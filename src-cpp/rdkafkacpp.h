@@ -410,6 +410,8 @@ class Message {
   virtual void               *payload () const = 0 ;
   virtual size_t              len () const = 0;
   virtual const std::string  *key () const = 0;
+  virtual void               *key_pointer () const = 0 ;
+  virtual size_t              key_len () const = 0;
   virtual int64_t             offset () const = 0;
   virtual void               *msg_opaque () const = 0;
   virtual ~Message () = 0;
@@ -567,6 +569,52 @@ class Producer : public virtual Handle {
                              int msgflags,
                              void *payload, size_t len,
                              const std::string *key,
+                             void *msg_opaque) = 0;
+
+  /**
+   * Produce and send a single message to broker.
+   *
+   * This is an asynch non-blocking API.
+   *
+   * 'partition' is the target partition, either:
+   *   - RdKafka::Topic::PARTITION_UA (unassigned) for
+   *     automatic partitioning using the topic's partitioner function, or
+   *   - a fixed partition (0..N)
+   *
+   * 'msgflags' is zero or more of the following flags OR:ed together:
+   *    RK_MSG_FREE - rdkafka will free(3) 'payload' when it is done with it.
+   *    RK_MSG_COPY - the 'payload' data will be copied and the 'payload'
+   *               pointer will not be used by rdkafka after the
+   *               call returns.
+   *
+   *  NOTE: RK_MSG_FREE and RK_MSG_COPY are mutually exclusive.
+   *
+   * 'payload' is the message payload of size 'len' bytes.
+   *
+   * 'key' is an optional message key, of size 'key_len' bytes.  If non-NULL
+   * it will be passed to the topic partitioner as well as be sent with the
+   * message to the broker and passed on to the consumer.
+   *
+   * 'msg_opaque' is an optional application-provided per-message opaque
+   * pointer that will provided in the delivery report callback (`dr_cb`) for
+   * referencing this message.
+   *
+   * Returns an ErrorCode to indicate success or failure.
+   *  ERR__QUEUE_FULL - maximum number of outstanding messages has been reached:
+   *                   "queue.buffering.max.message"
+   *
+   *  ERR_MSG_SIZE_TOO_LARGE - message is larger than configured max size:
+   *                           "messages.max.bytes".
+   *
+   *  ERR__UNKNOWN_PARTITION - requested 'partition' is unknown in the
+   *                           Kafka cluster.
+   *
+   *  ERR__UNKNOWN_TOPIC     - topic is unknown in the Kafka cluster.
+   */
+  virtual ErrorCode produce (Topic *topic, int32_t partition,
+                             int msgflags,
+                             void *payload, size_t len,
+                             void *key, size_t key_len,
                              void *msg_opaque) = 0;
 };
 

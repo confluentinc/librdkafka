@@ -40,6 +40,9 @@
 #include <inttypes.h>
 #include <sys/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * librdkafka version
@@ -1159,3 +1162,6 @@ int rd_kafka_thread_cnt (void);
 int rd_kafka_wait_destroyed (int timeout_ms);
 
 
+#ifdef __cplusplus
+}
+#endif

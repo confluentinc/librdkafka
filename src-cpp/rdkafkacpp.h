@@ -410,6 +410,8 @@ class Message {
   virtual void               *payload () const = 0 ;
   virtual size_t              len () const = 0;
   virtual const std::string  *key () const = 0;
+  virtual void               *key_pointer () const = 0 ;
+  virtual size_t              key_len () const = 0;
   virtual int64_t             offset () const = 0;
   virtual void               *msg_opaque () const = 0;
   virtual ~Message () = 0;

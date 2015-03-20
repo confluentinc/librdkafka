@@ -55,7 +55,7 @@ extern "C" {
  *
  * I.e.: 0x00080100 = 0.8.1
  */
-#define RD_KAFKA_VERSION  0x00080500
+#define RD_KAFKA_VERSION  0x00080600
 
 /**
  * Returns the librdkafka version as integer.

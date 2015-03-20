@@ -61,7 +61,9 @@ static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 	rktp->rktp_offset_fd = -1;
         rktp->rktp_lo_offset = -1;
         rktp->rktp_hi_offset = -1;
-
+        rktp->rktp_stored_offset = -1;
+        rktp->rktp_commited_offset = -1;
+        rktp->rktp_eof_offset = -1;
 	rd_kafka_msgq_init(&rktp->rktp_msgq);
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);
 	pthread_mutex_init(&rktp->rktp_lock, NULL);

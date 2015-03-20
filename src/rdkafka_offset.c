@@ -346,6 +346,13 @@ static void rd_kafka_offset_file_term (rd_kafka_toppar_t *rktp) {
 	rd_kafka_timer_stop(rktp->rktp_rkt->rkt_rk,
 			    &rktp->rktp_offset_commit_tmr, 1/*lock*/);
 
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
+                     "%s [%"PRId32"]: commit stored offset %"PRId64
+                     ", committed offset %"PRId64"?",
+                     rktp->rktp_rkt->rkt_topic->str,
+                     rktp->rktp_partition,
+                     rktp->rktp_stored_offset, rktp->rktp_commited_offset);
+
 	if (rktp->rktp_stored_offset > rktp->rktp_commited_offset)
 		rd_kafka_offset_file_commit(rktp, rktp->rktp_stored_offset);
 
@@ -511,12 +518,12 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 	if (offset != -1) {
 		/* Start fetching from offset */
 		rktp->rktp_commited_offset = offset;
-		rktp->rktp_next_offset     = offset;
+		rktp->rktp_next_offset     = offset+1;
 		rktp->rktp_fetch_state     = RD_KAFKA_TOPPAR_FETCH_ACTIVE;
 
 	} else {
 		/* Offset was not usable: perform offset reset logic */
-		rktp->rktp_commited_offset = 0;
+		rktp->rktp_commited_offset = -1;
 		rd_kafka_offset_reset(rktp, RD_KAFKA_OFFSET_ERROR,
 				      RD_KAFKA_RESP_ERR__FS,
 				      "non-readable offset file");
@@ -572,7 +579,7 @@ static void rd_kafka_offset_broker_init (rd_kafka_toppar_t *rktp) {
 			     rd_kafka_offset_broker_commit_tmr_cb, rktp);
 
         /* Read offset from broker */
-        rktp->rktp_commited_offset = 0;
+        rktp->rktp_commited_offset = -1;
         rd_kafka_offset_reset(rktp, RD_KAFKA_OFFSET_ERROR,
                               RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE,
                               "waiting for broker offset");
@@ -587,8 +594,18 @@ void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp) {
         if (!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_OFFSET_STORE))
                 return;
 
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
+                     "%s [%"PRId32"]: stopping offset store "
+                     "(stored offset %"PRId64
+                     ", commited offset %"PRId64", EOF offset %"PRId64")",
+                     rktp->rktp_rkt->rkt_topic->str,
+		     rktp->rktp_partition,
+		     rktp->rktp_stored_offset, rktp->rktp_commited_offset,
+                     rktp->rktp_eof_offset);
+
+        /* Store end offset for empty partitions */
         if (rktp->rktp_rkt->rkt_conf.auto_commit &&
-            rktp->rktp_stored_offset < rktp->rktp_eof_offset)
+            rktp->rktp_stored_offset == -1 && rktp->rktp_eof_offset != -1)
                 rd_kafka_offset_store0(rktp, rktp->rktp_eof_offset,
                                        0/*no lock*/);
 

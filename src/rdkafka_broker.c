@@ -2127,6 +2127,10 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 
 		/* Value(payload) length */
+		if (rkm->rkm_payload == NULL) {
+			/* Set length to -1 to indicate a NULL value. */
+			rkm->rkm_len = -1;
+		}
 		msghdr->part4.Value_len = htonl(rkm->rkm_len);
 		msghdr->part3.Crc =
 			crc32(msghdr->part3.Crc,
@@ -2138,12 +2142,15 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		rd_kafka_buf_push(rkbuf, &msghdr->part4, sizeof(msghdr->part4));
 			
 
-		/* Payload */
-		msghdr->part3.Crc =
-			crc32(msghdr->part3.Crc,
-					rkm->rkm_payload,
-					rkm->rkm_len);
-		rd_kafka_buf_push(rkbuf, rkm->rkm_payload, rkm->rkm_len);
+
+		/* Add Payload if not NULL */
+		if (rkm->rkm_payload != NULL) {
+			msghdr->part3.Crc =
+				crc32(msghdr->part3.Crc,
+						rkm->rkm_payload,
+						rkm->rkm_len);
+			rd_kafka_buf_push(rkbuf, rkm->rkm_payload, rkm->rkm_len);
+		}
 
 
 		/* Finalize Crc */
@@ -2801,14 +2808,18 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			/* Create op and push on temporary queue. */
 			rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH);
 
+			rko->rko_rkmessage.key = NULL;
 			if (!RD_KAFKAP_BYTES_IS_NULL(Key)) {
 				rko->rko_rkmessage.key = Key->data;
 				rko->rko_rkmessage.key_len =
 					RD_KAFKAP_BYTES_LEN(Key);
 			}
 
-			rko->rko_rkmessage.payload   = Value->data;
-			rko->rko_rkmessage.len       = Value_len;
+			rko->rko_rkmessage.payload = NULL;
+			if (!RD_KAFKAP_BYTES_IS_NULL(Value)) {
+				rko->rko_rkmessage.payload = Value->data;
+				rko->rko_rkmessage.len = RD_KAFKAP_BYTES_LEN(Value);
+			}
 
 			rko->rko_rkmessage.offset    = hdr->Offset;
 			rko->rko_rkmessage.rkt       = rktp->rktp_rkt;

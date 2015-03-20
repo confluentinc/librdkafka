@@ -93,6 +93,13 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
 			rkt->rkt_conf.message_timeout_ms * 1000;
 	}
 
+        /* Check for a NULL payload */
+        if (payload == NULL) {
+            rkm->rkm_payload = NULL;
+            rkm->rkm_len = 0;
+            return rkm;
+        }
+
 	if (msgflags & RD_KAFKA_MSG_F_COPY) {
 		/* Copy payload to space following the ..msg_t */
 		rkm->rkm_payload = (void *)(rkm+1);

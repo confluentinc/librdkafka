@@ -2514,7 +2514,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 
 			TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
 
-				rd_rkb_dbg(rkb, TOPIC, "TOPPAR",
+				rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
 					   "%.*s [%"PRId32"] %i+%i msgs",
 					   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
 							    rkt_topic),

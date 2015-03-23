@@ -52,7 +52,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <getopt.h>
+#include "wingetopt.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <windows.h>
@@ -344,8 +344,10 @@ getopt_internal(int nargc, char * const *nargv, const char *options,
 	 * CV, 2009-12-14: Check POSIXLY_CORRECT anew if optind == 0 or
 	 *                 optreset != 0 for GNU compatibility.
 	 */
+#ifndef _MSC_VER
 	if (posixly_correct == -1 || optreset != 0)
 		posixly_correct = (getenv("POSIXLY_CORRECT") != NULL);
+#endif
 	if (*options == '-')
 		flags |= FLAG_ALLARGS;
 	else if (posixly_correct || *options == '+')

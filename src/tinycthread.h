@@ -310,6 +310,10 @@ int cnd_wait(cnd_t *cond, mtx_t *mtx);
 */
 int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts);
 
+/** Same as cnd_timedwait() but takes a relative timeout in milliseconds.
+ */
+int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms);
+
 /* Thread */
 #if defined(_TTHREAD_WIN32_)
 typedef HANDLE thrd_t;
@@ -345,6 +349,13 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg);
 * @return The identifier of the calling thread.
 */
 thrd_t thrd_current(void);
+
+
+/** Checks if passed thread is the current thread.
+ * @return non-zero if same thread, else 0.
+ */
+int thrd_is_current(thrd_t thr);
+
 
 /** Dispose of any resources allocated to the thread when that thread exits.
  * @return thrd_success, or thrd_error on error
@@ -463,6 +474,46 @@ int tss_set(tss_t key, void *val);
 #else
   #define call_once(flag,func) pthread_once(flag,func)
 #endif
+
+
+
+
+/**
+* FIXME: description */
+#if defined(_TTHREAD_WIN32_)
+typedef struct rwlock_t {
+	SRWLOCK  lock;
+	int       rcnt;
+	int       wcnt;
+} rwlock_t;
+#define rwlock_init(rwl)    do { (rwl)->rcnt = (rwl)->wcnt = 0; InitializeSRWLock(&(rwl)->lock); } while (0)
+#define rwlock_destroy(rwl)
+#define rwlock_rdlock(rwl)   do { if (0) printf("Thr %i: at %i:   RDLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt >= 0); AcquireSRWLockShared(&(rwl)->lock); InterlockedIncrement(&(rwl)->rcnt); } while (0)
+#define rwlock_wrlock(rwl)   do { if (0) printf("Thr %i: at %i:   WRLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt >= 0); AcquireSRWLockExclusive(&(rwl)->lock); InterlockedIncrement(&(rwl)->wcnt); } while (0)
+#define rwlock_rdunlock(rwl) do { if (0) printf("Thr %i: at %i: RDUNLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt > 0 && (rwl)->wcnt >= 0); ReleaseSRWLockShared(&(rwl)->lock); InterlockedDecrement(&(rwl)->rcnt); } while (0)  
+#define rwlock_wrunlock(rwl) do { if (0) printf("Thr %i: at %i: RWUNLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt > 0); ReleaseSRWLockExclusive(&(rwl)->lock); InterlockedDecrement(&(rwl)->wcnt); } while (0)  
+
+#define rwlock_rdlock_d(rwl)   do { if (1) printf("Thr %i: at %i:   RDLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt >= 0); AcquireSRWLockShared(&(rwl)->lock); InterlockedIncrement(&(rwl)->rcnt); } while (0)
+#define rwlock_wrlock_d(rwl)   do { if (1) printf("Thr %i: at %i:   WRLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt >= 0); AcquireSRWLockExclusive(&(rwl)->lock); InterlockedIncrement(&(rwl)->wcnt); } while (0)
+#define rwlock_rdunlock_d(rwl) do { if (1) printf("Thr %i: at %i: RDUNLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt > 0 && (rwl)->wcnt >= 0); ReleaseSRWLockShared(&(rwl)->lock); InterlockedDecrement(&(rwl)->rcnt); } while (0)  
+#define rwlock_wrunlock_d(rwl) do { if (1) printf("Thr %i: at %i: RWUNLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt > 0); ReleaseSRWLockExclusive(&(rwl)->lock); InterlockedDecrement(&(rwl)->wcnt); } while (0)  
+
+
+#else
+typedef pthread_rwlock_t rwlock_t;
+#define rwlock_init(rwl)     pthread_rwlock_init(rwl, NULL)
+#define rwlock_destroy(rwl)  pthread_rwlock_destroy(rwl)
+#define rwlock_rdlock(rwl)   pthread_rwlock_rdlock(rwl)
+#define rwlock_wrlock(rwl)   pthread_rwlock_wrlock(rwl)
+#define rwlock_rdunlock(rwl) pthread_rwlock_unlock(rwl)
+#define rwlock_wrunlock(rwl) pthread_rwlock_unlock(rwl)
+
+#endif
+#ifdef __cplusplus
+}
+#endif
+
+
 
 #ifdef __cplusplus
 }

@@ -463,6 +463,16 @@ int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts)
 #endif
 }
 
+
+int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
+#if defined(_TTHREAD_WIN32_)
+	return _cnd_timedwait_win32(cnd, mtx, (DWORD)timeout_ms);
+#else
+	#error FIXME
+#endif
+}
+
+
 #if defined(_TTHREAD_WIN32_)
 struct TinyCThreadTSSData {
   void* value;
@@ -617,6 +627,15 @@ thrd_t thrd_current(void)
   return pthread_self();
 #endif
 }
+
+int thrd_is_current(thrd_t thr) {
+#if defined(_TTHREAD_WIN32_)
+	return GetThreadId(thr) == GetCurrentThreadId();
+#else	
+	return (pthread_self() == thr);
+#endif
+}
+
 
 int thrd_detach(thrd_t thr)
 {

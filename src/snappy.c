@@ -56,6 +56,8 @@
 #include "snappy_compat.h"
 #endif
 
+#include "rd.h"
+
 #define CRASH_UNLESS(x) BUG_ON(!(x))
 #define CHECK(cond) CRASH_UNLESS(cond)
 #define CHECK_LE(a, b) CRASH_UNLESS((a) <= (b))
@@ -153,12 +155,12 @@ static __inline int log2_floor(u32 n)
 	return n == 0 ? -1 : 31 ^ rd_clz(n);
 }
 
-static __inline int find_lsb_set_non_zero(u32 n)
+static RD_UNUSED __inline int find_lsb_set_non_zero(u32 n)
 {
 	return rd_ctz(n);
 }
 
-static __inline int find_lsb_set_non_zero64(u64 n)
+static RD_UNUSED __inline int find_lsb_set_non_zero64(u64 n)
 {
 	return rd_ctz64(n);
 }

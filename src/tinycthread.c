@@ -473,6 +473,9 @@ int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
 	struct timespec ts;
 
 	gettimeofday(&tv, NULL);
+  ts.tv_sec = tv.tv_sec;
+  ts.tv_nsec = tv.tv_usec * 1000;
+
 	TIMEVAL_TO_TIMESPEC(&tv, &ts);
 
 	ts.tv_sec  += timeout_ms / 1000;

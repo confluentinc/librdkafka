@@ -25,6 +25,7 @@ ssize_t rd_kafka_transport_sendmsg(rd_kafka_transport_t *rktrans, const struct m
 	char *errstr, size_t errstr_size);
 ssize_t rd_kafka_transport_recvmsg(rd_kafka_transport_t *rktrans, struct msghdr *msg,
 	char *errstr, size_t errstr_size);
+struct rd_kafka_broker_s;
 rd_kafka_transport_t *rd_kafka_transport_connect(struct rd_kafka_broker_s *rkb, const rd_sockaddr_inx_t *sinx,
 	char *errstr, int errstr_size);
 void rd_kafka_transport_close(rd_kafka_transport_t *rktrans);

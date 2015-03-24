@@ -424,8 +424,7 @@ void rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
 RD_EXPORT
 void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
                                 int (*open_cb) (const char *pathname,
-                                                int flags,
-												mode_t mode,
+                                                int flags, mode_t mode,
                                                 void *opaque));
 #endif
 

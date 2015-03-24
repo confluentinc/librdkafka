@@ -57,15 +57,6 @@
 #define RD_IS_CONSTANT(p)  __builtin_constant_p((p))
 #define RD_TLS      __thread
 
-/* size_t and ssize_t format strings */
-#define PRIusz  "zu"
-#define PRIdsz  "zd"
-
-#define RD_FORMAT(...) __attribute__((format(__VA_ARGS__)));
-
-#define rd_usleep(usec)  usleep(usec)
-
-
 /**
 * Allocation
 */
@@ -82,20 +73,26 @@
 */
 
 /* size_t and ssize_t format strings */
-#define PRIusz  "%zu"
-#define PRIdsz  "%zd"
+#define PRIusz  "zu"
+#define PRIdsz  "zd"
 
-#define RD_FORMAT(...) __attribute__((format (printf, __VA_ARGS__)))
-#define rd_snprintf(...)  sprintf_s(__VA_ARGS__)
+#define RD_FORMAT(...) __attribute__((format (__VA_ARGS__)))
+#define rd_snprintf(...)  snprintf(__VA_ARGS__)
 
 
 /**
  * Errors
  */
-#define rd_strerror(err) rd_strerror(err)
+#define rd_strerror(err) strerror(err)
 
 
 /**
 * Misc
 */
 #define rd_usleep(usec)  usleep(usec)
+
+
+/**
+ * Empty struct initializer
+ */
+#define RD_ZERO_INIT  {}

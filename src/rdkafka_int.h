@@ -35,15 +35,6 @@
 #include <fcntl.h>
 
 
-#ifdef _MSC_VER
-/* Visual Studio */
-#include "win32_config.h"
-#else
-/* POSIX / UNIX based systems */
-#include "../config.h" /* mklove output */
-#endif
-
-
 #include "rdsysqueue.h"
 
 #include "rdkafka.h"
@@ -221,9 +212,11 @@ struct rd_kafka_conf_s {
         /* Socket creation callback */
         int (*socket_cb) (int domain, int type, int protocol, void *opaque);
 
+#ifndef _MSC_VER
         /* File open callback */
-        int (*open_cb) (const char *pathname, int flags, int mode,
+        int (*open_cb) (const char *pathname, int flags, mode_t mode,
                         void *opaque);
+#endif
 
 	/* Opaque passed to callbacks. */
 	void  *opaque;
@@ -232,11 +225,12 @@ struct rd_kafka_conf_s {
 int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);
 int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
                                 void *opaque);
-int rd_kafka_open_cb_linux (const char *pathname, int flags, int mode,
+#ifndef _MCS_VER
+int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
                             void *opaque);
-int rd_kafka_open_cb_generic (const char *pathname, int flags, int mode,
+int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
                               void *opaque);
-
+#endif
 
 
 
@@ -824,20 +818,20 @@ void rd_kafka_log_buf (const rd_kafka_t *rk, int level,
 void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
 	const char *fac, const char *fmt, ...)	RD_FORMAT(printf, 5, 6);
 
-#define rd_kafka_log(rk,level,fac,fmt,...) rd_kafka_log0(rk,NULL,level,fac,fmt,__VA_ARGS__)
-#define rd_kafka_dbg(rk,ctx,fac,fmt,...) do {				  \
+#define rd_kafka_log(rk,level,fac,...) rd_kafka_log0(rk,NULL,level,fac,__VA_ARGS__)
+#define rd_kafka_dbg(rk,ctx,fac,...) do {				  \
 		if (unlikely((rk)->rk_conf.debug & RD_KAFKA_DBG_ ## ctx)) \
-			rd_kafka_log0(rk,NULL,LOG_DEBUG,fac,fmt,__VA_ARGS__);	  \
+			rd_kafka_log0(rk,NULL,LOG_DEBUG,fac,__VA_ARGS__); \
 	} while (0)
 
-#define rd_rkb_log(rkb,level,fac,fmt,...)				\
-	rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name, level, fac, fmt, __VA_ARGS__)
+#define rd_rkb_log(rkb,level,fac,...)					\
+	rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name, level, fac, __VA_ARGS__)
 
-#define rd_rkb_dbg(rkb,ctx,fac,fmt, ...) do {				\
+#define rd_rkb_dbg(rkb,ctx,fac,...) do {				\
 		if (unlikely((rkb)->rkb_rk->rk_conf.debug &		\
 			     RD_KAFKA_DBG_ ## ctx))			\
 			rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name,	\
-				      LOG_DEBUG, fac, fmt, __VA_ARGS__);		\
+				      LOG_DEBUG, fac, __VA_ARGS__);		\
 	} while (0)
 
 

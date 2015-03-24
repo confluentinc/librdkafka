@@ -32,6 +32,7 @@ static const char *socket_strerror(int err) {
 ssize_t rd_kafka_transport_sendmsg(rd_kafka_transport_t *rktrans, const struct msghdr *msg,
 	char *errstr, size_t errstr_size) {
 #ifndef _MSC_VER
+	ssize_t r;
 
 #ifdef sun
 	/* See recvmsg() comment. Setting it here to be safe. */

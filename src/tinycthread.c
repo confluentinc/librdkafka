@@ -468,7 +468,27 @@ int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
 #if defined(_TTHREAD_WIN32_)
 	return _cnd_timedwait_win32(cnd, mtx, (DWORD)timeout_ms);
 #else
-	#error FIXME
+  int ret;
+	struct timeval tv;
+	struct timespec ts;
+
+	gettimeofday(&tv, NULL);
+	TIMEVAL_TO_TIMESPEC(&tv, &ts);
+
+	ts.tv_sec  += timeout_ms / 1000;
+	ts.tv_nsec += (timeout_ms % 1000) * 1000000;
+
+	if (ts.tv_nsec > 1000000000) {
+		ts.tv_sec++;
+		ts.tv_nsec -= 1000000000;
+	}
+
+  ret = pthread_cond_timedwait(cnd, mtx, &ts);
+  if (ret == ETIMEDOUT)
+  {
+    return thrd_timedout;
+  }
+  return ret == 0 ? thrd_success : thrd_error;
 #endif
 }
 

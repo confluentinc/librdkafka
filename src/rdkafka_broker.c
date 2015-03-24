@@ -28,7 +28,13 @@
 
 
 #define __need_IOV_MAX
+
+#ifndef _MSC_VER
 #define _GNU_SOURCE
+#define _XOPEN_SOURCE
+#include <signal.h>
+#endif
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -327,7 +333,7 @@ static void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
 	rd_rkb_dbg(rkb, QUEUE, "BUFQ", "Purging bufq with %i buffers",
-		   rkbufq->rkbq_cnt);
+		   rd_atomic32_get(&rkbufq->rkbq_cnt));
 
 	TAILQ_FOREACH_SAFE(rkbuf, &rkbufq->rkbq_bufs, rkbuf_link, tmp)
 		rkbuf->rkbuf_cb(rkb, err, NULL, rkbuf, rkbuf->rkbuf_opaque);
@@ -687,12 +693,12 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
  *   - an 'err:' label must be available for error bailouts.
  */
 
-#define _FAIL(fmt, ...) do {						\
+#define _FAIL(...) do {						\
                 if (log_decode_errors) {                                \
                         rd_rkb_log(rkb, LOG_WARNING, "PROTOERR",        \
                                    "Protocol parse failure at %s:%i",   \
                                    __FUNCTION__, __LINE__);             \
-                        rd_rkb_log(rkb, LOG_WARNING, "PROTOERR", fmt, __VA_ARGS__);  \
+                        rd_rkb_log(rkb, LOG_WARNING, "PROTOERR", __VA_ARGS__);  \
                 }                                                       \
                 goto err;                                               \
 	} while (0)
@@ -1768,7 +1774,8 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 
 	rd_rkb_dbg(rkb, MSG, "MSGSET",
 		   "MessageSet with %i message(s) %sdelivered",
-		   request->rkbuf_msgq.rkmq_msg_cnt, err ? "not ": "");
+		   rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
+		   err ? "not ": "");
 
 	/* Parse Produce reply (unless the request errored) */
 	if (!err && reply)
@@ -1778,7 +1785,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 	if (err) {
 		rd_rkb_dbg(rkb, MSG, "MSGSET", "MessageSet with %i message(s) "
 			   "encountered error: %s",
-			   request->rkbuf_msgq.rkmq_msg_cnt,
+			   rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
 			   rd_kafka_err2str(err));
 
 		switch (err)
@@ -1922,11 +1929,11 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		rd_rkb_dbg(rkb, MSG, "PRODUCE",
 			   "Serve %i/%i messages (%i iovecs) "
 			   "for %.*s [%"PRId32"] (%"PRIu64" bytes)",
-			   msgcnt, rktp->rktp_msgq.rkmq_msg_cnt,
+			   msgcnt, rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
 			   iovcnt,
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
 			   rktp->rktp_partition,
-			   rktp->rktp_msgq.rkmq_msg_bytes);
+			   rd_atomic64_get(&rktp->rktp_msgq.rkmq_msg_bytes));
 
 
 	/* Allocate iovecs to hold all headers and messages,
@@ -2473,8 +2480,9 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 					   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
 							    rkt_topic),
 					   rktp->rktp_partition,
-					   rktp->rktp_msgq.rkmq_msg_cnt,
-					   rktp->rktp_xmit_msgq.rkmq_msg_cnt);
+					   rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
+					   rd_atomic32_get(&rktp->rktp_xmit_msgq.
+							   rkmq_msg_cnt));
 
 				rd_kafka_toppar_lock(rktp);
 
@@ -3082,7 +3090,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			rd_rkb_dbg(rkb, MSG, "CONSUME",
 				   "Enqueue %i messages on %s [%"PRId32"] "
 				   "fetch queue (%i)",
-				   tmp_opq.rkq_qlen,
+				   rd_atomic32_get(&tmp_opq.rkq_qlen),
 				   rktp->rktp_rkt->rkt_topic->str,
 				   rktp->rktp_partition,
 				   rd_kafka_q_len(&rktp->rktp_fetchq));
@@ -3103,7 +3111,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 	}
 
 	if (_REMAIN() != 0)
-		_FAIL("Remaining data after message set parse: %"PRIdsz" bytes",
+		_FAIL("Remaining data after message set parse: %i bytes",
 		      _REMAIN());
 
 	return 0;

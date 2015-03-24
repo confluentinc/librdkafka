@@ -198,13 +198,17 @@ class RD_EXPORT SocketCb {
 };
 
 
+#ifndef _MSC_VER
 /**
  * OpenCb callback class
  */
 class RD_EXPORT OpenCb {
  public:
+#ifndef _MSC_VER
   virtual int open_cb (const std::string &path, int flags, int mode) = 0;
+#endif
 };
+#endif
 
 
 /**

@@ -115,3 +115,9 @@ static __inline RD_UNUSED const char *rd_strerror(int err) {
  * Misc
  */
 #define rd_usleep(usec)  Sleep((usec) / 1000)
+
+
+/**
+ * Empty struct initializer
+ */
+#define RD_ZERO_INIT  {0}

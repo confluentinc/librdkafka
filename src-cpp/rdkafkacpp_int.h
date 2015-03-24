@@ -48,7 +48,7 @@ void error_cb_trampoline (rd_kafka_t *rk, int err, const char *reason,
 int stats_cb_trampoline (rd_kafka_t *rk, char *json, size_t json_len,
                          void *opaque);
 int socket_cb_trampoline (int domain, int type, int protocol, void *opaque);
-int open_cb_trampoline (const char *pathname, int flags, int mode,
+int open_cb_trampoline (const char *pathname, int flags, mode_t mode,
                         void *opaque);
 
 

@@ -1130,9 +1130,9 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_t *rk, void *arg) {
  */
 static int rd_kafka_thread_main (void *arg) {
 	rd_kafka_t *rk = arg;
-	rd_kafka_timer_t tmr_topic_scan = {0};
-	rd_kafka_timer_t tmr_stats_emit = {0};
-	rd_kafka_timer_t tmr_metadata_refresh = {0};
+	rd_kafka_timer_t tmr_topic_scan = RD_ZERO_INIT;
+	rd_kafka_timer_t tmr_stats_emit = RD_ZERO_INIT;
+	rd_kafka_timer_t tmr_metadata_refresh = RD_ZERO_INIT;
 
 	thrd_detach(thrd_current());
 

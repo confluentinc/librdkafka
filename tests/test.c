@@ -114,7 +114,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 
 	/* Open and read optional local test configuration file, if any. */
 #ifndef _MSC_VER
-		fp = fopen(testconf, "r");
+		fp = fopen(test_conf, "r");
 #else
 		fp = NULL;
 		errno = fopen_s(&fp, test_conf, "r");

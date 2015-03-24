@@ -39,6 +39,14 @@
 
 #include "tinycthread.h"
 
+#ifdef _MSC_VER
+/* Visual Studio */
+#include "win32_config.h"
+#else
+/* POSIX / UNIX based systems */
+#include "../config.h" /* mklove output */
+#endif
+
 
 #ifdef _MSC_VER
 /* Win32/Visual Studio */
@@ -160,12 +168,12 @@ static __inline int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v) 
 }
 
 static __inline int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
-	return ra->val;
+	return ATOMIC_OP(fetch, add, &ra->val, 0);
 }
 
 static __inline int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v) {
 #ifndef _MSC_VER
-	ra->val = v; // FIXME
+	return ra->val = v; // FIXME
 #else
 	return InterlockedExchange(&ra->val, v);
 #endif
@@ -189,13 +197,13 @@ static __inline int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v) 
 }
 
 static __inline int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
-	return ra->val;
+	return ATOMIC_OP(fetch, add, &ra->val, 0);
 }
 
 
 static __inline int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra, int64_t v) {
 #ifndef _MSC_VER
-	ra->val = v;
+	return ra->val = v; // FIXME
 #else
 	return InterlockedExchange64(&ra->val, v);
 #endif

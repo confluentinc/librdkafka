@@ -94,7 +94,7 @@ int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
  * Fallback version of open_cb NOT providing racefree CLOEXEC,
  * but setting CLOEXEC after file open (if FD_CLOEXEC is defined).
  */
-int rd_kafka_open_cb_generic (const char *pathname, int flags, int mode,
+int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
                               void *opaque) {
 #ifndef _MSC_VER
 	int fd;
@@ -280,7 +280,7 @@ static int rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp,
 		if (_chsize_s(_fileno(rktp->rktp_offset_fp), len) == -1)
 			; /* Ignore truncate failures */
 #else
-		if (ftruncate(rktp->rktp_offset_fd, len) == -1)
+		if (ftruncate(fileno(rktp->rktp_offset_fp), len) == -1)
 			; /* Ignore truncate failures */
 #endif
 

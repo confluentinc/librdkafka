@@ -624,8 +624,8 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 			     rkb->rkb_name,
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
-			     rktp->rktp_msgq.rkmq_msg_cnt,
-			     rktp->rktp_msgq.rkmq_msg_bytes);
+			     rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
+			     rd_atomic64_get(&rktp->rktp_msgq.rkmq_msg_bytes));
 		rd_kafka_broker_toppars_wrlock(rkb);
 		rd_kafka_toppar_keep(rktp);
 		TAILQ_INSERT_TAIL(&rkb->rkb_toppars, rktp, rktp_rkblink);
@@ -899,7 +899,7 @@ static void rd_kafka_topic_assign_uas (rd_kafka_topic_t *rkt) {
 	rd_kafka_dbg(rk, TOPIC, "PARTCNT",
 		     "Partitioning %i unassigned messages in topic %.*s to "
 		     "%"PRId32" partitions",
-		     rktp_ua->rktp_msgq.rkmq_msg_cnt, 
+		     rd_atomic32_get(&rktp_ua->rktp_msgq.rkmq_msg_cnt),
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic),
 		     rkt->rkt_partition_cnt);
 

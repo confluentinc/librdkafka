@@ -312,9 +312,7 @@ static void consume_messages (uint64_t testid, const char *topic,
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
-    int failcnt = 0;
 	int i;
-	int cnt = 0;
 
 	test_conf_init(&conf, &topic_conf, 20);
 
@@ -381,7 +379,6 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 	char errstr[512];
 	int i;
 	int32_t partition;
-	int cnt = 0;
 	int batch_cnt = msgcnt / partition_cnt;
 
 	test_conf_init(&conf, &topic_conf, 20);

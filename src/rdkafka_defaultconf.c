@@ -864,13 +864,14 @@ void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
 }
 
 
-
+#ifndef _MSC_VER
 void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
                                 int (*open_cb) (const char *pathname,
-                                                int flags, int mode,
+                                                int flags, mode_t mode,
                                                 void *opaque)) {
         conf->open_cb = open_cb;
 }
+#endif
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 	conf->opaque = opaque;

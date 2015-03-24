@@ -40,7 +40,7 @@
 #include "win32_config.h"
 #else
 /* POSIX / UNIX based systems */
-#include "config.h" /* mklove output */
+#include "../config.h" /* mklove output */
 #endif
 
 

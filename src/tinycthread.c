@@ -891,7 +891,7 @@ int _tthread_timespec_get(struct timespec *ts, int base)
 {
 #if defined(_TTHREAD_WIN32_)
   struct _timeb tb;
-#else
+#elif !defined(CLOCK_REALTIME)
   struct timeval tv;
 #endif
 

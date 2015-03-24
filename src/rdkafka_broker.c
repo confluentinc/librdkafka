@@ -39,10 +39,6 @@
 #include <stdarg.h>
 #include <string.h>
 
-#if WITH_ZLIB
-#include <zlib.h>
-#endif
-
 #include "rd.h"
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
@@ -56,6 +52,11 @@
 #include "rdgz.h"
 #include "snappy.h"
 #include "rdendian.h"
+
+#if WITH_ZLIB
+#include <zlib.h>
+#endif
+
 
 const char *rd_kafka_broker_state_names[] = {
 	"INIT",

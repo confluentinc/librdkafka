@@ -47,6 +47,7 @@
 
 
 #ifdef _MSC_VER
+#undef RD_EXPORT
 #ifdef LIBRDKAFKACPP_EXPORTS
 #define RD_EXPORT __declspec(dllexport)
 #else
@@ -197,18 +198,13 @@ class RD_EXPORT SocketCb {
   virtual int socket_cb (int domain, int type, int protocol) = 0;
 };
 
-
-#ifndef _MSC_VER
 /**
  * OpenCb callback class
  */
 class RD_EXPORT OpenCb {
  public:
-#ifndef _MSC_VER
   virtual int open_cb (const std::string &path, int flags, int mode) = 0;
-#endif
 };
-#endif
 
 
 /**

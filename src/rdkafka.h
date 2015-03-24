@@ -45,6 +45,7 @@
 #include <basetsd.h>
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED
+#undef RD_EXPORT
 #ifdef LIBRDKAFKA_EXPORTS
 #define RD_EXPORT __declspec(dllexport)
 #else

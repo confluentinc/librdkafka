@@ -38,6 +38,10 @@ extern "C" {
 #include "../src/rdkafka.h"
 };
 
+#ifdef _MSC_VER
+typedef int mode_t;
+#endif
+
 namespace RdKafka {
 
 

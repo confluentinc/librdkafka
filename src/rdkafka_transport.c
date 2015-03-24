@@ -2,6 +2,8 @@
 #pragma comment(lib, "ws2_32.lib")
 #endif
 
+#define _DARWIN_C_SOURCE  /* MSG_DONTWAIT */
+
 #include "rdkafka_int.h"
 #include "rdaddr.h"
 #include "rdkafka_transport.h"

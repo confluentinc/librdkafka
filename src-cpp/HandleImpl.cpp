@@ -93,7 +93,7 @@ int RdKafka::socket_cb_trampoline (int domain, int type, int protocol,
 }
 
 
-int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
+int RdKafka::open_cb_trampoline (const char *pathname, int flags, int mode,
                                  void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
@@ -120,8 +120,10 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
   }
 
   if (confimpl->open_cb_) {
+#ifndef _MSC_VER // FIXME
     rd_kafka_conf_set_open_cb(confimpl->rk_conf_, RdKafka::open_cb_trampoline);
     open_cb_ = confimpl->open_cb_;
+#endif
   }
 
 }

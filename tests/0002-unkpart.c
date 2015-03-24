@@ -31,10 +31,6 @@
  * Issue #39
  */
 
-#define _GNU_SOURCE
-#include <sys/time.h>
-#include <time.h>
-
 #include "test.h"
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
@@ -69,7 +65,7 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 }
 
 
-int main (int argc, char **argv) {
+int main_0002_unkpart (int argc, char **argv) {
 	int partition = 99; /* non-existent */
 	int r;
 	rd_kafka_t *rk;
@@ -99,7 +95,7 @@ int main (int argc, char **argv) {
                                  topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_strerror(errno));
 
         /* Request metadata so that we know the cluster is up before producing
          * messages, otherwise erroneous partitions will not fail immediately.*/
@@ -114,7 +110,7 @@ int main (int argc, char **argv) {
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
 		*msgidp = i;
-		snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
+		rd_snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
 		r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
 				     msg, strlen(msg), NULL, 0, msgidp);
 		if (r == -1) {
@@ -123,7 +119,7 @@ int main (int argc, char **argv) {
 					 "unknown partition: good!\n", i);
 			else
 				TEST_FAIL("Failed to produce message #%i: %s\n",
-					  i, strerror(errno));
+					  i, rd_strerror(errno));
 		} else {
 			if (i > 5)
 				TEST_FAIL("Message #%i produced: "
@@ -136,7 +132,7 @@ int main (int argc, char **argv) {
 		 * count: this will make subsequent produce() calls fail
 		 * immediately. */
 		if (i == 5)
-			sleep(2);
+			rd_sleep(2);
 	}
 
 	/* Wait for messages to time out */

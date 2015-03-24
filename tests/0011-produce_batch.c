@@ -30,9 +30,6 @@
  * Tests messages are produced in order.
  */
 
-#define _GNU_SOURCE
-#include <sys/time.h>
-#include <time.h>
 
 #include "test.h"
 
@@ -80,7 +77,7 @@ static void test_single_partition (void) {
 	char errstr[512];
 	char msg[128];
 	int msgcnt = 100000;
-        int failcnt;
+	int failcnt = 0;
 	int i;
         rd_kafka_message_t *rkmessages;
 
@@ -103,17 +100,17 @@ static void test_single_partition (void) {
                                  topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_strerror(errno));
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
 		*msgidp = i;
-		snprintf(msg, sizeof(msg), "%s:%s test message #%i",
+		rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
                          __FILE__, __FUNCTION__, i);
 
-                rkmessages[i].payload  = strdup(msg);
+                rkmessages[i].payload  = rd_strdup(msg);
                 rkmessages[i].len      = strlen(msg);
                 rkmessages[i]._private = msgidp;
         }
@@ -207,7 +204,7 @@ static void test_partitioner (void) {
 	char errstr[512];
 	char msg[128];
 	int msgcnt = 100000;
-        int failcnt;
+        int failcnt = 0;
 	int i;
         rd_kafka_message_t *rkmessages;
 
@@ -230,17 +227,17 @@ static void test_partitioner (void) {
                                  topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_strerror(errno));
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
 		*msgidp = i;
-		snprintf(msg, sizeof(msg), "%s:%s test message #%i",
+		rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
                          __FILE__, __FUNCTION__, i);
 
-                rkmessages[i].payload = strdup(msg);
+                rkmessages[i].payload = rd_strdup(msg);
                 rkmessages[i].len     = strlen(msg);
                 rkmessages[i]._private = msgidp;
         }
@@ -302,7 +299,7 @@ static void test_partitioner (void) {
 	return;
 }
 
-int main (int argc, char **argv) {
+int main_0011_produce_batch (int argc, char **argv) {
         test_single_partition();
         test_partitioner();
 	return 0;

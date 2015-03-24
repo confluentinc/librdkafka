@@ -57,18 +57,26 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_broker.h"
 
+
+#ifdef _MSC_VER
+#include <io.h>
+#include <Shlwapi.h>
+#endif
+
+
 /**
  * NOTE: toppar_lock(rktp) must be held
  */
 static void rd_kafka_offset_file_close (rd_kafka_toppar_t *rktp) {
-	if (rktp->rktp_offset_fd == -1)
+	if (!rktp->rktp_offset_fp)
 		return;
 
-	close(rktp->rktp_offset_fd);
-	rktp->rktp_offset_fd = -1;
+	fclose(rktp->rktp_offset_fp);
+	rktp->rktp_offset_fp = NULL;
 }
 
 
+#ifndef _MSC_VER
 /**
  * Linux version of open callback providing racefree CLOEXEC.
  */
@@ -80,14 +88,16 @@ int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
         return rd_kafka_open_cb_generic(pathname, flags, mode, opaque);
 #endif
 }
+#endif
 
 /**
  * Fallback version of open_cb NOT providing racefree CLOEXEC,
  * but setting CLOEXEC after file open (if FD_CLOEXEC is defined).
  */
-int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
+int rd_kafka_open_cb_generic (const char *pathname, int flags, int mode,
                               void *opaque) {
-        int fd;
+#ifndef _MSC_VER
+	int fd;
         int on = 1;
         fd = open(pathname, flags, mode);
         if (fd == -1)
@@ -96,6 +106,13 @@ int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
         fcntl(fd, F_SETFD, FD_CLOEXEC, &on);
 #endif
         return fd;
+#else
+	int fd;
+	fd = _open(pathname, flags, mode); // C4996
+	if (fd == -1)
+		return -1;
+	return fd;
+#endif
 }
 
 
@@ -104,7 +121,7 @@ int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
  */
 static int rd_kafka_offset_file_open (rd_kafka_toppar_t *rktp) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
-	int fd;
+		int fd;
 
 	if ((fd = rk->rk_conf.open_cb(rktp->rktp_offset_path,
                                       O_CREAT|O_RDWR, 0644,
@@ -115,11 +132,16 @@ static int rd_kafka_offset_file_open (rd_kafka_toppar_t *rktp) {
 				"Failed to open offset file %s: %s",
 				rktp->rktp_rkt->rkt_topic->str,
 				rktp->rktp_partition,
-				rktp->rktp_offset_path, strerror(errno));
+				rktp->rktp_offset_path, rd_strerror(errno));
 		return -1;
 	}
 
-	rktp->rktp_offset_fd = fd;
+	rktp->rktp_offset_fp =
+#ifndef _MSC_VER
+		fdopen(fd, "a+");
+#else
+		_fdopen(fd, "a+");
+#endif
 
 	return 0;
 }
@@ -133,7 +155,7 @@ static int64_t rd_kafka_offset_file_read (rd_kafka_toppar_t *rktp) {
 	int64_t offset;
 	int r;
 
-	if (lseek(rktp->rktp_offset_fd, SEEK_SET, 0) == -1) {
+	if (fseek(rktp->rktp_offset_fp, 0, SEEK_SET) == -1) {
 		rd_kafka_op_err(rktp->rktp_rkt->rkt_rk,
 				RD_KAFKA_RESP_ERR__FS,
 				"%s [%"PRId32"]: "
@@ -141,19 +163,19 @@ static int64_t rd_kafka_offset_file_read (rd_kafka_toppar_t *rktp) {
 				rktp->rktp_rkt->rkt_topic->str,
 				rktp->rktp_partition,
 				rktp->rktp_offset_path,
-				strerror(errno));
+				rd_strerror(errno));
 		rd_kafka_offset_file_close(rktp);
 		return -1;
 	}
 
-	if ((r = read(rktp->rktp_offset_fd, buf, sizeof(buf)-1)) == -1) {
+	if ((r = fread(buf, 1, sizeof(buf)-1, rktp->rktp_offset_fp)) == -1) {
 		rd_kafka_op_err(rktp->rktp_rkt->rkt_rk,
 				RD_KAFKA_RESP_ERR__FS,
 				"%s [%"PRId32"]: "
 				"Failed to read offset file %s: %s",
 				rktp->rktp_rkt->rkt_topic->str,
 				rktp->rktp_partition,
-				rktp->rktp_offset_path, strerror(errno));
+				rktp->rktp_offset_path, rd_strerror(errno));
 		rd_kafka_offset_file_close(rktp);
 		return -1;
 	}
@@ -193,6 +215,20 @@ static int64_t rd_kafka_offset_file_read (rd_kafka_toppar_t *rktp) {
 
 
 /**
+ * Sync/flush offset file.
+ */
+static int rd_kafka_offset_file_sync(rd_kafka_toppar_t *rktp) {
+#ifndef _MSC_VER
+	(void)fflush(rktp->rktp_offset_fp);
+	(void)fsync(fileno(rktp->rktp_offset_fp)); // FIXME
+#else
+	// FIXME
+	// FlushFileBuffers(_get_osfhandle(fileno(rktp->rktp_offset_fp)));
+#endif
+	return 0;
+}
+
+/**
  * NOTE: rktp lock is not required.
  * Locality: rdkafka main thread
  */
@@ -205,11 +241,11 @@ static int rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp,
 		char buf[22];
 		int len;
 
-		if (rktp->rktp_offset_fd == -1)
+		if (!rktp->rktp_offset_fp)
 			if (rd_kafka_offset_file_open(rktp) == -1)
 				continue;
 
-		if (lseek(rktp->rktp_offset_fd, 0, SEEK_SET) == -1) {
+		if (fseek(rktp->rktp_offset_fp, 0, SEEK_SET) == -1) {
 			rd_kafka_op_err(rktp->rktp_rkt->rkt_rk,
 					RD_KAFKA_RESP_ERR__FS,
 					"%s [%"PRId32"]: "
@@ -217,31 +253,36 @@ static int rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp,
 					rktp->rktp_rkt->rkt_topic->str,
 					rktp->rktp_partition,
 					rktp->rktp_offset_path,
-					strerror(errno));
+					rd_strerror(errno));
 			rd_kafka_offset_file_close(rktp);
 			continue;
 		}
 
-		len = snprintf(buf, sizeof(buf), "%"PRId64"\n", offset);
+		len = rd_snprintf(buf, sizeof(buf), "%"PRId64"\n", offset);
 
-		if (write(rktp->rktp_offset_fd, buf, len) == -1) {
+		if (fwrite(buf, 1, len, rktp->rktp_offset_fp) == -1) {
 			rd_kafka_op_err(rktp->rktp_rkt->rkt_rk,
 					RD_KAFKA_RESP_ERR__FS,
 					"%s [%"PRId32"]: "
 					"Failed to write offset %"PRId64" to "
-					"offset file %s (fd %i): %s",
+					"offset file %s: %s",
 					rktp->rktp_rkt->rkt_topic->str,
 					rktp->rktp_partition,
 					offset,
 					rktp->rktp_offset_path,
-					rktp->rktp_offset_fd,
-					strerror(errno));
+					rd_strerror(errno));
 			rd_kafka_offset_file_close(rktp);
 			continue;
 		}
 
+		/* Truncate file */
+#ifdef _MSC_VER
+		if (_chsize_s(_fileno(rktp->rktp_offset_fp), len) == -1)
+			; /* Ignore truncate failures */
+#else
 		if (ftruncate(rktp->rktp_offset_fd, len) == -1)
 			; /* Ignore truncate failures */
+#endif
 
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
 			     "%s [%"PRId32"]: wrote offset %"PRId64" to "
@@ -254,7 +295,8 @@ static int rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp,
 
 		/* If sync interval is set to immediate we sync right away. */
 		if (rkt->rkt_conf.offset_store_sync_interval_ms == 0)
-			fsync(rktp->rktp_offset_fd);
+			rd_kafka_offset_file_sync(rktp);
+
 
 		return 0;
 	}
@@ -278,10 +320,10 @@ rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
 	/* Find toppar */
 	rd_kafka_topic_rdlock(rkt);
 	if (!(rktp = rd_kafka_toppar_get(rkt, partition, 0/*!ua_on_miss*/))) {
-		rd_kafka_topic_unlock(rkt);
+		rd_kafka_topic_rdunlock(rkt);
 		return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 	}
-	rd_kafka_topic_unlock(rkt);
+	rd_kafka_topic_rdunlock(rkt);
 
 	rd_kafka_offset_store0(rktp, offset, 1/*lock*/);
 
@@ -321,12 +363,12 @@ static void rd_kafka_offset_file_sync_tmr_cb (rd_kafka_t *rk, void *arg) {
 	rd_kafka_toppar_t *rktp = arg;
 
 	rd_kafka_toppar_lock(rktp);
-	if (rktp->rktp_offset_fd != -1) {
+	if (rktp->rktp_offset_fp) {
 		rd_kafka_dbg(rk, TOPIC, "SYNC",
-			     "%s [%"PRId32"]: offset file sync",
-			     rktp->rktp_rkt->rkt_topic->str,
-			     rktp->rktp_partition);
-		fsync(rktp->rktp_offset_fd);
+			"%s [%"PRId32"]: offset file sync",
+			rktp->rktp_rkt->rkt_topic->str,
+			rktp->rktp_partition);
+		rd_kafka_offset_file_sync(rktp);
 	}
 	rd_kafka_toppar_unlock(rktp);
 }
@@ -351,7 +393,7 @@ static void rd_kafka_offset_file_term (rd_kafka_toppar_t *rktp) {
 
 	rd_kafka_offset_file_close(rktp);
 
-	free(rktp->rktp_offset_path);
+	rd_free(rktp->rktp_offset_path);
 	rktp->rktp_offset_path = NULL;
 }
 
@@ -380,7 +422,7 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 		rko->rko_rkmessage.offset    = err_offset;
 		rko->rko_rkmessage.rkt       = rktp->rktp_rkt;
 		rko->rko_rkmessage.partition = rktp->rktp_partition;
-		rko->rko_payload             = strdup(reason);
+		rko->rko_payload             = rd_strdup(reason);
 		rko->rko_len                 = strlen(rko->rko_payload);
 		rko->rko_flags              |= RD_KAFKA_OP_F_FREE;
                 rd_kafka_topic_keep(rko->rko_rkmessage.rkt);
@@ -429,7 +471,7 @@ static char *mk_esc_filename (const char *in, char *out, size_t out_size) {
                         break;
                 }
 
-                if ((o + esclen + 1) - out >= out_size) {
+                if ((size_t)((o + esclen + 1) - out) >= out_size) {
                         /* No more space in output string, truncate. */
                         break;
                 }
@@ -444,6 +486,16 @@ static char *mk_esc_filename (const char *in, char *out, size_t out_size) {
         return out;
 }
 
+static int path_is_dir(const char *path) {
+#ifdef _MSC_VER
+	struct _stat st;
+	return (_stat(path, &st) == 0 && st.st_mode & S_IFDIR);
+#else
+	struct stat st;
+	return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
+#endif
+
+}
 
 /**
  * Prepare a toppar for using an offset file.
@@ -451,25 +503,24 @@ static char *mk_esc_filename (const char *in, char *out, size_t out_size) {
  * NOTE: toppar_lock(rktp) must be held.
  */
 static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
-	struct stat st;
 	char spath[4096];
 	const char *path = rktp->rktp_rkt->rkt_conf.offset_store_path;
 	int64_t offset = -1;
 
-	if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
+	if (path_is_dir(path)) {
                 char tmpfile[1024];
                 char escfile[4096];
 
                 /* Include group.id in filename if configured. */
                 if (!RD_KAFKAP_STR_IS_NULL(rktp->rktp_rkt->rkt_conf.group_id))
-                        snprintf(tmpfile, sizeof(tmpfile),
+                        rd_snprintf(tmpfile, sizeof(tmpfile),
                                  "%s-%"PRId32"-%.*s.offset",
                                  rktp->rktp_rkt->rkt_topic->str,
                                  rktp->rktp_partition,
                                  RD_KAFKAP_STR_PR(rktp->rktp_rkt->
                                                   rkt_conf.group_id));
                 else
-                        snprintf(tmpfile, sizeof(tmpfile),
+                        rd_snprintf(tmpfile, sizeof(tmpfile),
                                  "%s-%"PRId32".offset",
                                  rktp->rktp_rkt->rkt_topic->str,
                                  rktp->rktp_partition);
@@ -477,7 +528,7 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
                 /* Escape filename to make it safe. */
                 mk_esc_filename(tmpfile, escfile, sizeof(escfile));
 
-                snprintf(spath, sizeof(spath), "%s%s%s",
+                rd_snprintf(spath, sizeof(spath), "%s%s%s",
                          path, path[strlen(path)-1] == '/' ? "" : "/", escfile);
 
 		path = spath;
@@ -488,7 +539,7 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 		     rktp->rktp_rkt->rkt_topic->str,
 		     rktp->rktp_partition,
 		     path);
-	rktp->rktp_offset_path = strdup(path);
+	rktp->rktp_offset_path = rd_strdup(path);
 
 	rd_kafka_timer_start(rktp->rktp_rkt->rkt_rk,
 			     &rktp->rktp_offset_commit_tmr,

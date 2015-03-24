@@ -77,7 +77,7 @@
  * This can be more efficient than UNALIGNED_LOAD64 + UNALIGNED_STORE64
  * on some platforms, in particular ARM.
  */
-static inline void unaligned_copy64(const void *src, void *dst)
+static __inline void unaligned_copy64(const void *src, void *dst)
 {
 	if (sizeof(void *) == 8) {
 		UNALIGNED_STORE64(dst, UNALIGNED_LOAD64(src));
@@ -90,7 +90,9 @@ static inline void unaligned_copy64(const void *src, void *dst)
 	}
 }
 
-#ifdef NDEBUG
+#undef NDEBUG
+
+#ifndef NDEBUG
 
 #define DCHECK(cond) do {} while(0)
 #define DCHECK_LE(a, b) do {} while(0)
@@ -112,7 +114,7 @@ static inline void unaligned_copy64(const void *src, void *dst)
 
 #endif
 
-static inline bool is_little_endian(void)
+static __inline bool is_little_endian(void)
 {
 #ifdef __LITTLE_ENDIAN__
 	return true;
@@ -120,19 +122,43 @@ static inline bool is_little_endian(void)
 	return false;
 }
 
-static inline int log2_floor(u32 n)
-{
-	return n == 0 ? -1 : 31 ^ __builtin_clz(n);
+#ifndef _MSC_VER
+#define rd_clz(n) __builtin_clz(n)
+#else
+#include <intrin.h>
+static int __inline rd_clz (u32 x) {
+	int r = 0;
+	_BitScanForward(&r, x);
+	return r;
 }
 
-static inline __attribute__((unused)) int find_lsb_set_non_zero(u32 n)
-{
-	return __builtin_ctz(n);
+static int __inline rd_ctz (u32 x) {
+	int r = 0;
+	_BitScanReverse(&r, x);
+	return r;
 }
 
-static inline int find_lsb_set_non_zero64(u64 n)
+static int __inline rd_ctz64(u64 x) {
+	int r = 0;
+	_BitScanReverse(&r, x >> 32); // FIXME
+	return r;
+}
+
+#endif
+
+static __inline int log2_floor(u32 n)
 {
-	return __builtin_ctzll(n);
+	return n == 0 ? -1 : 31 ^ rd_clz(n);
+}
+
+static __inline int find_lsb_set_non_zero(u32 n)
+{
+	return rd_ctz(n);
+}
+
+static __inline int find_lsb_set_non_zero64(u64 n)
+{
+	return rd_ctz64(n);
 }
 
 #define kmax32 5
@@ -144,7 +170,7 @@ static inline int find_lsb_set_non_zero64(u64 n)
  * past the last byte of the varint32. Else returns NULL.  On success,
  * "result <= limit".
  */
-static inline const char *varint_parse32_with_limit(const char *p,
+static __inline const char *varint_parse32_with_limit(const char *p,
 						    const char *l,
 						    u32 * OUTPUT)
 {
@@ -193,7 +219,7 @@ done:
  *  EFFECTS    Encodes "v" into "ptr" and returns a pointer to the
  *            byte just past the last encoded byte.
  */
-static inline char *varint_encode32(char *sptr, u32 v)
+static __inline char *varint_encode32(char *sptr, u32 v)
 {
 	/* Operate on characters as unsigneds */
 	unsigned char *ptr = (unsigned char *)(sptr);
@@ -229,17 +255,17 @@ struct source {
 	struct iovec *iov;
 	int iovlen;
 	int curvec;
-	int curoff;
+	size_t curoff;
 	size_t total;
 };
 
 /* Only valid at beginning when nothing is consumed */
-static inline int available(struct source *s)
+static __inline int available(struct source *s)
 {
 	return s->total;
 }
 
-static inline const char *peek(struct source *s, size_t *len)
+static __inline const char *peek(struct source *s, size_t *len)
 {
 	if (likely(s->curvec < s->iovlen)) {
 		struct iovec *iv = &s->iov[s->curvec];
@@ -252,7 +278,7 @@ static inline const char *peek(struct source *s, size_t *len)
 	return NULL;
 }
 
-static inline void skip(struct source *s, size_t n)
+static __inline void skip(struct source *s, size_t n)
 {
 	struct iovec *iv = &s->iov[s->curvec];
 	s->curoff += n;
@@ -271,7 +297,7 @@ struct sink {
 	unsigned written;
 };
 
-static inline void append(struct sink *s, const char *data, size_t n)
+static __inline void append(struct sink *s, const char *data, size_t n)
 {
 	struct iovec *iov = &s->iov[s->curvec];
 	char *dst = (char *)iov->iov_base + s->curoff;
@@ -291,7 +317,7 @@ static inline void append(struct sink *s, const char *data, size_t n)
 	}
 }
 
-static inline void *sink_peek(struct sink *s, size_t n)
+static __inline void *sink_peek(struct sink *s, size_t n)
 {
 	struct iovec *iov = &s->iov[s->curvec];
 	if (s->curvec < iov->iov_len && iov->iov_len - s->curoff >= n)
@@ -306,18 +332,18 @@ struct source {
 	size_t left;
 };
 
-static inline int available(struct source *s)
+static __inline int available(struct source *s)
 {
 	return s->left;
 }
 
-static inline const char *peek(struct source *s, size_t * len)
+static __inline const char *peek(struct source *s, size_t * len)
 {
 	*len = s->left;
 	return s->ptr;
 }
 
-static inline void skip(struct source *s, size_t n)
+static __inline void skip(struct source *s, size_t n)
 {
 	s->left -= n;
 	s->ptr += n;
@@ -327,7 +353,7 @@ struct sink {
 	char *dest;
 };
 
-static inline void append(struct sink *s, const char *data, size_t n)
+static __inline void append(struct sink *s, const char *data, size_t n)
 {
 	if (data != s->dest)
 		memcpy(s->dest, data, n);
@@ -336,7 +362,7 @@ static inline void append(struct sink *s, const char *data, size_t n)
 
 #define sink_peek(s, n) sink_peek_no_sg(s)
 
-static inline void *sink_peek_no_sg(const struct sink *s)
+static __inline void *sink_peek_no_sg(const struct sink *s)
 {
 	return s->dest;
 }
@@ -350,13 +376,13 @@ struct writer {
 };
 
 /* Called before decompression */
-static inline void writer_set_expected_length(struct writer *w, size_t len)
+static __inline void writer_set_expected_length(struct writer *w, size_t len)
 {
 	w->op_limit = w->op + len;
 }
 
 /* Called after decompression */
-static inline bool writer_check_length(struct writer *w)
+static __inline bool writer_check_length(struct writer *w)
 {
 	return w->op == w->op_limit;
 }
@@ -374,7 +400,7 @@ static inline bool writer_check_length(struct writer *w)
  * Note that this does not match the semantics of either memcpy()
  * or memmove().
  */
-static inline void incremental_copy(const char *src, char *op, ssize_t len)
+static __inline void incremental_copy(const char *src, char *op, ssize_t len)
 {
 	DCHECK_GT(len, 0);
 	do {
@@ -417,7 +443,7 @@ static inline void incremental_copy(const char *src, char *op, ssize_t len)
 
 #define kmax_increment_copy_overflow  10
 
-static inline void incremental_copy_fast_path(const char *src, char *op,
+static __inline void incremental_copy_fast_path(const char *src, char *op,
 					      ssize_t len)
 {
 	while (op - src < 8) {
@@ -433,14 +459,14 @@ static inline void incremental_copy_fast_path(const char *src, char *op,
 	}
 }
 
-static inline bool writer_append_from_self(struct writer *w, u32 offset,
+static __inline bool writer_append_from_self(struct writer *w, u32 offset,
 					   u32 len)
 {
 	char *const op = w->op;
 	CHECK_LE(op, w->op_limit);
 	const u32 space_left = w->op_limit - op;
 
-	if (op - w->base <= offset - 1u)	/* -1u catches offset==0 */
+	if ((u32)(op - w->base) <= offset - 1u)	/* -1u catches offset==0 */
 		return false;
 	if (len <= 16 && offset >= 8 && space_left >= 16) {
 		/* Fast path, used for the majority (70-80%) of dynamic
@@ -462,7 +488,7 @@ static inline bool writer_append_from_self(struct writer *w, u32 offset,
 	return true;
 }
 
-static inline bool writer_append(struct writer *w, const char *ip, u32 len)
+static __inline bool writer_append(struct writer *w, const char *ip, u32 len)
 {
 	char *const op = w->op;
 	CHECK_LE(op, w->op_limit);
@@ -474,7 +500,7 @@ static inline bool writer_append(struct writer *w, const char *ip, u32 len)
 	return true;
 }
 
-static inline bool writer_try_fast_append(struct writer *w, const char *ip, 
+static __inline bool writer_try_fast_append(struct writer *w, const char *ip, 
 					  u32 available_bytes, u32 len)
 {
 	char *const op = w->op;
@@ -496,13 +522,13 @@ static inline bool writer_try_fast_append(struct writer *w, const char *ip,
  * input. Of course, it doesn't hurt if the hash function is reasonably fast
  * either, as it gets called a lot.
  */
-static inline u32 hash_bytes(u32 bytes, int shift)
+static __inline u32 hash_bytes(u32 bytes, int shift)
 {
 	u32 kmul = 0x1e35a7bd;
 	return (bytes * kmul) >> shift;
 }
 
-static inline u32 hash(const char *p, int shift)
+static __inline u32 hash(const char *p, int shift)
 {
 	return hash_bytes(UNALIGNED_LOAD32(p), shift);
 }
@@ -542,7 +568,7 @@ enum {
 	COPY_4_BYTE_OFFSET = 3
 };
 
-static inline char *emit_literal(char *op,
+static __inline char *emit_literal(char *op,
 				 const char *literal,
 				 int len, bool allow_fast_path)
 {
@@ -587,7 +613,7 @@ static inline char *emit_literal(char *op,
 	return op + len;
 }
 
-static inline char *emit_copy_less_than64(char *op, int offset, int len)
+static __inline char *emit_copy_less_than64(char *op, int offset, int len)
 {
 	DCHECK_LE(len, 64);
 	DCHECK_GE(len, 4);
@@ -608,7 +634,7 @@ static inline char *emit_copy_less_than64(char *op, int offset, int len)
 	return op;
 }
 
-static inline char *emit_copy(char *op, int offset, int len)
+static __inline char *emit_copy(char *op, int offset, int len)
 {
 	/*
 	 * Emit 64 byte copies but make sure to keep at least four bytes
@@ -713,7 +739,7 @@ static u16 *get_hash_table(struct snappy_env *env, size_t input_size,
  * x86_64 is little endian.
  */
 #if defined(__LITTLE_ENDIAN__) && BITS_PER_LONG == 64
-static inline int find_match_length(const char *s1,
+static __inline int find_match_length(const char *s1,
 				    const char *s2, const char *s2_limit)
 {
 	int matched = 0;
@@ -758,7 +784,7 @@ static inline int find_match_length(const char *s1,
 	return matched;
 }
 #else
-static inline int find_match_length(const char *s1,
+static __inline int find_match_length(const char *s1,
 				    const char *s2, const char *s2_limit)
 {
 	/* Implementation based on the x86-64 version, above. */
@@ -804,12 +830,12 @@ static inline int find_match_length(const char *s1,
 
 typedef u64 eight_bytes_reference;
 
-static inline eight_bytes_reference get_eight_bytes_at(const char* ptr)
+static __inline eight_bytes_reference get_eight_bytes_at(const char* ptr)
 {
 	return UNALIGNED_LOAD64(ptr);
 }
 
-static inline u32 get_u32_at_offset(u64 v, int offset)
+static __inline u32 get_u32_at_offset(u64 v, int offset)
 {
 	DCHECK_GE(offset, 0);
 	DCHECK_LE(offset, 4);
@@ -820,12 +846,12 @@ static inline u32 get_u32_at_offset(u64 v, int offset)
 
 typedef const char *eight_bytes_reference;
 
-static inline eight_bytes_reference get_eight_bytes_at(const char* ptr) 
+static __inline eight_bytes_reference get_eight_bytes_at(const char* ptr) 
 {
 	return ptr;
 }
 
-static inline u32 get_u32_at_offset(const char *v, int offset) 
+static __inline u32 get_u32_at_offset(const char *v, int offset) 
 {
 	DCHECK_GE(offset, 0);
 	DCHECK_LE(offset, 4);
@@ -1093,13 +1119,15 @@ static bool read_uncompressed_length(struct snappy_decompressor *d,
 	*result = 0;
 	u32 shift = 0;
 	while (true) {
+		size_t n;
+		const char *ip;
+		unsigned char c;
 		if (shift >= 32)
 			return false;
-		size_t n;
-		const char *ip = peek(d->reader, &n);
+		ip = peek(d->reader, &n);
 		if (n == 0)
 			return false;
-		const unsigned char c = *(const unsigned char *)(ip);
+		c = *(const unsigned char *)(ip);
 		skip(d->reader, 1);
 		*result |= (u32) (c & 0x7f) << shift;
 		if (c < 128) {
@@ -1245,10 +1273,11 @@ static bool refill_tag(struct snappy_decompressor *d)
 		d->peeked = 0;
 		while (nbuf < needed) {
 			size_t length;
+			u32 to_add;
 			const char *src = peek(d->reader, &length);
 			if (length == 0)
 				return false;
-			u32 to_add = min_t(u32, needed - nbuf, length);
+			to_add = min_t(u32, needed - nbuf, length);
 			memcpy(d->scratch + nbuf, src, to_add);
 			nbuf += to_add;
 			skip(d->reader, to_add);
@@ -1298,7 +1327,7 @@ static int internal_uncompress(struct source *r,
 	return -EIO;
 }
 
-static inline int compress(struct snappy_env *env, struct source *reader,
+static __inline int compress(struct snappy_env *env, struct source *reader,
 			   struct sink *writer)
 {
 	int err;
@@ -1595,7 +1624,7 @@ int snappy_init_env(struct snappy_env *env)
 EXPORT_SYMBOL(snappy_init_env);
 
 /**
- * snappy_free_env - Free an snappy compression environment
+ * snappy_free_env - free an snappy compression environment
  * @env: Environment to free.
  *
  * Must run in process context.

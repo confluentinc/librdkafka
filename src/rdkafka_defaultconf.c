@@ -282,8 +282,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  .vdef = RD_KAFKA_COMPRESSION_NONE,
 	  .s2i = {
 			{ RD_KAFKA_COMPRESSION_NONE,   "none" },
+#if WITH_ZLIB
 			{ RD_KAFKA_COMPRESSION_GZIP,   "gzip" },
+#endif
+#ifndef _MSC_VER /* FIXME */
 			{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
+#endif
+			{ 0 }
 		} },
 	{ _RK_GLOBAL|_RK_PRODUCER, "batch.num.messages", _RK_C_INT,
 	  _RK(batch_num_messages),
@@ -417,7 +422,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                 }
         },
 
-	{ /* End */ }
+	{ 0, /* End */ }
 };
 
 
@@ -433,9 +438,9 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 	{
 		char **str = _RK_PTR(char **, conf, prop->offset);
 		if (*str)
-			free(*str);
+			rd_free(*str);
 		if (istr)
-			*str = strdup(istr);
+			*str = rd_strdup(istr);
 		else
 			*str = NULL;
 		return RD_KAFKA_CONF_OK;
@@ -483,18 +488,22 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		return RD_KAFKA_CONF_OK;
 
 	case _RK_C_PTR:
-		snprintf(errstr, errstr_size,
+		rd_snprintf(errstr, errstr_size,
 			 "Property \"%s\" must be set through dedicated "
 			 ".._set_..() function", prop->name);
 		return RD_KAFKA_CONF_INVALID;
 
 	case _RK_C_BOOL:
 		if (!value) {
-			snprintf(errstr, errstr_size,
+			rd_snprintf(errstr, errstr_size,
 				 "Bool configuration property \"%s\" cannot "
 				 "be set to empty value", prop->name);
 			return RD_KAFKA_CONF_INVALID;
 		}
+
+#ifdef _MSC_VER
+#define strcasecmp(A,B) _stricmp(A,B)
+#endif
 
 		if (!strcasecmp(value, "true") ||
 		    !strcasecmp(value, "t") ||
@@ -505,7 +514,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			 !strcmp(value, "0"))
 			ival = 0;
 		else {
-			snprintf(errstr, errstr_size,
+			rd_snprintf(errstr, errstr_size,
 				 "Expected bool value for \"%s\": "
 				 "true or false", prop->name);
 			return RD_KAFKA_CONF_INVALID;
@@ -516,7 +525,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 
 	case _RK_C_INT:
 		if (!value) {
-			snprintf(errstr, errstr_size,
+			rd_snprintf(errstr, errstr_size,
 				 "Integer configuration "
 				 "property \"%s\" cannot be set "
 				 "to empty value", prop->name);
@@ -526,7 +535,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		ival = atoi(value);
 		if (ival < prop->vmin ||
 		    ival > prop->vmax) {
-			snprintf(errstr, errstr_size,
+			rd_snprintf(errstr, errstr_size,
 				 "Configuration property \"%s\" value "
 				 "%i is outside allowed range %i..%i\n",
 				 prop->name, ival,
@@ -545,7 +554,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		const char *next;
 
 		if (!value) {
-			snprintf(errstr, errstr_size,
+			rd_snprintf(errstr, errstr_size,
 				 "Configuration "
 				 "property \"%s\" cannot be set "
 				 "to empty value", prop->name);
@@ -607,7 +616,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 				continue;
 
 			/* No match */
-			snprintf(errstr, errstr_size,
+			rd_snprintf(errstr, errstr_size,
 				 "Invalid value for "
 				 "configuration property \"%s\"", prop->name);
 			return RD_KAFKA_CONF_INVALID;
@@ -635,19 +644,19 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
 
 		if (prop->sdef || prop->vdef || prop->pdef)
 			rd_kafka_anyconf_set_prop0(scope, conf, prop,
-						   prop->sdef ? : prop->pdef,
+						   prop->sdef ? prop->sdef : prop->pdef,
                                                    prop->vdef);
 	}
 }
 
 rd_kafka_conf_t *rd_kafka_conf_new (void) {
-	rd_kafka_conf_t *conf = calloc(1, sizeof(*conf));
+	rd_kafka_conf_t *conf = rd_calloc(1, sizeof(*conf));
 	rd_kafka_defaultconf_set(_RK_GLOBAL, conf);
 	return conf;
 }
 
 rd_kafka_topic_conf_t *rd_kafka_topic_conf_new (void) {
-	rd_kafka_topic_conf_t *tconf = calloc(1, sizeof(*tconf));
+	rd_kafka_topic_conf_t *tconf = rd_calloc(1, sizeof(*tconf));
 	rd_kafka_defaultconf_set(_RK_TOPIC, tconf);
 	return tconf;
 }
@@ -680,7 +689,7 @@ static int rd_kafka_anyconf_set (int scope, void *conf,
 						 errstr, errstr_size);
 	}
 
-	snprintf(errstr, errstr_size,
+	rd_snprintf(errstr, errstr_size,
 		 "No such configuration property: \"%s\"", name);
 
 	return RD_KAFKA_CONF_UNKNOWN;
@@ -716,7 +725,7 @@ static void rd_kafka_anyconf_clear (void *conf,
 	{
 		char **str = _RK_PTR(char **, conf, prop->offset);
 		if (*str) {
-			free(*str);
+			rd_free(*str);
 			*str = NULL;
 		}
 	}
@@ -742,13 +751,13 @@ void rd_kafka_anyconf_destroy (int scope, void *conf) {
 
 void rd_kafka_conf_destroy (rd_kafka_conf_t *conf) {
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, conf);
-	free(conf);
+	rd_free(conf);
 }
 
 	
 void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf) {
 	rd_kafka_anyconf_destroy(_RK_TOPIC, topic_conf);
-	free(topic_conf);
+	rd_free(topic_conf);
 }
 
 
@@ -855,9 +864,10 @@ void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
 }
 
 
+
 void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
                                 int (*open_cb) (const char *pathname,
-                                                int flags, mode_t mode,
+                                                int flags, int mode,
                                                 void *opaque)) {
         conf->open_cb = open_cb;
 }
@@ -892,7 +902,7 @@ static const char **rd_kafka_anyconf_dump (int scope, void *conf,
 	char **arr;
 	int cnt = 0;
 
-	arr = calloc(sizeof(char *), RD_ARRAYSIZE(rd_kafka_properties)*2);
+	arr = rd_calloc(sizeof(char *), RD_ARRAYSIZE(rd_kafka_properties)*2);
 
 	for (prop = rd_kafka_properties; prop->name ; prop++) {
 		char tmp[22];
@@ -912,7 +922,7 @@ static const char **rd_kafka_anyconf_dump (int scope, void *conf,
 		case _RK_C_PTR:
 			val = *_RK_PTR(const void **, conf, prop->offset);
 			if (val) {
-				snprintf(tmp, sizeof(tmp), "%p", (void *)val);
+				rd_snprintf(tmp, sizeof(tmp), "%p", (void *)val);
 				val = tmp;
 			}
 			break;
@@ -922,7 +932,7 @@ static const char **rd_kafka_anyconf_dump (int scope, void *conf,
 			       "true":"false");
 			break;
 		case _RK_C_INT:
-			snprintf(tmp, sizeof(tmp), "%i",
+			rd_snprintf(tmp, sizeof(tmp), "%i",
 				 *_RK_PTR(int *, conf, prop->offset));
 			val = tmp;
 			break;
@@ -942,8 +952,8 @@ static const char **rd_kafka_anyconf_dump (int scope, void *conf,
 		}
 
 		if (val) {
-			arr[cnt++] = strdup(prop->name);
-			arr[cnt++] = strdup(val);
+			arr[cnt++] = rd_strdup(prop->name);
+			arr[cnt++] = rd_strdup(val);
 		}
 	}
 
@@ -964,13 +974,13 @@ const char **rd_kafka_topic_conf_dump (rd_kafka_topic_conf_t *conf,
 
 void rd_kafka_conf_dump_free (const char **arr, size_t cnt) {
 	char **_arr = (char **)arr;
-	int i;
+	unsigned int i;
 
 	for (i = 0 ; i < cnt ; i++)
 		if (_arr[i])
-			free(_arr[i]);
+			rd_free(_arr[i]);
 
-	free(_arr);
+	rd_free(_arr);
 }
 
 void rd_kafka_conf_properties_show (FILE *fp) {
@@ -1007,7 +1017,7 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 		switch (prop->type)
 		{
 		case _RK_C_STR:
-			fprintf(fp, "%13s", prop->sdef ? : "");
+			fprintf(fp, "%13s", prop->sdef ? prop->sdef : "");
 			break;
 		case _RK_C_BOOL:
 			fprintf(fp, "%13s", prop->vdef ? "true" : "false");

@@ -39,8 +39,11 @@
 #include <csignal>
 #include <cstring>
 
+#ifndef _MSC_VER
 #include <getopt.h>
-
+#else
+#include "../win32/wingetopt.h"
+#endif
 
 /*
  * Typically include path in a real application would be
@@ -130,7 +133,7 @@ int main (int argc, char **argv) {
   int64_t start_offset = RdKafka::Topic::OFFSET_BEGINNING;
   bool exit_eof = false;
   bool do_conf_dump = false;
-  char opt;
+  int opt;
   MyHashPartitionerCb hash_partitioner;
 
   /*
@@ -141,7 +144,7 @@ int main (int argc, char **argv) {
 
 
   while ((opt = getopt(argc, argv, "PCt:p:b:z:qd:o:eX:AM:")) != -1) {
-    switch (opt) {
+	  switch (opt) {
     case 'P':
     case 'C':
       mode = opt;
@@ -273,8 +276,8 @@ int main (int argc, char **argv) {
             "\n",
 	    argv[0],
 	    RdKafka::version_str().c_str(), RdKafka::version(),
-	    RdKafka::Conf::DEBUG_CONTEXTS.c_str());
-    exit(1);
+	    RdKafka::get_debug_contexts().c_str());
+	exit(1);
   }
 
 
@@ -356,7 +359,7 @@ int main (int argc, char **argv) {
     /*
      * Read messages from stdin and produce to broker.
      */
-    for (std::string line; run and std::getline(std::cin, line);) {
+    for (std::string line; run && std::getline(std::cin, line);) {
       if (line.empty()) {
         producer->poll(0);
 	continue;
@@ -381,7 +384,7 @@ int main (int argc, char **argv) {
     }
     run = true;
 
-    while (run and producer->outq_len() > 0) {
+    while (run && producer->outq_len() > 0) {
       std::cerr << "Waiting for " << producer->outq_len() << std::endl;
       producer->poll(1000);
     }

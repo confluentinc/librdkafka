@@ -32,18 +32,18 @@
 #include "rdsysqueue.h"
 
 
-#define rd_kafka_timers_lock(rk)   pthread_mutex_lock(&(rk)->rk_timers_lock)
-#define rd_kafka_timers_unlock(rk) pthread_mutex_unlock(&(rk)->rk_timers_lock)
+#define rd_kafka_timers_lock(rk)   mtx_lock(&(rk)->rk_timers_lock)
+#define rd_kafka_timers_unlock(rk) mtx_unlock(&(rk)->rk_timers_lock)
 
 
-static inline int rd_kafka_timer_started (const rd_kafka_timer_t *rtmr) {
+static __inline int rd_kafka_timer_started (const rd_kafka_timer_t *rtmr) {
 	return rtmr->rtmr_next ? 1 : 0;
 }
 
 
 static int rd_kafka_timer_cmp (const void *_a, const void *_b) {
 	const rd_kafka_timer_t *a = _a, *b = _b;
-	return a->rtmr_next - b->rtmr_next;
+	return (int)(a->rtmr_next - b->rtmr_next);
 }
 
 static void rd_kafka_timer_unschedule (rd_kafka_t *rk, rd_kafka_timer_t *rtmr) {
@@ -63,9 +63,9 @@ static void rd_kafka_timer_schedule (rd_kafka_t *rk, rd_kafka_timer_t *rtmr) {
 	if (!(first = TAILQ_FIRST(&rk->rk_timers)) ||
 	    first->rtmr_next > rtmr->rtmr_next) {
 		TAILQ_INSERT_HEAD(&rk->rk_timers, rtmr, rtmr_link);
-		pthread_cond_signal(&rk->rk_timers_cond);
+		cnd_signal(&rk->rk_timers_cond);
 	} else
-		TAILQ_INSERT_SORTED(&rk->rk_timers, rtmr, rtmr_link,
+		TAILQ_INSERT_SORTED(&rk->rk_timers, rtmr, rd_kafka_timer_s, rtmr_link,
 				    rd_kafka_timer_cmp);
 }
 
@@ -124,7 +124,7 @@ void rd_kafka_timer_start (rd_kafka_t *rk,
  */
 void rd_kafka_timers_interrupt (rd_kafka_t *rk) {
 	rd_kafka_timers_lock(rk);
-	pthread_cond_signal(&rk->rk_timers_cond);
+	cnd_signal(&rk->rk_timers_cond);
 	rd_kafka_timers_unlock(rk);
 }
 
@@ -138,8 +138,8 @@ void rd_kafka_timers_run (rd_kafka_t *rk, int timeout) {
 
         rd_kafka_timers_lock(rk);
 
-	while (!rk->rk_terminate && now <= end) {
-		int64_t sleeptime;
+	while (!rd_atomic32_get(&rk->rk_terminate) && now <= end) {
+		uint64_t sleeptime;
 		rd_kafka_timer_t *rtmr;
 
 		if (likely((rtmr = TAILQ_FIRST(&rk->rk_timers)) != NULL))
@@ -151,9 +151,9 @@ void rd_kafka_timers_run (rd_kafka_t *rk, int timeout) {
 			if (sleeptime > (end - now))
 				sleeptime = end - now;
 
-			pthread_cond_timedwait_ms(&rk->rk_timers_cond,
+			cnd_timedwait_ms(&rk->rk_timers_cond,
 						  &rk->rk_timers_lock,
-						  sleeptime / 1000);
+						  (int)(sleeptime / 1000));
 			now = rd_clock();
 		}
 
@@ -161,11 +161,11 @@ void rd_kafka_timers_run (rd_kafka_t *rk, int timeout) {
 		       rtmr->rtmr_next <= now) {
 
 			rd_kafka_timer_unschedule(rk, rtmr);
-                        rd_kafka_timers_unlock(rk);
+            rd_kafka_timers_unlock(rk);
 
 			rtmr->rtmr_callback(rk, rtmr->rtmr_arg);
 
-                        rd_kafka_timers_lock(rk);
+            rd_kafka_timers_lock(rk);
 			rd_kafka_timer_schedule(rk, rtmr);
 		}
 	}

@@ -31,9 +31,6 @@
  * Consume both through the standard interface and through the queue interface.
  */
 
-#define _GNU_SOURCE
-#include <sys/time.h>
-#include <time.h>
 
 #include "test.h"
 
@@ -76,7 +73,7 @@ static void produce_messages (uint64_t testid, const char *topic,
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
 	char msg[128];
-        int failcnt;
+	int failcnt = 0;
 	int i;
         rd_kafka_message_t *rkmessages;
 	int32_t partition;
@@ -102,7 +99,7 @@ static void produce_messages (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_strerror(errno));
 
         /* Create messages. */
 	prod_msg_remains = msgcnt;
@@ -111,10 +108,10 @@ static void produce_messages (uint64_t testid, const char *topic,
 		int batch_cnt = msgcnt / partition_cnt;
 
 		for (i = 0 ; i < batch_cnt ; i++) {
-			snprintf(msg, sizeof(msg),
+			rd_snprintf(msg, sizeof(msg),
 				 "testid=%"PRIu64", partition=%i, msg=%i",
 				 testid, (int)partition, msgid);
-			rkmessages[i].payload   = strdup(msg);
+			rkmessages[i].payload   = rd_strdup(msg);
 			rkmessages[i].len       = strlen(msg);
 			msgid++;
 		}
@@ -259,9 +256,12 @@ static void verify_consumed_msg0 (const char *func, int line,
 			  "not sourced by this test",
 			  (int)rkmessage->len);
 		
-	snprintf(buf, sizeof(buf), "%.*s",
+	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->len, (char *)rkmessage->payload);
 
+#ifdef _MSC_VER
+#define sscanf(...) sscanf_s(__VA_ARGS__)
+#endif
 	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
 		   &in_testid, &in_part, &in_msgnum) != 3)
 		TEST_FAIL("Incorrect message format: %s", buf);
@@ -307,16 +307,13 @@ static void verify_consumed_msg0 (const char *func, int line,
 static void consume_messages (uint64_t testid, const char *topic,
 			      int32_t partition, int msg_base, int batch_cnt,
 			      int msgcnt) {
-	int r;
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
-	char msg[128];
-        int failcnt;
+    int failcnt = 0;
 	int i;
-        rd_kafka_message_t *rkmessages;
 	int cnt = 0;
 
 	test_conf_init(&conf, &topic_conf, 20);
@@ -331,7 +328,7 @@ static void consume_messages (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_strerror(errno));
 
 	TEST_SAY("Consuming %i messages from partition %i\n",
 		 batch_cnt, partition);
@@ -376,17 +373,13 @@ static void consume_messages (uint64_t testid, const char *topic,
 
 static void consume_messages_with_queues (uint64_t testid, const char *topic,
 					  int partition_cnt, int msgcnt) {
-	int r;
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	rd_kafka_queue_t *rkqu;
 	char errstr[512];
-	char msg[128];
-        int failcnt;
 	int i;
-        rd_kafka_message_t *rkmessages;
 	int32_t partition;
 	int cnt = 0;
 	int batch_cnt = msgcnt / partition_cnt;
@@ -407,7 +400,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_strerror(errno));
 
 	TEST_SAY("Consuming %i messages from one queue serving %i partitions\n",
 		 msgcnt, partition_cnt);
@@ -517,7 +510,7 @@ static void test_produce_consume (void) {
 
 
 
-int main (int argc, char **argv) {
+int main_0012_produce_consume (int argc, char **argv) {
 	test_produce_consume();
 	return 0;
 }

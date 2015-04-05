@@ -67,7 +67,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Node.js: [node-kafka](https://github.com/sutoiku/node-kafka)
   * Lua: [in progress](https://github.com/edenhill/librdkafka/issues/196)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
-  * PHP: [phpkafka](https://github.com/salebab/phpkafka)
+  * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)
   * Python: [python-librdkafka](https://bitbucket.org/yungchin/python-librdkafka)
   * Python: [PyKafka](https://github.com/Parsely/pykafka)
   * Ruby: [Hermann](https://github.com/stancampbell3/Hermann)

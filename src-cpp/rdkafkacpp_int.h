@@ -158,6 +158,7 @@ class ConfImpl : public Conf {
       socket_cb_(NULL),
       open_cb_(NULL),
       partitioner_cb_(NULL),
+      partitioner_kp_cb_(NULL),
       rk_conf_(NULL),
       rkt_conf_(NULL){}
   ~ConfImpl () {

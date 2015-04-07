@@ -126,8 +126,9 @@ static void msg_delivered2 (rd_kafka_t *rk,
                         rd_kafka_message_errstr(rkmessage));
 	else if (!quiet)
 		fprintf(stderr,
-                        "%% Message delivered (%zd bytes, offset %"PRId64")\n",
-                        rkmessage->len, rkmessage->offset);
+                        "%% Message delivered (%zd bytes, offset %"PRId64", "
+                        "partition %"PRId32")\n",
+                        rkmessage->len, rkmessage->offset, rkmessage->partition);
 }
 
 

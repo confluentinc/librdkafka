@@ -541,6 +541,16 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
 					 int32_t partition_cnt,
 					 void *opaque, void *msg_opaque);
 
+/**
+ * Consistent partitioner
+ * Uses consistent hashing to map identical keys onto identical partitions.
+ *
+ * Returns a 'random' partition between 0 and partition_cnt - 1 based on the crc value of the key
+ */
+int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
+					 const void *key, size_t keylen,
+					 int32_t partition_cnt,
+					 void *opaque, void *msg_opaque);
 
 
 

@@ -30,6 +30,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
 #include "rdkafka_topic.h"
+#include "rdcrc32.h"
 #include "rdrand.h"
 #include "rdtime.h"
 
@@ -310,6 +311,15 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
 	else
 		return p;
 }
+
+int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
+					 const void *key, size_t keylen,
+					 int32_t partition_cnt,
+					 void *rkt_opaque,
+					 void *msg_opaque) {
+    return rd_crc32(key, keylen) % partition_cnt;
+}
+
 
 /**
  * Assigns a message to a topic partition using a partitioner.

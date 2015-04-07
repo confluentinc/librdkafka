@@ -1672,7 +1672,6 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
                                         .len        = rkm->rkm_len,
                                         .err        = rko->rko_err,
                                         .offset     = rkm->rkm_offset,
-                                        /* FIXME: partition */
                                         .partition  = rkm->rkm_partition,
                                         ._private   = rkm->rkm_opaque,
                                         /* FIXME: .rkt ? */

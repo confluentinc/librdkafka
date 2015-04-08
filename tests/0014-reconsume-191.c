@@ -89,7 +89,7 @@ static void produce_messages (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
         /* Produce messages */
 	prod_msg_remains = msgcnt;
@@ -311,7 +311,7 @@ static void consume_messages_callback_multi (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
         msg_next = msg_base;
 

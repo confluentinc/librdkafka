@@ -94,7 +94,7 @@ static void produce_null_messages (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
         /* Produce messages */
 	prod_msg_remains = msgcnt;
@@ -289,7 +289,7 @@ static void consume_messages (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
 	TEST_SAY("Consuming %i messages from partition %i\n",
 		 batch_cnt, partition);
@@ -360,7 +360,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
 	TEST_SAY("Consuming %i messages from one queue serving %i partitions\n",
 		 msgcnt, partition_cnt);

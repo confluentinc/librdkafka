@@ -69,7 +69,6 @@ static void produce_messages (uint64_t testid, const char *topic,
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
-        int failcnt;
 	int i;
 	int32_t partition;
 	int msgid = 0;
@@ -294,17 +293,12 @@ static void consume_messages_callback_multi (uint64_t testid, const char *topic,
                                              int32_t partition, int msg_base,
                                              int batch_cnt, int msgcnt,
                                              int iterations) {
-	int r;
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
-	char msg[128];
-        int failcnt;
 	int i;
-        rd_kafka_message_t *rkmessages;
-	int cnt = 0;
 
 	test_conf_init(&conf, &topic_conf, 20);
 
@@ -404,7 +398,7 @@ static void test_produce_consume (void) {
 
 
 
-int main (int argc, char **argv) {
+int main_0014_reconsume_191 (int argc, char **argv) {
 	test_produce_consume();
 	return 0;
 }

@@ -30,9 +30,6 @@
  * Tests various config related things
  */
 
-#define _GNU_SOURCE
-#include <sys/time.h>
-#include <time.h>
 
 #include "test.h"
 
@@ -68,7 +65,7 @@ static void conf_verify (int line,
 
 
 	for (i = 0 ; confs[i] ; i += 2) {
-		for (j = 0 ; j < cnt ; j += 2) {
+		for (j = 0 ; j < (int)cnt ; j += 2) {
 			if (!strcmp(confs[i], arr[j])) {
 				if (strcmp(confs[i+1], arr[j+1]))
 					TEST_FAIL("%i: Property %s mismatch: "
@@ -96,7 +93,7 @@ static void conf_cmp (const char *desc,
 		TEST_FAIL("%s config compare: count %zd != %zd mismatch",
 			  desc, acnt, bcnt);
 
-	for (i = 0 ; i < acnt ; i += 2) {
+	for (i = 0 ; i < (int)acnt ; i += 2) {
 		if (strcmp(a[i], b[i]))
 			TEST_FAIL("%s conf mismatch: %s != %s",
 				  desc, a[i], b[i]);
@@ -107,7 +104,7 @@ static void conf_cmp (const char *desc,
 }
 
 
-int main (int argc, char **argv) {
+int main_0004_conf (int argc, char **argv) {
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *ignore_conf, *conf, *conf2;
@@ -121,7 +118,9 @@ int main (int argc, char **argv) {
 		"message.max.bytes", "12345", /* int property */
 		"client.id", "my id", /* string property */
 		"debug", "topic,metadata", /* S2F property */
+#if WITH_ZLIB
 		"compression.codec", "gzip", /* S2I property */
+#endif
 		NULL
 	};
 	static const char *tconfs[] = {
@@ -203,7 +202,7 @@ int main (int argc, char **argv) {
 	rkt = rd_kafka_topic_new(rk, topic, tconf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_strerror(errno));
 
 	rd_kafka_topic_destroy(rkt);
 	rd_kafka_destroy(rk);
@@ -217,7 +216,7 @@ int main (int argc, char **argv) {
 	rkt = rd_kafka_topic_new(rk, topic, tconf2);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_strerror(errno));
 
 	rd_kafka_topic_destroy(rkt);
 	rd_kafka_destroy(rk);

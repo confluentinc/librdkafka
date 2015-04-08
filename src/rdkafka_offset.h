@@ -36,7 +36,7 @@
  * from the main rdkafka thread.
  * See head of rdkafka_offset.c for more information.
  */
-static inline RD_UNUSED
+static __inline RD_UNUSED
 void rd_kafka_offset_store0 (rd_kafka_toppar_t *rktp, int64_t offset,
 			     int lock) {
 	if (lock)

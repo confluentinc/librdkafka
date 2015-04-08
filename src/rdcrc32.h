@@ -58,7 +58,7 @@ rd_crc32_t rd_crc32_reflect(rd_crc32_t data, size_t data_len);
  *
  * \return     The initial crc value.
  *****************************************************************************/
-static inline rd_crc32_t rd_crc32_init(void)
+static __inline rd_crc32_t rd_crc32_init(void)
 {
     return 0xffffffff;
 }
@@ -81,7 +81,7 @@ rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t dat
  * \param crc  The current crc value.
  * \return     The final crc value.
  *****************************************************************************/
-static inline rd_crc32_t rd_crc32_finalize(rd_crc32_t crc)
+static __inline rd_crc32_t rd_crc32_finalize(rd_crc32_t crc)
 {
     return crc ^ 0xffffffff;
 }
@@ -90,7 +90,7 @@ static inline rd_crc32_t rd_crc32_finalize(rd_crc32_t crc)
 /**
  * Wrapper for performing CRC32 on the provided buffer.
  */
-static inline rd_crc32_t rd_crc32 (const char *data, size_t data_len) {
+static __inline rd_crc32_t rd_crc32 (const char *data, size_t data_len) {
 	return rd_crc32_finalize(rd_crc32_update(rd_crc32_init(),
 						 (const unsigned char *)data,
 						 data_len));

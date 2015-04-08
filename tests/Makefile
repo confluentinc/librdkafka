@@ -1,6 +1,11 @@
 TESTSRCS ?= $(wildcard 0*-*.c) $(wildcard 0*-*.cpp)
+OBJS	  = $(TESTSRCS:%.c=%.o)
 TESTS    ?= $(TESTSRCS:%.cpp=%.test)
 TESTS0    = $(TESTS:%.c=%.test)
+
+BIN	  = merged
+LIBS	 += -lrdkafka
+OBJS	 += test.o
 
 %.test: ../src/librdkafka.a test.o %.c
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka $(LIBS)
@@ -8,10 +13,13 @@ TESTS0    = $(TESTS:%.c=%.test)
 %.test: ../src/librdkafka.a test.o %.cpp
 	$(CXX) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka++ -lrdkafka $(LIBS)
 
-all: $(TESTS0)
-	for i in $^ ; do \
-	 LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh $$i || exit 1 ; \
-	done
+#all: $(TESTS0)
+#	for i in $^ ; do \
+#	 LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh $$i || exit 1 ; \
+#	done
+
+all: $(BIN)
+	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh $(BIN)
 
 include ../mklove/Makefile.base
 
@@ -23,5 +31,5 @@ test.o: test.c
 
 
 clean:
-	rm -f *.test test.o
+	rm -f *.test test.o $(OBJS) $(BIN)
 

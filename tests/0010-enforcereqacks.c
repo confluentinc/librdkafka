@@ -30,9 +30,6 @@
  * Tests enforce.isr.cnt (issue #91)
  */
 
-#define _GNU_SOURCE
-#include <sys/time.h>
-#include <time.h>
 
 #include "test.h"
 
@@ -73,7 +70,7 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 }
 
 
-int main (int argc, char **argv) {
+int main_0010_enforcereqacks (int argc, char **argv) {
 	int partition = 0;
 	int r;
 	rd_kafka_t *rk;
@@ -126,13 +123,13 @@ int main (int argc, char **argv) {
                 rkt = rd_kafka_topic_new(rk, topic, topic_conf);
                 if (!rkt)
                         TEST_FAIL("Failed to create topic: %s\n",
-                                  strerror(errno));
+                                  rd_strerror(errno));
 
                 /* Produce messages */
                 for (i = 0 ; i < msgcnt ; i++) {
                         int *msgidp = malloc(sizeof(*msgidp));
                         *msgidp = idbase + i;
-                        snprintf(msg, sizeof(msg),
+                        rd_snprintf(msg, sizeof(msg),
                                  "%s test message #%i (pass=%i)",
                                  argv[0], *msgidp, pass);
                         r = rd_kafka_produce(rkt, partition,
@@ -140,7 +137,7 @@ int main (int argc, char **argv) {
                                              msg, strlen(msg), NULL, 0, msgidp);
                         if (r == -1)
                                 TEST_FAIL("Failed to produce message #%i: %s\n",
-                                          *msgidp, strerror(errno));
+                                          *msgidp, rd_strerror(errno));
                 }
 
                 TEST_SAY("Produced %i messages, waiting for deliveries, "

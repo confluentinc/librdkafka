@@ -32,8 +32,8 @@
 /**
  * Returns a random (using rand(3)) number between 'low'..'high' (inclusive).
  */
-static inline int rd_jitter (int low, int high) RD_UNUSED;
-static inline int rd_jitter (int low, int high) {
+static __inline int rd_jitter (int low, int high) RD_UNUSED;
+static __inline int rd_jitter (int low, int high) {
 	return (low + (rand() % (high+1)));
 	
 }

@@ -33,7 +33,6 @@
 #include "rdkafkacpp_int.h"
 
 
-const std::string RdKafka::Conf::DEBUG_CONTEXTS = RD_KAFKA_DEBUG_CONTEXTS;
 
 RdKafka::ConfImpl::ConfResult RdKafka::ConfImpl::set(const std::string &name,
 						     const std::string &value,

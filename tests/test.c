@@ -51,16 +51,20 @@ static void test_error_cb (rd_kafka_t *rk, int err,
 
 static void test_init (void) {
 	int seed;
+#ifndef _MSC_VER
 	char *tmp;
+#endif
 
 	if (test_seed)
 		return;
 
+#ifndef _MSC_VER
 	if ((tmp = getenv("TEST_LEVEL")))
 		test_level = atoi(tmp);
 	if ((tmp = getenv("TEST_SEED")))
 		seed = atoi(tmp);
 	else
+#endif
 		seed = test_clock() & 0xffffffff;
 
 	srand(seed);
@@ -69,13 +73,13 @@ static void test_init (void) {
 
 
 const char *test_mk_topic_name (const char *suffix, int randomized) {
-        static __thread char ret[128];
+        static RD_TLS char ret[128];
 
         if (test_topic_random || randomized)
-                snprintf(ret, sizeof(ret), "%s_%"PRIx64"_%s",
+                rd_snprintf(ret, sizeof(ret), "%s_%"PRIx64"_%s",
                          test_topic_prefix, test_id_generate(), suffix);
         else
-                snprintf(ret, sizeof(ret), "%s_%s", test_topic_prefix, suffix);
+                rd_snprintf(ret, sizeof(ret), "%s_%s", test_topic_prefix, suffix);
 
         TEST_SAY("Using topic \"%s\"\n", ret);
 
@@ -92,7 +96,11 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 	FILE *fp;
 	char buf[512];
 	int line = 0;
-	const char *test_conf = getenv("RDKAFKA_TEST_CONF") ? : "test.conf";
+	const char *test_conf =
+#ifndef _MSC_VER
+		getenv("RDKAFKA_TEST_CONF") ? getenv("RDKAFKA_TEST_CONF") : 
+#endif
+		"test.conf";
 	char errstr[512];
 
 	test_init();
@@ -105,12 +113,18 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
         }
 
 	/* Open and read optional local test configuration file, if any. */
-	if (!(fp = fopen(test_conf, "r"))) {
+#ifndef _MSC_VER
+		fp = fopen(test_conf, "r");
+#else
+		fp = NULL;
+		errno = fopen_s(&fp, test_conf, "r");
+#endif
+	if (!fp) {
 		if (errno == ENOENT)
 			TEST_FAIL("%s not found\n", test_conf);
 		else
-			TEST_FAIL("Failed to read %s: %s",
-				  test_conf, strerror(errno));
+			TEST_FAIL("Failed to read %s: errno %i",
+				  test_conf, errno);
 	}
 
 	while (fgets(buf, sizeof(buf)-1, fp)) {
@@ -135,12 +149,12 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		val = t+1;
 
                 if (!strcmp(name, "test.timeout.multiplier")) {
-                        timeout = (float)timeout * strtod(val, NULL);
+                        timeout = (int)((float)timeout * strtod(val, NULL));
                         res = RD_KAFKA_CONF_OK;
                 } else if (!strcmp(name, "test.topic.prefix")) {
-                        strncpy(test_topic_prefix, val,
-                                sizeof(test_topic_prefix)-1);
-                        res = RD_KAFKA_CONF_OK;
+					rd_snprintf(test_topic_prefix, sizeof(test_topic_prefix),
+						"%s", val);
+				    res = RD_KAFKA_CONF_OK;
                 } else if (!strcmp(name, "test.topic.random")) {
                         if (!strcmp(val, "true") ||
                             !strcmp(val, "1"))
@@ -177,8 +191,10 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 	fclose(fp);
 
 	/* Limit the test run time. */
+#ifndef _MSC_VER
 	alarm(timeout);
 	signal(SIGALRM, sig_alarm);
+#endif
 }
 
 
@@ -190,7 +206,7 @@ void test_wait_exit (int timeout) {
 
 	while ((r = rd_kafka_thread_cnt()) && timeout-- >= 0) {
 		TEST_SAY("%i thread(s) in use by librdkafka, waiting...\n", r);
-		sleep(1);
+		rd_sleep(1);
 	}
 
 	TEST_SAY("%i thread(s) in use by librdkafka\n", r);
@@ -208,4 +224,30 @@ void test_wait_exit (int timeout) {
 uint64_t test_id_generate (void) {
 	test_init();
 	return (((uint64_t)rand()) << 32) | (uint64_t)rand();
+}
+
+
+int main(int argc, char **argv) {
+	int r = 0;
+
+#define RUN_TEST(NAME) do { \
+	extern int main_ ## NAME (int, char **); \
+		TEST_SAY("================= Run test %s =================\n", # NAME); \
+		int _r = main_ ## NAME (argc, argv); \
+		TEST_SAY("================= Test %s %s =================\n", # NAME, _r ? "FAILED" : "PASSED"); \
+		r |= _r; \
+	} while (0)
+	RUN_TEST(0001_multiobj);
+	RUN_TEST(0002_unkpart);
+	RUN_TEST(0003_msgmaxsize);
+	RUN_TEST(0004_conf);
+	RUN_TEST(0005_order);
+	RUN_TEST(0006_symbols);
+	RUN_TEST(0007_autotopic);
+	RUN_TEST(0008_reqacks);
+	RUN_TEST(0010_enforcereqacks);
+	RUN_TEST(0011_produce_batch);
+	RUN_TEST(0012_produce_consume);
+
+	return r;
 }

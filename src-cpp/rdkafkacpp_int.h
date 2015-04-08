@@ -38,6 +38,10 @@ extern "C" {
 #include "../src/rdkafka.h"
 };
 
+#ifdef _MSC_VER
+typedef int mode_t;
+#endif
+
 namespace RdKafka {
 
 
@@ -59,7 +63,7 @@ class EventImpl : public Event {
 
   EventImpl (Type type, ErrorCode err, Severity severity,
              const char *fac, const char *str):
-      type_(type), err_(err), severity_(severity), fac_(fac ? : ""), str_(str)
+      type_(type), err_(err), severity_(severity), fac_(fac ? fac : ""), str_(str)
   { };
 
   Type        type () const { return type_; }
@@ -109,7 +113,7 @@ class MessageImpl : public Message {
      *        For the producer case the payload needs to be the original
      *        payload pointer. */
     const char *es = rd_kafka_err2str(rkmessage_->err);
-    return std::string(es ? : "");
+    return std::string(es ? es : "");
   }
 
   ErrorCode           err () const {
@@ -299,7 +303,7 @@ class TopicImpl : public Topic {
   }
 
   bool partition_available (int32_t partition) {
-    return rd_kafka_topic_partition_available(rkt_, partition);
+    return !!rd_kafka_topic_partition_available(rkt_, partition);
   }
 
   ErrorCode offset_store (int32_t partition, int64_t offset) {
@@ -336,7 +340,7 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
 class ProducerImpl : virtual public Producer, virtual public HandleImpl {
 
  public:
-  ~ProducerImpl () { rd_kafka_destroy(rk_); };
+  ~ProducerImpl () { if (rk_) rd_kafka_destroy(rk_); };
 
   ErrorCode produce (Topic *topic, int32_t partition,
                      int msgflags,

@@ -46,7 +46,16 @@
 #include <stdint.h>
 
 
-
+#ifdef _MSC_VER
+#undef RD_EXPORT
+#ifdef LIBRDKAFKACPP_EXPORTS
+#define RD_EXPORT __declspec(dllexport)
+#else
+#define RD_EXPORT __declspec(dllimport)
+#endif
+#else
+#define RD_EXPORT
+#endif
 
 namespace RdKafka {
 
@@ -66,12 +75,21 @@ namespace RdKafka {
 /**
  * Returns the librdkafka version as integer.
  */
+RD_EXPORT
 int          version ();
 
 /**
  * Returns the librdkafka version as string.
  */
-std::string  version_str ();
+RD_EXPORT
+std::string  version_str();
+
+/**
+ * Returns a CSV list of the supported debug contexts
+ * for use with Conf::Set("debug", ..).
+ */
+RD_EXPORT
+std::string get_debug_contexts();
 
 /**
  * ErrorCode
@@ -129,7 +147,8 @@ enum ErrorCode {
 /**
  * Returns a human readable representation of a kafka error.
  */
-std::string  err2str (RdKafka::ErrorCode err);
+RD_EXPORT
+std::string  err2str(RdKafka::ErrorCode err);
 
 /**
  * Wait for all rd_kafka_t objects to be destroyed.
@@ -139,7 +158,8 @@ std::string  err2str (RdKafka::ErrorCode err);
  * `wait_destroyed()` function can be used for applications where
  * a clean shutdown is required.
  */
-int          wait_destroyed (int timeout_ms);
+RD_EXPORT
+int          wait_destroyed(int timeout_ms);
 
 
 /* Forward declarations */
@@ -152,7 +172,7 @@ class Topic;
 /**
  * Delivery Report callback class
  */
-class DeliveryReportCb {
+class RD_EXPORT DeliveryReportCb {
  public:
   virtual void dr_cb (Message &message) = 0;
 };
@@ -161,7 +181,7 @@ class DeliveryReportCb {
 /**
  * Partitioner callback class
  */
-class PartitionerCb {
+class RD_EXPORT PartitionerCb {
  public:
   virtual int32_t partitioner_cb (const Topic *topic,
                                   const std::string *key,
@@ -173,16 +193,15 @@ class PartitionerCb {
 /**
  * SocketCb callback class
  */
-class SocketCb {
+class RD_EXPORT SocketCb {
  public:
   virtual int socket_cb (int domain, int type, int protocol) = 0;
 };
 
-
 /**
  * OpenCb callback class
  */
-class OpenCb {
+class RD_EXPORT OpenCb {
  public:
   virtual int open_cb (const std::string &path, int flags, int mode) = 0;
 };
@@ -192,7 +211,7 @@ class OpenCb {
  * Event callback class
  * Events propogate errors, stats and logs to the application.
  */
-class EventCb {
+class RD_EXPORT EventCb {
  public:
   virtual void event_cb (Event &event) = 0;
 };
@@ -201,7 +220,7 @@ class EventCb {
 /**
  * Event class as provided to the EventCb callback.
  */
-class Event {
+class RD_EXPORT Event {
  public:
   enum Type {
     EVENT_ERROR,
@@ -237,7 +256,7 @@ class Event {
  * Holds either global or topic configuration.
  * Created through Conf::create() factory.
  */
-class Conf {
+class RD_EXPORT Conf {
  public:
   enum ConfType {
     CONF_GLOBAL,
@@ -250,8 +269,7 @@ class Conf {
     CONF_OK = 0
   };
 
-  static const std::string DEBUG_CONTEXTS;
-
+  
   /**
    * Create conf object
    */
@@ -302,7 +320,7 @@ class Conf {
 /**
  * Base handle, super class for Consumer and Producer.
  */
-class Handle {
+class RD_EXPORT Handle {
  public:
   virtual ~Handle() {};
 
@@ -342,7 +360,7 @@ class Handle {
 /**
  * Topic
  */
-class Topic {
+class RD_EXPORT Topic {
  public:
   /**
    * Unassigned partition.
@@ -399,7 +417,7 @@ class Topic {
 /**
  * Message, as provided to DeliveryReportCb, PartitionerCb callbacks, etc.
  */
-class Message {
+class RD_EXPORT Message {
  public:
   /* Accessor functions,
    * Not all fields are present in all types of callbacks. */
@@ -421,7 +439,7 @@ class Message {
 /**
  * Consumer
  */
-class Consumer : public virtual Handle {
+class RD_EXPORT Consumer : public virtual Handle {
  public:
   /**
    * Creates a new Kafka consumer handle.
@@ -497,7 +515,7 @@ class Consumer : public virtual Handle {
 /**
  * Producer
  */
-class Producer : public virtual Handle {
+class RD_EXPORT Producer : public virtual Handle {
  public:
   /**
    * Creates a new Kafka producer handle.

@@ -32,34 +32,87 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <errno.h>
 #include <time.h>
-#include <sys/time.h>
-
-#ifndef __FreeBSD__
-/* alloca(3) is in stdlib on FreeBSD */
-#include <alloca.h>
-#endif
 #include <assert.h>
-#include <pthread.h>
 
-#include "../config.h"
+#include "tinycthread.h"
+
+#ifdef _MSC_VER
+/* Visual Studio */
+#include "win32_config.h"
+#else
+/* POSIX / UNIX based systems */
+#include "../config.h" /* mklove output */
+#endif
+
+
+#ifdef _MSC_VER
+/* Win32/Visual Studio */
+#include "rdwin32.h"
+
+#else
+/* POSIX / UNIX based systems */
+#include "rdposix.h"
+#endif
 
 #include "rdtypes.h"
 
 
-#ifndef likely
-#define likely(x)   __builtin_expect((x),1)
-#endif
-#ifndef unlikely
-#define unlikely(x) __builtin_expect((x),0)
-#endif
+/**
+* Allocator wrappers.
+* We serve under the premise that if a (small) memory
+* allocation fails all hope is lost and the application
+* will fail anyway, so no need to handle it handsomely.
+*/
+static __inline RD_UNUSED void *rd_calloc(size_t num, size_t sz) {
+	void *p = calloc(num, sz);
+	assert(p);
+	return p;
+}
 
-#define RD_UNUSED   __attribute__((unused))
-#define RD_PACKED   __attribute__((packed))
-#define RD_IS_CONSTANT(p)  __builtin_constant_p((p))
+static __inline RD_UNUSED void *rd_malloc(size_t sz) {
+	void *p = malloc(sz);
+	assert(p);
+	return p;
+}
+
+static __inline RD_UNUSED void *rd_realloc(void *ptr, size_t sz) {
+	void *p = realloc(ptr, sz);
+	assert(p);
+	return p;
+}
+
+static __inline RD_UNUSED void rd_free(void *ptr) {
+	free(ptr);
+}
+
+static __inline RD_UNUSED char *rd_strdup(const char *s) {
+#ifndef _MSC_VER
+	char *n = strdup(s);
+#else
+	char *n = _strdup(s);
+#endif
+	assert(n);
+	return n;
+}
+
+static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
+#ifndef _MSC_VER
+	char *n = strndup(s, len);
+	assert(n);
+#else
+	char *n = malloc(len + 1);
+	assert(n);
+	memcpy(n, s, len);
+	n[len] = '\0';
+#endif
+	return n;
+}
+
+
+
 
 #define RD_ARRAY_SIZE(A)          (sizeof((A)) / sizeof(*(A)))
 #define RD_ARRAYSIZE(A)           RD_ARRAY_SIZE(A)
@@ -69,10 +122,10 @@
 /**
  * Returns the 'I'th array element from static sized array 'A'
  * or NULL if 'I' is out of range.
- * 'PFX' is an optional prefix to provide the correct return type.
+ * var-args is an optional prefix to provide the correct return type.
  */
-#define RD_ARRAY_ELEM(A,I,PFX...)				\
-	((unsigned int)(I) < RD_ARRAY_SIZE(A) ? PFX (A)[(I)] : NULL)
+#define RD_ARRAY_ELEM(A,I,...)				\
+	((unsigned int)(I) < RD_ARRAY_SIZE(A) ? __VA_ARGS__ (A)[(I)] : NULL)
 
 								  
 #define RD_STRINGIFY(X)  # X
@@ -90,52 +143,79 @@
 	((val) < (low) ? low : ((val) > (hi) ? (hi) : (val)))
 
 
-#define rd_atomic_add(PTR,VAL)  ATOMIC_OP(add,fetch,PTR,VAL)
-#define rd_atomic_sub(PTR,VAL)  ATOMIC_OP(sub,fetch,PTR,VAL)
+typedef struct {
+	int32_t val;
+} rd_atomic32_t;
 
-#define rd_atomic_add_prev(PTR,VAL)  ATOMIC_OP(fetch,add,PTR,VAL)
-#define rd_atomic_sub_prev(PTR,VAL)  ATOMIC_OP(fetch,sub,PTR,VAL)
+typedef struct {
+	int64_t val;
+} rd_atomic64_t;
 
-
-
-#ifdef sun
-#include <sys/isa_defs.h>
-#include <sys/byteorder.h>
-# ifdef _BIG_ENDIAN
-#define be64toh(x) (x)
-#define htobe64(x) (x)
-# else
-#  ifndef ntohll
-#define ntohll(x) BSWAP_64(x)
-#define htonll(x) ntohll(x)
-#  endif
-#define be64toh(x)  ntohll(x)
-#define htobe64(x)  htonll(x)
-# endif
-#endif /* sun */
-
-#ifdef __FreeBSD__
-/* FreeBSD defines be64toh() in sys/endian.h */
-#include <sys/endian.h>
-#endif
-
-#ifndef be64toh
-#ifndef __APPLE__
-#ifndef sun
-#include <byteswap.h>
-#endif
-
-#if __BYTE_ORDER == __BIG_ENDIAN
-#define be64toh(x) (x)
+static __inline int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, int32_t v) {
+#ifndef _MSC_VER
+	return ATOMIC_OP(add, fetch, &ra->val, v);
 #else
-# if __BYTE_ORDER == __LITTLE_ENDIAN
-#define be64toh(x)  bswap_64(x)
-# endif
+	return InterlockedAdd(&ra->val, v);
 #endif
+}
 
-#define htobe64(x) be64toh(x)
+static __inline int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v) {
+#ifndef _MSC_VER
+	return ATOMIC_OP(sub, fetch, &ra->val, v);
+#else
+	return InterlockedAdd(&ra->val, -v);
 #endif
+}
+
+static __inline int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
+#ifndef _MSC_VER
+	return ATOMIC_OP(fetch, add, &ra->val, 0);
+#else
+	return ra->val;
 #endif
+}
+
+static __inline int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v) {
+#ifndef _MSC_VER
+	return ra->val = v; // FIXME
+#else
+	return InterlockedExchange(&ra->val, v);
+#endif
+}
 
 
-void rd_init (void);
+static __inline int64_t RD_UNUSED rd_atomic64_add (rd_atomic64_t *ra, int64_t v) {
+#ifndef _MSC_VER
+	return ATOMIC_OP(add, fetch, &ra->val, v);
+#else
+	return InterlockedAdd64(&ra->val, v);
+#endif
+}
+
+static __inline int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v) {
+#ifndef _MSC_VER
+	return ATOMIC_OP(sub, fetch, &ra->val, v);
+#else
+	return InterlockedAdd64(&ra->val, -v);
+#endif
+}
+
+static __inline int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
+#ifndef _MSC_VER
+	return ATOMIC_OP(fetch, add, &ra->val, 0);
+#else
+	return ra->val;
+#endif
+}
+
+
+static __inline int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra, int64_t v) {
+#ifndef _MSC_VER
+	return ra->val = v; // FIXME
+#else
+	return InterlockedExchange64(&ra->val, v);
+#endif
+}
+
+
+

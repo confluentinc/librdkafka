@@ -5,7 +5,8 @@ LIBVER=		1
 
 SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_defaultconf.c rdkafka_timer.c rdkafka_offset.c \
-		rdcrc32.c rdgz.c rdaddr.c rdrand.c rdthread.c rdqueue.c \
+		rdkafka_transport.c \
+		rdcrc32.c rdgz.c rdaddr.c rdrand.c tinycthread.c \
 		rdlog.c \
 		snappy.c
 
@@ -22,7 +23,7 @@ CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 
 file-check: lib
 check: file-check
-	@(printf "%-30s " "Symbol visibility" ; \
+	@(printf "%-30s " "Symbol visibility ($(SYMDUMPER))" ; \
 	(($(SYMDUMPER) $(LIBFILENAME) | grep -q rd_kafka_new) && \
 	  ($(SYMDUMPER) $(LIBFILENAME) | grep -vq rd_kafka_destroy) && \
 		$(ECHO) "\033[32mOK\033[0m") || \

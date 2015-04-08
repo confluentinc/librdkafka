@@ -39,21 +39,21 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 		      void *msg_opaque);
 
 
-static inline RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
+static __inline RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
 	TAILQ_INIT(&rkmq->rkmq_msgs);
-	rkmq->rkmq_msg_cnt   = 0;
-	rkmq->rkmq_msg_bytes = 0;
+	rd_atomic32_set(&rkmq->rkmq_msg_cnt, 0);
+	rd_atomic64_set(&rkmq->rkmq_msg_bytes, 0);
 }
 
 /**
  * Concat all elements of 'src' onto tail of 'dst'.
  * 'src' will be cleared.
  */
-static inline RD_UNUSED void rd_kafka_msgq_concat (rd_kafka_msgq_t *dst,
+static __inline RD_UNUSED void rd_kafka_msgq_concat (rd_kafka_msgq_t *dst,
 						   rd_kafka_msgq_t *src) {
 	TAILQ_CONCAT(&dst->rkmq_msgs, &src->rkmq_msgs, rkm_link);
-	(void)rd_atomic_add(&dst->rkmq_msg_cnt, src->rkmq_msg_cnt);
-	(void)rd_atomic_add(&dst->rkmq_msg_bytes, src->rkmq_msg_bytes);
+	(void)rd_atomic32_add(&dst->rkmq_msg_cnt, rd_atomic32_get(&src->rkmq_msg_cnt));
+	(void)rd_atomic64_add(&dst->rkmq_msg_bytes, rd_atomic64_get(&src->rkmq_msg_bytes));
 	rd_kafka_msgq_init(src);
 }
 
@@ -61,19 +61,19 @@ static inline RD_UNUSED void rd_kafka_msgq_concat (rd_kafka_msgq_t *dst,
  * Move queue 'src' to 'dst' (overwrites dst)
  * Source will be cleared.
  */
-static inline RD_UNUSED void rd_kafka_msgq_move (rd_kafka_msgq_t *dst,
+static __inline RD_UNUSED void rd_kafka_msgq_move (rd_kafka_msgq_t *dst,
 						 rd_kafka_msgq_t *src) {
 	TAILQ_MOVE(&dst->rkmq_msgs, &src->rkmq_msgs, rkm_link);
-	dst->rkmq_msg_cnt   = src->rkmq_msg_cnt;
-	dst->rkmq_msg_bytes = src->rkmq_msg_bytes;
+	rd_atomic32_set(&dst->rkmq_msg_cnt, rd_atomic32_get(&src->rkmq_msg_cnt));
+	rd_atomic64_set(&dst->rkmq_msg_bytes, rd_atomic64_get(&src->rkmq_msg_bytes));
 	rd_kafka_msgq_init(src);
 }
 
 
 /**
- * Free all msgs in msgq and reinitialize the msgq.
+ * rd_free all msgs in msgq and reinitialize the msgq.
  */
-static inline RD_UNUSED void rd_kafka_msgq_purge (rd_kafka_t *rk,
+static __inline RD_UNUSED void rd_kafka_msgq_purge (rd_kafka_t *rk,
 						  rd_kafka_msgq_t *rkmq) {
 	rd_kafka_msg_t *rkm, *next;
 
@@ -92,15 +92,15 @@ static inline RD_UNUSED void rd_kafka_msgq_purge (rd_kafka_t *rk,
 /**
  * Remove message from message queue
  */
-static inline RD_UNUSED 
+static __inline RD_UNUSED 
 rd_kafka_msg_t *rd_kafka_msgq_deq (rd_kafka_msgq_t *rkmq,
 				   rd_kafka_msg_t *rkm,
 				   int do_count) {
 	if (likely(do_count)) {
-		rd_kafka_assert(NULL, rkmq->rkmq_msg_cnt > 0);
-		rd_kafka_assert(NULL, rkmq->rkmq_msg_bytes >= rkm->rkm_len);
-		(void)rd_atomic_sub(&rkmq->rkmq_msg_cnt, 1);
-		(void)rd_atomic_sub(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
+		rd_kafka_assert(NULL, rd_atomic32_get(&rkmq->rkmq_msg_cnt) > 0);
+		rd_kafka_assert(NULL, rd_atomic64_get(&rkmq->rkmq_msg_bytes) >= rkm->rkm_len);
+		(void)rd_atomic32_sub(&rkmq->rkmq_msg_cnt, 1);
+		(void)rd_atomic64_sub(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
 	}
 
 	TAILQ_REMOVE(&rkmq->rkmq_msgs, rkm, rkm_link);
@@ -108,7 +108,7 @@ rd_kafka_msg_t *rd_kafka_msgq_deq (rd_kafka_msgq_t *rkmq,
 	return rkm;
 }
 
-static inline RD_UNUSED
+static __inline RD_UNUSED
 rd_kafka_msg_t *rd_kafka_msgq_pop (rd_kafka_msgq_t *rkmq) {
 	rd_kafka_msg_t *rkm;
 
@@ -121,21 +121,21 @@ rd_kafka_msg_t *rd_kafka_msgq_pop (rd_kafka_msgq_t *rkmq) {
 /**
  * Insert message at head of message queue.
  */
-static inline RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
+static __inline RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
 						   rd_kafka_msg_t *rkm) {
 	TAILQ_INSERT_HEAD(&rkmq->rkmq_msgs, rkm, rkm_link);
-	(void)rd_atomic_add(&rkmq->rkmq_msg_cnt, 1);
-	(void)rd_atomic_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
+	(void)rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
+	(void)rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
 }
 
 /**
  * Append message to tail of message queue.
  */
-static inline RD_UNUSED void rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
+static __inline RD_UNUSED void rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
 						rd_kafka_msg_t *rkm) {
 	TAILQ_INSERT_TAIL(&rkmq->rkmq_msgs, rkm, rkm_link);
-	(void)rd_atomic_add(&rkmq->rkmq_msg_cnt, 1);
-	(void)rd_atomic_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
+	(void)rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
+	(void)rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
 }
 
 

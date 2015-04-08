@@ -4,9 +4,12 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <limits.h>
+#ifndef _MSC_VER
 #include <sys/uio.h>
+#endif
 
-#include "endian_compat.h"
+#include "rd.h"
+#include "rdendian.h"
 
 #if defined(__arm__) && \
 	!defined(__ARM_ARCH_4__) &&		\
@@ -48,13 +51,13 @@ typedef unsigned long long u64;
 
 /* You may want to define this on various ARM architectures */
 #ifdef UNALIGNED64_REALLYS_SLOW
-static inline u64 get_unaligned64(const void *p)
+static __inline u64 get_unaligned64(const void *p)
 {
 	u64 t;
 	memcpy(&t, p, 8);
 	return t;
 }
-static inline u64 put_unaligned64(u64 t, void *p)
+static __inline u64 put_unaligned64(u64 t, void *p)
 {
 	memcpy(p, &t, 8);
 	return t;
@@ -70,9 +73,6 @@ static inline u64 put_unaligned64(u64 t, void *p)
 #define EXPORT_SYMBOL(x)
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
-
-#define likely(x) __builtin_expect((x), 1)
-#define unlikely(x) __builtin_expect((x), 0)
 
 #define min_t(t,x,y) ((x) < (y) ? (x) : (y))
 #define max_t(t,x,y) ((x) > (y) ? (x) : (y))

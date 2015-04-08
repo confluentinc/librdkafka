@@ -38,11 +38,12 @@
 #include "rdkafka.h"  /* for Kafka driver */
 
 
-int main (int argc, char **argv) {
+int main_0006_symbols (int argc, char **argv) {
 
         if (argc < 0 /* always false */) {
                 rd_kafka_version();
                 rd_kafka_version_str();
+				rd_kafka_get_debug_contexts();
                 rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR);
                 rd_kafka_errno2err(EINVAL);
                 rd_kafka_conf_new();
@@ -55,8 +56,10 @@ int main (int argc, char **argv) {
                 rd_kafka_conf_set_stats_cb(NULL, NULL);
                 rd_kafka_conf_set_log_cb(NULL, NULL);
                 rd_kafka_conf_set_socket_cb(NULL, NULL);
-                rd_kafka_conf_set_open_cb(NULL, NULL);
-                rd_kafka_conf_set_opaque(NULL, NULL);
+#ifndef _MSC_VER
+				rd_kafka_conf_set_open_cb(NULL, NULL);
+#endif
+				rd_kafka_conf_set_opaque(NULL, NULL);
                 rd_kafka_opaque(NULL);
                 rd_kafka_conf_dump(NULL, NULL);
                 rd_kafka_topic_conf_dump(NULL, NULL);
@@ -91,7 +94,9 @@ int main (int argc, char **argv) {
                 rd_kafka_set_logger(NULL, NULL);
                 rd_kafka_set_log_level(NULL, 0);
                 rd_kafka_log_print(NULL, 0, NULL, NULL);
+#ifndef _MSC_VER
                 rd_kafka_log_syslog(NULL, 0, NULL, NULL);
+#endif
                 rd_kafka_outq_len(NULL);
                 rd_kafka_dump(NULL, NULL);
                 rd_kafka_thread_cnt();

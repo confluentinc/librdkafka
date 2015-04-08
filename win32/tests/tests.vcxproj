@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -95,6 +95,8 @@
     <ClCompile Include="..\..\tests\0010-enforcereqacks.c" />
     <ClCompile Include="..\..\tests\0011-produce_batch.c" />
     <ClCompile Include="..\..\tests\0012-produce_consume.c" />
+    <ClCompile Include="..\..\tests\0013-null-msgs.c" />
+    <ClCompile Include="..\..\tests\0014-reconsume-191.c" />
     <ClCompile Include="..\..\tests\test.c" />
   </ItemGroup>
   <ItemGroup>

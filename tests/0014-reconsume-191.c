@@ -99,10 +99,10 @@ static void produce_messages (uint64_t testid, const char *topic,
 		for (i = 0 ; i < batch_cnt ; i++) {
                         char key[128];
                         char buf[128];
-			snprintf(key, sizeof(key),
+			rd_snprintf(key, sizeof(key),
 				 "testid=%"PRIu64", partition=%i, msg=%i",
 				 testid, (int)partition, msgid);
-                        snprintf(buf, sizeof(buf),
+                        rd_snprintf(buf, sizeof(buf),
                                  "data: testid=%"PRIu64", partition=%i, msg=%i",
 				 testid, (int)partition, msgid);
 
@@ -218,7 +218,7 @@ static void verify_consumed_msg0 (const char *func, int line,
 			  "not sourced by this test",
 			  (int)rkmessage->key_len);
 
-	snprintf(buf, sizeof(buf), "%.*s",
+	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->key_len, (char *)rkmessage->key);
 
 	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",

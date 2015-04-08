@@ -103,7 +103,7 @@ static void produce_null_messages (uint64_t testid, const char *topic,
 
 		for (i = 0 ; i < batch_cnt ; i++) {
                         char key[128];
-			snprintf(key, sizeof(key),
+			rd_snprintf(key, sizeof(key),
 				 "testid=%"PRIu64", partition=%i, msg=%i",
 				 testid, (int)partition, msgid);
                         r = rd_kafka_produce(rkt, partition, 0,
@@ -222,7 +222,7 @@ static void verify_consumed_msg0 (const char *func, int line,
 			  "not sourced by this test",
 			  (int)rkmessage->key_len);
 
-	snprintf(buf, sizeof(buf), "%.*s",
+	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->key_len, (char *)rkmessage->key);
 
 	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
@@ -360,7 +360,8 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                          rd_kafka_err2str(rd_kafka_errno2err(errno
+)));
 
 	TEST_SAY("Consuming %i messages from one queue serving %i partitions\n",
 		 msgcnt, partition_cnt);

@@ -259,9 +259,6 @@ static void verify_consumed_msg0 (const char *func, int line,
 	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->len, (char *)rkmessage->payload);
 
-#ifdef _MSC_VER
-#define sscanf(...) sscanf_s(__VA_ARGS__)
-#endif
 	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
 		   &in_testid, &in_part, &in_msgnum) != 3)
 		TEST_FAIL("Incorrect message format: %s", buf);

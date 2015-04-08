@@ -15,6 +15,9 @@
 
 #include "../src/rd.h"
 
+#ifdef _MSC_VER
+#define sscanf(...) sscanf_s(__VA_ARGS__)
+#endif
 
 /**
  * Test output is controlled through "TEST_LEVEL=N" environemnt variable.

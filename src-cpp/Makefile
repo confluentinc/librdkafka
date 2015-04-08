@@ -50,7 +50,7 @@ LIB_LDFLAGS+= $(LDFLAG_LINKERSCRIPT)$(LIBNAME).lds
 endif
 
 $(LIBNAME).lds: $(HDRS)
-	@(echo "$(MKL_YELLOW)Generating linker script $@ from $(HDRS)$(MKL_CLR_RESET)" ; \
+	@($(ECHO) "$(MKL_YELLOW)Generating linker script $@ from $(HDRS)$(MKL_CLR_RESET)" ; \
 	  cat ../src/rdkafka.h | ../lds-gen.pl > $@)
 
 -include $(DEPS)

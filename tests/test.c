@@ -229,13 +229,18 @@ uint64_t test_id_generate (void) {
 
 int main(int argc, char **argv) {
 	int r = 0;
+        const char *tests_to_run = getenv("TESTS");
+
+        printf("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 
 #define RUN_TEST(NAME) do { \
 	extern int main_ ## NAME (int, char **); \
+        if (!tests_to_run || strstr(tests_to_run, # NAME)) { \
 		TEST_SAY("================= Run test %s =================\n", # NAME); \
 		int _r = main_ ## NAME (argc, argv); \
 		TEST_SAY("================= Test %s %s =================\n", # NAME, _r ? "FAILED" : "PASSED"); \
 		r |= _r; \
+        } \
 	} while (0)
 	RUN_TEST(0001_multiobj);
 	RUN_TEST(0002_unkpart);
@@ -248,6 +253,7 @@ int main(int argc, char **argv) {
 	RUN_TEST(0010_enforcereqacks);
 	RUN_TEST(0011_produce_batch);
 	RUN_TEST(0012_produce_consume);
-
+        RUN_TEST(0013_null_msgs);
+        RUN_TEST(0014_reconsume_191);
 	return r;
 }

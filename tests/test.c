@@ -229,7 +229,11 @@ uint64_t test_id_generate (void) {
 
 int main(int argc, char **argv) {
 	int r = 0;
-        const char *tests_to_run = getenv("TESTS");
+        const char *tests_to_run = NULL; /* all */
+
+#ifndef _MSC_VER
+        tests_to_run = getenv("TESTS");
+#endif
 
         printf("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 

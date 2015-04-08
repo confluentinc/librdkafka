@@ -129,6 +129,9 @@ class MessageImpl : public Message {
     }
     return NULL;
   }
+  const void         *key_pointer () const { return rkmessage_->key; }
+  size_t              key_len () const { return rkmessage_->key_len; }
+
   int64_t             offset () const { return rkmessage_->offset; }
   void               *msg_opaque () const { return rkmessage_->_private; };
 
@@ -155,6 +158,7 @@ class ConfImpl : public Conf {
       socket_cb_(NULL),
       open_cb_(NULL),
       partitioner_cb_(NULL),
+      partitioner_kp_cb_(NULL),
       rk_conf_(NULL),
       rkt_conf_(NULL){}
   ~ConfImpl () {
@@ -216,6 +220,22 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+  Conf::ConfResult set (const std::string &name,
+                        PartitionerKeyPointerCb *partitioner_kp_cb,
+                        std::string &errstr) {
+    if (name != "partitioner_key_pointer_cb") {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rkt_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_TOPIC object";
+      return Conf::CONF_INVALID;
+    }
+
+    partitioner_kp_cb_ = partitioner_kp_cb;
+    return Conf::CONF_OK;
+  }
 
   Conf::ConfResult set (const std::string &name, SocketCb *socket_cb,
                         std::string &errstr) {
@@ -258,6 +278,7 @@ class ConfImpl : public Conf {
   SocketCb *socket_cb_;
   OpenCb *open_cb_;
   PartitionerCb *partitioner_cb_;
+  PartitionerKeyPointerCb *partitioner_kp_cb_;
   ConfType conf_type_;
   rd_kafka_conf_t *rk_conf_;
   rd_kafka_topic_conf_t *rkt_conf_;
@@ -285,6 +306,7 @@ class HandleImpl : virtual public Handle {
   OpenCb *open_cb_;
   DeliveryReportCb *dr_cb_;
   PartitionerCb *partitioner_cb_;
+  PartitionerKeyPointerCb *partitioner_kp_cb_;
 };
 
 
@@ -312,6 +334,7 @@ class TopicImpl : public Topic {
 
   rd_kafka_topic_t *rkt_;
   PartitionerCb *partitioner_cb_;
+  PartitionerKeyPointerCb *partitioner_kp_cb_;
 };
 
 
@@ -342,6 +365,12 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                      int msgflags,
                      void *payload, size_t len,
                      const std::string *key,
+                     void *msg_opaque);
+
+  ErrorCode produce (Topic *topic, int32_t partition,
+                     int msgflags,
+                     void *payload, size_t len,
+                     const void *key, size_t key_len,
                      void *msg_opaque);
 
   static Producer *create (Conf *conf, std::string &errstr);

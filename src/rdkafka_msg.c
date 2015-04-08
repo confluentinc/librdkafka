@@ -409,7 +409,8 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
         (void)rd_atomic64_add(&rktp_new->rktp_c.msgs, 1);
 
         /* Update message partition */
-        rkm->rkm_partition = partition;
+        if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
+                rkm->rkm_partition = partition;
 
 	/* Partition is available: enqueue msg on partition's queue */
 	rd_kafka_toppar_enq_msg(rktp_new, rkm);

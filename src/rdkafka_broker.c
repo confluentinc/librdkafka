@@ -3373,8 +3373,8 @@ static void rd_kafka_toppar_offsetcommit_request (rd_kafka_broker_t *rkb,
                                  /* static fields */
                                  4 + 4 + 4 + 8 +
                                  /* dynamic fields */
-                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_rk->
-                                                    rk_conf.group_id) +
+                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->
+                                                    rkt_conf.group_id) +
                                  RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_topic) +
                                  RD_KAFKAP_STR_SIZE(&metadata));
 

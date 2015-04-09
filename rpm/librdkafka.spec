@@ -1,14 +1,13 @@
 Name:    librdkafka
-# NOTE: Make sure to update this to match rdkafka.h version
-Version: 0.8.5
-Release: 0
+Version: %{__version}%{?dist}
+Release: %{__release}
 %define soname 1
 
 Summary: The Apache Kafka C library
 Group:   Development/Libraries/C and C++
 License: BSD-2-Clause
 URL:     https://github.com/edenhill/librdkafka
-Source:	 librdkafka-%{version}.tar.gz
+Source:	 librdkafka-%{__version}.tar
 
 BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
@@ -39,7 +38,7 @@ using librdkafka.
 
 
 %prep
-%setup -q
+%setup -qc
 
 %configure
 
@@ -80,6 +79,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu Apr 09 2015 Eduard Iskandarov <e.iskandarov@corp.mail.ru> 0.8.6-0
+- 0.8.6 simplify build process
+
 * Fri Oct 24 2014 Magnus Edenhill <rdkafka@edenhill.se> 0.8.5-0
 - 0.8.5 release
 

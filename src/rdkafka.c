@@ -784,6 +784,12 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 		return "Broker: StaleControllerEpochCode";
 	case RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE:
 		return "Broker: Offset metadata string too large";
+	case RD_KAFKA_RESP_ERR_OFFSETS_LOAD_IN_PROGRESS:
+		return "Broker: Offsets load in progress";
+	case RD_KAFKA_RESP_ERR_CONSUMER_COORDINATOR_NOT_AVAILABLE:
+		return "Broker: Consumer coordinator not available";
+	case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_CONSUMER:
+		return "Broker: Not coordinator for consumer";
 	default:
 		snprintf(ret, sizeof(ret), "Err-%i?", err);
 		return ret;

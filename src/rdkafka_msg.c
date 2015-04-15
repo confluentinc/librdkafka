@@ -67,6 +67,9 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
 	rd_kafka_msg_t *rkm;
 	size_t mlen = sizeof(*rkm);
 
+	if (!payload) len = 0;
+	if (!key) keylen = 0;
+
 	if (unlikely(len + keylen > rkt->rkt_rk->rk_conf.max_msg_size)) {
                 *errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
                 errno = EMSGSIZE;

@@ -51,6 +51,7 @@
 
 
 static bool run = true;
+static bool exit_eof = false;
 
 static void sigterm (int sig) {
   run = false;
@@ -136,6 +137,9 @@ void msg_consume(RdKafka::Message* message, void* opaque) {
 
     case RdKafka::ERR__PARTITION_EOF:
       /* Last message */
+      if (exit_eof) {
+        run = false;
+      }
       break;
 
     default:
@@ -156,7 +160,6 @@ int main (int argc, char **argv) {
   std::string debug;
   int32_t partition = RdKafka::Topic::PARTITION_UA;
   int64_t start_offset = RdKafka::Topic::OFFSET_BEGINNING;
-  bool exit_eof = false;
   bool do_conf_dump = false;
   char opt;
   MyHashPartitionerCb hash_partitioner;
@@ -457,20 +460,10 @@ int main (int argc, char **argv) {
     /*
      * Consume messages
      */
-    if (exit_eof) {
-      // single-run mode uses the consumer_callback interface
-      int const count = consumer->consume_callback(topic, partition, 1000, msg_consume, NULL);
-      if (count == -1) {
-        std::cerr << "Consumer failed" << std::endl;
-      } else {
-        std::cerr << "Received " << count << "messages." << std::endl;
-      }
-    } else {
-      while (run) {
-        RdKafka::Message *msg = consumer->consume(topic, partition, 1000);
-        msg_consume(msg, NULL);
-        consumer->poll(0);
-      }
+    while (run) {
+      RdKafka::Message *msg = consumer->consume(topic, partition, 1000);
+      msg_consume(msg, NULL);
+      consumer->poll(0);
     }
 
     /*

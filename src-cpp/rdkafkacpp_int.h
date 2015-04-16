@@ -351,7 +351,8 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
   ErrorCode start (Topic *topic, int32_t partition, int64_t offset);
   ErrorCode stop (Topic *topic, int32_t partition);
   Message *consume (Topic *topic, int32_t partition, int timeout_ms);
-  int consume_callback(Topic* topic, int32_t partition, int timeout_ms, void (*consume_cb)(Message*, void*), void* opaque);
+  int consume_callback (Topic *topic, int32_t partition, int timeout_ms,
+                        ConsumeCb *cb, void *opaque);
 };
 
 

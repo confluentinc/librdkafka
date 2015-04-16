@@ -215,6 +215,15 @@ class EventCb {
 
 
 /**
+ * Consume callback class
+ */
+class ConsumeCb {
+ public:
+  virtual void consume_cb (Message &message, void *opaque) = 0;
+};
+
+
+/**
  * Event class as provided to the EventCb callback.
  */
 class Event {
@@ -524,8 +533,8 @@ class Consumer : public virtual Handle {
    * 'timeout_ms' is the maximum amount of time to wait for one or more messages
    * to arrive.
    *
-   * The provided 'consume_cb' function is called for each message,
-   * the application must not delete the provided 'message'.
+   * The provided 'consume_cb' instance has its 'consume_cb' function
+   * called for every message received.
    *
    * The 'opaque' argument is passed to the 'consume_cb' as 'opaque'.
    *
@@ -533,9 +542,8 @@ class Consumer : public virtual Handle {
    */
   virtual int consume_callback (Topic *topic, int32_t partition,
                                 int timeout_ms,
-                                void (*consume_cb) (Message* message, void *opaque),
+                                ConsumeCb *consume_cb,
                                 void *opaque) = 0;
-
 };
 
 

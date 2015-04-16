@@ -126,9 +126,9 @@ void msg_consume(RdKafka::Message* message, void* opaque) {
 
     case RdKafka::ERR_NO_ERROR:
       /* Real message */
-      std::cerr << "Read msg at offset " << message->offset() << std::endl;
+      std::cout << "Read msg at offset " << message->offset() << std::endl;
       if (message->key()) {
-        std::cerr << "Key: " << *message->key() << std::endl;
+        std::cout << "Key: " << *message->key() << std::endl;
       }
       printf("%.*s\n",
         static_cast<int>(message->len()),
@@ -147,8 +147,6 @@ void msg_consume(RdKafka::Message* message, void* opaque) {
       std::cerr << "Consume failed: " << message->errstr() << std::endl;
       run = false;
   }
-
-  delete message;
 }
 
 
@@ -463,15 +461,13 @@ int main (int argc, char **argv) {
     while (run) {
       RdKafka::Message *msg = consumer->consume(topic, partition, 1000);
       msg_consume(msg, NULL);
-      consumer->poll(0);
+      delete msg;
     }
 
     /*
      * Stop consumer
      */
     consumer->stop(topic, partition);
-
-    consumer->poll(1000);
 
     delete topic;
     delete consumer;

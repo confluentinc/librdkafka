@@ -215,6 +215,15 @@ class EventCb {
 
 
 /**
+ * Consume callback class
+ */
+class ConsumeCb {
+ public:
+  virtual void consume_cb (Message &message, void *opaque) = 0;
+};
+
+
+/**
  * Event class as provided to the EventCb callback.
  */
 class Event {
@@ -514,6 +523,27 @@ class Consumer : public virtual Handle {
   virtual Message *consume (Topic *topic, int32_t partition,
                             int timeout_ms) = 0;
 
+  /**
+   * Consumes messages from 'topic' and 'partition', calling
+   * the provided callback for each consumed messsage.
+   *
+   * `consume_callback()` provides higher throughput performance
+   * than `consume()`.
+   *
+   * 'timeout_ms' is the maximum amount of time to wait for one or more messages
+   * to arrive.
+   *
+   * The provided 'consume_cb' instance has its 'consume_cb' function
+   * called for every message received.
+   *
+   * The 'opaque' argument is passed to the 'consume_cb' as 'opaque'.
+   *
+   * Returns the number of messages processed or -1 on error.
+   */
+  virtual int consume_callback (Topic *topic, int32_t partition,
+                                int timeout_ms,
+                                ConsumeCb *consume_cb,
+                                void *opaque) = 0;
 };
 
 

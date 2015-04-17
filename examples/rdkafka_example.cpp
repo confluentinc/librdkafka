@@ -51,6 +51,7 @@
 
 
 static bool run = true;
+static bool exit_eof = false;
 
 static void sigterm (int sig) {
   run = false;
@@ -118,6 +119,35 @@ class MyHashPartitionerCb : public RdKafka::PartitionerCb {
   }
 };
 
+void msg_consume(RdKafka::Message* message, void* opaque) {
+  switch (message->err()) {
+    case RdKafka::ERR__TIMED_OUT:
+      break;
+
+    case RdKafka::ERR_NO_ERROR:
+      /* Real message */
+      std::cout << "Read msg at offset " << message->offset() << std::endl;
+      if (message->key()) {
+        std::cout << "Key: " << *message->key() << std::endl;
+      }
+      printf("%.*s\n",
+        static_cast<int>(message->len()),
+        static_cast<const char *>(message->payload()));
+      break;
+
+    case RdKafka::ERR__PARTITION_EOF:
+      /* Last message */
+      if (exit_eof) {
+        run = false;
+      }
+      break;
+
+    default:
+      /* Errors */
+      std::cerr << "Consume failed: " << message->errstr() << std::endl;
+      run = false;
+  }
+}
 
 
 int main (int argc, char **argv) {
@@ -128,7 +158,6 @@ int main (int argc, char **argv) {
   std::string debug;
   int32_t partition = RdKafka::Topic::PARTITION_UA;
   int64_t start_offset = RdKafka::Topic::OFFSET_BEGINNING;
-  bool exit_eof = false;
   bool do_conf_dump = false;
   char opt;
   MyHashPartitionerCb hash_partitioner;
@@ -431,37 +460,8 @@ int main (int argc, char **argv) {
      */
     while (run) {
       RdKafka::Message *msg = consumer->consume(topic, partition, 1000);
-
-      switch (msg->err())
-      {
-        case RdKafka::ERR__TIMED_OUT:
-          break;
-
-        case RdKafka::ERR_NO_ERROR:
-	  /* Real message */
-	  std::cerr << "Read msg at offset " << msg->offset() << std::endl;
-	  if (msg->key()) {
-		  std::cerr << "Key: " << *msg->key() << std::endl;
-	  }
-          printf("%.*s\n",
-                 static_cast<int>(msg->len()),
-                 static_cast<const char *>(msg->payload()));
-	  break;
-
-	case RdKafka::ERR__PARTITION_EOF:
-	  /* Last message */
-	  if (exit_eof)
-	    run = false;
-	  break;
-
-	default:
-	  /* Errors */
-	  std::cerr << "Consume failed: " << msg->errstr() << std::endl;
-	  run = false;
-	}
-
+      msg_consume(msg, NULL);
       delete msg;
-
       consumer->poll(0);
     }
 

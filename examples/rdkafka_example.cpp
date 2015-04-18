@@ -98,9 +98,6 @@ class ExampleEventCb : public RdKafka::EventCb {
 };
 
 
-
-
-
 /* Use of this partitioner is pretty pointless since no key is provided
  * in the produce() call. */
 class MyHashPartitionerCb : public RdKafka::PartitionerCb {
@@ -150,6 +147,15 @@ void msg_consume(RdKafka::Message* message, void* opaque) {
 }
 
 
+class ExampleConsumeCb : public RdKafka::ConsumeCb {
+ public:
+  void consume_cb (RdKafka::Message &msg, void *opaque) {
+    msg_consume(&msg, opaque);
+  }
+};
+
+
+
 int main (int argc, char **argv) {
   std::string brokers = "localhost";
   std::string errstr;
@@ -161,6 +167,7 @@ int main (int argc, char **argv) {
   bool do_conf_dump = false;
   char opt;
   MyHashPartitionerCb hash_partitioner;
+  int use_ccb = 0;
 
   /*
    * Create configuration objects
@@ -169,7 +176,7 @@ int main (int argc, char **argv) {
   RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
 
 
-  while ((opt = getopt(argc, argv, "PCt:p:b:z:qd:o:eX:AM:")) != -1) {
+  while ((opt = getopt(argc, argv, "PCt:p:b:z:qd:o:eX:AM:f:")) != -1) {
     switch (opt) {
     case 'P':
     case 'C':
@@ -258,6 +265,15 @@ int main (int argc, char **argv) {
       }
       break;
 
+      case 'f':
+        if (!strcmp(optarg, "ccb"))
+          use_ccb = 1;
+        else {
+          std::cerr << "Unknown option: " << optarg << std::endl;
+          exit(1);
+        }
+        break;
+
     default:
       goto usage;
     }
@@ -292,6 +308,8 @@ int main (int argc, char **argv) {
             "will be set on topic object.\n"
             "                  Use '-X list' to see the full list\n"
             "                  of supported properties.\n"
+            "  -f <flag>       Set option:\n"
+            "                     ccb - use consume_callback\n"
             "\n"
             " In Consumer mode:\n"
             "  writes fetched messages to stdout\n"
@@ -321,7 +339,6 @@ int main (int argc, char **argv) {
 
   ExampleEventCb ex_event_cb;
   conf->set("event_cb", &ex_event_cb, errstr);
-
 
   if (do_conf_dump) {
     int pass;
@@ -455,13 +472,20 @@ int main (int argc, char **argv) {
       exit(1);
     }
 
+    ExampleConsumeCb ex_consume_cb;
+
     /*
      * Consume messages
      */
     while (run) {
-      RdKafka::Message *msg = consumer->consume(topic, partition, 1000);
-      msg_consume(msg, NULL);
-      delete msg;
+      if (use_ccb) {
+        consumer->consume_callback(topic, partition, 1000,
+                                   &ex_consume_cb, &use_ccb);
+      } else {
+        RdKafka::Message *msg = consumer->consume(topic, partition, 1000);
+        msg_consume(msg, NULL);
+        delete msg;
+      }
       consumer->poll(0);
     }
 

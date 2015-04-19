@@ -880,6 +880,10 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 			pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
 	}
 
+        /* Disable logging since application's logger might be freed
+         * shortly after this function returns. */
+        rk->rk_conf.log_level = -1;
+
 	rd_kafka_unlock(rk);
 
 	/* Brokers pick up on rk_terminate automatically. */

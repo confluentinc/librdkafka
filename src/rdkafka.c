@@ -319,12 +319,14 @@ void rd_kafka_q_purge (rd_kafka_q_t *rkq) {
  * Returns the number of entries moved.
  */
 size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
-			    size_t cnt) {
+			    size_t cnt, int do_locks) {
 	rd_kafka_op_t *rko;
         size_t mcnt = 0;
 
-	pthread_mutex_lock(&srcq->rkq_lock);
-	pthread_mutex_lock(&dstq->rkq_lock);
+        if (do_locks) {
+                pthread_mutex_lock(&srcq->rkq_lock);
+                pthread_mutex_lock(&dstq->rkq_lock);
+        }
 
 	if (!dstq->rkq_fwdq && !srcq->rkq_fwdq) {
 		/* Optimization, if 'cnt' is equal/larger than all
@@ -354,10 +356,12 @@ size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 	} else
 		mcnt = rd_kafka_q_move_cnt(dstq->rkq_fwdq ? : dstq,
 					   srcq->rkq_fwdq ? : srcq,
-					   cnt);
+					   cnt, do_locks);
 
-	pthread_mutex_unlock(&dstq->rkq_lock);
-	pthread_mutex_unlock(&srcq->rkq_lock);
+        if (do_locks) {
+                pthread_mutex_unlock(&dstq->rkq_lock);
+                pthread_mutex_unlock(&srcq->rkq_lock);
+        }
 
 	return mcnt;
 }
@@ -415,10 +419,11 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms) {
  *
  * Locality: any thread.
  */
-int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
-		      void (*callback) (rd_kafka_op_t *rko,
-					void *opaque),
-		      void *opaque) {
+static int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
+                             int max_cnt,
+                             void (*callback) (rd_kafka_op_t *rko,
+                                               void *opaque),
+                             void *opaque) {
 	rd_kafka_op_t *rko, *tmp;
 	rd_kafka_q_t localq;
 
@@ -426,15 +431,15 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 	pthread_mutex_lock(&rkq->rkq_lock);
 	if (rkq->rkq_fwdq) {
-		int ret = rd_kafka_q_serve(rkq->rkq_fwdq, timeout_ms,
+		int ret = rd_kafka_q_serve(rkq->rkq_fwdq, timeout_ms, max_cnt,
 					   callback, opaque);
 		pthread_mutex_unlock(&rkq->rkq_lock);
 		return ret;
 	}
 
 	/* Wait for op */
-	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) && timeout_ms != 0) {
-		
+	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) && timeout_ms != 0 &&
+               max_cnt-- > 0) {
 		if (timeout_ms != RD_POLL_INFINITE) {
 			if (pthread_cond_timedwait_ms(&rkq->rkq_cond,
 						      &rkq->rkq_lock,
@@ -454,16 +459,23 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 		return 0;
 	}
 
-	/* Move all ops to local queue */
-	TAILQ_CONCAT(&localq.rkq_q, &rkq->rkq_q, rko_link);
-	localq.rkq_qlen = rkq->rkq_qlen;
-        localq.rkq_qsize = rkq->rkq_qsize;
+        if (max_cnt == 0) {
+                /* Move all ops to local queue */
+                TAILQ_CONCAT(&localq.rkq_q, &rkq->rkq_q, rko_link);
+                localq.rkq_qlen = rkq->rkq_qlen;
+                localq.rkq_qsize = rkq->rkq_qsize;
 
-	/* Reset real queue */
-	TAILQ_INIT(&rkq->rkq_q);
-        rkq->rkq_qlen  = 0;
-        rkq->rkq_qsize = 0;
-	pthread_mutex_unlock(&rkq->rkq_lock);
+                /* Reset real queue */
+                TAILQ_INIT(&rkq->rkq_q);
+                rkq->rkq_qlen  = 0;
+                rkq->rkq_qsize = 0;
+
+        } else {
+                /* Move the first `max_cnt` ops. */
+                rd_kafka_q_move_cnt(&localq, rkq, max_cnt, 0/*no-locks*/);
+        }
+
+        pthread_mutex_unlock(&rkq->rkq_lock);
 
 	/* Call callback for each op */
 	TAILQ_FOREACH_SAFE(rko, &localq.rkq_q, rko_link, tmp) {
@@ -1524,12 +1536,14 @@ static void rd_kafka_consume_cb (rd_kafka_op_t *rko, void *opaque) {
 
 static int rd_kafka_consume_callback0 (rd_kafka_q_t *rkq,
 				       int timeout_ms,
+                                       int max_cnt,
 				       void (*consume_cb) (rd_kafka_message_t
 							   *rkmessage,
 							   void *opaque),
 				       void *opaque) {
 	struct consume_ctx ctx = { .consume_cb = consume_cb, .opaque = opaque };
-	return rd_kafka_q_serve(rkq, timeout_ms, rd_kafka_consume_cb, &ctx);
+	return rd_kafka_q_serve(rkq, timeout_ms, max_cnt,
+                                rd_kafka_consume_cb, &ctx);
 
 }
 
@@ -1557,6 +1571,7 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 	}
 
 	r = rd_kafka_consume_callback0(&rktp->rktp_fetchq, timeout_ms,
+                                       rkt->rkt_conf.consume_callback_max_msgs,
 				       consume_cb, opaque);
 
 	rd_kafka_toppar_destroy(rktp);
@@ -1572,7 +1587,7 @@ int rd_kafka_consume_callback_queue (rd_kafka_queue_t *rkqu,
 							 *rkmessage,
 							 void *opaque),
 				     void *opaque) {
-	return rd_kafka_consume_callback0(&rkqu->rkqu_q, timeout_ms,
+	return rd_kafka_consume_callback0(&rkqu->rkqu_q, timeout_ms, 0,
 					  consume_cb, opaque);
 }
 
@@ -1731,7 +1746,7 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 }
 
 int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
-	return rd_kafka_q_serve(&rk->rk_rep, timeout_ms,
+	return rd_kafka_q_serve(&rk->rk_rep, timeout_ms, 0,
 				rd_kafka_poll_cb, rk);
 }
 

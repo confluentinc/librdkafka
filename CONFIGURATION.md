@@ -64,5 +64,6 @@ auto.offset.reset                        |  C  |       largest | Action to take 
 offset.store.path                        |  C  |             . | Path to local file for storing offsets. If the path is a directory a filename will be automatically generated in that directory based on the topic and partition.
 offset.store.sync.interval.ms            |  C  |            -1 | fsync() interval for the offset file, in milliseconds. Use -1 to disable syncing, and 0 for immediate sync after each write.
 offset.store.method                      |  C  |          file | Offset commit store method: 'file' - local file store (offset.store.path, et.al), 'broker' - broker commit store (requires Apache Kafka 0.8.1 or later on the broker).
+consume.callback.max.messages            |  C  |             0 | Maximum number of messages to dispatch in one `rd_kafka_consume_callback*()` call (0 = unlimited)
 
 ### C/P legend: C = Consumer, P = Producer, * = both

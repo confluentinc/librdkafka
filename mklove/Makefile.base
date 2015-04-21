@@ -1,13 +1,13 @@
 # Base Makefile providing various standard targets
 # Part of mklove suite but may be used independently.
 
-MKL_RED=\033[031m
-MKL_GREEN=\033[032m
-MKL_YELLOW=\033[033m
-MKL_BLUE=\033[034m
-MKL_CLR_RESET=\033[0m
+MKL_RED?=\033[031m
+MKL_GREEN?=\033[032m
+MKL_YELLOW?=\033[033m
+MKL_BLUE?=\033[034m
+MKL_CLR_RESET?=\033[0m
 
-ECHO?=           /bin/echo -e
+ECHO?=		/bin/echo -e
 DEPS=		$(OBJS:%.o=%.d)
 
 # TOPDIR is "TOPDIR/mklove/../" i.e., TOPDIR.
@@ -63,7 +63,7 @@ man8dir?=	$(mandir)/man8
 # Checks that mklove is set up and ready for building
 mklove-check:
 	@if [ ! -f "$(TOPDIR)/Makefile.config" ]; then \
-                $(ECHO) "$(MKL_RED)$(TOPDIR)/Makefile.config missing: please run ./configure$(MKL_CLR_RESET)" ; \
+		$(ECHO) "$(MKL_RED)$(TOPDIR)/Makefile.config missing: please run ./configure$(MKL_CLR_RESET)" ; \
 		exit 1 ; \
 	fi
 

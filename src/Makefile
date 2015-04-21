@@ -23,10 +23,10 @@ CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 file-check: lib
 check: file-check
 	@(printf "%-30s " "Symbol visibility" ; \
-	(($(SYMDUMPER) $(LIBFILENAME) | grep -q rd_kafka_new) && \
-	  ($(SYMDUMPER) $(LIBFILENAME) | grep -vq rd_kafka_destroy) && \
-		$(ECHO) "\033[32mOK\033[0m") || \
-	  $(ECHO) "\033[31mFAILED\033[0m")
+		(($(SYMDUMPER) $(LIBFILENAME) | grep -q rd_kafka_new) && \
+		($(SYMDUMPER) $(LIBFILENAME) | grep -vq rd_kafka_destroy) && \
+		$(ECHO) "$(MKL_GREEN)OK$(MKL_CLR_RESET)") || \
+		$(ECHO) "$(MKL_RED)FAILED$(MKL_CLR_RESET)")
 
 install: lib-install
 

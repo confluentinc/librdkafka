@@ -348,7 +348,6 @@ static void consume_messages_callback_multi (uint64_t testid, const char *topic,
                          i, msg_next - cnta);
 
                 rd_kafka_consume_stop(rkt, partition);
-                //sleep(5);
         }
 
 	/* Destroy topic */

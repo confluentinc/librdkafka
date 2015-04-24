@@ -651,11 +651,12 @@ typedef struct rd_kafka_toppar_s {
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rklink;  /* rd_kafka_t link */
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rkblink; /* rd_kafka_broker_t link*/
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rktlink; /* rd_kafka_topic_t link */
-	rd_kafka_topic_t  *rktp_rkt;
-	int32_t            rktp_partition;
-	rd_kafka_broker_t *rktp_leader;  /* Leader broker */
-	int                rktp_refcnt;
-	pthread_mutex_t    rktp_lock;
+	rd_kafka_topic_t   *rktp_rkt;
+	int32_t             rktp_partition;
+	rd_kafka_broker_t  *rktp_leader;  /* Leader broker */
+	int                 rktp_refcnt;
+	pthread_mutex_t     rktp_lock;
+	pthread_mutexattr_t rktp_attr;
 
 	rd_kafka_msgq_t    rktp_msgq;      /* application->rdkafka queue.
 					    * protected by rktp_lock */

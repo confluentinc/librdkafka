@@ -756,7 +756,11 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition);
  *   ENOENT    - 'rkt'+'partition' is unknown.
  *                (no prior `rd_kafka_consume_start()` call)
  *
- * The returned message's '..->err' must be checked for errors.
+ * NOTE: The returned message's '..->err' must be checked for errors.
+ * NOTE: '..->err == RD_KAFKA_RESP_ERR__PARTITION_EOF' signals that the end
+ *       of the partition has been reached, which should typically not be
+ *       considered an error. The application should handle this case
+ *       (e.g., ignore).
  */
 rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *rkt, int32_t partition,
 				      int timeout_ms);
@@ -777,6 +781,8 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *rkt, int32_t partition,
  *
  * Returns the number of rkmessages added in 'rkmessages',
  * or -1 on error (same error codes as for `rd_kafka_consume()`.
+ *
+ * See: rd_kafka_consume
  */
 ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
 				int timeout_ms,
@@ -802,6 +808,8 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
  * The 'opaque' argument is passed to the 'consume_cb' as 'opaque'.
  *
  * Returns the number of messages processed or -1 on error.
+ *
+ * See: rd_kafka_consume
  */
 int rd_kafka_consume_callback (rd_kafka_topic_t *rkt, int32_t partition,
 			       int timeout_ms,

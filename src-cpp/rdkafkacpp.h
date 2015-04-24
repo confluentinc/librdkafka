@@ -519,6 +519,7 @@ class Consumer : public virtual Handle {
    *
    * Errors (in Message->err()):
    *   ERR__TIMED_OUT - 'timeout_ms' was reached with no new messages fetched.
+   *   ERR__PARTITION_EOF - End of partition reached, not an error.
    */
   virtual Message *consume (Topic *topic, int32_t partition,
                             int timeout_ms) = 0;
@@ -539,6 +540,8 @@ class Consumer : public virtual Handle {
    * The 'opaque' argument is passed to the 'consume_cb' as 'opaque'.
    *
    * Returns the number of messages processed or -1 on error.
+   *
+   * See: consume()
    */
   virtual int consume_callback (Topic *topic, int32_t partition,
                                 int timeout_ms,

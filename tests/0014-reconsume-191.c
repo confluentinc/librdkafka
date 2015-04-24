@@ -111,7 +111,8 @@ static void produce_messages (uint64_t testid, const char *topic,
                                  "data: testid=%"PRIu64", partition=%i, msg=%i",
 				 testid, (int)partition, msgid);
 
-                        r = rd_kafka_produce(rkt, partition, 0,
+                        r = rd_kafka_produce(rkt, partition,
+                                             RD_KAFKA_MSG_F_COPY,
                                              buf, strlen(buf),
                                              key, strlen(key),
                                              NULL);

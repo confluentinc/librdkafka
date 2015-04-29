@@ -275,6 +275,9 @@ static int rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp,
 			continue;
 		}
 
+                /* Need to flush before truncate to preserve write ordering */
+                (void)fflush(rktp->rktp_offset_fp);
+
 		/* Truncate file */
 #ifdef _MSC_VER
 		if (_chsize_s(_fileno(rktp->rktp_offset_fp), len) == -1)
@@ -283,7 +286,6 @@ static int rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp,
 		if (ftruncate(fileno(rktp->rktp_offset_fp), len) == -1)
 			; /* Ignore truncate failures */
 #endif
-
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
 			     "%s [%"PRId32"]: wrote offset %"PRId64" to "
 			     "file %s",
@@ -542,7 +544,7 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 	}
 
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
-		     "%s [%"PRId32"] using offset file %s",
+		     "%s [%"PRId32"]: using offset file %s",
 		     rktp->rktp_rkt->rkt_topic->str,
 		     rktp->rktp_partition,
 		     path);

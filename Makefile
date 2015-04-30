@@ -18,7 +18,7 @@ libs:
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d || exit $?; done)
 
 CONFIGURATION.md: src/rdkafka.h examples
-	@$(ECHO) "$(MKL_YELLOW)Updating$(MKL_CLR_RESET)"
+	@printf "$(MKL_YELLOW)Updating$(MKL_CLR_RESET)\n"
 	@(examples/rdkafka_performance -X list > CONFIGURATION.md.tmp; \
 		cmp CONFIGURATION.md CONFIGURATION.md.tmp || \
 		mv CONFIGURATION.md.tmp CONFIGURATION.md; \

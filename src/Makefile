@@ -23,10 +23,10 @@ CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 file-check: lib
 check: file-check
 	@(printf "%-30s " "Symbol visibility" ; \
-	(($(SYMDUMPER) $(LIBFILENAME) | grep -q rd_kafka_new) && \
-	  ($(SYMDUMPER) $(LIBFILENAME) | grep -vq rd_kafka_destroy) && \
-		$(ECHO) "\033[32mOK\033[0m") || \
-	  $(ECHO) "\033[31mFAILED\033[0m")
+		(($(SYMDUMPER) $(LIBFILENAME) | grep -q rd_kafka_new) && \
+		($(SYMDUMPER) $(LIBFILENAME) | grep -vq rd_kafka_destroy) && \
+		printf "$(MKL_GREEN)OK$(MKL_CLR_RESET)\n") || \
+		printf "$(MKL_RED)FAILED$(MKL_CLR_RESET)\n")
 
 install: lib-install
 
@@ -38,7 +38,7 @@ LIB_LDFLAGS+= $(LDFLAG_LINKERSCRIPT)$(LIBNAME).lds
 endif
 
 $(LIBNAME).lds: $(HDRS)
-	@($(ECHO) "$(MKL_YELLOW)Generating linker script $@ from $(HDRS)$(MKL_CLR_RESET)" ; \
+	@(printf "$(MKL_YELLOW)Generating linker script $@ from $(HDRS)$(MKL_CLR_RESET)\n" ; \
 	  cat $(HDRS) | ../lds-gen.pl > $@)
 
 -include $(DEPS)

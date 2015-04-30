@@ -24,7 +24,7 @@ WITH_LDS=n
 ifeq ($(_UNAME_S),Darwin)
 	FWD_LINKING_REQ=y
 endif
-ifeq ($(shell uname -o),Cygwin)
+ifeq ($(shell uname -o 2>/dev/null),Cygwin)
 	FWD_LINKING_REQ=y
 endif
 
@@ -50,7 +50,7 @@ LIB_LDFLAGS+= $(LDFLAG_LINKERSCRIPT)$(LIBNAME).lds
 endif
 
 $(LIBNAME).lds: $(HDRS)
-	@($(ECHO) "$(MKL_YELLOW)Generating linker script $@ from $(HDRS)$(MKL_CLR_RESET)" ; \
+	@(printf "$(MKL_YELLOW)Generating linker script $@ from $(HDRS)$(MKL_CLR_RESET)\n" ; \
 	  cat ../src/rdkafka.h | ../lds-gen.pl > $@)
 
 -include $(DEPS)

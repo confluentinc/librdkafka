@@ -1711,7 +1711,7 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
                                 }
 
                                 rk->rk_conf.dr_msg_cb(rk, &rkmessage,
-                                                      rk->rk_conf.opaque);
+                                                      rk->rk_conf.opaque ? rk->conf.opaque : rkm->rkm_opaque);
 
                         } else {
 

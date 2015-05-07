@@ -1,13 +1,13 @@
 Name:    librdkafka
-Version: %{__version}%{?dist}
-Release: %{__release}
+Version: 0.8.6
+Release: 2.hawk
 %define soname 1
 
 Summary: The Apache Kafka C library
 Group:   Development/Libraries/C and C++
 License: BSD-2-Clause
 URL:     https://github.com/edenhill/librdkafka
-Source:	 librdkafka-%{__version}.tar
+Source:	 librdkafka-%{version}.tar.gz
 
 BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
@@ -38,7 +38,7 @@ using librdkafka.
 
 
 %prep
-%setup -qc
+%setup -qc -n %{name}
 
 %configure
 

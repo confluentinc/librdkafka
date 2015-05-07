@@ -573,7 +573,7 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
                                              rkb->rkb_nodename, errstr);
 			return -1;
 		}
-	    rkb->rkb_t_rsal_last = time(NULL);
+		rkb->rkb_t_rsal_last = time(NULL);
 	}
 
 	return 0;

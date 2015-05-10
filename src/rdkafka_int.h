@@ -873,7 +873,7 @@ void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 	} else
 		rd_kafka_q_concat0(rkq->rkq_fwdq ? : rkq,
 				   srcq->rkq_fwdq ? : srcq,
-				   do_lock);
+				   rkq->rkq_fwdq ? do_lock : 0);
 	if (do_lock)
 		pthread_mutex_unlock(&rkq->rkq_lock);
 }

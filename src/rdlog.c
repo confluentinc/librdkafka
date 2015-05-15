@@ -38,7 +38,7 @@
 
 void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 	const char *p = (const char *)ptr;
-	int of = 0;
+	unsigned int of = 0;
 
 
 	if (name)

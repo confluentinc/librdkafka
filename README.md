@@ -72,6 +72,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Python: [python-librdkafka](https://bitbucket.org/yungchin/python-librdkafka)
   * Python: [PyKafka](https://github.com/Parsely/pykafka)
   * Ruby: [Hermann](https://github.com/stancampbell3/Hermann)
+  * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
 
 #Users of librdkafka#
 

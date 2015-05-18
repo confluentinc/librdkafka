@@ -779,6 +779,9 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *rkt, int32_t partition,
  * 'rkmessages_size' messages to be put into 'rkmessages'.
  * This differs somewhat from `rd_kafka_consume()`.
  *
+ * The message objects must be destroyed with `rd_kafka_message_destroy()`
+ * when the application is done with it.
+ *
  * Returns the number of rkmessages added in 'rkmessages',
  * or -1 on error (same error codes as for `rd_kafka_consume()`.
  *
@@ -802,7 +805,7 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *rkt, int32_t partition,
  * to arrive.
  *
  * The provided 'consume_cb' function is called for each message,
- * the application must not call `rd_kafka_message_destroy()` on the provided
+ * the application must NOT call `rd_kafka_message_destroy()` on the provided
  * 'rkmessage'.
  *
  * The 'opaque' argument is passed to the 'consume_cb' as 'opaque'.

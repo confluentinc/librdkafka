@@ -898,10 +898,11 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 		ssize_t r;					\
 		ssize_t rem = size-of;				\
 		r = snprintf(buf+of, rem, fmt);			\
-		if (r > rem) {					\
+		while (r >= rem) {				\
 			size *= 2;				\
+			rem = size-of;				\
 			buf = realloc(buf, size);		\
-			r = snprintf(buf+of, size-of, fmt);	\
+			r = snprintf(buf+of, rem, fmt);		\
 		}						\
 		of += r;					\
 	} while (0)

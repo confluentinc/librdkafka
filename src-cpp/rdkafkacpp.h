@@ -597,6 +597,10 @@ class Producer : public virtual Handle {
    *
    *  NOTE: RK_MSG_FREE and RK_MSG_COPY are mutually exclusive.
    *
+   *  If the function returns -1 and RK_MSG_FREE was specified, then
+   *  the memory associated with the payload is still the caller's
+   *  responsibility.
+   *
    * 'payload' is the message payload of size 'len' bytes.
    *
    * 'key' is an optional message key, if non-NULL it

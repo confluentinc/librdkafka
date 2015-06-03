@@ -914,6 +914,10 @@ rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
  *
  *    .._F_FREE and .._F_COPY are mutually exclusive.
  *
+ *    If the function returns -1 and RD_KAFKA_MSG_F_FREE was specified, then
+ *    the memory associated with the payload is still the caller's
+ *    responsibility.
+ *
  * 'payload' is the message payload of size 'len' bytes.
  *
  * 'key' is an optional message key of size 'keylen' bytes, if non-NULL it

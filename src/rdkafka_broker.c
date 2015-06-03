@@ -3675,12 +3675,12 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 			break;
 		}
 
-		/* Backoff until next retry */
-		rktp->rktp_ts_offset_req_next = rd_clock() + 500000; /* 500ms */
-		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
-
                 if (request->rkbuf_hndcb ==
                     (void *)rd_kafka_toppar_next_offset_handle){
+			/* Backoff until next retry */
+			rktp->rktp_ts_offset_req_next = rd_clock() + 500000; /* 500ms */
+			rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
+
                         /* Signal error back to application */
                         rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
                         rko->rko_err = err;

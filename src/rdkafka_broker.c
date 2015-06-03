@@ -3634,11 +3634,16 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
         }
 
 	if (unlikely(err)) {
+		int data_path_request = 0;
+		if (request->rkbuf_hndcb == (void *)rd_kafka_toppar_next_offset_handle) {
+			data_path_request = 1;
+		}
 
                 rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-                           "Offset (type %hd) reply for "
+                           "Offset (type %hd) reply error for %s "
                            "topic %s [%"PRId32"]: %s",
                            ntohs(request->rkbuf_reqhdr.ApiKey),
+                           data_path_request ? "data fetch" : "consumer lag",
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                            rd_kafka_err2str(err));
 

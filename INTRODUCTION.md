@@ -112,8 +112,10 @@ per topic+partition basis.
 
 When low latency messaging is required the "queue.buffering.max.ms" should be
 tuned to the maximum permitted producer-side latency.
-Setting queue.buffering.max.ms to 0 will make sure messages are sent as
-soon as possible.
+Setting queue.buffering.max.ms to 1 will make sure messages are sent as
+soon as possible. You could check out [How to decrease message latency]
+(https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency)
+to find more details.
 
 
 ### Compression

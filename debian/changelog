@@ -1,3 +1,9 @@
+librdkafka (0.8.6-2) unstable; urgency=medium
+
+  * Update to 0.8.6
+
+ -- Filip Pytloun <filip@pytloun.cz>  Mon, 22 Jun 2015 14:04:03 +0200
+
 librdkafka (0.8.5-2) unstable; urgency=medium
 
   * Install rdkafka.pc in the right, multiarch location. (Closes: #766759)

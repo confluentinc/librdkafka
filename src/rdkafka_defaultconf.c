@@ -205,6 +205,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "opaque", _RK_C_PTR,
 	  _RK(opaque),
 	  "Application opaque (set with rd_kafka_conf_set_opaque())" },
+	{ _RK_GLOBAL, "internal.termination.signal", _RK_C_INT,
+	  _RK(term_sig),
+	  "Signal that librdkafka will use to quickly terminate on "
+	  "rd_kafka_destroy(). If this signal is not set then there will be a "
+	  "delay before rd_kafka_wait_destroyed() returns true "
+	  "as internal threads are timing out their system calls. "
+	  "If this signal is set however the delay will be minimal. "
+	  "The application should mask this signal as an internal "
+	  "signal handler is installed.",
+	  0, 128, 0 },
 
 	/* Global consumer properties */
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
@@ -260,7 +270,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(max_retries),
 	  "How many times to retry sending a failing MessageSet. "
 	  "**Note:** retrying may cause reordering.",
-	  0, 100, 2 },
+	  0, 10000000, 2 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "retry.backoff.ms", _RK_C_INT,
 	  _RK(retry_backoff_ms),
 	  "The backoff time in milliseconds before retrying a message send.",
@@ -279,6 +289,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(batch_num_messages),
 	  "Maximum number of messages batched in one MessageSet.",
 	  1, 1000000, 1000 },
+	{ _RK_GLOBAL|_RK_PRODUCER, "delivery.report.only.error", _RK_C_BOOL,
+	  _RK(dr_err_only),
+	  "Only provide delivery reports for failed messages.",
+	  0, 1, 0 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "dr_cb", _RK_C_PTR,
 	  _RK(dr_cb),
 	  "Delivery report callback (set with rd_kafka_conf_set_dr_cb())" },
@@ -299,10 +313,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "*1*=broker will wait until the data is written to local "
 	  "log before sending a response, "
 	  "*-1*=broker will block until message is committed by all "
-	  "in sync replicas (ISRs) before sending response. "
-	  "*>1*=for any number > 1 the broker will block waiting for this "
-	  "number of acknowledgements to be received (but the broker "
-	  "will never wait for more acknowledgements than there are ISRs).",
+	  "in sync replicas (ISRs) or broker's `in.sync.replicas` setting before sending response. "
+	  "*1*=Only the leader broker will need to ack the message. ",
 	  -1, 1000, 1 },
         { _RK_TOPIC|_RK_PRODUCER, "enforce.isr.cnt", _RK_C_INT,
           _RKT(enforce_isr_cnt),
@@ -342,6 +354,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
 
         /* Topic consumer properties */
+        { _RK_TOPIC|_RK_CONSUMER, "group.id", _RK_C_STR,
+          _RKT(group_id_str),
+          "Consumer group id string. All clients sharing the same group.id "
+          "belong to the same consumer group. This takes precedence over "
+          "the global group.id." },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.enable", _RK_C_BOOL,
 	  _RKT(auto_commit),
 	  "If true, periodically commit offset of the last message handed "
@@ -350,7 +367,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "If false, the application will have to call "
 	  "`rd_kafka_offset_store()` to store an offset (optional). "
 	  "**NOTE:** There is currently no zookeeper integration, offsets "
-	  "will be written to local file according to offset.store.path.",
+	  "will be written to broker or local file according to "
+          "offset.store.method.",
 	  0, 1, 1 },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RKT(auto_commit_interval_ms),

@@ -119,6 +119,16 @@ void rd_kafka_timer_start (rd_kafka_t *rk,
 
 
 /**
+ * Interrupt rd_kafka_timers_run().
+ * Used for termination.
+ */
+void rd_kafka_timers_interrupt (rd_kafka_t *rk) {
+	rd_kafka_timers_lock(rk);
+	pthread_cond_signal(&rk->rk_timers_cond);
+	rd_kafka_timers_unlock(rk);
+}
+
+/**
  * Dispatch timers.
  * Will block up to 'timeout' microseconds before returning.
  */

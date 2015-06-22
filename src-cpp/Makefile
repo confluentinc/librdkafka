@@ -20,10 +20,24 @@ include ../mklove/Makefile.base
 # No linker script/symbol hiding for C++ library
 WITH_LDS=n
 
+# OSX and Cygwin requires linking required libraries
+ifeq ($(_UNAME_S),Darwin)
+	FWD_LINKING_REQ=y
+endif
+ifeq ($(shell uname -o),Cygwin)
+	FWD_LINKING_REQ=y
+endif
+
+ifeq ($(FWD_LINKING_REQ),y)
+	LIBS := -L../src -lrdkafka $(LIBS) 
+endif
+
 LIBS += -lstdc++
 
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 
+
+file-check: lib
 check: file-check
 
 install: lib-install

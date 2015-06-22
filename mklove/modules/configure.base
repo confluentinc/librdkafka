@@ -852,6 +852,7 @@ function mkl_check_done {
 
 # Perform configure check by compiling source snippet
 # Arguments:
+#  [--ldflags="..." ]  (appended after "compiler arguments" below)
 #  config name
 #  define name
 #  action (fail|disable)
@@ -859,6 +860,11 @@ function mkl_check_done {
 #  compiler arguments (optional "", example: "-lzookeeper")
 #  source snippet
 function mkl_compile_check {
+    local ldf=
+    if [[ $1 == --ldflags=* ]]; then
+	ldf=${1#*=}
+	shift
+    fi
     mkl_check_begin "$1" "$2" "$3" "$1 (by compile)" && return $?
 
     local cflags=
@@ -871,13 +877,15 @@ function mkl_compile_check {
         cflags="$(mkl_mkvar_get CFLAGS)"
     fi
 
-    local srcfile=$(mktemp _mkltmpXXXX.$ext)
+    local srcfile=$(mktemp _mkltmpXXXXX)
+    mv "$srcfile" "${srcfile}.$ext"
+    srcfile="$srcfile.$ext"
     echo "$6" > $srcfile
     echo "
 int main () { return 0; }
 " >> $srcfile
 
-    local cmd="${!4} $cflags $(mkl_mkvar_get CPPFLAGS) -Wall -Werror $5 $srcfile -o ${srcfile}.o $(mkl_mkvar_get LDFLAGS)";
+    local cmd="${!4} $cflags $(mkl_mkvar_get CPPFLAGS) -Wall -Werror $5 $srcfile -o ${srcfile}.o $ldf $(mkl_mkvar_get LDFLAGS)";
     mkl_dbg "Compile check $1 ($2): $cmd"
 
     local output
@@ -914,7 +922,7 @@ source: $6"
 function mkl_link_check {
     mkl_check_begin "$1" "$2" "$3" "$1 (by linking)" && return $?
 
-    local srcfile=$(mktemp _mktmplXXXX.$ext)
+    local srcfile=$(mktemp _mktmpXXXXX)
     echo "int main () { return 0; }" > $srcfile
 
     local cmd="${CC} $(mkl_mkvar_get LDFLAGS) -c $srcfile -o ${srcfile}.o $4";
@@ -938,8 +946,36 @@ $output"
 }
 
 
+
+# Tries to figure out if we can use a static library or not.
+# Arguments:
+#  library name   (e.g. -lrdkafka)
+#  compiler flags (optional "", e.g: "-lyajl")
+# Returns/outputs:
+#  New list of compiler flags
+function mkl_lib_check_static {
+    local libname=$1
+    local libs=$2
+    local arfile_var=STATIC_LIB_${libname#-l}
+
+    # If STATIC_LIB_<libname_without_-l> specifies an existing .a file we
+    # use that instead.
+    if [[ -f ${!arfile_var} ]]; then
+	libs=$(echo $libs | sed -e "s|$libname|${!arfile_var}|g")
+    else
+        libs=$(echo $libs | sed -e "s|$libname|${LDFLAGS_STATIC} $libname ${LDFLAGS_DYNAMIC}|g")
+    fi
+
+    echo $libs
+}
+
+
 # Checks that the specified lib is available through a number of methods.
 # compiler flags are automatically appended to "LIBS" mkvar on success.
+#
+# If STATIC_LIB_<libname_without_-l> is set to the path of an <libname>.a file
+# it will be used instead of -l<libname>.
+#
 # Arguments:
 #  [--static=<lib>]  (allows static linking (--enable-static) for the
 #                     library provided, e.g.: --static=-lrdkafka "librdkafka"..)
@@ -963,15 +999,15 @@ function mkl_lib_check {
         fi
     fi
 
-    if ! mkl_compile_check "$1" "$2" "$3" "$4" "$5" "$6"; then
+    local libs="$5"
+    if [[ $WITH_STATIC_LINKING == y && ! -z $staticopt ]]; then
+	libs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
+    fi
+
+    if ! mkl_compile_check "$1" "$2" "$3" "$4" "$libs" "$6"; then
         return $?
     fi
 
-    local libs="$5"
-    if [[ $WITH_STATIC_LINKING == y && ! -z $staticopt ]]; then
-        local libname=${staticopt#*=}
-        libs=$(echo $libs | sed -e "s|$libname|${LDFLAGS_STATIC} $libname ${LDFLAGS_DYNAMIC}|g")
-    fi
     mkl_mkvar_append "$1" LIBS "$libs"
 }
 
@@ -1017,9 +1053,9 @@ $cflags"
     mkl_mkvar_append $1 "CFLAGS" "$cflags"
 
     if [[ $WITH_STATIC_LINKING == y && ! -z $staticopt ]]; then
-        local libname=${staticopt#*=}
-        libs=$(echo $libs | sed -e "s|$libname|${LDFLAGS_STATIC} $libname ${LDFLAGS_DYNAMIC}|g")
+	libs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
     fi
+
     mkl_mkvar_append "$1" LIBS "$libs"
 
     mkl_check_done "$1" "$2" "$3" "ok"
@@ -1170,7 +1206,7 @@ function mkl_module_download {
     # Download
     mkl_info "${MKL_BLUE}downloading missing module $modname from $url${MKL_CLR_RESET}"
 
-    tmpfile=$(mktemp _mkltmpXXXX.download)
+    tmpfile=$(mktemp _mkltmpXXXXX)
     local out=
     out=$(wget -nv -O "$tmpfile" "$url" 2>&1)
 
@@ -1351,7 +1387,8 @@ function mkl_usage {
 
     echo "Honoured environment variables:
   CC, CPP, CXX, CFLAGS, CPPFLAGS, CXXFLAGS, LDFLAGS, LIBS,
-  LD, NM, OBJDUMP, STRIP, PKG_CONFIG, PKG_CONFIG_PATH
+  LD, NM, OBJDUMP, STRIP, PKG_CONFIG, PKG_CONFIG_PATH,
+  STATIC_LIB_<libname>=.../libname.a
 
 "
 
@@ -1496,7 +1533,7 @@ function mkl_toggle_option {
     # Add corresponding "--disable-foo" option for "--enable-foo".
     local disname="${3/--enable/--disable}"
     local dishelp="${4/Enable/Disable}"
-    mkl_option "$1" "$2" "$disname" "$dishelp"
+    mkl_option "$1" "$2" "$disname" "$dishelp" "" "n"
 }
 
 # Adds a toggle (--enable-X, --disable-X) option with builtin checker.

@@ -98,6 +98,11 @@ int main (int argc, char **argv) {
                 rd_kafka_wait_destroyed(0);
                 rd_kafka_metadata(NULL, 0, NULL, NULL, 0);
                 rd_kafka_metadata_destroy(NULL);
+                rd_kafka_queue_destroy(NULL);
+                rd_kafka_consume_start_queue(NULL, 0, 0, NULL);
+                rd_kafka_consume_queue(NULL, 0);
+                rd_kafka_consume_batch_queue(NULL, 0, NULL, 0);
+                rd_kafka_consume_callback_queue(NULL, 0, NULL, NULL);
         }
 
 

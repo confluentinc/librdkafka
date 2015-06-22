@@ -346,6 +346,13 @@ static void rd_kafka_offset_file_term (rd_kafka_toppar_t *rktp) {
 	rd_kafka_timer_stop(rktp->rktp_rkt->rkt_rk,
 			    &rktp->rktp_offset_commit_tmr, 1/*lock*/);
 
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
+                     "%s [%"PRId32"]: commit stored offset %"PRId64
+                     ", committed offset %"PRId64"?",
+                     rktp->rktp_rkt->rkt_topic->str,
+                     rktp->rktp_partition,
+                     rktp->rktp_stored_offset, rktp->rktp_commited_offset);
+
 	if (rktp->rktp_stored_offset > rktp->rktp_commited_offset)
 		rd_kafka_offset_file_commit(rktp, rktp->rktp_stored_offset);
 
@@ -398,6 +405,54 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 
 
 /**
+ * Escape any special characters in filename 'in' and write escaped
+ * string to 'out' (of max size out_size).
+ */
+static char *mk_esc_filename (const char *in, char *out, size_t out_size) {
+        const char *s = in;
+        char *o = out;
+
+        while (*s) {
+                const char *esc;
+                int esclen;
+
+                switch (*s)
+                {
+                case '/': /* linux */
+                        esc = "%2F";
+                        esclen = strlen(esc);
+                        break;
+                case ':': /* osx, windows */
+                        esc = "%3A";
+                        esclen = strlen(esc);
+                        break;
+                case '\\': /* windows */
+                        esc = "%5C";
+                        esclen = strlen(esc);
+                        break;
+                default:
+                        esc = s;
+                        esclen = 1;
+                        break;
+                }
+
+                if ((o + esclen + 1) - out >= out_size) {
+                        /* No more space in output string, truncate. */
+                        break;
+                }
+
+                while (esclen-- > 0)
+                        *(o++) = *(esc++);
+
+                s++;
+        }
+
+        *o = '\0';
+        return out;
+}
+
+
+/**
  * Prepare a toppar for using an offset file.
  *
  * NOTE: toppar_lock(rktp) must be held.
@@ -409,11 +464,29 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 	int64_t offset = -1;
 
 	if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
-		snprintf(spath, sizeof(spath),
-			 "%s%s%s-%"PRId32".offset",
-			 path, path[strlen(path)-1] == '/' ? "" : "/",
-			 rktp->rktp_rkt->rkt_topic->str,
-			 rktp->rktp_partition);
+                char tmpfile[1024];
+                char escfile[4096];
+
+                /* Include group.id in filename if configured. */
+                if (!RD_KAFKAP_STR_IS_NULL(rktp->rktp_rkt->rkt_conf.group_id))
+                        snprintf(tmpfile, sizeof(tmpfile),
+                                 "%s-%"PRId32"-%.*s.offset",
+                                 rktp->rktp_rkt->rkt_topic->str,
+                                 rktp->rktp_partition,
+                                 RD_KAFKAP_STR_PR(rktp->rktp_rkt->
+                                                  rkt_conf.group_id));
+                else
+                        snprintf(tmpfile, sizeof(tmpfile),
+                                 "%s-%"PRId32".offset",
+                                 rktp->rktp_rkt->rkt_topic->str,
+                                 rktp->rktp_partition);
+
+                /* Escape filename to make it safe. */
+                mk_esc_filename(tmpfile, escfile, sizeof(escfile));
+
+                snprintf(spath, sizeof(spath), "%s%s%s",
+                         path, path[strlen(path)-1] == '/' ? "" : "/", escfile);
+
 		path = spath;
 	}
 
@@ -445,12 +518,12 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 	if (offset != -1) {
 		/* Start fetching from offset */
 		rktp->rktp_commited_offset = offset;
-		rktp->rktp_next_offset     = offset;
+		rktp->rktp_next_offset     = offset+1;
 		rktp->rktp_fetch_state     = RD_KAFKA_TOPPAR_FETCH_ACTIVE;
 
 	} else {
 		/* Offset was not usable: perform offset reset logic */
-		rktp->rktp_commited_offset = 0;
+		rktp->rktp_commited_offset = -1;
 		rd_kafka_offset_reset(rktp, RD_KAFKA_OFFSET_ERROR,
 				      RD_KAFKA_RESP_ERR__FS,
 				      "non-readable offset file");
@@ -506,7 +579,7 @@ static void rd_kafka_offset_broker_init (rd_kafka_toppar_t *rktp) {
 			     rd_kafka_offset_broker_commit_tmr_cb, rktp);
 
         /* Read offset from broker */
-        rktp->rktp_commited_offset = 0;
+        rktp->rktp_commited_offset = -1;
         rd_kafka_offset_reset(rktp, RD_KAFKA_OFFSET_ERROR,
                               RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE,
                               "waiting for broker offset");
@@ -521,10 +594,21 @@ void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp) {
         if (!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_OFFSET_STORE))
                 return;
 
-        if (rktp->rktp_stored_offset == 0 &&
-            rktp->rktp_eof_offset > 0)
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
+                     "%s [%"PRId32"]: stopping offset store "
+                     "(stored offset %"PRId64
+                     ", commited offset %"PRId64", EOF offset %"PRId64")",
+                     rktp->rktp_rkt->rkt_topic->str,
+		     rktp->rktp_partition,
+		     rktp->rktp_stored_offset, rktp->rktp_commited_offset,
+                     rktp->rktp_eof_offset);
+
+        /* Store end offset for empty partitions */
+        if (rktp->rktp_rkt->rkt_conf.auto_commit &&
+            rktp->rktp_stored_offset == -1 && rktp->rktp_eof_offset != -1)
                 rd_kafka_offset_store0(rktp, rktp->rktp_eof_offset,
                                        0/*no lock*/);
+
         switch (rktp->rktp_rkt->rkt_conf.offset_store_method)
         {
         case RD_KAFKA_OFFSET_METHOD_FILE:

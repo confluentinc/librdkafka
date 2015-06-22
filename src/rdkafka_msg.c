@@ -40,7 +40,7 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 	rd_kafka_assert(rk, rk->rk_producer.msg_cnt > 0);
 	(void)rd_atomic_sub(&rk->rk_producer.msg_cnt, 1);
 
-	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE)
+	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
 		free(rkm->rkm_payload);
 
 	if (rkm->rkm_key)
@@ -93,7 +93,7 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
 			rkt->rkt_conf.message_timeout_ms * 1000;
 	}
 
-	if (msgflags & RD_KAFKA_MSG_F_COPY) {
+	if (payload && msgflags & RD_KAFKA_MSG_F_COPY) {
 		/* Copy payload to space following the ..msg_t */
 		rkm->rkm_payload = (void *)(rkm+1);
 		memcpy(rkm->rkm_payload, payload, len);

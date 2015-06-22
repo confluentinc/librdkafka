@@ -841,6 +841,7 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
  *       librdkafka itself must use rd_kafka_destroy0(). */
 void rd_kafka_destroy (rd_kafka_t *rk) {
 	rd_kafka_topic_t *rkt, *rkt_tmp;
+	rd_kafka_broker_t *rkb;
 
 	rd_kafka_dbg(rk, GENERIC, "DESTROY", "Terminating instance");
 	(void)rd_atomic_add(&rk->rk_terminate, 1);
@@ -852,6 +853,15 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 		rd_kafka_topic_partitions_remove(rkt);
 		rd_kafka_rdlock(rk);
 	}
+
+	rd_kafka_timers_interrupt(rk);
+
+	/* Interrupt all IO threads to speed up termination. */
+	if (rk->rk_conf.term_sig) {
+		TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link)
+			pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
+	}
+
 	rd_kafka_unlock(rk);
 
 	/* Brokers pick up on rk_terminate automatically. */
@@ -884,6 +894,16 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 	char *buf = *bufp;
 	size_t size = *sizep;
 	int of = *ofp;
+        int64_t consumer_lag = -1;
+
+
+        if (rktp->rktp_hi_offset != -1 && rktp->rktp_next_offset > 0) {
+                if (rktp->rktp_next_offset > rktp->rktp_hi_offset)
+                        consumer_lag = 0;
+                else
+                        consumer_lag = rktp->rktp_hi_offset -
+                                rktp->rktp_next_offset;
+        }
 
 	_st_printf("%s\"%"PRId32"\": { "
 		   "\"partition\":%"PRId32", "
@@ -900,9 +920,13 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   "\"query_offset\":%"PRId64", "
 		   "\"next_offset\":%"PRId64", "
 		   "\"app_offset\":%"PRId64", "
+		   "\"stored_offset\":%"PRId64", "
 		   "\"commited_offset\":%"PRId64", " /*FIXME: issue #80 */
 		   "\"committed_offset\":%"PRId64", "
 		   "\"eof_offset\":%"PRId64", "
+		   "\"lo_offset\":%"PRId64", "
+		   "\"hi_offset\":%"PRId64", "
+                   "\"consumer_lag\":%"PRId64", "
 		   "\"txmsgs\":%"PRIu64", "
 		   "\"txbytes\":%"PRIu64", "
                    "\"msgs\": %"PRIu64" "
@@ -923,9 +947,13 @@ static inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rktp->rktp_query_offset,
 		   rktp->rktp_next_offset,
 		   rktp->rktp_app_offset,
+		   rktp->rktp_stored_offset,
 		   rktp->rktp_commited_offset, /* FIXME: issue #80 */
 		   rktp->rktp_commited_offset,
 		   rktp->rktp_eof_offset,
+		   rktp->rktp_lo_offset,
+		   rktp->rktp_hi_offset,
+                   consumer_lag,
 		   rktp->rktp_c.tx_msgs,
 		   rktp->rktp_c.tx_bytes,
 		   rktp->rktp_c.msgs);
@@ -954,13 +982,21 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 	now = rd_clock();
 	_st_printf("{ "
+                   "\"name\": \"%s\", "
+                   "\"type\": \"%s\", "
 		   "\"ts\":%"PRIu64", "
 		   "\"time\":%lli, "
 		   "\"replyq\":%i, "
+                   "\"msg_cnt\":%i, "
+                   "\"msg_max\":%i, "
 		   "\"brokers\":{ "/*open brokers*/,
+                   rk->rk_name,
+                   rd_kafka_type2str(rk->rk_type),
 		   now,
 		   (signed long long)time(NULL),
-		   rd_kafka_q_len(&rk->rk_rep));
+		   rd_kafka_q_len(&rk->rk_rep),
+                   rk->rk_producer.msg_cnt,
+                   rk->rk_conf.queue_buffering_max_msgs);
 
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -973,7 +1009,9 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"state\":\"%s\", "
                            "\"stateage\":%"PRId64", "
 			   "\"outbuf_cnt\":%i, "
+			   "\"outbuf_msg_cnt\":%i, "
 			   "\"waitresp_cnt\":%i, "
+			   "\"waitresp_msg_cnt\":%i, "
 			   "\"tx\":%"PRIu64", "
 			   "\"txbytes\":%"PRIu64", "
 			   "\"txerrs\":%"PRIu64", "
@@ -999,7 +1037,9 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rd_kafka_broker_state_names[rkb->rkb_state],
                            rkb->rkb_ts_state ? now - rkb->rkb_ts_state : 0,
 			   rkb->rkb_outbufs.rkbq_cnt,
+			   rkb->rkb_outbufs.rkbq_msg_cnt,
 			   rkb->rkb_waitresps.rkbq_cnt,
+			   rkb->rkb_waitresps.rkbq_msg_cnt,
 			   rkb->rkb_c.tx,
 			   rkb->rkb_c.tx_bytes,
 			   rkb->rkb_c.tx_err,
@@ -1107,6 +1147,8 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_t *rk, void *arg) {
         else
                 rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
                                              NULL, "periodic refresh");
+
+		rd_kafka_broker_destroy(rkb);
 }
 
 
@@ -1143,6 +1185,10 @@ static void *rd_kafka_thread_main (void *arg) {
 	return NULL;
 }
 
+
+static void rd_kafka_term_sig_handler (int sig) {
+	/* nop */
+}
 
 static void rd_kafka_global_init (void) {
 }
@@ -1229,6 +1275,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
          * we're done creating the thread. */
         sigemptyset(&oldset);
         sigfillset(&newset);
+	if (rk->rk_conf.term_sig) {
+		struct sigaction sa_term = {
+			.sa_handler = rd_kafka_term_sig_handler
+		};
+		sigaction(rk->rk_conf.term_sig, &sa_term, NULL);
+	}
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 
 	/* Create handler thread */
@@ -1309,13 +1361,6 @@ static int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
 		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
 
 	} else if (offset == RD_KAFKA_OFFSET_STORED) {
-
-		if (!rkt->rkt_conf.auto_commit) {
-			rd_kafka_toppar_unlock(rktp);
-			rd_kafka_toppar_destroy(rktp);
-			errno = EINVAL;
-			return -1;
-		}
 		rd_kafka_offset_store_init(rktp);
 
 	} else if (offset < 0) {

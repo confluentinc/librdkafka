@@ -17,16 +17,16 @@ function checks {
     if mkl_compile_check gnulib WITH_GNULD cont CC \
 	"-shared -Wl,-soname,mkltest.0" "" ; then
 	# GNU linker
-	mkl_mkvar_append LIB_LDFLAGS LIB_LDFLAGS '-Wl,-soname,$(LIBNAME).so.$(LIBVER)'
+	mkl_mkvar_append LIB_LDFLAGS LIB_LDFLAGS '-Wl,-soname,$(LIBFILENAME)'
 
     elif mkl_compile_check osxlib WITH_OSXLD cont CC \
 	"-dynamiclib -Wl,-install_name,/tmp/mkltest.so.0" ; then
 	# OSX linker
-        mkl_mkvar_append LIB_LDFLAGS LIB_LDFLAGS '-dynamiclib -Wl,-install_name,$(DESTDIR)$(libdir)/$(LIBNAME).so.$(LIBVER)'
+        mkl_mkvar_append LIB_LDFLAGS LIB_LDFLAGS '-dynamiclib -Wl,-install_name,$(DESTDIR)$(libdir)/$(LIBFILENAME)'
     fi
 
     # Check what argument is needed for passing linker script.
-    local ldsfile=$(mktemp _mkltmpXXXX.lds)
+    local ldsfile=$(mktemp _mkltmpXXXXX)
     echo "{
  global:
   *;

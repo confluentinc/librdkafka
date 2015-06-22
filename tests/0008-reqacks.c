@@ -92,7 +92,7 @@ int main (int argc, char **argv) {
 		 "all brokers!\033[0m\n");
 
         /* Try different request.required.acks settings (issue #75) */
-        for (reqacks = -1 ; reqacks <= 2 ; reqacks++) {
+        for (reqacks = -1 ; reqacks <= 1 ; reqacks++) {
                 char tmp[10];
 
                 test_conf_init(&conf, &topic_conf, 10);

@@ -255,11 +255,16 @@ int main (int argc, char **argv) {
 	int64_t start_offset = 0;
         int report_offsets = 0;
 	int do_conf_dump = 0;
+	char tmp[16];
 
 	quiet = !isatty(STDIN_FILENO);
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
+
+	/* Quick termination */
+	snprintf(tmp, sizeof(tmp), "%i", SIGIO);
+	rd_kafka_conf_set(conf, "internal.termination.signal", tmp, NULL, 0);
 
 	/* Topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();

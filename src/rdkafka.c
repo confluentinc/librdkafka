@@ -427,7 +427,7 @@ static int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	rd_kafka_op_t *rko, *tmp;
 	rd_kafka_q_t localq;
 
-	TAILQ_INIT(&localq.rkq_q);
+        rd_kafka_q_init(&localq);
 
 	pthread_mutex_lock(&rkq->rkq_lock);
 	if (rkq->rkq_fwdq) {

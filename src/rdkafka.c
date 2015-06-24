@@ -438,8 +438,7 @@ static int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	}
 
 	/* Wait for op */
-	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) && timeout_ms != 0 &&
-               max_cnt-- > 0) {
+	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) && timeout_ms != 0) {
 		if (timeout_ms != RD_POLL_INFINITE) {
 			if (pthread_cond_timedwait_ms(&rkq->rkq_cond,
 						      &rkq->rkq_lock,

@@ -82,6 +82,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * [rsyslog](http://www.rsyslog.com)
   * [syslog-ng](http://syslog-ng.org)
   * [collectd](http://collectd.org)
+  * [logkafka](https://github.com/Qihoo360/logkafka) - Collect logs and send to Kafka
   * [redBorder](http://www.redborder.net)
   * [Headweb](http://www.headweb.com/)
   * [Produban's log2kafka](https://github.com/Produban/log2kafka) - Web log producer

@@ -1986,7 +1986,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		struct {
 			int64_t Offset;
 			int32_t MessageSize;
-			int32_t Crc;
+			uint32_t Crc;
 			int8_t  MagicByte;
 			int8_t  Attributes;
 		} __attribute__((packed)) part3;
@@ -2170,7 +2170,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		struct {
 			int64_t Offset;
 			int32_t MessageSize;
-			int32_t Crc;
+			uint32_t Crc;
 			int8_t  MagicByte;
 			int8_t  Attributes;
 			int32_t Key_len; /* -1 */
@@ -2750,7 +2750,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		struct {
 			int64_t Offset;
 			int32_t MessageSize;
-			int32_t Crc;
+			uint32_t Crc;
 			int8_t  MagicByte;
 			int8_t  Attributes;
 		} RD_PACKED *hdr;
@@ -3634,11 +3634,16 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
         }
 
 	if (unlikely(err)) {
+		int data_path_request = 0;
+		if (request->rkbuf_hndcb == (void *)rd_kafka_toppar_next_offset_handle) {
+			data_path_request = 1;
+		}
 
                 rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-                           "Offset (type %hd) reply for "
+                           "Offset (type %hd) reply error for %s "
                            "topic %s [%"PRId32"]: %s",
                            ntohs(request->rkbuf_reqhdr.ApiKey),
+                           data_path_request ? "data fetch" : "consumer lag",
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                            rd_kafka_err2str(err));
 
@@ -3675,12 +3680,12 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 			break;
 		}
 
-		/* Backoff until next retry */
-		rktp->rktp_ts_offset_req_next = rd_clock() + 500000; /* 500ms */
-		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
-
                 if (request->rkbuf_hndcb ==
                     (void *)rd_kafka_toppar_next_offset_handle){
+			/* Backoff until next retry */
+			rktp->rktp_ts_offset_req_next = rd_clock() + 500000; /* 500ms */
+			rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
+
                         /* Signal error back to application */
                         rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
                         rko->rko_err = err;
@@ -3866,15 +3871,13 @@ static void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
 static void rd_kafka_toppar_offset_request (rd_kafka_broker_t *rkb,
 					    rd_kafka_toppar_t *rktp) {
 
-	rd_kafka_toppar_lock(rktp);
         if (rktp->rktp_rkt->rkt_conf.offset_store_method ==
             RD_KAFKA_OFFSET_METHOD_BROKER)
-        {
-                rd_kafka_toppar_unlock(rktp);
                 return rd_kafka_toppar_offsetfetch_request(rkb, rktp);
-        }
 
+	rd_kafka_toppar_lock(rktp);
 	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT;
+	rd_kafka_toppar_unlock(rktp);
 
         rd_kafka_toppar_offset_request0(rkb, rktp,
                                         rktp->rktp_query_offset <=
@@ -3883,7 +3886,6 @@ static void rd_kafka_toppar_offset_request (rd_kafka_broker_t *rkb,
                                         rktp->rktp_query_offset,
                                         rd_kafka_toppar_next_offset_handle,
                                         NULL);
-	rd_kafka_toppar_unlock(rktp);
 }
 
 
@@ -3931,7 +3933,6 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 	next = (void *)(fr+1);
 
 	TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
-            rd_kafka_toppar_lock(rktp);
 
                 /* Request offsets to measure consumer lag */
                 if (consumer_lag_intvl &&
@@ -3967,7 +3968,6 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 				   rktp->rktp_partition,
 				   rd_kafka_fetch_states[rktp->
 							 rktp_fetch_state]);
-                        rd_kafka_toppar_unlock(rktp);
 			continue;
 		}
 
@@ -3996,7 +3996,6 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 				   rktp->rktp_partition,
                                    rkb->rkb_rk->rk_conf.queued_min_msgs,
                                    rd_kafka_q_len(&rktp->rktp_fetchq));
-                        rd_kafka_toppar_unlock(rktp);
 			continue;
                 }
 
@@ -4010,7 +4009,6 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 				   rktp->rktp_partition,
                                    rkb->rkb_rk->rk_conf.queued_max_msg_kbytes,
                                    rd_kafka_q_size(&rktp->rktp_fetchq));
-                        rd_kafka_toppar_unlock(rktp);
 			continue;
                 }
 
@@ -4019,7 +4017,6 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
                                    "FIXME: Fetching too many "
                                    "partitions (>%i), see issue #110",
                                    max_cnt);
-                        rd_kafka_toppar_unlock(rktp);
                         break;
                 }
 
@@ -4044,7 +4041,6 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 			   rktp->rktp_next_offset);
 
 		cnt++;
-                rd_kafka_toppar_unlock(rktp);
 	}
 
 	rd_kafka_broker_toppars_unlock(rkb);

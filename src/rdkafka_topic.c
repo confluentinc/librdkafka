@@ -66,7 +66,9 @@ static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
         rktp->rktp_eof_offset = -1;
 	rd_kafka_msgq_init(&rktp->rktp_msgq);
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);
-	pthread_mutex_init(&rktp->rktp_lock, NULL);
+        pthread_mutexattr_init(&rktp->rktp_attr);
+        pthread_mutexattr_settype(&rktp->rktp_attr, PTHREAD_MUTEX_RECURSIVE);
+	pthread_mutex_init(&rktp->rktp_lock, &rktp->rktp_attr);
 
 	rd_kafka_q_init(&rktp->rktp_fetchq);
 

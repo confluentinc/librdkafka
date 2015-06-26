@@ -1986,7 +1986,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		struct {
 			int64_t Offset;
 			int32_t MessageSize;
-			uint32_t Crc;
+			int32_t Crc;
 			int8_t  MagicByte;
 			int8_t  Attributes;
 		} __attribute__((packed)) part3;
@@ -2170,7 +2170,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		struct {
 			int64_t Offset;
 			int32_t MessageSize;
-			uint32_t Crc;
+			int32_t Crc;
 			int8_t  MagicByte;
 			int8_t  Attributes;
 			int32_t Key_len; /* -1 */
@@ -2750,7 +2750,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		struct {
 			int64_t Offset;
 			int32_t MessageSize;
-			uint32_t Crc;
+			int32_t Crc;
 			int8_t  MagicByte;
 			int8_t  Attributes;
 		} RD_PACKED *hdr;

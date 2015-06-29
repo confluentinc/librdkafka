@@ -34,7 +34,7 @@
 #include <netdb.h>
 #else
 #define WIN32_MEAN_AND_LEAN
-#include <WinSock2.h>
+#include <winsock2.h>
 #include <ws2ipdef.h>
 #endif
 

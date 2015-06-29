@@ -60,8 +60,8 @@
 
 #ifdef _MSC_VER
 #include <io.h>
-#include <Shlwapi.h>
-typedef int mode_t;
+#include <shlwapi.h>
+//typedef int mode_t;
 #endif
 
 

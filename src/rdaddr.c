@@ -32,7 +32,7 @@
 #include "rdrand.h"
 
 #ifdef _MSC_VER
-#include <WS2tcpip.h>
+#include <ws2tcpip.h>
 #endif
 
 const char *rd_sockaddr2str (const void *addr, int flags) {

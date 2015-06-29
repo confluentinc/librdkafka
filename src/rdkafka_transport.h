@@ -2,6 +2,12 @@
 
 #ifndef _MSC_VER
 #include <poll.h>
+#else
+    typedef struct pollfd {
+        SOCKET fd;
+        short  events;
+        short  revents;
+    } WSAPOLLFD, *PWSAPOLLFD, *LPWSAPOLLFD;
 #endif
 
 #include "rdaddr.h"

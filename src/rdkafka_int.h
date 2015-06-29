@@ -32,7 +32,7 @@
 #ifndef _MSC_VER
 #include <syslog.h>
 #else
-typedef int mode_t;
+//typedef int mode_t;
 #endif
 #include <fcntl.h>
 

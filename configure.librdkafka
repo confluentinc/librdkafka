@@ -3,10 +3,10 @@
 
 mkl_require cxx
 mkl_require lib
-mkl_require pic
+#mkl_require pic
 mkl_require atomics must pass
 mkl_require good_cflags
-mkl_require socket
+#mkl_require socket
 
 # Generate version variables from rdkafka.h hex version define
 # so we can use it as string version when generating a pkg-config file.

@@ -41,7 +41,7 @@
 #include <sys/types.h>
 
 
-#ifdef _MSC_VER
+#ifdef MINGW_VER
 #include <basetsd.h>
 //typedef SSIZE_T ssize_t;
 #define RD_UNUSED
@@ -410,7 +410,7 @@ void rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
                                                     void *opaque));
 
 
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 /**
  * Set open callback.
  * The open callback is responsible for opening the file specified by

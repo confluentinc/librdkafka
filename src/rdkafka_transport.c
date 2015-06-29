@@ -1,4 +1,4 @@
-#ifdef _MSC_VER
+#ifdef MINGW_VER
 #pragma comment(lib, "ws2_32.lib")
 #endif
 
@@ -11,7 +11,7 @@
 #include <errno.h>
 
 
-#ifdef _MSC_VER
+#ifdef MINGW_VER
 #define socket_errno WSAGetLastError()
 #else
 #include <sys/socket.h>
@@ -21,7 +21,7 @@
 
 
 static const char *socket_strerror(int err) {
-#ifdef _MSC_VER
+#ifdef MINGW_VER
 	static RD_TLS char buf[256];
 	FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
 		err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)buf, sizeof(buf)-1, NULL);
@@ -33,7 +33,7 @@ static const char *socket_strerror(int err) {
 
 ssize_t rd_kafka_transport_sendmsg(rd_kafka_transport_t *rktrans, const struct msghdr *msg,
 	char *errstr, size_t errstr_size) {
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 	ssize_t r;
 
 #ifdef sun
@@ -80,7 +80,7 @@ ssize_t rd_kafka_transport_sendmsg(rd_kafka_transport_t *rktrans, const struct m
 
 ssize_t rd_kafka_transport_recvmsg(rd_kafka_transport_t *rktrans, struct msghdr *msg,
 									char *errstr, size_t errstr_size) {
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 	ssize_t r;
 #ifdef sun
 	/* SunOS doesn't seem to set errno when recvmsg() fails
@@ -203,7 +203,7 @@ rd_kafka_transport_t *rd_kafka_transport_connect(rd_kafka_broker_t *rkb, const r
 	}
 
 	/* After connection has been established set the socket to non-blocking */
-#ifdef _MSC_VER
+#ifdef MINGW_VER
 	if (ioctlsocket(s, FIONBIO, &on) == SOCKET_ERROR) {
 		rd_snprintf(errstr, errstr_size,
 			"Failed to set socket non-blocking: %s",
@@ -229,7 +229,7 @@ rd_kafka_transport_t *rd_kafka_transport_connect(rd_kafka_broker_t *rkb, const r
 	return rktrans;
 
 err:
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 	close(s);
 #else
 	closesocket(s);
@@ -239,7 +239,7 @@ err:
 
 
 void rd_kafka_transport_close(rd_kafka_transport_t *rktrans) {
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 	close(rktrans->rktrans_s);
 #else
 	closesocket(rktrans->rktrans_s);
@@ -257,7 +257,7 @@ void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event) {
 
 
 int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 	int r;
 	
 	r = poll(&rktrans->rktrans_pfd, 1, tmout);
@@ -278,7 +278,7 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 
 
 void rd_kafka_transport_init(void) {
-#ifdef _MSC_VER
+#ifdef MINGW_VER
 	WSADATA d;
 	(void)WSAStartup(MAKEWORD(2, 2), &d);
 #endif

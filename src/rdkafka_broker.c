@@ -57,6 +57,14 @@
 #include <zlib.h>
 #endif
 
+#ifndef POLLIN
+#define POLLIN      0x0001    /* There is data to read */
+#define POLLPRI     0x0002    /* There is urgent data to read */
+#define POLLOUT     0x0004    /* Writing now will not block */
+#define POLLERR     0x0008    /* Error condition */
+#define POLLHUP     0x0010    /* Hung up */
+#define POLLNVAL    0x0020    /* Invalid request: fd not open */
+#endif
 
 const char *rd_kafka_broker_state_names[] = {
 	"INIT",
@@ -548,7 +556,9 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 
 	if (!rkb->rkb_rsal) {
 		/* Resolve */
-
+#ifndef AI_ADDRCONFIG
+#define AI_ADDRCONFIG 0x00000400
+#endif
 		rkb->rkb_rsal = rd_getaddrinfo(rkb->rkb_nodename,
 					       RD_KAFKA_PORT_STR,
 					       AI_ADDRCONFIG,

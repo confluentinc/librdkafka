@@ -42,7 +42,7 @@
 /**
  * Types
  */
-typedef SSIZE_T ssize_t;
+//typedef SSIZE_T ssize_t;
 
 struct iovec {
 	void *iov_base;

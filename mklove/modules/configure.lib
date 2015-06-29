@@ -4,7 +4,7 @@
 # Sets:
 #  WITH_GNULD | WITH_OSXLD
 #  WITH_LDS  - linker script support
-mkl_require pic
+           # mkl_require pic
 
 function checks {
 

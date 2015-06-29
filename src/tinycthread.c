@@ -551,7 +551,7 @@ static void NTAPI _tinycthread_tss_callback(PVOID h, DWORD dwReason, PVOID pv)
   }
 }
 
-#if defined(_MSC_VER)
+#if defined(MINGW_VER)
 #pragma data_seg(".CRT$XLB")
 PIMAGE_TLS_CALLBACK p_thread_callback = _tinycthread_tss_callback;
 #pragma data_seg()

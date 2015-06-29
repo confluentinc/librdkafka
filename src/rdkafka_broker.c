@@ -29,7 +29,7 @@
 
 #define __need_IOV_MAX
 
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 #define _GNU_SOURCE
 #define _XOPEN_SOURCE
 #include <signal.h>
@@ -4195,7 +4195,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					       int32_t nodeid) {
 	rd_kafka_broker_t *rkb;
 	int err;
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 	sigset_t newset, oldset;
 #endif
 
@@ -4235,7 +4235,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	else /* disabled */
 		rkb->rkb_ts_metadata_poll = UINT64_MAX;
 
-#ifndef _MSC_VER
+#ifndef MINGW_VER
         /* Block all signals in newly created thread.
          * To avoid race condition we block all signals in the calling
          * thread, which the new thread will inherit its sigmask from,
@@ -4265,7 +4265,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 		rd_free(rkb);
 		rd_kafka_destroy(rk);
 
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 		/* Restore sigmask of caller */
 		pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
@@ -4280,7 +4280,7 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 		   "Added new broker with NodeId %"PRId32,
 		   rkb->rkb_nodeid);
 
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 	/* Restore sigmask of caller */
 	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif

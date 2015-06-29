@@ -124,7 +124,7 @@ static __inline bool is_little_endian(void)
 	return false;
 }
 
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 #define rd_clz(n)   __builtin_clz(n)
 #define rd_ctz(n)   __builtin_ctz(n)
 #define rd_ctz64(n) __builtin_ctz(n)

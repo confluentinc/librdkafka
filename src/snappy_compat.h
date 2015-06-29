@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <limits.h>
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 #include <sys/uio.h>
 #endif
 

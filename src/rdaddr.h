@@ -28,7 +28,7 @@
 
 #pragma once
 
-#ifndef _MSC_VER
+#ifndef MINGW_VER
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>

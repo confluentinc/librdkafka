@@ -37,7 +37,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#ifdef MINGW_VER
+#define SIGIO		29
+#define SIGUSR1		10
+#define	LOG_DEBUG	7
+#else
 #include <syslog.h>
+#endif
 #include <sys/time.h>
 #include <errno.h>
 

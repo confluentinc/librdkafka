@@ -32,6 +32,11 @@
  * (https://github.com/edenhill/librdkafka)
  */
 
+#ifdef MINGW_VER
+#define SIGIO		29
+#define SIGUSR1		10
+#endif
+#include <unistd.h>
 #include <ctype.h>
 #include <signal.h>
 #include <string.h>

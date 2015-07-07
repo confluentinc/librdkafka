@@ -26,12 +26,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rdkafka_int.h"
+#include "rdlog.h"
+
 #include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
 
-#include "rd.h"
-#include "rdlog.h"
 
 
 

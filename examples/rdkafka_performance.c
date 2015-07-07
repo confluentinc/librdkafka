@@ -32,6 +32,7 @@
  * (https://github.com/edenhill/librdkafka)
  */
 
+#define _GNU_SOURCE /* for strndup() */
 #include <ctype.h>
 #include <signal.h>
 #include <string.h>

@@ -30,6 +30,10 @@
 
 #pragma once
 
+#ifndef _MSC_VER
+#define _GNU_SOURCE  /* for strndup() */
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

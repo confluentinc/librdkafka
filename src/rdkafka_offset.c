@@ -46,17 +46,16 @@
  *    will also make sure to fsync() each offset file accordingly. (file)
  */
 
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 
-#include "rdkafka.h"
 #include "rdkafka_int.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_broker.h"
 
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #ifdef _MSC_VER
 #include <io.h>

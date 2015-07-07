@@ -26,14 +26,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <string.h>
+#include "rdkafka_int.h"
+#include "rd.h"
+
 #include <stdlib.h>
 #include <ctype.h>
 #include <stddef.h>
-
-#include "rdkafka.h"
-#include "rdkafka_int.h"
-#include "rd.h"
 
 
 struct rd_kafka_property {

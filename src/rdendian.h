@@ -38,11 +38,27 @@
  *   htobe16()
  */
 
-
+#ifndef __GLIBC__
+#error "__GLIBC__ not defined"
+#endif
 #ifdef __FreeBSD__
   #include <sys/endian.h>
 #elif defined __GLIBC__
   #include <endian.h>
+ #ifndef be64toh
+   /* Support older glibc (<2.9) which lack be64toh */
+  #include <byteswap.h>
+  #if __BYTE_ORDER == __BIG_ENDIAN
+   #define be16toh(x) (x)
+   #define be32toh(x) (x)
+   #define be64toh(x) (x)
+  #else
+   #define be16toh(x) __bswap_16 (x)
+   #define be32toh(x) __bswap_32 (x)
+   #define be64toh(x) __bswap_64 (x)
+  #endif
+ #endif
+
 #elif defined __CYGWIN__
  #include <endian.h>
 #elif defined __BSD__
@@ -102,7 +118,6 @@
 #ifndef be16toh
 #define be16toh(x) ntohs(x)
 #endif
-
 
 #ifndef htobe64
 #define htobe64(x) be64toh(x)

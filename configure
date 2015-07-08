@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 #
 
-echo "Using bash $BASH_VERSION (${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]})"
+BASHVER=$(expr ${BASH_VERSINFO[0]} \* 1000 + ${BASH_VERSINFO[1]})
+
+if [ "$BASHVER" -lt 3002 ]; then
+    echo "ERROR: mklove requires bash version 3.2 or later but you are using $BASH_VERSION ($BASHVER)"
+    echo "       See https://github.com/edenhill/mklove/issues/15"
+    exit 1
+fi
+
 MKL_CONFIGURE_ARGS="$0 $*"
 
 # Load base module

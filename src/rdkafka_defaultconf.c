@@ -420,6 +420,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                 }
         },
 
+        { _RK_TOPIC|_RK_CONSUMER, "consume.callback.max.messages", _RK_C_INT,
+          _RKT(consume_callback_max_msgs),
+          "Maximum number of messages to dispatch in "
+          "one `rd_kafka_consume_callback*()` call (0 = unlimited)",
+          0, 1000000, 0 },
+
 	{ 0, /* End */ }
 };
 

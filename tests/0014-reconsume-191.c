@@ -106,7 +106,8 @@ static void produce_messages (uint64_t testid, const char *topic,
                                  "data: testid=%"PRIu64", partition=%i, msg=%i",
 				 testid, (int)partition, msgid);
 
-                        r = rd_kafka_produce(rkt, partition, 0,
+                        r = rd_kafka_produce(rkt, partition,
+                                             RD_KAFKA_MSG_F_COPY,
                                              buf, strlen(buf),
                                              key, strlen(key),
                                              NULL);
@@ -338,7 +339,6 @@ static void consume_messages_callback_multi (uint64_t testid, const char *topic,
                          i, msg_next - cnta);
 
                 rd_kafka_consume_stop(rkt, partition);
-                //sleep(5);
         }
 
 	/* Destroy topic */
@@ -365,7 +365,7 @@ static void test_produce_consume (void) {
 
         /* Read test.conf to configure topic name */
         test_conf_init(NULL, NULL, 20);
-        topic = test_mk_topic_name("0013", 0);
+        topic = test_mk_topic_name("0014", 1/*random*/);
 
 	TEST_SAY("Topic %s, testid %"PRIu64"\n", topic, testid);
 

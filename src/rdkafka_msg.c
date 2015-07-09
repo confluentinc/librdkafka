@@ -67,8 +67,13 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
 	rd_kafka_msg_t *rkm;
 	size_t mlen = sizeof(*rkm);
 
-	if (unlikely(len + keylen > (size_t)rkt->rkt_rk->rk_conf.max_msg_size)) {
-                *errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
+	if (unlikely(!payload))
+		len = 0;
+	if (!key)
+		keylen = 0;
+
+	if (unlikely(len + keylen > (size_t)rkt->rkt_rk->rk_conf.max_msg_size)){
+		*errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
                 errno = EMSGSIZE;
 		return NULL;
 	}
@@ -113,6 +118,10 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
  *          into on the selected partition.
  *
  * Returns 0 on success or -1 on error.
+ *
+ * If the function returns -1 and RD_KAFKA_MSG_F_FREE was specified, then
+ * the memory associated with the payload is still the caller's
+ * responsibility.
  */
 int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 		      int msgflags,
@@ -147,8 +156,11 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 
 	/* Handle partitioner failures: it only fails when the application
 	 * attempts to force a destination partition that does not exist
-	 * in the cluster. */
+	 * in the cluster.  Note we must clear the RD_KAFKA_MSG_F_FREE
+	 * flag since our contract says we don't free the payload on
+	 * failure. */
 
+	rkm->rkm_flags &= ~RD_KAFKA_MSG_F_FREE;
 	rd_kafka_msg_destroy(rkt->rkt_rk, rkm);
 
 	/* Translate error codes to errnos. */

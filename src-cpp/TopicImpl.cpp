@@ -50,6 +50,19 @@ static int32_t partitioner_cb_trampoline (const rd_kafka_topic_t *rkt,
                                                     partition_cnt, msg_opaque);
 }
 
+static int32_t partitioner_kp_cb_trampoline (const rd_kafka_topic_t *rkt,
+                                             const void *keydata,
+                                             size_t keylen,
+                                             int32_t partition_cnt,
+                                             void *rkt_opaque,
+                                             void *msg_opaque) {
+  RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(rkt_opaque);
+  return topicimpl->partitioner_kp_cb_->partitioner_cb(topicimpl,
+                                                       keydata, keylen,
+                                                       partition_cnt,
+                                                       msg_opaque);
+}
+
 
 
 RdKafka::Topic *RdKafka::Topic::create (Handle *base,
@@ -78,6 +91,10 @@ RdKafka::Topic *RdKafka::Topic::create (Handle *base,
       rd_kafka_topic_conf_set_partitioner_cb(rkt_conf,
                                              partitioner_cb_trampoline);
       topic->partitioner_cb_ = confimpl->partitioner_cb_;
+    } else if (confimpl->partitioner_kp_cb_) {
+      rd_kafka_topic_conf_set_partitioner_cb(rkt_conf,
+                                             partitioner_kp_cb_trampoline);
+      topic->partitioner_kp_cb_ = confimpl->partitioner_kp_cb_;
     }
   }
 

@@ -161,7 +161,10 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE = 9,
 	RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE = 10,
 	RD_KAFKA_RESP_ERR_STALE_CTRL_EPOCH = 11,
-	RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE = 12
+	RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE = 12,
+	RD_KAFKA_RESP_ERR_OFFSETS_LOAD_IN_PROGRESS = 14,
+	RD_KAFKA_RESP_ERR_CONSUMER_COORDINATOR_NOT_AVAILABLE = 15,
+	RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_CONSUMER = 16
 } rd_kafka_resp_err_t;
 
 
@@ -814,7 +817,11 @@ int rd_kafka_consume_stop(rd_kafka_topic_t *rkt, int32_t partition);
  *   ENOENT    - 'rkt'+'partition' is unknown.
  *                (no prior `rd_kafka_consume_start()` call)
  *
- * The returned message's '..->err' must be checked for errors.
+ * NOTE: The returned message's '..->err' must be checked for errors.
+ * NOTE: '..->err == RD_KAFKA_RESP_ERR__PARTITION_EOF' signals that the end
+ *       of the partition has been reached, which should typically not be
+ *       considered an error. The application should handle this case
+ *       (e.g., ignore).
  */
 RD_EXPORT
 rd_kafka_message_t *rd_kafka_consume(rd_kafka_topic_t *rkt, int32_t partition,
@@ -834,8 +841,13 @@ rd_kafka_message_t *rd_kafka_consume(rd_kafka_topic_t *rkt, int32_t partition,
  * 'rkmessages_size' messages to be put into 'rkmessages'.
  * This differs somewhat from `rd_kafka_consume()`.
  *
+ * The message objects must be destroyed with `rd_kafka_message_destroy()`
+ * when the application is done with it.
+ *
  * Returns the number of rkmessages added in 'rkmessages',
  * or -1 on error (same error codes as for `rd_kafka_consume()`.
+ *
+ * See: rd_kafka_consume
  */
 RD_EXPORT
 ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
@@ -856,12 +868,14 @@ ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
  * to arrive.
  *
  * The provided 'consume_cb' function is called for each message,
- * the application must not call `rd_kafka_message_destroy()` on the provided
+ * the application must NOT call `rd_kafka_message_destroy()` on the provided
  * 'rkmessage'.
  *
  * The 'opaque' argument is passed to the 'consume_cb' as 'opaque'.
  *
  * Returns the number of messages processed or -1 on error.
+ *
+ * See: rd_kafka_consume
  */
 RD_EXPORT
 int rd_kafka_consume_callback(rd_kafka_topic_t *rkt, int32_t partition,
@@ -967,6 +981,10 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *rkt,
  *                          call returns.
  *
  *    .._F_FREE and .._F_COPY are mutually exclusive.
+ *
+ *    If the function returns -1 and RD_KAFKA_MSG_F_FREE was specified, then
+ *    the memory associated with the payload is still the caller's
+ *    responsibility.
  *
  * 'payload' is the message payload of size 'len' bytes.
  *

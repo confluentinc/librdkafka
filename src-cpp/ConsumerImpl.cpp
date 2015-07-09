@@ -110,3 +110,38 @@ RdKafka::Message *RdKafka::ConsumerImpl::consume (Topic *topic,
 
   return new RdKafka::MessageImpl(topic, rkmessage);
 }
+
+namespace {
+  /* Helper struct for `consume_callback'.
+   * Encapsulates the values we need in order to call `rd_kafka_consume_callback'
+   * and keep track of the C++ callback function and `opaque' value.
+   */
+  struct ConsumerImplCallback {
+    ConsumerImplCallback(RdKafka::Topic* topic, RdKafka::ConsumeCb* cb, void* data)
+      : topic(topic), cb_cls(cb), cb_data(data) {
+    }
+    /* This function is the one we give to `rd_kafka_consume_callback', with
+     * the `opaque' pointer pointing to an instance of this struct, in which
+     * we can find the C++ callback and `cb_data'.
+     */
+    static void consume_cb_trampoline(rd_kafka_message_t *msg, void *opaque) {
+      ConsumerImplCallback *instance = static_cast<ConsumerImplCallback*>(opaque);
+      RdKafka::MessageImpl message(instance->topic, msg, false /*don't free*/);
+      instance->cb_cls->consume_cb(message, instance->cb_data);
+    }
+    RdKafka::Topic *topic;
+    RdKafka::ConsumeCb *cb_cls;
+    void *cb_data;
+  };
+}
+
+int RdKafka::ConsumerImpl::consume_callback (RdKafka::Topic* topic,
+                                             int32_t partition,
+                                             int timeout_ms,
+                                             RdKafka::ConsumeCb *consume_cb,
+                                             void *opaque) {
+  RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(topic);
+  ConsumerImplCallback context(topic, consume_cb, NULL);
+  return rd_kafka_consume_callback(topicimpl->rkt_, partition, timeout_ms,
+                                   &ConsumerImplCallback::consume_cb_trampoline, &context);
+}

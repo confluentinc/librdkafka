@@ -54,6 +54,7 @@
 
 
 static bool run = true;
+static bool exit_eof = false;
 
 static void sigterm (int sig) {
   run = false;
@@ -100,9 +101,6 @@ class ExampleEventCb : public RdKafka::EventCb {
 };
 
 
-
-
-
 /* Use of this partitioner is pretty pointless since no key is provided
  * in the produce() call. */
 class MyHashPartitionerCb : public RdKafka::PartitionerCb {
@@ -121,6 +119,44 @@ class MyHashPartitionerCb : public RdKafka::PartitionerCb {
   }
 };
 
+void msg_consume(RdKafka::Message* message, void* opaque) {
+  switch (message->err()) {
+    case RdKafka::ERR__TIMED_OUT:
+      break;
+
+    case RdKafka::ERR_NO_ERROR:
+      /* Real message */
+      std::cout << "Read msg at offset " << message->offset() << std::endl;
+      if (message->key()) {
+        std::cout << "Key: " << *message->key() << std::endl;
+      }
+      printf("%.*s\n",
+        static_cast<int>(message->len()),
+        static_cast<const char *>(message->payload()));
+      break;
+
+    case RdKafka::ERR__PARTITION_EOF:
+      /* Last message */
+      if (exit_eof) {
+        run = false;
+      }
+      break;
+
+    default:
+      /* Errors */
+      std::cerr << "Consume failed: " << message->errstr() << std::endl;
+      run = false;
+  }
+}
+
+
+class ExampleConsumeCb : public RdKafka::ConsumeCb {
+ public:
+  void consume_cb (RdKafka::Message &msg, void *opaque) {
+    msg_consume(&msg, opaque);
+  }
+};
+
 
 
 int main (int argc, char **argv) {
@@ -131,10 +167,10 @@ int main (int argc, char **argv) {
   std::string debug;
   int32_t partition = RdKafka::Topic::PARTITION_UA;
   int64_t start_offset = RdKafka::Topic::OFFSET_BEGINNING;
-  bool exit_eof = false;
   bool do_conf_dump = false;
   int opt;
   MyHashPartitionerCb hash_partitioner;
+  int use_ccb = 0;
 
   /*
    * Create configuration objects
@@ -143,8 +179,8 @@ int main (int argc, char **argv) {
   RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
 
 
-  while ((opt = getopt(argc, argv, "PCt:p:b:z:qd:o:eX:AM:")) != -1) {
-	  switch (opt) {
+  while ((opt = getopt(argc, argv, "PCt:p:b:z:qd:o:eX:AM:f:")) != -1) {
+    switch (opt) {
     case 'P':
     case 'C':
       mode = opt;
@@ -232,6 +268,15 @@ int main (int argc, char **argv) {
       }
       break;
 
+      case 'f':
+        if (!strcmp(optarg, "ccb"))
+          use_ccb = 1;
+        else {
+          std::cerr << "Unknown option: " << optarg << std::endl;
+          exit(1);
+        }
+        break;
+
     default:
       goto usage;
     }
@@ -266,6 +311,8 @@ int main (int argc, char **argv) {
             "will be set on topic object.\n"
             "                  Use '-X list' to see the full list\n"
             "                  of supported properties.\n"
+            "  -f <flag>       Set option:\n"
+            "                     ccb - use consume_callback\n"
             "\n"
             " In Consumer mode:\n"
             "  writes fetched messages to stdout\n"
@@ -295,7 +342,6 @@ int main (int argc, char **argv) {
 
   ExampleEventCb ex_event_cb;
   conf->set("event_cb", &ex_event_cb, errstr);
-
 
   if (do_conf_dump) {
     int pass;
@@ -429,42 +475,20 @@ int main (int argc, char **argv) {
       exit(1);
     }
 
+    ExampleConsumeCb ex_consume_cb;
+
     /*
      * Consume messages
      */
     while (run) {
-      RdKafka::Message *msg = consumer->consume(topic, partition, 1000);
-
-      switch (msg->err())
-      {
-        case RdKafka::ERR__TIMED_OUT:
-          break;
-
-        case RdKafka::ERR_NO_ERROR:
-	  /* Real message */
-	  std::cerr << "Read msg at offset " << msg->offset() << std::endl;
-	  if (msg->key()) {
-		  std::cerr << "Key: " << *msg->key() << std::endl;
-	  }
-          printf("%.*s\n",
-                 static_cast<int>(msg->len()),
-                 static_cast<const char *>(msg->payload()));
-	  break;
-
-	case RdKafka::ERR__PARTITION_EOF:
-	  /* Last message */
-	  if (exit_eof)
-	    run = false;
-	  break;
-
-	default:
-	  /* Errors */
-	  std::cerr << "Consume failed: " << msg->errstr() << std::endl;
-	  run = false;
-	}
-
-      delete msg;
-
+      if (use_ccb) {
+        consumer->consume_callback(topic, partition, 1000,
+                                   &ex_consume_cb, &use_ccb);
+      } else {
+        RdKafka::Message *msg = consumer->consume(topic, partition, 1000);
+        msg_consume(msg, NULL);
+        delete msg;
+      }
       consumer->poll(0);
     }
 

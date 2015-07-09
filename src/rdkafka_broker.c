@@ -1888,7 +1888,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		struct {
 			int64_t Offset;
 			int32_t MessageSize;
-			int32_t Crc;
+			uint32_t Crc;
 			int8_t  MagicByte;
 			int8_t  Attributes;
 		} RD_PACKED part3;
@@ -2100,7 +2100,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		struct {
 			int64_t Offset;
 			int32_t MessageSize;
-			int32_t Crc;
+			uint32_t Crc;
 			int8_t  MagicByte;
 			int8_t  Attributes;
 			int32_t Key_len; /* -1 */
@@ -2711,7 +2711,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		struct {
 			int64_t Offset;
 			int32_t MessageSize;
-			int32_t Crc;
+			uint32_t Crc;
 			int8_t  MagicByte;
 			int8_t  Attributes;
 		} RD_PACKED *hdr;
@@ -3338,8 +3338,8 @@ static void rd_kafka_toppar_offsetcommit_request (rd_kafka_broker_t *rkb,
                                  /* static fields */
                                  4 + 4 + 4 + 8 +
                                  /* dynamic fields */
-                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_rk->
-                                                    rk_conf.group_id) +
+                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->
+                                                    rkt_conf.group_id) +
                                  RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_topic) +
                                  RD_KAFKAP_STR_SIZE(&metadata));
 
@@ -3599,11 +3599,16 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
         }
 
 	if (unlikely(err)) {
+		int data_path_request = 0;
+		if (request->rkbuf_hndcb == (void *)rd_kafka_toppar_next_offset_handle) {
+			data_path_request = 1;
+		}
 
                 rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-                           "Offset (type %hd) reply for "
+                           "Offset (type %hd) reply error for %s "
                            "topic %s [%"PRId32"]: %s",
                            be16toh(request->rkbuf_reqhdr.ApiKey),
+                           data_path_request ? "data fetch" : "consumer lag",
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                            rd_kafka_err2str(err));
 
@@ -3640,12 +3645,12 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 			break;
 		}
 
-		/* Backoff until next retry */
-		rktp->rktp_ts_offset_req_next = rd_clock() + 500000; /* 500ms */
-		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
-
                 if (request->rkbuf_hndcb ==
                     (void *)rd_kafka_toppar_next_offset_handle){
+			/* Backoff until next retry */
+			rktp->rktp_ts_offset_req_next = rd_clock() + 500000; /* 500ms */
+			rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
+
                         /* Signal error back to application */
                         rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
                         rko->rko_err = err;

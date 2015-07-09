@@ -252,6 +252,7 @@ struct rd_kafka_topic_conf_s {
         char   *group_id_str;
         rd_kafkap_str_t *group_id;    /* Consumer group id in protocol format */
 
+        int     consume_callback_max_msgs;
 	int     auto_commit;
 	int     auto_commit_interval_ms;
 	int     auto_offset_reset;
@@ -879,7 +880,7 @@ void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 	} else
 		rd_kafka_q_concat0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
 				   srcq->rkq_fwdq ? srcq->rkq_fwdq : srcq,
-				   do_lock);
+				   rkq->rkq_fwdq ? do_lock : 0);
 	if (do_lock)
 		mtx_unlock(&rkq->rkq_lock);
 }
@@ -919,7 +920,7 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms);
 void rd_kafka_q_purge (rd_kafka_q_t *rkq);
 
 size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
-			    size_t cnt);
+			    size_t cnt, int do_locks);
 
 
 struct rd_kafka_queue_s {

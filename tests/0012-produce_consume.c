@@ -335,7 +335,7 @@ static void consume_messages (uint64_t testid, const char *topic,
 			  (int)partition, batch_cnt,
 			  rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
-	for (i = 0 ; i < batch_cnt ; i++) {
+	for (i = 0 ; i < batch_cnt ; ) {
 		rd_kafka_message_t *rkmessage;
 
 		rkmessage = rd_kafka_consume(rkt, partition, 5000);
@@ -344,15 +344,21 @@ static void consume_messages (uint64_t testid, const char *topic,
 				  "partition %i: %s",
 				  i, batch_cnt, (int)partition,
 				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
-		if (rkmessage->err)
+		if (rkmessage->err) {
+                        if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF){
+                                rd_kafka_message_destroy(rkmessage);
+                                continue;
+                        }
 			TEST_FAIL("Consume message %i/%i from partition %i "
 				  "has error: %s",
 				  i, batch_cnt, (int)partition,
 				  rd_kafka_err2str(rkmessage->err));
+                }
 
 		verify_consumed_msg(testid, partition, msg_base+i, rkmessage);
 
 		rd_kafka_message_destroy(rkmessage);
+                i++;
 	}
 
 	rd_kafka_consume_stop(rkt, partition);
@@ -414,7 +420,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 
 
 	/* Consume messages from queue */
-	for (i = 0 ; i < msgcnt ; i++) {
+	for (i = 0 ; i < msgcnt ; ) {
 		rd_kafka_message_t *rkmessage;
 
 		rkmessage = rd_kafka_consume_queue(rkqu, 5000);
@@ -423,16 +429,22 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 				  "queue: %s",
 				  i, msgcnt,
 				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
-		if (rkmessage->err)
+		if (rkmessage->err) {
+                        if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF){
+                                rd_kafka_message_destroy(rkmessage);
+                                continue;
+                        }
 			TEST_FAIL("Consume message %i/%i from queue "
 				  "has error (partition %"PRId32"): %s",
 				  i, msgcnt,
 				  rkmessage->partition,
 				  rd_kafka_err2str(rkmessage->err));
+                }
 
 		verify_consumed_msg(testid, -1, -1, rkmessage);
 
 		rd_kafka_message_destroy(rkmessage);
+                i++;
 	}
 
 	/* Stop consuming each partition */

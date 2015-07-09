@@ -68,9 +68,11 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Lua: [in progress](https://github.com/edenhill/librdkafka/issues/196)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
   * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)
+  * PHP: [php-rdkafka](https://github.com/arnaud-lb/php-rdkafka)
   * Python: [python-librdkafka](https://bitbucket.org/yungchin/python-librdkafka)
   * Python: [PyKafka](https://github.com/Parsely/pykafka)
   * Ruby: [Hermann](https://github.com/stancampbell3/Hermann)
+  * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
 
 #Users of librdkafka#
 
@@ -80,12 +82,14 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * [rsyslog](http://www.rsyslog.com)
   * [syslog-ng](http://syslog-ng.org)
   * [collectd](http://collectd.org)
+  * [logkafka](https://github.com/Qihoo360/logkafka) - Collect logs and send to Kafka
   * [redBorder](http://www.redborder.net)
   * [Headweb](http://www.headweb.com/)
   * [Produban's log2kafka](https://github.com/Produban/log2kafka) - Web log producer
   * [fuse_kafka](https://github.com/yazgoo/fuse_kafka) - FUSE file system layer
   * [node-kafkacat](https://github.com/Rafflecopter/node-kafkacat)
   * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
+  * [otto.de](http://otto.de)'s [trackdrd](https://github.com/otto-de/trackrdrd) - Varnish log reader
   * large unnamed financial institution
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 

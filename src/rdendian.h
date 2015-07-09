@@ -38,9 +38,6 @@
  *   htobe16()
  */
 
-#ifndef __GLIBC__
-#error "__GLIBC__ not defined"
-#endif
 #ifdef __FreeBSD__
   #include <sys/endian.h>
 #elif defined __GLIBC__

@@ -32,7 +32,7 @@ function checks {
 
     # Required on SunOS
     if [[ $MKL_DISTRO == "SunOS" ]]; then
-	mkl_mkvar_append CPPFLAGS CPPFLAGS "-D_POSIX_PTHREAD_SEMANTICS"
+	mkl_mkvar_append CPPFLAGS CPPFLAGS "-D_POSIX_PTHREAD_SEMANTICS -D_REENTRANT -D__EXTENSIONS__"
     fi
 
     # Figure out what tool to use for dumping public symbols.

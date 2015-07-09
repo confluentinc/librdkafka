@@ -32,7 +32,9 @@
 
 #ifndef _MSC_VER
 #define _GNU_SOURCE  /* for strndup() */
-#define _POSIX_C_SOURCE 199506L  /* for timespec on solaris */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L  /* for timespec on solaris */
+#endif
 #endif
 
 #include <stdio.h>

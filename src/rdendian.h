@@ -97,6 +97,11 @@
 #define be32toh(x) _byteswap_ulong(x)
 #define be16toh(x) _byteswap_ushort(x)
 
+#elif defined _AIX      /* AIX is always big endian */
+#define be64toh(x) (x)
+#define be32toh(x) (x)
+#define be16toh(x) (x)
+
 #else
   #error Unknown location for endian.h
 #endif

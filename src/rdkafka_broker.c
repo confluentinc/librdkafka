@@ -31,7 +31,9 @@
 
 #ifndef _MSC_VER
 #define _GNU_SOURCE
+#ifndef _AIX    /* AIX defines this and the value needs to be set correctly */
 #define _XOPEN_SOURCE
+#endif
 #include <signal.h>
 #endif
 

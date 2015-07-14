@@ -19,6 +19,11 @@
 #define SOCKET_ERROR -1
 #endif
 
+/* AIX doesn't have MSG_DONTWAIT */
+#ifndef MSG_DONTWAIT
+#  define MSG_DONTWAIT MSG_NONBLOCK
+#endif
+
 
 static const char *socket_strerror(int err) {
 #ifdef _MSC_VER

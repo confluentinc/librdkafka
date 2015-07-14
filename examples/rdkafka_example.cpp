@@ -39,10 +39,12 @@
 #include <csignal>
 #include <cstring>
 
-#ifndef _MSC_VER
-#include <getopt.h>
-#else
+#ifdef _MSC_VER
 #include "../win32/wingetopt.h"
+#elif _AIX
+#include <unistd.h>
+#else
+#include <getopt.h>
 #endif
 
 /*

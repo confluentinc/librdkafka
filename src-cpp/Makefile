@@ -24,6 +24,9 @@ WITH_LDS=n
 ifeq ($(_UNAME_S),Darwin)
 	FWD_LINKING_REQ=y
 endif
+ifeq ($(_UNAME_S),AIX)
+	FWD_LINKING_REQ=y
+endif
 ifeq ($(shell uname -o 2>/dev/null),Cygwin)
 	FWD_LINKING_REQ=y
 endif

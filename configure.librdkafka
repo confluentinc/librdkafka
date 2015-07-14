@@ -39,7 +39,7 @@ function checks {
     # We rely on configure.cc setting up $NM if it exists.
     if mkl_env_check "nm" "" cont "NM" ; then
 	# nm by future mk var
-	if [[ $MKL_DISTRO == "osx" ]]; then
+	if [[ $MKL_DISTRO == "osx" || $MKL_DISTRO == "AIX" ]]; then
 	    mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -g'
 	else
 	    mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -D'

@@ -93,6 +93,11 @@
  * Complete missing TAILQ-ops
  */
 
+#ifndef	TAILQ_HEAD_INITIALIZER
+#define	TAILQ_HEAD_INITIALIZER(head)					\
+	{ NULL, &(head).tqh_first }
+#endif
+
 #ifndef TAILQ_INSERT_BEFORE
 #define	TAILQ_INSERT_BEFORE(listelm, elm, field) do {			\
 	(elm)->field.tqe_prev = (listelm)->field.tqe_prev;		\
@@ -105,6 +110,10 @@
 #ifndef TAILQ_FOREACH
 #define TAILQ_FOREACH(var, head, field)                                     \
  for ((var) = ((head)->tqh_first); (var); (var) = ((var)->field.tqe_next))
+#endif
+
+#ifndef TAILQ_EMPTY
+#define	TAILQ_EMPTY(head)		((head)->tqh_first == NULL)
 #endif
 
 #ifndef TAILQ_FIRST

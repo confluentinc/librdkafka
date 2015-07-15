@@ -147,12 +147,6 @@ File bug reports, feature requests and questions using
 Questions and discussions are also welcome on irc.freenode.org, #apache-kafka,
 nickname Snaps.
 
-## mingw
-
-This version supports building for MINGW
-Just do a:
-
-    CXX=x86_64-w64-mingw32-g++ CC=x86_64-w64-mingw32-gcc CFLAGS="-DLIBRDKAFKA_EXPORTS -DInterlockedAdd=_InterlockedAdd -DMINGW_VER -D_WIN32_WINNT=0x0760 -I$PWD/../win32/zlib-1.2.8/ -w" LDFLAGS="-L$PWD/../win32/zlib-1.2.8/" LIBS="-lwsock32 -lws2_32" ./configure
 
 ### Commercial support
 

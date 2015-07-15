@@ -77,7 +77,7 @@
 #define be16toh(x) OSSwapInt16(x)
 #endif
 
-#elif defined(MINGW_VER)
+#elif defined(_MSC_VER) || defined(MINGW_VER)
 #include <intrin.h>
 
 #define be64toh(x) _byteswap_uint64(x)

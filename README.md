@@ -152,7 +152,7 @@ nickname Snaps.
 This version supports building for MINGW
 Just do a:
 
-    ✗ CC=x86_64-w64-mingw32-gcc CFLAGS="-DLIBRDKAFKA_EXPORTS -DInterlockedAdd=_InterlockedAdd -DMINGW_VER -D_WIN32_WINNT=0x0760 -I$PWD/../win32/zlib-1.2.8/ -w" LDFLAGS="-L$PWD/../win32/zlib-1.2.8/" LIBS="-lwsock32 -lws2_32" ./configure
+    ✗ CXX=x86_64-w64-mingw32-g++ CC=x86_64-w64-mingw32-gcc CFLAGS="-DLIBRDKAFKA_EXPORTS -DInterlockedAdd=_InterlockedAdd -DMINGW_VER -D_WIN32_WINNT=0x0760 -I$PWD/../win32/zlib-1.2.8/ -w" LDFLAGS="-L$PWD/../win32/zlib-1.2.8/" LIBS="-lwsock32 -lws2_32" ./configure
     ✗ x86_64-w64-mingw32-gcc -L/home/yazgoo/dev/librdkafka/../win32/zlib-1.2.8/ -shared -Wl,--out-implib,librdkafka.a -Wl,-soname,librdkafka.so.1 -Wl,--version-script=librdkafka.lds rdkafka.o rdkafka_broker.o rdkafka_msg.o rdkafka_topic.o rdkafka_defaultconf.o rdkafka_timer.o rdkafka_offset.o rdkafka_transport.o rdcrc32.o rdgz.o rdaddr.o rdrand.o tinycthread.o rdlog.o snappy.o -o librdkafka.so.1 -lwsock32 -lws2_32 -lpthread -lz
 
 

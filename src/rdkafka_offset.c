@@ -61,7 +61,9 @@
 #if defined(_MSC_VER) || defined(MINGW_VER)
 #include <io.h>
 #include <shlwapi.h>
-//typedef int mode_t;
+#ifndef MINGW_VER
+typedef int mode_t;
+#endif
 #endif
 
 

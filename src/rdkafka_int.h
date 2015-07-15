@@ -32,7 +32,9 @@
 #if !defined(_MSC_VER) && !defined(MINGW_VER)
 #include <syslog.h>
 #else
-//typedef int mode_t;
+#ifndef MINGW_VER
+typedef int mode_t;
+#endif
 #endif
 #include <fcntl.h>
 

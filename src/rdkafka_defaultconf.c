@@ -285,7 +285,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_ZLIB
 			{ RD_KAFKA_COMPRESSION_GZIP,   "gzip" },
 #endif
-#ifndef MINGW_VER /* FIXME */
+#if !defined(_MSC_VER) && !defined(MINGW_VER) /* FIXME */
 			{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
 #endif
 			{ 0 }
@@ -501,7 +501,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			return RD_KAFKA_CONF_INVALID;
 		}
 
-#ifdef MINGW_VER
+#if defined(_MSC_VER) || defined(MINGW_VER)
 #define strcasecmp(A,B) _stricmp(A,B)
 #endif
 
@@ -864,7 +864,7 @@ void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
 }
 
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
                                 int (*open_cb) (const char *pathname,
                                                 int flags, mode_t mode,

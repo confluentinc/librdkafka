@@ -34,7 +34,7 @@
 #ifndef _SYS_QUEUE_H_
 #define	_SYS_QUEUE_H_
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 #include <sys/cdefs.h>
 #endif
 

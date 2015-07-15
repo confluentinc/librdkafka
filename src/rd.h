@@ -39,7 +39,7 @@
 
 #include "tinycthread.h"
 
-#ifdef MINGW_VER
+#if defined(_MSC_VER) || defined(MINGW_VER)
 /* Visual Studio */
 #include "win32_config.h"
 #else
@@ -48,7 +48,7 @@
 #endif
 
 
-#ifdef MINGW_VER
+#if defined(_MSC_VER) || defined(MINGW_VER)
 /* Win32/Visual Studio */
 #include "rdwin32.h"
 
@@ -89,7 +89,7 @@ static __inline RD_UNUSED void rd_free(void *ptr) {
 }
 
 static __inline RD_UNUSED char *rd_strdup(const char *s) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	char *n = strdup(s);
 #else
 	char *n = _strdup(s);
@@ -99,7 +99,7 @@ static __inline RD_UNUSED char *rd_strdup(const char *s) {
 }
 
 static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	char *n = strndup(s, len);
 	assert(n);
 #else
@@ -152,7 +152,7 @@ typedef struct {
 } rd_atomic64_t;
 
 static __inline int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, int32_t v) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	return ATOMIC_OP(add, fetch, &ra->val, v);
 #else
 	return InterlockedAdd(&ra->val, v);
@@ -160,7 +160,7 @@ static __inline int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, int32_t v)
 }
 
 static __inline int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	return ATOMIC_OP(sub, fetch, &ra->val, v);
 #else
 	return InterlockedAdd(&ra->val, -v);
@@ -168,7 +168,7 @@ static __inline int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v) 
 }
 
 static __inline int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	return ATOMIC_OP(fetch, add, &ra->val, 0);
 #else
 	return ra->val;
@@ -176,7 +176,7 @@ static __inline int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
 }
 
 static __inline int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	return ra->val = v; // FIXME
 #else
 	return InterlockedExchange(&ra->val, v);
@@ -185,7 +185,7 @@ static __inline int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v) 
 
 
 static __inline int64_t RD_UNUSED rd_atomic64_add (rd_atomic64_t *ra, int64_t v) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	return ATOMIC_OP(add, fetch, &ra->val, v);
 #else
 	return InterlockedAdd64(&ra->val, v);
@@ -193,7 +193,7 @@ static __inline int64_t RD_UNUSED rd_atomic64_add (rd_atomic64_t *ra, int64_t v)
 }
 
 static __inline int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	return ATOMIC_OP(sub, fetch, &ra->val, v);
 #else
 	return InterlockedAdd64(&ra->val, -v);
@@ -201,7 +201,7 @@ static __inline int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v) 
 }
 
 static __inline int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	return ATOMIC_OP(fetch, add, &ra->val, 0);
 #else
 	return ra->val;
@@ -210,7 +210,7 @@ static __inline int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
 
 
 static __inline int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra, int64_t v) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	return ra->val = v; // FIXME
 #else
 	return InterlockedExchange64(&ra->val, v);

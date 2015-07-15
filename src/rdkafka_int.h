@@ -29,7 +29,7 @@
 #pragma once
 
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 #include <syslog.h>
 #else
 //typedef int mode_t;
@@ -225,7 +225,7 @@ struct rd_kafka_conf_s {
 int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);
 int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
                                 void *opaque);
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
                             void *opaque);
 #endif

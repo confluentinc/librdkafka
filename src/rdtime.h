@@ -82,7 +82,7 @@ static __inline const char *rd_ctime (const time_t *t) RD_UNUSED;
 static __inline const char *rd_ctime (const time_t *t) {
 	static RD_TLS char ret[27];
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	ctime_r(t, ret);
 #else
 	ctime_s(ret, sizeof(ret), t);

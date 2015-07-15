@@ -42,7 +42,7 @@
 #include "rdkafka_transport.h"
 
 #include "rdtime.h"
-#ifdef MINGW_VER
+#if defined(_MSC_VER) || defined(MINGW_VER)
 #include <sys/types.h>
 #include <sys/timeb.h>
 #endif
@@ -125,7 +125,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 	const char *fac, const char *buf) {
 	int secs, msecs;
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	secs = (int)tv.tv_sec;
@@ -141,7 +141,7 @@ void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 		fac, rk ? rk->rk_name : "", buf);
 }
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 void rd_kafka_log_syslog (const rd_kafka_t *rk, int level,
 			  const char *fac, const char *buf) {
 	static int initialized = 0;
@@ -827,7 +827,7 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 	rd_kafka_timers_interrupt(rk);
 
 	/* Interrupt all IO threads to speed up termination. */
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	if (rk->rk_conf.term_sig) {
 		rd_kafka_broker_t *rkb;
 		TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link)
@@ -1173,7 +1173,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			  char *errstr, size_t errstr_size) {
 	rd_kafka_t *rk;
 	static int rkid = 0;
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
         sigset_t newset, oldset;
 #endif
 		int err;
@@ -1246,7 +1246,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			htobe32(rk->rk_conf.fetch_min_bytes);
 	}
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
         /* Block all signals in newly created thread.
          * To avoid race condition we block all signals in the calling
          * thread, which the new thread will inherit its sigmask from,
@@ -1272,7 +1272,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 				 "Failed to create thread: %s (%i)", rd_strerror(err), err);
 		rd_kafka_destroy0(rk); /* handler thread */
 		rd_kafka_destroy0(rk); /* application refcnt */
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 		/* Restore sigmask of caller */
 		pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
@@ -1286,7 +1286,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	(void)rd_atomic32_add(&rd_kafka_handle_cnt_curr, 1);
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	/* Restore sigmask of caller */
 	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif

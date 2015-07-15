@@ -28,7 +28,7 @@
 
 #pragma once
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>

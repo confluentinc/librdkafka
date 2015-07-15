@@ -1,22 +1,15 @@
 #pragma once
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 #include <poll.h>
 #endif
-//#else
-//    typedef struct pollfd {
-//        SOCKET fd;
-//        short  events;
-//        short  revents;
-//    } WSAPOLLFD, *PWSAPOLLFD, *LPWSAPOLLFD;
-//#endif
 
 #include "rdaddr.h"
 
 typedef struct rd_kafka_transport_s {
 	int rktrans_s;
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	struct pollfd rktrans_pfd;
 #else
 	WSAPOLLFD rktrans_pfd;

@@ -58,7 +58,7 @@
 #include "rdkafka_broker.h"
 
 
-#ifdef MINGW_VER
+#if defined(_MSC_VER) || defined(MINGW_VER)
 #include <io.h>
 #include <shlwapi.h>
 //typedef int mode_t;
@@ -77,7 +77,7 @@ static void rd_kafka_offset_file_close (rd_kafka_toppar_t *rktp) {
 }
 
 
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 /**
  * Linux version of open callback providing racefree CLOEXEC.
  */
@@ -97,7 +97,7 @@ int rd_kafka_open_cb_linux (const char *pathname, int flags, mode_t mode,
  */
 int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
                               void *opaque) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	int fd;
         int on = 1;
         fd = open(pathname, flags, mode);
@@ -138,7 +138,7 @@ static int rd_kafka_offset_file_open (rd_kafka_toppar_t *rktp) {
 	}
 
 	rktp->rktp_offset_fp =
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 		fdopen(fd, "a+");
 #else
 		_fdopen(fd, "a+");
@@ -219,7 +219,7 @@ static int64_t rd_kafka_offset_file_read (rd_kafka_toppar_t *rktp) {
  * Sync/flush offset file.
  */
 static int rd_kafka_offset_file_sync(rd_kafka_toppar_t *rktp) {
-#ifndef MINGW_VER
+#if !defined(_MSC_VER) && !defined(MINGW_VER)
 	(void)fflush(rktp->rktp_offset_fp);
 	(void)fsync(fileno(rktp->rktp_offset_fp)); // FIXME
 #else
@@ -277,7 +277,7 @@ static int rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp,
 		}
 
 		/* Truncate file */
-#ifdef MINGW_VER
+#if defined(_MSC_VER) || defined(MINGW_VER)
 		if (_chsize_s(_fileno(rktp->rktp_offset_fp), len) == -1)
 			; /* Ignore truncate failures */
 #else
@@ -488,7 +488,7 @@ static char *mk_esc_filename (const char *in, char *out, size_t out_size) {
 }
 
 static int path_is_dir(const char *path) {
-#ifdef MINGW_VER
+#if defined(_MSC_VER) || defined(MINGW_VER)
 	struct _stat st;
 	return (_stat(path, &st) == 0 && st.st_mode & S_IFDIR);
 #else

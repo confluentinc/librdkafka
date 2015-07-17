@@ -426,8 +426,7 @@ static int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
                              void *opaque) {
 	rd_kafka_op_t *rko, *tmp;
 	rd_kafka_q_t localq;
-
-        rd_kafka_q_init(&localq);
+	int served;
 
 	pthread_mutex_lock(&rkq->rkq_lock);
 	if (rkq->rkq_fwdq) {
@@ -458,6 +457,8 @@ static int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 		return 0;
 	}
 
+        rd_kafka_q_init(&localq);
+
         if (max_cnt == 0) {
                 /* Move all ops to local queue */
                 TAILQ_CONCAT(&localq.rkq_q, &rkq->rkq_q, rko_link);
@@ -479,10 +480,11 @@ static int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	/* Call callback for each op */
 	TAILQ_FOREACH_SAFE(rko, &localq.rkq_q, rko_link, tmp) {
 		callback(rko, opaque);
-		rd_kafka_op_destroy(rko);
 	}
 
-	return localq.rkq_qlen;
+	served = localq.rkq_qlen;
+	rd_kafka_q_destroy(&localq);
+	return served;
 }
 
 

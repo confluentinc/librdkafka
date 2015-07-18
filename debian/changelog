@@ -1,8 +1,10 @@
 librdkafka (0.8.6-1) unstable; urgency=medium
 
   * New upstream release.
+  * Backport upstream commit f6fd0da, adding --disable-silent-rules
+    compatibility support to mklove. (Closes: #788742)
 
- -- Faidon Liambotis <paravoid@debian.org>  Sun, 19 Jul 2015 01:34:21 +0300
+ -- Faidon Liambotis <paravoid@debian.org>  Sun, 19 Jul 2015 01:36:18 +0300
 
 librdkafka (0.8.5-2) unstable; urgency=medium
 

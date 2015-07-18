@@ -59,7 +59,11 @@ static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 	rktp->rktp_rkt = rkt;
 	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
 	rktp->rktp_offset_fd = -1;
-
+        rktp->rktp_lo_offset = -1;
+        rktp->rktp_hi_offset = -1;
+        rktp->rktp_stored_offset = -1;
+        rktp->rktp_commited_offset = -1;
+        rktp->rktp_eof_offset = -1;
 	rd_kafka_msgq_init(&rktp->rktp_msgq);
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);
 	pthread_mutex_init(&rktp->rktp_lock, NULL);
@@ -415,6 +419,8 @@ void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt) {
 
 	rd_kafka_destroy0(rkt->rkt_rk);
 
+        rd_kafkap_str_destroy(rkt->rkt_conf.group_id);
+
 	rd_kafka_anyconf_destroy(_RK_TOPIC, &rkt->rkt_conf);
 
 	pthread_rwlock_destroy(&rkt->rkt_lock);
@@ -494,6 +500,8 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
         rd_kafka_wrlock(rk);
 	if ((rkt = rd_kafka_topic_find(rk, topic, 0/*no lock*/))) {
                 rd_kafka_unlock(rk);
+		if (conf)
+			rd_kafka_topic_conf_destroy(conf);
 		return rkt;
         }
 
@@ -505,11 +513,20 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	if (!conf)
 		conf = rd_kafka_topic_conf_new();
 	rkt->rkt_conf = *conf;
-	free(conf);
+	free(conf); /* explicitly not rd_kafka_topic_destroy()
+		     * since we dont want to free internal members,
+		     * just the placeholder. The internal members
+		     * were copied on the line above. */
 
 	/* Default partitioner: random */
 	if (!rkt->rkt_conf.partitioner)
 		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_random;
+
+        /* Convert group.id to kafka string (may be NULL).
+         * Either use from topic config object or parent rk handle */
+        rkt->rkt_conf.group_id =
+                rd_kafkap_str_new(rkt->rkt_conf.group_id_str ? :
+                                  rkt->rkt_rk->rk_conf.group_id_str);
 
 	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));

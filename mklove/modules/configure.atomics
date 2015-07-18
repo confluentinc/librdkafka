@@ -52,8 +52,8 @@ int32_t foo (int32_t i) {
 }"
         then
         # Try __atomic with -latomic
-        if mkl_compile_check __atomic_32_lib HAVE_ATOMICS_32 \
-            cont CC "-latomic" \
+        if mkl_compile_check --ldflags="-latomic" __atomic_32_lib HAVE_ATOMICS_32 \
+            cont CC "" \
             "
 #include <inttypes.h>
 int32_t foo (int32_t i) {
@@ -98,8 +98,8 @@ int64_t foo (int64_t i) {
 }"
         then
         # Try __atomic with -latomic
-        if mkl_compile_check __atomic_64_lib HAVE_ATOMICS_64 \
-            cont CC "-latomic" \
+        if mkl_compile_check --ldflags="-latomic" __atomic_64_lib HAVE_ATOMICS_64 \
+            cont CC "" \
             "
 #include <inttypes.h>
 int64_t foo (int64_t i) {

@@ -26,6 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#pragma once
+
 /**
  * Apache Kafka consumer & producer
  *
@@ -59,7 +61,7 @@ namespace RdKafka {
  *
  * I.e.: 0x00080100 = 0.8.1
  */
-#define RD_KAFKA_VERSION  0x00080500
+#define RD_KAFKA_VERSION  0x00080600
 
 /**
  * Returns the librdkafka version as integer.
@@ -513,8 +515,13 @@ class Producer : public virtual Handle {
   virtual ~Producer () = 0;
 
   /* Produce msgflags */
-  static const int MSG_FREE = 0x1;
-  static const int MSG_COPY = 0x2;
+  static const int RK_MSG_FREE = 0x1;
+  static const int RK_MSG_COPY = 0x2;
+  /* For backwards compatibility: */
+#ifndef MSG_COPY /* defined in sys/msg.h */
+  static const int MSG_FREE = RK_MSG_FREE;
+  static const int MSG_COPY = RK_MSG_COPY;
+#endif
 
   /**
    * Produce and send a single message to broker.
@@ -527,12 +534,12 @@ class Producer : public virtual Handle {
    *   - a fixed partition (0..N)
    *
    * 'msgflags' is zero or more of the following flags OR:ed together:
-   *    MSG_FREE - rdkafka will free(3) 'payload' when it is done with it.
-   *    MSG_COPY - the 'payload' data will be copied and the 'payload'
+   *    RK_MSG_FREE - rdkafka will free(3) 'payload' when it is done with it.
+   *    RK_MSG_COPY - the 'payload' data will be copied and the 'payload'
    *               pointer will not be used by rdkafka after the
    *               call returns.
    *
-   *  NOTE: MSG_FREE and MSG_COPY are mutually exclusive.
+   *  NOTE: RK_MSG_FREE and RK_MSG_COPY are mutually exclusive.
    *
    * 'payload' is the message payload of size 'len' bytes.
    *

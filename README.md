@@ -1,7 +1,7 @@
 librdkafka - Apache Kafka C/C++ client library
 ==============================================
 
-Copyright (c) 2012-2013, [Magnus Edenhill](http://www.edenhill.se/).
+Copyright (c) 2012-2014, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
@@ -15,6 +15,8 @@ the producer and 3 million msgs/second for the consumer.
 
 For an introduction to the performance and usage of librdkafka, see
 [INTRODUCTION.md](https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md)
+
+See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 **NOTE**: The `master` branch is actively developed, use latest release for production use.
 
@@ -58,21 +60,33 @@ For an introduction to the performance and usage of librdkafka, see
 
 
 
+#Language bindings#
+
+  * Haskell: [haskakafka](https://github.com/cosbynator/haskakafka)
+  * Haskell: [haskell-kafka](https://github.com/yanatan16/haskell-kafka)
+  * Node.js: [node-kafka](https://github.com/sutoiku/node-kafka)
+  * Lua: [in progress](https://github.com/edenhill/librdkafka/issues/196)
+  * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
+  * PHP: [phpkafka](https://github.com/salebab/phpkafka)
+  * Python: [python-librdkafka](https://bitbucket.org/yungchin/python-librdkafka)
+  * Python: [PyKafka](https://github.com/Parsely/pykafka)
+  * Ruby: [Hermann](https://github.com/stancampbell3/Hermann)
+
 #Users of librdkafka#
 
-  * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka) - Varnish cache web log producer
   * [kafkacat](https://github.com/edenhill/kafkacat) - Apache Kafka swiss army knife
+  * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka) - Varnish cache web log producer
+  * [Wikimedia's kafkatee](https://github.com/wikimedia/analytics-kafkatee) - Kafka multi consumer with filtering and fanout
+  * [rsyslog](http://www.rsyslog.com)
+  * [syslog-ng](http://syslog-ng.org)
+  * [collectd](http://collectd.org)
   * [redBorder](http://www.redborder.net)
   * [Headweb](http://www.headweb.com/)
   * [Produban's log2kafka](https://github.com/Produban/log2kafka) - Web log producer
-  * [phpkafka](https://github.com/salebab/phpkafka) - PHP
-  * [node-kafka](https://github.com/sutoiku/node-kafka) - Node.js
-  * [node-kafkacat](https://github.com/Rafflecopter/node-kafkacat) - Node.js
-  * [haskakafka](https://github.com/cosbynator/haskakafka) - Haskell
-  * [haskell-kafka](https://github.com/yanatan16/haskell-kafka) - Haskell
-  * [Hermann](https://github.com/stancampbell3/Hermann) - Ruby
-  * large unnamed financial institution
+  * [fuse_kafka](https://github.com/yazgoo/fuse_kafka) - FUSE file system layer
+  * [node-kafkacat](https://github.com/Rafflecopter/node-kafkacat)
   * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
+  * large unnamed financial institution
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
 

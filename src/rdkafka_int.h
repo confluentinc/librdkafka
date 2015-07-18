@@ -136,6 +136,7 @@ struct rd_kafka_conf_s {
 	char   *clientid;
 	char   *brokerlist;
 	int     stats_interval_ms;
+	int     term_sig;
 
 	/*
 	 * Consumer configuration
@@ -164,6 +165,7 @@ struct rd_kafka_conf_s {
 	int    retry_backoff_ms;
 	int    batch_num_messages;
 	rd_kafka_compression_t compression_codec;
+	int    dr_err_only;
 
 	/* Message delivery report callback.
 	 * Called once for each produced message, either on
@@ -241,6 +243,9 @@ struct rd_kafka_topic_conf_s {
 				void *msg_opaque);
 
         int     produce_offset_report;
+
+        char   *group_id_str;
+        rd_kafkap_str_t *group_id;    /* Consumer group id in protocol format */
 
 	int     auto_commit;
 	int     auto_commit_interval_ms;
@@ -402,6 +407,12 @@ typedef struct rd_kafka_buf_s {
 			   struct rd_kafka_buf_s *reqrkbuf,
 			   void *opaque);
 
+        /* Handler callback: called after response has been parsed.
+         * The arguments are not predefined but varies depending on
+         * response type. */
+        void  (*rkbuf_hndcb) (void *);
+        void   *rkbuf_hndopaque;
+
 	int     rkbuf_refcnt;
 	void   *rkbuf_opaque;
 
@@ -421,6 +432,7 @@ typedef struct rd_kafka_buf_s {
 typedef struct rd_kafka_bufq_s {
 	TAILQ_HEAD(, rd_kafka_buf_s) rkbq_bufs;
 	int                          rkbq_cnt;
+        int                          rkbq_msg_cnt;
 } rd_kafka_bufq_t;
 
 
@@ -579,6 +591,7 @@ typedef struct rd_kafka_broker_s {
 	rd_kafka_buf_t     *rkb_recv_buf;
 
 	rd_kafka_bufq_t     rkb_outbufs;
+        int                 rkb_outbuf_msgcnt;
 	rd_kafka_bufq_t     rkb_waitresps;
 	rd_kafka_bufq_t     rkb_retrybufs;
 
@@ -676,6 +689,9 @@ typedef struct rd_kafka_toppar_s {
 						     * commit */
 	int64_t            rktp_eof_offset;      /* The last offset we reported
 						  * EOF for. */
+        int64_t            rktp_lo_offset;       /* Current broker low offset */
+        int64_t            rktp_hi_offset;       /* Current broker hi offset */
+        rd_ts_t            rktp_ts_offset_lag;
 
 	char              *rktp_offset_path;     /* Path to offset file */
 	int                rktp_offset_fd;       /* Offset file fd */

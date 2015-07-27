@@ -493,6 +493,8 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	    (conf &&
 	     (conf->message_timeout_ms < 0 ||
 	      conf->request_timeout_ms <= 0))) {
+		if (conf)
+			rd_kafka_topic_conf_destroy(conf);
 		errno = EINVAL;
 		return NULL;
 	}

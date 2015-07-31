@@ -1170,6 +1170,19 @@ int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms);
 
 
 /**
+ * Cancels the current callback dispatcher (rd_kafka_poll(),
+ * rd_kafka_consume_callback(), etc).
+ *
+ * A callback may use this to force an immediate return to the calling
+ * code (caller of e.g. rd_kafka_poll()) without processing any further
+ * events.
+ *
+ * NOTE: This function MUST ONLY be called from within a librdkafka callback.
+ */
+RD_EXPORT
+void rd_kafka_yield (rd_kafka_t *rk);
+
+/**
  * Adds a one or more brokers to the kafka handle's list of initial brokers.
  * Additional brokers will be discovered automatically as soon as rdkafka
  * connects to a broker by querying the broker metadata.

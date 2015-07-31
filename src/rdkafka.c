@@ -395,6 +395,11 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms) {
 
 
 
+static int RD_TLS yield_thread = 0;
+
+void rd_kafka_yield (rd_kafka_t *rk) {
+        yield_thread = 1;
+}
 
 /**
  * Pop all available ops from a queue and call the provided 
@@ -411,6 +416,7 @@ static int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
                              void *opaque) {
 	rd_kafka_op_t *rko, *tmp;
 	rd_kafka_q_t localq;
+        int cnt = 0;
 
         rd_kafka_q_init(&localq);
 
@@ -458,13 +464,26 @@ static int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 	mtx_unlock(&rkq->rkq_lock);
 
+        yield_thread = 0;
+
 	/* Call callback for each op */
 	TAILQ_FOREACH_SAFE(rko, &localq.rkq_q, rko_link, tmp) {
 		callback(rko, opaque);
 		rd_kafka_op_destroy(rko);
+                cnt++;
+
+                if (unlikely(yield_thread)) {
+                        /* Callback called rd_kafka_yield(), we must
+                         * stop our callback dispatching and put the
+                         * ops in localq back on the original queue head. */
+                        if (rko != TAILQ_LAST(&localq.rkq_q,
+                                              rd_kafka_op_head_s))
+                                rd_kafka_q_prepend(rkq, &localq);
+                        break;
+                }
 	}
 
-	return rd_atomic32_get(&localq.rkq_qlen);
+	return cnt;
 }
 
 

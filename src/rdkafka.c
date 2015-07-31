@@ -59,6 +59,11 @@ int rd_kafka_thread_cnt (void) {
 }
 
 /**
+ * Current thread's name (TLS)
+ */
+char RD_TLS rd_kafka_thread_name[64] = "app";
+
+/**
  * Current number of live rd_kafka_t handles.
  * This is used by rd_kafka_wait_destroyed() to know when the library
  * has fully cleaned up after itself.
@@ -102,19 +107,27 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	char buf[2048];
 	va_list ap;
 	int elen = 0;
+        int of = 0;
 
 	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level ||
 		rd_atomic32_get((rd_atomic32_t *)&rk->rk_terminate))
 		return;
 
+        elen = rd_snprintf(buf, sizeof(buf), "[thrd:%s]: ",
+                           rd_kafka_thread_name);
+        if (unlikely(elen >= sizeof(buf)))
+                elen = sizeof(buf);
+        of = elen;
+
 	if (extra) {
-		elen = rd_snprintf(buf, sizeof(buf), "%s: ", extra);
-		if (unlikely(elen >= sizeof(buf)))
-			elen = sizeof(buf);
+		elen = rd_snprintf(buf+of, sizeof(buf)-of, "%s: ", extra);
+		if (unlikely(elen >= sizeof(buf)-of))
+			elen = sizeof(buf)-of;
+                of += elen;
 	}
 
 	va_start(ap, fmt);
-	vsnprintf(buf+elen, sizeof(buf)-elen, fmt, ap);
+	vsnprintf(buf+of, sizeof(buf)-of, fmt, ap);
 	va_end(ap);
 
 	rk->rk_conf.log_cb(rk, level, fac, buf);
@@ -1174,6 +1187,7 @@ static int rd_kafka_thread_main (void *arg) {
 	rd_kafka_timer_t tmr_metadata_refresh = RD_ZERO_INIT;
 
 	thrd_detach(thrd_current());
+        snprintf(rd_kafka_thread_name, sizeof(rd_kafka_thread_name), "main");
 
 	(void)rd_atomic32_add(&rd_kafka_thread_cnt_curr, 1);
 

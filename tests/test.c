@@ -239,11 +239,13 @@ int main(int argc, char **argv) {
 
 #define RUN_TEST(NAME) do { \
 	extern int main_ ## NAME (int, char **); \
-        if (!tests_to_run || strstr(tests_to_run, # NAME)) { \
+        if (!tests_to_run || strstr(# NAME, tests_to_run)) {     \
 		TEST_SAY("================= Run test %s =================\n", # NAME); \
 		int _r = main_ ## NAME (argc, argv); \
 		TEST_SAY("================= Test %s %s =================\n", # NAME, _r ? "FAILED" : "PASSED"); \
 		r |= _r; \
+        } else { \
+                TEST_SAY("================= Skipping test %s ================\n", # NAME ); \
         } \
 	} while (0)
 	RUN_TEST(0001_multiobj);

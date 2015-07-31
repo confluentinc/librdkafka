@@ -55,10 +55,6 @@
 #include "snappy.h"
 #include "rdendian.h"
 
-#if WITH_ZLIB
-#include <zlib.h>
-#endif
-
 
 const char *rd_kafka_broker_state_names[] = {
 	"INIT",
@@ -2003,27 +1999,15 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 			htobe32(msghdr->part3.MessageSize);
 
 
-#if WITH_ZLIB
-		msghdr->part3.Crc = crc32(0, NULL, 0);
-#else
 		msghdr->part3.Crc = rd_crc32_init();
-#endif
 		msghdr->part3.MagicByte = 0;  /* FIXME: what? */
 		msghdr->part3.Attributes = 0; /* No compression */
 
 		msghdr->part3.Crc =
-#if WITH_ZLIB
-			crc32(
-#else
-			rd_crc32_update(
-#endif
-			msghdr->part3.Crc,
-					(void *)
-					&msghdr->part3.MagicByte,
-					sizeof(msghdr->part3.
-					       MagicByte) +
-					sizeof(msghdr->part3.
-					       Attributes));
+			rd_crc32_update(msghdr->part3.Crc,
+                                        (void *)&msghdr->part3.MagicByte,
+                                        sizeof(msghdr->part3.MagicByte) +
+                                        sizeof(msghdr->part3.Attributes));
 
 		/* Message header */
 		rd_kafka_buf_push(rkbuf, &msghdr->part3, sizeof(msghdr->part3));
@@ -2031,15 +2015,9 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 		/* Key */
 		msghdr->part3.Crc =
-#if WITH_ZLIB
-			crc32(
-#else
-			rd_crc32_update(
-#endif
-			msghdr->part3.Crc,
+			rd_crc32_update(msghdr->part3.Crc,
 					(void *)rkm->rkm_key,
-					RD_KAFKAP_BYTES_SIZE(rkm->
-							     rkm_key));
+                                        RD_KAFKAP_BYTES_SIZE(rkm->rkm_key));
 
 		rd_kafka_buf_push(rkbuf, rkm->rkm_key,
 				  RD_KAFKAP_BYTES_SIZE(rkm->rkm_key));
@@ -2050,40 +2028,22 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
                                                 rkm->rkm_len :
                                                 RD_KAFKAP_BYTES_LEN_NULL);
 		msghdr->part3.Crc =
-#if WITH_ZLIB
-			crc32(
-#else
-			rd_crc32_update(
-#endif
-				msghdr->part3.Crc,
-					(void *)
-					&msghdr->part4.Value_len,
-					sizeof(msghdr->part4.
-					       Value_len));
+			rd_crc32_update(msghdr->part3.Crc,
+					(void *)&msghdr->part4.Value_len,
+					sizeof(msghdr->part4.Value_len));
 
 		rd_kafka_buf_push(rkbuf, &msghdr->part4, sizeof(msghdr->part4));
 
 		/* Payload */
 		if (rkm->rkm_payload) {
 			msghdr->part3.Crc =
-#if WITH_ZLIB
-				crc32(
-#else
-				rd_crc32_update(
-#endif
-				msghdr->part3.Crc,
-				rkm->rkm_payload,
-				rkm->rkm_len);
+				rd_crc32_update(msghdr->part3.Crc,
+                                                rkm->rkm_payload, rkm->rkm_len);
 			rd_kafka_buf_push(rkbuf, rkm->rkm_payload, rkm->rkm_len);
 		}
 
 		/* Finalize Crc */
-		msghdr->part3.Crc =
-#if !WITH_ZLIB
-			htobe32(rd_crc32_finalize(msghdr->part3.Crc));
-#else
-			htobe32(msghdr->part3.Crc);
-#endif
+		msghdr->part3.Crc = htobe32(rd_crc32_finalize(msghdr->part3.Crc));
 		msghdr++;
 	}
 
@@ -2273,34 +2233,11 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 			compression_codec & 0x7;
 		msghdr2->Key_len = htobe32(-1);
 		msghdr2->Value_len = htobe32(coutlen);
-		msghdr2->Crc =
-#if WITH_ZLIB
-			crc32(0, NULL, 0);
-#else
-			rd_crc32_init();
-#endif
-		msghdr2->Crc =
-#if WITH_ZLIB
-			crc32(
-#else
-			rd_crc32_update(
-#endif
-			msghdr2->Crc,
-					       (void *)&msghdr2->MagicByte,
-					       1+1+4+4);
-		msghdr2->Crc =
-#if WITH_ZLIB
-			crc32(
-#else
-			rd_crc32_update(
-#endif
-			msghdr2->Crc, (void *)siov.iov_base, coutlen);
-		msghdr2->Crc =
-#if !WITH_ZLIB
-			htobe32(rd_crc32_finalize(msghdr2->Crc));
-#else
-			htobe32(msghdr2->Crc);
-#endif
+		msghdr2->Crc = rd_crc32_init();
+		msghdr2->Crc = rd_crc32_update(msghdr2->Crc,
+					       (void *)&msghdr2->MagicByte, 1+1+4+4);
+		msghdr2->Crc = rd_crc32_update(msghdr2->Crc, (void *)siov.iov_base, coutlen);
+		msghdr2->Crc = htobe32(rd_crc32_finalize(msghdr2->Crc));
 
 		/* Update enveloping MessageSet's length. */
 		prodhdr->part2.MessageSetSize = ctotlen;

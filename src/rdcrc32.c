@@ -118,6 +118,9 @@ rd_crc32_t rd_crc32_reflect(rd_crc32_t data, size_t data_len)
  *****************************************************************************/
 rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t data_len)
 {
+#if WITH_ZLIB
+        return crc32(crc, data, data_len);
+#else
     unsigned int tbl_idx;
 
     while (data_len--) {
@@ -127,6 +130,7 @@ rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t dat
         data++;
     }
     return crc & 0xffffffff;
+#endif
 }
 
 

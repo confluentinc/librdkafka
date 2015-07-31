@@ -24,6 +24,11 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+#include "rd.h"
+#if WITH_ZLIB
+#include <zlib.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -60,7 +65,11 @@ rd_crc32_t rd_crc32_reflect(rd_crc32_t data, size_t data_len);
  *****************************************************************************/
 static __inline rd_crc32_t rd_crc32_init(void)
 {
+#if WITH_ZLIB
+        return crc32(0, NULL, 0);
+#else
     return 0xffffffff;
+#endif
 }
 
 
@@ -83,7 +92,11 @@ rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t dat
  *****************************************************************************/
 static __inline rd_crc32_t rd_crc32_finalize(rd_crc32_t crc)
 {
+#if WITH_ZLIB
+        return crc;
+#else
     return crc ^ 0xffffffff;
+#endif
 }
 
 

@@ -90,6 +90,7 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
 	rkm->rkm_opaque     = msg_opaque;
 	rkm->rkm_key        = rd_kafkap_bytes_new(key, keylen);
 	rkm->rkm_partition  = force_partition;
+        rkm->rkm_offset     = 0;
 	if (rkt->rkt_conf.message_timeout_ms == 0) {
 		rkm->rkm_ts_timeout = INT64_MAX;
 	} else {

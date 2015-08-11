@@ -123,6 +123,7 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__TIMED_OUT = -185,    /* Operation timed out */
 	RD_KAFKA_RESP_ERR__QUEUE_FULL = -184,   /* Queue is full */
         RD_KAFKA_RESP_ERR__ISR_INSUFF = -183,   /* ISR count < required.acks */
+        RD_KAFKA_RESP_ERR__NODE_UPDATE = -182,  /* Broker node update */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */

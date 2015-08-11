@@ -461,7 +461,8 @@ typedef enum {
 	RD_KAFKA_OP_STATS,    /* Kafka thread -> Application */
 
 	RD_KAFKA_OP_METADATA_REQ, /* any -> Broker thread: request metadata */
-        RD_KAFKA_OP_OFFSET_COMMIT /* any -> toppar's Broker thread */
+        RD_KAFKA_OP_OFFSET_COMMIT,/* any -> toppar's Broker thread */
+        RD_KAFKA_OP_NODE_UPDATE   /* any -> Broker thread: node update */
 } rd_kafka_op_type_t;
 
 typedef struct rd_kafka_op_s {
@@ -505,6 +506,10 @@ typedef struct rd_kafka_op_s {
         struct rd_kafka_toppar_s *rko_rktp;
 #define rko_offset    rko_rkmessage.offset
 
+        /* For BROKER_UPDATE */
+#define rko_nodename  rko_rkmessage.payload
+#define rko_nodeid    rko_rkmessage.partition
+
 } rd_kafka_op_t;
 
 
@@ -516,6 +521,8 @@ typedef enum {
 	RD_KAFKA_LEARNED,
 } rd_kafka_confsource_t;
 
+
+#define RD_KAFKA_NODENAME_SIZE  128
 
 typedef struct rd_kafka_broker_s {
 	TAILQ_ENTRY(rd_kafka_broker_s) rkb_link;
@@ -551,6 +558,7 @@ typedef struct rd_kafka_broker_s {
 		RD_KAFKA_BROKER_STATE_INIT,
 		RD_KAFKA_BROKER_STATE_DOWN,
 		RD_KAFKA_BROKER_STATE_UP,
+                RD_KAFKA_BROKER_STATE_UPDATE,
 	} rkb_state;
 
         rd_ts_t             rkb_ts_state;        /* Timestamp of last
@@ -598,8 +606,8 @@ typedef struct rd_kafka_broker_s {
 
 	rd_kafka_avg_t      rkb_avg_rtt;        /* Current averaging period */
 
-	char                rkb_name[128];      /* Display name */
-	char                rkb_nodename[128];  /* host:port */
+	char                rkb_name[RD_KAFKA_NODENAME_SIZE];  /* Displ name */
+	char                rkb_nodename[RD_KAFKA_NODENAME_SIZE]; /* host:port*/
 
 
 } rd_kafka_broker_t;

@@ -766,6 +766,8 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 		return "Local: Queue full";
         case RD_KAFKA_RESP_ERR__ISR_INSUFF:
                 return "Local: ISR count insufficient";
+        case RD_KAFKA_RESP_ERR__NODE_UPDATE:
+                return "Local: Broker node update";
 
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
 		return "Unknown error";

@@ -54,7 +54,8 @@
 const char *rd_kafka_broker_state_names[] = {
 	"INIT",
 	"DOWN",
-	"UP"
+	"UP",
+        "UPDATE"
 };
 
 
@@ -99,6 +100,26 @@ static size_t rd_kafka_msghdr_size (const struct msghdr *msg) {
 		tot += msg->msg_iov[i].iov_len;
 
 	return tot;
+}
+
+
+/**
+ * Construct broker nodename.
+ */
+static void rd_kafka_mk_nodename (char *dest, size_t dsize,
+                                  const char *name, uint16_t port) {
+        snprintf(dest, dsize, "%s:%hu", name, port);
+}
+
+/**
+ * Construct descriptive broker name
+ */
+static void rd_kafka_mk_brokername (char *dest, size_t dsize,
+                                    const char *nodename, int32_t nodeid) {
+        if (nodeid == RD_KAFKA_NODEID_UA)
+		snprintf(dest, dsize, "%s/bootstrap", nodename);
+	else
+		snprintf(dest, dsize, "%s/%"PRId32, nodename, nodeid);
 }
 
 /**
@@ -1747,8 +1768,6 @@ static int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		cnt++;
 	}
 
-	rd_rkb_dbg(rkb, BROKER, "SEND", "Sent %i bufs", cnt);
-
 	return cnt;
 }
 
@@ -2415,7 +2434,63 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                                                      rko->rko_offset);
                 break;
 
-	default:
+        case RD_KAFKA_OP_NODE_UPDATE:
+        {
+                enum {
+                        _UPD_NAME = 0x1,
+                        _UPD_ID = 0x2
+                } updated = 0;
+                char brokername[RD_KAFKA_NODENAME_SIZE];
+
+                if (rko->rko_nodename) {
+                        if (strcmp(rkb->rkb_nodename, rko->rko_nodename)) {
+                                rd_rkb_dbg(rkb, BROKER, "UPDATE",
+                                           "Nodename changed from %s to %s",
+                                           rkb->rkb_nodename,
+                                           (char *)rko->rko_nodename);
+                                strncpy(rkb->rkb_nodename, rko->rko_nodename,
+                                        sizeof(rkb->rkb_nodename)-1);
+                                updated |= _UPD_NAME;
+                        }
+                        free(rko->rko_nodename);
+                        rko->rko_nodename = NULL;
+                }
+
+                if (rko->rko_nodeid != -1 &&
+                    rko->rko_nodeid != rkb->rkb_nodeid) {
+                        rd_rkb_dbg(rkb, BROKER, "UPDATE",
+                                   "NodeId changed from %"PRId32" to %"PRId32,
+                                   rkb->rkb_nodeid, (int32_t)rko->rko_nodeid);
+                        rkb->rkb_nodeid = rko->rko_nodeid;
+                        updated |= _UPD_ID;
+                }
+
+                rd_kafka_mk_brokername(brokername, sizeof(brokername),
+                                       rkb->rkb_nodename, rkb->rkb_nodeid);
+                if (strcmp(rkb->rkb_name, brokername)) {
+                        rd_rkb_dbg(rkb, BROKER, "UPDATE",
+                                   "Name changed from %s to %s",
+                                   rkb->rkb_name, brokername);
+                        strncpy(rkb->rkb_name, brokername,
+                                sizeof(rkb->rkb_name)-1);
+                }
+
+                if (updated & _UPD_NAME)
+                        rd_kafka_broker_fail(rkb,
+                                             RD_KAFKA_RESP_ERR__NODE_UPDATE,
+                                             "Broker hostname updated");
+                else if (updated & _UPD_ID) {
+                        /* Query for topic leaders.
+                         * This is done automatically from broker_fail()
+                         * so we dont need this if the nodename changed too. */
+                        rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
+                        rd_kafka_broker_set_state(rkb,
+                                                  RD_KAFKA_BROKER_STATE_UPDATE);
+                }
+                break;
+        }
+
+        default:
 		rd_kafka_assert(rkb->rkb_rk, !*"unhandled op type");
 	}
 
@@ -4150,6 +4225,8 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 			}
 			break;
 
+                case RD_KAFKA_BROKER_STATE_UPDATE:
+                        /* FALLTHRU */
 		case RD_KAFKA_BROKER_STATE_UP:
 			if (rkb->rkb_nodeid == RD_KAFKA_NODEID_UA)
 				rd_kafka_broker_ua_idle(rkb);
@@ -4157,6 +4234,8 @@ static void *rd_kafka_broker_thread_main (void *arg) {
 				rd_kafka_broker_producer_serve(rkb);
 			else if (rk->rk_type == RD_KAFKA_CONSUMER)
 				rd_kafka_broker_consumer_serve(rkb);
+                        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UPDATE)
+                                rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
 			break;
 		}
 
@@ -4220,14 +4299,11 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 	rkb = calloc(1, sizeof(*rkb));
 
-	snprintf(rkb->rkb_nodename, sizeof(rkb->rkb_nodename),
-		 "%s:%hu", name, port);
-	if (nodeid == RD_KAFKA_NODEID_UA)
-		snprintf(rkb->rkb_name, sizeof(rkb->rkb_name),
-			 "%s/bootstrap", rkb->rkb_nodename);
-	else
-		snprintf(rkb->rkb_name, sizeof(rkb->rkb_name),
-			 "%s/%"PRId32, rkb->rkb_nodename, nodeid);
+        rd_kafka_mk_nodename(rkb->rkb_nodename, sizeof(rkb->rkb_nodename),
+                             name, port);
+        rd_kafka_mk_brokername(rkb->rkb_name, sizeof(rkb->rkb_name),
+                               rkb->rkb_nodename, nodeid);
+
 	rkb->rkb_source = source;
 	rkb->rkb_rk = rk;
 	rkb->rkb_nodeid = nodeid;
@@ -4340,14 +4416,15 @@ static rd_kafka_broker_t *rd_kafka_broker_find (rd_kafka_t *rk,
 						const char *name,
 						uint16_t port) {
 	rd_kafka_broker_t *rkb;
-	char fullname[sizeof(rkb->rkb_name)];
+	char nodename[RD_KAFKA_NODENAME_SIZE];
 
-	snprintf(fullname, sizeof(fullname), "%s:%hu", name, port);
+        rd_kafka_mk_nodename(nodename, sizeof(nodename), name, port);
+
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
 		if (!rk->rk_terminate &&
-		    !strcmp(rkb->rkb_name, fullname)) {
+		    !strcmp(rkb->rkb_nodename, nodename)) {
 			rd_kafka_broker_keep(rkb);
 			rd_kafka_broker_unlock(rkb);
 			return rkb;
@@ -4422,21 +4499,46 @@ int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist) {
 
 /**
  * Adds a new broker or updates an existing one.
+ *
  */
 static void
 rd_kafka_broker_update (rd_kafka_t *rk,
                         const struct rd_kafka_metadata_broker *mdb) {
 	rd_kafka_broker_t *rkb;
+        char nodename[RD_KAFKA_NODENAME_SIZE];
+        int needs_update = 0;
+
+        rd_kafka_mk_nodename(nodename, sizeof(nodename), mdb->host, mdb->port);
 
 	rd_kafka_wrlock(rk);
-	if ((rkb = rd_kafka_broker_find_by_nodeid(rk, mdb->id)))
-		rd_kafka_broker_destroy(rkb);
-	else
+	if ((rkb = rd_kafka_broker_find_by_nodeid(rk, mdb->id))) {
+                /* Broker matched by nodeid, see if we need to update
+                 * the hostname. */
+                if (strcmp(rkb->rkb_nodename, nodename))
+                        needs_update = 1;
+        } else if ((rkb = rd_kafka_broker_find(rk, mdb->host, mdb->port))) {
+                /* Broker matched by hostname (but not by nodeid),
+                 * update the nodeid. */
+                needs_update = 1;
+
+        } else {
 		rd_kafka_broker_add(rk, RD_KAFKA_LEARNED,
 				    mdb->host, mdb->port, mdb->id);
+        }
 	rd_kafka_unlock(rk);
 
-	/* FIXME: invalidate Leader if required. */
+        if (rkb) {
+                /* Existing broker */
+                if (needs_update) {
+                        rd_kafka_op_t *rko;
+
+                        rko = rd_kafka_op_new(RD_KAFKA_OP_NODE_UPDATE);
+                        rko->rko_nodename = strdup(nodename);
+                        rko->rko_nodeid   = mdb->id;
+                        rd_kafka_q_enq(&rkb->rkb_ops, rko);
+                }
+                rd_kafka_broker_destroy(rkb);
+        }
 }
 
 

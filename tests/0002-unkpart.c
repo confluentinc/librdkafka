@@ -120,6 +120,7 @@ int main_0002_unkpart (int argc, char **argv) {
 			else
 				TEST_FAIL("Failed to produce message #%i: %s\n",
 					  i, rd_strerror(errno));
+                        free(msgidp);
 		} else {
 			if (i > 5)
 				TEST_FAIL("Message #%i produced: "

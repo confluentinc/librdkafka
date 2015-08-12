@@ -37,6 +37,8 @@ freely, subject to the following restrictions:
   #include <sys/timeb.h>
 #endif
 
+#include "rd.h"
+
 /* Standard, good-to-have defines */
 #ifndef NULL
   #define NULL (void*)0
@@ -51,6 +53,8 @@ freely, subject to the following restrictions:
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+static RD_TLS int thrd_is_detached;
 
 
 int mtx_init(mtx_t *mtx, int type)
@@ -599,6 +603,9 @@ static void * _thrd_wrapper_function(void * aArg)
 
   return res;
 #else
+  /* Avoid memory leak for detached threads by not allocating a return val */
+  if (thrd_is_detached)
+    return NULL;
   pres = malloc(sizeof(int));
   if (pres != NULL)
   {
@@ -660,6 +667,7 @@ int thrd_is_current(thrd_t thr) {
 
 int thrd_detach(thrd_t thr)
 {
+  thrd_is_detached = 1;
 #if defined(_TTHREAD_WIN32_)
   /* https://stackoverflow.com/questions/12744324/how-to-detach-a-thread-on-windows-c#answer-12746081 */
   return CloseHandle(thr) != 0 ? thrd_success : thrd_error;

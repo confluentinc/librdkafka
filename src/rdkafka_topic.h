@@ -39,6 +39,8 @@ void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
 				  rd_kafka_msgq_t *rkmq);
 void rd_kafka_toppar_concat_msgq (rd_kafka_toppar_t *rktp,
 				  rd_kafka_msgq_t *rkmq);
+void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
+                                rd_kafka_resp_err_t err);
 
 #define rd_kafka_topic_keep(rkt) (void)rd_atomic_add(&(rkt->rkt_refcnt), 1)
 void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt);

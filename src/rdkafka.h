@@ -778,6 +778,8 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *rkt, int32_t partition,
  *
  * 'timeout_ms' is the maximum amount of time to wait for all of
  * 'rkmessages_size' messages to be put into 'rkmessages'.
+ * If no messages were available within the timeout period this function
+ * returns 0 and `rkmessages` remains untouched.
  * This differs somewhat from `rd_kafka_consume()`.
  *
  * The message objects must be destroyed with `rd_kafka_message_destroy()`

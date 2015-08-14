@@ -1016,7 +1016,7 @@ rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
         return md;
 
 err:
-        free(md);
+        free(msh_buf);
         return NULL;
 }
 

@@ -77,6 +77,7 @@ typedef int mode_t;
 
 
 
+#include "rdkafka_msg.h"
 #include "rdkafka_proto.h"
 #include "rdkafka_buf.h"
 
@@ -355,30 +356,6 @@ static RD_UNUSED void rd_kafka_avg_destroy (rd_kafka_avg_t *ra) {
 
 
 
-
-typedef struct rd_kafka_msg_s {
-	TAILQ_ENTRY(rd_kafka_msg_s)  rkm_link;
-	int        rkm_flags;
-	size_t     rkm_len;
-	void      *rkm_payload;
-	void      *rkm_opaque;
-	int32_t    rkm_partition;  /* partition specified */
-	rd_kafkap_bytes_t *rkm_key;
-        int64_t    rkm_offset;
-	rd_ts_t    rkm_ts_timeout;
-} rd_kafka_msg_t;
-
-typedef struct rd_kafka_msgq_s {
-	TAILQ_HEAD(, rd_kafka_msg_s) rkmq_msgs;
-	rd_atomic32_t rkmq_msg_cnt;
-	rd_atomic64_t rkmq_msg_bytes;
-} rd_kafka_msgq_t;
-
-#define RD_KAFKA_MSGQ_INITIALIZER(rkmq) \
-	{ .rkmq_msgs = TAILQ_HEAD_INITIALIZER((rkmq).rkmq_msgs) }
-
-#define RD_KAFKA_MSGQ_FOREACH(elm,head) \
-	TAILQ_FOREACH(elm, &(head)->rkmq_msgs, rkm_link)
 
 
 

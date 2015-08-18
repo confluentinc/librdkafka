@@ -138,7 +138,8 @@ struct rd_kafka_conf_s {
 	int     socket_rcvbuf_size;
         int     socket_keepalive;
         int     socket_max_fails;
-	char   *clientid;
+	char   *client_id_str;
+        rd_kafkap_str_t *client_id;
 	char   *brokerlist;
 	int     stats_interval_ms;
 	int     term_sig;

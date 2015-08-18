@@ -33,6 +33,8 @@
 #include <ctype.h>
 #include <stddef.h>
 
+#include "rdkafka_int.h"
+
 
 struct rd_kafka_property {
 	rd_kafka_conf_scope_t scope;
@@ -68,7 +70,7 @@ struct rd_kafka_property {
  */
 static const struct rd_kafka_property rd_kafka_properties[] = {
 	/* Global properties */
-	{ _RK_GLOBAL, "client.id", _RK_C_STR, _RK(clientid),
+	{ _RK_GLOBAL, "client.id", _RK_C_STR, _RK(client_id_str),
 	  "Client identifier.",
 	  .sdef =  "rdkafka" },
 	{ _RK_GLOBAL, "metadata.broker.list", _RK_C_STR, _RK(brokerlist),

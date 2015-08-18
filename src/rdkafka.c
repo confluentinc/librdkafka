@@ -180,7 +180,23 @@ void rd_kafka_set_log_level (rd_kafka_t *rk, int level) {
 
 
 
+const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
+        static const char *names[] = {
+                "FETCH",
+                "ERR",
+                "DR",
+                "STATS",
+                "METADATA_REQ",
+                "OFFSET_COMMIT",
+                "REPLY",
+                "XMIT_BUF",
+                "RECV_BUF",
+                "FETCH_START",
+                "FETCH_STOP",
+        };
 
+        return names[type];
+}
 
 rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 	rd_kafka_op_t *rko;
@@ -307,6 +323,52 @@ void rd_kafka_q_purge (rd_kafka_q_t *rkq) {
 	mtx_unlock(&rkq->rkq_lock);
 
 	/* Destroy the ops */
+	next = TAILQ_FIRST(&tmpq);
+	while ((rko = next)) {
+		next = TAILQ_NEXT(next, rko_link);
+		rd_kafka_op_destroy(rko);
+	}
+}
+
+
+/**
+ * Purge all entries from a queue with a rktp version smaller than `version`
+ * This shaves off the head of the queue, up until the first rko with
+ * a non-matching rktp or version.
+ */
+void rd_kafka_q_purge_toppar_version (rd_kafka_q_t *rkq,
+                                      rd_kafka_toppar_t *rktp, int version) {
+	rd_kafka_op_t *rko, *next;
+	TAILQ_HEAD(, rd_kafka_op_s) tmpq = TAILQ_HEAD_INITIALIZER(tmpq);
+        int32_t cnt = 0;
+        int64_t size = 0;
+
+	mtx_lock(&rkq->rkq_lock);
+
+	if (rkq->rkq_fwdq) {
+		rd_kafka_q_purge_toppar_version(rkq->rkq_fwdq, rktp, version);
+		mtx_unlock(&rkq->rkq_lock);
+		return;
+	}
+
+        /* Move ops to temporary queue and then destroy them from there
+         * without locks to avoid lock-ordering problems in op_destroy() */
+        while ((rko = TAILQ_FIRST(&rkq->rkq_q)) &&
+               rko->rko_rktp == rktp && rko->rko_version < version) {
+                printf("Purge outdated rko version %i < %i\n",
+                       rko->rko_version, version);
+
+                TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
+                TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
+                cnt++;
+                size += rko->rko_len;
+        }
+
+
+        rd_atomic32_sub(&rkq->rkq_qlen, cnt);
+        rd_atomic64_sub(&rkq->rkq_qsize, size);
+	mtx_unlock(&rkq->rkq_lock);
+
 	next = TAILQ_FIRST(&tmpq);
 	while ((rko = next)) {
 		next = TAILQ_NEXT(next, rko_link);
@@ -538,6 +600,8 @@ static int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 					rd_kafka_message_t **rkmessages,
 					size_t rkmessages_size) {
 	unsigned int cnt = 0;
+        TAILQ_HEAD(, rd_kafka_op_s) tmpq = TAILQ_HEAD_INITIALIZER(tmpq);
+        rd_kafka_op_t *rko, *next;
 
 	mtx_lock(&rkq->rkq_lock);
 	if (rkq->rkq_fwdq) {
@@ -546,10 +610,8 @@ static int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 		mtx_unlock(&rkq->rkq_lock);
 		return cnt;
 	}
-	
 
 	while (cnt < rkmessages_size) {
-		rd_kafka_op_t *rko;
 
 		while (!(rko = TAILQ_FIRST(&rkq->rkq_q))) {
 			if (cnd_timedwait_ms(&rkq->rkq_cond,
@@ -564,6 +626,17 @@ static int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 		(void)rd_atomic32_sub(&rkq->rkq_qlen, 1);
 		(void)rd_atomic64_sub(&rkq->rkq_qsize, rko->rko_len);
 
+                if (rko->rko_version && rko->rko_rktp &&
+                    rko->rko_version <
+                    rd_atomic32_get(&rko->rko_rktp->rktp_version)) {
+                        /* Outdated op, put on discard queue */
+                        TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
+                        printf("Discard2 outdated rko version %i < %i\n",
+                               rko->rko_version, (int)rd_atomic32_get(&rko->rko_rktp->rktp_version));
+
+                        continue;
+                }
+
 		/* Auto-commit offset, if enabled. */
 		if (!rko->rko_err &&
 		    rko->rko_rkmessage.rkt->rkt_conf.auto_commit)
@@ -575,6 +648,14 @@ static int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 	}
 
 	mtx_unlock(&rkq->rkq_lock);
+
+        next = TAILQ_FIRST(&tmpq);
+        while (next) {
+                rko = next;
+                next = TAILQ_NEXT(next, rko_link);
+                rd_kafka_op_destroy(rko);
+        }
+
 
 	return cnt;
 }
@@ -796,12 +877,12 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 		return "Broker: StaleControllerEpochCode";
 	case RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE:
 		return "Broker: Offset metadata string too large";
-	case RD_KAFKA_RESP_ERR_OFFSETS_LOAD_IN_PROGRESS:
-		return "Broker: Offsets load in progress";
-	case RD_KAFKA_RESP_ERR_CONSUMER_COORDINATOR_NOT_AVAILABLE:
-		return "Broker: Consumer coordinator not available";
-	case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_CONSUMER:
-		return "Broker: Not coordinator for consumer";
+        case RD_KAFKA_RESP_ERR_OFFSET_LOAD_IN_PROGRESS:
+                return "Broker: Offset load in progress";
+        case RD_KAFKA_RESP_ERR_CONSUMER_COORDINATOR_NOT_AVAILABLE:
+                return "Broker: Consumer coordinator not available";
+        case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_CONSUMER:
+                return "Broker: Not coordinator for consumer";
 	default:
 		rd_snprintf(ret, sizeof(ret), "Err-%i?", err);
 		return ret;
@@ -843,7 +924,7 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
 	/* Purge op-queue */
 	rd_kafka_q_purge(&rk->rk_rep);
 
-	rd_kafkap_str_destroy(rk->rk_clientid);
+	rd_kafkap_str_destroy(rk->rk_conf.client_id);
         rd_kafkap_str_destroy(rk->rk_conf.group_id);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
 
@@ -1278,10 +1359,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                 rk->rk_conf.log_level = LOG_DEBUG;
 
 	rd_snprintf(rk->rk_name, sizeof(rk->rk_name), "%s#%s-%i",
-		 rk->rk_conf.clientid, rd_kafka_type2str(rk->rk_type), rkid++);
+                    rk->rk_conf.client_id_str, rd_kafka_type2str(rk->rk_type),
+                    rkid++);
 
 	/* Construct clientid kafka string */
-	rk->rk_clientid = rd_kafkap_str_new(rk->rk_conf.clientid);
+	rk->rk_conf.client_id = rd_kafkap_str_new(rk->rk_conf.client_id_str);
 
         /* Convert group.id to kafka string (may be NULL) */
         rk->rk_conf.group_id = rd_kafkap_str_new(rk->rk_conf.group_id_str);
@@ -1367,10 +1449,28 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
 }
 
 
+/**
+ * rktp fetch is split up in these parts:
+ *   * application side:
+ *          - the fetch state, initial offset, etc.
+ *          - offset commits
+ *   * broker side (handled by current leader broker thread for rktp):
+ *          - fetching messages, updating fetched offset, etc.
+ *
+ * Communication between the two are:
+ *    app side -> broker side: rktp_ops
+ *    broker side -> app side: rktp_fetchq
+ *
+ * There is no shared state between these two sides (threads), instead
+ * state is communicated through the two op queues, and state synchronization
+ * is performed by version barriers.
+ *
+ */
 
 static int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
 				    int64_t offset, rd_kafka_q_t *rkq) {
 	rd_kafka_toppar_t *rktp;
+        rd_kafka_op_t *rko;
 
 	if (partition < 0) {
 		errno = ESRCH;
@@ -1386,8 +1486,7 @@ static int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
 	if (offset == RD_KAFKA_OFFSET_BEGINNING ||
 	    offset == RD_KAFKA_OFFSET_END ||
             offset <= RD_KAFKA_OFFSET_TAIL_BASE) {
-		rktp->rktp_query_offset = offset;
-		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY;
+                /* logical offsets */
 
 	} else if (offset == RD_KAFKA_OFFSET_STORED) {
 		rd_kafka_offset_store_init(rktp);
@@ -1398,15 +1497,19 @@ static int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
 		errno = EINVAL;
 		return -1;
 
-	} else {
-		rktp->rktp_next_offset = offset;
-		rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_ACTIVE;
-	}
+        }
 
 	rd_kafka_toppar_unlock(rktp);
 
 	if (rkq)
 		rd_kafka_q_fwd_set(&rktp->rktp_fetchq, rkq);
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH_START);
+        rko->rko_offset = offset;
+        rko->rko_version = rd_atomic32_add(&rktp->rktp_version, 1);
+        rko->rko_rktp = rktp;
+        rd_kafka_toppar_keep(rktp);
+        rd_kafka_q_enq(&rktp->rktp_ops, rko);
 
 	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "CONSUMER",
 		     "Start consuming %.*s [%"PRId32"] at "
@@ -1430,6 +1533,10 @@ int rd_kafka_consume_start_queue (rd_kafka_topic_t *rkt, int32_t partition,
 
 int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
 	rd_kafka_toppar_t *rktp;
+        rd_kafka_op_t *rko;
+        int32_t version;
+        int wait_sync = 1;
+        rd_kafka_q_t tmpq;
 
 	if (partition == RD_KAFKA_PARTITION_UA) {
 		errno = EINVAL;
@@ -1448,15 +1555,22 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
 	rd_kafka_topic_wrunlock(rkt);
 
 	rd_kafka_toppar_lock(rktp);
-	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
 
-        rd_kafka_offset_store_term(rktp);
+        rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH_STOP);
+        rko->rko_version = version = rd_atomic32_add(&rktp->rktp_version, 1);
 
-	/* Stop queue forwarding. */
+        /* Stop queue forwarding. */
 	rd_kafka_q_fwd_set(&rktp->rktp_fetchq, NULL);
-	
-	/* Purge receive queue (only effective if queue was not forwarded). */
-	rd_kafka_q_purge(&rktp->rktp_fetchq);
+
+        /* Purge receive queue (only effective if queue was not forwarded). */
+	rd_kafka_q_purge_toppar_version(&rktp->rktp_fetchq, rktp,
+                                        rko->rko_version);
+
+        rd_kafka_q_init(&tmpq);
+        rko->rko_rktp = rktp;
+        rko->rko_replyq = &tmpq;
+        rd_kafka_toppar_keep(rktp);
+        rd_kafka_q_enq(&rktp->rktp_ops, rko);
 
 	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "CONSUMER",
 		     "Stop consuming %.*s [%"PRId32"] currently at offset "
@@ -1466,7 +1580,20 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
 		     rktp->rktp_next_offset);
 	rd_kafka_toppar_unlock(rktp);
 
-	rd_kafka_toppar_destroy(rktp); /* .._get() */
+        /* Synchronisation: Wait for stop reply from broker thread */
+        while (wait_sync) {
+                rko = rd_kafka_q_pop(&tmpq, RD_POLL_INFINITE);
+                if (!rko)
+                        continue;
+                if (rko->rko_version == version &&
+                    rko->rko_type == RD_KAFKA_OP_FETCH_STOP)
+                        wait_sync = 0;
+
+                rd_kafka_op_destroy(rko);
+        }
+        rd_kafka_q_destroy(&tmpq);
+
+        rd_kafka_toppar_destroy(rktp); /* .._get() */
 
 	return 0;
 }
@@ -1535,6 +1662,14 @@ struct consume_ctx {
 static void rd_kafka_consume_cb (rd_kafka_op_t *rko, void *opaque) {
 	struct consume_ctx *ctx = opaque;
 	rd_kafka_message_t *rkmessage;
+
+        if (unlikely(rko->rko_version && rko->rko_rktp &&
+                     rko->rko_version <
+                     rd_atomic32_get(&rko->rko_rktp->rktp_version))) {
+                printf("Skip outdated rko version %i < %i\n",
+                       rko->rko_version, (int)rd_atomic32_get(&rko->rko_rktp->rktp_version));
+                return;
+        }
 
 	rkmessage = rd_kafka_message_get(rko);
 	if (!rko->rko_err && rko->rko_rktp->rktp_rkt->rkt_conf.auto_commit)
@@ -1705,9 +1840,9 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
                                         .len        = rkm->rkm_len,
                                         .err        = rko->rko_err,
                                         .offset     = rkm->rkm_offset,
+                                        .rkt        = rko->rko_rkt,
                                         .partition  = rkm->rkm_partition,
                                         ._private   = rkm->rkm_opaque,
-                                        /* FIXME: .rkt ? */
                                 };
 
                                 if (rkm->rkm_key &&

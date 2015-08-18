@@ -1072,23 +1072,24 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_toppar_t *rktp;
-	rd_kafka_msgq_t timedout;
-	int tpcnt = 0;
-	int totcnt;
+	int totcnt = 0;
 	int wrlocked = 0;
 
-	rd_kafka_msgq_init(&timedout);
 
 	rd_kafka_rdlock(rk);
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
 		int p;
+                int cnt = 0, tpcnt = 0;
+                rd_kafka_msgq_t timedout;
+
+                rd_kafka_msgq_init(&timedout);
 
 		rd_kafka_topic_wrlock(rkt);
 		wrlocked = 1;
 
                 /* Check if metadata information has timed out:
                  * older than 3 times the metadata.refresh.interval.ms */
-        if (rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN &&
+                if (rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN &&
 		    rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms >= 0 &&
                     rd_clock() > rkt->rkt_ts_metadata +
                     (rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms *
@@ -1139,16 +1140,18 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 			rd_kafka_topic_wrunlock(rkt);
 		else
 			rd_kafka_topic_rdunlock(rkt);
+
+                if ((cnt = rd_atomic32_get(&timedout.rkmq_msg_cnt)) > 0) {
+                        totcnt += cnt;
+                        rd_kafka_dbg(rk, MSG, "TIMEOUT",
+                                     "%s: %"PRId32" message(s) "
+                                     "from %i toppar(s) timed out",
+                                     rkt->rkt_topic->str, cnt, tpcnt);
+                        rd_kafka_dr_msgq(rkt, &timedout,
+                                         RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
+                }
 	}
 	rd_kafka_rdunlock(rk);
-
-	if ((totcnt = rd_atomic32_get(&timedout.rkmq_msg_cnt)) > 0) {
-		rd_kafka_dbg(rk, MSG, "TIMEOUT",
-			     "%"PRId32" message(s) from %i toppar(s) timed out",
-			     rd_atomic32_get(&timedout.rkmq_msg_cnt), tpcnt);
-		rd_kafka_dr_msgq(rk, &timedout,
-				 RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
-	}
 
 	return totcnt;
 }

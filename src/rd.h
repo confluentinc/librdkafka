@@ -226,3 +226,68 @@ static __inline int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra, int64_t v) 
 
 
 
+
+
+/**
+ * Intervaller.
+ * Controls how often something is allowed to happen, including
+ * fast retries (with backoff) on failure.
+ * Attribs: Zero-allocations, Thread-safe
+ */
+typedef struct rd_interval_s {
+        /* Configuration */
+        const rd_ts_t  interval;      /* Standard interval */
+        const rd_ts_t  retry_delay;   /* Delay before retrying on failure. */
+
+        /* Runtime */
+        rd_atomic64_t  next;
+        rd_atomic32_t  retries;
+} rd_interval_t;
+
+static __inline RD_UNUSED
+void rd_interval_init (rd_interval_t *ri, int interval_us, int retry_delay_us) {
+        const rd_interval_t ri_init = { interval_us, retry_delay_us };
+        memcpy(ri, &ri_init, sizeof(*ri));
+}
+#define RD_INTERVAL_INIT(INTERVAL,RETRY_DELAY) {INTERVAL,RETRY_DELAY}
+
+/**
+ * Check if next interval is up.
+ * Returns true if so, else false.
+ */
+static __inline RD_UNUSED
+int rd_interval_next (rd_interval_t *ri, rd_ts_t now) {
+        return (int)(rd_atomic64_get(&ri->next) <= now);
+}
+
+
+/**
+ * Feed intervaller with result from last run.
+ * If 'ok' is set the next interval is scheduled as expected,
+ * else the next interval is set to the next retry (e.g., failure).
+ */
+static __inline RD_UNUSED
+void rd_interval_update (rd_interval_t *ri, rd_ts_t now, int ok) {
+        rd_ts_t next;
+
+        if (likely(ok)) {
+                rd_atomic64_set(&ri->next, now + ri->interval);
+                rd_atomic32_set(&ri->retries, 0);
+                return;
+        }
+
+        next = ri->retry_delay << (rd_atomic32_add(&ri->retries, 1)-1);
+        if (next > ri->interval)
+                next = ri->interval;
+        rd_atomic64_set(&ri->next, now + next);
+}
+
+
+/**
+ * Resets the next interval to fire immediately.
+ */
+static __inline RD_UNUSED
+void rd_interval_reset (rd_interval_t *ri) {
+        rd_atomic64_set(&ri->next, 0);
+        rd_atomic32_set(&ri->retries, 0);
+}

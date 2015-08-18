@@ -21,6 +21,9 @@ OBJS	 += test.o
 all: $(BIN)
 	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh $(BIN)
 
+test.o: ../src/librdkafka.a
+
+
 include ../mklove/Makefile.base
 
 CFLAGS += -I../src -I../src-cpp

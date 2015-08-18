@@ -841,11 +841,12 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_topic_t *rkt,
 	for (; i < rkt->rkt_partition_cnt ; i++) {
 		rktp = rkt->rkt_p[i];
 
-		/* Partition has gone away, move messages to UA or drop */
+		/* Partition has gone away, move messages to UA or error-out */
 		if (likely(rktp_ua != NULL))
 			rd_kafka_toppar_move_msgs(rktp_ua, rktp);
 		else
-			rd_kafka_msgq_purge(rkt->rkt_rk, &rktp->rktp_msgq);
+                        rd_kafka_dr_msgq(rkt, &rktp->rktp_msgq,
+                                         RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
 
 		/* If this is a desired partition move it back on to
 		 * the desired list. */

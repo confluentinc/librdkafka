@@ -29,6 +29,10 @@
 #include "test.h"
 #include <signal.h>
 
+#ifndef _MSC_VER
+#include <pthread.h>
+#endif
+
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
@@ -39,6 +43,12 @@ int test_seed = 0;
 
 static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
+static int  tests_run_in_parallel = 0;
+static int  tests_running_cnt = 0;
+
+#ifndef _MSC_VER
+static pthread_mutex_t test_lock;
+#endif
 
 static void sig_alarm (int sig) {
 	TEST_FAIL("Test timed out");
@@ -203,6 +213,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
  */
 void test_wait_exit (int timeout) {
 	int r;
+        time_t start = time(NULL);
 
 	while ((r = rd_kafka_thread_cnt()) && timeout-- >= 0) {
 		TEST_SAY("%i thread(s) in use by librdkafka, waiting...\n", r);
@@ -210,6 +221,10 @@ void test_wait_exit (int timeout) {
 	}
 
 	TEST_SAY("%i thread(s) in use by librdkafka\n", r);
+
+        timeout -= time(NULL) - start;
+        if (timeout > 0)
+                rd_kafka_wait_destroyed(timeout * 1000);
 
 	if (r > 0) {
 		assert(0);
@@ -227,22 +242,114 @@ uint64_t test_id_generate (void) {
 }
 
 
+#ifndef _MSC_VER
+struct run_args {
+        const char *testname;
+        int (*test_main) (int, char **);
+        int argc;
+        char **argv;
+};
+static void *run_test_from_thread (void *arg) {
+        struct run_args *run_args = arg;
+        int r;
+
+        pthread_detach(pthread_self());
+
+        r = run_args->test_main(run_args->argc, run_args->argv);
+
+        TEST_SAY("================= Test %s %s =================\n",
+                 run_args->testname, r ? "FAILED" : "PASSED");
+
+        pthread_mutex_lock(&test_lock);
+        tests_running_cnt--;
+        pthread_mutex_unlock(&test_lock);
+
+        free(run_args);
+
+        return NULL;
+}
+#endif
+
+
+
+static int run_test (const char *testname,
+                     int (*test_main) (int, char **),
+                     int argc, char **argv) {
+        int r;
+
+        if (tests_run_in_parallel) {
+#ifdef _MSC_VER
+                TEST_FAIL("Parallel runs not supported on this platform, yet\n");
+#else
+                pthread_t thr;
+                struct run_args *run_args = calloc(1, sizeof(*run_args));
+                run_args->testname = testname;
+                run_args->test_main = test_main;
+                run_args->argc = argc;
+                run_args->argv = argv;
+
+                pthread_mutex_lock(&test_lock);
+                tests_running_cnt++;
+                pthread_mutex_unlock(&test_lock);
+
+                r = pthread_create(&thr, NULL, run_test_from_thread, run_args);
+                if (r != 0) {
+                        pthread_mutex_lock(&test_lock);
+                        tests_running_cnt--;
+                        pthread_mutex_unlock(&test_lock);
+
+                        TEST_FAIL("Failed to start thread for test %s: %s\n",
+                                  testname, strerror(r));
+                }
+#endif
+        } else {
+                tests_running_cnt++;
+                r = test_main(argc, argv);
+                tests_running_cnt--;
+                /* Wait for everything to be cleaned up since broker
+                 * destroys are handled in its own thread. */
+                test_wait_exit(10);
+
+        }
+        return r;
+}
+
 int main(int argc, char **argv) {
 	int r = 0;
         const char *tests_to_run = NULL; /* all */
+        int i;
 
 #ifndef _MSC_VER
         tests_to_run = getenv("TESTS");
 #endif
+
+        for (i = 1 ; i < argc ; i++) {
+                if (!strcmp(argv[i], "-p") )
+                        tests_run_in_parallel = 1;
+                else {
+                        printf("Unknown option: %s\n"
+                               "\n"
+                               "Usage: %s [options]\n"
+                               "Options:\n"
+                               "  -p     Run tests in parallel\n"
+                               "\n",
+                               argv[0], argv[i]);
+                        exit(1);
+                }
+        }
 
         printf("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 
 #define RUN_TEST(NAME) do { \
 	extern int main_ ## NAME (int, char **); \
         if (!tests_to_run || strstr(# NAME, tests_to_run)) {     \
-		TEST_SAY("================= Run test %s =================\n", # NAME); \
-		int _r = main_ ## NAME (argc, argv); \
-		TEST_SAY("================= Test %s %s =================\n", # NAME, _r ? "FAILED" : "PASSED"); \
+                int _r;                                                 \
+		TEST_SAY("================= Run test %s %s=================\n", # NAME, tests_run_in_parallel ? "in parallel " : ""); \
+                _r = run_test(# NAME, main_ ## NAME, argc, argv);        \
+		TEST_SAY("================= Test %s %s =================\n", \
+                         # NAME, \
+                         _r ? (tests_run_in_parallel ? "FAILED TO START":"FAILED") : \
+                         (tests_run_in_parallel ? "STARTED" : "PASSED")); \
 		r |= _r; \
         } else { \
                 TEST_SAY("================= Skipping test %s ================\n", # NAME ); \
@@ -261,6 +368,11 @@ int main(int argc, char **argv) {
 	RUN_TEST(0012_produce_consume);
         RUN_TEST(0013_null_msgs);
         RUN_TEST(0014_reconsume_191);
+
+        if (tests_run_in_parallel) {
+                while (tests_running_cnt > 0)
+                        sleep(1);
+        }
 
         /* Wait for everything to be cleaned up since broker destroys are
 	 * handled in its own thread. */

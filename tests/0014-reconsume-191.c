@@ -382,12 +382,8 @@ static void test_produce_consume (void) {
                                                 2);
 	verify_consumed_msg_check();
 
-	/* Wait for everything to be cleaned up since broker destroys are
-	 * handled in its own thread. */
-	test_wait_exit(10);
+        verify_consumed_msg_check();
 
-	/* If we havent failed at this point then
-	 * there were no threads leaked */
 	return;
 }
 

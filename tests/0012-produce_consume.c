@@ -504,12 +504,6 @@ static void test_produce_consume (void) {
 	consume_messages_with_queues(testid, topic, partition_cnt, msgcnt);
 	verify_consumed_msg_check();
 
-	/* Wait for everything to be cleaned up since broker destroys are
-	 * handled in its own thread. */
-	test_wait_exit(10);
-
-	/* If we havent failed at this point then
-	 * there were no threads leaked */
 	return;
 }
 

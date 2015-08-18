@@ -129,11 +129,5 @@ int main_0005_order (int argc, char **argv) {
 	TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
 	rd_kafka_destroy(rk);
 
-	/* Wait for everything to be cleaned up since broker destroys are
-	 * handled in its own thread. */
-	test_wait_exit(10);
-
-	/* If we havent failed at this point then
-	 * there were no threads leaked */
 	return 0;
 }

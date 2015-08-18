@@ -108,11 +108,5 @@ int main_0001_multiobj (int argc, char **argv) {
 		rd_kafka_destroy(rk);
 	}
 
-	/* Wait for everything to be cleaned up since broker destroys are
-	 * handled in its own thread. */
-	test_wait_exit(10);
-
-	/* If we havent failed at this point then
-	 * there were no threads leaked */
 	return 0;
 }

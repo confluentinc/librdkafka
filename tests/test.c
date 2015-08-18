@@ -261,5 +261,12 @@ int main(int argc, char **argv) {
 	RUN_TEST(0012_produce_consume);
         RUN_TEST(0013_null_msgs);
         RUN_TEST(0014_reconsume_191);
+
+        /* Wait for everything to be cleaned up since broker destroys are
+	 * handled in its own thread. */
+	test_wait_exit(10);
+
+	/* If we havent failed at this point then
+	 * there were no threads leaked */
 	return r;
 }

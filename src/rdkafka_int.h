@@ -45,10 +45,10 @@ typedef int mode_t;
 #include "rdlog.h"
 #include "rdtime.h"
 #include "rdaddr.h"
+
 #include "rdkafka_transport.h"
 #include "rdkafka_timer.h"
 
-#include "rdsysqueue.h"
 
 #define RD_POLL_INFINITE  -1
 #define RD_POLL_NOWAIT     0
@@ -75,6 +75,16 @@ typedef int mode_t;
 #endif
 
 
+#define rd_kafka_assert(rk, cond) do {                                  \
+                if (unlikely(!(cond)))                                  \
+                        rd_kafka_crash(__FILE__,__LINE__, __FUNCTION__, \
+                                       (rk), "assert: " # cond);        \
+        } while (0)
+
+void
+RD_NORETURN
+rd_kafka_crash (const char *file, int line, const char *function,
+                rd_kafka_t *rk, const char *reason);
 
 
 #include "rdkafka_msg.h"
@@ -875,20 +885,10 @@ void rd_kafka_anyconf_destroy (int scope, void *conf);
 
 extern rd_atomic32_t rd_kafka_thread_cnt_curr;
 
-#define RD_KAFKA_SEND_END -1
+extern char RD_TLS rd_kafka_thread_name[64];
 
 
 
-int pthread_cond_timedwait_ms (cnd_t *cond,
-			       mtx_t *mutex,
-			       int timeout_ms);
-
-
-#define rd_kafka_assert(rk, cond) do {                                  \
-                if (unlikely(!(cond)))                                  \
-                        rd_kafka_crash(__FILE__,__LINE__, __FUNCTION__, \
-                                       (rk), "assert: " # cond);        \
-        } while (0)
 
 void
 RD_NORETURN

@@ -128,6 +128,13 @@ typedef struct rd_kafkap_str_s {
 #define RD_KAFKAP_STR_IS_NULL(kstr) \
 	((int16_t)be16toh((kstr)->len) == RD_KAFKAP_STR_LEN_NULL)
 
+/* strndupa() a Kafka string */
+#define RD_KAFKAP_STR_DUPA(kstr) strndupa((kstr)->str, RD_KAFKAP_STR_LEN(kstr))
+
+/* Initialize a kafka string to Null */
+#define RD_KAFKAP_STR_INIT_NULL  { htobe16(RD_KAFKAP_STR_LEN_NULL) }
+
+
 static __inline int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
 				     const rd_kafkap_str_t *b) RD_UNUSED;
 static __inline int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,

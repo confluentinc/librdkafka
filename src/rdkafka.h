@@ -221,9 +221,20 @@ typedef struct rd_kafka_message_s {
 				    * err!=0: Error string length */
 	void   *key;               /* err==0: Optional message key */
 	size_t  key_len;           /* err==0: Optional message key length */
-	int64_t offset;            /* Message offset (or offset for error
-				    * if err!=0 if applicable). */
-	void  *_private;           /* rdkafka private pointer: DO NOT MODIFY */
+	int64_t offset;            /* Consume:
+                                    *   Message offset (or offset for error
+				    *   if err!=0 if applicable).
+                                    * dr_msg_cb:
+                                    *   Message offset assigned by broker.
+                                    *   If produce.offset.report is set then
+                                    *   each message will have this field set,
+                                    *   otherwise only the last message in
+                                    *   each produced internal batch will
+                                    *   have this field set, otherwise 0. */
+	void  *_private;           /* Consume:
+                                    *   rdkafka private pointer: DO NOT MODIFY
+                                    * dr_msg_cb:
+                                    *   mgs_opaque from produce() call */
 } rd_kafka_message_t;
 
 

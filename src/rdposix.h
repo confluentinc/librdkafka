@@ -89,7 +89,14 @@
 /**
 * Misc
 */
-#define rd_usleep(usec)  usleep(usec)
+static __inline RD_UNUSED
+void rd_usleep (int usec) {
+        struct timespec req = {usec / 1000000, (long)(usec % 1000000) * 1000};
+
+        /* Retry until complete (issue #272) */
+        while (nanosleep(&req, &req) == -1 && errno == EINTR)
+                ;
+}
 
 
 /**

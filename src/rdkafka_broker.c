@@ -2168,14 +2168,90 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb) {
 
 
 /**
+ * Serve a toppar for producing.
+ * NOTE: toppar_lock(rktp) MUST NOT be held.
+ *
+ * Returns the number of messages produced.
+ */
+static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
+                                           rd_kafka_toppar_t *rktp,
+                                           int do_timeout_scan, rd_ts_t now) {
+        int cnt = 0;
+
+        rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
+                   "%.*s [%"PRId32"] %i+%i msgs",
+                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
+                                    rkt_topic),
+                   rktp->rktp_partition,
+                   rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
+                   rd_atomic32_get(&rktp->rktp_xmit_msgq.
+                                   rkmq_msg_cnt));
+
+        rd_kafka_toppar_lock(rktp);
+
+        /* Enforce ISR cnt (if set) */
+        if (unlikely(rktp->rktp_rkt->rkt_conf.enforce_isr_cnt >
+                     rktp->rktp_metadata.isr_cnt)) {
+
+                /* Trigger delivery report for
+                 * ISR failed msgs */
+                rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
+                                 RD_KAFKA_RESP_ERR__ISR_INSUFF);
+        }
+
+
+        if (rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt) > 0)
+                rd_kafka_msgq_concat(&rktp->rktp_xmit_msgq, &rktp->rktp_msgq);
+        rd_kafka_toppar_unlock(rktp);
+
+        /* Timeout scan */
+        if (unlikely(do_timeout_scan)) {
+                rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
+
+                if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq,
+                                           &timedout, now)) {
+                        /* Trigger delivery report for timed out messages */
+                        rd_kafka_dr_msgq(rktp->rktp_rkt, &timedout,
+                                         RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
+                }
+        }
+
+        if (rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) == 0)
+                return 0;
+
+        /* Attempt to fill the batch size, but limit
+         * our waiting to queue.buffering.max.ms
+         * and batch.num.messages. */
+        if (rktp->rktp_ts_last_xmit +
+            (rkb->rkb_rk->rk_conf.buffering_max_ms * 1000) > now &&
+            rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) <
+            rkb->rkb_rk->rk_conf.batch_num_messages) {
+                /* Wait for more messages */
+                return 0;
+        }
+
+        rktp->rktp_ts_last_xmit = now;
+
+        /* Send Produce requests for this toppar */
+        while (rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) > 0) {
+                int r = rd_kafka_broker_produce_toppar(rkb, rktp);
+                if (likely(r > 0))
+                        cnt += r;
+                else
+                        break;
+        }
+
+        return cnt;
+}
+
+
+/**
  * Producer serving
  */
 static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 	rd_ts_t last_timeout_scan = rd_clock();
-	rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
-        rd_kafka_msgq_t isrfailed = RD_KAFKA_MSGQ_INITIALIZER(isrfailed);
 
-		rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
+        rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
 	rd_kafka_broker_lock(rkb);
 
@@ -2197,78 +2273,15 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 		do {
 			cnt = 0;
 
+                        /* Try producing each toppar */
 			TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
-
-				rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
-					   "%.*s [%"PRId32"] %i+%i msgs",
-					   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
-							    rkt_topic),
-					   rktp->rktp_partition,
-					   rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
-					   rd_atomic32_get(&rktp->rktp_xmit_msgq.
-							   rkmq_msg_cnt));
-
-				rd_kafka_toppar_lock(rktp);
-
-                                /* Enforce ISR cnt (if set) */
-                                if (unlikely(rktp->rktp_rkt->rkt_conf.
-                                             enforce_isr_cnt >
-                                             rktp->rktp_metadata.isr_cnt))
-                                        rd_kafka_msgq_concat(&isrfailed,
-                                                             &rktp->rktp_msgq);
-
-				if (rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt) > 0)
-					rd_kafka_msgq_concat(&rktp->
-							     rktp_xmit_msgq,
-							     &rktp->rktp_msgq);
-				rd_kafka_toppar_unlock(rktp);
-
-				/* Timeout scan */
-				if (unlikely(do_timeout_scan))
-					rd_kafka_msgq_age_scan(&rktp->
-							       rktp_xmit_msgq,
-							       &timedout,
-							       now);
-
-				if (rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) == 0)
-					continue;
-				/* Attempt to fill the batch size, but limit
-				 * our waiting to queue.buffering.max.ms
-				 * and batch.num.messages. */
-				if (rktp->rktp_ts_last_xmit +
-				    (rkb->rkb_rk->rk_conf.
-				     buffering_max_ms * 1000) > now &&
-				    rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) <
-				    rkb->rkb_rk->rk_conf.
-				    batch_num_messages) {
-					/* Wait for more messages */
-					continue;
-				}
-
-				rktp->rktp_ts_last_xmit = now;
-
-				/* Send Produce requests for this toppar */
-				while (rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) > 0) {
-					int r = rd_kafka_broker_produce_toppar(
-						rkb, rktp);
-					if (likely(r > 0))
-						cnt += r;
-					else
-						break;
-				}
+                                cnt += rd_kafka_toppar_producer_serve(rkb, rktp,
+                                                                      do_timeout_scan, 
+                                                                      now);
 			}
 
 		} while (cnt);
 
-		/* Trigger delivery report for ISR failed messages */
-		if (unlikely(rd_atomic32_get(&isrfailed.rkmq_msg_cnt) > 0))
-			rd_kafka_dr_msgq(rkb->rkb_rk, &isrfailed,
-					 RD_KAFKA_RESP_ERR__ISR_INSUFF);
-
-		/* Trigger delivery report for timed out messages */
-		if (unlikely(rd_atomic32_get(&timedout.rkmq_msg_cnt) > 0))
-			rd_kafka_dr_msgq(rkb->rkb_rk, &timedout,
-					 RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
 
 		rd_kafka_broker_toppars_rdunlock(rkb);
 

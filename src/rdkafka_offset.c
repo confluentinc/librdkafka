@@ -677,6 +677,7 @@ void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp) {
 /**
  * Initialize toppar's offset store.
  * NOTE: toppar_lock(rktp) must be held.
+ * Locality: broker thread
  */
 void rd_kafka_offset_store_init (rd_kafka_toppar_t *rktp) {
         static const char *store_names[] = { "file", "broker" };

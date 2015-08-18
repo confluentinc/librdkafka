@@ -93,7 +93,7 @@ void rd_kafka_timer_stop (rd_kafka_t *rk, rd_kafka_timer_t *rtmr, int lock) {
 
 /**
  * Start the provided timer with the given interval.
- * Upon expiration of the interval the callback will be called in the
+ * Upon expiration of the interval (us) the callback will be called in the
  * main rdkafka thread, after callback return the timer will be restarted.
  *
  * Use rd_kafka_timer_stop() to stop a timer.

@@ -289,6 +289,8 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
 /**
  * Scan 'rkmq' for messages that have timed out and remove them from
  * 'rkmq' and add to 'timedout'.
+ *
+ * Returns the number of messages timed out.
  */
 int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_kafka_msgq_t *timedout,

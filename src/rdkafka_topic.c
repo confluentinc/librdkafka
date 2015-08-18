@@ -732,6 +732,7 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 
 /**
  * Remove all partitions from a topic, including the ua.
+ * WARNING: Any messages in partition queues will be LOST.
  */
 void rd_kafka_topic_partitions_remove (rd_kafka_topic_t *rkt) {
 	rd_kafka_toppar_t *rktp;

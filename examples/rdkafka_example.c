@@ -617,6 +617,9 @@ int main (int argc, char **argv) {
 		/* Stop consuming */
 		rd_kafka_consume_stop(rkt, partition);
 
+                while (rd_kafka_outq_len(rk) > 0)
+                        rd_kafka_poll(rk, 10);
+
 		/* Destroy topic */
 		rd_kafka_topic_destroy(rkt);
 

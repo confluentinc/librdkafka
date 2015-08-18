@@ -1594,11 +1594,22 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 		/* FALLTHRU */
 	}
 
-        /* produce.offset.report: Propagate assigned offset back to app. */
-        if (offset != -1 && rktp->rktp_rkt->rkt_conf.produce_offset_report) {
+        /* Propagate assigned offset back to app. */
+        if (likely(offset != -1)) {
                 rd_kafka_msg_t *rkm;
-                TAILQ_FOREACH(rkm, &request->rkbuf_msgq.rkmq_msgs, rkm_link)
-                        rkm->rkm_offset = offset++;
+                if (rktp->rktp_rkt->rkt_conf.produce_offset_report) {
+                        /* produce.offset.report: each message */
+                        TAILQ_FOREACH(rkm, &request->rkbuf_msgq.rkmq_msgs,
+                                      rkm_link)
+                                rkm->rkm_offset = offset++;
+                } else {
+                        /* Last message in each batch */
+                        rkm = TAILQ_LAST(&request->rkbuf_msgq.rkmq_msgs,
+                                         rd_kafka_msg_head_s);
+                        rkm->rkm_offset = offset +
+                                rd_atomic32_get(&request->rkbuf_msgq.
+                                                rkmq_msg_cnt);
+                }
         }
 
 	/* Enqueue messages for delivery report */

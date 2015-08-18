@@ -1441,21 +1441,24 @@ static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb) {
 		rd_kafka_broker_buf_enq0(rkb, rkbuf, 0/*tail*/);
 	}
 }
-	
+
 
 /**
  * Propagate delivery report for entire message queue.
  */
-void rd_kafka_dr_msgq (rd_kafka_t *rk,
+void rd_kafka_dr_msgq (rd_kafka_topic_t *rkt,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err) {
+        rd_kafka_t *rk = rkt->rkt_rk;
 
-	if ((rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) &&
+        if ((rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) &&
 	    (!rk->rk_conf.dr_err_only || err)) {
 		/* Pass all messages to application thread in one op. */
 		rd_kafka_op_t *rko;
 
 		rko = rd_kafka_op_new(RD_KAFKA_OP_DR);
 		rko->rko_err = err;
+                rd_kafka_topic_keep(rkt);
+                rko->rko_rkt = rkt;
 
 		/* Move all messages to op's msgq */
 		rd_kafka_msgq_move(&rko->rko_msgq, rkmq);
@@ -1599,7 +1602,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
         }
 
 	/* Enqueue messages for delivery report */
-	rd_kafka_dr_msgq(rkb->rkb_rk, &request->rkbuf_msgq, err);
+        rd_kafka_dr_msgq(rktp->rktp_rkt, &request->rkbuf_msgq, err);
 
 done:
 	rd_kafka_toppar_destroy(rktp); /* from produce_toppar() */

@@ -42,6 +42,8 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb);
 
 void rd_kafka_dr_msgq (rd_kafka_t *rk,
+
+void rd_kafka_dr_msgq (rd_kafka_topic_t *rkt,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);
 
 void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,

@@ -80,9 +80,9 @@ static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 void rd_kafka_toppar_destroy0 (rd_kafka_toppar_t *rktp) {
 
 	/* Clear queues */
-	rd_kafka_dr_msgq(rktp->rktp_rkt->rkt_rk, &rktp->rktp_xmit_msgq,
+	rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_xmit_msgq,
 			 RD_KAFKA_RESP_ERR__DESTROY);
-	rd_kafka_dr_msgq(rktp->rktp_rkt->rkt_rk, &rktp->rktp_msgq,
+	rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
 			 RD_KAFKA_RESP_ERR__DESTROY);
 	rd_kafka_q_purge(&rktp->rktp_fetchq);
 
@@ -935,7 +935,7 @@ static void rd_kafka_topic_assign_uas (rd_kafka_topic_t *rkt) {
 		rd_kafka_dbg(rk, TOPIC, "UAS",
 			     "%"PRId32"/%i messages failed partitioning in topic %s",
 			     rd_atomic32_get(&uas.rkmq_msg_cnt), cnt, rkt->rkt_topic->str);
-		rd_kafka_dr_msgq(rk, &failed,
+		rd_kafka_dr_msgq(rkt, &failed,
 				 rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS ?
 				 RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC :
 				 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);

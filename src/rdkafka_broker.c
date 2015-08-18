@@ -2109,8 +2109,8 @@ static void rd_kafka_broker_io_serve(rd_kafka_broker_t *rkb) {
 
 	/* Serve broker ops */
 	if (unlikely(rd_kafka_q_len(&rkb->rkb_ops) > 0))
-	while ((rko = rd_kafka_q_pop(&rkb->rkb_ops, RD_POLL_NOWAIT)))
-		rd_kafka_broker_op_serve(rkb, rko);
+                while ((rko = rd_kafka_q_pop(&rkb->rkb_ops, RD_POLL_NOWAIT)))
+                        rd_kafka_broker_op_serve(rkb, rko);
 
 	/* Periodic metadata poll */
 	if (unlikely(!rkb->rkb_rk->rk_conf.metadata_refresh_sparse &&

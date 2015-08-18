@@ -30,9 +30,6 @@
 
 extern const char *rd_kafka_broker_state_names[];
 
-#define rd_kafka_buf_keep(rkbuf) (void)rd_atomic32_add(&(rkbuf)->rkbuf_refcnt, 1)
-void rd_kafka_buf_destroy (rd_kafka_buf_t *rkbuf);
-
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 						   int32_t nodeid);
 
@@ -47,6 +44,23 @@ void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb);
 void rd_kafka_dr_msgq (rd_kafka_t *rk,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);
 
+void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
+                               int16_t ApiKey,
+                               rd_kafka_buf_t *rkbuf,
+                               void (*reply_cb) (
+                                       rd_kafka_broker_t *,
+                                       rd_kafka_resp_err_t err,
+                                       rd_kafka_buf_t *reply,
+                                       rd_kafka_buf_t *request,
+                                       void *opaque),
+                               void *opaque);
+
+void rd_kafka_broker_buf_enq_safe (rd_kafka_broker_t *rkb, int16_t ApiKey,
+                                   rd_kafka_buf_t *rkbuf,
+                                   rd_kafka_q_t *replyq,
+                                   void (*parse_cb) (rd_kafka_buf_t *reply,
+                                                     void *opaque),
+                                   void *opaque);
 
 void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
                                    int all_topics,
@@ -56,3 +70,5 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 rd_kafka_resp_err_t rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp,
                                                    int64_t offset);
+
+void rd_kafka_buf_op_serve (rd_kafka_op_t *rko);

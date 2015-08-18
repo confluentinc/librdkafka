@@ -48,6 +48,8 @@
 #include "rdkafka_broker.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_transport.h"
+#include "rdkafka_proto.h"
+#include "rdkafka_buf.h"
 #include "rdtime.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
@@ -141,202 +143,6 @@ static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
 
 
 
-void rd_kafka_buf_destroy (rd_kafka_buf_t *rkbuf) {
-
-	if (rd_atomic32_sub(&rkbuf->rkbuf_refcnt, 1) > 0)
-		return;
-
-	if (rkbuf->rkbuf_buf2)
-		rd_free(rkbuf->rkbuf_buf2);
-
-	if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FREE && rkbuf->rkbuf_buf)
-		rd_free(rkbuf->rkbuf_buf);
-
-	rd_free(rkbuf);
-}
-
-static void rd_kafka_buf_auxbuf_add (rd_kafka_buf_t *rkbuf, void *auxbuf) {
-	rd_kafka_assert(NULL, rkbuf->rkbuf_buf2 == NULL);
-	rkbuf->rkbuf_buf2 = auxbuf;
-}
-
-static void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex) {
-	rkbuf->rkbuf_msg.msg_iovlen = iovindex;
-}
-
-
-static struct iovec *rd_kafka_buf_iov_next (rd_kafka_buf_t *rkbuf) {
-	rd_kafka_assert(NULL,
-                        rkbuf->rkbuf_msg.msg_iovlen + 1 <= rkbuf->rkbuf_iovcnt);
-	return &rkbuf->rkbuf_iov[rkbuf->rkbuf_msg.msg_iovlen++];
-}
-
-/**
- * Pushes 'buf' & 'len' onto the previously allocated iov stack for 'rkbuf'.
- */
-static void rd_kafka_buf_push (rd_kafka_buf_t *rkbuf, void *buf, size_t len) {
-	struct iovec *iov;
-
-	iov = rd_kafka_buf_iov_next(rkbuf);
-
-	iov->iov_base = buf;
-	iov->iov_len = len;
-}
-
-/**
- * Simply pushes the write-buffer onto the iovec stack.
- * This is to be used when the rd_kafka_buf_write*() set of functions
- * are used to construct a buffer rather than individual rd_kafka_buf_push()es.
- */
-static void rd_kafka_buf_autopush (rd_kafka_buf_t *rkbuf) {
-        rd_kafka_buf_push(rkbuf, rkbuf->rkbuf_wbuf, rkbuf->rkbuf_wof);
-        rkbuf->rkbuf_wbuf += rkbuf->rkbuf_wof;
-        rkbuf->rkbuf_wof = 0;
-}
-
-
-/**
- * Write (copy) data to buffer at current write-buffer position.
- * There must be enough space allocated in the rkbuf.
- */
-static __inline void rd_kafka_buf_write (rd_kafka_buf_t *rkbuf,
-                                       const void *ptr, size_t len) {
-        /* Make sure there's enough room */
-        rd_kafka_assert(NULL,
-                        (rkbuf->rkbuf_wbuf + rkbuf->rkbuf_wof + len <=
-                         rkbuf->rkbuf_buf + rkbuf->rkbuf_size));
-
-        memcpy(rkbuf->rkbuf_wbuf + rkbuf->rkbuf_wof, ptr, len);
-        rkbuf->rkbuf_wof += len;
-}
-
-/**
- * Write int32_t to buffer.
- * The value will be endian-swapped before write.
- */
-static __inline void rd_kafka_buf_write_i32 (rd_kafka_buf_t *rkbuf, int32_t v) {
-        v = htobe32(v);
-        rd_kafka_buf_write(rkbuf, &v, sizeof(v));
-}
-
-/**
- * Write int64_t to buffer.
- * The value will be endian-swapped before write.
- */
-static __inline void rd_kafka_buf_write_i64 (rd_kafka_buf_t *rkbuf, int64_t v) {
-        v = htobe64(v);
-        rd_kafka_buf_write(rkbuf, &v, sizeof(v));
-}
-
-
-/**
- * Write (copy) Kafka string to buffer.
- */
-static __inline void rd_kafka_buf_write_kstr (rd_kafka_buf_t *rkbuf,
-                                            const rd_kafkap_str_t *kstr) {
-        rd_kafka_buf_write(rkbuf, kstr, RD_KAFKAP_STR_SIZE(kstr));
-}
-
-
-#define RD_KAFKA_HEADERS_IOV_CNT   2
-#define RD_KAFKA_PAYLOAD_IOV_MAX  (IOV_MAX-RD_KAFKA_HEADERS_IOV_CNT)
-
-static rd_kafka_buf_t *rd_kafka_buf_new (int iovcnt, size_t size) {
-	rd_kafka_buf_t *rkbuf;
-	const int iovcnt_fixed = RD_KAFKA_HEADERS_IOV_CNT;
-	size_t iovsize = sizeof(struct iovec) * (iovcnt+iovcnt_fixed);
-	size_t fullsize = iovsize + sizeof(*rkbuf) + size;
-
-	rkbuf = rd_malloc(fullsize);
-	memset(rkbuf, 0, sizeof(*rkbuf));
-
-	rkbuf->rkbuf_iov = (struct iovec *)(rkbuf+1);
-	rkbuf->rkbuf_iovcnt = (iovcnt+iovcnt_fixed);
-	rd_kafka_assert(NULL, rkbuf->rkbuf_iovcnt <= IOV_MAX);
-	rkbuf->rkbuf_msg.msg_iov = rkbuf->rkbuf_iov;
-
-	/* save the first two iovecs for the header + clientid */
-	rkbuf->rkbuf_msg.msg_iovlen = iovcnt_fixed;
-	memset(rkbuf->rkbuf_iov, 0, sizeof(*rkbuf->rkbuf_iov) * iovcnt_fixed);
-
-	rkbuf->rkbuf_size = size;
-	rkbuf->rkbuf_buf = ((char *)(rkbuf+1))+iovsize;
-        rkbuf->rkbuf_wbuf = rkbuf->rkbuf_buf;
-
-	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
-
-	rd_kafka_buf_keep(rkbuf);
-
-	return rkbuf;
-}
-
-/**
- * Create new rkbuf shadowing a memory region in rkbuf_buf2.
- */
-static rd_kafka_buf_t *rd_kafka_buf_new_shadow (void *ptr, size_t size) {
-	rd_kafka_buf_t *rkbuf;
-
-	rkbuf = rd_calloc(1, sizeof(*rkbuf));
-
-	rkbuf->rkbuf_buf2 = ptr;
-	rkbuf->rkbuf_len  = size;
-
-	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
-
-	rd_kafka_buf_keep(rkbuf);
-
-	return rkbuf;
-}
-
-static void rd_kafka_bufq_enq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
-	TAILQ_INSERT_TAIL(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
-	(void)rd_atomic32_add(&rkbufq->rkbq_cnt, 1);
-	(void)rd_atomic32_add(&rkbufq->rkbq_msg_cnt,
-                            rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
-}
-
-static void rd_kafka_bufq_deq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
-	TAILQ_REMOVE(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
-	rd_kafka_assert(NULL, rd_atomic32_get(&rkbufq->rkbq_cnt) > 0);
-	(void)rd_atomic32_sub(&rkbufq->rkbq_cnt, 1);
-	(void)rd_atomic32_sub(&rkbufq->rkbq_msg_cnt,
-                          rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
-}
-
-static void rd_kafka_bufq_init(rd_kafka_bufq_t *rkbufq) {
-	TAILQ_INIT(&rkbufq->rkbq_bufs);
-	rd_atomic32_set(&rkbufq->rkbq_cnt, 0);
-	rd_atomic32_set(&rkbufq->rkbq_msg_cnt, 0);
-}
-
-/**
- * Concat all buffers from 'src' to tail of 'dst'
- */
-static void rd_kafka_bufq_concat (rd_kafka_bufq_t *dst, rd_kafka_bufq_t *src) {
-	TAILQ_CONCAT(&dst->rkbq_bufs, &src->rkbq_bufs, rkbuf_link);
-	(void)rd_atomic32_add(&dst->rkbq_cnt, rd_atomic32_get(&src->rkbq_cnt));
-	(void)rd_atomic32_add(&dst->rkbq_msg_cnt, rd_atomic32_get(&src->rkbq_msg_cnt));
-	rd_kafka_bufq_init(src);
-}
-
-/**
- * Purge the wait-response queue.
- * NOTE: 'rkbufq' must be a temporary queue and not one of rkb_waitresps
- *       or rkb_outbufs since buffers may be re-enqueued on those queues.
- */
-static void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
-				 rd_kafka_bufq_t *rkbufq,
-				 rd_kafka_resp_err_t err) {
-	rd_kafka_buf_t *rkbuf, *tmp;
-
-	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
-
-	rd_rkb_dbg(rkb, QUEUE, "BUFQ", "Purging bufq with %i buffers",
-		   rd_atomic32_get(&rkbufq->rkbq_cnt));
-
-	TAILQ_FOREACH_SAFE(rkbuf, &rkbufq->rkbq_bufs, rkbuf_link, tmp)
-		rkbuf->rkbuf_cb(rkb, err, NULL, rkbuf, rkbuf->rkbuf_opaque);
-}
 
 
 
@@ -574,6 +380,17 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 				      rd_kafka_buf_t *rkbuf, int at_head) {
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
+        rkbuf->rkbuf_corrid = ++rkb->rkb_corrid;
+	rkbuf->rkbuf_reqhdr.CorrId = htobe32(rkbuf->rkbuf_corrid);
+
+        rkbuf->rkbuf_ts_enq = rd_clock();
+
+        /* Set timeout if not already set */
+        if (!rkbuf->rkbuf_ts_timeout)
+        	rkbuf->rkbuf_ts_timeout = rkbuf->rkbuf_ts_enq +
+                        rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
+
+
 	if (unlikely(at_head)) {
 		/* Insert message at head of queue */
 		rd_kafka_buf_t *prev;
@@ -601,49 +418,118 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 }
 
 
-static void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
-				      int16_t ApiKey,
-				      rd_kafka_buf_t *rkbuf,
-				      void (*reply_cb) (
-					      rd_kafka_broker_t *,
-					      rd_kafka_resp_err_t err,
-					      rd_kafka_buf_t *reply,
-					      rd_kafka_buf_t *request,
-					      void *opaque),
-				      void *opaque) {
-
-	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
-
-	rkbuf->rkbuf_corrid = ++rkb->rkb_corrid;
-
+/**
+ * Finalize a stuffed rkbuf for sending to broker.
+ */
+static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf, int16_t ApiKey) {
 	/* Header */
 	rkbuf->rkbuf_reqhdr.ApiKey = htobe16(ApiKey);
-	rkbuf->rkbuf_reqhdr.ApiVersion = 0;
-	rkbuf->rkbuf_reqhdr.CorrId = htobe32(rkbuf->rkbuf_corrid);
 
 	rkbuf->rkbuf_iov[0].iov_base = (void *)&rkbuf->rkbuf_reqhdr;
 	rkbuf->rkbuf_iov[0].iov_len  = sizeof(rkbuf->rkbuf_reqhdr);
 
 	/* Header ClientId */
-	rkbuf->rkbuf_iov[1].iov_base = (void *)rkb->rkb_rk->rk_clientid;
-	rkbuf->rkbuf_iov[1].iov_len =
-		RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_clientid);
-
-	rkbuf->rkbuf_cb = reply_cb;
-	rkbuf->rkbuf_opaque = opaque;
-
-	rkbuf->rkbuf_ts_enq = rd_clock();
+	rkbuf->rkbuf_iov[1].iov_base = (void *)rk->rk_conf.client_id;
+	rkbuf->rkbuf_iov[1].iov_len  = RD_KAFKAP_STR_SIZE(rk->rk_conf.client_id);
 
 	/* Calculate total message buffer length. */
 	rkbuf->rkbuf_of          = 0;
 	rkbuf->rkbuf_len         = rd_kafka_msghdr_size(&rkbuf->rkbuf_msg);
 	rkbuf->rkbuf_reqhdr.Size = be32toh(rkbuf->rkbuf_len-4);
+}
+
+void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
+                               int16_t ApiKey,
+                               rd_kafka_buf_t *rkbuf,
+                               void (*reply_cb) (
+                                       rd_kafka_broker_t *,
+                                       rd_kafka_resp_err_t err,
+                                       rd_kafka_buf_t *reply,
+                                       rd_kafka_buf_t *request,
+                                       void *opaque),
+                               void *opaque) {
+
+	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
+
+        rkbuf->rkbuf_cb     = reply_cb;
+	rkbuf->rkbuf_opaque = opaque;
+
+        rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf, ApiKey);
 
 	rd_kafka_broker_buf_enq0(rkb, rkbuf,
 				 (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLASH)?
 				 1/*head*/: 0/*tail*/);
 }
 
+
+
+/**
+ * Serve a buffer op.
+ */
+void rd_kafka_buf_op_serve (rd_kafka_op_t *rko) {
+        switch (rko->rko_type)
+        {
+        case RD_KAFKA_OP_RECV_BUF:
+                rko->rko_rkbuf->rkbuf_parse_cb(rko->rko_rkbuf, rko->rko_opaque);
+                break;
+        default:
+                rd_kafka_assert(NULL, !*"unknown buf op");
+        }
+}
+
+
+static void rd_kafka_buf_route_to_op (rd_kafka_broker_t *rkb,
+                                      rd_kafka_resp_err_t err,
+                                      rd_kafka_buf_t *reply,
+                                      rd_kafka_buf_t *request,
+                                      void *opaque) {
+        rd_kafka_op_t *rko = opaque;
+        rko->rko_type      = RD_KAFKA_OP_RECV_BUF;
+        rko->rko_rkbuf     = reply;
+        reply->rkbuf_err   = err;
+        reply->rkbuf_rkb   = rkb;
+        reply->rkbuf_parse_cb = request->rkbuf_parse_cb;
+        rd_kafka_broker_keep(rkb);
+        rd_kafka_buf_version_set(reply,
+                                 be16toh(request->rkbuf_reqhdr.ApiVersion));
+        rd_kafka_q_enq(rko->rko_replyq, rko);
+}
+
+/**
+ * Enqueue a buffer for tranmission to broker.
+ * Regarding _safe:
+ *   * This function must only be used from a non-broker thread,
+ *     the other enq functions must only be used from the broker thread.
+ *   * The response buffer is forwarded to 'replyq'.
+ *   * The 'replyq' server should dispatch rkbuf to parse_cb.
+ *
+ * NOTE: 'rkbuf' is no longer usable after this call (ownership shifted to rko).
+ .*/
+
+void rd_kafka_broker_buf_enq_safe (rd_kafka_broker_t *rkb, int16_t ApiKey,
+                                   rd_kafka_buf_t *rkbuf,
+                                   rd_kafka_q_t *replyq,
+                                   void (*parse_cb) (rd_kafka_buf_t *reply,
+                                                     void *opaque),
+                                   void *opaque) {
+
+        rd_kafka_op_t *rko;
+
+        rd_kafka_assert(rkb->rkb_rk, !thrd_is_current(rkb->rkb_thread));
+
+        rkbuf->rkbuf_cb       = rd_kafka_buf_route_to_op;
+        rkbuf->rkbuf_parse_cb = parse_cb;
+
+        rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf, ApiKey);
+
+        /* Create an op and enqueue it for broker thread. */
+        rko = rd_kafka_op_new(RD_KAFKA_OP_XMIT_BUF);
+        rko->rko_rkbuf        = rkbuf;
+        rko->rko_replyq       = replyq;
+        rko->rko_opaque       = opaque;
+	rkbuf->rkbuf_opaque   = rko;
+        rd_kafka_q_enq(&rkb->rkb_ops, rko);
+}
 
 static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 				     int16_t ApiKey,
@@ -658,8 +544,6 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 	rd_kafka_buf_t *rkbuf;
 
 	rkbuf = rd_kafka_buf_new(1, flags & RD_KAFKA_OP_F_FREE ? 0 : size);
-	rkbuf->rkbuf_ts_timeout = rd_clock() + 
-		rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
 	rkbuf->rkbuf_flags |= flags;
 
 	if (size > 0) {
@@ -681,132 +565,6 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
 
 
 
-/**
- * Memory reading helper macros to be used when parsing network responses.
- *
- * Assumptions:
- *   - data base pointer is in 'char *buf'
- *   - data total size is in 'size_t size'
- *   - current read offset is in 'size_t of' which must be initialized to 0.
- *   - the broker the message was received from must be 'rkb'
- *   - an 'err:' label must be available for error bailouts.
- */
-
-#define _FAIL(...) do {						\
-                if (log_decode_errors) {                                \
-                        rd_rkb_log(rkb, LOG_WARNING, "PROTOERR",        \
-                                   "Protocol parse failure at %s:%i",   \
-                                   __FUNCTION__, __LINE__);             \
-                        rd_rkb_log(rkb, LOG_WARNING, "PROTOERR", __VA_ARGS__);  \
-                }                                                       \
-                goto err;                                               \
-	} while (0)
-
-#define _REMAIN() (int)(size - of)
-
-#define _CHECK_LEN(len) do {						\
-		int _LEN = (int)(len);					\
-	if (unlikely(_LEN > _REMAIN())) {				\
-		_FAIL("expected %i bytes > %i remaining bytes",		\
-		      _LEN, (int)_REMAIN());				\
-		goto err;						\
-	}								\
-	} while (0)
-
-#define _SKIP(len) do {				\
-		_CHECK_LEN(len);		\
-		of += (len);			\
-	} while (0)
-
-/* Advance/allocate used space in marshall buffer.
- * Point PTR to available space of size LEN on success. */
-#define _MSH_ALLOC(PTR,LEN)  do {                                      \
-                int __LEN = (LEN);                                      \
-                if (msh_of + __LEN >= msh_size)                         \
-                        _FAIL("Not enough room in marshall buffer: "    \
-                              "%i+%i > %i",                             \
-                              msh_of, __LEN, msh_size);                 \
-                (PTR) = (void *)(msh_buf+msh_of);                       \
-                msh_of += __LEN;                                        \
-        } while(0)
-
-#define _READ(dstptr,len) do {			\
-		_CHECK_LEN(len);		\
-		memcpy((dstptr), buf+(of), (len));	\
-		of += (len);				\
-	} while (0)
-
-#define _READ_I64(dstptr) do {						\
-		_READ(dstptr, 8);					\
-		*(int64_t *)(dstptr) = be64toh(*(int64_t *)(dstptr));	\
-	} while (0)
-
-#define _READ_I32(dstptr) do {						\
-		_READ(dstptr, 4);					\
-		*(int32_t *)(dstptr) = be32toh(*(int32_t *)(dstptr));	\
-	} while (0)
-
-/* Same as _READ_I32 but does a direct assignment.
- * dst is assumed to be a scalar, not pointer. */
-#define _READ_I32A(dst) do {                                            \
-                int32_t _v;                                             \
-		_READ(&_v, 4);                                          \
-		dst = (int32_t) be32toh(_v);                 \
-	} while (0)
-
-#define _READ_I16(dstptr) do {						\
-		_READ(dstptr, 2);					\
-		*(int16_t *)(dstptr) = be16toh(*(int16_t *)(dstptr));	\
-	} while (0)
-
-#define _READ_I16A(dst) do {                                            \
-                int16_t _v;                                             \
-		_READ(&_v, 2);                                          \
-                dst = (int16_t)be16toh(_v);                 \
-	} while (0)
-
-
-/* Read Kafka String representation (2+N) */
-#define _READ_STR(kstr) do {					\
-		int _klen;					\
-		_CHECK_LEN(2);					\
-		kstr = (rd_kafkap_str_t *)((char *)buf+of);	\
-		_klen = RD_KAFKAP_STR_SIZE(kstr);		\
-                _CHECK_LEN(_klen);                              \
-		of += _klen;					\
-	} while (0)
-
-/* Read Kafka String representation (2+N) into nul-terminated C string.
- * Depends on a marshalling environment. */
-#define _READ_STR_MSH(dst) do {                                 \
-                rd_kafkap_str_t *_kstr;                         \
-		int _klen;					\
-		_CHECK_LEN(2);					\
-		_kstr = (rd_kafkap_str_t *)((char *)buf+of);	\
-		_klen = RD_KAFKAP_STR_SIZE(_kstr);		\
-                _CHECK_LEN(_klen);                              \
-		of += _klen;					\
-                _MSH_ALLOC(dst, _klen+1);                       \
-                memcpy(dst, _kstr->str, _klen);                  \
-                dst[_klen] = '\0';                              \
-	} while (0)
-
-/* Read Kafka Bytes representation (4+N) */
-#define _READ_BYTES(kbytes) do {				\
-		int32_t _klen;					\
-		_CHECK_LEN(4);					\
-		kbytes = (rd_kafkap_bytes_t *)((char *)buf+of);	\
-		_klen = RD_KAFKAP_BYTES_SIZE(kbytes);		\
-                _CHECK_LEN(_klen);                              \
-		of += (_klen);					\
-	} while (0)
-
-/* Reference memory, dont copy it */
-#define _READ_REF(dstptr,len) do {			\
-		_CHECK_LEN(len);			\
-		(dstptr) = (void *)((char *)buf+of);	\
-		of += (len);				\
-	} while(0)
 
 
 
@@ -822,7 +580,7 @@ static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
  */
 static struct rd_kafka_metadata *
 rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
-                          rd_kafka_op_t *rko, const char *buf, size_t size) {
+                          rd_kafka_op_t *rko, rd_kafka_buf_t *rkbuf) {
 	int i, j, k;
 	int of = 0;
 	int req_rkt_seen = 0;
@@ -835,7 +593,7 @@ rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
 
         /* We assume that the marshalled representation is
          * no more than 4 times larger than the wire representation. */
-        msh_size = sizeof(*md) + rkb_namelen + (size * 4);
+        msh_size = sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_len * 4);
         msh_buf = rd_malloc(msh_size);
 
         _MSH_ALLOC(md, sizeof(*md));
@@ -1015,10 +773,8 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
                                    "Metadata request failed: %s",
                                    rd_kafka_err2str(err));
 	} else {
-		md = rd_kafka_metadata_handle(rkb, rko,
-                                              reply->rkbuf_buf2,
-                                              reply->rkbuf_len);
-	}
+		md = rd_kafka_metadata_handle(rkb, rko, reply);
+        }
 
         if (rko->rko_rkt) {
                 rd_kafka_topic_wrlock(rko->rko_rkt);
@@ -1069,7 +825,7 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
 	if (!thrd_is_current(rkb->rkb_thread)) { // FIXME
 		rd_rkb_dbg(rkb, METADATA, "METADATA",
 			"Request metadata: scheduled: not in broker thread");
-        rd_kafka_q_enq(&rkb->rkb_ops, rko);
+                rd_kafka_q_enq(&rkb->rkb_ops, rko);
 		return;
 	}
 
@@ -1302,9 +1058,10 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 	}
 
 	rd_rkb_dbg(rkb, PROTOCOL, "RECV",
-		   "Received %sResponse (%"PRIdsz" bytes, CorrId %"PRId32
+		   "Received %sResponse (v%hd, %"PRIdsz" bytes, CorrId %"PRId32
 		   ", rtt %.2fms)",
 		   rd_kafka_ApiKey2str(be16toh(req->rkbuf_reqhdr.ApiKey)),
+                   be16toh(req->rkbuf_reqhdr.ApiVersion),
 		   rkbuf->rkbuf_len, rkbuf->rkbuf_reshdr.CorrId,
 		   (float)req->rkbuf_ts_sent / 1000.0f);
 
@@ -1617,9 +1374,10 @@ static int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		}
 
 		rd_rkb_dbg(rkb, PROTOCOL, "SEND",
-			   "Sent %sRequest (%"PRIdsz" bytes, CorrId %"PRId32")",
+			   "Sent %sRequest (v%hd, %"PRIdsz" bytes, CorrId %"PRId32")",
 			   rd_kafka_ApiKey2str(be16toh(rkbuf->rkbuf_reqhdr.
 						     ApiKey)),
+                           be16toh(rkbuf->rkbuf_reqhdr.ApiVersion),
 			   rkbuf->rkbuf_len, rkbuf->rkbuf_corrid);
 
 		/* Entire buffer sent, unlink from outbuf */
@@ -1720,8 +1478,6 @@ void rd_kafka_dr_msgq (rd_kafka_t *rk,
 static rd_kafka_resp_err_t
 rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf,
                                int64_t *offsetp) {
-	char *buf = rkbuf->rkbuf_buf2;
-	size_t size = rkbuf->rkbuf_len;
 	size_t of = 0;
 	int32_t TopicArrayCnt;
 	rd_kafkap_str_t *topic;
@@ -2310,6 +2066,19 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                                                      rko->rko_offset);
                 break;
 
+        case RD_KAFKA_OP_XMIT_BUF:
+                rd_kafka_broker_buf_enq0(rkb, rko->rko_rkbuf,
+                                         (rko->rko_rkbuf->rkbuf_flags &
+                                          RD_KAFKA_OP_F_FLASH) ?
+                                         1/*head*/: 0/*tail*/);
+                rko->rko_rkbuf = NULL; /* buffer now owned by broker */
+                if (rko->rko_replyq) {
+                        /* Op will be reused for forwarding response. */
+                        rko = NULL;
+                }
+                break;
+
+
 	default:
 		rd_kafka_assert(rkb->rkb_rk, !*"unhandled op type");
 	}
@@ -2634,12 +2403,17 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 						       rd_kafka_toppar_t *rktp,
 						       rd_kafka_q_t *rkq,
-						       rd_kafka_buf_t *rkbuf,
+						       rd_kafka_buf_t *rkbuf_orig,
 						       void *buf, size_t size) {
 	size_t of = 0;
+        rd_kafka_buf_t *rkbuf; /* Slice of rkbuf_orig */
 	rd_kafka_buf_t *rkbufz;
         /* Dont log decode errors since Fetch replies may be partial. */
         const int log_decode_errors = 0;
+
+        /* Set up a shadow rkbuf for parsing the slice of rkbuf_orig
+         * pointed out by buf,size. */
+        rkbuf = rd_kafka_buf_new_shadow(buf, size);
 
 	if (_REMAIN() == 0)
 		_FAIL("%s [%"PRId32"] empty messageset",
@@ -2733,8 +2507,8 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			 * that makes sure all consume_cb() will have been
 			 * called for each of these ops before the rkbuf
 			 * and its rkbuf_buf2 are freed. */
-			rko->rko_rkbuf = rkbuf;
-			rd_kafka_buf_keep(rkbuf);
+			rko->rko_rkbuf = rkbuf_orig; /* original rkbuf */
+			rd_kafka_buf_keep(rkbuf_orig);
 
 			if (0)
 			rd_rkb_dbg(rkb, MSG, "MSG",
@@ -2855,11 +2629,21 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 	}
 
+        /* rkbuf is a temporary shadow of rkbuf_orig, reset buf2 pointer
+         * to avoid it being freed now. */
+        rkbuf->rkbuf_buf2 = NULL;
+        rd_kafka_buf_destroy(rkbuf);
 	return 0;
 
 err:
         /* Count all errors as partial message errors. */
         rd_atomic64_add(&rkb->rkb_c.rx_partial, 1);
+
+        /* rkbuf is a temporary shadow of rkbuf_orig, reset buf2 pointer
+         * to avoid it being freed now. */
+        rkbuf->rkbuf_buf2 = NULL;
+        rd_kafka_buf_destroy(rkbuf);
+
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -2879,8 +2663,6 @@ static void rd_kafka_broker_fetch_backoff (rd_kafka_broker_t *rkb) {
  */
 static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 							rd_kafka_buf_t *rkbuf) {
-	char *buf = rkbuf->rkbuf_buf2;
-	size_t size = rkbuf->rkbuf_len;
 	size_t of = 0;
 	int32_t TopicArrayCnt;
 	int i;
@@ -3023,7 +2805,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 
 			/* Parse and handle the message set */
 			err2 = rd_kafka_messageset_handle(rkb, rktp, &tmp_opq,
-							  rkbuf, buf+of,
+							  rkbuf, rkbuf->rkbuf_buf2+of,
 							  hdr->MessageSetSize);
 			if (err2) {
 				rd_kafka_toppar_destroy(rktp); /* from get2() */
@@ -3126,8 +2908,6 @@ rd_kafka_toppar_offsetcommit_reply_handle (rd_kafka_broker_t *rkb,
                                            rd_kafka_buf_t *rkbuf,
                                            rd_kafka_toppar_t *rktp,
                                            int64_t offset) {
-	char *buf = rkbuf->rkbuf_buf2;
-	size_t size = rkbuf->rkbuf_len;
 	size_t of = 0;
 	int32_t TopicArrayCnt;
 	int i;
@@ -3314,10 +3094,6 @@ static void rd_kafka_toppar_offsetcommit_request (rd_kafka_broker_t *rkb,
                    offset,
 		   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
 
-	rkbuf->rkbuf_ts_timeout = rd_clock() +
-		rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
-
-
 	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_OffsetCommit, rkbuf,
 				 rd_kafka_toppar_offsetcommit_reply, rktp);
 
@@ -3365,8 +3141,6 @@ static rd_kafka_resp_err_t
 rd_kafka_toppar_offsetfetch_reply_handle (rd_kafka_broker_t *rkb,
                                           rd_kafka_buf_t *rkbuf,
                                           rd_kafka_toppar_t *rktp) {
-	char *buf = rkbuf->rkbuf_buf2;
-	size_t size = rkbuf->rkbuf_len;
 	size_t of = 0;
 	int32_t TopicArrayCnt;
 	int i;
@@ -3437,8 +3211,6 @@ rd_kafka_toppar_offset_reply_handle (rd_kafka_broker_t *rkb,
                                      rd_kafka_buf_t *request,
 				     rd_kafka_buf_t *rkbuf,
 				     rd_kafka_toppar_t *rktp) {
-	char *buf = rkbuf->rkbuf_buf2;
-	size_t size = rkbuf->rkbuf_len;
 	size_t of = 0;
 	int32_t TopicArrayCnt;
 	int i;
@@ -3660,9 +3432,6 @@ static void rd_kafka_toppar_offsetfetch_request (rd_kafka_broker_t *rkb,
 		   "OffsetFetchRequest for topic %s [%"PRId32"]",
 		   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
 
-	rkbuf->rkbuf_ts_timeout = rd_clock() +
-		rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
-
 	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_OffsetFetch, rkbuf,
 				 rd_kafka_toppar_offset_reply, rktp);
 
@@ -3710,9 +3479,6 @@ static void rd_kafka_toppar_offset_request0 (rd_kafka_broker_t *rkb,
 	rd_kafka_buf_push(rkbuf, part2, sizeof(*part2));
 
 	rd_kafka_toppar_keep(rktp); /* refcnt for request */
-
-	rkbuf->rkbuf_ts_timeout = rd_clock() +
-		rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
 
         rkbuf->rkbuf_hndcb     = hndcb;
         rkbuf->rkbuf_hndopaque = hndopaque;

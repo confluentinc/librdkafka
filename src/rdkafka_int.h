@@ -78,7 +78,7 @@ typedef int mode_t;
 
 
 #include "rdkafka_proto.h"
-
+#include "rdkafka_buf.h"
 
 
 /**
@@ -380,67 +380,6 @@ typedef struct rd_kafka_msgq_s {
 	TAILQ_FOREACH(elm, &(head)->rkmq_msgs, rkm_link)
 
 
-typedef struct rd_kafka_buf_s {
-	TAILQ_ENTRY(rd_kafka_buf_s) rkbuf_link;
-
-	int32_t rkbuf_corrid;
-
-	rd_ts_t rkbuf_ts_retry;    /* Absolute send retry time */
-
-	int     rkbuf_flags; /* RD_KAFKA_OP_F */
-	struct msghdr rkbuf_msg;
-	struct iovec *rkbuf_iov;
-	int           rkbuf_iovcnt;
-	size_t  rkbuf_of;          /* recv/send: byte offset */
-	size_t  rkbuf_len;         /* send: total length */
-	size_t  rkbuf_size;        /* allocated size */
-
-	char   *rkbuf_buf;         /* Main buffer */
-	char   *rkbuf_buf2;        /* Aux buffer */
-
-        char   *rkbuf_wbuf;        /* Write buffer pointer (into rkbuf_buf) */
-        size_t  rkbuf_wof;         /* Write buffer offset */
-
-	struct rd_kafkap_reqhdr rkbuf_reqhdr;
-	struct rd_kafkap_reshdr rkbuf_reshdr;
-
-	int32_t rkbuf_expected_size;  /* expected size of message */
-
-	/* Response callback */
-	void  (*rkbuf_cb) (struct rd_kafka_broker_s *,
-			   rd_kafka_resp_err_t err,
-			   struct rd_kafka_buf_s *reprkbuf,
-			   struct rd_kafka_buf_s *reqrkbuf,
-			   void *opaque);
-
-        /* Handler callback: called after response has been parsed.
-         * The arguments are not predefined but varies depending on
-         * response type. */
-        void  (*rkbuf_hndcb) (void *);
-        void   *rkbuf_hndopaque;
-
-	rd_atomic32_t rkbuf_refcnt;
-	void   *rkbuf_opaque;
-
-	int     rkbuf_retries;
-
-	rd_ts_t rkbuf_ts_enq;
-	rd_ts_t rkbuf_ts_sent;    /* Initially: Absolute time of transmission,
-				   * after response: RTT. */
-	rd_ts_t rkbuf_ts_timeout;
-
-        int64_t rkbuf_offset;  /* Used by OffsetCommit */
-
-	rd_kafka_msgq_t rkbuf_msgq;
-} rd_kafka_buf_t;
-
-
-typedef struct rd_kafka_bufq_s {
-	TAILQ_HEAD(, rd_kafka_buf_s) rkbq_bufs;
-	rd_atomic32_t  rkbq_cnt;
-	rd_atomic32_t  rkbq_msg_cnt;
-} rd_kafka_bufq_t;
-
 
 
 typedef struct rd_kafka_q_s {
@@ -467,6 +406,8 @@ typedef enum {
 
 	RD_KAFKA_OP_METADATA_REQ, /* any -> Broker thread: request metadata */
         RD_KAFKA_OP_OFFSET_COMMIT /* any -> toppar's Broker thread */
+        RD_KAFKA_OP_XMIT_BUF, /* transmit buffer: any -> broker thread */
+        RD_KAFKA_OP_RECV_BUF, /* received response buffer: broker thr -> any */
 } rd_kafka_op_type_t;
 
 typedef struct rd_kafka_op_s {

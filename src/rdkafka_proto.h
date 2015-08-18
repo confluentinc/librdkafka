@@ -274,3 +274,7 @@ struct rd_kafka_TopicMetadata {
 	int32_t PartitionMetadata_cnt;
 };
 
+
+
+typedef struct rd_kafka_buf_s rd_kafka_buf_t;
+

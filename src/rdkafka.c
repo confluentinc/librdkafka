@@ -1257,7 +1257,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	rd_kafka_keep(rk); /* application refcnt */
 
-	pthread_rwlock_init(&rk->rk_lock, NULL);
+	pthread_rwlockattr_t rwattr;
+	pthread_rwlockattr_init(&rwattr);
+	pthread_rwlockattr_setkind_np(&rwattr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+	pthread_rwlock_init(&rk->rk_lock, &rwattr);
+	pthread_rwlockattr_destroy(&rwattr);
 
 	rd_kafka_q_init(&rk->rk_rep);
 

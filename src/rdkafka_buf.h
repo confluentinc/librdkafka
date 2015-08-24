@@ -212,6 +212,8 @@ typedef struct rd_kafka_buf_s {
 	rd_atomic32_t rkbuf_refcnt;
 	void   *rkbuf_opaque;
 
+        int32_t rkbuf_op_version;    /* Originating queue version,
+                                      * NOT THE PROTOCOL VERSION! */
 	int     rkbuf_retries;
 
 	rd_ts_t rkbuf_ts_enq;

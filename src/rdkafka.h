@@ -42,6 +42,9 @@
 
 #ifdef __cplusplus
 extern "C" {
+#if 0
+} /* Restore indent */
+#endif
 #endif
 
 #ifdef _MSC_VER
@@ -145,6 +148,7 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__TIMED_OUT = -185,    /* Operation timed out */
 	RD_KAFKA_RESP_ERR__QUEUE_FULL = -184,   /* Queue is full */
         RD_KAFKA_RESP_ERR__ISR_INSUFF = -183,   /* ISR count < required.acks */
+        RD_KAFKA_RESP_ERR__IN_USE = -182,       /* Already in use */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -804,6 +808,10 @@ int rd_kafka_consume_start_queue(rd_kafka_topic_t *rkt, int32_t partition,
  * Stop consuming messages for topic 'rkt' and 'partition', purging
  * all messages currently in the local queue.
  *
+ * NOTE: To enforce synchronisation this call will block until the internal
+ *       fetcher has terminated and offsets are commited to configured
+ *       storage method.
+ *
  * The application needs to be stop all consumers before calling
  * `rd_kafka_destroy()` on the main object handle.
  *
@@ -812,6 +820,27 @@ int rd_kafka_consume_start_queue(rd_kafka_topic_t *rkt, int32_t partition,
 RD_EXPORT
 int rd_kafka_consume_stop(rd_kafka_topic_t *rkt, int32_t partition);
 
+
+
+/**
+ * Seek consumer for topic+partition to `offset` which is either an
+ * absolute or logical offset.
+ *
+ * If `timeout_ms` is not 0 the call will wait this long for the
+ * seek to be performed. If the timeout is reached the internal state
+ * will be unknown and this function returns `RD_KAFKA_RESP_ERR__TIMED_OUT`.
+ * If `timeout_ms` is 0 it will initiate the seek but return
+ * immediately without any error reporting.
+ *
+ * This call triggers a fetch queue barrier flush.
+ *
+ * Returns `RD_KAFKA_RESP_ERR__NO_ERROR` on success else an error code.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *rkt,
+                                   int32_t partition,
+                                   int64_t offset,
+                                   int timeout_ms);
 
 /**
  * Consume a single message from topic 'rkt' and 'partition'.

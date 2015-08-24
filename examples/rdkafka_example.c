@@ -257,6 +257,8 @@ int main (int argc, char **argv) {
         int report_offsets = 0;
 	int do_conf_dump = 0;
 	char tmp[16];
+        int64_t seek_offset = 0;
+        int64_t tmp_offset;
 
 	quiet = !isatty(STDIN_FILENO);
 
@@ -270,7 +272,7 @@ int main (int argc, char **argv) {
 	/* Topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();
 
-	while ((opt = getopt(argc, argv, "PCLt:p:b:z:qd:o:eX:A")) != -1) {
+	while ((opt = getopt(argc, argv, "PCLt:p:b:z:qd:o:eX:As:")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -296,20 +298,26 @@ int main (int argc, char **argv) {
 			}
 			break;
 		case 'o':
+                case 's':
 			if (!strcmp(optarg, "end"))
-				start_offset = RD_KAFKA_OFFSET_END;
+				tmp_offset = RD_KAFKA_OFFSET_END;
 			else if (!strcmp(optarg, "beginning"))
-				start_offset = RD_KAFKA_OFFSET_BEGINNING;
+				tmp_offset = RD_KAFKA_OFFSET_BEGINNING;
 			else if (!strcmp(optarg, "stored"))
-				start_offset = RD_KAFKA_OFFSET_STORED;
+				tmp_offset = RD_KAFKA_OFFSET_STORED;
                         else if (!strcmp(optarg, "report"))
                                 report_offsets = 1;
 			else {
-				start_offset = strtoll(optarg, NULL, 10);
+				tmp_offset = strtoll(optarg, NULL, 10);
 
-				if (start_offset < 0)
-					start_offset = RD_KAFKA_OFFSET_TAIL(-start_offset);
+				if (tmp_offset < 0)
+					tmp_offset = RD_KAFKA_OFFSET_TAIL(-tmp_offset);
 			}
+
+                        if (opt == 'o')
+                                start_offset = tmp_offset;
+                        else if (opt == 's')
+                                seek_offset = tmp_offset;
 			break;
 		case 'e':
 			exit_eof = 1;
@@ -600,6 +608,7 @@ int main (int argc, char **argv) {
 
 		while (run) {
 			rd_kafka_message_t *rkmessage;
+                        rd_kafka_resp_err_t err;
 
 			/* Consume single message.
 			 * See rdkafka_performance.c for high speed
@@ -612,6 +621,18 @@ int main (int argc, char **argv) {
 
 			/* Return message to rdkafka */
 			rd_kafka_message_destroy(rkmessage);
+
+                        if (seek_offset) {
+                                err = rd_kafka_seek(rkt, partition, seek_offset,
+                                                    2000);
+                                if (err)
+                                        printf("Seek failed: %s\n",
+                                               rd_kafka_err2str(err));
+                                else
+                                        printf("Seeked to %"PRId64"\n",
+                                               seek_offset);
+                                seek_offset = 0;
+                        }
 		}
 
 		/* Stop consuming */

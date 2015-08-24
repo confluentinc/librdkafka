@@ -5,29 +5,15 @@
    fun:calloc
    fun:_dl_allocate_tls
    fun:pthread_create@@GLIBC_2.2.5
-   fun:rd_kafka_broker_add
 }
+
 {
-   libc_gethostbyname_1
-   Helgrind:Race
-   fun:_nss_files_gethostbyname2_r
-   fun:gethostbyname2_r@@GLIBC_2.2.5
-   fun:gaih_inet
-   fun:getaddrinfo
-   fun:rd_getaddrinfo
-   fun:rd_kafka_broker_resolve
-}
-{
-   pthread_create_tls
+   helgrind---_dl_allocate_tls
    Helgrind:Race
    fun:mempcpy
    fun:_dl_allocate_tls_init
-   fun:get_cached_stack
-   fun:allocate_stack
-   fun:pthread_create@@GLIBC_2.2.5
-   obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
-   fun:rd_kafka_new
-   fun:consume_messages_callback_multi
-   fun:test_produce_consume
-   fun:main
+   ...
+   fun:pthread_create@@GLIBC_2.2*
+   fun:pthread_create_WRK
+   fun:pthread_create@*
 }

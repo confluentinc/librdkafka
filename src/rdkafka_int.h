@@ -101,6 +101,7 @@ rd_kafka_crash (const char *file, int line, const char *function,
 
 
 #define RD_KAFKA_OFFSET_ERROR    -1001
+#define RD_KAFKA_OFFSET_IS_LOGICAL(OFF)  ((OFF) < 0)
 
 /* Forward declarations */
 struct rd_kafka_s;
@@ -392,10 +393,15 @@ typedef enum {
 			       * Produce message delivery report */
 	RD_KAFKA_OP_STATS,    /* Kafka thread -> Application */
 
-	RD_KAFKA_OP_METADATA_REQ, /* any -> Broker thread: request metadata */
-        RD_KAFKA_OP_OFFSET_COMMIT /* any -> toppar's Broker thread */
+	RD_KAFKA_OP_METADATA_REQ,  /* any -> Broker thread: request metadata */
+        RD_KAFKA_OP_OFFSET_COMMIT, /* any -> toppar's Broker thread */
+
+        RD_KAFKA_OP_REPLY,    /* generic replyq op */
         RD_KAFKA_OP_XMIT_BUF, /* transmit buffer: any -> broker thread */
         RD_KAFKA_OP_RECV_BUF, /* received response buffer: broker thr -> any */
+        RD_KAFKA_OP_FETCH_START, /* Application -> toppar's Broker thread */
+        RD_KAFKA_OP_FETCH_STOP,  /* Application -> toppar's Broker thread */
+        RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
 typedef struct rd_kafka_op_s {
@@ -412,6 +418,7 @@ typedef struct rd_kafka_op_s {
         rd_kafka_q_t   *rko_replyq;    /* Indicates request: enq reply
                                         * on this queue. */
         int             rko_intarg;    /* Generic integer argument */
+        void           *rko_opaque;
 
 	/* For PRODUCE */
 	rd_kafka_msg_t *rko_rkm;
@@ -421,7 +428,7 @@ typedef struct rd_kafka_op_s {
 #define rko_payload rko_rkmessage.payload
 #define rko_len     rko_rkmessage.len
 
-	/* For FETCH */
+	/* For FETCH & REPLY */
 	rd_kafka_message_t rko_rkmessage;
 	rd_kafka_buf_t    *rko_rkbuf;
 
@@ -435,11 +442,17 @@ typedef struct rd_kafka_op_s {
 #define rko_json      rko_rkmessage.payload
 #define rko_json_len  rko_rkmessage.len
 
-        /* For OFFSET_COMMIT */
+        /* For OFFSET_COMMIT, FETCH_START */
         struct rd_kafka_toppar_s *rko_rktp;
 #define rko_offset    rko_rkmessage.offset
 
+        /* For FETCH_START */
+#define rko_version   rko_intarg
 } rd_kafka_op_t;
+
+TAILQ_HEAD(rd_kafka_op_head_s, rd_kafka_op_s);
+
+
 
 
 
@@ -602,14 +615,25 @@ typedef struct rd_kafka_toppar_s {
                                                            * for this toppar. */
 	/* Consumer */
 	rd_kafka_q_t       rktp_fetchq;          /* Queue of fetched messages
-						  * from broker. */
+						  * from broker.
+                                                  * Broker thread -> App */
+        rd_kafka_q_t       rktp_ops;             /* App -> Broker thread */
+
+        rd_atomic32_t      rktp_version;         /* Latest op version.
+                                                  * Authoritative (app thread)*/
+        int32_t            rktp_op_version;      /* Latest op version.
+                                                  * Slave (broker thread)*/
+        int32_t            rktp_fetch_version;   /* Op version of curr fetch */
 
 	enum {
 		RD_KAFKA_TOPPAR_FETCH_NONE = 0,
+                RD_KAFKA_TOPPAR_FETCH_COORD_QUERY,
+                RD_KAFKA_TOPPAR_FETCH_COORD_WAIT,
 		RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
 		RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
 		RD_KAFKA_TOPPAR_FETCH_ACTIVE,
-	} rktp_fetch_state;
+	} rktp_fetch_state;           /* Broker thread's state */
+
 
 	rd_ts_t            rktp_ts_offset_req_next;
 	int64_t            rktp_query_offset;    /* Offset to query broker for*/
@@ -643,7 +667,8 @@ typedef struct rd_kafka_toppar_s {
 	struct {
 		rd_atomic64_t tx_msgs;
 		rd_atomic64_t tx_bytes;
-        rd_atomic64_t msgs;
+                rd_atomic64_t msgs;
+                rd_atomic64_t rx_ver_drops;
 	} rktp_c;
 
 } rd_kafka_toppar_t;
@@ -706,7 +731,7 @@ struct rd_kafka_s {
 
 	TAILQ_HEAD(, rd_kafka_timer_s) rk_timers;
 	mtx_t                rk_timers_lock;
-	cnd_t                 rk_timers_cond;
+	cnd_t                rk_timers_cond;
 
 	thrd_t rk_thread;
 };
@@ -771,6 +796,11 @@ rd_kafka_q_t *rd_kafka_q_new (void);
 int rd_kafka_q_destroy (rd_kafka_q_t *rkq);
 #define rd_kafka_q_keep(rkq) ((void)rd_atomic32_add(&(rkq)->rkq_refcnt, 1))
 
+int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
+		      int max_cnt,
+		      void (*callback) (rd_kafka_op_t *rko,
+					void *opaque),
+		      void *opaque);
 /**
  * Enqueue the 'rko' op at the tail of the queue 'rkq'.
  *
@@ -792,7 +822,8 @@ void rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 
 /**
  * Concat all elements of 'srcq' onto tail of 'rkq'.
- * 'dstq' will be be locked (if 'do_lock'==1), but 'srcq' will not.
+ * 'rkq' will be be locked (if 'do_lock'==1), but 'srcq' will not.
+ * NOTE: 'srcq' is not in a usable state after this call.
  *
  * Locality: any thread.
  */
@@ -815,6 +846,40 @@ void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 }
 
 #define rd_kafka_q_concat(dstq,srcq) rd_kafka_q_concat0(dstq,srcq,1/*lock*/)
+
+
+/**
+ * Prepend all elements of 'srcq' onto head of 'rkq'.
+ * 'rkq' will be be locked (if 'do_lock'==1), but 'srcq' will not.
+ *
+ * NOTE: 'srcq' is not in a usable state after this call.
+ *
+ * Locality: any thread.
+ */
+static __inline RD_UNUSED
+void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
+                          int do_lock) {
+	if (do_lock)
+		mtx_lock(&rkq->rkq_lock);
+	if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
+                /* Concat rkq on srcq */
+                TAILQ_CONCAT(&srcq->rkq_q, &rkq->rkq_q, rko_link);
+                /* Move srcq to rkq */
+                TAILQ_MOVE(&rkq->rkq_q, &srcq->rkq_q, rko_link);
+                TAILQ_INIT(&srcq->rkq_q);
+		rd_atomic32_add(&srcq->rkq_qlen,
+                                rd_atomic32_get(&rkq->rkq_qlen));
+		rd_atomic64_add(&srcq->rkq_qsize,
+                                rd_atomic64_get(&rkq->rkq_qsize));
+	} else
+		rd_kafka_q_prepend0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
+                                    srcq->rkq_fwdq ? srcq->rkq_fwdq : srcq,
+                                    rkq->rkq_fwdq ? do_lock : 0);
+	if (do_lock)
+		mtx_unlock(&rkq->rkq_lock);
+}
+
+#define rd_kafka_q_prepend(dstq,srcq) rd_kafka_q_prepend0(dstq,srcq,1/*lock*/)
 
 
 /* Returns the number of elements in the queue */
@@ -844,7 +909,8 @@ uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
 }
 
 
-rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms);
+rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
+                               int32_t version);
 
 void rd_kafka_q_purge (rd_kafka_q_t *rkq);
 
@@ -857,6 +923,7 @@ struct rd_kafka_queue_s {
 };
 
 
+const char *rd_kafka_op2str (rd_kafka_op_type_t type);
 void rd_kafka_op_destroy (rd_kafka_op_t *rko);
 rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type);
 void rd_kafka_op_reply2 (rd_kafka_t *rk, rd_kafka_op_t *rko);

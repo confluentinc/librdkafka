@@ -32,8 +32,14 @@ extern const char *rd_kafka_broker_state_names[];
 
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 						   int32_t nodeid);
+rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,
+                                                    int32_t nodeid,
+                                                    int state);
+#define rd_kafka_broker_find_by_nodeid(rk,nodeid) \
+        rd_kafka_broker_find_by_nodeid0(rk,nodeid,-1)
 
 rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state);
+rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state);
 
 void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 				   int do_rk_lock);
@@ -41,7 +47,8 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	rd_kafka_topic_leader_query0(rk,rkt,1)
 void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb);
 
-void rd_kafka_dr_msgq (rd_kafka_t *rk,
+void rd_kafka_broker_update (rd_kafka_t *rk,
+                             const struct rd_kafka_metadata_broker *mdb);
 
 void rd_kafka_dr_msgq (rd_kafka_topic_t *rkt,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);

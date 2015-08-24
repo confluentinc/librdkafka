@@ -108,6 +108,8 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_consume_queue(NULL, 0);
                 rd_kafka_consume_batch_queue(NULL, 0, NULL, 0);
                 rd_kafka_consume_callback_queue(NULL, 0, NULL, NULL);
+                rd_kafka_seek(NULL, 0, 0, 0);
+                rd_kafka_yield(NULL);
         }
 
 

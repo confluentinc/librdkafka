@@ -38,6 +38,8 @@
 
 const char *rd_kafka_fetch_states[] = {
 	"none",
+        "coord-query",
+        "coord-wait",
 	"offset-query",
 	"offset-wait",
 	"active"
@@ -69,6 +71,8 @@ static rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_topic_t *rkt,
 	mtx_init(&rktp->rktp_lock, mtx_plain);
 
 	rd_kafka_q_init(&rktp->rktp_fetchq);
+        rd_kafka_q_init(&rktp->rktp_ops);
+        rd_atomic32_set(&rktp->rktp_version, 1);
 
 	rd_kafka_toppar_keep(rktp);
 	rd_kafka_topic_keep(rkt);
@@ -85,6 +89,8 @@ void rd_kafka_toppar_destroy0 (rd_kafka_toppar_t *rktp) {
 	rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
 			 RD_KAFKA_RESP_ERR__DESTROY);
 	rd_kafka_q_purge(&rktp->rktp_fetchq);
+        rd_kafka_assert(rktp->rktp_rkt->rkt_rk, TAILQ_EMPTY(&rktp->rktp_ops.rkq_q));
+        rd_kafka_q_purge(&rktp->rktp_ops);
 
 	rd_kafka_topic_destroy0(rktp->rktp_rkt);
 
@@ -704,6 +710,7 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 	if (rktp->rktp_leader) {
 		if (rktp->rktp_leader == rkb) {
 			/* No change in broker */
+                        if (0) // FIXME
 			rd_kafka_dbg(rk, TOPIC, "TOPICUPD",
 				     "No leader change for topic %s "
 				     "[%"PRId32"] with leader %"PRId32,

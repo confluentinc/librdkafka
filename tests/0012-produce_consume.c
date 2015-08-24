@@ -255,7 +255,7 @@ static void verify_consumed_msg0 (const char *func, int line,
 		TEST_FAIL("Incoming message too large (%i): "
 			  "not sourced by this test",
 			  (int)rkmessage->len);
-		
+
 	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->len, (char *)rkmessage->payload);
 
@@ -432,12 +432,13 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 		if (rkmessage->err) {
                         if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF){
                                 rd_kafka_message_destroy(rkmessage);
-                                continue;
+				break;
                         }
 			TEST_FAIL("Consume message %i/%i from queue "
-				  "has error (partition %"PRId32"): %s",
+				  "has error (offset %"PRId64
+                                  ", partition %"PRId32"): %s",
 				  i, msgcnt,
-				  rkmessage->partition,
+				  rkmessage->offset, rkmessage->partition,
 				  rd_kafka_err2str(rkmessage->err));
                 }
 
@@ -469,7 +470,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
  * Consume with queue interface from both, simultanously.
  */
 static void test_produce_consume (void) {
-	int msgcnt = 10000;
+	int msgcnt = 1000;
 	int partition_cnt = 2;
 	int i;
 	uint64_t testid;

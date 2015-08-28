@@ -258,7 +258,7 @@ int main (int argc, char **argv) {
 	int do_conf_dump = 0;
 	char tmp[16];
         int64_t seek_offset = 0;
-        int64_t tmp_offset;
+        int64_t tmp_offset = 0;
 
 	quiet = !isatty(STDIN_FILENO);
 

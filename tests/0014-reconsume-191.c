@@ -414,11 +414,7 @@ static void test_produce_consume (void) {
 
         /* Read test.conf to configure topic name */
         test_conf_init(NULL, NULL, 20);
-<<<<<<< HEAD
         topic = test_mk_topic_name("0014", 1/*random*/);
-=======
-        topic = test_mk_topic_name("0014", 0);
->>>>>>> ae924fc... WIP: offsets, et.al.
 
 	TEST_SAY("Topic %s, testid %"PRIu64"\n", topic, testid);
 

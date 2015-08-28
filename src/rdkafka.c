@@ -503,7 +503,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 		      void (*callback) (rd_kafka_op_t *rko,
 					void *opaque),
 		      void *opaque) {
-	rd_kafka_op_t *rko, *tmp;
+	rd_kafka_op_t *rko;
 	rd_kafka_q_t localq;
         int cnt = 0;
 

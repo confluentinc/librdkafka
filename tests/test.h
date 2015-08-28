@@ -89,6 +89,23 @@ static __inline int64_t test_clock (void) {
 #endif
 }
 
+typedef struct test_timing_s {
+	char name[64];
+	int64_t ts_start;
+	int64_t duration;
+} test_timing_t;
+
+#define TIMING_START(TIMING,NAME) do {					\
+	snprintf((TIMING)->name, sizeof((TIMING)->name), "%s", (NAME)); \
+	(TIMING)->ts_start = test_clock();				\
+	(TIMING)->duration = 0;						\
+	} while (0)
+
+#define TIMING_STOP(TIMING) do {				\
+	(TIMING)->duration = test_clock() - (TIMING)->ts_start; \
+	TEST_SAY("%s: duration %.3fms\n",				\
+		 (TIMING)->name, (float)(TIMING)->duration / 1000.0f);	\
+	} while (0)
 
 #ifndef _MSC_VER
 #define rd_sleep(S) sleep(S)

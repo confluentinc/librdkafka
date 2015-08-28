@@ -252,10 +252,15 @@ struct run_args {
 static void *run_test_from_thread (void *arg) {
         struct run_args *run_args = arg;
         int r;
-
+	test_timing_t t_run;
+	
         pthread_detach(pthread_self());
 
+	TIMING_START(&t_run, run_args->testname);
+
         r = run_args->test_main(run_args->argc, run_args->argv);
+
+	TIMING_STOP(&t_run);
 
         TEST_SAY("================= Test %s %s =================\n",
                  run_args->testname, r ? "FAILED" : "PASSED");
@@ -303,9 +308,14 @@ static int run_test (const char *testname,
                 }
 #endif
         } else {
+		test_timing_t t_run;
+
+		TIMING_START(&t_run, testname);
                 tests_running_cnt++;
                 r = test_main(argc, argv);
                 tests_running_cnt--;
+		TIMING_STOP(&t_run);
+		
                 /* Wait for everything to be cleaned up since broker
                  * destroys are handled in its own thread. */
                 test_wait_exit(10);

@@ -96,7 +96,7 @@ typedef struct test_timing_s {
 } test_timing_t;
 
 #define TIMING_START(TIMING,NAME) do {					\
-	snprintf((TIMING)->name, sizeof((TIMING)->name), "%s", (NAME)); \
+	rd_snprintf((TIMING)->name, sizeof((TIMING)->name), "%s", (NAME)); \
 	(TIMING)->ts_start = test_clock();				\
 	(TIMING)->duration = 0;						\
 	} while (0)

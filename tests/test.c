@@ -229,7 +229,7 @@ void test_wait_exit (int timeout) {
 		TEST_FAIL("%i thread(s) still active in librdkafka", r);
 	}
 
-        timeout -= time(NULL) - start;
+        timeout -= (int)(time(NULL) - start);
         if (timeout > 0) {
                 if (rd_kafka_wait_destroyed(timeout * 1000) == -1)
 			TEST_FAIL("Not all internal librdkafka "
@@ -432,7 +432,7 @@ int main(int argc, char **argv) {
 
         if (tests_run_in_parallel) {
                 while (tests_running_cnt > 0)
-                        sleep(1);
+                        rd_sleep(1);
         }
 
         /* Wait for everything to be cleaned up since broker destroys are

@@ -284,9 +284,10 @@ static void verify_consumed_msg0 (const char *func, int line,
 static void consume_cb (rd_kafka_message_t *rkmessage, void *opaque) {
         int64_t testid = *(int64_t *)opaque;
 
-        TEST_SAY("Consumed message #%d? at offset %"PRId64": %s\n",
-                 cons_msg_next, rkmessage->offset,
-                 rd_kafka_err2str(rkmessage->err));
+	if (test_level > 2)
+		TEST_SAY("Consumed message #%d? at offset %"PRId64": %s\n",
+			 cons_msg_next, rkmessage->offset,
+			 rd_kafka_err2str(rkmessage->err));
 
         if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
                 TEST_SAY("EOF at offset %"PRId64"\n", rkmessage->offset);
@@ -347,6 +348,8 @@ static void consume_messages_callback_multi (const char *desc,
 		TEST_FAIL("%s: Failed to create topic: %s\n",
                           desc, rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
+	cons_msg_stop = cons_msg_next + msg_cnt - 1;
+
         /* Consume the same batch of messages multiple times to
          * make sure back-to-back start&stops work. */
         for (i = 0 ; i < iterations ; i++) {
@@ -365,14 +368,13 @@ static void consume_messages_callback_multi (const char *desc,
 
                 /* Stop consuming messages when this number of messages
                  * is reached. */
-                cons_msg_stop = cons_msg_next + msg_cnt - 1;
                 TEST_SAY("%s: Consume message range %d .. %d, or to %d + %d\n",
                          desc, cons_msg_next, cons_msg_stop, msg_base, msg_cnt);
                 cnta = cons_msg_next;
                 do {
                         rd_kafka_consume_callback(rkt, partition, 1000,
                                                   consume_cb, &testid);
-                } while (cons_msg_next < msg_base + msg_cnt);
+                } while (cons_msg_next < cons_msg_stop);
 
                 TEST_SAY("%s: Iteration #%i: consumed %i messages\n",
                          desc, i, cons_msg_next - cnta);
@@ -381,8 +383,11 @@ static void consume_messages_callback_multi (const char *desc,
 
                 /* Advance next offset so we dont reconsume
                  * messages on the next run. */
-                if (initial_offset != RD_KAFKA_OFFSET_STORED)
+                if (initial_offset != RD_KAFKA_OFFSET_STORED) {
                         initial_offset = cons_last_offset+1;
+			cons_msg_stop = cons_msg_next + msg_cnt - 1;
+		}
+
         }
 
 	/* Destroy topic */

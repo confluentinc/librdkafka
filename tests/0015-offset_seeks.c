@@ -111,7 +111,7 @@ void produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 		char buf[128];
 
 		test_msg_fmt(key, sizeof(key), testid, partition, msg_id);
-		snprintf(buf, sizeof(buf), "data: %s", key);
+		rd_snprintf(buf, sizeof(buf), "data: %s", key);
 
 		remains++;
 

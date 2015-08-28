@@ -126,3 +126,8 @@ void test_msg_parse0 (const char *func, int line,
 			testid,ptr,size,exp_partition,msgidp)
 
 
+static __inline int jitter (int low, int high) RD_UNUSED;
+static __inline int jitter (int low, int high) {
+	return (low + (rand() % (high+1)));
+	
+}

@@ -13,6 +13,7 @@ topic.metadata.refresh.fast.interval.ms  |  *  |           250 | See `topic.meta
 topic.metadata.refresh.sparse            |  *  |         false | Sparse metadata requests (consumes less network bandwidth)
 debug                                    |  *  |               | A comma-separated list of debug contexts to enable: all,generic,broker,topic,metadata,producer,queue,msg,protocol
 socket.timeout.ms                        |  *  |         60000 | Timeout for network requests.
+socket.blocking.max.ms                   |  *  |          1000 | Maximum time a broker socket operation may block.
 socket.send.buffer.bytes                 |  *  |             0 | Broker socket send buffer size. System default is used if 0.
 socket.receive.buffer.bytes              |  *  |             0 | Broker socket receive buffer size. System default is used if 0.
 socket.keepalive.enable                  |  *  |         false | Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets

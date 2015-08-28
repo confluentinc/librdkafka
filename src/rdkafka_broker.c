@@ -2164,8 +2164,10 @@ static void rd_kafka_broker_io_serve(rd_kafka_broker_t *rkb) {
 		rd_kafka_transport_poll_clear(rkb->rkb_transport, POLLOUT);
 
 	if ((revents = rd_kafka_transport_poll(rkb->rkb_transport,
-		rkb->rkb_rk->rk_conf.buffering_max_ms)) <= 0)
+					       rkb->rkb_rk->rk_conf.
+					       socket_blocking_max_ms)) <= 0) {
 		return;
+	}
 
 	if (revents & POLLIN)
 		while (rd_kafka_recv(rkb) > 0)

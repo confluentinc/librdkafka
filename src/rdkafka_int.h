@@ -146,6 +146,7 @@ struct rd_kafka_conf_s {
 	int     broker_addr_ttl;
         int     broker_addr_family;
 	int     socket_timeout_ms;
+	int     socket_blocking_max_ms;
 	int     socket_sndbuf_size;
 	int     socket_rcvbuf_size;
         int     socket_keepalive;

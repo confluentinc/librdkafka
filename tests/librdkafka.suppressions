@@ -17,3 +17,103 @@
    fun:pthread_create_WRK
    fun:pthread_create@*
 }
+{
+   drd_nss1
+   drd:ConflictingAccess
+   fun:pthread_mutex_lock
+   fun:_nss_files_gethostbyname4_r
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+
+{
+   drd_nss2
+   drd:ConflictingAccess
+   fun:strlen
+   fun:nss_load_library
+   fun:__nss_lookup_function
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+{
+   drd_nss3
+   drd:ConflictingAccess
+   fun:__GI_stpcpy
+   fun:nss_load_library
+   fun:__nss_lookup_function
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+{
+   drd_nss4
+   drd:ConflictingAccess
+   fun:strlen
+   fun:__nss_lookup_function
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+{
+   drd_nss5
+   drd:ConflictingAccess
+   fun:strlen
+   fun:__nss_lookup_function
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+{
+   drd_nss6
+   drd:ConflictingAccess
+   fun:internal_setent
+   fun:_nss_files_gethostbyname4_r
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+>>>>>>> 4d79b65... More drd suppressions for glibc getaddrinfo()

@@ -374,6 +374,7 @@ void rd_kafka_q_purge_toppar_version (rd_kafka_q_t *rkq,
 
 /**
  * Move 'cnt' entries from 'srcq' to 'dstq'.
+ * If 'cnt' == -1 all entries will be moved.
  * Returns the number of entries moved.
  */
 size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
@@ -389,7 +390,8 @@ size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 	if (!dstq->rkq_fwdq && !srcq->rkq_fwdq) {
 		/* Optimization, if 'cnt' is equal/larger than all
 		 * items of 'srcq' we can move the entire queue. */
-		if (cnt >= (size_t)rd_atomic32_get(&srcq->rkq_qlen)) {
+		if (cnt == -1 ||
+		    cnt >= (size_t)rd_atomic32_get(&srcq->rkq_qlen)) {
 			TAILQ_CONCAT(&dstq->rkq_q, &srcq->rkq_q, rko_link);
 			mcnt = rd_atomic32_get(&srcq->rkq_qlen);
 			(void)rd_atomic32_add(&dstq->rkq_qlen, rd_atomic32_get(&srcq->rkq_qlen));
@@ -493,6 +495,7 @@ void rd_kafka_yield (rd_kafka_t *rk) {
 /**
  * Pop all available ops from a queue and call the provided 
  * callback for each op.
+ * `max_cnt` limits the number of ops served, 0 = no limit.
  *
  * Returns the number of ops served.
  *
@@ -536,7 +539,8 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 	/* Move the first `max_cnt` ops. */
 	rd_kafka_q_init(&localq);
-	rd_kafka_q_move_cnt(&localq, rkq, max_cnt, 0/*no-locks*/);
+	rd_kafka_q_move_cnt(&localq, rkq, max_cnt == 0 ? -1/*all*/ : max_cnt,
+			    0/*no-locks*/);
 
         mtx_unlock(&rkq->rkq_lock);
 

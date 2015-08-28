@@ -279,7 +279,7 @@ static __inline void rd_kafka_buf_update (rd_kafka_buf_t *rkbuf, int of,
                                           const void *data, size_t len) {
         int remain = rkbuf->rkbuf_size - (of + len);
         rd_kafka_assert(NULL, remain >= 0);
-        rd_kafka_assert(NULL, of >= 0 && of < rkbuf->rkbuf_size);
+        rd_kafka_assert(NULL, of >= 0 && of < (int)rkbuf->rkbuf_size);
 
 
         memcpy(rkbuf->rkbuf_wbuf+of, data, len);

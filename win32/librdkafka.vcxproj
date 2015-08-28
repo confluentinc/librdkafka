@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -115,6 +115,7 @@
     <ClCompile Include="..\src\rdkafka_timer.c" />
     <ClCompile Include="..\src\rdkafka_topic.c" />
     <ClCompile Include="..\src\rdkafka_transport.c" />
+    <ClCompile Include="..\src\rdkafka_buf.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\snappy.c" />

@@ -1507,7 +1507,7 @@ static int rd_kafka_consume_start0 (rd_kafka_topic_t *rkt, int32_t partition,
                 /* logical offsets */
 
 	} else if (offset == RD_KAFKA_OFFSET_STORED) {
-		rd_kafka_offset_store_init(rktp);
+		/* offset manager */
 
 	} else if (offset < 0) {
 		rd_kafka_toppar_unlock(rktp);

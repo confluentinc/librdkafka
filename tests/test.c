@@ -222,15 +222,19 @@ void test_wait_exit (int timeout) {
 
 	TEST_SAY("%i thread(s) in use by librdkafka\n", r);
 
-        timeout -= time(NULL) - start;
-        if (timeout > 0)
-                rd_kafka_wait_destroyed(timeout * 1000);
-
 	if (r > 0) {
-		assert(0);
 		TEST_FAIL("%i thread(s) still active in librdkafka", r);
 	}
+
+        timeout -= time(NULL) - start;
+        if (timeout > 0) {
+                if (rd_kafka_wait_destroyed(timeout * 1000) == -1)
+			TEST_FAIL("Not all internal librdkafka "
+				  "objects destroyed\n");
+	}
+
 }
+
 
 
 /**

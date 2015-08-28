@@ -176,7 +176,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rkb->rkb_transport = NULL;
 	}
 
-    rkb->rkb_req_timeouts = 0;
+	rkb->rkb_req_timeouts = 0;
 
 	if (rkb->rkb_recv_buf) {
 		rd_kafka_buf_destroy(rkb->rkb_recv_buf);
@@ -288,9 +288,6 @@ static void rd_kafka_broker_waitresp_timeout_scan (rd_kafka_broker_t *rkb,
 
 		rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
 
-                printf("Message timed out (%"PRId64"us, %"PRIu64" vs %"PRIu64")\n",
-                       now - rkbuf->rkbuf_ts_timeout,
-                       now, rkbuf->rkbuf_ts_timeout);
 		rkbuf->rkbuf_cb(rkb, RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
 				NULL, rkbuf, rkbuf->rkbuf_opaque);
 		cnt++;
@@ -2833,11 +2830,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                          * ignore it. */
                         if (rktp->rktp_fetch_version <
                             rktp->rktp_op_version) {
-                                rd_atomic64_add(&rktp->rktp_c.
-                                                rx_ver_drops, 1);
-                                printf("rx ver drop %d < %d\n",
-                                       (int)rktp->rktp_fetch_version,
-                                       (int)rktp->rktp_op_version);
+                                rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
                                 rd_kafka_toppar_destroy(rktp); /* from get2 */
                                 _SKIP(hdr->MessageSetSize);
                                 continue;
@@ -2852,12 +2845,6 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				hdr->ErrorCode =
 					RD_KAFKA_RESP_ERR__PARTITION_EOF;
 				rktp->rktp_eof_offset = rktp->rktp_next_offset;
-                                printf("y.EOF at offset %"PRId64
-                                       " with fetch_ver %d, op_ver %d\n",
-                                       rktp->rktp_next_offset,
-                                       rktp->rktp_fetch_version,
-                                       rktp->rktp_op_version);
-
 			}
 
 
@@ -2890,11 +2877,6 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 							      "Fetch response");
 					break;
 				case RD_KAFKA_RESP_ERR__PARTITION_EOF:
-                                        printf("x.EOF at offset %"PRId64
-                                               " with fetch_ver %d, op_ver %d\n",
-                                               rktp->rktp_next_offset,
-                                               rktp->rktp_fetch_version,
-                                               rktp->rktp_op_version);
 				case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
 				default: /* and all other errors */
 					rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
@@ -3735,8 +3717,6 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
         /* Signal back to application thread that start has commenced */
         if (rko_orig->rko_replyq) {
                 rd_kafka_op_t *rko;
-
-                printf("reply\n");
                 rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH_START);
                 rko->rko_version = rko_orig->rko_version;
                 rd_kafka_toppar_keep(rktp);
@@ -4208,7 +4188,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_bufq_init(&rkb->rkb_waitresps);
 	rd_kafka_bufq_init(&rkb->rkb_retrybufs);
 	rd_kafka_q_init(&rkb->rkb_ops);
-    rd_kafka_avg_init(&rkb->rkb_avg_rtt, RD_KAFKA_AVG_GAUGE);
+	rd_kafka_avg_init(&rkb->rkb_avg_rtt, RD_KAFKA_AVG_GAUGE);
 	rd_kafka_broker_keep(rkb);
 
 	/* Set next intervalled metadata refresh, offset by a random

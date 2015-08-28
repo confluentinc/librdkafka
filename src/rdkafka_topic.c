@@ -532,7 +532,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
          * Either use from topic config object or parent rk handle */
         rkt->rkt_conf.group_id =
                 rd_kafkap_str_new(rkt->rkt_conf.group_id_str ?
-								  rkt->rkt_conf.group_id_str :
+				  rkt->rkt_conf.group_id_str :
                                   rkt->rkt_rk->rk_conf.group_id_str);
 
 	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",

@@ -632,9 +632,6 @@ static int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                     rd_atomic32_get(&rko->rko_rktp->rktp_version)) {
                         /* Outdated op, put on discard queue */
                         TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
-                        printf("Discard2 outdated rko version %i < %i\n",
-                               rko->rko_version, (int)rd_atomic32_get(&rko->rko_rktp->rktp_version));
-
                         continue;
                 }
 
@@ -1845,10 +1842,6 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_q_t *rkq,
 	}
 
 	/* Get rkmessage from rko */
-        printf("is op ver %d for ver %d & %d: %s\n", (int)rko->rko_version,
-               !rko->rko_rktp ? -1 : (int)rd_atomic32_get(&rko->rko_rktp->rktp_version),
-               !rko->rko_rktp ? -1 : (int)rko->rko_rktp->rktp_op_version,
-               rd_kafka_err2str(rko->rko_err));
 	rkmessage = rd_kafka_message_get(rko);
 
 	/* Store offset */

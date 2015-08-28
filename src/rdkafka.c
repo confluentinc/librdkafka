@@ -1676,6 +1676,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *rkt,
         rd_kafka_q_enq(&rktp->rktp_ops, rko);
 
 	rd_kafka_toppar_unlock(rktp);
+	rd_kafka_toppar_destroy(rktp);
 
         if (timeout_ms != 0) {
                 rko = rd_kafka_q_pop(&tmpq, timeout_ms, 0);

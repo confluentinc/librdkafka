@@ -379,8 +379,8 @@ typedef struct rd_kafka_q_s {
 					* for all operations. */
 	TAILQ_HEAD(, rd_kafka_op_s) rkq_q;
 	rd_atomic32_t rkq_qlen;      /* Number of entries in queue */
-    rd_atomic64_t rkq_qsize;     /* Size of all entries in queue */
-    rd_atomic32_t rkq_refcnt;
+	rd_atomic64_t rkq_qsize;     /* Size of all entries in queue */
+	rd_atomic32_t rkq_refcnt;
         int             rkq_flags;
 #define RD_KAFKA_Q_F_ALLOCATED  0x1  /* Allocated: rd_free on destroy */
 } rd_kafka_q_t;
@@ -802,6 +802,17 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 					void *opaque),
 		      void *opaque);
 /**
+ * Reset a queue.
+ * WARNING: All messages will be lost and leaked.
+ */
+static __inline RD_UNUSED
+void rd_kafka_q_reset (rd_kafka_q_t *rkq) {
+	TAILQ_INIT(&rkq->rkq_q);
+	rd_atomic32_set(&rkq->rkq_qlen, 0);
+	rd_atomic64_set(&rkq->rkq_qsize, 0);
+}
+
+/**
  * Enqueue the 'rko' op at the tail of the queue 'rkq'.
  *
  * Locality: any thread.
@@ -818,6 +829,20 @@ void rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 		rd_kafka_q_enq(rkq->rkq_fwdq, rko);
 
 	mtx_unlock(&rkq->rkq_lock);
+}
+
+
+/**
+ * Dequeue 'rko' from queue 'rkq'.
+ *
+ * NOTE: rkq_lock MUST be held
+ * Locality: any thread
+ */
+static __inline RD_UNUSED
+void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
+	TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
+	rd_atomic32_sub(&rkq->rkq_qlen, 1);
+	rd_atomic64_sub(&rkq->rkq_qsize, rko->rko_len);
 }
 
 /**
@@ -866,7 +891,6 @@ void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
                 TAILQ_CONCAT(&srcq->rkq_q, &rkq->rkq_q, rko_link);
                 /* Move srcq to rkq */
                 TAILQ_MOVE(&rkq->rkq_q, &srcq->rkq_q, rko_link);
-                TAILQ_INIT(&srcq->rkq_q);
 		rd_atomic32_add(&srcq->rkq_qlen,
                                 rd_atomic32_get(&rkq->rkq_qlen));
 		rd_atomic64_add(&srcq->rkq_qsize,

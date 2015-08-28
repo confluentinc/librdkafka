@@ -59,6 +59,12 @@ typedef struct rd_kafka_msgq_s {
 #define RD_KAFKA_MSGQ_FOREACH(elm,head) \
 	TAILQ_FOREACH(elm, &(head)->rkmq_msgs, rkm_link)
 
+/**
+ * Returns the number of messages in the specified queue.
+ */
+static __inline RD_UNUSED int rd_kafka_msgq_len (rd_kafka_msgq_t *rkmq) {
+	return (int)rd_atomic32_get(&rkmq->rkmq_msg_cnt);
+}
 
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm);

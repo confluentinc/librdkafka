@@ -245,15 +245,6 @@ int rd_kafka_q_destroy (rd_kafka_q_t *rkq) {
 }
 
 
-/**
- * Reset a queue.
- * WARNING: All messages will be lost and leaked.
- */
-static __inline void rd_kafka_q_reset (rd_kafka_q_t *rkq) {
-	TAILQ_INIT(&rkq->rkq_q);
-	rd_atomic32_set(&rkq->rkq_qlen, 0);
-	rd_atomic64_set(&rkq->rkq_qsize, 0);
-}
 
 /**
  * Initialize a queue.
@@ -443,9 +434,7 @@ static __inline rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
         if (unlikely(rko->rko_version && rko->rko_rktp &&
                      rko->rko_version <
                      rd_atomic32_get(&rko->rko_rktp->rktp_version))) {
-                TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
-                (void)rd_atomic32_sub(&rkq->rkq_qlen, 1);
-                (void)rd_atomic64_sub(&rkq->rkq_qsize, rko->rko_len);
+		rd_kafka_q_deq0(rkq, rko);
                 rd_kafka_op_destroy(rko);
                 return NULL;
         }
@@ -482,11 +471,9 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
 				cnd_wait(&rkq->rkq_cond, &rkq->rkq_lock);
 		}
 
-		if (rko) {
-			TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
-			(void)rd_atomic32_sub(&rkq->rkq_qlen, 1);
-			(void)rd_atomic64_sub(&rkq->rkq_qsize, rko->rko_len);
-		}
+		if (rko)
+			rd_kafka_q_deq0(rkq, rko);
+
 	} else
 		rko = rd_kafka_q_pop(rkq->rkq_fwdq, timeout_ms, version);
 
@@ -520,8 +507,6 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	rd_kafka_q_t localq;
         int cnt = 0;
 
-        rd_kafka_q_init(&localq);
-
 	mtx_lock(&rkq->rkq_lock);
 	if (rkq->rkq_fwdq) {
 		int ret = rd_kafka_q_serve(rkq->rkq_fwdq, timeout_ms, max_cnt,
@@ -550,6 +535,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	}
 
 	/* Move the first `max_cnt` ops. */
+	rd_kafka_q_init(&localq);
 	rd_kafka_q_move_cnt(&localq, rkq, max_cnt, 0/*no-locks*/);
 
         mtx_unlock(&rkq->rkq_lock);
@@ -559,7 +545,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	/* Call callback for each op */
         while ((rko = TAILQ_FIRST(&localq.rkq_q))) {
 		callback(rko, opaque);
-                TAILQ_REMOVE(&localq.rkq_q, rko, rko_link);
+		rd_kafka_q_deq0(&localq, rko);
 		rd_kafka_op_destroy(rko);
                 cnt++;
 
@@ -572,6 +558,8 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
                         break;
                 }
 	}
+
+	rd_kafka_q_destroy(&localq);
 
 	return cnt;
 }
@@ -637,9 +625,7 @@ static int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 		if (!rko)
 			break; /* Timed out */
 
-		TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
-		(void)rd_atomic32_sub(&rkq->rkq_qlen, 1);
-		(void)rd_atomic64_sub(&rkq->rkq_qsize, rko->rko_len);
+		rd_kafka_q_deq0(rkq, rko);
 
                 if (rko->rko_version && rko->rko_rktp &&
                     rko->rko_version <
@@ -978,13 +964,10 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 	}
 #endif
 
-        /* Disable logging since application's logger might be freed
-         * shortly after this function returns. */
-        rk->rk_conf.log_level = -1;
+	/* Purge op-queue */
+	rd_kafka_q_purge(&rk->rk_rep);
 
 	rd_kafka_rdunlock(rk);
-
-	/* Brokers pick up on rk_terminate automatically. */
 
 	rd_kafka_destroy0(rk);
 }
@@ -1579,14 +1562,16 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
         /* Stop queue forwarding. */
 	rd_kafka_q_fwd_set(&rktp->rktp_fetchq, NULL);
 
-        /* Purge receive queue (only effective if queue was not forwarded). */
+        /* Purge receive queue */
 	rd_kafka_q_purge_toppar_version(&rktp->rktp_fetchq, rktp,
                                         rko->rko_version);
 
-        rd_kafka_q_init(&tmpq);
         rko->rko_rktp = rktp;
-        rko->rko_replyq = &tmpq;
         rd_kafka_toppar_keep(rktp);
+	if (wait_sync) {
+		rd_kafka_q_init(&tmpq);
+		rko->rko_replyq = &tmpq;
+	}
         rd_kafka_q_enq(&rktp->rktp_ops, rko);
 
 	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "CONSUMER",
@@ -1598,17 +1583,25 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *rkt, int32_t partition) {
 	rd_kafka_toppar_unlock(rktp);
 
         /* Synchronisation: Wait for stop reply from broker thread */
-        while (wait_sync) {
+        while (1) {
                 rko = rd_kafka_q_pop(&tmpq, RD_POLL_INFINITE, version);
                 if (!rko)
                         continue;
                 if (rko->rko_version == version &&
-                    rko->rko_type == RD_KAFKA_OP_FETCH_STOP)
-                        wait_sync = 0;
+                    rko->rko_type == RD_KAFKA_OP_FETCH_STOP) {
+			rd_kafka_op_destroy(rko);
+			break;
+		}
 
                 rd_kafka_op_destroy(rko);
         }
-        rd_kafka_q_destroy(&tmpq);
+
+
+	if (wait_sync)
+		rd_kafka_q_destroy(&tmpq);
+
+	/* Flush the fetchq */
+	rd_kafka_q_purge_toppar_version(&rktp->rktp_fetchq, rktp, version);
 
         rd_kafka_toppar_destroy(rktp); /* .._get() */
 
@@ -1645,10 +1638,9 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *rkt,
         rko->rko_offset = offset;
         rko->rko_version = version = rd_atomic32_add(&rktp->rktp_version, 1);
 
-        /* Purge receive queue (only effective if queue was not forwarded). */
+        /* Purge receive queue */
 	rd_kafka_q_purge_toppar_version(&rktp->rktp_fetchq, rktp,
                                         rko->rko_version);
-
 
         rko->rko_rktp = rktp;
         rd_kafka_toppar_keep(rktp);

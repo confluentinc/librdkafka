@@ -756,6 +756,8 @@ void rd_kafka_topic_partitions_remove (rd_kafka_topic_t *rkt) {
 
 		rd_kafka_toppar_lock(rktp);
 		rd_kafka_msgq_purge(rkt->rkt_rk, &rktp->rktp_msgq);
+		rd_kafka_q_purge(&rktp->rktp_fetchq);
+		rd_kafka_q_purge(&rktp->rktp_ops);
 		rd_kafka_toppar_unlock(rktp);
 		rd_kafka_toppar_destroy(rktp); /* _get() */
 		rd_kafka_toppar_destroy(rktp); /* remove partition */

@@ -1487,6 +1487,9 @@ void rd_kafka_dr_msgq (rd_kafka_topic_t *rkt,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err) {
         rd_kafka_t *rk = rkt->rkt_rk;
 
+	if (unlikely(rd_kafka_msgq_len(rkmq) == 0))
+	    return;
+
         if ((rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb) &&
 	    (!rk->rk_conf.dr_err_only || err)) {
 		/* Pass all messages to application thread in one op. */
@@ -2915,6 +2918,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 							  rkbuf, rkbuf->rkbuf_buf2+of,
 							  hdr->MessageSetSize);
 			if (err2) {
+				rd_kafka_q_destroy(&tmp_opq);
 				rd_kafka_toppar_destroy(rktp); /* from get2() */
 				_FAIL("messageset handle failed");
 			}
@@ -2929,10 +2933,10 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   rd_kafka_q_len(&rktp->rktp_fetchq));
 
 			if (rd_atomic32_get(&tmp_opq.rkq_qlen) > 0) {
-                                (void)rd_atomic64_add(&rktp->rktp_c.msgs,
-                                                    rd_atomic32_get(&tmp_opq.rkq_qlen));
-				rd_kafka_q_concat(&rktp->rktp_fetchq,
-						  &tmp_opq);
+                                rd_atomic64_add(&rktp->rktp_c.msgs,
+						rd_atomic32_get(&tmp_opq.rkq_qlen));
+				rd_kafka_q_concat(&rktp->rktp_fetchq, &tmp_opq);
+ 				rd_kafka_q_reset(&tmp_opq);
                         }
 
 			rd_kafka_toppar_destroy(rktp); /* from get2() */
@@ -3736,11 +3740,14 @@ static void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
         rd_kafka_toppar_unlock(rktp);
 
         /* Signal back to application thread that stop is done. */
-        rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH_STOP);
-        rko->rko_version = rko_orig->rko_version;
-        rd_kafka_toppar_keep(rktp);
-        rko->rko_rktp = rktp;
-        rd_kafka_q_enq(rko_orig->rko_replyq, rko);
+	if (rko_orig->rko_replyq) {
+		rd_kafka_op_t *rko;
+		rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH_STOP);
+		rko->rko_version = rko_orig->rko_version;
+		rd_kafka_toppar_keep(rktp);
+		rko->rko_rktp = rktp;
+		rd_kafka_q_enq(rko_orig->rko_replyq, rko);
+	}
 }
 
 /**

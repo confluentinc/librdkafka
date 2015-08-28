@@ -112,3 +112,17 @@ typedef struct test_timing_s {
 #else
 #define rd_sleep(S) Sleep((S)*1000)
 #endif
+
+
+
+
+void test_msg_fmt (char *dest, size_t dest_size,
+		   uint64_t testid, int32_t partition, int msgid);
+void test_msg_parse0 (const char *func, int line,
+		      uint64_t testid, const void *ptr, size_t size,
+		      int32_t exp_partition, int *msgidp);
+#define test_msg_parse(testid,ptr,size,exp_partition,msgidp)	\
+	test_msg_parse0(__FUNCTION__,__LINE__,\
+			testid,ptr,size,exp_partition,msgidp)
+
+

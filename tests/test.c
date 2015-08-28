@@ -246,6 +246,49 @@ uint64_t test_id_generate (void) {
 }
 
 
+
+/**
+ * Format a message token
+ */
+void test_msg_fmt (char *dest, size_t dest_size,
+		   uint64_t testid, int32_t partition, int msgid) {
+
+	rd_snprintf(dest, dest_size,
+		    "testid=%"PRIu64", partition=%"PRId32", msg=%i",
+		    testid, partition, msgid);
+}
+
+
+
+/**
+ * Parse a message token
+ */
+void test_msg_parse0 (const char *func, int line,
+		      uint64_t testid, const void *ptr, size_t size,
+		      int32_t exp_partition, int *msgidp) {
+	char buf[128];
+	uint64_t in_testid;
+	int in_part;
+
+	if (!ptr)
+		TEST_FAIL("%s:%i: Message has empty key\n",
+			  func, line);
+
+	rd_snprintf(buf, sizeof(buf), "%.*s", (int)size, (char *)ptr);
+
+	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+		   &in_testid, &in_part, msgidp) != 3)
+		TEST_FAIL("%s:%i: Incorrect key format: %s", func, line, buf);
+
+
+	if (testid != in_testid ||
+	    (exp_partition != -1 && exp_partition != in_part))
+		TEST_FAIL("%s:%i: Our testid %"PRIu64", part %i did "
+			  "not match message: \"%s\"\n",
+		  func, line, testid, (int)exp_partition, buf);
+}
+
+
 #ifndef _MSC_VER
 struct run_args {
         const char *testname;

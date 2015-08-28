@@ -49,6 +49,10 @@ void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb);
 
 void rd_kafka_broker_update (rd_kafka_t *rk,
                              const struct rd_kafka_metadata_broker *mdb);
+rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
+					rd_kafka_confsource_t source,
+					const char *name, uint16_t port,
+					int32_t nodeid);
 
 void rd_kafka_dr_msgq (rd_kafka_topic_t *rkt,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);
@@ -77,7 +81,10 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
                                    rd_kafka_q_t *replyq,
                                    const char *reason);
 
+
 rd_kafka_resp_err_t rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp,
                                                    int64_t offset);
+
+rd_kafka_broker_t *rd_kafka_broker_internal (rd_kafka_t *rk);
 
 void rd_kafka_buf_op_serve (rd_kafka_op_t *rko);

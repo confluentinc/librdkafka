@@ -686,6 +686,11 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
         rktp->rktp_metadata.isrs     = NULL;
         rd_kafka_toppar_unlock(rktp);
 
+	/* Delegate toppars with no new leader to the internal broker
+	 * for bookkeeping. */
+	if (!rkb && !rd_atomic32_get(&rk->rk_terminate))
+		rkb = rd_kafka_broker_internal(rk);
+
 	if (!rkb) {
 		int had_leader = rktp->rktp_leader ? 1 : 0;
 

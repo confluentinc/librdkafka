@@ -941,12 +941,24 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
  *       librdkafka itself must use rd_kafka_destroy0(). */
 void rd_kafka_destroy (rd_kafka_t *rk) {
 	rd_kafka_topic_t *rkt, *rkt_tmp;
+	rd_kafka_broker_t *rkb;
 
+	/* Brokers pick up on rk_terminate automatically. */
 	rd_kafka_dbg(rk, GENERIC, "DESTROY", "Terminating instance");
 	(void)rd_atomic32_add(&rk->rk_terminate, 1);
 
+
+	/* Loose our special reference to the internal broker. */
+	rd_kafka_wrlock(rk);
+	rkb = rk->rk_internal_rkb;
+	rk->rk_internal_rkb = NULL;
+	rd_kafka_wrunlock(rk);
+	if (rkb)
+		rd_kafka_broker_destroy(rkb);
+
 	/* Decommission all topics */
 	rd_kafka_rdlock(rk);
+
 	TAILQ_FOREACH_SAFE(rkt, &rk->rk_topics, rkt_link, rkt_tmp) {
 		rd_kafka_rdunlock(rk);
 		rd_kafka_topic_partitions_remove(rkt);
@@ -1414,6 +1426,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		errno = err;
 		return NULL;
 	}
+
+	rd_kafka_wrlock(rk);
+	rk->rk_internal_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,
+						  "", 0, RD_KAFKA_NODEID_UA);
+	rd_kafka_broker_keep(rk->rk_internal_rkb);
+	rd_kafka_wrunlock(rk);
 
 	/* Add initial list of brokers from configuration */
 	if (rk->rk_conf.brokerlist)

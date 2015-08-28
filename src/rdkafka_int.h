@@ -462,6 +462,7 @@ TAILQ_HEAD(rd_kafka_op_head_s, rd_kafka_op_s);
 typedef enum {
 	RD_KAFKA_CONFIGURED,
 	RD_KAFKA_LEARNED,
+	RD_KAFKA_INTERNAL,
 } rd_kafka_confsource_t;
 
 
@@ -704,6 +705,8 @@ struct rd_kafka_s {
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
 	rd_atomic32_t              rk_broker_cnt;
 	rd_atomic32_t              rk_broker_down_cnt;
+	rd_kafka_broker_t         *rk_internal_rkb;
+
 	TAILQ_HEAD(, rd_kafka_topic_s)  rk_topics;
 	int              rk_topic_cnt;
 

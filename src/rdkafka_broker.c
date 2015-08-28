@@ -73,6 +73,7 @@ static void rd_kafka_toppar_offsetcommit_request (rd_kafka_broker_t *rkb,
 
 static void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
                                                 int64_t Offset, void *opaque);
+static void rd_kafka_toppar_op_serve (rd_kafka_toppar_t *rktp);
 
 static void msghdr_print (rd_kafka_t *rk,
 			  const char *what, const struct msghdr *msg,
@@ -159,6 +160,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	rd_kafka_toppar_t *rktp;
 	rd_kafka_bufq_t tmpq;
         int statechange;
+	rd_kafka_broker_t *internal_rkb;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
@@ -230,6 +232,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	/* Purge the buffers */
 	rd_kafka_bufq_purge(rkb, &tmpq, err);
 
+	internal_rkb = rd_kafka_broker_internal(rkb->rkb_rk);
 
 	/* Undelegate all toppars from this broker. */
 	rd_kafka_broker_toppars_wrlock(rkb);
@@ -246,7 +249,10 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 		rd_kafka_topic_wrlock(rktp->rktp_rkt);
 		/* Undelegate */
-		rd_kafka_toppar_broker_delegate(rktp, NULL);
+		rd_kafka_toppar_broker_delegate(rktp,
+						rkb != internal_rkb ?
+						internal_rkb : NULL);
+
 		rd_kafka_topic_wrunlock(rktp->rktp_rkt);
 
 		rd_kafka_toppar_destroy(rktp);
@@ -2196,8 +2202,22 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb) {
 	       rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
 		rd_ts_t now;
 
-		rd_kafka_broker_io_serve(rkb);
 
+		if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
+			rd_kafka_toppar_t *rktp;
+
+			rd_kafka_broker_toppars_rdlock(rkb);
+			TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
+				/* Serve toppar op queue to
+				   update desired rktp state */
+				rd_kafka_toppar_op_serve(rktp);
+			}
+			rd_kafka_broker_toppars_rdunlock(rkb);
+			rd_usleep(100000);
+			break;
+		}
+
+		rd_kafka_broker_io_serve(rkb);
                 now = rd_clock();
 
 		if (unlikely(last_timeout_scan + 1000000 < now)) {
@@ -3726,10 +3746,8 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 
 }
 
-/* FIXME: What takes over op_serve() when no leader broker? */
 static void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
                                         rd_kafka_op_t *rko_orig) {
-        rd_kafka_op_t *rko;
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "FETCH",
                      "Stopping fetch for %.*s [%"PRId32"] in state %s",
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
@@ -4054,6 +4072,11 @@ static int rd_kafka_broker_thread_main (void *arg) {
 			 * failure triggers a state transition which might
 			 * trigger a ALL_BROKERS_DOWN error. */
 		case RD_KAFKA_BROKER_STATE_DOWN:
+			if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
+				rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
+				break;
+			}
+
 			/* ..connect() will block until done (or failure) */
 			if (rd_kafka_broker_connect(rkb) == -1) {
 				/* Try the next one until we've tried them all,
@@ -4087,10 +4110,12 @@ static int rd_kafka_broker_thread_main (void *arg) {
 
 	}
 
-	rd_kafka_wrlock(rkb->rkb_rk);
-	TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
-	(void)rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
-	rd_kafka_wrunlock(rkb->rkb_rk);
+	if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
+		rd_kafka_wrlock(rkb->rkb_rk);
+		TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
+		(void)rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
+		rd_kafka_wrunlock(rkb->rkb_rk);
+	}
 	rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__DESTROY, NULL);
 	rd_kafka_broker_destroy(rkb);
 
@@ -4127,15 +4152,32 @@ void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
 	rd_free(rkb);
 }
 
+/**
+ * Returns the internal broker with refcnt increased.
+ * NOTE: rd_kafka_*lock() MUST NOT be held.
+ */
+rd_kafka_broker_t *rd_kafka_broker_internal (rd_kafka_t *rk) {
+	rd_kafka_broker_t *rkb;
+
+	rd_kafka_rdlock(rk);
+	rkb = rk->rk_internal_rkb;
+	rd_kafka_rdunlock(rk);
+
+	if (rkb)
+		rd_kafka_broker_keep(rkb);
+
+	return rkb;
+}
+
 
 /**
  *
  * Locks: rd_kafka_wrlock(rk) must be held
  */
-static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
-					       rd_kafka_confsource_t source,
-					       const char *name, uint16_t port,
-					       int32_t nodeid) {
+rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
+					rd_kafka_confsource_t source,
+					const char *name, uint16_t port,
+					int32_t nodeid) {
 	rd_kafka_broker_t *rkb;
 	int err;
 #ifndef _MSC_VER
@@ -4150,7 +4192,8 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 		 "%s:%hu", name, port);
 	if (nodeid == RD_KAFKA_NODEID_UA)
 		rd_snprintf(rkb->rkb_name, sizeof(rkb->rkb_name),
-			 "%s/bootstrap", rkb->rkb_nodename);
+			    "%s/%s", rkb->rkb_nodename,
+			    source == RD_KAFKA_INTERNAL?"internal":"bootstrap");
 	else
 		rd_snprintf(rkb->rkb_name, sizeof(rkb->rkb_name),
 			 "%s/%"PRId32, rkb->rkb_nodename, nodeid);
@@ -4216,12 +4259,13 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 		return NULL;
 	}
 
-	TAILQ_INSERT_TAIL(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
-	(void)rd_atomic32_add(&rkb->rkb_rk->rk_broker_cnt, 1);
-
-	rd_rkb_dbg(rkb, BROKER, "BROKER",
-		   "Added new broker with NodeId %"PRId32,
-		   rkb->rkb_nodeid);
+	if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
+		TAILQ_INSERT_TAIL(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
+		(void)rd_atomic32_add(&rkb->rkb_rk->rk_broker_cnt, 1);
+		rd_rkb_dbg(rkb, BROKER, "BROKER",
+			   "Added new broker with NodeId %"PRId32,
+			   rkb->rkb_nodeid);
+	}
 
 #ifndef _MSC_VER
 	/* Restore sigmask of caller */

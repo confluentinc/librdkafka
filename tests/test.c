@@ -28,10 +28,12 @@
 
 #include "test.h"
 #include <signal.h>
+#include <stdlib.h>
 
 #ifndef _MSC_VER
 #include <pthread.h>
 #endif
+
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
@@ -117,17 +119,18 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 
         if (conf) {
                 *conf = rd_kafka_conf_new();
-                *topic_conf = rd_kafka_topic_conf_new();
-
                 rd_kafka_conf_set_error_cb(*conf, test_error_cb);
         }
 
+	if (topic_conf)
+		*topic_conf = rd_kafka_topic_conf_new();
+
 	/* Open and read optional local test configuration file, if any. */
 #ifndef _MSC_VER
-		fp = fopen(test_conf, "r");
+	fp = fopen(test_conf, "r");
 #else
-		fp = NULL;
-		errno = fopen_s(&fp, test_conf, "r");
+	fp = NULL;
+	errno = fopen_s(&fp, test_conf, "r");
 #endif
 	if (!fp) {
 		if (errno == ENOENT)
@@ -174,7 +177,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
                         res = RD_KAFKA_CONF_OK;
                 } else if (!strncmp(name, "topic.", strlen("topic."))) {
 			name += strlen("topic.");
-                        if (conf)
+                        if (topic_conf)
                                 res = rd_kafka_topic_conf_set(*topic_conf,
                                                               name, val,
                                                               errstr,
@@ -425,6 +428,7 @@ int main(int argc, char **argv) {
 	RUN_TEST(0012_produce_consume);
         RUN_TEST(0013_null_msgs);
         RUN_TEST(0014_reconsume_191);
+	RUN_TEST(0015_offsets_seek);
 
         if (tests_run_in_parallel) {
                 while (tests_running_cnt > 0)
@@ -437,5 +441,7 @@ int main(int argc, char **argv) {
 
 	/* If we havent failed at this point then
 	 * there were no threads leaked */
+
+	TEST_SAY("\n============== ALL TESTS PASSED ==============\n");
 	return r;
 }

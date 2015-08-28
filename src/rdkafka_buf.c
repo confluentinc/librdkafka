@@ -58,7 +58,8 @@ void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex) {
 
 struct iovec *rd_kafka_buf_iov_next (rd_kafka_buf_t *rkbuf) {
 	rd_kafka_assert(NULL,
-                        rkbuf->rkbuf_msg.msg_iovlen + 1 <= rkbuf->rkbuf_iovcnt);
+                        (int)rkbuf->rkbuf_msg.msg_iovlen + 1 <=
+			rkbuf->rkbuf_iovcnt);
 	return &rkbuf->rkbuf_iov[rkbuf->rkbuf_msg.msg_iovlen++];
 }
 

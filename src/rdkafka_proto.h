@@ -85,7 +85,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 	};
 	static RD_TLS char ret[32];
 
-	if (ApiKey < 0 || ApiKey >= RD_ARRAYSIZE(names)) {
+	if (ApiKey < 0 || ApiKey >= (int)RD_ARRAYSIZE(names)) {
 		rd_snprintf(ret, sizeof(ret), "Unknown-%hd?", ApiKey);
 		return ret;
 	}
@@ -226,7 +226,7 @@ static __inline int rd_kafkap_bytes_cmp_bytes (const rd_kafkap_bytes_t *a,
 	RD_UNUSED;
 static __inline int rd_kafkap_bytes_cmp_bytes (const rd_kafkap_bytes_t *a,
 					     const void *data, size_t datalen) {
-	if (a->len != datalen)
+	if ((size_t)a->len != datalen)
 		return -1;
 	return memcmp(a->data, data, be32toh(a->len));
 }

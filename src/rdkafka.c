@@ -377,10 +377,10 @@ void rd_kafka_q_purge_toppar_version (rd_kafka_q_t *rkq,
  * If 'cnt' == -1 all entries will be moved.
  * Returns the number of entries moved.
  */
-size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
-			    size_t cnt, int do_locks) {
+int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
+			    int cnt, int do_locks) {
 	rd_kafka_op_t *rko;
-        size_t mcnt = 0;
+        int mcnt = 0;
 
         if (do_locks) {
 		mtx_lock(&srcq->rkq_lock);
@@ -391,7 +391,7 @@ size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 		/* Optimization, if 'cnt' is equal/larger than all
 		 * items of 'srcq' we can move the entire queue. */
 		if (cnt == -1 ||
-		    cnt >= (size_t)rd_atomic32_get(&srcq->rkq_qlen)) {
+		    cnt >= (int)rd_atomic32_get(&srcq->rkq_qlen)) {
 			TAILQ_CONCAT(&dstq->rkq_q, &srcq->rkq_q, rko_link);
 			mcnt = rd_atomic32_get(&srcq->rkq_qlen);
 			(void)rd_atomic32_add(&dstq->rkq_qlen, rd_atomic32_get(&srcq->rkq_qlen));

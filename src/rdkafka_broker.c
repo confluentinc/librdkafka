@@ -86,7 +86,7 @@ static void msghdr_print (rd_kafka_t *rk,
 	rd_kafka_dbg(rk, MSG, "MSG", "%s: iovlen %"PRIdsz"",
 		     what, (size_t)msg->msg_iovlen);
 
-	for (i = 0 ; i < msg->msg_iovlen ; i++) {
+	for (i = 0 ; i < (int)msg->msg_iovlen ; i++) {
 		rd_kafka_dbg(rk, MSG, what,
 			     " iov #%i: %"PRIdsz"",
 			     i, msg->msg_iov[i].iov_len);
@@ -100,7 +100,7 @@ static size_t rd_kafka_msghdr_size (const struct msghdr *msg) {
 	int i;
 	size_t tot = 0;
 
-	for (i = 0 ; i < msg->msg_iovlen ; i++)
+	for (i = 0 ; i < (int)msg->msg_iovlen ; i++)
 		tot += msg->msg_iov[i].iov_len;
 
 	return tot;
@@ -112,7 +112,7 @@ static size_t rd_kafka_msghdr_size (const struct msghdr *msg) {
  */
 static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
 				       int state) {
-	if (rkb->rkb_state == state)
+	if ((int)rkb->rkb_state == state)
 		return;
 
 	rd_kafka_dbg(rkb->rkb_rk, BROKER, "STATE",
@@ -197,7 +197,7 @@ static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		/* Insert broker name in log message if it fits. */
 		of = rd_snprintf(rkb->rkb_err.msg, sizeof(rkb->rkb_err.msg),
 			      "%s: ", rkb->rkb_name);
-		if (of >= sizeof(rkb->rkb_err.msg))
+		if (of >= (int)sizeof(rkb->rkb_err.msg))
 			of = 0;
 		va_start(ap, fmt);
 		vsnprintf(rkb->rkb_err.msg+of,
@@ -956,7 +956,7 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
-		if (rkb->rkb_state == state) {
+		if ((int)rkb->rkb_state == state) {
                         if (cnt < 1 || rd_jitter(0, cnt) < 1) {
                                 if (good)
                                         rd_kafka_broker_destroy(good);
@@ -985,7 +985,7 @@ rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, in
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
-		if (rkb->rkb_state == state) {
+		if ((int)rkb->rkb_state == state) {
                         if (broker_id != -1 && rkb->rkb_nodeid == broker_id) {
                                 if (good)
                                         rd_kafka_broker_destroy(good);
@@ -1125,7 +1125,7 @@ static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
 	dst->msg_iov = iov;
 	dst->msg_iovlen = 0;
 
-	for (i = 0 ; i < src->msg_iovlen ; i++) {
+	for (i = 0 ; i < (int)src->msg_iovlen ; i++) {
 		off_t vof = of - len;
 
 		if (0)
@@ -1838,8 +1838,8 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 		/* Value(payload) length */
 		msghdr->part4.Value_len = htobe32(rkm->rkm_payload ?
-                                                rkm->rkm_len :
-                                                RD_KAFKAP_BYTES_LEN_NULL);
+						  (int)rkm->rkm_len :
+						  RD_KAFKAP_BYTES_LEN_NULL);
 		msghdr->part3.Crc =
 			rd_crc32_update(msghdr->part3.Crc,
 					(void *)&msghdr->part4.Value_len,
@@ -1930,7 +1930,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 			/* Iterate through each message and compress it. */
 			for (i = iov_firstmsg ;
-			     i < rkbuf->rkbuf_msg.msg_iovlen ; i++) {
+			     i < (int)rkbuf->rkbuf_msg.msg_iovlen ; i++) {
 
 				if (rkbuf->rkbuf_msg.msg_iov[i].iov_len == 0)
 					continue;
@@ -2443,7 +2443,7 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 			uof += ulen;
 		}
 
-		if (unlikely(of != inlen)) {
+		if (unlikely(of != (ssize_t)inlen)) {
 			rd_rkb_dbg(rkb, MSG, "SNAPPY",
 				   "%"PRIdsz" trailing bytes in Snappy-java framed compressed "
 				   "data at offset %"PRId64": ignoring message",
@@ -4268,7 +4268,7 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,
 		rd_kafka_broker_lock(rkb);
 		if (!rd_atomic32_get(&rk->rk_terminate) &&
 		    rkb->rkb_nodeid == nodeid) {
-                        if (state != -1 && rkb->rkb_state != state) {
+                        if (state != -1 && (int)rkb->rkb_state != state) {
                                 rd_kafka_broker_unlock(rkb);
                                 break;
                         }

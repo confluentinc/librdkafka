@@ -77,7 +77,7 @@ static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 		int cof = 0;
 		int i;
 
-		for (i = of ; i < of + 16 && i < len ; i++) {
+		for (i = of ; i < (int)of + 16 && i < (int)len ; i++) {
 			hof += sprintf(hexen+hof, "%02x ", p[i] & 0xff);
 			cof += sprintf(charen+cof, "%c",
 				       isprint((int)p[i]) ? p[i] : '.');
@@ -403,7 +403,7 @@ int main (int argc, char **argv) {
 							       &cnt);
 			}
 
-			for (i = 0 ; i < cnt ; i += 2)
+			for (i = 0 ; i < (int)cnt ; i += 2)
 				printf("%s = %s\n",
 				       arr[i], arr[i+1]);
 

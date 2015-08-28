@@ -602,9 +602,9 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 				continue;
 
 			/* Match string to s2i table entry */
-			for (j = 0 ; j < RD_ARRAYSIZE(prop->s2i); j++) {
+			for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
 				if (!prop->s2i[j].str ||
-				    strlen(prop->s2i[j].str) != (int)(t-s) ||
+				    strlen(prop->s2i[j].str) != (size_t)(t-s) ||
 				    strncmp(prop->s2i[j].str, s, (int)(t-s)))
 					continue;
 
@@ -622,7 +622,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			}
 				
 			/* S2F: Good match: continue with next */
-			if (j < RD_ARRAYSIZE(prop->s2i))
+			if (j < (int)RD_ARRAYSIZE(prop->s2i))
 				continue;
 
 			/* No match */
@@ -948,7 +948,7 @@ static const char **rd_kafka_anyconf_dump (int scope, void *conf,
 			val = tmp;
 			break;
 		case _RK_C_S2I:
-			for (j = 0 ; j < RD_ARRAYSIZE(prop->s2i); j++) {
+			for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
 				if (prop->s2i[j].val ==
 				    *_RK_PTR(int *, conf, prop->offset)) {
 					val = prop->s2i[j].str;
@@ -1037,7 +1037,7 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 			fprintf(fp, "%13i", prop->vdef);
 			break;
 		case _RK_C_S2I:
-			for (j = 0 ; j < RD_ARRAYSIZE(prop->s2i); j++) {
+			for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
 				if (prop->s2i[j].val == prop->vdef) {
 					fprintf(fp, "%13s", prop->s2i[j].str);
 					break;

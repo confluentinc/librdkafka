@@ -942,8 +942,8 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
 
 void rd_kafka_q_purge (rd_kafka_q_t *rkq);
 
-size_t rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
-			    size_t cnt, int do_locks);
+int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
+			 int cnt, int do_locks);
 
 
 struct rd_kafka_queue_s {

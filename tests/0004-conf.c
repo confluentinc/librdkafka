@@ -74,7 +74,7 @@ static void conf_verify (int line,
 						  confs[i],
 						  confs[i+1], arr[j+1]);
 			}
-			if (j == cnt)
+			if (j == (int)cnt)
 				TEST_FAIL("%i: "
 					  "Property %s not found in config\n",
 					  line,

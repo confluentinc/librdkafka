@@ -139,7 +139,7 @@ static void msg_delivered (rd_kafka_t *rk,
               !(cnt.msgs_dr_err % (dispintvl / 1000)))) ||
 	    !last || msgs_wait_cnt < 5 ||
 	    !(msgs_wait_cnt % dr_disp_div) || 
-	    (now - last) >= dispintvl * 1000 ||
+	    (int)(now - last) >= dispintvl * 1000 ||
             verbosity >= 3) {
 		if (rkmessage->err && verbosity >= 2)
 			printf("%% Message delivery failed: %s (%li remain)\n",
@@ -246,7 +246,7 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 
         }
 
-        if (msgcnt != -1 && cnt.msgs >= msgcnt)
+        if (msgcnt != -1 && (int)cnt.msgs >= msgcnt)
                 run = 0;
 }
 
@@ -929,7 +929,7 @@ int main (int argc, char **argv) {
 
 		/* Copy payload content to new buffer */
 		while (rof < msgsize) {
-			size_t xlen = RD_MIN(msgsize-rof, plen);
+			size_t xlen = RD_MIN((int)msgsize-rof, plen);
 			memcpy(sbuf+rof, msgpattern, xlen);
 			rof += xlen;
 		}
@@ -974,7 +974,7 @@ int main (int argc, char **argv) {
 
 		cnt.t_start = rd_clock();
 
-		while (run && (msgcnt == -1 || cnt.msgs < msgcnt)) {
+		while (run && (msgcnt == -1 || (int)cnt.msgs < msgcnt)) {
 			/* Send/Produce message. */
 
 			if (idle) {

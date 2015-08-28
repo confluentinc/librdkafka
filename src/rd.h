@@ -257,7 +257,7 @@ void rd_interval_init (rd_interval_t *ri, int interval_us, int retry_delay_us) {
  */
 static __inline RD_UNUSED
 int rd_interval_next (rd_interval_t *ri, rd_ts_t now) {
-        return (int)(rd_atomic64_get(&ri->next) <= (uint64_t)now);
+        return (int)(rd_atomic64_get(&ri->next) <= (int64_t)now);
 }
 
 

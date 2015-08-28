@@ -260,7 +260,7 @@ static int rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp,
 
 		len = rd_snprintf(buf, sizeof(buf), "%"PRId64"\n", offset);
 
-		if (fwrite(buf, 1, len, rktp->rktp_offset_fp) == -1) {
+		if (fwrite(buf, 1, len, rktp->rktp_offset_fp) < 1) {
 			rd_kafka_op_err(rktp->rktp_rkt->rkt_rk,
 					RD_KAFKA_RESP_ERR__FS,
 					"%s [%"PRId32"]: "

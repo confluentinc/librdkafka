@@ -564,7 +564,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
  */
 static void rd_kafka_topic_set_state (rd_kafka_topic_t *rkt, int state) {
 
-        if (rkt->rkt_state == state)
+        if ((int)rkt->rkt_state == state)
                 return;
 
         rd_kafka_dbg(rkt->rkt_rk, TOPIC, "STATE",

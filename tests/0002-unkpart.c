@@ -76,6 +76,7 @@ int main_0002_unkpart (int argc, char **argv) {
 	char msg[128];
 	int msgcnt = 10;
 	int i;
+	int fails = 0;
         const struct rd_kafka_metadata *metadata;
 
 	test_conf_init(&conf, &topic_conf, 10);
@@ -119,12 +120,15 @@ int main_0002_unkpart (int argc, char **argv) {
 					 "unknown partition: good!\n", i);
 			else
 				TEST_FAIL("Failed to produce message #%i: %s\n",
-					  i, rd_strerror(errno));
+					  i, rd_kafka_err2str(
+						  rd_kafka_errno2err(errno)));
                         free(msgidp);
 		} else {
-			if (i > 5)
-				TEST_FAIL("Message #%i produced: "
-					  "should've failed\n", i);
+			if (i > 5) {
+				fails++;
+				TEST_SAY("Message #%i produced: "
+					 "should've failed\n", i);
+			}
 			msgs_wait |= (1 << i);
 		}
 
@@ -142,6 +146,10 @@ int main_0002_unkpart (int argc, char **argv) {
 
 	if (msgs_wait != 0)
 		TEST_FAIL("Still waiting for messages: 0x%x\n", msgs_wait);
+
+
+	if (fails > 0)
+		TEST_FAIL("See previous error(s)\n");
 
 	/* Destroy topic */
 	rd_kafka_topic_destroy(rkt);

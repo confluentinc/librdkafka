@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 
-set -eu
+set -e
 
 if [[ "$1" == "-n" ]]; then
     DO_DELETE=0
@@ -27,25 +27,30 @@ if [[ -z "$KATOPS" ]]; then
     exit 1
 fi
 
-
+set -u
 echo -n "Collecting list of matching topics... "
 TOPICS=$($KATOPS --zookeeper $ZK --list 2>/dev/null | grep "$RE") || true
 N_TOPICS=$(echo "$TOPICS" | wc -w)
 echo "$N_TOPICS topics found"
 
-[[ $DO_DELETE != 1 ]] && exit 0
 
 for t in $TOPICS; do
-    echo -n "Deleting topic $t... "
-    ($KATOPS --zookeeper $ZK --delete --topic "$t" 2>/dev/null && echo "deleted") || echo "failed"
+    if [[ $DO_DELETE == 1 ]]; then
+	echo -n "Deleting topic $t... "
+	($KATOPS --zookeeper $ZK --delete --topic "$t" 2>/dev/null && echo "deleted") || echo "failed"
+    else
+	echo "Topic $t"
+    fi
 done
 
 echo "Done"
 
-echo -n "Collecting list of matching topics... "
-TOPICS=$($KATOPS --zookeeper $ZK --list 2>/dev/null | grep "$RE") || true
-N_TOPICS=$(echo "$TOPICS" | wc -w)
-echo "$N_TOPICS topics found"
+if [[ $DO_DELETE == 1 ]]; then
+    echo -n "Collecting list of matching topics... "
+    TOPICS=$($KATOPS --zookeeper $ZK --list 2>/dev/null | grep "$RE") || true
+    N_TOPICS=$(echo "$TOPICS" | wc -w)
+    echo "$N_TOPICS topics found"
+fi
 
 
     

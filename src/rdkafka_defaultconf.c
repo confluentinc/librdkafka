@@ -353,7 +353,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "The application must be use the `dr_msg_cb` to retrieve the offset "
           "from `rd_kafka_message_t.offset`.",
           0, 1, 0 },
-	{ _RK_TOPIC|_RK_PRODUCER, "partitioner", _RK_C_PTR,
+	{ _RK_TOPIC|_RK_PRODUCER, "partitioner_cb", _RK_C_PTR,
 	  _RKT(partitioner),
 	  "Partitioner callback "
 	  "(set with rd_kafka_topic_conf_set_partitioner_cb())" },

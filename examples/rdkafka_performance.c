@@ -200,6 +200,10 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 		       rkmessage->offset,
 		       rd_kafka_message_errstr(rkmessage));
 
+                if (rkmessage->err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION ||
+                    rkmessage->err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
+                        run = 0;
+
                 cnt.msgs_dr_err++;
 		return;
 	}
@@ -929,7 +933,7 @@ int main (int argc, char **argv) {
 
 		/* Copy payload content to new buffer */
 		while (rof < msgsize) {
-			size_t xlen = RD_MIN((int)msgsize-rof, plen);
+			size_t xlen = RD_MIN((size_t)msgsize-rof, plen);
 			memcpy(sbuf+rof, msgpattern, xlen);
 			rof += xlen;
 		}
@@ -1146,7 +1150,7 @@ int main (int argc, char **argv) {
 		}
 
 		cnt.t_start = rd_clock();
-		while (run && (msgcnt == -1 || msgcnt > cnt.msgs)) {
+		while (run && (msgcnt == -1 || msgcnt > (int)cnt.msgs)) {
 			/* Consume messages.
 			 * A message may either be a real message, or
 			 * an error signaling (if rkmessage->err is set).

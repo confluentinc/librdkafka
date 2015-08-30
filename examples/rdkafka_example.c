@@ -154,6 +154,10 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 		       rkmessage->partition,
 		       rkmessage->offset,
 		       rd_kafka_message_errstr(rkmessage));
+
+                if (rkmessage->err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION ||
+                    rkmessage->err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
+                        run = 0;
 		return;
 	}
 

@@ -499,6 +499,8 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	    (conf &&
 	     (conf->message_timeout_ms < 0 ||
 	      conf->request_timeout_ms <= 0))) {
+		if (conf)
+			rd_kafka_topic_conf_destroy(conf);
 		errno = EINVAL;
 		return NULL;
 	}
@@ -851,6 +853,11 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_topic_t *rkt,
 
 	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA, 0);
 
+        /* Propagate notexist errors for desired partitions */
+        TAILQ_FOREACH(rktp, &rkt->rkt_desp, rktp_rktlink) {
+                rd_kafka_toppar_enq_error(rktp, RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
+        }
+
 	/* Remove excessive partitions if partition count decreased. */
 	for (; i < rkt->rkt_partition_cnt ; i++) {
 		rktp = rkt->rkt_p[i];
@@ -873,6 +880,7 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_topic_t *rkt,
                                           RD_KAFKA_TOPPAR_F_UNKNOWN));
 			rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
 			TAILQ_INSERT_TAIL(&rkt->rkt_desp, rktp, rktp_rktlink);
+                        rd_kafka_toppar_enq_error(rktp, RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
 		}
 		rd_kafka_toppar_unlock(rktp);
 
@@ -890,6 +898,45 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_topic_t *rkt,
 	rkt->rkt_partition_cnt = partition_cnt;
 
 	return 1;
+}
+
+
+/**
+ * Propagate error for toppar
+ */
+void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
+                                rd_kafka_resp_err_t err) {
+        rd_kafka_op_t *rko;
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
+        rko->rko_err                 = err;
+        rko->rko_rkmessage.rkt       = rktp->rktp_rkt;
+        rko->rko_rkmessage.partition = rktp->rktp_partition;
+        rko->rko_payload             = strdup(rd_kafka_err2str(rko->rko_err));
+        rko->rko_len                 = strlen(rko->rko_payload);
+        rko->rko_flags              |= RD_KAFKA_OP_F_FREE;
+        rd_kafka_topic_keep(rko->rko_rkmessage.rkt);
+
+        rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
+}
+
+
+/**
+ * Topic 'rkt' does not exist: propagate to interested parties.
+ * The topic's state must have been set to NOTEXISTS and
+ * rd_kafka_topic_partition_cnt_update() must have been called prior to
+ * calling this function.
+ *
+ * Locks: rd_kafka_topic_*lock() must be held.
+ */
+static void rd_kafka_topic_propagate_notexists (rd_kafka_topic_t *rkt) {
+        if (rkt->rkt_rk->rk_type == RD_KAFKA_CONSUMER) {
+                rd_kafka_toppar_t *rktp;
+
+                /* Notify consumers that the topic doesn't exist. */
+                TAILQ_FOREACH(rktp, &rkt->rkt_desp, rktp_rktlink)
+                        rd_kafka_toppar_enq_error(rktp, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+        }
 }
 
 
@@ -977,6 +1024,9 @@ void rd_kafka_topic_metadata_none (rd_kafka_topic_t *rkt) {
 	/* Purge messages with forced partition */
 	rd_kafka_topic_assign_uas(rkt);
 
+        /* Propagate nonexistent topic info */
+        rd_kafka_topic_propagate_notexists(rkt);
+
 	rd_kafka_topic_wrunlock(rkt);
 }
 
@@ -993,6 +1043,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 	int j;
         rd_kafka_broker_t **partbrokers;
         int query_leader = 0;
+        int old_state;
 
 	if (!(rkt = rd_kafka_topic_find(rkb->rkb_rk, mdt->topic, 1/*lock*/)))
 		return -1; /* Ignore topics that we dont have locally. */
@@ -1024,6 +1075,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 	rd_kafka_topic_wrlock(rkt);
 
+        old_state = rkt->rkt_state;
 	rkt->rkt_ts_metadata = rd_clock();
 
 	/* Set topic state */
@@ -1064,6 +1116,11 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 	/* Try to assign unassigned messages to new partitions, or fail them */
 	if (upd > 0 || rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
 		rd_kafka_topic_assign_uas(rkt);
+
+        /* Trigger notexists propagation */
+        if (old_state != (int)rkt->rkt_state &&
+            rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
+                rd_kafka_topic_propagate_notexists(rkt);
 
 	rd_kafka_topic_wrunlock(rkt);
 

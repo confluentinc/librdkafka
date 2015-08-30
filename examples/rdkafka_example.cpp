@@ -144,6 +144,12 @@ void msg_consume(RdKafka::Message* message, void* opaque) {
       }
       break;
 
+    case RdKafka::ERR__UNKNOWN_TOPIC:
+    case RdKafka::ERR__UNKNOWN_PARTITION:
+      std::cerr << "Consume failed: " << message->errstr() << std::endl;
+      run = false;
+      break;
+
     default:
       /* Errors */
       std::cerr << "Consume failed: " << message->errstr() << std::endl;

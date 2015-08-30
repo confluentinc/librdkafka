@@ -148,7 +148,7 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__TIMED_OUT = -185,    /* Operation timed out */
 	RD_KAFKA_RESP_ERR__QUEUE_FULL = -184,   /* Queue is full */
         RD_KAFKA_RESP_ERR__ISR_INSUFF = -183,   /* ISR count < required.acks */
-        RD_KAFKA_RESP_ERR__IN_USE = -182,       /* Already in use */
+        RD_KAFKA_RESP_ERR__NODE_UPDATE = -182,  /* Broker node update */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -879,6 +879,8 @@ rd_kafka_message_t *rd_kafka_consume(rd_kafka_topic_t *rkt, int32_t partition,
  *
  * 'timeout_ms' is the maximum amount of time to wait for all of
  * 'rkmessages_size' messages to be put into 'rkmessages'.
+ * If no messages were available within the timeout period this function
+ * returns 0 and `rkmessages` remains untouched.
  * This differs somewhat from `rd_kafka_consume()`.
  *
  * The message objects must be destroyed with `rd_kafka_message_destroy()`

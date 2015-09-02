@@ -43,6 +43,7 @@
  * Types
  */
 typedef SSIZE_T ssize_t;
+typedef int socklen_t;
 
 struct iovec {
 	void *iov_base;

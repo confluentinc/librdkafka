@@ -123,7 +123,7 @@ static size_t rd_kafka_msghdr_size (const struct msghdr *msg) {
  */
 static void rd_kafka_mk_nodename (char *dest, size_t dsize,
                                   const char *name, uint16_t port) {
-        snprintf(dest, dsize, "%s:%hu", name, port);
+        rd_snprintf(dest, dsize, "%s:%hu", name, port);
 }
 
 /**

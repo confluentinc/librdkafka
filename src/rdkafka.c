@@ -1461,8 +1461,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	rd_kafka_wrunlock(rk);
 
 	/* Add initial list of brokers from configuration */
-	if (rk->rk_conf.brokerlist)
-		rd_kafka_brokers_add(rk, rk->rk_conf.brokerlist);
+	if (rk->rk_conf.brokerlist) {
+		if (rd_kafka_brokers_add(rk, rk->rk_conf.brokerlist) == 0)
+			rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
+					"No brokers configured");
+	}
 
 	(void)rd_atomic32_add(&rd_kafka_handle_cnt_curr, 1);
 

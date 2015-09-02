@@ -743,7 +743,6 @@ rd_kafka_transport_recvmsg (rd_kafka_transport_t *rktrans,
  * Locality: broker thread
  */
 static void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans) {
-	char errstr[512];
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 
 	/* Set socket send & receive buffer sizes if configuerd */
@@ -775,6 +774,8 @@ static void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans) {
 
 #if WITH_SSL
 	if (rkb->rkb_proto == RD_KAFKA_PROTO_SSL) {
+		char errstr[512];
+
 		/* Set up SSL connection.
 		 * This is also an asynchronous operation so dont
 		 * let propagate broker_connect_done() just yet. */
@@ -905,20 +906,12 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 	int on = 1;
 
 
-#if !WITH_SSL
-	if (rkb->rkb_proto == RD_KAFKA_PROTO_SSL) {
-		rd_snprintf(errstr, errstr_size,
-			    "SSL not supported in this build");
-		errno = ENOTSUP;
-		return NULL;
-	}
-#endif
-
 	s = rkb->rkb_rk->rk_conf.socket_cb(sinx->in.sin_family,
 					   SOCK_STREAM, IPPROTO_TCP,
 					   rkb->rkb_rk->rk_conf.opaque);
 	if (s == -1) {
-		rd_snprintf(errstr, errstr_size, "Failed to create socket: %s", socket_strerror(socket_errno));
+		rd_snprintf(errstr, errstr_size, "Failed to create socket: %s",
+			    socket_strerror(socket_errno));
 		return NULL;
 	}
 

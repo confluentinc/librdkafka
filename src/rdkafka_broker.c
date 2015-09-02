@@ -100,8 +100,9 @@ static void msghdr_print (rd_kafka_t *rk,
 		rd_kafka_dbg(rk, MSG, what,
 			     " iov #%i: %"PRIdsz"",
 			     i, msg->msg_iov[i].iov_len);
-		rd_hexdump(stdout, what, msg->msg_iov[i].iov_base,
-			   msg->msg_iov[i].iov_len);
+		if (hexdump)
+			rd_hexdump(stdout, what, msg->msg_iov[i].iov_base,
+				   msg->msg_iov[i].iov_len);
 	}
 }
 

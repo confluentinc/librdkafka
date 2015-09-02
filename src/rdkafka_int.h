@@ -53,6 +53,10 @@ typedef int mode_t;
 #define RD_POLL_INFINITE  -1
 #define RD_POLL_NOWAIT     0
 
+#if WITH_SSL
+#include <openssl/ssl.h>
+#endif
+
 
 /*
  * Portability
@@ -124,6 +128,14 @@ typedef enum {
 } rd_kafka_compression_t;
 
 
+typedef enum {
+	RD_KAFKA_PROTO_PLAINTEXT,
+#if WITH_SSL
+	RD_KAFKA_PROTO_SSL,
+#endif
+	RD_KAFKA_PROTO_NUM,
+} rd_kafka_secproto_t;
+
 /**
  * Optional configuration struct passed to rd_kafka_new*().
  *
@@ -156,7 +168,19 @@ struct rd_kafka_conf_s {
 	char   *brokerlist;
 	int     stats_interval_ms;
 	int     term_sig;
-
+	rd_kafka_secproto_t security_protocol;
+	struct {
+#if WITH_SSL
+		SSL_CTX *ctx;
+#endif
+		char *cipher_suites;
+		char *enabled_protocols;
+		char *key_location;
+		char *key_password;
+		char *cert_location;
+		char *ca_location;
+	} ssl;
+	
 	/*
 	 * Consumer configuration
 	 */
@@ -506,6 +530,7 @@ typedef struct rd_kafka_broker_s {
 	enum {
 		RD_KAFKA_BROKER_STATE_INIT,
 		RD_KAFKA_BROKER_STATE_DOWN,
+		RD_KAFKA_BROKER_STATE_CONNECT,
 		RD_KAFKA_BROKER_STATE_UP,
                 RD_KAFKA_BROKER_STATE_UPDATE,
 	} rkb_state;
@@ -549,7 +574,7 @@ typedef struct rd_kafka_broker_s {
 	rd_kafka_buf_t     *rkb_recv_buf;
 
 	rd_kafka_bufq_t     rkb_outbufs;
-    rd_atomic32_t       rkb_outbuf_msgcnt;
+	rd_atomic32_t       rkb_outbuf_msgcnt;
 	rd_kafka_bufq_t     rkb_waitresps;
 	rd_kafka_bufq_t     rkb_retrybufs;
 
@@ -557,6 +582,7 @@ typedef struct rd_kafka_broker_s {
 
 	char                rkb_name[RD_KAFKA_NODENAME_SIZE];  /* Displ name */
 	char                rkb_nodename[RD_KAFKA_NODENAME_SIZE]; /* host:port*/
+	rd_kafka_secproto_t rkb_proto;
 
 
 } rd_kafka_broker_t;
@@ -997,3 +1023,5 @@ void
 RD_NORETURN
 rd_kafka_crash (const char *file, int line, const char *function,
                 rd_kafka_t *rk, const char *reason);
+
+int rd_kafka_path_is_dir (const char *path);

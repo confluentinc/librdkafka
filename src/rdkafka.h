@@ -149,6 +149,7 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__QUEUE_FULL = -184,   /* Queue is full */
         RD_KAFKA_RESP_ERR__ISR_INSUFF = -183,   /* ISR count < required.acks */
         RD_KAFKA_RESP_ERR__NODE_UPDATE = -182,  /* Broker node update */
+	RD_KAFKA_RESP_ERR__SSL = -181,          /* SSL error */
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -1225,7 +1226,7 @@ RD_EXPORT
 void rd_kafka_yield (rd_kafka_t *rk);
 
 /**
- * Adds a one or more brokers to the kafka handle's list of initial brokers.
+ * Adds one or more brokers to the kafka handle's list of initial brokers.
  * Additional brokers will be discovered automatically as soon as rdkafka
  * connects to a broker by querying the broker metadata.
  *
@@ -1234,7 +1235,17 @@ void rd_kafka_yield (rd_kafka_t *rk);
  * round-robin fashion.
  *
  * 'brokerlist' is a ,-separated list of brokers in the format:
- *   <host1>[:<port1>],<host2>[:<port2>]...
+ *   <broker1>,<broker2>,..
+ * Where each broker is in either the host or URL based format:
+ *   <host>[:<port>]
+ *   <proto>://<host>[:port]
+ * <proto> is either PLAINTEXT or SSL.
+ * The two formats can be mixed but ultimately the value of the
+ * `security.protocol` config property decides what brokers are allowed.
+ *
+ * Example:
+ *    brokerlist = "broker1:10000,broker2"
+ *    brokerlist = "SSL://broker3:9000,broker1:10000,ssl://broker2"
  *
  * Returns the number of brokers successfully added.
  *

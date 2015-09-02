@@ -29,6 +29,7 @@
 #pragma once
 
 extern const char *rd_kafka_broker_state_names[];
+extern const char *rd_kafka_secproto_names[];
 
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 						   int32_t nodeid);
@@ -41,18 +42,28 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,
 rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state);
 rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state);
 
+void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
+			   rd_kafka_resp_err_t err,
+			   const char *fmt, ...);
+
 void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 				   int do_rk_lock);
 #define rd_kafka_topic_leader_query(rk,rkt) \
 	rd_kafka_topic_leader_query0(rk,rkt,1)
 void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb);
 
-void rd_kafka_broker_update (rd_kafka_t *rk,
+void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                              const struct rd_kafka_metadata_broker *mdb);
 rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					rd_kafka_confsource_t source,
+					rd_kafka_secproto_t proto,
 					const char *name, uint16_t port,
 					int32_t nodeid);
+
+void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr);
+
+int rd_kafka_send (rd_kafka_broker_t *rkb);
+int rd_kafka_recv (rd_kafka_broker_t *rkb);
 
 void rd_kafka_dr_msgq (rd_kafka_topic_t *rkt,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);

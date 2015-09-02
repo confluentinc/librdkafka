@@ -54,7 +54,6 @@
 
 #include <stdio.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 
 #ifdef _MSC_VER
@@ -495,16 +494,6 @@ static char *mk_esc_filename (const char *in, char *out, size_t out_size) {
         return out;
 }
 
-static int path_is_dir(const char *path) {
-#ifdef _MSC_VER
-	struct _stat st;
-	return (_stat(path, &st) == 0 && st.st_mode & S_IFDIR);
-#else
-	struct stat st;
-	return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
-#endif
-
-}
 
 /**
  * Prepare a toppar for using an offset file.
@@ -516,7 +505,7 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 	const char *path = rktp->rktp_rkt->rkt_conf.offset_store_path;
 	int64_t offset = -1;
 
-	if (path_is_dir(path)) {
+	if (rd_kafka_path_is_dir(path)) {
                 char tmpfile[1024];
                 char escfile[4096];
 

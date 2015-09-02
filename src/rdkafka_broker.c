@@ -40,6 +40,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "rd.h"
 #include "rdkafka_int.h"
@@ -61,12 +62,20 @@
 const char *rd_kafka_broker_state_names[] = {
 	"INIT",
 	"DOWN",
+	"CONNECT",
 	"UP",
         "UPDATE"
 };
 
+const char *rd_kafka_secproto_names[] = {
+	[RD_KAFKA_PROTO_PLAINTEXT] = "plaintext",
+#if WITH_SSL
+	[RD_KAFKA_PROTO_SSL] = "ssl",
+#endif
+	NULL
+};
 
-static int rd_kafka_send (rd_kafka_broker_t *rkb);
+
 
 static void rd_kafka_toppar_offsetcommit_request (rd_kafka_broker_t *rkb,
                                                   rd_kafka_toppar_t *rktp,
@@ -120,9 +129,23 @@ static void rd_kafka_mk_nodename (char *dest, size_t dsize,
  * Construct descriptive broker name
  */
 static void rd_kafka_mk_brokername (char *dest, size_t dsize,
-                                    const char *nodename, int32_t nodeid,
+				    rd_kafka_secproto_t proto,
+				    const char *nodename, int32_t nodeid,
 				    rd_kafka_confsource_t source) {
-        if (nodeid == RD_KAFKA_NODEID_UA)
+
+	/* Prepend protocol name to brokername, unless it is a
+	 * standard plaintext broker in which case we omit the protocol part. */
+	if (proto != RD_KAFKA_PROTO_PLAINTEXT) {
+		int r = rd_snprintf(dest, dsize, "%s://",
+				    rd_kafka_secproto_names[proto]);
+		if (r >= (int)dsize) /* Skip proto name if it wont fit.. */
+			r = 0;
+
+		dest += r;
+		dsize -= r;
+	}
+
+	if (nodeid == RD_KAFKA_NODEID_UA)
 		rd_snprintf(dest, dsize, "%s/%s",
 			    nodename,
 			    source == RD_KAFKA_INTERNAL ?
@@ -177,9 +200,9 @@ static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
  * 
  * Locality: Broker thread
  */
-static void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
-				  rd_kafka_resp_err_t err,
-				  const char *fmt, ...) {
+void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
+			   rd_kafka_resp_err_t err,
+			   const char *fmt, ...) {
 	va_list ap;
 	int errno_save = errno;
 	rd_kafka_toppar_t *rktp;
@@ -731,7 +754,8 @@ rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
                            md->brokers[i].host,
                            md->brokers[i].port,
                            md->brokers[i].id);
-		rd_kafka_broker_update(rkb->rkb_rk, &md->brokers[i]);
+		rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
+				       &md->brokers[i]);
 	}
 
 	/* Update partition count and leader for each topic we know about */
@@ -1179,7 +1203,7 @@ static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
 
 
 
-static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
+int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 	rd_kafka_buf_t *rkbuf;
 	ssize_t r;
 	struct msghdr msg;
@@ -1246,7 +1270,8 @@ static int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 
 	rd_kafka_assert(rkb->rkb_rk, rd_kafka_msghdr_size(&msg) > 0);
 
-	r = rd_kafka_transport_recvmsg(rkb->rkb_transport, &msg, errstr, sizeof(errstr));
+	r = rd_kafka_transport_recvmsg(rkb->rkb_transport, &msg,
+				       errstr, sizeof(errstr));
 	if (r == 0)
 		return 0; /* EAGAIN */
 	else if (r == -1) {
@@ -1345,7 +1370,15 @@ int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
 }
 
 
-static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
+/**
+ * Initiate asynchronous connection attempt to the next address
+ * in the broker's address list.
+ * While the connect is asynchronous and its IO served in the CONNECT state,
+ * the initial name resolve is blocking.
+ *
+ * Returns -1 on error, else 0.
+ */
+static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rd_sockaddr_inx_t *sinx;
 	char errstr[512];
 
@@ -1364,13 +1397,47 @@ static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
 		errstr, sizeof(errstr)))) {
 		/* Avoid duplicate log messages */
 		if (rkb->rkb_err.err == errno)
-			rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__FAIL, NULL);
+			rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__FAIL,
+					     NULL);
 		else
-			rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT, "%s", errstr);
+			rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+					     "%s", errstr);
 		return -1;
 	}
 	
+	rd_kafka_broker_lock(rkb);
+	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_CONNECT);
+	rkb->rkb_err.err = 0;
+	rd_kafka_broker_unlock(rkb);
 
+	return 0;
+}
+
+
+/**
+ * Call when asynchronous connection attempt completes, either succesfully
+ * (if errstr is NULL) or fails.
+ *
+ * Locality: broker thread
+ */
+void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
+
+	if (errstr) {
+		/* Connect failed */
+		if (rkb->rkb_err.err == errno)
+			rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__FAIL,
+					     NULL);
+		else
+			rd_kafka_broker_fail(rkb,
+					     RD_KAFKA_RESP_ERR__TRANSPORT,
+					     "%s", errstr);
+		return;
+	}
+
+	/* Connect succeeded */
+
+	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "Connected");
+	
 	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
 	rkb->rkb_err.err = 0;
@@ -1384,10 +1451,7 @@ static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
                                      metadata_refresh_sparse ?
                                      0 /* known topics */ : 1 /* all topics */,
                                      NULL, NULL, "connected");
-
-	return 0;
 }
-
 
 
 /**
@@ -1395,7 +1459,7 @@ static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
  *
  * Locality: io thread
  */
-static int rd_kafka_send (rd_kafka_broker_t *rkb) {
+int rd_kafka_send (rd_kafka_broker_t *rkb) {
 	rd_kafka_buf_t *rkbuf;
 	unsigned int cnt = 0;
 
@@ -2178,7 +2242,8 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 }
 
                 rd_kafka_mk_brokername(brokername, sizeof(brokername),
-                                       rkb->rkb_nodename, rkb->rkb_nodeid,
+                                       rkb->rkb_proto,
+				       rkb->rkb_nodename, rkb->rkb_nodeid,
 				       RD_KAFKA_LEARNED);
                 if (strcmp(rkb->rkb_name, brokername)) {
                         rd_rkb_dbg(rkb, BROKER, "UPDATE",
@@ -2228,7 +2293,6 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 static void rd_kafka_broker_io_serve(rd_kafka_broker_t *rkb) {
 	rd_kafka_op_t *rko;
 	rd_ts_t now = rd_clock();
-	int revents;
 
 	/* Serve broker ops */
 	if (unlikely(rd_kafka_q_len(&rkb->rkb_ops) > 0))
@@ -2241,31 +2305,8 @@ static void rd_kafka_broker_io_serve(rd_kafka_broker_t *rkb) {
 		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
 		NULL, "periodic refresh");
 
-	if (rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0)
-		rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
-	else
-		rd_kafka_transport_poll_clear(rkb->rkb_transport, POLLOUT);
-
-	if ((revents = rd_kafka_transport_poll(rkb->rkb_transport,
-					       rkb->rkb_rk->rk_conf.
-					       socket_blocking_max_ms)) <= 0) {
-		return;
-	}
-
-	if (revents & POLLIN)
-		while (rd_kafka_recv(rkb) > 0)
-			;
-
-
-	if (revents & POLLHUP) {
-		rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
-				"Connection closed");
-		return;
-	}
-
-	if (revents & POLLOUT)
-		while (rd_kafka_send(rkb) > 0)
-			;
+	/* Serve IO events */
+	rd_kafka_transport_io_serve(rkb->rkb_transport);
 }
 
 
@@ -2274,9 +2315,15 @@ static void rd_kafka_broker_io_serve(rd_kafka_broker_t *rkb) {
  */
 static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb) {
 	rd_ts_t last_timeout_scan = rd_clock();
+	int initial_state = rkb->rkb_state;
 
+	/* Since ua_idle is used during connection setup 
+	 * in state ..BROKER_STATE_CONNECT we only run this loop
+	 * as long as the state remains the same as the initial, on a state
+	 * change - most likely to UP, a correct serve() function
+	 * should be used instead. */
 	while (!rd_atomic32_get(&rkb->rkb_rk->rk_terminate) &&
-	       rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
+	       (int)rkb->rkb_state == initial_state) {
 		rd_ts_t now;
 
 
@@ -2297,7 +2344,8 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb) {
 		rd_kafka_broker_io_serve(rkb);
                 now = rd_clock();
 
-		if (unlikely(last_timeout_scan + 1000000 < now)) {
+		if (unlikely(rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP &&
+			     last_timeout_scan + 1000000 < now)) {
                         /* Scan wait-response queue */
                         rd_kafka_broker_waitresp_timeout_scan(rkb, now);
 			last_timeout_scan = now;
@@ -4137,11 +4185,31 @@ static int rd_kafka_broker_thread_main (void *arg) {
 				break;
 			}
 
-			/* ..connect() will block until done (or failure) */
+			/* Initiate asynchronous connection attempt.
+			 * Only the host lookup is blocking here. */
 			if (rd_kafka_broker_connect(rkb) == -1) {
-				/* Try the next one until we've tried them all,
-				 * in which case we sleep a short while to
-				 * avoid the busy looping. */
+				/* Immediate failure, most likely host
+				 * resolving failed.
+				 * Try the next resolve result until we've
+				 * tried them all, in which case we sleep a
+				 * short while to avoid the busy looping. */
+				if (!rkb->rkb_rsal ||
+					rkb->rkb_rsal->rsal_cnt == 0 ||
+					rkb->rkb_rsal->rsal_curr + 1 ==
+					rkb->rkb_rsal->rsal_cnt)
+					rd_usleep(1000000); /* 1s */
+			}
+			break;
+
+		case RD_KAFKA_BROKER_STATE_CONNECT:
+			/* Asynchronous connect in progress. */
+			rd_kafka_broker_ua_idle(rkb);
+
+			if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN) {
+				/* Connect failure.
+				 * Try the next resolve result until we've
+				 * tried them all, in which case we sleep a
+				 * short while to avoid the busy looping. */
 				if (!rkb->rkb_rsal ||
 					rkb->rkb_rsal->rsal_cnt == 0 ||
 					rkb->rkb_rsal->rsal_curr + 1 ==
@@ -4238,6 +4306,7 @@ rd_kafka_broker_t *rd_kafka_broker_internal (rd_kafka_t *rk) {
  */
 rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					rd_kafka_confsource_t source,
+					rd_kafka_secproto_t proto,
 					const char *name, uint16_t port,
 					int32_t nodeid) {
 	rd_kafka_broker_t *rkb;
@@ -4253,11 +4322,12 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rd_kafka_mk_nodename(rkb->rkb_nodename, sizeof(rkb->rkb_nodename),
                              name, port);
         rd_kafka_mk_brokername(rkb->rkb_name, sizeof(rkb->rkb_name),
-                               rkb->rkb_nodename, nodeid, source);
+                               proto, rkb->rkb_nodename, nodeid, source);
 
 	rkb->rkb_source = source;
 	rkb->rkb_rk = rk;
 	rkb->rkb_nodeid = nodeid;
+	rkb->rkb_proto = proto;
 
 	mtx_init(&rkb->rkb_lock, mtx_plain);
 	rwlock_init(&rkb->rkb_toppar_lock);
@@ -4366,6 +4436,7 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,
  * NOTE: caller must release rkb reference by rd_kafka_broker_destroy()
  */
 static rd_kafka_broker_t *rd_kafka_broker_find (rd_kafka_t *rk,
+						rd_kafka_secproto_t proto,
 						const char *name,
 						uint16_t port) {
 	rd_kafka_broker_t *rkb;
@@ -4376,6 +4447,7 @@ static rd_kafka_broker_t *rd_kafka_broker_find (rd_kafka_t *rk,
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
 		if (!rd_atomic32_get(&rk->rk_terminate) &&
+		    rkb->rkb_proto == proto &&
 		    !strcmp(rkb->rkb_nodename, nodename)) {
 			rd_kafka_broker_keep(rkb);
 			rd_kafka_broker_unlock(rkb);
@@ -4388,62 +4460,134 @@ static rd_kafka_broker_t *rd_kafka_broker_find (rd_kafka_t *rk,
 }
 
 
+/**
+ * Parse a broker host name.
+ * The string 'name' is modified and null-terminated portions of it
+ * are returned in 'proto', 'host', and 'port'.
+ *
+ * Returns 0 on success or -1 on parse error.
+ */
+static int rd_kafka_broker_name_parse (rd_kafka_t *rk,
+				       char **name,
+				       rd_kafka_secproto_t *proto,
+				       const char **host,
+				       uint16_t *port) {
+	char *s = *name;
+	char *n, *t, *t2;
+
+	/* Find end of this name (either by delimiter or end of string */
+	if ((n = strchr(s, ',')))
+		*n = '\0';
+	else
+		n = s + strlen(s)-1;
+
+
+	/* Check if this looks like an url. */
+	if ((t = strstr(s, "://"))) {
+		int i;
+		/* "proto://host[:port]" */
+
+		if (t == s)
+			return -1; /* empty proto */
+
+		/* Make protocol uppercase */
+		for (t2 = s ; t2 < t ; t2++)
+			*t2 = toupper(*t2);
+
+		*t = '\0';
+
+		/* Find matching protocol by name. */
+		for (i = 0 ; i < RD_KAFKA_PROTO_NUM ; i++)
+			if (!rd_strcasecmp(s, rd_kafka_secproto_names[i]))
+				break;
+
+		/* Unsupported protocol */
+		if (i == RD_KAFKA_PROTO_NUM)
+			return -1;
+
+		*proto = i;
+
+                /* Enforce protocol */
+		if (rk->rk_conf.security_protocol != *proto)
+			return -1;
+
+		/* Hostname starts here */
+		s = t+3;
+
+		/* Ignore anything that looks like the path part of an URL */
+		if ((t = strchr(s, '/')))
+			*t = '\0';
+
+	} else
+		*proto = rk->rk_conf.security_protocol; /* Default protocol */
+
+
+	*port = RD_KAFKA_PORT;
+	/* Check if port has been specified, but try to identify IPv6
+	 * addresses first:
+	 *  t = last ':' in string
+	 *  t2 = first ':' in string
+	 *  If t and t2 are equal then only one ":" exists in name
+	 *  and thus an IPv4 address with port specified.
+	 *  Else if not equal and t is prefixed with "]" then it's an
+	 *  IPv6 address with port specified.
+	 *  Else no port specified. */
+	if ((t = strrchr(s, ':')) &&
+	    ((t2 = strchr(s, ':')) == t || *(t-1) == ']')) {
+		*t = '\0';
+		*port = atoi(t+1);
+	}
+
+	/* Empty host name -> localhost */
+	if (!*s) 
+		s = "localhost";
+
+	*host = s;
+	*name = n+1;  /* past this name. e.g., next name/delimiter to parse */
+
+	return 0;
+}
+
+
 int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist) {
 	char *s_copy = rd_strdup(brokerlist);
 	char *s = s_copy;
-	char *t, *t2, *n;
 	int cnt = 0;
 	rd_kafka_broker_t *rkb;
 
 	/* Parse comma-separated list of brokers. */
 	while (*s) {
-		uint16_t port = 0;
+		uint16_t port;
+		const char *host;
+		rd_kafka_secproto_t proto;
+		
 
 		if (*s == ',' || *s == ' ') {
 			s++;
 			continue;
 		}
 
-		if ((n = strchr(s, ',')))
-			*n = '\0';
-		else
-			n = s + strlen(s)-1;
-
-		/* Check if port has been specified, but try to identify IPv6
-		 * addresses first:
-		 *  t = last ':' in string
-		 *  t2 = first ':' in string
-		 *  If t and t2 are equal then only one ":" exists in name
-		 *  and thus an IPv4 address with port specified.
-		 *  Else if not equal and t is prefixed with "]" then it's an
-		 *  IPv6 address with port specified.
-		 *  Else no port specified. */
-		if ((t = strrchr(s, ':')) &&
-		    ((t2 = strchr(s, ':')) == t || *(t-1) == ']')) {
-			*t = '\0';
-			port = atoi(t+1);
-		}
-
-		if (!port)
-			port = RD_KAFKA_PORT;
+		if (rd_kafka_broker_name_parse(rk, &s, &proto,
+					       &host, &port) == -1)
+			break;
 
 		rd_kafka_wrlock(rk);
 
-		if ((rkb = rd_kafka_broker_find(rk, s, port)) &&
+		if ((rkb = rd_kafka_broker_find(rk, proto, host, port)) &&
 		    rkb->rkb_source == RD_KAFKA_CONFIGURED) {
 			cnt++;
-		} else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED, s, port,
+		} else if (rd_kafka_broker_add(rk, RD_KAFKA_CONFIGURED,
+					       proto, host, port,
 					       RD_KAFKA_NODEID_UA) != NULL)
 			cnt++;
-
-		/* If rd_kafka_broker_find returned a broker its reference needs to be released 
+		
+		/* If rd_kafka_broker_find returned a broker its
+		 * reference needs to be released 
 		 * See issue #193 */
 		if (rkb)
 			rd_kafka_broker_destroy(rkb);
 
 		rd_kafka_wrunlock(rk);
-
-		s = n+1;
 	}
 
 	rd_free(s_copy);
@@ -4456,7 +4600,7 @@ int rd_kafka_brokers_add (rd_kafka_t *rk, const char *brokerlist) {
  * Adds a new broker or updates an existing one.
  *
  */
-void rd_kafka_broker_update (rd_kafka_t *rk,
+void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                              const struct rd_kafka_metadata_broker *mdb) {
 	rd_kafka_broker_t *rkb;
         char nodename[RD_KAFKA_NODENAME_SIZE];
@@ -4470,14 +4614,15 @@ void rd_kafka_broker_update (rd_kafka_t *rk,
                  * the hostname. */
                 if (strcmp(rkb->rkb_nodename, nodename))
                         needs_update = 1;
-        } else if ((rkb = rd_kafka_broker_find(rk, mdb->host, mdb->port))) {
+        } else if ((rkb = rd_kafka_broker_find(rk, proto,
+					       mdb->host, mdb->port))) {
                 /* Broker matched by hostname (but not by nodeid),
                  * update the nodeid. */
                 needs_update = 1;
 
         } else {
 		rd_kafka_broker_add(rk, RD_KAFKA_LEARNED,
-				    mdb->host, mdb->port, mdb->id);
+				    proto, mdb->host, mdb->port, mdb->id);
 	}
 
 	rd_kafka_wrunlock(rk);

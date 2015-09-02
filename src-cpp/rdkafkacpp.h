@@ -125,6 +125,7 @@ enum ErrorCode {
   ERR__QUEUE_FULL = -184,        /* Queue is full */
   ERR__ISR_INSUFF = -183,        /* ISR count < required.acks */
   ERR__NODE_UPDATE = -182,       /* Broker node update */
+  ERR__SSL = -181,               /* SSL certification verification failed */
   ERR__END = -100,               /* end internal error codes */
 
   /* Standard Kafka errors: */

@@ -33,6 +33,7 @@
 #include <stdarg.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
@@ -852,6 +853,8 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
                 return "Local: ISR count insufficient";
         case RD_KAFKA_RESP_ERR__NODE_UPDATE:
                 return "Local: Broker node update";
+	case RD_KAFKA_RESP_ERR__SSL:
+		return "Local: SSL error";
 
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
 		return "Unknown error";
@@ -927,6 +930,11 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
 
 	/* Purge op-queue */
 	rd_kafka_q_purge(&rk->rk_rep);
+
+#if WITH_SSL
+	if (rk->rk_conf.ssl.ctx)
+		rd_kafka_transport_ssl_ctx_term(rk);
+#endif
 
 	rd_kafkap_str_destroy(rk->rk_conf.client_id);
         rd_kafkap_str_destroy(rk->rk_conf.group_id);
@@ -1325,7 +1333,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 #ifndef _MSC_VER
         sigset_t newset, oldset;
 #endif
-		int err;
+	int err;
 
 	call_once(&rd_kafka_global_init_once, rd_kafka_global_init);
 
@@ -1396,6 +1404,19 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			htobe32(rk->rk_conf.fetch_min_bytes);
 	}
 
+#if WITH_SSL
+	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL) {
+		/* Create SSL context */
+		if (rd_kafka_transport_ssl_ctx_init(rk, errstr,
+						    errstr_size) == -1) {
+
+			rd_kafka_destroy0(rk); /* application refcnt */
+			errno = EINVAL;
+			return NULL;
+		}
+	}
+#endif
+
 #ifndef _MSC_VER
         /* Block all signals in newly created thread.
          * To avoid race condition we block all signals in the calling
@@ -1413,13 +1434,15 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
 
-	/* Create handler thread */
 
+	/* Create handler thread */
 	rd_kafka_keep(rk); /* one refcnt for handler thread */
-	if ((err = thrd_create(&rk->rk_thread, rd_kafka_thread_main, rk)) != thrd_success) {
+	if ((err = thrd_create(&rk->rk_thread,
+			       rd_kafka_thread_main, rk)) != thrd_success) {
 		if (errstr)
 			rd_snprintf(errstr, errstr_size,
-				 "Failed to create thread: %s (%i)", rd_strerror(err), err);
+				 "Failed to create thread: %s (%i)",
+				    rd_strerror(err), err);
 		rd_kafka_destroy0(rk); /* handler thread */
 		rd_kafka_destroy0(rk); /* application refcnt */
 #ifndef _MSC_VER
@@ -1432,6 +1455,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	rd_kafka_wrlock(rk);
 	rk->rk_internal_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,
+						  RD_KAFKA_PROTO_PLAINTEXT,
 						  "", 0, RD_KAFKA_NODEID_UA);
 	rd_kafka_broker_keep(rk->rk_internal_rkb);
 	rd_kafka_wrunlock(rk);
@@ -2208,4 +2232,15 @@ void rd_kafka_metadata_destroy (const struct rd_kafka_metadata *metadata) {
 
 const char *rd_kafka_get_debug_contexts(void) {
 	return RD_KAFKA_DEBUG_CONTEXTS;
+}
+
+
+int rd_kafka_path_is_dir (const char *path) {
+#ifdef _MSC_VER
+	struct _stat st;
+	return (_stat(path, &st) == 0 && st.st_mode & S_IFDIR);
+#else
+	struct stat st;
+	return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
+#endif
 }

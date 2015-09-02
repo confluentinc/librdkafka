@@ -29,6 +29,13 @@ socket_cb                                |  *  |               | Socket creation
 open_cb                                  |  *  |               | File open callback to provide race-free CLOEXEC
 opaque                                   |  *  |               | Application opaque (set with rd_kafka_conf_set_opaque())
 internal.termination.signal              |  *  |             0 | Signal that librdkafka will use to quickly terminate on rd_kafka_destroy(). If this signal is not set then there will be a delay before rd_kafka_wait_destroyed() returns true as internal threads are timing out their system calls. If this signal is set however the delay will be minimal. The application should mask this signal as an internal signal handler is installed.
+security.protocol                        |  *  |     plaintext | Protocol used to communicate with brokers.
+ssl.cipher.suites                        |  *  |               | A cipher suite is a named combination of authentication, encryption, MAC and key exchange algorithm used to negotiate the security settings for a network connection using TLS or SSL network protocol. See manual page for `ciphers(1)`.
+ssl.enabled.protocols                    |  *  |               | List of enabled security protocols. At least one of the protocols must be available on the broker.
+ssl.key.location                         |  *  |               | Path to client's private key (PEM) used for authentication.
+ssl.key.password                         |  *  |               | Private key pass phrase
+ssl.certificate.location                 |  *  |               | Path to certificate file for verifying the broker's key.
+ssl.ca.location                          |  *  |               | File or directory path to CA certificate(s) for verifying the broker's key.
 queued.min.messages                      |  C  |        100000 | Minimum number of messages per topic+partition in the local consumer queue.
 queued.max.messages.kbytes               |  C  |       1000000 | Maximum number of kilobytes per topic+partition in the local consumer queue. This value may be overshot by fetch.message.max.bytes.
 fetch.wait.max.ms                        |  C  |           100 | Maximum time the broker may wait to fill the response with fetch.min.bytes.

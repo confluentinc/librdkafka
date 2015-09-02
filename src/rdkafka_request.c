@@ -62,7 +62,7 @@ rd_kafka_ConsumerMetadataResponse (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf
                 rd_rkb_dbg(rkb, CONSUMER, "METADATA",
                            "ConsumerMetadata: kafka://%s:%i/?id=%"PRId32,
                            mdb.host, mdb.port, mdb.id);
-                rd_kafka_broker_update(rkb->rkb_rk, &mdb);
+                rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto, &mdb);
         }
 
         *coordidp = CoordId;

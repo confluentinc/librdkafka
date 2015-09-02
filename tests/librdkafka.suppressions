@@ -116,4 +116,96 @@
    fun:start_thread
    fun:clone
 }
->>>>>>> 4d79b65... More drd suppressions for glibc getaddrinfo()
+{
+   ssl_read
+   Memcheck:Cond
+   fun:ssl3_read_bytes
+   fun:ssl3_read_internal
+}
+
+
+		    
+{
+   ssl_noterm_leak1
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:SSL_library_init
+}
+{
+   ssl_noterm_leak2
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:OPENSSL_add_all_algorithms_noconf
+}
+{
+   ssl_noterm_leak3
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:OpenSSL_add_all_digests
+}
+{
+   ssl_noterm_leak4
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:EVP_add_digest
+}
+{
+   ssl_noterm_leak5
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:SSL_load_error_strings
+}
+{
+   ssl_noterm_leak6
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   ...
+   fun:OPENSSL_add_all_algorithms_noconf
+}
+{
+   ssl_noterm_leak7
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:ERR_load_SSL_strings
+}
+{
+   ssl_noterm_leak8
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:err_load_strings
+}
+
+{
+   ssl_noterm_leak9
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   ...
+   fun:ERR_load_SSL_strings
+}
+{
+   thrd_tls_alloc_stack
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create@@GLIBC_2.2.5
+   fun:thrd_create
+}

@@ -220,6 +220,53 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "signal handler is installed.",
 	  0, 128, 0 },
 
+	/* Security related global properties */
+	{ _RK_GLOBAL, "security.protocol", _RK_C_S2I,
+	  _RK(security_protocol),
+	  "Protocol used to communicate with brokers.",
+	  .vdef = RD_KAFKA_PROTO_PLAINTEXT,
+	  .s2i = {
+			{ RD_KAFKA_PROTO_PLAINTEXT, "plaintext" },
+#if WITH_SSL
+			{ RD_KAFKA_PROTO_SSL, "ssl" },
+#endif
+			{ 0, NULL }
+		} },
+
+#if WITH_SSL
+	{ _RK_GLOBAL, "ssl.cipher.suites", _RK_C_STR,
+	  _RK(ssl.cipher_suites), // FIXME
+	  "A cipher suite is a named combination of authentication, "
+	  "encryption, MAC and key exchange algorithm used to negotiate the "
+	  "security settings for a network connection using TLS or SSL network "
+	  "protocol. See manual page for `ciphers(1)`."
+	},
+	{ _RK_GLOBAL, "ssl.enabled.protocols", _RK_C_STR,
+	  _RK(ssl.enabled_protocols), // FIXME
+	  "List of enabled security protocols. At least one of the protocols "
+	  "must be available on the broker."
+	},
+	{ _RK_GLOBAL, "ssl.key.location", _RK_C_STR,
+	  _RK(ssl.key_location),
+	  "Path to client's private key (PEM) used for authentication."
+	},
+	{ _RK_GLOBAL, "ssl.key.password", _RK_C_STR,
+	  _RK(ssl.key_password),
+	  "Private key pass phrase"
+	},
+	{ _RK_GLOBAL, "ssl.certificate.location", _RK_C_STR,
+	  _RK(ssl.cert_location),
+	  "Path to certificate file for verifying the broker's key."
+	},
+	{ _RK_GLOBAL, "ssl.ca.location", _RK_C_STR,
+	  _RK(ssl.ca_location),
+	  "File or directory path to CA certificate(s) for verifying "
+	  "the broker's key."
+	},
+#endif /* WITH_SSL */
+	  
+
+	
 	/* Global consumer properties */
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
 	  _RK(queued_min_msgs),
@@ -511,16 +558,13 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			return RD_KAFKA_CONF_INVALID;
 		}
 
-#ifdef _MSC_VER
-#define strcasecmp(A,B) _stricmp(A,B)
-#endif
 
-		if (!strcasecmp(value, "true") ||
-		    !strcasecmp(value, "t") ||
+		if (!rd_strcasecmp(value, "true") ||
+		    !rd_strcasecmp(value, "t") ||
 		    !strcmp(value, "1"))
 			ival = 1;
-		else if (!strcasecmp(value, "false") ||
-			 !strcasecmp(value, "f") ||
+		else if (!rd_strcasecmp(value, "false") ||
+			 !rd_strcasecmp(value, "f") ||
 			 !strcmp(value, "0"))
 			ival = 0;
 		else {
@@ -605,7 +649,8 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
 				if (!prop->s2i[j].str ||
 				    strlen(prop->s2i[j].str) != (size_t)(t-s) ||
-				    strncmp(prop->s2i[j].str, s, (int)(t-s)))
+				    rd_strncasecmp(prop->s2i[j].str, s,
+						   (int)(t-s)))
 					continue;
 
 				rd_kafka_anyconf_set_prop0(scope, conf, prop,

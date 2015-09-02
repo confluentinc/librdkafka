@@ -18,6 +18,8 @@ mkl_require gen-pkg-config "rdkafka" "The Apache Kafka C/C++ library" \
     "Full Apache Kafka 0.8 protocol support, including producer and consumer" \
     "\$RDKAFKA_VERSION_STR"
 
+mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-code valgrind suppressions" "n"
+
 function checks {
 
     # required libs
@@ -58,6 +60,11 @@ function checks {
             mkl_err "disabling linker-script since perl is not available"
             mkl_mkvar_set WITH_LDS WITH_LDS "n"
         fi
+    fi
+
+    if [[ "$ENABLE_VALGRIND" == "y" ]]; then
+	mkl_compile_check valgrind WITH_VALGRIND disable CC "" \
+			  "#include <valgrind/memcheck.h>"
     fi
 }
 

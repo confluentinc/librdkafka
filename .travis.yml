@@ -8,3 +8,5 @@ os:
 
 script:
   ./configure && make all examples check
+
+sudo: false

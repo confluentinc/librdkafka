@@ -189,11 +189,12 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 "STATS",
                 "METADATA_REQ",
                 "OFFSET_COMMIT",
+		"NODE_UPDATE",
                 "REPLY",
                 "XMIT_BUF",
                 "RECV_BUF",
                 "FETCH_START",
-                "FETCH_STOP",
+                "FETCH_STOP"
         };
 
         return names[type];

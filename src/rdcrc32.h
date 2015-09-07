@@ -47,6 +47,10 @@ extern "C" {
  *****************************************************************************/
 typedef uint32_t rd_crc32_t;
 
+#if !WITH_ZLIB
+extern 	const rd_crc32_t crc_table[256];
+#endif
+
 
 /**
  * Reflect all bits of a \a data word of \a data_len bytes.
@@ -81,7 +85,31 @@ static __inline rd_crc32_t rd_crc32_init(void)
  * \param data_len Number of bytes in the \a data buffer.
  * \return         The updated crc value.
  *****************************************************************************/
-rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t data_len);
+	/**
+ * Update the crc value with new data.
+ *
+ * \param crc      The current crc value.
+ * \param data     Pointer to a buffer of \a data_len bytes.
+ * \param data_len Number of bytes in the \a data buffer.
+ * \return         The updated crc value.
+ *****************************************************************************/
+static __inline RD_UNUSED
+rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t data_len)
+{
+#if WITH_ZLIB
+        return crc32(crc, data, data_len);
+#else
+    unsigned int tbl_idx;
+
+    while (data_len--) {
+        tbl_idx = (crc ^ *data) & 0xff;
+        crc = (crc_table[tbl_idx] ^ (crc >> 8)) & 0xffffffff;
+
+        data++;
+    }
+    return crc & 0xffffffff;
+#endif
+}
 
 
 /**

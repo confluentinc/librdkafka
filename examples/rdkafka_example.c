@@ -712,7 +712,11 @@ int main (int argc, char **argv) {
         }
 
 	/* Let background threads clean up and terminate cleanly. */
-	rd_kafka_wait_destroyed(2000);
+	run = 5;
+	while (run-- > 0 && rd_kafka_wait_destroyed(1000) == -1)
+		printf("Waiting for librdkafka to decommission\n");
+	if (run <= 0)
+		rd_kafka_dump(stdout, rk);
 
 	return 0;
 }

@@ -231,6 +231,8 @@ void test_wait_exit (int timeout) {
 
         timeout -= (int)(time(NULL) - start);
         if (timeout > 0) {
+		TEST_SAY("Waiting %d seconds for all librdkafka memory "
+			 "to be released\n", timeout);
                 if (rd_kafka_wait_destroyed(timeout * 1000) == -1)
 			TEST_FAIL("Not all internal librdkafka "
 				  "objects destroyed\n");
@@ -378,6 +380,7 @@ int main(int argc, char **argv) {
 	int r = 0;
         const char *tests_to_run = NULL; /* all */
         int i;
+	test_timing_t t_all;
 
 #ifndef _MSC_VER
         tests_to_run = getenv("TESTS");
@@ -415,6 +418,8 @@ int main(int argc, char **argv) {
                 TEST_SAY("================= Skipping test %s ================\n", # NAME ); \
         } \
 	} while (0)
+
+	TIMING_START(&t_all, "ALL-TESTS");
 	RUN_TEST(0001_multiobj);
 	RUN_TEST(0002_unkpart);
 	RUN_TEST(0003_msgmaxsize);
@@ -435,9 +440,11 @@ int main(int argc, char **argv) {
                         rd_sleep(1);
         }
 
+	TIMING_STOP(&t_all);
+
         /* Wait for everything to be cleaned up since broker destroys are
 	 * handled in its own thread. */
-	test_wait_exit(10);
+	test_wait_exit(tests_run_in_parallel ? 20 : 10);
 
 	/* If we havent failed at this point then
 	 * there were no threads leaked */

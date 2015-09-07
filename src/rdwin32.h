@@ -78,7 +78,6 @@ struct msghdr {
 
 #define RD_UNUSED
 #define RD_NORETURN __declspec(noreturn)
-#define RD_PACKED
 #define RD_IS_CONSTANT(p)  (0)
 #define RD_TLS __declspec(thread)
 

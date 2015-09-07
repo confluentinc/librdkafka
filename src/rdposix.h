@@ -53,7 +53,6 @@
 
 #define RD_UNUSED   __attribute__((unused))
 #define RD_NORETURN __attribute__((noreturn))
-#define RD_PACKED   __attribute__((packed))
 #define RD_IS_CONSTANT(p)  __builtin_constant_p((p))
 #define RD_TLS      __thread
 

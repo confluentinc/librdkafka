@@ -515,7 +515,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
 	rkt = rd_calloc(1, sizeof(*rkt));
 
-	rkt->rkt_topic     = rd_kafkap_str_new(topic);
+	rkt->rkt_topic     = rd_kafkap_str_new(topic, -1);
 	rkt->rkt_rk        = rk;
 
 	if (!conf)
@@ -535,7 +535,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
         rkt->rkt_conf.group_id =
                 rd_kafkap_str_new(rkt->rkt_conf.group_id_str ?
 				  rkt->rkt_conf.group_id_str :
-                                  rkt->rkt_rk->rk_conf.group_id_str);
+                                  rkt->rkt_rk->rk_conf.group_id_str, -1);
 
 	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));

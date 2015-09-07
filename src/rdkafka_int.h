@@ -91,6 +91,17 @@ rd_kafka_crash (const char *file, int line, const char *function,
                 rd_kafka_t *rk, const char *reason);
 
 
+
+/**
+ * Flags used by:
+ *   - rd_kafka_op_t.rko_flags
+ *   - rd_kafka_buf_t.rkbuf_flags
+ */
+#define RD_KAFKA_OP_F_FREE        0x1  /* rd_free payload when done with it */
+#define RD_KAFKA_OP_F_FLASH       0x2  /* Internal: insert at head of queue */
+#define RD_KAFKA_OP_F_NO_RESPONSE 0x4  /* rkbuf: Not expecting a response */
+#define RD_KAFKA_OP_F_CRC         0x8  /* rkbuf: Perform CRC calculation */
+
 #include "rdkafka_msg.h"
 #include "rdkafka_proto.h"
 #include "rdkafka_buf.h"
@@ -434,10 +445,7 @@ typedef struct rd_kafka_op_s {
 	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
 
 	rd_kafka_op_type_t rko_type;
-	int       rko_flags;
-#define RD_KAFKA_OP_F_FREE        0x1  /* rd_free the payload when done with it. */
-#define RD_KAFKA_OP_F_FLASH       0x2  /* Internal: insert at head of queue */
-#define RD_KAFKA_OP_F_NO_RESPONSE 0x4  /* rkbuf: Not expecting a response */
+	int       rko_flags;      /* See RD_KAFKA_OP_F_... above */
 
         /* Generic fields */
 	rd_kafka_msgq_t rko_msgq;

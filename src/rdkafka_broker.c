@@ -432,8 +432,9 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 				      rd_kafka_buf_t *rkbuf, int at_head) {
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
+	/* Update CorrId header field. */
         rkbuf->rkbuf_corrid = ++rkb->rkb_corrid;
-	rkbuf->rkbuf_reqhdr.CorrId = htobe32(rkbuf->rkbuf_corrid);
+	rd_kafka_buf_update_i32(rkbuf, 4+2+2, rkbuf->rkbuf_corrid);
 
         rkbuf->rkbuf_ts_enq = rd_clock();
 
@@ -473,22 +474,30 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 /**
  * Finalize a stuffed rkbuf for sending to broker.
  */
-static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf, int16_t ApiKey) {
-	/* Header */
-	rkbuf->rkbuf_reqhdr.ApiKey = htobe16(ApiKey);
+static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
+				   int16_t ApiKey) {
+	int of_Size;
 
-	rkbuf->rkbuf_iov[0].iov_base = (void *)&rkbuf->rkbuf_reqhdr;
-	rkbuf->rkbuf_iov[0].iov_len  = sizeof(rkbuf->rkbuf_reqhdr);
+	rkbuf->rkbuf_reqhdr.ApiKey = ApiKey;
 
-	/* Header ClientId */
-	rkbuf->rkbuf_iov[1].iov_base = (void *)rk->rk_conf.client_id;
-	rkbuf->rkbuf_iov[1].iov_len  = RD_KAFKAP_STR_SIZE(rk->rk_conf.client_id);
+	/* Write header */
+	rd_kafka_buf_write_seek(rkbuf, 0);
+	of_Size = rd_kafka_buf_write_i32(rkbuf, 0); /* Size: Updated below */
+	rd_kafka_buf_write_i16(rkbuf, rkbuf->rkbuf_reqhdr.ApiKey);
+	rd_kafka_buf_write_i16(rkbuf, rkbuf->rkbuf_reqhdr.ApiVersion);
+	rd_kafka_buf_write_i32(rkbuf, 0); /* CorrId: Updated in enq0() */
+	
+	/* Write clientId */
+	rkbuf->rkbuf_iov[1].iov_base = RD_KAFKAP_STR_SER(rk->rk_conf.client_id);
+	rkbuf->rkbuf_iov[1].iov_len = RD_KAFKAP_STR_SIZE(rk->rk_conf.client_id);
 
 	/* Calculate total message buffer length. */
-	rkbuf->rkbuf_of          = 0;
+	rkbuf->rkbuf_of          = 0;  /* Indicates send position */
 	rkbuf->rkbuf_len         = rd_kafka_msghdr_size(&rkbuf->rkbuf_msg);
-	rkbuf->rkbuf_reqhdr.Size = be32toh(rkbuf->rkbuf_len-4);
+
+	rd_kafka_buf_update_i32(rkbuf, of_Size, rkbuf->rkbuf_len-4);
 }
+
 
 void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
                                int16_t ApiKey,
@@ -542,8 +551,7 @@ static void rd_kafka_buf_route_to_op (rd_kafka_broker_t *rkb,
         reply->rkbuf_rkb   = rkb;
         reply->rkbuf_parse_cb = request->rkbuf_parse_cb;
         rd_kafka_broker_keep(rkb);
-        rd_kafka_buf_version_set(reply,
-                                 be16toh(request->rkbuf_reqhdr.ApiVersion));
+        rd_kafka_buf_version_set(reply, request->rkbuf_reqhdr.ApiVersion);
         rd_kafka_q_enq(rko->rko_replyq, rko);
 }
 
@@ -583,37 +591,6 @@ void rd_kafka_broker_buf_enq_safe (rd_kafka_broker_t *rkb, int16_t ApiKey,
         rd_kafka_q_enq(&rkb->rkb_ops, rko);
 }
 
-static void rd_kafka_broker_buf_enq (rd_kafka_broker_t *rkb,
-				     int16_t ApiKey,
-				     char *buf, int32_t size, int flags,
-				     void (*reply_cb) (
-					     rd_kafka_broker_t *,
-					     int err,
-					     rd_kafka_buf_t *reply,
-					     rd_kafka_buf_t *request,
-					     void *opaque),
-				     void *opaque) {
-	rd_kafka_buf_t *rkbuf;
-
-	rkbuf = rd_kafka_buf_new(1, flags & RD_KAFKA_OP_F_FREE ? 0 : size);
-	rkbuf->rkbuf_flags |= flags;
-
-	if (size > 0) {
-		if (!(flags & RD_KAFKA_OP_F_FREE)) {
-			/* Duplicate data */
-			memcpy(rkbuf->rkbuf_buf, buf, size);
-			buf = rkbuf->rkbuf_buf;
-		} else {
-			rkbuf->rkbuf_buf = buf;
-			rkbuf->rkbuf_size = size;
-		}
-
-		rd_kafka_buf_push(rkbuf, buf, size);
-	}
-
-
-	rd_kafka_broker_buf_enq1(rkb, ApiKey, rkbuf, reply_cb, opaque);
-}
 
 
 
@@ -648,98 +625,108 @@ rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
         msh_size = sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_len * 4);
         msh_buf = rd_malloc(msh_size);
 
-        _MSH_ALLOC(md, sizeof(*md));
+        _MSH_ALLOC(rkbuf, md, sizeof(*md));
         md->orig_broker_id = rkb->rkb_nodeid;
-        _MSH_ALLOC(md->orig_broker_name, rkb_namelen);
+        _MSH_ALLOC(rkbuf, md->orig_broker_name, rkb_namelen);
         memcpy(md->orig_broker_name, rkb->rkb_name, rkb_namelen);
 
 	/* Read Brokers */
-	_READ_I32A(md->broker_cnt);
+	rd_kafka_buf_read_i32a(rkbuf, md->broker_cnt);
 	if (md->broker_cnt > RD_KAFKAP_BROKERS_MAX)
-		_FAIL("Broker_cnt %i > BROKERS_MAX %i",
-		      md->broker_cnt, RD_KAFKAP_BROKERS_MAX);
+		rd_kafka_buf_parse_fail(rkbuf, "Broker_cnt %i > BROKERS_MAX %i",
+					md->broker_cnt, RD_KAFKAP_BROKERS_MAX);
 
-        _MSH_ALLOC(md->brokers, md->broker_cnt * sizeof(*md->brokers));
+        _MSH_ALLOC(rkbuf, md->brokers, md->broker_cnt * sizeof(*md->brokers));
 
 	for (i = 0 ; i < md->broker_cnt ; i++) {
-                _READ_I32A(md->brokers[i].id);
-                _READ_STR_MSH(md->brokers[i].host);
-		_READ_I32A(md->brokers[i].port);
+                rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].id);
+                rd_kafka_buf_read_str_msh(rkbuf, md->brokers[i].host);
+		rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].port);
 	}
 
 
 	/* Read TopicMetadata */
-	_READ_I32A(md->topic_cnt);
+	rd_kafka_buf_read_i32a(rkbuf, md->topic_cnt);
 	rd_rkb_dbg(rkb, METADATA, "METADATA", "%i brokers, %i topics",
                    md->broker_cnt, md->topic_cnt);
 
 	if (md->topic_cnt > RD_KAFKAP_TOPICS_MAX)
-		_FAIL("TopicMetadata_cnt %"PRId32" > TOPICS_MAX %i",
-		      md->topic_cnt, RD_KAFKAP_TOPICS_MAX);
+		rd_kafka_buf_parse_fail(rkbuf, "TopicMetadata_cnt %"PRId32
+					" > TOPICS_MAX %i",
+					md->topic_cnt, RD_KAFKAP_TOPICS_MAX);
 
-        _MSH_ALLOC(md->topics, md->topic_cnt * sizeof(*md->topics));
+        _MSH_ALLOC(rkbuf, md->topics, md->topic_cnt * sizeof(*md->topics));
 
 	for (i = 0 ; i < md->topic_cnt ; i++) {
 
-		_READ_I16A(md->topics[i].err);
-		_READ_STR_MSH(md->topics[i].topic);
+		rd_kafka_buf_read_i16a(rkbuf, md->topics[i].err);
+		rd_kafka_buf_read_str_msh(rkbuf, md->topics[i].topic);
 
 		/* PartitionMetadata */
-                _READ_I32A(md->topics[i].partition_cnt);
+                rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partition_cnt);
 		if (md->topics[i].partition_cnt > RD_KAFKAP_PARTITIONS_MAX)
-			_FAIL("TopicMetadata[%i].PartitionMetadata_cnt %i "
-			      "> PARTITIONS_MAX %i",
-			      i, md->topics[i].partition_cnt,
-			      RD_KAFKAP_PARTITIONS_MAX);
+			rd_kafka_buf_parse_fail(rkbuf,
+						"TopicMetadata[%i]."
+						"PartitionMetadata_cnt %i "
+						"> PARTITIONS_MAX %i",
+						i, md->topics[i].partition_cnt,
+						RD_KAFKAP_PARTITIONS_MAX);
 
-                _MSH_ALLOC(md->topics[i].partitions,
+                _MSH_ALLOC(rkbuf, md->topics[i].partitions,
                            md->topics[i].partition_cnt *
                            sizeof(*md->topics[i].partitions));
 
 		for (j = 0 ; j < md->topics[i].partition_cnt ; j++) {
-			_READ_I16A(md->topics[i].partitions[j].err);
-			_READ_I32A(md->topics[i].partitions[j].id);
-			_READ_I32A(md->topics[i].partitions[j].leader);
+			rd_kafka_buf_read_i16a(rkbuf, md->topics[i].partitions[j].err);
+			rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].id);
+			rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].leader);
 
 			/* Replicas */
-			_READ_I32A(md->topics[i].partitions[j].replica_cnt);
+			rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].replica_cnt);
 			if (md->topics[i].partitions[j].replica_cnt >
 			    RD_KAFKAP_BROKERS_MAX)
-				_FAIL("TopicMetadata[%i]."
-				      "PartitionMetadata[%i].Replica_cnt "
-				      "%i > BROKERS_MAX %i",
-				      i, j,
-                                      md->topics[i].partitions[j].replica_cnt,
-				      RD_KAFKAP_BROKERS_MAX);
+				rd_kafka_buf_parse_fail(rkbuf,
+							"TopicMetadata[%i]."
+							"PartitionMetadata[%i]."
+							"Replica_cnt "
+							"%i > BROKERS_MAX %i",
+							i, j,
+							md->topics[i].
+							partitions[j].
+							replica_cnt,
+							RD_KAFKAP_BROKERS_MAX);
 
-                        _MSH_ALLOC(md->topics[i].partitions[j].replicas,
+                        _MSH_ALLOC(rkbuf, md->topics[i].partitions[j].replicas,
                                    md->topics[i].partitions[j].replica_cnt *
                                    sizeof(*md->topics[i].partitions[j].
                                           replicas));
 
                         for (k = 0 ;
                              k < md->topics[i].partitions[j].replica_cnt; k++)
-				_READ_I32A(md->topics[i].partitions[j].
+				rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].
                                            replicas[k]);
 
 			/* Isrs */
-			_READ_I32A(md->topics[i].partitions[j].isr_cnt);
+			rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].isr_cnt);
 			if (md->topics[i].partitions[j].isr_cnt >
 			    RD_KAFKAP_BROKERS_MAX)
-				_FAIL("TopicMetadata[%i]."
-				      "PartitionMetadata[%i].Isr_cnt "
-				      "%i > BROKERS_MAX %i",
-				      i, j,
-                                      md->topics[i].partitions[j].isr_cnt,
-				      RD_KAFKAP_BROKERS_MAX);
+				rd_kafka_buf_parse_fail(rkbuf,
+							"TopicMetadata[%i]."
+							"PartitionMetadata[%i]."
+							"Isr_cnt "
+							"%i > BROKERS_MAX %i",
+							i, j,
+							md->topics[i].
+							partitions[j].isr_cnt,
+							RD_KAFKAP_BROKERS_MAX);
 
-                        _MSH_ALLOC(md->topics[i].partitions[j].isrs,
+                        _MSH_ALLOC(rkbuf, md->topics[i].partitions[j].isrs,
                                    md->topics[i].partitions[j].isr_cnt *
                                    sizeof(*md->topics[i].partitions[j].isrs));
                         for (k = 0 ;
                              k < md->topics[i].partitions[j].isr_cnt; k++)
-				_READ_I32A(md->topics[i].partitions[j].
-                                           isrs[k]);
+				rd_kafka_buf_read_i32a(rkbuf, md->topics[i].
+						       partitions[j].isrs[k]);
 
 		}
 	}
@@ -860,8 +847,7 @@ static void rd_kafka_broker_metadata_reply (rd_kafka_broker_t *rkb,
 
 static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
                                              rd_kafka_op_t *rko) {
-	char *buf;
-	size_t of = 0;
+	rd_kafka_buf_t *rkbuf;
 	int32_t arrsize = 0;
 	size_t tnamelen = 0;
 	rd_kafka_topic_t *rkt;
@@ -923,30 +909,25 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
 		}
 	}
 
-	buf = rd_malloc(sizeof(arrsize) + tnamelen);
-	arrsize = htobe32(arrsize);
-	memcpy(buf+of, &arrsize, 4);
-	of += 4;
+	rkbuf = rd_kafka_buf_new(1, sizeof(arrsize) + tnamelen);
+	rd_kafka_buf_write_i32(rkbuf, arrsize);
 
 
 	if (rko->rko_rkt || !rko->rko_all_topics) {
 		/* Just our locally known topics */
 
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
-			int tlen;
 			if (rko->rko_rkt && rko->rko_rkt != rkt)
 				continue;
-			tlen = RD_KAFKAP_STR_SIZE(rkt->rkt_topic);
-			memcpy(buf+of, rkt->rkt_topic, tlen);
-			of += tlen;
+			rd_kafka_buf_write_kstr(rkbuf, rkt->rkt_topic);
 		}
 		rd_kafka_rdunlock(rkb->rkb_rk);
 	}
 
 
-	rd_kafka_broker_buf_enq(rkb, RD_KAFKAP_Metadata,
-				buf, of,
-				RD_KAFKA_OP_F_FREE|RD_KAFKA_OP_F_FLASH,
+	rd_kafka_buf_autopush(rkbuf);
+
+	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_Metadata, rkbuf,
 				rd_kafka_broker_metadata_reply, rko);
 }
 
@@ -1150,8 +1131,8 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 	rd_rkb_dbg(rkb, PROTOCOL, "RECV",
 		   "Received %sResponse (v%hd, %"PRIdsz" bytes, CorrId %"PRId32
 		   ", rtt %.2fms)",
-		   rd_kafka_ApiKey2str(be16toh(req->rkbuf_reqhdr.ApiKey)),
-                   be16toh(req->rkbuf_reqhdr.ApiVersion),
+		   rd_kafka_ApiKey2str(req->rkbuf_reqhdr.ApiKey),
+                   req->rkbuf_reqhdr.ApiVersion,
 		   rkbuf->rkbuf_len, rkbuf->rkbuf_reshdr.CorrId,
 		   (float)req->rkbuf_ts_sent / 1000.0f);
 
@@ -1208,8 +1189,10 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 	rd_kafka_buf_t *rkbuf;
 	ssize_t r;
 	struct msghdr msg;
+	struct iovec iov;
 	char errstr[512];
-	rd_kafka_resp_err_t err_code = 0;
+	rd_kafka_resp_err_t err_code = RD_KAFKA_RESP_ERR__BAD_MSG;
+	const int log_decode_errors = 1;
 
 	/**
 	 * The receive buffers are split up in two parts:
@@ -1249,24 +1232,30 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 
 		rkbuf = rd_kafka_buf_new(0, 0);
 
-		rkbuf->rkbuf_iov[0].iov_base = (void *)&rkbuf->rkbuf_reshdr;
-		rkbuf->rkbuf_iov[0].iov_len = sizeof(rkbuf->rkbuf_reshdr);
+		rkbuf->rkbuf_rkb = rkb;
+		rd_kafka_broker_keep(rkb);
+
+		/* The iov[0] buffer is already allocated by buf_new(),
+		 * shrink it to only allow for the response header. */
+		rkbuf->rkbuf_iov[0].iov_len = RD_KAFKAP_RESHDR_SIZE;
+		rkbuf->rkbuf_wof = 0;
 
 		rkbuf->rkbuf_msg.msg_iov = rkbuf->rkbuf_iov;
 		rkbuf->rkbuf_msg.msg_iovlen = 1;
 
 		msg = rkbuf->rkbuf_msg;
 
+		/* Point read buffer to main buffer. */
+		rkbuf->rkbuf_rbuf = rkbuf->rkbuf_buf;
+
 		rkb->rkb_recv_buf = rkbuf;
 
 	} else {
 		/* Receive in progress: adjust the msg to allow more data. */
-		msg.msg_iov = rd_alloca(sizeof(struct iovec) *
-				     rkbuf->rkbuf_iovcnt);
-		
+		msg.msg_iov = &iov;
 		rd_kafka_msghdr_rebuild(&msg, rkbuf->rkbuf_msg.msg_iovlen,
 					&rkbuf->rkbuf_msg,
-					rkbuf->rkbuf_of);
+					rkbuf->rkbuf_wof);
 	}
 
 	rd_kafka_assert(rkb->rkb_rk, rd_kafka_msghdr_size(&msg) > 0);
@@ -1281,23 +1270,26 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 		goto err;
 	}
 
-	rkbuf->rkbuf_of += r;
+	rkbuf->rkbuf_wof += r;
 
 	if (rkbuf->rkbuf_len == 0) {
 		/* Packet length not known yet. */
 
-		if (unlikely(rkbuf->rkbuf_of < sizeof(rkbuf->rkbuf_reshdr))) {
+		if (unlikely(rkbuf->rkbuf_wof < RD_KAFKAP_RESHDR_SIZE)) {
 			/* Need response header for packet length and corrid.
 			 * Wait for more data. */ 
 			return 0;
 		}
 
-		rkbuf->rkbuf_len = be32toh(rkbuf->rkbuf_reshdr.Size);
-		rkbuf->rkbuf_reshdr.CorrId = be32toh(rkbuf->rkbuf_reshdr.CorrId);
+		/* Read protocol header */
+		rd_kafka_buf_read_i32(rkbuf, &rkbuf->rkbuf_reshdr.Size);
+		rd_kafka_buf_read_i32(rkbuf, &rkbuf->rkbuf_reshdr.CorrId);
+		rkbuf->rkbuf_len = rkbuf->rkbuf_reshdr.Size;
 
 		/* Make sure message size is within tolerable limits. */
 		if (rkbuf->rkbuf_len < 4/*CorrId*/ ||
-		    rkbuf->rkbuf_len > (size_t)rkb->rkb_rk->rk_conf.recv_max_msg_size) {
+		    rkbuf->rkbuf_len >
+		    (size_t)rkb->rkb_rk->rk_conf.recv_max_msg_size) {
 			rd_snprintf(errstr, sizeof(errstr),
 				 "Invalid message size %"PRIdsz" (0..%i): "
 				 "increase receive.message.max.bytes",
@@ -1317,19 +1309,23 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 			 * data to be in contigious memory. */
 
 			rkbuf->rkbuf_buf2 = rd_malloc(rkbuf->rkbuf_len);
-			rd_kafka_assert(rkb->rkb_rk,
-                                        rkbuf->rkbuf_msg.msg_iovlen == 1);
-			rkbuf->rkbuf_iov[1].iov_base = rkbuf->rkbuf_buf2;
-			rkbuf->rkbuf_iov[1].iov_len = rkbuf->rkbuf_len;
-			rkbuf->rkbuf_msg.msg_iovlen = 2;
+			/* Point read buffer to payload buffer. */
+			rkbuf->rkbuf_rbuf = rkbuf->rkbuf_buf2;
+			/* Reset offsets for new buffer */
+			rkbuf->rkbuf_of   = 0;
+			rkbuf->rkbuf_wof  = 0;
+			/* Write to first iovec */
+			rkbuf->rkbuf_iov[0].iov_base = rkbuf->rkbuf_buf2;
+			rkbuf->rkbuf_iov[0].iov_len = rkbuf->rkbuf_len;
+			rkbuf->rkbuf_msg.msg_iovlen = 1;
 		}
 	}
 
-	if (rkbuf->rkbuf_of == rkbuf->rkbuf_len + sizeof(rkbuf->rkbuf_reshdr)) {
+	if (rkbuf->rkbuf_wof == rkbuf->rkbuf_len) {
 		/* Message is complete, pass it on to the original requester. */
 		rkb->rkb_recv_buf = NULL;
 		(void)rd_atomic64_add(&rkb->rkb_c.rx, 1);
-		(void)rd_atomic64_add(&rkb->rkb_c.rx_bytes, rkbuf->rkbuf_of);
+		(void)rd_atomic64_add(&rkb->rkb_c.rx_bytes, rkbuf->rkbuf_wof);
 		rd_kafka_req_response(rkb, rkbuf);
 	}
 
@@ -1504,10 +1500,10 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		}
 
 		rd_rkb_dbg(rkb, PROTOCOL, "SEND",
-			   "Sent %sRequest (v%hd, %"PRIdsz" bytes, CorrId %"PRId32")",
-			   rd_kafka_ApiKey2str(be16toh(rkbuf->rkbuf_reqhdr.
-						     ApiKey)),
-                           be16toh(rkbuf->rkbuf_reqhdr.ApiVersion),
+			   "Sent %sRequest (v%hd, %"PRIdsz" bytes, "
+			   "CorrId %"PRId32")",
+			   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
+                           rkbuf->rkbuf_reqhdr.ApiVersion,
 			   rkbuf->rkbuf_len, rkbuf->rkbuf_corrid);
 
 		/* Entire buffer sent, unlink from outbuf */
@@ -1612,20 +1608,16 @@ void rd_kafka_dr_msgq (rd_kafka_topic_t *rkt,
 static rd_kafka_resp_err_t
 rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf,
                                int64_t *offsetp) {
-	size_t of = 0;
 	int32_t TopicArrayCnt;
-	rd_kafkap_str_t *topic;
 	int32_t PartitionArrayCnt;
-#pragma pack(push, 1)
 	struct {
 		int32_t Partition;
 		int16_t ErrorCode;
 		int64_t Offset;
-	} RD_PACKED *hdr;
-#pragma pack(pop)
+	} hdr;
         const int log_decode_errors = 1;
 
-	_READ_I32(&TopicArrayCnt);
+	rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
 	if (TopicArrayCnt != 1)
 		goto err;
 
@@ -1633,17 +1625,19 @@ rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf,
 	 * request we assume that the reply only contains one topic+partition
 	 * and that it is the same that we requested.
 	 * If not the broker is buggy. */
-	_READ_STR(topic);
-	_READ_I32(&PartitionArrayCnt);
+	rd_kafka_buf_skip_str(rkbuf);
+	rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
 
 	if (PartitionArrayCnt != 1)
 		goto err;
 
-	_READ_REF(hdr, sizeof(*hdr));
+	rd_kafka_buf_read_i32(rkbuf, &hdr.Partition);
+	rd_kafka_buf_read_i16(rkbuf, &hdr.ErrorCode);
+	rd_kafka_buf_read_i64(rkbuf, &hdr.Offset);
 
-        *offsetp = be64toh(hdr->Offset);
+        *offsetp = hdr.Offset;
 
-	return be16toh(hdr->ErrorCode);
+	return hdr.ErrorCode;
 
 err:
 	return RD_KAFKA_RESP_ERR__BAD_MSG;
@@ -1756,6 +1750,185 @@ done:
 
 
 /**
+ * Compresses a MessageSet
+ */
+static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
+					     rd_kafka_toppar_t *rktp,
+					     rd_kafka_buf_t *rkbuf,
+					     int iov_firstmsg, int of_firstmsg,
+					     int32_t *MessageSetSizep) {
+	int32_t MessageSetSize = *MessageSetSizep;
+	int    siovlen = 1;
+	size_t coutlen = 0;
+	int    outlen;
+	int r;
+	struct snappy_env senv;
+	struct iovec siov;
+#if WITH_ZLIB
+	z_stream strm;
+	int i;
+#endif
+
+	switch (rkb->rkb_rk->rk_conf.compression_codec) {
+	case RD_KAFKA_COMPRESSION_NONE:
+		abort(); /* unreachable */
+		break;
+
+#if WITH_ZLIB
+	case RD_KAFKA_COMPRESSION_GZIP:
+		/* Initialize gzip compression */
+		memset(&strm, 0, sizeof(strm));
+		r = deflateInit2(&strm, Z_DEFAULT_COMPRESSION,
+				 Z_DEFLATED, 15+16,
+				 8, Z_DEFAULT_STRATEGY);
+		if (r != Z_OK) {
+			rd_rkb_log(rkb, LOG_ERR, "GZIP",
+				   "Failed to initialize gzip for "
+				   "compressing %"PRId32" bytes in "
+				   "topic %.*s [%"PRId32"]: %s (%i): "
+				   "sending uncompressed",
+				   MessageSetSize,
+				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+				   rktp->rktp_partition,
+				   strm.msg ? : "", r);
+			return -1;
+		}
+
+		/* Calculate maximum compressed size and
+		 * allocate an output buffer accordingly, being
+		 * prefixed with the Message header. */
+		siov.iov_len = deflateBound(&strm, MessageSetSize);
+		siov.iov_base = rd_malloc(siov.iov_len);
+
+		strm.next_out = (void *)siov.iov_base;
+		strm.avail_out = siov.iov_len;
+
+		/* Iterate through each message and compress it. */
+		for (i = iov_firstmsg ;
+		     i < (int)rkbuf->rkbuf_msg.msg_iovlen ; i++) {
+
+			if (rkbuf->rkbuf_msg.msg_iov[i].iov_len == 0)
+				continue;
+
+			strm.next_in = (void *)rkbuf->rkbuf_msg.
+				msg_iov[i].iov_base;
+			strm.avail_in = rkbuf->rkbuf_msg.msg_iov[i].iov_len;
+
+			/* Compress message */
+			if ((r = deflate(&strm, Z_NO_FLUSH) != Z_OK)) {
+				rd_rkb_log(rkb, LOG_ERR, "GZIP",
+					   "Failed to gzip-compress "
+					   "%"PRIdsz" bytes for "
+					   "topic %.*s [%"PRId32"]: "
+					   "%s (%i): "
+					   "sending uncompressed",
+					   rkbuf->rkbuf_msg.msg_iov[i].
+					   iov_len,
+					   RD_KAFKAP_STR_PR(rktp->
+							    rktp_rkt->
+							    rkt_topic),
+					   rktp->rktp_partition,
+					   strm.msg ? : "", r);
+				deflateEnd(&strm);
+				rd_free(siov.iov_base);
+				return -1;
+			}
+
+			rd_kafka_assert(rkb->rkb_rk, strm.avail_in == 0);
+		}
+
+		/* Finish the compression */
+		if ((r = deflate(&strm, Z_FINISH)) != Z_STREAM_END) {
+			rd_rkb_log(rkb, LOG_ERR, "GZIP",
+				   "Failed to finish gzip compression "
+				   " of %"PRId32" bytes for "
+				   "topic %.*s [%"PRId32"]: "
+				   "%s (%i): "
+				   "sending uncompressed",
+				   MessageSetSize,
+				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
+						    rkt_topic),
+				   rktp->rktp_partition,
+				   strm.msg ? : "", r);
+			deflateEnd(&strm);
+			rd_free(siov.iov_base);
+			return -1;
+		}
+
+		coutlen = strm.total_out;
+
+		/* Deinitialize compression */
+		deflateEnd(&strm);
+		break;
+#endif
+
+	case RD_KAFKA_COMPRESSION_SNAPPY:
+		/* Initialize snappy compression environment */
+		snappy_init_env_sg(&senv, 1/*iov enable*/);
+
+		/* Calculate maximum compressed size and
+		 * allocate an output buffer accordingly. */
+		siov.iov_len = snappy_max_compressed_length(MessageSetSize);
+		siov.iov_base = rd_malloc(siov.iov_len);
+
+		/* Compress each message */
+		if ((r = snappy_compress_iov(&senv,
+					     &rkbuf->
+					     rkbuf_iov[iov_firstmsg],
+					     rkbuf->rkbuf_msg.
+					     msg_iovlen -
+					     iov_firstmsg,
+					     MessageSetSize,
+					     &siov, &siovlen,
+					     &coutlen)) != 0) {
+			rd_rkb_log(rkb, LOG_ERR, "SNAPPY",
+				   "Failed to snappy-compress "
+				   "%"PRId32" bytes for "
+				   "topic %.*s [%"PRId32"]: %s: "
+				   "sending uncompressed",
+				   MessageSetSize,
+				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
+						    rkt_topic),
+				   rktp->rktp_partition,
+				   rd_strerror(-r));
+			rd_free(siov.iov_base);
+			return -1;
+		}
+
+		/* rd_free snappy environment */
+		snappy_free_env(&senv);
+		break;
+
+	default:
+		rd_kafka_assert(rkb->rkb_rk,
+				!*"notreached: compression.codec");
+		break;
+
+	}
+
+	/* Rewind rkbuf to the pre-message checkpoint.
+	 * This is to replace all the original Messages with just the
+	 * Message containing the compressed payload. */
+	rd_kafka_buf_rewind(rkbuf, iov_firstmsg, of_firstmsg);
+
+	rd_kafka_buf_write_Message(rkbuf, 0, 0,
+				   rkb->rkb_rk->rk_conf.compression_codec,
+				   &rd_kafkap_bytes_null,
+				   (void *)siov.iov_base, coutlen,
+				   &outlen);
+
+	/* Update enveloping MessageSet's length. */
+	*MessageSetSizep = outlen;
+
+	/* Add allocated buffer as auxbuf to rkbuf so that
+	 * it will get freed with the rkbuf */
+	rd_kafka_buf_auxbuf_add(rkbuf, siov.iov_base);
+
+	return 0;
+}
+
+
+/**
  * Produce messages from 'rktp's queue.
  */
 static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
@@ -1765,49 +1938,20 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	int msgcnt;
 	rd_kafka_buf_t *rkbuf;
 	rd_kafka_topic_t *rkt = rktp->rktp_rkt;
-	struct {
-#pragma pack(push, 1)
-		struct {
-			int16_t RequiredAcks;
-			int32_t Timeout;
-			int32_t TopicArrayCnt;
-		} RD_PACKED part1;
-		/* TopicName is inserted here */
-		struct {
-			int32_t PartitionArrayCnt;
-			int32_t Partition;
-			int32_t MessageSetSize;
-		} RD_PACKED part2;
-#pragma pack(pop)
-		/* MessageSet headers follows */
-	} *prodhdr;
-	/* Both MessageSet and Message headers combined: */
-	struct {
-#pragma pack(push, 1)
-		struct {
-			int64_t Offset;
-			int32_t MessageSize;
-			uint32_t Crc;
-			int8_t  MagicByte;
-			int8_t  Attributes;
-		} RD_PACKED part3;
-		struct {
-			int32_t Value_len;
-		} RD_PACKED part4;
-#pragma pack(pop)
-	} *msghdr;
 	int iovcnt;
 	int iov_firstmsg;
+	int of_firstmsg;
+	int of_MessageSetSize;
+	int32_t MessageSetSize = 0;
+	int outlen;
 
 	/* iovs:
-	 *  1 * RequiredAcks + Timeout (part1)
-	 *  1 * Topic
-	 *  1 * Partition + MessageSetSize (part2)
-	 *  msgcnt * messagehdr (part3)
-	 *  msgcnt * key
-	 *  msgcnt * Value_len (part4)
-	 *  msgcnt * messagepayload
-	 * = 3 + (4 * msgcnt)
+	 *  1 * (RequiredAcks + Timeout + Topic + Partition + MessageSetSize)
+	 *  msgcnt * messagehdr
+	 *  msgcnt * key (ext memory)
+	 *  msgcnt * Value_len
+	 *  msgcnt * messagepayload (ext memory)
+	 * = 1 + (4 * msgcnt)
 	 *
 	 * We are bound both by configuration and IOV_MAX
 	 */
@@ -1818,134 +1962,82 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	msgcnt = RD_MIN(rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt),
 			rkb->rkb_rk->rk_conf.batch_num_messages);
 	rd_kafka_assert(rkb->rkb_rk, msgcnt > 0);
-	iovcnt = 3 + (4 * msgcnt);
+	iovcnt = 1 + (4 * msgcnt);
 
 	if (iovcnt > RD_KAFKA_PAYLOAD_IOV_MAX) {
 		iovcnt = RD_KAFKA_PAYLOAD_IOV_MAX;
-		msgcnt = ((iovcnt / 4) - 3);
+		msgcnt = ((iovcnt / 4) - 1);
 	}
-
-	if (0)
-		rd_rkb_dbg(rkb, MSG, "PRODUCE",
-			   "Serve %i/%i messages (%i iovecs) "
-			   "for %.*s [%"PRId32"] (%"PRIu64" bytes)",
-			   msgcnt, rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
-			   iovcnt,
-			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
-			   rktp->rktp_partition,
-			   rd_atomic64_get(&rktp->rktp_msgq.rkmq_msg_bytes));
-
 
 	/* Allocate iovecs to hold all headers and messages,
 	 * and allocate auxilliery space for the headers. */
 	rkbuf = rd_kafka_buf_new(iovcnt,
-				 sizeof(*prodhdr) +
-				 (sizeof(*msghdr) * msgcnt));
-	prodhdr = (void *)rkbuf->rkbuf_buf;
-	msghdr = (void *)(prodhdr+1);
+				 /* RequiredAcks + Timeout + TopicCnt */
+				 2 + 4 + 4 +
+				 /* Topic */
+				 RD_KAFKAP_STR_SIZE(rkt->rkt_topic) +
+				 /* PartitionCnt + Partition + MessageSetSize */
+				 4 + 4 + 4 +
+				 /* MessageSet+Message * msgcnt */
+				 ((8 + 4 + /* Offset+MessageSize*/
+				   4 + 1 + 1 + 4 /* Crc+Magic+Attr+ValueLen */)
+				  * msgcnt));
 
-	/* Insert first part of Produce header */
-	prodhdr->part1.RequiredAcks  = htobe16(rkt->rkt_conf.required_acks);
-	prodhdr->part1.Timeout       = htobe32(rkt->rkt_conf.request_timeout_ms);
-	prodhdr->part1.TopicArrayCnt = htobe32(1);
-	rd_kafka_buf_push(rkbuf, &prodhdr->part1, sizeof(prodhdr->part1));
+	/*
+	 * Insert first part of Produce header
+	 */
+	/* RequiredAcks */
+	rd_kafka_buf_write_i16(rkbuf, rkt->rkt_conf.required_acks);
+	/* Timeout */
+	rd_kafka_buf_write_i32(rkbuf, rkt->rkt_conf.request_timeout_ms);
+	/* TopicArrayCnt */
+	rd_kafka_buf_write_i32(rkbuf, 1);
 
 	/* Insert topic */
-	rd_kafka_buf_push(rkbuf, rkt->rkt_topic,
-			  RD_KAFKAP_STR_SIZE(rkt->rkt_topic));
+	rd_kafka_buf_write_kstr(rkbuf, rkt->rkt_topic);
 
-	/* Insert second part of Produce header */
-	prodhdr->part2.PartitionArrayCnt = htobe32(1);
-	prodhdr->part2.Partition = htobe32(rktp->rktp_partition);
-	/* Will be finalized later*/
-	prodhdr->part2.MessageSetSize = 0;
+	/*
+	 * Insert second part of Produce header
+	 */
+	/* PartitionArrayCnt */
+	rd_kafka_buf_write_i32(rkbuf, 1);
+	/* Partition */
+	rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
+	/* MessageSetSize: Will be finalized later*/
+	of_MessageSetSize = rd_kafka_buf_write_i32(rkbuf, 0);
 
-	rd_kafka_buf_push(rkbuf, &prodhdr->part2, sizeof(prodhdr->part2));
+	/* Push write-buffer onto iovec stack */
+        rd_kafka_buf_autopush(rkbuf);
 
 	iov_firstmsg = rkbuf->rkbuf_msg.msg_iovlen;
+	of_firstmsg = rkbuf->rkbuf_wof;
 
 	while (msgcnt > 0 &&
 	       (rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs))) {
 
-		if (prodhdr->part2.MessageSetSize + rkm->rkm_len >
+		if (MessageSetSize + rkm->rkm_len >
 		    (size_t)rkb->rkb_rk->rk_conf.max_msg_size) {
 			rd_rkb_dbg(rkb, MSG, "PRODUCE",
 				   "No more space in current message "
 				   "(%i messages)",
-				   rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
+				   rd_atomic32_get(&rkbuf->rkbuf_msgq.
+						   rkmq_msg_cnt));
 			/* Not enough remaining size. */
 			break;
 		}
 
 		rd_kafka_msgq_deq(&rktp->rktp_xmit_msgq, rkm, 1);
-
 		rd_kafka_msgq_enq(&rkbuf->rkbuf_msgq, rkm);
-
 		msgcnt--;
 
-		/* Message header */
-		msghdr->part3.Offset = 0;
-		msghdr->part3.MessageSize = 
-			(sizeof(msghdr->part3) -
-			 sizeof(msghdr->part3.Offset) -
-			 sizeof(msghdr->part3.MessageSize)) +
-			RD_KAFKAP_BYTES_SIZE(rkm->rkm_key) +
-			sizeof(msghdr->part4) +
-			rkm->rkm_len;
-		prodhdr->part2.MessageSetSize +=
-			sizeof(msghdr->part3.Offset) +
-			sizeof(msghdr->part3.MessageSize) +
-			msghdr->part3.MessageSize;
-		msghdr->part3.MessageSize =
-			htobe32(msghdr->part3.MessageSize);
+		/* Write message to buffer */
+		rd_kafka_buf_write_Message(rkbuf, 0, 0,
+					   RD_KAFKA_COMPRESSION_NONE,
+					   rkm->rkm_key,
+					   rkm->rkm_payload, rkm->rkm_len,
+					   &outlen);
 
-
-		msghdr->part3.Crc = rd_crc32_init();
-		msghdr->part3.MagicByte = 0;  /* FIXME: what? */
-		msghdr->part3.Attributes = 0; /* No compression */
-
-		msghdr->part3.Crc =
-			rd_crc32_update(msghdr->part3.Crc,
-                                        (void *)&msghdr->part3.MagicByte,
-                                        sizeof(msghdr->part3.MagicByte) +
-                                        sizeof(msghdr->part3.Attributes));
-
-		/* Message header */
-		rd_kafka_buf_push(rkbuf, &msghdr->part3, sizeof(msghdr->part3));
-
-
-		/* Key */
-		msghdr->part3.Crc =
-			rd_crc32_update(msghdr->part3.Crc,
-					(void *)rkm->rkm_key,
-                                        RD_KAFKAP_BYTES_SIZE(rkm->rkm_key));
-
-		rd_kafka_buf_push(rkbuf, rkm->rkm_key,
-				  RD_KAFKAP_BYTES_SIZE(rkm->rkm_key));
-
-
-		/* Value(payload) length */
-		msghdr->part4.Value_len = htobe32(rkm->rkm_payload ?
-						  (int)rkm->rkm_len :
-						  RD_KAFKAP_BYTES_LEN_NULL);
-		msghdr->part3.Crc =
-			rd_crc32_update(msghdr->part3.Crc,
-					(void *)&msghdr->part4.Value_len,
-					sizeof(msghdr->part4.Value_len));
-
-		rd_kafka_buf_push(rkbuf, &msghdr->part4, sizeof(msghdr->part4));
-
-		/* Payload */
-		if (rkm->rkm_payload) {
-			msghdr->part3.Crc =
-				rd_crc32_update(msghdr->part3.Crc,
-                                                rkm->rkm_payload, rkm->rkm_len);
-			rd_kafka_buf_push(rkbuf, rkm->rkm_payload, rkm->rkm_len);
-		}
-
-		/* Finalize Crc */
-		msghdr->part3.Crc = htobe32(rd_crc32_finalize(msghdr->part3.Crc));
-		msghdr++;
+		MessageSetSize += outlen;
 	}
 
 	/* No messages added, bail out early. */
@@ -1954,223 +2046,30 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		return -1;
 	}
 
-	/* Compress the messages */
+
+	/* Compress the message(s) */
 	if (rkb->rkb_rk->rk_conf.compression_codec) {
-		int    siovlen = 1;
-		size_t coutlen = 0;
-		int r;
-#pragma pack(push, 1)
-		struct {
-			int64_t Offset;
-			int32_t MessageSize;
-			uint32_t Crc;
-			int8_t  MagicByte;
-			int8_t  Attributes;
-			int32_t Key_len; /* -1 */
-			int32_t Value_len;
-		} RD_PACKED *msghdr2 = NULL;
-#pragma pack(pop)
-		int32_t ctotlen;
-		struct snappy_env senv;
-		struct iovec siov;
-#if WITH_ZLIB
-		z_stream strm;
-		int i;
-#endif
+		/* Update MessageSetSize prior to compression */
+		rd_kafka_buf_update_i32(rkbuf,
+					of_MessageSetSize, MessageSetSize);
 
-		switch (rkb->rkb_rk->rk_conf.compression_codec) {
-		case RD_KAFKA_COMPRESSION_NONE:
-			abort(); /* unreachable */
-			break;
-
-#if WITH_ZLIB
-		case RD_KAFKA_COMPRESSION_GZIP:
-			/* Initialize gzip compression */
-			memset(&strm, 0, sizeof(strm));
-			r = deflateInit2(&strm, Z_DEFAULT_COMPRESSION,
-					 Z_DEFLATED, 15+16,
-					 8, Z_DEFAULT_STRATEGY);
-			if (r != Z_OK) {
-				rd_rkb_log(rkb, LOG_ERR, "GZIP",
-					   "Failed to initialize gzip for "
-					   "compressing %"PRId32" bytes in "
-					   "topic %.*s [%"PRId32"]: %s (%i): "
-					   "sending uncompressed",
-					   prodhdr->part2.MessageSetSize,
-					   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
-							    rkt_topic),
-					   rktp->rktp_partition,
-					   strm.msg ? : "", r);
-				goto do_send;
-			}
-
-			/* Calculate maximum compressed size and
-			 * allocate an output buffer accordingly, being
-			 * prefixed with the Message header. */
-			siov.iov_len = deflateBound(&strm,
-						    prodhdr->part2.
-						    MessageSetSize);
-			msghdr2 = rd_malloc(sizeof(*msghdr2) + siov.iov_len);
-			siov.iov_base = (void *)(msghdr2+1);
-
-			strm.next_out = (void *)siov.iov_base;
-			strm.avail_out = siov.iov_len;
-
-			/* Iterate through each message and compress it. */
-			for (i = iov_firstmsg ;
-			     i < (int)rkbuf->rkbuf_msg.msg_iovlen ; i++) {
-
-				if (rkbuf->rkbuf_msg.msg_iov[i].iov_len == 0)
-					continue;
-
-				strm.next_in = (void *)rkbuf->rkbuf_msg.
-					msg_iov[i].iov_base;
-				strm.avail_in = rkbuf->rkbuf_msg.
-					msg_iov[i].iov_len;
-
-				/* Compress message */
-				if ((r = deflate(&strm, Z_NO_FLUSH) != Z_OK)) {
-					rd_rkb_log(rkb, LOG_ERR, "GZIP",
-						   "Failed to gzip-compress "
-						   "%"PRIdsz" bytes for "
-						   "topic %.*s [%"PRId32"]: "
-						   "%s (%i): "
-						   "sending uncompressed",
-						   rkbuf->rkbuf_msg.msg_iov[i].
-						   iov_len,
-						   RD_KAFKAP_STR_PR(rktp->
-								    rktp_rkt->
-								    rkt_topic),
-						   rktp->rktp_partition,
-						   strm.msg ? : "", r);
-					deflateEnd(&strm);
-					rd_free(msghdr2);
-					goto do_send;
-				}
-
-				rd_kafka_assert(rkb->rkb_rk,
-                                                strm.avail_in == 0);
-			}
-
-			/* Finish the compression */
-			if ((r = deflate(&strm, Z_FINISH)) != Z_STREAM_END) {
-				rd_rkb_log(rkb, LOG_ERR, "GZIP",
-					   "Failed to finish gzip compression "
-					   " of %"PRId32" bytes for "
-					   "topic %.*s [%"PRId32"]: "
-					   "%s (%i): "
-					   "sending uncompressed",
-					   prodhdr->part2.MessageSetSize,
-					   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
-							    rkt_topic),
-					   rktp->rktp_partition,
-					   strm.msg ? : "", r);
-				deflateEnd(&strm);
-				rd_free(msghdr2);
-				goto do_send;
-			}
-
-			coutlen = strm.total_out;
-
-			/* Deinitialize compression */
-			deflateEnd(&strm);
-			break;
-#endif
-
-		case RD_KAFKA_COMPRESSION_SNAPPY:
-			/* Initialize snappy compression environment */
-			snappy_init_env_sg(&senv, 1/*iov enable*/);
-
-			/* Calculate maximum compressed size and
-			 * allocate an output buffer accordingly, being
-			 * prefixed with the Message header. */
-			siov.iov_len =
-				snappy_max_compressed_length(prodhdr->part2.
-							     MessageSetSize);
-			msghdr2 = rd_malloc(sizeof(*msghdr2) + siov.iov_len);
-			siov.iov_base = (void *)(msghdr2+1);
-
-			/* Compress each message */
-			if ((r = snappy_compress_iov(&senv,
-						     &rkbuf->
-						     rkbuf_iov[iov_firstmsg],
-						     rkbuf->rkbuf_msg.
-						     msg_iovlen -
-						     iov_firstmsg,
-						     prodhdr->part2.
-						     MessageSetSize,
-						     &siov, &siovlen,
-						     &coutlen)) != 0) {
-				rd_rkb_log(rkb, LOG_ERR, "SNAPPY",
-					   "Failed to snappy-compress "
-					   "%"PRId32" bytes for "
-					   "topic %.*s [%"PRId32"]: %s: "
-					   "sending uncompressed",
-					   prodhdr->part2.MessageSetSize,
-					   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
-							    rkt_topic),
-					   rktp->rktp_partition,
-					   rd_strerror(-r));
-				rd_free(msghdr2);
-				goto do_send;
-			}
-
-			/* rd_free snappy environment */
-			snappy_free_env(&senv);
-			break;
-
-		default:
-			rd_kafka_assert(rkb->rkb_rk, !*"notreached: compression.codec");
-			break;
-
-		}
-
-		/* Create a new Message who's Value is the compressed data */
-		ctotlen = sizeof(*msghdr2) + coutlen;
-		msghdr2->Offset      = 0;
-		msghdr2->MessageSize = htobe32(4+1+1+4+4 + coutlen);
-		msghdr2->MagicByte   = 0;
-		msghdr2->Attributes  = rkb->rkb_rk->rk_conf.
-			compression_codec & 0x7;
-		msghdr2->Key_len = htobe32(-1);
-		msghdr2->Value_len = htobe32(coutlen);
-		msghdr2->Crc = rd_crc32_init();
-		msghdr2->Crc = rd_crc32_update(msghdr2->Crc,
-					       (void *)&msghdr2->MagicByte, 1+1+4+4);
-		msghdr2->Crc = rd_crc32_update(msghdr2->Crc, (void *)siov.iov_base, coutlen);
-		msghdr2->Crc = htobe32(rd_crc32_finalize(msghdr2->Crc));
-
-		/* Update enveloping MessageSet's length. */
-		prodhdr->part2.MessageSetSize = ctotlen;
-
-		/* Rewind rkbuf to the pre-message checkpoint.
-		 * This replaces all the original Messages with just the
-		 * Message containing the compressed payload. */
-		rd_kafka_buf_rewind(rkbuf, iov_firstmsg);
-
-		/* Add allocated buffer as auxbuf to rkbuf so that
-		 * it will get freed with the rkbuf */
-		rd_kafka_buf_auxbuf_add(rkbuf, msghdr2);
-
-		/* Push the new Message onto the buffer stack. */
-		rd_kafka_buf_push(rkbuf, msghdr2, ctotlen);
+		rd_kafka_compress_MessageSet_buf(rkb, rktp, rkbuf,
+						 iov_firstmsg, of_firstmsg,
+						 &MessageSetSize);
 	}
 
-do_send:
-
-	(void)rd_atomic64_add(&rktp->rktp_c.tx_msgs,
-			    rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
-	(void)rd_atomic64_add(&rktp->rktp_c.tx_bytes,
-			    prodhdr->part2.MessageSetSize);
-
-	prodhdr->part2.MessageSetSize =
-		htobe32(prodhdr->part2.MessageSetSize);
+	/* Update MessageSetSize */
+	rd_kafka_buf_update_i32(rkbuf, of_MessageSetSize, MessageSetSize);
+	
+	rd_atomic64_add(&rktp->rktp_c.tx_msgs,
+			rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
+	rd_atomic64_add(&rktp->rktp_c.tx_bytes, MessageSetSize);
 
 	rd_rkb_dbg(rkb, MSG, "PRODUCE",
 		   "produce messageset with %i messages "
 		   "(%"PRId32" bytes)",
 		   rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt),
-		   be32toh(prodhdr->part2.MessageSetSize));
+		   MessageSetSize);
 
 	cnt = rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt);
 
@@ -2620,7 +2519,6 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 						       rd_kafka_q_t *rkq,
 						       rd_kafka_buf_t *rkbuf_orig,
 						       void *buf, size_t size) {
-	size_t of = 0;
         rd_kafka_buf_t *rkbuf; /* Slice of rkbuf_orig */
 	rd_kafka_buf_t *rkbufz;
         /* Dont log decode errors since Fetch replies may be partial. */
@@ -2630,32 +2528,34 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
          * pointed out by buf,size. */
         rkbuf = rd_kafka_buf_new_shadow(buf, size);
 
-	if (_REMAIN() == 0)
-		_FAIL("%s [%"PRId32"] empty messageset",
-		      rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+	if (rd_kafka_buf_remain(rkbuf) == 0)
+		rd_kafka_buf_parse_fail(rkbuf,
+					"%s [%"PRId32"] empty messageset",
+					rktp->rktp_rkt->rkt_topic->str,
+					rktp->rktp_partition);
 
-	while (_REMAIN() > 0) {
-#pragma pack(push, 1)
+	while (rd_kafka_buf_remain(rkbuf) > 0) {
 		struct {
 			int64_t Offset;
 			int32_t MessageSize;
 			uint32_t Crc;
 			int8_t  MagicByte;
 			int8_t  Attributes;
-		} RD_PACKED *hdr;
-#pragma pack(pop)
-		rd_kafkap_bytes_t *Key;
-		rd_kafkap_bytes_t *Value;
+		} hdr;
+		rd_kafkap_bytes_t Key;
+		rd_kafkap_bytes_t Value;
 		int32_t Value_len;
 		rd_kafka_op_t *rko;
 		size_t outlen;
 		void *outbuf = NULL;
 
-		_READ_REF(hdr, sizeof(*hdr));
-		hdr->Offset      = be64toh(hdr->Offset);
-		hdr->MessageSize = be32toh(hdr->MessageSize);
+		rd_kafka_buf_read_i64(rkbuf, &hdr.Offset);
+		rd_kafka_buf_read_i32(rkbuf, &hdr.MessageSize);
+		rd_kafka_buf_read_i32(rkbuf, &hdr.Crc);
+		rd_kafka_buf_read_i8(rkbuf, &hdr.MagicByte);
+		rd_kafka_buf_read_i8(rkbuf, &hdr.Attributes);
 
-                if (hdr->MessageSize - 6 > _REMAIN()) {
+                if (hdr.MessageSize - 6 > rd_kafka_buf_remain(rkbuf)) {
                         /* Broker may send partial messages.
                          * Bail out silently.
 			 * "A Guide To The Kafka Protocol" states:
@@ -2670,16 +2570,16 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		/* Ignore CRC (for now) */
 
 		/* Extract key */
-		_READ_BYTES(Key);
+		rd_kafka_buf_read_bytes(rkbuf, &Key);
 
 		/* Extract Value */
-		_READ_BYTES(Value);
+		rd_kafka_buf_read_bytes(rkbuf, &Value);
 
-		Value_len = RD_KAFKAP_BYTES_LEN(Value);
+		Value_len = RD_KAFKAP_BYTES_LEN(&Value);
 
 		/* Check for message compression.
 		 * The Key is ignored for compressed messages. */
-		switch (hdr->Attributes & 0x3)
+		switch (hdr.Attributes & 0x3)
 		{
 		case RD_KAFKA_COMPRESSION_NONE:
 			/* Pure uncompressed message, this is the innermost
@@ -2687,9 +2587,9 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			 * messagesets have been peeled off. */
 
                         /* MessageSets may contain offsets earlier than we
-                         * requested (compressed messagests in particular),
+                         * requested (compressed messagesets in particular),
                          * drop the earlier messages. */
-                        if (hdr->Offset < rktp->rktp_next_offset)
+                        if (hdr.Offset < rktp->rktp_next_offset)
                                 continue;
 
 			/* Create op and push on temporary queue. */
@@ -2697,19 +2597,19 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
                         rko->rko_version = rktp->rktp_op_version;
 
-			if (!RD_KAFKAP_BYTES_IS_NULL(Key)) {
-				rko->rko_rkmessage.key = Key->data;
+			if (!RD_KAFKAP_BYTES_IS_NULL(&Key)) {
+				rko->rko_rkmessage.key = (void *)Key.data;
 				rko->rko_rkmessage.key_len =
-					RD_KAFKAP_BYTES_LEN(Key);
+					RD_KAFKAP_BYTES_LEN(&Key);
 			}
 
                         /* Forward NULL message notation to application. */
 			rko->rko_rkmessage.payload   =
-                                RD_KAFKAP_BYTES_IS_NULL(Value) ?
-                                NULL : Value->data;
+                                RD_KAFKAP_BYTES_IS_NULL(&Value) ?
+                                NULL : (void *)Value.data;
 			rko->rko_rkmessage.len       = Value_len;
 
-			rko->rko_rkmessage.offset    = hdr->Offset;
+			rko->rko_rkmessage.offset    = hdr.Offset;
 			rko->rko_rkmessage.rkt       = rktp->rktp_rkt;
 			rko->rko_rkmessage.partition = rktp->rktp_partition;
                         rd_kafka_topic_keep(rko->rko_rkmessage.rkt);
@@ -2717,7 +2617,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rko->rko_rktp = rktp;
 			rd_kafka_toppar_keep(rktp);
 
-			rktp->rktp_next_offset = hdr->Offset + 1;
+			rktp->rktp_next_offset = hdr.Offset + 1;
 
 			/* Since all the ops share the same payload buffer
 			 * (rkbuf->rkbuf_buf2) a refcnt is used on the rkbuf
@@ -2727,10 +2627,10 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rko->rko_rkbuf = rkbuf_orig; /* original rkbuf */
 			rd_kafka_buf_keep(rkbuf_orig);
 
-			if (1)
+			if (0)
 			rd_rkb_dbg(rkb, MSG, "MSG",
 				   "Pushed message at offset %"PRId64
-				   " onto queue", hdr->Offset);
+				   " onto queue", hdr.Offset);
 
 			rd_kafka_q_enq(rkq, rko);
 			break;
@@ -2741,7 +2641,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			uint64_t outlenx = 0;
 
 			/* Decompress Message payload */
-			outbuf = rd_gz_decompress(Value->data, Value_len,
+			outbuf = rd_gz_decompress(Value.data, Value_len,
 						  &outlenx);
 			if (unlikely(!outbuf)) {
 				rd_rkb_dbg(rkb, MSG, "GZIP",
@@ -2749,7 +2649,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 					   "message at offset %"PRId64
 					   " of %"PRId32" bytes: "
 					   "ignoring message",
-					   hdr->Offset, Value_len);
+					   hdr.Offset, Value_len);
 				continue;
 			}
 
@@ -2760,7 +2660,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 		case RD_KAFKA_COMPRESSION_SNAPPY:
 		{
-			char *inbuf = Value->data;
+			const char *inbuf = Value.data;
 			int r;
 			static const char snappy_java_magic[] =
 				{ 0x82, 'S','N','A','P','P','Y', 0 };
@@ -2780,7 +2680,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 				inbuf = inbuf + snappy_java_hdrlen;
 				Value_len -= snappy_java_hdrlen;
 				outbuf = rd_kafka_snappy_java_decompress(rkb,
-									 hdr->Offset,
+									 hdr.Offset,
 									 inbuf,
 									 Value_len,
 									 &outlen);
@@ -2800,7 +2700,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 						   "for message at offset %"PRId64
 						   " (%"PRId32" bytes): "
 						   "ignoring message",
-						   hdr->Offset, Value_len);
+						   hdr.Offset, Value_len);
 					continue;
 				}
 
@@ -2817,7 +2717,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 						   "%"PRId64
 						   " (%"PRId32" bytes): %s: "
 						   "ignoring message",
-						   hdr->Offset, Value_len,
+						   hdr.Offset, Value_len,
 						   rd_strerror(-r/*negative errno*/));
 					rd_free(outbuf);
 					continue;
@@ -2880,66 +2780,68 @@ static void rd_kafka_broker_fetch_backoff (rd_kafka_broker_t *rkb) {
  */
 static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 							rd_kafka_buf_t *rkbuf) {
-	size_t of = 0;
 	int32_t TopicArrayCnt;
 	int i;
         const int log_decode_errors = 1;
 
-	_READ_I32(&TopicArrayCnt);
+	rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
 	/* Verify that TopicArrayCnt seems to be in line with remaining size */
-	_CHECK_LEN(TopicArrayCnt * (3/*topic min size*/ +
-				    4/*PartitionArrayCnt*/ +
-				    4+2+8+4/*inner header*/));
+	rd_kafka_buf_check_len(rkbuf,
+			       TopicArrayCnt * (3/*topic min size*/ +
+						4/*PartitionArrayCnt*/ +
+						4+2+8+4/*inner header*/));
 
 	for (i = 0 ; i < TopicArrayCnt ; i++) {
-		rd_kafkap_str_t *topic;
+		rd_kafkap_str_t topic;
 		rd_kafka_toppar_t *rktp;
 		int32_t PartitionArrayCnt;
-#pragma pack(push, 1)
 		struct {
 			int32_t Partition;
 			int16_t ErrorCode;
 			int64_t HighwaterMarkOffset;
 			int32_t MessageSetSize;
-		} RD_PACKED *hdr;
-#pragma pack(pop)
+		} hdr;
 		rd_kafka_resp_err_t err2;
 		int j;
 
-		_READ_STR(topic);
-		_READ_I32(&PartitionArrayCnt);
+		rd_kafka_buf_read_str(rkbuf, &topic);
+		rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
 
-		_CHECK_LEN(PartitionArrayCnt * (4+2+8+4/*inner header*/));
+		rd_kafka_buf_check_len(rkbuf,
+				       PartitionArrayCnt *
+				       (4+2+8+4/*inner header*/));
 
 		for (j = 0 ; j < PartitionArrayCnt ; j++) {
 			rd_kafka_q_t tmp_opq; /* Temporary queue for ops */
 
-			_READ_REF(hdr, sizeof(*hdr));
-			hdr->Partition = be32toh(hdr->Partition);
-			hdr->ErrorCode = be16toh(hdr->ErrorCode);
-			hdr->HighwaterMarkOffset = be64toh(hdr->
-							   HighwaterMarkOffset);
-			hdr->MessageSetSize = be32toh(hdr->MessageSetSize);
+			rd_kafka_buf_read_i32(rkbuf, &hdr.Partition);
+			rd_kafka_buf_read_i16(rkbuf, &hdr.ErrorCode);
+			rd_kafka_buf_read_i64(rkbuf, &hdr.HighwaterMarkOffset);
+			rd_kafka_buf_read_i32(rkbuf, &hdr.MessageSetSize);
 
-                        if (hdr->MessageSetSize < 0)
-                                _FAIL("%.*s [%"PRId32"]: "
+			rd_rkb_dbg(rkb, TOPIC, "MSGS",
+				   "MessageSet: part %d, err %d, mss %d",
+				   hdr.Partition, hdr.ErrorCode,
+				   hdr.MessageSetSize);
+                        if (hdr.MessageSetSize < 0)
+                                rd_kafka_buf_parse_fail(rkbuf, "%.*s [%"PRId32"]: "
                                       "invalid MessageSetSize %"PRId32,
-                                      RD_KAFKAP_STR_PR(topic),
-                                      hdr->Partition,
-                                      hdr->MessageSetSize);
+                                      RD_KAFKAP_STR_PR(&topic),
+                                      hdr.Partition,
+                                      hdr.MessageSetSize);
 
 			/* Look up topic+partition */
-			rktp = rd_kafka_toppar_get2(rkb->rkb_rk, topic,
-						    hdr->Partition, 0);
+			rktp = rd_kafka_toppar_get2(rkb->rkb_rk, &topic,
+						    hdr.Partition, 0);
 			if (unlikely(!rktp)) {
 				rd_rkb_dbg(rkb, TOPIC, "UNKTOPIC",
 					   "Received Fetch response "
 					   "(error %hu) for unknown topic "
 					   "%.*s [%"PRId32"]: ignoring",
-					   hdr->ErrorCode,
-					   RD_KAFKAP_STR_PR(topic),
-					   hdr->Partition);
-				_SKIP(hdr->MessageSetSize);
+					   hdr.ErrorCode,
+					   RD_KAFKAP_STR_PR(&topic),
+					   hdr.Partition);
+				rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
 				continue;
 			}
 
@@ -2948,10 +2850,10 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   "size %"PRId32", error \"%s\", "
 				   "MaxOffset %"PRId64", "
                                    "Ver %"PRId32"/%"PRId32,
-				   RD_KAFKAP_STR_PR(topic), hdr->Partition,
-				   hdr->MessageSetSize,
-				   rd_kafka_err2str(hdr->ErrorCode),
-				   hdr->HighwaterMarkOffset,
+				   RD_KAFKAP_STR_PR(&topic), hdr.Partition,
+				   hdr.MessageSetSize,
+				   rd_kafka_err2str(hdr.ErrorCode),
+				   hdr.HighwaterMarkOffset,
                                    rktp->rktp_fetch_version,
                                    rktp->rktp_op_version);
 
@@ -2961,30 +2863,30 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                             rktp->rktp_op_version) {
                                 rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
                                 rd_kafka_toppar_destroy(rktp); /* from get2 */
-                                _SKIP(hdr->MessageSetSize);
+                                rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                                 continue;
                         }
 
 
 			/* If this is the last message of the queue,
 			 * signal EOF back to the application. */
-			if (hdr->HighwaterMarkOffset == rktp->rktp_next_offset
+			if (hdr.HighwaterMarkOffset == rktp->rktp_next_offset
 			    &&
 			    rktp->rktp_eof_offset != rktp->rktp_next_offset) {
-				hdr->ErrorCode =
+				hdr.ErrorCode =
 					RD_KAFKA_RESP_ERR__PARTITION_EOF;
 				rktp->rktp_eof_offset = rktp->rktp_next_offset;
 			}
 
 
 			/* Handle partition-level errors. */
-			if (unlikely(hdr->ErrorCode !=
+			if (unlikely(hdr.ErrorCode !=
 				     RD_KAFKA_RESP_ERR_NO_ERROR)) {
 				rd_kafka_op_t *rko;
 
 				/* Some errors should be passed to the
 				 * application while some handled by rdkafka */
-				switch (hdr->ErrorCode)
+				switch (hdr.ErrorCode)
 				{
 					/* Errors handled by rdkafka */
 				case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
@@ -3002,7 +2904,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					rd_kafka_offset_reset(rktp,
 							      rktp->
 							      rktp_next_offset,
-							      hdr->ErrorCode,
+							      hdr.ErrorCode,
 							      "Fetch response");
 					break;
 				case RD_KAFKA_RESP_ERR__PARTITION_EOF:
@@ -3013,7 +2915,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                         rd_kafka_toppar_keep(rktp);
                                         rko->rko_version =
                                                 rktp->rktp_fetch_version;
-					rko->rko_err = hdr->ErrorCode;
+					rko->rko_err = hdr.ErrorCode;
 					rko->rko_rkmessage.offset =
 						rktp->rktp_next_offset;
 
@@ -3027,16 +2929,16 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					break;
 				}
 
-                                /* FIXME: only back off the rktp */
+                                /* FIXME: only back off this rktp */
 				rd_kafka_broker_fetch_backoff(rkb);
 
 				rd_kafka_toppar_destroy(rktp); /* from get2() */
 
-                                _SKIP(hdr->MessageSetSize);
+                                rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
 				continue;
 			}
 
-			if (hdr->MessageSetSize <= 0) {
+			if (hdr.MessageSetSize <= 0) {
 				rd_kafka_toppar_destroy(rktp); /* from get2() */
 				continue;
 			}
@@ -3048,12 +2950,14 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 
 			/* Parse and handle the message set */
 			err2 = rd_kafka_messageset_handle(rkb, rktp, &tmp_opq,
-							  rkbuf, rkbuf->rkbuf_buf2+of,
-							  hdr->MessageSetSize);
+							  rkbuf,
+							  rkbuf->rkbuf_rbuf+
+							  rkbuf->rkbuf_of,
+							  hdr.MessageSetSize);
 			if (err2) {
 				rd_kafka_q_destroy(&tmp_opq);
 				rd_kafka_toppar_destroy(rktp); /* from get2() */
-				_FAIL("messageset handle failed");
+				rd_kafka_buf_parse_fail(rkbuf, "messageset handle failed");
 			}
 
 			/* Concat all messages onto the real op queue */
@@ -3076,13 +2980,17 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 
 			rd_kafka_q_destroy(&tmp_opq);
 
-			_SKIP(hdr->MessageSetSize);
+			rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
 		}
 	}
 
-	if (_REMAIN() != 0)
-		_FAIL("Remaining data after message set parse: %i bytes",
-		      _REMAIN());
+	if (rd_kafka_buf_remain(rkbuf) != 0) {
+		rd_kafka_assert(NULL, 0);
+		rd_kafka_buf_parse_fail(rkbuf,
+					"Remaining data after message set "
+					"parse: %i bytes",
+					rd_kafka_buf_remain(rkbuf));
+	}
 
 	return 0;
 
@@ -3152,33 +3060,32 @@ rd_kafka_toppar_offsetcommit_reply_handle (rd_kafka_broker_t *rkb,
                                            rd_kafka_buf_t *rkbuf,
                                            rd_kafka_toppar_t *rktp,
                                            int64_t offset) {
-	size_t of = 0;
 	int32_t TopicArrayCnt;
 	int i;
         const int log_decode_errors = 1;
 
-	_READ_I32(&TopicArrayCnt);
+	rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
 	for (i = 0 ; i < TopicArrayCnt ; i++) {
-		rd_kafkap_str_t *topic;
+		rd_kafkap_str_t topic;
 		int32_t PartitionArrayCnt;
 		int j;
 
-		_READ_STR(topic);
-		_READ_I32(&PartitionArrayCnt);
+		rd_kafka_buf_read_str(rkbuf, &topic);
+		rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
 
 		for (j = 0 ; j < PartitionArrayCnt ; j++) {
 			int32_t Partition;
 			int16_t ErrorCode;
 
-			_READ_I32(&Partition);
-			_READ_I16(&ErrorCode);
+			rd_kafka_buf_read_i32(rkbuf, &Partition);
+			rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
 			/* Skip toppars we didnt ask for. */
 			if (unlikely(rktp->rktp_partition != Partition
 				     || rd_kafkap_str_cmp(rktp->
 							  rktp_rkt->
 							  rkt_topic,
-							  topic)))
+							  &topic)))
 				continue;
 
 			if (unlikely(ErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR))
@@ -3310,8 +3217,7 @@ static void rd_kafka_toppar_offsetcommit_request (rd_kafka_broker_t *rkb,
         rd_kafka_toppar_lock(rktp);
 
         /* ConsumerGroup */
-        rd_kafka_buf_write_kstr(rkbuf,
-                                rktp->rktp_rkt->rkt_conf.group_id);
+        rd_kafka_buf_write_kstr(rkbuf, rktp->rktp_rkt->rkt_conf.group_id);
         /* TopicArrayCnt */
         rd_kafka_buf_write_i32(rkbuf, 1);
         /* TopicName */
@@ -3386,37 +3292,35 @@ static rd_kafka_resp_err_t
 rd_kafka_toppar_offsetfetch_reply_handle (rd_kafka_broker_t *rkb,
                                           rd_kafka_buf_t *rkbuf,
                                           rd_kafka_toppar_t *rktp) {
-	size_t of = 0;
 	int32_t TopicArrayCnt;
 	int i;
         const int log_decode_errors = 1;
 
-	_READ_I32(&TopicArrayCnt);
+	rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
 	for (i = 0 ; i < TopicArrayCnt ; i++) {
-		rd_kafkap_str_t *topic;
+		rd_kafkap_str_t topic;
 		int32_t PartitionArrayCnt;
 		int j;
 
-		_READ_STR(topic);
-		_READ_I32(&PartitionArrayCnt);
+		rd_kafka_buf_read_str(rkbuf, &topic);
+		rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
 
 		for (j = 0 ; j < PartitionArrayCnt ; j++) {
 			int32_t Partition;
                         int64_t Offset;
-                        rd_kafkap_str_t *Metadata;
+                        rd_kafkap_str_t Metadata;
 			int16_t ErrorCode;
 
-			_READ_I32(&Partition);
-                        _READ_I64(&Offset);
-                        _READ_STR(Metadata);
-			_READ_I16(&ErrorCode);
+			rd_kafka_buf_read_i32(rkbuf, &Partition);
+                        rd_kafka_buf_read_i64(rkbuf, &Offset);
+                        rd_kafka_buf_read_str(rkbuf, &Metadata);
+			rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
 			/* Skip toppars we didnt ask for. */
 			if (unlikely(rktp->rktp_partition != Partition
 				     || rd_kafkap_str_cmp(rktp->
-							  rktp_rkt->
-							  rkt_topic,
-							  topic)))
+							  rktp_rkt->rkt_topic,
+							  &topic)))
 				continue;
 
 			if (unlikely(ErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR))
@@ -3456,19 +3360,18 @@ rd_kafka_toppar_offset_reply_handle (rd_kafka_broker_t *rkb,
                                      rd_kafka_buf_t *request,
 				     rd_kafka_buf_t *rkbuf,
 				     rd_kafka_toppar_t *rktp) {
-	size_t of = 0;
 	int32_t TopicArrayCnt;
 	int i;
         const int log_decode_errors = 1;
 
-	_READ_I32(&TopicArrayCnt);
+	rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
 	for (i = 0 ; i < TopicArrayCnt ; i++) {
-		rd_kafkap_str_t *topic;
+		rd_kafkap_str_t topic;
 		int32_t PartitionOffsetsArrayCnt;
 		int j;
 
-		_READ_STR(topic);
-		_READ_I32(&PartitionOffsetsArrayCnt);
+		rd_kafka_buf_read_str(rkbuf, &topic);
+		rd_kafka_buf_read_i32(rkbuf, &PartitionOffsetsArrayCnt);
 
 		for (j = 0 ; j < PartitionOffsetsArrayCnt ; j++) {
 			int32_t Partition;
@@ -3476,17 +3379,16 @@ rd_kafka_toppar_offset_reply_handle (rd_kafka_broker_t *rkb,
 			int32_t OffsetArrayCnt;
 			int64_t Offset;
 
-			_READ_I32(&Partition);
-			_READ_I16(&ErrorCode);
-			_READ_I32(&OffsetArrayCnt);
+			rd_kafka_buf_read_i32(rkbuf, &Partition);
+			rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+			rd_kafka_buf_read_i32(rkbuf, &OffsetArrayCnt);
 
 
 			/* Skip toppars we didnt ask for. */
 			if (unlikely(rktp->rktp_partition != Partition
 				     || rd_kafkap_str_cmp(rktp->
-							  rktp_rkt->
-							  rkt_topic,
-							  topic)))
+							  rktp_rkt->rkt_topic,
+							  &topic)))
 				continue;
 
 			if (unlikely(ErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR))
@@ -3498,7 +3400,7 @@ rd_kafka_toppar_offset_reply_handle (rd_kafka_broker_t *rkb,
 
                         /* We only asked for one offset, so just read the
                          * first one returned. */
-                        _READ_I64(&Offset);
+                        rd_kafka_buf_read_i64(rkbuf, &Offset);
 
 			rd_rkb_dbg(rkb, TOPIC, "OFFSET",
 				   "OffsetReply for topic %s [%"PRId32"]: "
@@ -3542,8 +3444,7 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
 	rd_kafka_op_t *rko;
 
 	if (likely(!err && reply)) {
-                if (be16toh(request->rkbuf_reqhdr.ApiKey) ==
-                    RD_KAFKAP_OffsetFetch)
+                if (request->rkbuf_reqhdr.ApiKey == RD_KAFKAP_OffsetFetch)
                         err = rd_kafka_toppar_offsetfetch_reply_handle(rkb,
                                                                        reply,
                                                                        rktp);
@@ -3563,7 +3464,7 @@ static void rd_kafka_toppar_offset_reply (rd_kafka_broker_t *rkb,
                 rd_rkb_dbg(rkb, TOPIC, "OFFSET",
                            "Offset (type %hd) reply error for %s "
                            "topic %s [%"PRId32"]: %s",
-                           be16toh(request->rkbuf_reqhdr.ApiKey),
+                           request->rkbuf_reqhdr.ApiKey,
                            data_path_request ? "data fetch" : "consumer lag",
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                            rd_kafka_err2str(err));
@@ -3654,8 +3555,7 @@ static void rd_kafka_toppar_offsetfetch_request (rd_kafka_broker_t *rkb,
         rd_kafka_toppar_lock(rktp);
 
         /* ConsumerGroup */
-        rd_kafka_buf_write_kstr(rkbuf,
-                                rktp->rktp_rkt->rkt_conf.group_id);
+        rd_kafka_buf_write_kstr(rkbuf, rktp->rktp_rkt->rkt_conf.group_id);
         /* TopicArrayCnt */
         rd_kafka_buf_write_i32(rkbuf, 1);
         /* TopicName */
@@ -3685,44 +3585,42 @@ static void rd_kafka_toppar_offsetfetch_request (rd_kafka_broker_t *rkb,
 
 
 
-
+/**
+ * Send OffsetRequest for toppar 'rktp'.
+ * FIXME: Send for all interested rktps.
+ */
 static void rd_kafka_toppar_offset_request0 (rd_kafka_broker_t *rkb,
                                              rd_kafka_toppar_t *rktp,
                                              int64_t query_offset,
                                              void *hndcb, void *hndopaque) {
-#pragma pack(push, 1)
-	struct {
-		int32_t ReplicaId;
-		int32_t TopicArrayCnt;
-	} RD_PACKED *part1;
-	/* Topic goes here */
-	struct {
-		int32_t PartitionArrayCnt;
-		int32_t Partition;
-		int64_t Time;
-		int32_t MaxNumberOfOffsets;
-	} RD_PACKED *part2;
-#pragma pack(pop)
 	rd_kafka_buf_t *rkbuf;
 
-	rkbuf = rd_kafka_buf_new(3/*part1,topic,part2*/,
-				 sizeof(*part1) + sizeof(*part2));
-	part1 = (void *)rkbuf->rkbuf_buf;
-	part1->ReplicaId          = htobe32(-1);
-	part1->TopicArrayCnt      = htobe32(1);
-	rd_kafka_buf_push(rkbuf, part1, sizeof(*part1));
+	rkbuf = rd_kafka_buf_new(3,/*Header,topic,subpart*/
+				 /* ReplicaId+TopicArrayCnt */
+				 4+4 +
+				 /* Topic (pushed) */
+				 /* PartArrayCnt+Partition+Time+MaxNumOffs */
+				 4+4+8+4);
 
-	rd_kafka_buf_push(rkbuf, rktp->rktp_rkt->rkt_topic,
-			  RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_topic));
+	/* ReplicaId */
+	rd_kafka_buf_write_i32(rkbuf, -1);
+	/* TopicArrayCnt */
+	rd_kafka_buf_write_i32(rkbuf, 1);
+	rd_kafka_buf_autopush(rkbuf);
 
-	part2 = (void *)(part1+1);
-	part2->PartitionArrayCnt  = htobe32(1);
-	part2->Partition          = htobe32(rktp->rktp_partition);
-        part2->Time               = htobe64(query_offset);
-        part2->MaxNumberOfOffsets = htobe32(1);
+	/* Topic */
+	rd_kafka_buf_push_kstr(rkbuf, rktp->rktp_rkt->rkt_topic);
 
-	rd_kafka_buf_push(rkbuf, part2, sizeof(*part2));
-
+	/* PartitionArrayCnt */
+	rd_kafka_buf_write_i32(rkbuf, 1);
+	/* Partition */
+	rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
+	/* Time/Offset */
+	rd_kafka_buf_write_i64(rkbuf, query_offset);
+	/* MaxNumberOfOffsets */
+	rd_kafka_buf_write_i32(rkbuf, 1);
+	rd_kafka_buf_autopush(rkbuf);
+	
 	rd_kafka_toppar_keep(rktp); /* refcnt for request */
 
         rkbuf->rkbuf_hndcb     = hndcb;
@@ -3916,50 +3814,82 @@ static void rd_kafka_toppar_op_serve (rd_kafka_toppar_t *rktp) {
         }
 }
 
+
+/**
+ * Request information from broker to keep track of consumer lag.
+ *
+ * Locality: broker thread
+ */
+static void rd_kafka_toppar_consumer_lag_req (rd_kafka_broker_t *rkb,
+					      rd_kafka_toppar_t *rktp) {
+	/* Ask for oldest and newest offset */
+	rd_kafka_toppar_offset_request0(rkb, rktp,
+					RD_KAFKA_OFFSET_BEGINNING,
+					rd_kafka_toppar_lo_offset_handle, NULL);
+	rd_kafka_toppar_offset_request0(rkb, rktp,
+					RD_KAFKA_OFFSET_END,
+					rd_kafka_toppar_hi_offset_handle, NULL);
+}
+
+
 /**
  * Build and send a Fetch request message for all underflowed toppars
  * for a specific broker.
  */
 static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
-	struct rd_kafkap_FetchRequest *fr;
-#pragma pack(push, 1)
-	struct { /* Per toppar header */
-		int32_t PartitionArrayCnt;
-		int32_t Partition;
-		int64_t FetchOffset;
-		int32_t MaxBytes;
-	} RD_PACKED *tp;
-#pragma pack(pop)
 	rd_kafka_toppar_t *rktp;
-	char *next;
-	int cnt = 0;
 	rd_kafka_buf_t *rkbuf;
 	rd_ts_t now = rd_clock();
-        int max_cnt;
         int consumer_lag_intvl = rkb->rkb_rk->rk_conf.stats_interval_ms * 1000;
+	int cnt = 0;
+        int max_cnt;
+	int iov_cnt;
+	int of_TopicArrayCnt = 0;
+	int TopicArrayCnt = 0;
+	int of_PartitionArrayCnt = 0;
+	int PartitionArrayCnt = 0;
+	rd_kafka_topic_t *rkt_last = NULL;
+	int warned_once_topparcnt = 0;
 
 	/* Create buffer and iovecs:
-	 *   1 x part1 header
+	 *   1 x ReplicaId MaxWaitTime MinBytes TopicArrayCnt
 	 *   N x topic name
-	 *   N x tp header
-	 * where N = number of toppars */
+	 *   N x PartitionArrayCnt Partition FetchOffset MaxBytes
+	 * where N = number of toppars.
+	 * Since we dont keep track of the number of topics served by
+	 * this broker, only the partition count, we do a worst-case calc
+	 * when allocation iovecs and assume each partition is on its own topic
+	 */
 
 	rd_kafka_broker_toppars_rdlock(rkb);
+	iov_cnt = 1 + (rkb->rkb_toppar_cnt * 2); 
 
-        /* FIXME: Workaround for clusters with more than 500 partitions.
-         *        This has no negative impact as long as the application
-         *        does not consume from more than 500 partitions from a
-         *        single broker. */
-        max_cnt = RD_MIN(rkb->rkb_toppar_cnt, 500);
-	rkbuf = rd_kafka_buf_new(1 + (max_cnt * (1 + 1)),
-				 sizeof(*fr) +
-				 (sizeof(*tp) * rkb->rkb_toppar_cnt));
+	/* Limit to maximum iovecs. This has the downside that if the
+	 * application consumes from more than ~ IOV_MAX/2 partitions the
+	 * over shooting partitions will not be consumed.
+	 * Doing a WFQ-like round-robin solves this. */
+	if (iov_cnt > RD_KAFKA_PAYLOAD_IOV_MAX)
+		iov_cnt = RD_KAFKA_PAYLOAD_IOV_MAX;
+	max_cnt = (iov_cnt - 1) / 2;
 
-	/* Set up header from pre-built header */
-	fr = (void *)rkbuf->rkbuf_buf;
-	*fr = rkb->rkb_rk->rk_conf.FetchRequest;
-	rd_kafka_buf_push(rkbuf, fr, sizeof(*fr));
-	next = (void *)(fr+1);
+	rkbuf = rd_kafka_buf_new(iov_cnt,
+				 /* ReplicaId+MaxWaitTime+MinBytes+TopicCnt */
+				 4+4+4+4+
+				 /* N x PartCnt+Partition+FetchOffset+MaxBytes*/
+				 (max_cnt * (4+4+8+4)));
+
+	/* FetchRequest header */
+	/* ReplicaId */
+	rd_kafka_buf_write_i32(rkbuf, -1);
+	/* MaxWaitTime */
+	rd_kafka_buf_write_i32(rkbuf, rkb->rkb_rk->rk_conf.fetch_wait_max_ms);
+	/* MinBytes */
+	rd_kafka_buf_write_i32(rkbuf, rkb->rkb_rk->rk_conf.fetch_min_bytes);
+
+	/* Write zero TopicArrayCnt but store pointer for later update */
+	of_TopicArrayCnt = rd_kafka_buf_write_i32(rkbuf, 0);
+
+	rd_kafka_buf_autopush(rkbuf);
 
 	TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
                 /* Serve toppar op queue to update desired rktp state */
@@ -3968,12 +3898,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
                 /* Request offsets to measure consumer lag */
                 if (consumer_lag_intvl &&
                     rktp->rktp_ts_offset_lag + consumer_lag_intvl < now) {
-                        rd_kafka_toppar_offset_request0(rkb, rktp,
-                                                        RD_KAFKA_OFFSET_BEGINNING,
-                                                        rd_kafka_toppar_lo_offset_handle, NULL);
-                        rd_kafka_toppar_offset_request0(rkb, rktp,
-                                                        RD_KAFKA_OFFSET_END,
-                                                        rd_kafka_toppar_hi_offset_handle, NULL);
+			rd_kafka_toppar_consumer_lag_req(rkb, rktp);
                         rktp->rktp_ts_offset_lag = now;
                 }
 
@@ -4050,27 +3975,41 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 			continue;
                 }
 
-                if (cnt >= max_cnt) {
-                        rd_rkb_dbg(rkb, TOPIC, "FETCH",
-                                   "FIXME: Fetching too many "
-                                   "partitions (>%i), see issue #110",
-                                   max_cnt);
-                        break;
+		if (rd_kafka_buf_iov_remain(rkbuf) < 2) {
+			if (!warned_once_topparcnt++)
+				rd_rkb_dbg(rkb, TOPIC, "FETCH",
+					   "FIXME: Fetching too many "
+					   "partitions (>%i), see issue #110",
+					   cnt);
+			continue;
                 }
 
-		/* Push topic name onto buffer stack. */
-		rd_kafka_buf_push(rkbuf, rktp->rktp_rkt->rkt_topic,
-				  RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->
-						     rkt_topic));
+		if (rkt_last != rktp->rktp_rkt) {
+			if (rkt_last != NULL) {
+				/* Update PartitionArrayCnt */
+				rd_kafka_buf_update_i32(rkbuf,
+							of_PartitionArrayCnt,
+							PartitionArrayCnt);
+				rd_kafka_buf_autopush(rkbuf);
+			}
 
-		/* Set up toppar header and push it */
-		tp = (void *)next;
-		tp->PartitionArrayCnt = htobe32(1);
-		tp->Partition = htobe32(rktp->rktp_partition);
-		tp->FetchOffset = htobe64(rktp->rktp_next_offset);
-		tp->MaxBytes = htobe32(rkb->rkb_rk->rk_conf.fetch_msg_max_bytes);
-		rd_kafka_buf_push(rkbuf, tp, sizeof(*tp));
-		next = (void *)(tp+1);
+			/* Push topic name onto buffer stack. */
+			rd_kafka_buf_push_kstr(rkbuf,
+					       rktp->rktp_rkt->rkt_topic);
+			TopicArrayCnt++;
+			rkt_last = rktp->rktp_rkt;
+			of_PartitionArrayCnt = rd_kafka_buf_write_i32(rkbuf, 0);
+			PartitionArrayCnt = 0;
+		}
+
+		PartitionArrayCnt++;
+		/* Partition */
+		rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
+		/* FetchOffset */
+		rd_kafka_buf_write_i64(rkbuf, rktp->rktp_next_offset);
+		/* MaxBytes */
+		rd_kafka_buf_write_i32(rkbuf, rkb->rkb_rk->rk_conf.
+				       fetch_msg_max_bytes);
 
 		rd_rkb_dbg(rkb, TOPIC, "FETCH",
 			   "Fetch topic %.*s [%"PRId32"] at offset %"PRId64,
@@ -4085,16 +4024,22 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 
 	rd_kafka_broker_toppars_rdunlock(rkb);
 
-
-	rd_rkb_dbg(rkb, MSG, "CONSUME",
-		   "consume from %i toppar(s)", cnt);
-
+	rd_rkb_dbg(rkb, MSG, "CONSUME", "consume from %i toppar(s)", cnt);
 	if (!cnt) {
 		rd_kafka_buf_destroy(rkbuf);
 		return cnt;
 	}
 
-	fr->TopicArrayCnt = htobe32(cnt);
+	if (rkt_last != NULL) {
+		/* Update last topic's PartitionArrayCnt */
+		rd_kafka_buf_update_i32(rkbuf,
+					of_PartitionArrayCnt,
+					PartitionArrayCnt);
+		rd_kafka_buf_autopush(rkbuf);
+	}
+
+	/* Update TopicArrayCnt */
+	rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
 
 
 	/* Use configured timeout */

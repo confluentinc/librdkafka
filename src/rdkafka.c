@@ -48,6 +48,9 @@
 #include <sys/timeb.h>
 #endif
 
+/* Convenience NULL-bytes */
+const rd_kafkap_bytes_t rd_kafkap_bytes_null;
+
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 
 /**
@@ -1324,6 +1327,11 @@ static void rd_kafka_term_sig_handler (int sig) {
 }
 
 static void rd_kafka_global_init (void) {
+	static const char null_bytes_data[4] = { 0xff, 0xff, 0xff, 0xff };
+	
+	rd_kafkap_bytes_init((rd_kafkap_bytes_t *)&rd_kafkap_bytes_null,
+			     null_bytes_data, 4);
+
 	rd_kafka_transport_init();
 }
 
@@ -1387,10 +1395,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                     rkid++);
 
 	/* Construct clientid kafka string */
-	rk->rk_conf.client_id = rd_kafkap_str_new(rk->rk_conf.client_id_str);
+	rk->rk_conf.client_id = rd_kafkap_str_new(rk->rk_conf.client_id_str,-1);
 
         /* Convert group.id to kafka string (may be NULL) */
-        rk->rk_conf.group_id = rd_kafkap_str_new(rk->rk_conf.group_id_str);
+        rk->rk_conf.group_id = rd_kafkap_str_new(rk->rk_conf.group_id_str,-1);
 
         /* Config fixups */
         rk->rk_conf.queued_max_msg_bytes =
@@ -1970,7 +1978,8 @@ static void rd_kafka_poll_cb (rd_kafka_op_t *rko, void *opaque) {
 
                                 if (rkm->rkm_key &&
                                     !RD_KAFKAP_BYTES_IS_NULL(rkm->rkm_key)) {
-                                        rkmessage.key = rkm->rkm_key->data;
+                                        rkmessage.key =
+						(void *)rkm->rkm_key->data;
                                         rkmessage.key_len =
                                                 RD_KAFKAP_BYTES_LEN(
                                                         rkm->rkm_key);

@@ -52,27 +52,34 @@ void rd_kafka_buf_auxbuf_add (rd_kafka_buf_t *rkbuf, void *auxbuf) {
 	rkbuf->rkbuf_buf2 = auxbuf;
 }
 
-void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex) {
+void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex, int new_of) {
 	rkbuf->rkbuf_msg.msg_iovlen = iovindex;
+	rkbuf->rkbuf_wof = new_of;
+
 }
 
 struct iovec *rd_kafka_buf_iov_next (rd_kafka_buf_t *rkbuf) {
 	rd_kafka_assert(NULL,
                         (int)rkbuf->rkbuf_msg.msg_iovlen + 1 <=
 			rkbuf->rkbuf_iovcnt);
+	rkbuf->rkbuf_wof_init = rkbuf->rkbuf_wof;
 	return &rkbuf->rkbuf_iov[rkbuf->rkbuf_msg.msg_iovlen++];
 }
 
 /**
  * Pushes 'buf' & 'len' onto the previously allocated iov stack for 'rkbuf'.
  */
-void rd_kafka_buf_push (rd_kafka_buf_t *rkbuf, void *buf, size_t len) {
+void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
+			 int allow_crc_calc) {
 	struct iovec *iov;
 
 	iov = rd_kafka_buf_iov_next(rkbuf);
 
-	iov->iov_base = buf;
+	iov->iov_base = (void *)buf;
 	iov->iov_len = len;
+
+	if (allow_crc_calc && (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC))
+		rkbuf->rkbuf_crc = rd_crc32_update(rkbuf->rkbuf_crc, buf, len);
 }
 
 /**
@@ -84,12 +91,17 @@ void rd_kafka_buf_push (rd_kafka_buf_t *rkbuf, void *buf, size_t len) {
  *   once and after all buf_write()s have been performed.
  */
 void rd_kafka_buf_autopush (rd_kafka_buf_t *rkbuf) {
-        rd_kafka_buf_push(rkbuf, rkbuf->rkbuf_wbuf, rkbuf->rkbuf_wof);
-        rkbuf->rkbuf_wbuf += rkbuf->rkbuf_wof;
-        rkbuf->rkbuf_wof = 0;
+        rd_kafka_buf_push0(rkbuf, rkbuf->rkbuf_wbuf + rkbuf->rkbuf_wof_init,
+			   rkbuf->rkbuf_wof - rkbuf->rkbuf_wof_init,
+			   0/* No CRC calc */);
 }
 
 
+/**
+ * Grow buffer to `needed_len`.
+ *
+ * NOTE: This is a costly operation since it uses realloc()
+ */
 void rd_kafka_buf_grow (rd_kafka_buf_t *rkbuf, size_t needed_len) {
         size_t alen = rkbuf->rkbuf_size;
         void *new;
@@ -118,11 +130,18 @@ rd_kafka_buf_t *rd_kafka_buf_new_growable (int iovcnt, size_t init_size) {
         return rkbuf;
 }
 
+
+/**
+ * Create a new buffer with 'iovcnt' iovecs and 'size' bytes buffer memory.
+ * Additional iovecs and space for the Kafka protocol headers 
+ * are inserted automatically.
+ */
 rd_kafka_buf_t *rd_kafka_buf_new (int iovcnt, size_t size) {
 	rd_kafka_buf_t *rkbuf;
 	const int iovcnt_fixed = RD_KAFKA_HEADERS_IOV_CNT;
 	size_t iovsize = sizeof(struct iovec) * (iovcnt+iovcnt_fixed);
-	size_t fullsize = iovsize + sizeof(*rkbuf) + size;
+	size_t fullsize = iovsize + sizeof(*rkbuf) +
+		RD_KAFKAP_REQHDR_SIZE + size;
 
 	rkbuf = rd_malloc(fullsize);
 	memset(rkbuf, 0, sizeof(*rkbuf));
@@ -132,13 +151,21 @@ rd_kafka_buf_t *rd_kafka_buf_new (int iovcnt, size_t size) {
 	rd_kafka_assert(NULL, rkbuf->rkbuf_iovcnt <= IOV_MAX);
 	rkbuf->rkbuf_msg.msg_iov = rkbuf->rkbuf_iov;
 
-	/* save the first two iovecs for the header + clientid */
-	rkbuf->rkbuf_msg.msg_iovlen = iovcnt_fixed;
-	memset(rkbuf->rkbuf_iov, 0, sizeof(*rkbuf->rkbuf_iov) * iovcnt_fixed);
-
-	rkbuf->rkbuf_size = size;
-	rkbuf->rkbuf_buf = ((char *)(rkbuf+1))+iovsize;
+	rkbuf->rkbuf_buf  = ((char *)(rkbuf+1))+iovsize;
         rkbuf->rkbuf_wbuf = rkbuf->rkbuf_buf;
+
+ 	/* save the first two iovecs for the header + clientid */
+	rkbuf->rkbuf_iov[0].iov_base = rkbuf->rkbuf_buf;
+	rkbuf->rkbuf_iov[0].iov_len  = RD_KAFKAP_REQHDR_SIZE;
+	/* ClientId */
+	rkbuf->rkbuf_iov[1].iov_base = NULL;
+	rkbuf->rkbuf_iov[1].iov_len  = 0;
+
+	rkbuf->rkbuf_msg.msg_iovlen = iovcnt_fixed;
+
+	rkbuf->rkbuf_size     = RD_KAFKAP_REQHDR_SIZE + size;
+	rkbuf->rkbuf_wof      = RD_KAFKAP_REQHDR_SIZE;
+	rkbuf->rkbuf_wof_init = rkbuf->rkbuf_wof;
 
 	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
 
@@ -156,7 +183,9 @@ rd_kafka_buf_t *rd_kafka_buf_new_shadow (void *ptr, size_t size) {
 	rkbuf = rd_calloc(1, sizeof(*rkbuf));
 
 	rkbuf->rkbuf_buf2 = ptr;
+	rkbuf->rkbuf_rbuf = rkbuf->rkbuf_buf2;
 	rkbuf->rkbuf_len  = size;
+	rkbuf->rkbuf_wof  = size;
 
 	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
 
@@ -215,3 +244,78 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 		rkbuf->rkbuf_cb(rkb, err, NULL, rkbuf, rkbuf->rkbuf_opaque);
 }
 
+
+
+int rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
+				int64_t Offset, int8_t MagicByte,
+				int8_t Attributes,
+				const rd_kafkap_bytes_t *key,
+				const void *payload, int len,
+				int *outlenp) {
+	int32_t MessageSize;
+	int begin_of;
+	int of_Crc;
+
+	/*
+	 * MessageSet's per-Message header.
+	 */
+	/* Offset */
+	begin_of = rd_kafka_buf_write_i64(rkbuf, Offset);
+
+	/* MessageSize */
+	MessageSize = (4 + 1 + 1 + /* Crc+MagicByte+Attributes */
+		       RD_KAFKAP_BYTES_SIZE(key) +
+		       4 /* Message.ValueLength */ +
+		       len /* Value length */);
+	rd_kafka_buf_write_i32(rkbuf, MessageSize);
+
+	/*
+	 * Message
+	 */
+	/* Crc: will be updated later */
+	of_Crc = rd_kafka_buf_write_i32(rkbuf, 0);
+
+	/* Start Crc calculation of all buf writes. */
+	rd_kafka_buf_crc_init(rkbuf);
+
+	/* MagicByte */
+	rd_kafka_buf_write_i8(rkbuf, MagicByte);
+
+	/* Attributes */
+	rd_kafka_buf_write_i8(rkbuf, Attributes);
+
+	/* Push write-buffer onto iovec stack */
+        rd_kafka_buf_autopush(rkbuf);
+
+	/* Message Key */
+	rd_kafka_buf_push_kbytes(rkbuf, key);
+
+	/* Value(payload) length */
+	rd_kafka_buf_write_i32(rkbuf, payload ? len : RD_KAFKAP_BYTES_LEN_NULL);
+
+	/* Push write-buffer onto iovec stack */
+        rd_kafka_buf_autopush(rkbuf);
+
+	/* Value */
+	if (payload)
+		rd_kafka_buf_push(rkbuf, payload, len);
+
+	/* Finalize Crc */
+	rd_kafka_buf_update_u32(rkbuf, of_Crc,
+				rd_kafka_buf_crc_finalize(rkbuf));
+
+
+	if (outlenp)
+		*outlenp = 8/*Offset*/ + 4/*MessageSize*/ + MessageSize;
+
+	return begin_of;
+}
+
+
+void rd_kafka_buf_hexdump (const char *what, const rd_kafka_buf_t *rkbuf,
+			   int read_buffer) {
+
+	rd_hexdump(stdout, what,
+		   read_buffer ? rkbuf->rkbuf_rbuf : rkbuf->rkbuf_buf,
+		   rkbuf->rkbuf_wof);
+}

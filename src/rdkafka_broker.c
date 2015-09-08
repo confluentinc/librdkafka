@@ -92,6 +92,9 @@ static void msghdr_print (rd_kafka_t *rk,
 			  const char *what, const struct msghdr *msg,
 			  int hexdump) {
 	int i;
+	int len = 0;
+
+	
 
 	rd_kafka_dbg(rk, MSG, "MSG", "%s: iovlen %"PRIdsz"",
 		     what, (size_t)msg->msg_iovlen);
@@ -103,8 +106,12 @@ static void msghdr_print (rd_kafka_t *rk,
 		if (hexdump)
 			rd_hexdump(stdout, what, msg->msg_iov[i].iov_base,
 				   msg->msg_iov[i].iov_len);
+
+		len += msg->msg_iov[i].iov_len;
 	}
+	rd_kafka_dbg(rk, MSG, "MSG", "^ message was %d bytes in total", len);
 }
+
 
 
 static size_t rd_kafka_msghdr_size (const struct msghdr *msg) {

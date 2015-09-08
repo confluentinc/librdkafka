@@ -51,6 +51,7 @@ for mode in $MODES; do
     case "$mode" in
 	valgrind)
 	    valgrind $VALGRIND_ARGS --leak-check=full --show-leak-kinds=all \
+		     --track-origins=yes \
 		     $SUPP $GEN_SUPP \
 		./$TEST $ARGS
 	    RET=$?

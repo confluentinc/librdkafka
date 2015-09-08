@@ -319,6 +319,9 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	}
 	rd_kafka_broker_toppars_wrunlock(rkb);
 
+	if (internal_rkb)
+		rd_kafka_broker_destroy(internal_rkb);
+
 	/* Query for the topic leaders (async) */
 	if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY && statechange)
 		rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);

@@ -116,7 +116,8 @@ static void produce_messages (uint64_t testid, const char *topic,
 			msgid++;
 		}
 
-		TEST_SAY("Start produce to partition %i\n", (int)partition);
+		TEST_SAY("Start produce to partition %i: msgs #%d..%d\n",
+			 (int)partition, msgid-batch_cnt, msgid);
 		/* Produce batch for this partition */
 		r = rd_kafka_produce_batch(rkt, partition, RD_KAFKA_MSG_F_FREE,
 					    rkmessages, batch_cnt);
@@ -185,6 +186,7 @@ static int  cons_msgs_size;
 static int  cons_msgs_cnt;
 
 static void verify_consumed_msg_reset (int msgcnt) {
+	TEST_SAY("Resetting consumed_msgs (msgcnt %d)\n", msgcnt);
 	if (cons_msgs) {
 		free(cons_msgs);
 		cons_msgs = NULL;
@@ -263,20 +265,20 @@ static void verify_consumed_msg0 (const char *func, int line,
 		   &in_testid, &in_part, &in_msgnum) != 3)
 		TEST_FAIL("Incorrect message format: %s", buf);
 
+	if (test_level > 2) {
+		TEST_SAY("%s:%i: Our testid %"PRIu64", part %i =? %i, "
+			 "msg %i =? %i "
+			 ", message's: \"%s\"\n",
+			 func, line,
+			 testid, (int)partition, (int)rkmessage->partition,
+			 msgnum, in_msgnum, buf);
+	}
+
 	if (testid != in_testid ||
 	    (partition != -1 && partition != in_part) ||
 	    (msgnum != -1 && msgnum != in_msgnum) ||
 	    (in_msgnum < 0 || in_msgnum > cons_msgs_size))
 		goto fail_match;
-
-	if (test_level > 2) {
-		TEST_SAY("%s:%i: Our testid %"PRIu64", part %i (%i), "
-			 "msg %i/%i did "
-			 ", message's: \"%s\"\n",
-			 func, line,
-			 testid, (int)partition, (int)rkmessage->partition,
-			 msgnum, cons_msgs_size, buf);
-	}
 
 	if (cons_msgs_cnt == cons_msgs_size) {
 		TEST_SAY("Too many messages in cons_msgs (%i) while reading "
@@ -431,8 +433,13 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
 		if (rkmessage->err) {
                         if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF){
+				TEST_SAY("Topic %s [%"PRId32"] reached "
+					 "EOF at offset %"PRId64"\n",
+					 rd_kafka_topic_name(rkmessage->rkt),
+					 rkmessage->partition,
+					 rkmessage->offset);
                                 rd_kafka_message_destroy(rkmessage);
-				break;
+				continue;
                         }
 			TEST_FAIL("Consume message %i/%i from queue "
 				  "has error (offset %"PRId64

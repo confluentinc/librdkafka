@@ -219,3 +219,22 @@
    fun:allocate_stack
 }
 
+{
+   ssl_uninit1
+   Memcheck:Cond
+   fun:rd_kafka_metadata_handle
+   fun:rd_kafka_broker_metadata_reply
+}
+{
+   ssl_uninit2
+   Memcheck:Value8
+   fun:rd_kafka_metadata_handle
+   fun:rd_kafka_broker_metadata_reply
+}
+{
+   ssl_uninit3
+   Memcheck:Cond
+   fun:memcpy@@GLIBC_2.14
+   fun:rd_kafka_metadata_handle
+   fun:rd_kafka_broker_metadata_reply
+}

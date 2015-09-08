@@ -304,7 +304,6 @@ static void consume_cb (rd_kafka_message_t *rkmessage, void *opaque) {
                             cons_msg_next, rkmessage);
 
         if (cons_msg_next == cons_msg_stop) {
-                TEST_SAY("yield at %d - %d\n", cons_msg_next, cons_msg_stop);
                 rd_kafka_yield(NULL/*FIXME*/);
         }
 

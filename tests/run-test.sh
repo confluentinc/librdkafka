@@ -50,7 +50,8 @@ for mode in $MODES; do
     echo -e "${CYAN}### Running test $TEST in $mode mode ###${CCLR}"
     case "$mode" in
 	valgrind)
-	    valgrind $VALGRIND_ARGS --leak-check=full $SUPP $GEN_SUPP \
+	    valgrind $VALGRIND_ARGS --leak-check=full --show-leak-kinds=all \
+		     $SUPP $GEN_SUPP \
 		./$TEST $ARGS
 	    RET=$?
 	    ;;

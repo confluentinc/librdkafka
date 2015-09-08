@@ -85,10 +85,6 @@ struct rd_kafka_transport_s {
 	struct pollfd rktrans_pfd;
 #else
 	WSAPOLLFD rktrans_pfd;
-// FIXME: Are these equal?
-//#define POLLIN  POLLRDNORM
-//#define POLLOUT POLLWRNORM
-
 #endif
 };
 
@@ -873,6 +869,11 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 }
 
 
+/**
+ * Poll and serve IOs
+ *
+ * Locality: broker thread 
+ */
 void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans) {
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	int events;

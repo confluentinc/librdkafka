@@ -621,7 +621,6 @@ static struct rd_kafka_metadata *
 rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
                           rd_kafka_op_t *rko, rd_kafka_buf_t *rkbuf) {
 	int i, j, k;
-	int of = 0;
 	int req_rkt_seen = 0;
         char *msh_buf = NULL;
         int   msh_of  = 0;
@@ -1020,7 +1019,8 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
  * Locks: rd_kafka_rdlock(rk) MUST be held.
  * Locality: any thread
  */
-rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state) {
+rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id,
+					   int state) {
 	rd_kafka_broker_t *rkb, *good = NULL;
         int cnt = 0;
 
@@ -1490,13 +1490,14 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 			msg = &msg2;
 		}
 
-		if (0)
+		if (0) {
 			rd_rkb_dbg(rkb, BROKER, "SEND",
 				   "Send buf corrid %"PRId32" at "
 				   "offset %"PRIdsz"/%"PRIdsz"",
 				   rkbuf->rkbuf_corrid,
 				   rkbuf->rkbuf_of, rkbuf->rkbuf_len);
-
+			msghdr_print(rkb->rkb_rk, "SEND", msg, 1);
+		}
 		if ((r = rd_kafka_broker_send(rkb, msg)) == -1) {
 			/* FIXME: */
 			return -1;

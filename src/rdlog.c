@@ -53,12 +53,13 @@ void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 		unsigned int i;
 
 		for (i = of ; i < of + 16 && i < len ; i++) {
-			hof += rd_snprintf(hexen+hof, sizeof(hexen)-hof, "%02x ",
-								p[i] & 0xff);
+			hof += rd_snprintf(hexen+hof, sizeof(hexen)-hof,
+					   "%02x ",
+					   p[i] & 0xff);
 			cof += rd_snprintf(charen+cof, sizeof(charen)-cof, "%c",
-								isprint((int)p[i]) ? p[i] : '.');
+					   isprint((int)p[i]) ? p[i] : '.');
 		}
-		fprintf(fp, "%08ux: %-48s %-16s\n",
+		fprintf(fp, "%08x: %-48s %-16s\n",
 			of, hexen, charen);
 	}
 }

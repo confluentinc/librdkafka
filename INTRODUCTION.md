@@ -36,8 +36,6 @@ it attempts to keep memory copying at a minimal. The payload of produced or
 consumed messages may pass through without any copying
 (if so desired by the application) putting no limit on message sizes.
 
-> *"You can have high throughput or low latency, but you cant have both"*
-
 librdkafka allows you to decide if high throughput is the name of the game,
 or if a low latency service is required, all through the configuration
 property interface.

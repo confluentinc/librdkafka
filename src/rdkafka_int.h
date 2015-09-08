@@ -731,8 +731,8 @@ static const char *rd_kafka_toppar_name (const rd_kafka_toppar_t *rktp) {
 	static RD_TLS char ret[256];
 
 	rd_snprintf(ret, sizeof(ret), "%.*s [%"PRId32"]",
-		 RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-		 rktp->rktp_partition);
+		    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+		    rktp->rktp_partition);
 
 	return ret;
 }

@@ -688,11 +688,6 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
         rktp->rktp_metadata.isrs     = NULL;
         rd_kafka_toppar_unlock(rktp);
 
-	/* Delegate toppars with no new leader to the internal broker
-	 * for bookkeeping. */
-	if (!rkb && !rd_atomic32_get(&rk->rk_terminate))
-		rkb = rd_kafka_broker_internal(rk);
-
 	if (!rkb) {
 		int had_leader = rktp->rktp_leader ? 1 : 0;
 
@@ -803,12 +798,8 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_topic_t *rkt,
 	rd_kafka_toppar_t *rktp;
 	int32_t i;
 
-	if (rkt->rkt_partition_cnt == partition_cnt) {
-		rd_kafka_dbg(rk, TOPIC, "PARTCNT",
-			     "No change in partition count for topic %s",
-			     rkt->rkt_topic->str);
+	if (likely(rkt->rkt_partition_cnt == partition_cnt))
 		return 0; /* No change in partition count */
-	}
 
 	if (unlikely(rkt->rkt_partition_cnt != 0))
 		rd_kafka_log(rk, LOG_NOTICE, "PARTCNT",
@@ -1014,6 +1005,13 @@ static void rd_kafka_topic_assign_uas (rd_kafka_topic_t *rkt) {
 void rd_kafka_topic_metadata_none (rd_kafka_topic_t *rkt) {
 	rd_kafka_topic_wrlock(rkt);
 
+	if (unlikely(rd_atomic32_get(&rkt->rkt_rk->rk_terminate))) {
+		/* Dont update metadata while terminating, do this
+		 * after acquiring lock for proper synchronisation */
+		rd_kafka_topic_wrunlock(rkt);
+		return;
+	}
+
 	rkt->rkt_ts_metadata = rd_clock();
 
         rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_NOTEXISTS);
@@ -1055,10 +1053,19 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 			   rkt->rkt_topic->str, mdt->partition_cnt,
 			   rd_kafka_err2str(mdt->err));
 
-        partbrokers = rd_alloca(mdt->partition_cnt * sizeof(*partbrokers));
-
 	/* Look up brokers before acquiring rkt lock to preserve lock order */
 	rd_kafka_rdlock(rkb->rkb_rk);
+
+	if (unlikely(rd_atomic32_get(&rkb->rkb_rk->rk_terminate))) {
+		/* Dont update metadata while terminating, do this
+		 * after acquiring lock for proper synchronisation */
+		rd_kafka_rdunlock(rkb->rkb_rk);
+		rd_kafka_topic_destroy0(rkt); /* from find() */
+		return -1;
+	}
+
+        partbrokers = rd_alloca(mdt->partition_cnt * sizeof(*partbrokers));
+
 	for (j = 0 ; j < mdt->partition_cnt ; j++) {
 		if (mdt->partitions[j].leader == -1) {
                         partbrokers[j] = NULL;
@@ -1091,6 +1098,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 	/* Update leader for each partition */
 	for (j = 0 ; j < mdt->partition_cnt ; j++) {
                 int r;
+		rd_kafka_broker_t *leader;
 
 		rd_rkb_dbg(rkb, METADATA, "METADATA",
 			   "  Topic %s partition %i Leader %"PRId32,
@@ -1098,18 +1106,28 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 			   mdt->partitions[j].id,
 			   mdt->partitions[j].leader);
 
+		if (!(leader = partbrokers[j]) &&
+		    !rd_atomic32_get(&rkb->rkb_rk->rk_terminate)) {
+			/* Delegate toppars with no leader to the
+			 * internal broker for bookkeeping. */
+			leader = rd_kafka_broker_internal(rkb->rkb_rk);
+		}
+		partbrokers[j] = NULL;
+
 		/* Update leader for partition */
-		r = rd_kafka_topic_leader_update(rkt,
-                                                 &mdt->partitions[j],
-                                                 partbrokers[j]);
+		r = rd_kafka_topic_leader_update(rkt, &mdt->partitions[j],
+						 leader);
+
                 if (r == -1)
                         query_leader = 1;
 
                 upd += (r != 0 ? 1 : 0);
 
-                /* Drop reference to broker (from find()) */
-                if (partbrokers[j])
-			rd_kafka_broker_destroy(partbrokers[j]);
+                /* Drop reference to broker (from find() or internal()) */
+		if (leader)
+			rd_kafka_broker_destroy(leader);
+
+	}
 
 	}
 

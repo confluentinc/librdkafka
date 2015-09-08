@@ -4555,6 +4555,13 @@ void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
         rd_kafka_mk_nodename(nodename, sizeof(nodename), mdb->host, mdb->port);
 
 	rd_kafka_wrlock(rk);
+	if (unlikely(rd_atomic32_get(&rk->rk_terminate))) {
+		/* Dont update metadata while terminating, do this
+		 * after acquiring lock for proper synchronisation */
+		rd_kafka_wrunlock(rk);
+		return;
+	}
+
 	if ((rkb = rd_kafka_broker_find_by_nodeid(rk, mdb->id))) {
                 /* Broker matched by nodeid, see if we need to update
                  * the hostname. */

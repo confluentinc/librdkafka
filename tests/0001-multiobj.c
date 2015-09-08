@@ -76,7 +76,7 @@ int main_0001_multiobj (int argc, char **argv) {
 		test_conf_init(&conf, &topic_conf, 30);
 
                 if (!topic)
-                        topic = test_mk_topic_name("generic", 0);
+                        topic = test_mk_topic_name("0001", 0);
 
 		rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
 				  errstr, sizeof(errstr));

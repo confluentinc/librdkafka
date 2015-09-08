@@ -95,7 +95,7 @@ int main_0008_reqacks (int argc, char **argv) {
                 test_conf_init(&conf, &topic_conf, 10);
 
                 if (!topic)
-                        topic = test_mk_topic_name("generic", 0);
+                        topic = test_mk_topic_name("0008", 0);
 
                 rd_snprintf(tmp, sizeof(tmp), "%i", reqacks);
 

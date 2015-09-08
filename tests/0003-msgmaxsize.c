@@ -95,7 +95,7 @@ int main_0003_msgmaxsize (int argc, char **argv) {
 
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
-	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("generic", 0),
+	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0003", 0),
                                  topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",

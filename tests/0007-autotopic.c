@@ -98,7 +98,7 @@ int main_0007_autotopic (int argc, char **argv) {
 
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
-	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("autotopic", 1),
+	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0007_autotopic", 1),
                                  topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",

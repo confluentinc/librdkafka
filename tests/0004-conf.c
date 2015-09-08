@@ -135,7 +135,7 @@ int main_0004_conf (int argc, char **argv) {
 	rd_kafka_conf_destroy(ignore_conf);
 	rd_kafka_topic_conf_destroy(ignore_topic_conf);
 
-        topic = test_mk_topic_name("generic", 0);
+        topic = test_mk_topic_name("0004", 0);
 
 	/* Set up a global config object */
 	conf = rd_kafka_conf_new();

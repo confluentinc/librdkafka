@@ -101,7 +101,7 @@ int main_0010_enforcereqacks (int argc, char **argv) {
                 test_conf_init(&conf, &topic_conf, 10);
 
                 if (!topic)
-                        topic = test_mk_topic_name("generic", 0);
+                        topic = test_mk_topic_name("0010", 0);
 
                 if (rd_kafka_topic_conf_set(topic_conf,
                                             "enforce.isr.cnt",

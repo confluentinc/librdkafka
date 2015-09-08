@@ -1092,8 +1092,11 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
         else
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
 
-	/* Update number of partitions */
-	upd += rd_kafka_topic_partition_cnt_update(rkt, mdt->partition_cnt);
+	/* Update number of partitions, but not if there are
+	 * (possibly intermittent) errors (e.g., "Leader not available"). */
+	if (mdt->err == RD_KAFKA_RESP_ERR_NO_ERROR)
+		upd += rd_kafka_topic_partition_cnt_update(rkt,
+							   mdt->partition_cnt);
 
 	/* Update leader for each partition */
 	for (j = 0 ; j < mdt->partition_cnt ; j++) {
@@ -1129,6 +1132,14 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 	}
 
+	if (mdt->err != RD_KAFKA_RESP_ERR_NO_ERROR && rkt->rkt_partition_cnt) {
+		/* (Possibly intermediate) topic-wide error:
+		 * remove leaders for partitions */
+
+		for (j = 0 ; j < rkt->rkt_partition_cnt ; j++)
+			if (rkt->rkt_p[j])
+				rd_kafka_toppar_broker_delegate(rkt->rkt_p[j],
+								NULL);
 	}
 
 	/* Try to assign unassigned messages to new partitions, or fail them */
@@ -1147,6 +1158,12 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
                 rd_kafka_topic_leader_query(rkt->rkt_rk, rkt);
 
 	rd_kafka_topic_destroy0(rkt); /* from find() */
+
+	/* Loose broker references */
+	for (j = 0 ; j < mdt->partition_cnt ; j++)
+		if (partbrokers[j])
+			rd_kafka_broker_destroy(partbrokers[j]);
+
 
 	return upd;
 }

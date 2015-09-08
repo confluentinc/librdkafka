@@ -943,6 +943,9 @@ static void rd_kafka_topic_assign_uas (rd_kafka_topic_t *rkt) {
 	rd_kafka_msgq_t failed = RD_KAFKA_MSGQ_INITIALIZER(failed);
 	int cnt;
 
+	if (rkt->rkt_rk->rk_type != RD_KAFKA_PRODUCER)
+		return;
+
 	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA, 0);
 	if (unlikely(!rktp_ua)) {
 		rd_kafka_dbg(rk, TOPIC, "ASSIGNUA",

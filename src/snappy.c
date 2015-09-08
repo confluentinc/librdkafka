@@ -1331,7 +1331,7 @@ static int internal_uncompress(struct source *r,
 	return -EIO;
 }
 
-static __inline int compress(struct snappy_env *env, struct source *reader,
+static __inline int sn_compress(struct snappy_env *env, struct source *reader,
 			   struct sink *writer)
 {
 	int err;
@@ -1428,7 +1428,7 @@ int snappy_compress_iov(struct snappy_env *env,
 		.iov = iov_out,
 		.iovlen = *iov_out_len,
 	};
-	int err = compress(env, &reader, &writer);
+	int err = sn_compress(env, &reader, &writer);
 
 	*iov_out_len = writer.curvec + 1;
 
@@ -1542,7 +1542,7 @@ int snappy_compress(struct snappy_env *env,
 	struct sink writer = {
 		.dest = compressed,
 	};
-	int err = compress(env, &reader, &writer);
+	int err = sn_compress(env, &reader, &writer);
 
 	/* Compute how many bytes were added */
 	*compressed_length = (writer.dest - compressed);

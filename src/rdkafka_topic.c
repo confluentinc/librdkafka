@@ -537,7 +537,11 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 	rd_kafka_topic_keep(rkt);
 	rd_kafka_keep(rk);
 
-	pthread_rwlock_init(&rkt->rkt_lock, NULL);
+	pthread_rwlockattr_t rwattr;
+	pthread_rwlockattr_init(&rwattr);
+	pthread_rwlockattr_setkind_np(&rwattr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+	pthread_rwlock_init(&rkt->rkt_lock, &rwattr);
+	pthread_rwlockattr_destroy(&rwattr);
 
 	/* Create unassigned partition */
 	rkt->rkt_ua = rd_kafka_toppar_new(rkt, RD_KAFKA_PARTITION_UA);

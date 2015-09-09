@@ -4310,7 +4310,12 @@ static rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 	rkb->rkb_s = -1;
 	pthread_mutex_init(&rkb->rkb_lock, NULL);
-	pthread_rwlock_init(&rkb->rkb_toppar_lock, NULL);
+
+	pthread_rwlockattr_t rwattr;
+	pthread_rwlockattr_init(&rwattr);
+	pthread_rwlockattr_setkind_np(&rwattr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+	pthread_rwlock_init(&rkb->rkb_toppar_lock, &rwattr);
+	pthread_rwlockattr_destroy(&rwattr);
 	TAILQ_INIT(&rkb->rkb_toppars);
 	rd_kafka_bufq_init(&rkb->rkb_outbufs);
 	rd_kafka_bufq_init(&rkb->rkb_waitresps);

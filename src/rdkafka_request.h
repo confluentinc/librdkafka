@@ -29,12 +29,14 @@
 #pragma once
 
 
+/**
+ * Parse ConsumerMetadataResponse
+ */
+rd_kafka_resp_err_t
+rd_kafka_ConsumerMetadataResponse_handle (rd_kafka_broker_t *rkb,
+					  rd_kafka_buf_t *rkbuf,
+					  int32_t *coordidp);
+
 rd_kafka_buf_t *rd_kafka_ConsumerMetadataRequest (rd_kafka_t *rk,
                                                   const rd_kafkap_str_t *cgrp);
-
-rd_kafka_buf_t *rd_kafka_OffsetFetchRequest (struct rd_kafka_cgrp_s *rkgc,
-                                             int version, int all);
-
-void rd_kafka_cgrp_OffsetFetchResponse (rd_kafka_buf_t *rkbuf, void *opaque);
-
 

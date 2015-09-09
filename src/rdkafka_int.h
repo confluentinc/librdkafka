@@ -812,7 +812,8 @@ struct rd_kafka_s {
 #define RD_KAFKA_DBG_QUEUE      0x20
 #define RD_KAFKA_DBG_MSG        0x40
 #define RD_KAFKA_DBG_PROTOCOL   0x80
-#define RD_KAFKA_DBG_ALL        0xff
+#define RD_KAFKA_DBG_CONSUMER   0x100
+#define RD_KAFKA_DBG_ALL        0xfff
 
 
 void rd_kafka_log_buf (const rd_kafka_t *rk, int level,

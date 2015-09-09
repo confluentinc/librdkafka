@@ -6,6 +6,7 @@ LIBVER=		1
 SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_defaultconf.c rdkafka_timer.c rdkafka_offset.c \
 		rdkafka_transport.c rdkafka_buf.c \
+		rdkafka_request.c \
 		rdcrc32.c rdgz.c rdaddr.c rdrand.c tinycthread.c \
 		rdlog.c \
 		snappy.c

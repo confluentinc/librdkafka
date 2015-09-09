@@ -29,34 +29,34 @@
 #include "rdkafka_int.h"
 #include "rdkafka_request.h"
 #include "rdkafka_broker.h"
-#include "rdkafka_cgrp.h"
 #include "rdkafka_offset.h"
 
 
 rd_kafka_resp_err_t
-rd_kafka_ConsumerMetadataResponse (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf,
+rd_kafka_ConsumerMetadataResponse_handle (rd_kafka_broker_t *rkb,
+				   rd_kafka_buf_t *rkbuf,
                                    int32_t *coordidp) {
         const int log_decode_errors = 1;
-        size_t of = 0;
         int16_t ErrorCode = RD_KAFKA_RESP_ERR_UNKNOWN;
         int32_t CoordId;
-        rd_kafkap_str_t *CoordHost;
+        rd_kafkap_str_t CoordHost;
         int32_t CoordPort;
         struct rd_kafka_metadata_broker mdb = RD_ZERO_INIT;
 
-        _READ_I16(&ErrorCode);
-        _READ_I32(&CoordId);
-        _READ_STR(CoordHost);
-        _READ_I32(&CoordPort);
+	rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+        rd_kafka_buf_read_i32(rkbuf, &CoordId);
+        rd_kafka_buf_read_str(rkbuf, &CoordHost);
+        rd_kafka_buf_read_i32(rkbuf, &CoordPort);
 
         printf("CoordId %"PRId32"\n", CoordId);
         if (ErrorCode) {
                 rd_rkb_dbg(rkb, CONSUMER, "METADATA",
-                           "ConsumerMetadata error: %s", rd_kafka_err2str(ErrorCode));
+                           "ConsumerMetadata error: %s",
+			   rd_kafka_err2str(ErrorCode));
 
         } else {
                 mdb.id = CoordId;
-                mdb.host = RD_KAFKAP_STR_DUPA(CoordHost);
+                mdb.host = RD_KAFKAP_STR_DUPA(&CoordHost);
                 mdb.port = CoordPort;
 
                 rd_rkb_dbg(rkb, CONSUMER, "METADATA",
@@ -76,12 +76,12 @@ rd_kafka_buf_t *rd_kafka_ConsumerMetadataRequest (rd_kafka_t *rk,
                                                   const rd_kafkap_str_t *cgrp) {
         rd_kafka_buf_t *rkbuf;
 
-        rkbuf = rd_kafka_buf_new(1, RD_KAFKAP_STR_SIZE(cgrp));
-        rd_kafka_buf_write_kstr(rkbuf, cgrp);
-        rd_kafka_buf_autopush(rkbuf);
+        rkbuf = rd_kafka_buf_new(1, 0);
+        rd_kafka_buf_push_kstr(rkbuf, cgrp);
 
         return rkbuf;
 }
+
 #if 0
 static void route_reply (rd_kafka_broker_t *rkb,
                          rd_kafka_resp_err_t err,
@@ -108,7 +108,6 @@ static void route_reply (rd_kafka_broker_t *rkb,
 
 void rd_kafka_OffsetCommitResponse (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
         const int log_decode_errors = 1;
-        size_t of = 0;
         int32_t TopicCount;
         int i;
 
@@ -119,24 +118,24 @@ OffsetCommitResponse => [TopicName [Partition ErrorCode]]]
   ErrorCode => int16
         */
 
-        _READ_I32(&TopicCount);
+        rd_kafka_buf_read_i32(rkbuf, &TopicCount);
 
         for (i = 0 ; i < TopicCount ; i++) {
-                rd_kafkap_str_t *Topic;
+                rd_kafkap_str_t Topic;
                 int32_t PartitionCount;
                 int j;
 
-                _READ_STR(Topic);
-                _READ_I32(&PartitionCount);
+                rd_kafka_buf_read_str(rkbuf, &Topic);
+                rd_kafka_buf_read_i32(rkbuf, &PartitionCount);
 
                 for (j = 0 ; j < PartitionCount ; j++) {
                         int32_t Partition;
                         int16_t ErrorCode;
-                        _READ_I32(&Partition);
-                        _READ_I16(&ErrorCode);
+                        rd_kafka_buf_read_i32(rkbuf, &Partition);
+                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
                         printf("OffsetCommitResponse: %.*s[%"PRId32"] error %s\n",
-                               RD_KAFKAP_STR_PR(Topic), Partition,
+                               RD_KAFKAP_STR_PR(&Topic), Partition,
                                rd_kafka_err2str(ErrorCode));
                 }
         }
@@ -145,6 +144,7 @@ err:
         return;
 }
 
+#if 0
 /**
  * Commit offsets for all toppars handled by this cgrp.
  */
@@ -225,15 +225,15 @@ OffsetFetchResponse => [TopicName [Partition Offset Metadata ErrorCode]]
         if (err)
                 goto err;
 
-        _READ_I32(&TopicCount);
+        rd_kafka_buf_read_i32(rkbuf, &TopicCount);
 
         for (i = 0 ; i < TopicCount ; i++) {
                 rd_kafkap_str_t *Topic;
                 int32_t PartitionCount;
                 int j;
 
-                _READ_STR(Topic);
-                _READ_I32(&PartitionCount);
+                rd_kafka_buf_read_str(rkbuf, Topic);
+                rd_kafka_buf_read_i32(rkbuf, &PartitionCount);
 
                 for (j = 0 ; j < PartitionCount ; j++) {
                         int32_t Partition;
@@ -242,10 +242,10 @@ OffsetFetchResponse => [TopicName [Partition Offset Metadata ErrorCode]]
                         rd_kafkap_str_t *Metadata;
                         rd_kafka_offsets_t *rkoff;
 
-                        _READ_I32(&Partition);
-                        _READ_I64(&Offset);
-                        _READ_STR(Metadata);
-                        _READ_I16(&ErrorCode);
+                        rd_kafka_buf_read_i32(rkbuf, &Partition);
+                        rd_kafka_buf_read_i64(rkbuf, &Offset);
+                        rd_kafka_buf_read_str(rkbuf, Metadata);
+                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
 
                         printf("OffsetFetchResponse: %.*s[%"PRId32"]: Offset %"PRId64
@@ -525,3 +525,4 @@ rd_kafka_consumer_group_join (rd_kafka_topic_t *rkt, const char *group) {
 #endif
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
+#endif

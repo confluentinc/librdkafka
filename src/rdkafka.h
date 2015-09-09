@@ -106,7 +106,7 @@ const char *rd_kafka_get_debug_contexts(void);
 
 /* Same as define (deprecated) */
 #define RD_KAFKA_DEBUG_CONTEXTS \
-	"all,generic,broker,topic,metadata,producer,queue,msg,protocol"
+	"all,generic,broker,topic,metadata,producer,queue,msg,protocol,consumer"
 
 /* Private types to provide ABI compatibility */
 typedef struct rd_kafka_s rd_kafka_t;
@@ -995,6 +995,133 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *rkt,
 
 
 
+
+/*******************************************************************
+ *								   *
+ * High-level Consumer API                                         *
+ *								   *
+ *******************************************************************/
+
+typedef struct rd_kafka_consumer_s rd_kafka_consumer_t;
+/* By config:
+ *   ConsumerRebalanceCallback
+ *   KeyDeserializer
+ *   ValueDeserializer
+ */
+rd_kafka_consumer_t *rd_kafka_consumer_new (rd_kafka_t *rkt,
+					    /* FIXME: some config object*/
+					    const char *group,
+					    char *errstr, int errstr_size);
+
+
+void rd_kafka_consumer_close (rd_kafka_consumer_t *rkcons);
+
+typedef enum {
+	
+} rd_kafka_commit_type;
+
+typedef struct rd_kafka_partition_s rd_kafka_partition_t;
+
+void rd_kafka_consumer_commit (rd_kafka_consumer_t *rkcons,
+			       rd_kafka_partition_t **rkparts,
+			       int rkparts_cnt,
+			       rd_kafka_commit_type_t commit_type,
+			       rd_kafka_queue_t *response_q,
+			       void (*commit_result_cb) (
+				       rd_kafka_consumer_t *rkcons,
+				       rd_kafka_partition_t *partitions,
+				       int partition_cnt,
+				       rd_kafka_resp_err_t error,
+				       void *opaque),
+			       void *opaque);
+							 
+
+rd_kafka_resp_err_t
+rd_kafka_consumer_committed (rd_kafka_consumer_t *rkcons,
+			     rd_kafka_partition_t *rkpart,
+			     rd_kafka_queue_t *response_q,
+			     void (*get_committed_cb) (
+				     rd_kafka_consumer_t *rkcons,
+				     rd_kafka_partition_t *partition,
+				     int64_t *offsetp,
+				     rd_kafka_resp_err_t error,
+				     void *opaque),
+			     void *opaque);
+
+
+rd_kafka_resp_err_t rd_kafka_consumer_metrics (rd_kafka_consumer_t *rkcons,
+					       void **dst, int *dst_lenp);
+
+rd_kafka_resp_err_t
+rd_kafka_consumer_partitionsFor (rd_kafka_consumer_t *rkcons,
+				 rd_kafka_topic_t *rkt,
+				 rd_kafka_partition_t **rkparts,
+				 int *rkparts_cntp,
+				 rd_kafka_queue_t *response_q,
+				 void (partitionsFor_cb) (
+					 rd_kafka_consumer_t *rkcons,
+					 rd_kafka_topic_t *rkt,
+					 rd_kafka_partition_t **rkparts,
+					 int rkparts_cnt,
+					 rd_kafka_resp_err_t error,
+					 void *opaque),
+				 void *opaque);
+						     
+						       
+
+rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_consumer_t *rkcons,
+					    int timeout_ms);
+
+
+rd_kafka_resp_err_t rd_kafka_consumer_position (rd_kafka_consumer_t *rkcons,
+						int64_t *offsetp);
+
+rd_kafka_resp_err_t
+rd_kafka_consumer_seek (rd_kafka_consumer_t *rkcons,
+			rd_kafka_partition_t *partition,
+			int64_t offset,
+			rd_kafka_queue_t *response_q,
+			void (*seek_cb) (
+				rd_kafka_consumer_t *rkcons,
+				rd_kafka_partition_t *partition,
+				int64_t offset,
+				rd_kafka_resp_err_t error,
+				void *opaque),
+			void *opaque);
+
+
+rd_kafka_resp_err_t
+rd_kafka_consumer_subscribe (rd_kafka_consumer_t *rkcons,
+			     rd_kafka_partition_t *rkparts,
+			     int rkparts_cnt,
+			     rd_kafka_queue_t *response_q,
+			     void (*subscribe_cb) (
+				     rd_kafka_consumer_t *rkcons,
+				     rd_kafka_partition_t **rkparts,
+				     int rkparts_cnt,
+				     rd_kafka_resp_err_t error,
+				     void *opaque),
+			     void *opaque);
+				
+
+
+rd_kafka_resp_err_t
+rd_kafka_consumer_subscriptions (rd_kafka_consumer_t *rkcons,
+				 rd_kafka_partition_t *rkparts,
+				 int rkparts_cnt);
+
+
+rd_kafka_resp_err_t
+rd_kafka_consumer_unsubscribe (rd_kafka_consumer_t *rkcons,
+			       rd_kafka_partition_t *rkparts,
+			       int rkparts_cnt);
+
+
+				
+
+
+      
+					   
 
 /*******************************************************************
  *								   *

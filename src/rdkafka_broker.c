@@ -4127,6 +4127,10 @@ static int rd_kafka_broker_thread_main (void *arg) {
 
 	(void)rd_atomic32_add(&rd_kafka_thread_cnt_curr, 1);
 
+	/* Acquire lock (which was held by thread creator during creation)
+	 * to synchronise state. */
+	rd_kafka_broker_lock(rkb);
+	rd_kafka_broker_unlock(rkb);
 	rd_rkb_dbg(rkb, BROKER, "BRKMAIN", "Enter main broker thread");
 
 	while (!rd_atomic32_get(&rkb->rkb_rk->rk_terminate)) {
@@ -4321,6 +4325,9 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
 
+	/* Lock broker's lock here to synchronise state, i.e., hold off
+	 * the broker thread until we've finalized the rkb. */
+	rd_kafka_broker_lock(rkb);
 	if ((err = thrd_create(&rkb->rkb_thread,
 		rd_kafka_broker_thread_main, rkb)) != thrd_success) {
 		char tmp[512];
@@ -4328,6 +4335,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 			 "Unable to create broker thread: %s (%i)",
 			 rd_strerror(err), err);
 		rd_kafka_log(rk, LOG_CRIT, "THREAD", "%s", tmp);
+
+		rd_kafka_broker_unlock(rkb);
 
 		/* Send ERR op back to application for processing. */
 		rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
@@ -4351,6 +4360,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 			   "Added new broker with NodeId %"PRId32,
 			   rkb->rkb_nodeid);
 	}
+
+	rd_kafka_broker_unlock(rkb);
 
 #ifndef _MSC_VER
 	/* Restore sigmask of caller */

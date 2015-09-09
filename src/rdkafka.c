@@ -1299,6 +1299,11 @@ static int rd_kafka_thread_main (void *arg) {
 
 	(void)rd_atomic32_add(&rd_kafka_thread_cnt_curr, 1);
 
+	/* Acquire lock (which was held by thread creator during creation)
+	 * to synchronise state. */
+	rd_kafka_wrlock(rk);
+	rd_kafka_wrunlock(rk);
+
 	rd_kafka_timer_start(rk, &tmr_topic_scan, 1000000,
 			     rd_kafka_topic_scan_tmr_cb, NULL);
 	rd_kafka_timer_start(rk, &tmr_stats_emit,
@@ -1443,6 +1448,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
 
+	/* Lock handle here to synchronise state, i.e., hold off
+	 * the thread until we've finalized the handle. */
+	rd_kafka_wrlock(rk);
 
 	/* Create handler thread */
 	rd_kafka_keep(rk); /* one refcnt for handler thread */
@@ -1452,6 +1460,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			rd_snprintf(errstr, errstr_size,
 				 "Failed to create thread: %s (%i)",
 				    rd_strerror(err), err);
+		rd_kafka_wrunlock(rk);
 		rd_kafka_destroy0(rk); /* handler thread */
 		rd_kafka_destroy0(rk); /* application refcnt */
 #ifndef _MSC_VER
@@ -1462,7 +1471,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		return NULL;
 	}
 
-	rd_kafka_wrlock(rk);
 	rk->rk_internal_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,
 						  RD_KAFKA_PROTO_PLAINTEXT,
 						  "", 0, RD_KAFKA_NODEID_UA);

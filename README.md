@@ -105,12 +105,17 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 ## Instructions
 
-### Building
+### Building(Linux)
 
       ./configure
       make
       sudo make install
 
+### Building(OSX)
+
+      CC=clang CXX=clang ./configure
+      make
+      sudo make install
 
 ### Usage in code
 

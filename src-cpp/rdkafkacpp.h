@@ -641,6 +641,94 @@ class Producer : public virtual Handle {
                              void *msg_opaque) = 0;
 };
 
+/**
+ * Queue
+ */
+//TODO: check the documentation correctness
+class Queue {
+ public:
+  /**
+   * Creates a new Kafka queue (C++ wrapping of rd_kafka_queue_t).
+   */
+  static Queue *create (Consumer *consumer);
+
+  virtual ~Queue () = 0;
+
+
+  /**
+   * Start consuming messages for topic and 'partition'
+   * at offset 'offset' which may either be a proper offset (0..N)
+   * or one of the the special offsets:
+   *  `OFFSET_BEGINNING` or `OFFSET_END`.
+   *
+   * rdkafka will attempt to keep 'queued.min.messages' (config property)
+   * messages in the local queue by repeatedly fetching batches of messages
+   * from the broker until the threshold is reached.
+   *
+   * The application shall use one of the `..->consume*()` functions
+   * to consume messages from the local queue, each kafka message being
+   * represented as a `RdKafka::Message *` object.
+   *
+   * `..->start()` must not be called multiple times for the same
+   * topic and partition without stopping consumption first with
+   * `..->stop()`.
+   *
+   * Returns an ErrorCode to indicate success or failure.
+   */
+  virtual ErrorCode start (Topic *topic, int32_t partition, int64_t offset) = 0;
+
+  /**
+   * Stop consuming messages for topic and 'partition', purging
+   * all messages currently in the local queue.
+   *
+   * The application needs to be stop all consumers before destroying
+   * the Consumer handle.
+   *
+   * Returns 0 on success or -1 on error (see `errno`).
+   */
+  virtual ErrorCode stop (Topic *topic, int32_t partition) = 0;
+
+
+  /**
+   * Consume a single message from topic and 'partition' bound by the queue.
+   *
+   * 'timeout_ms' is maximum amount of time to wait for a message to be
+   * received.
+   * Consumer must have been previously started with `..->start()`.
+   *
+   * Returns a Message object, the application needs to check if message
+   * is an error or a proper message `Message->err()` and checking for
+   * `ERR_NO_ERROR`.
+   *
+   * The message object must be destroyed when the application is done with it.
+   *
+   * Errors (in Message->err()):
+   *   ERR__TIMED_OUT - 'timeout_ms' was reached with no new messages fetched.
+   *   ERR__PARTITION_EOF - End of partition reached, not an error.
+   */
+  virtual Message *consume (int timeout_ms) = 0;
+
+  /**
+   * Consumes messages from 'topic' and 'partition', calling
+   * the provided callback for each consumed messsage.
+   *
+   * `consume_callback()` provides higher throughput performance
+   * than `consume()`.
+   *
+   * 'timeout_ms' is the maximum amount of time to wait for one or more messages
+   * to arrive.
+   *
+   * The provided 'consume_cb' instance has its 'consume_cb' function
+   * called for every message received.
+   *
+   * The 'opaque' argument is passed to the 'consume_cb' as 'opaque'.
+   *
+   * Returns the number of messages processed or -1 on error.
+   *
+   * See: consume()
+   */
+  virtual int consume_callback (int timeout_ms, ConsumeCb *consume_cb, void *opaque) = 0;
+};
 
 };
 

@@ -139,7 +139,7 @@ std::string  err2str (RdKafka::ErrorCode err);
  * Wait for all rd_kafka_t objects to be destroyed.
  * Returns 0 if all kafka objects are now destroyed, or -1 if the
  * timeout was reached.
- * Since RdKafka handle deletion is an asynch opration the 
+ * Since RdKafka handle deletion is an asynch opration the
  * `wait_destroyed()` function can be used for applications where
  * a clean shutdown is required.
  */
@@ -392,7 +392,7 @@ class Topic {
   /**
    * Creates a new topic handle for topic named 'topic_str'.
    *
-   * 'conf' is an optional configuration for the topic  that will be used 
+   * 'conf' is an optional configuration for the topic  that will be used
    * instead of the default topic configuration.
    * The 'conf' object is reusable after this call.
    *
@@ -649,6 +649,7 @@ class Queue {
  public:
   /**
    * Creates a new Kafka queue (C++ wrapping of rd_kafka_queue_t).
+   * NOTE: the consumer will not released at the queue destruction.
    */
   static Queue *create (Consumer *consumer);
 
@@ -665,7 +666,7 @@ class Queue {
    * messages in the local queue by repeatedly fetching batches of messages
    * from the broker until the threshold is reached.
    *
-   * The application shall use one of the `..->consume*()` functions
+   * The application shall use one of the `..->consume()` method
    * to consume messages from the local queue, each kafka message being
    * represented as a `RdKafka::Message *` object.
    *
@@ -690,11 +691,11 @@ class Queue {
 
 
   /**
-   * Consume a single message from topic and 'partition' bound by the queue.
+   * Consume a single message from the queue.
    *
    * 'timeout_ms' is maximum amount of time to wait for a message to be
    * received.
-   * Consumer must have been previously started with `..->start()`.
+   * Queue must have been previously started with `..->start()`.
    *
    * Returns a Message object, the application needs to check if message
    * is an error or a proper message `Message->err()` and checking for
@@ -705,11 +706,14 @@ class Queue {
    * Errors (in Message->err()):
    *   ERR__TIMED_OUT - 'timeout_ms' was reached with no new messages fetched.
    *   ERR__PARTITION_EOF - End of partition reached, not an error.
+   *
+   * NOTE: Message ordering is guaranteed within a topic+partition that is re-routed
+   * to the queue, but there is no definition of ordering between topic+partitions.
    */
   virtual Message *consume (int timeout_ms) = 0;
 
   /**
-   * Consumes messages from 'topic' and 'partition', calling
+   * Consumes messages from the queue, calling
    * the provided callback for each consumed messsage.
    *
    * `consume_callback()` provides higher throughput performance

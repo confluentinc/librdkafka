@@ -451,6 +451,15 @@ class Message {
 
 /**
  * Queue
+ *
+ * Create a new message queue.  Message queues allows the application
+ * to re-route consumed messages from multiple topic+partitions into
+ * one single queue point.  This queue point, containing messages from
+ * a number of topic+partitions, may then be served by a single
+ * consume() method, rather than one per topic+partition combination.
+ *
+ * See the Consumer::start() and Consumer::consume() methods that take
+ * a queue as the first parameter for more information.
  */
 class Queue {
  public:

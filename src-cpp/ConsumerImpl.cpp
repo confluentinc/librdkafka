@@ -175,7 +175,7 @@ RdKafka::Message *RdKafka::ConsumerImpl::consume (Queue *queue,
    * Recover our Topic * from the topic conf's opaque field, which we
    * set in RdKafka::Topic::create() for just this kind of situation.
    */
-  void *opaque = rd_kafka_topic_get_opaque(rkmessage->rkt);
+  void *opaque = rd_kafka_topic_opaque(rkmessage->rkt);
   Topic *topic = static_cast<Topic *>(opaque);
 
   return new RdKafka::MessageImpl(topic, rkmessage);

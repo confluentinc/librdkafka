@@ -180,3 +180,43 @@ RdKafka::Message *RdKafka::ConsumerImpl::consume (Queue *queue,
 
   return new RdKafka::MessageImpl(topic, rkmessage);
 }
+
+namespace {
+  /* Helper struct for `consume_callback' with a Queue.
+   * Encapsulates the values we need in order to call `rd_kafka_consume_callback'
+   * and keep track of the C++ callback function and `opaque' value.
+   */
+  struct ConsumerImplQueueCallback {
+    ConsumerImplQueueCallback(RdKafka::ConsumeCb *cb, void *data)
+      : cb_cls(cb), cb_data(data) {
+    }
+    /* This function is the one we give to `rd_kafka_consume_callback', with
+     * the `opaque' pointer pointing to an instance of this struct, in which
+     * we can find the C++ callback and `cb_data'.
+     */
+    static void consume_cb_trampoline(rd_kafka_message_t *msg, void *opaque) {
+      ConsumerImplQueueCallback *instance = static_cast<ConsumerImplQueueCallback *>(opaque);
+      /*
+       * Recover our Topic * from the topic conf's opaque field, which we
+       * set in RdKafka::Topic::create() for just this kind of situation.
+       */
+      void *topic_opaque = rd_kafka_topic_opaque(msg->rkt);
+      RdKafka::Topic *topic = static_cast<RdKafka::Topic *>(topic_opaque);
+      RdKafka::MessageImpl message(topic, msg, false /*don't free*/);
+      instance->cb_cls->consume_cb(message, instance->cb_data);
+    }
+    RdKafka::ConsumeCb *cb_cls;
+    void *cb_data;
+  };
+}
+
+int RdKafka::ConsumerImpl::consume_callback (Queue *queue,
+                                             int timeout_ms,
+                                             RdKafka::ConsumeCb *consume_cb,
+                                             void *opaque) {
+  RdKafka::QueueImpl *queueimpl = dynamic_cast<RdKafka::QueueImpl *>(queue);
+  ConsumerImplQueueCallback context(consume_cb, NULL);
+  return rd_kafka_consume_callback_queue(queueimpl->queue_, timeout_ms,
+                                         &ConsumerImplQueueCallback::consume_cb_trampoline,
+                                         &context);
+}

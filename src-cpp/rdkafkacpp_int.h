@@ -369,6 +369,8 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
   Message *consume (Queue *queue, int timeout_ms);
   int consume_callback (Topic *topic, int32_t partition, int timeout_ms,
                         ConsumeCb *cb, void *opaque);
+  int consume_callback (Queue *queue, int timeout_ms,
+                        RdKafka::ConsumeCb *consume_cb, void *opaque);
 };
 
 

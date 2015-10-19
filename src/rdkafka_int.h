@@ -160,6 +160,7 @@ struct rd_kafka_conf_s {
 	 * Producer configuration
 	 */
 	int    queue_buffering_max_msgs;
+	int    queue_buffering_max_bytes;
 	int    buffering_max_ms;
 	int    max_retries;
 	int    retry_backoff_ms;
@@ -771,7 +772,8 @@ struct rd_kafka_s {
 			uint64_t app_offset;
 		} consumer;
 		struct {
-			int msg_cnt;  /* current message count */
+			int msg_cnt;   /* current message count */
+			int msg_bytes; /* current message bytes */
 		} producer;
 	} rk_u;
 #define rk_consumer rk_u.consumer

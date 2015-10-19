@@ -40,6 +40,7 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
 	rd_kafka_assert(rk, rk->rk_producer.msg_cnt > 0);
 	(void)rd_atomic_sub(&rk->rk_producer.msg_cnt, 1);
+	(void)rd_atomic_sub(&rk->rk_producer.msg_bytes, rkm->rkm_len);
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
 		free(rkm->rkm_payload);
@@ -136,6 +137,19 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 		errno = ENOBUFS;
 		return -1;
 	}
+	/*
+	 * Note that when checking length, we're only looking at the payload length,
+	 * not Kafka message overhead.  I wanted to do the key length too, but it's
+	 * tedious to recover.  I don't think the key size is very important, and a
+	 * slightly fuzzy bound is way better than no bound.
+	 */
+	if (unlikely(rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_bytes, len) >
+		     rkt->rkt_rk->rk_conf.queue_buffering_max_bytes)) {
+		(void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+		(void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_bytes, len);
+		errno = ENOBUFS;
+		return -1;
+	}
 
         /* Create message */
         rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
@@ -144,6 +158,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
         if (unlikely(!rkm)) {
                 /* errno is already set by msg_new() */
                 (void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+		(void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_bytes, len);
                 return -1;
         }
 
@@ -188,6 +203,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
         int i;
         rd_ts_t now = rd_clock();
         int good = 0;
+	size_t good_bytes = 0;
         rd_kafka_toppar_t *rktp = NULL;
         rd_kafka_resp_err_t all_err = 0;
 
@@ -218,6 +234,19 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
                         rkmessages[i].err = all_err;
                         continue;
                 }
+                /* buffering.max.bytes reached */
+                if (unlikely(rkt->rkt_rk->rk_producer.msg_bytes +
+                             /* For partitioner: msg_cnt is increased per
+                              *                  message,
+                              * For single partition: msg_cnt is increased
+                              *                       just once at the end */
+                             (partition == RD_KAFKA_PARTITION_UA ? 0 : good_bytes)
+                             + rkmessages[i].len >
+                             rkt->rkt_rk->rk_conf.queue_buffering_max_bytes)) {
+                        all_err = RD_KAFKA_RESP_ERR__QUEUE_FULL;
+                        rkmessages[i].err = all_err;
+                        continue;
+                }
 
                 /* Create message */
                 rkm = rd_kafka_msg_new0(rkt,
@@ -238,6 +267,8 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
                 if (partition == RD_KAFKA_PARTITION_UA) {
                         (void)rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt,
                                             1);
+			(void)rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_bytes,
+					    rkmessages[i].len);
 
                         /* Partition the message */
                         rkmessages[i].err =
@@ -258,6 +289,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
 
                 rkmessages[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
                 good++;
+		good_bytes += rkmessages[i].len;
         }
 
 
@@ -273,6 +305,10 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
                         if (good > 0)
                                 (void)rd_atomic_add(&rkt->rkt_rk->
                                                     rk_producer.msg_cnt, good);
+                        if (good_bytes > 0)
+                                (void)rd_atomic_add(&rkt->rkt_rk->
+                                                    rk_producer.msg_bytes,
+						    good_bytes);
 
                         (void)rd_atomic_add(&rktp->rktp_c.msgs, good);
                         rd_kafka_toppar_concat_msgq(rktp, &tmpq);

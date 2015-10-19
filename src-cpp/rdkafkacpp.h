@@ -449,6 +449,19 @@ class Message {
 };
 
 
+/**
+ * Queue
+ */
+class Queue {
+ public:
+
+  /**
+   * Create Queue object
+   */
+  static Queue *create (Handle *handle);
+
+  virtual ~Queue () { }
+};
 
 
 /**
@@ -494,6 +507,14 @@ class Consumer : public virtual Handle {
   virtual ErrorCode start (Topic *topic, int32_t partition, int64_t offset) = 0;
 
   /**
+   * Start consuming messages for topic and 'partition' on queue 'queue'.
+   *
+   * See start() above for additional details on parameters and results.
+   */
+  virtual ErrorCode start (Topic *topic, int32_t partition, int64_t offset,
+                           Queue *queue) = 0;
+
+  /**
    * Stop consuming messages for topic and 'partition', purging
    * all messages currently in the local queue.
    *
@@ -504,6 +525,27 @@ class Consumer : public virtual Handle {
    */
   virtual ErrorCode stop (Topic *topic, int32_t partition) = 0;
 
+  /** Consume a single message from the specified queue.
+   *
+   * 'timeout_ms' is maximum amount of time to wait for a message to be
+   * received.
+   * Consumer must have been previously started on the queue with
+   * `..->start()`.
+   *
+   * Returns a Message object, the application needs to check if message
+   * is an error or a proper message `Message->err()` and checking for
+   * `ERR_NO_ERROR`.
+   *
+   * The message object must be destroyed when the application is done with it.
+   *
+   * Errors (in Message->err()):
+   *   ERR__TIMED_OUT - 'timeout_ms' was reached with no new messages fetched.
+   *
+   * Note that Message->topic() may be nullptr after certain kinds of
+   * errors, so applications should check that it isn't null before
+   * dereferencing it.
+   */
+  virtual Message *consume (Queue *queue, int timeout_ms) = 0;
 
   /**
    * Consume a single message from topic and 'partition'.

@@ -84,6 +84,20 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
 }
 
 
+RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
+                                                 int32_t partition,
+                                                 int64_t offset,
+                                                 Queue *queue) {
+  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+  RdKafka::QueueImpl *queueimpl = dynamic_cast<RdKafka::QueueImpl *>(queue);
+
+  if (rd_kafka_consume_start_queue(topicimpl->rkt_, partition, offset,
+                                   queueimpl->queue_) == -1)
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+
+  return RdKafka::ERR_NO_ERROR;
+}
+
 
 RdKafka::ErrorCode RdKafka::ConsumerImpl::stop (Topic *topic,
                                                 int32_t partition) {
@@ -144,4 +158,25 @@ int RdKafka::ConsumerImpl::consume_callback (RdKafka::Topic* topic,
   ConsumerImplCallback context(topic, consume_cb, NULL);
   return rd_kafka_consume_callback(topicimpl->rkt_, partition, timeout_ms,
                                    &ConsumerImplCallback::consume_cb_trampoline, &context);
+}
+
+
+RdKafka::Message *RdKafka::ConsumerImpl::consume (Queue *queue,
+                                                  int timeout_ms) {
+  RdKafka::QueueImpl *queueimpl = dynamic_cast<RdKafka::QueueImpl *>(queue);
+  rd_kafka_message_t *rkmessage;
+
+  rkmessage = rd_kafka_consume_queue(queueimpl->queue_, timeout_ms);
+  if (!rkmessage)
+    return new RdKafka::MessageImpl(NULL,
+                                    static_cast<RdKafka::ErrorCode>
+                                    (rd_kafka_errno2err(errno)));
+  /*
+   * Recover our Topic * from the topic conf's opaque field, which we
+   * set in RdKafka::Topic::create() for just this kind of situation.
+   */
+  void *opaque = rd_kafka_topic_get_opaque(rkmessage->rkt);
+  Topic *topic = static_cast<Topic *>(opaque);
+
+  return new RdKafka::MessageImpl(topic, rkmessage);
 }

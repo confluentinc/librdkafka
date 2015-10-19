@@ -1219,3 +1219,7 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *rkt,
 	return avail;
 }
 
+
+void *rd_kafka_topic_get_opaque (const rd_kafka_topic_t *rkt) {
+	return rkt->rkt_conf.opaque;
+}

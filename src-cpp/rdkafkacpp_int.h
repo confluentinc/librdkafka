@@ -379,5 +379,19 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
 };
 
 
+class QueueImpl : virtual public Queue {
+ public:
+  rd_kafka_queue_t *rkqu;
+
+  ~QueueImpl () {
+    rd_kafka_queue_destroy(rkqu);
+  }
+  static Queue *create (Consumer *consumer);
+
+  ErrorCode start (Topic *topic, int32_t partition, int64_t offset);
+  ErrorCode stop (Topic *topic, int32_t partition);
+  Message *consume (int timeout_ms);
+  int consume_callback (int timeout_ms, ConsumeCb *cb, void *opaque);
+};
 
 };

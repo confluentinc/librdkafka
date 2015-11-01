@@ -449,6 +449,29 @@ class Message {
 };
 
 
+/**
+ * Queue
+ *
+ * Create a new message queue.  Message queues allows the application
+ * to re-route consumed messages from multiple topic+partitions into
+ * one single queue point.  This queue point, containing messages from
+ * a number of topic+partitions, may then be served by a single
+ * consume() method, rather than one per topic+partition combination.
+ *
+ * See the Consumer::start(), Consumer::consume(), and
+ * Consumer::consume_callback() methods that take a queue as the first
+ * parameter for more information.
+ */
+class Queue {
+ public:
+
+  /**
+   * Create Queue object
+   */
+  static Queue *create (Handle *handle);
+
+  virtual ~Queue () { }
+};
 
 
 /**
@@ -494,6 +517,14 @@ class Consumer : public virtual Handle {
   virtual ErrorCode start (Topic *topic, int32_t partition, int64_t offset) = 0;
 
   /**
+   * Start consuming messages for topic and 'partition' on queue 'queue'.
+   *
+   * See start() above for additional details on parameters and results.
+   */
+  virtual ErrorCode start (Topic *topic, int32_t partition, int64_t offset,
+                           Queue *queue) = 0;
+
+  /**
    * Stop consuming messages for topic and 'partition', purging
    * all messages currently in the local queue.
    *
@@ -503,7 +534,6 @@ class Consumer : public virtual Handle {
    * Returns 0 on success or -1 on error (see `errno`).
    */
   virtual ErrorCode stop (Topic *topic, int32_t partition) = 0;
-
 
   /**
    * Consume a single message from topic and 'partition'.
@@ -524,6 +554,29 @@ class Consumer : public virtual Handle {
    */
   virtual Message *consume (Topic *topic, int32_t partition,
                             int timeout_ms) = 0;
+
+  /**
+   * Consume a single message from the specified queue.
+   *
+   * 'timeout_ms' is maximum amount of time to wait for a message to be
+   * received.
+   * Consumer must have been previously started on the queue with
+   * `..->start()`.
+   *
+   * Returns a Message object, the application needs to check if message
+   * is an error or a proper message `Message->err()` and checking for
+   * `ERR_NO_ERROR`.
+   *
+   * The message object must be destroyed when the application is done with it.
+   *
+   * Errors (in Message->err()):
+   *   ERR__TIMED_OUT - 'timeout_ms' was reached with no new messages fetched.
+   *
+   * Note that Message->topic() may be nullptr after certain kinds of
+   * errors, so applications should check that it isn't null before
+   * dereferencing it.
+   */
+  virtual Message *consume (Queue *queue, int timeout_ms) = 0;
 
   /**
    * Consumes messages from 'topic' and 'partition', calling
@@ -547,6 +600,29 @@ class Consumer : public virtual Handle {
   virtual int consume_callback (Topic *topic, int32_t partition,
                                 int timeout_ms,
                                 ConsumeCb *consume_cb,
+                                void *opaque) = 0;
+
+  /**
+   * Consumes messages from 'queue', calling the provided callback for
+   * each consumed messsage.
+   *
+   * `consume_callback()` provides higher throughput performance
+   * than `consume()`.
+   *
+   * 'timeout_ms' is the maximum amount of time to wait for one or more messages
+   * to arrive.
+   *
+   * The provided 'consume_cb' instance has its 'consume_cb' function
+   * called for every message received.
+   *
+   * The 'opaque' argument is passed to the 'consume_cb' as 'opaque'.
+   *
+   * Returns the number of messages processed or -1 on error.
+   *
+   * See: consume()
+   */
+  virtual int consume_callback (Queue *queue, int timeout_ms,
+                                RdKafka::ConsumeCb *consume_cb,
                                 void *opaque) = 0;
 };
 

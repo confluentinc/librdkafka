@@ -342,6 +342,19 @@ class TopicImpl : public Topic {
 
 
 
+class QueueImpl : public Queue {
+ public:
+  QueueImpl () { }
+  ~QueueImpl () {
+    rd_kafka_queue_destroy(queue_);
+  }
+  rd_kafka_queue_t *queue_;
+};
+
+
+
+
+
 class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
  public:
   ~ConsumerImpl () {
@@ -349,10 +362,15 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
   static Consumer *create (Conf *conf, std::string &errstr);
 
   ErrorCode start (Topic *topic, int32_t partition, int64_t offset);
+  ErrorCode start (Topic *topic, int32_t partition, int64_t offset,
+                   Queue *queue);
   ErrorCode stop (Topic *topic, int32_t partition);
   Message *consume (Topic *topic, int32_t partition, int timeout_ms);
+  Message *consume (Queue *queue, int timeout_ms);
   int consume_callback (Topic *topic, int32_t partition, int timeout_ms,
                         ConsumeCb *cb, void *opaque);
+  int consume_callback (Queue *queue, int timeout_ms,
+                        RdKafka::ConsumeCb *consume_cb, void *opaque);
 };
 
 

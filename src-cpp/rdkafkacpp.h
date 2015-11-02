@@ -340,7 +340,7 @@ class Handle {
   /**
    * Returns the name of the handle
    */
-  virtual const std::string name () = 0;
+  virtual const std::string name () const = 0;
 
 
   /**
@@ -406,13 +406,13 @@ class Topic {
   /**
    * Returns the topic name
    */
-  virtual const std::string name () = 0;
+  virtual const std::string name () const = 0;
 
   /**
    * Returns true if 'partition' is available for the topic (has leader).
    * NOTE: MUST ONLY be called from within a PartitionerCb callback.
    */
-  virtual bool partition_available (int32_t partition) = 0;
+  virtual bool partition_available (int32_t partition) const = 0;
 
   /**
    * Store offset 'offset' for topic partition 'partition'.

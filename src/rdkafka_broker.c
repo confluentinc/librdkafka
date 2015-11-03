@@ -2849,7 +2849,12 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 	 */
 
 	rd_kafka_broker_toppars_rdlock(rkb);
-	iov_cnt = 1 + (rkb->rkb_toppar_cnt * 2); 
+        if (unlikely(rkb->rkb_fetch_toppar_cnt == 0)) {
+                rd_kafka_broker_toppars_rdunlock(rkb);
+                return 0;
+        }
+
+	iov_cnt = 1 + (rkb->rkb_fetch_toppar_cnt * 2); 
 
 	/* Limit to maximum iovecs. This has the downside that if the
 	 * application consumes from more than ~ IOV_MAX/2 partitions the
@@ -2859,7 +2864,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 		iov_cnt = RD_KAFKA_PAYLOAD_IOV_MAX;
 	max_cnt = (iov_cnt - 1) / 2;
 
-	rkbuf = rd_kafka_buf_new(iov_cnt,
+	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, iov_cnt,
 				 /* ReplicaId+MaxWaitTime+MinBytes+TopicCnt */
 				 4+4+4+4+
 				 /* N x PartCnt+Partition+FetchOffset+MaxBytes*/
@@ -2878,98 +2883,11 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 
 	rd_kafka_buf_autopush(rkbuf);
 
-	TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
-                /* Serve toppar op queue to update desired rktp state */
-                rd_kafka_toppar_op_serve(rktp);
-
-                /* Request offsets to measure consumer lag */
-                if (consumer_lag_intvl &&
-                    rktp->rktp_ts_offset_lag + consumer_lag_intvl < now) {
-			rd_kafka_toppar_consumer_lag_req(rkb, rktp);
-                        rktp->rktp_ts_offset_lag = now;
-                }
-
-		/* Check Toppar Fetch state */
-		if (unlikely(rktp->rktp_fetch_state !=
-			     RD_KAFKA_TOPPAR_FETCH_ACTIVE)) {
-
-			switch (rktp->rktp_fetch_state)
-			{
-                        case RD_KAFKA_TOPPAR_FETCH_COORD_QUERY:
-                                break;
-
-			case RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY:
-				if (rktp->rktp_ts_offset_req_next <= now)
-					rd_kafka_toppar_offset_request(rkb,
-								       rktp,
-                                                                       rktp->rktp_query_offset);
-
-				break;
-			default:
-				break;
-			}
-
-			/* Skip this toppar until its state changes */
-                        if (rktp->rktp_fetch_state != RD_KAFKA_TOPPAR_FETCH_NONE)
-                                rd_rkb_dbg(rkb, TOPIC, "FETCH",
-                                           "Skipping topic %s [%"PRId32"] "
-                                           "in state %s",
-                                           rktp->rktp_rkt->rkt_topic->str,
-                                           rktp->rktp_partition,
-                                           rd_kafka_fetch_states[rktp->
-                                                                 rktp_fetch_state]);
-			continue;
-		}
-
-                rd_rkb_dbg(rkb, QUEUE, "FETCH",
-                           "Topic %s [%"PRId32"] "
-                           "fetch queue %i (%"PRIu64"kb) >= "
-                           "queued.min.messages %i "
-                           "(queued.max.messages.kbytes %i)?",
-                           rktp->rktp_rkt->rkt_topic->str,
-                           rktp->rktp_partition,
-                           rd_kafka_q_len(&rktp->rktp_fetchq),
-                           rd_kafka_q_size(&rktp->rktp_fetchq) / 1024,
-                           rkb->rkb_rk->rk_conf.queued_min_msgs,
-                           rkb->rkb_rk->rk_conf.queued_max_msg_kbytes);
-
-
-		/* Skip toppars who's local message queue is already above
-		 * the lower threshold. */
-		if (rd_kafka_q_len(&rktp->rktp_fetchq) >=
-		    rkb->rkb_rk->rk_conf.queued_min_msgs) {
-			rd_rkb_dbg(rkb, TOPIC, "FETCH",
-				   "Skipping topic %s [%"PRId32"]: "
-                                   "threshold queued.min.messages=%i "
-                                   "exceeded: %i messages in queue",
-				   rktp->rktp_rkt->rkt_topic->str,
-				   rktp->rktp_partition,
-                                   rkb->rkb_rk->rk_conf.queued_min_msgs,
-                                   rd_kafka_q_len(&rktp->rktp_fetchq));
-			continue;
-                }
-
-                if ((int64_t)rd_kafka_q_size(&rktp->rktp_fetchq) >=
-                    rkb->rkb_rk->rk_conf.queued_max_msg_bytes) {
-			rd_rkb_dbg(rkb, TOPIC, "FETCH",
-				   "Skipping topic %s [%"PRId32"]: "
-                                   "threshold queued.max.messages.kbytes=%i "
-                                   "exceeded: %"PRId64" bytes in queue",
-				   rktp->rktp_rkt->rkt_topic->str,
-				   rktp->rktp_partition,
-                                   rkb->rkb_rk->rk_conf.queued_max_msg_kbytes,
-                                   rd_kafka_q_size(&rktp->rktp_fetchq));
-			continue;
-                }
-
-		if (rd_kafka_buf_iov_remain(rkbuf) < 2) {
-			if (!warned_once_topparcnt++)
-				rd_rkb_dbg(rkb, TOPIC, "FETCH",
-					   "FIXME: Fetching too many "
-					   "partitions (>%i), see issue #110",
-					   cnt);
-			continue;
-                }
+        /* Round-robin start of the list. */
+        rktp = rkb->rkb_fetch_toppar_next;
+        do {
+		if (rd_kafka_buf_iov_remain(rkbuf) < 2)
+                        break;
 
 		if (rkt_last != rktp->rktp_rkt) {
 			if (rkt_last != NULL) {
@@ -2999,19 +2917,31 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 				       fetch_msg_max_bytes);
 
 		rd_rkb_dbg(rkb, TOPIC, "FETCH",
-			   "Fetch topic %.*s [%"PRId32"] at offset %"PRId64,
+			   "Fetch topic %.*s [%"PRId32"] in state %s "
+                           "at offset %"PRId64,
 			   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			   rktp->rktp_partition,
+                           rd_kafka_fetch_states[rktp->rktp_fetch_state],
 			   rktp->rktp_next_offset);
 
                 rktp->rktp_fetch_version = rktp->rktp_op_version;
 
 		cnt++;
-	}
+	} while ((rktp = CIRCLEQ_LOOP_NEXT(&rkb->rkb_fetch_toppars,
+                                           rktp, rktp_fetchlink)) !=
+                 rkb->rkb_fetch_toppar_next);
 
+        /* Update next toppar to fetch in round-robin list. */
+        rd_kafka_broker_fetch_toppar_next(rkb,
+                                          rktp ?
+                                          CIRCLEQ_LOOP_NEXT(&rkb->
+                                                            rkb_fetch_toppars,
+                                                            rktp, rktp_fetchlink):
+                                          NULL);
 	rd_kafka_broker_toppars_rdunlock(rkb);
 
-	rd_rkb_dbg(rkb, MSG, "CONSUME", "consume from %i toppar(s)", cnt);
+	rd_rkb_dbg(rkb, TOPIC, "CONSUME", "Consume from %i/%i/%i toppar(s)",
+                   cnt, rkb->rkb_fetch_toppar_cnt, rkb->rkb_toppar_cnt);
 	if (!cnt) {
 		rd_kafka_buf_destroy(rkbuf);
 		return cnt;

@@ -110,6 +110,9 @@ static void msghdr_print (rd_kafka_t *rk,
 
 
 
+#define rd_kafka_broker_terminating(rkb) \
+        (rd_refcnt_get(&(rkb)->rkb_refcnt) <= 1)
+
 static size_t rd_kafka_msghdr_size (const struct msghdr *msg) {
 	int i;
 	size_t tot = 0;

@@ -103,7 +103,7 @@ void rd_kafka_log_buf (const rd_kafka_t *rk, int level,
 		       const char *fac, const char *buf) {
 
 	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level ||
-		rd_atomic32_get((rd_atomic32_t *)&rk->rk_terminate))
+            rd_kafka_terminating((rd_kafka_t *)rk))
 		return;
 
 	rk->rk_conf.log_cb(rk, level, fac, buf);
@@ -117,7 +117,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
         unsigned int of = 0;
 
 	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level ||
-		rd_atomic32_get((rd_atomic32_t *)&rk->rk_terminate))
+            rd_kafka_terminating((rd_kafka_t *)rk))
 		return;
 
         elen = rd_snprintf(buf, sizeof(buf), "[thrd:%s]: ",
@@ -359,12 +359,47 @@ rd_kafka_resp_err_t rd_kafka_errno2err (int errnox) {
 }
 
 
-void rd_kafka_destroy0 (rd_kafka_t *rk) {
-	if (rd_atomic32_sub(&rk->rk_refcnt, 1) > 0)
-		return;
+
+static void rd_kafka_simple_consumer_cleanup (rd_kafka_t *rk) {
+        rd_kafka_q_t *tmpq;
+        rd_kafka_resp_err_t err;
+
+        if (!rk->rk_cgrp)
+                return;
+
+        tmpq = rd_kafka_q_new(rk);
+        rd_kafka_cgrp_terminate(rk->rk_cgrp, tmpq);
+        err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
+        rd_kafka_q_destroy(tmpq);
+
+        if (err)
+                rd_kafka_log(rk, LOG_ERR, "CLEANUP",
+                             "Failed to stop consumer group: %s",
+                             rd_kafka_err2str(err));
+}
+
+
+/**
+ * Final destructor for rd_kafka_t, must only be called with refcnt 0.
+ */
+void rd_kafka_destroy_final (rd_kafka_t *rk) {
+
+        rd_kafka_assert(rk, rd_atomic32_get(&rk->rk_terminate) != 0);
+
+        /* Synchronize state */
+        rd_kafka_wrlock(rk);
+        rd_kafka_wrunlock(rk);
+
+        rd_kafka_assignors_term(rk);
+
+        rd_kafka_timers_destroy(&rk->rk_timers);
+
+        /* Destroy cgrp */
+        if (rk->rk_cgrp)
+                rd_kafka_cgrp_destroy_final(rk->rk_cgrp);
 
 	/* Purge op-queue */
-	rd_kafka_q_purge(&rk->rk_rep);
+	rd_kafka_q_destroy(&rk->rk_rep);
 
 #if WITH_SSL
 	if (rk->rk_conf.ssl.ctx)
@@ -378,58 +413,112 @@ void rd_kafka_destroy0 (rd_kafka_t *rk) {
 	rwlock_destroy(&rk->rk_lock);
 
 	rd_free(rk);
+        rd_atomic32_sub(&rd_kafka_handle_cnt_curr, 1);
+}
 
-	(void)rd_atomic32_sub(&rd_kafka_handle_cnt_curr, 1);
+
+static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
+        thrd_t thrd;
+
+        rd_kafka_dbg(rk, GENERIC, "DESTROY", "Terminating instance");
+        rd_kafka_wrlock(rk);
+        thrd = rk->rk_thread;
+	rd_atomic32_add(&rk->rk_terminate, 1);
+        rd_kafka_timers_interrupt(&rk->rk_timers);
+        rd_kafka_wrunlock(rk);
+
+        if (!blocking)
+                return; /* FIXME: thread resource leak */
+
+        if (thrd_join(thrd, NULL) != thrd_success)
+                rd_kafka_assert(NULL, !*"failed to join main thread");
 }
 
 
 /* NOTE: Must only be called by application.
  *       librdkafka itself must use rd_kafka_destroy0(). */
 void rd_kafka_destroy (rd_kafka_t *rk) {
-	rd_kafka_topic_t *rkt, *rkt_tmp;
-	rd_kafka_broker_t *rkb;
+        rd_kafka_destroy_app(rk, 1);
+}
+
+
+/* NOTE: Must only be called by application.
+ *       librdkafka itself must use rd_kafka_destroy0(). */
+static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
+	rd_kafka_itopic_t *rkt, *rkt_tmp;
+	rd_kafka_broker_t *rkb, *rkb_tmp;
+        rd_list_t wait_thrds;
+        thrd_t *thrd;
+        int i;
 
 	/* Brokers pick up on rk_terminate automatically. */
-	rd_kafka_dbg(rk, GENERIC, "DESTROY", "Terminating instance");
-	(void)rd_atomic32_add(&rk->rk_terminate, 1);
 
+        /* The legacy/simple consumer lacks an API to close down the consumer */
+        if (rd_kafka_is_simple_consumer(rk))
+                rd_kafka_simple_consumer_cleanup(rk);
+
+        /* List of (broker) threads to join to synchronize termination */
+        rd_list_init(&wait_thrds, rd_atomic32_get(&rk->rk_broker_cnt));
+
+	rd_kafka_wrlock(rk);
+
+	/* Decommission all topics */
+	TAILQ_FOREACH_SAFE(rkt, &rk->rk_topics, rkt_link, rkt_tmp) {
+		rd_kafka_wrunlock(rk);
+		rd_kafka_topic_partitions_remove(rkt);
+		rd_kafka_wrlock(rk);
+	}
+
+        /* Decommission brokers.
+         * Broker thread holds a refcount and detects when broker refcounts
+         * reaches 1 and then decommissions itself. */
+        TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_tmp) {
+                /* Add broker's thread to wait_thrds list for later joining */
+                thrd = malloc(sizeof(*thrd));
+                *thrd = rkb->rkb_thread;
+                rd_list_add(&wait_thrds, thrd);
+                rd_kafka_wrunlock(rk);
+
+#ifndef _MSC_VER
+                /* Interrupt IO threads to speed up termination. */
+                if (rk->rk_conf.term_sig)
+			pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
+#endif
+
+                rd_kafka_broker_destroy(rkb);
+
+                rd_kafka_wrlock(rk);
+        }
+
+
+        rd_kafka_wrunlock(rk);
 
 	/* Loose our special reference to the internal broker. */
-	rd_kafka_wrlock(rk);
-	rkb = rk->rk_internal_rkb;
-	rk->rk_internal_rkb = NULL;
-	rd_kafka_wrunlock(rk);
+        mtx_lock(&rk->rk_internal_rkb_lock);
+	if ((rkb = rk->rk_internal_rkb)) {
+                rk->rk_internal_rkb = NULL;
+                thrd = malloc(sizeof(*thrd));
+                *thrd = rkb->rkb_thread;
+                rd_list_add(&wait_thrds, thrd);
+        }
+        mtx_unlock(&rk->rk_internal_rkb_lock);
 	if (rkb)
 		rd_kafka_broker_destroy(rkb);
 
-	/* Decommission all topics */
-	rd_kafka_rdlock(rk);
 
-	TAILQ_FOREACH_SAFE(rkt, &rk->rk_topics, rkt_link, rkt_tmp) {
-		rd_kafka_rdunlock(rk);
-		rd_kafka_topic_partitions_remove(rkt);
-		rd_kafka_rdlock(rk);
-	}
+        /* Join broker threads */
+        RD_LIST_FOREACH(thrd, &wait_thrds, i) {
+                if (thrd_join(*thrd, NULL) != thrd_success)
+                        ;
+                free(thrd);
+        }
 
-	rd_kafka_timers_interrupt(rk);
+        rd_list_destroy(&wait_thrds, NULL);
 
-	/* Interrupt all IO threads to speed up termination. */
-#ifndef _MSC_VER
-	if (rk->rk_conf.term_sig) {
-		rd_kafka_broker_t *rkb;
-		TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link)
-			pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
-	}
-#endif
-
-	/* Purge op-queue */
+        /* Purge op-queue */
+        rd_kafka_q_disable(&rk->rk_rep);
 	rd_kafka_q_purge(&rk->rk_rep);
-
-	rd_kafka_rdunlock(rk);
-
-	rd_kafka_destroy0(rk);
 }
-
 
 
 /* Stats buffer printf */
@@ -724,12 +813,11 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
  * Main loop for Kafka handler thread.
  */
 static int rd_kafka_thread_main (void *arg) {
-	rd_kafka_t *rk = arg;
+        rd_kafka_t *rk = arg;
 	rd_kafka_timer_t tmr_topic_scan = RD_ZERO_INIT;
 	rd_kafka_timer_t tmr_stats_emit = RD_ZERO_INIT;
 	rd_kafka_timer_t tmr_metadata_refresh = RD_ZERO_INIT;
 
-	thrd_detach(thrd_current());
         rd_snprintf(rd_kafka_thread_name, sizeof(rd_kafka_thread_name), "main");
 
 	(void)rd_atomic32_add(&rd_kafka_thread_cnt_curr, 1);
@@ -825,8 +913,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	rk->rk_conf = *conf;
 	rd_free(conf);
 
-	rd_kafka_keep(rk); /* application refcnt */
-
 	rwlock_init(&rk->rk_lock);
 
 	rd_kafka_q_init(&rk->rk_rep);
@@ -875,7 +961,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		if (rd_kafka_transport_ssl_ctx_init(rk, errstr,
 						    errstr_size) == -1) {
 
-			rd_kafka_destroy0(rk); /* application refcnt */
+                        rd_kafka_destroy_internal(rk);
 			errno = EINVAL;
 			return NULL;
 		}
@@ -904,7 +990,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	rd_kafka_wrlock(rk);
 
 	/* Create handler thread */
-	rd_kafka_keep(rk); /* one refcnt for handler thread */
 	if ((err = thrd_create(&rk->rk_thread,
 			       rd_kafka_thread_main, rk)) != thrd_success) {
 		if (errstr)
@@ -912,8 +997,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 				 "Failed to create thread: %s (%i)",
 				    rd_strerror(err), err);
 		rd_kafka_wrunlock(rk);
-		rd_kafka_destroy0(rk); /* handler thread */
-		rd_kafka_destroy0(rk); /* application refcnt */
+                rd_kafka_destroy_internal(rk);
 #ifndef _MSC_VER
 		/* Restore sigmask of caller */
 		pthread_sigmask(SIG_SETMASK, &oldset, NULL);

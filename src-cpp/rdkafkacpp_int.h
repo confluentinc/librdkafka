@@ -36,7 +36,7 @@
 
 extern "C" {
 #include "../src/rdkafka.h"
-};
+}
 
 #ifdef _MSC_VER
 typedef int mode_t;
@@ -483,4 +483,4 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
 
 
 
-};
+}

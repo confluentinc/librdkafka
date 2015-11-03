@@ -2,7 +2,7 @@
 
 #include "rdkafka_op.h"
 
-typedef struct rd_kafka_q_s {
+struct rd_kafka_q_s {
 	mtx_t  rkq_lock;
 	cnd_t  rkq_cond;
 	struct rd_kafka_q_s *rkq_fwdq; /* Forwarded/Routed queue.
@@ -18,7 +18,7 @@ typedef struct rd_kafka_q_s {
                                       * Flag is cleared on destory */
 
         rd_kafka_t   *rkq_rk;
-} rd_kafka_q_t;
+};
 
 
 

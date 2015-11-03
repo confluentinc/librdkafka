@@ -1542,8 +1542,7 @@ rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
 void
 rd_kafka_topic_partition_list_add (rd_kafka_topic_partition_list_t *rktparlist,
                                    const char *topic, int32_t partition) {
-        return rd_kafka_topic_partition_list_add0(rktparlist, topic, partition,
-                                                  NULL);
+        rd_kafka_topic_partition_list_add0(rktparlist, topic, partition, NULL);
 }
 
 

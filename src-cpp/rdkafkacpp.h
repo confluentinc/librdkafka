@@ -767,5 +767,5 @@ class RD_EXPORT Producer : public virtual Handle {
 };
 
 
-};
+}
 

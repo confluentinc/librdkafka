@@ -436,5 +436,5 @@ void rd_kafka_assignors_init (rd_kafka_t *rk) {
  */
 void rd_kafka_assignors_term (rd_kafka_t *rk) {
         rd_list_destroy(&rk->rk_conf.partition_assignors,
-                        (void *)rd_kafka_assignor_destroy);
+                        (void *)(void *)rd_kafka_assignor_destroy);
 }

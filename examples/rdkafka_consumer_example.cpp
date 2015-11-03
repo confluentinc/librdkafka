@@ -62,8 +62,8 @@ static bool exit_eof = false;
 static int eof_cnt = 0;
 static int partition_cnt = 0;
 static int verbosity = 1;
-static long long msg_cnt = 0;
-static long long msg_bytes = 0;
+static long msg_cnt = 0;
+static int64_t msg_bytes = 0;
 static void sigterm (int sig) {
   run = false;
 }

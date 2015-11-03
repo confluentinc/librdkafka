@@ -125,7 +125,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 
 #ifdef SIGIO
                 /* Quick termination */
-                snprintf(buf, sizeof(buf), "%i", SIGIO);
+                rd_snprintf(buf, sizeof(buf), "%i", SIGIO);
                 rd_kafka_conf_set(*conf, "internal.termination.signal",
                                   buf, NULL, 0);
                 signal(SIGIO, SIG_IGN);

@@ -103,7 +103,7 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 typedef struct rd_sockaddr_list_s {
 	int rsal_cnt;
 	int rsal_curr;
-	rd_sockaddr_inx_t rsal_addr[0];
+	rd_sockaddr_inx_t rsal_addr[];
 } rd_sockaddr_list_t;
 
 

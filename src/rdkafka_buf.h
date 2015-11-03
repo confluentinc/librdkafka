@@ -201,7 +201,7 @@ typedef void (rd_kafka_resp_cb_t) (rd_kafka_broker_t *rkb,
                                    rd_kafka_buf_t *request,
                                    void *opaque);
 
-typedef struct rd_kafka_buf_s {
+struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	TAILQ_ENTRY(rd_kafka_buf_s) rkbuf_link;
 
 	int32_t rkbuf_corrid;
@@ -262,7 +262,7 @@ typedef struct rd_kafka_buf_s {
         int64_t rkbuf_offset;  /* Used by OffsetCommit */
 
 	rd_kafka_msgq_t rkbuf_msgq;
-} rd_kafka_buf_t;
+};
 
 
 typedef struct rd_kafka_bufq_s {

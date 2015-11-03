@@ -36,7 +36,7 @@
 
 RdKafka::Producer::~Producer () {
 
-};
+}
 
 static void dr_msg_cb_trampoline (rd_kafka_t *rk,
                                   const rd_kafka_message_t *

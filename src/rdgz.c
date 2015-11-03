@@ -49,7 +49,7 @@ void *rd_gz_decompress (void *compressed, int compressed_len,
 		pass++;
 
 	for (; pass <= 2 ; pass++) {
-		z_stream strm = {};
+		z_stream strm = RD_ZERO_INIT;
 		gz_header hdr;
 		char buf[512];
 		char *p;

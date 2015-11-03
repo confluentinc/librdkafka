@@ -38,7 +38,7 @@ extern const char *rd_kafka_fetch_states[];
 /**
  * Topic + Partition combination
  */
-typedef struct rd_kafka_toppar_s {
+struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rklink;  /* rd_kafka_t link */
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rkblink; /* rd_kafka_broker_t link*/
         CIRCLEQ_ENTRY(rd_kafka_toppar_s) rktp_fetchlink; /* rkb_fetch_toppars */
@@ -142,7 +142,7 @@ typedef struct rd_kafka_toppar_s {
                 rd_atomic64_t rx_ver_drops;
 	} rktp_c;
 
-} rd_kafka_toppar_t;
+};
 
 
 

@@ -33,7 +33,7 @@ extern const char *rd_kafka_secproto_names[];
 
 #define RD_KAFKA_NODENAME_SIZE  128
 
-typedef struct rd_kafka_broker_s {
+struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	TAILQ_ENTRY(rd_kafka_broker_s) rkb_link;
 
 	int32_t             rkb_nodeid;
@@ -148,7 +148,7 @@ typedef struct rd_kafka_broker_s {
 		char msg[512];
 		int  err;  /* errno */
 	} rkb_err;
-} rd_kafka_broker_t;
+};
 
 #define rd_kafka_broker_keep(rkb)   rd_refcnt_add(&(rkb)->rkb_refcnt)
 #define rd_kafka_broker_lock(rkb)   mtx_lock(&(rkb)->rkb_lock)

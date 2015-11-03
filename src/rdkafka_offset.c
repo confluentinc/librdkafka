@@ -75,7 +75,7 @@ const char *rd_kafka_offset2str (int64_t offset) {
         i = (i + 1) % 16;
 
         if (offset >= 0)
-                snprintf(ret[i], sizeof(ret[i]), "%"PRId64, offset);
+                rd_snprintf(ret[i], sizeof(ret[i]), "%"PRId64, offset);
         else if (offset == RD_KAFKA_OFFSET_BEGINNING)
                 return "BEGINNING";
         else if (offset == RD_KAFKA_OFFSET_END)
@@ -85,10 +85,10 @@ const char *rd_kafka_offset2str (int64_t offset) {
         else if (offset == RD_KAFKA_OFFSET_ERROR)
                 return "ERROR";
         else if (offset <= RD_KAFKA_OFFSET_TAIL_BASE)
-                snprintf(ret[i], sizeof(ret[i]), "TAIL(%lld)",
-                         llabs(offset - RD_KAFKA_OFFSET_TAIL_BASE));
+                rd_snprintf(ret[i], sizeof(ret[i]), "TAIL(%lld)",
+			    llabs(offset - RD_KAFKA_OFFSET_TAIL_BASE));
         else
-                snprintf(ret[i], sizeof(ret[i]), "%"PRId64"?", offset);
+                rd_snprintf(ret[i], sizeof(ret[i]), "%"PRId64"?", offset);
 
         return ret[i];
 }

@@ -263,7 +263,7 @@ typedef struct rd_kafkap_bytes_s {
 	int         len;   /* Kafka bytes length (-1=NULL, 0=empty, >0=data) */
 	const void *data;  /* points just past the struct, or other memory,
 			    * not NULL-terminated */
-	const char _data[0]; /* Bytes following struct when new()ed */
+	const char _data[]; /* Bytes following struct when new()ed */
 } rd_kafkap_bytes_t;
 
 

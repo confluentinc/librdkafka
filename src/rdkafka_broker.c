@@ -1506,7 +1506,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 				   MessageSetSize,
 				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 				   rktp->rktp_partition,
-				   strm.msg ? : "", r);
+				   strm.msg ? strm.msg : "", r);
 			return -1;
 		}
 
@@ -1544,7 +1544,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 							    rktp_rkt->
 							    rkt_topic),
 					   rktp->rktp_partition,
-					   strm.msg ? : "", r);
+					   strm.msg ? strm.msg : "", r);
 				deflateEnd(&strm);
 				rd_free(siov.iov_base);
 				return -1;
@@ -1565,7 +1565,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
 						    rkt_topic),
 				   rktp->rktp_partition,
-				   strm.msg ? : "", r);
+				   strm.msg ? strm.msg : "", r);
 			deflateEnd(&strm);
 			rd_free(siov.iov_base);
 			return -1;
@@ -2388,7 +2388,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		{
 			const char *inbuf = Value.data;
 			int r;
-			static const char snappy_java_magic[] =
+			static const unsigned char snappy_java_magic[] =
 				{ 0x82, 'S','N','A','P','P','Y', 0 };
 			static const int snappy_java_hdrlen = 8+4+4;
 

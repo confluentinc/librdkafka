@@ -326,8 +326,6 @@ int main (int argc, char **argv) {
 		int pass;
 
 		for (pass = 0 ; pass < 2 ; pass++) {
-			int i;
-
 			if (pass == 0) {
 				arr = rd_kafka_conf_dump(conf, &cnt);
 				printf("# Global config\n");

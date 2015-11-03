@@ -879,7 +879,7 @@ static void rd_kafka_term_sig_handler (int sig) {
 }
 
 static void rd_kafka_global_init (void) {
-	static const char null_bytes_data[4] = { 0xff, 0xff, 0xff, 0xff };
+	static const unsigned char null_bytes_data[4]={0xff, 0xff, 0xff, 0xff};
 
 #if ENABLE_SHAREDPTR_DEBUG
         LIST_INIT(&rd_shared_ptr_debug_list);
@@ -1894,7 +1894,6 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
 			rd_kafka_toppar_dump(fp, "   ",
                                              rd_kafka_toppar_s2i(rkt->rkt_ua));
                 if (rd_list_empty(&rkt->rkt_desp)) {
-                        int i;
                         fprintf(fp, "   desired partitions:");
                         RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp,  i)
                                 fprintf(fp, " %"PRId32,

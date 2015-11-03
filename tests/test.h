@@ -26,13 +26,16 @@
 extern int test_level;
 
 extern int test_seed;
+extern const char *test_curr;
+
 
 #define TEST_FAIL(...) do {					\
-		fprintf(stderr, "### Test failed at %s:%i:%s(): ###\n", \
-			__FILE__,__LINE__,__FUNCTION__);		\
+		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
+			test_curr ? test_curr:"(n/a)",                  \
+                        __FILE__,__LINE__,__FUNCTION__);                \
 		fprintf(stderr, __VA_ARGS__);				\
 		fprintf(stderr, "\n");					\
-                fprintf(stderr, "### Test random seed was %i ###\n",    \
+                fprintf(stderr, "### Test random seed was %i ###\033[0m\n",    \
                         test_seed);                                     \
 						assert(0); \
 		exit(1);						\
@@ -44,9 +47,11 @@ extern int test_seed;
 			TEST_FAIL(#call " failed: %s", rd_strerror(errno)); \
 	} while (0)
 
-#define TEST_SAY(...) do {			\
-	if (test_level >= 2)			\
-		fprintf(stderr, __VA_ARGS__);		\
+#define TEST_SAY(...) do {                                              \
+	if (test_level >= 2) {                                          \
+                fprintf(stderr, "\033[36m" __VA_ARGS__);                \
+                fprintf(stderr, "\033[0m");                             \
+        }                                                               \
 	} while (0)
 
 #define TEST_REPORT(...) do {		\
@@ -129,5 +134,54 @@ void test_msg_parse0 (const char *func, int line,
 static __inline int jitter (int low, int high) RD_UNUSED;
 static __inline int jitter (int low, int high) {
 	return (low + (rand() % (high+1)));
-	
 }
+
+
+
+/******************************************************************************
+ *
+ * Helpers
+ *
+ ******************************************************************************/
+
+/**
+ * Delivery reported callback.
+ * Called for each message once to signal its delivery status.
+ */
+void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
+                 rd_kafka_resp_err_t err, void *opaque, void *msg_opaque);
+
+rd_kafka_t *test_create_producer (void);
+rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
+                                              const char *topic);
+void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+                        uint64_t testid, int32_t partition,
+                        int msg_base, int cnt);
+rd_kafka_t *test_create_consumer (const char *group_id,
+                                  rd_kafka_topic_conf_t *default_topic_conf);
+rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
+                                              const char *topic);
+void test_consumer_start (const char *what,
+                          rd_kafka_topic_t *rkt, int32_t partition,
+                          int64_t start_offset);
+void test_consumer_stop (const char *what,
+                         rd_kafka_topic_t *rkt, int32_t partition);
+void test_consumer_seek (const char *what, rd_kafka_topic_t *rkt,
+                         int32_t partition, int64_t offset);
+
+#define TEST_NO_SEEK  -1
+int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
+                           uint64_t testid, int32_t partition, int64_t offset,
+                           int exp_msg_base, int exp_cnt);
+
+
+int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
+                        int exp_eof_cnt, int exp_msg_base, int exp_cnt);
+
+void test_consumer_subscribe_partition (const char *what,
+                                        rd_kafka_t *rk, const char *topic,
+                                        int32_t partition);
+void test_consumer_unsubscribe_partition (const char *what,
+                                          rd_kafka_t *rk, const char *topic,
+                                          int32_t partition);
+void test_consumer_close (rd_kafka_t *rk);

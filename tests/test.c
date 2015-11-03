@@ -47,6 +47,7 @@ static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
 static int  tests_run_in_parallel = 0;
 static int  tests_running_cnt = 0;
+const char *test_curr = NULL;
 
 #ifndef _MSC_VER
 static pthread_mutex_t test_lock;
@@ -120,6 +121,14 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
         if (conf) {
                 *conf = rd_kafka_conf_new();
                 rd_kafka_conf_set_error_cb(*conf, test_error_cb);
+
+#ifdef SIGIO
+                /* Quick termination */
+                snprintf(buf, sizeof(buf), "%i", SIGIO);
+                rd_kafka_conf_set(*conf, "internal.termination.signal",
+                                  buf, NULL, 0);
+                signal(SIGIO, SIG_IGN);
+#endif
         }
 
 	if (topic_conf)
@@ -203,11 +212,13 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 
 	fclose(fp);
 
-	/* Limit the test run time. */
+        if (timeout) {
+                /* Limit the test run time. */
 #ifndef _MSC_VER
-	alarm(timeout);
-	signal(SIGALRM, sig_alarm);
+                alarm(timeout);
+                signal(SIGALRM, sig_alarm);
 #endif
+        }
 }
 
 
@@ -363,14 +374,16 @@ static int run_test (const char *testname,
 		test_timing_t t_run;
 
 		TIMING_START(&t_run, testname);
+                test_curr = testname;
                 tests_running_cnt++;
                 r = test_main(argc, argv);
                 tests_running_cnt--;
 		TIMING_STOP(&t_run);
-		
+
                 /* Wait for everything to be cleaned up since broker
                  * destroys are handled in its own thread. */
-                test_wait_exit(10);
+                test_wait_exit(5);
+                test_curr = NULL;
 
         }
         return r;
@@ -428,12 +441,12 @@ int main(int argc, char **argv) {
 	RUN_TEST(0006_symbols);
 	RUN_TEST(0007_autotopic);
 	RUN_TEST(0008_reqacks);
-	RUN_TEST(0010_enforcereqacks);
 	RUN_TEST(0011_produce_batch);
 	RUN_TEST(0012_produce_consume);
         RUN_TEST(0013_null_msgs);
         RUN_TEST(0014_reconsume_191);
 	RUN_TEST(0015_offsets_seek);
+        RUN_TEST(0016_subscribe_partition);
 
         if (tests_run_in_parallel) {
                 while (tests_running_cnt > 0)
@@ -444,11 +457,394 @@ int main(int argc, char **argv) {
 
         /* Wait for everything to be cleaned up since broker destroys are
 	 * handled in its own thread. */
-	test_wait_exit(tests_run_in_parallel ? 20 : 10);
+	test_wait_exit(tests_run_in_parallel ? 10 : 5);
 
 	/* If we havent failed at this point then
 	 * there were no threads leaked */
 
 	TEST_SAY("\n============== ALL TESTS PASSED ==============\n");
 	return r;
+}
+
+
+
+
+
+/******************************************************************************
+ *
+ * Helpers
+ *
+ ******************************************************************************/
+
+void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
+                 rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
+	int *remainsp = msg_opaque;
+
+	if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+		TEST_FAIL("Message delivery failed: %s\n",
+			  rd_kafka_err2str(err));
+
+	if (*remainsp == 0)
+		TEST_FAIL("Too many messages delivered (remains %i)",
+			  *remainsp);
+
+	(*remainsp)--;
+}
+
+
+rd_kafka_t *test_create_producer (void) {
+	rd_kafka_t *rk;
+	rd_kafka_conf_t *conf;
+	char errstr[512];
+
+	test_conf_init(&conf, NULL, 20);
+
+	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+
+	/* Create kafka instance */
+	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+	if (!rk)
+		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
+
+	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+
+	return rk;
+}
+
+rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
+                                              const char *topic) {
+	rd_kafka_topic_t *rkt;
+	rd_kafka_topic_conf_t *topic_conf;
+	char errstr[512];
+
+	test_conf_init(NULL, &topic_conf, 20);
+
+	/* Make sure all replicas are in-sync after producing
+	 * so that consume test wont fail. */
+        rd_kafka_topic_conf_set(topic_conf, "request.required.acks", "-1",
+                                errstr, sizeof(errstr));
+
+
+	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+	if (!rkt)
+		TEST_FAIL("Failed to create topic: %s\n",
+                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+
+	return rkt;
+
+}
+
+void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+                        uint64_t testid, int32_t partition,
+                        int msg_base, int cnt) {
+	int msg_id;
+	test_timing_t t_all;
+	int remains = 0;
+
+	TEST_SAY("Produce to %s [%"PRId32"]: messages #%d..%d\n",
+		 rd_kafka_topic_name(rkt), partition, msg_base, msg_base+cnt);
+
+	TIMING_START(&t_all, "PRODUCE");
+
+	for (msg_id = msg_base ; msg_id < msg_base + cnt ; msg_id++) {
+		char key[128];
+		char buf[128];
+
+		test_msg_fmt(key, sizeof(key), testid, partition, msg_id);
+		rd_snprintf(buf, sizeof(buf), "data: %s", key);
+
+		remains++;
+
+		if (rd_kafka_produce(rkt, partition,
+				     RD_KAFKA_MSG_F_COPY,
+				     buf, strlen(buf),
+				     key, strlen(key),
+				     &remains) == -1)
+			TEST_FAIL("Failed to produce message %i "
+				  "to partition %i: %s",
+				  msg_id, (int)partition,
+				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+
+        }
+
+
+	/* Wait for messages to be delivered */
+	while (remains > 0 && rd_kafka_outq_len(rk) > 0)
+		rd_kafka_poll(rk, 10);
+
+	TIMING_STOP(&t_all);
+}
+
+
+
+rd_kafka_t *test_create_consumer (const char *group_id,
+                                  rd_kafka_topic_conf_t *default_topic_conf) {
+	rd_kafka_t *rk;
+	rd_kafka_conf_t *conf;
+	char errstr[512];
+
+	test_conf_init(&conf, NULL, 20);
+
+        if (group_id) {
+                if (rd_kafka_conf_set(conf, "group.id", group_id,
+                                      errstr, sizeof(errstr)) !=
+                    RD_KAFKA_CONF_OK)
+                        TEST_FAIL("Conf failed: %s\n", errstr);
+        }
+
+        if (default_topic_conf)
+                rd_kafka_conf_set_default_topic_conf(conf, default_topic_conf);
+
+	/* Create kafka instance */
+	rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+	if (!rk)
+		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
+
+	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+
+	return rk;
+}
+
+rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
+                                              const char *topic) {
+	rd_kafka_topic_t *rkt;
+	rd_kafka_topic_conf_t *topic_conf;
+
+	test_conf_init(NULL, &topic_conf, 20);
+
+	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+	if (!rkt)
+		TEST_FAIL("Failed to create topic: %s\n",
+                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+
+	return rkt;
+}
+
+
+void test_consumer_start (const char *what,
+                          rd_kafka_topic_t *rkt, int32_t partition,
+                          int64_t start_offset) {
+
+	TEST_SAY("%s: consumer_start: %s [%"PRId32"] at offset %"PRId64"\n",
+		 what, rd_kafka_topic_name(rkt), partition, start_offset);
+
+	if (rd_kafka_consume_start(rkt, partition, start_offset) == -1)
+		TEST_FAIL("%s: consume_start failed: %s\n",
+			  what, rd_kafka_err2str(rd_kafka_errno2err(errno)));
+}
+
+void test_consumer_stop (const char *what,
+                         rd_kafka_topic_t *rkt, int32_t partition) {
+
+	TEST_SAY("%s: consumer_stop: %s [%"PRId32"]\n",
+		 what, rd_kafka_topic_name(rkt), partition);
+
+	if (rd_kafka_consume_stop(rkt, partition) == -1)
+		TEST_FAIL("%s: consume_stop failed: %s\n",
+			  what, rd_kafka_err2str(rd_kafka_errno2err(errno)));
+}
+
+void test_consumer_seek (const char *what, rd_kafka_topic_t *rkt,
+                         int32_t partition, int64_t offset) {
+	int err;
+
+	TEST_SAY("%s: consumer_seek: %s [%"PRId32"] to offset %"PRId64"\n",
+		 what, rd_kafka_topic_name(rkt), partition, offset);
+
+	if ((err = rd_kafka_seek(rkt, partition, offset, 2000)))
+		TEST_FAIL("%s: consume_seek(%s, %"PRId32", %"PRId64") "
+			  "failed: %s\n",
+			  what,
+			  rd_kafka_topic_name(rkt), partition, offset,
+			  rd_kafka_err2str(err));
+}
+
+
+
+/**
+ * Returns offset of the last message consumed
+ */
+int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
+                           uint64_t testid, int32_t partition, int64_t offset,
+                           int exp_msg_base, int exp_cnt) {
+	int cnt = 0;
+	int msg_next = exp_msg_base;
+	int fails = 0;
+	int64_t offset_last = -1;
+	test_timing_t t_first, t_all;
+
+	TEST_SAY("%s: consume_msgs: %s [%"PRId32"]: expect msg #%d..%d "
+		 "at offset %"PRId64"\n",
+		 what, rd_kafka_topic_name(rkt), partition,
+		 exp_msg_base, exp_cnt, offset);
+
+	if (offset != TEST_NO_SEEK) {
+		rd_kafka_resp_err_t err;
+		test_timing_t t_seek;
+
+		TIMING_START(&t_seek, "SEEK");
+		if ((err = rd_kafka_seek(rkt, partition, offset, 5000)))
+			TEST_FAIL("%s: consume_msgs: %s [%"PRId32"]: "
+				  "seek to %"PRId64" failed: %s\n",
+				  what, rd_kafka_topic_name(rkt), partition,
+				  offset, rd_kafka_err2str(err));
+		TIMING_STOP(&t_seek);
+		TEST_SAY("%s: seeked to offset %"PRId64"\n", what, offset);
+	}
+
+	TIMING_START(&t_first, "FIRST MSG");
+	TIMING_START(&t_all, "ALL MSGS");
+
+	while (cnt < exp_cnt) {
+		rd_kafka_message_t *rkmessage;
+		int msg_id;
+
+		rkmessage = rd_kafka_consume(rkt, partition, 5000);
+		if (!rkmessage)
+			TEST_FAIL("%s: consume_msgs: %s [%"PRId32"]: "
+				  "expected msg #%d (%d/%d): timed out\n",
+				  what, rd_kafka_topic_name(rkt), partition,
+				  msg_next, cnt, exp_cnt);
+
+		if (rkmessage->err)
+			TEST_FAIL("%s: consume_msgs: %s [%"PRId32"]: "
+				  "expected msg #%d (%d/%d): got error: %s\n",
+				  what, rd_kafka_topic_name(rkt), partition,
+				  msg_next, cnt, exp_cnt,
+				  rd_kafka_err2str(rkmessage->err));
+
+		if (cnt == 0)
+			TIMING_STOP(&t_first);
+
+		test_msg_parse(testid, rkmessage->key, rkmessage->key_len,
+			       partition, &msg_id);
+
+		if (test_level >= 3)
+			TEST_SAY("%s: consume_msgs: %s [%"PRId32"]: "
+				 "got msg #%d at offset %"PRId64
+				 " (expect #%d at offset %"PRId64")\n",
+				 what, rd_kafka_topic_name(rkt), partition,
+				 msg_id, rkmessage->offset,
+				 msg_next,
+				 offset >= 0 ? offset + cnt : -1);
+
+		if (msg_id != msg_next) {
+			TEST_SAY("%s: consume_msgs: %s [%"PRId32"]: "
+				 "expected msg #%d (%d/%d): got msg #%d\n",
+				 what, rd_kafka_topic_name(rkt), partition,
+				 msg_next, cnt, exp_cnt, msg_id);
+			fails++;
+		}
+
+		cnt++;
+		msg_next++;
+		offset_last = rkmessage->offset;
+
+		rd_kafka_message_destroy(rkmessage);
+	}
+
+	TIMING_STOP(&t_all);
+
+	if (fails)
+		TEST_FAIL("%s: consume_msgs: %s [%"PRId32"]: %d failures\n",
+			  what, rd_kafka_topic_name(rkt), partition, fails);
+
+	TEST_SAY("%s: consume_msgs: %s [%"PRId32"]: "
+		 "%d/%d messages consumed succesfully\n",
+		 what, rd_kafka_topic_name(rkt), partition,
+		 cnt, exp_cnt);
+	return offset_last;
+}
+
+
+
+
+void test_consumer_subscribe_partition (const char *what,
+                                        rd_kafka_t *rk, const char *topic,
+                                        int32_t partition) {
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+
+        TIMING_START(&timing, "SUBSCRIBE.PARTITION");
+        err = rd_kafka_subscribe_partition(rk, topic, partition);
+        TIMING_STOP(&timing);
+        if (err)
+                TEST_FAIL("%s: failed to subscribe to %s [%"PRId32"]: %s\n",
+                          what, topic, partition, rd_kafka_err2str(err));
+        else
+                TEST_SAY("%s: subscribed to %s [%"PRId32"]\n",
+                         what, topic, partition);
+}
+
+
+void test_consumer_unsubscribe_partition (const char *what,
+                                          rd_kafka_t *rk, const char *topic,
+                                          int32_t partition) {
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+
+        TIMING_START(&timing, "UNSUBSCRIBE.PARTITION");
+        err = rd_kafka_unsubscribe_partition(rk, topic, partition);
+        TIMING_STOP(&timing);
+        if (err)
+                TEST_FAIL("%s: failed to unsubscribe from %s [%"PRId32"]: %s\n",
+                          what, topic, partition, rd_kafka_err2str(err));
+        else
+                TEST_SAY("%s: unsubscribed from %s [%"PRId32"]\n",
+                         what, topic, partition);
+
+}
+
+int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
+                        int exp_eof_cnt, int exp_msg_base, int exp_cnt) {
+        int eof_cnt = 0;
+        int cnt = 0;
+
+        while (eof_cnt < exp_eof_cnt) {
+                rd_kafka_message_t *rkmessage;
+
+                rkmessage = rd_kafka_consumer_poll(rk, 10*1000);
+                if (!rkmessage) /* Shouldn't take this long to get a msg */
+                        TEST_FAIL("%s: consumer_poll() timeout\n", what);
+
+
+                if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+                        TEST_SAY("%s [%"PRId32"] reached EOF at "
+                                 "offset %"PRId64"\n",
+                                 rd_kafka_topic_name(rkmessage->rkt),
+                                 rkmessage->partition,
+                                 rkmessage->offset);
+                        eof_cnt++;
+
+                } else if (rkmessage->err) {
+                        TEST_SAY("%s [%"PRId32"] error (offset %"PRId64"): %s",
+                                 rkmessage->rkt ?
+                                 rd_kafka_topic_name(rkmessage->rkt) :
+                                 "(no-topic)",
+                                 rkmessage->partition,
+                                 rkmessage->offset,
+                                 rd_kafka_message_errstr(rkmessage));
+
+                } else {
+                        cnt++;
+                }
+
+                rd_kafka_message_destroy(rkmessage);
+        }
+
+        return cnt;
+}
+
+void test_consumer_close (rd_kafka_t *rk) {
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+
+        TEST_SAY("Closing consumer\n");
+
+        TIMING_START(&timing, "CONSUMER.CLOSE");
+        err = rd_kafka_consumer_close(rk);
+        TIMING_STOP(&timing);
+        if (err)
+                TEST_FAIL("Failed to close consumer: %s\n",
+                          rd_kafka_err2str(err));
 }

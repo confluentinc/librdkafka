@@ -238,3 +238,23 @@
    fun:rd_kafka_metadata_handle
    fun:rd_kafka_broker_metadata_reply
 }
+
+{
+   log_races0
+   Helgrind:Race
+   fun:rd_kafka_log0
+}
+{
+   glibc_tls
+   Helgrind:Race
+   fun:mempcpy
+   fun:_dl_allocate_tls_init
+   fun:get_cached_stack
+   fun:allocate_stack
+   fun:pthread_create@@GLIBC_2.2.5
+}
+{
+   false_tls
+   Helgrind:Race
+   fun:thrd_detach
+}

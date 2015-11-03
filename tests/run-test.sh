@@ -9,7 +9,7 @@ CCLR='\033[0m'
 if [ -z "$1" ]; then
     echo "Usage: $0 [-p] <00xx-...test> [modes..]"
     echo ""
-    echo "  Modes: bare valgrind helgrind drd"
+    echo "  Modes: bare valgrind helgrind drd gdb"
     echo "  Options:"
     echo "   -p    - run all tests in parallel"
     exit 1
@@ -57,7 +57,9 @@ for mode in $MODES; do
 	    RET=$?
 	    ;;
 	helgrind)
-	    valgrind $VALGRIND_ARGS --tool=helgrind $SUPP $GEN_SUPP \
+	    valgrind $VALGRIND_ARGS --tool=helgrind \
+                     --sim-hints=no-nptl-pthread-stackcache \
+                     $SUPP $GEN_SUPP \
 		./$TEST	$ARGS
 	    RET=$?
 	    ;;
@@ -65,7 +67,11 @@ for mode in $MODES; do
 	    valgrind $VALGRIND_ARGS --tool=drd $SUPP $GEN_SUPP \
 		./$TEST	$ARGS
 	    RET=$?
-	    ;;	    
+	    ;;
+        gdb)
+            gdb ./$TEST
+            RET=$?
+            ;;
 	bare)
 	    ./$TEST $ARGS
 	    RET=$?

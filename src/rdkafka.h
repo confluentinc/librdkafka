@@ -574,6 +574,35 @@ void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
                                            rd_kafka_topic_conf_t *tconf);
 
 
+
+/**
+ * Retrieve configuration value for property `name`.
+ *
+ * If `dest` is non-NULL the value will be written to `dest` with at
+ * most `dest_size`.
+ *
+ * `*dest_size` is updated to the full length of the value, thus if
+ * `*dest_size` initially is smaller than the full length the application
+ * may reallocate `dest` to fit the returned `*dest_size` and try again.
+ *
+ * If `dest` is NULL only the full length of the value is returned.
+ *
+ * Returns RD_KAFKA_CONF_OK if the property name matched, else
+ * RD_KAFKA_CONF_UNKNOWN.
+ */
+rd_kafka_conf_res_t rd_kafka_conf_get (const rd_kafka_conf_t *conf,
+                                       const char *name,
+                                       char *dest, size_t *dest_size);
+
+
+/**
+ * Same as `rd_kafka_conf_get()` but for topic configuration objects.
+ */
+rd_kafka_conf_res_t rd_kafka_topic_conf_get (const rd_kafka_topic_conf_t *conf,
+                                             const char *name,
+                                             char *dest, size_t *dest_size);
+
+
 /**
  * Dump the configuration properties and values of `conf` to an array
  * with "key", "value" pairs. The number of entries in the array is

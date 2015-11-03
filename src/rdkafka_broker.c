@@ -679,16 +679,25 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
  * Returns a random broker (with refcnt increased) in state 'state'.
  * Uses Reservoir sampling.
  *
+ * 'filter' is an optional callback used to filter out undesired brokers.
+ * The filter function should return 1 to filter out a broker, or 0 to keep it
+ * in the list of eligible brokers to return.
+ * rd_kafka_broker_lock() is held during the filter callback.
+ *
  * Locks: rd_kafka_rdlock(rk) MUST be held.
  * Locality: any thread
  */
-rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
+rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
+                                        int (*filter) (rd_kafka_broker_t *rkb,
+                                                       void *opaque),
+                                        void *opaque) {
 	rd_kafka_broker_t *rkb, *good = NULL;
         int cnt = 0;
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
-		if ((int)rkb->rkb_state == state) {
+		if ((int)rkb->rkb_state == state &&
+                    (!filter || !filter(rkb, opaque))) {
                         if (cnt < 1 || rd_jitter(0, cnt) < 1) {
                                 if (good)
                                         rd_kafka_broker_destroy(good);
@@ -705,7 +714,8 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state) {
 
 
 /**
- * Returns a broker in state `state`, preferring the one with matching `broker_id`.
+ * Returns a broker in state `state`, preferring the one with
+ * matching `broker_id`.
  * Uses Reservoir sampling.
  *
  * Locks: rd_kafka_rdlock(rk) MUST be held.
@@ -746,13 +756,15 @@ rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id,
  * Trigger broker metadata query for topic leader.
  * 'rkt' may be NULL to query for all topics.
  */
-void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
 				   int do_rk_lock) {
 	rd_kafka_broker_t *rkb;
 
 	if (do_rk_lock)
 		rd_kafka_rdlock(rk);
-	if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP))) {
+	if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
+                                        rd_kafka_broker_filter_non_blocking,
+                                        NULL))) {
 		if (do_rk_lock)
 			rd_kafka_rdunlock(rk);
 		return; /* No brokers are up */

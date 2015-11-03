@@ -46,7 +46,7 @@
 int main_0001_multiobj (int argc, char **argv) {
 	int partition = RD_KAFKA_PARTITION_UA; /* random */
 	int i;
-	const int NUM_ITER = 100;
+	const int NUM_ITER = 30;
 #ifndef _MSC_VER
 	struct rlimit rlim = {};
 #endif
@@ -72,6 +72,7 @@ int main_0001_multiobj (int argc, char **argv) {
 		rd_kafka_topic_conf_t *topic_conf;
 		char errstr[512];
 		char msg[128];
+                test_timing_t t_destroy;
 
 		test_conf_init(&conf, &topic_conf, 30);
 
@@ -103,9 +104,11 @@ int main_0001_multiobj (int argc, char **argv) {
 
 		/* Destroy topic */
 		rd_kafka_topic_destroy(rkt);
-		
+
 		/* Destroy rdkafka instance */
+                TIMING_START(&t_destroy, "rd_kafka_destroy()");
 		rd_kafka_destroy(rk);
+                TIMING_STOP(&t_destroy);
 	}
 
 	return 0;

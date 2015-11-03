@@ -89,17 +89,29 @@
 
 
 /**
+ * Atomics
+ */
+#include "rdatomic.h"
+
+/**
 * Misc
 */
+
+/**
+ * Microsecond sleep.
+ * Will retry on signal interrupt unless *terminate is true.
+ */
 static __inline RD_UNUSED
-void rd_usleep (int usec) {
+void rd_usleep (int usec, rd_atomic32_t *terminate) {
         struct timespec req = {usec / 1000000, (long)(usec % 1000000) * 1000};
 
-        /* Retry until complete (issue #272) */
-        while (nanosleep(&req, &req) == -1 && errno == EINTR)
+        /* Retry until complete (issue #272), unless terminating. */
+        while (nanosleep(&req, &req) == -1 &&
+               (errno == EINTR && (!terminate || !rd_atomic32_get(terminate))))
                 ;
 }
 
+#define rd_assert(EXPR)  assert(EXPR)
 
 /**
  * Empty struct initializer

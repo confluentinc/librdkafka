@@ -99,7 +99,7 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
 #endif
 			return -1;
 		}
-		rd_usleep(25000); /* 25ms */
+		rd_usleep(25000, NULL); /* 25ms */
 	}
 
 	return 0;

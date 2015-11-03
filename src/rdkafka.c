@@ -156,7 +156,7 @@ void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 	secs = (int)tb.time;
 	msecs = (int)tb.millitm;
 #endif
-	fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n",
+	fprintf(stdout, "%%%i|%u.%03u|%s|%s| %s\n",
 		level, secs, msecs,
 		fac, rk ? rk->rk_name : "", buf);
 }
@@ -621,11 +621,12 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
  */
 static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 	char  *buf;
-	size_t size = 1024*rd_atomic32_get(&rk->rk_refcnt);
+	size_t size = 1024*10;
 	int    of = 0;
 	rd_kafka_broker_t *rkb;
-	rd_kafka_topic_t *rkt;
-	rd_kafka_toppar_t *rktp;
+	rd_kafka_itopic_t *rkt;
+	shptr_rd_kafka_toppar_t *s_rktp;
+        rd_kafka_toppar_t *rktp;
 	rd_ts_t now;
 
 	buf = rd_malloc(size);
@@ -637,11 +638,12 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 	_st_printf("{ "
                    "\"name\": \"%s\", "
                    "\"type\": \"%s\", "
-		   "\"ts\":%"PRIu64", "
+		   "\"ts\":%"PRId64", "
 		   "\"time\":%lli, "
 		   "\"replyq\":%i, "
                    "\"msg_cnt\":%i, "
                    "\"msg_max\":%i, "
+                   "\"simple_cnt\":%i, "
 		   "\"brokers\":{ "/*open brokers*/,
                    rk->rk_name,
                    rd_kafka_type2str(rk->rk_type),
@@ -649,13 +651,14 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		   (signed long long)time(NULL),
 		   rd_kafka_q_len(&rk->rk_rep),
                    rd_atomic32_get(&rk->rk_producer.msg_cnt),
-                   rk->rk_conf.queue_buffering_max_msgs);
+                   rk->rk_conf.queue_buffering_max_msgs,
+                   rd_atomic32_get(&rk->rk_simple_cnt));
 
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_kafka_avg_t rtt;
+                rd_avg_t rtt;
 		rd_kafka_broker_lock(rkb);
-		rd_kafka_avg_rollover(&rtt, &rkb->rkb_avg_rtt);
+		rd_avg_rollover(&rtt, &rkb->rkb_avg_rtt);
 		_st_printf("%s\"%s\": { "/*open broker*/
 			   "\"name\":\"%s\", "
 			   "\"nodeid\":%"PRId32", "
@@ -732,7 +735,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		   "\"topics\":{ ");
 
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
-		int i;
+		int i, j;
 
 		rd_kafka_topic_rdlock(rkt);
 		_st_printf("%s\"%.*s\": { "
@@ -747,16 +750,19 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 		for (i = 0 ; i < rkt->rkt_partition_cnt ; i++)
 			rd_kafka_stats_emit_toppar(&buf, &size, &of,
-						   rkt->rkt_p[i],
+						   rd_kafka_toppar_s2i(rkt->rkt_p[i]),
 						   i == 0);
 
-		TAILQ_FOREACH(rktp, &rkt->rkt_desp, rktp_rktlink)
+                RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, j)
 			rd_kafka_stats_emit_toppar(&buf, &size, &of, rktp,
-						   i++ == 0);
+						   i+j == 0);
+
+                i += j;
 
 		if (rkt->rkt_ua)
 			rd_kafka_stats_emit_toppar(&buf, &size, &of,
-						   rkt->rkt_ua, i++ == 0);
+						   rd_kafka_toppar_s2i(rkt->rkt_ua),
+                                                   i++ == 0);
 		rd_kafka_topic_rdunlock(rkt);
 
 		_st_printf("} "/*close partitions*/
@@ -771,7 +777,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 
 	/* Enqueue op for application */
-	rd_kafka_op_reply(rk, RD_KAFKA_OP_STATS, 0, buf, of);
+	rd_kafka_op_app_reply(&rk->rk_rep, RD_KAFKA_OP_STATS, 0, 0, buf, of);
 }
 
 
@@ -914,8 +920,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	rd_free(conf);
 
 	rwlock_init(&rk->rk_lock);
+        mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
 
-	rd_kafka_q_init(&rk->rk_rep);
+	rd_kafka_q_init(&rk->rk_rep, rk);
 
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
@@ -1006,15 +1013,20 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		return NULL;
 	}
 
+        rd_kafka_wrunlock(rk);
+
+        mtx_lock(&rk->rk_internal_rkb_lock);
 	rk->rk_internal_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,
 						  RD_KAFKA_PROTO_PLAINTEXT,
 						  "", 0, RD_KAFKA_NODEID_UA);
-	rd_kafka_broker_keep(rk->rk_internal_rkb);
-	rd_kafka_wrunlock(rk);
+        mtx_unlock(&rk->rk_internal_rkb_lock);
+
+
+        rd_atomic32_add(&rd_kafka_handle_cnt_curr, 1);
 
 	/* Add initial list of brokers from configuration */
 	if (rk->rk_conf.brokerlist) {
-		if (rd_kafka_brokers_add(rk, rk->rk_conf.brokerlist) == 0)
+		if (rd_kafka_brokers_add0(rk, rk->rk_conf.brokerlist) == 0)
 			rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
 					"No brokers configured");
 	}
@@ -1033,7 +1045,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 #endif
         }
 
-	(void)rd_atomic32_add(&rd_kafka_handle_cnt_curr, 1);
 
 #ifndef _MSC_VER
 	/* Restore sigmask of caller */
@@ -1056,8 +1067,7 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
 		      void *payload, size_t len,
 		      const void *key, size_t keylen,
 		      void *msg_opaque) {
-
-	return rd_kafka_msg_new(rkt, partition,
+	return rd_kafka_msg_new(rd_kafka_topic_a2i(rkt), partition,
 				msgflags, payload, len,
 				key, keylen, msg_opaque);
 }
@@ -1956,7 +1966,9 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         /* Query any broker that is up, and if none are up pick the first one,
          * if we're lucky it will be up before the timeout */
         rd_kafka_rdlock(rk);
-        if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP))) {
+        if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
+                                        rd_kafka_broker_filter_non_blocking,
+                                        NULL))) {
                 rkb = TAILQ_FIRST(&rk->rk_brokers);
                 if (rkb)
                         rd_kafka_broker_keep(rkb);
@@ -1966,14 +1978,13 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         if (!rkb)
                 return RD_KAFKA_RESP_ERR__TRANSPORT;
 
-        /* Give one refcount to destination, will be decreased when
-         * reply is enqueued on replyq.
-         * This ensures the replyq stays alive even after we timeout here. */
-        replyq = rd_kafka_q_new();
-        rd_kafka_q_keep(replyq);
+        replyq = rd_kafka_q_new(rk);
 
         /* Async: request metadata */
-        rd_kafka_broker_metadata_req(rkb, all_topics, only_rkt, replyq,
+        rd_kafka_broker_metadata_req(rkb, all_topics,
+                                     only_rkt ?
+                                     rd_kafka_topic_a2i(only_rkt) : NULL,
+                                     replyq,
                                      "application requested");
 
         rd_kafka_broker_destroy(rkb);

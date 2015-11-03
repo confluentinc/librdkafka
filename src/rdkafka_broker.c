@@ -807,8 +807,8 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find (rd_kafka_broker_t *rkb,
 		if (rkbuf->rkbuf_corrid == corrid) {
 			/* Convert ts_sent to RTT */
 			rkbuf->rkbuf_ts_sent = now - rkbuf->rkbuf_ts_sent;
-			rd_kafka_avg_add(&rkb->rkb_avg_rtt,
-					 rkbuf->rkbuf_ts_sent);
+			rd_avg_add(&rkb->rkb_avg_rtt, rkbuf->rkbuf_ts_sent);
+
                         if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING)
                                 rd_atomic32_sub(&rkb->rkb_blocking_request_cnt,
                                                 1);
@@ -947,10 +947,7 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 	if (!(rkbuf = rkb->rkb_recv_buf)) {
 		/* No receive in progress: new message. */
 
-		rkbuf = rd_kafka_buf_new(0, 0);
-
-		rkbuf->rkbuf_rkb = rkb;
-		rd_kafka_broker_keep(rkb);
+		rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 0, 0);
 
 		/* The iov[0] buffer is already allocated by buf_new(),
 		 * shrink it to only allow for the response header. */
@@ -1043,6 +1040,8 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 		rkb->rkb_recv_buf = NULL;
 		(void)rd_atomic64_add(&rkb->rkb_c.rx, 1);
 		(void)rd_atomic64_add(&rkb->rkb_c.rx_bytes, rkbuf->rkbuf_wof);
+                rkbuf->rkbuf_rkb = rkb;
+		rd_kafka_broker_keep(rkb);
 		rd_kafka_req_response(rkb, rkbuf);
 	}
 
@@ -1093,7 +1092,7 @@ int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
  * Returns -1 on error, else 0.
  */
 static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
-	rd_sockaddr_inx_t *sinx;
+	const rd_sockaddr_inx_t *sinx;
 	char errstr[512];
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECT",
@@ -1226,8 +1225,8 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 
 		/* Entire buffer sent, unlink from outbuf */
 		rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
-                (void)rd_atomic32_sub(&rkb->rkb_outbuf_msgcnt,
-                                    rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
+                rd_atomic32_sub(&rkb->rkb_outbuf_msgcnt,
+                                rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
 
 		/* Store time for RTT calculation */
 		rkbuf->rkbuf_ts_sent = rd_clock();
@@ -1688,7 +1687,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 	/* Allocate iovecs to hold all headers and messages,
 	 * and allocate auxilliery space for the headers. */
-	rkbuf = rd_kafka_buf_new(iovcnt,
+	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, iovcnt,
 				 /* RequiredAcks + Timeout + TopicCnt */
 				 2 + 4 + 4 +
 				 /* Topic */

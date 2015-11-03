@@ -613,6 +613,9 @@ int main (int argc, char **argv) {
 			rd_kafka_message_t *rkmessage;
                         rd_kafka_resp_err_t err;
 
+                        /* Poll for errors, etc. */
+                        rd_kafka_poll(rk, 0);
+
 			/* Consume single message.
 			 * See rdkafka_performance.c for high speed
 			 * consuming of messages. */

@@ -90,29 +90,36 @@ class MessageImpl : public Message {
   ~MessageImpl () {
     if (free_rkmessage_)
       rd_kafka_message_destroy(const_cast<rd_kafka_message_t *>(rkmessage_));
-    delete key_;
+    if (key_)
+            delete key_;
   };
 
   MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) { }
+  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) {}
 
   MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage,
                bool dofree):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree), key_(NULL) { }
+  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree), key_(NULL) { }
 
   MessageImpl (RdKafka::Topic *topic, const rd_kafka_message_t *rkmessage):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(false), key_(NULL) { }
+  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(false), key_(NULL) { }
+
+  MessageImpl (rd_kafka_message_t *rkmessage):
+  topic_(NULL), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) {
+    if (rkmessage->rkt)
+      topic_ = static_cast<Topic *>(rd_kafka_topic_opaque(rkmessage->rkt));
+  }
 
   /* Create errored message */
   MessageImpl (RdKafka::Topic *topic, RdKafka::ErrorCode err):
-      topic_(topic), free_rkmessage_(false), key_(NULL) {
+  topic_(topic), free_rkmessage_(false), key_(NULL) {
     rkmessage_ = &rkmessage_err_;
     memset(&rkmessage_err_, 0, sizeof(rkmessage_err_));
     rkmessage_err_.err = static_cast<rd_kafka_resp_err_t>(err);
   }
 
   std::string         errstr() const {
-    /* FIXME: If there is a error string in payload (for consume_cb)
+    /* FIXME: If there is an error string in payload (for consume_cb)
      *        it wont be shown since 'payload' is reused for errstr
      *        and we cant distinguish between consumer and producer.
      *        For the producer case the payload needs to be the original
@@ -150,7 +157,7 @@ class MessageImpl : public Message {
   /* For error signalling by the C++ layer the .._err_ message is
    * used as a place holder and rkmessage_ is set to point to it. */
   rd_kafka_message_t rkmessage_err_;
-  mutable std::string* key_; /* mutable because it's a cached value */
+  mutable std::string *key_; /* mutable because it's a cached value */
 
 private:
   /* "delete" copy ctor + copy assignment, for safety of key_ */

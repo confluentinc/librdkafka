@@ -47,7 +47,8 @@ static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
 static int  tests_run_in_parallel = 0;
 static int  tests_running_cnt = 0;
-const char *test_curr = NULL;
+const __thread char *test_curr = NULL;
+__thread int64_t test_start = 0;
 
 #ifndef _MSC_VER
 static pthread_mutex_t test_lock;
@@ -305,28 +306,48 @@ void test_msg_parse0 (const char *func, int line,
 }
 
 
-#ifndef _MSC_VER
 struct run_args {
         const char *testname;
         int (*test_main) (int, char **);
         int argc;
         char **argv;
 };
+
+static int run_test0 (struct run_args *run_args) {
+	test_timing_t t_run;
+	int r;
+
+	test_curr = run_args->testname;
+	TEST_SAY("================= Running test %s =================\n",
+		 run_args->testname);
+	TIMING_START(&t_run, run_args->testname);
+	test_start = t_run.ts_start;
+	r = run_args->test_main(run_args->argc, run_args->argv);
+	TIMING_STOP(&t_run);
+
+	if (r)
+		TEST_SAY("\033[31m"
+			 "================= Test %s FAILED ================="
+			 "\033[0m\n",
+			 run_args->testname);
+	else
+		TEST_SAY("\033[32m"
+			 "================= Test %s PASSED ================="
+			 "\033[0m\n",
+			 run_args->testname);
+
+	return r;
+}
+
+
+
+#ifndef _MSC_VER
 static void *run_test_from_thread (void *arg) {
         struct run_args *run_args = arg;
-        int r;
-	test_timing_t t_run;
 	
         pthread_detach(pthread_self());
 
-	TIMING_START(&t_run, run_args->testname);
-
-        r = run_args->test_main(run_args->argc, run_args->argv);
-
-	TIMING_STOP(&t_run);
-
-        TEST_SAY("================= Test %s %s =================\n",
-                 run_args->testname, r ? "FAILED" : "PASSED");
+	run_test0(run_args);
 
         pthread_mutex_lock(&test_lock);
         tests_running_cnt--;
@@ -371,20 +392,20 @@ static int run_test (const char *testname,
                 }
 #endif
         } else {
-		test_timing_t t_run;
-
-		TIMING_START(&t_run, testname);
-                test_curr = testname;
-                tests_running_cnt++;
-                r = test_main(argc, argv);
-                tests_running_cnt--;
-		TIMING_STOP(&t_run);
-
+		struct run_args run_args = { .testname = testname,
+					     .test_main = test_main,
+					     .argc = argc,
+					     .argv = argv };
+		
+		tests_running_cnt++;
+		run_test0(&run_args);
+		tests_running_cnt--;
+		
                 /* Wait for everything to be cleaned up since broker
                  * destroys are handled in its own thread. */
                 test_wait_exit(5);
-                test_curr = NULL;
 
+		test_curr = NULL;
         }
         return r;
 }
@@ -414,21 +435,18 @@ int main(int argc, char **argv) {
                 }
         }
 
-        printf("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
+	test_curr = "<MAIN>";
+	test_start = test_clock();
+
+	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 
 #define RUN_TEST(NAME) do { \
 	extern int main_ ## NAME (int, char **); \
         if (!tests_to_run || strstr(# NAME, tests_to_run)) {     \
-                int _r;                                                 \
-		TEST_SAY("================= Run test %s %s=================\n", # NAME, tests_run_in_parallel ? "in parallel " : ""); \
-                _r = run_test(# NAME, main_ ## NAME, argc, argv);        \
-		TEST_SAY("================= Test %s %s =================\n", \
-                         # NAME, \
-                         _r ? (tests_run_in_parallel ? "FAILED TO START":"FAILED") : \
-                         (tests_run_in_parallel ? "STARTED" : "PASSED")); \
-		r |= _r; \
+                r |= run_test(# NAME, main_ ## NAME, argc, argv);	\
         } else { \
-                TEST_SAY("================= Skipping test %s ================\n", # NAME ); \
+                TEST_SAY("================= Skipping test %s "	\
+			 "================\n", # NAME );	\
         } \
 	} while (0)
 
@@ -591,6 +609,10 @@ rd_kafka_t *test_create_consumer (const char *group_id,
                     RD_KAFKA_CONF_OK)
                         TEST_FAIL("Conf failed: %s\n", errstr);
         }
+
+	if (rd_kafka_conf_set(conf, "session.timeout.ms", "10000",
+			      errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
+		TEST_FAIL("Conf failed: %s\n", errstr);
 
         if (default_topic_conf)
                 rd_kafka_conf_set_default_topic_conf(conf, default_topic_conf);

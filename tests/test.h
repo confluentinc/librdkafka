@@ -26,8 +26,8 @@
 extern int test_level;
 
 extern int test_seed;
-extern const char *test_curr;
-
+extern const __thread char *test_curr;
+extern __thread int64_t test_start;
 
 #define TEST_FAIL(...) do {					\
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
@@ -49,7 +49,11 @@ extern const char *test_curr;
 
 #define TEST_SAY(...) do {                                              \
 	if (test_level >= 2) {                                          \
-                fprintf(stderr, "\033[36m" __VA_ARGS__);                \
+                fprintf(stderr, "\033[36m[%-28s/%7.3fs] ",		\
+			test_curr,					\
+			test_start ?					\
+			((float)(test_clock() - test_start)/1000000.0f) : 0); \
+		fprintf(stderr, __VA_ARGS__);				\
                 fprintf(stderr, "\033[0m");                             \
         }                                                               \
 	} while (0)

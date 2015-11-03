@@ -4,7 +4,7 @@ Property                                 | C/P |       Default | Description
 -----------------------------------------|-----|--------------:|--------------------------
 client.id                                |  *  |       rdkafka | Client identifier.
 metadata.broker.list                     |  *  |               | Initial list of brokers. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime.
-message.max.bytes                        |  *  |       4000000 | Maximum transmit message size.
+message.max.bytes                        |  *  |       1000000 | Maximum transmit message size.
 receive.message.max.bytes                |  *  |     100000000 | Maximum receive message size. This is a safety precaution to avoid memory exhaustion in case of protocol hickups. The value should be at least fetch.message.max.bytes * number of partitions consumed from + messaging overhead (e.g. 200000 bytes).
 metadata.request.timeout.ms              |  *  |         60000 | Non-topic request timeout in milliseconds. This is for metadata requests, etc.
 topic.metadata.refresh.interval.ms       |  *  |        600000 | Topic metadata refresh interval in milliseconds. The metadata is automatically refreshed on error and connect. Use -1 to disable the intervalled refresh.
@@ -14,7 +14,7 @@ topic.metadata.refresh.sparse            |  *  |          true | Sparse metadata
 topic.blacklist                          |  *  |               | Topic blacklist, a comma-separated list of regular expressions for matching topic names that should be ignored in broker metadata information as if the topics did not exist.
 debug                                    |  *  |               | A comma-separated list of debug contexts to enable: all,generic,broker,topic,metadata,producer,queue,msg,protocol,cgrp
 socket.timeout.ms                        |  *  |         60000 | Timeout for network requests.
-socket.blocking.max.ms                   |  *  |          1000 | Maximum time a broker socket operation may block.
+socket.blocking.max.ms                   |  *  |           100 | Maximum time a broker socket operation may block. A lower value improves responsiveness at the expense of slightly higher CPU usage.
 socket.send.buffer.bytes                 |  *  |             0 | Broker socket send buffer size. System default is used if 0.
 socket.receive.buffer.bytes              |  *  |             0 | Broker socket receive buffer size. System default is used if 0.
 socket.keepalive.enable                  |  *  |         false | Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets
@@ -29,7 +29,9 @@ log_level                                |  *  |             6 | Logging level (
 socket_cb                                |  *  |               | Socket creation callback to provide race-free CLOEXEC
 open_cb                                  |  *  |               | File open callback to provide race-free CLOEXEC
 opaque                                   |  *  |               | Application opaque (set with rd_kafka_conf_set_opaque())
+default_topic_conf                       |  *  |               | Default topic configuration for automatically subscribed topics
 internal.termination.signal              |  *  |             0 | Signal that librdkafka will use to quickly terminate on rd_kafka_destroy(). If this signal is not set then there will be a delay before rd_kafka_wait_destroyed() returns true as internal threads are timing out their system calls. If this signal is set however the delay will be minimal. The application should mask this signal as an internal signal handler is installed.
+protocol.version                         |  *  |             0 | Broker protocol version. Since there is no way for a client to know what protocol version is used by the broker it can't know which API version to use for certain protocol requests. This property is used to hint the client of the broker version. Format is 0xMMmmrrpp where MM=Major, mm=minor, rr=revision, pp=patch, e.g., 0x00080200 for 0.8.2. A version of 0 means an optimistic approach where the client assumes the latest version of APIs are supported.
 security.protocol                        |  *  |     plaintext | Protocol used to communicate with brokers.
 ssl.cipher.suites                        |  *  |               | A cipher suite is a named combination of authentication, encryption, MAC and key exchange algorithm used to negotiate the security settings for a network connection using TLS or SSL network protocol. See manual page for `ciphers(1)`.
 ssl.enabled.protocols                    |  *  |               | List of enabled security protocols. At least one of the protocols must be available on the broker.
@@ -67,7 +69,6 @@ rebalance_cb                             |  C  |               | Called after co
 Property                                 | C/P |       Default | Description              
 -----------------------------------------|-----|--------------:|--------------------------
 request.required.acks                    |  P  |             1 | This field indicates how many acknowledgements the leader broker must receive from ISR brokers before responding to the request: *0*=broker does not send any response, *1*=broker will wait until the data is written to local log before sending a response, *-1*=broker will block until message is committed by all in sync replicas (ISRs) or broker's `in.sync.replicas` setting before sending response. *1*=Only the leader broker will need to ack the message. 
-enforce.isr.cnt                          |  P  |             0 | Fail messages locally if the currently known ISR count for a partition is less than this value. **NOTE**: The ISR count is fetched from the broker at regular intervals (`topic.metadata.refresh.interval.ms`) and might thus be outdated.
 request.timeout.ms                       |  P  |          5000 | The ack timeout of the producer request in milliseconds. This value is only enforced by the broker and relies on `request.required.acks` being > 0.
 message.timeout.ms                       |  P  |        300000 | Local message timeout. This value is only enforced locally and limits the time a produced message waits for successful delivery. A time of 0 is infinite.
 produce.offset.report                    |  P  |         false | Report offset of produced message back to application. The application must be use the `dr_msg_cb` to retrieve the offset from `rd_kafka_message_t.offset`.

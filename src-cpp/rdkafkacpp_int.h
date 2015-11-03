@@ -282,8 +282,8 @@ class ConfImpl : public Conf {
       return Conf::CONF_INVALID;
     }
 
-    if (!rkt_conf_) {
-      errstr = "Requires RdKafka::Conf::CONF_TOPIC object";
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
       return Conf::CONF_INVALID;
     }
 
@@ -299,8 +299,8 @@ class ConfImpl : public Conf {
       return Conf::CONF_INVALID;
     }
 
-    if (!rkt_conf_) {
-      errstr = "Requires RdKafka::Conf::CONF_TOPIC object";
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
       return Conf::CONF_INVALID;
     }
 

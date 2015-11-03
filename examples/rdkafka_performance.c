@@ -221,7 +221,7 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 
 
         if (latency_mode) {
-                uint64_t remote_ts, ts;
+                int64_t remote_ts, ts;
 
                 if (rkmessage->len > 8 &&
                     !memcmp(rkmessage->payload, "LATENCY:", 8) &&
@@ -878,7 +878,7 @@ int main (int argc, char **argv) {
         }
 
         if (rd_kafka_conf_set(conf, "statistics.interval.ms",
-                              stats_intvlstr ? : tmp,
+                              stats_intvlstr ? stats_intvlstr : tmp,
                               errstr, sizeof(errstr)) !=
             RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%% %s\n", errstr);

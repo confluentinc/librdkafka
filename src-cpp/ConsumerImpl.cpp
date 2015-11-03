@@ -71,6 +71,9 @@ RdKafka::Consumer *RdKafka::Consumer::create (RdKafka::Conf *conf,
   return rkc;
 }
 
+int64_t RdKafka::Consumer::OffsetTail (int64_t offset) {
+  return RD_KAFKA_OFFSET_TAIL(offset);
+}
 
 RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
                                                  int32_t partition,

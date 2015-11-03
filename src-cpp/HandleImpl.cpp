@@ -136,6 +136,8 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
   rd_kafka_conf_set_opaque(confimpl->rk_conf_, this);
 
   if (confimpl->event_cb_) {
+    rd_kafka_conf_set_log_cb(confimpl->rk_conf_,
+                             RdKafka::log_cb_trampoline);
     rd_kafka_conf_set_error_cb(confimpl->rk_conf_,
                                RdKafka::error_cb_trampoline);
     rd_kafka_conf_set_stats_cb(confimpl->rk_conf_,

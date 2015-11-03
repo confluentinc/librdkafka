@@ -91,7 +91,7 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_produce_batch(NULL, 0, 0, NULL, 0);
                 rd_kafka_poll(NULL, 0);
                 rd_kafka_brokers_add(NULL, NULL);
-                rd_kafka_set_logger(NULL, NULL);
+                /* DEPRECATED: rd_kafka_set_logger(NULL, NULL); */
                 rd_kafka_set_log_level(NULL, 0);
                 rd_kafka_log_print(NULL, 0, NULL, NULL);
 #ifndef _MSC_VER

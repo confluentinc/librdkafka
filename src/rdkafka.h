@@ -51,6 +51,7 @@ extern "C" {
 #include <basetsd.h>
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED
+#define RD_DEPRECATED
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_EXPORTS
 #define RD_EXPORT __declspec(dllexport)
@@ -61,6 +62,7 @@ typedef SSIZE_T ssize_t;
 #else
 #define RD_UNUSED __attribute__((unused))
 #define RD_EXPORT
+#define RD_DEPRECATED __attribute__((deprecated))
 #endif
 
 /**
@@ -1427,9 +1429,11 @@ int rd_kafka_brokers_add(rd_kafka_t *rk, const char *brokerlist);
  * Alternatively the application may provide its own logger callback.
  * Or pass 'func' as NULL to disable logging.
  *
+ * DEPRECATED, use rd_kafka_conf_set_log_cb()
+ *
  * NOTE: 'rk' may be passed as NULL in the callback.
  */
-RD_EXPORT
+RD_EXPORT RD_DEPRECATED
 void rd_kafka_set_logger(rd_kafka_t *rk,
 			  void (*func) (const rd_kafka_t *rk, int level,
 					const char *fac, const char *buf));

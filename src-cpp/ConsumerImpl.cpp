@@ -64,9 +64,6 @@ RdKafka::Consumer *RdKafka::Consumer::create (RdKafka::Conf *conf,
 
   rkc->rk_ = rk;
 
-  /* Redirect logging to event callback */
-  if (confimpl && confimpl->event_cb_)
-    rd_kafka_set_logger(rk, RdKafka::log_cb_trampoline);
 
   return rkc;
 }

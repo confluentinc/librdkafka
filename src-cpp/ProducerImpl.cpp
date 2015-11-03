@@ -84,10 +84,6 @@ RdKafka::Producer *RdKafka::Producer::create (RdKafka::Conf *conf,
 
   rkp->rk_ = rk;
 
-  /* Redirect logging to event callback */
-  if (confimpl && confimpl->event_cb_)
-    rd_kafka_set_logger(rk, RdKafka::log_cb_trampoline);
-
   return rkp;
 }
 

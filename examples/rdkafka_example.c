@@ -96,7 +96,7 @@ static void logger (const rd_kafka_t *rk, int level,
 	gettimeofday(&tv, NULL);
 	fprintf(stderr, "%u.%03u RDKAFKA-%i-%s: %s: %s\n",
 		(int)tv.tv_sec, (int)(tv.tv_usec / 1000),
-		level, fac, rd_kafka_name(rk), buf);
+		level, fac, rk ? rd_kafka_name(rk) : NULL, buf);
 }
 
 /**
@@ -268,6 +268,9 @@ int main (int argc, char **argv) {
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
+
+        /* Set logger */
+        rd_kafka_conf_set_log_cb(conf, logger);
 
 	/* Quick termination */
 	snprintf(tmp, sizeof(tmp), "%i", SIGIO);
@@ -510,8 +513,6 @@ int main (int argc, char **argv) {
 			exit(1);
 		}
 
-		/* Set logger */
-		rd_kafka_set_logger(rk, logger);
 		rd_kafka_set_log_level(rk, LOG_DEBUG);
 
 		/* Add brokers */
@@ -590,8 +591,6 @@ int main (int argc, char **argv) {
 			exit(1);
 		}
 
-		/* Set logger */
-		rd_kafka_set_logger(rk, logger);
 		rd_kafka_set_log_level(rk, LOG_DEBUG);
 
 		/* Add brokers */
@@ -663,8 +662,6 @@ int main (int argc, char **argv) {
 			exit(1);
 		}
 
-		/* Set logger */
-		rd_kafka_set_logger(rk, logger);
 		rd_kafka_set_log_level(rk, LOG_DEBUG);
 
 		/* Add brokers */

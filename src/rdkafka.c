@@ -56,12 +56,17 @@ const rd_kafkap_bytes_t rd_kafkap_bytes_null;
 
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 
+
 /**
  * Current number of threads created by rdkafka.
  * This is used in regression tests.
  */
 rd_atomic32_t rd_kafka_thread_cnt_curr;
 int rd_kafka_thread_cnt (void) {
+#if ENABLE_SHAREDPTR_DEBUG
+        rd_shared_ptrs_dump();
+#endif
+
 	return rd_atomic32_get(&rd_kafka_thread_cnt_curr);
 }
 
@@ -89,6 +94,9 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
                rd_atomic32_get(&rd_kafka_handle_cnt_curr) > 0) {
 		if (rd_clock() >= timeout) {
 			errno = ETIMEDOUT;
+#if ENABLE_SHAREDPTR_DEBUG
+                        rd_shared_ptrs_dump();
+#endif
 			return -1;
 		}
 		rd_usleep(25000); /* 25ms */
@@ -872,7 +880,13 @@ static void rd_kafka_term_sig_handler (int sig) {
 
 static void rd_kafka_global_init (void) {
 	static const char null_bytes_data[4] = { 0xff, 0xff, 0xff, 0xff };
-	
+
+#if ENABLE_SHAREDPTR_DEBUG
+        LIST_INIT(&rd_shared_ptr_debug_list);
+        mtx_init(&rd_shared_ptr_debug_mtx, mtx_plain);
+        atexit(rd_shared_ptrs_dump);
+#endif
+
 	rd_kafkap_bytes_init((rd_kafkap_bytes_t *)&rd_kafkap_bytes_null,
 			     null_bytes_data, 4);
 
@@ -2033,3 +2047,24 @@ int rd_kafka_path_is_dir (const char *path) {
 	return (stat(path, &st) == 0 && S_ISDIR(st.st_mode));
 #endif
 }
+
+
+
+#if ENABLE_SHAREDPTR_DEBUG
+struct rd_shptr0_head rd_shared_ptr_debug_list;
+mtx_t rd_shared_ptr_debug_mtx;
+
+void rd_shared_ptrs_dump (void) {
+        rd_shptr0_t *sptr;
+
+        printf("################ Current shared pointers ################\n");
+        printf("### op_cnt: %d\n", rd_atomic32_get(&rd_kafka_op_cnt));
+        mtx_lock(&rd_shared_ptr_debug_mtx);
+        LIST_FOREACH(sptr, &rd_shared_ptr_debug_list, link)
+                printf("# shptr ((%s*)%p): object %p refcnt %d: at %s:%d\n",
+                       sptr->typename, sptr, sptr->obj,
+                       rd_refcnt_get(sptr->ref), sptr->func, sptr->line);
+        mtx_unlock(&rd_shared_ptr_debug_mtx);
+        printf("#########################################################\n");
+}
+#endif

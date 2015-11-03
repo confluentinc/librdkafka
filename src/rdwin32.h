@@ -77,6 +77,7 @@ struct msghdr {
 #endif
 
 #define RD_UNUSED
+#define RD_WARN_UNUSED_RESULT
 #define RD_NORETURN __declspec(noreturn)
 #define RD_IS_CONSTANT(p)  (0)
 #define RD_TLS __declspec(thread)
@@ -115,10 +116,23 @@ static __inline RD_UNUSED const char *rd_strerror(int err) {
 
 
 /**
+ * Atomics
+ */
+#include "rdatomic.h"
+
+
+/**
  * Misc
  */
-#define rd_usleep(usec)  Sleep((usec) / 1000)
 
+/**
+ * Microsecond sleep.
+ * 'retry': if true, retry if sleep is interrupted (because of signal)
+ */
+#define rd_usleep(usec,terminate)  Sleep((usec) / 1000)
+
+
+#define rd_assert(EXPR)  assert(EXPR)
 
 /**
  * Empty struct initializer

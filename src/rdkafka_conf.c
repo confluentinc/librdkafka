@@ -46,6 +46,8 @@ struct rd_kafka_property {
 		_RK_C_S2F,  /* CSV String to Integer flag mapping (OR:ed) */
 		_RK_C_BOOL,
 		_RK_C_PTR,  /* Only settable through special set functions */
+                _RK_C_PATLIST, /* Pattern list */
+                _RK_C_KSTR  /* Kafka string */
 	} type;
 	int   offset;
 	const char *desc;
@@ -57,7 +59,7 @@ struct rd_kafka_property {
 	struct {
 		int val;
 		const char *str;
-	} s2i[10];  /* _RK_C_S2I and _RK_C_S2F */
+	} s2i[16];  /* _RK_C_S2I and _RK_C_S2F */
 };
 
 
@@ -79,7 +81,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "brokers during runtime." },
 	{ _RK_GLOBAL, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
 	  "Maximum transmit message size.",
-	  1000, 1000000000, 4000000 },
+	  1000, 1000000000, 1000000 },
 	{ _RK_GLOBAL, "receive.message.max.bytes", _RK_C_INT,
           _RK(recv_max_msg_size),
 	  "Maximum receive message size. "
@@ -91,7 +93,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "metadata.request.timeout.ms", _RK_C_INT,
 	  _RK(metadata_request_timeout_ms),
 	  "Non-topic request timeout in milliseconds. "
-	  "This is for metadata requests, etc.", /* FIXME: OffsetReq? */
+	  "This is for metadata requests, etc.",
 	  10, 900*1000, 60*1000},
 	{ _RK_GLOBAL, "topic.metadata.refresh.interval.ms", _RK_C_INT,
 	  _RK(metadata_refresh_interval_ms),
@@ -113,7 +115,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL, "topic.metadata.refresh.sparse", _RK_C_BOOL,
           _RK(metadata_refresh_sparse),
           "Sparse metadata requests (consumes less network bandwidth)",
-          0, 1, 0 },
+          0, 1, 1 },
+        { _RK_GLOBAL, "topic.blacklist", _RK_C_PATLIST,
+          _RK(topic_blacklist),
+          "Topic blacklist, a comma-separated list of regular expressions "
+          "for matching topic names that should be ignored in "
+          "broker metadata information as if the topics did not exist." },
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
 	  "A comma-separated list of debug contexts to enable: "
 	  RD_KAFKA_DEBUG_CONTEXTS,
@@ -134,8 +141,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  10, 300*1000, 60*1000 },
 	{ _RK_GLOBAL, "socket.blocking.max.ms", _RK_C_INT,
 	  _RK(socket_blocking_max_ms),
-	  "Maximum time a broker socket operation may block.",
-	  1, 300*1000, 1000 },
+	  "Maximum time a broker socket operation may block. "
+          "A lower value improves responsiveness at the expense of "
+          "slightly higher CPU usage.",
+	  1, 60*1000, 100 },
 	{ _RK_GLOBAL, "socket.send.buffer.bytes", _RK_C_INT,
 	  _RK(socket_sndbuf_size),
 	  "Broker socket send buffer size. System default is used if 0.",
@@ -223,6 +232,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The application should mask this signal as an internal "
 	  "signal handler is installed.",
 	  0, 128, 0 },
+        { _RK_GLOBAL, "protocol.version", _RK_C_INT,
+          _RK(protocol_version),
+          "Broker protocol version. Since there is no way for a client "
+          "to know what protocol version is used by the broker it can't "
+          "know which API version to use for certain protocol requests. "
+          "This property is used to hint the client of the broker version. "
+          "Format is 0xMMmmrrpp where MM=Major, mm=minor, rr=revision, "
+          "pp=patch, e.g., 0x00080200 for 0.8.2. "
+          "A version of 0 means an optimistic approach where the client "
+          "assumes the latest version of APIs are supported.",
+          0, 0x7fffffff, 0 },
 
 	/* Security related global properties */
 	{ _RK_GLOBAL, "security.protocol", _RK_C_S2I,
@@ -268,7 +288,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "the broker's key."
 	},
 #endif /* WITH_SSL */
-	  
 
         /* Global client group properties */
         { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,
@@ -407,14 +426,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "in sync replicas (ISRs) or broker's `in.sync.replicas` setting before sending response. "
 	  "*1*=Only the leader broker will need to ack the message. ",
 	  -1, 1000, 1 },
-        { _RK_TOPIC|_RK_PRODUCER, "enforce.isr.cnt", _RK_C_INT,
-          _RKT(enforce_isr_cnt),
-          "Fail messages locally if the currently known ISR count for a "
-          "partition is less than this value. "
-          "**NOTE**: The ISR count is fetched from the broker at "
-          "regular intervals (`topic.metadata.refresh.interval.ms`) and "
-          "might thus be outdated.",
-          0, 1000, 0 },
 
 	{ _RK_TOPIC|_RK_PRODUCER, "request.timeout.ms", _RK_C_INT,
 	  _RKT(request_timeout_ms),
@@ -517,7 +528,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 static rd_kafka_conf_res_t
 rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			    const struct rd_kafka_property *prop,
-			    const char *istr, int ival) {
+			    const char *istr, int ival,
+                            char *errstr, int errstr_size) {
 #define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
 	switch (prop->type)
 	{
@@ -532,6 +544,18 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			*str = NULL;
 		return RD_KAFKA_CONF_OK;
 	}
+        case _RK_C_KSTR:
+        {
+                rd_kafkap_str_t **kstr = _RK_PTR(rd_kafkap_str_t **, conf,
+                                                 prop->offset);
+                if (*kstr)
+                        rd_kafkap_str_destroy(*kstr);
+                if (istr)
+                        *kstr = rd_kafkap_str_new(istr, -1);
+                else
+                        *kstr = NULL;
+                return RD_KAFKA_CONF_OK;
+        }
 	case _RK_C_PTR:
 		*_RK_PTR(const void **, conf, prop->offset) = istr;
 		return RD_KAFKA_CONF_OK;
@@ -550,9 +574,24 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			*val = ival;
 
 		}
-		
 		return RD_KAFKA_CONF_OK;
 	}
+        case _RK_C_PATLIST:
+        {
+                /* Split comma-separated list into individual regex expressions
+                 * that are verified and then append to the provided list. */
+                rd_kafka_pattern_list_t *plist;
+
+                plist = _RK_PTR(rd_kafka_pattern_list_t *, conf, prop->offset);
+
+                rd_kafka_pattern_list_clear(plist);
+
+                if (rd_kafka_pattern_list_init(plist, istr,
+                                               errstr, errstr_size) == -1)
+                        return RD_KAFKA_CONF_INVALID;
+                return RD_KAFKA_CONF_OK;
+        }
+
 	default:
 		rd_kafka_assert(NULL, !*"unknown conf type");
 	}
@@ -571,8 +610,10 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 	switch (prop->type)
 	{
 	case _RK_C_STR:
-		rd_kafka_anyconf_set_prop0(scope, conf, prop, value, 0);
-		return RD_KAFKA_CONF_OK;
+        case _RK_C_KSTR:
+        case _RK_C_PATLIST:
+		return rd_kafka_anyconf_set_prop0(scope, conf, prop, value, 0,
+                                                  errstr, errstr_size);
 
 	case _RK_C_PTR:
 		rd_snprintf(errstr, errstr_size,
@@ -604,7 +645,8 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			return RD_KAFKA_CONF_INVALID;
 		}
 
-		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival);
+		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival,
+                                           errstr, errstr_size);
 		return RD_KAFKA_CONF_OK;
 
 	case _RK_C_INT:
@@ -628,7 +670,8 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			return RD_KAFKA_CONF_INVALID;
 		}
 
-		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival);
+		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival,
+                                           errstr, errstr_size);
 		return RD_KAFKA_CONF_OK;
 
 	case _RK_C_S2I:
@@ -644,7 +687,6 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 				 "to empty value", prop->name);
 			return RD_KAFKA_CONF_INVALID;
 		}
-			
 
 		next = value;
 		while (next && *next) {
@@ -685,7 +727,8 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 
 				rd_kafka_anyconf_set_prop0(scope, conf, prop,
 							   NULL,
-							   prop->s2i[j].val);
+							   prop->s2i[j].val,
+                                                           errstr, errstr_size);
 
 				if (prop->type == _RK_C_S2F) {
 					/* Flags: OR it in: do next */
@@ -695,7 +738,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 					return RD_KAFKA_CONF_OK;
 				}
 			}
-				
+
 			/* S2F: Good match: continue with next */
 			if (j < (int)RD_ARRAYSIZE(prop->s2i))
 				continue;
@@ -729,8 +772,10 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
 
 		if (prop->sdef || prop->vdef || prop->pdef)
 			rd_kafka_anyconf_set_prop0(scope, conf, prop,
-						   prop->sdef ? prop->sdef : prop->pdef,
-                                                   prop->vdef);
+						   prop->sdef ?
+                                                   prop->sdef : prop->pdef,
+                                                   prop->vdef,
+                                                   NULL, 0);
 	}
 }
 
@@ -816,6 +861,40 @@ static void rd_kafka_anyconf_clear (void *conf,
 	}
 	break;
 
+        case _RK_C_KSTR:
+        {
+                rd_kafkap_str_t **kstr = _RK_PTR(rd_kafkap_str_t **, conf,
+                                                 prop->offset);
+                if (*kstr) {
+                        rd_kafkap_str_destroy(*kstr);
+                        *kstr = NULL;
+                }
+        }
+        break;
+
+        case _RK_C_PATLIST:
+        {
+                rd_kafka_pattern_list_t *plist;
+                plist = _RK_PTR(rd_kafka_pattern_list_t *, conf, prop->offset);
+                rd_kafka_pattern_list_clear(plist);
+        }
+        break;
+
+        case _RK_C_PTR:
+                if (_RK_PTR(void *, conf, prop->offset) != NULL) {
+                        if (!strcmp(prop->name, "default_topic_conf")) {
+                                rd_kafka_topic_conf_t **tconf;
+
+                                tconf = _RK_PTR(rd_kafka_topic_conf_t **,
+                                                conf, prop->offset);
+                                if (*tconf) {
+                                        rd_kafka_topic_conf_destroy(*tconf);
+                                        *tconf = NULL;
+                                }
+                        }
+                }
+                break;
+
 	default:
 		break;
 	}
@@ -836,10 +915,10 @@ void rd_kafka_anyconf_destroy (int scope, void *conf) {
 
 void rd_kafka_conf_destroy (rd_kafka_conf_t *conf) {
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, conf);
+        //FIXME: partition_assignors
 	rd_free(conf);
 }
 
-	
 void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf) {
 	rd_kafka_anyconf_destroy(_RK_TOPIC, topic_conf);
 	rd_free(topic_conf);
@@ -862,7 +941,19 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 		case _RK_C_STR:
 		case _RK_C_PTR:
 			val = *_RK_PTR(const char **, src, prop->offset);
+
+                        if (!strcmp(prop->name, "default_topic_conf") && val)
+                                val = (void *)rd_kafka_topic_conf_dup(
+                                        (const rd_kafka_topic_conf_t *)val);
 			break;
+                case _RK_C_KSTR:
+                {
+                        rd_kafkap_str_t **kstr = _RK_PTR(rd_kafkap_str_t **,
+                                                         src, prop->offset);
+                        if (*kstr)
+                                val = (*kstr)->str;
+                        break;
+                }
 
 		case _RK_C_BOOL:
 		case _RK_C_INT:
@@ -870,12 +961,20 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 		case _RK_C_S2F:
 			ival = *_RK_PTR(const int *, src, prop->offset);
 			break;
-
+                case _RK_C_PATLIST:
+                {
+                        const rd_kafka_pattern_list_t *plist;
+                        plist = _RK_PTR(const rd_kafka_pattern_list_t *,
+                                        src, prop->offset);
+                        val = plist->rkpl_orig;
+                        break;
+                }
 		default:
 			continue;
 		}
 
-		rd_kafka_anyconf_set_prop0(scope, dst, prop, val, ival);
+		rd_kafka_anyconf_set_prop0(scope, dst, prop, val, ival,
+                                           NULL, 0);
 	}
 }
 
@@ -1006,7 +1105,161 @@ void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *topic_conf,
 }
 
 
-static const char **rd_kafka_anyconf_dump (int scope, void *conf,
+/**
+ * Return "original"(re-created) configuration value string
+ */
+static rd_kafka_conf_res_t
+rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
+                       char *dest, size_t *dest_size) {
+        char tmp[22];
+        const char *val = NULL;
+        size_t val_len = 0;
+        int j;
+
+        switch (prop->type)
+        {
+        case _RK_C_STR:
+                val = *_RK_PTR(const char **, conf, prop->offset);
+                break;
+
+        case _RK_C_KSTR:
+        {
+                const rd_kafkap_str_t **kstr = _RK_PTR(const rd_kafkap_str_t **,
+                                                       conf, prop->offset);
+                if (*kstr)
+                        val = (*kstr)->str;
+                break;
+        }
+
+        case _RK_C_PTR:
+                val = *_RK_PTR(const void **, conf, prop->offset);
+                if (val) {
+                        rd_snprintf(tmp, sizeof(tmp), "%p", (void *)val);
+                        val = tmp;
+                }
+                break;
+
+        case _RK_C_BOOL:
+                val = (*_RK_PTR(int *, conf, prop->offset) ? "true" : "false");
+                break;
+
+        case _RK_C_INT:
+                rd_snprintf(tmp, sizeof(tmp), "%i",
+                            *_RK_PTR(int *, conf, prop->offset));
+                val = tmp;
+                break;
+
+        case _RK_C_S2I:
+                for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
+                        if (prop->s2i[j].val ==
+                            *_RK_PTR(int *, conf, prop->offset)) {
+                                val = prop->s2i[j].str;
+                                break;
+                        }
+                }
+                break;
+        case _RK_C_S2F:
+        {
+                const int ival = *_RK_PTR(const int *, conf, prop->offset);
+                int phase = 0;
+                int of = 0;
+
+                /* Phase 1: scan for set flags, accumulate needed size.
+                 * Phase 2: write to dest */
+                for (phase = 0 ; phase < (dest ? 2 : 1) ; phase++) {
+                        for (j = 0 ; prop->s2i[j].str ; j++) {
+                                if ((ival & prop->s2i[j].val) !=
+                                    prop->s2i[j].val)
+                                        continue;
+
+                                if (phase == 0)
+                                        val_len += strlen(prop->s2i[j].str) +
+                                                (val_len > 0 ? 1 : 0);
+                                else {
+                                        size_t r;
+                                        r = rd_snprintf(dest+of, (*dest_size)-of,
+                                                        "%s%s",
+                                                        of > 0 ? ",":"",
+                                                        prop->s2i[j].str);
+                                        if (r > (*dest_size)-of) {
+                                                r = (*dest_size)-of;
+                                                break;
+                                        }
+                                        of += r;
+                                }
+                        }
+                }
+                break;
+        }
+
+        case _RK_C_PATLIST:
+        {
+                const rd_kafka_pattern_list_t *plist;
+                plist = _RK_PTR(const rd_kafka_pattern_list_t *,
+                                conf, prop->offset);
+                val = plist->rkpl_orig;
+                break;
+        }
+
+        default:
+                break;
+        }
+
+        if (val_len) {
+                *dest_size = val_len+1;
+                return RD_KAFKA_CONF_OK;
+        }
+
+        if (!val)
+                return RD_KAFKA_CONF_INVALID;
+
+        val_len = strlen(val);
+
+        if (dest) {
+                int use_len = RD_MIN(val_len, (*dest_size)-1);
+                memcpy(dest, val, use_len);
+                dest[use_len] = '\0';
+        }
+
+        /* Return needed size */
+        *dest_size = val_len+1;
+
+        return RD_KAFKA_CONF_OK;
+}
+
+
+static rd_kafka_conf_res_t rd_kafka_anyconf_get (int scope, const void *conf,
+                                                 const char *name,
+                                                 char *dest, size_t *dest_size){
+	const struct rd_kafka_property *prop;
+
+	for (prop = rd_kafka_properties; prop->name ; prop++) {
+
+		if (!(prop->scope & scope) || strcmp(prop->name, name))
+			continue;
+
+                if (rd_kafka_anyconf_get0(conf, prop, dest, dest_size) ==
+                    RD_KAFKA_CONF_OK)
+                        return RD_KAFKA_CONF_OK;
+        }
+
+        return RD_KAFKA_CONF_UNKNOWN;
+}
+
+rd_kafka_conf_res_t rd_kafka_topic_conf_get (const rd_kafka_topic_conf_t *conf,
+                                             const char *name,
+                                             char *dest, size_t *dest_size) {
+        return rd_kafka_anyconf_get(_RK_TOPIC, conf, name, dest, dest_size);
+}
+
+rd_kafka_conf_res_t rd_kafka_conf_get (const rd_kafka_conf_t *conf,
+                                       const char *name,
+                                       char *dest, size_t *dest_size) {
+        return rd_kafka_anyconf_get(_RK_GLOBAL, conf, name, dest, dest_size);
+}
+
+
+static const char **rd_kafka_anyconf_dump (int scope, const void *conf,
 					   size_t *cntp) {
 	const struct rd_kafka_property *prop;
 	char **arr;
@@ -1015,56 +1268,23 @@ static const char **rd_kafka_anyconf_dump (int scope, void *conf,
 	arr = rd_calloc(sizeof(char *), RD_ARRAYSIZE(rd_kafka_properties)*2);
 
 	for (prop = rd_kafka_properties; prop->name ; prop++) {
-		char tmp[22];
-		const char *val = NULL;
-		int j;
+                char *val = NULL;
+                size_t val_size;
 
 		if (!(prop->scope & scope))
 			continue;
 
+                /* Query value size */
+                if (rd_kafka_anyconf_get0(conf, prop, NULL, &val_size) !=
+                    RD_KAFKA_CONF_OK)
+                        continue;
 
-		switch (prop->type)
-		{
-		case _RK_C_STR:
-			val = *_RK_PTR(const char **, conf, prop->offset);
-			break;
+                /* Get value */
+                val = malloc(val_size);
+                rd_kafka_anyconf_get0(conf, prop, val, &val_size);
 
-		case _RK_C_PTR:
-			val = *_RK_PTR(const void **, conf, prop->offset);
-			if (val) {
-				rd_snprintf(tmp, sizeof(tmp), "%p", (void *)val);
-				val = tmp;
-			}
-			break;
-
-		case _RK_C_BOOL:
-			val = (*_RK_PTR(int *, conf, prop->offset) ?
-			       "true":"false");
-			break;
-		case _RK_C_INT:
-			rd_snprintf(tmp, sizeof(tmp), "%i",
-				 *_RK_PTR(int *, conf, prop->offset));
-			val = tmp;
-			break;
-		case _RK_C_S2I:
-			for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
-				if (prop->s2i[j].val ==
-				    *_RK_PTR(int *, conf, prop->offset)) {
-					val = prop->s2i[j].str;
-                                        break;
-                                }
-                        }
-			break;
-		case _RK_C_S2F:
-			/* FIXME: ignore for now, just used with "debug" */
-		default:
-			break;
-		}
-
-		if (val) {
-			arr[cnt++] = rd_strdup(prop->name);
-			arr[cnt++] = rd_strdup(val);
-		}
+                arr[cnt++] = rd_strdup(prop->name);
+                arr[cnt++] = val;
 	}
 
 	*cntp = cnt;
@@ -1127,6 +1347,8 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 		switch (prop->type)
 		{
 		case _RK_C_STR:
+                case _RK_C_KSTR:
+                case _RK_C_PATLIST:
 			fprintf(fp, "%13s", prop->sdef ? prop->sdef : "");
 			break;
 		case _RK_C_BOOL:
@@ -1145,6 +1367,7 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 			if (j == RD_ARRAYSIZE(prop->s2i))
 				fprintf(fp, "%13s", " ");
 			break;
+
 		case _RK_C_S2F:
 		default:
 			/* FIXME when needed */

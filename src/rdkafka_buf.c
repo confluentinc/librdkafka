@@ -30,16 +30,16 @@
 #include "rdkafka_buf.h"
 #include "rdkafka_broker.h"
 
-void rd_kafka_buf_destroy (rd_kafka_buf_t *rkbuf) {
+void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
 
-	if (rd_atomic32_sub(&rkbuf->rkbuf_refcnt, 1) > 0)
-		return;
+        if (rkbuf->rkbuf_response)
+                rd_kafka_buf_destroy(rkbuf->rkbuf_response);
 
-	if (rkbuf->rkbuf_buf2)
-		rd_free(rkbuf->rkbuf_buf2);
+        if (rkbuf->rkbuf_buf2)
+                rd_free(rkbuf->rkbuf_buf2);
 
-	if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FREE && rkbuf->rkbuf_buf)
-		rd_free(rkbuf->rkbuf_buf);
+        if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FREE && rkbuf->rkbuf_buf)
+                rd_free(rkbuf->rkbuf_buf);
 
         if (rkbuf->rkbuf_rkb)
                 rd_kafka_broker_destroy(rkbuf->rkbuf_rkb);
@@ -108,63 +108,90 @@ void rd_kafka_buf_grow (rd_kafka_buf_t *rkbuf, size_t needed_len) {
 
         rd_kafka_assert(NULL, rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FREE);
 
+        if (alen < 256) /* avoid slow upramp */
+                alen = 256;
         while (needed_len > alen)
                 alen *= 2;
 
         new = rd_realloc(rkbuf->rkbuf_buf, alen);
-        /* FIXME: ^ error check */
+        rd_kafka_assert(NULL, new != NULL);
+
+        /* If memory was moved we need to repoint the iovecs */
+        if (unlikely(rkbuf->rkbuf_buf != new))
+                rkbuf->rkbuf_iov[0].iov_base = new;
+
         rkbuf->rkbuf_buf  = new;
         rkbuf->rkbuf_wbuf = rkbuf->rkbuf_buf;
         rkbuf->rkbuf_size = alen;
 }
 
-rd_kafka_buf_t *rd_kafka_buf_new_growable (int iovcnt, size_t init_size) {
-        rd_kafka_buf_t *rkbuf;
-
-        rkbuf = rd_kafka_buf_new(iovcnt, 0);
-        rkbuf->rkbuf_buf    = rd_malloc(init_size);
-        rkbuf->rkbuf_wbuf   = rkbuf->rkbuf_buf;
-        rkbuf->rkbuf_size   = init_size;
-        rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_FREE;
-
-        return rkbuf;
+rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk,
+                                           int iovcnt, size_t init_size) {
+        rd_kafka_assert(NULL, iovcnt == 1);/* growables only support one iovec */
+        return rd_kafka_buf_new0(rk, iovcnt, init_size, RD_KAFKA_OP_F_FREE);
 }
 
 
 /**
  * Create a new buffer with 'iovcnt' iovecs and 'size' bytes buffer memory.
- * Additional iovecs and space for the Kafka protocol headers 
- * are inserted automatically.
+ * If 'rk' is non-NULL (typical case):
+ * Additional space for the Kafka protocol headers is inserted automatically.
+ *
  */
-rd_kafka_buf_t *rd_kafka_buf_new (int iovcnt, size_t size) {
+rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
+                                   int iovcnt, size_t size, int flags) {
 	rd_kafka_buf_t *rkbuf;
-	const int iovcnt_fixed = RD_KAFKA_HEADERS_IOV_CNT;
-	size_t iovsize = sizeof(struct iovec) * (iovcnt+iovcnt_fixed);
-	size_t fullsize = iovsize + sizeof(*rkbuf) +
-		RD_KAFKAP_REQHDR_SIZE + size;
+	size_t iovsize;
+	size_t fullsize;
+        size_t extsize = 0;
+        size_t headersize = 0;
+        int growable = (flags & RD_KAFKA_OP_F_FREE);
+
+        /* Make room for common protocol request headers */
+        if (rk) {
+                headersize = RD_KAFKAP_REQHDR_SIZE +
+                        RD_KAFKAP_STR_SIZE(rk->rk_conf.client_id);
+                size += headersize;
+                iovcnt += 1; /* headers */
+        }
+
+        iovsize = sizeof(struct iovec) * iovcnt;
+        fullsize = iovsize + sizeof(*rkbuf);
+
+        /* If the buffer is growable the rkbuf_buf is allocated separetely
+         * to cater for realloc() calls.
+         * If not growable the rkbuf_buf memory is allocated with the rkbuf
+         * following the rkbuf struct and iovecs. */
+        if (growable)
+                extsize = size;
+        else
+                fullsize += size;
 
 	rkbuf = rd_malloc(fullsize);
 	memset(rkbuf, 0, sizeof(*rkbuf));
 
+        rkbuf->rkbuf_flags = flags;
 	rkbuf->rkbuf_iov = (struct iovec *)(rkbuf+1);
-	rkbuf->rkbuf_iovcnt = (iovcnt+iovcnt_fixed);
+	rkbuf->rkbuf_iovcnt = iovcnt;
 	rd_kafka_assert(NULL, rkbuf->rkbuf_iovcnt <= IOV_MAX);
 	rkbuf->rkbuf_msg.msg_iov = rkbuf->rkbuf_iov;
 
-	rkbuf->rkbuf_buf  = ((char *)(rkbuf+1))+iovsize;
+        if (growable)
+                rkbuf->rkbuf_buf = rd_malloc(extsize);
+        else
+                rkbuf->rkbuf_buf  = ((char *)(rkbuf+1))+iovsize;
         rkbuf->rkbuf_wbuf = rkbuf->rkbuf_buf;
+	rkbuf->rkbuf_msg.msg_iovlen = 0;
 
- 	/* save the first two iovecs for the header + clientid */
-	rkbuf->rkbuf_iov[0].iov_base = rkbuf->rkbuf_buf;
-	rkbuf->rkbuf_iov[0].iov_len  = RD_KAFKAP_REQHDR_SIZE;
-	/* ClientId */
-	rkbuf->rkbuf_iov[1].iov_base = NULL;
-	rkbuf->rkbuf_iov[1].iov_len  = 0;
+        if (rk) {
+                /* save the first iovecs for the header + clientid */
+                rkbuf->rkbuf_iov[0].iov_base = rkbuf->rkbuf_buf;
+                rkbuf->rkbuf_iov[0].iov_len  = headersize;
+                rkbuf->rkbuf_msg.msg_iovlen = 1;
+        }
 
-	rkbuf->rkbuf_msg.msg_iovlen = iovcnt_fixed;
-
-	rkbuf->rkbuf_size     = RD_KAFKAP_REQHDR_SIZE + size;
-	rkbuf->rkbuf_wof      = RD_KAFKAP_REQHDR_SIZE;
+	rkbuf->rkbuf_size     = size;
+        rkbuf->rkbuf_wof      = headersize;
 	rkbuf->rkbuf_wof_init = rkbuf->rkbuf_wof;
 
 	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
@@ -177,12 +204,12 @@ rd_kafka_buf_t *rd_kafka_buf_new (int iovcnt, size_t size) {
 /**
  * Create new rkbuf shadowing a memory region in rkbuf_buf2.
  */
-rd_kafka_buf_t *rd_kafka_buf_new_shadow (void *ptr, size_t size) {
+rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size) {
 	rd_kafka_buf_t *rkbuf;
 
 	rkbuf = rd_calloc(1, sizeof(*rkbuf));
 
-	rkbuf->rkbuf_buf2 = ptr;
+	rkbuf->rkbuf_buf2 = (void *)ptr;
 	rkbuf->rkbuf_rbuf = rkbuf->rkbuf_buf2;
 	rkbuf->rkbuf_len  = size;
 	rkbuf->rkbuf_wof  = size;
@@ -229,6 +256,7 @@ void rd_kafka_bufq_concat (rd_kafka_bufq_t *dst, rd_kafka_bufq_t *src) {
  * Purge the wait-response queue.
  * NOTE: 'rkbufq' must be a temporary queue and not one of rkb_waitresps
  *       or rkb_outbufs since buffers may be re-enqueued on those queues.
+ *       'rkbufq' needs to be bufq_init():ed before reuse after this call.
  */
 void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
                           rd_kafka_bufq_t *rkbufq,
@@ -240,8 +268,9 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 	rd_rkb_dbg(rkb, QUEUE, "BUFQ", "Purging bufq with %i buffers",
 		   rd_atomic32_get(&rkbufq->rkbq_cnt));
 
-	TAILQ_FOREACH_SAFE(rkbuf, &rkbufq->rkbq_bufs, rkbuf_link, tmp)
-		rkbuf->rkbuf_cb(rkb, err, NULL, rkbuf, rkbuf->rkbuf_opaque);
+	TAILQ_FOREACH_SAFE(rkbuf, &rkbufq->rkbq_bufs, rkbuf_link, tmp) {
+                rd_kafka_buf_callback(rkb, err, NULL, rkbuf);
+        }
 }
 
 
@@ -309,6 +338,105 @@ int rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 		*outlenp = 8/*Offset*/ + 4/*MessageSize*/ + MessageSize;
 
 	return begin_of;
+}
+
+
+/**
+ * Retry failed request, depending on the error.
+ * Returns 1 if the request was scheduled for retry, else 0.
+ */
+int rd_kafka_buf_retry (rd_kafka_broker_t *rkb,
+                        rd_kafka_resp_err_t err, rd_kafka_buf_t *rkbuf) {
+
+        /* Request was sent on 'rkb' thread, but was received on the
+         * current broker thread (because cgrp or rktp migrated).
+         * We dont retry on the previous broker 'rkb' in this case. */
+        if (unlikely(!thrd_is_current(rkb->rkb_thread)))
+                return 0;
+
+        switch (err)
+        {
+        case RD_KAFKA_RESP_ERR__TRANSPORT:
+        case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+        case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
+                /* Try again */
+                if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
+                    rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
+                    ++rkbuf->rkbuf_retries < rkb->rkb_rk->rk_conf.max_retries) {
+                        rd_kafka_broker_buf_retry(rkb, rkbuf);
+                        return 1;
+                }
+                return 0;
+        default:
+                return 0;
+        }
+}
+
+
+/**
+ * Handle RD_KAFKA_OP_RECV_BUF
+ */
+void rd_kafka_buf_handle_op (rd_kafka_op_t *rko) {
+        rd_kafka_buf_t *request, *response;
+
+        request = rko->rko_rkbuf;
+
+        rd_kafka_q_destroy(request->rkbuf_replyq);
+        request->rkbuf_replyq = NULL;
+
+        response = request->rkbuf_response; /* May be NULL */
+
+        /* Let buf_callback() do destroy()s */
+        request->rkbuf_response = NULL;
+        rko->rko_rkbuf = NULL;
+
+        rd_kafka_buf_callback(request->rkbuf_rkb, rko->rko_err,
+                              response, request);
+}
+
+/**
+ * Call request.rkbuf_cb(), but:
+ *  - if the rkbuf has a rkbuf_replyq the buffer is enqueude on that queue
+ *    with op type RD_KAFKA_OP_RECV_BUF.
+ *  - else call rkbuf_cb().
+ *
+ * Will decrease refcount for both response and request, eventually.
+ */
+void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
+                            rd_kafka_buf_t *response, rd_kafka_buf_t *request) {
+
+        /* Decide if the request should be retried.
+         * This is always done in the originating broker thread. */
+        if (unlikely(err && rd_kafka_buf_retry(rkb, err, request)))
+                return;
+
+        if (request->rkbuf_replyq) {
+                rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
+
+                request->rkbuf_response = response;
+
+                rko->rko_rkbuf = request;
+
+                rko->rko_err = err;
+                rd_kafka_q_enq(request->rkbuf_replyq, rko);
+        } else {
+                if (request->rkbuf_cb)
+                        request->rkbuf_cb(rkb, err, response, request,
+                                          request->rkbuf_opaque);
+                if (response)
+                        rd_kafka_buf_destroy(response);
+                rd_kafka_buf_destroy(request);
+        }
+}
+
+
+/**
+ * Create new Kafka bytes object from a buffer.
+ * The buffer must only have one iovec.
+ */
+rd_kafkap_bytes_t *rd_kafkap_bytes_from_buf (const rd_kafka_buf_t *rkbuf) {
+        rd_kafka_assert(NULL, rkbuf->rkbuf_msg.msg_iovlen == 1);
+        return rd_kafkap_bytes_new(rkbuf->rkbuf_wbuf, rkbuf->rkbuf_wof);
 }
 
 

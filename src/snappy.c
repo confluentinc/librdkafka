@@ -144,7 +144,7 @@ static int __inline rd_ctz (u32 x) {
 
 static int __inline rd_ctz64(u64 x) {
 	int r = 0;
-	_BitScanReverse(&r, x >> 32); // FIXME
+	_BitScanReverse(&r, x >> 32); // FIXME: 64-bit support
 	return r;
 }
 

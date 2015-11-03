@@ -183,13 +183,6 @@
  * Some extra functions for LIST manipulation
  */
 
-#define LIST_MOVE(newhead, oldhead, field) do {			        \
-        if((oldhead)->lh_first) {					\
-           (oldhead)->lh_first->field.le_prev = &(newhead)->lh_first;	\
-	}								\
-        (newhead)->lh_first = (oldhead)->lh_first;			\
-} while (0) 
-
 #define LIST_INSERT_SORTED(head, elm, headname, field, cmpfunc) do {	\
         if(LIST_EMPTY(head)) {					\
            LIST_INSERT_HEAD(head, elm, field);			\

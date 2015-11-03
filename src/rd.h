@@ -45,6 +45,7 @@
 #include <assert.h>
 
 #include "tinycthread.h"
+#include "rdsysqueue.h"
 
 #ifdef _MSC_VER
 /* Visual Studio */
@@ -53,7 +54,6 @@
 /* POSIX / UNIX based systems */
 #include "../config.h" /* mklove output */
 #endif
-
 
 #ifdef _MSC_VER
 /* Win32/Visual Studio */
@@ -120,6 +120,27 @@ static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 
 
 
+/*
+ * Portability
+ */
+
+/* MacOSX does not have strndupa() */
+#ifndef strndupa
+#define strndupa(PTR,LEN) ({ int _L = (LEN); char *_x = rd_alloca(_L+1); \
+      memcpy(_x, (PTR), _L); *(_x+_L) = 0; _x;})
+#endif
+
+#ifndef strdupa
+#define strdupa(PTR) ({ const char *_P = (PTR); int _L = strlen(_P); \
+      char *_x = rd_alloca(_L+1); memcpy(_x, _P, _L); *(_x+_L) = 0; _x;})
+#endif
+
+/* Some versions of MacOSX dont have IOV_MAX */
+#ifndef IOV_MAX
+#define IOV_MAX 1024
+#endif
+
+
 
 #define RD_ARRAY_SIZE(A)          (sizeof((A)) / sizeof(*(A)))
 #define RD_ARRAYSIZE(A)           RD_ARRAY_SIZE(A)
@@ -134,7 +155,7 @@ static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #define RD_ARRAY_ELEM(A,I,...)				\
 	((unsigned int)(I) < RD_ARRAY_SIZE(A) ? __VA_ARGS__ (A)[(I)] : NULL)
 
-								  
+
 #define RD_STRINGIFY(X)  # X
 
 
@@ -150,144 +171,145 @@ static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 	((val) < (low) ? low : ((val) > (hi) ? (hi) : (val)))
 
 
-typedef struct {
-	int32_t val;
-} rd_atomic32_t;
-
-typedef struct {
-	int64_t val;
-} rd_atomic64_t;
-
-static __inline int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, int32_t v) {
-#ifndef _MSC_VER
-	return ATOMIC_OP(add, fetch, &ra->val, v);
-#else
-	return InterlockedAdd(&ra->val, v);
-#endif
-}
-
-static __inline int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v) {
-#ifndef _MSC_VER
-	return ATOMIC_OP(sub, fetch, &ra->val, v);
-#else
-	return InterlockedAdd(&ra->val, -v);
-#endif
-}
-
-static __inline int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
-#ifndef _MSC_VER
-	return ATOMIC_OP(fetch, add, &ra->val, 0);
-#else
-	return ra->val;
-#endif
-}
-
-static __inline int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v) {
-#ifndef _MSC_VER
-	return ra->val = v; // FIXME
-#else
-	return InterlockedExchange(&ra->val, v);
-#endif
-}
-
-
-static __inline int64_t RD_UNUSED rd_atomic64_add (rd_atomic64_t *ra, int64_t v) {
-#ifndef _MSC_VER
-	return ATOMIC_OP(add, fetch, &ra->val, v);
-#else
-	return InterlockedAdd64(&ra->val, v);
-#endif
-}
-
-static __inline int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v) {
-#ifndef _MSC_VER
-	return ATOMIC_OP(sub, fetch, &ra->val, v);
-#else
-	return InterlockedAdd64(&ra->val, -v);
-#endif
-}
-
-static __inline int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
-#ifndef _MSC_VER
-	return ATOMIC_OP(fetch, add, &ra->val, 0);
-#else
-	return ra->val;
-#endif
-}
-
-
-static __inline int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra, int64_t v) {
-#ifndef _MSC_VER
-	return ra->val = v; // FIXME
-#else
-	return InterlockedExchange64(&ra->val, v);
-#endif
-}
-
-
-
 
 
 /**
- * Intervaller.
- * Controls how often something is allowed to happen, including
- * fast retries (with backoff) on failure.
- * Attribs: Zero-allocations, Thread-safe
+ * Generic refcnt interface
  */
-typedef struct rd_interval_s {
-        /* Configuration */
-        const rd_ts_t  interval;      /* Standard interval */
-        const rd_ts_t  retry_delay;   /* Delay before retrying on failure. */
+typedef rd_atomic32_t rd_refcnt_t;
+#define rd_refcnt_add0(R)  rd_atomic32_add(R, 1)
 
-        /* Runtime */
-        rd_atomic64_t  next;
-        rd_atomic32_t  retries;
-} rd_interval_t;
-
-static __inline RD_UNUSED
-void rd_interval_init (rd_interval_t *ri, int interval_us, int retry_delay_us) {
-        const rd_interval_t ri_init = { interval_us, retry_delay_us };
-        memcpy(ri, &ri_init, sizeof(*ri));
-}
-#define RD_INTERVAL_INIT(INTERVAL,RETRY_DELAY) {INTERVAL,RETRY_DELAY}
-
-/**
- * Check if next interval is up.
- * Returns true if so, else false.
- */
-static __inline RD_UNUSED
-int rd_interval_next (rd_interval_t *ri, rd_ts_t now) {
-        return (int)(rd_atomic64_get(&ri->next) <= (int64_t)now);
+static __inline RD_UNUSED int rd_refcnt_sub0 (rd_refcnt_t *R) {
+        int r = rd_atomic32_sub(R, 1);
+        if (r < 0)
+                assert(!*"refcnt sub-zero");
+        return r;
 }
 
+#define rd_refcnt_get(R)   rd_atomic32_get(R)
 
 /**
- * Feed intervaller with result from last run.
- * If 'ok' is set the next interval is scheduled as expected,
- * else the next interval is set to the next retry (e.g., failure).
+ * A wrapper for decreasing refcount and calling a destroy function
+ * when refcnt reaches 0.
  */
-static __inline RD_UNUSED
-void rd_interval_update (rd_interval_t *ri, rd_ts_t now, int ok) {
-        rd_ts_t next;
+#define rd_refcnt_destroywrapper(REFCNT,DESTROY_CALL) do {      \
+                if (rd_refcnt_sub(REFCNT) > 0)                  \
+                        break;                                  \
+                DESTROY_CALL;                                   \
+        } while (0)
 
-        if (likely(ok)) {
-                rd_atomic64_set(&ri->next, now + ri->interval);
-                rd_atomic32_set(&ri->retries, 0);
-                return;
+
+#define rd_refcnt_destroywrapper2(REFCNT,WHAT,DESTROY_CALL) do {        \
+                if (rd_refcnt_sub2(REFCNT,WHAT) > 0)                        \
+                        break;                                  \
+                DESTROY_CALL;                                   \
+        } while (0)
+
+#if ENABLE_REFCNT_DEBUG
+#define rd_refcnt_add(R)                                                \
+        (                                                               \
+                printf("REFCNT DEBUG: %-35s %d +1: %16p: %s:%d\n",      \
+                       #R, rd_refcnt_get(R), (R), __FUNCTION__,__LINE__), \
+                rd_refcnt_add0(R)                                       \
+                )
+
+#define rd_refcnt_add2(R,WHAT)  do {                                        \
+                printf("REFCNT DEBUG: %-35s %d +1: %16p: %16s: %s:%d\n",      \
+                       #R, rd_refcnt_get(R), (R), WHAT, __FUNCTION__,__LINE__), \
+                rd_refcnt_add0(R);                                      \
+        } while (0)
+
+
+#define rd_refcnt_sub2(R,WHAT) (                                            \
+                printf("REFCNT DEBUG: %-35s %d -1: %16p: %16s: %s:%d\n",      \
+                       #R, rd_refcnt_get(R), (R), WHAT, __FUNCTION__,__LINE__), \
+                rd_refcnt_sub0(R) )
+
+#define rd_refcnt_sub(R) (                                              \
+                printf("REFCNT DEBUG: %-35s %d -1: %16p: %s:%d\n",      \
+                       #R, rd_refcnt_get(R), (R), __FUNCTION__,__LINE__), \
+                rd_refcnt_sub0(R) )
+
+#else
+#define rd_refcnt_add(R)  rd_refcnt_add0(R)
+#define rd_refcnt_sub(R)  rd_refcnt_sub0(R)
+#endif
+
+
+
+#if !ENABLE_SHAREDPTR_DEBUG
+
+/**
+ * The non-debug version of shared_ptr is simply a reference counting interface
+ * without any additional costs and no indirections.
+ */
+
+#define RD_SHARED_PTR_TYPE(STRUCT_NAME,WRAPPED_TYPE) WRAPPED_TYPE
+
+
+#define rd_shared_ptr_get(OBJ,REFCNT,SPTR_TYPE)          \
+        (rd_refcnt_add(REFCNT), (OBJ))
+
+#define rd_shared_ptr_obj(SPTR) (SPTR)
+
+#define rd_shared_ptr_put(SPTR,REF,DESTRUCTOR)                  \
+                rd_refcnt_destroywrapper(REF,DESTRUCTOR)
+
+
+#else
+
+#define RD_SHARED_PTR_TYPE(STRUCT_NAME, WRAPPED_TYPE) \
+        struct STRUCT_NAME {                          \
+                LIST_ENTRY(rd_shptr0_s) link;         \
+                WRAPPED_TYPE *obj;                     \
+                rd_refcnt_t *ref;                     \
+                const char *typename;                 \
+                const char *func;                     \
+                int line;                             \
         }
 
-        next = ri->retry_delay << (rd_atomic32_add(&ri->retries, 1)-1);
-        if (next > ri->interval)
-                next = ri->interval;
-        rd_atomic64_set(&ri->next, now + next);
-}
 
 
-/**
- * Resets the next interval to fire immediately.
- */
-static __inline RD_UNUSED
-void rd_interval_reset (rd_interval_t *ri) {
-        rd_atomic64_set(&ri->next, 0);
-        rd_atomic32_set(&ri->retries, 0);
+/* Common backing struct compatible with RD_SHARED_PTR_TYPE() types */
+typedef RD_SHARED_PTR_TYPE(rd_shptr0_s, void) rd_shptr0_t;
+
+LIST_HEAD(rd_shptr0_head, rd_shptr0_s);
+extern struct rd_shptr0_head rd_shared_ptr_debug_list;
+extern mtx_t rd_shared_ptr_debug_mtx;
+
+static __inline RD_UNUSED RD_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+rd_shptr0_t *rd_shared_ptr_get0 (const char *func, int line,
+                                 const char *typename,
+                                 rd_refcnt_t *ref, void *obj) {
+        rd_shptr0_t *sptr = rd_calloc(1, sizeof(*sptr));
+        sptr->obj = obj;
+        sptr->ref = ref;
+        sptr->typename = typename;
+        sptr->func = func;
+        sptr->line = line;
+
+        mtx_lock(&rd_shared_ptr_debug_mtx);
+        LIST_INSERT_HEAD(&rd_shared_ptr_debug_list, sptr, link);
+        mtx_unlock(&rd_shared_ptr_debug_mtx);
+        return sptr;
 }
+
+#define rd_shared_ptr_get(OBJ,REF,SPTR_TYPE)                            \
+        (rd_refcnt_add(REF),                                            \
+         (SPTR_TYPE *)rd_shared_ptr_get0(__FUNCTION__,__LINE__,         \
+                                         #SPTR_TYPE,REF,OBJ))
+
+
+#define rd_shared_ptr_obj(SPTR) (SPTR)->obj
+
+#define rd_shared_ptr_put(SPTR,REF,DESTRUCTOR) do {               \
+                if (rd_refcnt_sub(REF) == 0)                      \
+                        DESTRUCTOR;                               \
+                mtx_lock(&rd_shared_ptr_debug_mtx);               \
+                LIST_REMOVE(SPTR, link);                          \
+                mtx_unlock(&rd_shared_ptr_debug_mtx);             \
+                rd_free(SPTR);                                    \
+        } while (0)
+
+void rd_shared_ptrs_dump (void);
+#endif

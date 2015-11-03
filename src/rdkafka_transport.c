@@ -502,19 +502,11 @@ static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 }
 
 
-static RD_UNUSED int rd_kafka_transport_ssl_io_event (rd_kafka_transport_t *rktrans,
-					     int events) {
+static RD_UNUSED int
+rd_kafka_transport_ssl_io_event (rd_kafka_transport_t *rktrans, int events) {
 	int r;
 	char errstr[512];
 
-	if (events & POLLIN && 0 /*FIXME*/)  {
-		r = SSL_read(rktrans->rktrans_ssl, NULL, 0);
-		if (rd_kafka_transport_ssl_io_update(rktrans, r,
-						     errstr,
-						     sizeof(errstr)) == -1)
-			goto fail;
-	}
-	
 	if (events & POLLOUT) {
 		r = SSL_write(rktrans->rktrans_ssl, NULL, 0);
 		if (rd_kafka_transport_ssl_io_update(rktrans, r,
@@ -741,6 +733,12 @@ rd_kafka_transport_recvmsg (rd_kafka_transport_t *rktrans,
 static void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans) {
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 
+        rd_rkb_dbg(rkb, BROKER, "CONNECT",
+                   "Connected to %s",
+                   rd_sockaddr2str(rkb->rkb_addr_last,
+                                   RD_SOCKADDR2STR_F_PORT |
+                                   RD_SOCKADDR2STR_F_FAMILY));
+
 	/* Set socket send & receive buffer sizes if configuerd */
 	if (rkb->rkb_rk->rk_conf.socket_sndbuf_size != 0) {
 		if (setsockopt(rktrans->rktrans_s, SOL_SOCKET, SO_SNDBUF,
@@ -820,19 +818,24 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 
 		if (getsockopt(rktrans->rktrans_s, SOL_SOCKET,
 			       SO_ERROR, &r, &intlen) == -1) {
-			rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
-					     "Connect to %s failed: "
-					     "unable to get status from "
-					     "socket %d: %s",
-					     "FIXME",
-					     rktrans->rktrans_s,
-					     strerror(errno));
-
+			rd_kafka_broker_fail(
+                                rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+                                "Connect to %s failed: "
+                                "unable to get status from "
+                                "socket %d: %s",
+                                rd_sockaddr2str(rkb->rkb_addr_last,
+                                                RD_SOCKADDR2STR_F_PORT |
+                                                RD_SOCKADDR2STR_F_FAMILY),
+                                rktrans->rktrans_s,
+                                strerror(errno));
 		} else if (r != 0) {
 			/* Connect failed */
 			rd_snprintf(errstr, sizeof(errstr),
 				    "Connect to %s failed: %s",
-				    "FIXME", strerror(r));
+                                    rd_sockaddr2str(rkb->rkb_addr_last,
+                                                    RD_SOCKADDR2STR_F_PORT |
+                                                    RD_SOCKADDR2STR_F_FAMILY),
+                                    strerror(r));
 
 			rd_kafka_broker_connect_done(rkb, errstr);
 		} else {
@@ -848,7 +851,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 			while (rd_kafka_recv(rkb) > 0)
 				;
 		}
-		
 
 		if (events & POLLHUP) {
 			rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
@@ -874,20 +876,18 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
  *
  * Locality: broker thread 
  */
-void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans) {
+void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
+                                  int timeout_ms) {
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	int events;
 
 	if (rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0)
 		rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
 
-	if ((events = rd_kafka_transport_poll(rktrans,
-					       rkb->rkb_rk->rk_conf.
-					       socket_blocking_max_ms)) <= 0) {
-		return;
-	}
-	
-	rd_kafka_transport_poll_clear(rktrans, POLLOUT);
+	if ((events = rd_kafka_transport_poll(rktrans, timeout_ms)) <= 0)
+                return;
+
+        rd_kafka_transport_poll_clear(rktrans, POLLOUT);
 
 	rd_kafka_transport_io_event(rktrans, events);
 }
@@ -906,6 +906,8 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 	int s = -1;
 	int on = 1;
 
+
+        rkb->rkb_addr_last = sinx;
 
 	s = rkb->rkb_rk->rk_conf.socket_cb(sinx->in.sin_family,
 					   SOCK_STREAM, IPPROTO_TCP,
@@ -1022,7 +1024,7 @@ void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event) {
 int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 #ifndef _MSC_VER
 	int r;
-	
+
 	r = poll(&rktrans->rktrans_pfd, 1, tmout);
 	if (r <= 0)
 		return r;

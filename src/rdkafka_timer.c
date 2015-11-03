@@ -32,8 +32,13 @@
 #include "rdsysqueue.h"
 
 
-#define rd_kafka_timers_lock(rk)   mtx_lock(&(rk)->rk_timers_lock)
-#define rd_kafka_timers_unlock(rk) mtx_unlock(&(rk)->rk_timers_lock)
+static __inline void rd_kafka_timers_lock (rd_kafka_timers_t *rkts) {
+        mtx_lock(&rkts->rkts_lock);
+}
+
+static __inline void rd_kafka_timers_unlock (rd_kafka_timers_t *rkts) {
+        mtx_unlock(&rkts->rkts_lock);
+}
 
 
 static __inline int rd_kafka_timer_started (const rd_kafka_timer_t *rtmr) {
@@ -46,12 +51,13 @@ static int rd_kafka_timer_cmp (const void *_a, const void *_b) {
 	return (int)(a->rtmr_next - b->rtmr_next);
 }
 
-static void rd_kafka_timer_unschedule (rd_kafka_t *rk, rd_kafka_timer_t *rtmr) {
-	TAILQ_REMOVE(&rk->rk_timers, rtmr, rtmr_link);
+static void rd_kafka_timer_unschedule (rd_kafka_timers_t *rkts,
+                                       rd_kafka_timer_t *rtmr) {
+	TAILQ_REMOVE(&rkts->rkts_timers, rtmr, rtmr_link);
 	rtmr->rtmr_next = 0;
 }
 
-static void rd_kafka_timer_schedule (rd_kafka_t *rk, rd_kafka_timer_t *rtmr) {
+static void rd_kafka_timer_schedule (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr) {
 	rd_kafka_timer_t *first;
 
 	/* Timer has been stopped */
@@ -60,12 +66,13 @@ static void rd_kafka_timer_schedule (rd_kafka_t *rk, rd_kafka_timer_t *rtmr) {
 
 	rtmr->rtmr_next = rd_clock() + rtmr->rtmr_interval;
 
-	if (!(first = TAILQ_FIRST(&rk->rk_timers)) ||
+	if (!(first = TAILQ_FIRST(&rkts->rkts_timers)) ||
 	    first->rtmr_next > rtmr->rtmr_next) {
-		TAILQ_INSERT_HEAD(&rk->rk_timers, rtmr, rtmr_link);
-		cnd_signal(&rk->rk_timers_cond);
+		TAILQ_INSERT_HEAD(&rkts->rkts_timers, rtmr, rtmr_link);
+                cnd_signal(&rkts->rkts_cond);
 	} else
-		TAILQ_INSERT_SORTED(&rk->rk_timers, rtmr, rd_kafka_timer_s, rtmr_link,
+		TAILQ_INSERT_SORTED(&rkts->rkts_timers, rtmr,
+                                    rd_kafka_timer_s, rtmr_link,
 				    rd_kafka_timer_cmp);
 }
 
@@ -73,21 +80,22 @@ static void rd_kafka_timer_schedule (rd_kafka_t *rk, rd_kafka_timer_t *rtmr) {
  * Stop a timer that may be started.
  * If called from inside a timer callback 'lock' must be 0, else 1.
  */
-void rd_kafka_timer_stop (rd_kafka_t *rk, rd_kafka_timer_t *rtmr, int lock) {
+void rd_kafka_timer_stop (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
+                          int lock) {
 	if (lock)
-		rd_kafka_timers_lock(rk);
+		rd_kafka_timers_lock(rkts);
 
 	if (!rd_kafka_timer_started(rtmr)) {
 		if (lock)
-			rd_kafka_timers_unlock(rk);
+			rd_kafka_timers_unlock(rkts);
 		return;
 	}
 
-	rd_kafka_timer_unschedule(rk, rtmr);
+	rd_kafka_timer_unschedule(rkts, rtmr);
 	rtmr->rtmr_interval = 0;
 
 	if (lock)
-		rd_kafka_timers_unlock(rk);
+		rd_kafka_timers_unlock(rkts);
 }
 
 
@@ -98,22 +106,22 @@ void rd_kafka_timer_stop (rd_kafka_t *rk, rd_kafka_timer_t *rtmr, int lock) {
  *
  * Use rd_kafka_timer_stop() to stop a timer.
  */
-void rd_kafka_timer_start (rd_kafka_t *rk,
+void rd_kafka_timer_start (rd_kafka_timers_t *rkts,
 			   rd_kafka_timer_t *rtmr, int interval,
-			   void (*callback) (rd_kafka_t *rk, void *arg),
+			   void (*callback) (rd_kafka_timers_t *rkts, void *arg),
 			   void *arg) {
-	rd_kafka_timers_lock(rk);
+	rd_kafka_timers_lock(rkts);
 
 	if (rd_kafka_timer_started(rtmr))
-		rd_kafka_timer_stop(rk, rtmr, 0/*!lock*/);
+		rd_kafka_timer_stop(rkts, rtmr, 0/*!lock*/);
 
 	rtmr->rtmr_interval = interval;
 	rtmr->rtmr_callback = callback;
 	rtmr->rtmr_arg      = arg;
 
-	rd_kafka_timer_schedule(rk, rtmr);
+	rd_kafka_timer_schedule(rkts, rtmr);
 
-	rd_kafka_timers_unlock(rk);
+	rd_kafka_timers_unlock(rkts);
 }
 
 
@@ -122,27 +130,27 @@ void rd_kafka_timer_start (rd_kafka_t *rk,
  * Interrupt rd_kafka_timers_run().
  * Used for termination.
  */
-void rd_kafka_timers_interrupt (rd_kafka_t *rk) {
-	rd_kafka_timers_lock(rk);
-	cnd_signal(&rk->rk_timers_cond);
-	rd_kafka_timers_unlock(rk);
+void rd_kafka_timers_interrupt (rd_kafka_timers_t *rkts) {
+	rd_kafka_timers_lock(rkts);
+	cnd_signal(&rkts->rkts_cond);
+	rd_kafka_timers_unlock(rkts);
 }
 
 /**
  * Dispatch timers.
  * Will block up to 'timeout' microseconds before returning.
  */
-void rd_kafka_timers_run (rd_kafka_t *rk, int timeout) {
+void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us) {
 	rd_ts_t now = rd_clock();
-	rd_ts_t end = now + timeout;
+	rd_ts_t end = now + timeout_us;
 
-        rd_kafka_timers_lock(rk);
+        rd_kafka_timers_lock(rkts);
 
-	while (!rd_atomic32_get(&rk->rk_terminate) && now <= end) {
-		uint64_t sleeptime;
+	while (!rd_atomic32_get(&rkts->rkts_rk->rk_terminate) && now <= end) {
+		int64_t sleeptime;
 		rd_kafka_timer_t *rtmr;
 
-		if (likely((rtmr = TAILQ_FIRST(&rk->rk_timers)) != NULL))
+		if (likely((rtmr = TAILQ_FIRST(&rkts->rkts_timers)) != NULL))
 			sleeptime = rtmr->rtmr_next - now;
 		else
 			sleeptime = 100000000000000llu;
@@ -151,24 +159,45 @@ void rd_kafka_timers_run (rd_kafka_t *rk, int timeout) {
 			if (sleeptime > (end - now))
 				sleeptime = end - now;
 
-			cnd_timedwait_ms(&rk->rk_timers_cond,
-						  &rk->rk_timers_lock,
-						  (int)(sleeptime / 1000));
+                        cnd_timedwait_ms(&rkts->rkts_cond,
+                                         &rkts->rkts_lock,
+                                         (int)(sleeptime / 1000));
+
 			now = rd_clock();
 		}
 
-		while ((rtmr = TAILQ_FIRST(&rk->rk_timers)) &&
+		while ((rtmr = TAILQ_FIRST(&rkts->rkts_timers)) &&
 		       rtmr->rtmr_next <= now) {
 
-			rd_kafka_timer_unschedule(rk, rtmr);
-            rd_kafka_timers_unlock(rk);
+			rd_kafka_timer_unschedule(rkts, rtmr);
+                        rd_kafka_timers_unlock(rkts);
 
-			rtmr->rtmr_callback(rk, rtmr->rtmr_arg);
+			rtmr->rtmr_callback(rkts, rtmr->rtmr_arg);
 
-            rd_kafka_timers_lock(rk);
-			rd_kafka_timer_schedule(rk, rtmr);
+                        rd_kafka_timers_lock(rkts);
+                        rd_kafka_timer_schedule(rkts, rtmr);
 		}
 	}
 
-	rd_kafka_timers_unlock(rk);
+	rd_kafka_timers_unlock(rkts);
+}
+
+
+void rd_kafka_timers_destroy (rd_kafka_timers_t *rkts) {
+        rd_kafka_timer_t *rtmr;
+
+        while ((rtmr = TAILQ_FIRST(&rkts->rkts_timers)))
+                rd_kafka_timer_stop(rkts, rtmr, 0);
+        rd_kafka_assert(rkts->rkts_rk, TAILQ_EMPTY(&rkts->rkts_timers));
+
+        cnd_destroy(&rkts->rkts_cond);
+        mtx_destroy(&rkts->rkts_lock);
+}
+
+void rd_kafka_timers_init (rd_kafka_timers_t *rkts, rd_kafka_t *rk) {
+        memset(rkts, 0, sizeof(*rkts));
+        rkts->rkts_rk = rk;
+        TAILQ_INIT(&rkts->rkts_timers);
+        mtx_init(&rkts->rkts_lock, mtx_plain);
+        cnd_init(&rkts->rkts_cond);
 }

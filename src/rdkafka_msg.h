@@ -69,7 +69,7 @@ static __inline RD_UNUSED int rd_kafka_msgq_len (rd_kafka_msgq_t *rkmq) {
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm);
 
-int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
+int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      int msgflags,
 		      char *payload, size_t len,
 		      const void *keydata, size_t keylen,
@@ -85,6 +85,7 @@ static __inline RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
 /**
  * Concat all elements of 'src' onto tail of 'dst'.
  * 'src' will be cleared.
+ * Proper locks for 'src' and 'dst' must be held.
  */
 static __inline RD_UNUSED void rd_kafka_msgq_concat (rd_kafka_msgq_t *dst,
 						   rd_kafka_msgq_t *src) {
@@ -111,7 +112,7 @@ static __inline RD_UNUSED void rd_kafka_msgq_move (rd_kafka_msgq_t *dst,
  * rd_free all msgs in msgq and reinitialize the msgq.
  */
 static __inline RD_UNUSED void rd_kafka_msgq_purge (rd_kafka_t *rk,
-						  rd_kafka_msgq_t *rkmq) {
+                                                    rd_kafka_msgq_t *rkmq) {
 	rd_kafka_msg_t *rkm, *next;
 
 	next = TAILQ_FIRST(&rkmq->rkmq_msgs);
@@ -187,5 +188,5 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_ts_t now);
 
 
-int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
+int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 			      int do_lock);

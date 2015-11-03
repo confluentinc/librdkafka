@@ -30,6 +30,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
 #include "rdkafka_topic.h"
+#include "rdkafka_partition.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
 #include "rdtime.h"
@@ -56,7 +57,7 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
  * Returns 0 on success or -1 on error.
  * Both errno and 'errp' are set appropriately.
  */
-static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
+static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
                                           int32_t force_partition,
                                           int msgflags,
                                           char *payload, size_t len,
@@ -124,7 +125,7 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
  * the memory associated with the payload is still the caller's
  * responsibility.
  */
-int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
+int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      int msgflags,
 		      char *payload, size_t len,
 		      const void *key, size_t keylen,
@@ -183,15 +184,15 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
  * Returns the number of messages succesfully queued for producing.
  * Each message's .err will be set accordingly.
  */
-int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
+int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                             int msgflags,
                             rd_kafka_message_t *rkmessages, int message_cnt) {
         rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
         int i;
         rd_ts_t now = rd_clock();
         int good = 0;
-        rd_kafka_toppar_t *rktp = NULL;
         rd_kafka_resp_err_t all_err = 0;
+        rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
 
         /* For partitioner; hold lock for entire run,
          * for one partition: only acquire when needed at the end. */
@@ -266,19 +267,22 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
 
 	/* Specific partition */
         if (partition != RD_KAFKA_PARTITION_UA) {
+                shptr_rd_kafka_toppar_t *s_rktp;
+
 		rd_kafka_topic_rdlock(rkt);
 
-                rktp = rd_kafka_toppar_get_avail(rkt, partition,
-                                                 1/*ua on miss*/, &all_err);
+                s_rktp = rd_kafka_toppar_get_avail(rkt, partition,
+                                                   1/*ua on miss*/, &all_err);
                 /* Concatenate tmpq onto partition queue. */
-                if (likely(rktp != NULL)) {
+                if (likely(s_rktp != NULL)) {
+                        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
                         if (good > 0)
                                 (void)rd_atomic32_add(&rkt->rkt_rk->
                                                     rk_producer.msg_cnt, good);
 
-                        (void)rd_atomic64_add(&rktp->rktp_c.msgs, good);
+                        rd_atomic64_add(&rktp->rktp_c.msgs, good);
                         rd_kafka_toppar_concat_msgq(rktp, &tmpq);
-                        rd_kafka_toppar_destroy(rktp);
+                        rd_kafka_toppar_destroy(s_rktp);
                 }
         }
 
@@ -328,10 +332,10 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
 }
 
 int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
-					 const void *key, size_t keylen,
-					 int32_t partition_cnt,
-					 void *rkt_opaque,
-					 void *msg_opaque) {
+                                             const void *key, size_t keylen,
+                                             int32_t partition_cnt,
+                                             void *rkt_opaque,
+                                             void *msg_opaque) {
     return rd_crc32(key, keylen) % partition_cnt;
 }
 
@@ -341,10 +345,11 @@ int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
  * Returns RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION or .._UNKNOWN_TOPIC if
  * partitioning failed, or 0 on success.
  */
-int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
+int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 			      int do_lock) {
 	int32_t partition;
 	rd_kafka_toppar_t *rktp_new;
+        shptr_rd_kafka_toppar_t *s_rktp_new;
 	rd_kafka_resp_err_t err;
 
 	if (do_lock)
@@ -381,7 +386,7 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
                 /* Partition not assigned, run partitioner. */
                 if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
                         partition = rkt->rkt_conf.
-                                partitioner(rkt,
+                                partitioner(rkt->rkt_app_rkt,
                                             rkm->rkm_key->data,
                                             RD_KAFKAP_BYTES_LEN(rkm->
                                                                 rkm_key),
@@ -406,9 +411,9 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
         }
 
 	/* Get new partition */
-	rktp_new = rd_kafka_toppar_get(rkt, partition, 0);
+	s_rktp_new = rd_kafka_toppar_get(rkt, partition, 0);
 
-	if (unlikely(!rktp_new)) {
+	if (unlikely(!s_rktp_new)) {
 		/* Unknown topic or partition */
 		if (rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
 			err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
@@ -421,7 +426,8 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
 		return  err;
 	}
 
-        (void)rd_atomic64_add(&rktp_new->rktp_c.msgs, 1);
+        rktp_new = rd_kafka_toppar_s2i(s_rktp_new);
+        rd_atomic64_add(&rktp_new->rktp_c.msgs, 1);
 
         /* Update message partition */
         if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
@@ -431,6 +437,6 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
 	rd_kafka_toppar_enq_msg(rktp_new, rkm);
 	if (do_lock)
 		rd_kafka_topic_rdunlock(rkt);
-	rd_kafka_toppar_destroy(rktp_new); /* from _get() */
+	rd_kafka_toppar_destroy(s_rktp_new); /* from _get() */
 	return 0;
 }

@@ -178,7 +178,8 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 		rd_kafka_buf_skip(rkbuf, RD_KAFKAP_STR_LEN0(_slen));	\
 	} while (0)
 
-/* Read Kafka Bytes representation (4+N) */
+/* Read Kafka Bytes representation (4+N).
+ *  The 'kbytes' will be updated to point to rkbuf data */
 #define rd_kafka_buf_read_bytes(rkbuf, kbytes) do {		   \
 		int _klen;						\
 		rd_kafka_buf_read_i32a(rkbuf, _klen);			\
@@ -190,6 +191,15 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 	} while (0)
 
 
+
+/**
+ * Response handling callback.
+ */
+typedef void (rd_kafka_resp_cb_t) (rd_kafka_broker_t *rkb,
+                                   rd_kafka_resp_err_t err,
+                                   rd_kafka_buf_t *reply,
+                                   rd_kafka_buf_t *request,
+                                   void *opaque);
 
 typedef struct rd_kafka_buf_s {
 	TAILQ_ENTRY(rd_kafka_buf_s) rkbuf_link;
@@ -218,29 +228,26 @@ typedef struct rd_kafka_buf_s {
 
 	rd_crc32_t rkbuf_crc;      /* Current CRC calculation */
 
-	struct rd_kafkap_reqhdr rkbuf_reqhdr;
-	struct rd_kafkap_reshdr rkbuf_reshdr;
+	struct rd_kafkap_reqhdr rkbuf_reqhdr;   /* Request header.
+                                                 * These fields are encoded
+                                                 * and written to output buffer
+                                                 * on buffer finalization. */
+	struct rd_kafkap_reshdr rkbuf_reshdr;   /* Response header.
+                                                 * Decoded fields are copied
+                                                 * here from the buffer
+                                                 * to provide an ease-of-use
+                                                 * interface to the header */
 
 	int32_t rkbuf_expected_size;  /* expected size of message */
 
-	/* Response callback */
-	void  (*rkbuf_cb) (struct rd_kafka_broker_s *,
-			   rd_kafka_resp_err_t err,
-			   struct rd_kafka_buf_s *reprkbuf,
-			   struct rd_kafka_buf_s *reqrkbuf,
-			   void *opaque);
-
-        void  (*rkbuf_parse_cb) (struct rd_kafka_buf_s *respbuf, void *opaque);
+        rd_kafka_q_t       *rkbuf_replyq;       /* Enqueue response on replyq */
+        rd_kafka_resp_cb_t *rkbuf_cb;           /* Response callback */
+        struct rd_kafka_buf_s *rkbuf_response;  /* Response buffer */
 
         rd_kafka_resp_err_t       rkbuf_err;
         struct rd_kafka_broker_s *rkbuf_rkb;
-        /* Handler callback: called after response has been parsed.
-         * The arguments are not predefined but varies depending on
-         * response type. */
-        void  (*rkbuf_hndcb) (void *);
-        void   *rkbuf_hndopaque;
 
-	rd_atomic32_t rkbuf_refcnt;
+	rd_refcnt_t rkbuf_refcnt;
 	void   *rkbuf_opaque;
 
         int32_t rkbuf_op_version;    /* Originating queue version,
@@ -265,9 +272,12 @@ typedef struct rd_kafka_bufq_s {
 } rd_kafka_bufq_t;
 
 
-#define rd_kafka_buf_keep(rkbuf) (void)rd_atomic32_add(&(rkbuf)->rkbuf_refcnt, 1)
-void rd_kafka_buf_destroy (rd_kafka_buf_t *rkbuf);
-void rd_kafka_buf_destroy (rd_kafka_buf_t *rkbuf);
+#define rd_kafka_buf_keep(rkbuf) rd_refcnt_add(&(rkbuf)->rkbuf_refcnt)
+#define rd_kafka_buf_destroy(rkbuf)                                     \
+        rd_refcnt_destroywrapper(&(rkbuf)->rkbuf_refcnt,                \
+                                 rd_kafka_buf_destroy_final(rkbuf))
+
+void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf);
 void rd_kafka_buf_auxbuf_add (rd_kafka_buf_t *rkbuf, void *auxbuf);
 void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex, int new_of);
 struct iovec *rd_kafka_buf_iov_next (rd_kafka_buf_t *rkbuf);
@@ -276,9 +286,12 @@ void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
 #define rd_kafka_buf_push(rkbuf,buf,len) \
 	rd_kafka_buf_push0(rkbuf,buf,len,1/*allow_crc*/)
 void rd_kafka_buf_autopush (rd_kafka_buf_t *rkbuf);
-rd_kafka_buf_t *rd_kafka_buf_new_growable (int iovcnt, size_t init_size);
-rd_kafka_buf_t *rd_kafka_buf_new (int iovcnt, size_t size);
-rd_kafka_buf_t *rd_kafka_buf_new_shadow (void *ptr, size_t size);
+rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk,
+                                           int iovcnt, size_t init_size);
+rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
+                                   int iovcnt, size_t size, int flags);
+#define rd_kafka_buf_new(rk,iovcnt,size) rd_kafka_buf_new0(rk,iovcnt,size,0)
+rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size);
 void rd_kafka_bufq_enq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf);
 void rd_kafka_bufq_deq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf);
 void rd_kafka_bufq_init(rd_kafka_bufq_t *rkbufq);
@@ -286,6 +299,14 @@ void rd_kafka_bufq_concat (rd_kafka_bufq_t *dst, rd_kafka_bufq_t *src);
 void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
                           rd_kafka_bufq_t *rkbufq,
                           rd_kafka_resp_err_t err);
+
+int rd_kafka_buf_retry (rd_kafka_broker_t *rkb,
+                        rd_kafka_resp_err_t err, rd_kafka_buf_t *rkbuf);
+
+void rd_kafka_buf_handle_op (rd_kafka_op_t *rko);
+void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
+                            rd_kafka_buf_t *response, rd_kafka_buf_t *request);
+
 
 
 /**
@@ -468,6 +489,23 @@ static __inline int rd_kafka_buf_write_kstr (rd_kafka_buf_t *rkbuf,
 }
 
 /**
+ * Write (copy) char * string to buffer.
+ */
+static __inline int rd_kafka_buf_write_str (rd_kafka_buf_t *rkbuf,
+                                            const char *str, size_t len) {
+        int r;
+        if (!str)
+                len = RD_KAFKAP_STR_LEN_NULL;
+        else if (len == (size_t)-1)
+                len = strlen(str);
+        r = rd_kafka_buf_write_i16(rkbuf, len);
+        if (str)
+                r = rd_kafka_buf_write(rkbuf, str, len);
+        return r;
+}
+
+
+/**
  * Push (i.e., no copy) Kafka string to buffer iovec
  */
 static __inline void rd_kafka_buf_push_kstr (rd_kafka_buf_t *rkbuf,
@@ -483,8 +521,8 @@ static __inline void rd_kafka_buf_push_kstr (rd_kafka_buf_t *rkbuf,
  */
 static __inline int rd_kafka_buf_write_kbytes (rd_kafka_buf_t *rkbuf,
 					       const rd_kafkap_bytes_t *kbytes){
-        return rd_kafka_buf_write(rkbuf, kbytes,
-				  kbytes ? RD_KAFKAP_BYTES_SIZE(kbytes) : 0);
+        return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
+                                  RD_KAFKAP_BYTES_SIZE(kbytes));
 }
 
 /**
@@ -495,6 +533,21 @@ static __inline void rd_kafka_buf_push_kbytes (rd_kafka_buf_t *rkbuf,
 	rd_kafka_buf_push(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
 			  RD_KAFKAP_BYTES_SIZE(kbytes));
 }
+
+/**
+ * Write (copy) binary bytes to buffer as Kafka bytes encapsulate data.
+ */
+static __inline int rd_kafka_buf_write_bytes (rd_kafka_buf_t *rkbuf,
+                                              const void *payload, size_t size) {
+        int r;
+        if (!payload)
+                size = RD_KAFKAP_BYTES_LEN_NULL;
+        r = rd_kafka_buf_write_i32(rkbuf, size);
+        if (payload)
+                r = rd_kafka_buf_write(rkbuf, payload, size);
+        return r;
+}
+
 
 
 
@@ -514,7 +567,6 @@ int rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 /**
  * Start calculating CRC from now and track it in '*crcp'.
  */
- 
 static __inline RD_UNUSED void rd_kafka_buf_crc_init (rd_kafka_buf_t *rkbuf) {
 	rd_kafka_assert(NULL, !(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC));
 	rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_CRC;
@@ -539,6 +591,8 @@ int rd_kafka_buf_iov_remain (const rd_kafka_buf_t *rkbuf) {
 	return rkbuf->rkbuf_iovcnt - rkbuf->rkbuf_msg.msg_iovlen;
 }
 
+
+rd_kafkap_bytes_t *rd_kafkap_bytes_from_buf (const rd_kafka_buf_t *rkbuf);
 
 void rd_kafka_buf_hexdump (const char *what, const rd_kafka_buf_t *rkbuf,
 			   int read_buffer);

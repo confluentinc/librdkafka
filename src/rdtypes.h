@@ -37,4 +37,4 @@
 
 
 /* Timestamp (microseconds) */
-typedef uint64_t rd_ts_t;
+typedef int64_t rd_ts_t;

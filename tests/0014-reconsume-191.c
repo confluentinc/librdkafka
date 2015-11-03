@@ -330,6 +330,11 @@ static void consume_messages_callback_multi (const char *desc,
 
 	test_conf_init(&conf, &topic_conf, 20);
 
+        /* Broker based offset storage requires a group.id */
+        if (rd_kafka_conf_set(conf, "group.id", topic,
+                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
+                TEST_FAIL("%s: %s\n", desc, errstr);
+
 	/* Create kafka instance */
 	rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
 	if (!rk)
@@ -359,7 +364,7 @@ static void consume_messages_callback_multi (const char *desc,
                          desc, i, partition, initial_offset);
 
                 /* Consume messages */
-                if (rd_kafka_consume_start(rkt, partition, initial_offset) == 1)
+                if (rd_kafka_consume_start(rkt, partition, initial_offset) == -1)
                         TEST_FAIL("%s: consume_start(%i) failed: %s",
                                   desc, (int)partition,
                                   rd_kafka_err2str(rd_kafka_errno2err(errno)));
@@ -367,8 +372,10 @@ static void consume_messages_callback_multi (const char *desc,
 
                 /* Stop consuming messages when this number of messages
                  * is reached. */
-                TEST_SAY("%s: Consume message range %d .. %d, or to %d + %d\n",
-                         desc, cons_msg_next, cons_msg_stop, msg_base, msg_cnt);
+                TEST_SAY("%s: %s: "
+                         "Consume message range %d .. %d, or to %d + %d\n",
+                         desc, rd_kafka_name(rk),
+                         cons_msg_next, cons_msg_stop, msg_base, msg_cnt);
                 cnta = cons_msg_next;
                 do {
                         rd_kafka_consume_callback(rkt, partition, 1000,

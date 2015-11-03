@@ -118,7 +118,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "A comma-separated list of debug contexts to enable: "
 	  RD_KAFKA_DEBUG_CONTEXTS,
 	  .s2i = {
-			{ RD_KAFKA_DBG_GENERIC,  "generic" },
+                        { RD_KAFKA_DBG_GENERIC,  "generic" },
 			{ RD_KAFKA_DBG_BROKER,   "broker" },
 			{ RD_KAFKA_DBG_TOPIC,    "topic" },
 			{ RD_KAFKA_DBG_METADATA, "metadata" },
@@ -126,6 +126,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ RD_KAFKA_DBG_QUEUE,    "queue" },
 			{ RD_KAFKA_DBG_MSG,      "msg" },
 			{ RD_KAFKA_DBG_PROTOCOL, "protocol" },
+                        { RD_KAFKA_DBG_CGRP,     "cgrp" },
 			{ RD_KAFKA_DBG_ALL,      "all" },
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
@@ -209,6 +210,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "opaque", _RK_C_PTR,
 	  _RK(opaque),
 	  "Application opaque (set with rd_kafka_conf_set_opaque())" },
+        { _RK_GLOBAL, "default_topic_conf", _RK_C_PTR,
+          _RK(topic_conf),
+          "Default topic configuration for automatically subscribed topics" },
 	{ _RK_GLOBAL, "internal.termination.signal", _RK_C_INT,
 	  _RK(term_sig),
 	  "Signal that librdkafka will use to quickly terminate on "
@@ -266,8 +270,37 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif /* WITH_SSL */
 	  
 
-	
-	/* Global consumer properties */
+        /* Global client group properties */
+        { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,
+          _RK(group_id_str),
+          "Client group id string. All clients sharing the same group.id "
+          "belong to the same group." },
+        { _RK_GLOBAL|_RK_CGRP, "partition.assignment.strategy", _RK_C_STR,
+          _RK(partition_assignment_strategy),
+          "Name of partition assignment strategy to use when elected "
+          "group leader assigns partitions to group members.",
+          .sdef = "range" },
+        { _RK_GLOBAL|_RK_CGRP, "session.timeout.ms", _RK_C_INT,
+          _RK(group_session_timeout_ms),
+          "Client group session and failure detection timeout.",
+          1, 3600*1000, 30*1000 },
+        { _RK_GLOBAL|_RK_CGRP, "heartbeat.interval.ms", _RK_C_INT,
+          _RK(group_heartbeat_intvl_ms),
+          "Group session keepalive heartbeat interval.",
+          1, 3600*1000, 1*1000 },
+        { _RK_GLOBAL|_RK_CGRP, "group.protocol.type", _RK_C_KSTR,
+          _RK(group_protocol_type),
+          "Group protocol type",
+          .sdef = "consumer" },
+        { _RK_GLOBAL|_RK_CGRP, "coordinator.query.interval.ms", _RK_C_INT,
+          _RK(coord_query_intvl_ms),
+          "How often to query for the current client group coordinator. "
+          "If the currently assigned coordinator is down the configured "
+          "query interval will be divided by ten to more quickly recover "
+          "in case of coordinator reassignment.",
+          1, 3600*1000, 10*60*1000 },
+
+        /* Global consumer properties */
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
 	  _RK(queued_min_msgs),
 	  "Minimum number of messages per topic+partition in the "
@@ -300,12 +333,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "How long to postpone the next fetch request for a "
 	  "topic+partition in case of a fetch error.",
 	  0, 300*1000, 500 },
-        { _RK_GLOBAL|_RK_CONSUMER, "group.id", _RK_C_STR,
-          _RK(group_id_str),
-          "Consumer group id string. All clients sharing the same group.id "
-          "belong to the same consumer group." },
-
-
 
 	/* Global producer properties */
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.messages", _RK_C_INT,
@@ -355,8 +382,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "dr_msg_cb", _RK_C_PTR,
 	  _RK(dr_msg_cb),
 	  "Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())" },
+	{ _RK_GLOBAL|_RK_CONSUMER, "consume_cb", _RK_C_PTR,
+	  _RK(consume_cb),
+	  "Message consume callback (set with rd_kafka_conf_set_consume_cb())"},
+	{ _RK_GLOBAL|_RK_CONSUMER, "rebalance_cb", _RK_C_PTR,
+	  _RK(rebalance_cb),
+	  "Called after consumer group has been rebalanced "
+          "(set with rd_kafka_conf_set_rebalance_cb())" },
 
-	/*
+
+        /*
          * Topic properties
          */
 
@@ -410,11 +445,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
 
         /* Topic consumer properties */
-        { _RK_TOPIC|_RK_CONSUMER, "group.id", _RK_C_STR,
-          _RKT(group_id_str),
-          "Consumer group id string. All clients sharing the same group.id "
-          "belong to the same consumer group. This takes precedence over "
-          "the global group.id." },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.enable", _RK_C_BOOL,
 	  _RKT(auto_commit),
 	  "If true, periodically commit offset of the last message handed "
@@ -465,8 +495,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Offset commit store method: "
           "'file' - local file store (offset.store.path, et.al), "
           "'broker' - broker commit store "
-          "(requires Apache Kafka 0.8.1 or later on the broker).",
-          .vdef = RD_KAFKA_OFFSET_METHOD_FILE,
+          "(requires Apache Kafka 0.8.2 or later on the broker).",
+          .vdef = RD_KAFKA_OFFSET_METHOD_BROKER, /* FIXME: warn about default change */
           .s2i = {
                         { RD_KAFKA_OFFSET_METHOD_FILE, "file" },
                         { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
@@ -887,6 +917,22 @@ void rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
 }
 
 
+void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
+                                   void (*consume_cb) (rd_kafka_message_t *
+                                                       rkmessage,
+                                                       void *opaque)) {
+        conf->consume_cb = consume_cb;
+}
+
+void rd_kafka_conf_set_rebalance_cb (
+        rd_kafka_conf_t *conf,
+        void (*rebalance_cb) (rd_kafka_t *rk,
+                              rd_kafka_resp_err_t err,
+                              const rd_kafka_topic_partition_list_t *partitions,
+                              void *opaque)) {
+        conf->rebalance_cb = rebalance_cb;
+}
+
 
 void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 				 void  (*error_cb) (rd_kafka_t *rk, int err,
@@ -932,6 +978,14 @@ void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 	conf->opaque = opaque;
 }
 
+
+void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
+                                           rd_kafka_topic_conf_t *tconf) {
+        if (conf->topic_conf)
+                rd_kafka_topic_conf_destroy(conf->topic_conf);
+
+        conf->topic_conf = tconf;
+}
 
 
 void

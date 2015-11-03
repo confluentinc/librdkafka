@@ -53,6 +53,10 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_OffsetCommit  8
 #define RD_KAFKAP_OffsetFetch   9
 #define RD_KAFKAP_ConsumerMetadata 10
+#define RD_KAFKAP_JoinGroup     11
+#define RD_KAFKAP_Heartbeat     12
+#define RD_KAFKAP_LeaveGroup    13
+#define RD_KAFKAP_SyncGroup     14
 	int16_t  ApiVersion;
 	int32_t  CorrId;
 	/* ClientId follows */
@@ -82,7 +86,11 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 		[RD_KAFKAP_StopReplica] = "StopReplica",
 		[RD_KAFKAP_OffsetCommit] = "OffsetCommit",
 		[RD_KAFKAP_OffsetFetch] = "OffsetFetch",
-		[RD_KAFKAP_ConsumerMetadata] = "ConsumerMetadata"
+		[RD_KAFKAP_ConsumerMetadata] = "ConsumerMetadata",
+                [RD_KAFKAP_JoinGroup] = "JoinGroup",
+                [RD_KAFKAP_Heartbeat] = "Heartbeat",
+                [RD_KAFKAP_LeaveGroup] = "LeaveGroup",
+                [RD_KAFKAP_SyncGroup] = "SyncGroup"
 	};
 	static RD_TLS char ret[32];
 

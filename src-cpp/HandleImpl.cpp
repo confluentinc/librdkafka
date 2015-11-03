@@ -99,6 +99,38 @@ int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
   return handle->open_cb_->open_cb(pathname, flags, static_cast<int>(mode));
 }
 
+
+/**
+ * Convert a list of C partitions to C++ partitions
+ */
+static void c_parts_to_partitions (const rd_kafka_topic_partition_list_t
+                                   *c_parts,
+                                   std::vector<RdKafka::TopicPartition*>
+                                   &partitions) {
+  partitions.resize(c_parts->cnt);
+  for (int i = 0 ; i < c_parts->cnt ; i++)
+    partitions[i] = new RdKafka::TopicPartitionImpl(&c_parts->elems[i]);
+}
+
+void
+RdKafka::rebalance_cb_trampoline (rd_kafka_t *rk,
+                                  rd_kafka_resp_err_t err,
+                                  const rd_kafka_topic_partition_list_t
+                                  *c_partitions,
+                                  void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+  std::vector<RdKafka::TopicPartition*> partitions;
+
+  c_parts_to_partitions(c_partitions, partitions);
+
+  handle->rebalance_cb_->rebalance_cb(static_cast<RdKafka::ErrorCode>(err),
+                                      partitions);
+  for (unsigned int i = 0 ; i < partitions.size() ; i++)
+    delete partitions[i];
+  partitions.clear();
+}
+
+
 void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
 
   rd_kafka_conf_set_opaque(confimpl->rk_conf_, this);
@@ -124,4 +156,9 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
 #endif
   }
 
+  if (confimpl->rebalance_cb_) {
+    rd_kafka_conf_set_rebalance_cb(confimpl->rk_conf_,
+                                   RdKafka::rebalance_cb_trampoline);
+    rebalance_cb_ = confimpl->rebalance_cb_;
+  }
 }

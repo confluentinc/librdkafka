@@ -30,499 +30,1589 @@
 #include "rdkafka_request.h"
 #include "rdkafka_broker.h"
 #include "rdkafka_offset.h"
+#include "rdkafka_topic.h"
+#include "rdkafka_partition.h"
 
 
-rd_kafka_resp_err_t
-rd_kafka_ConsumerMetadataResponse_handle (rd_kafka_broker_t *rkb,
-				   rd_kafka_buf_t *rkbuf,
-                                   int32_t *coordidp) {
-        const int log_decode_errors = 1;
-        int16_t ErrorCode = RD_KAFKA_RESP_ERR_UNKNOWN;
-        int32_t CoordId;
-        rd_kafkap_str_t CoordHost;
-        int32_t CoordPort;
-        struct rd_kafka_metadata_broker mdb = RD_ZERO_INIT;
+/**
+ * Kafka protocol request and response handling.
+ * All of this code runs in the broker thread and uses op queues for
+ * propagating results back to the various sub-systems operating in
+ * other threads.
+ */
 
-	rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
-        rd_kafka_buf_read_i32(rkbuf, &CoordId);
-        rd_kafka_buf_read_str(rkbuf, &CoordHost);
-        rd_kafka_buf_read_i32(rkbuf, &CoordPort);
+#define RD_KAFKA_ERR_ACTION_PERMANENT   0x1 /* Permanent error */
+#define RD_KAFKA_ERR_ACTION_IGNORE      0x2 /* Error can be ignored */
+#define RD_KAFKA_ERR_ACTION_REFRESH     0x4 /* Refresh state (e.g., metadata) */
+#define RD_KAFKA_ERR_ACTION_INFORM      0x8 /* Inform application about err */
 
-        printf("CoordId %"PRId32"\n", CoordId);
-        if (ErrorCode) {
-                rd_rkb_dbg(rkb, CONSUMER, "METADATA",
-                           "ConsumerMetadata error: %s",
-			   rd_kafka_err2str(ErrorCode));
+static int rd_kafka_err_action (rd_kafka_broker_t *rkb,
+                                rd_kafka_resp_err_t err,
+                                rd_kafka_buf_t *rkbuf,
+                                rd_kafka_buf_t *request) {
+        int actions = 0;
 
-        } else {
-                mdb.id = CoordId;
-                mdb.host = RD_KAFKAP_STR_DUPA(&CoordHost);
-                mdb.port = CoordPort;
+        if (err && rkb && request)
+                rd_rkb_dbg(rkb, BROKER, "REQERR",
+                           "%sRequest failed: %s",
+                           rd_kafka_ApiKey2str(request->rkbuf_reqhdr.ApiKey),
+                           rd_kafka_err2str(err));
 
-                rd_rkb_dbg(rkb, CONSUMER, "METADATA",
-                           "ConsumerMetadata: kafka://%s:%i/?id=%"PRId32,
-                           mdb.host, mdb.port, mdb.id);
-                rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto, &mdb);
+        // FIXME: ILLEGAL_GENERATION
+        switch (err)
+        {
+        case RD_KAFKA_RESP_ERR_NO_ERROR:
+                break;
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+        case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
+        case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_CONSUMER_COORDINATOR_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_CONSUMER:
+                /* Request metadata information update */
+                actions |= RD_KAFKA_ERR_ACTION_REFRESH;
+                break;
+        default:
+                actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
+                break;
         }
 
-        *coordidp = CoordId;
-        return 0;
+        return actions;
+}
+
+
+static void rd_kafka_assignor_handle_Metadata (rd_kafka_broker_t *rkb,
+                                               rd_kafka_resp_err_t err,
+                                               rd_kafka_buf_t *rkbuf,
+                                               rd_kafka_buf_t *request,
+                                               void *opaque);
+
+/**
+ * Send ConsumerMetadataRequest
+ */
+void rd_kafka_ConsumerMetadataRequest (rd_kafka_broker_t *rkb,
+                                       const rd_kafkap_str_t *cgrp,
+                                       rd_kafka_q_t *replyq,
+                                       rd_kafka_resp_cb_t *resp_cb,
+                                       void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+
+        rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1, 0);
+        rd_kafka_buf_push_kstr(rkbuf, cgrp);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_ConsumerMetadata,
+                                       rkbuf, replyq, resp_cb, opaque);
+}
+
+
+
+
+
+
+
+/**
+ * Parses and handles Offset replies.
+ * Returns the parsed Offset in '*Offsetp'.
+ * Returns 0 on success, else an error.
+ */
+static rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_broker_t *rkb,
+                                                   rd_kafka_resp_err_t err,
+                                                   rd_kafka_buf_t *rkbuf,
+                                                   rd_kafka_buf_t *request,
+                                                   rd_kafka_toppar_t *rktp,
+                                                   int64_t *Offsetp) {
+        const int log_decode_errors = 1;
+        int16_t ErrorCode = 0;
+        int32_t TopicArrayCnt;
+        int64_t Offset = -1;
+        int hit = 0;
+        int actions;
+
+        if (err) {
+                ErrorCode = err;
+                goto err;
+        }
+
+        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
+        while (TopicArrayCnt-- > 0) {
+                rd_kafkap_str_t topic;
+                int32_t PartArrayCnt;
+
+                rd_kafka_buf_read_str(rkbuf, &topic);
+                rd_kafka_buf_read_i32(rkbuf, &PartArrayCnt);
+
+                while (PartArrayCnt-- > 0) {
+                        int32_t partition;
+                        int32_t OffsetArrayCnt;
+                        int correct_partition;
+
+                        rd_kafka_buf_read_i32(rkbuf, &partition);
+                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+                        rd_kafka_buf_read_i32(rkbuf, &OffsetArrayCnt);
+
+                        correct_partition =
+                                !rd_kafkap_str_cmp(&topic,
+                                                   rktp->rktp_rkt->rkt_topic) &&
+                                partition == rktp->rktp_partition;
+
+                        while (OffsetArrayCnt-- > 0) {
+                                rd_kafka_buf_read_i64(rkbuf, &Offset);
+
+                                if (correct_partition) {
+                                        hit = 1;
+                                        goto done;
+                                }
+                        }
+                }
+        }
+
 err:
+        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                /* Re-query for coordinator */
+                rd_kafka_broker_metadata_req(rktp->rktp_leader, 0,
+                                             rktp->rktp_rkt, NULL,
+                                             "Offset request failed");
+                /* Schedule a retry */
+                rd_kafka_buf_keep(request);
+                rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+                return RD_KAFKA_RESP_ERR__IN_PROGRESS;
+        }
+
+done:
+        if (!ErrorCode && !hit)
+                ErrorCode = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+
+        if (!ErrorCode)
+                *Offsetp = Offset;
+
         return ErrorCode;
 }
 
 
-rd_kafka_buf_t *rd_kafka_ConsumerMetadataRequest (rd_kafka_t *rk,
-                                                  const rd_kafkap_str_t *cgrp) {
-        rd_kafka_buf_t *rkbuf;
-
-        rkbuf = rd_kafka_buf_new(1, 0);
-        rd_kafka_buf_push_kstr(rkbuf, cgrp);
-
-        return rkbuf;
-}
-
-#if 0
-static void route_reply (rd_kafka_broker_t *rkb,
-                         rd_kafka_resp_err_t err,
-                         rd_kafka_buf_t *reply,
-                         rd_kafka_buf_t *request,
-                         void *opaque) {
-        rd_kafka_q_t *replyq = opaque;
-        rd_kafka_op_t *rko;
-
-        rko = rd_kafka_op_new(RD_KAFKA_OP_REPLY);
-
-        rko->rko_err = err;
-        if (reply) {
-                rko->rko_rkbuf = reply;
-                rd_kafka_buf_keep(reply);
-        }
-
-        printf("route reply on %p ref %i\n",
-               replyq, rd_atomic32_get(&replyq->rkq_refcnt));
-        rd_kafka_q_enq(replyq, rko);
-        rd_kafka_q_destroy(replyq);
-}
-#endif
-
-void rd_kafka_OffsetCommitResponse (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
-        const int log_decode_errors = 1;
-        int32_t TopicCount;
-        int i;
-
-        /*
-OffsetCommitResponse => [TopicName [Partition ErrorCode]]]
-  TopicName => string
-  Partition => int32
-  ErrorCode => int16
-        */
-
-        rd_kafka_buf_read_i32(rkbuf, &TopicCount);
-
-        for (i = 0 ; i < TopicCount ; i++) {
-                rd_kafkap_str_t Topic;
-                int32_t PartitionCount;
-                int j;
-
-                rd_kafka_buf_read_str(rkbuf, &Topic);
-                rd_kafka_buf_read_i32(rkbuf, &PartitionCount);
-
-                for (j = 0 ; j < PartitionCount ; j++) {
-                        int32_t Partition;
-                        int16_t ErrorCode;
-                        rd_kafka_buf_read_i32(rkbuf, &Partition);
-                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
-
-                        printf("OffsetCommitResponse: %.*s[%"PRId32"] error %s\n",
-                               RD_KAFKAP_STR_PR(&Topic), Partition,
-                               rd_kafka_err2str(ErrorCode));
-                }
-        }
-        return;
-err:
-        return;
-}
-
-#if 0
 /**
- * Commit offsets for all toppars handled by this cgrp.
+ * Toppar based OffsetResponse handling.
+ * This is used for finding the next offset to Fetch.
  */
-rd_kafka_buf_t *rd_kafka_OffsetCommitRequest (rd_kafka_cgrp_t *rkcg,
-                                              int version) {
-        rd_kafka_buf_t *rkbuf;
-        const rd_kafkap_str_t null_str = RD_KAFKAP_STR_INIT_NULL;
-        const rd_kafkap_str_t *metadata = &null_str;
-        rd_kafka_topic_t *last_rkt = NULL;
-        rd_kafka_offsets_t *rkoff;
-        int32_t cgrpgenid = -1; // FIXME
-        int64_t timestamp = 0; // FIXME
+void rd_kafka_toppar_handle_Offset (rd_kafka_broker_t *rkb,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_buf_t *rkbuf,
+                                    rd_kafka_buf_t *request,
+                                    void *opaque) {
+        shptr_rd_kafka_toppar_t *s_rktp = opaque;
+        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
+        int64_t Offset;
 
-        rd_kafka_cgrp_lock(rkcg);
+        /* Parse and return Offset */
+        err = rd_kafka_handle_Offset(rkb, err, rkbuf, request, rktp, &Offset);
 
-        rkbuf = rd_kafka_buf_new_growable(1,
-                                          /* Arbitrary */
-                                          128 +
-                                          (rkcg->rkcg_topic_cnt * 128) +
-                                          (rkcg->rkcg_offsets_cnt * 64));
+        if (err) {
+                rd_kafka_op_t *rko;
 
-        rd_kafka_buf_version_set(rkbuf, version);
+                rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+                           "Offset reply error for "
+                           "topic %.*s [%"PRId32"]: %s",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition, rd_kafka_err2str(err));
 
-        rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_name);
-        if (version >= 1) {
-                rd_kafka_buf_write_i32(rkbuf, cgrpgenid);
-                rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_rk->rk_conf.client_id);
-        }
+                /* Keep querying, but back off a bit to avoid busy looping. */
+                rd_interval_backoff(&rktp->rktp_offset_query_intvl,
+                                    500*1000 /* 500ms */);
 
-        if (version >= 2)
-                rd_kafka_buf_write_i64(rkbuf, timestamp); /* RetentionTime */
+                rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 
-        rd_kafka_buf_write_i32(rkbuf, rkcg->rkcg_topic_cnt);
-        LIST_FOREACH(rkoff, &rkcg->rkcg_offsets, rkoff_link) {
-                rd_kafka_topic_t *rkt = rkoff->rkoff_rkt;
-                if (rkt != last_rkt) {
-                        rd_kafka_buf_write_kstr(rkbuf, rkt->rkt_topic);
-                        rd_kafka_buf_write_i32(rkbuf,
-                                               rd_atomic32_get(&rkt->rkt_offsets_cnt));
-                        last_rkt = rkt;
+                /* Signal error back to application,
+                 * unless this is an intermittent problem
+                 * (e.g.,connection lost) */
+                if (err != RD_KAFKA_RESP_ERR__TRANSPORT) {
+                        rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
+                        rko->rko_err = err;
+                        if (rktp->rktp_query_offset <=
+                            RD_KAFKA_OFFSET_TAIL_BASE)
+                                rko->rko_rkmessage.offset =
+                                        rktp->rktp_query_offset -
+                                        RD_KAFKA_OFFSET_TAIL_BASE;
+                        else
+                                rko->rko_rkmessage.offset =
+                                        rktp->rktp_query_offset;
+                        rko->rko_rkmessage.rkt =
+                                rd_kafka_topic_keep_a(rktp->rktp_rkt);
+                        rko->rko_rkmessage.partition = rktp->rktp_partition;
+
+                        rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
                 }
-                rd_kafka_buf_write_i32(rkbuf, rkoff->rkoff_partition);
-                rd_kafka_buf_write_i64(rkbuf,
-                                       rd_atomic64_get(&rkoff->rkoff_stored));
-                if (version == 1)
-                        rd_kafka_buf_write_i64(rkbuf, timestamp);
-                rd_kafka_buf_write_kstr(rkbuf, metadata);
+
+                rd_kafka_toppar_destroy(s_rktp); /* from request.opaque */
+                return;
         }
 
-        rd_kafka_buf_autopush(rkbuf);
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
+                     "Offset %"PRId64" request for %.*s [%"PRId32"] "
+                     "returned offset %"PRId64,
+                     rktp->rktp_query_offset,
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition, Offset);
 
-        return rkbuf;
+        rd_kafka_toppar_next_offset_handle(rktp, Offset);
+
+        rd_kafka_toppar_destroy(s_rktp); /* from request.opaque */
+}
+
+
+/**
+ * Toppar based OffsetResponse handling.
+ * This is used for updating the low water mark for consumer lag.
+ */
+void rd_kafka_toppar_lag_handle_Offset (rd_kafka_broker_t *rkb,
+                                        rd_kafka_resp_err_t err,
+                                        rd_kafka_buf_t *rkbuf,
+                                        rd_kafka_buf_t *request,
+                                        void *opaque) {
+        shptr_rd_kafka_toppar_t *s_rktp = opaque;
+        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
+        int64_t Offset;
+
+        /* Parse and return Offset */
+        err = rd_kafka_handle_Offset(rkb, err, rkbuf, request, rktp, &Offset);
+
+
+        if (!err)
+                rktp->rktp_lo_offset = Offset;
+
+        rd_kafka_toppar_destroy(s_rktp); /* from request.opaque */
 }
 
 
 
-void rd_kafka_cgrp_OffsetFetchResponse (rd_kafka_buf_t *rkbuf, void *opaque) {
-        rd_kafka_broker_t *rkb = rkbuf->rkbuf_rkb;
-        rd_kafka_cgrp_t *rkcg = opaque;
+/**
+ * Send OffsetRequest for toppar 'rktp'.
+ */
+void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
+                             rd_kafka_toppar_t *rktp,
+                             int64_t query_offset,
+                             rd_kafka_q_t *replyq,
+                             rd_kafka_resp_cb_t *resp_cb,
+                             void *opaque) {
+	rd_kafka_buf_t *rkbuf;
+
+	rkbuf = rd_kafka_buf_new(rkb->rkb_rk,
+                                 3,/*Header,topic,subpart*/
+				 /* ReplicaId+TopicArrayCnt */
+				 4+4 +
+				 /* Topic (pushed) */
+				 /* PartArrayCnt+Partition+Time+MaxNumOffs */
+				 4+4+8+4);
+
+	/* ReplicaId */
+	rd_kafka_buf_write_i32(rkbuf, -1);
+	/* TopicArrayCnt */
+	rd_kafka_buf_write_i32(rkbuf, 1);
+	rd_kafka_buf_autopush(rkbuf);
+
+	/* Topic */
+	rd_kafka_buf_push_kstr(rkbuf, rktp->rktp_rkt->rkt_topic);
+
+	/* PartitionArrayCnt */
+	rd_kafka_buf_write_i32(rkbuf, 1);
+	/* Partition */
+	rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
+	/* Time/Offset */
+	rd_kafka_buf_write_i64(rkbuf, query_offset);
+	/* MaxNumberOfOffsets */
+	rd_kafka_buf_write_i32(rkbuf, 1);
+	rd_kafka_buf_autopush(rkbuf);
+
+	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+		   "OffsetRequest (%"PRId64") for topic %s [%"PRId32"]",
+                   query_offset,
+                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+
+	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Offset,
+                                       rkbuf, replyq, resp_cb, opaque);
+}
+
+
+/**
+ * Generic handler for OffsetFetch responses.
+ * Offsets for included partitions will be propagated through
+ * the rktp_ops queue.
+ */
+void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
+                                  rd_kafka_resp_err_t err,
+                                  rd_kafka_buf_t *rkbuf,
+                                  rd_kafka_buf_t *request,
+                                  rd_kafka_toppar_t *rktp,
+                                  rd_kafka_op_t *rko_reply) {
         const int log_decode_errors = 1;
-        size_t of = 0;
-        int32_t TopicCount;
-        rd_kafka_resp_err_t err = rkbuf->rkbuf_err;
+        int32_t TopicArrayCnt;
+        int64_t offset = -1;
+        int hit = 0;
+        int16_t ErrorCode = 0;
+        rd_kafkap_str_t metadata;
         int i;
+        int actions;
 
-        /*
-OffsetFetchResponse => [TopicName [Partition Offset Metadata ErrorCode]]
-  TopicName => string
-  Partition => int32
-  Offset => int64
-  Metadata => string
-  ErrorCode => int16
-        */
-
-        printf("%s: OffsetFetchResp err %s\n", rkb->rkb_name, rd_kafka_err2str(err));
-        rd_kafka_cgrp_lock(rkcg);
-
-        if (err)
+        if (err) {
+                ErrorCode = err;
                 goto err;
+        }
 
-        rd_kafka_buf_read_i32(rkbuf, &TopicCount);
-
-        for (i = 0 ; i < TopicCount ; i++) {
-                rd_kafkap_str_t *Topic;
-                int32_t PartitionCount;
+        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
+        for (i = 0 ; i < TopicArrayCnt ; i++) {
+                rd_kafkap_str_t topic;
+                int32_t PartArrayCnt;
                 int j;
 
-                rd_kafka_buf_read_str(rkbuf, Topic);
-                rd_kafka_buf_read_i32(rkbuf, &PartitionCount);
+                rd_kafka_buf_read_str(rkbuf, &topic);
+                rd_kafka_buf_read_i32(rkbuf, &PartArrayCnt);
 
-                for (j = 0 ; j < PartitionCount ; j++) {
-                        int32_t Partition;
-                        int64_t Offset;
-                        int16_t ErrorCode;
-                        rd_kafkap_str_t *Metadata;
-                        rd_kafka_offsets_t *rkoff;
+                for (j = 0 ; j < PartArrayCnt ; i++) {
+                        int32_t partition;
 
-                        rd_kafka_buf_read_i32(rkbuf, &Partition);
-                        rd_kafka_buf_read_i64(rkbuf, &Offset);
-                        rd_kafka_buf_read_str(rkbuf, Metadata);
+                        rd_kafka_buf_read_i32(rkbuf, &partition);
+                        rd_kafka_buf_read_i64(rkbuf, &offset);
+                        rd_kafka_buf_read_str(rkbuf, &metadata);
                         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
-
-                        printf("OffsetFetchResponse: %.*s[%"PRId32"]: Offset %"PRId64
-                               ", Metadata \"%.*s\", error %s\n",
-                               RD_KAFKAP_STR_PR(Topic), Partition, Offset,
-                               RD_KAFKAP_STR_PR(Metadata), rd_kafka_err2str(ErrorCode));
-
-                        rkoff = rd_kafka_cgrp_offsets_find(rkcg,
-                                                           Topic, Partition);
-                        if (!rkoff)
+                        if (rd_kafkap_str_cmp(&topic,
+                                              rktp->rktp_rkt->rkt_topic) ||
+                            partition != rktp->rktp_partition) {
+                                /* Received offset for topic/partition we didn't
+                                 * ask for, this shouldn't really happen. */
                                 continue;
-
-                        if (ErrorCode) {
-                                /* FIXME: What to do here? */
-                                rd_kafka_offsets_reset(rkoff, ErrorCode);
-
-                        } else {
-                                if (Offset == -1)
-                                        rd_kafka_offsets_reset(rkoff, 0);
-                                else
-                                        rd_kafka_offsets_set_start(rkoff,
-                                                                   Offset);
                         }
+
+                        /* Found our offset, form reply. */
+                        hit = 1;
+                        goto done;
                 }
         }
 
-        /* Serve offsets (since their state might have changed) */
-        rd_kafka_cgrp_offsets_serve(rkcg);
 
-        rd_kafka_cgrp_unlock(rkcg);
-        return;
 err:
-        printf("OffsetFetchResponse: Error: %s\n", rd_kafka_err2str(err));
-        rd_kafka_cgrp_unlock(rkcg);
-        return;
+        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                /* Re-query for coordinator */
+                rd_kafka_cgrp_op(rkb->rkb_rk->rk_cgrp, rktp,
+                                 NULL, RD_KAFKA_OP_COORD_QUERY, ErrorCode);
+                /* Schedule a retry */
+                rd_kafka_buf_keep(request);
+                rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+                return;
+        }
+
+done:
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
+                     "OffsetFetch for %.*s [%"PRId32"] returned offset %"PRId64
+                     "%s: %s",
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition,
+                     offset, hit ? "":" (not seen in reply)",
+                     rd_kafka_err2str(ErrorCode));
+        rko_reply->rko_rktp = rd_kafka_toppar_keep(rktp);
+        rko_reply->rko_offset = hit ? offset : -1;
+        rko_reply->rko_err = ErrorCode;
+        if (!hit || RD_KAFKAP_STR_IS_NULL(&metadata))
+                rko_reply->rko_payload = NULL;
+        else {
+                rko_reply->rko_flags |= RD_KAFKA_OP_F_FREE;
+                rko_reply->rko_payload = RD_KAFKAP_STR_DUP(&metadata);
+                rko_reply->rko_len = RD_KAFKAP_STR_LEN(&metadata);
+        }
 }
 
 
 /**
- * Fetch offsets for active toppars in cgrp.
- * If 'all' is set then offsets are fetched for all active toppars,
- * else just for those we dont currently have an offset for.
+ * opaque=rktp wrapper for handle_OffsetFetch.
  *
- * NOTE: lock(rkcg) MUST be held.
+ * Locality: rktp's broker thread
  */
-rd_kafka_buf_t *rd_kafka_OffsetFetchRequest (rd_kafka_cgrp_t *rkcg, int version,
-                                             int all) {
-        rd_kafka_buf_t *rkbuf;
-        rd_kafka_offsets_t *rkoff;
-        rd_kafka_topic_t *last_rkt = NULL;
-        int topic_cnt_of = -1, part_cnt_of = -1;
-        int topic_cnt = 0, part_cnt = 0;
+void rd_kafka_toppar_handle_OffsetFetch (rd_kafka_broker_t *rkb,
+                                         rd_kafka_resp_err_t err,
+                                         rd_kafka_buf_t *rkbuf,
+                                         rd_kafka_buf_t *request,
+                                         void *opaque) {
+        rd_kafka_toppar_t *rktp = opaque;
+        rd_kafka_op_t *rko_reply;
 
-        rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "OFFETCH",
-                     "Consumer group \"%.*s\": OffsetFetch (v%d, all=%d) for %d toppars",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_name),
-                     version, all, rkcg->rkcg_offsets_cnt);
+        rko_reply = rd_kafka_op_new(RD_KAFKA_OP_OFFSET);
+        /* NOTE: This is only safe in the rktp's broker thread. */
+        rko_reply->rko_version = rktp->rktp_op_version;
+        rd_kafka_handle_OffsetFetch(rkb, err, rkbuf, request, rktp, rko_reply);
+        rd_kafka_q_enq(&rktp->rktp_ops, rko_reply);
+}
 
-        rkbuf = rd_kafka_buf_new_growable(1,
-                                          /* Arbitrary */
-                                          RD_KAFKAP_STR_SIZE(rkcg->rkcg_name) +
-                                          (rkcg->rkcg_topic_cnt * 64) +
-                                          (rkcg->rkcg_offsets_cnt * 4));
-        rd_kafka_buf_version_set(rkbuf, version);
+
+/**
+ * opaque=rko wrapper for handle_OffsetFetch.
+ *
+ * Locality: cgrp's broker thread
+ */
+void rd_kafka_op_handle_OffsetFetch (rd_kafka_broker_t *rkb,
+                                     rd_kafka_resp_err_t err,
+                                     rd_kafka_buf_t *rkbuf,
+                                     rd_kafka_buf_t *request,
+                                     void *opaque) {
+        rd_kafka_op_t *rko = opaque;
+        rd_kafka_op_t *rko_reply;
+        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+
+        rko_reply = rd_kafka_op_new(RD_KAFKA_OP_OFFSET);
+        rko_reply->rko_version = rko->rko_version;
+        rd_kafka_handle_OffsetFetch(rkb, err, rkbuf, request, rktp, rko_reply);
+        rd_kafka_q_enq(rko->rko_replyq, rko_reply);
+        rd_kafka_op_destroy(rko);
+}
+
+
+
+
+
+/**
+ * Send OffsetFetchRequest for toppar.
+ */
+void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
+                                  rd_kafka_toppar_t *rktp,
+                                  int16_t api_version,
+                                  rd_kafka_q_t *replyq,
+                                  rd_kafka_resp_cb_t *resp_cb,
+                                  void *opaque) {
+	rd_kafka_buf_t *rkbuf;
+
+	rkbuf = rd_kafka_buf_new(rkb->rkb_rk,
+                                 1,
+                                 /* How much memory to allocate for buffer: */
+                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_rk->
+                                                    rk_conf.group_id) +
+                                 4 +
+                                 RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->rkt_topic) +
+                                 4 + 4);
+
 
         /* ConsumerGroup */
-        rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_name);
+        rd_kafka_buf_write_kstr(rkbuf, rktp->rktp_rkt->rkt_rk->
+                                rk_conf.group_id);
+        /* TopicArrayCnt */
+        rd_kafka_buf_write_i32(rkbuf, 1);
+        /* TopicName */
+        rd_kafka_buf_write_kstr(rkbuf, rktp->rktp_rkt->rkt_topic);
+        /* PartitionArrayCnt */
+        rd_kafka_buf_write_i32(rkbuf, 1);
+        /* Partition */
+        rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
 
-        /* Topic count (will be updated later) */
-        topic_cnt_of = rd_kafka_buf_write_i32(rkbuf, 0);
-
-        LIST_FOREACH(rkoff, &rkcg->rkcg_offsets, rkoff_link) {
-                if (!all && rd_atomic64_get(&rkoff->rkoff_committed) != -1) {
-                        rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "OFFETCH",
-                                     "Consumer group \"%.*s\": "
-                                     "not fetching offset for "
-                                     "%.*s [%"PRId32"]: already active "
-                                     "(committed offset %"PRId64")",
-                                     RD_KAFKAP_STR_PR(rkcg->rkcg_name),
-                                     RD_KAFKAP_STR_PR(rkoff->rkoff_rkt->rkt_topic),
-                                     rkoff->rkoff_partition,
-                                     rd_atomic64_get(&rkoff->rkoff_committed));
-                        continue;
-                }
-
-                if (last_rkt != rkoff->rkoff_rkt) {
-                        if (part_cnt_of != -1) {
-                                /* Update latest Partition count */
-                                rd_kafka_buf_update_i32(rkbuf, part_cnt_of,
-                                                        part_cnt);
-                                part_cnt = 0;
-                        }
-                        topic_cnt++;
-                        last_rkt = rkoff->rkoff_rkt;
-
-                        /* Topic name */
-                        rd_kafka_buf_write_kstr(rkbuf,
-                                                rkoff->rkoff_rkt->rkt_topic);
-
-                        /* Partition count (will be updated later) */
-                        part_cnt_of = rd_kafka_buf_write_i32(rkbuf, 0);
-                }
-
-                /* Partition */
-                rd_kafka_buf_write_i32(rkbuf, rkoff->rkoff_partition);
-                part_cnt++;
-        }
-
-        printf("OffsetFetchRequest: %i topics, %i partitions\n", topic_cnt, part_cnt);
-        if (!topic_cnt) {
-                /* No toppars to fetch offsets for. */
-                rd_kafka_buf_destroy(rkbuf);
-                return NULL;
-        }
-
-        /* Update latest Partition count */
-        if (part_cnt)
-                rd_kafka_buf_update_i32(rkbuf, part_cnt_of, part_cnt);
-
-        /* Update Topic count */
-        rd_kafka_buf_update_i32(rkbuf, topic_cnt_of, topic_cnt);
-
+        /* Push write-buffer onto iovec stack */
         rd_kafka_buf_autopush(rkbuf);
 
-        return rkbuf;
+        rd_kafka_buf_version_set(rkbuf, api_version);
+
+	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+		   "OffsetFetchRequest(v%d) for topic %s [%"PRId32"]",
+                   api_version,
+		   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+
+	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_OffsetFetch, rkbuf,
+                                       replyq, resp_cb, opaque);
 }
 
-rd_kafka_resp_err_t
-rd_kafka_consumer_group_join (rd_kafka_topic_t *rkt, const char *group) {
-        #if 0
-        rd_kafkap_str_t *cgrp;
+
+
+/**
+ * Handle OffsetCommitResponse
+ * Takes the original 'rko' as opaque argument.
+ */
+void rd_kafka_op_handle_OffsetCommit (rd_kafka_broker_t *rkb,
+                                      rd_kafka_resp_err_t err,
+                                      rd_kafka_buf_t *rkbuf,
+                                      rd_kafka_buf_t *request,
+                                      void *opaque) {
+        rd_kafka_op_t *rko_orig = opaque;
+        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(rko_orig->rko_rktp);
+        rd_kafka_op_t *rko_reply;
+        const int log_decode_errors = 1;
+        int32_t TopicArrayCnt;
+        int hit = 0;
+        int16_t ErrorCode = 0;
+        int i;
+
+        if (err) {
+                ErrorCode = err;
+                goto err;
+        }
+
+        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
+        for (i = 0 ; i < TopicArrayCnt ; i++) {
+                rd_kafkap_str_t topic;
+                int32_t PartArrayCnt;
+                int j;
+
+                rd_kafka_buf_read_str(rkbuf, &topic);
+                rd_kafka_buf_read_i32(rkbuf, &PartArrayCnt);
+
+                for (j = 0 ; j < PartArrayCnt ; i++) {
+                        int32_t partition;
+
+                        rd_kafka_buf_read_i32(rkbuf, &partition);
+                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+                        if (rd_kafkap_str_cmp(&topic,
+                                              rktp->rktp_rkt->rkt_topic) ||
+                            partition != rktp->rktp_partition) {
+                                /* Received offset for topic/partition we didn't
+                                 * ask for, this shouldn't really happen. */
+                                continue;
+                        }
+
+                        /* Found our partition, bail out. */
+                        hit = 1;
+                        goto done;
+                }
+        }
+
+
+err:
+        rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
+done:
+        /* Reuse the original op for reply */
+        rko_reply = rko_orig;
+        if (!ErrorCode && !hit)
+                ErrorCode = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+        rko_reply->rko_err = ErrorCode;
+
+        rd_kafka_q_enq(&rktp->rktp_ops, rko_reply);
+}
+
+
+/**
+ * Send OffsetCommitRequest for toppar.
+ */
+void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
+                                   rd_kafka_cgrp_t *rkcg,
+                                   rd_kafka_toppar_t *rktp,
+                                   int16_t api_version,
+                                   int64_t offset,
+                                   rd_kafkap_str_t *metadata,
+                                   rd_kafka_q_t *replyq,
+                                   rd_kafka_resp_cb_t *resp_cb,
+                                   void *opaque) {
+	rd_kafka_buf_t *rkbuf;
+        int free_metadata = 0;
+
+        if (!metadata) {
+                metadata = rd_kafkap_str_new(NULL, 0);
+                free_metadata = 1;
+        }
+
+        if (api_version == 0)
+                rkbuf = rd_kafka_buf_new(rkb->rkb_rk,
+                                         1,
+                                         RD_KAFKAP_STR_SIZE(rkcg->rkcg_group_id)+
+                                         4+
+                                         RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->
+                                                            rkt_topic)+
+                                         4+4+8+
+                                         RD_KAFKAP_STR_SIZE(metadata));
+        else if (api_version == 1)
+                rkbuf = rd_kafka_buf_new(rkb->rkb_rk,
+                                         1,
+                                         RD_KAFKAP_STR_SIZE(rkcg->rkcg_group_id)+
+                                         4 /* GenerationId */ +
+                                         RD_KAFKAP_STR_SIZE(rkcg->rkcg_member_id)+
+                                         4 /* Topic cnt */ +
+                                         RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->
+                                                            rkt_topic)+
+                                         4+4+8+8+
+                                         RD_KAFKAP_STR_SIZE(metadata));
+        else if (api_version == 2)
+                rkbuf = rd_kafka_buf_new(rkb->rkb_rk,
+                                         1,
+                                         RD_KAFKAP_STR_SIZE(rkcg->rkcg_group_id)+
+                                         4 /* GenerationId */ +
+                                         RD_KAFKAP_STR_SIZE(rkcg->rkcg_client_id)+
+                                         8 /* RetentionTime */ +
+                                         4 /* Topic cnt */ +
+                                         RD_KAFKAP_STR_SIZE(rktp->rktp_rkt->
+                                                            rkt_topic)+
+                                         4+4+8+
+                                         RD_KAFKAP_STR_SIZE(metadata));
+        else
+                rd_kafka_assert(rkb->rkb_rk,
+                                !*"unsupported OffsetCommit API version");
+
+        /* ConsumerGroup */
+        rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_group_id);
+
+        /* v1,v2 */
+        if (api_version >= 1) {
+                /* ConsumerGroupGenerationId */
+                rd_kafka_buf_write_i32(rkbuf, rkcg->rkcg_generation_id);
+                /* ConsumerId */
+                rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_member_id);
+                /* v2: RetentionTime */
+                if (api_version == 2)
+                        rd_kafka_buf_write_i64(rkbuf, 0);
+        }
+
+        /* TopicArrayCnt */
+        rd_kafka_buf_write_i32(rkbuf, 1);
+        /* TopicName */
+        rd_kafka_buf_write_kstr(rkbuf, rktp->rktp_rkt->rkt_topic);
+        /* PartitionArrayCnt */
+        rd_kafka_buf_write_i32(rkbuf, 1);
+        /* Partition */
+        rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
+        /* Offset */
+        rd_kafka_buf_write_i64(rkbuf, offset);
+
+        /* v1: TimeStamp */
+        if (api_version == 1)
+                rd_kafka_buf_write_i64(rkbuf, -1); // FIXME: retention time
+
+        /* Metadata */
+        rd_kafka_buf_write_kstr(rkbuf, metadata);
+
+        /* Push write-buffer onto iovec stack */
+        rd_kafka_buf_autopush(rkbuf);
+
+        rd_kafka_buf_version_set(rkbuf, api_version);
+
+	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+		   "OffsetCommitRequest(v%d, offset %"PRId64") "
+                   "for topic %s [%"PRId32"]",
+                   api_version, offset,
+		   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+
+	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_OffsetCommit, rkbuf,
+                                       replyq, resp_cb, opaque);
+
+        if (free_metadata)
+                rd_kafkap_str_destroy(metadata);
+}
+
+
+
+/**
+ * Write "consumer" protocol type MemberState for SyncGroupRequest.
+ */
+static rd_kafkap_bytes_t *rd_kafka_group_MemberState_consumer_write (
+        const rd_kafka_group_member_t *rkgm) {
         rd_kafka_buf_t *rkbuf;
-        rd_kafka_broker_t *rkb;
-        rd_kafka_q_t *replyq;
-        rd_kafka_op_t *rko;
-        const int timeout_ms = 3000;
-        rd_kafka_t *rk = rkt->rkt_rk;
-        int32_t coordid;
-        rd_kafka_resp_err_t err;
-        int64_t offset;
-        int32_t partition = 0;
+        int i;
+        const char *last_topic = NULL;
+        int of_TopicCnt;
+        int of_PartCnt = -1;
+        int TopicCnt = 0;
+        int PartCnt = 0;
+        rd_kafkap_bytes_t *MemberState;
 
-        /* Query any broker that is up, and if none are up pick the first one,
-         * if we're lucky it will be up before the timeout */
-        rd_kafka_rdlock(rk);
-        if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP))) {
-                rkb = TAILQ_FIRST(&rk->rk_brokers);
-                if (rkb)
-                        rd_kafka_broker_keep(rkb);
-        }
-        rd_kafka_rdunlock(rk);
+        rkbuf = rd_kafka_buf_new_growable(NULL, 1, 100);
+        rd_kafka_buf_write_i16(rkbuf, 0); /* Version */
+        of_TopicCnt = rd_kafka_buf_write_i32(rkbuf, 0); /* Updated later */
+        for (i = 0 ; i < rkgm->rkgm_assignment->cnt ; i++) {
+                const rd_kafka_topic_partition_t *rktpar;
 
-        if (!rkb)
-                return RD_KAFKA_RESP_ERR__TRANSPORT;
+                rktpar = &rkgm->rkgm_assignment->elems[i];
 
+                if (!last_topic || strcmp(last_topic,
+                                          rktpar->topic)) {
+                        if (last_topic)
+                                /* Finalize previous PartitionCnt */
+                                rd_kafka_buf_update_i32(rkbuf, of_PartCnt,
+                                                        PartCnt);
+                        rd_kafka_buf_write_str(rkbuf, rktpar->topic, -1);
+                        /* Updated later */
+                        of_PartCnt = rd_kafka_buf_write_i32(rkbuf, 0);
+                        PartCnt = 0;
+                        last_topic = rktpar->topic;
+                        TopicCnt++;
+                }
 
-        cgrp = rkt->rkt_conf.group_id;
-
-        printf("Using group %.*s\n", RD_KAFKAP_STR_PR(cgrp));
-
-        /* Give one refcount to destination, will be decreased when
-         * reply is enqueued on replyq.
-         * This ensures the replyq stays alive even after we timeout here. */
-        replyq = rd_kafka_q_new();
-        rd_kafka_q_keep(replyq);
-        rd_kafka_q_keep(replyq);
-
-
-
-        /* Ask for coordinator */
-        rkbuf = rd_kafka_ConsumerMetadataRequest(rkt->rkt_rk, cgrp);
-
-        rkbuf->rkbuf_ts_timeout = rd_clock() + 
-		rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
-
-        rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_ConsumerMetadata, rkbuf,
-                                 route_reply, replyq);
-
-        /* Wait for reply (or timeout) */
-        rko = rd_kafka_q_pop(replyq, timeout_ms, 0);
-        printf("rko1: %p, refcnt %i\n", rko, rd_atomic32_get(&replyq->rkq_refcnt));
-        /* Timeout */
-        if (!rko)
-                return RD_KAFKA_RESP_ERR__TIMED_OUT;
-
-        /* Error */
-        if (rko->rko_err) {
-                rd_kafka_resp_err_t err = rko->rko_err;
-                rd_kafka_op_destroy(rko);
-                return err;
+                rd_kafka_buf_write_i32(rkbuf, rktpar->partition);
+                PartCnt++;
         }
 
-        err = rd_kafka_ConsumerMetadataResponse(rkb, rko->rko_rkbuf, &coordid);
+        if (of_PartCnt != -1)
+                rd_kafka_buf_update_i32(rkbuf, of_PartCnt, PartCnt);
+        rd_kafka_buf_update_i32(rkbuf, of_TopicCnt, TopicCnt);
 
-        rd_kafka_op_destroy(rko);
-        if (err)
-                return err;
+        rd_kafka_buf_write_kbytes(rkbuf, rkgm->rkgm_userdata);
 
-        rd_kafka_broker_destroy(rkb);
+        rd_kafka_buf_autopush(rkbuf);
+        MemberState = rd_kafkap_bytes_from_buf(rkbuf);
+        rd_kafka_buf_destroy(rkbuf);
 
-
-
-        rd_kafka_rdlock(rk);
-        rkb = rd_kafka_broker_find_by_nodeid(rk, coordid);
-        if (!rkb) {
-                printf("Coordinator %"PRId32" not available\n", coordid);
-                return RD_KAFKA_RESP_ERR_UNKNOWN;
-        }
-
-        offset = rd_jitter(1,500);
-        printf("Commit offset %"PRId64"\n", offset);
-        rkbuf = rd_kafka_OffsetCommitRequest(rkt, partition, 1, 1, 1, -1,
-                                             rd_kafkap_str_new("boink"));
-	rkbuf->rkbuf_ts_timeout = rd_clock() + 
-		rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
-
-        printf("Send Commit to %s\n", rkb->rkb_name);
-        rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_OffsetCommit, rkbuf,
-                                 route_reply, replyq);
-
-
-        /* Wait for reply (or timeout) */
-        rko = rd_kafka_q_pop(replyq, timeout_ms, 0);
-        printf("rko %p: %s\n", rko,
-               rko ? rd_kafka_err2str(rko->rko_err) : "NONE");
-        // FIXME rd_kafka_q_destroy(replyq);
-
-        /* Timeout */
-        if (!rko)
-                return RD_KAFKA_RESP_ERR__TIMED_OUT;
-
-        /* Error */
-        if (rko->rko_err) {
-                rd_kafka_resp_err_t err = rko->rko_err;
-                rd_kafka_op_destroy(rko);
-                return err;
-        }
-
-        rd_kafka_OffsetCommitResponse(rkb, rko->rko_rkbuf);
-
-        /* Reply */
-        rd_kafka_op_destroy(rko);
-
-
-        /* Fetch offset */
-        rkbuf = rd_kafka_OffsetFetchRequest(rkt, partition, 1, cgrp);
-	rkbuf->rkbuf_ts_timeout = rd_clock() +
-		rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
-
-        printf("Send OffsetFetch to %s\n", rkb->rkb_name);
-        rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_OffsetFetch, rkbuf,
-                                 route_reply, replyq);
-
-        rd_kafka_broker_destroy(rkb);
-
-        /* Wait for reply (or timeout) */
-        rko = rd_kafka_q_pop(replyq, timeout_ms, 0);
-        printf("rko fetch %p: %s\n", rko,
-               rko ? rd_kafka_err2str(rko->rko_err) : "NONE");
-        // FIXME rd_kafka_q_destroy(replyq);
-
-        /* Timeout */
-        if (!rko)
-                return RD_KAFKA_RESP_ERR__TIMED_OUT;
-
-        /* Error */
-        if (rko->rko_err) {
-                rd_kafka_resp_err_t err = rko->rko_err;
-                rd_kafka_op_destroy(rko);
-                return err;
-        }
-
-        rd_kafka_OffsetFetchResponse(rkb, rko->rko_rkbuf);
-
-        /* Reply */
-        rd_kafka_op_destroy(rko);
-#endif
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        return MemberState;
 }
-#endif
+
+/**
+ * Send SyncGroupRequest
+ */
+void rd_kafka_SyncGroupRequest (rd_kafka_broker_t *rkb,
+                                const rd_kafkap_str_t *group_id,
+                                int32_t generation_id,
+                                const rd_kafkap_str_t *member_id,
+                                const rd_kafka_group_member_t
+                                *assignments,
+                                int assignment_cnt,
+                                rd_kafka_q_t *replyq,
+                                rd_kafka_resp_cb_t *resp_cb,
+                                void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int i;
+
+        rkbuf = rd_kafka_buf_new_growable(rkb->rkb_rk,
+                                          1,
+                                          RD_KAFKAP_STR_SIZE(group_id) +
+                                          4 /* GenerationId */ +
+                                          RD_KAFKAP_STR_SIZE(member_id) +
+                                          4 /* array size group_assignment */ +
+                                          (assignment_cnt * 100/*guess*/));
+        rd_kafka_buf_write_kstr(rkbuf, group_id);
+        rd_kafka_buf_write_i32(rkbuf, generation_id);
+        rd_kafka_buf_write_kstr(rkbuf, member_id);
+        rd_kafka_buf_write_i32(rkbuf, assignment_cnt);
+
+        for (i = 0 ; i < assignment_cnt ; i++) {
+                const rd_kafka_group_member_t *rkgm = &assignments[i];
+                rd_kafkap_bytes_t *MemberState;
+                rd_kafka_buf_write_kstr(rkbuf, rkgm->rkgm_member_id);
+
+                MemberState =
+                        rd_kafka_group_MemberState_consumer_write(rkgm);
+                rd_kafka_buf_write_kbytes(rkbuf, MemberState);
+                rd_kafkap_bytes_destroy(MemberState);
+        }
+
+        /* Push write-buffer onto iovec stack */
+        rd_kafka_buf_autopush(rkbuf);
+
+        /* This is a blocking request */
+        rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;
+        rkbuf->rkbuf_ts_timeout = rd_clock() +
+                (rkb->rkb_rk->rk_conf.group_session_timeout_ms * 1000) +
+                (3*1000*1000/* 3s grace period*/);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_SyncGroup,
+                                       rkbuf, replyq, resp_cb, opaque);
+}
+
+/**
+ * Handler for SyncGroup responses
+ * opaque must be the cgrp handle.
+ */
+void rd_kafka_handle_SyncGroup (rd_kafka_broker_t *rkb,
+                                rd_kafka_resp_err_t err,
+                                rd_kafka_buf_t *rkbuf,
+                                rd_kafka_buf_t *request,
+                                void *opaque) {
+        rd_kafka_cgrp_t *rkcg = opaque;
+        const int log_decode_errors = 1;
+        int16_t ErrorCode = 0;
+        rd_kafkap_bytes_t MemberState = RD_ZERO_INIT;
+        int actions;
+
+        if (err) {
+                ErrorCode = err;
+                goto err;
+        }
+
+        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+        rd_kafka_buf_read_bytes(rkbuf, &MemberState);
+
+err:
+        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                /* Re-query for coordinator */
+                rd_kafka_cgrp_op(rkcg, NULL, NULL, RD_KAFKA_OP_COORD_QUERY,
+                                 ErrorCode);
+                /* FALLTHRU */
+        }
+
+        rd_kafka_dbg(rkb->rkb_rk, CGRP, "SYNCGROUP",
+                     "SyncGroup response: %s (%d bytes of MemberState data)",
+                     rd_kafka_err2str(ErrorCode),
+                     RD_KAFKAP_BYTES_LEN(&MemberState));
+
+        rd_kafka_cgrp_handle_SyncGroup(rkcg, ErrorCode, &MemberState);
+}
+
+
+/**
+ * Send JoinGroupRequest
+ */
+void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
+                                const rd_kafkap_str_t *group_id,
+                                const rd_kafkap_str_t *member_id,
+                                const rd_kafkap_str_t *protocol_type,
+                                const rd_kafka_topic_partition_list_t
+                                *subscription,
+                                rd_kafka_q_t *replyq,
+                                rd_kafka_resp_cb_t *resp_cb,
+                                void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        rd_kafka_t *rk = rkb->rkb_rk;
+        rd_kafka_assignor_t *rkas;
+        int i;
+
+        rkbuf = rd_kafka_buf_new_growable(rkb->rkb_rk,
+                                          1,
+                                          RD_KAFKAP_STR_SIZE(group_id) +
+                                          4 /* sessionTimeoutMs */ +
+                                          RD_KAFKAP_STR_SIZE(member_id) +
+                                          RD_KAFKAP_STR_SIZE(protocol_type) +
+                                          4 /* array count GroupProtocols */ +
+                                          (subscription->cnt * 100));
+        rd_kafka_buf_write_kstr(rkbuf, group_id);
+        rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.group_session_timeout_ms);
+        rd_kafka_buf_write_kstr(rkbuf, member_id);
+        rd_kafka_buf_write_kstr(rkbuf, protocol_type);
+        rd_kafka_buf_write_i32(rkbuf,
+                               rd_list_cnt(&rk->rk_conf.partition_assignors));
+
+        RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i) {
+                rd_kafkap_bytes_t *member_metadata;
+                rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
+                member_metadata = rkas->rkas_get_metadata_cb(rkas,subscription);
+                rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
+                rd_kafkap_bytes_destroy(member_metadata);
+        }
+
+        /* Push write-buffer onto iovec stack */
+        rd_kafka_buf_autopush(rkbuf);
+
+
+        /* This is a blocking request */
+        rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;
+        rkbuf->rkbuf_ts_timeout = rd_clock() +
+                (rk->rk_conf.group_session_timeout_ms * 1000) +
+                (3*1000*1000/* 3s grace period*/);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_JoinGroup,
+                                       rkbuf, replyq, resp_cb, opaque);
+}
+
+
+
+
+/**
+ * Parse single JoinGroup.Members.MemberMetadata for "consumer" ProtocolType
+ *
+ * Protocol definition:
+ * https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Client-side+Assignment+Proposal
+ *
+ * Returns 0 on success or -1 on error.
+ */
+static int
+rd_kafka_group_MemberMetadata_consumer_read (
+        rd_kafka_broker_t *rkb, rd_kafka_group_member_t *rkgm,
+        const rd_kafkap_str_t *GroupProtocol,
+        const rd_kafkap_bytes_t *MemberMetadata) {
+
+        rd_kafka_buf_t *rkbuf;
+        int16_t Version;
+        int32_t subscription_cnt;
+        rd_kafkap_bytes_t UserData;
+        const int log_decode_errors = 1;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__BAD_MSG;
+
+        /* Create a shadow-buffer pointing to the metadata to ease parsing. */
+        rkbuf = rd_kafka_buf_new_shadow(MemberMetadata->data,
+                                        RD_KAFKAP_BYTES_LEN(MemberMetadata));
+
+        rd_kafka_buf_read_i16(rkbuf, &Version);
+        rd_kafka_buf_read_i32(rkbuf, &subscription_cnt);
+
+        if (subscription_cnt > 10000 || subscription_cnt <= 0)
+                goto err;
+
+        rkgm->rkgm_subscription =
+                rd_kafka_topic_partition_list_new(subscription_cnt);
+
+        while (subscription_cnt-- > 0) {
+                rd_kafkap_str_t Topic;
+                rd_kafka_buf_read_str(rkbuf, &Topic);
+                rd_kafka_topic_partition_list_add(rkgm->rkgm_subscription,
+                                                  RD_KAFKAP_STR_DUPA(&Topic),
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+
+        rd_kafka_buf_read_bytes(rkbuf, &UserData);
+        rkgm->rkgm_userdata = rd_kafkap_bytes_copy(&UserData);
+
+        rkbuf->rkbuf_buf2 = NULL;  /* Avoid freeing payload */
+        rd_kafka_buf_destroy(rkbuf);
+
+        return 0;
+
+err:
+        rd_rkb_dbg(rkb, CGRP, "MEMBERMETA",
+                   "Failed to parse MemberMetadata for \"%.*s\": %s",
+                   RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
+                   rd_kafka_err2str(err));
+        if (rkgm->rkgm_subscription) {
+                rd_kafka_topic_partition_list_destroy(rkgm->
+                                                      rkgm_subscription);
+                rkgm->rkgm_subscription = NULL;
+        }
+
+        rkbuf->rkbuf_buf2 = NULL;  /* Avoid freeing payload */
+        rd_kafka_buf_destroy(rkbuf);
+        return -1;
+}
+
+
+
+/**
+ * cgrp handler for JoinGroup responses
+ * opaque must be the cgrp handle.
+ *
+ * Locality: cgrp broker thread
+ */
+void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_broker_t *rkb,
+                                     rd_kafka_resp_err_t err,
+                                     rd_kafka_buf_t *rkbuf,
+                                     rd_kafka_buf_t *request,
+                                     void *opaque) {
+        rd_kafka_cgrp_t *rkcg = opaque;
+        const int log_decode_errors = 1;
+        int16_t ErrorCode = 0;
+        int32_t GenerationId;
+        rd_kafkap_str_t Protocol, LeaderId, MyMemberId;
+        int32_t member_cnt;
+        int actions;
+        int i_am_leader = 0;
+
+        if (err) {
+                ErrorCode = err;
+                goto err;
+        }
+
+        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+        rd_kafka_buf_read_i32(rkbuf, &GenerationId);
+        rd_kafka_buf_read_str(rkbuf, &Protocol);
+        rd_kafka_buf_read_str(rkbuf, &LeaderId);
+        rd_kafka_buf_read_str(rkbuf, &MyMemberId);
+        rd_kafka_buf_read_i32(rkbuf, &member_cnt);
+
+        rd_kafka_dbg(rkb->rkb_rk, CGRP, "JOINGROUP",
+                     "JoinGroup response: GenerationId %"PRId32", "
+                     "Protocol %.*s, LeaderId %.*s%s, my MemberId %.*s, "
+                     "%"PRId32" members in group: %s",
+                     GenerationId,
+                     RD_KAFKAP_STR_PR(&Protocol),
+                     RD_KAFKAP_STR_PR(&LeaderId),
+                     !rd_kafkap_str_cmp(&LeaderId, &MyMemberId) ? " (me)" : "",
+                     RD_KAFKAP_STR_PR(&MyMemberId),
+                     member_cnt,
+                     ErrorCode ? rd_kafka_err2str(ErrorCode) : "(no error)");
+
+        if (!ErrorCode) {
+                rkcg->rkcg_generation_id = GenerationId;
+                rd_kafka_cgrp_set_member_id(rkcg,
+                                            RD_KAFKAP_STR_DUPA(&MyMemberId));
+                i_am_leader = !rd_kafkap_str_cmp(&LeaderId, &MyMemberId);
+        } else {
+                rd_interval_backoff(&rkcg->rkcg_join_intvl, 1000*1000);
+                goto err;
+        }
+
+        if (i_am_leader) {
+                rd_kafka_group_member_t *members;
+                int i;
+                int sub_cnt = 0;
+
+                rd_kafka_dbg(rkb->rkb_rk, CGRP, "JOINGROUP",
+                             "Elected leader for group \"%s\" "
+                             "with %"PRId32" member(s)",
+                             rkcg->rkcg_group_id->str, member_cnt);
+
+                if (member_cnt > 100000) {
+                        err = RD_KAFKA_RESP_ERR__BAD_MSG;
+                        goto err;
+                }
+
+                members = rd_calloc(member_cnt, sizeof(*members));
+
+                for (i = 0 ; i < member_cnt ; i++) {
+                        rd_kafkap_str_t MemberId;
+                        rd_kafkap_bytes_t MemberMetadata;
+                        rd_kafka_group_member_t *rkgm;
+
+                        rd_kafka_buf_read_str(rkbuf, &MemberId);
+                        rd_kafka_buf_read_bytes(rkbuf, &MemberMetadata);
+
+                        rkgm = &members[sub_cnt];
+                        rkgm->rkgm_member_id = rd_kafkap_str_copy(&MemberId);
+                        rd_list_init(&rkgm->rkgm_eligible, 0);
+
+                        if (rd_kafka_group_MemberMetadata_consumer_read(
+                                    rkb, rkgm, &Protocol, &MemberMetadata)) {
+                                /* Failed to parse this member's metadata,
+                                 * ignore it. */
+                        } else {
+                                sub_cnt++;
+                                rkgm->rkgm_assignment =
+                                        rd_kafka_topic_partition_list_new(
+                                                rkgm->rkgm_subscription->size);
+                        }
+
+                }
+
+                /* FIXME: What to do if parsing failed for some/all members?
+                 *        It is a sign of incompatibility. */
+
+                if (rkcg->rkcg_group_leader.protocol)
+                        rd_free(rkcg->rkcg_group_leader.protocol);
+                rkcg->rkcg_group_leader.protocol = RD_KAFKAP_STR_DUP(&Protocol);
+                rkcg->rkcg_group_leader.members    = members;
+                rkcg->rkcg_group_leader.member_cnt = sub_cnt;
+
+
+                rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA);
+                /* The assignor will need metadata so fetch it asynchronously
+                 * and run the assignor when we get a reply. */
+                rd_kafka_MetadataRequest(rkb, 1 /* all topics */, NULL,
+                                         "partition assignor",
+                                         &rkcg->rkcg_ops,
+                                         rd_kafka_assignor_handle_Metadata,
+                                         rkcg);
+        } else {
+                rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC);
+
+                rd_kafka_SyncGroupRequest(rkb, rkcg->rkcg_group_id,
+                                          rkcg->rkcg_generation_id,
+                                          rkcg->rkcg_member_id,
+                                          NULL, 0,
+                                          &rkcg->rkcg_ops,
+                                          rd_kafka_handle_SyncGroup, rkcg);
+
+        }
+
+err:
+        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                /* Re-query for coordinator */
+                rd_kafka_cgrp_op(rkcg, NULL, NULL, RD_KAFKA_OP_COORD_QUERY,
+                                 ErrorCode);
+        }
+
+        if (ErrorCode) {
+                if (ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER)
+                        rd_kafka_cgrp_set_member_id(rkcg, "");
+                rd_kafka_cgrp_set_join_state(rkcg,
+                                             RD_KAFKA_CGRP_JOIN_STATE_INIT);
+        }
+}
+
+
+
+/**
+ * Send LeaveGroupRequest
+ */
+void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
+                                 const rd_kafkap_str_t *group_id,
+                                 const rd_kafkap_str_t *member_id,
+                                 rd_kafka_q_t *replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+
+        rkbuf = rd_kafka_buf_new(rkb->rkb_rk,
+                                 1,
+                                 RD_KAFKAP_STR_SIZE(group_id) +
+                                 RD_KAFKAP_STR_SIZE(member_id));
+        rd_kafka_buf_write_kstr(rkbuf, group_id);
+        rd_kafka_buf_write_kstr(rkbuf, member_id);
+
+        /* Push write-buffer onto iovec stack */
+        rd_kafka_buf_autopush(rkbuf);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_LeaveGroup,
+                                       rkbuf, replyq, resp_cb, opaque);
+}
+
+
+/**
+ * Handler for LeaveGroup responses
+ * opaque must be the cgrp handle.
+ */
+void rd_kafka_handle_LeaveGroup (rd_kafka_broker_t *rkb,
+                                 rd_kafka_resp_err_t err,
+                                 rd_kafka_buf_t *rkbuf,
+                                 rd_kafka_buf_t *request,
+                                 void *opaque) {
+        rd_kafka_cgrp_t *rkcg = opaque;
+        const int log_decode_errors = 1;
+        int16_t ErrorCode = 0;
+        int actions;
+
+        if (err) {
+                ErrorCode = err;
+                goto err;
+        }
+
+        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+
+err:
+        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                /* Re-query for coordinator */
+                rd_kafka_cgrp_op(rkcg, NULL, NULL, RD_KAFKA_OP_COORD_QUERY,
+                                 ErrorCode);
+                /* Schedule a retry */
+                rd_kafka_buf_keep(request);
+                rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+                return;
+        }
+
+        if (ErrorCode)
+                rd_kafka_dbg(rkb->rkb_rk, CGRP, "LEAVEGROUP",
+                             "LeaveGroup response: %s",
+                             rd_kafka_err2str(ErrorCode));
+}
+
+
+
+
+
+
+/**
+ * Send HeartbeatRequest
+ */
+void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
+                                const rd_kafkap_str_t *group_id,
+                                int32_t generation_id,
+                                const rd_kafkap_str_t *member_id,
+                                rd_kafka_q_t *replyq,
+                                rd_kafka_resp_cb_t *resp_cb,
+                                void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+
+        rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
+                   "Heartbeat for group \"%s\" generation id %"PRId32,
+                   group_id->str, generation_id);
+
+        rkbuf = rd_kafka_buf_new(rkb->rkb_rk,
+                                 1,
+                                 RD_KAFKAP_STR_SIZE(group_id) +
+                                 4 /* GenerationId */ +
+                                 RD_KAFKAP_STR_SIZE(member_id));
+
+        rd_kafka_buf_write_kstr(rkbuf, group_id);
+        rd_kafka_buf_write_i32(rkbuf, generation_id);
+        rd_kafka_buf_write_kstr(rkbuf, member_id);
+
+        /* Push write-buffer onto iovec stack */
+        rd_kafka_buf_autopush(rkbuf);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Heartbeat,
+                                       rkbuf, replyq, resp_cb, opaque);
+}
+
+
+/**
+ * Generic handler for Heartbeat responses.
+ * opaque must be the cgrp handle.
+ */
+void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_broker_t *rkb,
+                                     rd_kafka_resp_err_t err,
+                                     rd_kafka_buf_t *rkbuf,
+                                     rd_kafka_buf_t *request,
+                                     void *opaque) {
+        rd_kafka_cgrp_t *rkcg = opaque;
+        const int log_decode_errors = 1;
+        int16_t ErrorCode = 0;
+        int actions;
+
+        if (err) {
+                ErrorCode = err;
+                goto err;
+        }
+
+        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+err:
+        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
+
+        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                /* Re-query for coordinator */
+                rd_kafka_cgrp_op(rkcg, NULL, NULL, RD_KAFKA_OP_COORD_QUERY,
+                                 ErrorCode);
+                /* Schedule a retry */
+                rd_kafka_buf_keep(request);
+                rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+                return;
+        }
+
+        /* If an IllegalGeneration error code is returned in the
+         * HeartbeatResponse, it indicates that the co-ordinator has
+         * initiated a rebalance. The consumer then stops fetching data,
+         * commits offsets and sends a JoinGroupRequest to it's co-ordinator
+         * broker */
+        if (ErrorCode != 0) {
+                rd_kafka_dbg(rkb->rkb_rk, CGRP, "HEARTBEAT",
+                             "Heartbeat error response: %s",
+                             rd_kafka_err2str(ErrorCode));
+                // FIXME: stop fetching, commit, rejoin */
+                rd_kafka_cgrp_set_join_state(rkcg,
+                                             RD_KAFKA_CGRP_JOIN_STATE_INIT);
+        }
+}
+
+
+
+/**
+ * Construct MetadataRequest (does not send)
+ *
+ * all_topics - if true, all topics in cluster will be requested, else only
+ *              the ones known locally.
+ * only_rkt   - only request this specific topic (optional)
+ * replyq     - enqueue reply op on this queue (optional)
+ * reason     - metadata request reason
+ *
+ */
+rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
+                                           int all_topics,
+                                           rd_kafka_itopic_t *only_rkt,
+                                           const char *reason) {
+	rd_kafka_buf_t *rkbuf;
+	int32_t arrsize = 0;
+	size_t tnamelen = 0;
+	rd_kafka_itopic_t *rkt;
+
+	rd_rkb_dbg(rkb, METADATA, "METADATA",
+		   "Request metadata for %s: %s",
+                   only_rkt ? only_rkt->rkt_topic->str :
+		   (all_topics ? "all topics":"locally known topics"),
+                   reason ? reason : "");
+
+	if (only_rkt || all_topics) {
+		rd_kafka_rdlock(rkb->rkb_rk);
+
+		/* Calculate size to hold requested topics */
+		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
+			if (only_rkt && only_rkt != rkt)
+				continue;
+
+			arrsize++;
+			tnamelen += RD_KAFKAP_STR_SIZE(rkt->rkt_topic);
+		}
+	}
+
+	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1, sizeof(arrsize) + tnamelen);
+	rd_kafka_buf_write_i32(rkbuf, arrsize);
+
+	if (only_rkt || all_topics) {
+		/* Just our locally known topics */
+
+		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
+                        if (only_rkt && only_rkt != rkt)
+				continue;
+			rd_kafka_buf_write_kstr(rkbuf, rkt->rkt_topic);
+		}
+		rd_kafka_rdunlock(rkb->rkb_rk);
+	}
+
+
+	rd_kafka_buf_autopush(rkbuf);
+
+
+	return rkbuf;
+}
+
+
+void rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
+                               int all_topics,
+                               rd_kafka_itopic_t *only_rkt,
+                               const char *reason,
+                               rd_kafka_q_t *replyq,
+                               rd_kafka_resp_cb_t *resp_cb,
+                               void *opaque) {
+        rd_kafka_buf_t *rkbuf = rd_kafka_MetadataRequest0(rkb, all_topics,
+                                                          only_rkt, reason);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Metadata,
+                                       rkbuf, replyq, resp_cb, opaque);
+}
+
+
+
+/**
+ * Handle a Metadata response message.
+ * If 'rkt' is non-NULL the metadata originated from a topic-specific request.
+ *
+ * The metadata will be marshalled into 'struct rd_kafka_metadata*' structs.
+ *
+ * Returns the marshalled metadata, or NULL on parse error.
+ *
+ * Locality: broker thread
+ */
+static struct rd_kafka_metadata *
+rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
+                         rd_kafka_itopic_t *rkt, rd_kafka_buf_t *rkbuf) {
+	int i, j, k;
+	int req_rkt_seen = 0;
+        char *msh_buf = NULL;
+        int   msh_of  = 0;
+        int   msh_size;
+        struct rd_kafka_metadata *md = NULL;
+        int rkb_namelen = strlen(rkb->rkb_name)+1;
+        const int log_decode_errors = 1;
+
+        /* We assume that the marshalled representation is
+         * no more than 4 times larger than the wire representation. */
+        msh_size = sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_len * 4);
+        msh_buf = rd_malloc(msh_size);
+
+        _MSH_ALLOC(rkbuf, md, sizeof(*md));
+        md->orig_broker_id = rkb->rkb_nodeid;
+        _MSH_ALLOC(rkbuf, md->orig_broker_name, rkb_namelen);
+        memcpy(md->orig_broker_name, rkb->rkb_name, rkb_namelen);
+
+	/* Read Brokers */
+	rd_kafka_buf_read_i32a(rkbuf, md->broker_cnt);
+	if (md->broker_cnt > RD_KAFKAP_BROKERS_MAX)
+		rd_kafka_buf_parse_fail(rkbuf, "Broker_cnt %i > BROKERS_MAX %i",
+					md->broker_cnt, RD_KAFKAP_BROKERS_MAX);
+
+        _MSH_ALLOC(rkbuf, md->brokers, md->broker_cnt * sizeof(*md->brokers));
+
+	for (i = 0 ; i < md->broker_cnt ; i++) {
+                rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].id);
+                rd_kafka_buf_read_str_msh(rkbuf, md->brokers[i].host);
+		rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].port);
+	}
+
+
+	/* Read TopicMetadata */
+	rd_kafka_buf_read_i32a(rkbuf, md->topic_cnt);
+	rd_rkb_dbg(rkb, METADATA, "METADATA", "%i brokers, %i topics",
+                   md->broker_cnt, md->topic_cnt);
+
+	if (md->topic_cnt > RD_KAFKAP_TOPICS_MAX)
+		rd_kafka_buf_parse_fail(rkbuf, "TopicMetadata_cnt %"PRId32
+					" > TOPICS_MAX %i",
+					md->topic_cnt, RD_KAFKAP_TOPICS_MAX);
+
+        _MSH_ALLOC(rkbuf, md->topics, md->topic_cnt * sizeof(*md->topics));
+
+	for (i = 0 ; i < md->topic_cnt ; i++) {
+
+		rd_kafka_buf_read_i16a(rkbuf, md->topics[i].err);
+		rd_kafka_buf_read_str_msh(rkbuf, md->topics[i].topic);
+
+		/* PartitionMetadata */
+                rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partition_cnt);
+		if (md->topics[i].partition_cnt > RD_KAFKAP_PARTITIONS_MAX)
+			rd_kafka_buf_parse_fail(rkbuf,
+						"TopicMetadata[%i]."
+						"PartitionMetadata_cnt %i "
+						"> PARTITIONS_MAX %i",
+						i, md->topics[i].partition_cnt,
+						RD_KAFKAP_PARTITIONS_MAX);
+
+                _MSH_ALLOC(rkbuf, md->topics[i].partitions,
+                           md->topics[i].partition_cnt *
+                           sizeof(*md->topics[i].partitions));
+
+		for (j = 0 ; j < md->topics[i].partition_cnt ; j++) {
+			rd_kafka_buf_read_i16a(rkbuf, md->topics[i].partitions[j].err);
+			rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].id);
+			rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].leader);
+
+			/* Replicas */
+			rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].replica_cnt);
+			if (md->topics[i].partitions[j].replica_cnt >
+			    RD_KAFKAP_BROKERS_MAX)
+				rd_kafka_buf_parse_fail(rkbuf,
+							"TopicMetadata[%i]."
+							"PartitionMetadata[%i]."
+							"Replica_cnt "
+							"%i > BROKERS_MAX %i",
+							i, j,
+							md->topics[i].
+							partitions[j].
+							replica_cnt,
+							RD_KAFKAP_BROKERS_MAX);
+
+                        _MSH_ALLOC(rkbuf, md->topics[i].partitions[j].replicas,
+                                   md->topics[i].partitions[j].replica_cnt *
+                                   sizeof(*md->topics[i].partitions[j].
+                                          replicas));
+
+                        for (k = 0 ;
+                             k < md->topics[i].partitions[j].replica_cnt; k++)
+				rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].
+                                           replicas[k]);
+
+			/* Isrs */
+			rd_kafka_buf_read_i32a(rkbuf, md->topics[i].partitions[j].isr_cnt);
+			if (md->topics[i].partitions[j].isr_cnt >
+			    RD_KAFKAP_BROKERS_MAX)
+				rd_kafka_buf_parse_fail(rkbuf,
+							"TopicMetadata[%i]."
+							"PartitionMetadata[%i]."
+							"Isr_cnt "
+							"%i > BROKERS_MAX %i",
+							i, j,
+							md->topics[i].
+							partitions[j].isr_cnt,
+							RD_KAFKAP_BROKERS_MAX);
+
+                        _MSH_ALLOC(rkbuf, md->topics[i].partitions[j].isrs,
+                                   md->topics[i].partitions[j].isr_cnt *
+                                   sizeof(*md->topics[i].partitions[j].isrs));
+                        for (k = 0 ;
+                             k < md->topics[i].partitions[j].isr_cnt; k++)
+				rd_kafka_buf_read_i32a(rkbuf, md->topics[i].
+						       partitions[j].isrs[k]);
+
+		}
+	}
+
+        /* Entire Metadata response now parsed without errors:
+         * now update our internal state according to the response. */
+
+        /* Avoid metadata updates when we're terminating. */
+	if (rd_kafka_terminating(rkb->rkb_rk))
+                goto done;
+
+	/* Update our list of brokers. */
+	for (i = 0 ; i < md->broker_cnt ; i++) {
+		rd_rkb_dbg(rkb, METADATA, "METADATA",
+			   "  Broker #%i/%i: %s:%i NodeId %"PRId32,
+			   i, md->broker_cnt,
+                           md->brokers[i].host,
+                           md->brokers[i].port,
+                           md->brokers[i].id);
+		rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
+				       &md->brokers[i]);
+	}
+
+	/* Update partition count and leader for each topic we know about */
+	for (i = 0 ; i < md->topic_cnt ; i++) {
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "  Topic #%i/%i: %s with %i partitions%s%s",
+                           i, md->topic_cnt, md->topics[i].topic,
+                           md->topics[i].partition_cnt,
+                           md->topics[i].err ? ": " : "",
+                           md->topics[i].err ?
+                           rd_kafka_err2str(md->topics[i].err) : "");
+
+
+		if (rkt && !rd_kafkap_str_cmp_str(rkt->rkt_topic,
+                                                  md->topics[i].topic))
+			req_rkt_seen++;
+
+		rd_kafka_topic_metadata_update(rkb, &md->topics[i]);
+	}
+
+
+	/* Requested topics not seen in metadata? Propogate to topic code. */
+	if (rkt) {
+		rd_rkb_dbg(rkb, TOPIC, "METADATA",
+			   "Requested topic %s %sseen in metadata",
+			   rkt->rkt_topic->str,
+                           req_rkt_seen ? "" : "not ");
+		if (!req_rkt_seen)
+			rd_kafka_topic_metadata_none(rkt);
+	}
+
+
+done:
+        /* This metadata request was triggered by someone wanting
+         * the metadata information back as a reply, so send that reply now.
+         * In this case we must not rd_free the metadata memory here,
+         * the requestee will do. */
+        return md;
+
+err:
+        rd_free(msh_buf);
+        return NULL;
+}
+
+
+/**
+ * Generic op-based handler for Metadata responses
+ */
+void rd_kafka_op_handle_Metadata (rd_kafka_broker_t *rkb,
+                                  rd_kafka_resp_err_t err,
+                                  rd_kafka_buf_t *rkbuf,
+                                  rd_kafka_buf_t *request,
+                                  void *opaque) {
+        rd_kafka_op_t *rko = opaque;
+        struct rd_kafka_metadata *md = NULL;
+        rd_kafka_q_t *replyq;
+
+	rd_rkb_dbg(rkb, METADATA, "METADATA",
+		   "===== Received metadata from %s =====",
+		   rkb->rkb_name);
+
+	/* Avoid metadata updates when we're terminating. */
+	if (rd_kafka_terminating(rkb->rkb_rk))
+                err = RD_KAFKA_RESP_ERR__DESTROY;
+
+	if (unlikely(err)) {
+		/* FIXME: handle error */
+                if (err != RD_KAFKA_RESP_ERR__DESTROY)
+                        rd_rkb_log(rkb, LOG_WARNING, "METADATA",
+                                   "Metadata request failed: %s",
+                                   rd_kafka_err2str(err));
+	} else {
+		md = rd_kafka_parse_Metadata(rkb,
+                                             rko->rko_rkt ?
+                                             rd_kafka_topic_a2i(rko->rko_rkt):
+                                             NULL,
+                                             rkbuf);
+        }
+
+        if (rko->rko_rkt) {
+                rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(rko->rko_rkt);
+                rd_kafka_topic_wrlock(rkt);
+                rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_QUERY;
+                rd_kafka_topic_wrunlock(rkt);
+        }
+
+        if ((replyq = rko->rko_replyq)) {
+                /* Reply to metadata requester, passing on the metadata.
+                 * Reuse requesting rko for the reply. */
+                rko->rko_replyq = NULL;
+                rko->rko_err = err;
+                rko->rko_metadata = md;
+                rd_kafka_q_enq(replyq, rko);
+                /* Drop refcount to queue */
+                rd_kafka_q_destroy(replyq);
+        } else {
+                if (md)
+                        rd_free(md);
+                rd_kafka_op_destroy(rko);
+        }
+}
+
+static void rd_kafka_assignor_handle_Metadata (rd_kafka_broker_t *rkb,
+                                               rd_kafka_resp_err_t err,
+                                               rd_kafka_buf_t *rkbuf,
+                                               rd_kafka_buf_t *request,
+                                               void *opaque) {
+        rd_kafka_cgrp_t *rkcg = opaque;
+        struct rd_kafka_metadata *md = NULL;
+
+        if (!err) {
+                md = rd_kafka_parse_Metadata(rkb, NULL, rkbuf);
+                if (!md)
+                        err = RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+        rd_kafka_cgrp_handle_Metadata(rkcg, err, md);
+
+        if (md)
+                rd_free(md);
+}
+
+

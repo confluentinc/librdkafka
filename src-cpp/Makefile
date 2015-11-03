@@ -3,8 +3,8 @@ LIBNAME=	librdkafka++
 LIBVER=		1
 
 CXXSRCS=	RdKafka.cpp ConfImpl.cpp HandleImpl.cpp \
-		ConsumerImpl.cpp ProducerImpl.cpp \
-		TopicImpl.cpp MessageImpl.cpp
+		ConsumerImpl.cpp ProducerImpl.cpp KafkaConsumerImpl.cpp \
+		TopicImpl.cpp TopicPartitionImpl.cpp MessageImpl.cpp
 
 HDRS=		rdkafkacpp.h
 

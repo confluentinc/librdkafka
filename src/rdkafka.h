@@ -106,7 +106,7 @@ const char *rd_kafka_get_debug_contexts(void);
 
 /* Same as define (deprecated) */
 #define RD_KAFKA_DEBUG_CONTEXTS \
-	"all,generic,broker,topic,metadata,producer,queue,msg,protocol,consumer"
+	"all,generic,broker,topic,metadata,producer,queue,msg,protocol,cgrp"
 
 /* Private types to provide ABI compatibility */
 typedef struct rd_kafka_s rd_kafka_t;
@@ -150,6 +150,24 @@ typedef enum {
         RD_KAFKA_RESP_ERR__ISR_INSUFF = -183,   /* ISR count < required.acks */
         RD_KAFKA_RESP_ERR__NODE_UPDATE = -182,  /* Broker node update */
 	RD_KAFKA_RESP_ERR__SSL = -181,          /* SSL error */
+        RD_KAFKA_RESP_ERR__WAIT_COORD = -180,   /* Waiting for coordinator
+                                                 * to become available. */
+        RD_KAFKA_RESP_ERR__UNKNOWN_GROUP = -179,/* Unknown client group */
+        RD_KAFKA_RESP_ERR__IN_PROGRESS = -178,  /* Operation in progress */
+        RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS = -177, /* Previous operation
+                                                     * in progress, wait for
+                                                     * it to finish. */
+        RD_KAFKA_RESP_ERR__EXISTING_SUBSCRIPTION = -176, /* This operation
+                                                          * would interfer
+                                                          * with an existing
+                                                          * subscription */
+        RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS = -175, /* For use w rebalance_cb*/
+        RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS = -174, /* For use w rebalance_cb*/
+        RD_KAFKA_RESP_ERR__CONFLICT = -173,     /* Conflicting use */
+        RD_KAFKA_RESP_ERR__STATE = -172,        /* Wrong state */
+        RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL = -171, /* Unknown protocol */
+        RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED = -170, /* Not implemented */
+
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
 	/* Standard Kafka errors: */
@@ -169,7 +187,21 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE = 12,
         RD_KAFKA_RESP_ERR_OFFSET_LOAD_IN_PROGRESS = 14,
         RD_KAFKA_RESP_ERR_CONSUMER_COORDINATOR_NOT_AVAILABLE = 15,
-        RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_CONSUMER = 16
+        RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_CONSUMER = 16,
+        RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION = 17,
+        RD_KAFKA_RESP_ERR_RECORD_LIST_TOO_LARGE = 18,
+        RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS = 19,
+        RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND = 20,
+        RD_KAFKA_RESP_ERR_INVALID_REQUIRED_ACKS = 21,
+        RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION = 22,
+        RD_KAFKA_RESP_ERR_INCONSISTENT_GROUP_PROTOCOL = 23,
+        /* NOTE: 24 is not defined */
+        RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER = 25,
+        RD_KAFKA_RESP_ERR_INVALID_SESSION_TIMEOUT = 26,
+        /* NOTE: 27 is not defined */
+        RD_KAFKA_RESP_ERR_INVALID_COMMIT_OFFSET_SIZE = 28,
+        RD_KAFKA_RESP_ERR_AUTHORIZATION_FAILED = 29,
+        RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS = 30
 } rd_kafka_resp_err_t;
 
 
@@ -194,6 +226,44 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
 
+
+
+
+/*******************************************************************
+ *								   *
+ * Topic+Partition place holder                                    *
+ *								   *
+ *******************************************************************/
+
+typedef struct rd_kafka_topic_partition_s {
+        char      *topic;
+        int32_t    partition;
+        void     *_private;    /* INTERNAL USE ONLY, DO NOT TOUCH:
+                                * : shptr_rd_kafka_toppar_t */
+} rd_kafka_topic_partition_t;
+
+
+
+typedef struct rd_kafka_topic_partition_list_s {
+        int cnt;               /* Current number of elements */
+        int size;              /* Allocated size */
+        rd_kafka_topic_partition_t *elems;
+} rd_kafka_topic_partition_list_t;
+
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new (int size);
+void rd_kafka_topic_partition_list_destroy (rd_kafka_topic_partition_list_t *rkparlist);
+void rd_kafka_topic_partition_list_add (rd_kafka_topic_partition_list_t *rktparlist,
+                                        const char *topic, int32_t partition);
+
+void
+rd_kafka_topic_partition_list_add_range (rd_kafka_topic_partition_list_t
+                                         *rktparlist,
+                                         const char *topic,
+                                         int32_t start, int32_t stop);
+
+
+rd_kafka_topic_partition_list_t *
+rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src);
 
 
 /*******************************************************************
@@ -363,6 +433,32 @@ void rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
                                                      rkmessage,
                                                      void *opaque));
 
+
+/**
+ * Consumer:
+ * Set consume callback for use with `rd_kafka_consumer_poll()`.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
+                                   void (*consume_cb) (rd_kafka_message_t *
+                                                       rkmessage,
+                                                       void *opaque));
+
+/**
+ * Consumer:
+ * Set rebalance callback for use with coordinated consumer group balancing.
+ * The 'err' field is set to either RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS
+ * or RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS and 'partitions'
+ * contains the partitions that were either assigned or revoked.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_rebalance_cb (
+        rd_kafka_conf_t *conf,
+        void (*rebalance_cb) (rd_kafka_t *rk,
+                              rd_kafka_resp_err_t err,
+                              const rd_kafka_topic_partition_list_t *partitions,
+                              void *opaque));
+
 /**
  * Set error callback in provided conf object.
  * The error callback is used by librdkafka to signal critical errors
@@ -463,6 +559,17 @@ void rd_kafka_conf_set_opaque(rd_kafka_conf_t *conf, void *opaque);
  */
 RD_EXPORT
 void *rd_kafka_opaque(const rd_kafka_t *rk);
+
+
+
+/**
+ * Sets the default topic configuration to use for automatically
+ * subscribed topics (e.g., through pattern-matched topics).
+ * The topic config object is not usable after this call.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
+                                           rd_kafka_topic_conf_t *tconf);
 
 
 /**
@@ -744,7 +851,7 @@ void rd_kafka_queue_destroy(rd_kafka_queue_t *rkqu);
 
 /*******************************************************************
  *								   *
- * Consumer API                                                    *
+ * Simple Consumer API                                             *
  *								   *
  *******************************************************************/
 
@@ -765,8 +872,8 @@ void rd_kafka_queue_destroy(rd_kafka_queue_t *rkqu);
 
 /**
  * Start consuming messages for topic 'rkt' and 'partition'
- * at offset 'offset' which may either be a proper offset (0..N)
- * or one of the the special offsets:
+ * at offset 'offset' which may either be an absolute (0..N)
+ * or one of the logical offsets:
  *  `RD_KAFKA_OFFSET_BEGINNING`, `RD_KAFKA_OFFSET_END`,
  *  `RD_KAFKA_OFFSET_STORED`, `RD_KAFKA_OFFSET_TAIL(..)`
  *
@@ -782,7 +889,17 @@ void rd_kafka_queue_destroy(rd_kafka_queue_t *rkqu);
  * topic and partition without stopping consumption first with
  * `rd_kafka_consume_stop()`.
  *
- * Returns 0 on success or -1 on error (see `errno`).
+ * Returns 0 on success or -1 on error in which case errno is set accordingly:
+ *   EBUSY    - Conflicts with an existing or previous subscription
+ *              (RD_KAFKA_RESP_ERR__CONFLICT)
+ *   EINVAL   - Invalid offset, or incomplete configuration (lacking group.id)
+ *              (RD_KAFKA_RESP_ERR__INVALID_ARG)
+ *   ESRCH    - requested 'partition' is invalid.
+ *              (RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
+ *   ENOENT   - topic is unknown in the Kafka cluster.
+ *              (RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
+ *
+ * Use `rd_kafka_errno2err()` to convert `errno` to `rd_kafka_resp_err_t`.
  */
 RD_EXPORT
 int rd_kafka_consume_start(rd_kafka_topic_t *rkt, int32_t partition,
@@ -1008,120 +1125,38 @@ typedef struct rd_kafka_consumer_s rd_kafka_consumer_t;
  *   KeyDeserializer
  *   ValueDeserializer
  */
-rd_kafka_consumer_t *rd_kafka_consumer_new (rd_kafka_t *rkt,
-					    /* FIXME: some config object*/
-					    const char *group,
-					    char *errstr, int errstr_size);
+rd_kafka_resp_err_t rd_kafka_subscribe_partition (rd_kafka_t *rk,
+                                                  const char *topic,
+                                                  int32_t partition);
 
 
-void rd_kafka_consumer_close (rd_kafka_consumer_t *rkcons);
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_subscribe (rd_kafka_t *rk,
+                    const rd_kafka_topic_partition_list_t *topics);
 
-typedef enum {
-	
-} rd_kafka_commit_type;
+rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk);
 
-typedef struct rd_kafka_partition_s rd_kafka_partition_t;
+rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
 
-void rd_kafka_consumer_commit (rd_kafka_consumer_t *rkcons,
-			       rd_kafka_partition_t **rkparts,
-			       int rkparts_cnt,
-			       rd_kafka_commit_type_t commit_type,
-			       rd_kafka_queue_t *response_q,
-			       void (*commit_result_cb) (
-				       rd_kafka_consumer_t *rkcons,
-				       rd_kafka_partition_t *partitions,
-				       int partition_cnt,
-				       rd_kafka_resp_err_t error,
-				       void *opaque),
-			       void *opaque);
-							 
+rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
 
-rd_kafka_resp_err_t
-rd_kafka_consumer_committed (rd_kafka_consumer_t *rkcons,
-			     rd_kafka_partition_t *rkpart,
-			     rd_kafka_queue_t *response_q,
-			     void (*get_committed_cb) (
-				     rd_kafka_consumer_t *rkcons,
-				     rd_kafka_partition_t *partition,
-				     int64_t *offsetp,
-				     rd_kafka_resp_err_t error,
-				     void *opaque),
-			     void *opaque);
+rd_kafka_resp_err_t rd_kafka_consumer_get_offset (rd_kafka_topic_t *rkt,
+                                                  int32_t partition,
+                                                  int64_t *offsetp,
+                                                  int timeout_ms);
 
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_assign (rd_kafka_t *rk,
+                 const rd_kafka_topic_partition_list_t *partitions);
 
-rd_kafka_resp_err_t rd_kafka_consumer_metrics (rd_kafka_consumer_t *rkcons,
-					       void **dst, int *dst_lenp);
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_assignment (rd_kafka_t *rk,
+                     rd_kafka_topic_partition_list_t **partitions);
 
-rd_kafka_resp_err_t
-rd_kafka_consumer_partitionsFor (rd_kafka_consumer_t *rkcons,
-				 rd_kafka_topic_t *rkt,
-				 rd_kafka_partition_t **rkparts,
-				 int *rkparts_cntp,
-				 rd_kafka_queue_t *response_q,
-				 void (partitionsFor_cb) (
-					 rd_kafka_consumer_t *rkcons,
-					 rd_kafka_topic_t *rkt,
-					 rd_kafka_partition_t **rkparts,
-					 int rkparts_cnt,
-					 rd_kafka_resp_err_t error,
-					 void *opaque),
-				 void *opaque);
-						     
-						       
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_subscription (rd_kafka_t *rk,
+                       rd_kafka_topic_partition_list_t **topics);
 
-rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_consumer_t *rkcons,
-					    int timeout_ms);
-
-
-rd_kafka_resp_err_t rd_kafka_consumer_position (rd_kafka_consumer_t *rkcons,
-						int64_t *offsetp);
-
-rd_kafka_resp_err_t
-rd_kafka_consumer_seek (rd_kafka_consumer_t *rkcons,
-			rd_kafka_partition_t *partition,
-			int64_t offset,
-			rd_kafka_queue_t *response_q,
-			void (*seek_cb) (
-				rd_kafka_consumer_t *rkcons,
-				rd_kafka_partition_t *partition,
-				int64_t offset,
-				rd_kafka_resp_err_t error,
-				void *opaque),
-			void *opaque);
-
-
-rd_kafka_resp_err_t
-rd_kafka_consumer_subscribe (rd_kafka_consumer_t *rkcons,
-			     rd_kafka_partition_t *rkparts,
-			     int rkparts_cnt,
-			     rd_kafka_queue_t *response_q,
-			     void (*subscribe_cb) (
-				     rd_kafka_consumer_t *rkcons,
-				     rd_kafka_partition_t **rkparts,
-				     int rkparts_cnt,
-				     rd_kafka_resp_err_t error,
-				     void *opaque),
-			     void *opaque);
-				
-
-
-rd_kafka_resp_err_t
-rd_kafka_consumer_subscriptions (rd_kafka_consumer_t *rkcons,
-				 rd_kafka_partition_t *rkparts,
-				 int rkparts_cnt);
-
-
-rd_kafka_resp_err_t
-rd_kafka_consumer_unsubscribe (rd_kafka_consumer_t *rkcons,
-			       rd_kafka_partition_t *rkparts,
-			       int rkparts_cnt);
-
-
-				
-
-
-      
-					   
 
 /*******************************************************************
  *								   *
@@ -1463,6 +1498,21 @@ int rd_kafka_thread_cnt(void);
  */
 RD_EXPORT
 int rd_kafka_wait_destroyed(int timeout_ms);
+
+
+
+
+
+
+
+/* FIXME */
+RD_EXPORT
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_new (const char *topic,
+                                                          int32_t partition);
+
+RD_EXPORT
+void rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar);
+
 
 
 #ifdef __cplusplus

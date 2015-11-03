@@ -43,6 +43,7 @@
 
 #include <string>
 #include <list>
+#include <vector>
 #include <stdint.h>
 
 
@@ -126,6 +127,23 @@ enum ErrorCode {
   ERR__ISR_INSUFF = -183,        /* ISR count < required.acks */
   ERR__NODE_UPDATE = -182,       /* Broker node update */
   ERR__SSL = -181,               /* SSL certification verification failed */
+  ERR__WAIT_COORD = -180,        /* Waiting for coordinator
+                                  * to become available. */
+  ERR__UNKNOWN_GROUP = -179,     /* Unknown client group */
+  ERR__IN_PROGRESS = -178,       /* Operation in progress */
+  ERR__PREV_IN_PROGRESS = -177,  /* Previous operation
+                                  * in progress, wait for
+                                  * it to finish. */
+  ERR__EXISTING_SUBSCRIPTION = -176, /* This operation
+                                      * would interfer
+                                      * with an existing
+                                      * subscription */
+  ERR__ASSIGN_PARTITIONS = -175, /* For use w rebalance_cb*/
+  ERR__REVOKE_PARTITIONS = -174, /* For use w rebalance_cb*/
+  ERR__CONFLICT = -173,          /* Conflicting use */
+  ERR__STATE = -172,             /* Wrong state */
+  ERR__UNKNOWN_PROTOCOL = -171,  /* Unknown protocol */
+  ERR__NOT_IMPLEMENTED = -170,   /* Not implemented */
   ERR__END = -100,               /* end internal error codes */
 
   /* Standard Kafka errors: */
@@ -145,7 +163,19 @@ enum ErrorCode {
   ERR_OFFSET_METADATA_TOO_LARGE = 12,
   ERR_OFFSET_LOAD_IN_PROGRESS = 14,
   ERR_CONSUMER_COORDINATOR_NOT_AVAILABLE = 15,
-  ERR_NOT_COORDINATOR_FOR_CONSUMER = 16
+  ERR_NOT_COORDINATOR_FOR_CONSUMER = 16,
+  ERR_TOPIC_EXCEPTION = 17,
+  ERR_RECORD_LIST_TOO_LARGE = 18,
+  ERR_NOT_ENOUGH_REPLICAS = 19,
+  ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND = 20,
+  ERR_INVALID_REQUIRED_ACKS = 21,
+  ERR_ILLEGAL_GENERATION = 22,
+  ERR_INCONSISTENT_GROUP_PROTOCOL = 23,
+  ERR_UNKNOWN_MEMBER = 25,
+  ERR_INVALID_SESSION_TIMEOUT = 26,
+  ERR_INVALID_COMMIT_OFFSET_SIZE = 28,
+  ERR_AUTHORIZATION_FAILED = 29,
+  ERR_REBALANCE_IN_PROGRESS = 30
 };
 
 
@@ -172,6 +202,7 @@ class Producer;
 class Message;
 class Event;
 class Topic;
+class TopicPartition;
 
 
 /**
@@ -238,10 +269,20 @@ class RD_EXPORT EventCb {
 /**
  * Consume callback class
  */
-class ConsumeCb {
+class RD_EXPORT ConsumeCb {
  public:
   virtual void consume_cb (Message &message, void *opaque) = 0;
 };
+
+/**
+ * Rebalance callback class
+ */
+class RD_EXPORT RebalanceCb {
+public:
+  virtual void rebalance_cb(RdKafka::ErrorCode err,
+                            const std::vector<TopicPartition*>&partitions) = 0;
+};
+
 
 
 /**
@@ -323,6 +364,11 @@ class RD_EXPORT Conf {
                                 EventCb *event_cb,
                                 std::string &errstr) = 0;
 
+  /* Use with 'name' = "default_topic_conf" */
+  virtual Conf::ConfResult set (const std::string &name,
+                                const Conf *topic_conf,
+                                std::string &errstr) = 0;
+
   /* Use with 'name' = "partitioner_cb" */
   virtual Conf::ConfResult set (const std::string &name,
                                 PartitionerCb *partitioner_cb,
@@ -341,6 +387,10 @@ class RD_EXPORT Conf {
   virtual Conf::ConfResult set (const std::string &name, OpenCb *open_cb,
                                 std::string &errstr) = 0;
 
+  /* Use with 'name' = "rebalance_cb" */
+  virtual Conf::ConfResult set (const std::string &name,
+                                RebalanceCb *rebalance_cb,
+                                std::string &errstr) = 0;
 
   /**
    * Dump configuration names and values to list containing name,value tuples
@@ -386,6 +436,21 @@ class RD_EXPORT Handle {
    * messages waiting to be sent to, or acknowledged by, the broker.
    */
   virtual int outq_len () = 0;
+
+};
+
+
+/**
+ * Topic and Partition
+ */
+class RD_EXPORT TopicPartition {
+public:
+  static TopicPartition *create (const std::string &topic, int partition);
+
+  virtual ~TopicPartition() = 0;
+
+  virtual int partition () = 0;
+  virtual const std::string &topic () const = 0;
 };
 
 
@@ -469,6 +534,47 @@ class RD_EXPORT Message {
 
 
 
+/**
+ * High-level KafkaConsumer (for brokers 0.9 and later)
+ */
+class RD_EXPORT KafkaConsumer : public virtual Handle {
+public:
+  static KafkaConsumer *create (Conf *conf, std::string &errstr);
+
+  virtual ~KafkaConsumer () = 0;
+
+
+  virtual ErrorCode assignment (std::vector<RdKafka::TopicPartition*> &partitions) = 0;
+  virtual ErrorCode subscription (std::vector<std::string> &topics) = 0;
+
+
+  /* pattern matching automatically performed for topics prefixed with "^" */
+  virtual ErrorCode subscribe (const std::vector<std::string> &topics) = 0;
+
+  virtual ErrorCode unsubscribe () = 0;
+
+  virtual ErrorCode assign (const std::vector<TopicPartition*> &partitions) = 0;
+
+  virtual Message *consume (int timeout_ms) = 0;
+
+#if FIXME
+  virtual ErrorCode commitSync () = 0;
+  // FIXME virtual ErrorCode commitSync (Map<TopicPartition, Offset> offsets) = 0;
+  // FIXME virtual ErrorCode commitAsync (OffsetCommitCallback *callback) = 0;
+
+  virtual ErrorCode seek (TopicPartition &partition, int64_t offset) = 0;
+  virtual ErrorCode seek (Topic *topic, int64_t offset) = 0,
+  virtual ErrorCode seekToBeginning (TopicPartition &partition) = 0;
+  virtual ErrorCode seekToEnd (TopicPartition &partition) = 0;
+
+  virtual ErrorCode position (TopicPartition &partition, int64_t *offsetp) = 0;
+
+  // FIXME virtual ErrorCode committed (TopicPartition &partition, OffsetAndMetadata *oam) = 0;
+#endif
+
+  virtual ErrorCode close () = 0;
+
+};
 
 /**
  * Consumer

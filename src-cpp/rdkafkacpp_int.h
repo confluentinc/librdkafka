@@ -54,6 +54,11 @@ int stats_cb_trampoline (rd_kafka_t *rk, char *json, size_t json_len,
 int socket_cb_trampoline (int domain, int type, int protocol, void *opaque);
 int open_cb_trampoline (const char *pathname, int flags, mode_t mode,
                         void *opaque);
+void rebalance_cb_trampoline (rd_kafka_t *rk,
+                              rd_kafka_resp_err_t err,
+                              const rd_kafka_topic_partition_list_t
+                              *c_partitions,
+                              void *opaque);
 
 
 
@@ -163,6 +168,7 @@ class ConfImpl : public Conf {
       open_cb_(NULL),
       partitioner_cb_(NULL),
       partitioner_kp_cb_(NULL),
+      rebalance_cb_(NULL),
       rk_conf_(NULL),
       rkt_conf_(NULL){}
   ~ConfImpl () {
@@ -205,6 +211,27 @@ class ConfImpl : public Conf {
     }
 
     event_cb_ = event_cb;
+    return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult set (const std::string &name, const Conf *topic_conf,
+                        std::string &errstr) {
+    const ConfImpl *tconf_impl =
+        dynamic_cast<const RdKafka::ConfImpl *>(topic_conf);
+    if (name != "default_topic_conf" || !tconf_impl->rkt_conf_) {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    rd_kafka_conf_set_default_topic_conf(rk_conf_,
+                                         rd_kafka_topic_conf_dup(tconf_impl->
+                                                                 rkt_conf_));
+
     return Conf::CONF_OK;
   }
 
@@ -275,6 +302,23 @@ class ConfImpl : public Conf {
   }
 
 
+  Conf::ConfResult set (const std::string &name, RebalanceCb *rebalance_cb,
+                        std::string &errstr) {
+    if (name != "rebalance_cb") {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    rebalance_cb_ = rebalance_cb;
+    return Conf::CONF_OK;
+  }
+
+
   std::list<std::string> *dump ();
 
   DeliveryReportCb *dr_cb_;
@@ -283,6 +327,7 @@ class ConfImpl : public Conf {
   OpenCb *open_cb_;
   PartitionerCb *partitioner_cb_;
   PartitionerKeyPointerCb *partitioner_kp_cb_;
+  RebalanceCb *rebalance_cb_;
   ConfType conf_type_;
   rd_kafka_conf_t *rk_conf_;
   rd_kafka_topic_conf_t *rkt_conf_;
@@ -311,6 +356,7 @@ class HandleImpl : virtual public Handle {
   DeliveryReportCb *dr_cb_;
   PartitionerCb *partitioner_cb_;
   PartitionerKeyPointerCb *partitioner_kp_cb_;
+  RebalanceCb *rebalance_cb_;
 };
 
 
@@ -343,6 +389,52 @@ class TopicImpl : public Topic {
 
 
 
+/**
+ * Topic and Partition
+ */
+class TopicPartitionImpl : public TopicPartition {
+public:
+  ~TopicPartitionImpl() {};
+
+  static TopicPartition *create (const std::string &topic, int partition);
+
+  TopicPartitionImpl (const std::string &topic, int partition):
+  topic_(topic), partition_(partition) {}
+
+  TopicPartitionImpl (const rd_kafka_topic_partition_t *c_part) {
+    topic_ = std::string(c_part->topic);
+    partition_ = c_part->partition;
+  }
+
+  int partition () { return partition_; }
+  const std::string &topic () const { return topic_ ; }
+
+  std::ostream& operator<<(std::ostream &ostrm) const {
+    return ostrm << topic_ << " [" << partition_ << "]";
+  }
+
+  std::string topic_;
+  int partition_;
+};
+
+
+
+class KafkaConsumerImpl : virtual public KafkaConsumer, virtual public HandleImpl {
+public:
+  ~KafkaConsumerImpl () {
+
+  }
+
+  static KafkaConsumer *create (Conf *conf, std::string &errstr);
+
+  ErrorCode assignment (std::vector<TopicPartition*> &partitions);
+  ErrorCode subscription (std::vector<std::string> &topics);
+  ErrorCode subscribe (const std::vector<std::string> &topics);
+  ErrorCode unsubscribe ();
+  ErrorCode assign (const std::vector<TopicPartition*> &partitions);
+  Message *consume (int timeout_ms);
+  ErrorCode close ();
+};
 
 
 

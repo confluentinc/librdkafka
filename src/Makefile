@@ -5,9 +5,11 @@ LIBVER=		1
 
 SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_defaultconf.c rdkafka_timer.c rdkafka_offset.c \
-		rdkafka_transport.c rdkafka_buf.c \
-		rdkafka_request.c \
-		rdcrc32.c rdgz.c rdaddr.c rdrand.c tinycthread.c \
+		rdkafka_transport.c rdkafka_buf.c rdkafka_queue.c rdkafka_op.c \
+		rdkafka_request.c rdkafka_cgrp.c rdkafka_pattern.c \
+		rdkafka_partition.c rdkafka_subscription.c \
+		rdkafka_assignor.c rdkafka_range_assignor.c \
+		rdcrc32.c rdgz.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
 		rdlog.c \
 		snappy.c
 

@@ -693,6 +693,13 @@ void rd_kafka_topic_conf_set_opaque(rd_kafka_topic_conf_t *conf, void *opaque);
 
 
 /**
+ * Return topic opaque as previously set by `rd_kafka_topic_conf_set_opaque()`
+ */
+RD_EXPORT
+void *rd_kafka_topic_opaque (rd_kafka_topic_t *rkt);
+
+
+/**
  * Producer:
  * Set partitioner callback in provided topic conf object.
  *

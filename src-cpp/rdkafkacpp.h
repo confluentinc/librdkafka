@@ -624,6 +624,13 @@ class Consumer : public virtual Handle {
   virtual int consume_callback (Queue *queue, int timeout_ms,
                                 RdKafka::ConsumeCb *consume_cb,
                                 void *opaque) = 0;
+
+  /**
+   * Converts an offset into the logical offset from the tail of a topic.
+   *
+   * 'offset' is the (positive) number of items from the end.
+   */
+  static int64_t OffsetTail(int64_t offset);
 };
 
 

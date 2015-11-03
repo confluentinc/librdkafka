@@ -13,6 +13,8 @@ rdkafka.pc
 *.d
 librdkafka*.lds
 core
+vgcore.*
 *dSYM/
 *.offset
 SOURCES
+gmon.out

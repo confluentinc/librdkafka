@@ -146,9 +146,12 @@ typedef struct rd_kafkap_str_s {
 #define RD_KAFKAP_STR_PR(kstr)						\
 	(int)((kstr)->len == RD_KAFKAP_STR_LEN_NULL ? 0 : (kstr)->len), \
 		(kstr)->str
-	
+
 /* strndupa() a Kafka string */
 #define RD_KAFKAP_STR_DUPA(kstr) strndupa((kstr)->str, RD_KAFKAP_STR_LEN(kstr))
+
+/* strndup() a Kafka string */
+#define RD_KAFKAP_STR_DUP(kstr) rd_strndup((kstr)->str, RD_KAFKAP_STR_LEN(kstr))
 
 /**
  * Frees a Kafka string previously allocated with `rd_kafkap_str_new()`
@@ -158,7 +161,8 @@ static RD_UNUSED void rd_kafkap_str_destroy (rd_kafkap_str_t *kstr) {
 }
 
 /**
- * Initialize a Kafka string struct based on 'data' of size 'len'.
+ * Initialize a Kafka string struct based on a serialized kstr
+ * in 'data' of size 'len'.
  * No copying will be done, 'kstr->str' will point into 'data'.
  */
 static __inline RD_UNUSED
@@ -215,10 +219,20 @@ rd_kafkap_str_t *rd_kafkap_str_new (const char *str, int len) {
 		memcpy((void *)kstr->str, str, len);
 		((char *)kstr->str)[len] = '\0';
 	}
-	
+
 	return kstr;
 }
-						  
+
+
+/**
+ * Makes a copy of `src`. The copy will be fully allocated and should
+ * be freed with rd_kafka_pstr_destroy()
+ */
+static __inline RD_UNUSED
+rd_kafkap_str_t *rd_kafkap_str_copy (const rd_kafkap_str_t *src) {
+        return rd_kafkap_str_new(src->str, src->len);
+}
+
 static __inline RD_UNUSED int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
 						 const rd_kafkap_str_t *b) {
 	if (a->len != b->len)
@@ -272,7 +286,7 @@ extern const rd_kafkap_bytes_t rd_kafkap_bytes_null;
 /* Serialized Kafka bytes: only works for _new() and _init()ed kbytes */
 #define RD_KAFKAP_BYTES_SER(kbytes)  ((kbytes)+1)
 
-	
+
 /**
  * Frees a Kafka bytes previously allocated with `rd_kafkap_bytes_new()`
  */
@@ -289,7 +303,7 @@ int rd_kafkap_bytes_init (rd_kafkap_bytes_t *kbytes,
 			  const void *data, int len) {
 	int32_t klen;
 	const char *d = data;
-	
+
 	if (unlikely(len < 4))
 		return -1;
 
@@ -323,17 +337,27 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int len) {
 
 	klen = htobe32(len);
 	memcpy(kbytes+1, &klen, 4);
-	
+
 	if (len == RD_KAFKAP_BYTES_LEN_NULL)
 		kbytes->data = NULL;
 	else {
 		kbytes->data = ((const char *)(kbytes+1))+4;
 		memcpy((void *)kbytes->data, bytes, len);
 	}
-	
+
 	return kbytes;
 }
-						  
+
+
+/**
+ * Makes a copy of `src`. The copy will be fully allocated and should
+ * be freed with rd_kafkap_bytes_destroy()
+ */
+static __inline RD_UNUSED
+rd_kafkap_bytes_t *rd_kafkap_bytes_copy (const rd_kafkap_bytes_t *src) {
+        return rd_kafkap_bytes_new(src->data, src->len);
+}
+
 
 static __inline RD_UNUSED int rd_kafkap_bytes_cmp (const rd_kafkap_bytes_t *a,
 						   const rd_kafkap_bytes_t *b) {

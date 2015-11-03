@@ -809,6 +809,9 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find (rd_kafka_broker_t *rkb,
 			rkbuf->rkbuf_ts_sent = now - rkbuf->rkbuf_ts_sent;
 			rd_kafka_avg_add(&rkb->rkb_avg_rtt,
 					 rkbuf->rkbuf_ts_sent);
+                        if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING)
+                                rd_atomic32_sub(&rkb->rkb_blocking_request_cnt,
+                                                1);
 
 			rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
 			return rkbuf;

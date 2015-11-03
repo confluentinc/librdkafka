@@ -2019,18 +2019,6 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                    rkmq_msg_cnt));
 
         rd_kafka_toppar_lock(rktp);
-
-        /* Enforce ISR cnt (if set) */
-        if (unlikely(rktp->rktp_rkt->rkt_conf.enforce_isr_cnt >
-                     rktp->rktp_metadata.isr_cnt)) {
-
-                /* Trigger delivery report for
-                 * ISR failed msgs */
-                rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
-                                 RD_KAFKA_RESP_ERR__ISR_INSUFF);
-        }
-
-
         if (rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt) > 0)
                 rd_kafka_msgq_concat(&rktp->rktp_xmit_msgq, &rktp->rktp_msgq);
         rd_kafka_toppar_unlock(rktp);

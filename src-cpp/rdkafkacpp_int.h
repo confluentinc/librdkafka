@@ -289,7 +289,7 @@ class HandleImpl : virtual public Handle {
  public:
   ~HandleImpl() {};
   HandleImpl () {};
-  const std::string name () { return std::string(rd_kafka_name(rk_)); };
+  const std::string name () const { return std::string(rd_kafka_name(rk_)); };
   int poll (int timeout_ms) { return rd_kafka_poll(rk_, timeout_ms); };
   int outq_len () { return rd_kafka_outq_len(rk_); };
 
@@ -316,11 +316,11 @@ class TopicImpl : public Topic {
     rd_kafka_topic_destroy(rkt_);
   }
 
-  const std::string name () {
+  const std::string name () const {
     return rd_kafka_topic_name(rkt_);
   }
 
-  bool partition_available (int32_t partition) {
+  bool partition_available (int32_t partition) const {
     return rd_kafka_topic_partition_available(rkt_, partition);
   }
 

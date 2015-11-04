@@ -46,7 +46,7 @@ rd_kafka_pattern_t *rd_kafka_pattern_new (const char *pattern,
                                           char *errstr, int errstr_size) {
         rd_kafka_pattern_t *rkpat;
 		TRex *re;
-		const TRexChar *error;
+		const char *error;
 
 		/* Verify and precompile pattern */
 		if (!(re = trex_compile(pattern, &error))) {

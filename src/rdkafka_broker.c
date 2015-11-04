@@ -2521,7 +2521,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 	for (i = 0 ; i < TopicArrayCnt ; i++) {
 		rd_kafkap_str_t topic;
 		rd_kafka_toppar_t *rktp;
-                shptr_rd_kafka_toppar_t *s_rktp;
+		shptr_rd_kafka_toppar_t *s_rktp = NULL;
 		int32_t PartitionArrayCnt;
 		struct {
 			int32_t Partition;

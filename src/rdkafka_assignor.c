@@ -125,7 +125,7 @@ static int rd_kafka_member_subscription_match (
 
                 if (*rktpar->topic == '^') {
 					    TRex *re;
-						char *error;
+						const char *error;
 
                         /* FIXME: cache compiled regex */
 						if (!(re = trex_compile(rktpar->topic, &error))) {

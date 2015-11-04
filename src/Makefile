@@ -11,7 +11,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
 		rdcrc32.c rdgz.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
 		rdlog.c \
-		snappy.c
+		snappy.c trex.c
 
 HDRS=		rdkafka.h
 

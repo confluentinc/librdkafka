@@ -292,11 +292,13 @@ int main (int argc, char **argv) {
 
   if (mode.empty() || topic_str.empty() || optind != argc) {
   usage:
+	  std::string features;
+	  conf->get("builtin.features", features);
     fprintf(stderr,
             "Usage: %s [-C|-P] -t <topic> "
             "[-p <partition>] [-b <host1:port1,host2:port2,..>]\n"
             "\n"
-            "librdkafka version %s (0x%08x)\n"
+            "librdkafka version %s (0x%08x, builtin.features \"%s\")\n"
             "\n"
             " Options:\n"
             "  -C | -P         Consumer or Producer mode\n"
@@ -331,6 +333,7 @@ int main (int argc, char **argv) {
             "\n",
 	    argv[0],
 	    RdKafka::version_str().c_str(), RdKafka::version(),
+		features.c_str(),
 	    RdKafka::get_debug_contexts().c_str());
 	exit(1);
   }

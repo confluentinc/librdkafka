@@ -72,6 +72,24 @@ struct rd_kafka_property {
  */
 static const struct rd_kafka_property rd_kafka_properties[] = {
 	/* Global properties */
+	{ _RK_GLOBAL, "builtin.features", _RK_C_S2F, _RK(builtin_features),
+	"Indicates the builtin features for this build of librdkafka. "
+	"An application can either query this value or attempt to set it "
+	"with its list of required features to check for library support.",
+	0, 0x7fffffff, 0xff,
+	.s2i = {
+#if WITH_ZLIB
+		{ 0x1, "gzip" },
+#endif
+#ifndef _MSC_VER
+		{ 0x2, "snappy" },
+#endif
+#if WITH_SSL
+		{ 0x4, "ssl" },
+#endif
+		{ 0, NULL }
+		}
+	},
 	{ _RK_GLOBAL, "client.id", _RK_C_STR, _RK(client_id_str),
 	  "Client identifier.",
 	  .sdef =  "rdkafka" },

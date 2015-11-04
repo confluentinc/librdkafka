@@ -86,6 +86,7 @@ struct rd_kafka_conf_s {
         /* Client group configuration */
         int    coord_query_intvl_ms;
 
+	int builtin_features;
 	/*
 	 * Consumer configuration
 	 */

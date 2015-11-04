@@ -392,6 +392,10 @@ class RD_EXPORT Conf {
                                 RebalanceCb *rebalance_cb,
                                 std::string &errstr) = 0;
 
+  /* Query single configuration value */
+  virtual Conf::ConfResult get(const std::string &name,
+	  std::string &value) const = 0;
+
   /**
    * Dump configuration names and values to list containing name,value tuples
    */

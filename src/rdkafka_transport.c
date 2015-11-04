@@ -371,10 +371,10 @@ static ssize_t
 rd_kafka_transport_ssl_sendmsg (rd_kafka_transport_t *rktrans,
 				const struct msghdr *msg,
 				char *errstr, size_t errstr_size) {
-	unsigned int i;
+	int i;
 	ssize_t sum = 0;
 
-	for (i = 0; i < msg->msg_iovlen; i++) {
+	for (i = 0; i < (int)msg->msg_iovlen; i++) {
 		int r;
 
 		if (unlikely(msg->msg_iov[i].iov_len == 0))
@@ -407,9 +407,9 @@ rd_kafka_transport_ssl_recvmsg (rd_kafka_transport_t *rktrans,
 				struct msghdr *msg,
 				char *errstr, size_t errstr_size) {
 	ssize_t sum = 0;
-	unsigned int i;
+	int i;
 	
-	for (i = 0; i < msg->msg_iovlen; i++) {
+	for (i = 0; i < (int)msg->msg_iovlen; i++) {
 		int r;
 
 		r = SSL_read(rktrans->rktrans_ssl,

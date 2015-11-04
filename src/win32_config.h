@@ -31,3 +31,4 @@
  */
 #pragma once
 
+#define WITH_SSL 1

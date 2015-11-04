@@ -20,6 +20,12 @@ mkl_require gen-pkg-config "rdkafka" "The Apache Kafka C/C++ library" \
 
 mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-code valgrind suppressions" "n"
 
+mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Enable refcnt debugging" "n"
+
+mkl_toggle_option "Development" ENABLE_SHAREDPTR_DEBUG "--enable-sharedptr-debug" "Enable sharedptr debugging" "n"
+
+
+
 function checks {
 
     # required libs

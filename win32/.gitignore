@@ -76,6 +76,10 @@ ipch/
 *.vsp
 *.vspx
 
+# NuGet
+packages/*
+!packages/repositories.config
+
 # Installshield output folder
 [Ee]xpress/
 

@@ -26,8 +26,8 @@
 extern int test_level;
 
 extern int test_seed;
-extern const __thread char *test_curr;
-extern __thread int64_t test_start;
+extern const RD_TLS char *test_curr;
+extern RD_TLS int64_t test_start;
 
 #define TEST_FAIL(...) do {					\
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \

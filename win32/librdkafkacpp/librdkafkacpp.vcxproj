@@ -87,10 +87,12 @@
     <ClCompile Include="..\..\src-cpp\ConfImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\ConsumerImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\HandleImpl.cpp" />
+    <ClCompile Include="..\..\src-cpp\KafkaConsumerImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\MessageImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\ProducerImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\RdKafka.cpp" />
     <ClCompile Include="..\..\src-cpp\TopicImpl.cpp" />
+    <ClCompile Include="..\..\src-cpp\TopicPartitionImpl.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src-cpp\rdkafkacpp.h" />

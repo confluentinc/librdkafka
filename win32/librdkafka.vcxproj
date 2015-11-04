@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -118,7 +118,6 @@
     <ClInclude Include="..\src\rdwin32.h" />
     <ClInclude Include="..\src\trex.h" />
     <ClInclude Include="..\src\win32_config.h" />
-    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\rdaddr.c" />
@@ -150,9 +149,6 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\LICENSE..txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="librdkafka.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

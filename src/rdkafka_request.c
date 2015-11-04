@@ -933,9 +933,11 @@ rd_kafka_group_MemberMetadata_consumer_read (
 
         while (subscription_cnt-- > 0) {
                 rd_kafkap_str_t Topic;
+				char *topic_name;
                 rd_kafka_buf_read_str(rkbuf, &Topic);
+				RD_KAFKAP_STR_DUPA(&topic_name, &Topic);
                 rd_kafka_topic_partition_list_add(rkgm->rkgm_subscription,
-                                                  RD_KAFKAP_STR_DUPA(&Topic),
+                                                  topic_name,
                                                   RD_KAFKA_PARTITION_UA);
         }
 
@@ -1010,9 +1012,10 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_broker_t *rkb,
                      ErrorCode ? rd_kafka_err2str(ErrorCode) : "(no error)");
 
         if (!ErrorCode) {
+			    char *my_member_id;
+				RD_KAFKAP_STR_DUPA(&my_member_id, &MyMemberId);
                 rkcg->rkcg_generation_id = GenerationId;
-                rd_kafka_cgrp_set_member_id(rkcg,
-                                            RD_KAFKAP_STR_DUPA(&MyMemberId));
+				rd_kafka_cgrp_set_member_id(rkcg, my_member_id);
                 i_am_leader = !rd_kafkap_str_cmp(&LeaderId, &MyMemberId);
         } else {
                 rd_interval_backoff(&rkcg->rkcg_join_intvl, 1000*1000);

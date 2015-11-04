@@ -258,7 +258,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		if (of >= (int)sizeof(rkb->rkb_err.msg))
 			of = 0;
 		va_start(ap, fmt);
-		vsnprintf(rkb->rkb_err.msg+of,
+		rd_vsnprintf(rkb->rkb_err.msg+of,
 			  sizeof(rkb->rkb_err.msg)-of, fmt, ap);
 		va_end(ap);
 
@@ -3528,7 +3528,7 @@ void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                         rd_kafka_op_t *rko;
 
                         rko = rd_kafka_op_new(RD_KAFKA_OP_NODE_UPDATE);
-                        rko->rko_nodename = strdup(nodename);
+                        rko->rko_nodename = rd_strdup(nodename);
                         rko->rko_nodeid   = mdb->id;
                         rko->rko_flags   |= RD_KAFKA_OP_F_FREE;/*free nodename*/
                         rd_kafka_q_enq(&rkb->rkb_ops, rko);

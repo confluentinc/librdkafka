@@ -148,7 +148,8 @@ typedef struct rd_kafkap_str_s {
 		(kstr)->str
 
 /* strndupa() a Kafka string */
-#define RD_KAFKAP_STR_DUPA(kstr) strndupa((kstr)->str, RD_KAFKAP_STR_LEN(kstr))
+#define RD_KAFKAP_STR_DUPA(destptr,kstr) \
+	rd_strndupa((destptr), (kstr)->str, RD_KAFKAP_STR_LEN(kstr))
 
 /* strndup() a Kafka string */
 #define RD_KAFKAP_STR_DUP(kstr) rd_strndup((kstr)->str, RD_KAFKAP_STR_LEN(kstr))

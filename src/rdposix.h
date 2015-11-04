@@ -78,6 +78,7 @@
 
 #define RD_FORMAT(...) __attribute__((format (__VA_ARGS__)))
 #define rd_snprintf(...)  snprintf(__VA_ARGS__)
+#define rd_vsnprintf(...) vsnprintf(__VA_ARGS__)
 
 #define rd_strcasecmp(A,B) strcasecmp(A,B)
 #define rd_strncasecmp(A,B,N) strncasecmp(A,B,N)

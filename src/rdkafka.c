@@ -142,7 +142,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	}
 
 	va_start(ap, fmt);
-	vsnprintf(buf+of, sizeof(buf)-of, fmt, ap);
+	rd_vsnprintf(buf+of, sizeof(buf)-of, fmt, ap);
 	va_end(ap);
 
 	rk->rk_conf.log_cb(rk, level, fac, buf);

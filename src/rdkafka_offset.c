@@ -134,8 +134,7 @@ int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
         return fd;
 #else
 	int fd;
-	fd = _open(pathname, flags, mode); // C4996
-	if (fd == -1)
+	if (_sopen_s(&fd, pathname, flags, 0, mode) != 0)
 		return -1;
 	return fd;
 #endif

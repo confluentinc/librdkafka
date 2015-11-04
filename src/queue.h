@@ -656,8 +656,7 @@ struct {								\
 		((char *)((head)->stqh_last) - offsetof(struct type, field))))
 
 
-#ifdef _MSVC
-#define __launder_type(x)  (x)
+#ifndef _KERNEL
 /*
  * Circular queue definitions. Do not use. We still keep the macros
  * for compatibility but because of pointer aliasing issues their use
@@ -679,6 +678,9 @@ struct {								\
  * this by changing the head/tail sentinal values, but see the note above
  * this one.
  */
+#ifdef _MSC_VER
+#define __launder_type(x)  ((const void *)(x))
+#else
 static __inline const void * __launder_type(const void *);
 static __inline const void *
 __launder_type(const void *__x)
@@ -686,6 +688,7 @@ __launder_type(const void *__x)
 	__asm __volatile("" : "+r" (__x));
 	return __x;
 }
+#endif
 
 #if defined(QUEUEDEBUG)
 #define QUEUEDEBUG_CIRCLEQ_HEAD(head, field)				\

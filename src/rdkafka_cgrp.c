@@ -369,8 +369,8 @@ static void rd_kafka_cgrp_handle_ConsumerMetadata (rd_kafka_broker_t *rkb,
 
 
         mdb.id = CoordId;
-        mdb.host = RD_KAFKAP_STR_DUPA(&CoordHost);
-        mdb.port = CoordPort;
+		RD_KAFKAP_STR_DUPA(&mdb.host, &CoordHost);
+		mdb.port = CoordPort;
 
         rd_rkb_dbg(rkb, CGRP, "CGRPMETADATA",
                    "Group \"%.*s\" ConsumerMetadata coordinator is "
@@ -1388,11 +1388,12 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                 rd_kafka_buf_read_i32(rkbuf, &PartCnt);
                 while (PartCnt-- > 0) {
                         int32_t Partition;
+						char *topic_name;
+						RD_KAFKAP_STR_DUPA(&topic_name, &Topic);
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
 
                         rd_kafka_topic_partition_list_add(
-                                assignment,
-                                RD_KAFKAP_STR_DUPA(&Topic), Partition);
+                                assignment, topic_name, Partition);
                 }
         }
 

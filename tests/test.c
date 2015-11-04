@@ -47,8 +47,8 @@ static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
 static int  tests_run_in_parallel = 0;
 static int  tests_running_cnt = 0;
-const __thread char *test_curr = NULL;
-__thread int64_t test_start = 0;
+const RD_TLS char *test_curr = NULL;
+RD_TLS int64_t test_start = 0;
 
 #ifndef _MSC_VER
 static pthread_mutex_t test_lock;
@@ -398,12 +398,12 @@ static int run_test (const char *testname,
 					     .argv = argv };
 		
 		tests_running_cnt++;
-		run_test0(&run_args);
+		r =  run_test0(&run_args);
 		tests_running_cnt--;
 		
-                /* Wait for everything to be cleaned up since broker
-                 * destroys are handled in its own thread. */
-                test_wait_exit(5);
+        /* Wait for everything to be cleaned up since broker
+         * destroys are handled in its own thread. */
+        test_wait_exit(5);
 
 		test_curr = NULL;
         }

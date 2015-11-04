@@ -115,7 +115,8 @@ int rd_kafka_pattern_list_remove (rd_kafka_pattern_list_t *plist,
 static int rd_kafka_pattern_list_parse (rd_kafka_pattern_list_t *plist,
                                         const char *patternlist,
                                         char *errstr, int errstr_size) {
-        char *s = strdupa(patternlist);
+		char *s;
+		rd_strdupa(&s, patternlist);
 
         while (s && *s) {
                 char *t = s;

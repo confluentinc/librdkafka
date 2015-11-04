@@ -124,15 +124,17 @@ static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
  * Portability
  */
 
-/* MacOSX does not have strndupa() */
-#ifndef strndupa
-#define strndupa(PTR,LEN) ({ int _L = (LEN); char *_x = rd_alloca(_L+1); \
-      memcpy(_x, (PTR), _L); *(_x+_L) = 0; _x;})
+#ifdef strndupa
+#define rd_strndupa(DESTPTR,PTR,LEN)  (*(DESTPTR) = strndupa(PTR,LEN))
+#else
+#define rd_strndupa(DESTPTR,PTR,LEN) (*(DESTPTR) = rd_alloca(LEN+1), \
+      memcpy(*(DESTPTR), (PTR), LEN), *((*(DESTPTR))+(LEN)) = 0)
 #endif
 
-#ifndef strdupa
-#define strdupa(PTR) ({ const char *_P = (PTR); int _L = strlen(_P); \
-      char *_x = rd_alloca(_L+1); memcpy(_x, _P, _L); *(_x+_L) = 0; _x;})
+#ifdef strdupa
+#define rd_strdupa(DESTPTR,PTR)  (*(DESTPTR) = strdupa(PTR,LEN))
+#else
+#define rd_strdupa(DESTPTR,PTR)  rd_strndupa(DESTPTR,PTR,strlen(PTR))
 #endif
 
 /* Some versions of MacOSX dont have IOV_MAX */

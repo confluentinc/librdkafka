@@ -99,6 +99,7 @@ struct msghdr {
 
 #define RD_FORMAT(...)
 #define rd_snprintf(...)  sprintf_s(__VA_ARGS__)
+#define rd_vsnprintf(buf,size,...) vsnprintf_s(buf,size,_TRUNCATE,__VA_ARGS__)
 
 #define rd_strcasecmp(A,B) _stricmp(A,B)
 #define rd_strncasecmp(A,B,N) _strnicmp(A,B,N)

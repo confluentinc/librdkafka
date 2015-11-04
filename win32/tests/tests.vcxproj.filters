@@ -42,13 +42,22 @@
     <ClCompile Include="..\..\tests\0008-reqacks.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\tests\0010-enforcereqacks.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\tests\0011-produce_batch.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\tests\0012-produce_consume.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\tests\0013-null-msgs.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\tests\0014-reconsume-191.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\tests\0015-offset_seeks.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\tests\0016-subscribe_partition.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

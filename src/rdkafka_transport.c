@@ -351,11 +351,11 @@ rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
 			if (ret == 0)
 				errno = ECONNRESET;
 			rd_snprintf(errstr, errstr_size,
-				    "SSL syscall error: %s", strerror(errno));
+				    "SSL syscall error: %s", rd_strerror(errno));
 		} else
 			rd_snprintf(errstr, errstr_size,
 				    "SSL syscall error number: %d: %s", serr2,
-				    strerror(errno));
+				    rd_strerror(errno));
 		return -1;
 
 	default:
@@ -817,7 +817,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 			return;
 
 		if (getsockopt(rktrans->rktrans_s, SOL_SOCKET,
-			       SO_ERROR, &r, &intlen) == -1) {
+			       SO_ERROR, (void *)&r, &intlen) == -1) {
 			rd_kafka_broker_fail(
                                 rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
                                 "Connect to %s failed: "
@@ -827,7 +827,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
                                                 RD_SOCKADDR2STR_F_PORT |
                                                 RD_SOCKADDR2STR_F_FAMILY),
                                 rktrans->rktrans_s,
-                                strerror(errno));
+                                rd_strerror(socket_errno));
 		} else if (r != 0) {
 			/* Connect failed */
 			rd_snprintf(errstr, sizeof(errstr),
@@ -835,7 +835,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
                                     rd_sockaddr2str(rkb->rkb_addr_last,
                                                     RD_SOCKADDR2STR_F_PORT |
                                                     RD_SOCKADDR2STR_F_FAMILY),
-                                    strerror(r));
+                                    rd_strerror(r));
 
 			rd_kafka_broker_connect_done(rkb, errstr);
 		} else {
@@ -974,7 +974,11 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 	/* Connect to broker */
 	if (connect(s, (struct sockaddr *)sinx,
 		    RD_SOCKADDR_INX_LEN(sinx)) == SOCKET_ERROR &&
-	    errno != EINPROGRESS) {
+	    (socket_errno != EINPROGRESS
+#ifdef _MSC_VER
+		&& socket_errno != WSAEWOULDBLOCK
+#endif
+		)) {
 		rd_rkb_dbg(rkb, BROKER, "CONNECT",
 			   "couldn't connect to %s: %s (%i)",
 			   rd_sockaddr2str(sinx,

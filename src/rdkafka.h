@@ -252,11 +252,15 @@ typedef struct rd_kafka_topic_partition_list_s {
         rd_kafka_topic_partition_t *elems;
 } rd_kafka_topic_partition_list_t;
 
+RD_EXPORT
 rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new (int size);
+RD_EXPORT
 void rd_kafka_topic_partition_list_destroy (rd_kafka_topic_partition_list_t *rkparlist);
+RD_EXPORT
 void rd_kafka_topic_partition_list_add (rd_kafka_topic_partition_list_t *rktparlist,
                                         const char *topic, int32_t partition);
 
+RD_EXPORT
 void
 rd_kafka_topic_partition_list_add_range (rd_kafka_topic_partition_list_t
                                          *rktparlist,
@@ -264,6 +268,7 @@ rd_kafka_topic_partition_list_add_range (rd_kafka_topic_partition_list_t
                                          int32_t start, int32_t stop);
 
 
+RD_EXPORT
 rd_kafka_topic_partition_list_t *
 rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src);
 
@@ -590,6 +595,7 @@ void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
  * Returns RD_KAFKA_CONF_OK if the property name matched, else
  * RD_KAFKA_CONF_UNKNOWN.
  */
+RD_EXPORT
 rd_kafka_conf_res_t rd_kafka_conf_get (const rd_kafka_conf_t *conf,
                                        const char *name,
                                        char *dest, size_t *dest_size);
@@ -598,6 +604,7 @@ rd_kafka_conf_res_t rd_kafka_conf_get (const rd_kafka_conf_t *conf,
 /**
  * Same as `rd_kafka_conf_get()` but for topic configuration objects.
  */
+RD_EXPORT
 rd_kafka_conf_res_t rd_kafka_topic_conf_get (const rd_kafka_topic_conf_t *conf,
                                              const char *name,
                                              char *dest, size_t *dest_size);
@@ -1163,6 +1170,7 @@ typedef struct rd_kafka_consumer_s rd_kafka_consumer_t;
  *   KeyDeserializer
  *   ValueDeserializer
  */
+RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_subscribe_partition (rd_kafka_t *rk,
                                                   const char *topic,
                                                   int32_t partition);
@@ -1172,12 +1180,21 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_subscribe (rd_kafka_t *rk,
                     const rd_kafka_topic_partition_list_t *topics);
 
+RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk);
 
+
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_unsubscribe_partition(rd_kafka_t *rk,
+const char *topic, int32_t partition);
+
+RD_EXPORT
 rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
 
+RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
 
+RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_consumer_get_offset (rd_kafka_topic_t *rkt,
                                                   int32_t partition,
                                                   int64_t *offsetp,

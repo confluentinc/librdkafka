@@ -202,7 +202,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
                         rd_kafka_wrunlock(rk);
                         rd_kafka_log(rk, LOG_ERR, "TOPIC",
                                      "Failed to create local topic \"%s\": %s",
-                                     topic, strerror(errno));
+                                     topic, rd_strerror(errno));
                         return NULL;
                 }
         }
@@ -1419,7 +1419,7 @@ void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
         rko->rko_err                 = err;
         rko->rko_rkmessage.rkt = rd_kafka_topic_keep_a(rktp->rktp_rkt);
         rko->rko_rkmessage.partition = rktp->rktp_partition;
-        rko->rko_payload             = strdup(rd_kafka_err2str(rko->rko_err));
+        rko->rko_payload             = rd_strdup(rd_kafka_err2str(rko->rko_err));
         rko->rko_len                 = strlen(rko->rko_payload);
         rko->rko_flags              |= RD_KAFKA_OP_F_FREE;
 

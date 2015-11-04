@@ -137,7 +137,7 @@ void rd_kafka_op_err (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 	char buf[2048];
 
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
+	rd_vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
 	if (rk->rk_conf.error_cb)
@@ -157,11 +157,11 @@ void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_resp_err_t err,
 	char buf[2048];
 
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
+	rd_vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
         rd_kafka_op_app_reply(rkq, RD_KAFKA_OP_ERR, err, version,
-                              strdup(buf), strlen(buf));
+                              rd_strdup(buf), strlen(buf));
 }
 
 
@@ -203,7 +203,7 @@ void rd_kafka_op_app_fmt (rd_kafka_q_t *rkq, rd_kafka_op_type_t type,
         char buf[1024];
         va_list ap;
         va_start(ap, fmt);
-        vsnprintf(buf, sizeof(buf), fmt, ap);
+        rd_vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
 
         rd_kafka_op_app(rkq, type, RD_KAFKA_OP_F_FREE,

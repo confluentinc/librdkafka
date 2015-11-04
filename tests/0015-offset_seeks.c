@@ -81,12 +81,12 @@ int main_0015_offsets_seek (int argc, char **argv) {
 
 	/* Now go dancing over the entire range with offset seeks. */
 	for (i = 0 ; i < dance_iterations ; i++) {
-		int64_t offset = jitter(offset_base, offset_base+msg_cnt);
+		int64_t offset = jitter((int)offset_base, (int)offset_base+msg_cnt);
 
 		test_consume_msgs("dance", rkt_c,
                                   testid, partition, offset,
-                                  msg_base + (offset - offset_base),
-                                  RD_MIN(msgs_per_dance, offset_last - offset));
+                                  msg_base + (int)(offset - offset_base),
+                                  RD_MIN(msgs_per_dance, (int)offset_last - offset));
 	}
 
 	test_consumer_stop("1", rkt_c, partition);

@@ -132,7 +132,7 @@ static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #endif
 
 #ifdef strdupa
-#define rd_strdupa(DESTPTR,PTR)  (*(DESTPTR) = strdupa(PTR,LEN))
+#define rd_strdupa(DESTPTR,PTR)  (*(DESTPTR) = strdupa(PTR))
 #else
 #define rd_strdupa(DESTPTR,PTR)  rd_strndupa(DESTPTR,PTR,strlen(PTR))
 #endif

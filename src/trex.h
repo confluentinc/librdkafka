@@ -27,7 +27,10 @@
 
 ****************************************************************/
 
-#ifdef _UNICODE
+/* librdkafka: Topic names are 7-bit ascii, no need for unicode matching */
+#undef TREX_UNICODE
+
+#ifdef TREX_UNICODE
 #define TRexChar unsigned short
 #define MAX_CHAR 0xFFFF
 #define _TREXC(c) L##c 

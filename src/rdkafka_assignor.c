@@ -27,6 +27,7 @@
  */
 #include "rdkafka_int.h"
 #include "rdkafka_assignor.h"
+#include "trex.h"
 
 /**
  * Clear out and free any memory used by the member, but not the rkgm itself.
@@ -123,33 +124,28 @@ static int rd_kafka_member_subscription_match (
                         &rkgm->rkgm_subscription->elems[i];
 
                 if (*rktpar->topic == '^') {
-                        regex_t reg;
-                        int rerr;
+					    TRex *re;
+						char *error;
 
                         /* FIXME: cache compiled regex */
-                        if ((rerr = regcomp(&reg, rktpar->topic,
-                                            REG_EXTENDED|REG_NOSUB))) {
-                                char errbuf[256];
-
-                                regerror(rerr, &reg, errbuf, sizeof(errbuf)-1);
+						if (!(re = trex_compile(rktpar->topic, &error))) {
                                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP,
                                              "SUBMATCH",
                                              "Invalid regex for member "
                                              "\"%.*s\" subscription \"%s\": %s",
                                              RD_KAFKAP_STR_PR(rkgm->
                                                               rkgm_member_id),
-                                             rktpar->topic, errbuf);
+                                             rktpar->topic, error);
                                 continue;
                         }
 
-                        if (regexec(&reg, topic_metadata->topic,
-                                    0, NULL, 0) != REG_NOMATCH) {
+                        if (trex_match(re, topic_metadata->topic)) {
                                 rd_list_add(&rkgm->rkgm_eligible,
                                             (void *)topic_metadata);
                                 matched++;
                         }
 
-                        regfree(&reg);
+						trex_free(re);
                         has_regex++;
 
                 } else if (!strcmp(rktpar->topic, topic_metadata->topic)) {

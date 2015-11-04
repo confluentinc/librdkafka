@@ -34,7 +34,7 @@
 #include "rdkafka_assignor.h"
 #include "rdkafka_cgrp.h"
 
-#include <regex.h>
+#include "trex.h"
 
 
 static int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg);

@@ -656,7 +656,8 @@ struct {								\
 		((char *)((head)->stqh_last) - offsetof(struct type, field))))
 
 
-#ifndef _KERNEL
+#ifdef _MSVC
+#define __launder_type(x)  (x)
 /*
  * Circular queue definitions. Do not use. We still keep the macros
  * for compatibility but because of pointer aliasing issues their use

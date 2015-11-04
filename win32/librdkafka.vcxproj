@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -79,7 +79,21 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\src\queue.h" />
+    <ClInclude Include="..\src\rdatomic.h" />
+    <ClInclude Include="..\src\rdavg.h" />
     <ClInclude Include="..\src\rdendian.h" />
+    <ClInclude Include="..\src\rdinterval.h" />
+    <ClInclude Include="..\src\rdkafka_assignor.h" />
+    <ClInclude Include="..\src\rdkafka_buf.h" />
+    <ClInclude Include="..\src\rdkafka_cgrp.h" />
+    <ClInclude Include="..\src\rdkafka_conf.h" />
+    <ClInclude Include="..\src\rdkafka_op.h" />
+    <ClInclude Include="..\src\rdkafka_partition.h" />
+    <ClInclude Include="..\src\rdkafka_pattern.h" />
+    <ClInclude Include="..\src\rdkafka_queue.h" />
+    <ClInclude Include="..\src\rdkafka_request.h" />
+    <ClInclude Include="..\src\rdkafka_subscription.h" />
+    <ClInclude Include="..\src\rdlist.h" />
     <ClInclude Include="..\src\rdposix.h" />
     <ClInclude Include="..\src\rd.h" />
     <ClInclude Include="..\src\rdaddr.h" />
@@ -102,27 +116,43 @@
     <ClInclude Include="..\src\snappy_compat.h" />
     <ClInclude Include="..\src\tinycthread.h" />
     <ClInclude Include="..\src\rdwin32.h" />
+    <ClInclude Include="..\src\trex.h" />
     <ClInclude Include="..\src\win32_config.h" />
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\rdaddr.c" />
     <ClCompile Include="..\src\rdcrc32.c" />
     <ClCompile Include="..\src\rdkafka.c" />
+    <ClCompile Include="..\src\rdkafka_assignor.c" />
     <ClCompile Include="..\src\rdkafka_broker.c" />
-    <ClCompile Include="..\src\rdkafka_defaultconf.c" />
+    <ClCompile Include="..\src\rdkafka_cgrp.c" />
+    <ClCompile Include="..\src\rdkafka_conf.c" />
     <ClCompile Include="..\src\rdkafka_msg.c" />
     <ClCompile Include="..\src\rdkafka_offset.c" />
+    <ClCompile Include="..\src\rdkafka_op.c" />
+    <ClCompile Include="..\src\rdkafka_partition.c" />
+    <ClCompile Include="..\src\rdkafka_pattern.c" />
+    <ClCompile Include="..\src\rdkafka_queue.c" />
+    <ClCompile Include="..\src\rdkafka_range_assignor.c" />
+    <ClCompile Include="..\src\rdkafka_request.c" />
+    <ClCompile Include="..\src\rdkafka_subscription.c" />
     <ClCompile Include="..\src\rdkafka_timer.c" />
     <ClCompile Include="..\src\rdkafka_topic.c" />
     <ClCompile Include="..\src\rdkafka_transport.c" />
     <ClCompile Include="..\src\rdkafka_buf.c" />
+    <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\snappy.c" />
     <ClCompile Include="..\src\tinycthread.c" />
+    <ClCompile Include="..\src\trex.c" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\LICENSE..txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="librdkafka.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

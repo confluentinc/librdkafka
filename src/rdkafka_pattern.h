@@ -28,14 +28,12 @@
 #pragma once
 
 
-// FIXME: use T-Rex or SLRE for portability
-#include <regex.h>
-
+#include "trex.h"
 
 
 typedef struct rd_kafka_pattern_s {
         TAILQ_ENTRY(rd_kafka_pattern_s)  rkpat_link;
-        regex_t      rkpat_re;   /* Compiled regex */
+        TRex        *rkpat_re;   /* Compiled regex */
         char        *rkpat_orig;  /* Original pattern */
 } rd_kafka_pattern_t;
 

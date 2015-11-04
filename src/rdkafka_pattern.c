@@ -32,8 +32,8 @@
 void rd_kafka_pattern_destroy (rd_kafka_pattern_list_t *plist,
                                rd_kafka_pattern_t *rkpat) {
         TAILQ_REMOVE(&plist->rkpl_head, rkpat, rkpat_link);
-        regfree(&rkpat->rkpat_re);
-        free(rkpat->rkpat_orig);
+		trex_free(rkpat->rkpat_re);
+        rd_free(rkpat->rkpat_orig);
         rd_free(rkpat);
 }
 
@@ -45,16 +45,17 @@ void rd_kafka_pattern_add (rd_kafka_pattern_list_t *plist,
 rd_kafka_pattern_t *rd_kafka_pattern_new (const char *pattern,
                                           char *errstr, int errstr_size) {
         rd_kafka_pattern_t *rkpat;
-        int r;
+		TRex *re;
+		const TRexChar *error;
+
+		/* Verify and precompile pattern */
+		if (!(re = trex_compile(pattern, &error))) {
+			rd_snprintf(errstr, errstr_size, "%s", error);
+			return NULL;
+		}
 
         rkpat = rd_calloc(1, sizeof(*rkpat));
-
-        /* Verify pattern */
-        if ((r = regcomp(&rkpat->rkpat_re, pattern, REG_EXTENDED|REG_NOSUB))) {
-                regerror(r, &rkpat->rkpat_re, errstr, sizeof(errstr));
-                rd_free(rkpat);
-                return NULL;
-        }
+		rkpat->rkpat_re = re;
 
         rkpat->rkpat_orig = rd_strdup(pattern);
 
@@ -67,7 +68,7 @@ int rd_kafka_pattern_match (rd_kafka_pattern_list_t *plist, const char *str) {
         rd_kafka_pattern_t *rkpat;
 
         TAILQ_FOREACH(rkpat, &plist->rkpl_head, rkpat_link) {
-                if (regexec(&rkpat->rkpat_re, str, 0, NULL, 0) == 0)
+                if (trex_match(rkpat->rkpat_re, str))
                         return 1;
         }
 

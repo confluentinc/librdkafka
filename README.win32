@@ -1,0 +1,22 @@
+
+Native win32 build instructions using Microsoft Visual Studio (MSVC).
+
+Requirements:
+ * OpenSSL-win32 must be installed in C:\OpenSSL-win32.
+   Download and install the latest non-light package from:
+   https://slproweb.com/products/Win32OpenSSL.html
+
+
+The Visual Studio solution file for librdkafka resides in win32/librdkafka.sln
+
+Artifacts:
+ - C library
+ - C++ library
+ - rdkafka_example
+ - tests
+
+ Missing:
+  - remaining tools (rdkafka_performance, etc)
+  - parallell tests
+  - Snappy support
+

@@ -1,3 +1,8 @@
+#include "rdkafka_int.h"
+#include "rdendian.h"
+
+
+
 #ifdef __FreeBSD__
 #  include <sys/endian.h>
 #elif defined(__APPLE_CC_) || defined(__MACH__)  /* MacOS/X support */
@@ -14,7 +19,7 @@
 #endif
 
 
-#elif !defined(__WIN32__)
+#elif !defined(__WIN32__) && !defined(_MSC_VER)
 #  include <endian.h>
 #endif
 
@@ -24,7 +29,7 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <limits.h>
-#ifndef __WIN32__
+#if !defined(__WIN32__) && !defined(_MSC_VER)
 #include <sys/uio.h>
 #endif
 
@@ -52,7 +57,7 @@ struct iovec {
 
 // Potentially unaligned loads and stores.
 // x86 and PowerPC can simply do these loads and stores native.
-#if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__)
+#if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__) || defined(_MSC_VER)
 
 #define get_unaligned get_unaligned_direct
 #define put_unaligned put_unaligned_direct
@@ -97,15 +102,20 @@ struct iovec {
 
 #endif
 
-#define get_unaligned_le32(x) (le32toh(get_unaligned((u32 *)(x))))
-#define put_unaligned_le16(v,x) (put_unaligned(htole16(v), (u16 *)(x)))
+#define get_unaligned_le32(x) (htobe32(get_unaligned((u32 *)(x))))
+#define put_unaligned_le16(v,x) (put_unaligned(be16toh(v), (u16 *)(x)))
 
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned u32;
 typedef unsigned long long u64;
 
+#ifdef _MSC_VER
+#define BUG_ON(x) do { if (unlikely((x))) abort(); } while (0)
+#else
 #define BUG_ON(x) assert(!(x))
+#endif
+
 
 #define vmalloc(x) malloc(x)
 #define vfree(x) free(x)
@@ -114,8 +124,10 @@ typedef unsigned long long u64;
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 
+#ifndef likely
 #define likely(x) __builtin_expect((x), 1)
 #define unlikely(x) __builtin_expect((x), 0)
+#endif
 
 #define min_t(t,x,y) ((x) < (y) ? (x) : (y))
 #define max_t(t,x,y) ((x) > (y) ? (x) : (y))

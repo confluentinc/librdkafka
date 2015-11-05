@@ -36,6 +36,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef SG
+#define SG /* Scatter-Gather / iovec support in Snappy */
+#endif
+
 #ifdef __KERNEL__
 #include <linux/kernel.h>
 #ifdef SG
@@ -49,8 +53,11 @@
 #include <asm/unaligned.h>
 #else
 #include "snappy.h"
-#include "compat.h"
+#include "snappy_compat.h"
 #endif
+
+#include "rd.h"
+#define inline __inline
 
 #define CRASH_UNLESS(x) BUG_ON(!(x))
 #define CHECK(cond) CRASH_UNLESS(cond)
@@ -116,19 +123,58 @@ static inline bool is_little_endian(void)
 	return false;
 }
 
+#ifndef _MSC_VER
+#define rd_clz(n)   __builtin_clz(n)
+#define rd_ctz(n)   __builtin_ctz(n)
+#define rd_ctzll(n) __builtin_ctzll(n)
+#else
+#include <intrin.h>
+static int __inline rd_clz(u32 x) {
+	int r = 0;
+	if (_BitScanForward(&r, x))
+		return 31 - r;
+	else
+		return 32;
+}
+
+static int __inline rd_ctz(u32 x) {
+	int r = 0;
+	if (_BitScanReverse(&r, x))
+		return r;
+	else
+		return 32;
+}
+
+static int __inline rd_ctz64(u64 x) {
+#ifdef _M_X64
+	int r = 0;
+	if (_BitScanReverse64(&r, x))
+		return r;
+	else
+		return 64;
+#else
+	int r;
+	if ((r = rd_ctz(x & 0xffffffff)) < 32)
+		return r;
+	return 32 + rd_ctz(x >> 32);
+#endif
+}
+#endif
+
+
 static inline int log2_floor(u32 n)
 {
-	return n == 0 ? -1 : 31 ^ __builtin_clz(n);
+	return n == 0 ? -1 : 31 ^ rd_clz(n);
 }
 
 static inline int find_lsb_set_non_zero(u32 n)
 {
-	return __builtin_ctz(n);
+	return rd_ctz(n);
 }
 
 static inline int find_lsb_set_non_zero64(u64 n)
 {
-	return __builtin_ctzll(n);
+	return rd_ctz64(n);
 }
 
 #define kmax32 5
@@ -244,7 +290,7 @@ static inline const char *peek(struct source *s, size_t *len)
 {
 	if (likely(s->curvec < s->iovlen)) {
 		struct iovec *iv = &s->iov[s->curvec];
-		if (s->curoff < iv->iov_len) { 
+		if ((unsigned)s->curoff < iv->iov_len) { 
 			*len = iv->iov_len - s->curoff;
 			return n_bytes_after_addr(iv->iov_base, s->curoff);
 		}
@@ -257,8 +303,8 @@ static inline void skip(struct source *s, size_t n)
 {
 	struct iovec *iv = &s->iov[s->curvec];
 	s->curoff += n;
-	DCHECK_LE(s->curoff, iv->iov_len);
-	if (s->curoff >= iv->iov_len && s->curvec + 1 < s->iovlen) {
+	DCHECK_LE((unsigned)s->curoff, iv->iov_len);
+	if ((unsigned)s->curoff >= iv->iov_len && s->curvec + 1 < s->iovlen) {
 		s->curoff = 0;
 		s->curvec++;
 	}
@@ -284,7 +330,7 @@ static inline void append(struct sink *s, const char *data, size_t n)
 	while ((n -= nlen) > 0) {
 		data += nlen;
 		s->curvec++;
-		DCHECK_LT(s->curvec, s->iovlen);
+		DCHECK_LT((signed)s->curvec, s->iovlen);
 		iov++;
 		nlen = min_t(size_t, iov->iov_len, n);
 		memcpy(iov->iov_base, data, nlen);
@@ -441,7 +487,7 @@ static inline bool writer_append_from_self(struct writer *w, u32 offset,
 	CHECK_LE(op, w->op_limit);
 	const u32 space_left = w->op_limit - op;
 
-	if (op - w->base <= offset - 1u)	/* -1u catches offset==0 */
+	if ((unsigned)(op - w->base) <= offset - 1u)	/* -1u catches offset==0 */
 		return false;
 	if (len <= 16 && offset >= 8 && space_left >= 16) {
 		/* Fast path, used for the majority (70-80%) of dynamic
@@ -1299,7 +1345,7 @@ static int internal_uncompress(struct source *r,
 	return -EIO;
 }
 
-static inline int compress(struct snappy_env *env, struct source *reader,
+static inline int sn_compress(struct snappy_env *env, struct source *reader,
 			   struct sink *writer)
 {
 	int err;
@@ -1396,7 +1442,7 @@ int snappy_compress_iov(struct snappy_env *env,
 		.iov = iov_out,
 		.iovlen = *iov_out_len,
 	};
-	int err = compress(env, &reader, &writer);
+	int err = sn_compress(env, &reader, &writer);
 
 	*iov_out_len = writer.curvec + 1;
 
@@ -1510,7 +1556,7 @@ int snappy_compress(struct snappy_env *env,
 	struct sink writer = {
 		.dest = compressed,
 	};
-	int err = compress(env, &reader, &writer);
+	int err = sn_compress(env, &reader, &writer);
 
 	/* Compute how many bytes were added */
 	*compressed_length = (writer.dest - compressed);

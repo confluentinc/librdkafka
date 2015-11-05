@@ -465,6 +465,7 @@ int main(int argc, char **argv) {
         RUN_TEST(0014_reconsume_191);
 	RUN_TEST(0015_offsets_seek);
         RUN_TEST(0016_subscribe_partition);
+		RUN_TEST(0017_compression);
 
         if (tests_run_in_parallel) {
                 while (tests_running_cnt > 0)

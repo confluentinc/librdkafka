@@ -1485,7 +1485,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 	int i;
 #endif
 
-	switch (rkb->rkb_rk->rk_conf.compression_codec) {
+	switch (rktp->rktp_rkt->rkt_conf.compression_codec) {
 	case RD_KAFKA_COMPRESSION_NONE:
 		abort(); /* unreachable */
 		break;
@@ -1628,7 +1628,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 	rd_kafka_buf_rewind(rkbuf, iov_firstmsg, of_firstmsg);
 
 	rd_kafka_buf_write_Message(rkbuf, 0, 0,
-				   rkb->rkb_rk->rk_conf.compression_codec,
+				   rktp->rktp_rkt->rkt_conf.compression_codec,
 				   &rd_kafkap_bytes_null,
 				   (void *)siov.iov_base, coutlen,
 				   &outlen);
@@ -1764,7 +1764,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 
 	/* Compress the message(s) */
-	if (rkb->rkb_rk->rk_conf.compression_codec) {
+	if (rktp->rktp_rkt->rkt_conf.compression_codec) {
 		/* Update MessageSetSize prior to compression */
 		rd_kafka_buf_update_i32(rkbuf,
 					of_MessageSetSize, MessageSetSize);

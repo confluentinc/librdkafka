@@ -198,6 +198,9 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	if (!rkt->rkt_conf.partitioner)
 		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_random;
 
+	if (rkt->rkt_conf.compression_codec == RD_KAFKA_COMPRESSION_INHERIT)
+		rkt->rkt_conf.compression_codec = rk->rk_conf.compression_codec;
+
 	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));
 

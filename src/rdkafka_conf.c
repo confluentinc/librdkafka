@@ -81,9 +81,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_ZLIB
 		{ 0x1, "gzip" },
 #endif
-#ifndef _MSC_VER
 		{ 0x2, "snappy" },
-#endif
 #if WITH_SSL
 		{ 0x4, "ssl" },
 #endif
@@ -400,9 +398,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_ZLIB
 			{ RD_KAFKA_COMPRESSION_GZIP,   "gzip" },
 #endif
-#ifndef _MSC_VER /* FIXME */
 			{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
-#endif
 			{ 0 }
 		} },
 	{ _RK_GLOBAL|_RK_PRODUCER, "batch.num.messages", _RK_C_INT,
@@ -471,6 +467,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_TOPIC, "opaque", _RK_C_PTR,
 	  _RKT(opaque),
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
+	{ _RK_TOPIC | _RK_PRODUCER, "compression.codec", _RK_C_S2I,
+	  _RKT(compression_codec),
+	  "Compression codec to use for compressing message sets: "
+	  "none, gzip or snappy",
+	  .vdef = RD_KAFKA_COMPRESSION_INHERIT,
+	  .s2i = {
+		  { RD_KAFKA_COMPRESSION_NONE, "none" },
+#if WITH_ZLIB
+		  { RD_KAFKA_COMPRESSION_GZIP, "gzip" },
+#endif
+		  { RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
+		  { RD_KAFKA_COMPRESSION_INHERIT, "inherit" },
+		  { 0 }
+		} },
 
 
         /* Topic consumer properties */

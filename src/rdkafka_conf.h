@@ -9,6 +9,7 @@ typedef enum {
 	RD_KAFKA_COMPRESSION_NONE,
 	RD_KAFKA_COMPRESSION_GZIP,
 	RD_KAFKA_COMPRESSION_SNAPPY,
+	RD_KAFKA_COMPRESSION_INHERIT /* Inherit setting from global conf */
 } rd_kafka_compression_t;
 
 
@@ -205,6 +206,7 @@ struct rd_kafka_topic_conf_s {
 				void *rkt_opaque,
 				void *msg_opaque);
 
+	rd_kafka_compression_t compression_codec;
         int     produce_offset_report;
 
         int     consume_callback_max_msgs;

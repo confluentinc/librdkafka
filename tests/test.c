@@ -533,12 +533,23 @@ rd_kafka_t *test_create_producer (void) {
 }
 
 rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
-                                              const char *topic) {
+	const char *topic, ...) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
+	va_list ap;
+	const char *name, *val;
 
 	test_conf_init(NULL, &topic_conf, 20);
+
+	va_start(ap, topic);
+	while ((name = va_arg(ap, const char *)) &&
+		(val = va_arg(ap, const char *))) {
+		if (rd_kafka_topic_conf_set(topic_conf, name, val,
+			errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
+			TEST_FAIL("Conf failed: %s\n", errstr);
+	}
+	va_end(ap);
 
 	/* Make sure all replicas are in-sync after producing
 	 * so that consume test wont fail. */

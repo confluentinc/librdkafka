@@ -156,8 +156,8 @@ void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
                  rd_kafka_resp_err_t err, void *opaque, void *msg_opaque);
 
 rd_kafka_t *test_create_producer (void);
-rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
-                                              const char *topic);
+rd_kafka_topic_t *test_create_producer_topic(rd_kafka_t *rk,
+	const char *topic, ...);
 void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                         uint64_t testid, int32_t partition,
                         int msg_base, int cnt);

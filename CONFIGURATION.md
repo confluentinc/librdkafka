@@ -2,6 +2,7 @@
 
 Property                                 | C/P |       Default | Description              
 -----------------------------------------|-----|--------------:|--------------------------
+builtin.features                         |  *  |               | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support.
 client.id                                |  *  |       rdkafka | Client identifier.
 metadata.broker.list                     |  *  |               | Initial list of brokers. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime.
 message.max.bytes                        |  *  |       1000000 | Maximum transmit message size.
@@ -74,6 +75,7 @@ message.timeout.ms                       |  P  |        300000 | Local message t
 produce.offset.report                    |  P  |         false | Report offset of produced message back to application. The application must be use the `dr_msg_cb` to retrieve the offset from `rd_kafka_message_t.offset`.
 partitioner_cb                           |  P  |               | Partitioner callback (set with rd_kafka_topic_conf_set_partitioner_cb())
 opaque                                   |  *  |               | Application opaque (set with rd_kafka_topic_conf_set_opaque())
+compression.codec                        |  P  |       inherit | Compression codec to use for compressing message sets: none, gzip or snappy
 auto.commit.enable                       |  C  |          true | If true, periodically commit offset of the last message handed to the application. This commited offset will be used when the process restarts to pick up where it left off. If false, the application will have to call `rd_kafka_offset_store()` to store an offset (optional). **NOTE:** There is currently no zookeeper integration, offsets will be written to broker or local file according to offset.store.method.
 auto.commit.interval.ms                  |  C  |         60000 | The frequency in milliseconds that the consumer offsets are commited (written) to offset storage.
 auto.offset.reset                        |  C  |       largest | Action to take when there is no initial offset in offset store or the desired offset is out of range: 'smallest' - automatically reset the offset to the smallest offset, 'largest' - automatically reset the offset to the largest offset, 'error' - trigger an error which is retrieved by consuming messages and checking 'message->err'.

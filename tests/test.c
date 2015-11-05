@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <stdarg.h>
 #include "test.h"
 #include <signal.h>
 #include <stdlib.h>
@@ -544,7 +545,7 @@ rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
 
 	va_start(ap, topic);
 	while ((name = va_arg(ap, const char *)) &&
-		(val = va_arg(ap, const char *))) {
+	       (val = va_arg(ap, const char *))) {
 		if (rd_kafka_topic_conf_set(topic_conf, name, val,
 			errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
 			TEST_FAIL("Conf failed: %s\n", errstr);

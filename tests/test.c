@@ -421,12 +421,14 @@ int main(int argc, char **argv) {
 #endif
 
         for (i = 1 ; i < argc ; i++) {
-                if (!strcmp(argv[i], "-p") )
-                        tests_run_in_parallel = 1;
+			if (!strcmp(argv[i], "-p"))
+				tests_run_in_parallel = 1;
+			else if (i == 1)
+				tests_to_run = argv[i];
                 else {
                         printf("Unknown option: %s\n"
                                "\n"
-                               "Usage: %s [options]\n"
+							   "Usage: %s [options] [<test-match-substr>]\n"
                                "Options:\n"
                                "  -p     Run tests in parallel\n"
                                "\n",

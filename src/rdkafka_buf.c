@@ -52,9 +52,14 @@ void rd_kafka_buf_auxbuf_add (rd_kafka_buf_t *rkbuf, void *auxbuf) {
 	rkbuf->rkbuf_buf2 = auxbuf;
 }
 
-void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex, int new_of) {
+/**
+ * Rewind write offset pointer and iovec poiner to a previous stored value.
+ */
+void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex, int new_of,
+	int new_of_init) {
 	rkbuf->rkbuf_msg.msg_iovlen = iovindex;
 	rkbuf->rkbuf_wof = new_of;
+	rkbuf->rkbuf_wof_init = new_of_init;
 
 }
 
@@ -91,6 +96,7 @@ void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
  *   once and after all buf_write()s have been performed.
  */
 void rd_kafka_buf_autopush (rd_kafka_buf_t *rkbuf) {
+	rd_kafka_assert(NULL, rkbuf->rkbuf_wof > rkbuf->rkbuf_wof_init);
         rd_kafka_buf_push0(rkbuf, rkbuf->rkbuf_wbuf + rkbuf->rkbuf_wof_init,
 			   rkbuf->rkbuf_wof - rkbuf->rkbuf_wof_init,
 			   0/* No CRC calc */);

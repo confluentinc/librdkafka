@@ -1472,6 +1472,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 					     rd_kafka_toppar_t *rktp,
 					     rd_kafka_buf_t *rkbuf,
 					     int iov_firstmsg, int of_firstmsg,
+						 int of_init_firstmsg,
 					     int32_t *MessageSetSizep) {
 	int32_t MessageSetSize = *MessageSetSizep;
 	int    siovlen = 1;
@@ -1625,7 +1626,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 	/* Rewind rkbuf to the pre-message checkpoint.
 	 * This is to replace all the original Messages with just the
 	 * Message containing the compressed payload. */
-	rd_kafka_buf_rewind(rkbuf, iov_firstmsg, of_firstmsg);
+	rd_kafka_buf_rewind(rkbuf, iov_firstmsg, of_firstmsg, of_init_firstmsg);
 
 	rd_kafka_buf_write_Message(rkbuf, 0, 0,
 				   rktp->rktp_rkt->rkt_conf.compression_codec,
@@ -1657,6 +1658,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	int iovcnt;
 	int iov_firstmsg;
 	int of_firstmsg;
+	int of_init_firstmsg;
 	int of_MessageSetSize;
 	int32_t MessageSetSize = 0;
 	int outlen;
@@ -1727,6 +1729,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 	iov_firstmsg = rkbuf->rkbuf_msg.msg_iovlen;
 	of_firstmsg = rkbuf->rkbuf_wof;
+	of_init_firstmsg = rkbuf->rkbuf_wof_init;
 
 	while (msgcnt > 0 &&
 	       (rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs))) {
@@ -1770,7 +1773,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 					of_MessageSetSize, MessageSetSize);
 
 		rd_kafka_compress_MessageSet_buf(rkb, rktp, rkbuf,
-						 iov_firstmsg, of_firstmsg,
+						 iov_firstmsg, of_firstmsg, of_init_firstmsg,
 						 &MessageSetSize);
 	}
 

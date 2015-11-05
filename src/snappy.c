@@ -126,7 +126,7 @@ static inline bool is_little_endian(void)
 #ifndef _MSC_VER
 #define rd_clz(n)   __builtin_clz(n)
 #define rd_ctz(n)   __builtin_ctz(n)
-#define rd_ctzll(n) __builtin_ctzll(n)
+#define rd_ctz64(n) __builtin_ctzll(n)
 #else
 #include <intrin.h>
 static int __inline rd_clz(u32 x) {

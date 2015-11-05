@@ -39,7 +39,6 @@
 
 
 int main_0017_compression(int argc, char **argv) {
-	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 	rd_kafka_t *rk_p, *rk_c;
 	const int msg_cnt = 10;
 	int msg_base = 0;

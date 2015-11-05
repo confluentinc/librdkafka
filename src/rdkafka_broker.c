@@ -2086,6 +2086,8 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 		rd_ts_t now;
                 int do_timeout_scan = 0;
 
+		rd_kafka_broker_unlock(rkb);
+
 		now = rd_clock();
 
                 if (rd_interval(&timeout_scan, 1000*1000, now) >= 0)
@@ -2112,8 +2114,6 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 		/* Check and move retry buffers */
 		if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
 			rd_kafka_broker_retry_bufs_move(rkb);
-
-		rd_kafka_broker_unlock(rkb);
 
 		rd_kafka_broker_serve(rkb, RD_POLL_NOWAIT);
 
@@ -2980,6 +2980,8 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
 	       rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
 		rd_ts_t now;
 
+		rd_kafka_broker_unlock(rkb);
+
 		now = rd_clock();
 
                 /* Serve toppars */
@@ -3005,8 +3007,6 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
 		/* Check and move retry buffers */
 		if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
 			rd_kafka_broker_retry_bufs_move(rkb);
-
-		rd_kafka_broker_unlock(rkb);
 
 		rd_kafka_broker_serve(rkb, RD_POLL_NOWAIT);
 

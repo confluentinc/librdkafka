@@ -1092,16 +1092,12 @@ static void __inline rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
  * Serve toppar's op queue to update thread-local state.
  *
  * Locality: broker thread
+ * Locks: none
  */
 void rd_kafka_toppar_op_serve (rd_kafka_toppar_t *rktp,
                                rd_kafka_broker_t *rkb) {
         rd_kafka_op_t *rko;
         rd_ts_t now = rd_clock();
-
-        /* Request earliest offset to measure consumer lag */
-        if (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
-            rd_interval(&rktp->rktp_consumer_lag_intvl, 0, now) > 0)
-                rd_kafka_toppar_consumer_lag_req(rkb, rktp);
 
         /* Offset commit interval */
         if (rd_interval(&rktp->rktp_offset_commit_intvl, 0, now) > 0)
@@ -1231,9 +1227,18 @@ void rd_kafka_toppar_op_serve (rd_kafka_toppar_t *rktp,
 
         /* Avoid sending requests for internal broker, or when
          * the broker isnt up */
+	rd_kafka_broker_lock(rkb);
         if (rkb->rkb_source == RD_KAFKA_INTERNAL ||
-            rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP)
+            rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP) {
+		rd_kafka_broker_unlock(rkb);
                 return;
+	}
+	rd_kafka_broker_unlock(rkb);
+
+	/* Request earliest offset to measure consumer lag */
+        if (rd_interval(&rktp->rktp_consumer_lag_intvl, 0, now) > 0)
+                rd_kafka_toppar_consumer_lag_req(rkb, rktp);
+
 
         /* Toppar fetch state machine */
         switch (rktp->rktp_fetch_state)

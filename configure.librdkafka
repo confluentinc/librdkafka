@@ -33,6 +33,7 @@ function checks {
 
     # optional libs
     mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz"
+    mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
     mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl"
 
     # -lrt is needed on linux for clock_gettime: link it if it exists.

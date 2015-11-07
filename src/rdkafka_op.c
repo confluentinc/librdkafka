@@ -147,6 +147,25 @@ void rd_kafka_op_err (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 		rd_kafka_log_buf(rk, LOG_ERR, "ERROR", buf);
 }
 
+
+/**
+ * sprintf a message in rko->rko_payload (typically error string)
+ */
+void rd_kafka_op_sprintf (rd_kafka_op_t *rko, const char *fmt, ...) {
+	va_list ap;
+	char buf[2048];
+
+	va_start(ap, fmt);
+	rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+
+	rd_kafka_assert(NULL, !rko->rko_payload);
+	rko->rko_payload = rd_strdup(buf);
+	rko->rko_len = strlen(buf);
+	rko->rko_flags |= RD_KAFKA_OP_F_FREE;
+	rko->rko_free_cb = rd_free;
+}
+
 /**
  * Propagate an error event to the application on a specific queue.
  */

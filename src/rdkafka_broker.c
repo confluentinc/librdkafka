@@ -2455,6 +2455,46 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 		}
 		break;
+
+		default:
+			rd_rkb_dbg(rkb, MSG, "CODEC",
+				   "%s [%"PRId32"]: Message at offset %"PRId64
+				   " with unsupported "
+				   "compression codec 0x%hx: message ignored",
+				   rktp->rktp_rkt->rkt_topic->str,
+				   rktp->rktp_partition,
+				   hdr.Offset, hdr.Attributes);
+
+
+						/* Pure uncompressed message, this is the innermost
+			 * handler after all compression and cascaded
+			 * messagesets have been peeled off. */
+
+                        /* MessageSets may contain offsets earlier than we
+                         * requested (compressed messagesets in particular),
+                         * drop the earlier messages. */
+                        if (hdr.Offset < rktp->rktp_next_offset)
+                                continue;
+
+			/* Enqueue error messsage */
+			/* Create op and push on temporary queue. */
+			rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
+
+			rd_kafka_op_sprintf(rko,
+					    "Unsupported compression codec "
+					    "0x%hx", hdr.Attributes);
+			rko->rko_err = RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
+                        rko->rko_version = rktp->rktp_op_version;
+			rko->rko_rkmessage.offset    = hdr.Offset;
+			rko->rko_rkmessage.rkt       = rd_kafka_topic_keep_a(rktp->rktp_rkt);
+			rko->rko_rkmessage.partition = rktp->rktp_partition;
+
+			rko->rko_rktp = rd_kafka_toppar_keep(rktp);
+
+			rktp->rktp_next_offset = hdr.Offset + 1;
+
+			rd_kafka_q_enq(rkq, rko);
+			break;
 		}
 
 

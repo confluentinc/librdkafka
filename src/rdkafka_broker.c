@@ -2364,7 +2364,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rd_kafka_q_enq(rkq, rko);
 			break;
 
-#if ENABLE_GZIP
+#if WITH_ZLIB
 		case RD_KAFKA_COMPRESSION_GZIP:
 		{
 			uint64_t outlenx = 0;

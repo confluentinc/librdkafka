@@ -69,7 +69,7 @@ for mode in $MODES; do
 	    RET=$?
 	    ;;
         gdb)
-            gdb ./$TEST
+            gdb $* ./$TEST
             RET=$?
             ;;
 	bare)

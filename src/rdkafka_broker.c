@@ -1769,15 +1769,11 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 
 	/* Compress the message(s) */
-	if (rktp->rktp_rkt->rkt_conf.compression_codec) {
-		/* Update MessageSetSize prior to compression */
-		rd_kafka_buf_update_i32(rkbuf,
-					of_MessageSetSize, MessageSetSize);
-
+	if (rktp->rktp_rkt->rkt_conf.compression_codec)
 		rd_kafka_compress_MessageSet_buf(rkb, rktp, rkbuf,
-						 iov_firstmsg, of_firstmsg, of_init_firstmsg,
+						 iov_firstmsg, of_firstmsg,
+						 of_init_firstmsg,
 						 &MessageSetSize);
-	}
 
 	/* Update MessageSetSize */
 	rd_kafka_buf_update_i32(rkbuf, of_MessageSetSize, MessageSetSize);

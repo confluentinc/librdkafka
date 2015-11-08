@@ -1409,20 +1409,12 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 
 		switch (err)
 		{
-		case RD_KAFKA_RESP_ERR__DESTROY:
-		case RD_KAFKA_RESP_ERR_INVALID_MSG:
-		case RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE:
-		case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
-			/* Fatal errors: no message transmission retries */
-			break;
-
 		case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
 		case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
 		case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
 		case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
 		case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
 		case RD_KAFKA_RESP_ERR__TRANSPORT:
-		default:
 			/* Request metadata information update */
 			rkb->rkb_metadata_fast_poll_cnt =
 				rkb->rkb_rk->rk_conf.metadata_refresh_fast_cnt;
@@ -1436,6 +1428,14 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 			 * is delegated. */
 			rd_kafka_toppar_insert_msgq(rktp, &request->rkbuf_msgq);
 			goto done;
+
+		case RD_KAFKA_RESP_ERR__DESTROY:
+		case RD_KAFKA_RESP_ERR_INVALID_MSG:
+		case RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE:
+		case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
+		default:
+			/* Fatal errors: no message transmission retries */
+			break;
 		}
 
 		/* FALLTHRU */

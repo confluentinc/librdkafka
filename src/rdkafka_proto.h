@@ -139,7 +139,7 @@ typedef struct rd_kafkap_str_s {
 #define RD_KAFKAP_STR_SIZE(kstr) RD_KAFKAP_STR_SIZE0((kstr)->len)
 
 
-/* Serialized Kafka string: only works for _new() and _init():ed kstrs */
+/* Serialized Kafka string: only works for _new() kstrs */
 #define RD_KAFKAP_STR_SER(kstr)  ((kstr)+1)
 
 /* Macro suitable for "%.*s" printing. */
@@ -161,30 +161,6 @@ static RD_UNUSED void rd_kafkap_str_destroy (rd_kafkap_str_t *kstr) {
 	rd_free(kstr);
 }
 
-/**
- * Initialize a Kafka string struct based on a serialized kstr
- * in 'data' of size 'len'.
- * No copying will be done, 'kstr->str' will point into 'data'.
- */
-static __inline RD_UNUSED
-int rd_kafkap_str_init (rd_kafkap_str_t *kstr, const void *data, int len) {
-	int16_t klen;
-	const char *d = data;
-	
-	if (unlikely(len < 2))
-		return -1;
-
-	memcpy(&klen, d, 2);
-	klen = be16toh(klen);
-
-	if (unlikely(len < 2 + klen))
-		return -1;
-
-	kstr->len = klen;
-	kstr->str = d+2;
-
-	return kstr->len;
-}
 
 
 /**
@@ -284,7 +260,7 @@ extern const rd_kafkap_bytes_t rd_kafkap_bytes_null;
 #define RD_KAFKAP_BYTES_SIZE(kbytes) RD_KAFKAP_BYTES_SIZE0((kbytes)->len)
 
 
-/* Serialized Kafka bytes: only works for _new() and _init()ed kbytes */
+/* Serialized Kafka bytes: only works for _new() and kbytes */
 #define RD_KAFKAP_BYTES_SER(kbytes)  ((kbytes)+1)
 
 
@@ -295,30 +271,6 @@ static RD_UNUSED void rd_kafkap_bytes_destroy (rd_kafkap_bytes_t *kbytes) {
 	rd_free(kbytes);
 }
 
-/**
- * Initialize a Kafka bytes struct based on 'data' of size 'len'.
- * No copying will be done, 'kbytes->data' will point into 'data'.
- */
-static __inline RD_UNUSED
-int rd_kafkap_bytes_init (rd_kafkap_bytes_t *kbytes,
-			  const void *data, int len) {
-	int32_t klen;
-	const char *d = data;
-
-	if (unlikely(len < 4))
-		return -1;
-
-	memcpy(&klen, d, 4);
-	klen = be32toh(klen);
-
-	if (unlikely(len < 4 + klen))
-		return -1;
-
-	kbytes->len = klen;
-	kbytes->data = d+4;
-
-	return kbytes->len;
-}
 
 /**
  * Allocate a new Kafka bytes and make a copy of 'bytes'.

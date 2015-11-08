@@ -136,6 +136,35 @@ void rd_kafka_timers_interrupt (rd_kafka_timers_t *rkts) {
 	rd_kafka_timers_unlock(rkts);
 }
 
+
+/**
+ * Returns the delta time to the next timer to fire, capped by 'timeout_ms'.
+ */
+rd_ts_t rd_kafka_timers_next (rd_kafka_timers_t *rkts, int timeout_us,
+			      int do_lock) {
+	rd_ts_t now = rd_clock();
+	rd_ts_t sleeptime = 0;
+	rd_kafka_timer_t *rtmr;
+
+	if (do_lock)
+		rd_kafka_timers_lock(rkts);
+
+	if (likely((rtmr = TAILQ_FIRST(&rkts->rkts_timers)) != NULL)) {
+		sleeptime = rtmr->rtmr_next - now;
+		if (sleeptime < 0)
+			sleeptime = 0;
+		else if (sleeptime > (rd_ts_t)timeout_us)
+			sleeptime = (rd_ts_t)timeout_us;
+	} else
+		sleeptime = (rd_ts_t)timeout_us;
+
+	if (do_lock)
+		rd_kafka_timers_unlock(rkts);
+
+	return sleeptime;
+}
+
+
 /**
  * Dispatch timers.
  * Will block up to 'timeout' microseconds before returning.
@@ -150,21 +179,20 @@ void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us) {
 		int64_t sleeptime;
 		rd_kafka_timer_t *rtmr;
 
-		if (likely((rtmr = TAILQ_FIRST(&rkts->rkts_timers)) != NULL))
-			sleeptime = rtmr->rtmr_next - now;
-		else
-			sleeptime = 100000000000000llu;
+		if (timeout_us != RD_POLL_NOWAIT) {
+			sleeptime = rd_kafka_timers_next(rkts,
+							 timeout_us,
+							 0/*no-lock*/);
 
-		if (sleeptime > 0) {
-			if (sleeptime > (end - now))
-				sleeptime = end - now;
+			if (sleeptime > 0) {
+				cnd_timedwait_ms(&rkts->rkts_cond,
+						 &rkts->rkts_lock,
+						 (int)(sleeptime / 1000));
 
-                        cnd_timedwait_ms(&rkts->rkts_cond,
-                                         &rkts->rkts_lock,
-                                         (int)(sleeptime / 1000));
-
-			now = rd_clock();
+			}
 		}
+
+		now = rd_clock();
 
 		while ((rtmr = TAILQ_FIRST(&rkts->rkts_timers)) &&
 		       rtmr->rtmr_next <= now) {

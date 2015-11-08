@@ -148,6 +148,3 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
 
-void rd_kafka_toppar_op_serve (rd_kafka_toppar_t *rktp,
-                               rd_kafka_broker_t *rkb);
-

@@ -64,6 +64,8 @@ void rd_kafka_timer_start (rd_kafka_timers_t *rkts,
 			   void *arg);
 
 void rd_kafka_timers_interrupt (rd_kafka_timers_t *rkts);
+rd_ts_t rd_kafka_timers_next (rd_kafka_timers_t *rkts, int timeout_ms,
+			      int do_lock);
 void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us);
 void rd_kafka_timers_destroy (rd_kafka_timers_t *rkts);
 void rd_kafka_timers_init (rd_kafka_timers_t *rkte, rd_kafka_t *rk);

@@ -403,8 +403,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         if (rk->rk_cgrp)
                 rd_kafka_cgrp_destroy_final(rk->rk_cgrp);
 
-	/* Purge op-queue */
+	/* Purge op-queues */
 	rd_kafka_q_destroy(&rk->rk_rep);
+	rd_kafka_q_destroy(&rk->rk_toppar_ops);
 
 #if WITH_SSL
 	if (rk->rk_conf.ssl.ctx)
@@ -432,6 +433,12 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 	rd_atomic32_add(&rk->rk_terminate, 1);
         rd_kafka_timers_interrupt(&rk->rk_timers);
         rd_kafka_wrunlock(rk);
+
+#ifndef _MSC_VER
+                /* Interrupt main kafka thread to speed up termination. */
+                if (rk->rk_conf.term_sig)
+			pthread_kill(thrd, rk->rk_conf.term_sig);
+#endif
 
         if (!blocking)
                 return; /* FIXME: thread resource leak */
@@ -821,6 +828,18 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
 }
 
 
+
+static int rd_kafka_toppar_q_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
+				 int cb_type, void *opaque) {
+	rd_kafka_toppar_op_serve(rko);
+	return 1; /* op handled */
+}
+
+
+static void rd_kafka_toppars_q_serve (rd_kafka_q_t *rkq, int timeout_ms) {
+	rd_kafka_q_serve(rkq, timeout_ms, 0,
+			 _Q_CB_GLOBAL, rd_kafka_toppar_q_cb, NULL);
+}
 /**
  * Main loop for Kafka handler thread.
  */
@@ -850,8 +869,13 @@ static int rd_kafka_thread_main (void *arg) {
                                      1000,
                                      rd_kafka_metadata_refresh_cb, NULL);
 
-	while (likely(!rd_kafka_terminating(rk))) {
-		rd_kafka_timers_run(&rk->rk_timers, 1*1000*1000);
+	while (likely(!rd_kafka_terminating(rk) ||
+		      rd_kafka_q_len(&rk->rk_toppar_ops))) {
+		rd_ts_t sleeptime = rd_kafka_timers_next(
+			&rk->rk_timers,
+			rk->rk_conf.socket_blocking_max_ms * 1000, 1/*lock*/);
+		rd_kafka_toppars_q_serve(&rk->rk_toppar_ops, sleeptime / 1000);
+		rd_kafka_timers_run(&rk->rk_timers, RD_POLL_NOWAIT);
 	}
 
         rd_kafka_timer_stop(&rk->rk_timers, &tmr_topic_scan, 1);
@@ -935,9 +959,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
 
 	rd_kafka_q_init(&rk->rk_rep, rk);
+	rd_kafka_q_init(&rk->rk_toppar_ops, rk);
 
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
+	TAILQ_INIT(&rk->rk_toppars);
         rd_kafka_timers_init(&rk->rk_timers, rk);
 
 

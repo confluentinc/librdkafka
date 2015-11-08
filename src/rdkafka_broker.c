@@ -1972,7 +1972,7 @@ static void rd_kafka_broker_toppars_serve (rd_kafka_broker_t *rkb) {
         rd_kafka_broker_toppars_wrlock(rkb);
         TAILQ_FOREACH_SAFE(rktp, &rkb->rkb_toppars, rktp_rkblink, rktp_tmp) {
                 /* Serve toppar op queue to update desired rktp state */
-                rd_kafka_toppar_op_serve(rktp, rkb);
+                rd_kafka_toppar_serve(rktp, rkb);
         }
         rd_kafka_broker_toppars_wrunlock(rkb);
 }
@@ -2098,7 +2098,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
                         /* Serve each toppar */
 			TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
                                 /* Serve toppar op queue */
-                                rd_kafka_toppar_op_serve(rktp, rkb);
+                                rd_kafka_toppar_serve(rktp, rkb);
 
                                 /* Try producing toppar */
                                 cnt += rd_kafka_toppar_producer_serve(rkb, rktp,

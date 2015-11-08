@@ -274,6 +274,12 @@ void rd_kafka_broker_fetch_toppar_next (rd_kafka_broker_t *rkb,
 
 
 
+void rd_kafka_toppar_op_serve (rd_kafka_op_t *rko);
+void rd_kafka_toppar_serve (rd_kafka_toppar_t *rktp,
+			    rd_kafka_broker_t *rkb);
+
+
+
 
 rd_kafka_assignor_t *
 rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol);

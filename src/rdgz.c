@@ -34,7 +34,7 @@
 
 #define RD_GZ_CHUNK  262144
 
-void *rd_gz_decompress (void *compressed, int compressed_len,
+void *rd_gz_decompress (const void *compressed, int compressed_len,
 			uint64_t *decompressed_lenp) {
 	int pass = 1;
 	char *decompressed = NULL;
@@ -59,7 +59,7 @@ void *rd_gz_decompress (void *compressed, int compressed_len,
 		if ((r = inflateInit2(&strm, 15+32)) != Z_OK)
 			goto fail;
 
-		strm.next_in = compressed;
+		strm.next_in = (void *)compressed;
 		strm.avail_in = compressed_len;
 
 		if ((r = inflateGetHeader(&strm, &hdr)) != Z_OK) {

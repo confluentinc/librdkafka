@@ -569,7 +569,8 @@ rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
 
 void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                         uint64_t testid, int32_t partition,
-                        int msg_base, int cnt) {
+                        int msg_base, int cnt,
+			const char *payload, size_t size) {
 	int msg_id;
 	test_timing_t t_all;
 	int remains = 0;
@@ -582,15 +583,25 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	for (msg_id = msg_base ; msg_id < msg_base + cnt ; msg_id++) {
 		char key[128];
 		char buf[128];
+		const char *use_payload;
+		size_t use_size;
 
-		test_msg_fmt(key, sizeof(key), testid, partition, msg_id);
-		rd_snprintf(buf, sizeof(buf), "data: %s", key);
+		if (payload) {
+			use_payload = payload;
+			use_size = size;
+		} else {
+			test_msg_fmt(key, sizeof(key), testid, partition,
+				     msg_id);
+			rd_snprintf(buf, sizeof(buf), "data: %s", key);
+			use_payload = buf;
+			use_size = strlen(buf);
+		}
 
 		remains++;
 
 		if (rd_kafka_produce(rkt, partition,
 				     RD_KAFKA_MSG_F_COPY,
-				     buf, strlen(buf),
+				     (void *)use_payload, use_size,
 				     key, strlen(key),
 				     &remains) == -1)
 			TEST_FAIL("Failed to produce message %i "
@@ -703,7 +714,7 @@ void test_consumer_seek (const char *what, rd_kafka_topic_t *rkt,
  */
 int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
                            uint64_t testid, int32_t partition, int64_t offset,
-                           int exp_msg_base, int exp_cnt) {
+                           int exp_msg_base, int exp_cnt, int parse_fmt) {
 	int cnt = 0;
 	int msg_next = exp_msg_base;
 	int fails = 0;
@@ -753,8 +764,11 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 		if (cnt == 0)
 			TIMING_STOP(&t_first);
 
-		test_msg_parse(testid, rkmessage->key, rkmessage->key_len,
-			       partition, &msg_id);
+		if (parse_fmt)
+			test_msg_parse(testid, rkmessage->key,
+				       rkmessage->key_len, partition, &msg_id);
+		else
+			msg_id = 0;
 
 		if (test_level >= 3)
 			TEST_SAY("%s: consume_msgs: %s [%"PRId32"]: "
@@ -765,7 +779,7 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 				 msg_next,
 				 offset >= 0 ? offset + cnt : -1);
 
-		if (msg_id != msg_next) {
+		if (parse_fmt && msg_id != msg_next) {
 			TEST_SAY("%s: consume_msgs: %s [%"PRId32"]: "
 				 "expected msg #%d (%d/%d): got msg #%d\n",
 				 what, rd_kafka_topic_name(rkt), partition,

@@ -58,7 +58,8 @@ int main_0016_subscribe_partition (int argc, char **argv) {
 
         for (partition = 0 ; partition < partition_cnt ; partition++) {
                 test_produce_msgs(rk_p, rkt_p, testid, partition,
-                                  msg_base+(partition*msg_cnt), msg_cnt);
+                                  msg_base+(partition*msg_cnt), msg_cnt,
+				  NULL, 0);
         }
 
 	rd_kafka_topic_destroy(rkt_p);

@@ -54,7 +54,8 @@ int main_0015_offsets_seek (int argc, char **argv) {
 	rk_p = test_create_producer();
 	rkt_p = test_create_producer_topic(rk_p, topic);
 
-	test_produce_msgs(rk_p, rkt_p, testid, partition, msg_base, msg_cnt);
+	test_produce_msgs(rk_p, rkt_p, testid, partition, msg_base, msg_cnt,
+			  NULL, 0);
 
 	rd_kafka_topic_destroy(rkt_p);
 	rd_kafka_destroy(rk_p);
@@ -69,7 +70,7 @@ int main_0015_offsets_seek (int argc, char **argv) {
 	/* Make sure all messages are available */
 	offset_last = test_consume_msgs("verify.all", rkt_c,
                                         testid, partition, TEST_NO_SEEK,
-                                        msg_base, msg_cnt);
+                                        msg_base, msg_cnt, 1/* parse format*/);
 
 	/* Rewind offset back to its base. */
 	offset_base = offset_last - msg_cnt + 1;
@@ -86,7 +87,9 @@ int main_0015_offsets_seek (int argc, char **argv) {
 		test_consume_msgs("dance", rkt_c,
                                   testid, partition, offset,
                                   msg_base + (int)(offset - offset_base),
-                                  RD_MIN(msgs_per_dance, (int)offset_last - offset));
+                                  RD_MIN(msgs_per_dance,
+					 (int)offset_last - offset),
+				  1 /* parse format */);
 	}
 
 	test_consumer_stop("1", rkt_c, partition);

@@ -160,7 +160,8 @@ rd_kafka_topic_t *test_create_producer_topic(rd_kafka_t *rk,
 	const char *topic, ...);
 void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                         uint64_t testid, int32_t partition,
-                        int msg_base, int cnt);
+                        int msg_base, int cnt,
+			const char *payload, size_t size);
 rd_kafka_t *test_create_consumer (const char *group_id,
                                   rd_kafka_topic_conf_t *default_topic_conf);
 rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
@@ -176,7 +177,7 @@ void test_consumer_seek (const char *what, rd_kafka_topic_t *rkt,
 #define TEST_NO_SEEK  -1
 int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
                            uint64_t testid, int32_t partition, int64_t offset,
-                           int exp_msg_base, int exp_cnt);
+                           int exp_msg_base, int exp_cnt, int parse_fmt);
 
 
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,

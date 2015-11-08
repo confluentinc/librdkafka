@@ -40,11 +40,18 @@
 
 int main_0017_compression(int argc, char **argv) {
 	rd_kafka_t *rk_p, *rk_c;
-	const int msg_cnt = 10;
+	const int msg_cnt = 1000;
 	int msg_base = 0;
 	uint64_t testid;
 #define CODEC_CNT 3
-	const char *codecs[CODEC_CNT] = { "none", "gzip", "snappy" };
+	const char *codecs[CODEC_CNT+1] = {
+		"none",
+#if WITH_ZLIB
+		"gzip",
+#endif
+		"snappy",
+		NULL
+	};
 	const char *topics[CODEC_CNT];
 	const int32_t partition = 0;
 	int i;
@@ -53,18 +60,19 @@ int main_0017_compression(int argc, char **argv) {
 
 	/* Produce messages */
 	rk_p = test_create_producer();
-	for (i = 0; i < CODEC_CNT ; i++) {
+	for (i = 0; codecs[i] != NULL ; i++) {
 		rd_kafka_topic_t *rkt_p;
 
 		topics[i] = test_mk_topic_name(codecs[i], 1);
-		TEST_SAY("Produce %d messages with %s compression to topic %s\n",
+		TEST_SAY("Produce %d messages with %s compression to "
+			 "topic %s\n",
 			msg_cnt, codecs[i], topics[i]);
 		rkt_p = test_create_producer_topic(rk_p, topics[i],
 			"compression.codec", codecs[i], NULL);
 
 		test_produce_msgs(rk_p, rkt_p, testid, partition,
-			msg_base + (partition*msg_cnt), msg_cnt);
-
+				  msg_base + (partition*msg_cnt), msg_cnt,
+				  NULL, 0);
 		rd_kafka_topic_destroy(rkt_p);
 	}
 
@@ -74,16 +82,18 @@ int main_0017_compression(int argc, char **argv) {
 	/* Consume messages */
 	rk_c = test_create_consumer(NULL, NULL);
 
-	for (i = 0; i < CODEC_CNT ; i++) {
-		rd_kafka_topic_t *rkt_c = rd_kafka_topic_new(rk_c, topics[i], NULL);
+	for (i = 0; codecs[i] != NULL ; i++) {
+		rd_kafka_topic_t *rkt_c = rd_kafka_topic_new(rk_c,
+							     topics[i], NULL);
 		TEST_SAY("Consume %d messages from topic %s\n",
 			msg_cnt, topics[i]);
 		/* Start consuming */
-		test_consumer_start(codecs[i], rkt_c, partition, RD_KAFKA_OFFSET_BEGINNING);
+		test_consumer_start(codecs[i], rkt_c, partition,
+				    RD_KAFKA_OFFSET_BEGINNING);
 
 		/* Consume messages */
 		test_consume_msgs(codecs[i], rkt_c, testid, partition, 0,
-			msg_base, msg_cnt);
+				  msg_base, msg_cnt, 1 /* parse format */);
 		rd_kafka_topic_destroy(rkt_c);
 	}
 

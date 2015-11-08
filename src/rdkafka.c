@@ -901,17 +901,11 @@ static void rd_kafka_term_sig_handler (int sig) {
 }
 
 static void rd_kafka_global_init (void) {
-	static const unsigned char null_bytes_data[4]={0xff, 0xff, 0xff, 0xff};
-
 #if ENABLE_SHAREDPTR_DEBUG
         LIST_INIT(&rd_shared_ptr_debug_list);
         mtx_init(&rd_shared_ptr_debug_mtx, mtx_plain);
         atexit(rd_shared_ptrs_dump);
 #endif
-
-	rd_kafkap_bytes_init((rd_kafkap_bytes_t *)&rd_kafkap_bytes_null,
-			     null_bytes_data, 4);
-
 	rd_kafka_transport_init();
 }
 

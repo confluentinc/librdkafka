@@ -57,7 +57,7 @@ struct iovec {
 
 // Potentially unaligned loads and stores.
 // x86 and PowerPC can simply do these loads and stores native.
-#if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__) || defined(_MSC_VER)
+#if defined(__i386__) || defined(__x86_64__) || defined(__powerpc__) || defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64)
 
 #define get_unaligned get_unaligned_direct
 #define put_unaligned put_unaligned_direct
@@ -102,8 +102,8 @@ struct iovec {
 
 #endif
 
-#define get_unaligned_le32(x) (htobe32(get_unaligned((u32 *)(x))))
-#define put_unaligned_le16(v,x) (put_unaligned(be16toh(v), (u16 *)(x)))
+#define get_unaligned_le32(x) (le32toh(get_unaligned((u32 *)(x))))
+#define put_unaligned_le16(v,x) (put_unaligned(htole16(v), (u16 *)(x)))
 
 typedef unsigned char u8;
 typedef unsigned short u16;

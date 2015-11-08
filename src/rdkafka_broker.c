@@ -1632,7 +1632,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 
 	rd_kafka_buf_write_Message(rkbuf, 0, 0,
 				   rktp->rktp_rkt->rkt_conf.compression_codec,
-				   &rd_kafkap_bytes_null,
+				   rkb->rkb_rk->rk_null_bytes,
 				   (void *)siov.iov_base, coutlen,
 				   &outlen);
 

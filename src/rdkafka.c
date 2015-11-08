@@ -51,9 +51,6 @@
 #include <sys/timeb.h>
 #endif
 
-/* Convenience NULL-bytes */
-const rd_kafkap_bytes_t rd_kafkap_bytes_null;
-
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 
 
@@ -418,6 +415,7 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         rd_kafkap_str_destroy(rk->rk_conf.group_id);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
 
+	rd_kafkap_bytes_destroy((rd_kafkap_bytes_t *)rk->rk_null_bytes);
 	rwlock_destroy(&rk->rk_lock);
 
 	rd_free(rk);
@@ -941,6 +939,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
         rd_kafka_timers_init(&rk->rk_timers, rk);
+
+
+	/* Convenience Kafka protocol null bytes */
+	rk->rk_null_bytes = rd_kafkap_bytes_new(NULL, 0);
 
 	if (rk->rk_conf.debug)
                 rk->rk_conf.log_level = LOG_DEBUG;

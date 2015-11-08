@@ -244,9 +244,6 @@ typedef struct rd_kafkap_bytes_s {
 } rd_kafkap_bytes_t;
 
 
-/* Convenience NULL bytes */
-extern const rd_kafkap_bytes_t rd_kafkap_bytes_null;
-
 #define RD_KAFKAP_BYTES_LEN_NULL -1
 #define RD_KAFKAP_BYTES_IS_NULL(kbytes) \
 	((kbytes)->len == RD_KAFKAP_BYTES_LEN_NULL)

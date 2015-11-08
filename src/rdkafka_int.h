@@ -149,6 +149,8 @@ struct rd_kafka_s {
          *  <0: Running in High level consumer mode */
         rd_atomic32_t    rk_simple_cnt;
 
+	const rd_kafkap_bytes_t *rk_null_bytes;
+
 	union {
 		struct {
 			rd_atomic32_t msg_cnt;  /* current message count */

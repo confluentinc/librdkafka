@@ -81,6 +81,15 @@ const char *rd_kafka_secproto_names[] = {
 
 
 
+static void iov_print (rd_kafka_t *rk,
+		       const char *what, int iov_idx, const struct iovec *iov,
+		       int hexdump) {
+	printf("%s:  iov #%i: %"PRIdsz"\n", what, iov_idx, iov->iov_len);
+	if (hexdump)
+		rd_hexdump(stdout, what, iov->iov_base, iov->iov_len);
+}
+
+
 static void msghdr_print (rd_kafka_t *rk,
 			  const char *what, const struct msghdr *msg,
 			  int hexdump) RD_UNUSED;
@@ -90,22 +99,13 @@ static void msghdr_print (rd_kafka_t *rk,
 	int i;
 	int len = 0;
 
-	
-
-	rd_kafka_dbg(rk, MSG, "MSG", "%s: iovlen %"PRIdsz"",
-		     what, (size_t)msg->msg_iovlen);
+	printf("%s: iovlen %"PRIdsz"\n", what, (size_t)msg->msg_iovlen);
 
 	for (i = 0 ; i < (int)msg->msg_iovlen ; i++) {
-		rd_kafka_dbg(rk, MSG, what,
-			     " iov #%i: %"PRIdsz"",
-			     i, msg->msg_iov[i].iov_len);
-		if (hexdump)
-			rd_hexdump(stdout, what, msg->msg_iov[i].iov_base,
-				   msg->msg_iov[i].iov_len);
-
+		iov_print(rk, what, i, &msg->msg_iov[i], hexdump);
 		len += msg->msg_iov[i].iov_len;
 	}
-	rd_kafka_dbg(rk, MSG, "MSG", "^ message was %d bytes in total", len);
+	printf("%s: ^ message was %d bytes in total\n", what, len);
 }
 
 
@@ -1197,9 +1197,11 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
                 }
 
 		if (0) {
-			rd_rkb_dbg(rkb, BROKER, "SEND",
-				   "Send buf corrid %"PRId32" at "
+			rd_rkb_dbg(rkb, PROTOCOL, "SEND",
+				   "Send %s corrid %"PRId32" at "
 				   "offset %"PRIdsz"/%"PRIdsz"",
+				   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.
+						       ApiKey),
 				   rkbuf->rkbuf_corrid,
 				   rkbuf->rkbuf_of, rkbuf->rkbuf_len);
 			msghdr_print(rkb->rkb_rk, "SEND", msg, 1);

@@ -141,4 +141,16 @@ typedef unsigned long long u64;
 #define le32toh(x) (x)
 #endif
 
+
+#if defined(_MSC_VER)
+#if BYTE_ORDER == LITTLE_ENDIAN
+#define htole16(x) (x)
+#define le32toh(x) (x)
+
+#elif BYTE_ORDER == BIG_ENDIAN
+#define htole16(x) __builtin_bswap16(x)
+#define le32toh(x) __builtin_bswap32(x)
+#endif
+#endif
+
 #define BITS_PER_LONG (__SIZEOF_LONG__ * 8)

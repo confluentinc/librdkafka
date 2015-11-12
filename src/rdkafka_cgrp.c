@@ -311,10 +311,11 @@ static int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_cgrp_unassign_broker(rkcg);
 
         rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_BROKER);
-        if (rkb)
-                rd_kafka_cgrp_delegate_broker(rkcg, rkb);
 
-        rd_kafka_broker_destroy(rkb); /* from select_broker() */
+        if (rkb) {
+                rd_kafka_cgrp_delegate_broker(rkcg, rkb);
+		rd_kafka_broker_destroy(rkb); /* from select_broker() */
+	}
 
         return 1;
 }

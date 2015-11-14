@@ -129,11 +129,13 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
             rd_kafka_terminating((rd_kafka_t *)rk))
 		return;
 
-        elen = rd_snprintf(buf, sizeof(buf), "[thrd:%s]: ",
-                           rd_kafka_thread_name);
-        if (unlikely(elen >= sizeof(buf)))
-                elen = sizeof(buf);
-        of = elen;
+	if (rk->rk_conf.log_thread_name) {
+		elen = rd_snprintf(buf, sizeof(buf), "[thrd:%s]: ",
+				   rd_kafka_thread_name);
+		if (unlikely(elen >= sizeof(buf)))
+			elen = sizeof(buf);
+		of = elen;
+	}
 
 	if (extra) {
 		elen = rd_snprintf(buf+of, sizeof(buf)-of, "%s: ", extra);

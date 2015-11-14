@@ -216,6 +216,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(log_level),
           "Logging level (syslog(3) levels)",
           0, 7, 6 },
+	{ _RK_GLOBAL, "log.thread.name", _RK_C_BOOL,
+	  _RK(log_thread_name),
+	  "Print internal thread name in log messages "
+	  "(useful for debugging librdkafka internals)",
+	  0, 1, 0 },
         { _RK_GLOBAL, "socket_cb", _RK_C_PTR,
           _RK(socket_cb),
           "Socket creation callback to provide race-free CLOEXEC",

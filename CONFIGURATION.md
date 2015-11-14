@@ -27,6 +27,7 @@ error_cb                                 |  *  |               | Error callback 
 stats_cb                                 |  *  |               | Statistics callback (set with rd_kafka_conf_set_stats_cb())
 log_cb                                   |  *  |               | Log callback (set with rd_kafka_conf_set_log_cb())
 log_level                                |  *  |             6 | Logging level (syslog(3) levels)
+log.thread.name                          |  *  |         false | Print internal thread name in log messages (useful for debugging librdkafka internals)
 socket_cb                                |  *  |               | Socket creation callback to provide race-free CLOEXEC
 open_cb                                  |  *  |               | File open callback to provide race-free CLOEXEC
 opaque                                   |  *  |               | Application opaque (set with rd_kafka_conf_set_opaque())

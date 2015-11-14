@@ -256,7 +256,6 @@ int main (int argc, char **argv) {
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
-	const char *debug = NULL;
 	int64_t start_offset = 0;
         int report_offsets = 0;
 	int do_conf_dump = 0;
@@ -330,7 +329,15 @@ int main (int argc, char **argv) {
 			exit_eof = 1;
 			break;
 		case 'd':
-			debug = optarg;
+			if (rd_kafka_conf_set(conf, "debug", optarg,
+					      errstr, sizeof(errstr)) !=
+			    RD_KAFKA_CONF_OK) {
+				fprintf(stderr,
+					"%% Debug configuration failed: "
+					"%s: %s\n",
+					errstr, optarg);
+				exit(1);
+			}
 			break;
 		case 'q':
 			quiet = 1;
@@ -356,9 +363,30 @@ int main (int argc, char **argv) {
 
 			name = optarg;
 			if (!(val = strchr(name, '='))) {
-				fprintf(stderr, "%% Expected "
-					"-X property=value, not %s\n", name);
-				exit(1);
+				char dest[512];
+				size_t dest_size = sizeof(dest);
+				/* Return current value for property. */
+
+				res = RD_KAFKA_CONF_UNKNOWN;
+				if (!strncmp(name, "topic.", strlen("topic.")))
+					res = rd_kafka_topic_conf_get(
+						topic_conf,
+						name+strlen("topic."),
+						dest, &dest_size);
+				if (res == RD_KAFKA_CONF_UNKNOWN)
+					res = rd_kafka_conf_get(
+						conf, name, dest, &dest_size);
+
+				if (res == RD_KAFKA_CONF_OK) {
+					printf("%s = %s\n", name, dest);
+					exit(0);
+				} else {
+					fprintf(stderr,
+						"%% %s property\n",
+						res == RD_KAFKA_CONF_UNKNOWN ?
+						"Unknown" : "Invalid");
+					exit(1);
+				}
 			}
 
 			*val = '\0';
@@ -448,12 +476,13 @@ int main (int argc, char **argv) {
 			"                  %s\n"
 			"  -q              Be quiet\n"
 			"  -A              Raw payload output (consumer)\n"
-			"  -X <prop=name> Set arbitrary librdkafka "
+			"  -X <prop=name>  Set arbitrary librdkafka "
 			"configuration property\n"
-			"               Properties prefixed with \"topic.\" "
+			"                  Properties prefixed with \"topic.\" "
 			"will be set on topic object.\n"
-			"               Use '-X list' to see the full list\n"
-			"               of supported properties.\n"
+			"  -X list         Show full list of supported "
+			"properties.\n"
+			"  -X <prop>       Get single property value\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  writes fetched messages to stdout\n"
@@ -474,14 +503,6 @@ int main (int argc, char **argv) {
 
 	signal(SIGINT, stop);
 	signal(SIGUSR1, sig_usr1);
-
-	if (debug &&
-	    rd_kafka_conf_set(conf, "debug", debug, errstr, sizeof(errstr)) !=
-	    RD_KAFKA_CONF_OK) {
-		fprintf(stderr, "%% Debug configuration failed: %s: %s\n",
-			errstr, debug);
-		exit(1);
-	}
 
 	if (mode == 'P') {
 		/*

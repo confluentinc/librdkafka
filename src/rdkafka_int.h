@@ -213,6 +213,7 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 #define RD_KAFKA_DBG_MSG        0x40
 #define RD_KAFKA_DBG_PROTOCOL   0x80
 #define RD_KAFKA_DBG_CGRP       0x100
+#define RD_KAFKA_DBG_SECURITY   0x200
 #define RD_KAFKA_DBG_ALL        0xfff
 
 

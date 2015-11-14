@@ -108,7 +108,7 @@ const char *rd_kafka_get_debug_contexts(void);
 
 /* Same as define (deprecated) */
 #define RD_KAFKA_DEBUG_CONTEXTS \
-	"all,generic,broker,topic,metadata,producer,queue,msg,protocol,cgrp"
+	"all,generic,broker,topic,metadata,producer,queue,msg,protocol,cgrp,security"
 
 /* Private types to provide ABI compatibility */
 typedef struct rd_kafka_s rd_kafka_t;

@@ -445,7 +445,7 @@ static int rd_kafka_transport_ssl_passwd_cb (char *buf, int size, int rwflag,
 	rd_kafka_t *rk = userdata;
 	int pwlen;
 
-	rd_kafka_dbg(rk, BROKER, "SSLPASSWD",
+	rd_kafka_dbg(rk, SECURITY, "SSLPASSWD",
 		     "Private key file \"%s\" requires password",
 		     rk->rk_conf.ssl.key_location);
 
@@ -549,7 +549,7 @@ static int rd_kafka_transport_ssl_verify (rd_kafka_transport_t *rktrans) {
 		return -1;
 	}
 
-	rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SSLVERIFY",
+	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SSLVERIFY",
 		   "Broker SSL certificate verified");
 	return 0;
 }
@@ -632,7 +632,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		/* CA certificate location, either file or directory. */
 		int is_dir = rd_kafka_path_is_dir(rk->rk_conf.ssl.ca_location);
 
-		rd_kafka_dbg(rk, BROKER, "SSL",
+		rd_kafka_dbg(rk, SECURITY, "SSL",
 			     "Loading CA certificate(s) from %s %s",
 			     is_dir ? "directory":"file",
 			     rk->rk_conf.ssl.ca_location);
@@ -650,7 +650,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	}
 
 	if (rk->rk_conf.ssl.cert_location) {
-		rd_kafka_dbg(rk, BROKER, "SSL",
+		rd_kafka_dbg(rk, SECURITY, "SSL",
 			     "Loading certificate from file %s",
 			     rk->rk_conf.ssl.cert_location);
 
@@ -663,7 +663,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	}
 
 	if (rk->rk_conf.ssl.key_location) {
-		rd_kafka_dbg(rk, BROKER, "SSL",
+		rd_kafka_dbg(rk, SECURITY, "SSL",
 			     "Loading private key file from %s",
 			     rk->rk_conf.ssl.key_location);
 

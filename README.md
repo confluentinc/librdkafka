@@ -112,6 +112,9 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
       sudo make install
 
 
+**NOTE**: See [README.win32](README.win32) for instructions how to build
+          on Windows with Microsoft Visual Studio.
+
 ### Usage in code
 
 See [examples/rdkafka_example.c](https://github.com/edenhill/librdkafka/blob/master/examples/rdkafka_example.c) for an example producer and consumer.

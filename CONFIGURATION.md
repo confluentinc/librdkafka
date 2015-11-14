@@ -13,7 +13,7 @@ topic.metadata.refresh.fast.cnt          |  *  |            10 | When a topic lo
 topic.metadata.refresh.fast.interval.ms  |  *  |           250 | See `topic.metadata.refresh.fast.cnt` description
 topic.metadata.refresh.sparse            |  *  |          true | Sparse metadata requests (consumes less network bandwidth)
 topic.blacklist                          |  *  |               | Topic blacklist, a comma-separated list of regular expressions for matching topic names that should be ignored in broker metadata information as if the topics did not exist.
-debug                                    |  *  |               | A comma-separated list of debug contexts to enable: all,generic,broker,topic,metadata,producer,queue,msg,protocol,cgrp
+debug                                    |  *  |               | A comma-separated list of debug contexts to enable: all,generic,broker,topic,metadata,producer,queue,msg,protocol,cgrp,security
 socket.timeout.ms                        |  *  |         60000 | Timeout for network requests.
 socket.blocking.max.ms                   |  *  |           100 | Maximum time a broker socket operation may block. A lower value improves responsiveness at the expense of slightly higher CPU usage.
 socket.send.buffer.bytes                 |  *  |             0 | Broker socket send buffer size. System default is used if 0.
@@ -40,6 +40,12 @@ ssl.key.location                         |  *  |               | Path to client'
 ssl.key.password                         |  *  |               | Private key pass phrase
 ssl.certificate.location                 |  *  |               | Path to certificate file for verifying the broker's key.
 ssl.ca.location                          |  *  |               | File or directory path to CA certificate(s) for verifying the broker's key.
+sasl.mechanisms                          |  *  |        GSSAPI | Space separated list of eligible SASL mechanisms
+sasl.kerberos.service.name               |  *  |         kafka | Kerberos principal name that Kafka runs as.
+sasl.kerberos.principal                  |  *  |   kafkaclient | This client's Kerberos principal name.
+sasl.kerberos.kinit.cmd                  |  *  |         kinit | Kerberos kinit command path.
+sasl.kerberos.keytab                     |  *  |               | Path to Kerberos keytab file. Uses system default if not set.
+sasl.kerberos.min.time.before.relogin    |  *  |         60000 | Minimum time in milliseconds between key refresh attempts.
 group.id                                 |  *  |               | Client group id string. All clients sharing the same group.id belong to the same group.
 partition.assignment.strategy            |  *  |         range | Name of partition assignment strategy to use when elected group leader assigns partitions to group members.
 session.timeout.ms                       |  *  |         30000 | Client group session and failure detection timeout.

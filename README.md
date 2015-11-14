@@ -103,6 +103,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
    	pthreads
 	zlib (optional, for gzip compression support)
 	libssl-dev (optional, for SSL support)
+	libsasl2-dev (optional, for SASL support)
 
 ## Instructions
 

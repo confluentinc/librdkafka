@@ -169,6 +169,7 @@ typedef enum {
         RD_KAFKA_RESP_ERR__STATE = -172,        /* Wrong state */
         RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL = -171, /* Unknown protocol */
         RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED = -170, /* Not implemented */
+	RD_KAFKA_RESP_ERR__AUTHENTICATION = -169,  /* Authentication failure */
 
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 

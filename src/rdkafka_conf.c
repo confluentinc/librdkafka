@@ -85,6 +85,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SSL
 		{ 0x4, "ssl" },
 #endif
+#if WITH_SASL
+		{ 0x8, "sasl" },
+#endif
 		{ 0, NULL }
 		}
 	},
@@ -271,6 +274,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SSL
 			{ RD_KAFKA_PROTO_SSL, "ssl" },
 #endif
+#if WITH_SASL
+			{ RD_KAFKA_PROTO_SASL_PLAINTEXT, "sasl_plaintext" },
+#if WITH_SSL
+			{ RD_KAFKA_PROTO_SASL_SSL, "sasl_ssl" },
+#endif
+#endif
 			{ 0, NULL }
 		} },
 
@@ -305,6 +314,32 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "the broker's key."
 	},
 #endif /* WITH_SSL */
+
+#if WITH_SASL
+	{_RK_GLOBAL,"sasl.mechanisms", _RK_C_STR,
+	 _RK(sasl.mechanisms),
+	 "Space separated list of eligible SASL mechanisms",
+	 .sdef = "GSSAPI" },
+	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
+	  _RK(sasl.service_name),
+	  "Kerberos principal name that Kafka runs as.",
+	  .sdef = "kafka" },
+	{ _RK_GLOBAL, "sasl.kerberos.principal", _RK_C_STR,
+	  _RK(sasl.principal),
+	  "This client's Kerberos principal name.",
+	  .sdef = "kafkaclient" },
+	{ _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
+	  _RK(sasl.kinit_cmd),
+	  "Kerberos kinit command path.",
+	  .sdef = "kinit" },
+	{ _RK_GLOBAL, "sasl.kerberos.keytab", _RK_C_STR,
+	  _RK(sasl.keytab),
+	  "Path to Kerberos keytab file. Uses system default if not set." },
+	{ _RK_GLOBAL, "sasl.kerberos.min.time.before.relogin", _RK_C_INT,
+	  _RK(sasl.relogin_min_time),
+	  "Minimum time in milliseconds between key refresh attempts.",
+	  1, 86400*1000, 60*1000 },
+#endif
 
         /* Global client group properties */
         { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,

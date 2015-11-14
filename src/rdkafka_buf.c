@@ -52,6 +52,26 @@ void rd_kafka_buf_auxbuf_add (rd_kafka_buf_t *rkbuf, void *auxbuf) {
 	rkbuf->rkbuf_buf2 = auxbuf;
 }
 
+
+/**
+ * Allocate another receive buffer that fits 'size' bytes.
+ * This to ensure entire payload resides in contigous memory.
+ */
+void rd_kafka_buf_alloc_recvbuf (rd_kafka_buf_t *rkbuf, size_t size) {
+	rkbuf->rkbuf_len  = size;
+	rkbuf->rkbuf_buf2 = rd_malloc(size);
+	/* Point read buffer to payload buffer. */
+	rkbuf->rkbuf_rbuf = rkbuf->rkbuf_buf2;
+	/* Reset offsets for new buffer */
+	rkbuf->rkbuf_of   = 0;
+	rkbuf->rkbuf_wof  = 0;
+	/* Write to first iovec */
+	rkbuf->rkbuf_iov[0].iov_base = rkbuf->rkbuf_buf2;
+	rkbuf->rkbuf_iov[0].iov_len = rkbuf->rkbuf_len;
+	rkbuf->rkbuf_msg.msg_iovlen = 1;
+}
+
+
 /**
  * Rewind write offset pointer and iovec poiner to a previous stored value.
  */

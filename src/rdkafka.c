@@ -45,6 +45,10 @@
 #include "rdkafka_cgrp.h"
 #include "rdkafka_assignor.h"
 
+#if WITH_SASL
+#include "rdkafka_sasl.h"
+#endif
+
 #include "rdtime.h"
 #ifdef _MSC_VER
 #include <sys/types.h>
@@ -265,6 +269,8 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
                 return "Local: Unknown protocol";
         case RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED:
                 return "Local: Not implemented";
+	case RD_KAFKA_RESP_ERR__AUTHENTICATION:
+		return "Local: Authentication failure";
 
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
 		return "Unknown error";
@@ -907,6 +913,9 @@ static void rd_kafka_global_init (void) {
         atexit(rd_shared_ptrs_dump);
 #endif
 	rd_kafka_transport_init();
+#if WITH_SASL
+	rd_kafka_sasl_global_init();
+#endif
 }
 
 rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
@@ -999,7 +1008,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         }
 
 #if WITH_SSL
-	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL) {
+	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL ||
+	    rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL) {
 		/* Create SSL context */
 		if (rd_kafka_transport_ssl_ctx_init(rk, errstr,
 						    errstr_size) == -1) {

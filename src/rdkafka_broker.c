@@ -54,6 +54,7 @@
 #include "rdkafka_buf.h"
 #include "rdkafka_cgrp.h"
 #include "rdkafka_request.h"
+#include "rdkafka_sasl.h"
 #include "rdtime.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
@@ -66,15 +67,16 @@ const char *rd_kafka_broker_state_names[] = {
 	"INIT",
 	"DOWN",
 	"CONNECT",
+	"AUTH",
 	"UP",
         "UPDATE"
 };
 
 const char *rd_kafka_secproto_names[] = {
 	[RD_KAFKA_PROTO_PLAINTEXT] = "plaintext",
-#if WITH_SSL
 	[RD_KAFKA_PROTO_SSL] = "ssl",
-#endif
+	[RD_KAFKA_PROTO_SASL_PLAINTEXT] = "sasl_plaintext",
+	[RD_KAFKA_PROTO_SASL_SSL] = "sasl_ssl",
 	NULL
 };
 
@@ -90,12 +92,9 @@ static void iov_print (rd_kafka_t *rk,
 }
 
 
-static void msghdr_print (rd_kafka_t *rk,
-			  const char *what, const struct msghdr *msg,
-			  int hexdump) RD_UNUSED;
-static void msghdr_print (rd_kafka_t *rk,
-			  const char *what, const struct msghdr *msg,
-			  int hexdump) {
+void msghdr_print (rd_kafka_t *rk,
+		   const char *what, const struct msghdr *msg,
+		   int hexdump) {
 	int i;
 	int len = 0;
 
@@ -165,8 +164,7 @@ static void rd_kafka_mk_brokername (char *dest, size_t dsize,
  * Locks: rd_kafka_broker_lock() MUST be held.
  * Locality: broker thread
  */
-static void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb,
-				       int state) {
+void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 	if ((int)rkb->rkb_state == state)
 		return;
 
@@ -876,14 +874,6 @@ static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
 	for (i = 0 ; i < (int)src->msg_iovlen ; i++) {
 		off_t vof = of - len;
 
-		if (0)
-			printf(" #%i/%"PRIdsz" and %"PRIdsz": of %jd, len %"PRIdsz", "
-			       "vof %jd: iov %"PRIdsz"\n",
-			       i,
-			       (size_t)src->msg_iovlen,
-			       (size_t)dst->msg_iovlen,
-			       (intmax_t)of, len, (intmax_t)vof,
-			       src->msg_iov[i].iov_len);
 		if (vof < 0)
 			vof = 0;
 
@@ -1022,16 +1012,7 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 			 * the common response header). We want all
 			 * data to be in contigious memory. */
 
-			rkbuf->rkbuf_buf2 = rd_malloc(rkbuf->rkbuf_len);
-			/* Point read buffer to payload buffer. */
-			rkbuf->rkbuf_rbuf = rkbuf->rkbuf_buf2;
-			/* Reset offsets for new buffer */
-			rkbuf->rkbuf_of   = 0;
-			rkbuf->rkbuf_wof  = 0;
-			/* Write to first iovec */
-			rkbuf->rkbuf_iov[0].iov_base = rkbuf->rkbuf_buf2;
-			rkbuf->rkbuf_iov[0].iov_len = rkbuf->rkbuf_len;
-			rkbuf->rkbuf_msg.msg_iovlen = 1;
+			rd_kafka_buf_alloc_recvbuf(rkbuf, rkbuf->rkbuf_len);
 		}
 	}
 
@@ -3108,6 +3089,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
 			break;
 
 		case RD_KAFKA_BROKER_STATE_CONNECT:
+		case RD_KAFKA_BROKER_STATE_AUTH:
 			/* Asynchronous connect in progress. */
 			rd_kafka_broker_ua_idle(rkb);
 
@@ -3174,6 +3156,13 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 	rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_outbufs.rkbq_bufs));
 	rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_toppars));
+
+#if WITH_SASL
+	if (rkb->rkb_rk->rk_conf.security_protocol ==
+	    RD_KAFKA_PROTO_SASL_PLAINTEXT ||
+	    rkb->rkb_rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL)
+		rd_kafka_broker_sasl_term(rkb);
+#endif
 
 	if (rkb->rkb_recv_buf)
 		rd_kafka_buf_destroy(rkb->rkb_recv_buf);
@@ -3302,6 +3291,12 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 		return NULL;
 	}
+
+#if WITH_SASL
+	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT ||
+	    rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL)
+		rd_kafka_broker_sasl_init(rkb);
+#endif
 
 	if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
 		TAILQ_INSERT_TAIL(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);

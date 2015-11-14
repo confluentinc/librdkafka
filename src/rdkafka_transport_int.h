@@ -25,42 +25,50 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
 #pragma once
 
-#ifndef _MSC_VER
-#include <poll.h>
+/* This header file is to be used by .c files needing access to the
+ * rd_kafka_transport_t struct internals. */
+
+#if WITH_SASL
+#include <sasl/sasl.h>
+#include "rdkafka_sasl.h"
 #endif
-
-#include "rdaddr.h"
-
-typedef struct rd_kafka_transport_s rd_kafka_transport_t;
-
-void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
-                                  int timeout_ms);
-
-ssize_t rd_kafka_transport_sendmsg(rd_kafka_transport_t *rktrans, const struct msghdr *msg,
-	char *errstr, size_t errstr_size);
-ssize_t rd_kafka_transport_recvmsg(rd_kafka_transport_t *rktrans, struct msghdr *msg,
-	char *errstr, size_t errstr_size);
-int rd_kafka_transport_framed_recvmsg (rd_kafka_transport_t *rktrans,
-				       rd_kafka_buf_t **rkbufp,
-				       char *errstr, size_t errstr_size);
-struct rd_kafka_broker_s;
-rd_kafka_transport_t *rd_kafka_transport_connect(struct rd_kafka_broker_s *rkb, const rd_sockaddr_inx_t *sinx,
-	char *errstr, int errstr_size);
-void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
-				      char *errstr);
-
-void rd_kafka_transport_close(rd_kafka_transport_t *rktrans);
-void rd_kafka_transport_poll_set(rd_kafka_transport_t *rktrans, int event);
-void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event);
-int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout);
 
 #if WITH_SSL
-void rd_kafka_transport_ssl_ctx_term (rd_kafka_t *rk);
-int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
-				     char *errstr, int errstr_size);
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #endif
-void rd_kafka_transport_term (void);
-void rd_kafka_transport_init(void);
+
+struct rd_kafka_transport_s {	
+	int rktrans_s;
+	
+	rd_kafka_broker_t *rktrans_rkb;
+
+#if WITH_SSL
+	SSL *rktrans_ssl;
+#endif
+
+#if WITH_SASL
+	struct {
+		sasl_conn_t *conn;
+
+		struct msghdr msg;
+		struct iovec  iov[2];
+
+		char          *recv_buf;
+		int            recv_of;    /* Received byte count */
+		int            recv_len;   /* Expected receive length for
+					    * current frame. */
+	} rktrans_sasl;
+#endif
+
+	rd_kafka_buf_t *rktrans_recv_buf;  /* Used with framed_recvmsg */
+	
+#ifndef _MSC_VER
+	struct pollfd rktrans_pfd;
+#else
+	WSAPOLLFD rktrans_pfd;
+#endif
+};
+

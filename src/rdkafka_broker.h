@@ -83,6 +83,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 		RD_KAFKA_BROKER_STATE_INIT,
 		RD_KAFKA_BROKER_STATE_DOWN,
 		RD_KAFKA_BROKER_STATE_CONNECT,
+		RD_KAFKA_BROKER_STATE_AUTH,
 		RD_KAFKA_BROKER_STATE_UP,
                 RD_KAFKA_BROKER_STATE_UPDATE,
 	} rkb_state;
@@ -144,6 +145,11 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	char                rkb_nodename[RD_KAFKA_NODENAME_SIZE]; /* host:port*/
 	rd_kafka_secproto_t rkb_proto;
 
+#if WITH_SASL
+	rd_kafka_timer_t    rkb_sasl_kinit_refresh_tmr;
+#endif
+
+
 	struct {
 		char msg[512];
 		int  err;  /* errno */
@@ -179,6 +185,7 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
 rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state);
 
 int rd_kafka_brokers_add0 (rd_kafka_t *rk, const char *brokerlist);
+void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state);
 
 void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			   rd_kafka_resp_err_t err,
@@ -233,3 +240,6 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 rd_kafka_broker_t *rd_kafka_broker_internal (rd_kafka_t *rk);
 
+void msghdr_print (rd_kafka_t *rk,
+		   const char *what, const struct msghdr *msg,
+		   int hexdump);

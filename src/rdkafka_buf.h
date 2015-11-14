@@ -279,6 +279,7 @@ typedef struct rd_kafka_bufq_s {
 
 void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf);
 void rd_kafka_buf_auxbuf_add (rd_kafka_buf_t *rkbuf, void *auxbuf);
+void rd_kafka_buf_alloc_recvbuf (rd_kafka_buf_t *kbuf, size_t size);
 void rd_kafka_buf_rewind(rd_kafka_buf_t *rkbuf, int iovindex, int new_of,
 	int new_of_init);
 struct iovec *rd_kafka_buf_iov_next (rd_kafka_buf_t *rkbuf);

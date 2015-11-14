@@ -2,6 +2,9 @@ PKGNAME=	librdkafka
 LIBNAME=	librdkafka
 LIBVER=		1
 
+-include ../Makefile.config
+
+SRCS_$(WITH_SASL) += rdkafka_sasl.c
 
 SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_conf.c rdkafka_timer.c rdkafka_offset.c \
@@ -11,7 +14,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
 		rdcrc32.c rdgz.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
 		rdlog.c \
-		snappy.c trex.c
+		snappy.c trex.c $(SRCS_y)
 
 HDRS=		rdkafka.h
 

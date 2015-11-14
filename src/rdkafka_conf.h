@@ -15,9 +15,9 @@ typedef enum {
 
 typedef enum {
 	RD_KAFKA_PROTO_PLAINTEXT,
-#if WITH_SSL
 	RD_KAFKA_PROTO_SSL,
-#endif
+	RD_KAFKA_PROTO_SASL_PLAINTEXT,
+	RD_KAFKA_PROTO_SASL_SSL,
 	RD_KAFKA_PROTO_NUM,
 } rd_kafka_secproto_t;
 
@@ -71,10 +71,10 @@ struct rd_kafka_conf_s {
 	int     term_sig;
         int     protocol_version;
 	rd_kafka_secproto_t security_protocol;
-	struct {
+
 #if WITH_SSL
+	struct {
 		SSL_CTX *ctx;
-#endif
 		char *cipher_suites;
 		char *enabled_protocols;
 		char *key_location;
@@ -82,6 +82,19 @@ struct rd_kafka_conf_s {
 		char *cert_location;
 		char *ca_location;
 	} ssl;
+#endif
+
+#if WITH_SASL
+	struct {
+		char *principal;
+		char *mechanisms;
+		char *service_name;
+		char *kinit_cmd;
+		char *keytab;
+		int   relogin_min_time;
+		char  kinit_refresh_cmdline[512]; /* Full cached command line */
+	} sasl;
+#endif
 
 
         /* Client group configuration */

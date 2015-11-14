@@ -34,6 +34,7 @@
 #include "rdkafka_int.h"
 #include "rdaddr.h"
 #include "rdkafka_transport.h"
+#include "rdkafka_transport_int.h"
 #include "rdkafka_broker.h"
 
 #include <errno.h>
@@ -62,31 +63,12 @@
 
 
 #if WITH_SSL
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-
 static mtx_t *rd_kafka_ssl_locks;
 static int    rd_kafka_ssl_locks_cnt;
 
 static once_flag rd_kafka_ssl_init_once = ONCE_FLAG_INIT;
 #endif
 
-
-struct rd_kafka_transport_s {	
-	int rktrans_s;
-	
-	rd_kafka_broker_t *rktrans_rkb;
-
-#if WITH_SSL
-	SSL *rktrans_ssl;
-#endif
-	
-#ifndef _MSC_VER
-	struct pollfd rktrans_pfd;
-#else
-	WSAPOLLFD rktrans_pfd;
-#endif
-};
 
 
 
@@ -100,6 +82,14 @@ void rd_kafka_transport_close (rd_kafka_transport_t *rktrans) {
 		SSL_free(rktrans->rktrans_ssl);
 	}
 #endif
+
+#if WITH_SASL
+	if (rktrans->rktrans_sasl.conn)
+		sasl_dispose(&rktrans->rktrans_sasl.conn);
+#endif
+
+	if (rktrans->rktrans_recv_buf)
+		rd_kafka_buf_destroy(rktrans->rktrans_recv_buf);
 
 	if (rktrans->rktrans_s != -1) {
 #ifndef _MSC_VER
@@ -226,6 +216,45 @@ rd_kafka_transport_socket_recvmsg (rd_kafka_transport_t *rktrans,
 #endif
 }
 
+
+
+
+/**
+ * CONNECT state is failed (errstr!=NULL) or done (TCP is up, SSL is working..).
+ * From this state we either hand control back to the broker code,
+ * or if authentication is configured we ente the AUTH state.
+ */
+void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
+				      char *errstr) {
+	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
+
+#if WITH_SASL
+	if (!errstr &&
+	    (rkb->rkb_proto == RD_KAFKA_PROTO_SASL_PLAINTEXT ||
+	     rkb->rkb_proto == RD_KAFKA_PROTO_SASL_SSL)) {
+		char sasl_errstr[512];
+		if (rd_kafka_sasl_client_new(rkb->rkb_transport, sasl_errstr,
+					     sizeof(sasl_errstr)) == -1) {
+			errno = EINVAL;
+			rd_kafka_broker_fail(rkb,
+					     RD_KAFKA_RESP_ERR__AUTHENTICATION,
+					     "Failed to initialize "
+					     "SASL authentication: %s",
+					     sasl_errstr);
+			return;
+
+		}
+
+		rd_kafka_broker_lock(rkb);
+		rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_AUTH);
+		rd_kafka_broker_unlock(rkb);
+
+		return;
+	}
+#endif
+
+	rd_kafka_broker_connect_done(rkb, errstr);
+}
 
 
 
@@ -485,7 +514,7 @@ static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 	if (r == 1) {
 		/* Connected, highly unlikely since this is a
 		 * non-blocking operation. */
-		rd_kafka_broker_connect_done(rkb, NULL);
+		rd_kafka_transport_connect_done(rktrans, NULL);
 		return 0;
 	}
 
@@ -572,7 +601,7 @@ static int rd_kafka_transport_ssl_handhsake (rd_kafka_transport_t *rktrans) {
 		if (rd_kafka_transport_ssl_verify(rktrans) == -1)
 			return -1;
 
-		rd_kafka_broker_connect_done(rkb, NULL);
+		rd_kafka_transport_connect_done(rktrans, NULL);
 		return 1;
 		
 	} else if (rd_kafka_transport_ssl_io_update(rktrans, r,
@@ -725,12 +754,109 @@ rd_kafka_transport_recvmsg (rd_kafka_transport_t *rktrans,
 
 
 /**
+ * Length framed receive handling.
+ * Currently only supports a the following framing:
+ *     [int32_t:big_endian_length_of_payload][payload]
+ *
+ * To be used on POLLIN event, will return:
+ *   -1: on fatal error (errstr will be updated, *rkbufp remains unset)
+ *    0: still waiting for data (*rkbufp remains unset)
+ *    1: data complete, (buffer returned in *rkbufp)
+ */
+int rd_kafka_transport_framed_recvmsg (rd_kafka_transport_t *rktrans,
+				       rd_kafka_buf_t **rkbufp,
+				       char *errstr, size_t errstr_size) {
+	rd_kafka_buf_t *rkbuf = rktrans->rktrans_recv_buf;
+	int r;
+	const int log_decode_errors = 0;
+
+	/* States:
+	 *   !rktrans_recv_buf: initial state; set up buf to receive header.
+	 *    rkbuf_len == 0:   awaiting header
+	 *    rkbuf_len > 0:    awaiting payload
+	 */
+
+	if (!rkbuf) {
+		rkbuf = rd_kafka_buf_new(NULL, 1, 4);
+		/* Point read buffer to main buffer. */
+		rkbuf->rkbuf_rbuf = rkbuf->rkbuf_buf;
+		rd_kafka_buf_push(rkbuf, rkbuf->rkbuf_buf, 4);
+
+		rktrans->rktrans_recv_buf = rkbuf;
+	}
+
+
+	r = rd_kafka_transport_recvmsg(rktrans, &rkbuf->rkbuf_msg,
+				       errstr, errstr_size);
+	if (r == 0)
+		return 0;
+	else if (r == -1)
+		return -1;
+
+	rkbuf->rkbuf_wof += r;
+
+	if (rkbuf->rkbuf_len == 0) {
+		/* Frame length not known yet. */
+		int32_t frame_len;
+
+		if (rkbuf->rkbuf_wof < sizeof(frame_len)) {
+			/* Wait for entire frame header. */
+			return 0;
+		}
+
+		/* Reader header: payload length */
+		rd_kafka_buf_read_i32(rkbuf, &frame_len);
+
+		if (frame_len < 0 ||
+		    frame_len > rktrans->rktrans_rkb->
+		    rkb_rk->rk_conf.recv_max_msg_size) {
+			rd_snprintf(errstr, errstr_size,
+				    "Invalid frame size %"PRId32, frame_len);
+			return -1;
+		}
+
+		rkbuf->rkbuf_len = frame_len;
+		if (frame_len == 0) {
+			/* Payload is empty, we're done. */
+			rktrans->rktrans_recv_buf = NULL;
+			*rkbufp = rkbuf;
+			return 1;
+		}
+
+		/* Allocate memory to hold entire frame payload in contigious
+		 * memory. */
+		rd_kafka_buf_alloc_recvbuf(rkbuf, frame_len);
+
+		/* Try reading directly, there is probably more data available*/
+		return rd_kafka_transport_framed_recvmsg(rktrans, rkbufp,
+							 errstr, errstr_size);
+	}
+
+	if (rkbuf->rkbuf_wof == rkbuf->rkbuf_len) {
+		/* Payload is complete. */
+		rktrans->rktrans_recv_buf = NULL;
+		*rkbufp = rkbuf;
+		return 1;
+	}
+
+	/* Wait for more data */
+	return 0;
+
+ err:
+	if (rkbuf)
+		rd_kafka_buf_destroy(rkbuf);
+	rd_snprintf(errstr, errstr_size, "Frame header parsing failed");
+	return -1;
+}
+
+
+/**
  * TCP connection established.
  * Set up socket options, SSL, etc.
  *
  * Locality: broker thread
  */
-static void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans) {
+static void rd_kafka_transport_connected (rd_kafka_transport_t *rktrans) {
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 
         rd_rkb_dbg(rkb, BROKER, "CONNECT",
@@ -767,16 +893,17 @@ static void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans) {
 
 
 #if WITH_SSL
-	if (rkb->rkb_proto == RD_KAFKA_PROTO_SSL) {
+	if (rkb->rkb_proto == RD_KAFKA_PROTO_SSL ||
+	    rkb->rkb_proto == RD_KAFKA_PROTO_SASL_SSL) {
 		char errstr[512];
 
 		/* Set up SSL connection.
 		 * This is also an asynchronous operation so dont
-		 * let propagate broker_connect_done() just yet. */
+		 * propagate to broker_connect_done() just yet. */
 		if (rd_kafka_transport_ssl_connect(rkb, rktrans,
 						   errstr,
 						   sizeof(errstr)) == -1) {
-			rd_kafka_broker_connect_done(rkb, errstr);
+			rd_kafka_transport_connect_done(rktrans, errstr);
 			return;
 		}
 		return;
@@ -784,7 +911,7 @@ static void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans) {
 #endif
 
 	/* Propagate connect success */
-	rd_kafka_broker_connect_done(rkb, NULL);
+	rd_kafka_transport_connect_done(rktrans, NULL);
 }
 
 
@@ -837,11 +964,28 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
                                                     RD_SOCKADDR2STR_F_FAMILY),
                                     rd_strerror(r));
 
-			rd_kafka_broker_connect_done(rkb, errstr);
+			rd_kafka_transport_connect_done(rktrans, errstr);
 		} else {
 			/* Connect succeeded */
-			rd_kafka_transport_connect_done(rktrans);
+			rd_kafka_transport_connected(rktrans);
 		}
+		break;
+
+	case RD_KAFKA_BROKER_STATE_AUTH:
+#if WITH_SASL
+		rd_kafka_assert(NULL, rktrans->rktrans_sasl.conn != NULL);
+
+		/* SASL handshake */
+		if (rd_kafka_sasl_io_event(rktrans, events,
+					   errstr, sizeof(errstr)) == -1) {
+			errno = EINVAL;
+			rd_kafka_broker_fail(rkb,
+					     RD_KAFKA_RESP_ERR__AUTHENTICATION,
+					     "SASL authentication failure: %s",
+					     errstr);
+			return;
+		}
+#endif
 		break;
 
 	case RD_KAFKA_BROKER_STATE_UP:

@@ -144,6 +144,7 @@ enum ErrorCode {
   ERR__STATE = -172,             /* Wrong state */
   ERR__UNKNOWN_PROTOCOL = -171,  /* Unknown protocol */
   ERR__NOT_IMPLEMENTED = -170,   /* Not implemented */
+  ERR__AUTHENTICATION = -169,    /* Authentication failure */
   ERR__END = -100,               /* end internal error codes */
 
   /* Standard Kafka errors: */

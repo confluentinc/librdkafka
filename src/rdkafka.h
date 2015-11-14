@@ -72,11 +72,11 @@ typedef SSIZE_T ssize_t;
  *   MM = Major
  *   mm = minor
  *   rr = revision
- *   xx = currently unused
+ *   xx = pre-release id (0xff is the final release)
  *
- * I.e.: 0x00080100 = 0.8.1
+ * I.e.: 0x000801ff = 0.8.1
  */
-#define RD_KAFKA_VERSION  0x00080600
+#define RD_KAFKA_VERSION  0x00090001
 
 /**
  * Returns the librdkafka version as integer.

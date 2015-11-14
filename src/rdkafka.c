@@ -1964,11 +1964,26 @@ const char *rd_kafka_version_str (void) {
 	static char ret[64];
 	int ver = rd_kafka_version();
 
-	if (!*ret)
+	if (!*ret) {
+		int prel = (ver & 0xff);
 		rd_snprintf(ret, sizeof(ret), "%i.%i.%i",
-			 (ver >> 24) & 0xff,
-			 (ver >> 16) & 0xff,
-			 (ver >> 8) & 0xff);
+			    (ver >> 24) & 0xff,
+			    (ver >> 16) & 0xff,
+			    (ver >> 8) & 0xff);
+		if (prel != 0xff) {
+			/* pre-builds below 200 are just running numbers,
+			 * abouve 200 are RC numbers. */
+			if (prel <= 200)
+				rd_snprintf(ret+strlen(ret),
+					    sizeof(ret)-strlen(ret),
+					    "-pre%d", prel);
+			else
+				rd_snprintf(ret+strlen(ret),
+					    sizeof(ret)-strlen(ret),
+					    "-RC%d", prel - 200);
+		}
+	}
+
 
 	return ret;
 }

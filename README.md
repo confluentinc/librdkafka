@@ -101,7 +101,8 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 	The GNU toolchain
 	GNU make
    	pthreads
-	zlib
+	zlib (optional, for gzip compression support)
+	libssl-dev (optional, for SSL support)
 
 ## Instructions
 

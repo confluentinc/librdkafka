@@ -24,4 +24,4 @@ Artifacts:
   - remaining tools (rdkafka_performance, etc)
   - parallell tests
   - Snappy support
-
+  - SASL support (no official Cyrus libsasl2 DLLs available)

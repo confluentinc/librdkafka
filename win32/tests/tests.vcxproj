@@ -100,6 +100,7 @@
     <ClCompile Include="..\..\tests\0014-reconsume-191.c" />
     <ClCompile Include="..\..\tests\0015-offset_seeks.c" />
     <ClCompile Include="..\..\tests\0016-subscribe_partition.c" />
+    <ClCompile Include="..\..\tests\0017-compression.c" />
     <ClCompile Include="..\..\tests\test.c" />
   </ItemGroup>
   <ItemGroup>

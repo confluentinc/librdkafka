@@ -60,6 +60,9 @@
     <ClCompile Include="..\..\tests\0016-subscribe_partition.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\tests\0017-compression.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\tests\test.h">

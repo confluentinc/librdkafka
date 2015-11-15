@@ -76,7 +76,6 @@ struct rd_kafka_conf_s {
 	struct {
 		SSL_CTX *ctx;
 		char *cipher_suites;
-		char *enabled_protocols;
 		char *key_location;
 		char *key_password;
 		char *cert_location;

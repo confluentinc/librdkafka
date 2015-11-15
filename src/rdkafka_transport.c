@@ -656,6 +656,19 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	SSL_CTX_set_default_passwd_cb(ctx, rd_kafka_transport_ssl_passwd_cb);
 	SSL_CTX_set_default_passwd_cb_userdata(ctx, rk);
 
+	/* Ciphers */
+	if (rk->rk_conf.ssl.cipher_suites) {
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+			     "Setting cipher list: %s",
+			     rk->rk_conf.ssl.cipher_suites);
+		if (!SSL_CTX_set_cipher_list(ctx,
+					     rk->rk_conf.ssl.cipher_suites)) {
+			rd_snprintf(errstr, errstr_size,
+				    "No recognized ciphers");
+			goto fail;
+		}
+	}
+
 
 	if (rk->rk_conf.ssl.ca_location) {
 		/* CA certificate location, either file or directory. */

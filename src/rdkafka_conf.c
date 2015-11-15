@@ -290,16 +290,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
 #if WITH_SSL
 	{ _RK_GLOBAL, "ssl.cipher.suites", _RK_C_STR,
-	  _RK(ssl.cipher_suites), // FIXME
+	  _RK(ssl.cipher_suites),
 	  "A cipher suite is a named combination of authentication, "
 	  "encryption, MAC and key exchange algorithm used to negotiate the "
 	  "security settings for a network connection using TLS or SSL network "
-	  "protocol. See manual page for `ciphers(1)`."
-	},
-	{ _RK_GLOBAL, "ssl.enabled.protocols", _RK_C_STR,
-	  _RK(ssl.enabled_protocols), // FIXME
-	  "List of enabled security protocols. At least one of the protocols "
-	  "must be available on the broker."
+	  "protocol. See manual page for `ciphers(1)` and "
+	  "`SSL_CTX_set_cipher_list(3)."
 	},
 	{ _RK_GLOBAL, "ssl.key.location", _RK_C_STR,
 	  _RK(ssl.key_location),

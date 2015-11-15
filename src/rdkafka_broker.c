@@ -2361,7 +2361,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 				continue;
 			}
 
-			outlen = outlenx;
+			outlen = (size_t)outlenx;
 		}
 		break;
 #endif

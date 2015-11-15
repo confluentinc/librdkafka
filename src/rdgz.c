@@ -74,7 +74,7 @@ void *rd_gz_decompress (const void *compressed, int compressed_len,
 		} else {
 			/* Use real output buffer */
 			p = decompressed;
-			len = *decompressed_lenp;
+			len = (int)*decompressed_lenp;
 		}
 
 		do {
@@ -102,7 +102,7 @@ void *rd_gz_decompress (const void *compressed, int compressed_len,
 
 		if (pass == 1) {
 			*decompressed_lenp = strm.total_out;
-			if (!(decompressed = malloc(*decompressed_lenp+1))) {
+			if (!(decompressed = malloc((size_t)(*decompressed_lenp)+1))) {
 				inflateEnd(&strm);
 				return NULL;
 			}

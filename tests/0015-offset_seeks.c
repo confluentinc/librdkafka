@@ -88,7 +88,7 @@ int main_0015_offsets_seek (int argc, char **argv) {
                                   testid, partition, offset,
                                   msg_base + (int)(offset - offset_base),
                                   RD_MIN(msgs_per_dance,
-					 (int)offset_last - offset),
+					 (int)(offset_last - offset)),
 				  1 /* parse format */);
 	}
 

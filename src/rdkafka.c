@@ -882,7 +882,7 @@ static int rd_kafka_thread_main (void *arg) {
 		rd_ts_t sleeptime = rd_kafka_timers_next(
 			&rk->rk_timers,
 			rk->rk_conf.socket_blocking_max_ms * 1000, 1/*lock*/);
-		rd_kafka_toppars_q_serve(&rk->rk_toppar_ops, sleeptime / 1000);
+		rd_kafka_toppars_q_serve(&rk->rk_toppar_ops, (int)(sleeptime / 1000));
 		rd_kafka_timers_run(&rk->rk_timers, RD_POLL_NOWAIT);
 	}
 

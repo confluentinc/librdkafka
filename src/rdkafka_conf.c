@@ -47,7 +47,8 @@ struct rd_kafka_property {
 		_RK_C_BOOL,
 		_RK_C_PTR,  /* Only settable through special set functions */
                 _RK_C_PATLIST, /* Pattern list */
-                _RK_C_KSTR  /* Kafka string */
+                _RK_C_KSTR, /* Kafka string */
+		_RK_C_ALIAS /* Alias: points to other property through .sdef */
 	} type;
 	int   offset;
 	const char *desc;
@@ -835,6 +836,9 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
 		if (!(prop->scope & scope))
 			continue;
 
+		if (prop->type == _RK_C_ALIAS)
+			continue;
+
 		if (prop->sdef || prop->vdef || prop->pdef)
 			rd_kafka_anyconf_set_prop0(scope, conf, prop,
 						   prop->sdef ?
@@ -879,6 +883,11 @@ static int rd_kafka_anyconf_set (int scope, void *conf,
 
 		if (strcmp(prop->name, name))
 			continue;
+
+		if (prop->type == _RK_C_ALIAS)
+			return rd_kafka_anyconf_set(scope, conf,
+						    prop->sdef, value,
+						    errstr, errstr_size);
 
 		return rd_kafka_anyconf_set_prop(scope, conf, prop, value,
 						 errstr, errstr_size);
@@ -999,6 +1008,9 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 		int ival = 0;
 
 		if (!(prop->scope & scope))
+			continue;
+
+		if (prop->type == _RK_C_ALIAS)
 			continue;
 
 		switch (prop->type)
@@ -1303,6 +1315,11 @@ static rd_kafka_conf_res_t rd_kafka_anyconf_get (int scope, const void *conf,
 		if (!(prop->scope & scope) || strcmp(prop->name, name))
 			continue;
 
+		if (prop->type == _RK_C_ALIAS)
+			return rd_kafka_anyconf_get(scope, conf,
+						    prop->sdef,
+						    dest, dest_size);
+
                 if (rd_kafka_anyconf_get0(conf, prop, dest, dest_size) ==
                     RD_KAFKA_CONF_OK)
                         return RD_KAFKA_CONF_OK;
@@ -1337,6 +1354,10 @@ static const char **rd_kafka_anyconf_dump (int scope, const void *conf,
                 size_t val_size;
 
 		if (!(prop->scope & scope))
+			continue;
+
+		/* Skip aliases, show original property instead. */
+		if (prop->type == _RK_C_ALIAS)
 			continue;
 
                 /* Query value size */
@@ -1440,7 +1461,10 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 			break;
 		}
 
-		fprintf(fp, " | %s\n", prop->desc);
+		if (prop->type == _RK_C_ALIAS)
+			fprintf(fp, " | Alias for `%s`\n", prop->sdef);
+		else
+			fprintf(fp, " | %s\n", prop->desc);
 	}
 	fprintf(fp, "\n");
         fprintf(fp, "### C/P legend: C = Consumer, P = Producer, * = both\n");

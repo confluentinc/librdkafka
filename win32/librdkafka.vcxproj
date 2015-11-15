@@ -87,6 +87,7 @@
     <ClInclude Include="..\src\rdatomic.h" />
     <ClInclude Include="..\src\rdavg.h" />
     <ClInclude Include="..\src\rdendian.h" />
+    <ClInclude Include="..\src\rdgz.h" />
     <ClInclude Include="..\src\rdinterval.h" />
     <ClInclude Include="..\src\rdkafka_assignor.h" />
     <ClInclude Include="..\src\rdkafka_buf.h" />
@@ -127,6 +128,7 @@
   <ItemGroup>
     <ClCompile Include="..\src\rdaddr.c" />
     <ClCompile Include="..\src\rdcrc32.c" />
+    <ClCompile Include="..\src\rdgz.c" />
     <ClCompile Include="..\src\rdkafka.c" />
     <ClCompile Include="..\src\rdkafka_assignor.c" />
     <ClCompile Include="..\src\rdkafka_broker.c" />

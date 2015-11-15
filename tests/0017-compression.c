@@ -49,7 +49,9 @@ int main_0017_compression(int argc, char **argv) {
 #if WITH_ZLIB
 		"gzip",
 #endif
+#if WITH_SNAPPY
 		"snappy",
+#endif
 		NULL
 	};
 	const char *topics[CODEC_CNT];

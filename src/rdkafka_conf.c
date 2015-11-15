@@ -82,7 +82,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_ZLIB
 		{ 0x1, "gzip" },
 #endif
+#if WITH_SNAPPY
 		{ 0x2, "snappy" },
+#endif
 #if WITH_SSL
 		{ 0x4, "ssl" },
 #endif
@@ -441,7 +443,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_ZLIB
 			{ RD_KAFKA_COMPRESSION_GZIP,   "gzip" },
 #endif
+#if WITH_SNAPPY
 			{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
+#endif
 			{ 0 }
 		} },
 	{ _RK_GLOBAL|_RK_PRODUCER, "batch.num.messages", _RK_C_INT,
@@ -520,7 +524,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_ZLIB
 		  { RD_KAFKA_COMPRESSION_GZIP, "gzip" },
 #endif
+#if WITH_SNAPPY
 		  { RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
+#endif
 		  { RD_KAFKA_COMPRESSION_INHERIT, "inherit" },
 		  { 0 }
 		} },

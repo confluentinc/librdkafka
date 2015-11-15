@@ -1458,11 +1458,13 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 						 int of_init_firstmsg,
 					     int32_t *MessageSetSizep) {
 	int32_t MessageSetSize = *MessageSetSizep;
-	int    siovlen = 1;
 	size_t coutlen = 0;
 	int    outlen;
 	int r;
+#if WITH_SNAPPY
+	int    siovlen = 1;
 	struct snappy_env senv;
+#endif
 	struct iovec siov;
 #if WITH_ZLIB
 	z_stream strm;
@@ -1562,6 +1564,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 		break;
 #endif
 
+#if WITH_SNAPPY
 	case RD_KAFKA_COMPRESSION_SNAPPY:
 		/* Initialize snappy compression environment */
 		snappy_init_env_sg(&senv, 1/*iov enable*/);
@@ -1598,6 +1601,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 		/* rd_free snappy environment */
 		snappy_free_env(&senv);
 		break;
+#endif
 
 	default:
 		rd_kafka_assert(rkb->rkb_rk,
@@ -2103,6 +2107,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 }
 
 
+#if WITH_SNAPPY
 /**
  * Decompress Snappy message with Snappy-java framing.
  * Returns a malloced buffer with the uncompressed data, or NULL on failure.
@@ -2218,7 +2223,7 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 
 	return outbuf;
 }
-
+#endif
 
 /**
  * Parses a MessageSet and enqueues internal ops on the local
@@ -2366,6 +2371,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		break;
 #endif
 
+#if WITH_SNAPPY
 		case RD_KAFKA_COMPRESSION_SNAPPY:
 		{
 			const char *inbuf = Value.data;
@@ -2434,6 +2440,7 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 		}
 		break;
+#endif
 
 		default:
 			rd_rkb_dbg(rkb, MSG, "CODEC",

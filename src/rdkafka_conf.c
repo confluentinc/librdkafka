@@ -303,7 +303,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	},
 	{ _RK_GLOBAL, "ssl.key.password", _RK_C_STR,
 	  _RK(ssl.key_password),
-	  "Private key pass phrase"
+	  "Private key passphrase"
 	},
 	{ _RK_GLOBAL, "ssl.certificate.location", _RK_C_STR,
 	  _RK(ssl.cert_location),

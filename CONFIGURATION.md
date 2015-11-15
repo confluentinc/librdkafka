@@ -57,6 +57,7 @@ queued.min.messages                      |  C  |        100000 | Minimum number 
 queued.max.messages.kbytes               |  C  |       1000000 | Maximum number of kilobytes per topic+partition in the local consumer queue. This value may be overshot by fetch.message.max.bytes.
 fetch.wait.max.ms                        |  C  |           100 | Maximum time the broker may wait to fill the response with fetch.min.bytes.
 fetch.message.max.bytes                  |  C  |       1048576 | Maximum number of bytes per topic+partition to request when fetching messages from the broker.
+max.partition.fetch.bytes                |  C  |               | Alias for `fetch.message.max.bytes`
 fetch.min.bytes                          |  C  |             1 | Minimum number of bytes the broker responds with. If fetch.wait.max.ms expires the accumulated data will be sent to the client regardless of this setting.
 fetch.error.backoff.ms                   |  C  |           500 | How long to postpone the next fetch request for a topic+partition in case of a fetch error.
 queue.buffering.max.messages             |  P  |        100000 | Maximum number of messages allowed on the producer queue.

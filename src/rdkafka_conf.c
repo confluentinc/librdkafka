@@ -99,6 +99,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Initial list of brokers. "
 	  "The application may also use `rd_kafka_brokers_add()` to add "
 	  "brokers during runtime." },
+	{ _RK_GLOBAL, "bootstrap.servers", _RK_C_ALIAS, 0,
+	  "See metadata.broker.list",
+	  .sdef = "metadata.broker.list" },
 	{ _RK_GLOBAL, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
 	  "Maximum transmit message size.",
 	  1000, 1000000000, 1000000 },
@@ -395,6 +398,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Maximum number of bytes per topic+partition to request when "
           "fetching messages from the broker.",
           1, 1000000000, 1024*1024 },
+	{ _RK_GLOBAL|_RK_CONSUMER, "max.partition.fetch.bytes", _RK_C_ALIAS,
+	  .sdef = "fetch.message.max.bytes" },
 	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.min.bytes", _RK_C_INT,
 	  _RK(fetch_min_bytes),
 	  "Minimum number of bytes the broker responds with. "
@@ -533,6 +538,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "will be written to broker or local file according to "
           "offset.store.method.",
 	  0, 1, 1 },
+	{ _RK_TOPIC|_RK_CONSUMER, "enable.auto.commit", _RK_C_ALIAS,
+	  .sdef = "auto.commit.enable" },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RKT(auto_commit_interval_ms),
 	  "The frequency in milliseconds that the consumer offsets "

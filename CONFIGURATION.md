@@ -5,6 +5,7 @@ Property                                 | C/P |       Default | Description
 builtin.features                         |  *  |               | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support.
 client.id                                |  *  |       rdkafka | Client identifier.
 metadata.broker.list                     |  *  |               | Initial list of brokers. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime.
+bootstrap.servers                        |  *  |               | Alias for `metadata.broker.list`
 message.max.bytes                        |  *  |       1000000 | Maximum transmit message size.
 receive.message.max.bytes                |  *  |     100000000 | Maximum receive message size. This is a safety precaution to avoid memory exhaustion in case of protocol hickups. The value should be at least fetch.message.max.bytes * number of partitions consumed from + messaging overhead (e.g. 200000 bytes).
 metadata.request.timeout.ms              |  *  |         60000 | Non-topic request timeout in milliseconds. This is for metadata requests, etc.
@@ -37,7 +38,7 @@ protocol.version                         |  *  |             0 | Broker protocol
 security.protocol                        |  *  |     plaintext | Protocol used to communicate with brokers.
 ssl.cipher.suites                        |  *  |               | A cipher suite is a named combination of authentication, encryption, MAC and key exchange algorithm used to negotiate the security settings for a network connection using TLS or SSL network protocol. See manual page for `ciphers(1)` and `SSL_CTX_set_cipher_list(3).
 ssl.key.location                         |  *  |               | Path to client's private key (PEM) used for authentication.
-ssl.key.password                         |  *  |               | Private key pass phrase
+ssl.key.password                         |  *  |               | Private key passphrase
 ssl.certificate.location                 |  *  |               | Path to certificate file for verifying the broker's key.
 ssl.ca.location                          |  *  |               | File or directory path to CA certificate(s) for verifying the broker's key.
 sasl.mechanisms                          |  *  |        GSSAPI | Space separated list of eligible SASL mechanisms
@@ -83,6 +84,7 @@ partitioner_cb                           |  P  |               | Partitioner cal
 opaque                                   |  *  |               | Application opaque (set with rd_kafka_topic_conf_set_opaque())
 compression.codec                        |  P  |       inherit | Compression codec to use for compressing message sets: none, gzip or snappy
 auto.commit.enable                       |  C  |          true | If true, periodically commit offset of the last message handed to the application. This commited offset will be used when the process restarts to pick up where it left off. If false, the application will have to call `rd_kafka_offset_store()` to store an offset (optional). **NOTE:** There is currently no zookeeper integration, offsets will be written to broker or local file according to offset.store.method.
+enable.auto.commit                       |  C  |               | Alias for `auto.commit.enable`
 auto.commit.interval.ms                  |  C  |         60000 | The frequency in milliseconds that the consumer offsets are commited (written) to offset storage.
 auto.offset.reset                        |  C  |       largest | Action to take when there is no initial offset in offset store or the desired offset is out of range: 'smallest' - automatically reset the offset to the smallest offset, 'largest' - automatically reset the offset to the largest offset, 'error' - trigger an error which is retrieved by consuming messages and checking 'message->err'.
 offset.store.path                        |  C  |             . | Path to local file for storing offsets. If the path is a directory a filename will be automatically generated in that directory based on the topic and partition.

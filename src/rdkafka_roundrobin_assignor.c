@@ -29,19 +29,6 @@
 #include "rdkafka_assignor.h"
 
 
-
-
-
-
-static int member_lex_cmp (const void *_a, const void *_b) {
-        const rd_kafka_group_member_t *a =
-                *(const rd_kafka_group_member_t * const *)_a;
-        const rd_kafka_group_member_t *b =
-                *(const rd_kafka_group_member_t * const *)_b;
-
-        return rd_kafkap_str_cmp(a->rkgm_member_id, b->rkgm_member_id);
-}
-
 /**
  * Source: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/clients/consumer/RoundRobinAssignor.java
  *
@@ -74,27 +61,35 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 					char *errstr, size_t errstr_size,
 					void *opaque) {
         unsigned int ti;
+	int next = 0; /* Next member id */
 
 	/* Sort topics by name */
 	qsort(eligible_topics, eligible_topic_cnt, sizeof(*eligible_topics),
 	      rd_kafka_assignor_topic_cmp);
 
+	/* Sort members by name */
+	qsort(members, member_cnt, sizeof(*members),
+	      rd_kafka_group_member_cmp);
+
         for (ti = 0 ; ti < eligible_topic_cnt ; ti++) {
                 rd_kafka_assignor_topic_t *eligible_topic = eligible_topics[ti];
 		int partition;
-		int next;
-
-                /* For each topic, sort members in lexicographic order. */
-                rd_list_sort(&eligible_topic->members, member_lex_cmp);
-		next = 0; /* next member */
 
 		/* For each topic+partition, assign one member (in a cyclic
 		 * iteration) per partition until the partitions are exhausted*/
 		for (partition = 0 ;
 		     partition < eligible_topic->metadata->partition_cnt ;
 		     partition++) {
-			rd_kafka_group_member_t *rkgm =
-				rd_list_elem(&eligible_topic->members, next);
+			rd_kafka_group_member_t *rkgm;
+
+			/* Scan through members until we find one
+			 * subscription to this topic. */
+			while (!rd_kafka_group_member_find_subscription(
+				       rk, &members[next],
+				       eligible_topic->metadata->topic))
+				next++;
+
+			rkgm = &members[next];
 
 			rd_kafka_dbg(rk, CGRP, "ASSIGN",
 				     "roundrobin: Member \"%s\": "

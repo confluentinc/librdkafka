@@ -928,6 +928,6 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
 }
 
 
-void *rd_kafka_topic_opaque (rd_kafka_topic_t *app_rkt) {
+void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
         return rd_kafka_topic_a2i(app_rkt)->rkt_conf.opaque;
 }

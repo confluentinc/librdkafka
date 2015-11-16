@@ -145,7 +145,6 @@ enum ErrorCode {
   ERR__UNKNOWN_PROTOCOL = -171,  /* Unknown protocol */
   ERR__NOT_IMPLEMENTED = -170,   /* Not implemented */
   ERR__AUTHENTICATION = -169,    /* Authentication failure */
-  ERR__THROTTLE = -168,          /* Request was throttled */
   ERR__END = -100,               /* end internal error codes */
 
   /* Standard Kafka errors: */

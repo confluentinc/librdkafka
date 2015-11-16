@@ -82,7 +82,7 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 		     partition++) {
 			rd_kafka_group_member_t *rkgm;
 
-			/* Scan through members until we find one
+			/* Scan through members until we find one with a
 			 * subscription to this topic. */
 			while (!rd_kafka_group_member_find_subscription(
 				       rk, &members[next],

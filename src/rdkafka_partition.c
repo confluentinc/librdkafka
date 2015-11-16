@@ -31,6 +31,7 @@
 #include "rdkafka_request.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_partition.h"
+#include "trex.h"
 
 
 
@@ -1607,3 +1608,47 @@ rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src){
 }
 
 
+/**
+ * Returns true if 'topic' matches the 'rktpar', else false.
+ * On match, if rktpar is a regex pattern then 'matched_by_regex' is set to 1.
+ */
+int rd_kafka_topic_partition_match (rd_kafka_t *rk,
+				    const rd_kafka_group_member_t *rkgm,
+				    const rd_kafka_topic_partition_t *rktpar,
+				    const char *topic, int *matched_by_regex) {
+	int ret = 0;
+
+	if (*rktpar->topic == '^') {
+		TRex *re;
+		const char *error;
+
+		/* FIXME: cache compiled regex */
+		if (!(re = trex_compile(rktpar->topic, &error))) {
+			rd_kafka_dbg(rk, CGRP,
+				     "SUBMATCH",
+				     "Invalid regex for member "
+				     "\"%.*s\" subscription \"%s\": %s",
+				     RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
+				     rktpar->topic, error);
+			return 0;
+		}
+
+		if (trex_match(re, topic)) {
+			if (matched_by_regex)
+				*matched_by_regex = 1;
+
+			ret = 1;
+		}
+
+		trex_free(re);
+
+	} else if (!strcmp(rktpar->topic, topic)) {
+
+		if (matched_by_regex)
+			*matched_by_regex = 0;
+
+		ret = 1;
+	}
+
+	return ret;
+}

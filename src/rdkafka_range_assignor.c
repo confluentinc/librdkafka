@@ -33,15 +33,6 @@
 
 
 
-static int member_lex_cmp (const void *_a, const void *_b) {
-        const rd_kafka_group_member_t *a =
-                *(const rd_kafka_group_member_t * const *)_a;
-        const rd_kafka_group_member_t *b =
-                *(const rd_kafka_group_member_t * const *)_b;
-
-        return rd_kafkap_str_cmp(a->rkgm_member_id, b->rkgm_member_id);
-}
-
 /**
  * Source: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/clients/consumer/RangeAssignor.java
  *
@@ -80,7 +71,8 @@ rd_kafka_range_assignor_assign_cb (rd_kafka_t *rk,
 
                 /* For each topic, we lay out the available partitions in
                  * numeric order and the consumers in lexicographic order. */
-                rd_list_sort(&eligible_topic->members, member_lex_cmp);
+                rd_list_sort(&eligible_topic->members,
+			     rd_kafka_group_member_cmp_pp);
 
                 /* We then divide the number of partitions by the total number of
                  * consumers to determine the number of partitions to assign to

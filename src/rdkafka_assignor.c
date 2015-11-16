@@ -27,7 +27,6 @@
  */
 #include "rdkafka_int.h"
 #include "rdkafka_assignor.h"
-#include "trex.h"
 
 #include <ctype.h>
 
@@ -54,6 +53,55 @@ void rd_kafka_group_member_clear (rd_kafka_group_member_t *rkgm) {
 
         memset(rkgm, 0, sizeof(*rkgm));
 }
+
+
+/**
+ * Member id string comparator (takes rd_kafka_group_member_t *)
+ */
+int rd_kafka_group_member_cmp (const void *_a, const void *_b) {
+        const rd_kafka_group_member_t *a =
+                (const rd_kafka_group_member_t *)_a;
+        const rd_kafka_group_member_t *b =
+                (const rd_kafka_group_member_t *)_b;
+
+        return rd_kafkap_str_cmp(a->rkgm_member_id, b->rkgm_member_id);
+}
+
+/**
+ * Member id string comparator (takes rd_kafka_group_member_t **)
+ */
+int rd_kafka_group_member_cmp_pp (const void *_a, const void *_b) {
+        const rd_kafka_group_member_t *a =
+                *(const rd_kafka_group_member_t * const *)_a;
+        const rd_kafka_group_member_t *b =
+                *(const rd_kafka_group_member_t * const *)_b;
+
+        return rd_kafkap_str_cmp(a->rkgm_member_id, b->rkgm_member_id);
+}
+
+/**
+ * Returns true if member subscribes to topic, else false.
+ */
+int
+rd_kafka_group_member_find_subscription (rd_kafka_t *rk,
+					 const rd_kafka_group_member_t *rkgm,
+					 const char *topic) {
+	int i;
+
+	/* Match against member's subscription. */
+        for (i = 0 ; i < rkgm->rkgm_subscription->cnt ; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                        &rkgm->rkgm_subscription->elems[i];
+
+		if (rd_kafka_topic_partition_match(rk, rkgm, rktpar,
+						   topic, NULL))
+			return 1;
+	}
+
+	return 0;
+}
+
+
 
 static rd_kafkap_bytes_t *
 rd_kafka_consumer_protocol_member_metadata_new (
@@ -124,38 +172,17 @@ static int rd_kafka_member_subscription_match (
         for (i = 0 ; i < rkgm->rkgm_subscription->cnt ; i++) {
                 const rd_kafka_topic_partition_t *rktpar =
                         &rkgm->rkgm_subscription->elems[i];
+		int matched_by_regex = 0;
 
-                if (*rktpar->topic == '^') {
-					    TRex *re;
-						const char *error;
-
-                        /* FIXME: cache compiled regex */
-						if (!(re = trex_compile(rktpar->topic, &error))) {
-                                rd_kafka_dbg(rkcg->rkcg_rk, CGRP,
-                                             "SUBMATCH",
-                                             "Invalid regex for member "
-                                             "\"%.*s\" subscription \"%s\": %s",
-                                             RD_KAFKAP_STR_PR(rkgm->
-                                                              rkgm_member_id),
-                                             rktpar->topic, error);
-                                continue;
-                        }
-
-                        if (trex_match(re, topic_metadata->topic)) {
-                                rd_list_add(&rkgm->rkgm_eligible,
-                                            (void *)topic_metadata);
-                                matched++;
-                        }
-
-						trex_free(re);
-                        has_regex++;
-
-                } else if (!strcmp(rktpar->topic, topic_metadata->topic)) {
-                        rd_list_add(&rkgm->rkgm_eligible,
-                                    (void *)topic_metadata);
-                        matched++;
-                }
-        }
+		if (rd_kafka_topic_partition_match(rkcg->rkcg_rk, rkgm, rktpar,
+						   topic_metadata->topic,
+						   &matched_by_regex)) {
+			rd_list_add(&rkgm->rkgm_eligible,
+				    (void *)topic_metadata);
+			matched++;
+			has_regex += matched_by_regex;
+		}
+	}
 
         if (matched)
                 rd_list_add(&eligible_topic->members, rkgm);

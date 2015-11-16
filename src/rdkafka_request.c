@@ -1104,7 +1104,7 @@ err:
         }
 
         if (ErrorCode) {
-                if (ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER)
+                if (ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID)
                         rd_kafka_cgrp_set_member_id(rkcg, "");
                 rd_kafka_cgrp_set_join_state(rkcg,
                                              RD_KAFKA_CGRP_JOIN_STATE_INIT);

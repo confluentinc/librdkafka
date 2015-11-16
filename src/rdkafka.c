@@ -324,16 +324,20 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
                 return "Broker: Specified group generation id is not valid";
         case RD_KAFKA_RESP_ERR_INCONSISTENT_GROUP_PROTOCOL:
                 return "Broker: Inconsistent group protocol";
-        case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER:
+        case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
                 return "Broker: Unknown member";
         case RD_KAFKA_RESP_ERR_INVALID_SESSION_TIMEOUT:
                 return "Broker: Invalid session timeout";
-        case RD_KAFKA_RESP_ERR_INVALID_COMMIT_OFFSET_SIZE:
-                return "Broker: Committing offset data size is not valid";
-        case RD_KAFKA_RESP_ERR_AUTHORIZATION_FAILED:
-                return "Broker: Authorization failed";
-        case RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS:
+	case RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS:
                 return "Broker: Group rebalance in progress";
+        case RD_KAFKA_RESP_ERR_INVALID_COMMIT_OFFSET_SIZE:
+                return "Broker: Commit offset data size is not valid";
+        case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
+                return "Broker: Topic authorization failed";
+	case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
+                return "Broker: Group authorization failed";
+	case RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED:
+                return "Broker: Cluster authorization failed";
 
 	default:
 		rd_snprintf(ret, sizeof(ret), "Err-%i?", err);

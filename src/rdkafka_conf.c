@@ -372,7 +372,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(partition_assignment_strategy),
           "Name of partition assignment strategy to use when elected "
           "group leader assigns partitions to group members.",
-          .sdef = "range" },
+	  .sdef = "range,roundrobin" },
         { _RK_GLOBAL|_RK_CGRP, "session.timeout.ms", _RK_C_INT,
           _RK(group_session_timeout_ms),
           "Client group session and failure detection timeout.",

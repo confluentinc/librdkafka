@@ -13,6 +13,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_request.c rdkafka_cgrp.c rdkafka_pattern.c \
 		rdkafka_partition.c rdkafka_subscription.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
+		rdkafka_roundrobin_assignor.c \
 		rdcrc32.c rdgz.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
 		rdlog.c \
 		trex.c $(SRCS_y)

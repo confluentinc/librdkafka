@@ -53,6 +53,7 @@ typedef struct rd_kafka_assignor_topic_s {
 } rd_kafka_assignor_topic_t;
 
 
+int rd_kafka_assignor_topic_cmp (const void *_a, const void *_b);
 
 
 typedef struct rd_kafka_assignor_s {
@@ -61,6 +62,8 @@ typedef struct rd_kafka_assignor_s {
 
         const void        *rkas_userdata;
         size_t             rkas_userdata_size;
+
+	int                rkas_enabled;
 
         rd_kafka_resp_err_t (*rkas_assign_cb) (
                 rd_kafka_t *rk,
@@ -127,9 +130,12 @@ rd_kafka_assignor_run (struct rd_kafka_cgrp_s *rkcg,
 rd_kafka_assignor_t *
 rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol);
 
-void rd_kafka_assignors_init (rd_kafka_t *rk);
+int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, int errstr_size);
 void rd_kafka_assignors_term (rd_kafka_t *rk);
 
+
+
+void rd_kafka_group_member_clear (rd_kafka_group_member_t *rkgm);
 
 
 /**
@@ -148,4 +154,19 @@ rd_kafka_range_assignor_assign_cb (rd_kafka_t *rk,
                                    void *opaque);
 
 
-void rd_kafka_group_member_clear (rd_kafka_group_member_t *rkgm);
+/**
+ * rd_kafka_roundrobin_assignor.c
+ */
+rd_kafka_resp_err_t
+rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
+					const char *member_id,
+					const char *protocol_name,
+					const rd_kafka_metadata_t *metadata,
+					rd_kafka_group_member_t *members,
+					size_t member_cnt,
+					rd_kafka_assignor_topic_t
+					**eligible_topics,
+					size_t eligible_topic_cnt,
+					char *errstr, size_t errstr_size,
+					void *opaque);
+

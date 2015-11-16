@@ -29,6 +29,8 @@
 #include "rdkafka_assignor.h"
 #include "trex.h"
 
+#include <ctype.h>
+
 /**
  * Clear out and free any memory used by the member, but not the rkgm itself.
  */
@@ -94,12 +96,12 @@ rd_kafka_consumer_protocol_member_metadata_new (
 
 
 rd_kafkap_bytes_t *
-rd_kafka_assignor_get_metadata (rd_kafka_assignor_t *rkpas,
+rd_kafka_assignor_get_metadata (rd_kafka_assignor_t *rkas,
                                 const rd_kafka_topic_partition_list_t
                                 *subscription) {
         return rd_kafka_consumer_protocol_member_metadata_new(
-                subscription, rkpas->rkas_userdata,
-                rkpas->rkas_userdata_size);
+                subscription, rkas->rkas_userdata,
+                rkas->rkas_userdata_size);
 }
 
 
@@ -237,6 +239,15 @@ rd_kafka_assignor_topic_destroy (rd_kafka_assignor_topic_t *at) {
         rd_free(at);
 }
 
+int rd_kafka_assignor_topic_cmp (const void *_a, const void *_b) {
+	const rd_kafka_assignor_topic_t *a =
+                *(const rd_kafka_assignor_topic_t * const *)_a;
+        const rd_kafka_assignor_topic_t *b =
+                *(const rd_kafka_assignor_topic_t * const *)_b;
+
+	return !strcmp(a->metadata->topic, b->metadata->topic);
+}
+
 rd_kafka_resp_err_t
 rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                        const char *protocol_name,
@@ -245,11 +256,18 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                        size_t member_cnt,
                        char *errstr, size_t errstr_size) {
         rd_kafka_resp_err_t err;
-        rd_kafka_assignor_t *rkpas = rkcg->rkcg_rk->rk_conf.assignor;
+        rd_kafka_assignor_t *rkas;
         rd_ts_t ts_start = rd_clock();
         unsigned int i;
         rd_list_t eligible_topics;
         int j;
+
+	if (!(rkas = rd_kafka_assignor_find(rkcg->rkcg_rk, protocol_name)) ||
+	    !rkas->rkas_enabled) {
+		rd_snprintf(errstr, errstr_size,
+			    "Unsupported assignor \"%s\"", protocol_name);
+		return RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
+	}
 
 
         /* Map available topics to subscribing members */
@@ -288,7 +306,7 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
         }
 
         /* Call assignors assign callback */
-        err = rkpas->rkas_assign_cb(rkcg->rkcg_rk,
+        err = rkas->rkas_assign_cb(rkcg->rkcg_rk,
                                     rkcg->rkcg_member_id->str,
                                     protocol_name, metadata,
                                     members, member_cnt,
@@ -296,7 +314,7 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                                     eligible_topics.rl_elems,
                                     eligible_topics.rl_cnt,
                                     errstr, sizeof(errstr),
-                                    rkpas->rkas_opaque);
+                                    rkas->rkas_opaque);
 
         if (err) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
@@ -366,10 +384,10 @@ rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol) {
 /**
  * Destroys an assignor (but does not unlink).
  */
-static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkpas) {
-        rd_kafkap_str_destroy(rkpas->rkas_protocol_type);
-        rd_kafkap_str_destroy(rkpas->rkas_protocol_name);
-        rd_free(rkpas);
+static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
+        rd_kafkap_str_destroy(rkas->rkas_protocol_type);
+        rd_kafkap_str_destroy(rkas->rkas_protocol_name);
+        rd_free(rkas);
 }
 
 
@@ -392,40 +410,102 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                                size_t eligible_topic_cnt,
                                char *errstr, size_t errstr_size, void *opaque),
                        void *opaque) {
-        rd_kafka_assignor_t *rkpas;
+        rd_kafka_assignor_t *rkas;
 
         if (rd_kafkap_str_cmp_str(rk->rk_conf.group_protocol_type,
                                   protocol_type))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
 
-        /* Allow application to overwrite built-in assignors. */
-        if ((rkpas = rd_kafka_assignor_find(rk, protocol_name))) {
-                rd_list_remove(&rk->rk_conf.partition_assignors, rkpas);
-                rd_kafka_assignor_destroy(rkpas);
-        }
+        /* Dont overwrite application assignors */
+        if ((rkas = rd_kafka_assignor_find(rk, protocol_name)))
+		return RD_KAFKA_RESP_ERR__CONFLICT;
 
-        rkpas = rd_calloc(1, sizeof(*rkpas));
+        rkas = rd_calloc(1, sizeof(*rkas));
 
-        rkpas->rkas_protocol_name    = rd_kafkap_str_new(protocol_name, -1);
-        rkpas->rkas_protocol_type    = rd_kafkap_str_new(protocol_type, -1);
-        rkpas->rkas_assign_cb        = assign_cb;
-        rkpas->rkas_get_metadata_cb  = rd_kafka_assignor_get_metadata;
-        rkpas->rkas_opaque = opaque;
+        rkas->rkas_protocol_name    = rd_kafkap_str_new(protocol_name, -1);
+        rkas->rkas_protocol_type    = rd_kafkap_str_new(protocol_type, -1);
+        rkas->rkas_assign_cb        = assign_cb;
+        rkas->rkas_get_metadata_cb  = rd_kafka_assignor_get_metadata;
+        rkas->rkas_opaque = opaque;
 
-        rd_list_add(&rk->rk_conf.partition_assignors, rkpas);
+        rd_list_add(&rk->rk_conf.partition_assignors, rkas);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 
+/* Right trim string of whitespaces */
+static void rtrim (char *s) {
+	char *e = s + strlen(s);
+
+	if (e == s)
+		return;
+
+	while (e >= s && isspace(*e))
+		e--;
+
+	*e = '\0';
+}
+
+
 /**
- * Add built-in assignors.
+ * Initialize assignor list based on configuration.
  */
-void rd_kafka_assignors_init (rd_kafka_t *rk) {
-        rd_kafka_assignor_add(rk, "consumer", "range",
+int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, int errstr_size) {
+	char *wanted;
+	char *s;
+
+	/* Add builtin assignors */
+	rd_kafka_assignor_add(rk, "consumer", "range",
                               rd_kafka_range_assignor_assign_cb,
                               NULL);
+        rd_kafka_assignor_add(rk, "consumer", "roundrobin",
+                              rd_kafka_roundrobin_assignor_assign_cb,
+                              NULL);
+
+
+	rd_strdupa(&wanted, rk->rk_conf.partition_assignment_strategy);
+
+	s = wanted;
+	while (*s) {
+		rd_kafka_assignor_t *rkas;
+		char *t;
+
+		/* Left trim */
+		while (*s == ' ' || *s == ',')
+			s++;
+
+		if ((t = strchr(s, ','))) {
+			*t = '\0';
+			t++;
+		} else {
+			t = s + strlen(s);
+		}
+
+		/* Right trim */
+		rtrim(s);
+
+		if (!(rkas = rd_kafka_assignor_find(rk, s))) {
+			rd_snprintf(errstr, errstr_size,
+				    "Unsupported "
+				    "partition.assignment.strategy \"%s\" "
+				    "for group.protocol.type=\"%s\"",
+				    s, rk->rk_conf.group_protocol_type->str);
+			return -1;
+		} else {
+			if (!rkas->rkas_enabled) {
+				rkas->rkas_enabled = 1;
+				rk->rk_conf.enabled_assignor_cnt++;
+			}
+		}
+
+		s = t;
+	}
+
+	return 0;
 }
+
+
 
 /**
  * Free assignors

@@ -50,7 +50,7 @@ sasl.kerberos.kinit.cmd                  |  *  |         kinit | Kerberos kinit 
 sasl.kerberos.keytab                     |  *  |               | Path to Kerberos keytab file. Uses system default if not set.
 sasl.kerberos.min.time.before.relogin    |  *  |         60000 | Minimum time in milliseconds between key refresh attempts.
 group.id                                 |  *  |               | Client group id string. All clients sharing the same group.id belong to the same group.
-partition.assignment.strategy            |  *  |         range | Name of partition assignment strategy to use when elected group leader assigns partitions to group members.
+partition.assignment.strategy            |  *  | range,roundrobin | Name of partition assignment strategy to use when elected group leader assigns partitions to group members.
 session.timeout.ms                       |  *  |         30000 | Client group session and failure detection timeout.
 heartbeat.interval.ms                    |  *  |          1000 | Group session keepalive heartbeat interval.
 group.protocol.type                      |  *  |      consumer | Group protocol type

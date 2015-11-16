@@ -43,6 +43,8 @@ static int member_lex_cmp (const void *_a, const void *_b) {
 }
 
 /**
+ * Source: https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/clients/consumer/RangeAssignor.java
+ *
  * The range assignor works on a per-topic basis. For each topic, we lay out the available partitions in numeric order
  * and the consumers in lexicographic order. We then divide the number of partitions by the total number of
  * consumers to determine the number of partitions to assign to each consumer. If it does not evenly

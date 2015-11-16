@@ -869,11 +869,12 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.group_session_timeout_ms);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
         rd_kafka_buf_write_kstr(rkbuf, protocol_type);
-        rd_kafka_buf_write_i32(rkbuf,
-                               rd_list_cnt(&rk->rk_conf.partition_assignors));
+        rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.enabled_assignor_cnt);
 
         RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i) {
                 rd_kafkap_bytes_t *member_metadata;
+		if (!rkas->rkas_enabled)
+			continue;
                 rd_kafka_buf_write_kstr(rkbuf, rkas->rkas_protocol_name);
                 member_metadata = rkas->rkas_get_metadata_cb(rkas,subscription);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);

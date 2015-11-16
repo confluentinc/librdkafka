@@ -714,7 +714,7 @@ static rd_kafka_resp_err_t
 rd_kafka_cgrp_subscribe (rd_kafka_cgrp_t *rkcg,
                          rd_kafka_topic_partition_list_t *rktparlist) {
 
-        if (rd_list_empty(&rkcg->rkcg_rk->rk_conf.partition_assignors))
+        if (rkcg->rkcg_rk->rk_conf.enabled_assignor_cnt == 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         /* Remove existing subscription first */

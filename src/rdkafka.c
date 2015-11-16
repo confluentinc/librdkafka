@@ -1012,21 +1012,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                 (int64_t)rk->rk_conf.queued_max_msg_kbytes * 1000ll;
 
 
-        rd_kafka_assignors_init(rk);
-
-        if (!(rk->rk_conf.assignor = rd_kafka_assignor_find(
-                      rk, rk->rk_conf.partition_assignment_strategy))) {
-                rd_snprintf(errstr, errstr_size,
-                            "Unsupported "
-                            "\"partition.assignment.strategy\"=\"%s\" "
-                            "for \"group.protocol.type\"=\"%s\"",
-                            rk->rk_conf.partition_assignment_strategy,
-                            rk->rk_conf.group_protocol_type->str);
-
-                rd_kafka_destroy_internal(rk);
-                errno = EINVAL;
-                return NULL;
-        }
+        if (rd_kafka_assignors_init(rk, errstr, errstr_size) == -1) {
+		rd_kafka_destroy_internal(rk);
+		errno = EINVAL;
+		return NULL;
+	}
 
 #if WITH_SSL
 	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL ||

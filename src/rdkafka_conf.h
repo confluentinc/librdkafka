@@ -124,6 +124,7 @@ struct rd_kafka_conf_s {
         rd_kafkap_str_t *group_protocol_type;
         char *partition_assignment_strategy;
         rd_list_t partition_assignors;
+	int enabled_assignor_cnt;
         struct rd_kafka_assignor_s *assignor;
 
         void (*rebalance_cb) (rd_kafka_t *rk,

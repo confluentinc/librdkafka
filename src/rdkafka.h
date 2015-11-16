@@ -871,6 +871,7 @@ const char *rd_kafka_topic_name(const rd_kafka_topic_t *rkt);
 /**
  * Get the rkt_opaque pointer that was set in the topic configuration.
  */
+RD_EXPORT
 void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
 
 

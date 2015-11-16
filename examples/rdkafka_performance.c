@@ -115,6 +115,13 @@ static void err_cb (rd_kafka_t *rk, int err, const char *reason, void *opaque) {
 	       rd_kafka_name(rk), rd_kafka_err2str(err), reason);
 }
 
+static void throttle_cb (rd_kafka_t *rk, const char *broker_name,
+			 int32_t broker_id, int throttle_time_ms,
+			 void *opaque) {
+	printf("%% THROTTLED %dms by %s (%"PRId32")\n", throttle_time_ms,
+	       broker_name, broker_id);
+}
+
 
 static void msg_delivered (rd_kafka_t *rk,
                            const rd_kafka_message_t *rkmessage, void *opaque) {
@@ -551,6 +558,7 @@ int main (int argc, char **argv) {
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
 	rd_kafka_conf_set_error_cb(conf, err_cb);
+	rd_kafka_conf_set_throttle_cb(conf, throttle_cb);
 	rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered);
 
 	/* Quick termination */

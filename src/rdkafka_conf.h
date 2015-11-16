@@ -69,6 +69,7 @@ struct rd_kafka_conf_s {
 	char   *brokerlist;
 	int     stats_interval_ms;
 	int     term_sig;
+	int     quota_support;
         int     protocol_version;
 	rd_kafka_secproto_t security_protocol;
 
@@ -172,6 +173,11 @@ struct rd_kafka_conf_s {
 	/* Error callback */
 	void (*error_cb) (rd_kafka_t *rk, int err,
 			  const char *reason, void *opaque);
+
+	/* Throttle callback */
+	void (*throttle_cb) (rd_kafka_t *rk, const char *broker_name,
+			     int32_t broker_id, int throttle_time_ms,
+			     void *opaque);
 
 	/* Stats callback */
 	int (*stats_cb) (rd_kafka_t *rk,

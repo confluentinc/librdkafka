@@ -57,6 +57,7 @@ typedef enum {
         RD_KAFKA_OP_GET_SUBSCRIPTION,/* Get current subscription */
         RD_KAFKA_OP_GET_ASSIGNMENT,  /* Get current assignment */
         RD_KAFKA_OP_SYNCGROUP,       /* SyncGroup response */
+	RD_KAFKA_OP_THROTTLE,        /* Throttle info */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -108,9 +109,12 @@ typedef struct rd_kafka_op_s {
         /* For FETCH_START */
 #define rko_version   rko_intarg
 
-        /* For BROKER_UPDATE */
+        /* For BROKER_UPDATE and THROTTLE */
 #define rko_nodename  rko_rkmessage.payload
 #define rko_nodeid    rko_rkmessage.partition
+
+	/* For THROTTLE */
+#define rko_throttle_time rko_rkmessage.offset
 
 } rd_kafka_op_t;
 
@@ -153,5 +157,9 @@ rd_kafka_op_t *rd_kafka_op_req (rd_kafka_q_t *destq,
                                 int timeout_ms);
 rd_kafka_op_t *rd_kafka_op_req2 (rd_kafka_q_t *destq, rd_kafka_op_type_t type);
 rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko);
+
+void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
+				rd_kafka_q_t *rkq,
+				int throttle_time);
 
 extern rd_atomic32_t rd_kafka_op_cnt;

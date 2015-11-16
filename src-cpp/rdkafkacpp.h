@@ -145,6 +145,7 @@ enum ErrorCode {
   ERR__UNKNOWN_PROTOCOL = -171,  /* Unknown protocol */
   ERR__NOT_IMPLEMENTED = -170,   /* Not implemented */
   ERR__AUTHENTICATION = -169,    /* Authentication failure */
+  ERR__THROTTLE = -168,          /* Request was throttled */
   ERR__END = -100,               /* end internal error codes */
 
   /* Standard Kafka errors: */
@@ -294,7 +295,8 @@ class RD_EXPORT Event {
   enum Type {
     EVENT_ERROR,
     EVENT_STATS,
-    EVENT_LOG
+    EVENT_LOG,
+    EVENT_THROTTLE
   };
 
   enum Severity {
@@ -312,11 +314,15 @@ class RD_EXPORT Event {
   ~Event () {};
 
   /* Accessor functions */
-  virtual Type        type () const = 0;
-  virtual ErrorCode   err () const = 0;
-  virtual Severity    severity () const = 0;
-  virtual std::string fac () const = 0;
-  virtual std::string str () const = 0;
+  virtual Type        type () const = 0;          /* ALL */
+  virtual ErrorCode   err () const = 0;           /* ALL but THROTTLE */
+  virtual Severity    severity () const = 0;      /* LOG */
+  virtual std::string fac () const = 0;           /* LOG */
+  virtual std::string str () const = 0;           /* LOG */
+  virtual int         throttle_time () const = 0; /* THROTTLE */
+  virtual std::string broker_name () const = 0;   /* THROTTLE */
+  virtual int         broker_id () const = 0;   /* THROTTLE */
+  
 };
 
 

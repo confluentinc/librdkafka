@@ -146,6 +146,9 @@ struct rd_kafka_s {
 	rd_kafka_type_t  rk_type;
 	struct timeval   rk_tv_state_change;
 
+	rd_atomic32_t    rk_last_throttle;  /* Last throttle_time_ms value
+					     * from broker. */
+
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,
          *   0: No consumers running

@@ -70,6 +70,21 @@ void RdKafka::error_cb_trampoline (rd_kafka_t *rk, int err,
 }
 
 
+void RdKafka::throttle_cb_trampoline (rd_kafka_t *rk, const char *broker_name,
+				      int32_t broker_id,
+				      int throttle_time_ms,
+				      void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+
+  RdKafka::EventImpl event(RdKafka::Event::EVENT_THROTTLE);
+  event.str_ = broker_name;
+  event.id_ = broker_id;
+  event.throttle_time_ = throttle_time_ms;
+
+  handle->event_cb_->event_cb(event);
+}
+
+
 int RdKafka::stats_cb_trampoline (rd_kafka_t *rk, char *json, size_t json_len,
                                   void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
@@ -140,6 +155,8 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
                              RdKafka::log_cb_trampoline);
     rd_kafka_conf_set_error_cb(confimpl->rk_conf_,
                                RdKafka::error_cb_trampoline);
+    rd_kafka_conf_set_throttle_cb(confimpl->rk_conf_,
+				  RdKafka::throttle_cb_trampoline);
     rd_kafka_conf_set_stats_cb(confimpl->rk_conf_,
                                RdKafka::stats_cb_trampoline);
     event_cb_ = confimpl->event_cb_;

@@ -478,6 +478,23 @@ void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
 						    const char *reason,
 						    void *opaque));
 
+/**
+ * Set throttle callback.
+ * The throttle callback is used in conjunction with `quota.support.enable=true`
+ * to forward broker throttle times for Produce and Fetch (consume) requests.
+ *
+ * Callbacks are called whenever a non-zero throttle time is returned by
+ * the broker, or when the throttle time drops back to zero.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
+				    void (*throttle_cb) (
+					    rd_kafka_t *rk,
+					    const char *broker_name,
+					    int32_t broker_id,
+					    int throttle_time_ms,
+					    void *opaque));
+
 
 /**
  * Set logger callback.

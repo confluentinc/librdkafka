@@ -647,7 +647,6 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 	rd_kafka_broker_t *rkb;
 	rd_kafka_itopic_t *rkt;
 	shptr_rd_kafka_toppar_t *s_rktp;
-        rd_kafka_toppar_t *rktp;
 	rd_ts_t now;
 
 	buf = rd_malloc(size);
@@ -677,9 +676,12 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_avg_t rtt;
+                rd_avg_t rtt, throttle;
+		rd_kafka_toppar_t *rktp;
+
 		rd_kafka_broker_lock(rkb);
 		rd_avg_rollover(&rtt, &rkb->rkb_avg_rtt);
+		rd_avg_rollover(&throttle, &rkb->rkb_avg_throttle);
 		_st_printf("%s\"%s\": { "/*open broker*/
 			   "\"name\":\"%s\", "
 			   "\"nodeid\":%"PRId32", "
@@ -700,6 +702,13 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                            "\"rxcorriderrs\":%"PRIu64", "
                            "\"rxpartial\":%"PRIu64", "
 			   "\"rtt\": {"
+			   " \"min\":%"PRId64","
+			   " \"max\":%"PRId64","
+			   " \"avg\":%"PRId64","
+			   " \"sum\":%"PRId64","
+			   " \"cnt\":%i "
+			   "}, "
+			   "\"throttle\": {"
 			   " \"min\":%"PRId64","
 			   " \"max\":%"PRId64","
 			   " \"avg\":%"PRId64","
@@ -731,7 +740,12 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rtt.ra_v.maxv,
 			   rtt.ra_v.avg,
 			   rtt.ra_v.sum,
-			   rtt.ra_v.cnt);
+			   rtt.ra_v.cnt,
+			   throttle.ra_v.minv,
+			   throttle.ra_v.maxv,
+			   throttle.ra_v.avg,
+			   throttle.ra_v.sum,
+			   throttle.ra_v.cnt);
 
 		rd_kafka_broker_toppars_rdlock(rkb);
 		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
@@ -775,7 +789,8 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 						   i == 0);
 
                 RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, j)
-			rd_kafka_stats_emit_toppar(&buf, &size, &of, rktp,
+			rd_kafka_stats_emit_toppar(&buf, &size, &of,
+						   rd_kafka_toppar_s2i(s_rktp),
 						   i+j == 0);
 
                 i += j;
@@ -1776,6 +1791,14 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 		if (!(dcnt % 1000))
 			rd_kafka_dbg(rk, MSG, "POLL",
 				     "Now %i messages delivered to app", dcnt);
+		break;
+
+	case RD_KAFKA_OP_THROTTLE:
+		if (rk->rk_conf.throttle_cb)
+			rk->rk_conf.throttle_cb(rk, rko->rko_nodename,
+						rko->rko_nodeid,
+						rko->rko_throttle_time,
+						rk->rk_conf.opaque);
 		break;
 
 	case RD_KAFKA_OP_STATS:

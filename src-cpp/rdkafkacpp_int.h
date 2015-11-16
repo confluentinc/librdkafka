@@ -49,6 +49,9 @@ void log_cb_trampoline (const rd_kafka_t *rk, int level,
                         const char *fac, const char *buf);
 void error_cb_trampoline (rd_kafka_t *rk, int err, const char *reason,
                           void *opaque);
+void throttle_cb_trampoline (rd_kafka_t *rk, const char *broker_name,
+			     int32_t broker_id, int throttle_time_ms,
+			     void *opaque);
 int stats_cb_trampoline (rd_kafka_t *rk, char *json, size_t json_len,
                          void *opaque);
 int socket_cb_trampoline (int domain, int type, int protocol, void *opaque);
@@ -68,20 +71,34 @@ class EventImpl : public Event {
 
   EventImpl (Type type, ErrorCode err, Severity severity,
              const char *fac, const char *str):
-      type_(type), err_(err), severity_(severity), fac_(fac ? fac : ""), str_(str)
-  { };
+  type_(type), err_(err), severity_(severity), fac_(fac ? fac : ""),
+	  str_(str), id_(0), throttle_time_(0) {};
+
+  EventImpl (Type type):
+  type_(type), err_(ERR_NO_ERROR), severity_(EVENT_SEVERITY_EMERG),
+	  fac_(""), str_(""), id_(0), throttle_time_(0) {};
 
   Type        type () const { return type_; }
   ErrorCode   err () const { return err_; }
   Severity    severity () const { return severity_; }
   std::string fac () const { return fac_; }
   std::string str () const { return str_; }
+  std::string broker_name () const {
+	  if (type_ == EVENT_THROTTLE)
+		  return str_;
+	  else
+		  return std::string("");
+  }
+  int         broker_id () const { return id_; }
+  int         throttle_time () const { return throttle_time_; }
 
   Type        type_;
   ErrorCode   err_;
   Severity    severity_;
   std::string fac_;
-  std::string str_;
+  std::string str_;         /* reused for THROTTLE broker_name */
+  int         id_;
+  int         throttle_time_;
 };
 
 

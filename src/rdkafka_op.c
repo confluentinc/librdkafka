@@ -39,7 +39,8 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 "ASSIGN",
                 "GET_SUBSCRIPTION",
                 "GET_ASSIGNMENT",
-                "SYNCGROUP"
+                "SYNCGROUP",
+		"THROTTLE"
         };
 
         return names[type];
@@ -321,4 +322,35 @@ rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko) {
         rd_kafka_resp_err_t err = rko->rko_err;
         rd_kafka_op_destroy(rko);
         return err;
+}
+
+
+/**
+ * Enqueue ERR__THROTTLE op, if desired.
+ */
+void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,
+				rd_kafka_q_t *rkq,
+				int throttle_time) {
+	rd_kafka_op_t *rko;
+
+	rd_avg_add(&rkb->rkb_avg_throttle, throttle_time);
+
+	if (!rkb->rkb_rk->rk_conf.quota_support)
+		return;
+
+	/* We send throttle events when:
+	 *  - throttle_time > 0
+	 *  - throttle_time == 0 and last throttle_time > 0
+	 */
+	if (!throttle_time && !rd_atomic32_get(&rkb->rkb_rk->rk_last_throttle))
+		return;
+
+	rd_atomic32_set(&rkb->rkb_rk->rk_last_throttle, throttle_time);
+
+	rko = rd_kafka_op_new(RD_KAFKA_OP_THROTTLE);
+	rko->rko_nodename      = rd_strdup(rkb->rkb_nodename);
+	rko->rko_flags        |= RD_KAFKA_OP_F_FREE; /* free nodename */
+	rko->rko_nodeid        = rkb->rkb_nodeid;
+	rko->rko_throttle_time = throttle_time;
+	rd_kafka_q_enq(rkq, rko);
 }

@@ -1319,7 +1319,9 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
  * Returns 0 on success or an error code on failure.
  */
 static rd_kafka_resp_err_t
-rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf,
+rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb,
+			       rd_kafka_buf_t *rkbuf,
+			       rd_kafka_buf_t *request,
                                int64_t *offsetp) {
 	int32_t TopicArrayCnt;
 	int32_t PartitionArrayCnt;
@@ -1350,6 +1352,15 @@ rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf,
 
         *offsetp = hdr.Offset;
 
+	if (request->rkbuf_reqhdr.ApiVersion == 1) {
+		int32_t Throttle_Time;
+		rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
+
+		rd_kafka_op_throttle_time(rkb, &rkb->rkb_rk->rk_rep,
+					  Throttle_Time);
+	}
+
+
 	return hdr.ErrorCode;
 
 err:
@@ -1376,7 +1387,8 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 
 	/* Parse Produce reply (unless the request errored) */
 	if (!err && reply)
-		err = rd_kafka_produce_reply_handle(rkb, reply, &offset);
+		err = rd_kafka_produce_reply_handle(rkb, reply,
+						    request, &offset);
 
 
 	if (err) {
@@ -1781,6 +1793,9 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	/* Use timeout from first message. */
 	rkbuf->rkbuf_ts_timeout =
 		TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->rkm_ts_timeout;
+
+	if (rkb->rkb_rk->rk_conf.quota_support)
+		rd_kafka_buf_version_set(rkbuf, 1);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Produce, rkbuf,
                                        &rktp->rktp_ops,
@@ -2533,12 +2548,21 @@ static void rd_kafka_broker_fetch_backoff (rd_kafka_broker_t *rkb) {
  * Parses and handles a Fetch reply.
  * Returns 0 on success or an error code on failure.
  */
-static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
-							rd_kafka_buf_t *rkbuf) {
+static rd_kafka_resp_err_t
+rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
+			     rd_kafka_buf_t *rkbuf, rd_kafka_buf_t *request) {
 	int32_t TopicArrayCnt;
 	int i;
         const int log_decode_errors = 1;
         shptr_rd_kafka_itopic_t *s_rkt = NULL;
+
+	if (request->rkbuf_reqhdr.ApiVersion == 1) {
+		int32_t Throttle_Time;
+		rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
+
+		rd_kafka_op_throttle_time(rkb, &rkb->rkb_rk->rk_rep,
+					  Throttle_Time);
+	}
 
 	rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
 	/* Verify that TopicArrayCnt seems to be in line with remaining size */
@@ -2797,7 +2821,7 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_broker_t *rkb,
 
 	/* Parse and handle the messages (unless the request errored) */
 	if (!err && reply)
-		err = rd_kafka_fetch_reply_handle(rkb, reply);
+		err = rd_kafka_fetch_reply_handle(rkb, reply, request);
 
 	rd_rkb_dbg(rkb, MSG, "FETCH", "Fetch reply: %s",
 		   rd_kafka_err2str(err));
@@ -2977,15 +3001,17 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 	/* Update TopicArrayCnt */
 	rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
 
-
 	/* Use configured timeout */
 	rkbuf->rkbuf_ts_timeout = now +
 		((rkb->rkb_rk->rk_conf.socket_timeout_ms +
 		  rkb->rkb_rk->rk_conf.fetch_wait_max_ms) * 1000);
 
+	if (rkb->rkb_rk->rk_conf.quota_support)
+		rd_kafka_buf_version_set(rkbuf, 1);
+
 	rkb->rkb_fetching = 1;
 	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_Fetch, rkbuf,
-                                rd_kafka_broker_fetch_reply, NULL);
+				 rd_kafka_broker_fetch_reply, NULL);
 
 	return cnt;
 }
@@ -3181,6 +3207,7 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 	rd_kafka_q_destroy(&rkb->rkb_ops);
 
         rd_avg_destroy(&rkb->rkb_avg_rtt);
+	rd_avg_destroy(&rkb->rkb_avg_throttle);
 
 	rwlock_destroy(&rkb->rkb_toppar_lock);
 	mtx_destroy(&rkb->rkb_lock);
@@ -3244,6 +3271,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_bufq_init(&rkb->rkb_retrybufs);
 	rd_kafka_q_init(&rkb->rkb_ops, rk);
 	rd_avg_init(&rkb->rkb_avg_rtt, RD_AVG_GAUGE);
+	rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE);
 	rd_kafka_broker_keep(rkb); /* Caller's refcount */
 
 	/* Set next intervalled metadata refresh, offset by a random

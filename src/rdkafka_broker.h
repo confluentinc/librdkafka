@@ -139,7 +139,8 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_kafka_bufq_t     rkb_waitresps;
 	rd_kafka_bufq_t     rkb_retrybufs;
 
-	rd_avg_t            rkb_avg_rtt;        /* Current averaging period */
+	rd_avg_t            rkb_avg_rtt;        /* Current RTT period */
+	rd_avg_t            rkb_avg_throttle;   /* Current throttle period */
 
 	char                rkb_name[RD_KAFKA_NODENAME_SIZE];  /* Displ name */
 	char                rkb_nodename[RD_KAFKA_NODENAME_SIZE]; /* host:port*/

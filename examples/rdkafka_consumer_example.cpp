@@ -97,6 +97,11 @@ class ExampleEventCb : public RdKafka::EventCb {
                 event.severity(), event.fac().c_str(), event.str().c_str());
         break;
 
+      case RdKafka::Event::EVENT_THROTTLE:
+	std::cerr << "THROTTLED: " << event.throttle_time() << "ms by " <<
+	  event.broker_name() << " id " << (int)event.broker_id() << std::endl;
+	break;
+
       default:
         std::cerr << "EVENT " << event.type() <<
             " (" << RdKafka::err2str(event.err()) << "): " <<
@@ -412,6 +417,8 @@ int main (int argc, char **argv) {
     RdKafka::Message *msg = consumer->consume(1000);
     msg_consume(msg, NULL);
     delete msg;
+
+    consumer->poll(0);
   }
 
   alarm(10);

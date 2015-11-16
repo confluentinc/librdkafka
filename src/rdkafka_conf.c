@@ -211,6 +211,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "error_cb", _RK_C_PTR,
 	  _RK(error_cb),
 	  "Error callback (set with rd_kafka_conf_set_error_cb())" },
+	{ _RK_GLOBAL, "throttle_cb", _RK_C_PTR,
+	  _RK(throttle_cb),
+	  "Throttle callback (set with rd_kafka_conf_set_throttle_cb())" },
 	{ _RK_GLOBAL, "stats_cb", _RK_C_PTR,
 	  _RK(stats_cb),
 	  "Statistics callback (set with rd_kafka_conf_set_stats_cb())" },
@@ -263,6 +266,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The application should mask this signal as an internal "
 	  "signal handler is installed.",
 	  0, 128, 0 },
+	{ _RK_GLOBAL, "quota.support.enable", _RK_C_BOOL,
+	  _RK(quota_support),
+	  "Enables application forwarding of broker's throttle time for "
+	  "Produce and Fetch (consume) requests. "
+	  "Whenever a Produce or Fetch request is returned with a non-zero "
+	  "throttle time (how long the broker throttled the request to "
+	  "enforce configured quota rates) a throttle_cb will be enqueued "
+	  "for the next call to `rd_kafka_poll()`. "
+	  "The same is also true for the first non-throttled "
+	  "request following a throttled request. "
+	  "Requires Kafka brokers >=0.9.0 with quotas enabled.",
+	  0, 1, 0 },
         { _RK_GLOBAL, "protocol.version", _RK_C_INT,
           _RK(protocol_version),
           "Broker protocol version. Since there is no way for a client "
@@ -1128,6 +1143,17 @@ void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 						    const char *reason,
 						    void *opaque)) {
 	conf->error_cb = error_cb;
+}
+
+
+void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
+				    void (*throttle_cb) (
+					    rd_kafka_t *rk,
+					    const char *broker_name,
+					    int32_t broker_id,
+					    int throttle_time_ms,
+					    void *opaque)) {
+	conf->throttle_cb = throttle_cb;
 }
 
 

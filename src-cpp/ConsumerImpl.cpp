@@ -68,6 +68,9 @@ RdKafka::Consumer *RdKafka::Consumer::create (RdKafka::Conf *conf,
   return rkc;
 }
 
+int64_t RdKafka::Consumer::OffsetTail (int64_t offset) {
+  return RD_KAFKA_OFFSET_TAIL(offset);
+}
 
 RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
                                                  int32_t partition,
@@ -80,6 +83,20 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
   return RdKafka::ERR_NO_ERROR;
 }
 
+
+RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
+                                                 int32_t partition,
+                                                 int64_t offset,
+                                                 Queue *queue) {
+  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+  RdKafka::QueueImpl *queueimpl = dynamic_cast<RdKafka::QueueImpl *>(queue);
+
+  if (rd_kafka_consume_start_queue(topicimpl->rkt_, partition, offset,
+                                   queueimpl->queue_) == -1)
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+
+  return RdKafka::ERR_NO_ERROR;
+}
 
 
 RdKafka::ErrorCode RdKafka::ConsumerImpl::stop (Topic *topic,
@@ -141,4 +158,65 @@ int RdKafka::ConsumerImpl::consume_callback (RdKafka::Topic* topic,
   ConsumerImplCallback context(topic, consume_cb, NULL);
   return rd_kafka_consume_callback(topicimpl->rkt_, partition, timeout_ms,
                                    &ConsumerImplCallback::consume_cb_trampoline, &context);
+}
+
+
+RdKafka::Message *RdKafka::ConsumerImpl::consume (Queue *queue,
+                                                  int timeout_ms) {
+  RdKafka::QueueImpl *queueimpl = dynamic_cast<RdKafka::QueueImpl *>(queue);
+  rd_kafka_message_t *rkmessage;
+
+  rkmessage = rd_kafka_consume_queue(queueimpl->queue_, timeout_ms);
+  if (!rkmessage)
+    return new RdKafka::MessageImpl(NULL,
+                                    static_cast<RdKafka::ErrorCode>
+                                    (rd_kafka_errno2err(errno)));
+  /*
+   * Recover our Topic * from the topic conf's opaque field, which we
+   * set in RdKafka::Topic::create() for just this kind of situation.
+   */
+  void *opaque = rd_kafka_topic_opaque(rkmessage->rkt);
+  Topic *topic = static_cast<Topic *>(opaque);
+
+  return new RdKafka::MessageImpl(topic, rkmessage);
+}
+
+namespace {
+  /* Helper struct for `consume_callback' with a Queue.
+   * Encapsulates the values we need in order to call `rd_kafka_consume_callback'
+   * and keep track of the C++ callback function and `opaque' value.
+   */
+  struct ConsumerImplQueueCallback {
+    ConsumerImplQueueCallback(RdKafka::ConsumeCb *cb, void *data)
+      : cb_cls(cb), cb_data(data) {
+    }
+    /* This function is the one we give to `rd_kafka_consume_callback', with
+     * the `opaque' pointer pointing to an instance of this struct, in which
+     * we can find the C++ callback and `cb_data'.
+     */
+    static void consume_cb_trampoline(rd_kafka_message_t *msg, void *opaque) {
+      ConsumerImplQueueCallback *instance = static_cast<ConsumerImplQueueCallback *>(opaque);
+      /*
+       * Recover our Topic * from the topic conf's opaque field, which we
+       * set in RdKafka::Topic::create() for just this kind of situation.
+       */
+      void *topic_opaque = rd_kafka_topic_opaque(msg->rkt);
+      RdKafka::Topic *topic = static_cast<RdKafka::Topic *>(topic_opaque);
+      RdKafka::MessageImpl message(topic, msg, false /*don't free*/);
+      instance->cb_cls->consume_cb(message, instance->cb_data);
+    }
+    RdKafka::ConsumeCb *cb_cls;
+    void *cb_data;
+  };
+}
+
+int RdKafka::ConsumerImpl::consume_callback (Queue *queue,
+                                             int timeout_ms,
+                                             RdKafka::ConsumeCb *consume_cb,
+                                             void *opaque) {
+  RdKafka::QueueImpl *queueimpl = dynamic_cast<RdKafka::QueueImpl *>(queue);
+  ConsumerImplQueueCallback context(consume_cb, NULL);
+  return rd_kafka_consume_callback_queue(queueimpl->queue_, timeout_ms,
+                                         &ConsumerImplQueueCallback::consume_cb_trampoline,
+                                         &context);
 }

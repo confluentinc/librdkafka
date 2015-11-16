@@ -4,7 +4,8 @@ LIBVER=		1
 
 CXXSRCS=	RdKafka.cpp ConfImpl.cpp HandleImpl.cpp \
 		ConsumerImpl.cpp ProducerImpl.cpp KafkaConsumerImpl.cpp \
-		TopicImpl.cpp TopicPartitionImpl.cpp MessageImpl.cpp
+		TopicImpl.cpp TopicPartitionImpl.cpp MessageImpl.cpp \
+		QueueImpl.cpp
 
 HDRS=		rdkafkacpp.h
 

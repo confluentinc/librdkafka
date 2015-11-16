@@ -390,7 +390,7 @@ class HandleImpl : virtual public Handle {
  public:
   ~HandleImpl() {};
   HandleImpl () {};
-  const std::string name () { return std::string(rd_kafka_name(rk_)); };
+  const std::string name () const { return std::string(rd_kafka_name(rk_)); };
   int poll (int timeout_ms) { return rd_kafka_poll(rk_, timeout_ms); };
   int outq_len () { return rd_kafka_outq_len(rk_); };
 
@@ -418,11 +418,11 @@ class TopicImpl : public Topic {
     rd_kafka_topic_destroy(rkt_);
   }
 
-  const std::string name () {
+  const std::string name () const {
     return rd_kafka_topic_name(rkt_);
   }
 
-  bool partition_available (int32_t partition) {
+  bool partition_available (int32_t partition) const {
     return !!rd_kafka_topic_partition_available(rkt_, partition);
   }
 
@@ -490,6 +490,19 @@ public:
 
 
 
+class QueueImpl : public Queue {
+ public:
+  QueueImpl () { }
+  ~QueueImpl () {
+    rd_kafka_queue_destroy(queue_);
+  }
+  rd_kafka_queue_t *queue_;
+};
+
+
+
+
+
 class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
  public:
   ~ConsumerImpl () {
@@ -497,10 +510,15 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
   static Consumer *create (Conf *conf, std::string &errstr);
 
   ErrorCode start (Topic *topic, int32_t partition, int64_t offset);
+  ErrorCode start (Topic *topic, int32_t partition, int64_t offset,
+                   Queue *queue);
   ErrorCode stop (Topic *topic, int32_t partition);
   Message *consume (Topic *topic, int32_t partition, int timeout_ms);
+  Message *consume (Queue *queue, int timeout_ms);
   int consume_callback (Topic *topic, int32_t partition, int timeout_ms,
                         ConsumeCb *cb, void *opaque);
+  int consume_callback (Queue *queue, int timeout_ms,
+                        RdKafka::ConsumeCb *consume_cb, void *opaque);
 };
 
 

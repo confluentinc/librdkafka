@@ -174,7 +174,7 @@ The delivery report callback is optional.
 ### Documentation
 
 The librdkafka API is documented in the
-[`rdkafka.h`](https://github.com/edenhill/librdkafka/blob/master/rdkafka.h)
+[`rdkafka.h`](https://github.com/edenhill/librdkafka/blob/master/src/rdkafka.h)
 header file, the configuration properties are documented in 
 [`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
 

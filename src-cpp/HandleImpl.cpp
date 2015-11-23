@@ -100,6 +100,24 @@ int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
   return handle->open_cb_->open_cb(pathname, flags, static_cast<int>(mode));
 }
 
+RdKafka::ErrorCode RdKafka::HandleImpl::metadata (bool all_topics,
+                                                  const Topic *only_rkt,
+                                                  Metadata **metadatap, 
+                                                  int timeout_ms) {
+
+  const rd_kafka_metadata_t *cmetadatap=NULL;
+
+  rd_kafka_topic_t *topic = only_rkt ? 
+    static_cast<const TopicImpl *>(only_rkt)->rkt_ : NULL;
+
+  const rd_kafka_resp_err_t rc = rd_kafka_metadata(rk_, all_topics, topic,
+                                                   &cmetadatap,timeout_ms);
+
+  *metadatap = (rc == RD_KAFKA_RESP_ERR_NO_ERROR) ? 
+    new RdKafka::MetadataImpl(cmetadatap) : NULL;
+
+  return static_cast<RdKafka::ErrorCode>(rc);
+}
 
 void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
 

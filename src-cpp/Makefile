@@ -4,7 +4,8 @@ LIBVER=		1
 
 CXXSRCS=	RdKafka.cpp ConfImpl.cpp HandleImpl.cpp \
 		ConsumerImpl.cpp ProducerImpl.cpp \
-		QueueImpl.cpp TopicImpl.cpp MessageImpl.cpp
+		QueueImpl.cpp TopicImpl.cpp MessageImpl.cpp \
+                MetadataImpl.cpp
 
 HDRS=		rdkafkacpp.h
 

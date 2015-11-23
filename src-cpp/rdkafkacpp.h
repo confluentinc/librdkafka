@@ -39,8 +39,6 @@
  * The C++ interface is STD C++ '03 compliant.
  */
 
-
-
 #include <string>
 #include <list>
 #include <vector>
@@ -208,6 +206,7 @@ class Message;
 class Event;
 class Topic;
 class TopicPartition;
+class Metadata;
 
 
 /**
@@ -451,6 +450,22 @@ class RD_EXPORT Handle {
    */
   virtual int outq_len () = 0;
 
+  /**
+   * Request Metadata from broker.
+   *  all_topics - if non-zero: request info about all topics in cluster,
+   *               if zero: only request info about locally known topics.
+   *  only_rkt   - only request info about this topic
+   *  metadatap  - pointer to hold metadata result.
+   *               The '*metadatap' pointer must be released
+   *               with delete.
+   *  timeout_ms - maximum response time before failing.
+   *
+   * Returns RD_KAFKA_RESP_ERR_NO_ERROR on success (in which case *metadatap)
+   * will be set, else RD_KAFKA_RESP_ERR__TIMED_OUT on timeout or
+   * other error code on error.
+   */
+  virtual ErrorCode metadata (bool all_topics, const Topic *only_rkt,
+                              Metadata **metadatap, int timeout_ms) = 0;
 };
 
 
@@ -614,7 +629,6 @@ public:
 #endif
 
   virtual ErrorCode close () = 0;
-
 };
 
 /**
@@ -865,6 +879,138 @@ class RD_EXPORT Producer : public virtual Handle {
                              void *payload, size_t len,
                              const void *key, size_t key_len,
                              void *msg_opaque) = 0;
+};
+
+
+
+/**
+ * Metadata: Broker information
+ */
+class BrokerMetadata {
+ public:
+  /**
+   * Broker id
+   */
+  virtual int32_t id() const = 0;
+
+  /**
+   * Broker hostname
+   */
+  virtual const std::string host() const = 0;
+
+  /**
+   * Broker listening port
+   */
+  virtual int port() const = 0;
+
+  virtual ~BrokerMetadata() = 0;
+};
+
+
+
+/**
+ * Metadata: Partition information
+ */
+class PartitionMetadata {
+ public:
+  typedef std::vector<int32_t> ReplicasVector;
+  typedef std::vector<int32_t> ISRSVector;
+
+  typedef ReplicasVector::const_iterator ReplicasIterator;
+  typedef ISRSVector::const_iterator     ISRSIterator;
+
+
+  /**
+   * Partition id
+   */
+  virtual int32_t id() const = 0;
+
+  /**
+   * Partition error reported by broker
+   */
+  virtual ErrorCode err() const = 0;
+
+  /**
+   * Leader broker (id) for partition
+   */
+  virtual int32_t leader() const = 0;
+
+  /**
+   * Replica brokers
+   */
+  virtual const std::vector<int32_t> *replicas() const = 0;
+
+  /**
+   * In-Sync-Replica brokers
+   * NOTE: The broker may return a cached/outdated list of ISRs.
+   */
+  virtual const std::vector<int32_t> *isrs() const = 0;
+
+  virtual ~PartitionMetadata() = 0;
+};
+
+
+
+/**
+ * Metadata: Topic information
+ */
+class TopicMetadata {
+ public:
+  typedef std::vector<const PartitionMetadata*> PartitionMetadataVector;
+  typedef PartitionMetadataVector::const_iterator PartitionMetadataIterator;
+
+  /**
+   * Topic name
+   */
+  virtual const std::string topic() const = 0;
+
+  /**
+   * Partition list
+   */
+  virtual const PartitionMetadataVector *partitions() const = 0;
+
+  /**
+   * Topic error reported by broker
+   */
+  virtual ErrorCode err() const = 0;
+
+  virtual ~TopicMetadata() = 0;
+};
+
+
+/**
+ * Metadata container
+ */
+class Metadata {
+ public:
+  typedef std::vector<const BrokerMetadata*> BrokerMetadataVector;
+  typedef std::vector<const TopicMetadata*>  TopicMetadataVector;
+
+  typedef BrokerMetadataVector::const_iterator BrokerMetadataIterator;
+  typedef TopicMetadataVector::const_iterator  TopicMetadataIterator;
+
+
+  /**
+   * Broker list
+   */
+  virtual const BrokerMetadataVector *brokers() const = 0;
+
+  /**
+   * Topic list
+   */
+  virtual const TopicMetadataVector  *topics() const = 0;
+
+  /**
+   * Broker (id) originating this metadata
+   */
+  virtual int32_t orig_broker_id() const = 0;
+
+  /**
+   * Broker (name) originating this metadataa
+   */
+  virtual const std::string orig_broker_name() const = 0;
+
+  virtual ~Metadata() = 0;
 };
 
 

@@ -534,7 +534,11 @@ class RD_EXPORT Message {
    * Not all fields are present in all types of callbacks. */
   virtual std::string         errstr() const = 0;
   virtual ErrorCode           err () const = 0;
+  /* NOTE: topic() will return NULL if the corresponding Topic object has not been
+   *       explicitly created with Topic::create().
+   *       In this case use topic_name() instead. */
   virtual Topic              *topic () const = 0;
+  virtual std::string         topic_name () const = 0;
   virtual int32_t             partition () const = 0;
   virtual void               *payload () const = 0 ;
   virtual size_t              len () const = 0;

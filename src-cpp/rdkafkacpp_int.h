@@ -123,8 +123,10 @@ class MessageImpl : public Message {
 
   MessageImpl (rd_kafka_message_t *rkmessage):
   topic_(NULL), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) {
-    if (rkmessage->rkt)
+    if (rkmessage->rkt) {
+      /* Possibly NULL */
       topic_ = static_cast<Topic *>(rd_kafka_topic_opaque(rkmessage->rkt));
+    }
   }
 
   /* Create errored message */
@@ -150,6 +152,12 @@ class MessageImpl : public Message {
   }
 
   Topic              *topic () const { return topic_; }
+  std::string         topic_name  () const {
+          if (rkmessage_->rkt)
+                  return rd_kafka_topic_name(rkmessage_->rkt);
+          else
+                  return "";
+  }
   int32_t             partition () const { return rkmessage_->partition; }
   void               *payload () const { return rkmessage_->payload; }
   size_t              len () const { return rkmessage_->len; }

@@ -122,3 +122,23 @@ RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
 
   return RdKafka::ERR_NO_ERROR;
 }
+
+
+RdKafka::ErrorCode
+RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
+                                int32_t partition,
+                                const std::vector<char> *payload,
+                                const std::vector<char> *key,
+                                void *msg_opaque) {
+  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+
+  if (rd_kafka_produce(topicimpl->rkt_, partition, RD_KAFKA_MSG_F_COPY,
+                       payload ? (void *)&(*payload)[0] : NULL,
+                       payload ? payload->size() : 0,
+                       key ? &(*key)[0] : NULL, key ? key->size() : 0,
+                       msg_opaque) == -1)
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+
+  return RdKafka::ERR_NO_ERROR;
+
+}

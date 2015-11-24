@@ -578,6 +578,11 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                      const void *key, size_t key_len,
                      void *msg_opaque);
 
+  ErrorCode produce (Topic *topic, int32_t partition,
+                     const std::vector<char> *payload,
+                     const std::vector<char> *key,
+                     void *msg_opaque);
+
   static Producer *create (Conf *conf, std::string &errstr);
 
 };

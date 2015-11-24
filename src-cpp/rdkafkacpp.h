@@ -288,7 +288,6 @@ public:
 };
 
 
-
 /**
  * Event class as provided to the EventCb callback.
  */
@@ -878,6 +877,16 @@ class RD_EXPORT Producer : public virtual Handle {
                              int msgflags,
                              void *payload, size_t len,
                              const void *key, size_t key_len,
+                             void *msg_opaque) = 0;
+
+
+  /**
+   * Variant produce() that accepts vectors for key and payload.
+   * The vector data will be copied.
+   */
+  virtual ErrorCode produce (Topic *topic, int32_t partition,
+                             const std::vector<char> *payload,
+                             const std::vector<char> *key,
                              void *msg_opaque) = 0;
 };
 

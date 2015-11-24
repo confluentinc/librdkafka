@@ -261,6 +261,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(queue_buffering_max_msgs),
 	  "Maximum number of messages allowed on the producer queue.",
 	  1, 10000000, 100000 },
+	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.bytes", _RK_C_INT,
+	  _RK(queue_buffering_max_bytes),
+	  "Maximum number of bytes allowed on the producer queue.",
+	  1, 2147483648, 10000000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.ms", _RK_C_INT,
 	  _RK(buffering_max_ms),
 	  "Maximum time, in milliseconds, for buffering data "

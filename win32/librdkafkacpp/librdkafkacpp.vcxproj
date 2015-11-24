@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -89,7 +89,9 @@
     <ClCompile Include="..\..\src-cpp\HandleImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\KafkaConsumerImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\MessageImpl.cpp" />
+    <ClCompile Include="..\..\src-cpp\MetadataImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\ProducerImpl.cpp" />
+    <ClCompile Include="..\..\src-cpp\QueueImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\RdKafka.cpp" />
     <ClCompile Include="..\..\src-cpp\TopicImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\TopicPartitionImpl.cpp" />

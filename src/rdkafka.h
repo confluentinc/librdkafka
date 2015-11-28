@@ -980,7 +980,10 @@ int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partitition,
  *   _private        - Message opaque pointer (msg_opaque)
  *   err             - Will be set according to success or failure.
  *                     Application only needs to check for errors if
- *                     return value != `message_cnt`.
+ *                     return value != `message_cnt`. In case of error and if
+ *                     the payload pointer is not set to 0, the caller is
+ *                     responsible for freeing the memory if
+ *                     RD_KAFKA_MSG_F_FREE is given.
  *
  * Returns the number of messages succesfully enqueued for producing.
  */

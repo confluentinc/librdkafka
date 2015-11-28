@@ -229,8 +229,12 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
                                         rkmessages[i]._private,
                                         &rkmessages[i].err,
                                         now);
-                if (!rkm)
+                if (unlikely(!rkm)) {
+                        rkmessages[i].err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
                         continue;
+                } else {
+                    rkmessages[i].payload = 0; // owned by rkm
+                }
 
                 /* Two cases here:
                  *  partition==UA:     run the partitioner (slow)

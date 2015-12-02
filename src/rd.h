@@ -174,6 +174,13 @@ static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 
 
 
+/**
+ * Allocate 'size' bytes, copy 'src', return pointer to new memory.
+ *
+ * Use rd_free() to free the returned pointer.
+*/
+void *rd_memdup (const void *src, size_t size);
+
 
 /**
  * Generic refcnt interface

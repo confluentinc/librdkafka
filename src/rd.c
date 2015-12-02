@@ -35,3 +35,11 @@ void rd_init (void) {
 	rd_thread_init();
 	rd_timers_init();
 }
+
+
+
+void *rd_memdup (const void *src, size_t size) {
+	void *dst = rd_malloc(size);
+	memcpy(dst, src, size);
+	return dst;
+}

@@ -42,6 +42,11 @@ static __inline void rd_kafka_timers_unlock (rd_kafka_timers_t *rkts) {
 
 
 static __inline int rd_kafka_timer_started (const rd_kafka_timer_t *rtmr) {
+	return rtmr->rtmr_interval ? 1 : 0;
+}
+
+
+static __inline int rd_kafka_timer_scheduled (const rd_kafka_timer_t *rtmr) {
 	return rtmr->rtmr_next ? 1 : 0;
 }
 
@@ -57,14 +62,15 @@ static void rd_kafka_timer_unschedule (rd_kafka_timers_t *rkts,
 	rtmr->rtmr_next = 0;
 }
 
-static void rd_kafka_timer_schedule (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr) {
+static void rd_kafka_timer_schedule (rd_kafka_timers_t *rkts,
+				     rd_kafka_timer_t *rtmr, int extra_us) {
 	rd_kafka_timer_t *first;
 
 	/* Timer has been stopped */
 	if (!rtmr->rtmr_interval)
 		return;
 
-	rtmr->rtmr_next = rd_clock() + rtmr->rtmr_interval;
+	rtmr->rtmr_next = rd_clock() + rtmr->rtmr_interval + extra_us;
 
 	if (!(first = TAILQ_FIRST(&rkts->rkts_timers)) ||
 	    first->rtmr_next > rtmr->rtmr_next) {
@@ -91,7 +97,9 @@ void rd_kafka_timer_stop (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
 		return;
 	}
 
-	rd_kafka_timer_unschedule(rkts, rtmr);
+	if (rd_kafka_timer_scheduled(rtmr))
+		rd_kafka_timer_unschedule(rkts, rtmr);
+
 	rtmr->rtmr_interval = 0;
 
 	if (lock)
@@ -112,18 +120,29 @@ void rd_kafka_timer_start (rd_kafka_timers_t *rkts,
 			   void *arg) {
 	rd_kafka_timers_lock(rkts);
 
-	if (rd_kafka_timer_started(rtmr))
-		rd_kafka_timer_stop(rkts, rtmr, 0/*!lock*/);
+	rd_kafka_timer_stop(rkts, rtmr, 0/*!lock*/);
 
 	rtmr->rtmr_interval = interval;
 	rtmr->rtmr_callback = callback;
 	rtmr->rtmr_arg      = arg;
 
-	rd_kafka_timer_schedule(rkts, rtmr);
+	rd_kafka_timer_schedule(rkts, rtmr, 0);
 
 	rd_kafka_timers_unlock(rkts);
 }
 
+
+/**
+ * Delay the next timer invocation by 'backoff_us'
+ */
+void rd_kafka_timer_backoff (rd_kafka_timers_t *rkts,
+			     rd_kafka_timer_t *rtmr, int backoff_us) {
+	rd_kafka_timers_lock(rkts);
+	if (rd_kafka_timer_scheduled(rtmr))
+		rd_kafka_timer_unschedule(rkts, rtmr);
+	rd_kafka_timer_schedule(rkts, rtmr, backoff_us);
+	rd_kafka_timers_unlock(rkts);
+}
 
 
 /**
@@ -203,7 +222,11 @@ void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us) {
 			rtmr->rtmr_callback(rkts, rtmr->rtmr_arg);
 
                         rd_kafka_timers_lock(rkts);
-                        rd_kafka_timer_schedule(rkts, rtmr);
+			/* Restart timer, unless it has been stopped, or
+			 * already reschedueld (start()ed) from callback. */
+			if (rd_kafka_timer_started(rtmr) &&
+			    !rd_kafka_timer_scheduled(rtmr))
+				rd_kafka_timer_schedule(rkts, rtmr, 0);
 		}
 	}
 

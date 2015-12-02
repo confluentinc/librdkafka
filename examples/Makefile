@@ -1,5 +1,6 @@
 EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
-	rdkafka_consumer_example rdkafka_consumer_example_cpp
+	rdkafka_consumer_example rdkafka_consumer_example_cpp \
+	kafkatest_verifiable_client
 
 all: $(EXAMPLES)
 
@@ -56,6 +57,10 @@ rdkafka_performance: ../src/librdkafka.a rdkafka_performance.c
 
 rdkafka_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_example.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) rdkafka_example.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS) -lstdc++
+
+kafkatest_verifiable_client: ../src-cpp/librdkafka++.a ../src/librdkafka.a kafkatest_verifiable_client.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) kafkatest_verifiable_client.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS) -lstdc++
 
 

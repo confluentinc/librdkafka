@@ -4,7 +4,9 @@ CHECK_FILES+=	CONFIGURATION.md \
 		examples/rdkafka_example examples/rdkafka_performance \
 		examples/rdkafka_example_cpp
 
-VERSION = $(shell python rpm/get_version.py)
+PACKAGE_NAME?=	librdkafka
+VERSION?=	$(shell python rpm/get_version.py)
+
 # Jenkins CI integration
 BUILD_NUMBER ?= 1
 
@@ -39,11 +41,21 @@ clean:
 	@$(MAKE) -C examples $@
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d $@ ; done)
 
-build_prepare: clean
+distclean: clean
+	./configure --clean
+	rm -f config.log config.log.old
+
+archive:
+	git archive --prefix=$(PACKAGE_NAME)-$(VERSION)/ \
+		-o $(PACKAGE_NAME)-$(VERSION).tar.gz HEAD
+	git archive --prefix=$(PACKAGE_NAME)-$(VERSION)/ \
+		-o $(PACKAGE_NAME)-$(VERSION).zip HEAD
+
+build_prepare: distclean
 	mkdir -p SOURCES
 	git archive --format tar --output SOURCES/librdkafka-$(VERSION).tar HEAD:
 
-srpm: clean build_prepare
+srpm: build_prepare
 	/usr/bin/mock \
 		--define "__version $(VERSION)"\
 		--define "__release $(BUILD_NUMBER)"\

@@ -18,3 +18,8 @@ vgcore.*
 *.offset
 SOURCES
 gmon.out
+*.zip
+*.gz
+*.bz2
+*.deb
+*.rpm

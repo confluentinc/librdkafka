@@ -7,7 +7,7 @@ BIN	  = merged
 LIBS	 += -lrdkafka
 OBJS	 += test.o
 
-include ../Makefile.config
+-include ../Makefile.config
 
 %.test: ../src/librdkafka.a test.o %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka $(LIBS)

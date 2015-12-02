@@ -168,7 +168,7 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 }
 
 
-static void print_partition_list (FILE *fp, rd_kafka_resp_err_t err,
+static void print_partition_list (FILE *fp, int is_assigned,
                                   const rd_kafka_topic_partition_list_t
                                   *partitions) {
         int i;
@@ -178,7 +178,7 @@ static void print_partition_list (FILE *fp, rd_kafka_resp_err_t err,
                         partitions->elems[i].topic,
                         partitions->elems[i].partition);
 
-                if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
+		if (is_assigned)
                         wait_eof++;
                 else {
                         if (exit_eof && --wait_eof == 0)
@@ -190,11 +190,11 @@ static void print_partition_list (FILE *fp, rd_kafka_resp_err_t err,
 }
 static void rebalance_cb (rd_kafka_t *rk,
                           rd_kafka_resp_err_t err,
-                          const rd_kafka_topic_partition_list_t *partitions,
+                          rd_kafka_topic_partition_list_t *revoked,
+			  rd_kafka_topic_partition_list_t *partitions,
                           void *opaque) {
 
-        if (!(err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS ||
-              err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS)) {
+        if (err) {
                 fprintf(stderr,
                         "%% Consumer group rebalance failed: %s\n",
                         rd_kafka_err2str(err));
@@ -204,10 +204,10 @@ static void rebalance_cb (rd_kafka_t *rk,
 
         fprintf(stderr, "%% Consumer group rebalanced\n");
 
-        fprintf(stderr, "%% %s partitions: ",
-                err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS ?
-                "Assigned":"Revoked");
-        print_partition_list(stderr, err, partitions);
+        fprintf(stderr, "%% Revoked partitions: ");
+	print_partition_list(stderr, 0, revoked);
+	fprintf(stderr, "%% Assigned partitions: ");
+	print_partition_list(stderr, 1, revoked);
 }
 
 

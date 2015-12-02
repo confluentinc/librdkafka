@@ -36,6 +36,14 @@ typedef	enum {
         _RK_CGRP = 0x10
 } rd_kafka_conf_scope_t;
 
+typedef enum {
+        RD_KAFKA_OFFSET_METHOD_NONE,
+        RD_KAFKA_OFFSET_METHOD_FILE,
+        RD_KAFKA_OFFSET_METHOD_BROKER
+} rd_kafka_offset_method_t;
+
+
+
 
 /**
  * Optional configuration struct passed to rd_kafka_new*().
@@ -100,7 +108,7 @@ struct rd_kafka_conf_s {
         /* Client group configuration */
         int    coord_query_intvl_ms;
 
-	int builtin_features;
+	int    builtin_features;
 	/*
 	 * Consumer configuration
 	 */
@@ -118,7 +126,8 @@ struct rd_kafka_conf_s {
         struct rd_kafka_topic_conf_s *topic_conf; /* Default topic config
                                                    * for automatically
                                                    * subscribed topics. */
-
+        int enable_auto_commit;
+        int auto_commit_interval_ms;
         int group_session_timeout_ms;
         int group_heartbeat_intvl_ms;
         rd_kafkap_str_t *group_protocol_type;
@@ -129,8 +138,16 @@ struct rd_kafka_conf_s {
 
         void (*rebalance_cb) (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
-                              const rd_kafka_topic_partition_list_t *partitions,
+			      rd_kafka_topic_partition_list_t *revoked,
+			      rd_kafka_topic_partition_list_t *assigned,
                               void *opaque);
+
+        void (*offset_commit_cb) (rd_kafka_t *rk,
+                                  rd_kafka_resp_err_t err,
+                                  rd_kafka_topic_partition_list_t *offsets,
+                                  void *opaque);
+
+        rd_kafka_offset_method_t offset_store_method;
 
 	/*
 	 * Producer configuration
@@ -235,10 +252,8 @@ struct rd_kafka_topic_conf_s {
 	int     auto_offset_reset;
 	char   *offset_store_path;
 	int     offset_store_sync_interval_ms;
-        enum {
-                RD_KAFKA_OFFSET_METHOD_FILE,
-                RD_KAFKA_OFFSET_METHOD_BROKER
-        } offset_store_method;
+
+        rd_kafka_offset_method_t offset_store_method;
 
 	/* Application provided opaque pointer (this is rkt_opaque) */
 	void   *opaque;

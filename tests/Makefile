@@ -10,10 +10,10 @@ OBJS	 += test.o
 include ../Makefile.config
 
 %.test: ../src/librdkafka.a test.o %.c
-	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka $(LIBS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka $(LIBS)
 
 %.test: ../src/librdkafka.a test.o %.cpp
-	$(CXX) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka++ -lrdkafka $(LIBS)
+	$(CXX) $(CPPFLAGS) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka++ -lrdkafka $(LIBS)
 
 #all: $(TESTS0)
 #	for i in $^ ; do \
@@ -42,7 +42,7 @@ CFLAGS += -I../src -I../src-cpp
 LDFLAGS += -L../src -L../src-cpp
 
 test.o: test.c
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
 
 clean:

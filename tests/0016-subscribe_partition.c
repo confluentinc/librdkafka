@@ -54,7 +54,7 @@ int main_0016_subscribe_partition (int argc, char **argv) {
 
 	/* Produce messages */
 	rk_p = test_create_producer();
-	rkt_p = test_create_producer_topic(rk_p, topic);
+	rkt_p = test_create_producer_topic(rk_p, topic, NULL);
 
         for (partition = 0 ; partition < partition_cnt ; partition++) {
                 test_produce_msgs(rk_p, rkt_p, testid, partition,

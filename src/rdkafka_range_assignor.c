@@ -102,6 +102,9 @@ rd_kafka_range_assignor_assign_cb (rd_kafka_t *rk,
                          int length = numPartitionsPerConsumer +
                                  (i + 1 > consumersWithExtraPartition ? 0 : 1);
 
+			 if (length == 0)
+				 continue;
+
                          rd_kafka_dbg(rk, CGRP, "ASSIGN",
                                       "range: Member \"%s\": "
                                       "assigned topic %s partitions %d..%d",

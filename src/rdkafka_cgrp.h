@@ -99,7 +99,8 @@ typedef struct rd_kafka_cgrp_s {
                 /* all: waiting for previous assignment to decommission */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN,
 
-                /* all: synchronized, assigned and operational */
+                /* all: synchronized, assigned and operational.
+                 *      may be an empty assignment. */
                 RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED,
         } rkcg_join_state;
 
@@ -117,6 +118,8 @@ typedef struct rd_kafka_cgrp_s {
 
         int                rkcg_flags;
 #define RD_KAFKA_CGRP_F_TERMINATE    0x1            /* Terminate cgrp (async) */
+#define RD_KAFKA_CGRP_F_WAIT_COMMIT  0x2            /* Waiting for OffsetCommit
+                                                     * to complete. */
 
         rd_interval_t      rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t      rkcg_heartbeat_intvl;    /* Heartbeat intvl */
@@ -164,6 +167,9 @@ typedef struct rd_kafka_cgrp_s {
                                                      * application.
                                                      * This is for silencing
                                                      * same errors. */
+
+        rd_kafka_timer_t   rkcg_offset_commit_tmr;  /* Offset commit timer */
+
         rd_kafka_t        *rkcg_rk;
 
         rd_kafka_op_t     *rkcg_reply_rko;          /* Send reply for op

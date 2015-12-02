@@ -1,3 +1,30 @@
+/*
+ * librdkafka - Apache Kafka C library
+ *
+ * Copyright (c) 2012-2015, Magnus Edenhill
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 #pragma once
 
 
@@ -33,7 +60,6 @@ typedef enum {
         RD_KAFKA_OP_OFFSET_COMMIT, /* any -> toppar's Broker thread */
         RD_KAFKA_OP_NODE_UPDATE,   /* any -> Broker thread: node update */
 
-        RD_KAFKA_OP_REPLY,    /* generic replyq op */
         RD_KAFKA_OP_XMIT_BUF, /* transmit buffer: any -> broker thread */
         RD_KAFKA_OP_RECV_BUF, /* received response buffer: broker thr -> any */
         RD_KAFKA_OP_XMIT_RETRY, /* retry buffer xmit: any -> broker thread */
@@ -43,7 +69,7 @@ typedef enum {
         RD_KAFKA_OP_CGRP_DELEGATE, /* any -> Broker thread: delegate cgrp mgmt*/
         RD_KAFKA_OP_OFFSET_FETCH, /* Broker -> broker thread: fetch offsets
                                    * for topic. */
-        RD_KAFKA_OP_OFFSET,       /* Broker -> rktp: next offset */
+
         RD_KAFKA_OP_PARTITION_JOIN,  /* * -> broker thread: add toppar to cgrp */
         RD_KAFKA_OP_PARTITION_LEAVE, /* * -> broker thread: remove toppar from cgrp */
         RD_KAFKA_OP_REBALANCE,       /* broker thread -> app:
@@ -58,20 +84,29 @@ typedef enum {
         RD_KAFKA_OP_GET_ASSIGNMENT,  /* Get current assignment */
         RD_KAFKA_OP_SYNCGROUP,       /* SyncGroup response */
 	RD_KAFKA_OP_THROTTLE,        /* Throttle info */
+        RD_KAFKA_OP_CALLBACK,        /* Calls rko_op_cb */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
+
+
+/* Flags used with op_type_t */
+#define RD_KAFKA_OP_REPLY  (1 << 31)  /* Reply op. */
+
 
 typedef struct rd_kafka_op_s {
 	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
 
 	rd_kafka_op_type_t rko_type;
-	int       rko_flags;      /* See RD_KAFKA_OP_F_... above */
+	int                rko_flags;  /* See RD_KAFKA_OP_F_... above */
 
         /* Generic fields */
 	rd_kafka_msgq_t rko_msgq;
         rd_kafka_q_t   *rko_replyq;    /* Indicates request: enq reply
                                         * on this queue. Refcounted. */
         int             rko_intarg;    /* Generic integer argument */
+
+        /* RD_KAFKA_OP_CALLBACK */
+        void          (*rko_op_cb) (rd_kafka_t *rk, struct rd_kafka_op_s *rko);
 
         void          (*rko_free_cb) (void *);/* Callback to free rko_payload if
                                                * RD_KAFKA_OP_F_FREE flag is set.
@@ -85,7 +120,7 @@ typedef struct rd_kafka_op_s {
 #define rko_payload rko_rkmessage.payload
 #define rko_len     rko_rkmessage.len
 
-	/* For FETCH & REPLY */
+	/* For FETCH */
 	rd_kafka_message_t rko_rkmessage;
 	rd_kafka_buf_t    *rko_rkbuf;
 
@@ -126,6 +161,9 @@ TAILQ_HEAD(rd_kafka_op_head_s, rd_kafka_op_s);
 const char *rd_kafka_op2str (rd_kafka_op_type_t type);
 void rd_kafka_op_destroy (rd_kafka_op_t *rko);
 rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type);
+rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig);
+void rd_kafka_op_payload_move (rd_kafka_op_t *dst, rd_kafka_op_t *src);
+
 void rd_kafka_op_app_reply2 (rd_kafka_t *rk, rd_kafka_op_t *rko);
 void rd_kafka_op_app_reply (rd_kafka_q_t *rkq,
                             rd_kafka_op_type_t type,
@@ -157,6 +195,8 @@ rd_kafka_op_t *rd_kafka_op_req (rd_kafka_q_t *destq,
                                 int timeout_ms);
 rd_kafka_op_t *rd_kafka_op_req2 (rd_kafka_q_t *destq, rd_kafka_op_type_t type);
 rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko);
+
+void rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_op_t *rko);
 
 void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
 				rd_kafka_q_t *rkq,

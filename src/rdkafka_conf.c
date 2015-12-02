@@ -160,6 +160,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ RD_KAFKA_DBG_PROTOCOL, "protocol" },
                         { RD_KAFKA_DBG_CGRP,     "cgrp" },
 			{ RD_KAFKA_DBG_SECURITY, "security" },
+			{ RD_KAFKA_DBG_FETCH,    "fetch" },
 			{ RD_KAFKA_DBG_ALL,      "all" },
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
@@ -394,6 +395,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           1, 3600*1000, 10*60*1000 },
 
         /* Global consumer properties */
+        { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.commit", _RK_C_BOOL,
+          _RK(enable_auto_commit),
+          "Automatically and periodically commit offsets in the background.",
+          0, 1, 1 },
+        { _RK_GLOBAL|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
+	  _RKT(auto_commit_interval_ms),
+	  "The frequency in milliseconds that the consumer offsets "
+	  "are commited (written) to offset storage. (0 = disable)",
+          0, 86400*1000, 5*1000 },
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
 	  _RK(queued_min_msgs),
 	  "Minimum number of messages per topic+partition in the "
@@ -428,6 +438,31 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "How long to postpone the next fetch request for a "
 	  "topic+partition in case of a fetch error.",
 	  0, 300*1000, 500 },
+        { _RK_GLOBAL|_RK_CONSUMER, "offset.store.method", _RK_C_S2I,
+          _RK(offset_store_method),
+          "Offset commit store method: "
+          "'file' - local file store (offset.store.path, et.al), "
+          "'broker' - broker commit store "
+          "(requires Apache Kafka 0.8.2 or later on the broker).",
+          .vdef = RD_KAFKA_OFFSET_METHOD_BROKER,
+          .s2i = {
+                        { RD_KAFKA_OFFSET_METHOD_NONE, "none" },
+                        { RD_KAFKA_OFFSET_METHOD_FILE, "file" },
+                        { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
+                }
+        },
+        { _RK_GLOBAL|_RK_CONSUMER, "consume_cb", _RK_C_PTR,
+	  _RK(consume_cb),
+	  "Message consume callback (set with rd_kafka_conf_set_consume_cb())"},
+	{ _RK_GLOBAL|_RK_CONSUMER, "rebalance_cb", _RK_C_PTR,
+	  _RK(rebalance_cb),
+	  "Called after consumer group has been rebalanced "
+          "(set with rd_kafka_conf_set_rebalance_cb())" },
+	{ _RK_GLOBAL|_RK_CONSUMER, "offset_commit_cb", _RK_C_PTR,
+	  _RK(offset_commit_cb),
+	  "Offset commit result propagation callback. "
+          "(set with rd_kafka_conf_set_offset_commit_cb())" },
+
 
 	/* Global producer properties */
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.messages", _RK_C_INT,
@@ -477,13 +512,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "dr_msg_cb", _RK_C_PTR,
 	  _RK(dr_msg_cb),
 	  "Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb())" },
-	{ _RK_GLOBAL|_RK_CONSUMER, "consume_cb", _RK_C_PTR,
-	  _RK(consume_cb),
-	  "Message consume callback (set with rd_kafka_conf_set_consume_cb())"},
-	{ _RK_GLOBAL|_RK_CONSUMER, "rebalance_cb", _RK_C_PTR,
-	  _RK(rebalance_cb),
-	  "Called after consumer group has been rebalanced "
-          "(set with rd_kafka_conf_set_rebalance_cb())" },
 
 
         /*
@@ -570,14 +598,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(auto_offset_reset),
 	  "Action to take when there is no initial offset in offset store "
 	  "or the desired offset is out of range: "
-	  "'smallest' - automatically reset the offset to the smallest offset, "
-	  "'largest' - automatically reset the offset to the largest offset, "
+	  "'smallest','earliest' - automatically reset the offset to the smallest offset, "
+	  "'largest','latest' - automatically reset the offset to the largest offset, "
 	  "'error' - trigger an error which is retrieved by consuming messages "
 	  "and checking 'message->err'.",
 	  .vdef = RD_KAFKA_OFFSET_END,
 	  .s2i = {
 			{ RD_KAFKA_OFFSET_BEGINNING, "smallest" },
+			{ RD_KAFKA_OFFSET_BEGINNING, "earliest" },
 			{ RD_KAFKA_OFFSET_END, "largest" },
+			{ RD_KAFKA_OFFSET_END, "latest" },
 			{ RD_KAFKA_OFFSET_ERROR, "error" },
 		}
 	},
@@ -1132,10 +1162,21 @@ void rd_kafka_conf_set_rebalance_cb (
         rd_kafka_conf_t *conf,
         void (*rebalance_cb) (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
-                              const rd_kafka_topic_partition_list_t *partitions,
+                              rd_kafka_topic_partition_list_t *revoked,
+			      rd_kafka_topic_partition_list_t *assigned,
                               void *opaque)) {
         conf->rebalance_cb = rebalance_cb;
 }
+
+void rd_kafka_conf_set_offset_commit_cb (
+        rd_kafka_conf_t *conf,
+        void (*offset_commit_cb) (rd_kafka_t *rk,
+                                  rd_kafka_resp_err_t err,
+                                  rd_kafka_topic_partition_list_t *offsets,
+                                  void *opaque)) {
+        conf->offset_commit_cb = offset_commit_cb;
+}
+
 
 
 void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,

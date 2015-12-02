@@ -273,6 +273,8 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
                 return "Local: Not implemented";
 	case RD_KAFKA_RESP_ERR__AUTHENTICATION:
 		return "Local: Authentication failure";
+	case RD_KAFKA_RESP_ERR__NO_OFFSET:
+		return "Local: No offset stored";
 
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
 		return "Unknown error";
@@ -412,12 +414,15 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         rd_kafka_timers_destroy(&rk->rk_timers);
 
         /* Destroy cgrp */
-        if (rk->rk_cgrp)
+        if (rk->rk_cgrp) {
+                /* Reset queue forwarding (rep -> cgrp) */
+                rd_kafka_q_fwd_set(&rk->rk_rep, NULL);
                 rd_kafka_cgrp_destroy_final(rk->rk_cgrp);
+        }
 
 	/* Purge op-queues */
 	rd_kafka_q_destroy(&rk->rk_rep);
-	rd_kafka_q_destroy(&rk->rk_toppar_ops);
+	rd_kafka_q_destroy(&rk->rk_ops);
 
 #if WITH_SSL
 	if (rk->rk_conf.ssl.ctx)
@@ -858,7 +863,7 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
 
 static int rd_kafka_toppar_q_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 				 int cb_type, void *opaque) {
-	rd_kafka_toppar_op_serve(rko);
+	rd_kafka_toppar_op_serve(rk, rko);
 	return 1; /* op handled */
 }
 
@@ -897,13 +902,17 @@ static int rd_kafka_thread_main (void *arg) {
                                      rd_kafka_metadata_refresh_cb, NULL);
 
 	while (likely(!rd_kafka_terminating(rk) ||
-		      rd_kafka_q_len(&rk->rk_toppar_ops))) {
+		      rd_kafka_q_len(&rk->rk_ops))) {
 		rd_ts_t sleeptime = rd_kafka_timers_next(
 			&rk->rk_timers,
 			rk->rk_conf.socket_blocking_max_ms * 1000, 1/*lock*/);
-		rd_kafka_toppars_q_serve(&rk->rk_toppar_ops, (int)(sleeptime / 1000));
+		rd_kafka_toppars_q_serve(&rk->rk_ops,
+					 (int)(sleeptime / 1000));
 		rd_kafka_timers_run(&rk->rk_timers, RD_POLL_NOWAIT);
 	}
+
+	rd_kafka_q_disable(&rk->rk_ops);
+	rd_kafka_q_purge(&rk->rk_ops);
 
         rd_kafka_timer_stop(&rk->rk_timers, &tmr_topic_scan, 1);
         rd_kafka_timer_stop(&rk->rk_timers, &tmr_stats_emit, 1);
@@ -983,7 +992,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
 
 	rd_kafka_q_init(&rk->rk_rep, rk);
-	rd_kafka_q_init(&rk->rk_toppar_ops, rk);
+	rd_kafka_q_init(&rk->rk_ops, rk);
 
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
@@ -1081,27 +1090,19 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
         rd_atomic32_add(&rd_kafka_handle_cnt_curr, 1);
 
+
+        /* Client group, eligible both in consumer and producer mode. */
+        if (RD_KAFKAP_STR_LEN(rk->rk_conf.group_id) > 0)
+                rk->rk_cgrp = rd_kafka_cgrp_new(rk,
+                                                rk->rk_conf.group_id,
+                                                rk->rk_conf.client_id);
+
 	/* Add initial list of brokers from configuration */
 	if (rk->rk_conf.brokerlist) {
 		if (rd_kafka_brokers_add0(rk, rk->rk_conf.brokerlist) == 0)
 			rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
 					"No brokers configured");
 	}
-
-
-        /* Client group, eligible both in consumer and producer mode. */
-        if (RD_KAFKAP_STR_LEN(rk->rk_conf.group_id) > 0) {
-                rk->rk_cgrp = rd_kafka_cgrp_new(rk,
-                                                rk->rk_conf.group_id,
-                                                rk->rk_conf.client_id);
-#if FIXME
-                /* To support old-style consumers (consume_start()) we
-                 * forward the cgrp response queue to the main queue until
-                 * the new-style consumer has been started (subscribe*()). */
-                rd_kafka_q_fwd_set(&rk->rk_cgrp->rkcg_q, &rk->rk_rep);
-#endif
-        }
-
 
 #ifndef _MSC_VER
 	/* Restore sigmask of caller */
@@ -1318,11 +1319,6 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
                 tmpq = rd_kafka_q_new(rkt->rkt_rk);
 
         rktp = rd_kafka_toppar_s2i(s_rktp);
-        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "CONSUMER",
-		     "Seek %.*s [%"PRId32"] to offset %"PRId64,
-		     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-		     rktp->rktp_partition, offset);
-
         if ((err = rd_kafka_toppar_op_seek(rktp, offset, tmpq, &version))) {
                 if (tmpq)
                         rd_kafka_q_destroy(tmpq);
@@ -1423,8 +1419,10 @@ static int rd_kafka_consume_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
         }
 
 	rkmessage = rd_kafka_message_get(rko);
-	if (!rko->rko_err && rktp->rktp_rkt->rkt_conf.auto_commit)
-		rd_kafka_offset_store0(rktp, rkmessage->offset, 1/*lock*/);
+	if (!rko->rko_err &&
+            ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit) ||
+             rktp->rktp_rkt->rkt_conf.auto_commit))
+		rd_kafka_offset_store0(rktp, rkmessage->offset+1, 1/*lock*/);
 	ctx->consume_cb(rkmessage, ctx->opaque);
 
         return 1;
@@ -1529,10 +1527,14 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 	rkmessage = rd_kafka_message_get(rko);
 
 	/* Store offset */
-	if (!rko->rko_err &&
-            rd_kafka_topic_a2i(rko->rko_rkmessage.rkt)->rkt_conf.auto_commit)
-		rd_kafka_offset_store0(rd_kafka_toppar_s2i(rko->rko_rktp),
-				       rkmessage->offset, 1/*lock*/);
+	if (!rko->rko_err) {
+                rd_kafka_toppar_t *rktp;
+                rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+                if ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit)
+                    || rktp->rktp_rkt->rkt_conf.auto_commit)
+                        rd_kafka_offset_store0(rktp, rkmessage->offset+1,
+                                               1/*lock*/);
+        }
 
 	return rkmessage;
 }
@@ -1581,7 +1583,7 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk) {
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        rd_kafka_q_fwd_set(&rkcg->rkcg_q, &rk->rk_rep);
+        rd_kafka_q_fwd_set(&rk->rk_rep, &rkcg->rkcg_q);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -1639,6 +1641,7 @@ rd_kafka_resp_err_t rd_kafka_consumer_get_offset (rd_kafka_topic_t *app_rkt,
         rd_kafka_toppar_t *rktp;
         shptr_rd_kafka_toppar_t *s_rktp;
 
+        rd_kafka_assert(NULL, !*"FIXME: use part_list for query");
         if (!(rkcg = rd_kafka_cgrp_get(rkt->rkt_rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
@@ -1656,13 +1659,25 @@ rd_kafka_resp_err_t rd_kafka_consumer_get_offset (rd_kafka_topic_t *app_rkt,
         replyq = rd_kafka_q_new(rktp->rktp_rkt->rkt_rk);
 
         do {
-                rd_kafka_cgrp_op(rkcg, rktp, replyq,
-                                 RD_KAFKA_OP_OFFSET_FETCH, 0);
+                rd_kafka_toppar_offset_fetch(rktp, replyq);
 
                 rko = rd_kafka_q_pop(replyq, timeout_ms, 0);
                 if (rko) {
-                        if (!(err = rko->rko_err))
-                                *offsetp = rko->rko_offset;
+                        rd_kafka_topic_partition_list_t *offsets =
+                                rko->rko_payload;
+
+                        if (!(err = rko->rko_err)) {
+                                rd_kafka_topic_partition_t *rktpar;
+
+                                offsets = rko->rko_payload;
+                                rktpar = &offsets->elems[0];
+
+                                if (!(err = rktpar->err))
+                                        *offsetp = rktpar->offset;
+                        }
+
+                        rd_kafka_topic_partition_list_destroy(offsets);
+
                         rd_kafka_op_destroy(rko);
                 } else
                         err = RD_KAFKA_RESP_ERR__TIMED_OUT;
@@ -1690,8 +1705,12 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 	rd_kafka_msg_t *rkm;
 	static int dcnt = 0;
 
-	switch (rko->rko_type)
+	switch ((int)rko->rko_type)
 	{
+        case RD_KAFKA_OP_CALLBACK:
+                rd_kafka_op_call(rk, rko);
+                break;
+
 	case RD_KAFKA_OP_FETCH:
                 if (rk->rk_conf.consume_cb)
                         rk->rk_conf.consume_cb(rd_kafka_message_get(rko),
@@ -1702,12 +1721,23 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 
         case RD_KAFKA_OP_REBALANCE:
         {
-                rd_kafka_topic_partition_list_t *partitions = rko->rko_payload;
-                rk->rk_conf.rebalance_cb(rk, rko->rko_err, partitions,
+		rd_list_t *tuple = rko->rko_payload;
+                rd_kafka_topic_partition_list_t *revoked =
+			rd_list_elem(tuple, 0);
+		rd_kafka_topic_partition_list_t *assigned =
+			rd_list_elem(tuple, 1);
+                rk->rk_conf.rebalance_cb(rk, rko->rko_err,
+					 revoked, assigned,
                                          rk->rk_conf.opaque);
         }
         break;
 
+        case RD_KAFKA_OP_OFFSET_COMMIT | RD_KAFKA_OP_REPLY:
+                rk->rk_conf.offset_commit_cb(
+                        rk, rko->rko_err,
+                        (rd_kafka_topic_partition_list_t *)rko->rko_payload,
+                        rk->rk_conf.opaque);
+                break;
 
         case RD_KAFKA_OP_CONSUMER_ERR:
                 /* rd_kafka_consumer_poll() (_Q_CB_CONSUMER):
@@ -1723,7 +1753,8 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 
 	case RD_KAFKA_OP_ERR:
 		if (rk->rk_conf.error_cb) {
-			char *errstr = rd_strndup(rko->rko_payload, rko->rko_len);
+			char *errstr = rd_strndup(rko->rko_payload,
+                                                  rko->rko_len);
 			rk->rk_conf.error_cb(rk, rko->rko_err,
                                              errstr, rk->rk_conf.opaque);
 			rd_free(errstr);

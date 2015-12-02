@@ -59,9 +59,13 @@ int open_cb_trampoline (const char *pathname, int flags, mode_t mode,
                         void *opaque);
 void rebalance_cb_trampoline (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
-                              const rd_kafka_topic_partition_list_t
-                              *c_partitions,
+                              rd_kafka_topic_partition_list_t *c_revoked,
+                              rd_kafka_topic_partition_list_t *c_assigned,
                               void *opaque);
+void offset_commit_cb_trampoline (rd_kafka_t *rk,
+                                  rd_kafka_resp_err_t err,
+                                  rd_kafka_topic_partition_list_t *c_offsets,
+                                  void *opaque);
 
 
 
@@ -201,6 +205,7 @@ class ConfImpl : public Conf {
       partitioner_cb_(NULL),
       partitioner_kp_cb_(NULL),
       rebalance_cb_(NULL),
+      offset_commit_cb_(NULL),
       rk_conf_(NULL),
       rkt_conf_(NULL){}
   ~ConfImpl () {
@@ -350,6 +355,24 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+
+  Conf::ConfResult set (const std::string &name,
+                        OffsetCommitCb *offset_commit_cb,
+                        std::string &errstr) {
+    if (name != "offset_commit_cb") {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    offset_commit_cb_ = offset_commit_cb;
+    return Conf::CONF_OK;
+  }
+
   Conf::ConfResult get(const std::string &name, std::string &value) const {
 	  size_t size;
 	  rd_kafka_conf_res_t res = RD_KAFKA_CONF_OK;
@@ -388,6 +411,7 @@ class ConfImpl : public Conf {
   PartitionerCb *partitioner_cb_;
   PartitionerKeyPointerCb *partitioner_kp_cb_;
   RebalanceCb *rebalance_cb_;
+  OffsetCommitCb *offset_commit_cb_;
   ConfType conf_type_;
   rd_kafka_conf_t *rk_conf_;
   rd_kafka_topic_conf_t *rkt_conf_;
@@ -420,6 +444,7 @@ class HandleImpl : virtual public Handle {
   PartitionerCb *partitioner_cb_;
   PartitionerKeyPointerCb *partitioner_kp_cb_;
   RebalanceCb *rebalance_cb_;
+  OffsetCommitCb *offset_commit_cb_;
 };
 
 
@@ -461,15 +486,24 @@ public:
   static TopicPartition *create (const std::string &topic, int partition);
 
   TopicPartitionImpl (const std::string &topic, int partition):
-  topic_(topic), partition_(partition) {}
+  topic_(topic), partition_(partition), offset_(0), err_(ERR_NO_ERROR) {}
 
   TopicPartitionImpl (const rd_kafka_topic_partition_t *c_part) {
     topic_ = std::string(c_part->topic);
     partition_ = c_part->partition;
+    offset_ = c_part->offset;
+    err_ = static_cast<ErrorCode>(c_part->err);
+    // FIXME: metadata
   }
 
   int partition () { return partition_; }
   const std::string &topic () const { return topic_ ; }
+
+  int64_t offset () { return offset_; }
+
+  ErrorCode err () { return err_; }
+
+  void set_offset (int64_t offset) { offset_ = offset; }
 
   std::ostream& operator<<(std::ostream &ostrm) const {
     return ostrm << topic_ << " [" << partition_ << "]";
@@ -477,6 +511,8 @@ public:
 
   std::string topic_;
   int partition_;
+  int64_t offset_;
+  ErrorCode err_;
 };
 
 
@@ -495,6 +531,23 @@ public:
   ErrorCode unsubscribe ();
   ErrorCode assign (const std::vector<TopicPartition*> &partitions);
   Message *consume (int timeout_ms);
+  ErrorCode commitSync () {
+    return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 0/*sync*/));
+  }
+  ErrorCode commitAsync () {
+    return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 1/*async*/));
+  }
+  ErrorCode commitSync (Message *message) {
+	  MessageImpl *msgimpl = dynamic_cast<MessageImpl*>(message);
+	  return static_cast<ErrorCode>(
+                  rd_kafka_commit_message(rk_, msgimpl->rkmessage_, 0/*sync*/));
+  }
+  ErrorCode commitAsync (Message *message) {
+	  MessageImpl *msgimpl = dynamic_cast<MessageImpl*>(message);
+	  return static_cast<ErrorCode>(
+                  rd_kafka_commit_message(rk_, msgimpl->rkmessage_,1/*async*/));
+  }
+
   ErrorCode close ();
 };
 

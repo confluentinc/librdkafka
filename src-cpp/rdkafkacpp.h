@@ -143,6 +143,7 @@ enum ErrorCode {
   ERR__UNKNOWN_PROTOCOL = -171,  /* Unknown protocol */
   ERR__NOT_IMPLEMENTED = -170,   /* Not implemented */
   ERR__AUTHENTICATION = -169,    /* Authentication failure */
+  ERR__NO_OFFSET = -168,         /* No stored offset */
   ERR__END = -100,               /* end internal error codes */
 
   /* Standard Kafka errors: */
@@ -278,13 +279,25 @@ class RD_EXPORT ConsumeCb {
   virtual void consume_cb (Message &message, void *opaque) = 0;
 };
 
+
 /**
  * Rebalance callback class
  */
 class RD_EXPORT RebalanceCb {
 public:
   virtual void rebalance_cb(RdKafka::ErrorCode err,
-                            const std::vector<TopicPartition*>&partitions) = 0;
+                            std::vector<TopicPartition*>&revoked,
+			    std::vector<TopicPartition*>&assigned) = 0;
+};
+
+
+/**
+ * Offset Commit callback class
+ */
+class RD_EXPORT OffsetCommitCb {
+public:
+  virtual void offset_commit_cb(RdKafka::ErrorCode err,
+                                std::vector<TopicPartition*>&offsets) = 0;
 };
 
 
@@ -400,6 +413,11 @@ class RD_EXPORT Conf {
                                 RebalanceCb *rebalance_cb,
                                 std::string &errstr) = 0;
 
+  /* Use with 'name' = "offset_commit_cb" */
+  virtual Conf::ConfResult set (const std::string &name,
+                                OffsetCommitCb *offset_commit_cb,
+                                std::string &errstr) = 0;
+
   /* Query single configuration value */
   virtual Conf::ConfResult get(const std::string &name,
 	  std::string &value) const = 0;
@@ -478,6 +496,13 @@ public:
   virtual ~TopicPartition() = 0;
 
   virtual int partition () = 0;
+
+  virtual int64_t offset () = 0;
+
+  virtual ErrorCode err () = 0;
+
+  virtual void set_offset (int64_t offset) = 0;
+
   virtual const std::string &topic () const = 0;
 };
 
@@ -612,10 +637,14 @@ public:
 
   virtual Message *consume (int timeout_ms) = 0;
 
+  virtual ErrorCode commitSync () = 0;
+  virtual ErrorCode commitAsync () = 0;
+  virtual ErrorCode commitSync (Message *message) = 0;
+  virtual ErrorCode commitAsync (Message *message) = 0;
 #if FIXME
   virtual ErrorCode commitSync () = 0;
-  // FIXME virtual ErrorCode commitSync (Map<TopicPartition, Offset> offsets) = 0;
-  // FIXME virtual ErrorCode commitAsync (OffsetCommitCallback *callback) = 0;
+  virtual ErrorCode commitSync (const std::vector<TopicPartition*> &partitions) = 0;
+  virtual ErrorCode commitAsync (const std::vector<TopicPartition*> &partitions) = 0;
 
   virtual ErrorCode seek (TopicPartition &partition, int64_t offset) = 0;
   virtual ErrorCode seek (Topic *topic, int64_t offset) = 0,

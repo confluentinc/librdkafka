@@ -113,20 +113,27 @@ class ExampleEventCb : public RdKafka::EventCb {
 
 
 class ExampleRebalanceCb : public RdKafka::RebalanceCb {
- public:
-  void rebalance_cb (RdKafka::ErrorCode err,
-                     const std::vector<RdKafka::TopicPartition*> &partitions) {
-    std::cerr << "RebalanceCb: " << RdKafka::err2str(err) << ": ";
+private:
+  static void part_list_print (const std::vector<RdKafka::TopicPartition*>&partitions){
     for (unsigned int i = 0 ; i < partitions.size() ; i++)
       std::cerr << partitions[i]->topic() <<
-          "[" << partitions[i]->partition() << "], ";
+	"[" << partitions[i]->partition() << "], ";
     std::cerr << "\n";
+  }
 
-    if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
-      partition_cnt = partitions.size();
-      eof_cnt = 0;
-    } else
-      partition_cnt = 0;
+public:
+  void rebalance_cb (RdKafka::ErrorCode err,
+                     std::vector<RdKafka::TopicPartition*> &revoked,
+		     std::vector<RdKafka::TopicPartition*> &assigned) {
+    std::cerr << "RebalanceCb: " << RdKafka::err2str(err) << ": ";
+
+    std::cerr << " Revoked: ";
+    part_list_print(revoked);
+    std::cerr << " Assigned: ";
+    part_list_print(assigned);
+    
+    partition_cnt = assigned.size();
+    eof_cnt = 0;
   }
 };
 

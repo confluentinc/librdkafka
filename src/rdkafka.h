@@ -170,6 +170,7 @@ typedef enum {
         RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL = -171, /* Unknown protocol */
         RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED = -170, /* Not implemented */
 	RD_KAFKA_RESP_ERR__AUTHENTICATION = -169,  /* Authentication failure */
+	RD_KAFKA_RESP_ERR__NO_OFFSET = -168,       /* No stored offset */
 
 	RD_KAFKA_RESP_ERR__END = -100,       /* end internal error codes */
 
@@ -241,10 +242,15 @@ rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
  *******************************************************************/
 
 typedef struct rd_kafka_topic_partition_s {
-        char      *topic;
-        int32_t    partition;
-        void     *_private;    /* INTERNAL USE ONLY, DO NOT TOUCH:
-                                * : shptr_rd_kafka_toppar_t */
+        char        *topic;             /* Topic name */
+        int32_t      partition;         /* Partition */
+	int64_t      offset;            /* Offset */
+        void        *metadata;          /* Metadata */
+        size_t       metadata_size;     /* Metadata size */
+        void        *opaque;            /* Application opaque */
+        rd_kafka_resp_err_t err;        /* Error code, depending on use. */
+        void       *_private;           /* INTERNAL USE ONLY,
+                                         * INITIALIZE TO ZERO, DO NOT TOUCH */
 } rd_kafka_topic_partition_t;
 
 
@@ -260,9 +266,14 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new (int size);
 RD_EXPORT
 void rd_kafka_topic_partition_list_destroy (rd_kafka_topic_partition_list_t *rkparlist);
 RD_EXPORT
-void rd_kafka_topic_partition_list_add (rd_kafka_topic_partition_list_t *rktparlist,
-                                        const char *topic, int32_t partition);
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_add (rd_kafka_topic_partition_list_t *rktparlist,
+                                   const char *topic, int32_t partition);
 
+
+/**
+ * Add range of partitions from `start` to `stop` inclusive.
+ */
 RD_EXPORT
 void
 rd_kafka_topic_partition_list_add_range (rd_kafka_topic_partition_list_t
@@ -466,8 +477,29 @@ void rd_kafka_conf_set_rebalance_cb (
         rd_kafka_conf_t *conf,
         void (*rebalance_cb) (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
-                              const rd_kafka_topic_partition_list_t *partitions,
+                              rd_kafka_topic_partition_list_t *revoked,
+			      rd_kafka_topic_partition_list_t *assigned,
                               void *opaque));
+
+
+/**
+ * Consumer:
+ * Set offset commit callback for use with consumer groups.
+ * The results of automatic or manual offset commits will be scheduled
+ * for this callback and is served by rd_kafka_consumer_poll().
+ *
+ * The 'offsets' list contains per-partition information:
+ *   - offset: committed offset (attempted)
+ *   - err:    commit error
+ */
+RD_EXPORT
+void rd_kafka_conf_set_offset_commit_cb (
+        rd_kafka_conf_t *conf,
+        void (*offset_commit_cb) (rd_kafka_t *rk,
+                                  rd_kafka_resp_err_t err,
+                                  rd_kafka_topic_partition_list_t *offsets,
+                                  void *opaque));
+
 
 /**
  * Set error callback in provided conf object.
@@ -1233,6 +1265,18 @@ rd_kafka_subscription (rd_kafka_t *rk,
                        rd_kafka_topic_partition_list_t **topics);
 
 
+
+
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,
+                 int async);
+
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
+                         int async);
+
+
+
 /*******************************************************************
  *								   *
  * Producer API                                                    *
@@ -1590,6 +1634,9 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_new (const char *topic,
 RD_EXPORT
 void rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar);
 
+
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
 
 
 #ifdef __cplusplus

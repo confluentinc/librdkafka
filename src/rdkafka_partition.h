@@ -88,7 +88,6 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_FETCH_IS_STARTED(fetch_state) \
         ((fetch_state) >= RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
 
-        rd_interval_t      rktp_offset_query_intvl; /* Offset query intervaller*/
 
 	int64_t            rktp_query_offset;    /* Offset to query broker for*/
 	int64_t            rktp_next_offset;     /* Next offset to fetch */
@@ -109,10 +108,6 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 
 	char              *rktp_offset_path;     /* Path to offset file */
 	FILE              *rktp_offset_fp;       /* Offset file pointer */
-        rd_interval_t      rktp_offset_commit_intvl; /* Offset commit intvl */
-	rd_interval_t      rktp_offset_sync_intvl; /* Offset file sync intvl */
-        rd_interval_t      rktp_consumer_lag_intvl; /* Consumer lag monitoring
-                                                     * interval. */
         rd_kafka_cgrp_t   *rktp_cgrp;       /* Belongs to this cgrp */
 
         int                rktp_assigned;   /* Partition in cgrp assignment */
@@ -128,6 +123,7 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_UNKNOWN  0x2      /* Topic is (not yet) seen on
 					     * a broker. */
 #define RD_KAFKA_TOPPAR_F_OFFSET_STORE 0x4  /* Offset store is active */
+#define RD_KAFKA_TOPPAR_F_OFFSET_STORE_STOPPING 0x8 /* Offset store stopping */
 
         shptr_rd_kafka_toppar_t *rktp_s_for_desp; /* Shared pointer for
                                                    * rkt_desp list */
@@ -135,6 +131,16 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                    * rkcg_toppars list */
         shptr_rd_kafka_toppar_t *rktp_s_for_rkb;  /* Shared pointer for
                                                    * rkb_toppars list */
+
+	/*
+	 * Timers
+	 */
+	rd_kafka_timer_t rktp_offset_query_tmr;  /* Offset query timer */
+	rd_kafka_timer_t rktp_offset_commit_tmr; /* Offset commit timer */
+	rd_kafka_timer_t rktp_offset_sync_tmr;   /* Offset file sync timer */
+        rd_kafka_timer_t rktp_consumer_lag_tmr;  /* Consumer lag monitoring
+						  * timer */
+
 	struct {
 		rd_atomic64_t tx_msgs;
 		rd_atomic64_t tx_bytes;
@@ -228,7 +234,7 @@ void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
                                          int64_t Offset);
 
 void rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp, int64_t offset,
-                                    rd_kafka_q_t *replyq);
+				    const char *metadata);
 
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 				      rd_kafka_broker_t *rkb);
@@ -273,12 +279,21 @@ void rd_kafka_broker_fetch_toppar_next (rd_kafka_broker_t *rkb,
 }
 
 
-
-void rd_kafka_toppar_op_serve (rd_kafka_op_t *rko);
-void rd_kafka_toppar_serve (rd_kafka_toppar_t *rktp,
-			    rd_kafka_broker_t *rkb);
+void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
+				   rd_kafka_broker_t *rkb);
 
 
+
+void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko);
+void rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
+					    rd_kafka_toppar_t *rktp);
+
+
+void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
+                                   rd_kafka_q_t *replyq);
+
+void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
+				     int64_t query_offset);
 
 
 rd_kafka_assignor_t *
@@ -286,7 +301,7 @@ rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol);
 
 
 
-void
+rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
                                     const char *topic, int32_t partition,
                                     void *_private);
@@ -295,3 +310,19 @@ int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 				    const rd_kafka_group_member_t *rkgm,
 				    const rd_kafka_topic_partition_t *rktpar,
 				    const char *topic, int *matched_by_regex);
+
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktarplist,
+                                    const char *topic, int32_t partition,
+                                    int *start_idx);
+
+void rd_kafka_topic_partition_list_sort_by_topic (
+        rd_kafka_topic_partition_list_t *rktparlist);
+
+void rd_kafka_topic_partition_list_set_offsets (
+        rd_kafka_topic_partition_list_t *rktparlist,
+        int from_rktp, int64_t def_value);
+
+rd_kafka_toppar_t *
+rd_kafka_topic_partition_list_get_toppar (
+        rd_kafka_t *rk, rd_kafka_topic_partition_list_t *rktparlist, int idx);

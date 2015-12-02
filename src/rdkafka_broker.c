@@ -300,6 +300,10 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 		s_rkt = rd_kafka_topic_keep(rkt); /* Hold on to rkt */
 		s_rktp = rd_kafka_toppar_keep(rktp);
+
+		/* Update fetch decision (remove from fetcher list) */
+		rd_kafka_toppar_fetch_decide(rktp, rkb);
+
 		rd_kafka_broker_toppars_wrunlock(rkb);
 		rd_rkb_dbg(rkb, TOPIC, "BRKTP",
 			   "Undelegating %.*s [%"PRId32"]",
@@ -532,10 +536,37 @@ void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
 }
 
 
+/**
+ * Enqueue buffer on broker's xmit queue, but fail buffer immediately
+ * if broker is not up.
+ *
+ * Locality: broker thread
+ */
+static int rd_kafka_broker_buf_enq2 (rd_kafka_broker_t *rkb,
+				      rd_kafka_buf_t *rkbuf) {
+        if (unlikely(rkb->rkb_source == RD_KAFKA_INTERNAL /* FIXME||
+							     rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP */)) {
+                /* Fail request immediately if this is the internal broker. */
+		// FIXME there is no broker connection. */
+                rd_kafka_buf_callback(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+                                      NULL, rkbuf);
+                return -1;
+        }
+
+	rd_kafka_broker_buf_enq0(rkb, rkbuf,
+				 (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLASH)?
+				 1/*head*/: 0/*tail*/);
+
+	return 0;
+}
+
+
 
 /**
  * Enqueue buffer for tranmission.
  * Responses are enqueued on 'replyq' (RD_KAFKA_OP_RECV_BUF)
+ *
+ * Locality: any thread
  */
 void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
                                      int16_t ApiKey,
@@ -556,19 +587,15 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf, ApiKey);
 
-        if (unlikely(rkb->rkb_source == RD_KAFKA_INTERNAL ||
-                     rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP)) {
-                /* Fail request immediately if there is no broker connection. */
-                rd_kafka_assert(NULL, !*"not connected");
-                rd_kafka_buf_callback(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
-                                      NULL, rkbuf);
-                return;
-        }
 
+	if (thrd_is_current(rkb->rkb_thread)) {
+		rd_kafka_broker_buf_enq2(rkb, rkbuf);
 
-	rd_kafka_broker_buf_enq0(rkb, rkbuf,
-				 (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLASH)?
-				 1/*head*/: 0/*tail*/);
+	} else {
+		rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_XMIT_BUF);
+		rko->rko_rkbuf = rkbuf;
+		rd_kafka_q_enq(&rkb->rkb_ops, rko);
+	}
 }
 
 
@@ -624,8 +651,9 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
                                           rko->rko_reason ?
                                           (char *)rko->rko_reason : "");
 
-	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_Metadata, rkbuf,
-                                 rd_kafka_op_handle_Metadata, rko);
+	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Metadata, rkbuf,
+				       &rkb->rkb_rk->rk_ops,
+				       rd_kafka_op_handle_Metadata, rko);
 }
 
 
@@ -1821,6 +1849,10 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
 	switch (rko->rko_type)
 	{
+        case RD_KAFKA_OP_CALLBACK:
+                rd_kafka_op_call(rkb->rkb_rk, rko);
+                break;
+
 	case RD_KAFKA_OP_METADATA_REQ:
                 rd_kafka_broker_metadata_req_op(rkb, rko);
                 rko = NULL; /* metadata_req assumes rko ownership */
@@ -1888,10 +1920,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
         }
 
         case RD_KAFKA_OP_XMIT_BUF:
-                rd_kafka_broker_buf_enq0(rkb, rko->rko_rkbuf,
-                                         (rko->rko_rkbuf->rkbuf_flags &
-                                          RD_KAFKA_OP_F_FLASH) ?
-                                         1/*head*/: 0/*tail*/);
+                rd_kafka_broker_buf_enq2(rkb, rko->rko_rkbuf);
                 rko->rko_rkbuf = NULL; /* buffer now owned by broker */
                 if (rko->rko_replyq) {
                         /* Op will be reused for forwarding response. */
@@ -1972,7 +2001,8 @@ static void rd_kafka_broker_toppars_serve (rd_kafka_broker_t *rkb) {
         rd_kafka_broker_toppars_wrlock(rkb);
         TAILQ_FOREACH_SAFE(rktp, &rkb->rkb_toppars, rktp_rkblink, rktp_tmp) {
                 /* Serve toppar op queue to update desired rktp state */
-                rd_kafka_toppar_serve(rktp, rkb);
+		rd_kafka_broker_consumer_toppar_serve(rkb, rktp);
+        
         }
         rd_kafka_broker_toppars_wrunlock(rkb);
 }
@@ -2098,7 +2128,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
                         /* Serve each toppar */
 			TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
                                 /* Serve toppar op queue */
-                                rd_kafka_toppar_serve(rktp, rkb);
+                                // FIXME rd_kafka_toppar_serve(rktp, rkb);
 
                                 /* Try producing toppar */
                                 cnt += rd_kafka_toppar_producer_serve(rkb, rktp,
@@ -2671,12 +2701,15 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                         }
 
 
+			rd_kafka_toppar_lock(rktp);
+
                         /* Update hi offset to be able to compute
                          * consumer lag. */
                         rktp->rktp_hi_offset = hdr.HighwaterMarkOffset;
 
 			/* If this is the last message of the queue,
 			 * signal EOF back to the application. */
+			// FIXME: protect next_offset?
 			if (hdr.HighwaterMarkOffset == rktp->rktp_next_offset
 			    &&
 			    rktp->rktp_eof_offset != rktp->rktp_next_offset) {
@@ -2684,7 +2717,6 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					RD_KAFKA_RESP_ERR__PARTITION_EOF;
 				rktp->rktp_eof_offset = rktp->rktp_next_offset;
 			}
-
 
 			/* Handle partition-level errors. */
 			if (unlikely(hdr.ErrorCode !=
@@ -2708,12 +2740,16 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 
 					/* Application errors */
 				case RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE:
-					rd_kafka_offset_reset(rktp,
-							      rktp->
-							      rktp_next_offset,
+                                {
+                                        int64_t err_offset =
+                                                rktp->rktp_next_offset;
+                                        rktp->rktp_next_offset =
+                                                RD_KAFKA_OFFSET_ERROR;
+					rd_kafka_offset_reset(rktp, err_offset,
 							      hdr.ErrorCode,
 							      "Fetch response");
-					break;
+                                }
+                                break;
 				case RD_KAFKA_RESP_ERR__PARTITION_EOF:
 				case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
 				default: /* and all other errors */
@@ -2733,6 +2769,8 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					break;
 				}
 
+				rd_kafka_toppar_unlock(rktp);
+
                                 /* FIXME: only back off this rktp */
 				rd_kafka_broker_fetch_backoff(rkb);
 
@@ -2741,6 +2779,8 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
 				continue;
 			}
+
+			rd_kafka_toppar_unlock(rktp);
 
 			if (hdr.MessageSetSize <= 0) {
 				rd_kafka_toppar_destroy(s_rktp); /*from get()*/
@@ -2765,7 +2805,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			}
 
 			/* Concat all messages onto the real op queue */
-			rd_rkb_dbg(rkb, MSG, "CONSUME",
+			rd_rkb_dbg(rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
 				   "Enqueue %i messages on %s [%"PRId32"] "
 				   "fetch queue (%i)",
 				   rd_atomic32_get(&tmp_opq.rkq_qlen),
@@ -2959,7 +2999,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 		rd_kafka_buf_write_i32(rkbuf, rkb->rkb_rk->rk_conf.
 				       fetch_msg_max_bytes);
 
-		rd_rkb_dbg(rkb, TOPIC, "FETCH",
+		rd_rkb_dbg(rkb, FETCH, "FETCH",
 			   "Fetch topic %.*s [%"PRId32"] in state %s "
                            "at offset %"PRId64,
 			   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
@@ -2983,7 +3023,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
                                           NULL);
 	rd_kafka_broker_toppars_rdunlock(rkb);
 
-	rd_rkb_dbg(rkb, TOPIC, "CONSUME", "Consume from %i/%i/%i toppar(s)",
+	rd_rkb_dbg(rkb, FETCH, "FETCH", "Fetch %i/%i/%i toppar(s)",
                    cnt, rkb->rkb_fetch_toppar_cnt, rkb->rkb_toppar_cnt);
 	if (!cnt) {
 		rd_kafka_buf_destroy(rkbuf);

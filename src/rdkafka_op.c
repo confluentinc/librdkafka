@@ -1,3 +1,33 @@
+/*
+ * librdkafka - Apache Kafka C library
+ *
+ * Copyright (c) 2012-2015, Magnus Edenhill
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#include <stdarg.h>
+
 #include "rdkafka_int.h"
 #include "rdkafka_op.h"
 #include "rdkafka_topic.h"
@@ -8,42 +38,47 @@ rd_atomic32_t rd_kafka_op_cnt;
 
 
 const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
+        int skiplen = 6;
         static const char *names[] = {
-                "NONE",
-                "FETCH",
-                "ERR",
-                "CONSUMER_ERR",
-                "DR",
-                "STATS",
-                "METADATA_REQ",
-                "OFFSET_COMMIT",
-		"NODE_UPDATE",
-                "REPLY",
-                "XMIT_BUF",
-                "RECV_BUF",
-                "XMIT_RETRY",
-                "FETCH_START",
-                "FETCH_STOP",
-                "SEEK",
-                "CGRP_DELEGATE",
-                "OFFSET_FETCH",
-                "OFFSET",
-                "PARTITION_JOIN",
-                "PARTITION_LEAVE",
-                "REBALANCE",
-                "STOP",
-                "TERMINATE",
-                "RESTART",
-                "COORD_QUERY",
-                "SUBSCRIBE",
-                "ASSIGN",
-                "GET_SUBSCRIPTION",
-                "GET_ASSIGNMENT",
-                "SYNCGROUP",
-		"THROTTLE"
+                "REPLY:NONE",
+                "REPLY:FETCH",
+                "REPLY:ERR",
+                "REPLY:CONSUMER_ERR",
+                "REPLY:DR",
+                "REPLY:STATS",
+                "REPLY:METADATA_REQ",
+                "REPLY:OFFSET_COMMIT",
+		"REPLY:NODE_UPDATE",
+                "REPLY:XMIT_BUF",
+                "REPLY:RECV_BUF",
+                "REPLY:XMIT_RETRY",
+                "REPLY:FETCH_START",
+                "REPLY:FETCH_STOP",
+                "REPLY:SEEK",
+                "REPLY:CGRP_DELEGATE",
+                "REPLY:OFFSET_FETCH",
+                "REPLY:PARTITION_JOIN",
+                "REPLY:PARTITION_LEAVE",
+                "REPLY:REBALANCE",
+                "REPLY:STOP",
+                "REPLY:TERMINATE",
+                "REPLY:RESTART",
+                "REPLY:COORD_QUERY",
+                "REPLY:SUBSCRIBE",
+                "REPLY:ASSIGN",
+                "REPLY:GET_SUBSCRIPTION",
+                "REPLY:GET_ASSIGNMENT",
+                "REPLY:SYNCGROUP",
+		"REPLY:THROTTLE",
+                "REPLY:CALLBACK"
         };
 
-        return names[type];
+        if (type & RD_KAFKA_OP_REPLY) {
+                type &= ~RD_KAFKA_OP_REPLY;
+                skiplen = 0;
+        }
+
+        return names[type]+skiplen;
 }
 
 rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
@@ -231,6 +266,42 @@ void rd_kafka_op_app_fmt (rd_kafka_q_t *rkq, rd_kafka_op_type_t type,
 }
 
 
+/**
+ * Moves a payload (pointer and free_cb, not actual memory content)
+ * from src to dst.
+ */
+void rd_kafka_op_payload_move (rd_kafka_op_t *dst, rd_kafka_op_t *src) {
+        dst->rko_payload = src->rko_payload;
+        dst->rko_len = src->rko_len;
+        dst->rko_free_cb = src->rko_free_cb;
+        dst->rko_flags = (src->rko_flags & RD_KAFKA_OP_F_FREE);
+
+        src->rko_payload = NULL;
+        src->rko_len = 0;
+        src->rko_free_cb = NULL;
+        src->rko_flags &= ~RD_KAFKA_OP_F_FREE;
+}
+
+
+/**
+ * Creates a reply opp based on 'rko_orig'.
+ * If 'rko_orig' has rko_op_cb set the reply op will be of type
+ * RD_KAFKA_OP_CALLBACK, else the reply type will be the original rko_type OR:ed
+ * with RD_KAFKA_OP_REPLY.
+ */
+rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig) {
+        rd_kafka_op_t *rko;
+
+        rko = rd_kafka_op_new(rko_orig->rko_op_cb ?
+                              RD_KAFKA_OP_CALLBACK :
+                              (rko_orig->rko_type | RD_KAFKA_OP_REPLY));
+        rko->rko_op_cb = rko_orig->rko_op_cb;
+        rko->rko_version = rko_orig->rko_version;
+
+        return rko;
+}
+
+
 
 /**
  * Reply to 'rko_orig' using err,payload,len if a replyq is set up,
@@ -274,6 +345,8 @@ rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
 
         /* Indicate to destination where to send reply. */
         rko->rko_replyq = recvq;
+        if (recvq)
+                rd_kafka_q_keep(rko->rko_replyq);
 
         /* Enqueue op */
         rd_kafka_q_enq(destq, rko);
@@ -322,6 +395,14 @@ rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko) {
         rd_kafka_resp_err_t err = rko->rko_err;
         rd_kafka_op_destroy(rko);
         return err;
+}
+
+
+/**
+ * Call op callback
+ */
+void rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_op_t *rko) {
+        rko->rko_op_cb(rk, rko);
 }
 
 

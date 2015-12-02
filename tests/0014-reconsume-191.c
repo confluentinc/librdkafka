@@ -358,6 +358,7 @@ static void consume_messages_callback_multi (const char *desc,
          * make sure back-to-back start&stops work. */
         for (i = 0 ; i < iterations ; i++) {
                 int cnta;
+                test_timing_t t_stop;
 
                 TEST_SAY("%s: Iteration #%i: Consuming from "
                          "partition %i at offset %"PRId64"\n",
@@ -385,7 +386,9 @@ static void consume_messages_callback_multi (const char *desc,
                 TEST_SAY("%s: Iteration #%i: consumed %i messages\n",
                          desc, i, cons_msg_next - cnta);
 
+                TIMING_START(&t_stop, "rd_kafka_consume_stop()");
                 rd_kafka_consume_stop(rkt, partition);
+                TIMING_STOP(&t_stop);
 
                 /* Advance next offset so we dont reconsume
                  * messages on the next run. */
@@ -393,7 +396,6 @@ static void consume_messages_callback_multi (const char *desc,
                         initial_offset = cons_last_offset+1;
 			cons_msg_stop = cons_msg_next + msg_cnt - 1;
 		}
-
         }
 
 	/* Destroy topic */

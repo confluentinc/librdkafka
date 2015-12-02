@@ -14,6 +14,7 @@ void rd_kafka_yield (rd_kafka_t *rk) {
  */
 void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
 
+        rd_kafka_q_fwd_set(rkq, NULL);
         rd_kafka_q_disable(rkq);
         rd_kafka_q_purge(rkq);
 
@@ -467,12 +468,15 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                 }
 
 		/* Auto-commit offset, if enabled. */
-		if (!rko->rko_err &&
-		    rd_kafka_topic_a2i(rko->rko_rkmessage.rkt)->
-                    rkt_conf.auto_commit)
-			rd_kafka_offset_store0(rd_kafka_toppar_s2i(rko->
-                                                                   rko_rktp),
-					       rko->rko_offset, 1/*lock*/);
+		if (!rko->rko_err) {
+                        rd_kafka_toppar_t *rktp;
+                        rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+                        if ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit)
+                            || rktp->rktp_rkt->rkt_conf.auto_commit)
+                                rd_kafka_offset_store0(rktp,
+                                                       rko->rko_offset+1,
+                                                       1/*lock*/);
+                }
 
 		/* Get rkmessage from rko and append to array. */
 		rkmessages[cnt++] = rd_kafka_message_get(rko);

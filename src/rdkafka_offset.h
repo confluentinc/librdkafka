@@ -64,3 +64,12 @@ void rd_kafka_offset_store_init (rd_kafka_toppar_t *rktp);
 
 void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 			    rd_kafka_resp_err_t err, const char *reason);
+
+void rd_kafka_offset_query_tmr_cb (rd_kafka_timers_t *rkts, void *arg);
+
+
+rd_kafka_resp_err_t
+rd_kafka_commit0 (rd_kafka_t *rk,
+                  const rd_kafka_topic_partition_list_t *offsets,
+                  rd_kafka_q_t *replyq,
+                  void (*op_cb) (rd_kafka_t *, rd_kafka_op_t *));

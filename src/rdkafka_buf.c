@@ -422,7 +422,7 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko) {
 
 /**
  * Call request.rkbuf_cb(), but:
- *  - if the rkbuf has a rkbuf_replyq the buffer is enqueude on that queue
+ *  - if the rkbuf has a rkbuf_replyq the buffer is enqueued on that queue
  *    with op type RD_KAFKA_OP_RECV_BUF.
  *  - else call rkbuf_cb().
  *

@@ -70,8 +70,7 @@ RdKafka::KafkaConsumer *RdKafka::KafkaConsumer::create (RdKafka::Conf *conf,
   rkc->rk_ = rk;
 
   /* Redirect handle queue to cgrp's queue to provide a single queue point */
-  // FIXME:
-  // rd_kafka_queue_forward(rd_kafka_event_queue(rk), rd_kafka_consumer_queue(rk));
+  rd_kafka_poll_set_consumer(rk);
 
   return rkc;
 }

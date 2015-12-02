@@ -54,11 +54,6 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
                              rd_kafka_resp_cb_t *resp_cb,
                              void *opaque);
 
-void rd_kafka_toppar_handle_OffsetFetch (rd_kafka_broker_t *rkb,
-                                         rd_kafka_resp_err_t err,
-                                         rd_kafka_buf_t *rkbuf,
-                                         rd_kafka_buf_t *request,
-                                         void *opaque);
 void rd_kafka_op_handle_OffsetFetch (rd_kafka_broker_t *rkb,
                                      rd_kafka_resp_err_t err,
                                      rd_kafka_buf_t *rkbuf,
@@ -66,8 +61,8 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_broker_t *rkb,
                                      void *opaque);
 
 void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
-                                  rd_kafka_toppar_t *rktp,
                                   int16_t api_version,
+                                  const rd_kafka_topic_partition_list_t *parts,
                                   rd_kafka_q_t *replyq,
                                   rd_kafka_resp_cb_t *resp_cb,
                                   void *opaque);
@@ -81,10 +76,8 @@ void rd_kafka_op_handle_OffsetCommit (rd_kafka_broker_t *rkb,
                                       void *opaque);
 void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                                    rd_kafka_cgrp_t *rkcg,
-                                   rd_kafka_toppar_t *rktp,
                                    int16_t api_version,
-                                   int64_t offset,
-                                   rd_kafkap_str_t *metadata,
+                                   rd_kafka_topic_partition_list_t *offsets,
                                    rd_kafka_q_t *replyq,
                                    rd_kafka_resp_cb_t *resp_cb,
                                    void *opaque);

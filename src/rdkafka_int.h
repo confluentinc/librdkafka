@@ -121,6 +121,7 @@ typedef RD_SHARED_PTR_TYPE(shptr_rd_ikafka_s, rd_ikafka_t) shptr_rd_ikafka_t;
 
 struct rd_kafka_s {
 	rd_kafka_q_t rk_rep;   /* kafka -> application reply queue */
+	rd_kafka_q_t rk_ops;   /* any -> rdkafka main thread ops */
 
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
 	rd_atomic32_t              rk_broker_cnt;
@@ -133,7 +134,6 @@ struct rd_kafka_s {
 	int              rk_topic_cnt;
 
 	TAILQ_HEAD(, rd_kafka_toppar_s)  rk_toppars;
-	rd_kafka_q_t rk_toppar_ops;
 
         struct rd_kafka_cgrp_s *rk_cgrp;
 
@@ -217,6 +217,7 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 #define RD_KAFKA_DBG_PROTOCOL   0x80
 #define RD_KAFKA_DBG_CGRP       0x100
 #define RD_KAFKA_DBG_SECURITY   0x200
+#define RD_KAFKA_DBG_FETCH      0x400
 #define RD_KAFKA_DBG_ALL        0xfff
 
 
@@ -236,7 +237,7 @@ void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
 
 #define rd_rkb_dbg(rkb,ctx,fac,...) do {				\
 		if (unlikely((rkb)->rkb_rk->rk_conf.debug &		\
-			     RD_KAFKA_DBG_ ## ctx))			\
+			     (RD_KAFKA_DBG_ ## ctx)))			\
 			rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name,	\
 				      LOG_DEBUG, fac, __VA_ARGS__);		\
 	} while (0)

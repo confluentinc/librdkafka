@@ -145,22 +145,46 @@ static void c_parts_to_partitions (const rd_kafka_topic_partition_list_t
     partitions[i] = new RdKafka::TopicPartitionImpl(&c_parts->elems[i]);
 }
 
+static void free_partition_vector (std::vector<RdKafka::TopicPartition*> &v) {
+  for (unsigned int i = 0 ; i < v.size() ; i++)
+    delete v[i];
+  v.clear();
+}
+
 void
 RdKafka::rebalance_cb_trampoline (rd_kafka_t *rk,
                                   rd_kafka_resp_err_t err,
-                                  const rd_kafka_topic_partition_list_t
-                                  *c_partitions,
+                                  rd_kafka_topic_partition_list_t *c_revoked,
+				  rd_kafka_topic_partition_list_t *c_assigned,
                                   void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
-  std::vector<RdKafka::TopicPartition*> partitions;
+  std::vector<RdKafka::TopicPartition*> revoked, assigned;
 
-  c_parts_to_partitions(c_partitions, partitions);
+  c_parts_to_partitions(c_revoked, revoked);
+  c_parts_to_partitions(c_assigned, assigned);
 
   handle->rebalance_cb_->rebalance_cb(static_cast<RdKafka::ErrorCode>(err),
-                                      partitions);
-  for (unsigned int i = 0 ; i < partitions.size() ; i++)
-    delete partitions[i];
-  partitions.clear();
+				      revoked, assigned);
+
+  free_partition_vector(revoked);
+  free_partition_vector(assigned);
+}
+
+
+void
+RdKafka::offset_commit_cb_trampoline (
+    rd_kafka_t *rk,
+    rd_kafka_resp_err_t err,
+    rd_kafka_topic_partition_list_t *c_offsets, void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+  std::vector<RdKafka::TopicPartition*> offsets;
+
+  c_parts_to_partitions(c_offsets, offsets);
+
+  handle->offset_commit_cb_->
+      offset_commit_cb(static_cast<RdKafka::ErrorCode>(err), offsets);
+
+  free_partition_vector(offsets);
 }
 
 
@@ -198,4 +222,11 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
                                    RdKafka::rebalance_cb_trampoline);
     rebalance_cb_ = confimpl->rebalance_cb_;
   }
+
+  if (confimpl->offset_commit_cb_) {
+    rd_kafka_conf_set_offset_commit_cb(confimpl->rk_conf_,
+                                   RdKafka::offset_commit_cb_trampoline);
+    offset_commit_cb_ = confimpl->offset_commit_cb_;
+  }
+
 }

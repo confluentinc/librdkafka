@@ -32,8 +32,8 @@
 
 static RD_UNUSED void rd_list_dump (const char *what, const rd_list_t *rl) {
         int i;
-        printf("%s%s: (rd_list_t*)%p cnt %d, size %d, elems %p:\n",
-               what, rl->name, rl, rl->rl_cnt, rl->rl_size, rl->rl_elems);
+        printf("%s: (rd_list_t*)%p cnt %d, size %d, elems %p:\n",
+               what, rl, rl->rl_cnt, rl->rl_size, rl->rl_elems);
         for (i = 0 ; i < rl->rl_cnt ; i++)
                 printf("  #%d: %p at &%p\n", i,
                        rl->rl_elems[i], &rl->rl_elems[i]);
@@ -49,6 +49,18 @@ void rd_list_init (rd_list_t *rl, int initial_size) {
         memset(rl, 0, sizeof(*rl));
 
         rd_list_grow(rl, initial_size);
+}
+
+rd_list_t *rd_list_new (int initial_size) {
+	rd_list_t *rl = malloc(sizeof(*rl));
+	rd_list_init(rl, initial_size);
+	rl->rl_allocated = 1;
+	return rl;
+}
+
+
+void rd_list_set_free_cb (rd_list_t *rl, void (*free_cb) (void *)) {
+	rl->rl_free_cb = free_cb;
 }
 
 
@@ -110,6 +122,9 @@ void rd_list_clear (rd_list_t *rl) {
 
 
 void rd_list_destroy (rd_list_t *rl, void (*free_cb) (void *)) {
+	if (free_cb)
+		free_cb = rl->rl_free_cb;
+
         if (rl->rl_elems) {
                 int i;
                 if (free_cb) {
@@ -119,6 +134,9 @@ void rd_list_destroy (rd_list_t *rl, void (*free_cb) (void *)) {
                 }
                 rd_free(rl->rl_elems);
         }
+
+	if (rl->rl_allocated)
+		rd_free(rl);
 }
 
 

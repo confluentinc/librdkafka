@@ -39,7 +39,8 @@ typedef struct rd_list_s {
         int    rl_size;
         int    rl_cnt;
         void **rl_elems;
-        const char *name;
+	void (*rl_free_cb) (void *);
+	int    rl_allocated;
 } rd_list_t;
 
 
@@ -48,10 +49,26 @@ typedef struct rd_list_s {
  */
 void rd_list_init (rd_list_t *rl, int initial_size);
 
+
+/**
+ * Allocate a new list pointer and initialize it according to rd_list_init().
+ *
+ * Use rd_list_destroy() to free.
+ */
+rd_list_t *rd_list_new (int initial_size);
+
+
+/**
+ * Set element free callback
+ */
+void rd_list_set_free_cb (rd_list_t *rl, void (*free_cb) (void *));
+
+
 /**
  * Append element to list
  */
 void rd_list_add (rd_list_t *rl, void *elem);
+
 
 /**
  * Remove element from list.
@@ -80,9 +97,12 @@ void rd_list_clear (rd_list_t *rl);
 
 /**
  * Empties the list, frees the element array, and optionally frees
- * each element using 'free_cb'.
+ * each element using 'free_cb' or 'rl->rl_free_cb'.
+ *
+ * If the list was previously allocated with rd_list_new() it will be freed.
  */
 void rd_list_destroy (rd_list_t *rl, void (*free_cb) (void *));
+
 
 /**
  * Returns the element at index 'idx', or NULL if out of range.

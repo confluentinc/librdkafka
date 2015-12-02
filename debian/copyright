@@ -25,7 +25,7 @@ License: BSD-2-clause
   POSSIBILITY OF SUCH DAMAGE.
 
 Files: *
-Copyright: 2012-2013, Magnus Edenhill
+Copyright: 2012-2015, Magnus Edenhill
 License: BSD-2-clause
 
 Files: src/rdcrc32.c src/rdcrc32.h

@@ -69,7 +69,7 @@ static struct {
     bool useAsyncCommit;
   } consumer;
 } state = {
-  .maxMessages = -1,
+  /* .maxMessages = */ -1
 };
 
 

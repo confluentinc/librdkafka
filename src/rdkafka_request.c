@@ -393,8 +393,6 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
                                                                     partition,
                                                                     NULL);
 
-                        printf("FETCHED %s:%d: offset %"PRId64", err %d, rktpar %p\n",
-                               topic_name, partition, offset, ErrorCode, rktpar);
                         if (!rktpar)
                                 continue;
 

@@ -354,9 +354,11 @@ static void rd_kafka_offset_broker_commit_op_cb (rd_kafka_t *rk,
 
         if (!(s_rktp = rd_kafka_topic_partition_list_get_toppar(rk,
                                                                 offsets, 0))) {
-                printf("No rktp found for %s.%d\n",
-                       offsets->elems[0].topic,
-                       (int)offsets->elems[0].partition);
+                rd_kafka_dbg(rk, TOPIC, "OFFSETCOMMIT",
+                             "OffsetCommit reply: "
+                             "no local toppar found for %s [%"PRId32"]",
+                             offsets->elems[0].topic,
+                             offsets->elems[0].partition);
                 return;
         }
 
@@ -492,7 +494,6 @@ rd_kafka_commit (rd_kafka_t *rk,
         if (!async)
                 tmpq = rd_kafka_q_new(rk);
 
-        printf("waitq is %p\n", tmpq);
         err = rd_kafka_commit0(rk, offsets,
                                async ? &rkcg->rkcg_ops : tmpq, NULL);
 

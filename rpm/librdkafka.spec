@@ -1,5 +1,5 @@
 Name:    librdkafka
-Version: %{__version}%{?dist}
+Version: %{__version}
 Release: %{__release}
 %define soname 1
 

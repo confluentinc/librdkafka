@@ -62,9 +62,8 @@ rm -rf %{buildroot}
 %doc README.md CONFIGURATION.md INTRODUCTION.md
 %doc LICENSE LICENSE.pycrc LICENSE.queue LICENSE.snappy LICENSE.tinycthread LICENSE.trex LICENSE.wingetopt
 
-
 %defattr(-,root,root)
-#%{_bindir}/rdkafka_example
+%{_bindir}/rdkafka_example
 #%{_bindir}/rdkafka_performance
 
 

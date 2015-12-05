@@ -13,7 +13,7 @@ BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++ openssl-devel cyrus
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 %description
-librdkafka is the C/C++ library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
+librdkafka is the C/C++ client library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
 
 
 %package -n %{name}%{soname}
@@ -21,7 +21,7 @@ Summary: The Apache Kafka C library
 Group:   Development/Libraries/C and C++
 Requires: zlib libstdc++ openssl-libs cyrus-sasl
 %description -n %{name}%{soname}
-librdkafka is the C/C++ library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
+librdkafka is the C/C++ client library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
 
 
 %package -n %{name}-devel
@@ -30,7 +30,7 @@ Group:   Development/Libraries/C and C++
 Requires: %{name}%{soname} = %{version}
 
 %description -n %{name}-devel
-librdkafka is the C/C++ library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
+librdkafka is the C/C++ client library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
 
 This package contains headers and libraries required to build applications
 using librdkafka.
@@ -63,7 +63,7 @@ rm -rf %{buildroot}
 %doc LICENSE LICENSE.pycrc LICENSE.queue LICENSE.snappy LICENSE.tinycthread LICENSE.trex LICENSE.wingetopt
 
 %defattr(-,root,root)
-%{_bindir}/rdkafka_example
+#%{_bindir}/rdkafka_example
 #%{_bindir}/rdkafka_performance
 
 

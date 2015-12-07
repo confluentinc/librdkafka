@@ -1720,17 +1720,11 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 		break;
 
         case RD_KAFKA_OP_REBALANCE:
-        {
-		rd_list_t *tuple = rko->rko_payload;
-                rd_kafka_topic_partition_list_t *revoked =
-			rd_list_elem(tuple, 0);
-		rd_kafka_topic_partition_list_t *assigned =
-			rd_list_elem(tuple, 1);
                 rk->rk_conf.rebalance_cb(rk, rko->rko_err,
-					 revoked, assigned,
+					 (rd_kafka_topic_partition_list_t *)
+					 rko->rko_payload,
                                          rk->rk_conf.opaque);
-        }
-        break;
+		break;
 
         case RD_KAFKA_OP_OFFSET_COMMIT | RD_KAFKA_OP_REPLY:
                 rk->rk_conf.offset_commit_cb(

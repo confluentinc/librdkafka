@@ -138,8 +138,7 @@ struct rd_kafka_conf_s {
 
         void (*rebalance_cb) (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
-			      rd_kafka_topic_partition_list_t *revoked,
-			      rd_kafka_topic_partition_list_t *assigned,
+			      rd_kafka_topic_partition_list_t *partitions,
                               void *opaque);
 
         void (*offset_commit_cb) (rd_kafka_t *rk,

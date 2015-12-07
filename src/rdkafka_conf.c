@@ -1162,8 +1162,7 @@ void rd_kafka_conf_set_rebalance_cb (
         rd_kafka_conf_t *conf,
         void (*rebalance_cb) (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
-                              rd_kafka_topic_partition_list_t *revoked,
-			      rd_kafka_topic_partition_list_t *assigned,
+                              rd_kafka_topic_partition_list_t *partitions,
                               void *opaque)) {
         conf->rebalance_cb = rebalance_cb;
 }

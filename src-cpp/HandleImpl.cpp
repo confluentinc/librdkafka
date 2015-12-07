@@ -154,20 +154,19 @@ static void free_partition_vector (std::vector<RdKafka::TopicPartition*> &v) {
 void
 RdKafka::rebalance_cb_trampoline (rd_kafka_t *rk,
                                   rd_kafka_resp_err_t err,
-                                  rd_kafka_topic_partition_list_t *c_revoked,
-				  rd_kafka_topic_partition_list_t *c_assigned,
+                                  rd_kafka_topic_partition_list_t *c_partitions,
                                   void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
-  std::vector<RdKafka::TopicPartition*> revoked, assigned;
+  std::vector<RdKafka::TopicPartition*> partitions;
 
-  c_parts_to_partitions(c_revoked, revoked);
-  c_parts_to_partitions(c_assigned, assigned);
+  c_parts_to_partitions(c_partitions, partitions);
 
-  handle->rebalance_cb_->rebalance_cb(static_cast<RdKafka::ErrorCode>(err),
-				      revoked, assigned);
+  handle->rebalance_cb_->rebalance_cb(
+				      dynamic_cast<RdKafka::KafkaConsumer*>(handle),
+				      static_cast<RdKafka::ErrorCode>(err),
+				      partitions);
 
-  free_partition_vector(revoked);
-  free_partition_vector(assigned);
+  free_partition_vector(partitions);
 }
 
 

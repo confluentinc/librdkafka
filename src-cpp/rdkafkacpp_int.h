@@ -59,8 +59,7 @@ int open_cb_trampoline (const char *pathname, int flags, mode_t mode,
                         void *opaque);
 void rebalance_cb_trampoline (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
-                              rd_kafka_topic_partition_list_t *c_revoked,
-                              rd_kafka_topic_partition_list_t *c_assigned,
+                              rd_kafka_topic_partition_list_t *c_partitions,
                               void *opaque);
 void offset_commit_cb_trampoline (rd_kafka_t *rk,
                                   rd_kafka_resp_err_t err,

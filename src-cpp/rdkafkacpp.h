@@ -285,9 +285,9 @@ class RD_EXPORT ConsumeCb {
  */
 class RD_EXPORT RebalanceCb {
 public:
-  virtual void rebalance_cb(RdKafka::ErrorCode err,
-                            std::vector<TopicPartition*>&revoked,
-			    std::vector<TopicPartition*>&assigned) = 0;
+ virtual void rebalance_cb (RdKafka::KafkaConsumer *consumer,
+			    RdKafka::ErrorCode err,
+                            std::vector<TopicPartition*>&partitions) = 0;
 };
 
 

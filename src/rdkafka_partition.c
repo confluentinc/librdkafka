@@ -910,6 +910,12 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 	} else if (offset == RD_KAFKA_OFFSET_STORED) {
                 rd_kafka_offset_store_init(rktp);
 
+	} else if (offset == RD_KAFKA_OFFSET_ERROR) {
+		rd_kafka_offset_reset(rktp, offset,
+				      RD_KAFKA_RESP_ERR__NO_OFFSET,
+				      "no previously committedd offset "
+				      "available");
+
 	} else {
 		rktp->rktp_next_offset = offset;
                 rd_kafka_toppar_set_fetch_state(rktp,
@@ -1847,11 +1853,16 @@ void rd_kafka_topic_partition_list_sort_by_topic (
  * Set offset values in partition list based on toppar's last stored offset.
  *
  *  from_rktp - true: set rktp's last stored offset, false: set def_value
+ *  is_commit: indicates that set offset is to be committed (for debug log)
+ *
+ * Returns the number of valid non-logical offsets (>=0).
  */
-void rd_kafka_topic_partition_list_set_offsets (
+int rd_kafka_topic_partition_list_set_offsets (
+	rd_kafka_t *rk,
         rd_kafka_topic_partition_list_t *rktparlist,
-        int from_rktp, int64_t def_value) {
+        int from_rktp, int64_t def_value, int is_commit) {
         int i;
+	int valid_cnt = 0;
 
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &rktparlist->elems[i];
@@ -1863,7 +1874,18 @@ void rd_kafka_topic_partition_list_set_offsets (
                 } else {
                         rktpar->offset = def_value;
                 }
+
+		rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_TOPIC, "OFFSET",
+			     "Topic %s [%"PRId32"]: "
+			     "commiting %s offset %"PRId64,
+			     rktpar->topic, rktpar->partition,
+			     from_rktp ? "stored" : "default", rktpar->offset);
+
+		if (rktpar->offset >= 0)
+			valid_cnt++;
         }
+
+	return valid_cnt;
 }
 
 

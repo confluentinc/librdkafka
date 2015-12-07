@@ -66,6 +66,19 @@ static __inline RD_UNUSED void rd_interval_backoff (rd_interval_t *ri,
 }
 
 /**
+ * Expedite (speed up) the next interval by `expedite_us` microseconds.
+ * If `expedite_us` is 0 the interval will be set to trigger
+ * immedately on the next rd_interval() call.
+ */
+static __inline RD_UNUSED void rd_interval_expedite (rd_interval_t *ri,
+						     int expedite_us) {
+	if (!expedite_us)
+		ri->ri_ts_last = 0;
+	else
+		ri->ri_backoff = -expedite_us;
+}
+
+/**
  * Specifies a fixed interval to use if rd_interval() is called with
  * `interval_us` set to 0.
  */

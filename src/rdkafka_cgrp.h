@@ -120,6 +120,10 @@ typedef struct rd_kafka_cgrp_s {
 #define RD_KAFKA_CGRP_F_TERMINATE    0x1            /* Terminate cgrp (async) */
 #define RD_KAFKA_CGRP_F_WAIT_COMMIT  0x2            /* Waiting for OffsetCommit
                                                      * to complete. */
+#define RD_KAFKA_CGRP_F_WAIT_UNASSIGN 0x4           /* Waiting for unassign
+						     * to complete */
+#define RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN 0x8       /* Send LeaveGroup when
+						     * unassign is done */
 
         rd_interval_t      rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t      rkcg_heartbeat_intvl;    /* Heartbeat intvl */
@@ -213,6 +217,9 @@ rd_kafka_resp_err_t rd_kafka_cgrp_topic_pattern_add (rd_kafka_cgrp_t *rkcg,
 int rd_kafka_cgrp_topic_check (rd_kafka_cgrp_t *rkcg, const char *topic);
 
 void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id);
+
+void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
+					   rd_kafka_resp_err_t err);
 
 void rd_kafka_cgrp_handle_Metadata (rd_kafka_cgrp_t *rkcg,
                                     rd_kafka_resp_err_t err,

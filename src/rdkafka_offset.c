@@ -343,6 +343,32 @@ rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp) {
 
 
 /**
+ * Trigger offset_commit_cb op, if configured.
+ * Takes ownership of `offsets`
+ */
+void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
+				   rd_kafka_resp_err_t err,
+				   rd_kafka_topic_partition_list_t *offsets) {
+	rd_kafka_op_t *rko;
+
+        if (!rk->rk_conf.offset_commit_cb) {
+		rd_kafka_topic_partition_list_destroy(offsets);
+		return;
+	}
+
+	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
+	rko->rko_err = err;
+	rko->rko_payload = offsets;
+	rd_kafka_assert(NULL, offsets->cnt > 0);
+	rko->rko_flags |= RD_KAFKA_OP_F_FREE;
+	rko->rko_free_cb =(void *)rd_kafka_topic_partition_list_destroy;
+	rd_kafka_q_enq(&rk->rk_rep, rko);
+}
+
+
+
+
+/**
  * Called when a broker commit is done.
  */
 static void rd_kafka_offset_broker_commit_op_cb (rd_kafka_t *rk,
@@ -354,11 +380,14 @@ static void rd_kafka_offset_broker_commit_op_cb (rd_kafka_t *rk,
 
         if (!(s_rktp = rd_kafka_topic_partition_list_get_toppar(rk,
                                                                 offsets, 0))) {
-                rd_kafka_dbg(rk, TOPIC, "OFFSETCOMMIT",
-                             "OffsetCommit reply: "
-                             "no local toppar found for %s [%"PRId32"]",
-                             offsets->elems[0].topic,
-                             offsets->elems[0].partition);
+		rd_kafka_dbg(rk, TOPIC, "OFFSETCOMMIT",
+			     "No local partition found for %s [%"PRId32"] "
+			     "while parsing OffsetCommit response "
+			     "(offset %"PRId64", error \"%s\")",
+			     offsets->elems[0].topic,
+			     offsets->elems[0].partition,
+			     offsets->elems[0].offset,
+			     rd_kafka_err2str(offsets->elems[0].err));
                 return;
         }
 
@@ -481,6 +510,9 @@ rd_kafka_commit0 (rd_kafka_t *rk,
 }
 
 
+/**
+ * NOTE: 'offsets' may be NULL, see official documentation.
+ */
 rd_kafka_resp_err_t
 rd_kafka_commit (rd_kafka_t *rk,
                  const rd_kafka_topic_partition_list_t *offsets, int async) {
@@ -500,6 +532,16 @@ rd_kafka_commit (rd_kafka_t *rk,
         if (!async) {
                 rd_kafka_op_t *rko = rd_kafka_q_pop(tmpq, RD_POLL_INFINITE, 0);
                 err = rko->rko_err;
+
+		/* Enqueue offset_commit_cb if configured */
+		if (rko->rko_payload /* offset list */) {
+			rd_kafka_offset_commit_cb_op(
+				rk, rko->rko_err,
+				(rd_kafka_topic_partition_list_t *)
+				rko->rko_payload);
+			rko->rko_payload = NULL;
+		}
+
                 rd_kafka_op_destroy(rko);
                 rd_kafka_q_destroy(tmpq);
         } else {

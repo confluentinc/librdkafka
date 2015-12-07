@@ -122,17 +122,20 @@ private:
   }
 
 public:
-  void rebalance_cb (RdKafka::ErrorCode err,
-                     std::vector<RdKafka::TopicPartition*> &revoked,
-		     std::vector<RdKafka::TopicPartition*> &assigned) {
+  void rebalance_cb (RdKafka::KafkaConsumer *consumer,
+		     RdKafka::ErrorCode err,
+                     std::vector<RdKafka::TopicPartition*> &partitions) {
     std::cerr << "RebalanceCb: " << RdKafka::err2str(err) << ": ";
 
-    std::cerr << " Revoked: ";
-    part_list_print(revoked);
-    std::cerr << " Assigned: ";
-    part_list_print(assigned);
-    
-    partition_cnt = assigned.size();
+    part_list_print(partitions);
+
+    if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
+      consumer->assign(partitions);
+      partition_cnt = partitions.size();
+    } else {
+      consumer->unassign();
+      partition_cnt = 0;
+    }
     eof_cnt = 0;
   }
 };

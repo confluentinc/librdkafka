@@ -363,8 +363,9 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
         }
 
         /* Set default offset for all partitions. */
-        rd_kafka_topic_partition_list_set_offsets(offsets, 0,
-                                                  RD_KAFKA_OFFSET_ERROR);
+        rd_kafka_topic_partition_list_set_offsets(rkb->rkb_rk, offsets, 0,
+                                                  RD_KAFKA_OFFSET_ERROR,
+						  0 /* !is commit */);
 
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
         for (i = 0 ; i < TopicArrayCnt ; i++) {
@@ -402,7 +403,10 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
                         if (!s_rktp)
                                 continue;
 
-                        rktpar->offset = offset;
+			if (offset == -1)
+				rktpar->offset = RD_KAFKA_OFFSET_ERROR;
+			else
+				rktpar->offset = offset;
                         rktpar->err = ErrorCode;
 
                         if (rktpar->metadata)
@@ -1297,19 +1301,8 @@ err:
                 return;
         }
 
-        /* If an IllegalGeneration error code is returned in the
-         * HeartbeatResponse, it indicates that the co-ordinator has
-         * initiated a rebalance. The consumer then stops fetching data,
-         * commits offsets and sends a JoinGroupRequest to it's co-ordinator
-         * broker */
-        if (ErrorCode != 0) {
-                rd_kafka_dbg(rkb->rkb_rk, CGRP, "HEARTBEAT",
-                             "Heartbeat error response: %s",
-                             rd_kafka_err2str(ErrorCode));
-                // FIXME: stop fetching, commit, rejoin */
-                rd_kafka_cgrp_set_join_state(rkcg,
-                                             RD_KAFKA_CGRP_JOIN_STATE_INIT);
-        }
+        if (ErrorCode != 0)
+		rd_kafka_cgrp_handle_heartbeat_error(rkcg, ErrorCode);
 }
 
 

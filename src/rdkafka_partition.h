@@ -319,9 +319,10 @@ rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktarplist,
 void rd_kafka_topic_partition_list_sort_by_topic (
         rd_kafka_topic_partition_list_t *rktparlist);
 
-void rd_kafka_topic_partition_list_set_offsets (
+int rd_kafka_topic_partition_list_set_offsets (
+	rd_kafka_t *rk,
         rd_kafka_topic_partition_list_t *rktparlist,
-        int from_rktp, int64_t def_value);
+        int from_rktp, int64_t def_value, int is_commit);
 
 rd_kafka_toppar_t *
 rd_kafka_topic_partition_list_get_toppar (

@@ -190,24 +190,30 @@ static void print_partition_list (FILE *fp, int is_assigned,
 }
 static void rebalance_cb (rd_kafka_t *rk,
                           rd_kafka_resp_err_t err,
-                          rd_kafka_topic_partition_list_t *revoked,
 			  rd_kafka_topic_partition_list_t *partitions,
                           void *opaque) {
 
-        if (err) {
-                fprintf(stderr,
-                        "%% Consumer group rebalance failed: %s\n",
+	fprintf(stderr, "%% Consumer group rebalanced: ");
+
+	switch (err)
+	{
+	case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
+		fprintf(stderr, "assigned:\n");
+		print_partition_list(stderr, 1, partitions);
+		rd_kafka_assign(rk, partitions);
+		break;
+
+	case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+		fprintf(stderr, "revoked:\n");
+		print_partition_list(stderr, 0, partitions);
+		rd_kafka_assign(rk, NULL);
+		break;
+
+	default:
+		fprintf(stderr, "failed: %s\n",
                         rd_kafka_err2str(err));
-                return;
-        }
-
-
-        fprintf(stderr, "%% Consumer group rebalanced\n");
-
-        fprintf(stderr, "%% Revoked partitions: ");
-	print_partition_list(stderr, 0, revoked);
-	fprintf(stderr, "%% Assigned partitions: ");
-	print_partition_list(stderr, 1, revoked);
+		break;
+	}
 }
 
 

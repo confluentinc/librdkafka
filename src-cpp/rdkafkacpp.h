@@ -634,6 +634,7 @@ public:
   virtual ErrorCode unsubscribe () = 0;
 
   virtual ErrorCode assign (const std::vector<TopicPartition*> &partitions) = 0;
+  virtual ErrorCode unassign () = 0;
 
   virtual Message *consume (int timeout_ms) = 0;
 

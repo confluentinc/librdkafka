@@ -34,11 +34,11 @@
 
 
 /**
- * Partition subscription test, without consumer group balancing.
+ * Consumer partition assignment test, without consumer group balancing.
  */
 
 
-int main_0016_subscribe_partition (int argc, char **argv) {
+int main_0016_assign_partition (int argc, char **argv) {
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 	rd_kafka_t *rk_p, *rk_c;
         rd_kafka_topic_t *rkt_p;
@@ -48,7 +48,7 @@ int main_0016_subscribe_partition (int argc, char **argv) {
         int partition;
 	uint64_t testid;
         rd_kafka_topic_conf_t *default_topic_conf;
-
+	rd_kafka_topic_partition_list_t *partitions;
 
 	testid = test_id_generate();
 
@@ -71,19 +71,20 @@ int main_0016_subscribe_partition (int argc, char **argv) {
                                 "smallest", NULL, 0);
         rk_c = test_create_consumer(topic/*group_id*/, default_topic_conf);
 
-        /* Start subscriptions */
+	/* Fill in partition set */
+	partitions = rd_kafka_topic_partition_list_new(partition_cnt);
+
         for (partition = 0 ; partition < partition_cnt ; partition++)
-                test_consumer_subscribe_partition("subscribe.partition",
-                                                  rk_c, topic, partition);
+		rd_kafka_topic_partition_list_add(partitions, topic, partition);
+
+	test_consumer_assign("assign.partition", rk_c, partitions);
 
 	/* Make sure all messages are available */
 	test_consumer_poll("verify.all", rk_c, testid, partition_cnt,
                            msg_base, partition_cnt * msg_cnt);
 
-        /* Stop subscriptions */
-        for (partition = 0 ; partition < partition_cnt ; partition++)
-                test_consumer_unsubscribe_partition("unsubscribe.partition",
-                                                    rk_c, topic, partition);
+        /* Stop assignments */
+	test_consumer_unassign("unassign.partitions", rk_c);
 
         /* Acquire stored offsets */
         for (partition = 0 ; partition < partition_cnt ; partition++) {

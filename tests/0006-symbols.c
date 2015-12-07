@@ -56,10 +56,15 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_conf_set_stats_cb(NULL, NULL);
                 rd_kafka_conf_set_log_cb(NULL, NULL);
                 rd_kafka_conf_set_socket_cb(NULL, NULL);
+		rd_kafka_conf_set_rebalance_cb(NULL, NULL);
+		rd_kafka_conf_set_offset_commit_cb(NULL, NULL);
+		rd_kafka_conf_set_throttle_cb(NULL, NULL);
+		rd_kafka_conf_set_default_topic_conf(NULL, NULL);
+		rd_kafka_conf_get(NULL, NULL, NULL, NULL);
 #ifndef _MSC_VER
-				rd_kafka_conf_set_open_cb(NULL, NULL);
+		rd_kafka_conf_set_open_cb(NULL, NULL);
 #endif
-				rd_kafka_conf_set_opaque(NULL, NULL);
+		rd_kafka_conf_set_opaque(NULL, NULL);
                 rd_kafka_opaque(NULL);
                 rd_kafka_conf_dump(NULL, NULL);
                 rd_kafka_topic_conf_dump(NULL, NULL);
@@ -70,12 +75,15 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_topic_conf_destroy(NULL);
                 rd_kafka_topic_conf_set(NULL, NULL, NULL, NULL, 0);
                 rd_kafka_topic_conf_set_opaque(NULL, NULL);
+		rd_kafka_topic_conf_get(NULL, NULL, NULL, NULL);
                 rd_kafka_topic_conf_set_partitioner_cb(NULL, NULL);
                 rd_kafka_topic_partition_available(NULL, 0);
+		rd_kafka_topic_opaque(NULL);
                 rd_kafka_msg_partitioner_random(NULL, NULL, 0, 0, NULL, NULL);
                 rd_kafka_new(0, NULL, NULL, 0);
                 rd_kafka_destroy(NULL);
                 rd_kafka_name(NULL);
+		rd_kafka_memberid(NULL);
                 rd_kafka_topic_new(NULL, NULL, NULL);
                 rd_kafka_topic_destroy(NULL);
                 rd_kafka_topic_name(NULL);
@@ -110,6 +118,26 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_consume_callback_queue(NULL, 0, NULL, NULL);
                 rd_kafka_seek(NULL, 0, 0, 0);
                 rd_kafka_yield(NULL);
+
+		/* KafkaConsumer API */
+		rd_kafka_subscribe(NULL, NULL);
+		rd_kafka_unsubscribe(NULL);
+		rd_kafka_subscription(NULL, NULL);
+		rd_kafka_consumer_poll(NULL, 0);
+		rd_kafka_consumer_close(NULL);
+		rd_kafka_assign(NULL, NULL);
+		rd_kafka_assignment(NULL, NULL);
+		rd_kafka_commit(NULL, NULL, 0);
+		rd_kafka_commit_message(NULL, NULL, 0);
+
+		/* TopicPartition */
+		rd_kafka_topic_partition_list_new(0);
+		rd_kafka_topic_partition_list_destroy(NULL);
+		rd_kafka_topic_partition_list_add(NULL, NULL, 0);
+		rd_kafka_topic_partition_list_add_range(NULL, NULL, 0, 0);
+		rd_kafka_topic_partition_list_copy(NULL);
+		
+		
         }
 
 

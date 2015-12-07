@@ -318,7 +318,6 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 		ret = rd_kafka_q_serve(fwdq, timeout_ms, max_cnt,
                                        cb_type, callback, opaque);
                 rd_kafka_q_destroy(fwdq);
-		mtx_unlock(&rkq->rkq_lock);
 		return ret;
 	}
 

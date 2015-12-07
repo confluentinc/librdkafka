@@ -589,7 +589,10 @@ rd_kafka_cgrp_offsets_fetch (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb,
                              rd_kafka_q_t *replyq) {
 
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
-        rko->rko_payload = offsets;
+
+	rko->rko_payload = rd_kafka_topic_partition_list_copy(offsets);
+	rko->rko_flags |= RD_KAFKA_OP_F_FREE;
+	rko->rko_free_cb = (void *)rd_kafka_topic_partition_list_destroy;
 
         rd_kafka_q_keep(replyq);
         rko->rko_replyq  = replyq;
@@ -989,10 +992,11 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 
 	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
 		     "Group \"%s\" heartbeat error response in "
-		     "state %s (join state %s): %s",
+		     "state %s (join state %s, %d partition(s) assigned): %s",
 		     rkcg->rkcg_group_id->str,
 		     rd_kafka_cgrp_state_names[rkcg->rkcg_state],
 		     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
+		     rkcg->rkcg_assignment ? rkcg->rkcg_assignment->cnt : 0,
 		     rd_kafka_err2str(err));
 
 	
@@ -1418,7 +1422,7 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg,
                                             rd_kafka_broker_t *rkb) {
 
-        if (1) // FIXME
+        if (0) // FIXME
         rd_rkb_dbg(rkb, CGRP, "JOINFSM",
                    "Group \"%s\" in join state %s with%s subscription",
                    rkcg->rkcg_group_id->str,

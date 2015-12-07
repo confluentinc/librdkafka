@@ -913,7 +913,7 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 	} else if (offset == RD_KAFKA_OFFSET_ERROR) {
 		rd_kafka_offset_reset(rktp, offset,
 				      RD_KAFKA_RESP_ERR__NO_OFFSET,
-				      "no previously committedd offset "
+				      "no previously committed offset "
 				      "available");
 
 	} else {
@@ -1877,8 +1877,9 @@ int rd_kafka_topic_partition_list_set_offsets (
 
 		rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_TOPIC, "OFFSET",
 			     "Topic %s [%"PRId32"]: "
-			     "commiting %s offset %"PRId64,
+			     "%s %s offset %"PRId64,
 			     rktpar->topic, rktpar->partition,
+			     is_commit ? "committing" : "setting",
 			     from_rktp ? "stored" : "default", rktpar->offset);
 
 		if (rktpar->offset >= 0)

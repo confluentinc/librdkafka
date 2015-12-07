@@ -29,6 +29,9 @@ extern int test_seed;
 extern const RD_TLS char *test_curr;
 extern RD_TLS int64_t test_start;
 
+extern int  test_session_timeout_ms; /* Group session timeout */
+
+
 #define TEST_FAIL(...) do {					\
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
 			test_curr ? test_curr:"(n/a)",                  \
@@ -163,7 +166,14 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                         int msg_base, int cnt,
 			const char *payload, size_t size);
 rd_kafka_t *test_create_consumer (const char *group_id,
-                                  rd_kafka_topic_conf_t *default_topic_conf);
+				  void (*rebalance_cb) (
+					  rd_kafka_t *rk,
+					  rd_kafka_resp_err_t err,
+					  rd_kafka_topic_partition_list_t
+					  *partitions,
+					  void *opaque),
+                                  rd_kafka_topic_conf_t *default_topic_conf,
+				  void *opaque);
 rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
                                               const char *topic);
 void test_consumer_start (const char *what,
@@ -188,3 +198,6 @@ void test_consumer_assign (const char *what, rd_kafka_t *rk,
 void test_consumer_unassign (const char *what, rd_kafka_t *rk);
 
 void test_consumer_close (rd_kafka_t *rk);
+
+void test_print_partition_list (const rd_kafka_topic_partition_list_t
+				*partitions);

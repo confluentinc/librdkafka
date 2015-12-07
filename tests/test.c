@@ -51,6 +51,8 @@ static int  tests_running_cnt = 0;
 const RD_TLS char *test_curr = NULL;
 RD_TLS int64_t test_start = 0;
 
+int  test_session_timeout_ms = 6000;
+
 #ifndef _MSC_VER
 static pthread_mutex_t test_lock;
 #endif
@@ -467,8 +469,8 @@ int main(int argc, char **argv) {
         RUN_TEST(0013_null_msgs);
         RUN_TEST(0014_reconsume_191);
 	RUN_TEST(0015_offsets_seek);
-        RUN_TEST(0016_assign_partition);
-		RUN_TEST(0017_compression);
+	RUN_TEST(0017_compression);
+	RUN_TEST(0018_cgrp_term);
 
         if (tests_run_in_parallel) {
                 while (tests_running_cnt > 0)
@@ -622,10 +624,18 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 
 
 rd_kafka_t *test_create_consumer (const char *group_id,
-                                  rd_kafka_topic_conf_t *default_topic_conf) {
+				  void (*rebalance_cb) (
+					  rd_kafka_t *rk,
+					  rd_kafka_resp_err_t err,
+					  rd_kafka_topic_partition_list_t
+					  *partitions,
+					  void *opaque),
+                                  rd_kafka_topic_conf_t *default_topic_conf,
+				  void *opaque) {
 	rd_kafka_t *rk;
 	rd_kafka_conf_t *conf;
 	char errstr[512];
+	char tmp[64];
 
 	test_conf_init(&conf, NULL, 20);
 
@@ -636,9 +646,15 @@ rd_kafka_t *test_create_consumer (const char *group_id,
                         TEST_FAIL("Conf failed: %s\n", errstr);
         }
 
-	if (rd_kafka_conf_set(conf, "session.timeout.ms", "10000",
+	rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
+	if (rd_kafka_conf_set(conf, "session.timeout.ms", tmp,
 			      errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
 		TEST_FAIL("Conf failed: %s\n", errstr);
+
+	rd_kafka_conf_set_opaque(conf, opaque);
+
+	if (rebalance_cb)
+		rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
         if (default_topic_conf)
                 rd_kafka_conf_set_default_topic_conf(conf, default_topic_conf);
@@ -873,6 +889,12 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                                  rd_kafka_message_errstr(rkmessage));
 
                 } else {
+			if (test_level > 2)
+				TEST_SAY("%s [%"PRId32"] "
+					 "message at offset %"PRId64"\n",
+					 rd_kafka_topic_name(rkmessage->rkt),
+					 rkmessage->partition,
+					 rkmessage->offset);
                         cnt++;
                 }
 
@@ -894,4 +916,15 @@ void test_consumer_close (rd_kafka_t *rk) {
         if (err)
                 TEST_FAIL("Failed to close consumer: %s\n",
                           rd_kafka_err2str(err));
+}
+
+
+void test_print_partition_list (const rd_kafka_topic_partition_list_t
+				*partitions) {
+        int i;
+        for (i = 0 ; i < partitions->cnt ; i++) {
+		TEST_SAY(" %s [%"PRId32"]\n",
+                        partitions->elems[i].topic,
+                        partitions->elems[i].partition);
+        }
 }

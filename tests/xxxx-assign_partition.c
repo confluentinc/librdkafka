@@ -49,6 +49,7 @@ int main_0016_assign_partition (int argc, char **argv) {
 	uint64_t testid;
         rd_kafka_topic_conf_t *default_topic_conf;
 	rd_kafka_topic_partition_list_t *partitions;
+	char errstr[512];
 
 	testid = test_id_generate();
 
@@ -67,9 +68,13 @@ int main_0016_assign_partition (int argc, char **argv) {
 
 
         test_conf_init(NULL, &default_topic_conf, 0);
-        rd_kafka_topic_conf_set(default_topic_conf, "auto.offset.reset",
-                                "smallest", NULL, 0);
-        rk_c = test_create_consumer(topic/*group_id*/, default_topic_conf);
+        if (rd_kafka_topic_conf_set(default_topic_conf, "auto.offset.reset",
+				    "smallest", errstr, sizeof(errstr)) !=
+	    RD_KAFKA_CONF_OK)
+		TEST_FAIL("%s\n", errstr);
+
+        rk_c = test_create_consumer(topic/*group_id*/, NULL,
+				    default_topic_conf, NULL);
 
 	/* Fill in partition set */
 	partitions = rd_kafka_topic_partition_list_new(partition_cnt);
@@ -86,6 +91,7 @@ int main_0016_assign_partition (int argc, char **argv) {
         /* Stop assignments */
 	test_consumer_unassign("unassign.partitions", rk_c);
 
+#if 0 // FIXME when get_offset() is functional
         /* Acquire stored offsets */
         for (partition = 0 ; partition < partition_cnt ; partition++) {
                 rd_kafka_resp_err_t err;
@@ -107,6 +113,7 @@ int main_0016_assign_partition (int argc, char **argv) {
 
                 rd_kafka_topic_destroy(rkt_c);
         }
+#endif
         test_consumer_close(rk_c);
 
 	rd_kafka_destroy(rk_c);

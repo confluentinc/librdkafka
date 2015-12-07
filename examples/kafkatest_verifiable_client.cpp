@@ -566,7 +566,7 @@ int main (int argc, char **argv) {
    * Create configuration objects
    */
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-  RdKafka::Conf *tconf = RdKafbka::Conf::create(RdKafka::Conf::CONF_TOPIC);
+  RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
 
   {
     char hostname[128];

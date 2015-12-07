@@ -226,6 +226,7 @@ rd_kafka_assign (rd_kafka_t *rk,
 			rd_kafka_topic_partition_list_copy(partitions);
 		rko->rko_free_cb =
 			(void *)rd_kafka_topic_partition_list_destroy;
+		rko->rko_flags |= RD_KAFKA_OP_F_FREE;
 	}
 
         return rd_kafka_op_err_destroy(

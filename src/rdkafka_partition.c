@@ -1271,6 +1271,7 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
                 rko->rko_err = offsets->elems[0].err;
                 offsets->elems[0]._private = NULL;
                 rd_kafka_topic_partition_list_destroy(offsets);
+		rko->rko_payload = NULL;
                 rktp = rd_kafka_toppar_s2i(s_rktp);
 
                 if (!outdated)

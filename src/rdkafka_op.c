@@ -324,6 +324,8 @@ int rd_kafka_op_reply (rd_kafka_op_t *rko_orig,
         rko->rko_payload = payload;
         rko->rko_len     = len;
         rko->rko_free_cb = free_cb;
+	if (free_cb)
+		rko->rko_flags |= RD_KAFKA_OP_F_FREE;
         rko->rko_version = rko_orig->rko_version;
 
         rd_kafka_q_enq(rko_orig->rko_replyq, rko);

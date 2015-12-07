@@ -69,7 +69,7 @@ namespace RdKafka {
  *
  * I.e.: 0x000801ff = 0.8.1
  */
-#define RD_KAFKA_VERSION  0x00090001
+#define RD_KAFKA_VERSION  0x000900ff
 
 /**
  * Returns the librdkafka version as integer.

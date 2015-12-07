@@ -70,7 +70,8 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 "REPLY:GET_ASSIGNMENT",
                 "REPLY:SYNCGROUP",
 		"REPLY:THROTTLE",
-                "REPLY:CALLBACK"
+                "REPLY:CALLBACK",
+		"REPLY:NAME"
         };
 
         if (type & RD_KAFKA_OP_REPLY) {

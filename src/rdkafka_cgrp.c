@@ -1189,6 +1189,15 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                         rd_kafka_op_call(rkcg->rkcg_rk, rko);
                         break;
 
+		case RD_KAFKA_OP_NAME:
+			/* Return the currently assigned member id. */
+			rd_kafka_op_reply(rko, 0,
+					  rkcg->rkcg_member_id ?
+					  RD_KAFKAP_STR_DUP(rkcg->
+							    rkcg_member_id) :
+					  NULL, 0, rd_free);
+			break;
+
                 case RD_KAFKA_OP_OFFSET_FETCH:
                         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP ||
                             (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)) {

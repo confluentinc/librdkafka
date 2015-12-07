@@ -442,6 +442,16 @@ class RD_EXPORT Handle {
    */
   virtual const std::string name () const = 0;
 
+  /**
+   * @brief Returns the client's broker-assigned group member id
+   *
+   * @remark This currently requires the high-level KafkaConsumer
+   *
+   * @returns Last assigned member id, or empty string if not currently
+   *          a group member.
+   */
+  virtual const std::string memberid () const = 0;
+
 
   /**
    * Polls the provided kafka handle for events.

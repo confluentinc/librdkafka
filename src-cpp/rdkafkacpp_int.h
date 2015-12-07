@@ -31,6 +31,7 @@
 #include <string>
 #include <iostream>
 #include <cstring>
+#include <stdlib.h>
 
 #include "rdkafkacpp.h"
 
@@ -422,6 +423,13 @@ class HandleImpl : virtual public Handle {
   ~HandleImpl() {};
   HandleImpl () {};
   const std::string name () const { return std::string(rd_kafka_name(rk_)); };
+  const std::string memberid () const {
+	  char *str = rd_kafka_memberid(rk_);
+	  std::string memberid = str ? str : "";
+	  if (str)
+		  free(str);
+	  return memberid;
+  }
   int poll (int timeout_ms) { return rd_kafka_poll(rk_, timeout_ms); };
   int outq_len () { return rd_kafka_outq_len(rk_); };
 

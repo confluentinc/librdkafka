@@ -2003,6 +2003,25 @@ const char *rd_kafka_name (const rd_kafka_t *rk) {
 }
 
 
+char *rd_kafka_memberid (const rd_kafka_t *rk) {
+	rd_kafka_op_t *rko;
+	rd_kafka_cgrp_t *rkcg;
+	char *memberid;
+
+	if (!(rkcg = rd_kafka_cgrp_get(rk)))
+		return NULL;
+
+	rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_NAME);
+	if (!rko)
+		return NULL;
+	memberid = rko->rko_payload;
+	rko->rko_payload = NULL;
+	rd_kafka_op_destroy(rko);
+
+	return memberid;
+}
+
+
 void *rd_kafka_opaque (const rd_kafka_t *rk) {
         return rk->rk_conf.opaque;
 }

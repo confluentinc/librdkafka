@@ -1050,6 +1050,18 @@ RD_EXPORT
 const char *rd_kafka_name(const rd_kafka_t *rk);
 
 
+/**
+ * @brief Returns this client's broker-assigned group member id 
+ *
+ * @remark This currently requires the high-level KafkaConsumer
+ *
+ * @returns An allocated string containing the current broker-assigned group
+ *          member id, or NULL if not available.
+ *          The application must free the string with \p free()
+ */
+RD_EXPORT
+char *rd_kafka_memberid (const rd_kafka_t *rk);
+
 
 /**
  * @brief Creates a new topic handle for topic named \p topic.

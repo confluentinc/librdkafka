@@ -85,6 +85,7 @@ typedef enum {
         RD_KAFKA_OP_SYNCGROUP,       /* SyncGroup response */
 	RD_KAFKA_OP_THROTTLE,        /* Throttle info */
         RD_KAFKA_OP_CALLBACK,        /* Calls rko_op_cb */
+	RD_KAFKA_OP_NAME,            /* Request name */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

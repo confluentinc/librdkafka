@@ -431,8 +431,8 @@ int main (int argc, char **argv) {
                 exit(1);
         }
 
-        /* Redirect rd_kafka_poll() to consumer_poll(): FIXME, other way around*/
-        // rd_kafka_poll_set_consumer(rk);
+        /* Redirect rd_kafka_poll() to consumer_poll() */
+        rd_kafka_poll_set_consumer(rk);
 
         rd_kafka_set_log_level(rk, LOG_DEBUG);
 

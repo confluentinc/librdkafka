@@ -427,8 +427,6 @@ int main (int argc, char **argv) {
     RdKafka::Message *msg = consumer->consume(1000);
     msg_consume(msg, NULL);
     delete msg;
-
-    consumer->poll(0);
   }
 
   alarm(10);

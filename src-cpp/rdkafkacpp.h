@@ -209,7 +209,7 @@ class Event;
 class Topic;
 class TopicPartition;
 class Metadata;
-
+class KafkaConsumer;
 
 /**
  * Delivery Report callback class

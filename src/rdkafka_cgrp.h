@@ -133,6 +133,8 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_list_t          rkcg_toppars;            /* Toppars subscribed to*/
 
+	int                rkcg_assigned_cnt;       /* Assigned partitions */
+
         int32_t            rkcg_coord_id;           /* Current coordinator id */
 
         int32_t            rkcg_generation_id;      /* Current generation id */

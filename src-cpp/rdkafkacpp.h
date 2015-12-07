@@ -641,21 +641,6 @@ public:
   virtual ErrorCode commitAsync () = 0;
   virtual ErrorCode commitSync (Message *message) = 0;
   virtual ErrorCode commitAsync (Message *message) = 0;
-#if FIXME
-  virtual ErrorCode commitSync () = 0;
-  virtual ErrorCode commitSync (const std::vector<TopicPartition*> &partitions) = 0;
-  virtual ErrorCode commitAsync (const std::vector<TopicPartition*> &partitions) = 0;
-
-  virtual ErrorCode seek (TopicPartition &partition, int64_t offset) = 0;
-  virtual ErrorCode seek (Topic *topic, int64_t offset) = 0,
-  virtual ErrorCode seekToBeginning (TopicPartition &partition) = 0;
-  virtual ErrorCode seekToEnd (TopicPartition &partition) = 0;
-
-  virtual ErrorCode position (TopicPartition &partition, int64_t *offsetp) = 0;
-
-  // FIXME virtual ErrorCode committed (TopicPartition &partition, OffsetAndMetadata *oam) = 0;
-#endif
-
   virtual ErrorCode close () = 0;
 };
 

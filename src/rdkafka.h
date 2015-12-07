@@ -1625,15 +1625,9 @@ int rd_kafka_wait_destroyed(int timeout_ms);
 
 
 
-
-/* FIXME */
-RD_EXPORT
-rd_kafka_topic_partition_t *rd_kafka_topic_partition_new (const char *topic,
-                                                          int32_t partition);
-
-RD_EXPORT
-void rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar);
-
+/**
+ * Experimental APIs.
+ */
 
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);

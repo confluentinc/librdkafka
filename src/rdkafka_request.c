@@ -68,8 +68,8 @@ static int rd_kafka_err_action (rd_kafka_broker_t *rkb,
         case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
         case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
-        case RD_KAFKA_RESP_ERR_CONSUMER_COORDINATOR_NOT_AVAILABLE:
-        case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_CONSUMER:
+        case RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
                 /* Request metadata information update */
                 actions |= RD_KAFKA_ERR_ACTION_REFRESH;
                 break;
@@ -89,9 +89,9 @@ static void rd_kafka_assignor_handle_Metadata (rd_kafka_broker_t *rkb,
                                                void *opaque);
 
 /**
- * Send ConsumerMetadataRequest
+ * Send GroupCoordinatorRequest
  */
-void rd_kafka_ConsumerMetadataRequest (rd_kafka_broker_t *rkb,
+void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
                                        const rd_kafkap_str_t *cgrp,
                                        rd_kafka_q_t *replyq,
                                        rd_kafka_resp_cb_t *resp_cb,
@@ -101,7 +101,7 @@ void rd_kafka_ConsumerMetadataRequest (rd_kafka_broker_t *rkb,
         rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1, 0);
         rd_kafka_buf_push_kstr(rkbuf, cgrp);
 
-        rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_ConsumerMetadata,
+        rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_GroupCoordinator,
                                        rkbuf, replyq, resp_cb, opaque);
 }
 

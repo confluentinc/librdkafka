@@ -277,7 +277,7 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 		return "Local: No offset stored";
 
 	case RD_KAFKA_RESP_ERR_UNKNOWN:
-		return "Unknown error";
+		return "Unknown broker error";
 	case RD_KAFKA_RESP_ERR_NO_ERROR:
 		return "Success";
 	case RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE:
@@ -304,12 +304,14 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 		return "Broker: StaleControllerEpochCode";
 	case RD_KAFKA_RESP_ERR_OFFSET_METADATA_TOO_LARGE:
 		return "Broker: Offset metadata string too large";
-        case RD_KAFKA_RESP_ERR_OFFSET_LOAD_IN_PROGRESS:
-                return "Broker: Offset load in progress";
-        case RD_KAFKA_RESP_ERR_CONSUMER_COORDINATOR_NOT_AVAILABLE:
-                return "Broker: Consumer coordinator not available";
-        case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_CONSUMER:
-                return "Broker: Not coordinator for consumer";
+	case RD_KAFKA_RESP_ERR_NETWORK_EXCEPTION:
+		return "Broker: Broker disconnected before response received";
+        case RD_KAFKA_RESP_ERR_GROUP_LOAD_IN_PROGRESS:
+                return "Broker: Group coordinator load in progress";
+        case RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
+                return "Broker: Group coordinator not available";
+        case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
+                return "Broker: Not coordinator for group";
         case RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION:
                 return "Broker: Invalid topic";
         case RD_KAFKA_RESP_ERR_RECORD_LIST_TOO_LARGE:
@@ -321,11 +323,13 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
                 return "Broker: Message(s) written to insufficient number of "
                         "in-sync replicas";
         case RD_KAFKA_RESP_ERR_INVALID_REQUIRED_ACKS:
-                return "Broker: Invalid required acks";
+                return "Broker: Invalid required acks value";
         case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
                 return "Broker: Specified group generation id is not valid";
         case RD_KAFKA_RESP_ERR_INCONSISTENT_GROUP_PROTOCOL:
                 return "Broker: Inconsistent group protocol";
+	case RD_KAFKA_RESP_ERR_INVALID_GROUP_ID:
+		return "Broker: Invalid group.id";
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
                 return "Broker: Unknown member";
         case RD_KAFKA_RESP_ERR_INVALID_SESSION_TIMEOUT:

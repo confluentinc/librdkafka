@@ -30,7 +30,7 @@
 
 #include "rdkafka_cgrp.h"
 
-void rd_kafka_ConsumerMetadataRequest (rd_kafka_broker_t *rkb,
+void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
                                        const rd_kafkap_str_t *cgrp,
                                        rd_kafka_q_t *replyq,
                                        rd_kafka_resp_cb_t *resp_cb,

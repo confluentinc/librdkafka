@@ -1519,18 +1519,6 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                          int async);
 
 
-
-/**
- * Retrieve stored offsets from broker.
- *
- * @remark Experimental, not final API.
- */
-RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_consumer_get_offset (rd_kafka_topic_t *rkt,
-                                                  int32_t partition,
-                                                  int64_t *offsetp,
-                                                  int timeout_ms);
-
 ///@}
 
 

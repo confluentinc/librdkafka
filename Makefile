@@ -36,6 +36,10 @@ install:
 examples tests: .PHONY libs
 	$(MAKE) -C $@
 
+docs:
+	doxygen Doxyfile
+	@echo "Documentation generated in staging-docs"
+
 clean:
 	@$(MAKE) -C tests $@
 	@$(MAKE) -C examples $@

@@ -183,10 +183,8 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt);
 
-void test_consumer_subscribe_partition (const char *what,
-                                        rd_kafka_t *rk, const char *topic,
-                                        int32_t partition);
-void test_consumer_unsubscribe_partition (const char *what,
-                                          rd_kafka_t *rk, const char *topic,
-                                          int32_t partition);
+void test_consumer_assign (const char *what, rd_kafka_t *rk,
+			   rd_kafka_topic_partition_list_t *parts);
+void test_consumer_unassign (const char *what, rd_kafka_t *rk);
+
 void test_consumer_close (rd_kafka_t *rk);

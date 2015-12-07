@@ -14,7 +14,7 @@ topic.metadata.refresh.fast.cnt          |  *  |            10 | When a topic lo
 topic.metadata.refresh.fast.interval.ms  |  *  |           250 | See `topic.metadata.refresh.fast.cnt` description
 topic.metadata.refresh.sparse            |  *  |          true | Sparse metadata requests (consumes less network bandwidth)
 topic.blacklist                          |  *  |               | Topic blacklist, a comma-separated list of regular expressions for matching topic names that should be ignored in broker metadata information as if the topics did not exist.
-debug                                    |  *  |               | A comma-separated list of debug contexts to enable: all,generic,broker,topic,metadata,producer,queue,msg,protocol,cgrp,security
+debug                                    |  *  |               | A comma-separated list of debug contexts to enable: all,generic,broker,topic,metadata,producer,queue,msg,protocol,cgrp,security,fetch
 socket.timeout.ms                        |  *  |         60000 | Timeout for network requests.
 socket.blocking.max.ms                   |  *  |           100 | Maximum time a broker socket operation may block. A lower value improves responsiveness at the expense of slightly higher CPU usage.
 socket.send.buffer.bytes                 |  *  |             0 | Broker socket send buffer size. System default is used if 0.

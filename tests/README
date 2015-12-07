@@ -10,13 +10,17 @@ and possibly other rdkafka configuration properties:
 
 To run tests:
 
-    make
+   # Run tests in parallel (quickest, but harder to troubleshoot)
+   make
 
+   # Run tests in sequence
+   make run_seq
 
-To run specific test(s):
+   # Run specific test
+   TESTS=0004 make
 
-    TESTS=0004-conf.test make
-
+   # Run test(s) with helgrind, valgrind, gdb
+   TESTS=0009 ./run-test.sh ./merged valgrind|helgrind|gdb
 
 
 All tests in the 0000-0999 series are run automatically with 'make'.
@@ -26,8 +30,3 @@ configuration, these tests are run with "TESTS=1xxx-yyyyy.test make".
 See comments in the test's source file for specific requirements.
 
 
-The run-test.sh script can be modified to run tests in one or more of
-the following modes:
- * bare  (default)
- * valgrind
- * helgrind

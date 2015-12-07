@@ -467,7 +467,7 @@ int main(int argc, char **argv) {
         RUN_TEST(0013_null_msgs);
         RUN_TEST(0014_reconsume_191);
 	RUN_TEST(0015_offsets_seek);
-        RUN_TEST(0016_subscribe_partition);
+        RUN_TEST(0016_assign_partition);
 		RUN_TEST(0017_compression);
 
         if (tests_run_in_parallel) {
@@ -810,41 +810,37 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 
 
 
-void test_consumer_subscribe_partition (const char *what,
-                                        rd_kafka_t *rk, const char *topic,
-                                        int32_t partition) {
+void test_consumer_assign (const char *what, rd_kafka_t *rk,
+			   rd_kafka_topic_partition_list_t *partitions) {
         rd_kafka_resp_err_t err;
         test_timing_t timing;
 
-        TIMING_START(&timing, "SUBSCRIBE.PARTITION");
-        err = rd_kafka_subscribe_partition(rk, topic, partition);
+        TIMING_START(&timing, "ASSIGN.PARTITIONS");
+        err = rd_kafka_assign(rk, partitions);
         TIMING_STOP(&timing);
         if (err)
-                TEST_FAIL("%s: failed to subscribe to %s [%"PRId32"]: %s\n",
-                          what, topic, partition, rd_kafka_err2str(err));
+                TEST_FAIL("%s: failed to assign %d partition(s): %s\n",
+			  what, partitions->cnt, rd_kafka_err2str(err));
         else
-                TEST_SAY("%s: subscribed to %s [%"PRId32"]\n",
-                         what, topic, partition);
+                TEST_SAY("%s: assigned %d partition(s)\n",
+			 what, partitions->cnt);
 }
 
 
-void test_consumer_unsubscribe_partition (const char *what,
-                                          rd_kafka_t *rk, const char *topic,
-                                          int32_t partition) {
+void test_consumer_unassign (const char *what, rd_kafka_t *rk) {
         rd_kafka_resp_err_t err;
         test_timing_t timing;
 
-        TIMING_START(&timing, "UNSUBSCRIBE.PARTITION");
-        err = rd_kafka_unsubscribe_partition(rk, topic, partition);
+        TIMING_START(&timing, "UNASSIGN.PARTITIONS");
+        err = rd_kafka_assign(rk, NULL);
         TIMING_STOP(&timing);
         if (err)
-                TEST_FAIL("%s: failed to unsubscribe from %s [%"PRId32"]: %s\n",
-                          what, topic, partition, rd_kafka_err2str(err));
+                TEST_FAIL("%s: failed to unassign current partitions: %s\n",
+                          what, rd_kafka_err2str(err));
         else
-                TEST_SAY("%s: unsubscribed from %s [%"PRId32"]\n",
-                         what, topic, partition);
-
+                TEST_SAY("%s: unassigned current partitions\n", what);
 }
+
 
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt) {

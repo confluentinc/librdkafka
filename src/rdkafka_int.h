@@ -228,7 +228,7 @@ void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
 
 #define rd_kafka_log(rk,level,fac,...) rd_kafka_log0(rk,NULL,level,fac,__VA_ARGS__)
 #define rd_kafka_dbg(rk,ctx,fac,...) do {				  \
-		if (unlikely((rk)->rk_conf.debug & RD_KAFKA_DBG_ ## ctx)) \
+		if (unlikely((rk)->rk_conf.debug & (RD_KAFKA_DBG_ ## ctx))) \
 			rd_kafka_log0(rk,NULL,LOG_DEBUG,fac,__VA_ARGS__); \
 	} while (0)
 

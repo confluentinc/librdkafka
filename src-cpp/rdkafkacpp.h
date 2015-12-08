@@ -29,16 +29,25 @@
 #pragma once
 
 /**
- * Apache Kafka consumer & producer
+ * @file rdkafkacpp.h
+ * @brief Apache Kafka C/C++ consumer and producer client library.
+ *
+ * @remark \b FIXME This header file is currently not doxygenicated
  *
  * rdkafkacpp.h contains the public C++ API for librdkafka.
- * The API isdocumented in this file as comments prefixing the class, function,
+ * The API is documented in this file as comments prefixing the class, function,
  * type, enum, define, etc.
  * For more information, see the C interface in rdkafka.h and read the
  * manual in INTRODUCTION.md.
- * The C++ interface is STD C++ '03 compliant.
+ * The C++ interface is STD C++ '03 compliant and adheres to the
+ * Google C++ Style Guide.
+
+ * @sa For the C interface see \sa rdkafka.h
+ *
+ * @tableofcontents
  */
 
+/**@cond NO_DOC*/
 #include <string>
 #include <list>
 #include <vector>
@@ -55,6 +64,8 @@
 #else
 #define RD_EXPORT
 #endif
+
+/**@endcond*/
 
 namespace RdKafka {
 

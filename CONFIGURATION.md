@@ -1,3 +1,4 @@
+//@file
 ## Global configuration properties
 
 Property                                 | C/P |       Default | Description              

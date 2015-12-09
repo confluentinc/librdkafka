@@ -34,7 +34,7 @@
  * The API is documented in this file as comments prefixing the function, type,
  * enum, define, etc.
  *
- * @sa For the C++ interface see \sa rdkafkacpp.h
+ * @sa For the C++ interface see rdkafkacpp.h
  *
  * @tableofcontents
  */
@@ -367,7 +367,6 @@ rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
  */
 
 /**
- * @typedef rd_kafka_topic_partition_t
  * @brief Generic place holder for a specific Topic+Partition.
  *
  * @sa rd_kafka_topic_partition_list_new()
@@ -387,7 +386,6 @@ typedef struct rd_kafka_topic_partition_s {
 
 
 /**
- * @typedef rd_kafka_topic_partition_list_t
  * @brief A growable list of Topic+Partitions.
  *
  */
@@ -483,7 +481,6 @@ rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src);
 // "Compound rd_kafka_message_t is not documented."
 
 /**
- * @typedef rd_kafka_message_t
  * @brief A Kafka message as returned by the \c rd_kafka_consume*() family
  *        of functions.
  *
@@ -653,7 +650,7 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  * accepted by rd_kafka_produce() (et.al) with \p err set to indicate
  * the result of the produce request.
  * 
- * The callback is called when a message was succesfully produced or
+ * The callback is called when a message is succesfully produced or
  * if librdkafka encountered a permanent failure, or the retry counter for
  * temporary errors has been exhausted.
  *
@@ -679,8 +676,8 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
                                                        void *opaque));
 
 /**
- * @brief \b Consumer:
- * Set rebalance callback for use with coordinated consumer group balancing.
+ * @brief \b Consumer: Set rebalance callback for use with
+ *                     coordinated consumer group balancing.
  *
  * The \p err field is set to either RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS
  * or RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS and 'partitions'
@@ -689,6 +686,16 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  * Registering a \p rebalance_cb turns off librdkafka's automatic
  * partition assignment/revocation and instead delegates that responsibility
  * to the application's \p rebalance_cb.
+ *
+ * The rebalance callback is responsible for updating librdkafka's
+ * assignment set based on the two events: RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS
+ * andRD_KAFKA_RESP_ERR__REVOKE_PARTITIONS.
+ *
+ * Without a rebalance callback this is done automatically by librdkafka
+ * but registering a rebalance callback gives the application flexibility
+ * in performing other operations along with the assinging/revocation,
+ * such as fetching offsets from an alternate location (on assign)
+ * or manually committing offsets (on revoke).
  *
  * The following example show's the application's responsibilities:
  * @code
@@ -830,7 +837,7 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  * @brief Set socket callback.
  *
  * The socket callback is responsible for opening a socket
- * according to the supplied domain, type and protocol.
+ * according to the supplied \p domain, \p type and \p protocol.
  * The socket shall be created with \c CLOEXEC set in a racefree fashion, if
  * possible.
  *
@@ -1268,7 +1275,6 @@ void rd_kafka_yield (rd_kafka_t *rk);
 /**
  * @name Queue API
  * @{
- * @brief High-level KafkaConsumer API
  *
  * Message queues allows the application to re-route consumed messages
  * from multiple topic+partitions into one single queue point.
@@ -2041,6 +2047,9 @@ int rd_kafka_wait_destroyed(int timeout_ms);
 /**
  * @brief Redirect the main (rd_kafka_poll()) queue to the KafkaConsumer's
  *        queue (rd_kafka_consumer_poll()).
+ *
+ * @warning It is not permitted to call rd_kafka_poll() after directing the
+ *          main queue with rd_kafka_poll_set_consumer().
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);

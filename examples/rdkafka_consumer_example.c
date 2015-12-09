@@ -472,7 +472,6 @@ int main (int argc, char **argv) {
                         msg_consume(rkmessage, NULL);
                         rd_kafka_message_destroy(rkmessage);
                 }
-                rd_kafka_poll(rk, 0);
         }
 
         err = rd_kafka_consumer_close(rk);
@@ -481,9 +480,6 @@ int main (int argc, char **argv) {
                         rd_kafka_err2str(err));
         else
                 fprintf(stderr, "%% Consumer closed\n");
-
-        while (rd_kafka_outq_len(rk) > 0)
-                rd_kafka_poll(rk, 10);
 
         /* Destroy handle */
         rd_kafka_destroy(rk);

@@ -21,7 +21,8 @@ libs:
 
 CONFIGURATION.md: src/rdkafka.h examples
 	@printf "$(MKL_YELLOW)Updating$(MKL_CLR_RESET)\n"
-	@(examples/rdkafka_performance -X list > CONFIGURATION.md.tmp; \
+	@echo '//@file' > CONFIGURATION.md.tmp
+	@(examples/rdkafka_performance -X list >> CONFIGURATION.md.tmp; \
 		cmp CONFIGURATION.md CONFIGURATION.md.tmp || \
 		mv CONFIGURATION.md.tmp CONFIGURATION.md; \
 		rm -f CONFIGURATION.md.tmp)
@@ -39,6 +40,9 @@ examples tests: .PHONY libs
 docs:
 	doxygen Doxyfile
 	@echo "Documentation generated in staging-docs"
+
+clean-docs:
+	rm -rf staging-docs
 
 clean:
 	@$(MAKE) -C tests $@

@@ -1,7 +1,7 @@
 librdkafka - Apache Kafka C/C++ client library
 ==============================================
 
-Copyright (c) 2012-2014, [Magnus Edenhill](http://www.edenhill.se/).
+Copyright (c) 2012-2015, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
@@ -22,12 +22,31 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 [![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
 
-**Apache Kafka 0.8 support:**
+**Apache Kafka 0.9 support:**
 
   * Branch: master
   * Producer: supported
-  * Consumer: supported
+  * High-level balanced KafkaConsumer: supported
+  * Simple Consumer: supported
   * Compression: snappy and gzip
+  * Broker version support: >=0.8
+  * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
+  * ZooKeeper: not supported
+  * C API: Stable, ABI safe, backwards compatible with 0.8
+  * C++ API: Stable
+  * Tests: Regression tests in `tests/` directory.
+  * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
+  * Status: Testing
+
+
+**Apache Kafka 0.8 support:**
+
+  * Branch: 0.8
+  * Producer: supported
+  * High-level Consumer: not supported
+  * Simple Consumer: supported
+  * Compression: snappy and gzip
+  * Broker version support: >=0.8
   * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
   * ZooKeeper: not supported
   * C API: Stable, ABI safe, not backwards compatible with 0.7
@@ -41,21 +60,12 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
   * Branch: 0.7
   * Producer: supported
-  * Consumer: supported
+  * High-level Consumer: not supported
+  * Simple Consumer: supported
   * Compression: not supported
+  * Broker version support: 0.7.x
   * ZooKeeper: not supported
-  * C API: backwards compatible with 0.6
-  * Status: Stable
-
-
-**Apache Kafka 0.6 support:**
-
-  * Branch: 0.6
-  * Producer: supported
-  * Consumer: supported
-  * Compression: not supported
-  * ZooKeeper: not supported
-  * Status: Testing
+  * Status: Stable, Deprecated, Unsupported
 
 
 
@@ -126,9 +136,14 @@ Link your program with `-lrdkafka -lz -lpthread -lrt`.
 
 ## Documentation
 
-The **C** API is documented in [src/rdkafka.h](src/rdkafka.h)
+The public APIs are documented in their respective header files:
+ * The **C** API is documented in [src/rdkafka.h](src/rdkafka.h)
+ * The **C++** API is documented in [src-cpp/rdkafkacpp.h](src-cpp/rdkafkacpp.h)
 
-The **C++** API is documented in [src-cpp/rdkafkacpp.h](src-cpp/rdkafkacpp.h)
+To generate Doxygen documents for the API, type:
+
+    make docs
+
 
 Configuration properties are documented in
 [CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)

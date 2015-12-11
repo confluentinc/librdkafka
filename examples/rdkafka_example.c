@@ -55,6 +55,13 @@ static 	enum {
 	OUTPUT_RAW,
 } output = OUTPUT_HEXDUMP;
 
+/* Partition's at EOF state array */
+int *part_eof = NULL;
+/* Number of partitions that has reached EOF */
+int part_eof_cnt = 0;
+/* Threshold level (partitions at EOF) before exiting */
+int part_eof_thres = 0;
+
 static void stop (int sig) {
 	run = 0;
 	fclose(stdin); /* abort fgets() */
@@ -142,8 +149,15 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 			       rd_kafka_topic_name(rkmessage->rkt),
 			       rkmessage->partition, rkmessage->offset);
 
-			if (exit_eof)
-				run = 0;
+			if (exit_eof) {
+				if (!part_eof[rkmessage->partition]) {
+					part_eof[rkmessage->partition] = 1;
+					part_eof_cnt++;
+
+					if (part_eof_cnt >= part_eof_thres)
+						run = 0;
+				}
+			}
 
 			return;
 		}
@@ -255,6 +269,10 @@ int main (int argc, char **argv) {
 	int opt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
+	rd_kafka_resp_err_t err;
+	rd_kafka_queue_t *rkqu;
+	const rd_kafka_metadata_t *metadata;
+	int i;
 	char errstr[512];
 	int64_t start_offset = 0;
         int report_offsets = 0;
@@ -623,10 +641,77 @@ int main (int argc, char **argv) {
 		/* Create topic */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
-		/* Start consuming */
-		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
-			fprintf(stderr, "%% Failed to start consuming: %s\n",
-				rd_kafka_err2str(rd_kafka_errno2err(errno)));
+		/* Query broker for topic + partition information. */
+		if ((err = rd_kafka_metadata(rk, 0, rkt, &metadata, 5000))) {
+			fprintf(stderr, "%% Failed to query metadata for topic %s: %s",
+				rd_kafka_topic_name(rkt), rd_kafka_err2str(err));
+			exit(1);
+		}
+
+		/* Error handling */
+		if (metadata->topic_cnt == 0) {
+			fprintf(stderr, "%% No such topic in cluster: %s",
+				rd_kafka_topic_name(rkt));
+			exit(1);
+		}
+
+		if ((err = metadata->topics[0].err)) {
+			fprintf(stderr, "%% Topic %s error: %s",
+				rd_kafka_topic_name(rkt),
+				rd_kafka_err2str(err));
+			exit(1);
+		}
+
+		if (metadata->topics[0].partition_cnt == 0) {
+			fprintf(stderr, "Topic %s has no partitions",
+				rd_kafka_topic_name(rkt));
+			exit(1);
+		}
+
+		/* If Exit-at-EOF is enabled, set up array to track EOF
+		 * state for each partition. */
+		if (exit_eof) {
+			part_eof = calloc(sizeof(*part_eof),
+					  metadata->topics[0].partition_cnt);
+
+			if (partition != RD_KAFKA_PARTITION_UA)
+				part_eof_thres = 1;
+			else
+				part_eof_thres = metadata->topics[0].partition_cnt;
+		}
+
+		/* Create a shared queue that combines messages from
+		 * all wanted partitions. */
+		rkqu = rd_kafka_queue_new(rk);
+
+		/* Start consuming from all wanted partitions. */
+		for (i = 0 ; i < metadata->topics[0].partition_cnt ; i++) {
+			/* If -p <part> was specified: skip unwanted partitions */
+			if (partition != RD_KAFKA_PARTITION_UA &&
+			    partition != metadata->topics[0].partitions[i].id)
+				continue;
+
+			/* Start consuming */
+			if (rd_kafka_consume_start_queue(rkt,
+							 metadata->topics[0].partitions[i].id,
+							 start_offset,
+							 rkqu) == -1) {
+				fprintf(stderr, "%% Failed to start consuming: %s\n",
+					rd_kafka_err2str(rd_kafka_errno2err(errno)));
+				exit(1);
+			}
+
+			if (partition != RD_KAFKA_PARTITION_UA)
+				break;
+		}
+
+		if (partition != RD_KAFKA_PARTITION_UA &&
+		    i == metadata->topics[0].partition_cnt) {
+			fprintf(stderr, "%% Topic %s (with partitions 0..%i): "
+				"partition %i does not exist",
+				rd_kafka_topic_name(rkt),
+				metadata->topics[0].partition_cnt-1,
+				partition);
 			exit(1);
 		}
 
@@ -640,7 +725,7 @@ int main (int argc, char **argv) {
 			/* Consume single message.
 			 * See rdkafka_performance.c for high speed
 			 * consuming of messages. */
-			rkmessage = rd_kafka_consume(rkt, partition, 1000);
+			rkmessage = rd_kafka_consume_queue(rkqu, 1000);
 			if (!rkmessage) /* timeout */
 				continue;
 
@@ -663,7 +748,17 @@ int main (int argc, char **argv) {
 		}
 
 		/* Stop consuming */
-		rd_kafka_consume_stop(rkt, partition);
+		for (i = 0 ; i < metadata->topics[0].partition_cnt ; i++) {
+			/* If -p <part> was specified: skip unwanted partitions */
+			if (partition != RD_KAFKA_PARTITION_UA &&
+			    partition != metadata->topics[0].partitions[i].id)
+				continue;
+
+			rd_kafka_consume_stop(rkt, metadata->topics[0].partitions[i].id);
+		}
+
+		/* Destroy shared queue */
+		rd_kafka_queue_destroy(rkqu);
 
                 while (rd_kafka_outq_len(rk) > 0)
                         rd_kafka_poll(rk, 10);

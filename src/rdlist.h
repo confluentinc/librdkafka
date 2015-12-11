@@ -144,3 +144,10 @@ static __inline RD_UNUSED int rd_list_cnt (const rd_list_t *rl) {
  */
 void *rd_list_find (const rd_list_t *rl, const void *match,
                     int (*cmp) (const void *, const void *));
+
+
+
+/**
+ * Debugging: Print list to stdout.
+ */
+void rd_list_dump (const char *what, const rd_list_t *rl);

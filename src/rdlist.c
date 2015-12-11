@@ -30,7 +30,7 @@
 #include "rdlist.h"
 
 
-static RD_UNUSED void rd_list_dump (const char *what, const rd_list_t *rl) {
+void rd_list_dump (const char *what, const rd_list_t *rl) {
         int i;
         printf("%s: (rd_list_t*)%p cnt %d, size %d, elems %p:\n",
                what, rl, rl->rl_cnt, rl->rl_size, rl->rl_elems);
@@ -122,7 +122,8 @@ void rd_list_clear (rd_list_t *rl) {
 
 
 void rd_list_destroy (rd_list_t *rl, void (*free_cb) (void *)) {
-	if (free_cb)
+
+	if (!free_cb)
 		free_cb = rl->rl_free_cb;
 
         if (rl->rl_elems) {

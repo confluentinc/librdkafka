@@ -203,8 +203,9 @@ rd_kafka_subscribe (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
-        rko->rko_payload = rd_kafka_topic_partition_list_copy(topics);
-        rko->rko_free_cb = (void *)rd_kafka_topic_partition_list_destroy;
+        rd_kafka_op_payload_set(rko,
+                                rd_kafka_topic_partition_list_copy(topics),
+                                (void *)rd_kafka_topic_partition_list_destroy);
 
         return rd_kafka_op_err_destroy(
                 rd_kafka_op_req(&rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
@@ -221,13 +222,11 @@ rd_kafka_assign (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
-	if (partitions && partitions->cnt > 0) {
-		rko->rko_payload =
-			rd_kafka_topic_partition_list_copy(partitions);
-		rko->rko_free_cb =
-			(void *)rd_kafka_topic_partition_list_destroy;
-		rko->rko_flags |= RD_KAFKA_OP_F_FREE;
-	}
+	if (partitions && partitions->cnt > 0)
+                rd_kafka_op_payload_set(
+                        rko,
+                        rd_kafka_topic_partition_list_copy(partitions),
+			(void *)rd_kafka_topic_partition_list_destroy);
 
         return rd_kafka_op_err_destroy(
                 rd_kafka_op_req(&rkcg->rkcg_ops, rko, RD_POLL_INFINITE));

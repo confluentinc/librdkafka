@@ -784,7 +784,8 @@ void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
                                            rd_kafka_toppar_keep(rktp));
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
-        rko->rko_payload = part;
+        rd_kafka_op_payload_set(rko, part,
+                                (void*)rd_kafka_topic_partition_list_destroy);
         rko->rko_replyq = replyq;
         rd_kafka_q_keep(replyq);
         rko->rko_version = rktp->rktp_op_version;

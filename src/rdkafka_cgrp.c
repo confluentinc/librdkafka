@@ -596,9 +596,9 @@ rd_kafka_cgrp_offsets_fetch (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb,
 
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
 
-	rko->rko_payload = rd_kafka_topic_partition_list_copy(offsets);
-	rko->rko_flags |= RD_KAFKA_OP_F_FREE;
-	rko->rko_free_cb = (void *)rd_kafka_topic_partition_list_destroy;
+        rd_kafka_op_payload_set(rko,
+                                rd_kafka_topic_partition_list_copy(offsets),
+                                (void *)rd_kafka_topic_partition_list_destroy);
 
         rd_kafka_q_keep(replyq);
         rko->rko_replyq  = replyq;
@@ -698,7 +698,7 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 /**
  * Handler of OffsetCommit response (after parsing).
  *
- * Function takes ownership of 'offsets'.
+ * @warning Function takes ownership of 'offsets'.
  */
 static void
 rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
@@ -711,6 +711,7 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WAIT_COMMIT;
 
 	rd_kafka_offset_commit_cb_op(rkcg->rkcg_rk, err, offsets);
+        offsets = NULL; /* Ownership delegated to commit_cb_op */
 
         if (rd_kafka_cgrp_try_terminate(rkcg))
                 return; /* terminated */
@@ -724,6 +725,8 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
  * Commit a list of offsets.
  * Reuse the orignating 'rko' for the async reply.
  * 'rko->rko_payload' must be set to 'offsets' (or NULL for no-op)
+ *
+ * Might alter \p offsets but does not hang on to it after return.
  */
 static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
                                           rd_kafka_broker_t *rkb,
@@ -774,6 +777,7 @@ static void rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg) {
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
 			     "Group \"%s\": no valid offsets to commit",
 			     rkcg->rkcg_group_id->str);
+                /* Takes ownership of 'offsets' */
 		rd_kafka_cgrp_handle_OffsetCommit(rkcg,
 						  RD_KAFKA_RESP_ERR__NO_OFFSET,
 						  offsets);
@@ -782,7 +786,8 @@ static void rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg) {
 
         /* Create op to hold the response */
         rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT);
-        rko->rko_payload = offsets;
+        rd_kafka_op_payload_set(rko, offsets,
+                                (void *)rd_kafka_topic_partition_list_destroy);
         rko->rko_replyq = &rkcg->rkcg_ops;
         rd_kafka_q_keep(rko->rko_replyq);
 
@@ -1315,9 +1320,14 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                          * if NULL it will default to the current assignment. */
                         if (!rko->rko_payload && rkcg->rkcg_assignment) {
 				int valid_offset_cnt;
-                                rko->rko_payload =
+
+                                rd_kafka_op_payload_set(
+                                        rko,
                                         rd_kafka_topic_partition_list_copy(
-                                                rkcg->rkcg_assignment);
+                                                rkcg->rkcg_assignment),
+                                        (void *)
+                                        rd_kafka_topic_partition_list_destroy);
+
 				valid_offset_cnt =
 					rd_kafka_topic_partition_list_set_offsets(
 						rkcg->rkcg_rk,
@@ -1353,6 +1363,9 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                                 rkcg, rko->rko_err,
                                 (rd_kafka_topic_partition_list_t *)
                                 rko->rko_payload);
+                        /* handle_OffsetCommit() takes ownership of
+                         * the offsets list. */
+                        rko->rko_payload = NULL;
                         break;
 
                 case RD_KAFKA_OP_COORD_QUERY:

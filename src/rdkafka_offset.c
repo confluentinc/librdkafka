@@ -358,10 +358,9 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
 	rko->rko_err = err;
-	rko->rko_payload = offsets;
 	rd_kafka_assert(NULL, offsets->cnt > 0);
-	rko->rko_flags |= RD_KAFKA_OP_F_FREE;
-	rko->rko_free_cb =(void *)rd_kafka_topic_partition_list_destroy;
+        rd_kafka_op_payload_set(rko, offsets,
+                                (void *)rd_kafka_topic_partition_list_destroy);
 	rd_kafka_q_enq(&rk->rk_rep, rko);
 }
 
@@ -502,7 +501,9 @@ rd_kafka_commit0 (rd_kafka_t *rk,
                 rd_kafka_q_keep(rko->rko_replyq);
 
         if (offsets)
-                rko->rko_payload = rd_kafka_topic_partition_list_copy(offsets);
+                rd_kafka_op_payload_set(
+                        rko, rd_kafka_topic_partition_list_copy(offsets),
+                        (void *)rd_kafka_topic_partition_list_destroy);
 
         rd_kafka_q_enq(&rkcg->rkcg_ops, rko);
 

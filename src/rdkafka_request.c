@@ -468,10 +468,7 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_broker_t *rkb,
 
         rko_reply = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH|RD_KAFKA_OP_REPLY);
         rko_reply->rko_version = rko->rko_version;
-        rko_reply->rko_payload = offsets;
-	rko_reply->rko_flags |= RD_KAFKA_OP_F_FREE;
-	rko_reply->rko_free_cb = (void *)rd_kafka_topic_partition_list_destroy;
-        rko->rko_payload = NULL;
+        rd_kafka_op_payload_move(rko_reply, rko); /* move 'offsets' */
 
         rd_kafka_handle_OffsetFetch(rkb, err, rkbuf, request, offsets);
 

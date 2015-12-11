@@ -165,6 +165,21 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type);
 rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig);
 void rd_kafka_op_payload_move (rd_kafka_op_t *dst, rd_kafka_op_t *src);
 
+/**
+ * Sets the op payload to \p payload and if \p free_cb is set also
+ * assigns it as the free callback as well as sets the RD_KAFKA_OP_F_FREE flag.
+ */
+static RD_UNUSED void rd_kafka_op_payload_set (rd_kafka_op_t *rko,
+                                               void *payload,
+                                               void (*free_cb) (void *)) {
+        rko->rko_payload = payload;
+        if (free_cb) {
+                rko->rko_flags |= RD_KAFKA_OP_F_FREE;
+                rko->rko_free_cb = free_cb;
+        }
+}
+
+
 void rd_kafka_op_app_reply2 (rd_kafka_t *rk, rd_kafka_op_t *rko);
 void rd_kafka_op_app_reply (rd_kafka_q_t *rkq,
                             rd_kafka_op_type_t type,

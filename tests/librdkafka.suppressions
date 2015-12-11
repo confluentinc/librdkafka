@@ -258,3 +258,31 @@
    Helgrind:Race
    fun:thrd_detach
 }
+
+
+# cyrus libsasl2 global/once memory "leaks"
+{
+   leak_sasl_global_init1
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:sasl_client_init
+}
+{
+   leak_sasl_global_init6
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   ...
+   fun:sasl_client_init
+}
+
+{
+   leak_sasl_dlopen
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:?alloc
+   ...
+   fun:_dl_catch_error
+}

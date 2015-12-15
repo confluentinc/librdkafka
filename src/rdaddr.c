@@ -152,6 +152,7 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 	struct addrinfo *ais, *ai;
 	char *node, *svc;
 	int r;
+	int check_r;
 	int cnt = 0;
 	rd_sockaddr_list_t *rsal;
 
@@ -165,10 +166,11 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 		
 	if ((r = getaddrinfo(node, defsvc, &hints, &ais))) {
 #ifdef EAI_SYSTEM
-		if (r == EAI_SYSTEM)
+		check_r = (r == EAI_SYSTEM);
 #else
-		if (0)
+		check_r = 0;
 #endif
+		if (check_r)
 			*errstr = rd_strerror(errno);
 		else {
 #ifdef _MSC_VER

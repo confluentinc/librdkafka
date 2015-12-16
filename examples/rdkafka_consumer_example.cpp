@@ -214,8 +214,14 @@ int main (int argc, char **argv) {
   ExampleRebalanceCb ex_rebalance_cb;
   conf->set("rebalance_cb", &ex_rebalance_cb, errstr);
 
-  while ((opt = getopt(argc, argv, "b:z:qd:eX:AM:f:qv")) != -1) {
+  while ((opt = getopt(argc, argv, "g:b:z:qd:eX:AM:f:qv")) != -1) {
     switch (opt) {
+    case 'g':
+      if (conf->set("group.id",  optarg, errstr) != RdKafka::Conf::CONF_OK) {
+        std::cerr << errstr << std::endl;
+        exit(1);
+      }
+      break;
     case 'b':
       brokers = optarg;
       break;
@@ -302,11 +308,12 @@ int main (int argc, char **argv) {
   if (topics.empty() || optind != argc) {
   usage:
     fprintf(stderr,
-            "Usage: %s -X group.id=<groupname> [options] topic1 topic2..\n"
+            "Usage: %s -g <group-id> [options] topic1 topic2..\n"
             "\n"
             "librdkafka version %s (0x%08x)\n"
             "\n"
             " Options:\n"
+            "  -g <group-id>   Consumer group id\n"
             "  -b <brokers>    Broker address (localhost:9092)\n"
             "  -z <codec>      Enable compression:\n"
             "                  none|gzip|snappy\n"
@@ -325,12 +332,6 @@ int main (int argc, char **argv) {
             "                     ccb - use consume_callback\n"
             "  -q              Quiet / Decrease verbosity\n"
             "  -v              Increase verbosity\n"
-            "\n"
-            " In Consumer mode:\n"
-            "  writes fetched messages to stdout\n"
-            " In Producer mode:\n"
-            "  reads messages from stdin and sends to broker\n"
-            "\n"
             "\n"
             "\n",
 	    argv[0],

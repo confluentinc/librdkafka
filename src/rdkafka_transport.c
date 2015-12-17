@@ -970,6 +970,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
                                 rd_strerror(socket_errno));
 		} else if (r != 0) {
 			/* Connect failed */
+                        errno = r;
 			rd_snprintf(errstr, sizeof(errstr),
 				    "Connect to %s failed: %s",
                                     rd_sockaddr2str(rkb->rkb_addr_last,

@@ -118,6 +118,7 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_consume_callback_queue(NULL, 0, NULL, NULL);
                 rd_kafka_seek(NULL, 0, 0, 0);
                 rd_kafka_yield(NULL);
+                rd_kafka_mem_free(NULL, NULL);
 
 		/* KafkaConsumer API */
 		rd_kafka_subscribe(NULL, NULL);

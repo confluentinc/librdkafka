@@ -75,8 +75,9 @@ int main_0005_order (int argc, char **argv) {
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
 	char msg[128];
-	int msgcnt = 100000;
+	int msgcnt = 50000;
 	int i;
+        test_timing_t t_produce, t_delivery;
 
 	test_conf_init(&conf, &topic_conf, 10);
 
@@ -97,7 +98,8 @@ int main_0005_order (int argc, char **argv) {
 		TEST_FAIL("Failed to create topic: %s\n",
 			  rd_strerror(errno));
 
-	/* Produce a message */
+	/* Produce messages */
+        TIMING_START(&t_produce, "PRODUCE");
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
 		*msgidp = i;
@@ -108,12 +110,14 @@ int main_0005_order (int argc, char **argv) {
 			TEST_FAIL("Failed to produce message #%i: %s\n",
 				  i, rd_strerror(errno));
 	}
-
+        TIMING_STOP(&t_produce);
 	TEST_SAY("Produced %i messages, waiting for deliveries\n", msgcnt);
 
-	/* Wait for messages to time out */
+	/* Wait for messages to be delivered */
+        TIMING_START(&t_delivery, "DELIVERY");
 	while (rd_kafka_outq_len(rk) > 0)
 		rd_kafka_poll(rk, 50);
+        TIMING_STOP(&t_delivery);
 
 	if (fails)
 		TEST_FAIL("%i failures, see previous errors", fails);

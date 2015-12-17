@@ -15,21 +15,16 @@ OBJS	 += test.o
 %.test: ../src/librdkafka.a test.o %.cpp
 	$(CXX) $(CPPFLAGS) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka++ -lrdkafka $(LIBS)
 
-#all: $(TESTS0)
-#	for i in $^ ; do \
-#	 LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh $$i || exit 1 ; \
-#	done
-
 all: $(BIN) run_par
-	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh -p $(BIN)
+	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh -p ./$(BIN)
 
 run_par:
 	@echo "Running tests in parallel"
-	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh -p $(BIN)
+	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh -p ./$(BIN)
 
 run_seq:
 	@echo "Running tests sequentially"
-	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh $(BIN)
+	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh ./$(BIN)
 
 build: $(BIN)
 

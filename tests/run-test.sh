@@ -53,27 +53,27 @@ for mode in $MODES; do
 	    valgrind $VALGRIND_ARGS --leak-check=full --show-leak-kinds=all \
 		     --track-origins=yes \
 		     $SUPP $GEN_SUPP \
-		./$TEST $ARGS
+		$TEST $ARGS
 	    RET=$?
 	    ;;
 	helgrind)
 	    valgrind $VALGRIND_ARGS --tool=helgrind \
                      --sim-hints=no-nptl-pthread-stackcache \
                      $SUPP $GEN_SUPP \
-		./$TEST	$ARGS
+		$TEST	$ARGS
 	    RET=$?
 	    ;;
 	drd)
 	    valgrind $VALGRIND_ARGS --tool=drd $SUPP $GEN_SUPP \
-		./$TEST	$ARGS
+		$TEST	$ARGS
 	    RET=$?
 	    ;;
         gdb)
-            gdb $ARGS ./$TEST
+            gdb $ARGS $TEST
             RET=$?
             ;;
 	bare)
-	    ./$TEST $ARGS
+	    $TEST $ARGS
 	    RET=$?
 	    ;;
 	*)

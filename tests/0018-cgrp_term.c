@@ -49,11 +49,14 @@ static void rebalance_cb (rd_kafka_t *rk,
 			  rd_kafka_resp_err_t err,
 			  rd_kafka_topic_partition_list_t *partitions,
 			  void *opaque) {
-	
+        char *memberid = rd_kafka_memberid(rk);
 
 	TEST_SAY("%s: MemberId \"%s\": Consumer group rebalanced: %s\n",
-		 rd_kafka_name(rk), rd_kafka_memberid(rk),
-		 rd_kafka_err2str(err));
+		 rd_kafka_name(rk), memberid, rd_kafka_err2str(err));
+
+        if (memberid)
+                free(memberid);
+
 	test_print_partition_list(partitions);
 
 	switch (err)
@@ -158,7 +161,7 @@ int main_0018_cgrp_term (int argc, char **argv) {
 	/* Fill in topic subscription set */
 	topics = rd_kafka_topic_partition_list_new(1);
 	rd_kafka_topic_partition_list_add(topics, topic, -1);
-	
+
 	/* Create consumers and start subscription */
 	for (i = 0 ; i < _CONS_CNT ; i++) {
 		rk_c[i] = test_create_consumer(topic/*group_id*/,
@@ -176,6 +179,10 @@ int main_0018_cgrp_term (int argc, char **argv) {
 		if (err)
 			TEST_FAIL("subscribe: %s\n", rd_kafka_err2str(err));
 	}
+
+        rd_kafka_topic_conf_destroy(default_topic_conf);
+
+        rd_kafka_topic_partition_list_destroy(topics);
 
 
 	/* Wait for both consumers to get an assignment */

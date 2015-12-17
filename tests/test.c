@@ -742,7 +742,7 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 	TEST_SAY("%s: consume_msgs: %s [%"PRId32"]: expect msg #%d..%d "
 		 "at offset %"PRId64"\n",
 		 what, rd_kafka_topic_name(rkt), partition,
-		 exp_msg_base, exp_cnt, offset);
+		 exp_msg_base, exp_msg_base+exp_cnt, offset);
 
 	if (offset != TEST_NO_SEEK) {
 		rd_kafka_resp_err_t err;

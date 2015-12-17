@@ -50,6 +50,7 @@ static int  tests_run_in_parallel = 0;
 static int  tests_running_cnt = 0;
 const RD_TLS char *test_curr = NULL;
 RD_TLS int64_t test_start = 0;
+double test_timeout_multiplier  = 1.0;
 
 int  test_session_timeout_ms = 6000;
 
@@ -175,7 +176,8 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		val = t+1;
 
                 if (!strcmp(name, "test.timeout.multiplier")) {
-                        timeout = (int)((float)timeout * strtod(val, NULL));
+                        test_timeout_multiplier = strtod(val, NULL);
+                        timeout = (int)((float)timeout * test_timeout_multiplier;
                         res = RD_KAFKA_CONF_OK;
                 } else if (!strcmp(name, "test.topic.prefix")) {
 					rd_snprintf(test_topic_prefix, sizeof(test_topic_prefix),

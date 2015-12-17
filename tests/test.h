@@ -29,7 +29,10 @@ extern int test_seed;
 extern const RD_TLS char *test_curr;
 extern RD_TLS int64_t test_start;
 
+extern double test_timeout_multiplier;
 extern int  test_session_timeout_ms; /* Group session timeout */
+
+#define tmout_multip(msecs)   ((int)(((double)msecs) * test_timeout_multiplier))
 
 
 #define TEST_FAIL(...) do {					\

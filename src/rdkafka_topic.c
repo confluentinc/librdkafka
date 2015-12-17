@@ -371,18 +371,19 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 	if (likely(rkt->rkt_partition_cnt == partition_cnt))
 		return 0; /* No change in partition count */
 
-	if (unlikely(rkt->rkt_partition_cnt != 0))
-		rd_kafka_log(rk, LOG_NOTICE, "PARTCNT",
-			     "Topic %s partition count changed "
-			     "from %"PRId32" to %"PRId32,
-			     rkt->rkt_topic->str,
-			     rkt->rkt_partition_cnt, partition_cnt);
-	else
-		rd_kafka_dbg(rk, TOPIC, "PARTCNT",
-			     "Topic %s partition count changed "
-			     "from %"PRId32" to %"PRId32,
-			     rkt->rkt_topic->str,
-			     rkt->rkt_partition_cnt, partition_cnt);
+        if (unlikely(rkt->rkt_partition_cnt != 0 &&
+                     !rd_kafka_terminating(rkt->rkt_rk)))
+                rd_kafka_log(rk, LOG_NOTICE, "PARTCNT",
+                             "Topic %s partition count changed "
+                             "from %"PRId32" to %"PRId32,
+                             rkt->rkt_topic->str,
+                             rkt->rkt_partition_cnt, partition_cnt);
+        else
+                rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+                             "Topic %s partition count changed "
+                             "from %"PRId32" to %"PRId32,
+                             rkt->rkt_topic->str,
+                             rkt->rkt_partition_cnt, partition_cnt);
 
 
 	/* Create and assign new partition list */

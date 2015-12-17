@@ -379,7 +379,8 @@ int rd_kafka_buf_retry (rd_kafka_broker_t *rkb,
         /* Request was sent on 'rkb' thread, but was received on the
          * current broker thread (because cgrp or rktp migrated).
          * We dont retry on the previous broker 'rkb' in this case. */
-        if (unlikely(!thrd_is_current(rkb->rkb_thread)))
+        if (unlikely(!thrd_is_current(rkb->rkb_thread) ||
+                     rd_kafka_terminating(rkb->rkb_rk)))
                 return 0;
 
         switch (err)
@@ -412,9 +413,8 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko) {
         rd_kafka_q_destroy(request->rkbuf_replyq);
         request->rkbuf_replyq = NULL;
 
-        response = request->rkbuf_response; /* May be NULL */
-
         /* Let buf_callback() do destroy()s */
+        response = request->rkbuf_response; /* May be NULL */
         request->rkbuf_response = NULL;
         rko->rko_rkbuf = NULL;
 
@@ -438,23 +438,37 @@ void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
         if (unlikely(err && rd_kafka_buf_retry(rkb, err, request)))
                 return;
 
+        rd_kafka_assert(NULL, !request->rkbuf_response);
+        request->rkbuf_response = response;
+
         if (request->rkbuf_replyq) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
 
-                request->rkbuf_response = response;
-
+                /* Increment refcnt since rko_rkbuf will be decref:ed
+                 * if q_enq() fails and we dont want the rkbuf gone in that
+                 * case. */
+                rd_kafka_buf_keep(request);
                 rko->rko_rkbuf = request;
 
                 rko->rko_err = err;
-                rd_kafka_q_enq(request->rkbuf_replyq, rko);
-        } else {
-                if (request->rkbuf_cb)
-                        request->rkbuf_cb(rkb, err, response, request,
-                                          request->rkbuf_opaque);
-                if (response)
-                        rd_kafka_buf_destroy(response);
-                rd_kafka_buf_destroy(request);
+                if (rd_kafka_q_enq(request->rkbuf_replyq, rko)) {
+                        /* Enqueued */
+                        rd_kafka_buf_destroy(request); /* from keep above */
+                        return;
+                }
+
+                /* Enqueue failed because replyq is disabled,
+                 * fall through to let callback clean up. */
+                err = RD_KAFKA_RESP_ERR__DESTROY;
+                rd_kafka_q_destroy(request->rkbuf_replyq);
+                request->rkbuf_replyq = NULL;
         }
+
+        if (request->rkbuf_cb)
+                request->rkbuf_cb(rkb, err, response, request,
+                                  request->rkbuf_opaque);
+
+        rd_kafka_buf_destroy(request);
 }
 
 

@@ -66,26 +66,31 @@ void rd_kafka_q_fwd_set (rd_kafka_q_t *srcq, rd_kafka_q_t *destq);
 
 /**
  * Enqueue the 'rko' op at the tail of the queue 'rkq'.
+ * Returns 1 if op was enqueued or 0 if queue is disabled and
+ * there was no replyq to enqueue on.
  *
  * Locality: any thread.
  */
 static __inline RD_UNUSED
-void rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
+int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         rd_kafka_assert(NULL, rd_refcnt_get(&rkq->rkq_refcnt) > 0);
 
 
 	mtx_lock(&rkq->rkq_lock);
         if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
+                int r;
+
                 /* Queue has been disabled, reply to and fail the rko. */
                 mtx_unlock(&rkq->rkq_lock);
 
-                if (rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY,
+                r = rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY,
                                       rko->rko_payload, rko->rko_len,
-                                      rko->rko_free_cb))
+                                      rko->rko_free_cb);
+                if (r)
                         rko->rko_payload = NULL; /* Now owned by reply op */
 
                 rd_kafka_op_destroy(rko);
-                return;
+                return r;
         }
 	if (!rkq->rkq_fwdq) {
 		TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
@@ -96,6 +101,8 @@ void rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 		rd_kafka_q_enq(rkq->rkq_fwdq, rko);
 
 	mtx_unlock(&rkq->rkq_lock);
+
+        return 1;
 }
 
 

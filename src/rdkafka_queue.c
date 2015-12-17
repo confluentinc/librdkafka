@@ -77,7 +77,6 @@ void rd_kafka_q_fwd_set (rd_kafka_q_t *srcq, rd_kafka_q_t *destq) {
 		 * This is an irreversible operation. */
 		if (rd_atomic32_get(&srcq->rkq_qlen) > 0)
 			rd_kafka_q_concat(destq, srcq);
-                rd_kafka_assert(NULL, rd_atomic32_get(&srcq->rkq_qlen) == 0);
 	}
 	mtx_unlock(&srcq->rkq_lock);
 }

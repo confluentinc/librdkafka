@@ -328,10 +328,9 @@ int rd_kafka_op_reply (rd_kafka_op_t *rko_orig,
 		rko->rko_flags |= RD_KAFKA_OP_F_FREE;
         rko->rko_version = rko_orig->rko_version;
 
-        rd_kafka_q_enq(rko_orig->rko_replyq, rko);
-
-        return 1;
+        return rd_kafka_q_enq(rko_orig->rko_replyq, rko);
 }
+
 
 /**
  * Send request to queue, wait for response.
@@ -341,10 +340,6 @@ rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
                                  rd_kafka_op_t *rko,
                                  int timeout_ms) {
         rd_kafka_op_t *reply;
-
-        /* Bump refcount for destination, destination will decrease refcount
-         * after posting reply. */
-        rd_kafka_q_keep(recvq);
 
         /* Indicate to destination where to send reply. */
         rko->rko_replyq = recvq;

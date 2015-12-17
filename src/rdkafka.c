@@ -961,7 +961,7 @@ static void rd_kafka_global_init (void) {
 rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			  char *errstr, size_t errstr_size) {
 	rd_kafka_t *rk;
-	static int rkid = 0;
+	static rd_atomic32_t rkid;
 #ifndef _MSC_VER
         sigset_t newset, oldset;
 #endif
@@ -1017,7 +1017,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	rd_snprintf(rk->rk_name, sizeof(rk->rk_name), "%s#%s-%i",
                     rk->rk_conf.client_id_str, rd_kafka_type2str(rk->rk_type),
-                    rkid++);
+                    rd_atomic32_add(&rkid, 1));
 
 	/* Construct clientid kafka string */
 	rk->rk_conf.client_id = rd_kafkap_str_new(rk->rk_conf.client_id_str,-1);

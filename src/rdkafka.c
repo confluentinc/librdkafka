@@ -1717,6 +1717,15 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                 break;
 
 	case RD_KAFKA_OP_FETCH:
+                /* Check if message is outdated */
+                if (rko->rko_version) {
+                        rd_kafka_toppar_t *rktp =
+                                rd_kafka_toppar_s2i(rko->rko_rktp);
+                        if (rko->rko_version <
+                            rd_atomic32_get(&rktp->rktp_version))
+                                break; /* Outdated, discard. */
+                }
+
                 if (rk->rk_conf.consume_cb)
                         rk->rk_conf.consume_cb(rd_kafka_message_get(rko),
                                                rk->rk_conf.opaque);

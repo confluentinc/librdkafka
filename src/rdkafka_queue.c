@@ -249,11 +249,21 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
 	mtx_lock(&rkq->rkq_lock);
 
 	if (!rkq->rkq_fwdq) {
-		while (!(rko = rd_kafka_op_filter(rkq,
-                                                  TAILQ_FIRST(&rkq->rkq_q))) &&
-		       timeout_ms != RD_POLL_NOWAIT) {
+                do {
+                        /* Filter out outdated ops */
+                        while ((rko = TAILQ_FIRST(&rkq->rkq_q)) &&
+                               !(rko = rd_kafka_op_filter(rkq, rko)))
+                                ;
 
+                        if (rko) {
+                                /* Proper versioned op */
+                                rd_kafka_q_deq0(rkq, rko);
+                                break;
+                        }
+
+                        /* No op, wait for one */
 			if (timeout_ms != RD_POLL_INFINITE) {
+                                rd_ts_t pre = rd_clock();
 				if (cnd_timedwait_ms(&rkq->rkq_cond,
                                                      &rkq->rkq_lock,
                                                      timeout_ms) ==
@@ -261,13 +271,13 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
 					mtx_unlock(&rkq->rkq_lock);
 					return NULL;
 				}
-				timeout_ms = 0;
+                                /* Remove spent time */
+				timeout_ms -= (rd_clock()-pre) / 1000;
+                                if (timeout_ms < 0)
+                                        timeout_ms = RD_POLL_NOWAIT;
 			} else
 				cnd_wait(&rkq->rkq_cond, &rkq->rkq_lock);
-		}
-
-		if (rko)
-			rd_kafka_q_deq0(rkq, rko);
+		} while (timeout_ms != RD_POLL_NOWAIT);
 
                 mtx_unlock(&rkq->rkq_lock);
 

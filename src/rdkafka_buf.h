@@ -194,6 +194,12 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
 /**
  * Response handling callback.
+ *
+ * NOTE: Callbacks must check for 'err == RD_KAFKA_RESP_ERR__DESTROY'
+ *       which indicates that some entity is terminating (rd_kafka_t, broker,
+ *       toppar, queue, etc) and the callback may not be called in the
+ *       correct thread. In this case the callback must perform just
+ *       the most minimal cleanup and dont trigger any other operations.
  */
 typedef void (rd_kafka_resp_cb_t) (rd_kafka_broker_t *rkb,
                                    rd_kafka_resp_err_t err,

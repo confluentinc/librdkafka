@@ -73,6 +73,7 @@ static int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                 /* Request metadata information update */
                 actions |= RD_KAFKA_ERR_ACTION_REFRESH;
                 break;
+        case RD_KAFKA_RESP_ERR__DESTROY:
         default:
                 actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
                 break;
@@ -464,6 +465,12 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_broker_t *rkb,
         rd_kafka_op_t *rko_reply;
         rd_kafka_topic_partition_list_t *offsets = rko->rko_payload;
 
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* Termination, quick cleanup. */
+                rd_kafka_op_destroy(rko);
+                return;
+        }
+
         rd_kafka_assert(NULL, offsets != NULL);
 
         rko_reply = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH|RD_KAFKA_OP_REPLY);
@@ -621,7 +628,8 @@ err:
         rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
 
 
-        if ((replyq = rko_orig->rko_replyq)) {
+        if (ErrorCode != RD_KAFKA_RESP_ERR__DESTROY &&
+            (replyq = rko_orig->rko_replyq)) {
                 rd_kafka_op_t *rko_reply = rd_kafka_op_new_reply(rko_orig);
                 rd_kafka_op_payload_move(rko_reply, rko_orig);
                 rko_reply->rko_err = ErrorCode;
@@ -878,6 +886,9 @@ err:
                      "SyncGroup response: %s (%d bytes of MemberState data)",
                      rd_kafka_err2str(ErrorCode),
                      RD_KAFKAP_BYTES_LEN(&MemberState));
+
+        if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY)
+                return; /* Termination */
 
         rd_kafka_cgrp_handle_SyncGroup(rkcg, ErrorCode, &MemberState);
 }
@@ -1151,6 +1162,9 @@ err:
         }
 
         if (ErrorCode) {
+                if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY)
+                        return; /* Termination */
+
                 if (ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID)
                         rd_kafka_cgrp_set_member_id(rkcg, "");
                 rd_kafka_cgrp_set_join_state(rkcg,
@@ -1300,7 +1314,7 @@ err:
                 return;
         }
 
-        if (ErrorCode != 0)
+        if (ErrorCode != 0 && ErrorCode != RD_KAFKA_RESP_ERR__DESTROY)
 		rd_kafka_cgrp_handle_heartbeat_error(rkcg, ErrorCode);
 }
 
@@ -1600,10 +1614,14 @@ void rd_kafka_op_handle_Metadata (rd_kafka_broker_t *rkb,
 
 	if (unlikely(err)) {
 		/* FIXME: handle error */
-                if (err != RD_KAFKA_RESP_ERR__DESTROY)
-                        rd_rkb_log(rkb, LOG_WARNING, "METADATA",
-                                   "Metadata request failed: %s",
-                                   rd_kafka_err2str(err));
+                if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                        rd_kafka_op_destroy(rko);
+                        return; /* Terminating */
+                }
+
+                rd_rkb_log(rkb, LOG_WARNING, "METADATA",
+                           "Metadata request failed: %s",
+                           rd_kafka_err2str(err));
 	} else {
 		md = rd_kafka_parse_Metadata(rkb,
                                              rko->rko_rkt ?
@@ -1642,6 +1660,9 @@ static void rd_kafka_assignor_handle_Metadata (rd_kafka_broker_t *rkb,
                                                void *opaque) {
         rd_kafka_cgrp_t *rkcg = opaque;
         struct rd_kafka_metadata *md = NULL;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                return; /* Terminating */
 
         if (!err) {
                 md = rd_kafka_parse_Metadata(rkb, NULL, rkbuf);

@@ -70,8 +70,10 @@ typedef enum {
         RD_KAFKA_OP_OFFSET_FETCH, /* Broker -> broker thread: fetch offsets
                                    * for topic. */
 
-        RD_KAFKA_OP_PARTITION_JOIN,  /* * -> broker thread: add toppar to cgrp */
-        RD_KAFKA_OP_PARTITION_LEAVE, /* * -> broker thread: remove toppar from cgrp */
+        RD_KAFKA_OP_PARTITION_JOIN,  /* * -> cgrp op:   add toppar to cgrp
+                                      * * -> broker op: add toppar to broker */
+        RD_KAFKA_OP_PARTITION_LEAVE, /* * -> cgrp op:   remove toppar from cgrp
+                                      * * -> broker op: remove toppar from rkb*/
         RD_KAFKA_OP_REBALANCE,       /* broker thread -> app:
                                       * group rebalance */
         RD_KAFKA_OP_STOP,            /* For generic use */

@@ -34,11 +34,31 @@
 extern const char *rd_kafka_fetch_states[];
 
 
+/**
+ * @brief Offset statistics
+ */
+struct offset_stats {
+        int64_t fetch_offset; /**< Next offset to fetch */
+        int64_t eof_offset;   /**< Last offset we reported EOF for */
+        int64_t hi_offset;    /**< Current broker hi offset */
+};
+
+/**
+ * @brief Reset offset_stats struct to default values
+ */
+static RD_UNUSED void rd_kafka_offset_stats_reset (struct offset_stats *offs) {
+        offs->fetch_offset = 0;
+        offs->eof_offset = -1;
+        offs->hi_offset = -1;
+}
+
+
 
 /**
  * Topic + Partition combination
  */
 struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
+        int rktp_removed;
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rklink;  /* rd_kafka_t link */
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rkblink; /* rd_kafka_broker_t link*/
         CIRCLEQ_ENTRY(rd_kafka_toppar_s) rktp_fetchlink; /* rkb_fetch_toppars */
@@ -49,7 +69,9 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 	int32_t            rktp_partition;
         //LOCK: toppar_lock() + topic_wrlock()
         //LOCK: .. in partition_available()
-	rd_kafka_broker_t *rktp_leader;  /* Leader broker */
+	rd_kafka_broker_t *rktp_leader;      /**< Current leader broker */
+        rd_kafka_broker_t *rktp_next_leader; /**< Next leader broker after
+                                              *   async migration op. */
 	rd_refcnt_t        rktp_refcnt;
 	mtx_t              rktp_lock;
 
@@ -72,9 +94,8 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 
         rd_atomic32_t      rktp_version;         /* Latest op version.
                                                   * Authoritative (app thread)*/
-        int32_t            rktp_op_version;      /* Latest op version.
-                                                  * Slave (broker thread)*/
-        int32_t            rktp_fetch_version;   /* Op version of curr fetch */
+        int32_t            rktp_fetch_version;   /* Op version of curr fetch.
+                                                    (broker thread) */
 
 	enum {
 		RD_KAFKA_TOPPAR_FETCH_NONE = 0,
@@ -90,7 +111,9 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 
 
 	int64_t            rktp_query_offset;    /* Offset to query broker for*/
-	int64_t            rktp_next_offset;     /* Next offset to fetch */
+	int64_t            rktp_next_offset;     /* Next offset to start
+                                                  * fetching from.
+                                                  * Locality: toppar thread */
 	int64_t            rktp_app_offset;      /* Last offset delivered to
 						  * application */
 	int64_t            rktp_stored_offset;   /* Last stored offset, but
@@ -100,15 +123,27 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 	int64_t            rktp_committed_offset; /* Last committed offset */
 	rd_ts_t            rktp_ts_committed_offset; /* Timestamp of last
                                                       * commit */
-	int64_t            rktp_eof_offset;      /* The last offset we reported
-						  * EOF for. */
-        int64_t            rktp_lo_offset;       /* Current broker low offset */
-        int64_t            rktp_hi_offset;       /* Current broker hi offset */
+
+        struct offset_stats rktp_offsets; /* Current offsets.
+                                           * Locality: broker thread*/
+        struct offset_stats rktp_offsets_fin; /* Finalized offset for stats.
+                                               * Updated periodically
+                                               * by broker thread.
+                                               * Locks: toppar_lock */
+        int64_t rktp_lo_offset;              /* Current broker low offset.
+                                              * This is outside of the stats
+                                              * struct due to this field
+                                              * being populated by the
+                                              * toppar thread rather than
+                                              * the broker thread.
+                                              * Locality: toppar thread
+                                              * Locks: toppar_lock */
+
         rd_ts_t            rktp_ts_offset_lag;
 
 	char              *rktp_offset_path;     /* Path to offset file */
 	FILE              *rktp_offset_fp;       /* Offset file pointer */
-        rd_kafka_cgrp_t   *rktp_cgrp;       /* Belongs to this cgrp */
+        rd_kafka_cgrp_t   *rktp_cgrp;            /* Belongs to this cgrp */
 
         int                rktp_assigned;   /* Partition in cgrp assignment */
 
@@ -193,6 +228,7 @@ static const char *rd_kafka_toppar_name (const rd_kafka_toppar_t *rktp) {
 shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
                                               int32_t partition);
 void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp);
+void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
                                       int fetch_state);
@@ -238,26 +274,21 @@ void rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp, int64_t offset,
 
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 				      rd_kafka_broker_t *rkb);
-int32_t rd_kafka_toppar_op (rd_kafka_toppar_t *rktp, rd_kafka_op_type_t type,
-                            int new_barrier,
-                            int64_t offset, rd_kafka_cgrp_t *rkcg,
-                            rd_kafka_q_t *replyq);
+void rd_kafka_toppar_op (rd_kafka_toppar_t *rktp, rd_kafka_op_type_t type,
+                         int64_t offset, rd_kafka_cgrp_t *rkcg,
+                         rd_kafka_q_t *replyq);
 
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start (rd_kafka_toppar_t *rktp,
                                                     int64_t offset,
                                                     rd_kafka_q_t *fwdq,
-                                                    rd_kafka_q_t *replyq,
-                                                    int32_t *versionp);
+                                                    rd_kafka_q_t *replyq);
 
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_stop (rd_kafka_toppar_t *rktp,
-                                                   rd_kafka_q_t *replyq,
-                                                   int32_t *versionp);
+                                                   rd_kafka_q_t *replyq);
 
 rd_kafka_resp_err_t rd_kafka_toppar_op_seek (rd_kafka_toppar_t *rktp,
                                              int64_t offset,
-                                             rd_kafka_q_t *replyq,
-                                             int32_t *versionp);
-
+                                             rd_kafka_q_t *replyq);
 
 void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
                                     rd_kafka_resp_err_t err);
@@ -324,6 +355,6 @@ int rd_kafka_topic_partition_list_set_offsets (
         rd_kafka_topic_partition_list_t *rktparlist,
         int from_rktp, int64_t def_value, int is_commit);
 
-rd_kafka_toppar_t *
+shptr_rd_kafka_toppar_t *
 rd_kafka_topic_partition_list_get_toppar (
         rd_kafka_t *rk, rd_kafka_topic_partition_list_t *rktparlist, int idx);

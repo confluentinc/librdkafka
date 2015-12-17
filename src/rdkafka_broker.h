@@ -49,9 +49,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 	rd_kafka_q_t        rkb_ops;
 
-        /* Protects rkb_toppars and rkb_fetch_toppars */
-        rwlock_t            rkb_toppar_lock;
-
         /* Toppars handled by this broker */
 	TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;
 	int                 rkb_toppar_cnt;
@@ -69,15 +66,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 	rd_ts_t             rkb_ts_fetch_backoff;
 	int                 rkb_fetching;
-
-#define rd_kafka_broker_toppars_rdlock(rkb) \
-	rwlock_rdlock(&(rkb)->rkb_toppar_lock)
-#define rd_kafka_broker_toppars_wrlock(rkb) \
-	rwlock_wrlock(&(rkb)->rkb_toppar_lock)
-#define rd_kafka_broker_toppars_rdunlock(rkb) \
-	rwlock_rdunlock(&(rkb)->rkb_toppar_lock)
-#define rd_kafka_broker_toppars_wrunlock(rkb) \
-	rwlock_wrunlock(&(rkb)->rkb_toppar_lock)
 
 	enum {
 		RD_KAFKA_BROKER_STATE_INIT,

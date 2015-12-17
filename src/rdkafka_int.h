@@ -133,8 +133,6 @@ struct rd_kafka_s {
 	TAILQ_HEAD(, rd_kafka_itopic_s)  rk_topics;
 	int              rk_topic_cnt;
 
-	TAILQ_HEAD(, rd_kafka_toppar_s)  rk_toppars;
-
         struct rd_kafka_cgrp_s *rk_cgrp;
 
 	char             rk_name[128];

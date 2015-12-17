@@ -369,6 +369,9 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 
 /**
  * Called when a broker commit is done.
+ *
+ * Locality: toppar handler thread
+ * Locks: none
  */
 static void rd_kafka_offset_broker_commit_op_cb (rd_kafka_t *rk,
                                                  rd_kafka_op_t *rko) {
@@ -403,8 +406,10 @@ static void rd_kafka_offset_broker_commit_op_cb (rd_kafka_t *rk,
 
         rktp->rktp_committing_offset = 0;
 
+        rd_kafka_toppar_lock(rktp);
         if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_OFFSET_STORE_STOPPING)
                 rd_kafka_offset_store_term(rktp, rko->rko_err);
+        rd_kafka_toppar_unlock(rktp);
 
         rd_kafka_toppar_destroy(s_rktp);
 }
@@ -886,6 +891,8 @@ static void rd_kafka_offset_broker_init (rd_kafka_toppar_t *rktp) {
 /**
  * Terminates toppar's offset store, this is the finalizing step after
  * offset_store_stop().
+ *
+ * Locks: rd_kafka_toppar_lock() MUST be held.
  */
 void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp,
                                  rd_kafka_resp_err_t err) {
@@ -929,6 +936,8 @@ void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp,
  *
  * The offset layer will call rd_kafka_offset_store_term() when
  * the offset management has been fully stopped for this partition.
+ *
+ * Locks: rd_kafka_toppar_lock() MUST be held.
  */
 rd_kafka_resp_err_t rd_kafka_offset_store_stop (rd_kafka_toppar_t *rktp) {
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -945,14 +954,15 @@ rd_kafka_resp_err_t rd_kafka_offset_store_stop (rd_kafka_toppar_t *rktp) {
                      rktp->rktp_rkt->rkt_topic->str,
 		     rktp->rktp_partition,
 		     rktp->rktp_stored_offset, rktp->rktp_committed_offset,
-                     rktp->rktp_eof_offset);
+                     rktp->rktp_offsets_fin.eof_offset);
 
         /* Store end offset for empty partitions */
         if (((!rd_kafka_is_simple_consumer(rktp->rktp_rkt->rkt_rk) &&
               rktp->rktp_rkt->rkt_rk->rk_conf.enable_auto_commit)
              || rktp->rktp_rkt->rkt_conf.auto_commit) &&
-            rktp->rktp_stored_offset == -1 && rktp->rktp_eof_offset > 0)
-                rd_kafka_offset_store0(rktp, rktp->rktp_eof_offset,
+            rktp->rktp_stored_offset == -1 &&
+            rktp->rktp_offsets_fin.eof_offset > 0)
+                rd_kafka_offset_store0(rktp, rktp->rktp_offsets_fin.eof_offset,
                                        0/*no lock*/);
 
         /* Commit offset to backing store.

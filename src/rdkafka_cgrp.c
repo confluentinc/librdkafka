@@ -653,8 +653,8 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
 				rd_kafka_offset_store0(rktp, rktpar->offset, 1);
 
 			rd_kafka_toppar_op_fetch_start(rktp, rktpar->offset,
-                                                       &rkcg->rkcg_q,
-                                                       NULL, NULL);
+                                                       &rkcg->rkcg_q, NULL);
+
                         rktp->rktp_assigned = 1;
 			rkcg->rkcg_assigned_cnt++;
                 }
@@ -911,12 +911,13 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
                 rktp = rd_kafka_toppar_s2i(s_rktp);
 
                 if (rktp->rktp_assigned) {
-                        rd_kafka_toppar_op_fetch_stop(rktp, &rkcg->rkcg_ops,
-                                                      NULL);
+                        rd_kafka_toppar_op_fetch_stop(rktp, &rkcg->rkcg_ops);
                         rkcg->rkcg_wait_unassign_cnt++;
                 }
 
+                rd_kafka_toppar_lock(rktp);
                 rd_kafka_toppar_desired_del(rktp);
+                rd_kafka_toppar_unlock(rktp);
         }
 
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_assignment);

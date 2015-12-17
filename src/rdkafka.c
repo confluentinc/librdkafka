@@ -584,14 +584,18 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 	size_t size = *sizep;
 	int of = *ofp;
         int64_t consumer_lag = -1;
+        struct offset_stats offs;
 
+        /* Grab a copy of the latest finalized offset stats */
+        rd_kafka_toppar_lock(rktp);
+        offs = rktp->rktp_offsets_fin;
+        rd_kafka_toppar_unlock(rktp);
 
-        if (rktp->rktp_hi_offset != -1 && rktp->rktp_next_offset > 0) {
-                if (rktp->rktp_next_offset > rktp->rktp_hi_offset)
+        if (offs.hi_offset != -1 && offs.fetch_offset > 0) {
+                if (offs.fetch_offset > offs.hi_offset)
                         consumer_lag = 0;
                 else
-                        consumer_lag = rktp->rktp_hi_offset -
-                                rktp->rktp_next_offset;
+                        consumer_lag = offs.hi_offset - offs.fetch_offset;
         }
 
 	_st_printf("%s\"%"PRId32"\": { "
@@ -635,14 +639,14 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rd_kafka_q_size(&rktp->rktp_fetchq),
 		   rd_kafka_fetch_states[rktp->rktp_fetch_state],
 		   rktp->rktp_query_offset,
-		   rktp->rktp_next_offset,
+                   offs.fetch_offset,
 		   rktp->rktp_app_offset,
 		   rktp->rktp_stored_offset,
 		   rktp->rktp_committed_offset, /* FIXME: issue #80 */
 		   rktp->rktp_committed_offset,
-		   rktp->rktp_eof_offset,
+                   offs.eof_offset,
 		   rktp->rktp_lo_offset,
-		   rktp->rktp_hi_offset,
+		   offs.hi_offset,
                    consumer_lag,
                    rd_atomic64_get(&rktp->rktp_c.tx_msgs),
 		   rd_atomic64_get(&rktp->rktp_c.tx_bytes),
@@ -764,7 +768,6 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   throttle.ra_v.sum,
 			   throttle.ra_v.cnt);
 
-		rd_kafka_broker_toppars_rdlock(rkb);
 		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
 			_st_printf("%s\"%.*s\": { "
 				   "\"topic\":\"%.*s\", "
@@ -774,7 +777,6 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 				   rktp->rktp_partition);
 		}
-		rd_kafka_broker_toppars_rdunlock(rkb);
 
 		rd_kafka_broker_unlock(rkb);
 
@@ -1004,7 +1006,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
-	TAILQ_INIT(&rk->rk_toppars);
         rd_kafka_timers_init(&rk->rk_timers, rk);
 
 
@@ -1224,7 +1225,7 @@ int rd_kafka_consume_start0 (rd_kafka_itopic_t *rkt, int32_t partition,
         }
 
         rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_s2i(s_rktp), offset,
-                                      rkq, NULL, NULL);
+                                      rkq, NULL);
 
         rd_kafka_toppar_destroy(s_rktp);
 
@@ -1257,12 +1258,14 @@ static RD_UNUSED int rd_kafka_consume_stop0 (rd_kafka_toppar_t *rktp) {
         rd_kafka_resp_err_t err;
 
         rd_kafka_topic_wrlock(rktp->rktp_rkt);
+        rd_kafka_toppar_lock(rktp);
 	rd_kafka_toppar_desired_del(rktp);
+        rd_kafka_toppar_unlock(rktp);
 	rd_kafka_topic_wrunlock(rktp->rktp_rkt);
 
         tmpq = rd_kafka_q_new(rktp->rktp_rkt->rkt_rk);
 
-        rd_kafka_toppar_op_fetch_stop(rktp, tmpq, NULL);
+        rd_kafka_toppar_op_fetch_stop(rktp, tmpq);
 
         /* Synchronisation: Wait for stop reply from broker thread */
         err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
@@ -1306,7 +1309,6 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
         shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
-        int32_t version;
         rd_kafka_q_t *tmpq = NULL;
         rd_kafka_resp_err_t err;
 
@@ -1327,16 +1329,12 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
                 tmpq = rd_kafka_q_new(rkt->rkt_rk);
 
         rktp = rd_kafka_toppar_s2i(s_rktp);
-        if ((err = rd_kafka_toppar_op_seek(rktp, offset, tmpq, &version))) {
+        if ((err = rd_kafka_toppar_op_seek(rktp, offset, tmpq))) {
                 if (tmpq)
                         rd_kafka_q_destroy(tmpq);
                 rd_kafka_toppar_destroy(s_rktp);
                 return err;
         }
-
-
-        /* Purge receive queue of older messages (prior to seek) */
-	rd_kafka_q_purge_toppar_version(&rktp->rktp_fetchq, rktp, version);
 
 	rd_kafka_toppar_destroy(s_rktp);
 
@@ -1511,13 +1509,12 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 	rd_kafka_op_t *rko;
 	rd_kafka_message_t *rkmessage = NULL;
 
-        while ((rko = rd_kafka_q_pop(rkq, timeout_ms, 0/*FIXME:version*/))) {
+        while ((rko = rd_kafka_q_pop(rkq, timeout_ms, 0))) {
                 if (rd_kafka_poll_cb(rk, rko, _Q_CB_CONSUMER, NULL)) {
                         /* Message was handled by callback. */
                         rd_kafka_op_destroy(rko);
                         continue;
                 }
-
                 break;
         }
 
@@ -1903,12 +1900,9 @@ static void rd_kafka_broker_dump (FILE *fp, rd_kafka_broker_t *rkb, int locks) {
                 rd_atomic64_get(&rkb->rkb_c.tx_retries));
 
         fprintf(fp, "  %i toppars:\n", rkb->rkb_toppar_cnt);
-        if (locks)
-                rd_kafka_broker_toppars_rdlock(rkb);
         TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink)
                 rd_kafka_toppar_dump(fp, "   ", rktp);
         if (locks) {
-                rd_kafka_broker_toppars_rdunlock(rkb);
                 rd_kafka_broker_unlock(rkb);
         }
 }

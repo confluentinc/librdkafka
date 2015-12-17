@@ -116,8 +116,7 @@ rd_kafka_resp_err_t rd_kafka_subscribe_partition (rd_kafka_t *rk,
 
                 err = rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_s2i(s_rktp),
                                                      RD_KAFKA_OFFSET_STORED,
-                                                     &rkcg->rkcg_q,
-                                                     tmpq, NULL);
+                                                     &rkcg->rkcg_q, tmpq);
                 rd_kafka_toppar_destroy(s_rktp);
         }
 
@@ -137,6 +136,7 @@ rd_kafka_resp_err_t rd_kafka_unsubscribe_partition (rd_kafka_t *rk,
                                                     int32_t partition) {
         rd_kafka_cgrp_t *rkcg;
         shptr_rd_kafka_toppar_t *s_rktp;
+        rd_kafka_toppar_t *rktp;
         rd_kafka_itopic_t *rkt;
         shptr_rd_kafka_itopic_t *s_rkt;
         int is_regex = *topic == '^';
@@ -164,12 +164,14 @@ rd_kafka_resp_err_t rd_kafka_unsubscribe_partition (rd_kafka_t *rk,
         if (unlikely(!s_rktp))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 
-        rd_kafka_toppar_desired_del(rd_kafka_toppar_s2i(s_rktp));
+        rktp = rd_kafka_toppar_s2i(s_rktp);
+        rd_kafka_toppar_lock(rktp);
+        rd_kafka_toppar_desired_del(rktp);
+        rd_kafka_toppar_unlock(rktp);
 
         tmpq = rd_kafka_q_new(rkt->rkt_rk);
 
-        err = rd_kafka_toppar_op_fetch_stop(rd_kafka_toppar_s2i(s_rktp), tmpq,
-                                            NULL);
+        err = rd_kafka_toppar_op_fetch_stop(rd_kafka_toppar_s2i(s_rktp), tmpq);
         if (!err)
                 err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
 

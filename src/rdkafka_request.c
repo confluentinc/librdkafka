@@ -172,9 +172,11 @@ err:
         actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
+                rd_kafka_toppar_lock(rktp);
                 rd_kafka_broker_metadata_req(rktp->rktp_leader, 0,
                                              rktp->rktp_rkt, NULL,
                                              "Offset request failed");
+                rd_kafka_toppar_unlock(rktp);
                 /* Schedule a retry */
                 rd_kafka_buf_keep(request);
                 rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
@@ -217,13 +219,17 @@ void rd_kafka_toppar_handle_Offset (rd_kafka_broker_t *rkb,
                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                            rktp->rktp_partition, rd_kafka_err2str(err));
 
-                /* Keep querying, but back off a bit to avoid busy looping. */
-		rd_kafka_assert(NULL, !*"start timer here?");
-		// was backoff 500ms
+                if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                        /* Termination, quick cleanup. */
 
+                        /* from request.opaque */
+                        rd_kafka_toppar_destroy(s_rktp);
+
+                        return;
+                }
 		rd_kafka_toppar_lock(rktp);
-
-		rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
+                rd_kafka_offset_reset(rktp, rktp->rktp_query_offset,
+                                      err, "failed to query logical offset");
 		rd_kafka_toppar_unlock(rktp);
 
                 /* Signal error back to application,
@@ -1414,9 +1420,11 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         int   msh_of  = 0;
         int   msh_size;
         struct rd_kafka_metadata *md = NULL;
-        int rkb_namelen = strlen(rkb->rkb_name)+1;
+        int rkb_namelen;
         const int log_decode_errors = 1;
 
+        rd_kafka_broker_lock(rkb);
+        rkb_namelen = strlen(rkb->rkb_name)+1;
         /* We assume that the marshalled representation is
          * no more than 4 times larger than the wire representation. */
         msh_size = sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_len * 4);
@@ -1426,6 +1434,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         md->orig_broker_id = rkb->rkb_nodeid;
         _MSH_ALLOC(rkbuf, md->orig_broker_name, rkb_namelen);
         memcpy(md->orig_broker_name, rkb->rkb_name, rkb_namelen);
+        rd_kafka_broker_unlock(rkb);
 
 	/* Read Brokers */
 	rd_kafka_buf_read_i32a(rkbuf, md->broker_cnt);

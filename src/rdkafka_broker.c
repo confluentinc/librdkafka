@@ -399,8 +399,8 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 		return -1;
 	}
 
-	(void)rd_atomic64_add(&rkb->rkb_c.tx_bytes, r);
-	(void)rd_atomic64_add(&rkb->rkb_c.tx, 1);
+	rd_atomic64_add(&rkb->rkb_c.tx_bytes, r);
+	rd_atomic64_add(&rkb->rkb_c.tx, 1);
 	return r;
 }
 

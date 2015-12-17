@@ -56,7 +56,6 @@ typedef struct rd_kafka_cgrp_s {
         const rd_kafkap_str_t    *rkcg_group_id;
         rd_kafkap_str_t          *rkcg_member_id;  /* Last assigned MemberId */
         const rd_kafkap_str_t    *rkcg_client_id;
-        rd_refcnt_t       rkcg_refcnt;
 
         enum {
                 /* Init state */

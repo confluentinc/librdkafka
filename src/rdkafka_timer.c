@@ -237,6 +237,8 @@ void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us) {
 void rd_kafka_timers_destroy (rd_kafka_timers_t *rkts) {
         rd_kafka_timer_t *rtmr;
 
+        rd_kafka_assert(NULL, TAILQ_EMPTY(&rkts->rkts_timers));
+
         while ((rtmr = TAILQ_FIRST(&rkts->rkts_timers)))
                 rd_kafka_timer_stop(rkts, rtmr, 0);
         rd_kafka_assert(rkts->rkts_rk, TAILQ_EMPTY(&rkts->rkts_timers));

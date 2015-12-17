@@ -1291,7 +1291,7 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 						  "Failed to fetch offsets: %s",
 						  rd_kafka_err2str(rko->
 								   rko_err));
-				
+
 				// FIXME: What do we do here?
                                 break;
                         }

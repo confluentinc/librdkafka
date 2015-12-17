@@ -454,9 +454,9 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
         rd_kafka_wrunlock(rk);
 
 #ifndef _MSC_VER
-                /* Interrupt main kafka thread to speed up termination. */
-                if (rk->rk_conf.term_sig)
-			pthread_kill(thrd, rk->rk_conf.term_sig);
+        /* Interrupt main kafka thread to speed up termination. */
+        if (rk->rk_conf.term_sig)
+                pthread_kill(thrd, rk->rk_conf.term_sig);
 #endif
 
         if (!blocking)
@@ -1950,11 +1950,10 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
         fprintf(fp, " cgrp:\n");
         if (rk->rk_cgrp) {
                 rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
-                fprintf(fp, "  %.*s in state %s, flags 0x%x, refcnt %i\n",
+                fprintf(fp, "  %.*s in state %s, flags 0x%x\n",
                         RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                         rd_kafka_cgrp_state_names[rkcg->rkcg_state],
-                        rkcg->rkcg_flags,
-                        rd_atomic32_get(&rkcg->rkcg_refcnt));
+                        rkcg->rkcg_flags);
                 fprintf(fp, "   coord_id %"PRId32", managing broker %s\n",
                         rkcg->rkcg_coord_id,
                         rkcg->rkcg_rkb ? rkcg->rkcg_rkb->rkb_name : "(none)");

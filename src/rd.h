@@ -185,17 +185,93 @@ void *rd_memdup (const void *src, size_t size);
 /**
  * Generic refcnt interface
  */
+#define RD_REFCNT_USE_LOCKS 1
+
+#ifdef RD_REFCNT_USE_LOCKS
+typedef struct rd_refcnt_t {
+        mtx_t lock;
+        int v;
+} rd_refcnt_t;
+#else
 typedef rd_atomic32_t rd_refcnt_t;
+#endif
+
+#ifdef RD_REFCNT_USE_LOCKS
+static __inline RD_UNUSED int rd_refcnt_init (rd_refcnt_t *R, int v) {
+        int r;
+        mtx_init(&R->lock, mtx_plain);
+        mtx_lock(&R->lock);
+        r = R->v = v;
+        mtx_unlock(&R->lock);
+        return r;
+}
+#else
+#define rd_refcnt_init(R,v)  rd_atomic32_set(R, v)
+#endif
+
+#ifdef RD_REFCNT_USE_LOCKS
+static __inline RD_UNUSED void rd_refcnt_destroy (rd_refcnt_t *R) {
+        mtx_lock(&R->lock);
+        assert(R->v == 0);
+        mtx_unlock(&R->lock);
+
+        mtx_destroy(&R->lock);
+}
+#else
+#define rd_refcnt_destroy(R) do { } while (0)
+#endif
+
+
+#ifdef RD_REFCNT_USE_LOCKS
+static __inline RD_UNUSED int rd_refcnt_set (rd_refcnt_t *R, int v) {
+        int r;
+        mtx_lock(&R->lock);
+        r = R->v = v;
+        mtx_unlock(&R->lock);
+        return r;
+}
+#else
+#define rd_refcnt_set(R,v)  rd_atomic32_set(R, v)
+#endif
+
+
+#ifdef RD_REFCNT_USE_LOCKS
+static __inline RD_UNUSED int rd_refcnt_add0 (rd_refcnt_t *R) {
+        int r;
+        mtx_lock(&R->lock);
+        r = ++(R->v);
+        mtx_unlock(&R->lock);
+        return r;
+}
+#else
 #define rd_refcnt_add0(R)  rd_atomic32_add(R, 1)
+#endif
 
 static __inline RD_UNUSED int rd_refcnt_sub0 (rd_refcnt_t *R) {
-        int r = rd_atomic32_sub(R, 1);
+        int r;
+#ifdef RD_REFCNT_USE_LOCKS
+        mtx_lock(&R->lock);
+        r = --(R->v);
+        mtx_unlock(&R->lock);
+#else
+        r = rd_atomic32_sub(R, 1);
+#endif
         if (r < 0)
                 assert(!*"refcnt sub-zero");
         return r;
 }
 
+#ifdef RD_REFCNT_USE_LOCKS
+static __inline RD_UNUSED int rd_refcnt_get (rd_refcnt_t *R) {
+        int r;
+        mtx_lock(&R->lock);
+        r = R->v;
+        mtx_unlock(&R->lock);
+        return r;
+}
+#else
 #define rd_refcnt_get(R)   rd_atomic32_get(R)
+#endif
 
 /**
  * A wrapper for decreasing refcount and calling a destroy function

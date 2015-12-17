@@ -109,6 +109,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);
 	mtx_init(&rktp->rktp_lock, mtx_plain);
 
+        rd_refcnt_init(&rktp->rktp_refcnt, 0);
 	rd_kafka_q_init(&rktp->rktp_fetchq, rkt->rkt_rk);
         rd_kafka_q_init(&rktp->rktp_ops, rkt->rkt_rk);
         rd_atomic32_set(&rktp->rktp_version, 1);
@@ -165,6 +166,9 @@ void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp) {
 	rd_kafka_topic_destroy0(rktp->rktp_s_rkt);
 
 	mtx_destroy(&rktp->rktp_lock);
+
+        rd_refcnt_destroy(&rktp->rktp_refcnt);
+
 	rd_free(rktp);
 }
 

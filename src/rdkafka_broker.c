@@ -3252,6 +3252,8 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 	rwlock_destroy(&rkb->rkb_toppar_lock);
 	mtx_destroy(&rkb->rkb_lock);
 
+        rd_refcnt_destroy(&rkb->rkb_refcnt);
+
 	rd_free(rkb);
 }
 
@@ -3312,7 +3314,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_q_init(&rkb->rkb_ops, rk);
 	rd_avg_init(&rkb->rkb_avg_rtt, RD_AVG_GAUGE);
 	rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE);
-	rd_kafka_broker_keep(rkb); /* Caller's refcount */
+        rd_refcnt_init(&rkb->rkb_refcnt, 0);
+        rd_kafka_broker_keep(rkb); /* Caller's refcount */
 
 	/* Set next intervalled metadata refresh, offset by a random
 	 * value to avoid all brokers to be queried simultaneously. */

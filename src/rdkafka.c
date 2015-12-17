@@ -1868,7 +1868,7 @@ static void rd_kafka_toppar_dump (FILE *fp, const char *indent,
 		"%s msgq:      %i messages\n"
 		"%s xmit_msgq: %i messages\n"
 		"%s total:     %"PRIu64" messages, %"PRIu64" bytes\n",
-		indent, rd_atomic32_get(&rktp->rktp_refcnt),
+		indent, rd_refcnt_get(&rktp->rktp_refcnt),
 		indent, rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
 		indent, rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt),
 		indent, rd_atomic64_get(&rktp->rktp_c.tx_msgs), rd_atomic64_get(&rktp->rktp_c.tx_bytes));
@@ -1886,7 +1886,7 @@ static void rd_kafka_broker_dump (FILE *fp, rd_kafka_broker_t *rkb, int locks) {
                 rkb->rkb_ts_state ?
                 (float)(rd_clock() - rkb->rkb_ts_state) / 1000000.0f :
                 0.0f);
-        fprintf(fp, "  refcnt %i\n", rd_atomic32_get(&rkb->rkb_refcnt));
+        fprintf(fp, "  refcnt %i\n", rd_refcnt_get(&rkb->rkb_refcnt));
         fprintf(fp, "  outbuf_cnt: %i waitresp_cnt: %i\n",
                 rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt),
                 rd_atomic32_get(&rkb->rkb_waitresps.rkbq_cnt));
@@ -1973,7 +1973,7 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
 			RD_KAFKAP_STR_PR(rkt->rkt_topic),
 			rkt->rkt_partition_cnt,
                         rd_kafka_topic_state_names[rkt->rkt_state],
-                        rd_atomic32_get(&rkt->rkt_refcnt));
+                        rd_refcnt_get(&rkt->rkt_refcnt));
 		if (rkt->rkt_ua)
 			rd_kafka_toppar_dump(fp, "   ",
                                              rd_kafka_toppar_s2i(rkt->rkt_ua));

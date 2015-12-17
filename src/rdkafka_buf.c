@@ -44,6 +44,8 @@ void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
         if (rkbuf->rkbuf_rkb)
                 rd_kafka_broker_destroy(rkbuf->rkbuf_rkb);
 
+        rd_refcnt_destroy(&rkbuf->rkbuf_refcnt);
+
 	rd_free(rkbuf);
 }
 
@@ -222,7 +224,7 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
 
 	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
 
-	rd_kafka_buf_keep(rkbuf);
+        rd_refcnt_init(&rkbuf->rkbuf_refcnt, 1);
 
 	return rkbuf;
 }
@@ -242,7 +244,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size) {
 
 	rd_kafka_msgq_init(&rkbuf->rkbuf_msgq);
 
-	rd_kafka_buf_keep(rkbuf);
+        rd_refcnt_init(&rkbuf->rkbuf_refcnt, 1);
 
 	return rkbuf;
 }

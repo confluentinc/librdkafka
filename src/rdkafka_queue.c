@@ -23,6 +23,7 @@ void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
 	assert(!rkq->rkq_fwdq);
 	mtx_destroy(&rkq->rkq_lock);
 	cnd_destroy(&rkq->rkq_cond);
+        rd_refcnt_destroy(&rkq->rkq_refcnt);
 
         if (rkq->rkq_flags & RD_KAFKA_Q_F_ALLOCATED)
                 rd_free(rkq);
@@ -36,7 +37,7 @@ void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
 void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk) {
         rd_kafka_q_reset(rkq);
 	rkq->rkq_fwdq   = NULL;
-	rd_atomic32_set(&rkq->rkq_refcnt, 1);
+        rd_refcnt_init(&rkq->rkq_refcnt, 1);
         rkq->rkq_flags  = RD_KAFKA_Q_F_READY;
         rkq->rkq_rk     = rk;
 	mtx_init(&rkq->rkq_lock, mtx_plain);

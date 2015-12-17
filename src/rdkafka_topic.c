@@ -51,7 +51,7 @@ const char *rd_kafka_topic_state_names[] = {
  */
 void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
 
-	rd_kafka_assert(rkt->rkt_rk, rd_atomic32_get(&rkt->rkt_refcnt) == 0);
+	rd_kafka_assert(rkt->rkt_rk, rd_refcnt_get(&rkt->rkt_refcnt) == 0);
 
 	if (rkt->rkt_topic)
 		rd_kafkap_str_destroy(rkt->rkt_topic);
@@ -67,6 +67,7 @@ void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
 	rd_kafka_anyconf_destroy(_RK_TOPIC, &rkt->rkt_conf);
 
 	rwlock_destroy(&rkt->rkt_lock);
+        rd_refcnt_destroy(&rkt->rkt_refcnt);
 
 	rd_free(rkt);
 }
@@ -205,6 +206,8 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));
 
         rd_list_init(&rkt->rkt_desp, 16);
+        rd_refcnt_init(&rkt->rkt_refcnt, 0);
+
         s_rkt = rd_kafka_topic_keep(rkt);
 
 	rwlock_init(&rkt->rkt_lock);

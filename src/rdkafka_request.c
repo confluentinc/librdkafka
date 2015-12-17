@@ -1128,12 +1128,13 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_broker_t *rkb,
                 /* FIXME: What to do if parsing failed for some/all members?
                  *        It is a sign of incompatibility. */
 
-                if (rkcg->rkcg_group_leader.protocol)
-                        rd_free(rkcg->rkcg_group_leader.protocol);
+
+                rd_kafka_cgrp_group_leader_reset(rkcg);
+
                 rkcg->rkcg_group_leader.protocol = RD_KAFKAP_STR_DUP(&Protocol);
+                rd_kafka_assert(NULL, rkcg->rkcg_group_leader.members == NULL);
                 rkcg->rkcg_group_leader.members    = members;
                 rkcg->rkcg_group_leader.member_cnt = sub_cnt;
-
 
                 rd_kafka_cgrp_set_join_state(
 			rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA);

@@ -96,16 +96,9 @@ void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state){
 void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_assignment);
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription);
+        rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_group_leader.members);
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
-        if (rkcg->rkcg_group_leader.protocol)
-                rd_free(rkcg->rkcg_group_leader.protocol);
-        if (rkcg->rkcg_group_leader.members) {
-                int i;
-                for (i = 0 ; i < rkcg->rkcg_group_leader.member_cnt ; i++)
-                        rd_kafka_group_member_clear(&rkcg->rkcg_group_leader.
-                                                    members[i]);
-                rd_free(rkcg->rkcg_group_leader.members);
-        }
+
         rd_kafka_q_destroy(&rkcg->rkcg_q);
         rd_kafka_q_destroy(&rkcg->rkcg_ops);
         rd_kafka_pattern_list_clear(&rkcg->rkcg_whitelist);
@@ -1056,6 +1049,31 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 	}
 }
 
+
+
+/**
+ * Clean up any group-leader related resources.
+ *
+ * Locality: cgrp thread
+ */
+void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg){
+        if (rkcg->rkcg_group_leader.protocol) {
+                rd_free(rkcg->rkcg_group_leader.protocol);
+                rkcg->rkcg_group_leader.protocol = NULL;
+        }
+
+        if (rkcg->rkcg_group_leader.members) {
+                int i;
+
+                for (i = 0 ; i < rkcg->rkcg_group_leader.member_cnt ; i++)
+                        rd_kafka_group_member_clear(&rkcg->rkcg_group_leader.
+                                                    members[i]);
+                rkcg->rkcg_group_leader.member_cnt = 0;
+                rd_free(rkcg->rkcg_group_leader.members);
+                rkcg->rkcg_group_leader.members = NULL;
+        }
+}
+
 /**
  * Remove existing topic subscription.
  */
@@ -1066,6 +1084,11 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
                 rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
                 rkcg->rkcg_subscription = NULL;
         }
+
+        /*
+         * Clean-up group leader duties, if any.
+         */
+        rd_kafka_cgrp_group_leader_reset(rkcg);
 
 	if (leave_group)
 		rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN;

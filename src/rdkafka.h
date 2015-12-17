@@ -1167,7 +1167,8 @@ const char *rd_kafka_name(const rd_kafka_t *rk);
  *
  * @returns An allocated string containing the current broker-assigned group
  *          member id, or NULL if not available.
- *          The application must free the string with \p free()
+ *          The application must free the string with \p free() or
+ *          rd_kafka_mem_free()
  */
 RD_EXPORT
 char *rd_kafka_memberid (const rd_kafka_t *rk);
@@ -1264,6 +1265,23 @@ int rd_kafka_poll(rd_kafka_t *rk, int timeout_ms);
  */
 RD_EXPORT
 void rd_kafka_yield (rd_kafka_t *rk);
+
+
+/**
+ * @brief Free pointer returned by librdkafka
+ *
+ * This is typically an abstraction for the free(3) call and makes sure
+ * the application can use the same memory allocator as librdkafka for
+ * freeing pointers returned by librdkafka.
+ *
+ * In standard setups it is usually not necessary to use this interface
+ * rather than the free(3) functione.
+ *
+ * @remark rd_kafka_mem_free() must only be used for pointers returned by APIs
+ *         that explicitly mention using this function for freeing.
+ */
+RD_EXPORT
+void rd_kafka_mem_free (rd_kafka_t *rk, void *ptr);
 
 
 /**@}*/

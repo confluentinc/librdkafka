@@ -427,7 +427,7 @@ class HandleImpl : virtual public Handle {
 	  char *str = rd_kafka_memberid(rk_);
 	  std::string memberid = str ? str : "";
 	  if (str)
-		  free(str);
+		  rd_kafka_mem_free(rk_, str);
 	  return memberid;
   }
   int poll (int timeout_ms) { return rd_kafka_poll(rk_, timeout_ms); };

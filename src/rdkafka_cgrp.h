@@ -99,6 +99,9 @@ typedef struct rd_kafka_cgrp_s {
                 /* all: waiting for previous assignment to decommission */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN,
 
+                /* all: waiting for application's rebalance_cb to operate */
+                RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB,
+
                 /* all: synchronized, assigned and operational.
                  *      may be an empty assignment. */
                 RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED,

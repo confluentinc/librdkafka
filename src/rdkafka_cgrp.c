@@ -60,6 +60,7 @@ const char *rd_kafka_cgrp_join_state_names[] = {
         "wait-metadata",
         "wait-sync",
         "wait-unassign",
+        "wait-rebalance_cb",
         "assigned"
 };
 
@@ -686,6 +687,9 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 		     rkcg->rkcg_group_id->str,
 		     err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS ?
 		     "revoke":"assign", assignment->cnt);
+
+        rd_kafka_cgrp_set_join_state(
+                rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB);
 
 	rd_kafka_op_app(&rkcg->rkcg_q, RD_KAFKA_OP_REBALANCE,
 			RD_KAFKA_OP_F_FREE, NULL, err,
@@ -1485,6 +1489,9 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg,
                 break;
 
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC:
+                break;
+
+        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB:
                 break;
 
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN:

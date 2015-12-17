@@ -111,8 +111,7 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
 void rd_kafka_log_buf (const rd_kafka_t *rk, int level,
 		       const char *fac, const char *buf) {
 
-	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level ||
-            rd_kafka_terminating((rd_kafka_t *)rk))
+	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level)
 		return;
 
 	rk->rk_conf.log_cb(rk, level, fac, buf);
@@ -125,8 +124,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	unsigned int elen = 0;
         unsigned int of = 0;
 
-	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level ||
-            rd_kafka_terminating((rd_kafka_t *)rk))
+	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level)
 		return;
 
 	if (rk->rk_conf.log_thread_name) {
@@ -448,7 +446,7 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
         thrd_t thrd;
 
-        rd_kafka_dbg(rk, GENERIC, "DESTROY", "Terminating instance");
+        rd_kafka_dbg(rk, ALL, "DESTROY", "Terminating instance");
         rd_kafka_wrlock(rk);
         thrd = rk->rk_thread;
 	rd_atomic32_add(&rk->rk_terminate, 1);
@@ -476,14 +474,19 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 }
 
 
-/* NOTE: Must only be called by application.
- *       librdkafka itself must use rd_kafka_destroy0(). */
+/**
+ * Main destructor for rd_kafka_t
+ *
+ * Locality: rdkafka main thread
+ */
 static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 	rd_kafka_itopic_t *rkt, *rkt_tmp;
 	rd_kafka_broker_t *rkb, *rkb_tmp;
         rd_list_t wait_thrds;
         thrd_t *thrd;
         int i;
+
+        rd_kafka_dbg(rk, ALL, "DESTROY", "Destroy internal");
 
 	/* Brokers pick up on rk_terminate automatically. */
 
@@ -496,6 +499,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
 	rd_kafka_wrlock(rk);
 
+        rd_kafka_dbg(rk, ALL, "DESTROY", "Remove all topics");
 	/* Decommission all topics */
 	TAILQ_FOREACH_SAFE(rkt, &rk->rk_topics, rkt_link, rkt_tmp) {
 		rd_kafka_wrunlock(rk);

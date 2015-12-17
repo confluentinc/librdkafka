@@ -177,7 +177,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 
                 if (!strcmp(name, "test.timeout.multiplier")) {
                         test_timeout_multiplier = strtod(val, NULL);
-                        timeout = (int)((float)timeout * test_timeout_multiplier;
+                        timeout = tmout_multip(timeout*1000);
                         res = RD_KAFKA_CONF_OK;
                 } else if (!strcmp(name, "test.topic.prefix")) {
 					rd_snprintf(test_topic_prefix, sizeof(test_topic_prefix),

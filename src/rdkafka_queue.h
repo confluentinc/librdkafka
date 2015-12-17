@@ -123,7 +123,8 @@ void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 /**
  * Concat all elements of 'srcq' onto tail of 'rkq'.
  * 'rkq' will be be locked (if 'do_lock'==1), but 'srcq' will not.
- * NOTE: 'srcq' is not in a usable state after this call.
+ * NOTE: 'srcq' will be reset.
+is not in a usable state after this call.
  *
  * Locality: any thread.
  */
@@ -134,9 +135,13 @@ void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 		mtx_lock(&rkq->rkq_lock);
 	if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
-		(void)rd_atomic32_add(&rkq->rkq_qlen, rd_atomic32_get(&srcq->rkq_qlen));
-		(void)rd_atomic64_add(&rkq->rkq_qsize, rd_atomic64_get(&srcq->rkq_qsize));
+		rd_atomic32_add(&rkq->rkq_qlen,
+                                rd_atomic32_get(&srcq->rkq_qlen));
+		rd_atomic64_add(&rkq->rkq_qsize,
+                                rd_atomic64_get(&srcq->rkq_qsize));
 		cnd_signal(&rkq->rkq_cond);
+
+                rd_kafka_q_reset(srcq);
 	} else
 		rd_kafka_q_concat0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
 				   srcq->rkq_fwdq ? srcq->rkq_fwdq : srcq,

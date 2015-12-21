@@ -1091,6 +1091,7 @@ int32_t rd_kafka_msg_partitioner_random(const rd_kafka_topic_t *rkt,
  * @returns a \"random\" partition between 0 and partition_cnt - 1 based on
  *          the CRC value of the key
  */
+RD_EXPORT
 int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
 					 const void *key, size_t keylen,
 					 int32_t partition_cnt,

@@ -272,7 +272,7 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
 					return NULL;
 				}
                                 /* Remove spent time */
-				timeout_ms -= (rd_clock()-pre) / 1000;
+				timeout_ms -= (int) (rd_clock()-pre) / 1000;
                                 if (timeout_ms < 0)
                                         timeout_ms = RD_POLL_NOWAIT;
 			} else

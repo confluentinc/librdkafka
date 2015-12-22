@@ -506,7 +506,7 @@ static __inline int rd_kafka_buf_write_str (rd_kafka_buf_t *rkbuf,
                 len = RD_KAFKAP_STR_LEN_NULL;
         else if (len == (size_t)-1)
                 len = strlen(str);
-        r = rd_kafka_buf_write_i16(rkbuf, len);
+        r = rd_kafka_buf_write_i16(rkbuf, (int16_t) len);
         if (str)
                 r = rd_kafka_buf_write(rkbuf, str, len);
         return r;

@@ -57,10 +57,10 @@
     <ClCompile Include="..\..\tests\0015-offset_seeks.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\tests\0016-subscribe_partition.c">
+    <ClCompile Include="..\..\tests\0017-compression.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\tests\0017-compression.c">
+    <ClCompile Include="..\..\tests\0018-cgrp_term.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

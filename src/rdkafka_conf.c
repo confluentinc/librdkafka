@@ -329,7 +329,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	},
 	{ _RK_GLOBAL, "ssl.certificate.location", _RK_C_STR,
 	  _RK(ssl.cert_location),
-	  "Path to certificate file for verifying the broker's key."
+	  "Path to client's public key (PEM) used for authentication."
 	},
 	{ _RK_GLOBAL, "ssl.ca.location", _RK_C_STR,
 	  _RK(ssl.ca_location),

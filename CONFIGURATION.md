@@ -42,7 +42,7 @@ security.protocol                        |  *  |     plaintext | Protocol used t
 ssl.cipher.suites                        |  *  |               | A cipher suite is a named combination of authentication, encryption, MAC and key exchange algorithm used to negotiate the security settings for a network connection using TLS or SSL network protocol. See manual page for `ciphers(1)` and `SSL_CTX_set_cipher_list(3).
 ssl.key.location                         |  *  |               | Path to client's private key (PEM) used for authentication.
 ssl.key.password                         |  *  |               | Private key passphrase
-ssl.certificate.location                 |  *  |               | Path to certificate file for verifying the broker's key.
+ssl.certificate.location                 |  *  |               | Path to client's public key (PEM) used for authentication.
 ssl.ca.location                          |  *  |               | File or directory path to CA certificate(s) for verifying the broker's key.
 sasl.mechanisms                          |  *  |        GSSAPI | Space separated list of eligible SASL mechanisms
 sasl.kerberos.service.name               |  *  |         kafka | Kerberos principal name that Kafka runs as.

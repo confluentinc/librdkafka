@@ -74,7 +74,7 @@ mklove-check:
 	$(CXX) -MD -MP $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 
-lib: $(LIBFILENAME) $(LIBNAME).a
+lib: $(LIBFILENAME) $(LIBNAME).a $(LIBFILENAMELINK)
 
 $(LIBFILENAME): $(OBJS) $(LIBNAME).lds
 	@printf "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)\n"
@@ -84,6 +84,9 @@ $(LIBNAME).a:	$(OBJS)
 	@printf "$(MKL_YELLOW)Creating static library $@$(MKL_CLR_RESET)\n"
 	$(AR) rcs$(ARFLAGS) $@ $(OBJS)
 
+$(LIBFILENAMELINK): $(LIBFILENAME)
+	@printf "$(MKL_YELLOW)Creating $@ symlink$(MKL_CLR_RESET)\n"
+	rm -f "$@" && ln -s "$^" "$@"
 
 $(BIN): $(OBJS)
 	@printf "$(MKL_YELLOW)Creating program $@$(MKL_CLR_RESET)\n"

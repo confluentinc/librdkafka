@@ -48,6 +48,7 @@ docdir?=	$(datarootdir)/doc/$(PKGNAME)
 infodir?=	$(datarootdir)/info
 libdir?=	$(prefix)/lib
 localedir?=	$(datarootdir)/locale
+pkgconfigdir?=	$(libdir)/pkgconfig
 mandir?=	$(datarootdir)/man
 man1dir?=	$(mandir)/man1
 man2dir?=	$(mandir)/man2
@@ -111,6 +112,10 @@ lib-install:
 	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME) ; \
 	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir) ; \
 	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir) ; \
+	[ -f "$(LIBNAME).pc" ] && ( \
+		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) ; \
+		$(INSTALL) $(LIBNAME).pc $$DESTDIR$(pkgconfigdir) \
+	) ; \
 	(cd $$DESTDIR$(libdir) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
 
 lib-uninstall:

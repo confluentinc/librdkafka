@@ -3,7 +3,7 @@
 # Generates pkg-config file for library.
 #
 # Arguments:
-#  libname     (e.g., "rdkafka" for librdkafka)
+#  libname     (e.g., "librdkafka" for librdkafka)
 #  name        (e.g., "The Apache Kafka C/C++ library")
 #  description (e.g., "A full producer and consumer for Apache Kafka 0.8...")
 #  version     (e.g., "1.2.3" or "$VERSION" or "\$VERSION" (for late reference)
@@ -45,6 +45,7 @@ Description: ${MKL__PKG_CONFIG_desc}
 Version: $ver
 Cflags: -I\${includedir}
 Libs: -L\${libdir} -l${MKL__PKG_CONFIG_libname}
+Libs.private: ${LIBS}
 ${MKL__PKG_CONFIG_extra}"
 
     echo "Generated $fname"

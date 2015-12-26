@@ -6,6 +6,8 @@
 #    STR_VERSION_VARIABLE_NAME
 #  [ HEX_VERSION_VARIABLE_NAME ]
 #
+# Note: The version will also be set in MKL_APP_VERSION
+#
 # Example: Set string version in variable named "MYVERSION_STR" and
 #          the hex representation in "MYVERSION"
 #   mkl_require parseversion "$(head -1 VERSION.txt)" MYVERSION_STR MYVERSION
@@ -88,6 +90,6 @@ function checks {
     fi
 
     mkl_allvar_set "parseversion" "$parseversion_strvar" "$orig"
-
+    mkl_allvar_set "parseversion" MKL_APP_VERSION "$orig"
     mkl_check_done "parseversion" "" "cont" "ok" "${!parseversion_strvar}"
 }

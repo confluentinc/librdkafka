@@ -1,6 +1,15 @@
 #!/bin/bash
 #
 
+mkl_meta_set "description" "name"      "librdkafka"
+mkl_meta_set "description" "oneline"   "The Apache Kafka C/C++ library"
+mkl_meta_set "description" "long"      "Full Apache Kafka protocol support, including producer and consumer"
+mkl_meta_set "description" "copyright" "Copyright (c) 2012-2015 Magnus Edenhill"
+
+# Enable generation of pkg-config .pc file
+mkl_mkvar_set "" GEN_PKG_CONFIG y
+
+
 mkl_require cxx
 mkl_require lib
 mkl_require pic
@@ -13,10 +22,6 @@ mkl_require socket
 
 verdef=$(grep '^#define  *RD_KAFKA_VERSION  *0x' src/rdkafka.h | sed 's/^#define  *RD_KAFKA_VERSION  *\(0x[a-f0-9]*\)\.*$/\1/')
 mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
-
-mkl_require gen-pkg-config "rdkafka" "The Apache Kafka C/C++ library" \
-    "Full Apache Kafka 0.8 protocol support, including producer and consumer" \
-    "\$RDKAFKA_VERSION_STR"
 
 mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-code valgrind suppressions" "n"
 

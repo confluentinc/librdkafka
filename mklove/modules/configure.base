@@ -1195,6 +1195,10 @@ function mkl_env_check {
 
 # Run all checks
 function mkl_checks_run {
+    # Set up common variables
+    mkl_allvar_set "" MKL_APP_NAME $(mkl_meta_get description name)
+    mkl_allvar_set "" MKL_APP_DESC_ONELINE "$(mkl_meta_get description oneline)"
+
     # Call checks functions in dependency order
     local mf
     for mf in $MKL_CHECKS ; do
@@ -1479,11 +1483,19 @@ function mkl_require {
 MKL_USAGE="Usage: ./configure [OPTIONS...]
 
  mklove configure script - mklove, not autoconf
- Copyright (c) 2014 Magnus Edenhill - https://github.com/edenhill/mklove
+ Copyright (c) 2014-2015 Magnus Edenhill - https://github.com/edenhill/mklove
 "
 
 function mkl_usage {
     echo "$MKL_USAGE"
+    local name=$(mkl_meta_get description name)
+
+    if [[ ! -z ${name} ]]; then
+	echo " $name - $(mkl_meta_get description oneline)
+ $(mkl_meta_get description copyright)
+"
+    fi
+
     local og
     for og in $MKL_USAGE_GROUPS ; do
         og="MKL_USAGE_GROUP__$og"

@@ -14,6 +14,10 @@ DEPS=		$(OBJS:%.o=%.d)
 MKLOVE_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 TOPDIR = $(MKLOVE_DIR:mklove/=.)
 
+
+# Convert LIBNAME ("libxyz") to "xyz"
+LIBNAME0=$(LIBNAME:lib%=%)
+
 # Silence lousy default ARFLAGS (rv)
 ARFLAGS=
 
@@ -74,7 +78,7 @@ mklove-check:
 	$(CXX) -MD -MP $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 
-lib: $(LIBFILENAME) $(LIBNAME).a $(LIBFILENAMELINK)
+lib: $(LIBFILENAME) $(LIBNAME).a $(LIBFILENAMELINK) lib-gen-pkg-config
 
 $(LIBFILENAME): $(OBJS) $(LIBNAME).lds
 	@printf "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)\n"
@@ -87,6 +91,38 @@ $(LIBNAME).a:	$(OBJS)
 $(LIBFILENAMELINK): $(LIBFILENAME)
 	@printf "$(MKL_YELLOW)Creating $@ symlink$(MKL_CLR_RESET)\n"
 	rm -f "$@" && ln -s "$^" "$@"
+
+
+# pkg-config .pc file definition
+ifeq ($(GEN_PKG_CONFIG),y)
+define _PKG_CONFIG_DEF
+prefix=$(prefix)
+libdir=$(libdir)
+includedir=$(includedir)
+
+Name: $(LIBNAME)
+Description: $(MKL_APP_DESC_ONELINE)
+Version: $(MKL_APP_VERSION)
+Cflags: -I$${includedir}
+Libs: -L$${libdir} -l$(LIBNAME0)
+Libs.private: $(patsubst -L%,,$(LIBS))
+endef
+
+export _PKG_CONFIG_DEF
+
+$(LIBNAME0).pc: ../Makefile.config
+	@printf "$(MKL_YELLOW)Generating pkg-config file $@$(MKL_CLR_RESET)\n"
+	@echo "$$_PKG_CONFIG_DEF" > $@
+
+lib-gen-pkg-config: $(LIBNAME0).pc
+
+lib-clean-pkg-config:
+	rm -f $(LIBNAME0).pc
+else
+lib-gen-pkg-config:
+lib-clean-pkg-config:
+endif
+
 
 $(BIN): $(OBJS)
 	@printf "$(MKL_YELLOW)Creating program $@$(MKL_CLR_RESET)\n"
@@ -115,9 +151,9 @@ lib-install:
 	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME) ; \
 	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir) ; \
 	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir) ; \
-	[ -f "$(LIBNAME).pc" ] && ( \
+	[ -f "$(LIBNAME0).pc" ] && ( \
 		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) ; \
-		$(INSTALL) $(LIBNAME).pc $$DESTDIR$(pkgconfigdir) \
+		$(INSTALL) $(LIBNAME0).pc $$DESTDIR$(pkgconfigdir) \
 	) ; \
 	(cd $$DESTDIR$(libdir) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
 
@@ -129,6 +165,7 @@ lib-uninstall:
 	rm -f $$DESTDIR$(libdir)/$(LIBFILENAME)
 	rm -f $$DESTDIR$(libdir)/$(LIBFILENAMELINK)
 	rmdir $$DESTDIR$(includedir)/$(PKGNAME) || true
+
 
 
 bin-install:
@@ -144,7 +181,7 @@ bin-uninstall:
 generic-clean:
 	rm -f $(OBJS) $(DEPS)
 
-lib-clean: generic-clean
+lib-clean: generic-clean lib-clean-pkg-config
 	rm -f $(LIBNAME)*.a $(LIBFILENAME) $(LIBFILENAMELINK) \
 		$(LIBNAME).lds
 

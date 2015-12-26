@@ -32,10 +32,7 @@ ifeq ($(shell uname -o 2>/dev/null),Cygwin)
 	FWD_LINKING_REQ=y
 endif
 
-ifeq ($(FWD_LINKING_REQ),y)
-	LIBS := -L../src -lrdkafka $(LIBS) 
-endif
-
+LIBS := -L../src -lrdkafka $(LIBS) 
 LIBS += -lstdc++
 
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a

@@ -32,6 +32,7 @@
 
 #ifndef _MSC_VER
 #define _GNU_SOURCE  /* for strndup() */
+#define __need_IOV_MAX
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L  /* for timespec on solaris */
 #endif
@@ -43,6 +44,7 @@
 #include <errno.h>
 #include <time.h>
 #include <assert.h>
+#include <limits.h>
 
 #include "tinycthread.h"
 #include "rdsysqueue.h"
@@ -137,9 +139,16 @@ static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #define rd_strdupa(DESTPTR,PTR)  rd_strndupa(DESTPTR,PTR,strlen(PTR))
 #endif
 
-/* Some versions of MacOSX dont have IOV_MAX */
 #ifndef IOV_MAX
+#ifdef __APPLE__
+/* Some versions of MacOSX dont have IOV_MAX */
 #define IOV_MAX 1024
+#elif defined(_MSC_VER)
+/* There is no IOV_MAX on MSVC but it is used internally in librdkafka */
+#define IOV_MAX 1024
+#else
+#error "IOV_MAX not defined"
+#endif
 #endif
 
 

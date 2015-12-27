@@ -301,7 +301,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		s_rktp = rd_kafka_toppar_keep(rktp);
 
 		/* Update fetch decision (remove from fetcher list) */
-		rd_kafka_toppar_fetch_decide(rktp, rkb);
+		rd_kafka_toppar_fetch_decide(rktp, rkb, 0);
 
 		rd_rkb_dbg(rkb, TOPIC, "BRKTP",
 			   "Undelegating %.*s [%"PRId32"]",
@@ -1937,7 +1937,9 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
 
         case RD_KAFKA_OP_PARTITION_JOIN:
-                /* Add partition to broker toppars */
+                /*
+		 * Add partition to broker toppars
+		 */
                 rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
                 rd_kafka_toppar_lock(rktp);
 
@@ -1998,8 +2000,14 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 break;
 
         case RD_KAFKA_OP_PARTITION_LEAVE:
-                /* Remove partition from broker toppars */
+                /*
+		 * Remove partition from broker toppars
+		 */
                 rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+
+		/* Remove from fetcher list */
+		rd_kafka_toppar_fetch_decide(rktp, rkb, 1/*force remove*/);
+
                 rd_kafka_toppar_lock(rktp);
 
                 rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",

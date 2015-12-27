@@ -311,7 +311,8 @@ void rd_kafka_broker_fetch_toppar_next (rd_kafka_broker_t *rkb,
 
 
 void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
-				   rd_kafka_broker_t *rkb);
+				   rd_kafka_broker_t *rkb,
+				   int force_remove);
 
 
 

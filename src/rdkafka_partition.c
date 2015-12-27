@@ -1200,12 +1200,20 @@ static __inline void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
  * Locality: broker thread
  */
 void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
-				   rd_kafka_broker_t *rkb) {
+				   rd_kafka_broker_t *rkb,
+				   int force_remove) {
         int should_fetch = 1;
         const char *reason = "";
         int32_t version;
 
 	rd_kafka_toppar_lock(rktp);
+
+	/* Forced removal from fetch list */
+	if (unlikely(force_remove)) {
+		reason = "forced removal";
+		should_fetch = 0;
+		goto done;
+	}
 
 	/* Skip toppars not in active fetch state */
 	if (rktp->rktp_fetch_state != RD_KAFKA_TOPPAR_FETCH_ACTIVE) {
@@ -1293,7 +1301,7 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
  */
 void rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
 					    rd_kafka_toppar_t *rktp) {
-	rd_kafka_toppar_fetch_decide(rktp, rkb);
+	rd_kafka_toppar_fetch_decide(rktp, rkb, 0);
 }
 
 

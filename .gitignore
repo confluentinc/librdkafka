@@ -2,7 +2,7 @@ config.h
 config.log*
 config.cache
 Makefile.config
-rdkafka.pc
+rdkafka*.pc
 *~
 \#*
 *.o

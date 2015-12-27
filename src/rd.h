@@ -43,6 +43,7 @@
 #include <errno.h>
 #include <time.h>
 #include <assert.h>
+#include <limits.h>
 
 #include "tinycthread.h"
 #include "rdsysqueue.h"
@@ -139,7 +140,11 @@ static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 
 /* Some versions of MacOSX dont have IOV_MAX */
 #ifndef IOV_MAX
+#ifdef __APPLE__
 #define IOV_MAX 1024
+#else
+#error "IOV_MAX not defined"
+#endif
 #endif
 
 

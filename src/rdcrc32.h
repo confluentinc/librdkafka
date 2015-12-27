@@ -21,10 +21,11 @@
 #ifndef __RDCRC32___H__
 #define __RDCRC32___H__
 
+#include "rd.h"
+
 #include <stdlib.h>
 #include <stdint.h>
 
-#include "rd.h"
 #if WITH_ZLIB
 #include <zlib.h>
 #endif

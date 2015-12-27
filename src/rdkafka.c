@@ -1830,7 +1830,7 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 		if (rk->rk_conf.throttle_cb)
 			rk->rk_conf.throttle_cb(rk, rko->rko_nodename,
 						rko->rko_nodeid,
-						rko->rko_throttle_time,
+						(int) rko->rko_throttle_time,
 						rk->rk_conf.opaque);
 		break;
 

@@ -75,6 +75,8 @@ rm -rf %{buildroot}
 %{_libdir}/librdkafka.so
 %{_libdir}/librdkafka++.a
 %{_libdir}/librdkafka++.so
+%{_libdir}/pkgconfig/rdkafka++.pc
+%{_libdir}/pkgconfig/rdkafka.pc
 
 
 %changelog

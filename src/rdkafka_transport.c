@@ -696,9 +696,8 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 			     "Loading certificate from file %s",
 			     rk->rk_conf.ssl.cert_location);
 
-		r = SSL_CTX_use_certificate_file(ctx,
-						 rk->rk_conf.ssl.cert_location,
-						 SSL_FILETYPE_PEM);
+		r = SSL_CTX_use_certificate_chain_file(ctx,
+						       rk->rk_conf.ssl.cert_location);
 
 		if (r != 1)
 			goto fail;

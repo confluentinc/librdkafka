@@ -108,7 +108,7 @@ static __inline RD_UNUSED char *rd_strdup(const char *s) {
 }
 
 static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
-#ifndef _MSC_VER
+#if HAVE_STRNDUP
 	char *n = strndup(s, len);
 	assert(n);
 #else

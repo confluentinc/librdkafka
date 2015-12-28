@@ -32,8 +32,8 @@ CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 file-check: lib
 check: file-check
 	@(printf "%-30s " "Symbol visibility" ; \
-		(($(SYMDUMPER) $(LIBFILENAME) | grep -q rd_kafka_new) && \
-		($(SYMDUMPER) $(LIBFILENAME) | grep -vq rd_kafka_destroy) && \
+		(($(SYMDUMPER) $(LIBFILENAME) | grep rd_kafka_new >/dev/null) && \
+		($(SYMDUMPER) $(LIBFILENAME) | grep -v rd_kafka_destroy >/dev/null) && \
 		printf "$(MKL_GREEN)OK$(MKL_CLR_RESET)\n") || \
 		printf "$(MKL_RED)FAILED$(MKL_CLR_RESET)\n")
 

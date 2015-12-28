@@ -141,7 +141,7 @@ file-check:
 			RET=false ; \
 		fi ; \
 	done ; \
-	$$($$RET)
+	$$RET
 
 
 lib-install:

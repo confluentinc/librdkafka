@@ -63,6 +63,13 @@ function checks {
 	mkl_mkvar_append CPPFLAGS CPPFLAGS "-D_POSIX_PTHREAD_SEMANTICS -D_REENTRANT -D__EXTENSIONS__"
     fi
 
+    # Check if strndup() is available (isn't on Solaris 10)
+    mkl_compile_check "strndup" "HAVE_STRNDUP" disable CC "" \
+"#include <string.h>
+int main (void) {
+   return strndup("hi", 2) ? 0 : 1;
+}"
+
     # Figure out what tool to use for dumping public symbols.
     # We rely on configure.cc setting up $NM if it exists.
     if mkl_env_check "nm" "" cont "NM" ; then

@@ -290,7 +290,7 @@ static inline const char *peek(struct source *s, size_t *len)
 {
 	if (likely(s->curvec < s->iovlen)) {
 		struct iovec *iv = &s->iov[s->curvec];
-		if ((unsigned)s->curoff < iv->iov_len) { 
+		if ((unsigned)s->curoff < (size_t)iv->iov_len) { 
 			*len = iv->iov_len - s->curoff;
 			return n_bytes_after_addr(iv->iov_base, s->curoff);
 		}
@@ -303,8 +303,9 @@ static inline void skip(struct source *s, size_t n)
 {
 	struct iovec *iv = &s->iov[s->curvec];
 	s->curoff += n;
-	DCHECK_LE((unsigned)s->curoff, iv->iov_len);
-	if ((unsigned)s->curoff >= iv->iov_len && s->curvec + 1 < s->iovlen) {
+	DCHECK_LE((unsigned)s->curoff, (size_t)iv->iov_len);
+	if ((unsigned)s->curoff >= (size_t)iv->iov_len &&
+	    s->curvec + 1 < s->iovlen) {
 		s->curoff = 0;
 		s->curvec++;
 	}
@@ -332,7 +333,7 @@ static inline void append(struct sink *s, const char *data, size_t n)
 		s->curvec++;
 		DCHECK_LT((signed)s->curvec, s->iovlen);
 		iov++;
-		nlen = min_t(size_t, iov->iov_len, n);
+		nlen = min_t(size_t, (size_t)iov->iov_len, n);
 		memcpy(iov->iov_base, data, nlen);
 		s->curoff = nlen;
 	}
@@ -341,7 +342,7 @@ static inline void append(struct sink *s, const char *data, size_t n)
 static inline void *sink_peek(struct sink *s, size_t n)
 {
 	struct iovec *iov = &s->iov[s->curvec];
-	if (s->curvec < iov->iov_len && iov->iov_len - s->curoff >= n)
+	if (s->curvec < (size_t)iov->iov_len && iov->iov_len - s->curoff >= n)
 		return n_bytes_after_addr(iov->iov_base, s->curoff);
 	return NULL;
 }

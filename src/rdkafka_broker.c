@@ -86,7 +86,8 @@ const char *rd_kafka_secproto_names[] = {
 static void iov_print (rd_kafka_t *rk,
 		       const char *what, int iov_idx, const struct iovec *iov,
 		       int hexdump) {
-	printf("%s:  iov #%i: %"PRIdsz"\n", what, iov_idx, iov->iov_len);
+	printf("%s:  iov #%i: %"PRIdsz"\n", what, iov_idx,
+	       (size_t)iov->iov_len);
 	if (hexdump)
 		rd_hexdump(stdout, what, iov->iov_base, iov->iov_len);
 }
@@ -901,7 +902,7 @@ static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
 		if (vof < 0)
 			vof = 0;
 
-		if ((size_t)vof < src->msg_iov[i].iov_len) {
+		if ((size_t)vof < (size_t)src->msg_iov[i].iov_len) {
 			rd_kafka_assert(NULL, (size_t)dst->msg_iovlen < dst_len);
 			dst->msg_iov[dst->msg_iovlen].iov_base =
 				(char *)src->msg_iov[i].iov_base + vof;
@@ -1560,7 +1561,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 					   "topic %.*s [%"PRId32"]: "
 					   "%s (%i): "
 					   "sending uncompressed",
-					   rkbuf->rkbuf_msg.msg_iov[i].
+					   (size_t)rkbuf->rkbuf_msg.msg_iov[i].
 					   iov_len,
 					   RD_KAFKAP_STR_PR(rktp->
 							    rktp_rkt->

@@ -19,7 +19,7 @@
 #endif
 
 
-#elif !defined(__WIN32__) && !defined(_MSC_VER)
+#elif !defined(__WIN32__) && !defined(_MSC_VER) && !defined(sun)
 #  include <endian.h>
 #endif
 
@@ -151,6 +151,11 @@ typedef unsigned long long u64;
 #define htole16(x) __builtin_bswap16(x)
 #define le32toh(x) __builtin_bswap32(x)
 #endif
+#endif
+
+#if defined(sun)
+#define htole16(x) LE_16(x)
+#define le32toh(x) LE_32(x)
 #endif
 
 #define BITS_PER_LONG (__SIZEOF_LONG__ * 8)

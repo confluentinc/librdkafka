@@ -187,11 +187,11 @@ void rd_kafka_op_app_reply (rd_kafka_q_t *rkq,
                             rd_kafka_op_type_t type,
                             rd_kafka_resp_err_t err,
                             int32_t version,
-                            void *payload, int len);
+                            void *payload, size_t len);
 
 int rd_kafka_op_reply (rd_kafka_op_t *orig_rko,
                        rd_kafka_resp_err_t err,
-                       void *payload, int len, void (*free_cb) (void *));
+                       void *payload, size_t len, void (*free_cb) (void *));
 void rd_kafka_op_sprintf (rd_kafka_op_t *rko, const char *fmt, ...);
 
 void rd_kafka_op_err (rd_kafka_t *rk, rd_kafka_resp_err_t err,
@@ -202,7 +202,7 @@ void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
 void rd_kafka_op_app (rd_kafka_q_t *rkq, rd_kafka_op_type_t type,
                       int op_flags, rd_kafka_toppar_t *rktp,
                       rd_kafka_resp_err_t err,
-                      void *payload, int len,
+                      void *payload, size_t len,
                       void (*free_cb) (void *));
 void rd_kafka_op_app_fmt (rd_kafka_q_t *rkq, rd_kafka_op_type_t type,
                           rd_kafka_toppar_t *rktp,

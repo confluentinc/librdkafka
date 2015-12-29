@@ -97,7 +97,7 @@ void msghdr_print (rd_kafka_t *rk,
 		   const char *what, const struct msghdr *msg,
 		   int hexdump) {
 	int i;
-	int len = 0;
+	size_t len = 0;
 
 	printf("%s: iovlen %"PRIdsz"\n", what, (size_t)msg->msg_iovlen);
 
@@ -105,7 +105,7 @@ void msghdr_print (rd_kafka_t *rk,
 		iov_print(rk, what, i, &msg->msg_iov[i], hexdump);
 		len += msg->msg_iov[i].iov_len;
 	}
-	printf("%s: ^ message was %d bytes in total\n", what, len);
+	printf("%s: ^ message was %"PRIdsz" bytes in total\n", what, len);
 }
 
 
@@ -493,7 +493,7 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
  */
 static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
 				   int16_t ApiKey) {
-	int of_Size;
+	size_t of_Size;
 
 	rkbuf->rkbuf_reqhdr.ApiKey = ApiKey;
 
@@ -511,7 +511,7 @@ static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
 	rkbuf->rkbuf_of          = 0;  /* Indicates send position */
 	rkbuf->rkbuf_len         = rd_kafka_msghdr_size(&rkbuf->rkbuf_msg);
 
-	rd_kafka_buf_update_i32(rkbuf, of_Size, rkbuf->rkbuf_len-4);
+	rd_kafka_buf_update_i32(rkbuf, of_Size, (int32_t) rkbuf->rkbuf_len-4);
 }
 
 
@@ -888,7 +888,7 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
  */
 static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
 				     struct msghdr *src,
-				     off_t of) {
+				     ssize_t of) {
 	int i;
 	size_t len = 0;
 	void *iov = dst->msg_iov;
@@ -897,7 +897,7 @@ static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
 	dst->msg_iovlen = 0;
 
 	for (i = 0 ; i < (int)src->msg_iovlen ; i++) {
-		off_t vof = of - len;
+		ssize_t vof = of - len;
 
 		if (vof < 0)
 			vof = 0;
@@ -1491,8 +1491,8 @@ done:
 static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 					     rd_kafka_toppar_t *rktp,
 					     rd_kafka_buf_t *rkbuf,
-					     int iov_firstmsg, int of_firstmsg,
-						 int of_init_firstmsg,
+					     int iov_firstmsg, size_t of_firstmsg,
+						 size_t of_init_firstmsg,
 					     int32_t *MessageSetSizep) {
 	int32_t MessageSetSize = *MessageSetSizep;
 	size_t coutlen = 0;
@@ -1540,7 +1540,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 		siov.iov_base = rd_malloc(siov.iov_len);
 
 		strm.next_out = (void *)siov.iov_base;
-		strm.avail_out = siov.iov_len;
+		strm.avail_out = (uInt) siov.iov_len;
 
 		/* Iterate through each message and compress it. */
 		for (i = iov_firstmsg ;
@@ -1551,7 +1551,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 
 			strm.next_in = (void *)rkbuf->rkbuf_msg.
 				msg_iov[i].iov_base;
-			strm.avail_in = rkbuf->rkbuf_msg.msg_iov[i].iov_len;
+			strm.avail_in = (uInt) rkbuf->rkbuf_msg.msg_iov[i].iov_len;
 
 			/* Compress message */
 			if ((r = deflate(&strm, Z_NO_FLUSH) != Z_OK)) {
@@ -1652,10 +1652,11 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 	 * Message containing the compressed payload. */
 	rd_kafka_buf_rewind(rkbuf, iov_firstmsg, of_firstmsg, of_init_firstmsg);
 
+	rd_kafka_assert(rkb->rkb_rk, coutlen < INT32_MAX);
 	rd_kafka_buf_write_Message(rkbuf, 0, 0,
 				   rktp->rktp_rkt->rkt_conf.compression_codec,
 				   rkb->rkb_rk->rk_null_bytes,
-				   (void *)siov.iov_base, coutlen,
+				   (void *)siov.iov_base, (int32_t) coutlen,
 				   &outlen);
 
 	/* Update enveloping MessageSet's length. */
@@ -1681,9 +1682,9 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
 	int iovcnt;
 	int iov_firstmsg;
-	int of_firstmsg;
-	int of_init_firstmsg;
-	int of_MessageSetSize;
+	size_t of_firstmsg;
+	size_t of_init_firstmsg;
+	size_t of_MessageSetSize;
 	int32_t MessageSetSize = 0;
 	int outlen;
 
@@ -1774,10 +1775,11 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		msgcnt--;
 
 		/* Write message to buffer */
+		rd_kafka_assert(rkb->rkb_rk, rkm->rkm_len < INT32_MAX);
 		rd_kafka_buf_write_Message(rkbuf, 0, 0,
 					   RD_KAFKA_COMPRESSION_NONE,
 					   rkm->rkm_key,
-					   rkm->rkm_payload, rkm->rkm_len,
+					   rkm->rkm_payload, (int32_t) rkm->rkm_len,
 					   &outlen);
 
 		MessageSetSize += outlen;
@@ -3022,9 +3024,9 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 	rd_kafka_buf_t *rkbuf;
 	rd_ts_t now = rd_clock();
 	int cnt = 0;
-	int of_TopicArrayCnt = 0;
+	size_t of_TopicArrayCnt = 0;
 	int TopicArrayCnt = 0;
-	int of_PartitionArrayCnt = 0;
+	size_t of_PartitionArrayCnt = 0;
 	int PartitionArrayCnt = 0;
 	rd_kafka_itopic_t *rkt_last = NULL;
 

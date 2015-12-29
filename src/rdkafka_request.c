@@ -531,9 +531,9 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
                                   rd_kafka_resp_cb_t *resp_cb,
                                   void *opaque) {
 	rd_kafka_buf_t *rkbuf;
-        int of_TopicCnt;
+        size_t of_TopicCnt;
         int TopicCnt = 0;
-        int of_PartCnt = -1;
+        ssize_t of_PartCnt = -1;
         const char *last_topic = NULL;
         int PartCnt = 0;
         int i;
@@ -683,10 +683,10 @@ void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                                    rd_kafka_resp_cb_t *resp_cb,
                                    void *opaque) {
 	rd_kafka_buf_t *rkbuf;
-        int of_TopicCnt = -1;
+        ssize_t of_TopicCnt = -1;
         int TopicCnt = 0;
         const char *last_topic = NULL;
-        int of_PartCnt = -1;
+        ssize_t of_PartCnt = -1;
         int PartCnt = 0;
         int i;
 
@@ -782,8 +782,8 @@ static rd_kafkap_bytes_t *rd_kafka_group_MemberState_consumer_write (
         rd_kafka_buf_t *rkbuf;
         int i;
         const char *last_topic = NULL;
-        int of_TopicCnt;
-        int of_PartCnt = -1;
+        size_t of_TopicCnt;
+        ssize_t of_PartCnt = -1;
         int TopicCnt = 0;
         int PartCnt = 0;
         rd_kafkap_bytes_t *MemberState;
@@ -1485,11 +1485,11 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                          rd_kafka_itopic_t *rkt, rd_kafka_buf_t *rkbuf) {
 	int i, j, k;
 	int req_rkt_seen = 0;
-        char *msh_buf = NULL;
-        int   msh_of  = 0;
-        int   msh_size;
+        char  *msh_buf = NULL;
+        size_t msh_of  = 0;
+        size_t msh_size;
         struct rd_kafka_metadata *md = NULL;
-        int rkb_namelen;
+        size_t rkb_namelen;
         const int log_decode_errors = 1;
 
         rd_kafka_broker_lock(rkb);

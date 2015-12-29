@@ -150,7 +150,7 @@ rd_kafka_transport_socket_sendmsg (rd_kafka_transport_t *rktrans,
 		ssize_t r;
 
 		r = send(rktrans->rktrans_s,
-			 msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len, 0);
+			 msg->msg_iov[i].iov_base, (int) msg->msg_iov[i].iov_len, 0);
 		if (r == SOCKET_ERROR) {
 			if (sum > 0 || WSAGetLastError() == WSAEWOULDBLOCK)
 				return sum;
@@ -201,7 +201,7 @@ rd_kafka_transport_socket_recvmsg (rd_kafka_transport_t *rktrans,
 		ssize_t r;
 
 		r = recv(rktrans->rktrans_s,
-			 msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len, 0);
+			 msg->msg_iov[i].iov_base, (int) msg->msg_iov[i].iov_len, 0);
 		if (r == SOCKET_ERROR) {
 			if (WSAGetLastError() == WSAEWOULDBLOCK)
 				break;
@@ -269,7 +269,7 @@ void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
  * else it will fall back on global 'rk' debugging.
  */
 static char *rd_kafka_ssl_error (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-				 char *errstr, int errstr_size) {
+				 char *errstr, size_t errstr_size) {
     unsigned long l;
     const char *file, *data;
     int line, flags;
@@ -360,7 +360,7 @@ static void rd_kafka_transport_ssl_init (void) {
  */
 static __inline int
 rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
-				  char *errstr, int errstr_size) {
+				  char *errstr, size_t errstr_size) {
 	int serr = SSL_get_error(rktrans->rktrans_ssl, ret);
 	int serr2;
 
@@ -411,7 +411,7 @@ rd_kafka_transport_ssl_sendmsg (rd_kafka_transport_t *rktrans,
 
 		r = SSL_write(rktrans->rktrans_ssl, 
 			      msg->msg_iov[i].iov_base,
-			      msg->msg_iov[i].iov_len);
+			      (int) msg->msg_iov[i].iov_len);
 
 		if (unlikely(r <= 0)) {
 			if (rd_kafka_transport_ssl_io_update(rktrans, r,
@@ -442,7 +442,7 @@ rd_kafka_transport_ssl_recvmsg (rd_kafka_transport_t *rktrans,
 		int r;
 
 		r = SSL_read(rktrans->rktrans_ssl,
-			     msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len);
+			     msg->msg_iov[i].iov_base, (int) msg->msg_iov[i].iov_len);
 
 		if (unlikely(r <= 0)) {
 			if (rd_kafka_transport_ssl_io_update(rktrans, r,
@@ -487,7 +487,7 @@ static int rd_kafka_transport_ssl_passwd_cb (char *buf, int size, int rwflag,
 	}
 
 
-	pwlen = strlen(rk->rk_conf.ssl.key_password);
+	pwlen = (int) strlen(rk->rk_conf.ssl.key_password);
 	memcpy(buf, rk->rk_conf.ssl.key_password, RD_MIN(pwlen, size));
 
 	return pwlen;
@@ -640,7 +640,7 @@ void rd_kafka_transport_ssl_ctx_term (rd_kafka_t *rk) {
  * NOTE: rd_kafka_wrlock() MUST be held
  */
 int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
-				     char *errstr, int errstr_size) {
+				     char *errstr, size_t errstr_size) {
 	int r;
 	SSL_CTX *ctx;
 
@@ -779,7 +779,7 @@ int rd_kafka_transport_framed_recvmsg (rd_kafka_transport_t *rktrans,
 				       rd_kafka_buf_t **rkbufp,
 				       char *errstr, size_t errstr_size) {
 	rd_kafka_buf_t *rkbuf = rktrans->rktrans_recv_buf;
-	int r;
+	ssize_t r;
 	const int log_decode_errors = 0;
 
 	/* States:

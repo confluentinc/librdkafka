@@ -205,7 +205,7 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
                                    rd_list_t *eligible_topics,
                                    const rd_kafka_metadata_t *metadata,
                                    rd_kafka_group_member_t *members,
-                                   size_t member_cnt) {
+                                   int member_cnt) {
         int ti;
         rd_kafka_assignor_topic_t *eligible_topic = NULL;
 
@@ -215,7 +215,7 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
          * to find matching subscriptions. */
         for (ti = 0 ; ti < metadata->topic_cnt ; ti++) {
                 int complete_cnt = 0;
-                unsigned int i;
+                int i;
 
                 /* Ignore topics in blacklist */
                 if (rd_kafka_pattern_match(&rkcg->rkcg_rk->rk_conf.
@@ -280,12 +280,12 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                        const char *protocol_name,
                        rd_kafka_metadata_t *metadata,
                        rd_kafka_group_member_t *members,
-                       size_t member_cnt,
+                       int member_cnt,
                        char *errstr, size_t errstr_size) {
         rd_kafka_resp_err_t err;
         rd_kafka_assignor_t *rkas;
         rd_ts_t ts_start = rd_clock();
-        unsigned int i;
+        int i;
         rd_list_t eligible_topics;
         int j;
 
@@ -307,7 +307,7 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                              "Group \"%s\" running %s assignment for "
                              "%d member(s):",
                              rkcg->rkcg_group_id->str, protocol_name,
-                             (int)member_cnt);
+                             member_cnt);
 
                 for (i = 0 ; i < member_cnt ; i++) {
                         const rd_kafka_group_member_t *member = &members[i];
@@ -478,7 +478,7 @@ static void rtrim (char *s) {
 /**
  * Initialize assignor list based on configuration.
  */
-int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, int errstr_size) {
+int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 	char *wanted;
 	char *s;
 

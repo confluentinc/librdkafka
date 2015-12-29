@@ -98,7 +98,8 @@ static __inline RD_UNUSED
 rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t data_len)
 {
 #if WITH_ZLIB
-        return crc32(crc, data, data_len);
+        rd_assert(data_len <= UINT_MAX);
+        return crc32(crc, data, (uInt) data_len);
 #else
     unsigned int tbl_idx;
 

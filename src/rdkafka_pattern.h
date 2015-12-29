@@ -58,7 +58,7 @@ void rd_kafka_pattern_list_clear (rd_kafka_pattern_list_t *plist);
 void rd_kafka_pattern_list_destroy (rd_kafka_pattern_list_t *plist);
 int rd_kafka_pattern_list_init (rd_kafka_pattern_list_t *plist,
                                 const char *patternlist,
-                                char *errstr, int errstr_size);
+                                char *errstr, size_t errstr_size);
 rd_kafka_pattern_list_t *rd_kafka_pattern_list_new (const char *patternlist,
                                                     char *errstr,
                                                     int errstr_size);

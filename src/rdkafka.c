@@ -578,12 +578,12 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
  * Emit stats for toppar
  */
 static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
-					       int *ofp,
+					       size_t *ofp,
 					       rd_kafka_toppar_t *rktp,
 					       int first) {
 	char *buf = *bufp;
 	size_t size = *sizep;
-	int of = *ofp;
+	size_t of = *ofp;
         int64_t consumer_lag = -1;
         struct offset_stats offs;
 
@@ -665,7 +665,7 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 	char  *buf;
 	size_t size = 1024*10;
-	int    of = 0;
+	size_t of = 0;
 	rd_kafka_broker_t *rkb;
 	rd_kafka_itopic_t *rkt;
 	shptr_rd_kafka_toppar_t *s_rktp;

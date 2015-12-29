@@ -114,7 +114,7 @@ int rd_kafka_pattern_list_remove (rd_kafka_pattern_list_t *plist,
  */
 static int rd_kafka_pattern_list_parse (rd_kafka_pattern_list_t *plist,
                                         const char *patternlist,
-                                        char *errstr, int errstr_size) {
+                                        char *errstr, size_t errstr_size) {
 		char *s;
 		rd_strdupa(&s, patternlist);
 
@@ -182,7 +182,7 @@ void rd_kafka_pattern_list_destroy (rd_kafka_pattern_list_t *plist) {
  */
 int rd_kafka_pattern_list_init (rd_kafka_pattern_list_t *plist,
                                 const char *patternlist,
-                                char *errstr, int errstr_size) {
+                                char *errstr, size_t errstr_size) {
         TAILQ_INIT(&plist->rkpl_head);
         if (patternlist) {
                 if (rd_kafka_pattern_list_parse(plist, patternlist,

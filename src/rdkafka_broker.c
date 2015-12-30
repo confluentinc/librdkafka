@@ -3346,6 +3346,8 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 	if (rkb->rkb_rsal)
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
 
+        rd_free(rkb->rkb_origname);
+
 	rd_kafka_q_purge(&rkb->rkb_ops);
 	rd_kafka_q_destroy(&rkb->rkb_ops);
 
@@ -3405,6 +3407,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rkb->rkb_rk = rk;
 	rkb->rkb_nodeid = nodeid;
 	rkb->rkb_proto = proto;
+        rkb->rkb_port = port;
+        rkb->rkb_origname = rd_strdup(name);
 
 	mtx_init(&rkb->rkb_lock, mtx_plain);
 	TAILQ_INIT(&rkb->rkb_toppars);

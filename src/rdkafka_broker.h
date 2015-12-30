@@ -132,6 +132,11 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 	char                rkb_name[RD_KAFKA_NODENAME_SIZE];  /* Displ name */
 	char                rkb_nodename[RD_KAFKA_NODENAME_SIZE]; /* host:port*/
+        uint16_t            rkb_port;                          /* TCP port */
+        char               *rkb_origname;                      /* Original
+                                                                * host name */
+
+
 	rd_kafka_secproto_t rkb_proto;
 
 #if WITH_SASL

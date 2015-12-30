@@ -43,7 +43,7 @@ extern int  test_session_timeout_ms; /* Group session timeout */
 		fprintf(stderr, "\n");					\
                 fprintf(stderr, "### Test random seed was %i ###\033[0m\n",    \
                         test_seed);                                     \
-						assert(0); \
+                assert(0);                                              \
 		exit(1);						\
 	} while (0)
 
@@ -78,6 +78,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 void test_wait_exit (int timeout);
 
 uint64_t test_id_generate (void);
+void test_str_id_generate (char *dest, size_t dest_size);
 
 
 /**

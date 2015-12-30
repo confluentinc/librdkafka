@@ -268,6 +268,13 @@ uint64_t test_id_generate (void) {
 }
 
 
+/**
+ * Generate a "unique" string id
+ */
+void test_str_id_generate (char *dest, size_t dest_size) {
+        rd_snprintf(dest, dest_size, "%"PRId64, test_id_generate());
+}
+
 
 /**
  * Format a message token
@@ -473,6 +480,7 @@ int main(int argc, char **argv) {
 	RUN_TEST(0015_offsets_seek);
 	RUN_TEST(0017_compression);
 	RUN_TEST(0018_cgrp_term);
+        RUN_TEST(0019_list_groups);
 
         if (tests_run_in_parallel) {
                 while (tests_running_cnt > 0)

@@ -169,34 +169,47 @@ static void verify_consumed_msg_reset (int msgcnt) {
         cons_msg_next = 0;
         cons_msg_stop = -1;
         cons_last_offset = -1;
+
+        TEST_SAY("Reset consumed_msg stats, making room for %d new messages\n",
+                 msgcnt);
 }
 
 
 static int int_cmp (const void *_a, const void *_b) {
 	int a = *(int *)_a;
 	int b = *(int *)_b;
-	return a - b;
+        /* Sort -1 (non-received msgs) at the end */
+	return (a == -1 ? 100000000 : a) - (b == -1 ? 10000000 : b);
 }
 
 static void verify_consumed_msg_check0 (const char *func, int line,
-                                        const char *desc) {
+                                        const char *desc,
+                                        int expected_cnt) {
 	int i;
 	int fails = 0;
         int not_recvd = 0;
 
-	if (cons_msgs_cnt < cons_msgs_size) {
+        TEST_SAY("%s: received %d/%d/%d messages\n",
+                 desc, cons_msgs_cnt, expected_cnt, cons_msgs_size);
+        if (expected_cnt > cons_msgs_size)
+                TEST_FAIL("expected_cnt %d > cons_msgs_size %d\n",
+                          expected_cnt, cons_msgs_size);
+
+	if (cons_msgs_cnt < expected_cnt) {
 		TEST_SAY("%s: Missing %i messages in consumer\n",
-			 desc, cons_msgs_size - cons_msgs_cnt);
+			 desc,expected_cnt - cons_msgs_cnt);
 		fails++;
 	}
 
 	qsort(cons_msgs, cons_msgs_size, sizeof(*cons_msgs), int_cmp);
 
-	for (i = 0 ; i < cons_msgs_size ; i++) {
+	for (i = 0 ; i < expected_cnt ; i++) {
 		if (cons_msgs[i] != i) {
-                        if (cons_msgs[i] == -1)
+                        if (cons_msgs[i] == -1) {
                                 not_recvd++;
-                        else
+                                TEST_SAY("%s: msg %d/%d not received\n",
+                                         desc, i, expected_cnt);
+                        } else
                                 TEST_SAY("%s: Consumed message #%i is wrong, "
                                          "expected #%i\n",
                                          desc, cons_msgs[i], i);
@@ -211,14 +224,14 @@ static void verify_consumed_msg_check0 (const char *func, int line,
 	if (fails)
 		TEST_FAIL("%s: See above error(s)", desc);
         else
-                TEST_SAY("%s: message range check: succeeded\n", desc);
+                TEST_SAY("%s: message range check: %d/%d messages consumed: "
+                         "succeeded\n", desc, cons_msgs_cnt, expected_cnt);
 
-	verify_consumed_msg_reset(0);
 }
 
 
-#define verify_consumed_msg_check(desc) \
-	verify_consumed_msg_check0(__FUNCTION__,__LINE__, desc)
+#define verify_consumed_msg_check(desc,expected_cnt)                        \
+	verify_consumed_msg_check0(__FUNCTION__,__LINE__, desc, expected_cnt)
 
 
 
@@ -261,7 +274,7 @@ static void verify_consumed_msg0 (const char *func, int line,
 		TEST_SAY("Too many messages in cons_msgs (%i) while reading "
 			 "message key \"%s\"\n",
 			 cons_msgs_cnt, buf);
-		verify_consumed_msg_check("?");
+		verify_consumed_msg_check("?", cons_msgs_size);
 		TEST_FAIL("See above error(s)");
 	}
 
@@ -312,7 +325,9 @@ static void consume_cb (rd_kafka_message_t *rkmessage, void *opaque) {
 
 static void consume_messages_callback_multi (const char *desc,
                                              uint64_t testid, const char *topic,
-                                             int32_t partition, int msg_base,
+                                             int32_t partition,
+                                             const char *offset_store_method,
+                                             int msg_base,
                                              int msg_cnt,
                                              int64_t initial_offset,
                                              int iterations) {
@@ -330,10 +345,13 @@ static void consume_messages_callback_multi (const char *desc,
 
 	test_conf_init(&conf, &topic_conf, 20);
 
-        /* Broker based offset storage requires a group.id */
-        if (rd_kafka_conf_set(conf, "group.id", topic,
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
-                TEST_FAIL("%s: %s\n", desc, errstr);
+        test_topic_conf_set(topic_conf, "offset.store.method",
+                            offset_store_method);
+
+        if (!strcmp(offset_store_method, "broker")) {
+                /* Broker based offset storage requires a group.id */
+                test_conf_set(conf, "group.id", topic);
+        }
 
 	/* Create kafka instance */
 	rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
@@ -361,8 +379,10 @@ static void consume_messages_callback_multi (const char *desc,
                 test_timing_t t_stop;
 
                 TEST_SAY("%s: Iteration #%i: Consuming from "
-                         "partition %i at offset %"PRId64"\n",
-                         desc, i, partition, initial_offset);
+                         "partition %i at offset %"PRId64", "
+                         "msgs range %d..%d\n",
+                         desc, i, partition, initial_offset,
+                         cons_msg_next, cons_msg_stop);
 
                 /* Consume messages */
                 if (rd_kafka_consume_start(rkt, partition, initial_offset) == -1)
@@ -373,10 +393,6 @@ static void consume_messages_callback_multi (const char *desc,
 
                 /* Stop consuming messages when this number of messages
                  * is reached. */
-                TEST_SAY("%s: %s: "
-                         "Consume message range %d .. %d, or to %d + %d\n",
-                         desc, rd_kafka_name(rk),
-                         cons_msg_next, cons_msg_stop, msg_base, msg_cnt);
                 cnta = cons_msg_next;
                 do {
                         rd_kafka_consume_callback(rkt, partition, 1000,
@@ -408,8 +424,8 @@ static void consume_messages_callback_multi (const char *desc,
 
 
 
-static void test_produce_consume (void) {
-	int msgcnt = 1000;
+static void test_produce_consume (const char *offset_store_method) {
+	int msgcnt = 100;
         int partition_cnt = 1;
 	int i;
 	uint64_t testid;
@@ -424,21 +440,36 @@ static void test_produce_consume (void) {
         test_conf_init(NULL, NULL, 20);
         topic = test_mk_topic_name("0014", 1/*random*/);
 
-	TEST_SAY("Topic %s, testid %"PRIu64"\n", topic, testid);
+	TEST_SAY("Topic %s, testid %"PRIu64", offset.store.method=%s\n",
+                 topic, testid, offset_store_method);
 
 	/* Produce messages */
 	produce_messages(testid, topic, partition_cnt, msg_base, msgcnt);
 
+        /* 100% of messages */
+        verify_consumed_msg_reset(msgcnt);
 
-	/* Consume messages with callbacks: stored offsets */
-	verify_consumed_msg_reset(msgcnt);
+	/* Consume 50% of messages with callbacks: stored offsets with no prior
+         * offset stored. */
 	for (i = 0 ; i < partition_cnt ; i++)
-		consume_messages_callback_multi("STORED", testid, topic, i,
+		consume_messages_callback_multi("STORED.1/2", testid, topic, i,
+                                                offset_store_method,
                                                 msg_base,
-                                                msgcnt / partition_cnt,
+                                                (msgcnt / partition_cnt) / 2,
                                                 RD_KAFKA_OFFSET_STORED,
-                                                2);
-        verify_consumed_msg_check("STORED");
+                                                1);
+        verify_consumed_msg_check("STORED.1/2", msgcnt / 2);
+
+        /* Consume the rest using the now stored offset */
+        for (i = 0 ; i < partition_cnt ; i++)
+		consume_messages_callback_multi("STORED.2/2", testid, topic, i,
+                                                offset_store_method,
+                                                msg_base,
+                                                (msgcnt / partition_cnt) / 2,
+                                                RD_KAFKA_OFFSET_STORED,
+                                                1);
+        verify_consumed_msg_check("STORED.2/2", msgcnt);
+
 
 	/* Consume messages with callbacks: logical offsets */
 	verify_consumed_msg_reset(msgcnt);
@@ -447,6 +478,7 @@ static void test_produce_consume (void) {
                 int64_t initial_offset = RD_KAFKA_OFFSET_TAIL(p_msg_cnt);
                 const int iterations = 4;
 		consume_messages_callback_multi("TAIL+", testid, topic, i,
+                                                offset_store_method,
                                                 /* start here (msgid) */
                                                 msg_base,
                                                 /* consume this many messages
@@ -457,7 +489,9 @@ static void test_produce_consume (void) {
                                                 iterations);
         }
 
-        verify_consumed_msg_check("TAIL+");
+        verify_consumed_msg_check("TAIL+", msgcnt);
+
+        verify_consumed_msg_reset(0);
 
 	return;
 }
@@ -466,6 +500,7 @@ static void test_produce_consume (void) {
 
 
 int main_0014_reconsume_191 (int argc, char **argv) {
-	test_produce_consume();
+	test_produce_consume("broker");
+        test_produce_consume("file");
 	return 0;
 }

@@ -15,8 +15,6 @@
 
 #include "rdkafka.h"
 
-#include "../src/rd.h"
-
 #ifdef _MSC_VER
 #define sscanf(...) sscanf_s(__VA_ARGS__)
 #endif
@@ -203,6 +201,10 @@ void test_consumer_assign (const char *what, rd_kafka_t *rk,
 void test_consumer_unassign (const char *what, rd_kafka_t *rk);
 
 void test_consumer_close (rd_kafka_t *rk);
+
+void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val);
+void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
+                          const char *name, const char *val);
 
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions);

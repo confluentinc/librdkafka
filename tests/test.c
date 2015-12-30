@@ -921,6 +921,25 @@ void test_consumer_close (rd_kafka_t *rk) {
 }
 
 
+void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val) {
+        char errstr[512];
+        if (rd_kafka_conf_set(conf, name, val, errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK)
+                TEST_FAIL("Failed to set config \"%s\"=\"%s\": %s\n",
+                          name, val, errstr);
+}
+
+
+void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
+                          const char *name, const char *val) {
+        char errstr[512];
+        if (rd_kafka_topic_conf_set(tconf, name, val, errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK)
+                TEST_FAIL("Failed to set topic config \"%s\"=\"%s\": %s\n",
+                          name, val, errstr);
+}
+
+
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions) {
         int i;

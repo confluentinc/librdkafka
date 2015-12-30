@@ -6,6 +6,7 @@ LIBVER=		1
 
 SRCS_$(WITH_SASL) += rdkafka_sasl.c
 SRCS_$(WITH_SNAPPY) += snappy.c
+SRCS_$(WITH_ZLIB) += rdgz.c
 
 SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_conf.c rdkafka_timer.c rdkafka_offset.c \
@@ -14,7 +15,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_partition.c rdkafka_subscription.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
 		rdkafka_roundrobin_assignor.c \
-		rdcrc32.c rdgz.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
+		rdcrc32.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
 		rdlog.c \
 		trex.c $(SRCS_y)
 

@@ -57,6 +57,8 @@ static 	enum {
 } output = OUTPUT_HEXDUMP;
 
 static void stop (int sig) {
+        if (!run)
+                exit(1);
 	run = 0;
 	fclose(stdin); /* abort fgets() */
 }

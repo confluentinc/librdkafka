@@ -188,7 +188,11 @@ static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
  *
  * Use rd_free() to free the returned pointer.
 */
-void *rd_memdup (const void *src, size_t size);
+static __inline RD_UNUSED void *rd_memdup (const void *src, size_t size) {
+	void *dst = rd_malloc(size);
+	memcpy(dst, src, size);
+	return dst;
+}
 
 
 /**

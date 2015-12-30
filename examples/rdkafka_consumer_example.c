@@ -219,12 +219,62 @@ static void rebalance_cb (rd_kafka_t *rk,
 }
 
 
+static int describe_groups (rd_kafka_t *rk, const char *group) {
+        rd_kafka_resp_err_t err;
+        const struct rd_kafka_group_list *grplist;
+        int i;
+
+        err = rd_kafka_list_groups(rk, group, &grplist, 10000);
+
+        if (err) {
+                fprintf(stderr, "%% Failed to acquire group list: %s\n",
+                        rd_kafka_err2str(err));
+                return -1;
+        }
+
+        for (i = 0 ; i < grplist->group_cnt ; i++) {
+                const struct rd_kafka_group_info *gi = &grplist->groups[i];
+                int j;
+
+                printf("Group \"%s\" in state %s on broker %d (%s:%hu)\n",
+                       gi->group, gi->state,
+                       gi->broker.id, gi->broker.host, gi->broker.port);
+                if (gi->err)
+                        printf(" Error: %s\n", rd_kafka_err2str(gi->err));
+                printf(" Protocol type \"%s\", protocol \"%s\", "
+                       "with %d member(s):\n",
+                       gi->protocol_type, gi->protocol, gi->member_cnt);
+
+                for (j = 0 ; j < gi->member_cnt ; j++) {
+                        const struct rd_kafka_group_member_info *mi;
+                        mi = &gi->members[j];
+
+                        printf("  \"%s\", client id \"%s\" on host %s\n",
+                               mi->member_id, mi->client_id, mi->client_host);
+                        printf("    metadata: %d bytes\n",
+                               mi->member_metadata_size);
+                        printf("    assignment: %d bytes\n",
+                               mi->member_assignment_size);
+                }
+                printf("\n");
+        }
+
+        if (group && !grplist->group_cnt)
+                fprintf(stderr, "%% No matching group (%s)\n", group);
+
+        rd_kafka_group_list_destroy(grplist);
+
+        return 0;
+}
+
+
 
 static void sig_usr1 (int sig) {
 	rd_kafka_dump(stdout, rk);
 }
 
 int main (int argc, char **argv) {
+        char mode = 'C';
 	char *brokers = "localhost:9092";
 	int opt;
 	rd_kafka_conf_t *conf;
@@ -234,7 +284,7 @@ int main (int argc, char **argv) {
 	int do_conf_dump = 0;
 	char tmp[16];
         rd_kafka_resp_err_t err;
-        char *group = "rdkafka_consumer_example";
+        char *group = NULL;
         rd_kafka_topic_partition_list_t *topics;
         int i;
 
@@ -253,7 +303,7 @@ int main (int argc, char **argv) {
 	/* Topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();
 
-	while ((opt = getopt(argc, argv, "g:b:qd:eX:As:")) != -1) {
+	while ((opt = getopt(argc, argv, "g:b:qd:eX:As:D")) != -1) {
 		switch (opt) {
 		case 'b':
 			brokers = optarg;
@@ -322,6 +372,10 @@ int main (int argc, char **argv) {
 		}
 		break;
 
+                case 'D':
+                        mode = 'D';
+                        break;
+
 		default:
 			goto usage;
 		}
@@ -356,7 +410,7 @@ int main (int argc, char **argv) {
 	}
 
 
-	if (optind == argc) {
+	if (mode == 'C' && optind == argc) {
 	usage:
 		fprintf(stderr,
 			"Usage: %s [options] <topic[:part]> <topic[:part]>..\n"
@@ -368,6 +422,7 @@ int main (int argc, char **argv) {
 			"  -b <brokers>    Broker address (%s)\n"
 			"  -e              Exit consumer when last message\n"
 			"                  in partition has been received.\n"
+                        "  -D              Describe group.\n"
 			"  -d [facs..]     Enable debugging contexts:\n"
 			"                  %s\n"
 			"  -q              Be quiet\n"
@@ -403,26 +458,32 @@ int main (int argc, char **argv) {
          * Client/Consumer group
          */
 
-        /* Consumer grups require a group id */
-        if (rd_kafka_conf_set(conf, "group.id", group,
-                              errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%% %s\n", errstr);
-                exit(1);
+        if (mode == 'C') {
+                /* Consumer groups require a group id */
+                if (!group)
+                        group = "rdkafka_consumer_example";
+                if (rd_kafka_conf_set(conf, "group.id", group,
+                                      errstr, sizeof(errstr)) !=
+                    RD_KAFKA_CONF_OK) {
+                        fprintf(stderr, "%% %s\n", errstr);
+                        exit(1);
+                }
+
+                /* Consumer groups always use broker based offset storage */
+                if (rd_kafka_topic_conf_set(topic_conf, "offset.store.method",
+                                            "broker",
+                                            errstr, sizeof(errstr)) !=
+                    RD_KAFKA_CONF_OK) {
+                        fprintf(stderr, "%% %s\n", errstr);
+                        exit(1);
+                }
+
+                /* Set default topic config for pattern-matched topics. */
+                rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
+
+                /* Callback called on partition assignment changes */
+                rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
         }
-
-        /* Consumer groups always use broker based offset storage */
-        if (rd_kafka_topic_conf_set(topic_conf, "offset.store.method", "broker",
-                                    errstr, sizeof(errstr)) !=
-            RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%% %s\n", errstr);
-                exit(1);
-        }
-
-        /* Set default topic config for pattern-matched topics. */
-        rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
-
-        /* Callback called on partition assignment changes */
-        rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
         /* Create Kafka handle */
         if (!(rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf,
@@ -433,9 +494,6 @@ int main (int argc, char **argv) {
                 exit(1);
         }
 
-        /* Redirect rd_kafka_poll() to consumer_poll() */
-        rd_kafka_poll_set_consumer(rk);
-
         rd_kafka_set_log_level(rk, LOG_DEBUG);
 
         /* Add brokers */
@@ -444,6 +502,18 @@ int main (int argc, char **argv) {
                 exit(1);
         }
 
+
+        if (mode == 'D') {
+                int r;
+                /* Describe groups */
+                r = describe_groups(rk, group);
+
+                rd_kafka_destroy(rk);
+                exit(r == -1 ? 1 : 0);
+        }
+
+        /* Redirect rd_kafka_poll() to consumer_poll() */
+        rd_kafka_poll_set_consumer(rk);
 
         topics = rd_kafka_topic_partition_list_new(argc - optind);
         for (i = optind ; i < argc ; i++) {

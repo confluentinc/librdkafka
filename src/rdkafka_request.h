@@ -128,6 +128,18 @@ void rd_kafka_handle_SyncGroup (rd_kafka_broker_t *rkb,
                                 rd_kafka_buf_t *request,
                                 void *opaque);
 
+void rd_kafka_ListGroupsRequest (rd_kafka_broker_t *rkb,
+                                 rd_kafka_q_t *replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque);
+
+void rd_kafka_DescribeGroupsRequest (rd_kafka_broker_t *rkb,
+                                     const char **groups, int group_cnt,
+                                     rd_kafka_q_t *replyq,
+                                     rd_kafka_resp_cb_t *resp_cb,
+                                     void *opaque);
+
+
 void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *group_id,
                                 int32_t generation_id,

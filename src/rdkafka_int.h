@@ -147,6 +147,10 @@ struct rd_kafka_s {
 	rd_atomic32_t    rk_last_throttle;  /* Last throttle_time_ms value
 					     * from broker. */
 
+        /* Locks: rd_kafka_*lock() */
+        rd_ts_t          rk_ts_metadata;    /* Timestamp of most recent
+                                             * metadata. */
+
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,
          *   0: No consumers running

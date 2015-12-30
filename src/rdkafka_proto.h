@@ -57,7 +57,7 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_Heartbeat     12
 #define RD_KAFKAP_LeaveGroup    13
 #define RD_KAFKAP_SyncGroup     14
-#define RD_KAFKAP_DescribeGroup 15
+#define RD_KAFKAP_DescribeGroups 15
 #define RD_KAFKAP_ListGroups    16
 	int16_t  ApiVersion;
 	int32_t  CorrId;
@@ -93,7 +93,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_Heartbeat] = "Heartbeat",
                 [RD_KAFKAP_LeaveGroup] = "LeaveGroup",
                 [RD_KAFKAP_SyncGroup] = "SyncGroup",
-		[RD_KAFKAP_DescribeGroup] = "DescribeGroup",
+		[RD_KAFKAP_DescribeGroups] = "DescribeGroups",
 		[RD_KAFKAP_ListGroups] = "ListGroups"
 	};
 	static RD_TLS char ret[32];
@@ -261,7 +261,7 @@ typedef struct rd_kafkap_bytes_s {
 #define RD_KAFKAP_BYTES_SIZE(kbytes) RD_KAFKAP_BYTES_SIZE0((kbytes)->len)
 
 
-/* Serialized Kafka bytes: only works for _new() and kbytes */
+/* Serialized Kafka bytes: only works for _new() kbytes */
 #define RD_KAFKAP_BYTES_SER(kbytes)  ((kbytes)+1)
 
 

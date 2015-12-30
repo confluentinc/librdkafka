@@ -109,9 +109,6 @@ void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
 
 
 
-
-
-
 /**
  * Parses and handles Offset replies.
  * Returns the parsed Offset in '*Offsetp'.
@@ -1327,6 +1324,50 @@ err:
 
 
 
+
+/**
+ * Send ListGroupsRequest
+ */
+void rd_kafka_ListGroupsRequest (rd_kafka_broker_t *rkb,
+                                 rd_kafka_q_t *replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+
+        rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 0, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_ListGroups,
+                                       rkbuf, replyq, resp_cb, opaque);
+}
+
+
+/**
+ * Send DescribeGroupsRequest
+ */
+void rd_kafka_DescribeGroupsRequest (rd_kafka_broker_t *rkb,
+                                     const char **groups, int group_cnt,
+                                     rd_kafka_q_t *replyq,
+                                     rd_kafka_resp_cb_t *resp_cb,
+                                     void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+
+        rkbuf = rd_kafka_buf_new_growable(rkb->rkb_rk, 1, 32*group_cnt);
+
+        rd_kafka_buf_write_i32(rkbuf, group_cnt);
+        while (group_cnt-- > 0)
+                rd_kafka_buf_write_str(rkbuf, groups[group_cnt], -1);
+
+        rd_kafka_buf_autopush(rkbuf);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_DescribeGroups,
+                                       rkbuf, replyq, resp_cb, opaque);
+}
+
+
+
+
+
+
 /**
  * Construct MetadataRequest (does not send)
  *
@@ -1587,6 +1628,10 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 	}
 
 
+        rd_kafka_wrlock(rkb->rkb_rk);
+        rkb->rkb_rk->rk_ts_metadata = rd_clock();
+        rd_kafka_wrunlock(rkb->rkb_rk);
+
 done:
         /* This metadata request was triggered by someone wanting
          * the metadata information back as a reply, so send that reply now.
@@ -1685,5 +1730,4 @@ static void rd_kafka_assignor_handle_Metadata (rd_kafka_broker_t *rkb,
         if (md)
                 rd_free(md);
 }
-
 

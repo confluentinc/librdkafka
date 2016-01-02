@@ -121,6 +121,8 @@ static void produce_null_messages (uint64_t testid, const char *topic,
         }
 
 
+        TEST_SAY("Produced %d messages to %d partition(s), "
+                 "waiting for deliveries\n", msgcnt, partition_cnt);
 	/* Wait for messages to be delivered */
 	while (rd_kafka_outq_len(rk) > 0)
 		rd_kafka_poll(rk, 100);
@@ -131,6 +133,8 @@ static void produce_null_messages (uint64_t testid, const char *topic,
 	if (prod_msg_remains != 0)
 		TEST_FAIL("Still waiting for %i messages to be produced",
 			  prod_msg_remains);
+        else
+                TEST_SAY("All messages delivered\n");
 
 	/* Destroy topic */
 	rd_kafka_topic_destroy(rkt);
@@ -369,7 +373,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 	/* Start consuming each partition */
 	for (partition = 0 ; partition < partition_cnt ; partition++) {
 		/* Consume messages */
-		TEST_SAY("Start consuming partition %i at offset -%i\n",
+		TEST_SAY("Start consuming partition %i at tail offset -%i\n",
 			 partition, batch_cnt);
 		if (rd_kafka_consume_start_queue(rkt, partition,
 						 RD_KAFKA_OFFSET_TAIL(batch_cnt),

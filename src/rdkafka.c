@@ -2282,6 +2282,7 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_broker_t *rkb,
                                          void *opaque) {
         struct list_groups_state *state = opaque;
         const int log_decode_errors = 1;
+        int16_t ErrorCode;
         char **grps;
         int cnt, grpcnt, i = 0;
 
@@ -2290,9 +2291,11 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_broker_t *rkb,
         if (err)
                 goto err;
 
-        rd_kafka_buf_read_i16(reply, &err);
-        if (err)
+        rd_kafka_buf_read_i16(reply, &ErrorCode);
+        if (ErrorCode) {
+                err = ErrorCode;
                 goto err;
+        }
 
         rd_kafka_buf_read_i32(reply, &cnt);
 

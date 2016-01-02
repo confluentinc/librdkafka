@@ -1140,9 +1140,8 @@ rd_kafka_cgrp_subscribe (rd_kafka_cgrp_t *rkcg,
  *
  * Locality: cgrp broker thread
  */
-static void rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko){
-        // int i;
-        // FIXME: shptr_rd_kafka_toppar_t *s_rktp;
+static void
+rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
                      "Terminating group \"%.*s\" in state %s "
@@ -1172,23 +1171,6 @@ static void rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko)
         rkcg->rkcg_reply_rko = rko;
 
         rd_kafka_cgrp_unsubscribe(rkcg, 1/*leave group*/);
-
-#if 0
-        /* Tell all toppars to stop, they will eventually
-         * call PARTITION_LEAVE. */
-        RD_LIST_FOREACH(s_rktp, &rkcg->rkcg_toppars, i) {
-                rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP,
-                             "CGRPTERM",
-                             "Group \"%.*s\": "
-                             "stopping %.*s [%"PRId32"]",
-                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                             rktp->rktp_partition);
-
-                rd_kafka_toppar_op_fetch_stop(rktp, NULL, NULL);
-        }
-#endif
 
         /* If there were no toppars attached the cgrp
          * can be terminated right away. */
@@ -1291,8 +1273,6 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 						  "Failed to fetch offsets: %s",
 						  rd_kafka_err2str(rko->
 								   rko_err));
-
-				// FIXME: What do we do here?
                                 break;
                         }
 

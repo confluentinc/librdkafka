@@ -178,6 +178,7 @@
     <ClCompile Include="..\..\tests\0015-offset_seeks.c" />
     <ClCompile Include="..\..\tests\0017-compression.c" />
     <ClCompile Include="..\..\tests\0018-cgrp_term.c" />
+    <ClCompile Include="..\..\tests\0019-list_groups.c" />
     <ClCompile Include="..\..\tests\test.c" />
   </ItemGroup>
   <ItemGroup>

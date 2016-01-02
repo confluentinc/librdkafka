@@ -1635,37 +1635,30 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
         return err;
 }
 
-rd_kafka_resp_err_t rd_kafka_consumer_get_offset (rd_kafka_topic_t *app_rkt,
-                                                  int32_t partition,
-                                                  int64_t *offsetp,
-                                                  int timeout_ms) {
-        rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
+
+
+rd_kafka_resp_err_t
+rd_kafka_position (rd_kafka_t *rk,
+                   rd_kafka_topic_partition_list_t *partitions,
+                   int timeout_ms) {
         rd_kafka_q_t *replyq;
-        rd_kafka_op_t *rko;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
-        rd_kafka_toppar_t *rktp;
-        shptr_rd_kafka_toppar_t *s_rktp;
 
-        rd_kafka_assert(NULL, !*"FIXME: use part_list for query");
-        if (!(rkcg = rd_kafka_cgrp_get(rkt->rkt_rk)))
+        if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        rd_kafka_topic_rdlock(rkt);
-	s_rktp = rd_kafka_toppar_get(rkt, partition, 0/*no ua on miss*/);
-	if (unlikely(!s_rktp))
-		s_rktp = rd_kafka_toppar_desired_get(rkt, partition);
-	rd_kafka_topic_rdunlock(rkt);
-
-        if (unlikely(!s_rktp))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
-
-        rktp = rd_kafka_toppar_s2i(s_rktp);
-
-        replyq = rd_kafka_q_new(rktp->rktp_rkt->rkt_rk);
-
+        replyq = rd_kafka_q_new(rk);
         do {
-                rd_kafka_toppar_offset_fetch(rktp, replyq);
+                rd_kafka_op_t *rko;
+
+                rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
+                rko->rko_replyq = replyq;
+                rd_kafka_q_keep(rko->rko_replyq);
+
+                rd_kafka_op_payload_set(rko, partitions, NULL);
+
+                rd_kafka_q_enq(&rkcg->rkcg_ops, rko);
 
                 rko = rd_kafka_q_pop(replyq, timeout_ms, 0);
                 if (rko) {
@@ -1673,16 +1666,10 @@ rd_kafka_resp_err_t rd_kafka_consumer_get_offset (rd_kafka_topic_t *app_rkt,
                                 rko->rko_payload;
 
                         if (!(err = rko->rko_err)) {
-                                rd_kafka_topic_partition_t *rktpar;
-
-                                offsets = rko->rko_payload;
-                                rktpar = &offsets->elems[0];
-
-                                if (!(err = rktpar->err))
-                                        *offsetp = rktpar->offset;
-                        }
-
-                        rd_kafka_topic_partition_list_destroy(offsets);
+                                rd_kafka_assert(NULL, offsets == partitions);
+                                rko->rko_payload = NULL;
+                        } else if (err == RD_KAFKA_RESP_ERR__WAIT_COORD)
+                                rd_usleep(10*1000, &rk->rk_terminate);
 
                         rd_kafka_op_destroy(rko);
                 } else
@@ -1690,8 +1677,6 @@ rd_kafka_resp_err_t rd_kafka_consumer_get_offset (rd_kafka_topic_t *app_rkt,
         } while (err == RD_KAFKA_RESP_ERR__WAIT_COORD);
 
         rd_kafka_q_destroy(replyq);
-
-        rd_kafka_toppar_destroy(s_rktp);
 
         return err;
 }

@@ -1725,6 +1725,21 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                          int async);
 
 
+
+
+/**
+ * @brief Retrieve committed positions (offsets) for topics+partitions.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
+ *          \p offset or \p err field of each \p partitions' element is filled
+ *          in with the stored offset, or a partition specific error.
+ *          Else returns an error code.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_position (rd_kafka_t *rk,
+                   rd_kafka_topic_partition_list_t *partitions,
+                   int timeout_ms);
+
 /**@}*/
 
 

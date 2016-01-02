@@ -303,7 +303,7 @@ int main (int argc, char **argv) {
 	/* Topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();
 
-	while ((opt = getopt(argc, argv, "g:b:qd:eX:As:D")) != -1) {
+	while ((opt = getopt(argc, argv, "g:b:qd:eX:As:DO")) != -1) {
 		switch (opt) {
 		case 'b':
 			brokers = optarg;
@@ -373,7 +373,8 @@ int main (int argc, char **argv) {
 		break;
 
                 case 'D':
-                        mode = 'D';
+                case 'O':
+                        mode = opt;
                         break;
 
 		default:
@@ -410,7 +411,7 @@ int main (int argc, char **argv) {
 	}
 
 
-	if (mode == 'C' && optind == argc) {
+	if (strchr("OC", mode) && optind == argc) {
 	usage:
 		fprintf(stderr,
 			"Usage: %s [options] <topic[:part]> <topic[:part]>..\n"
@@ -423,6 +424,7 @@ int main (int argc, char **argv) {
 			"  -e              Exit consumer when last message\n"
 			"                  in partition has been received.\n"
                         "  -D              Describe group.\n"
+                        "  -O              Get commmitted offset(s)\n"
 			"  -d [facs..]     Enable debugging contexts:\n"
 			"                  %s\n"
 			"  -q              Be quiet\n"
@@ -458,7 +460,7 @@ int main (int argc, char **argv) {
          * Client/Consumer group
          */
 
-        if (mode == 'C') {
+        if (strchr("CO", mode)) {
                 /* Consumer groups require a group id */
                 if (!group)
                         group = "rdkafka_consumer_example";
@@ -530,6 +532,38 @@ int main (int argc, char **argv) {
                 rd_kafka_topic_partition_list_add(topics, topic, partition);
         }
 
+        if (mode == 'O') {
+                /* Offset query */
+
+                err = rd_kafka_position(rk, topics, 5000);
+                if (err) {
+                        fprintf(stderr, "%% Failed to fetch offsets: %s\n",
+                                rd_kafka_err2str(err));
+                        exit(1);
+                }
+
+                for (i = 0 ; i < topics->cnt ; i++) {
+                        rd_kafka_topic_partition_t *p = &topics->elems[i];
+                        printf("Topic \"%s\" partition %"PRId32,
+                               p->topic, p->partition);
+                        if (p->err)
+                                printf(" error %s",
+                                       rd_kafka_err2str(p->err));
+                        else {
+                                printf(" offset %"PRId64"",
+                                       p->offset);
+
+                                if (p->metadata_size)
+                                        printf(" (%d bytes of metadata)",
+                                               (int)p->metadata_size);
+                        }
+                        printf("\n");
+                }
+
+                goto done;
+        }
+
+
         if ((err = rd_kafka_subscribe(rk, topics))) {
                 fprintf(stderr, "%% Failed to start consuming topics: %s\n",
                         rd_kafka_err2str(err));
@@ -546,6 +580,7 @@ int main (int argc, char **argv) {
                 }
         }
 
+done:
         err = rd_kafka_consumer_close(rk);
         if (err)
                 fprintf(stderr, "%% Failed to close consumer: %s\n",
@@ -553,10 +588,10 @@ int main (int argc, char **argv) {
         else
                 fprintf(stderr, "%% Consumer closed\n");
 
+        rd_kafka_topic_partition_list_destroy(topics);
+
         /* Destroy handle */
         rd_kafka_destroy(rk);
-
-        rd_kafka_topic_partition_list_destroy(topics);
 
 	/* Let background threads clean up and terminate cleanly. */
 	run = 5;

@@ -846,26 +846,36 @@ void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
 /**
  * Send OffsetRequest for toppar.
  *
+ * If \p backoff_ms is non-zero only the query timer is started,
+ * otherwise a query is triggered directly.
+ *
  * Locality: toppar handler thread
  * Locks: toppar_lock() must be held
  */
 void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
-				     int64_t query_offset) {
+				     int64_t query_offset, int backoff_ms) {
 	rd_kafka_broker_t *rkb;
 
 	rd_kafka_assert(NULL,
 			thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread));
 
-	if (!(rkb = rktp->rktp_leader)) {
+	if (!(rkb = rktp->rktp_leader) || backoff_ms) {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
-			     "%s [%"PRId32"]: no current leader for partition, "
+			     "%s [%"PRId32"]: %s"
 			     "starting offset query timer for offset %s",
 			     rktp->rktp_rkt->rkt_topic->str,
 			     rktp->rktp_partition,
+                             !rkb ? "no current leader for partition, " : "",
 			     rd_kafka_offset2str(query_offset));
+
+                if (!backoff_ms)
+                        backoff_ms = 500;
+
+                rd_kafka_toppar_set_fetch_state(
+                        rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 		rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
 				     &rktp->rktp_offset_query_tmr,
-				     500*1000,
+				     backoff_ms*1000,
 				     rd_kafka_offset_query_tmr_cb, rktp);
 		return;
 	} else {

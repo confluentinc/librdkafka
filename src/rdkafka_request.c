@@ -223,32 +223,50 @@ void rd_kafka_toppar_handle_Offset (rd_kafka_broker_t *rkb,
                         rd_kafka_toppar_destroy(s_rktp);
 
                         return;
+
+                } else if (err == RD_KAFKA_RESP_ERR__TRANSPORT) {
+                        /* Intermittent connectivity problem,
+                         * return to query state and let the timed
+                         * interval try again. */
+
+
+                        rd_kafka_toppar_lock(rktp);
+                        rd_kafka_toppar_offset_request(rktp,
+                                                       rktp->rktp_query_offset,
+                                                       500);
+                        rd_kafka_toppar_unlock(rktp);
+
+                        /* from request.opaque */
+                        rd_kafka_toppar_destroy(s_rktp);
+
+                        return;
                 }
-		rd_kafka_toppar_lock(rktp);
+
+
+                rd_kafka_toppar_lock(rktp);
                 rd_kafka_offset_reset(rktp, rktp->rktp_query_offset,
-                                      err, "failed to query logical offset");
-		rd_kafka_toppar_unlock(rktp);
+                                      err,
+                                      "failed to query logical offset");
+                rd_kafka_toppar_unlock(rktp);
 
                 /* Signal error back to application,
                  * unless this is an intermittent problem
                  * (e.g.,connection lost) */
-                if (err != RD_KAFKA_RESP_ERR__TRANSPORT) {
-                        rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
-                        rko->rko_err = err;
-                        if (rktp->rktp_query_offset <=
-                            RD_KAFKA_OFFSET_TAIL_BASE)
-                                rko->rko_rkmessage.offset =
-                                        rktp->rktp_query_offset -
-                                        RD_KAFKA_OFFSET_TAIL_BASE;
-                        else
-                                rko->rko_rkmessage.offset =
-                                        rktp->rktp_query_offset;
-                        rko->rko_rkmessage.rkt =
-                                rd_kafka_topic_keep_a(rktp->rktp_rkt);
-                        rko->rko_rkmessage.partition = rktp->rktp_partition;
+                rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
+                rko->rko_err = err;
+                if (rktp->rktp_query_offset <=
+                    RD_KAFKA_OFFSET_TAIL_BASE)
+                        rko->rko_rkmessage.offset =
+                                rktp->rktp_query_offset -
+                                RD_KAFKA_OFFSET_TAIL_BASE;
+                else
+                        rko->rko_rkmessage.offset =
+                                rktp->rktp_query_offset;
+                rko->rko_rkmessage.rkt =
+                        rd_kafka_topic_keep_a(rktp->rktp_rkt);
+                rko->rko_rkmessage.partition = rktp->rktp_partition;
 
-                        rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
-                }
+                rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
 
                 rd_kafka_toppar_destroy(s_rktp); /* from request.opaque */
                 return;

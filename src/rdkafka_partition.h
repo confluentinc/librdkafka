@@ -325,7 +325,7 @@ void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
                                    rd_kafka_q_t *replyq);
 
 void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
-				     int64_t query_offset);
+				     int64_t query_offset, int backoff_ms);
 
 
 rd_kafka_assignor_t *

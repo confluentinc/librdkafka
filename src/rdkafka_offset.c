@@ -733,7 +733,7 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
                      reason, rd_kafka_err2str(err));
 
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
-		rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_offset);
+		rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_offset,0);
 }
 
 
@@ -996,10 +996,10 @@ void rd_kafka_offset_query_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
 		     "Topic %s [%"PRId32"]: timed offset query for %s",
 		     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
 		     rd_kafka_offset2str(rktp->rktp_query_offset));
-	rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_offset);
+	rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_offset, 0);
 	rd_kafka_toppar_unlock(rktp);
 }
- 
+
 
 /**
  * Initialize toppar's offset store.

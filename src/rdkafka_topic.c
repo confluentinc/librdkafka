@@ -432,9 +432,9 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 		s_rktp = rkt->rkt_p[i];
                 rktp = rd_kafka_toppar_s2i(s_rktp);
 
-                rd_kafka_toppar_broker_delegate(rktp, NULL);
-
 		rd_kafka_toppar_lock(rktp);
+
+                rd_kafka_toppar_broker_delegate(rktp, NULL);
 
 		/* Partition has gone away, move messages to UA or error-out */
 		if (likely(rktp_ua != NULL))
@@ -744,7 +744,9 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
                                 continue;
 
                         rktp = rd_kafka_toppar_s2i(rkt->rkt_p[j]);
+                        rd_kafka_toppar_lock(rktp);
                         rd_kafka_toppar_broker_delegate(rktp, NULL);
+                        rd_kafka_toppar_unlock(rktp);
                 }
         }
 

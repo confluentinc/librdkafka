@@ -124,8 +124,13 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 	test_init();
 
         if (conf) {
+                char *tmp;
+
                 *conf = rd_kafka_conf_new();
                 rd_kafka_conf_set_error_cb(*conf, test_error_cb);
+
+                if ((tmp = getenv("TEST_DEBUG")) && *tmp)
+                        test_conf_set(*conf, "debug", tmp);
 
 #ifdef SIGIO
                 /* Quick termination */

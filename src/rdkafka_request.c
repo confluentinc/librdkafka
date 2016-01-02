@@ -495,6 +495,7 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_broker_t *rkb,
         rd_kafka_assert(NULL, offsets != NULL);
 
         rko_reply = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH|RD_KAFKA_OP_REPLY);
+        rko_reply->rko_err = err;
         rko_reply->rko_version = rko->rko_version;
         rd_kafka_op_payload_move(rko_reply, rko); /* move 'offsets' */
 

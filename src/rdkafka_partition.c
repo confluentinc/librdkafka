@@ -859,7 +859,12 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
 	rd_kafka_assert(NULL,
 			thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread));
 
-	if (!(rkb = rktp->rktp_leader) || backoff_ms) {
+        rkb = rktp->rktp_leader;
+
+        if (!backoff_ms && (!rkb || rkb->rkb_source == RD_KAFKA_INTERNAL))
+                backoff_ms = 500;
+
+        if (backoff_ms) {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
 			     "%s [%"PRId32"]: %s"
 			     "starting offset query timer for offset %s",
@@ -868,9 +873,6 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
                              !rkb ? "no current leader for partition, " : "",
 			     rd_kafka_offset2str(query_offset));
 
-                if (!backoff_ms)
-                        backoff_ms = 500;
-
                 rd_kafka_toppar_set_fetch_state(
                         rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 		rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
@@ -878,10 +880,11 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
 				     backoff_ms*1000,
 				     rd_kafka_offset_query_tmr_cb, rktp);
 		return;
-	} else {
-		rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
-				    &rktp->rktp_offset_query_tmr, 1/*lock*/);
-	}
+        }
+
+
+        rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
+                            &rktp->rktp_offset_query_tmr, 1/*lock*/);
 
 
 	if (query_offset == RD_KAFKA_OFFSET_STORED &&

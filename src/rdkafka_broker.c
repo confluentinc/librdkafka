@@ -3022,8 +3022,6 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 	rd_kafka_buf_t *rkbuf;
 	rd_ts_t now = rd_clock();
 	int cnt = 0;
-        int max_cnt;
-	int iov_cnt;
 	int of_TopicArrayCnt = 0;
 	int TopicArrayCnt = 0;
 	int of_PartitionArrayCnt = 0;
@@ -3043,21 +3041,12 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
         if (unlikely(rkb->rkb_fetch_toppar_cnt == 0))
                 return 0;
 
-	iov_cnt = 1 + (rkb->rkb_fetch_toppar_cnt * 2); 
-
-	/* Limit to maximum iovecs. This has the downside that if the
-	 * application consumes from more than ~ IOV_MAX/2 partitions the
-	 * over shooting partitions will not be consumed.
-	 * Doing a WFQ-like round-robin solves this. */
-	if (iov_cnt > RD_KAFKA_PAYLOAD_IOV_MAX)
-		iov_cnt = RD_KAFKA_PAYLOAD_IOV_MAX;
-	max_cnt = (iov_cnt - 1) / 2;
-
-	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, iov_cnt,
-				 /* ReplicaId+MaxWaitTime+MinBytes+TopicCnt */
-				 4+4+4+4+
-				 /* N x PartCnt+Partition+FetchOffset+MaxBytes*/
-				 (max_cnt * (4+4+8+4)));
+	rkbuf = rd_kafka_buf_new_growable(
+                rkb->rkb_rk, 1,
+                /* ReplicaId+MaxWaitTime+MinBytes+TopicCnt */
+                4+4+4+4+
+                /* N x PartCnt+Partition+FetchOffset+MaxBytes+?TopicNameLen?*/
+                (rkb->rkb_fetch_toppar_cnt * (4+4+8+4+40)));
 
 	/* FetchRequest header */
 	/* ReplicaId */
@@ -3070,28 +3059,23 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 	/* Write zero TopicArrayCnt but store pointer for later update */
 	of_TopicArrayCnt = rd_kafka_buf_write_i32(rkbuf, 0);
 
-	rd_kafka_buf_autopush(rkbuf);
-
         /* Round-robin start of the list. */
         rktp = rkb->rkb_fetch_toppar_next;
         do {
-		if (rd_kafka_buf_iov_remain(rkbuf) < 2)
-                        break;
-
 		if (rkt_last != rktp->rktp_rkt) {
 			if (rkt_last != NULL) {
 				/* Update PartitionArrayCnt */
 				rd_kafka_buf_update_i32(rkbuf,
 							of_PartitionArrayCnt,
 							PartitionArrayCnt);
-				rd_kafka_buf_autopush(rkbuf);
 			}
 
-			/* Push topic name onto buffer stack. */
-			rd_kafka_buf_push_kstr(rkbuf,
-					       rktp->rktp_rkt->rkt_topic);
+                        /* Topic name */
+			rd_kafka_buf_write_kstr(rkbuf,
+                                                rktp->rktp_rkt->rkt_topic);
 			TopicArrayCnt++;
 			rkt_last = rktp->rktp_rkt;
+                        /* Partition count */
 			of_PartitionArrayCnt = rd_kafka_buf_write_i32(rkbuf, 0);
 			PartitionArrayCnt = 0;
 		}
@@ -3138,7 +3122,6 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 		rd_kafka_buf_update_i32(rkbuf,
 					of_PartitionArrayCnt,
 					PartitionArrayCnt);
-		rd_kafka_buf_autopush(rkbuf);
 	}
 
 	/* Update TopicArrayCnt */
@@ -3151,6 +3134,8 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 
 	if (rkb->rkb_rk->rk_conf.quota_support)
 		rd_kafka_buf_version_set(rkbuf, 1);
+
+        rd_kafka_buf_autopush(rkbuf);
 
 	rkb->rkb_fetching = 1;
 	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_Fetch, rkbuf,

@@ -2481,6 +2481,10 @@ void rd_kafka_mem_free (rd_kafka_t *rk, void *ptr) {
 }
 
 
+int rd_kafka_errno (void) {
+        return errno;
+}
+
 
 #if ENABLE_SHAREDPTR_DEBUG
 struct rd_shptr0_head rd_shared_ptr_debug_list;

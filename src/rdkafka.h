@@ -354,6 +354,18 @@ RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
 
 
+/**
+ * @brief Returns the thread-local system errno
+ *
+ * On most platforms this is the same as \p errno but in case of different
+ * runtimes between library and application (e.g., Windows static DLLs)
+ * this provides a means for expsing the errno librdkafka uses.
+ *
+ * @remark The value is local to the current calling thread.
+ */
+RD_EXPORT
+int rd_kafka_errno (void);
+
 
 
 /**

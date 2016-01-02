@@ -558,6 +558,7 @@ public:
 	  return static_cast<ErrorCode>(
                   rd_kafka_commit_message(rk_, msgimpl->rkmessage_,1/*async*/));
   }
+  ErrorCode position (std::vector<TopicPartition*> &partitions, int timeout_ms);
 
   ErrorCode close ();
 };

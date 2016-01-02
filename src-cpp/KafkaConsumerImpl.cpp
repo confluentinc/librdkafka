@@ -188,6 +188,56 @@ RdKafka::KafkaConsumerImpl::assign (const std::vector<TopicPartition*> &partitio
 }
 
 
+RdKafka::ErrorCode
+RdKafka::KafkaConsumerImpl::position (std::vector<RdKafka::TopicPartition*> &partitions, int timeout_ms) {
+  rd_kafka_topic_partition_list_t *c_parts;
+  rd_kafka_resp_err_t err;
+
+  c_parts = rd_kafka_topic_partition_list_new(partitions.size());
+
+  for (unsigned int i = 0 ; i < partitions.size() ; i++)
+    rd_kafka_topic_partition_list_add(c_parts,
+                                      partitions[i]->topic().c_str(),
+                                      partitions[i]->partition());
+
+  err = rd_kafka_position(rk_, c_parts, timeout_ms);
+
+  if (!err) {
+    /* Update the application provided 'partitions' with info from 'c_parts' */
+    for (int i = 0 ; i < c_parts->cnt ; i++) {
+      rd_kafka_topic_partition_t *p = &c_parts->elems[i];
+
+      /* Find corresponding C++ entry */
+      for (unsigned int j = 0 ; j < partitions.size() ; j++) {
+        RdKafka::TopicPartitionImpl *pp =
+            dynamic_cast<RdKafka::TopicPartitionImpl*>(partitions[j]);
+        if (!strcmp(p->topic, pp->topic_.c_str()) &&
+            p->partition == pp->partition_) {
+          pp->offset_ = p->offset;
+          pp->err_ = static_cast<RdKafka::ErrorCode>(p->err);
+        }
+      }
+    }
+  }
+
+  rd_kafka_topic_partition_list_destroy(c_parts);
+
+  return static_cast<RdKafka::ErrorCode>(err);
+
+
+  if ((err = rd_kafka_assignment(rk_, &c_parts)))
+    return static_cast<RdKafka::ErrorCode>(err);
+
+  partitions.resize(c_parts->cnt);
+
+  for (int i = 0 ; i < c_parts->cnt ; i++)
+    partitions[i] = new RdKafka::TopicPartitionImpl(&c_parts->elems[i]);
+
+  rd_kafka_topic_partition_list_destroy(c_parts);
+
+  return RdKafka::ERR_NO_ERROR;
+}
+
 
 RdKafka::ErrorCode
 RdKafka::KafkaConsumerImpl::close () {

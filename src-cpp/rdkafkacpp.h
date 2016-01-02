@@ -1190,6 +1190,18 @@ public:
    */
   virtual ErrorCode commitAsync (Message *message) = 0;
 
+
+  /**
+   * @brief Retrieve committed positions (offsets) for topics+partitions.
+   *
+   * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
+   *          \p offset or \p err field of each \p partitions' element is filled
+   *          in with the stored offset, or a partition specific error.
+   *          Else returns an error code.
+   */
+  virtual ErrorCode position (std::vector<TopicPartition*> &partitions,
+                              int timeout_ms) = 0;
+
   /**
    * @brief Close and shut down the proper.
    *

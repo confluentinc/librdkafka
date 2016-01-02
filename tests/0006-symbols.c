@@ -133,6 +133,7 @@ int main_0006_symbols (int argc, char **argv) {
 		rd_kafka_assignment(NULL, NULL);
 		rd_kafka_commit(NULL, NULL, 0);
 		rd_kafka_commit_message(NULL, NULL, 0);
+                rd_kafka_position(NULL, NULL, 0);
 
 		/* TopicPartition */
 		rd_kafka_topic_partition_list_new(0);
@@ -140,8 +141,6 @@ int main_0006_symbols (int argc, char **argv) {
 		rd_kafka_topic_partition_list_add(NULL, NULL, 0);
 		rd_kafka_topic_partition_list_add_range(NULL, NULL, 0, 0);
 		rd_kafka_topic_partition_list_copy(NULL);
-		
-		
         }
 
 

@@ -400,7 +400,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Automatically and periodically commit offsets in the background.",
           0, 1, 1 },
         { _RK_GLOBAL|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
-	  _RKT(auto_commit_interval_ms),
+	  _RK(auto_commit_interval_ms),
 	  "The frequency in milliseconds that the consumer offsets "
 	  "are commited (written) to offset storage. (0 = disable)",
           0, 86400*1000, 5*1000 },

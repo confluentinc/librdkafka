@@ -29,6 +29,7 @@ mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Ena
 
 mkl_toggle_option "Development" ENABLE_SHAREDPTR_DEBUG "--enable-sharedptr-debug" "Enable sharedptr debugging" "n"
 
+mkl_toggle_option "Libraries" ENABLE_SASL "--enable-sasl" "Enable SASL support" "y"
 
 
 function checks {
@@ -43,9 +44,11 @@ function checks {
     mkl_meta_set "libssl" "deb" "libssl-dev"
     mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl"
 
-    mkl_meta_set "libsasl2" "deb" "libsasl2-dev"
-    if ! mkl_lib_check "libsasl2" "WITH_SASL" disable CC "-lsasl2"; then
-	mkl_lib_check "libsasl" "WITH_SASL" disable CC "-lsasl"
+    if [[ "$ENABLE_SASL" == "y" ]]; then
+        mkl_meta_set "libsasl2" "deb" "libsasl2-dev"
+        if ! mkl_lib_check "libsasl2" "WITH_SASL" disable CC "-lsasl2"; then
+	    mkl_lib_check "libsasl" "WITH_SASL" disable CC "-lsasl"
+        fi
     fi
 
     # Snappy is currently broken on MSVC Win32, enable for everything else.

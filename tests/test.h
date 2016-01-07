@@ -169,6 +169,8 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                         uint64_t testid, int32_t partition,
                         int msg_base, int cnt,
 			const char *payload, size_t size);
+uint64_t
+test_produce_msgs_easy (const char *topic, int32_t partition, int msgcnt);
 rd_kafka_t *test_create_consumer (const char *group_id,
 				  void (*rebalance_cb) (
 					  rd_kafka_t *rk,
@@ -193,6 +195,17 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
                            uint64_t testid, int32_t partition, int64_t offset,
                            int exp_msg_base, int exp_cnt, int parse_fmt);
 
+
+void test_verify_rkmessage0 (const char *func, int line,
+                             rd_kafka_message_t *rkmessage, uint64_t testid,
+                             int32_t partition, int msgnum);
+#define test_verify_rkmessage(rkmessage,testid,partition,msgnum) \
+        test_verify_rkmessage0(__FUNCTION__,__LINE__,\
+                               rkmessage,testid,partition,msgnum)
+
+void
+test_consume_msgs_easy (const char *group_id, const char *topic,
+                        uint64_t testid, int exp_msgcnt);
 
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt);

@@ -417,14 +417,14 @@ static int run_test (const char *testname,
 					     .test_main = test_main,
 					     .argc = argc,
 					     .argv = argv };
-		
+
 		tests_running_cnt++;
 		r =  run_test0(&run_args);
 		tests_running_cnt--;
-		
-        /* Wait for everything to be cleaned up since broker
-         * destroys are handled in its own thread. */
-        test_wait_exit(5);
+
+                /* Wait for everything to be cleaned up since broker
+                 * destroys are handled in its own thread. */
+                test_wait_exit(5);
 
 		test_curr = NULL;
         }
@@ -490,10 +490,18 @@ int main(int argc, char **argv) {
 	RUN_TEST(0017_compression);
 	RUN_TEST(0018_cgrp_term);
         RUN_TEST(0019_list_groups);
+        RUN_TEST(0020_destroy_hang);
 
         if (tests_run_in_parallel) {
-                while (tests_running_cnt > 0)
+                pthread_mutex_lock(&test_lock);
+                while (tests_running_cnt > 0) {
+                        TEST_SAY("%d test(s) still running\n",
+                                 tests_running_cnt);
+                        pthread_mutex_unlock(&test_lock);
                         rd_sleep(1);
+                        pthread_mutex_lock(&test_lock);
+                }
+                pthread_mutex_unlock(&test_lock);
         }
 
 	TIMING_STOP(&t_all);
@@ -613,7 +621,7 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 		} else {
 			test_msg_fmt(key, sizeof(key), testid, partition,
 				     msg_id);
-			rd_snprintf(buf, sizeof(buf), "data: %s", key);
+			rd_snprintf(buf, sizeof(buf), "%s: data", key);
 			use_payload = buf;
 			use_size = strlen(buf);
 		}
@@ -640,6 +648,30 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	TIMING_STOP(&t_all);
 }
 
+
+/**
+ * Create producer, produce \p msgcnt messages to \p topic \p partition,
+ * destroy consumer, and returns the used testid.
+ */
+uint64_t
+test_produce_msgs_easy (const char *topic, int32_t partition, int msgcnt) {
+        rd_kafka_t *rk;
+        rd_kafka_topic_t *rkt;
+        uint64_t testid;
+        test_timing_t t_produce;
+
+        testid = test_id_generate();
+        rk = test_create_producer();
+        rkt = test_create_producer_topic(rk, topic, NULL);
+
+        TIMING_START(&t_produce, "PRODUCE");
+        test_produce_msgs(rk, rkt, testid, partition, 0, msgcnt, NULL, 0);
+        TIMING_STOP(&t_produce);
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(rk);
+
+        return testid;
+}
 
 
 rd_kafka_t *test_create_consumer (const char *group_id,
@@ -843,6 +875,48 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 }
 
 
+/**
+ * Create high-level consumer subscribing to \p topic from BEGINNING
+ * and expects \d exp_msgcnt with matching \p testid
+ * Destroys consumer when done.
+ */
+void
+test_consume_msgs_easy (const char *group_id, const char *topic,
+                        uint64_t testid, int exp_msgcnt) {
+        rd_kafka_t *rk;
+        rd_kafka_topic_conf_t *tconf;
+        rd_kafka_resp_err_t err;
+        rd_kafka_topic_partition_list_t *topics;
+
+        test_conf_init(NULL, &tconf, 0);
+
+        test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
+        rk = test_create_consumer(group_id, NULL, tconf, NULL);
+
+        rd_kafka_poll_set_consumer(rk);
+
+        topics = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(topics, topic, RD_KAFKA_PARTITION_UA);
+
+        TEST_SAY("Subscribing to topic %s in group %s "
+                 "(expecting %d msgs with testid %"PRIu64")\n",
+                 topic, group_id, exp_msgcnt, testid);
+
+        err = rd_kafka_subscribe(rk, topics);
+        if (err)
+                TEST_FAIL("Failed to subscribe to %s: %s\n",
+                          topic, rd_kafka_err2str(err));
+
+        rd_kafka_topic_partition_list_destroy(topics);
+
+        /* Consume messages */
+        test_consumer_poll("consume.easy", rk, testid, -1, -1, exp_msgcnt);
+
+        test_consumer_close(rk);
+
+        rd_kafka_destroy(rk);
+}
+
 
 
 void test_consumer_assign (const char *what, rd_kafka_t *rk,
@@ -877,12 +951,59 @@ void test_consumer_unassign (const char *what, rd_kafka_t *rk) {
 }
 
 
+void test_verify_rkmessage0 (const char *func, int line,
+                             rd_kafka_message_t *rkmessage, uint64_t testid,
+                             int32_t partition, int msgnum) {
+	uint64_t in_testid;
+	int in_part;
+	int in_msgnum;
+	char buf[128];
+
+	rd_snprintf(buf, sizeof(buf), "%.*s",
+		 (int)rkmessage->len, (char *)rkmessage->payload);
+
+	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+		   &in_testid, &in_part, &in_msgnum) != 3)
+		TEST_FAIL("Incorrect format: %s", buf);
+
+	if (testid != in_testid ||
+	    (partition != -1 && partition != in_part) ||
+	    (msgnum != -1 && msgnum != in_msgnum) ||
+	    in_msgnum < 0)
+		goto fail_match;
+
+	if (test_level > 2) {
+		TEST_SAY("%s:%i: Our testid %"PRIu64", part %i (%i), msg %i\n",
+			 func, line,
+			 testid, (int)partition, (int)rkmessage->partition,
+			 msgnum);
+	}
+
+
+        return;
+
+fail_match:
+	TEST_FAIL("%s:%i: Our testid %"PRIu64", part %i, msg %i did "
+		  "not match message: \"%s\"\n",
+		  func, line,
+		  testid, (int)partition, msgnum, buf);
+}
+
+
+
+
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt) {
         int eof_cnt = 0;
         int cnt = 0;
+        test_timing_t t_cons;
 
-        while (eof_cnt < exp_eof_cnt) {
+        TEST_SAY("%s: consume %d messages\n", what, exp_cnt);
+
+        TIMING_START(&t_cons, "CONSUME");
+
+        while ((exp_eof_cnt == -1 || eof_cnt < exp_eof_cnt) &&
+               (cnt < exp_cnt)) {
                 rd_kafka_message_t *rkmessage;
 
                 rkmessage = rd_kafka_consumer_poll(rk, 10*1000);
@@ -914,12 +1035,18 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
 					 rd_kafka_topic_name(rkmessage->rkt),
 					 rkmessage->partition,
 					 rkmessage->offset);
+
+                        test_verify_rkmessage(rkmessage, testid, -1, -1);
                         cnt++;
                 }
 
                 rd_kafka_message_destroy(rkmessage);
         }
 
+        TIMING_STOP(&t_cons);
+
+        TEST_SAY("%s: consumed %d/%d messages (%d/%d EOFs)\n",
+                 what, cnt, exp_cnt, eof_cnt, exp_eof_cnt);
         return cnt;
 }
 

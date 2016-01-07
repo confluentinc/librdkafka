@@ -29,7 +29,8 @@ mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Ena
 
 mkl_toggle_option "Development" ENABLE_SHAREDPTR_DEBUG "--enable-sharedptr-debug" "Enable sharedptr debugging" "n"
 
-mkl_toggle_option "Libraries" ENABLE_SASL "--enable-sasl" "Enable SASL support" "y"
+mkl_toggle_option "Feature" ENABLE_SSL "--enable-ssl" "Enable SSL support" "y"
+mkl_toggle_option "Feature" ENABLE_SASL "--enable-sasl" "Enable SASL support" "y"
 
 
 function checks {
@@ -41,8 +42,10 @@ function checks {
     mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz"
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
 
-    mkl_meta_set "libssl" "deb" "libssl-dev"
-    mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl"
+    if [[ "$ENABLE_SSL" == "y" ]]; then
+	mkl_meta_set "libssl" "deb" "libssl-dev"
+	mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl"
+    fi
 
     if [[ "$ENABLE_SASL" == "y" ]]; then
         mkl_meta_set "libsasl2" "deb" "libsasl2-dev"

@@ -1738,7 +1738,7 @@ void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id){
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rkcg->rkcg_member_id ?
                      rkcg->rkcg_member_id->str : "(not-set)",
-                     member_id ? member_id : "(not-set");
+                     member_id ? member_id : "(not-set)");
 
         if (rkcg->rkcg_member_id) {
                 rd_kafkap_str_destroy(rkcg->rkcg_member_id);

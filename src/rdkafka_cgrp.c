@@ -1354,6 +1354,7 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 						rkcg->rkcg_rkb,
 						RD_KAFKA_RESP_ERR__NO_OFFSET,
 						NULL, NULL, rko);
+                                        rko = NULL; /* freed by op_handle */
 					break;
 				}
                         }

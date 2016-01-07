@@ -604,9 +604,11 @@ void rd_kafka_op_handle_OffsetCommit (rd_kafka_broker_t *rkb,
         int32_t TopicArrayCnt;
         int16_t ErrorCode = 0;
         rd_kafka_q_t *replyq;
-        rd_kafka_topic_partition_list_t *offsets = rko_orig->rko_payload;
+        rd_kafka_topic_partition_list_t *offsets;
         int i;
         int oi = 0;  /* index of offsets->elems */
+
+        offsets = rko_orig->rko_payload; /* possibly NULL (for some err!=0) */
 
         if (err) {
                 ErrorCode = err;
@@ -649,16 +651,14 @@ void rd_kafka_op_handle_OffsetCommit (rd_kafka_broker_t *rkb,
 err:
         rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
 
-
         if (ErrorCode != RD_KAFKA_RESP_ERR__DESTROY &&
             (replyq = rko_orig->rko_replyq)) {
                 rd_kafka_op_t *rko_reply = rd_kafka_op_new_reply(rko_orig);
                 rd_kafka_op_payload_move(rko_reply, rko_orig);
                 rko_reply->rko_err = ErrorCode;
                 rd_kafka_q_enq(replyq, rko_reply);
-        } else {
-                rd_kafka_topic_partition_list_destroy(offsets);
         }
+
 
         rd_kafka_op_destroy(rko_orig);
 }

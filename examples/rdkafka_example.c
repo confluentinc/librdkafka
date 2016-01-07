@@ -627,6 +627,11 @@ int main (int argc, char **argv) {
 		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
 			fprintf(stderr, "%% Failed to start consuming: %s\n",
 				rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                        if (errno == EINVAL)
+                                fprintf(stderr,
+                                        "%% Broker based offset storage "
+                                        "requires a group.id, "
+                                        "add: -X group.id=yourGroup\n");
 			exit(1);
 		}
 

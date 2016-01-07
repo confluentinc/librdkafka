@@ -386,7 +386,7 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
 
         /* Set default offset for all partitions. */
         rd_kafka_topic_partition_list_set_offsets(rkb->rkb_rk, offsets, 0,
-                                                  RD_KAFKA_OFFSET_ERROR,
+                                                  RD_KAFKA_OFFSET_INVALID,
 						  0 /* !is commit */);
 
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
@@ -426,7 +426,7 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
                                 continue;
 
 			if (offset == -1)
-				rktpar->offset = RD_KAFKA_OFFSET_ERROR;
+				rktpar->offset = RD_KAFKA_OFFSET_INVALID;
 			else
 				rktpar->offset = offset;
                         rktpar->err = ErrorCode;

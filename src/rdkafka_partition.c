@@ -979,7 +979,7 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 	} else if (offset == RD_KAFKA_OFFSET_STORED) {
                 rd_kafka_offset_store_init(rktp);
 
-	} else if (offset == RD_KAFKA_OFFSET_ERROR) {
+	} else if (offset == RD_KAFKA_OFFSET_INVALID) {
 		rd_kafka_offset_reset(rktp, offset,
 				      RD_KAFKA_RESP_ERR__NO_OFFSET,
 				      "no previously committed offset "

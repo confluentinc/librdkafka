@@ -104,7 +104,6 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 #define RD_KAFKAP_PARTITIONS_MAX  10000
 
 
-#define RD_KAFKA_OFFSET_ERROR    -1001
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF)  ((OFF) < 0)
 
 

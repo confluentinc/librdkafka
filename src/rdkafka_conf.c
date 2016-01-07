@@ -612,7 +612,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ RD_KAFKA_OFFSET_BEGINNING, "earliest" },
 			{ RD_KAFKA_OFFSET_END, "largest" },
 			{ RD_KAFKA_OFFSET_END, "latest" },
-			{ RD_KAFKA_OFFSET_ERROR, "error" },
+			{ RD_KAFKA_OFFSET_INVALID, "error" },
 		}
 	},
 	{ _RK_TOPIC|_RK_CONSUMER, "offset.store.path", _RK_C_STR,

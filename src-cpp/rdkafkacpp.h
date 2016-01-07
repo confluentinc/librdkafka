@@ -903,6 +903,7 @@ class RD_EXPORT Topic {
   static const int64_t OFFSET_BEGINNING = -2; /**< Consume from beginning */
   static const int64_t OFFSET_END       = -1; /**< Consume from end */
   static const int64_t OFFSET_STORED    = -1000; /**< Use offset storage */
+  static const int64_t OFFSET_INVALID   = -1001; /**< Invalid offset */
 
 
   /**

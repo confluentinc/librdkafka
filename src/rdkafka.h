@@ -1346,6 +1346,8 @@ void rd_kafka_queue_destroy(rd_kafka_queue_t *rkqu);
 				       *   partition queue: next msg */
 #define RD_KAFKA_OFFSET_STORED -1000  /**< Start consuming from offset retrieved
 				       *   from offset store */
+#define RD_KAFKA_OFFSET_INVALID -1001 /**< Invalid offset */
+
 
 /** @cond NO_DOC */
 #define RD_KAFKA_OFFSET_TAIL_BASE -2000 /* internal: do not use */

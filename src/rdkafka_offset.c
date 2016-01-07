@@ -82,8 +82,8 @@ const char *rd_kafka_offset2str (int64_t offset) {
                 return "END";
         else if (offset == RD_KAFKA_OFFSET_STORED)
                 return "STORED";
-        else if (offset == RD_KAFKA_OFFSET_ERROR)
-                return "ERROR";
+        else if (offset == RD_KAFKA_OFFSET_INVALID)
+                return "INVALID";
         else if (offset <= RD_KAFKA_OFFSET_TAIL_BASE)
                 rd_snprintf(ret[i], sizeof(ret[i]), "TAIL(%lld)",
 			    llabs(offset - RD_KAFKA_OFFSET_TAIL_BASE));
@@ -671,7 +671,7 @@ static void rd_kafka_offset_reset_op_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
  */
 void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 			    rd_kafka_resp_err_t err, const char *reason) {
-	int64_t offset = RD_KAFKA_OFFSET_ERROR;
+	int64_t offset = RD_KAFKA_OFFSET_INVALID;
 	rd_kafka_op_t *rko;
 	int64_t offset_reset = rktp->rktp_rkt->rkt_conf.auto_offset_reset;
 
@@ -706,7 +706,7 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
                 rd_kafka_toppar_set_fetch_state(
 			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 
-	} else if (offset_reset == RD_KAFKA_OFFSET_ERROR) {
+	} else if (offset_reset == RD_KAFKA_OFFSET_INVALID) {
 		/* Error, auto.offset.reset tells us to error out. */
 		rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
 
@@ -859,7 +859,7 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 	} else {
 		/* Offset was not usable: perform offset reset logic */
 		rktp->rktp_committed_offset = -1;
-		rd_kafka_offset_reset(rktp, RD_KAFKA_OFFSET_ERROR,
+		rd_kafka_offset_reset(rktp, RD_KAFKA_OFFSET_INVALID,
 				      RD_KAFKA_RESP_ERR__FS,
 				      "non-readable offset file");
 	}

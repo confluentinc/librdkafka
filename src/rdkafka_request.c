@@ -378,6 +378,7 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
         rd_kafkap_str_t metadata;
         int i;
         int actions;
+        int seen_cnt = 0;
 
         if (err) {
                 ErrorCode = err;
@@ -405,11 +406,12 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
                         int32_t partition;
                         shptr_rd_kafka_toppar_t *s_rktp;
                         rd_kafka_topic_partition_t *rktpar;
+                        int16_t err2;
 
                         rd_kafka_buf_read_i32(rkbuf, &partition);
                         rd_kafka_buf_read_i64(rkbuf, &offset);
                         rd_kafka_buf_read_str(rkbuf, &metadata);
-                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+                        rd_kafka_buf_read_i16(rkbuf, &err2);
 
                         rktpar = rd_kafka_topic_partition_list_find(offsets,
                                                                     topic_name,
@@ -419,6 +421,7 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
                         if (!rktpar)
                                 continue;
 
+                        seen_cnt++;
 
                         s_rktp = rd_kafka_toppar_get2(rkb->rkb_rk, topic_name,
                                                       partition, 0, 1);
@@ -429,7 +432,7 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
 				rktpar->offset = RD_KAFKA_OFFSET_INVALID;
 			else
 				rktpar->offset = offset;
-                        rktpar->err = ErrorCode;
+                        rktpar->err = err2;
 
                         if (rktpar->metadata)
                                 rd_free(rktpar->metadata);
@@ -453,6 +456,11 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
 
 
 err:
+        rd_rkb_dbg(rkb, TOPIC, "OFFFETCH",
+                   "OffsetFetch for %d/%d partition(s) returned %s",
+                   seen_cnt,
+                   offsets ? offsets->cnt : -1, rd_kafka_err2str(ErrorCode));
+
         actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {

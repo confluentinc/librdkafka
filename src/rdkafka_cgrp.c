@@ -508,6 +508,15 @@ static void rd_kafka_cgrp_terminated (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_offset_commit_tmr, 1/*lock*/);
 
+
+	/* Disable and empty ops queue since there will be no
+	 * (broker) thread serving it anymore after the unassign_broker
+	 * below.
+	 * This prevents hang on destroy where responses are enqueued on rkcg_ops
+	 * without anything serving the queue. */
+	rd_kafka_q_disable(&rkcg->rkcg_ops);
+	rd_kafka_q_purge(&rkcg->rkcg_ops);
+
 	if (rkcg->rkcg_rkb)
 		rd_kafka_cgrp_unassign_broker(rkcg);
 

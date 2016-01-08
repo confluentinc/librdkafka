@@ -160,9 +160,9 @@ static int rd_kafka_offset_file_open (rd_kafka_toppar_t *rktp) {
 
 	rktp->rktp_offset_fp =
 #ifndef _MSC_VER
-		fdopen(fd, "a+");
+		fdopen(fd, "r+");
 #else
-		_fdopen(fd, "a+");
+		_fdopen(fd, "r+");
 #endif
 
 	return 0;

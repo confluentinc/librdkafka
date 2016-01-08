@@ -15,7 +15,7 @@ struct rd_kafka_q_s {
         int           rkq_flags;
 #define RD_KAFKA_Q_F_ALLOCATED  0x1  /* Allocated: rd_free on destroy */
 #define RD_KAFKA_Q_F_READY      0x2  /* Queue is ready to be used.
-                                      * Flag is cleared on destory */
+                                      * Flag is cleared on destroy */
 
         rd_kafka_t   *rkq_rk;
 };

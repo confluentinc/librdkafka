@@ -89,7 +89,7 @@ const char *test_mk_topic_name (const char *suffix, int randomized) {
         static RD_TLS char ret[128];
 
         if (test_topic_random || randomized)
-                rd_snprintf(ret, sizeof(ret), "%s_%"PRIx64"_%s",
+                rd_snprintf(ret, sizeof(ret), "%s_rnd%"PRIx64"_%s",
                          test_topic_prefix, test_id_generate(), suffix);
         else
                 rd_snprintf(ret, sizeof(ret), "%s_%s", test_topic_prefix, suffix);
@@ -275,8 +275,9 @@ uint64_t test_id_generate (void) {
 /**
  * Generate a "unique" string id
  */
-void test_str_id_generate (char *dest, size_t dest_size) {
+char *test_str_id_generate (char *dest, size_t dest_size) {
         rd_snprintf(dest, dest_size, "%"PRId64, test_id_generate());
+	return dest;
 }
 
 
@@ -871,6 +872,8 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
  * Create high-level consumer subscribing to \p topic from BEGINNING
  * and expects \d exp_msgcnt with matching \p testid
  * Destroys consumer when done.
+ *
+ * If \p group_id is NULL a new unique group is generated
  */
 void
 test_consume_msgs_easy (const char *group_id, const char *topic,
@@ -879,8 +882,12 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
         rd_kafka_topic_conf_t *tconf;
         rd_kafka_resp_err_t err;
         rd_kafka_topic_partition_list_t *topics;
+	char grpid0[64];
 
         test_conf_init(NULL, &tconf, 0);
+
+	if (!group_id)
+		group_id = test_str_id_generate(grpid0, sizeof(grpid0));
 
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
         rk = test_create_consumer(group_id, NULL, tconf, NULL);

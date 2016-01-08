@@ -54,55 +54,71 @@ static int nonexist_part (void) {
         const int msgcnt = 1000;
         uint64_t testid;
         int i;
+	int it, iterations = 5;
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, RD_KAFKA_PARTITION_UA, msgcnt);
 
-        /* Consume messages */
-        test_consume_msgs_easy(topic/*group*/, topic, testid, msgcnt);
+	for (it = 0 ; it < iterations ; it++) {
+		char group_id[32];
 
-        /*
-         * Now start a new consumer and query stored offsets (positions)
-         */
+		test_str_id_generate(group_id, sizeof(group_id));
 
-        rk = test_create_consumer(topic, NULL, NULL, NULL);
+		TEST_SAY("Iteration %d/%d, using group.id %s\n", it, iterations,
+			 group_id);
 
-	/* Fill in partition set */
-	parts = rd_kafka_topic_partition_list_new(2);
-	rd_kafka_topic_partition_list_add(parts, topic, 0); /* existing */
-        rd_kafka_topic_partition_list_add(parts, topic, 123); /* non-existing */
+		/* Consume messages */
+		test_consume_msgs_easy(group_id, topic, testid, msgcnt);
+
+		/*
+		 * Now start a new consumer and query stored offsets (positions)
+		 */
+
+		rk = test_create_consumer(group_id, NULL, NULL, NULL);
+
+		/* Fill in partition set */
+		parts = rd_kafka_topic_partition_list_new(2);
+		/* existing */
+		rd_kafka_topic_partition_list_add(parts, topic, 0);
+		/* non-existing */
+		rd_kafka_topic_partition_list_add(parts, topic, 123);
 
 
-        TIMING_START(&t_pos, "POSITION");
-        err = rd_kafka_position(rk, parts, tmout_multip(5000));
-        TIMING_STOP(&t_pos);
-        if (err)
-                TEST_FAIL("Failed to acquire positions: %s\n",
-                          rd_kafka_err2str(err));
+		TIMING_START(&t_pos, "POSITION");
+		err = rd_kafka_position(rk, parts, tmout_multip(5000));
+		TIMING_STOP(&t_pos);
+		if (err)
+			TEST_FAIL("Failed to acquire positions: %s\n",
+				  rd_kafka_err2str(err));
 
-        for (i = 0 ; i < parts->cnt ; i++) {
-                TEST_SAY("%s [%"PRId32"] returned offset %"PRId64": %s\n",
-                         parts->elems[i].topic, parts->elems[i].partition,
-                         parts->elems[i].offset,
-                         rd_kafka_err2str(parts->elems[i].err));
-                if (parts->elems[i].partition == 0 &&
-                    parts->elems[i].offset <= 0)
-                        TEST_FAIL("Partition %"PRId32" should have a "
-                                  "proper offset, not %"PRId64"\n",
-                                  parts->elems[i].partition,
-                                  parts->elems[i].offset);
-                else if (parts->elems[i].partition == 123 &&
-                         parts->elems[i].offset != RD_KAFKA_OFFSET_INVALID)
-                        TEST_FAIL("Partition %"PRId32" should have failed\n",
-                                  parts->elems[i].partition);
-        }
+		for (i = 0 ; i < parts->cnt ; i++) {
+			TEST_SAY("%s [%"PRId32"] returned offset %"PRId64
+				 ": %s\n",
+				 parts->elems[i].topic,
+				 parts->elems[i].partition,
+				 parts->elems[i].offset,
+				 rd_kafka_err2str(parts->elems[i].err));
+			if (parts->elems[i].partition == 0 &&
+			    parts->elems[i].offset <= 0)
+				TEST_FAIL("Partition %"PRId32" should have a "
+					  "proper offset, not %"PRId64"\n",
+					  parts->elems[i].partition,
+					  parts->elems[i].offset);
+			else if (parts->elems[i].partition == 123 &&
+				 parts->elems[i].offset !=
+				 RD_KAFKA_OFFSET_INVALID)
+				TEST_FAIL("Partition %"PRId32
+					  " should have failed\n",
+					  parts->elems[i].partition);
+		}
 
-        rd_kafka_topic_partition_list_destroy(parts);
+		rd_kafka_topic_partition_list_destroy(parts);
 
-        test_consumer_close(rk);
+		test_consumer_close(rk);
 
-        /* Hangs if bug isn't fixed */
-        rd_kafka_destroy(rk);
+		/* Hangs if bug isn't fixed */
+		rd_kafka_destroy(rk);
+	}
 
         return 0;
 }

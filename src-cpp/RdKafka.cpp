@@ -38,6 +38,10 @@ std::string RdKafka::version_str () {
   return std::string(rd_kafka_version_str());
 }
 
+std::string RdKafka::get_debug_contexts() {
+	return std::string(RD_KAFKA_DEBUG_CONTEXTS);
+}
+
 std::string RdKafka::err2str (RdKafka::ErrorCode err) {
   return std::string(rd_kafka_err2str(static_cast<rd_kafka_resp_err_t>(err)));
 }

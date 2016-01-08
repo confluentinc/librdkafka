@@ -30,23 +30,45 @@
 
 #include "rd.h"
 
+/* A timer engine. */
+typedef struct rd_kafka_timers_s {
+
+        TAILQ_HEAD(, rd_kafka_timer_s) rkts_timers;
+
+        struct rd_kafka_s *rkts_rk;
+
+	mtx_t       rkts_lock;
+	cnd_t       rkts_cond;
+
+} rd_kafka_timers_t;
+
+
 typedef struct rd_kafka_timer_s {
 	TAILQ_ENTRY(rd_kafka_timer_s)  rtmr_link;
-	
+
 	rd_ts_t rtmr_next;
 	int     rtmr_interval;   /* interval in microseconds */
-	
-	void  (*rtmr_callback) (struct rd_kafka_s *rk, void *arg);
+
+	void  (*rtmr_callback) (rd_kafka_timers_t *rkts, void *arg);
 	void   *rtmr_arg;
 } rd_kafka_timer_t;
 
 
 
-void rd_kafka_timer_stop (rd_kafka_t *rk, rd_kafka_timer_t *rtmr, int lock);
-void rd_kafka_timer_start (rd_kafka_t *rk,
+void rd_kafka_timer_stop (rd_kafka_timers_t *rkts,
+                          rd_kafka_timer_t *rtmr, int lock);
+void rd_kafka_timer_start (rd_kafka_timers_t *rkts,
 			   rd_kafka_timer_t *rtmr, int interval,
-			   void (*callback) (struct rd_kafka_s *rk, void *arg),
+			   void (*callback) (rd_kafka_timers_t *rkts,
+                                             void *arg),
 			   void *arg);
 
-void rd_kafka_timers_interrupt (rd_kafka_t *rk);
-void rd_kafka_timers_run (rd_kafka_t *rk, int timeout);
+void rd_kafka_timer_backoff (rd_kafka_timers_t *rkts,
+			     rd_kafka_timer_t *rtmr, int backoff_us);
+
+void rd_kafka_timers_interrupt (rd_kafka_timers_t *rkts);
+rd_ts_t rd_kafka_timers_next (rd_kafka_timers_t *rkts, int timeout_ms,
+			      int do_lock);
+void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us);
+void rd_kafka_timers_destroy (rd_kafka_timers_t *rkts);
+void rd_kafka_timers_init (rd_kafka_timers_t *rkte, rd_kafka_t *rk);

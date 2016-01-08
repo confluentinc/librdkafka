@@ -46,7 +46,7 @@ class BrokerMetadataImpl : public BrokerMetadata {
 
   int32_t      id() const{return broker_metadata_->id;}
 
-  const std::string *host() const {return &host_;}
+  const std::string host() const {return host_;}
   int port() const {return broker_metadata_->port;}
 
   virtual ~BrokerMetadataImpl() {}
@@ -113,7 +113,7 @@ class TopicMetadataImpl : public TopicMetadata{
       delete partitions_[i];
   }
 
-  const std::string *topic() const {return &topic_;}
+  const std::string topic() const {return topic_;}
   const std::vector<const PartitionMetadata *> *partitions() const {
     return &partitions_;
   }

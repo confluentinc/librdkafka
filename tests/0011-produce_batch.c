@@ -30,9 +30,6 @@
  * Tests messages are produced in order.
  */
 
-#define _GNU_SOURCE
-#include <sys/time.h>
-#include <time.h>
 
 #include "test.h"
 
@@ -80,7 +77,7 @@ static void test_single_partition (void) {
 	char errstr[512];
 	char msg[128];
 	int msgcnt = 100000;
-        int failcnt;
+	int failcnt = 0;
 	int i;
         rd_kafka_message_t *rkmessages;
 
@@ -99,21 +96,21 @@ static void test_single_partition (void) {
 
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
-	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("generic", 0),
+	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0),
                                  topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_strerror(errno));
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
 		*msgidp = i;
-		snprintf(msg, sizeof(msg), "%s:%s test message #%i",
+		rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
                          __FILE__, __FUNCTION__, i);
 
-                rkmessages[i].payload  = strdup(msg);
+                rkmessages[i].payload  = rd_strdup(msg);
                 rkmessages[i].len      = strlen(msg);
                 rkmessages[i]._private = msgidp;
         }
@@ -165,12 +162,6 @@ static void test_single_partition (void) {
 	TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
 	rd_kafka_destroy(rk);
 
-	/* Wait for everything to be cleaned up since broker destroys are
-	 * handled in its own thread. */
-	test_wait_exit(10);
-
-	/* If we havent failed at this point then
-	 * there were no threads leaked */
 	return;
 }
 
@@ -207,7 +198,7 @@ static void test_partitioner (void) {
 	char errstr[512];
 	char msg[128];
 	int msgcnt = 100000;
-        int failcnt;
+        int failcnt = 0;
 	int i;
         rd_kafka_message_t *rkmessages;
 
@@ -226,21 +217,21 @@ static void test_partitioner (void) {
 
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
-	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("generic", 0),
+	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0),
                                  topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  strerror(errno));
+			  rd_strerror(errno));
 
         /* Create messages */
         rkmessages = calloc(sizeof(*rkmessages), msgcnt);
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
 		*msgidp = i;
-		snprintf(msg, sizeof(msg), "%s:%s test message #%i",
+		rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
                          __FILE__, __FUNCTION__, i);
 
-                rkmessages[i].payload = strdup(msg);
+                rkmessages[i].payload = rd_strdup(msg);
                 rkmessages[i].len     = strlen(msg);
                 rkmessages[i]._private = msgidp;
         }
@@ -293,16 +284,10 @@ static void test_partitioner (void) {
 	TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
 	rd_kafka_destroy(rk);
 
-	/* Wait for everything to be cleaned up since broker destroys are
-	 * handled in its own thread. */
-	test_wait_exit(10);
-
-	/* If we havent failed at this point then
-	 * there were no threads leaked */
 	return;
 }
 
-int main (int argc, char **argv) {
+int main_0011_produce_batch (int argc, char **argv) {
         test_single_partition();
         test_partitioner();
 	return 0;

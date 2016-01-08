@@ -20,7 +20,7 @@
 /**
  * Static table used for the table_driven implementation.
  *****************************************************************************/
-static const rd_crc32_t crc_table[256] = {
+const rd_crc32_t crc_table[256] = {
     0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
     0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
     0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
@@ -108,26 +108,6 @@ rd_crc32_t rd_crc32_reflect(rd_crc32_t data, size_t data_len)
 }
 
 
-/**
- * Update the crc value with new data.
- *
- * \param crc      The current crc value.
- * \param data     Pointer to a buffer of \a data_len bytes.
- * \param data_len Number of bytes in the \a data buffer.
- * \return         The updated crc value.
- *****************************************************************************/
-rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t data_len)
-{
-    unsigned int tbl_idx;
-
-    while (data_len--) {
-        tbl_idx = (crc ^ *data) & 0xff;
-        crc = (crc_table[tbl_idx] ^ (crc >> 8)) & 0xffffffff;
-
-        data++;
-    }
-    return crc & 0xffffffff;
-}
 
 
 

@@ -55,7 +55,7 @@
 
 #pragma once
 
-#include <sys/queue.h>
+#include "queue.h"
 
 /*
  * Complete missing LIST-ops
@@ -93,6 +93,11 @@
  * Complete missing TAILQ-ops
  */
 
+#ifndef	TAILQ_HEAD_INITIALIZER
+#define	TAILQ_HEAD_INITIALIZER(head)					\
+	{ NULL, &(head).tqh_first }
+#endif
+
 #ifndef TAILQ_INSERT_BEFORE
 #define	TAILQ_INSERT_BEFORE(listelm, elm, field) do {			\
 	(elm)->field.tqe_prev = (listelm)->field.tqe_prev;		\
@@ -105,6 +110,10 @@
 #ifndef TAILQ_FOREACH
 #define TAILQ_FOREACH(var, head, field)                                     \
  for ((var) = ((head)->tqh_first); (var); (var) = ((var)->field.tqe_next))
+#endif
+
+#ifndef TAILQ_EMPTY
+#define	TAILQ_EMPTY(head)		((head)->tqh_first == NULL)
 #endif
 
 #ifndef TAILQ_FIRST
@@ -174,18 +183,11 @@
  * Some extra functions for LIST manipulation
  */
 
-#define LIST_MOVE(newhead, oldhead, field) do {			        \
-        if((oldhead)->lh_first) {					\
-           (oldhead)->lh_first->field.le_prev = &(newhead)->lh_first;	\
-	}								\
-        (newhead)->lh_first = (oldhead)->lh_first;			\
-} while (0) 
-
-#define LIST_INSERT_SORTED(head, elm, field, cmpfunc) do {	\
+#define LIST_INSERT_SORTED(head, elm, headname, field, cmpfunc) do {	\
         if(LIST_EMPTY(head)) {					\
            LIST_INSERT_HEAD(head, elm, field);			\
         } else {						\
-           typeof(elm) _tmp;					\
+           struct headname *_tmp;					\
            LIST_FOREACH(_tmp,head,field) {			\
               if(cmpfunc(elm,_tmp) <= 0) {			\
                 LIST_INSERT_BEFORE(_tmp,elm,field);		\
@@ -200,11 +202,11 @@
 } while(0)
 
 #ifndef TAILQ_INSERT_SORTED
-#define TAILQ_INSERT_SORTED(head, elm, field, cmpfunc) do {	\
+#define TAILQ_INSERT_SORTED(head, elm, headname, field, cmpfunc) do {	\
         if(TAILQ_FIRST(head) == NULL) {				\
            TAILQ_INSERT_HEAD(head, elm, field);			\
         } else {						\
-           typeof(elm) _tmp;					\
+           struct headname *_tmp;					\
            TAILQ_FOREACH(_tmp,head,field) {			\
               if(cmpfunc(elm,_tmp) <= 0) {			\
                 TAILQ_INSERT_BEFORE(_tmp,elm,field);		\
@@ -222,10 +224,12 @@
 #define TAILQ_MOVE(newhead, oldhead, field) do { \
         if(TAILQ_FIRST(oldhead)) { \
            TAILQ_FIRST(oldhead)->field.tqe_prev = &(newhead)->tqh_first;  \
-        } \
-        (newhead)->tqh_first = (oldhead)->tqh_first;                   \
-        (newhead)->tqh_last = (oldhead)->tqh_last;                     \
-} while (/*CONSTCOND*/0) 
+	   (newhead)->tqh_first = (oldhead)->tqh_first;			\
+	   (newhead)->tqh_last = (oldhead)->tqh_last;			\
+	   TAILQ_INIT(oldhead);						\
+	} else								\
+		TAILQ_INIT(newhead);					\
+	} while (/*CONSTCOND*/0) 
 
 #ifndef TAILQ_CONCAT
 #define TAILQ_CONCAT(dhead, shead, field) do {                          \

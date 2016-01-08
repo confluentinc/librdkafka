@@ -30,6 +30,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
 #include "rdkafka_topic.h"
+#include "rdkafka_partition.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
 #include "rdtime.h"
@@ -38,16 +39,16 @@
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
-	rd_kafka_assert(rk, rk->rk_producer.msg_cnt > 0);
-	(void)rd_atomic_sub(&rk->rk_producer.msg_cnt, 1);
+	rd_kafka_assert(rk, rd_atomic32_get(&rk->rk_producer.msg_cnt) > 0);
+	(void)rd_atomic32_sub(&rk->rk_producer.msg_cnt, 1);
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
-		free(rkm->rkm_payload);
+		rd_free(rkm->rkm_payload);
 
 	if (rkm->rkm_key)
 		rd_kafkap_bytes_destroy(rkm->rkm_key);
 
-	free(rkm);
+	rd_free(rkm);
 }
 
 /**
@@ -56,7 +57,7 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
  * Returns 0 on success or -1 on error.
  * Both errno and 'errp' are set appropriately.
  */
-static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
+static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
                                           int32_t force_partition,
                                           int msgflags,
                                           char *payload, size_t len,
@@ -67,11 +68,13 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
 	rd_kafka_msg_t *rkm;
 	size_t mlen = sizeof(*rkm);
 
-	if (!payload) len = 0;
-	if (!key) keylen = 0;
+	if (unlikely(!payload))
+		len = 0;
+	if (!key)
+		keylen = 0;
 
-	if (unlikely(len + keylen > rkt->rkt_rk->rk_conf.max_msg_size)) {
-                *errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
+	if (unlikely(len + keylen > (size_t)rkt->rkt_rk->rk_conf.max_msg_size)){
+		*errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
                 errno = EMSGSIZE;
 		return NULL;
 	}
@@ -82,9 +85,9 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
 		mlen += len;
 	}
 
-	/* Note: using malloc here, not calloc, so make sure all fields
+	/* Note: using rd_malloc here, not rd_calloc, so make sure all fields
 	 *       are properly set up. */
-	rkm = malloc(mlen);
+	rkm = rd_malloc(mlen);
 	rkm->rkm_len        = len;
 	rkm->rkm_flags      = msgflags;
 	rkm->rkm_opaque     = msg_opaque;
@@ -122,7 +125,7 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_topic_t *rkt,
  * the memory associated with the payload is still the caller's
  * responsibility.
  */
-int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
+int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      int msgflags,
 		      char *payload, size_t len,
 		      const void *key, size_t keylen,
@@ -130,9 +133,9 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
 	rd_kafka_msg_t *rkm;
 	rd_kafka_resp_err_t err;
 
-	if (unlikely(rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
+	if (unlikely(rd_atomic32_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
 		     rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
-		(void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+		(void)rd_atomic32_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
 		errno = ENOBUFS;
 		return -1;
 	}
@@ -143,7 +146,7 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
                                 rd_clock());
         if (unlikely(!rkm)) {
                 /* errno is already set by msg_new() */
-                (void)rd_atomic_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+                (void)rd_atomic32_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
                 return -1;
         }
 
@@ -181,15 +184,15 @@ int rd_kafka_msg_new (rd_kafka_topic_t *rkt, int32_t force_partition,
  * Returns the number of messages succesfully queued for producing.
  * Each message's .err will be set accordingly.
  */
-int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
+int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                             int msgflags,
                             rd_kafka_message_t *rkmessages, int message_cnt) {
         rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
         int i;
         rd_ts_t now = rd_clock();
         int good = 0;
-        rd_kafka_toppar_t *rktp = NULL;
         rd_kafka_resp_err_t all_err = 0;
+        rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
 
         /* For partitioner; hold lock for entire run,
          * for one partition: only acquire when needed at the end. */
@@ -206,7 +209,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
                 }
 
                 /* buffering.max.messages reached */
-                if (unlikely(rkt->rkt_rk->rk_producer.msg_cnt +
+                if (unlikely(rd_atomic32_get(&rkt->rkt_rk->rk_producer.msg_cnt) +
                              /* For partitioner: msg_cnt is increased per
                               *                  message,
                               * For single partition: msg_cnt is increased
@@ -236,7 +239,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
                  *  partition==UA:     run the partitioner (slow)
                  *  fixed partition:   simply concatenate the queue to partit */
                 if (partition == RD_KAFKA_PARTITION_UA) {
-                        (void)rd_atomic_add(&rkt->rkt_rk->rk_producer.msg_cnt,
+                        (void)rd_atomic32_add(&rkt->rkt_rk->rk_producer.msg_cnt,
                                             1);
 
                         /* Partition the message */
@@ -264,23 +267,26 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
 
 	/* Specific partition */
         if (partition != RD_KAFKA_PARTITION_UA) {
+                shptr_rd_kafka_toppar_t *s_rktp;
+
 		rd_kafka_topic_rdlock(rkt);
 
-                rktp = rd_kafka_toppar_get_avail(rkt, partition,
-                                                 1/*ua on miss*/, &all_err);
+                s_rktp = rd_kafka_toppar_get_avail(rkt, partition,
+                                                   1/*ua on miss*/, &all_err);
                 /* Concatenate tmpq onto partition queue. */
-                if (likely(rktp != NULL)) {
+                if (likely(s_rktp != NULL)) {
+                        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
                         if (good > 0)
-                                (void)rd_atomic_add(&rkt->rkt_rk->
+                                (void)rd_atomic32_add(&rkt->rkt_rk->
                                                     rk_producer.msg_cnt, good);
 
-                        (void)rd_atomic_add(&rktp->rktp_c.msgs, good);
+                        rd_atomic64_add(&rktp->rktp_c.msgs, good);
                         rd_kafka_toppar_concat_msgq(rktp, &tmpq);
-                        rd_kafka_toppar_destroy(rktp);
+                        rd_kafka_toppar_destroy(s_rktp);
                 }
         }
 
-	rd_kafka_topic_unlock(rkt);
+	rd_kafka_topic_rdunlock(rkt);
 
         return good;
 }
@@ -288,12 +294,14 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *rkt, int32_t partition,
 /**
  * Scan 'rkmq' for messages that have timed out and remove them from
  * 'rkmq' and add to 'timedout'.
+ *
+ * Returns the number of messages timed out.
  */
 int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_kafka_msgq_t *timedout,
 			    rd_ts_t now) {
 	rd_kafka_msg_t *rkm, *tmp;
-	int cnt = timedout->rkmq_msg_cnt;
+	int cnt = rd_atomic32_get(&timedout->rkmq_msg_cnt);
 
 	/* Assume messages are added in time sequencial order */
 	TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp) {
@@ -304,7 +312,7 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 		rd_kafka_msgq_enq(timedout, rkm);
 	}
 
-	return timedout->rkmq_msg_cnt - cnt;
+	return rd_atomic32_get(&timedout->rkmq_msg_cnt) - cnt;
 }
 
 
@@ -324,10 +332,10 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
 }
 
 int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
-					 const void *key, size_t keylen,
-					 int32_t partition_cnt,
-					 void *rkt_opaque,
-					 void *msg_opaque) {
+                                             const void *key, size_t keylen,
+                                             int32_t partition_cnt,
+                                             void *rkt_opaque,
+                                             void *msg_opaque) {
     return rd_crc32(key, keylen) % partition_cnt;
 }
 
@@ -337,10 +345,11 @@ int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
  * Returns RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION or .._UNKNOWN_TOPIC if
  * partitioning failed, or 0 on success.
  */
-int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
+int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 			      int do_lock) {
 	int32_t partition;
 	rd_kafka_toppar_t *rktp_new;
+        shptr_rd_kafka_toppar_t *s_rktp_new;
 	rd_kafka_resp_err_t err;
 
 	if (do_lock)
@@ -360,7 +369,7 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
                  * Fail message immediately. */
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
 		if (do_lock)
-			rd_kafka_topic_unlock(rkt);
+			rd_kafka_topic_rdunlock(rkt);
                 return err;
 
         case RD_KAFKA_TOPIC_S_EXISTS:
@@ -377,7 +386,7 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
                 /* Partition not assigned, run partitioner. */
                 if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
                         partition = rkt->rkt_conf.
-                                partitioner(rkt,
+                                partitioner(rkt->rkt_app_rkt,
                                             rkm->rkm_key->data,
                                             RD_KAFKAP_BYTES_LEN(rkm->
                                                                 rkm_key),
@@ -391,7 +400,7 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
                 if (partition >= rkt->rkt_partition_cnt) {
                         err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
                         if (do_lock)
-                                rd_kafka_topic_unlock(rkt);
+                                rd_kafka_topic_rdunlock(rkt);
                         return err;
                 }
                 break;
@@ -402,9 +411,9 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
         }
 
 	/* Get new partition */
-	rktp_new = rd_kafka_toppar_get(rkt, partition, 0);
+	s_rktp_new = rd_kafka_toppar_get(rkt, partition, 0);
 
-	if (unlikely(!rktp_new)) {
+	if (unlikely(!s_rktp_new)) {
 		/* Unknown topic or partition */
 		if (rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
 			err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
@@ -412,12 +421,13 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
 			err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 
 		if (do_lock)
-			rd_kafka_topic_unlock(rkt);
+			rd_kafka_topic_rdunlock(rkt);
 
 		return  err;
 	}
 
-        (void)rd_atomic_add(&rktp_new->rktp_c.msgs, 1);
+        rktp_new = rd_kafka_toppar_s2i(s_rktp_new);
+        rd_atomic64_add(&rktp_new->rktp_c.msgs, 1);
 
         /* Update message partition */
         if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
@@ -426,7 +436,7 @@ int rd_kafka_msg_partitioner (rd_kafka_topic_t *rkt, rd_kafka_msg_t *rkm,
 	/* Partition is available: enqueue msg on partition's queue */
 	rd_kafka_toppar_enq_msg(rktp_new, rkm);
 	if (do_lock)
-		rd_kafka_topic_unlock(rkt);
-	rd_kafka_toppar_destroy(rktp_new); /* from _get() */
+		rd_kafka_topic_rdunlock(rkt);
+	rd_kafka_toppar_destroy(s_rktp_new); /* from _get() */
 	return 0;
 }

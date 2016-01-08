@@ -31,12 +31,17 @@
 #include <string>
 #include <iostream>
 #include <cstring>
+#include <stdlib.h>
 
 #include "rdkafkacpp.h"
 
 extern "C" {
 #include "../src/rdkafka.h"
-};
+}
+
+#ifdef _MSC_VER
+typedef int mode_t;
+#endif
 
 namespace RdKafka {
 
@@ -45,11 +50,22 @@ void log_cb_trampoline (const rd_kafka_t *rk, int level,
                         const char *fac, const char *buf);
 void error_cb_trampoline (rd_kafka_t *rk, int err, const char *reason,
                           void *opaque);
+void throttle_cb_trampoline (rd_kafka_t *rk, const char *broker_name,
+			     int32_t broker_id, int throttle_time_ms,
+			     void *opaque);
 int stats_cb_trampoline (rd_kafka_t *rk, char *json, size_t json_len,
                          void *opaque);
 int socket_cb_trampoline (int domain, int type, int protocol, void *opaque);
 int open_cb_trampoline (const char *pathname, int flags, mode_t mode,
                         void *opaque);
+void rebalance_cb_trampoline (rd_kafka_t *rk,
+                              rd_kafka_resp_err_t err,
+                              rd_kafka_topic_partition_list_t *c_partitions,
+                              void *opaque);
+void offset_commit_cb_trampoline (rd_kafka_t *rk,
+                                  rd_kafka_resp_err_t err,
+                                  rd_kafka_topic_partition_list_t *c_offsets,
+                                  void *opaque);
 
 
 
@@ -59,20 +75,34 @@ class EventImpl : public Event {
 
   EventImpl (Type type, ErrorCode err, Severity severity,
              const char *fac, const char *str):
-      type_(type), err_(err), severity_(severity), fac_(fac ? : ""), str_(str)
-  { };
+  type_(type), err_(err), severity_(severity), fac_(fac ? fac : ""),
+	  str_(str), id_(0), throttle_time_(0) {};
+
+  EventImpl (Type type):
+  type_(type), err_(ERR_NO_ERROR), severity_(EVENT_SEVERITY_EMERG),
+	  fac_(""), str_(""), id_(0), throttle_time_(0) {};
 
   Type        type () const { return type_; }
   ErrorCode   err () const { return err_; }
   Severity    severity () const { return severity_; }
   std::string fac () const { return fac_; }
   std::string str () const { return str_; }
+  std::string broker_name () const {
+	  if (type_ == EVENT_THROTTLE)
+		  return str_;
+	  else
+		  return std::string("");
+  }
+  int         broker_id () const { return id_; }
+  int         throttle_time () const { return throttle_time_; }
 
   Type        type_;
   ErrorCode   err_;
   Severity    severity_;
   std::string fac_;
-  std::string str_;
+  std::string str_;         /* reused for THROTTLE broker_name */
+  int         id_;
+  int         throttle_time_;
 };
 
 
@@ -81,35 +111,44 @@ class MessageImpl : public Message {
   ~MessageImpl () {
     if (free_rkmessage_)
       rd_kafka_message_destroy(const_cast<rd_kafka_message_t *>(rkmessage_));
-    delete key_;
+    if (key_)
+            delete key_;
   };
 
   MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) { }
+  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) {}
 
   MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage,
                bool dofree):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree), key_(NULL) { }
+  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree), key_(NULL) { }
 
   MessageImpl (RdKafka::Topic *topic, const rd_kafka_message_t *rkmessage):
-      topic_(topic), rkmessage_(rkmessage), free_rkmessage_(false), key_(NULL) { }
+  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(false), key_(NULL) { }
+
+  MessageImpl (rd_kafka_message_t *rkmessage):
+  topic_(NULL), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) {
+    if (rkmessage->rkt) {
+      /* Possibly NULL */
+      topic_ = static_cast<Topic *>(rd_kafka_topic_opaque(rkmessage->rkt));
+    }
+  }
 
   /* Create errored message */
   MessageImpl (RdKafka::Topic *topic, RdKafka::ErrorCode err):
-      topic_(topic), free_rkmessage_(false), key_(NULL) {
+  topic_(topic), free_rkmessage_(false), key_(NULL) {
     rkmessage_ = &rkmessage_err_;
     memset(&rkmessage_err_, 0, sizeof(rkmessage_err_));
     rkmessage_err_.err = static_cast<rd_kafka_resp_err_t>(err);
   }
 
   std::string         errstr() const {
-    /* FIXME: If there is a error string in payload (for consume_cb)
+    /* FIXME: If there is an error string in payload (for consume_cb)
      *        it wont be shown since 'payload' is reused for errstr
      *        and we cant distinguish between consumer and producer.
      *        For the producer case the payload needs to be the original
      *        payload pointer. */
     const char *es = rd_kafka_err2str(rkmessage_->err);
-    return std::string(es ? : "");
+    return std::string(es ? es : "");
   }
 
   ErrorCode           err () const {
@@ -117,6 +156,12 @@ class MessageImpl : public Message {
   }
 
   Topic              *topic () const { return topic_; }
+  std::string         topic_name  () const {
+          if (rkmessage_->rkt)
+                  return rd_kafka_topic_name(rkmessage_->rkt);
+          else
+                  return "";
+  }
   int32_t             partition () const { return rkmessage_->partition; }
   void               *payload () const { return rkmessage_->payload; }
   size_t              len () const { return rkmessage_->len; }
@@ -141,7 +186,7 @@ class MessageImpl : public Message {
   /* For error signalling by the C++ layer the .._err_ message is
    * used as a place holder and rkmessage_ is set to point to it. */
   rd_kafka_message_t rkmessage_err_;
-  mutable std::string* key_; /* mutable because it's a cached value */
+  mutable std::string *key_; /* mutable because it's a cached value */
 
 private:
   /* "delete" copy ctor + copy assignment, for safety of key_ */
@@ -159,6 +204,8 @@ class ConfImpl : public Conf {
       open_cb_(NULL),
       partitioner_cb_(NULL),
       partitioner_kp_cb_(NULL),
+      rebalance_cb_(NULL),
+      offset_commit_cb_(NULL),
       rk_conf_(NULL),
       rkt_conf_(NULL){}
   ~ConfImpl () {
@@ -204,6 +251,27 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+  Conf::ConfResult set (const std::string &name, const Conf *topic_conf,
+                        std::string &errstr) {
+    const ConfImpl *tconf_impl =
+        dynamic_cast<const RdKafka::ConfImpl *>(topic_conf);
+    if (name != "default_topic_conf" || !tconf_impl->rkt_conf_) {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    rd_kafka_conf_set_default_topic_conf(rk_conf_,
+                                         rd_kafka_topic_conf_dup(tconf_impl->
+                                                                 rkt_conf_));
+
+    return Conf::CONF_OK;
+  }
+
   Conf::ConfResult set (const std::string &name, PartitionerCb *partitioner_cb,
                         std::string &errstr) {
     if (name != "partitioner_cb") {
@@ -244,8 +312,8 @@ class ConfImpl : public Conf {
       return Conf::CONF_INVALID;
     }
 
-    if (!rkt_conf_) {
-      errstr = "Requires RdKafka::Conf::CONF_TOPIC object";
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
       return Conf::CONF_INVALID;
     }
 
@@ -261,14 +329,77 @@ class ConfImpl : public Conf {
       return Conf::CONF_INVALID;
     }
 
-    if (!rkt_conf_) {
-      errstr = "Requires RdKafka::Conf::CONF_TOPIC object";
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
       return Conf::CONF_INVALID;
     }
 
     open_cb_ = open_cb;
     return Conf::CONF_OK;
   }
+
+
+  Conf::ConfResult set (const std::string &name, RebalanceCb *rebalance_cb,
+                        std::string &errstr) {
+    if (name != "rebalance_cb") {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    rebalance_cb_ = rebalance_cb;
+    return Conf::CONF_OK;
+  }
+
+
+  Conf::ConfResult set (const std::string &name,
+                        OffsetCommitCb *offset_commit_cb,
+                        std::string &errstr) {
+    if (name != "offset_commit_cb") {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    offset_commit_cb_ = offset_commit_cb;
+    return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult get(const std::string &name, std::string &value) const {
+	  size_t size;
+	  rd_kafka_conf_res_t res = RD_KAFKA_CONF_OK;
+	  if (rk_conf_) {
+		  if ((res = rd_kafka_conf_get(rk_conf_,
+			  name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
+			  return static_cast<Conf::ConfResult>(res);
+
+		  value.resize(size);
+		  if ((res = rd_kafka_conf_get(rk_conf_, name.c_str(),
+			  (char *)value.c_str(), &size)) != RD_KAFKA_CONF_OK)
+			  return static_cast<Conf::ConfResult>(res);
+	  }
+	  else if (rkt_conf_) {
+		  if ((res = rd_kafka_topic_conf_get(rkt_conf_,
+			  name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
+			  return static_cast<Conf::ConfResult>(res);
+
+		  value.resize(size);
+		  if ((res = rd_kafka_topic_conf_get(rkt_conf_, name.c_str(),
+			  (char *)value.c_str(), &size)) != RD_KAFKA_CONF_OK)
+			  return static_cast<Conf::ConfResult>(res);
+	  }
+
+	  return Conf::CONF_OK;
+  }
+
 
 
   std::list<std::string> *dump ();
@@ -279,6 +410,8 @@ class ConfImpl : public Conf {
   OpenCb *open_cb_;
   PartitionerCb *partitioner_cb_;
   PartitionerKeyPointerCb *partitioner_kp_cb_;
+  RebalanceCb *rebalance_cb_;
+  OffsetCommitCb *offset_commit_cb_;
   ConfType conf_type_;
   rd_kafka_conf_t *rk_conf_;
   rd_kafka_topic_conf_t *rkt_conf_;
@@ -290,6 +423,13 @@ class HandleImpl : virtual public Handle {
   ~HandleImpl() {};
   HandleImpl () {};
   const std::string name () const { return std::string(rd_kafka_name(rk_)); };
+  const std::string memberid () const {
+	  char *str = rd_kafka_memberid(rk_);
+	  std::string memberid = str ? str : "";
+	  if (str)
+		  rd_kafka_mem_free(rk_, str);
+	  return memberid;
+  }
   int poll (int timeout_ms) { return rd_kafka_poll(rk_, timeout_ms); };
   int outq_len () { return rd_kafka_outq_len(rk_); };
 
@@ -310,6 +450,8 @@ class HandleImpl : virtual public Handle {
   DeliveryReportCb *dr_cb_;
   PartitionerCb *partitioner_cb_;
   PartitionerKeyPointerCb *partitioner_kp_cb_;
+  RebalanceCb *rebalance_cb_;
+  OffsetCommitCb *offset_commit_cb_;
 };
 
 
@@ -324,7 +466,7 @@ class TopicImpl : public Topic {
   }
 
   bool partition_available (int32_t partition) const {
-    return rd_kafka_topic_partition_available(rkt_, partition);
+    return !!rd_kafka_topic_partition_available(rkt_, partition);
   }
 
   ErrorCode offset_store (int32_t partition, int64_t offset) {
@@ -341,11 +483,92 @@ class TopicImpl : public Topic {
 };
 
 
+/**
+ * Topic and Partition
+ */
+class TopicPartitionImpl : public TopicPartition {
+public:
+  ~TopicPartitionImpl() {};
+
+  static TopicPartition *create (const std::string &topic, int partition);
+
+  TopicPartitionImpl (const std::string &topic, int partition):
+  topic_(topic), partition_(partition), offset_(0), err_(ERR_NO_ERROR) {}
+
+  TopicPartitionImpl (const rd_kafka_topic_partition_t *c_part) {
+    topic_ = std::string(c_part->topic);
+    partition_ = c_part->partition;
+    offset_ = c_part->offset;
+    err_ = static_cast<ErrorCode>(c_part->err);
+    // FIXME: metadata
+  }
+
+  int partition () { return partition_; }
+  const std::string &topic () const { return topic_ ; }
+
+  int64_t offset () { return offset_; }
+
+  ErrorCode err () { return err_; }
+
+  void set_offset (int64_t offset) { offset_ = offset; }
+
+  std::ostream& operator<<(std::ostream &ostrm) const {
+    return ostrm << topic_ << " [" << partition_ << "]";
+  }
+
+  std::string topic_;
+  int partition_;
+  int64_t offset_;
+  ErrorCode err_;
+};
+
+
+
+class KafkaConsumerImpl : virtual public KafkaConsumer, virtual public HandleImpl {
+public:
+  ~KafkaConsumerImpl () {
+
+  }
+
+  static KafkaConsumer *create (Conf *conf, std::string &errstr);
+
+  ErrorCode assignment (std::vector<TopicPartition*> &partitions);
+  ErrorCode subscription (std::vector<std::string> &topics);
+  ErrorCode subscribe (const std::vector<std::string> &topics);
+  ErrorCode unsubscribe ();
+  ErrorCode assign (const std::vector<TopicPartition*> &partitions);
+  ErrorCode unassign () {
+	  std::vector<TopicPartition*> empty;
+	  return assign(empty);
+  }
+  Message *consume (int timeout_ms);
+  ErrorCode commitSync () {
+    return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 0/*sync*/));
+  }
+  ErrorCode commitAsync () {
+    return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 1/*async*/));
+  }
+  ErrorCode commitSync (Message *message) {
+	  MessageImpl *msgimpl = dynamic_cast<MessageImpl*>(message);
+	  return static_cast<ErrorCode>(
+                  rd_kafka_commit_message(rk_, msgimpl->rkmessage_, 0/*sync*/));
+  }
+  ErrorCode commitAsync (Message *message) {
+	  MessageImpl *msgimpl = dynamic_cast<MessageImpl*>(message);
+	  return static_cast<ErrorCode>(
+                  rd_kafka_commit_message(rk_, msgimpl->rkmessage_,1/*async*/));
+  }
+  ErrorCode position (std::vector<TopicPartition*> &partitions, int timeout_ms);
+
+  ErrorCode close ();
+};
+
+
 class MetadataImpl : public Metadata {
  public:
   MetadataImpl(const rd_kafka_metadata_t *metadata);
   ~MetadataImpl();
-  
+
   const std::vector<const BrokerMetadata *> *brokers() const {
     return &brokers_;
   }
@@ -360,9 +583,9 @@ class MetadataImpl : public Metadata {
 
   int32_t orig_broker_id() const {
     return metadata_->orig_broker_id;
-  } 
- 
- private:
+  }
+
+private:
   const rd_kafka_metadata_t *metadata_;
   std::vector<const BrokerMetadata *> brokers_;
   std::vector<const TopicMetadata *> topics_;
@@ -406,7 +629,7 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
 class ProducerImpl : virtual public Producer, virtual public HandleImpl {
 
  public:
-  ~ProducerImpl () { rd_kafka_destroy(rk_); };
+  ~ProducerImpl () { if (rk_) rd_kafka_destroy(rk_); };
 
   ErrorCode produce (Topic *topic, int32_t partition,
                      int msgflags,
@@ -420,10 +643,15 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                      const void *key, size_t key_len,
                      void *msg_opaque);
 
+  ErrorCode produce (Topic *topic, int32_t partition,
+                     const std::vector<char> *payload,
+                     const std::vector<char> *key,
+                     void *msg_opaque);
+
   static Producer *create (Conf *conf, std::string &errstr);
 
 };
 
 
 
-};
+}

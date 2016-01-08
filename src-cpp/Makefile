@@ -3,9 +3,9 @@ LIBNAME=	librdkafka++
 LIBVER=		1
 
 CXXSRCS=	RdKafka.cpp ConfImpl.cpp HandleImpl.cpp \
-		ConsumerImpl.cpp ProducerImpl.cpp \
-		QueueImpl.cpp TopicImpl.cpp MessageImpl.cpp \
-                MetadataImpl.cpp
+		ConsumerImpl.cpp ProducerImpl.cpp KafkaConsumerImpl.cpp \
+		TopicImpl.cpp TopicPartitionImpl.cpp MessageImpl.cpp \
+		QueueImpl.cpp MetadataImpl.cpp
 
 HDRS=		rdkafkacpp.h
 
@@ -25,14 +25,14 @@ WITH_LDS=n
 ifeq ($(_UNAME_S),Darwin)
 	FWD_LINKING_REQ=y
 endif
+ifeq ($(_UNAME_S),AIX)
+	FWD_LINKING_REQ=y
+endif
 ifeq ($(shell uname -o 2>/dev/null),Cygwin)
 	FWD_LINKING_REQ=y
 endif
 
-ifeq ($(FWD_LINKING_REQ),y)
-	LIBS := -L../src -lrdkafka $(LIBS) 
-endif
-
+LIBS := -L../src -lrdkafka $(LIBS) 
 LIBS += -lstdc++
 
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a

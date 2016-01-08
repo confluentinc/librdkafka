@@ -26,13 +26,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rdkafka_int.h"
+#include "rdlog.h"
+
 #include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
 
-#include "rd.h"
-#include "rdthread.h"
-#include "rdlog.h"
 
 
 
@@ -42,7 +42,7 @@ void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 
 
 	if (name)
-		fprintf(fp, "%s hexdump (%zu bytes):\n", name, len);
+		fprintf(fp, "%s hexdump (%"PRIusz" bytes):\n", name, len);
 
 	for (of = 0 ; of < len ; of += 16) {
 		char hexen[16*3+1];
@@ -50,12 +50,14 @@ void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 		int hof = 0;
 
 		int cof = 0;
-		int i;
+		unsigned int i;
 
 		for (i = of ; i < of + 16 && i < len ; i++) {
-			hof += sprintf(hexen+hof, "%02x ", p[i] & 0xff);
-			cof += sprintf(charen+cof, "%c",
-				       isprint((int)p[i]) ? p[i] : '.');
+			hof += rd_snprintf(hexen+hof, sizeof(hexen)-hof,
+					   "%02x ",
+					   p[i] & 0xff);
+			cof += rd_snprintf(charen+cof, sizeof(charen)-cof, "%c",
+					   isprint((int)p[i]) ? p[i] : '.');
 		}
 		fprintf(fp, "%08x: %-48s %-16s\n",
 			of, hexen, charen);

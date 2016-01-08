@@ -1,3 +1,4 @@
+//@file INTRODUCTION.md
 # Introduction to librdkafka - the Apache Kafka C/C++ client library
 
 
@@ -35,8 +36,6 @@ librdkafka is a multi-threaded library designed for use on modern hardware and
 it attempts to keep memory copying at a minimal. The payload of produced or
 consumed messages may pass through without any copying
 (if so desired by the application) putting no limit on message sizes.
-
-> *"You can have high throughput or low latency, but you cant have both"*
 
 librdkafka allows you to decide if high throughput is the name of the game,
 or if a low latency service is required, all through the configuration
@@ -334,7 +333,9 @@ to `ENOBUFS`, thus providing a backpressure mechanism.
 **Note**: See `examples/rdkafka_performance.c` for a producer implementation.
 
 
-### Consumer API
+### Simple Consumer API (legacy)
+
+NOTE: For the high-level KafkaConsumer interface see rd_kafka_subscribe (rdkafka.h) or KafkaConsumer (rdkafkacpp.h)
 
 The consumer API is a bit more stateful than the producer API.
 After creating `rd_kafka_t` with type `RD_KAFKA_CONSUMER` and
@@ -404,7 +405,11 @@ purge any messages currently in the local queue.
 
 #### Offset management
 
-Offset management is available through a local offset file store, where the
+Broker based offset management is available for broker version >= 0.9.0
+in conjunction with using the high-level KafkaConsumer interface (see
+rdkafka.h or rdkafkacpp.h)
+
+Offset management is also available through a local offset file store, where the
 offset is periodically written to a local file for each topic+partition
 according to the following topic configuration properties:
 

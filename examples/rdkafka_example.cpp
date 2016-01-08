@@ -39,8 +39,13 @@
 #include <csignal>
 #include <cstring>
 
+#ifdef _MSC_VER
+#include "../win32/wingetopt.h"
+#elif _AIX
+#include <unistd.h>
+#else
 #include <getopt.h>
-
+#endif
 
 /*
  * Typically include path in a real application would be
@@ -58,21 +63,21 @@ static void metadata_print (const std::string &topic,
   /* Iterate brokers */
   std::cout << " " << metadata->brokers()->size() << " brokers:" << std::endl;
   RdKafka::Metadata::BrokerMetadataIterator ib;
-  for (ib = metadata->brokers()->begin(); 
-       ib != metadata->brokers()->end(); 
+  for (ib = metadata->brokers()->begin();
+       ib != metadata->brokers()->end();
        ++ib) {
-    std::cout << "  broker " << (*ib)->id() << " at " 
+    std::cout << "  broker " << (*ib)->id() << " at "
               << (*ib)->host() << ":" << (*ib)->port() << std::endl;
   }
-  /* Iterate topics */        
+  /* Iterate topics */
   std::cout << metadata->topics()->size() << " topics:" << std::endl;
   RdKafka::Metadata::TopicMetadataIterator it;
-  for (it = metadata->topics()->begin(); 
-       it != metadata->topics()->end(); 
+  for (it = metadata->topics()->begin();
+       it != metadata->topics()->end();
        ++it) {
-    std::cout << "  topic "<< *(*it)->topic() << " with " 
-             << (*it)->partitions()->size() << " partitions" << std::endl;
-    
+    std::cout << "  topic \""<< (*it)->topic() << "\" with "
+              << (*it)->partitions()->size() << " partitions:";
+
     if ((*it)->err() != RdKafka::ERR_NO_ERROR) {
       std::cout << " " << err2str((*it)->err());
       if ((*it)->err() == RdKafka::ERR_LEADER_NOT_AVAILABLE)
@@ -82,26 +87,26 @@ static void metadata_print (const std::string &topic,
 
     /* Iterate topic's partitions */
     RdKafka::TopicMetadata::PartitionMetadataIterator ip;
-    for (ip = (*it)->partitions()->begin(); 
-         ip != (*it)->partitions()->end() ; 
+    for (ip = (*it)->partitions()->begin();
+         ip != (*it)->partitions()->end();
          ++ip) {
       std::cout << "    partition " << (*ip)->id()
-                << " leader " << (*ip)->leader()
+                << ", leader " << (*ip)->leader()
                 << ", replicas: ";
 
       /* Iterate partition's replicas */
       RdKafka::PartitionMetadata::ReplicasIterator ir;
-      for (ir = (*ip)->replicas()->begin(); 
-           ir != (*ip)->replicas()->end() ; 
+      for (ir = (*ip)->replicas()->begin();
+           ir != (*ip)->replicas()->end();
            ++ir) {
-        std::cout << (ir == (*ip)->replicas()->begin() ? ",":"") << *ir;
+        std::cout << (ir == (*ip)->replicas()->begin() ? "":",") << *ir;
       }
 
       /* Iterate partition's ISRs */
       std::cout << ", isrs: ";
       RdKafka::PartitionMetadata::ISRSIterator iis;
       for (iis = (*ip)->isrs()->begin(); iis != (*ip)->isrs()->end() ; ++iis)
-        std::cout << (iis == (*ip)->isrs()->begin() ? ",":"") << *iis;
+        std::cout << (iis == (*ip)->isrs()->begin() ? "":",") << *iis;
 
       if ((*ip)->err() != RdKafka::ERR_NO_ERROR)
         std::cout << ", " << RdKafka::err2str((*ip)->err()) << std::endl;
@@ -232,7 +237,7 @@ int main (int argc, char **argv) {
   int32_t partition = RdKafka::Topic::PARTITION_UA;
   int64_t start_offset = RdKafka::Topic::OFFSET_BEGINNING;
   bool do_conf_dump = false;
-  char opt;
+  int opt;
   MyHashPartitionerCb hash_partitioner;
   int use_ccb = 0;
 
@@ -347,13 +352,15 @@ int main (int argc, char **argv) {
     }
   }
 
-  if (mode.empty() || topic_str.empty() || optind != argc) {
+  if (mode.empty() || (topic_str.empty() && mode != "L") || optind != argc) {
   usage:
+	  std::string features;
+	  conf->get("builtin.features", features);
     fprintf(stderr,
             "Usage: %s [-C|-P] -t <topic> "
             "[-p <partition>] [-b <host1:port1,host2:port2,..>]\n"
             "\n"
-            "librdkafka version %s (0x%08x)\n"
+            "librdkafka version %s (0x%08x, builtin.features \"%s\")\n"
             "\n"
             " Options:\n"
             "  -C | -P         Consumer or Producer mode\n"
@@ -389,8 +396,9 @@ int main (int argc, char **argv) {
             "\n",
 	    argv[0],
 	    RdKafka::version_str().c_str(), RdKafka::version(),
-	    RdKafka::Conf::DEBUG_CONTEXTS.c_str());
-    exit(1);
+		features.c_str(),
+	    RdKafka::get_debug_contexts().c_str());
+	exit(1);
   }
 
 
@@ -475,7 +483,7 @@ int main (int argc, char **argv) {
     /*
      * Read messages from stdin and produce to broker.
      */
-    for (std::string line; run and std::getline(std::cin, line);) {
+    for (std::string line; run && std::getline(std::cin, line);) {
       if (line.empty()) {
         producer->poll(0);
 	continue;
@@ -500,7 +508,7 @@ int main (int argc, char **argv) {
     }
     run = true;
 
-    while (run and producer->outq_len() > 0) {
+    while (run && producer->outq_len() > 0) {
       std::cerr << "Waiting for " << producer->outq_len() << std::endl;
       producer->poll(1000);
     }

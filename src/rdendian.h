@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012 - 2014 Magnus Edenhill
+ * Copyright (c) 2012-2015 Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,20 +25,54 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#pragma once
+
+/**
+ * Provides portable endian-swapping macros/functions.
+ *
+ *   be64toh()
+ *   htobe64()
+ *   be32toh()
+ *   htobe32()
+ *   be16toh()
+ *   htobe16()
+ */
 
 #ifdef __FreeBSD__
   #include <sys/endian.h>
 #elif defined __GLIBC__
   #include <endian.h>
+ #ifndef be64toh
+   /* Support older glibc (<2.9) which lack be64toh */
+  #include <byteswap.h>
+  #if __BYTE_ORDER == __BIG_ENDIAN
+   #define be16toh(x) (x)
+   #define be32toh(x) (x)
+   #define be64toh(x) (x)
+  #else
+   #define be16toh(x) __bswap_16 (x)
+   #define be32toh(x) __bswap_32 (x)
+   #define be64toh(x) __bswap_64 (x)
+  #endif
+ #endif
+
 #elif defined __CYGWIN__
  #include <endian.h>
 #elif defined __BSD__
   #include <sys/endian.h>
 #elif defined sun
   #include <sys/byteorder.h>
-  #define __bswap_64(x)      BSWAP_64(x)
-  #define __bswap_32(x)      BSWAP_32(x)
-  #define __bswap_16(x)      BSWAP_16(x)
+  #include <sys/isa_defs.h>
+#ifdef _BIG_ENDIAN
+#define be64toh(x) (x)
+#define be32toh(x) (x)
+#define be16toh(x) (x)
+# else
+#define be64toh(x) BSWAP_64(x)
+#define be32toh(x) ntohl(x)
+#define be16toh(x) ntohs(x)
+#endif /* sun */
+
 #elif defined __APPLE__
   #include <sys/_endian.h>
   #include <libkern/OSByteOrder.h>
@@ -46,37 +80,53 @@
   #define __bswap_32(x)      OSSwapInt32(x)
   #define __bswap_16(x)      OSSwapInt16(x)
 
-  #if __DARWIN_BYTE_ORDER == __DARWIN_BIG_ENDIAN
-    #define htobe16(x) (x)
-    #define htole16(x) __bswap_16 (x)
-    #define be16toh(x) (x)
-    #define le16toh(x) __bswap_16 (x)
+#if __DARWIN_BYTE_ORDER == __DARWIN_BIG_ENDIAN
+#define be64toh(x) (x)
+#define be32toh(x) (x)
+#define be16toh(x) (x)
+#else
+#define be64toh(x) OSSwapInt64(x)
+#define be32toh(x) OSSwapInt32(x)
+#define be16toh(x) OSSwapInt16(x)
+#endif
 
-    #define htobe32(x) (x)
-    #define htole32(x) __bswap_32 (x)
-    #define be32toh(x) (x)
-    #define le32toh(x) __bswap_32 (x)
+#elif defined(_MSC_VER)
+#include <intrin.h>
 
-    #define htobe64(x) (x)
-    #define htole64(x) __bswap_64 (x)
-    #define be64toh(x) (x)
-    #define le64toh(x) __bswap_64 (x)
-  #else
-    #define htobe16(x) __bswap_16 (x)
-    #define htole16(x) (x)
-    #define be16toh(x) __bswap_16 (x)
-    #define le16toh(x) (x)
+#define be64toh(x) _byteswap_uint64(x)
+#define be32toh(x) _byteswap_ulong(x)
+#define be16toh(x) _byteswap_ushort(x)
 
-    #define htobe32(x) __bswap_32 (x)
-    #define htole32(x) (x)
-    #define be32toh(x) __bswap_32 (x)
-    #define le32toh(x) (x)
+#elif defined _AIX      /* AIX is always big endian */
+#define be64toh(x) (x)
+#define be32toh(x) (x)
+#define be16toh(x) (x)
 
-    #define htobe64(x) __bswap_64 (x)
-    #define htole64(x) (x)
-    #define be64toh(x) __bswap_64 (x)
-    #define le64toh(x) (x)
-  #endif
 #else
   #error Unknown location for endian.h
+#endif
+
+
+
+
+#ifndef be64toh
+#error Missing definition for be64toh
+#endif
+
+#ifndef be32toh
+#define be32toh(x) ntohl(x)
+#endif
+
+#ifndef be16toh
+#define be16toh(x) ntohs(x)
+#endif
+
+#ifndef htobe64
+#define htobe64(x) be64toh(x)
+#endif
+#ifndef htobe32
+#define htobe32(x) be32toh(x)
+#endif
+#ifndef htobe16
+#define htobe16(x) be16toh(x)
 #endif

@@ -7,10 +7,18 @@ CYAN='\033[36m'
 CCLR='\033[0m'
 
 if [ -z "$1" ]; then
-    echo "Usage: $0 <00xx-...test> [modes..]"
+    echo "Usage: $0 [-p] <00xx-...test> [modes..]"
     echo ""
-    echo "  Modes: bare valgrind helgrind drd"
+    echo "  Modes: bare valgrind helgrind drd gdb"
+    echo "  Options:"
+    echo "   -p    - run all tests in parallel"
     exit 1
+fi
+
+ARGS=
+if [[ $1 == "-p" ]]; then
+    ARGS="$ARGS $1"
+    shift
 fi
 
 TEST=$1
@@ -42,22 +50,30 @@ for mode in $MODES; do
     echo -e "${CYAN}### Running test $TEST in $mode mode ###${CCLR}"
     case "$mode" in
 	valgrind)
-	    valgrind $VALGRIND_ARGS --leak-check=full $SUPP $GEN_SUPP \
-		./$TEST
+	    valgrind $VALGRIND_ARGS --leak-check=full --show-leak-kinds=all \
+		     --track-origins=yes \
+		     $SUPP $GEN_SUPP \
+		$TEST $ARGS
 	    RET=$?
 	    ;;
 	helgrind)
-	    valgrind $VALGRIND_ARGS --tool=helgrind $SUPP $GEN_SUPP \
-		./$TEST	
+	    valgrind $VALGRIND_ARGS --tool=helgrind \
+                     --sim-hints=no-nptl-pthread-stackcache \
+                     $SUPP $GEN_SUPP \
+		$TEST	$ARGS
 	    RET=$?
 	    ;;
 	drd)
 	    valgrind $VALGRIND_ARGS --tool=drd $SUPP $GEN_SUPP \
-		./$TEST	
+		$TEST	$ARGS
 	    RET=$?
-	    ;;	    
+	    ;;
+        gdb)
+            gdb $ARGS $TEST
+            RET=$?
+            ;;
 	bare)
-	    ./$TEST
+	    $TEST $ARGS
 	    RET=$?
 	    ;;
 	*)

@@ -36,16 +36,16 @@
 extern sigset_t rd_intr_sigset;
 extern int      rd_intr_blocked;
 
-static inline void rd_intr_block (void) RD_UNUSED;
-static inline void rd_intr_block (void) {
+static __inline void rd_intr_block (void) RD_UNUSED;
+static __inline void rd_intr_block (void) {
 	if (rd_intr_blocked++)
 		return;
 
 	sigprocmask(SIG_BLOCK, &rd_intr_sigset, NULL);
 }
 
-static inline void rd_intr_unblock (void) RD_UNUSED;
-static inline void rd_intr_unblock (void) {
+static __inline void rd_intr_unblock (void) RD_UNUSED;
+static __inline void rd_intr_unblock (void) {
 	assert(rd_intr_blocked > 0);
 	if (--rd_intr_blocked)
 		return;

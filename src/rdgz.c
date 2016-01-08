@@ -34,7 +34,7 @@
 
 #define RD_GZ_CHUNK  262144
 
-void *rd_gz_decompress (void *compressed, int compressed_len,
+void *rd_gz_decompress (const void *compressed, int compressed_len,
 			uint64_t *decompressed_lenp) {
 	int pass = 1;
 	char *decompressed = NULL;
@@ -49,7 +49,7 @@ void *rd_gz_decompress (void *compressed, int compressed_len,
 		pass++;
 
 	for (; pass <= 2 ; pass++) {
-		z_stream strm = {};
+		z_stream strm = RD_ZERO_INIT;
 		gz_header hdr;
 		char buf[512];
 		char *p;
@@ -59,7 +59,7 @@ void *rd_gz_decompress (void *compressed, int compressed_len,
 		if ((r = inflateInit2(&strm, 15+32)) != Z_OK)
 			goto fail;
 
-		strm.next_in = compressed;
+		strm.next_in = (void *)compressed;
 		strm.avail_in = compressed_len;
 
 		if ((r = inflateGetHeader(&strm, &hdr)) != Z_OK) {
@@ -74,7 +74,7 @@ void *rd_gz_decompress (void *compressed, int compressed_len,
 		} else {
 			/* Use real output buffer */
 			p = decompressed;
-			len = *decompressed_lenp;
+			len = (int)*decompressed_lenp;
 		}
 
 		do {
@@ -102,7 +102,7 @@ void *rd_gz_decompress (void *compressed, int compressed_len,
 
 		if (pass == 1) {
 			*decompressed_lenp = strm.total_out;
-			if (!(decompressed = malloc(*decompressed_lenp+1))) {
+			if (!(decompressed = malloc((size_t)(*decompressed_lenp)+1))) {
 				inflateEnd(&strm);
 				return NULL;
 			}

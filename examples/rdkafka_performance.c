@@ -32,6 +32,7 @@
  * (https://github.com/edenhill/librdkafka)
  */
 
+#define _GNU_SOURCE /* for strndup() */
 #include <ctype.h>
 #include <signal.h>
 #include <string.h>
@@ -114,6 +115,13 @@ static void err_cb (rd_kafka_t *rk, int err, const char *reason, void *opaque) {
 	       rd_kafka_name(rk), rd_kafka_err2str(err), reason);
 }
 
+static void throttle_cb (rd_kafka_t *rk, const char *broker_name,
+			 int32_t broker_id, int throttle_time_ms,
+			 void *opaque) {
+	printf("%% THROTTLED %dms by %s (%"PRId32")\n", throttle_time_ms,
+	       broker_name, broker_id);
+}
+
 
 static void msg_delivered (rd_kafka_t *rk,
                            const rd_kafka_message_t *rkmessage, void *opaque) {
@@ -138,7 +146,7 @@ static void msg_delivered (rd_kafka_t *rk,
               !(cnt.msgs_dr_err % (dispintvl / 1000)))) ||
 	    !last || msgs_wait_cnt < 5 ||
 	    !(msgs_wait_cnt % dr_disp_div) || 
-	    (now - last) >= dispintvl * 1000 ||
+	    (int)(now - last) >= dispintvl * 1000 ||
             verbosity >= 3) {
 		if (rkmessage->err && verbosity >= 2)
 			printf("%% Message delivery failed: %s (%li remain)\n",
@@ -220,7 +228,7 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 
 
         if (latency_mode) {
-                uint64_t remote_ts, ts;
+                int64_t remote_ts, ts;
 
                 if (rkmessage->len > 8 &&
                     !memcmp(rkmessage->payload, "LATENCY:", 8) &&
@@ -249,7 +257,7 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 
         }
 
-        if (msgcnt != -1 && cnt.msgs >= msgcnt)
+        if (msgcnt != -1 && (int)cnt.msgs >= msgcnt)
                 run = 0;
 }
 
@@ -550,6 +558,7 @@ int main (int argc, char **argv) {
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
 	rd_kafka_conf_set_error_cb(conf, err_cb);
+	rd_kafka_conf_set_throttle_cb(conf, throttle_cb);
 	rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered);
 
 	/* Quick termination */
@@ -877,7 +886,7 @@ int main (int argc, char **argv) {
         }
 
         if (rd_kafka_conf_set(conf, "statistics.interval.ms",
-                              stats_intvlstr ? : tmp,
+                              stats_intvlstr ? stats_intvlstr : tmp,
                               errstr, sizeof(errstr)) !=
             RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%% %s\n", errstr);
@@ -932,7 +941,7 @@ int main (int argc, char **argv) {
 
 		/* Copy payload content to new buffer */
 		while (rof < msgsize) {
-			size_t xlen = RD_MIN(msgsize-rof, plen);
+			size_t xlen = RD_MIN((size_t)msgsize-rof, plen);
 			memcpy(sbuf+rof, msgpattern, xlen);
 			rof += xlen;
 		}
@@ -977,7 +986,7 @@ int main (int argc, char **argv) {
 
 		cnt.t_start = rd_clock();
 
-		while (run && (msgcnt == -1 || cnt.msgs < msgcnt)) {
+		while (run && (msgcnt == -1 || (int)cnt.msgs < msgcnt)) {
 			/* Send/Produce message. */
 
 			if (idle) {
@@ -1149,7 +1158,7 @@ int main (int argc, char **argv) {
 		}
 
 		cnt.t_start = rd_clock();
-		while (run && (msgcnt == -1 || msgcnt > cnt.msgs)) {
+		while (run && (msgcnt == -1 || msgcnt > (int)cnt.msgs)) {
 			/* Consume messages.
 			 * A message may either be a real message, or
 			 * an error signaling (if rkmessage->err is set).

@@ -36,12 +36,5 @@
  */
 
 
-
-
-typedef pthread_mutex_t   rd_mutex_t;
-typedef pthread_rwlock_t  rd_rwlock_t;
-typedef pthread_cond_t    rd_cond_t;
-
-
 /* Timestamp (microseconds) */
-typedef uint64_t rd_ts_t;
+typedef int64_t rd_ts_t;

@@ -56,6 +56,9 @@
 #include "snappy_compat.h"
 #endif
 
+#include "rd.h"
+#define inline __inline
+
 #define CRASH_UNLESS(x) BUG_ON(!(x))
 #define CHECK(cond) CRASH_UNLESS(cond)
 #define CHECK_LE(a, b) CRASH_UNLESS((a) <= (b))
@@ -120,19 +123,58 @@ static inline bool is_little_endian(void)
 	return false;
 }
 
-static inline int log2_floor(u32 n)
-{
-	return n == 0 ? -1 : 31 ^ __builtin_clz(n);
+#ifndef _MSC_VER
+#define rd_clz(n)   __builtin_clz(n)
+#define rd_ctz(n)   __builtin_ctz(n)
+#define rd_ctz64(n) __builtin_ctzll(n)
+#else
+#include <intrin.h>
+static int __inline rd_clz(u32 x) {
+	int r = 0;
+	if (_BitScanForward(&r, x))
+		return 31 - r;
+	else
+		return 32;
 }
 
-static inline __attribute__((unused)) int find_lsb_set_non_zero(u32 n)
+static int __inline rd_ctz(u32 x) {
+	int r = 0;
+	if (_BitScanReverse(&r, x))
+		return r;
+	else
+		return 32;
+}
+
+static int __inline rd_ctz64(u64 x) {
+#ifdef _M_X64
+	int r = 0;
+	if (_BitScanReverse64(&r, x))
+		return r;
+	else
+		return 64;
+#else
+	int r;
+	if ((r = rd_ctz(x & 0xffffffff)) < 32)
+		return r;
+	return 32 + rd_ctz(x >> 32);
+#endif
+}
+#endif
+
+
+static inline int log2_floor(u32 n)
 {
-	return __builtin_ctz(n);
+	return n == 0 ? -1 : 31 ^ rd_clz(n);
+}
+
+static inline int find_lsb_set_non_zero(u32 n)
+{
+	return rd_ctz(n);
 }
 
 static inline int find_lsb_set_non_zero64(u64 n)
 {
-	return __builtin_ctzll(n);
+	return rd_ctz64(n);
 }
 
 #define kmax32 5
@@ -225,6 +267,11 @@ static inline char *varint_encode32(char *sptr, u32 v)
 
 #ifdef SG
 
+static inline void *n_bytes_after_addr(void *addr, size_t n_bytes)
+{
+    return (void *) ((char *)addr + n_bytes);
+}
+
 struct source {
 	struct iovec *iov;
 	int iovlen;
@@ -243,9 +290,9 @@ static inline const char *peek(struct source *s, size_t *len)
 {
 	if (likely(s->curvec < s->iovlen)) {
 		struct iovec *iv = &s->iov[s->curvec];
-		if (s->curoff < iv->iov_len) { 
+		if ((unsigned)s->curoff < (size_t)iv->iov_len) { 
 			*len = iv->iov_len - s->curoff;
-			return (char *)iv->iov_base + s->curoff;
+			return n_bytes_after_addr(iv->iov_base, s->curoff);
 		}
 	}
 	*len = 0;
@@ -256,8 +303,9 @@ static inline void skip(struct source *s, size_t n)
 {
 	struct iovec *iv = &s->iov[s->curvec];
 	s->curoff += n;
-	DCHECK_LE(s->curoff, iv->iov_len);
-	if (s->curoff >= iv->iov_len && s->curvec + 1 < s->iovlen) {
+	DCHECK_LE((unsigned)s->curoff, (size_t)iv->iov_len);
+	if ((unsigned)s->curoff >= (size_t)iv->iov_len &&
+	    s->curvec + 1 < s->iovlen) {
 		s->curoff = 0;
 		s->curvec++;
 	}
@@ -274,7 +322,7 @@ struct sink {
 static inline void append(struct sink *s, const char *data, size_t n)
 {
 	struct iovec *iov = &s->iov[s->curvec];
-	char *dst = (char *)iov->iov_base + s->curoff;
+	char *dst = n_bytes_after_addr(iov->iov_base, s->curoff);
 	size_t nlen = min_t(size_t, iov->iov_len - s->curoff, n);
 	if (data != dst)
 		memcpy(dst, data, nlen);
@@ -283,9 +331,9 @@ static inline void append(struct sink *s, const char *data, size_t n)
 	while ((n -= nlen) > 0) {
 		data += nlen;
 		s->curvec++;
-		DCHECK_LT(s->curvec, s->iovlen);
+		DCHECK_LT((signed)s->curvec, s->iovlen);
 		iov++;
-		nlen = min_t(size_t, iov->iov_len, n);
+		nlen = min_t(size_t, (size_t)iov->iov_len, n);
 		memcpy(iov->iov_base, data, nlen);
 		s->curoff = nlen;
 	}
@@ -294,8 +342,8 @@ static inline void append(struct sink *s, const char *data, size_t n)
 static inline void *sink_peek(struct sink *s, size_t n)
 {
 	struct iovec *iov = &s->iov[s->curvec];
-	if (s->curvec < iov->iov_len && iov->iov_len - s->curoff >= n)
-		return (char *)iov->iov_base + s->curoff;
+	if (s->curvec < (size_t)iov->iov_len && iov->iov_len - s->curoff >= n)
+		return n_bytes_after_addr(iov->iov_base, s->curoff);
 	return NULL;
 }
 
@@ -440,7 +488,7 @@ static inline bool writer_append_from_self(struct writer *w, u32 offset,
 	CHECK_LE(op, w->op_limit);
 	const u32 space_left = w->op_limit - op;
 
-	if (op - w->base <= offset - 1u)	/* -1u catches offset==0 */
+	if ((unsigned)(op - w->base) <= offset - 1u)	/* -1u catches offset==0 */
 		return false;
 	if (len <= 16 && offset >= 8 && space_left >= 16) {
 		/* Fast path, used for the majority (70-80%) of dynamic
@@ -1298,7 +1346,7 @@ static int internal_uncompress(struct source *r,
 	return -EIO;
 }
 
-static inline int compress(struct snappy_env *env, struct source *reader,
+static inline int sn_compress(struct snappy_env *env, struct source *reader,
 			   struct sink *writer)
 {
 	int err;
@@ -1395,7 +1443,7 @@ int snappy_compress_iov(struct snappy_env *env,
 		.iov = iov_out,
 		.iovlen = *iov_out_len,
 	};
-	int err = compress(env, &reader, &writer);
+	int err = sn_compress(env, &reader, &writer);
 
 	*iov_out_len = writer.curvec + 1;
 
@@ -1509,7 +1557,7 @@ int snappy_compress(struct snappy_env *env,
 	struct sink writer = {
 		.dest = compressed,
 	};
-	int err = compress(env, &reader, &writer);
+	int err = sn_compress(env, &reader, &writer);
 
 	/* Compute how many bytes were added */
 	*compressed_length = (writer.dest - compressed);
@@ -1543,6 +1591,11 @@ int snappy_uncompress(const char *compressed, size_t n, char *uncompressed)
 EXPORT_SYMBOL(snappy_uncompress);
 #endif
 
+static inline void clear_env(struct snappy_env *env)
+{
+    memset(env, 0, sizeof(*env));
+}
+
 #ifdef SG
 /**
  * snappy_init_env_sg - Allocate snappy compression environment
@@ -1556,9 +1609,9 @@ EXPORT_SYMBOL(snappy_uncompress);
  */
 int snappy_init_env_sg(struct snappy_env *env, bool sg)
 {
-	env->hash_table = vmalloc(sizeof(u16) * kmax_hash_table_size);
-	if (!env->hash_table)
+	if (snappy_init_env(env) < 0)
 		goto error;
+
 	if (sg) {
 		env->scratch = vmalloc(kblock_size);
 		if (!env->scratch)
@@ -1587,6 +1640,7 @@ EXPORT_SYMBOL(snappy_init_env_sg);
  */
 int snappy_init_env(struct snappy_env *env)
 {
+    clear_env(env);
 	env->hash_table = vmalloc(sizeof(u16) * kmax_hash_table_size);
 	if (!env->hash_table)
 		return -ENOMEM;
@@ -1607,6 +1661,6 @@ void snappy_free_env(struct snappy_env *env)
 	vfree(env->scratch);
 	vfree(env->scratch_output);
 #endif
-	memset(env, 0, sizeof(struct snappy_env));
+	clear_env(env);
 }
 EXPORT_SYMBOL(snappy_free_env);

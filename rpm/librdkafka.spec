@@ -1,6 +1,6 @@
 Name:    librdkafka
-Version: %{__version}%{?dist}
-Release: %{__release}
+Version: %{__version}
+Release: %{__release}%{?dist}
 %define soname 1
 
 Summary: The Apache Kafka C library
@@ -9,20 +9,19 @@ License: BSD-2-Clause
 URL:     https://github.com/edenhill/librdkafka
 Source:	 librdkafka-%{__version}.tar
 
-BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++
+BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++ openssl-devel cyrus-sasl-devel
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 %description
-librdkafka is a C/C++ library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
-It was designed with message delivery reliability and high performance in mind, current figures exceed 800000 msgs/second for the producer and 3 million msgs/second for the consumer.
+librdkafka is the C/C++ client library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
 
 
 %package -n %{name}%{soname}
 Summary: The Apache Kafka C library
 Group:   Development/Libraries/C and C++
-
+Requires: zlib libstdc++ openssl-libs cyrus-sasl
 %description -n %{name}%{soname}
-librdkafka is a C/C++ library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
+librdkafka is the C/C++ client library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
 
 
 %package -n %{name}-devel
@@ -31,7 +30,7 @@ Group:   Development/Libraries/C and C++
 Requires: %{name}%{soname} = %{version}
 
 %description -n %{name}-devel
-librdkafka is a C/C++ library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
+librdkafka is the C/C++ client library implementation of the Apache Kafka protocol, containing both Producer and Consumer support.
 
 This package contains headers and libraries required to build applications
 using librdkafka.
@@ -61,7 +60,7 @@ rm -rf %{buildroot}
 %{_libdir}/librdkafka++.so.%{soname}
 %defattr(-,root,root)
 %doc README.md CONFIGURATION.md INTRODUCTION.md
-%doc LICENSE LICENSE.pycrc LICENSE.snappy
+%doc LICENSE LICENSE.pycrc LICENSE.queue LICENSE.snappy LICENSE.tinycthread LICENSE.trex LICENSE.wingetopt
 
 %defattr(-,root,root)
 #%{_bindir}/rdkafka_example
@@ -76,6 +75,8 @@ rm -rf %{buildroot}
 %{_libdir}/librdkafka.so
 %{_libdir}/librdkafka++.a
 %{_libdir}/librdkafka++.so
+%{_libdir}/pkgconfig/rdkafka++.pc
+%{_libdir}/pkgconfig/rdkafka.pc
 
 
 %changelog

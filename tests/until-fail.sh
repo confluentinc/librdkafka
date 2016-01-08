@@ -1,6 +1,8 @@
 #!/bin/bash
 #
 
+DELETE_TOPICS=y
+
 set -e
 
 modes=$*
@@ -34,6 +36,11 @@ while true ; do
             TESTS=$t ./run-test.sh ./merged $mode || (echo "Failed on iteration $iter, test $t, mode $mode" ; exit 1)
         done
     done
+
+
+    if [[ "$DELETE_TOPICS" == "y" ]]; then
+	./delete-test-topics.sh localhost ~/src/jason/kafka/bin/kafka-topics.sh ^rdkafkatest_rnd || true
+    fi
 done
 
 

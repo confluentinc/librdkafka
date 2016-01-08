@@ -155,7 +155,7 @@ int RdKafka::ConsumerImpl::consume_callback (RdKafka::Topic* topic,
                                              RdKafka::ConsumeCb *consume_cb,
                                              void *opaque) {
   RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(topic);
-  ConsumerImplCallback context(topic, consume_cb, NULL);
+  ConsumerImplCallback context(topic, consume_cb, opaque);
   return rd_kafka_consume_callback(topicimpl->rkt_, partition, timeout_ms,
                                    &ConsumerImplCallback::consume_cb_trampoline, &context);
 }
@@ -215,7 +215,7 @@ int RdKafka::ConsumerImpl::consume_callback (Queue *queue,
                                              RdKafka::ConsumeCb *consume_cb,
                                              void *opaque) {
   RdKafka::QueueImpl *queueimpl = dynamic_cast<RdKafka::QueueImpl *>(queue);
-  ConsumerImplQueueCallback context(consume_cb, NULL);
+  ConsumerImplQueueCallback context(consume_cb, opaque);
   return rd_kafka_consume_callback_queue(queueimpl->queue_, timeout_ms,
                                          &ConsumerImplQueueCallback::consume_cb_trampoline,
                                          &context);

@@ -5,14 +5,14 @@ TESTS0    = $(TESTS:%.c=%.test)
 
 BIN	  = merged
 LIBS	 += -lrdkafka
-OBJS	 += test.o
+OBJS	 += test.o tinycthread.o
 
 -include ../Makefile.config
 
-%.test: ../src/librdkafka.a test.o %.c
+%.test: ../src/librdkafka.a $(OBJS) %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka $(LIBS)
 
-%.test: ../src/librdkafka.a test.o %.cpp
+%.test: ../src/librdkafka.a $(OBJS) %.cpp
 	$(CXX) $(CPPFLAGS) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka++ -lrdkafka $(LIBS)
 
 all: $(BIN) run_par
@@ -28,7 +28,7 @@ run_seq:
 
 build: $(BIN)
 
-test.o: ../src/librdkafka.a
+test.o: ../src/librdkafka.so
 
 
 include ../mklove/Makefile.base
@@ -36,10 +36,10 @@ include ../mklove/Makefile.base
 CFLAGS += -I../src -I../src-cpp
 LDFLAGS += -L../src -L../src-cpp
 
-test.o: test.c
+tinycthread.o: ../src/tinycthread.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
 
 clean:
-	rm -f *.test test.o $(OBJS) $(BIN)
+	rm -f *.test $(OBJS) $(BIN)
 

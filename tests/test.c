@@ -31,10 +31,6 @@
 #include <signal.h>
 #include <stdlib.h>
 
-#ifndef _MSC_VER
-#include <pthread.h>
-#endif
-
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
@@ -54,9 +50,8 @@ double test_timeout_multiplier  = 1.0;
 
 int  test_session_timeout_ms = 6000;
 
-#ifndef _MSC_VER
-static pthread_mutex_t test_lock;
-#endif
+static mtx_t test_lock;
+
 
 static void sig_alarm (int sig) {
 	TEST_FAIL("Test timed out");
@@ -362,56 +357,51 @@ static int run_test0 (struct run_args *run_args) {
 
 
 
-#ifndef _MSC_VER
-static void *run_test_from_thread (void *arg) {
+
+static int run_test_from_thread (void *arg) {
         struct run_args *run_args = arg;
-	
-        pthread_detach(pthread_self());
+
+	thrd_detach(thrd_current());
 
 	run_test0(run_args);
 
-        pthread_mutex_lock(&test_lock);
+        mtx_lock(&test_lock);
         tests_running_cnt--;
-        pthread_mutex_unlock(&test_lock);
+        mtx_unlock(&test_lock);
 
         free(run_args);
 
-        return NULL;
+        return 0;
 }
-#endif
 
 
 
 static int run_test (const char *testname,
                      int (*test_main) (int, char **),
                      int argc, char **argv) {
-        int r;
+        int r = 0;
 
         if (tests_run_in_parallel) {
-#ifdef _MSC_VER
-                TEST_FAIL("Parallel runs not supported on this platform, yet\n");
-#else
-                pthread_t thr;
+		thrd_t thr;
                 struct run_args *run_args = calloc(1, sizeof(*run_args));
                 run_args->testname = testname;
                 run_args->test_main = test_main;
                 run_args->argc = argc;
                 run_args->argv = argv;
 
-                pthread_mutex_lock(&test_lock);
+                mtx_lock(&test_lock);
                 tests_running_cnt++;
-                pthread_mutex_unlock(&test_lock);
+                mtx_unlock(&test_lock);
 
-                r = pthread_create(&thr, NULL, run_test_from_thread, run_args);
-                if (r != 0) {
-                        pthread_mutex_lock(&test_lock);
+		if (thrd_create(&thr, run_test_from_thread, run_args) !=
+		    thrd_success) {
+                        mtx_lock(&test_lock);
                         tests_running_cnt--;
-                        pthread_mutex_unlock(&test_lock);
+                        mtx_unlock(&test_lock);
 
-                        TEST_FAIL("Failed to start thread for test %s: %s\n",
-                                  testname, strerror(r));
+                        TEST_FAIL("Failed to start thread for test %s\n",
+                                  testname);
                 }
-#endif
         } else {
 		struct run_args run_args = { .testname = testname,
 					     .test_main = test_main,
@@ -419,7 +409,7 @@ static int run_test (const char *testname,
 					     .argv = argv };
 
 		tests_running_cnt++;
-		r =  run_test0(&run_args);
+		r = run_test0(&run_args);
 		tests_running_cnt--;
 
                 /* Wait for everything to be cleaned up since broker
@@ -436,6 +426,8 @@ int main(int argc, char **argv) {
         const char *tests_to_run = NULL; /* all */
         int i;
 	test_timing_t t_all;
+
+	mtx_init(&test_lock, mtx_plain);
 
 #ifndef _MSC_VER
         tests_to_run = getenv("TESTS");
@@ -493,15 +485,15 @@ int main(int argc, char **argv) {
         RUN_TEST(0020_destroy_hang);
 
         if (tests_run_in_parallel) {
-                pthread_mutex_lock(&test_lock);
+                mtx_lock(&test_lock);
                 while (tests_running_cnt > 0) {
                         TEST_SAY("%d test(s) still running\n",
                                  tests_running_cnt);
-                        pthread_mutex_unlock(&test_lock);
+                        mtx_unlock(&test_lock);
                         rd_sleep(1);
-                        pthread_mutex_lock(&test_lock);
+                        mtx_lock(&test_lock);
                 }
-                pthread_mutex_unlock(&test_lock);
+                mtx_unlock(&test_lock);
         }
 
 	TIMING_STOP(&t_all);

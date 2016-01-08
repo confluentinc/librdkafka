@@ -423,10 +423,13 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
 
                         seen_cnt++;
 
-                        s_rktp = rd_kafka_toppar_get2(rkb->rkb_rk, topic_name,
-                                                      partition, 0, 1);
-                        if (!s_rktp)
-                                continue;
+			if (!rktpar->_private) {
+				s_rktp = rd_kafka_toppar_get2(rkb->rkb_rk,
+							      topic_name,
+							      partition, 0, 0);
+				/* May be NULL if topic is not locally known */
+				rktpar->_private = s_rktp;
+			}
 
 			if (offset == -1)
 				rktpar->offset = RD_KAFKA_OFFSET_INVALID;
@@ -445,12 +448,6 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
                                 rktpar->metadata_size =
                                         RD_KAFKAP_STR_LEN(&metadata);
                         }
-
-                        if (!rktpar->_private)
-                                rktpar->_private = s_rktp;
-                        else
-                                rd_kafka_toppar_destroy(s_rktp);
-
                 }
         }
 

@@ -956,6 +956,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                 if (!s_rktp)
                         continue;
 
+		rd_kafka_assert(NULL, !rktpar->_private);
                 rktpar->_private = s_rktp;
         }
 

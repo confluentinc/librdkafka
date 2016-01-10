@@ -180,6 +180,7 @@
     <ClCompile Include="..\..\tests\0018-cgrp_term.c" />
     <ClCompile Include="..\..\tests\0019-list_groups.c" />
     <ClCompile Include="..\..\tests\0020-destroy_hang.c" />
+    <ClCompile Include="..\..\tests\0021-rkt_destroy.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

@@ -196,8 +196,8 @@ void rd_kafka_op_sprintf (rd_kafka_op_t *rko, const char *fmt, ...);
 
 void rd_kafka_op_err (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 		      const char *fmt, ...);
-void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_resp_err_t err,
-                        int32_t version,
+void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
+                        rd_kafka_resp_err_t err, int32_t version,
                         const char *fmt, ...);
 void rd_kafka_op_app (rd_kafka_q_t *rkq, rd_kafka_op_type_t type,
                       int op_flags, rd_kafka_toppar_t *rktp,

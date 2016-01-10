@@ -205,9 +205,11 @@ void rd_kafka_op_sprintf (rd_kafka_op_t *rko, const char *fmt, ...) {
 
 /**
  * Propagate an error event to the application on a specific queue.
+ * \p optype should be RD_KAFKA_OP_ERR for generic errors and
+ * RD_KAFKA_OP_CONSUMER_ERR for consumer errors.
  */
-void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_resp_err_t err,
-                        int32_t version,
+void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
+                        rd_kafka_resp_err_t err, int32_t version,
                         const char *fmt, ...) {
 	va_list ap;
 	char buf[2048];
@@ -216,7 +218,7 @@ void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_resp_err_t err,
 	rd_vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 
-        rd_kafka_op_app_reply(rkq, RD_KAFKA_OP_ERR, err, version,
+        rd_kafka_op_app_reply(rkq, optype, err, version,
                               rd_strdup(buf), strlen(buf));
 }
 

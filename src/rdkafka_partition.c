@@ -1460,6 +1460,7 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 		if (rko->rko_err) {
 			rd_kafka_q_op_err(rko->rko_replyq ?
 					  rko->rko_replyq : &rktp->rktp_fetchq,
+                                          RD_KAFKA_OP_CONSUMER_ERR,
 					  rko->rko_err, rko->rko_version,
 					  "Commit of offset %"PRId64
 					  " failed: %s",

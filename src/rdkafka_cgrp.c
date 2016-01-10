@@ -1168,7 +1168,7 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                 /* Already handling a previous terminate */
                 rd_kafka_q_t *replyq = rko->rko_replyq;
                 rko->rko_replyq = NULL;
-                rd_kafka_q_op_err(replyq,
+                rd_kafka_q_op_err(replyq, RD_KAFKA_OP_CONSUMER_ERR,
                                   RD_KAFKA_RESP_ERR__IN_PROGRESS,
                                   rkcg->rkcg_reply_rko->rko_version,
                                   "Group is busy handling %s",
@@ -1284,8 +1284,11 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 
                                 rd_kafka_topic_partition_list_destroy(
                                         rko->rko_payload);
+                                rko->rko_payload = NULL;
 
-				rd_kafka_q_op_err(&rkcg->rkcg_q, rko->rko_err,
+				rd_kafka_q_op_err(&rkcg->rkcg_q,
+                                                  RD_KAFKA_OP_CONSUMER_ERR,
+                                                  rko->rko_err,
 						  0,
 						  "Failed to fetch offsets: %s",
 						  rd_kafka_err2str(rko->

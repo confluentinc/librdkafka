@@ -484,6 +484,7 @@ int main(int argc, char **argv) {
 	RUN_TEST(0018_cgrp_term);
         RUN_TEST(0019_list_groups);
         RUN_TEST(0020_destroy_hang);
+        RUN_TEST(0021_rkt_destroy);
 
         if (tests_run_in_parallel) {
                 mtx_lock(&test_lock);
@@ -589,13 +590,20 @@ rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
 
 }
 
-void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
-                        uint64_t testid, int32_t partition,
-                        int msg_base, int cnt,
-			const char *payload, size_t size) {
+/**
+ * Produces \p cnt messages and returns immediately.
+ * Does not wait for delivery.
+ * \p msgcounterp is incremented for each produced messages and passed
+ * as \p msg_opaque which is later used in test_dr_cb to decrement
+ * the counter on delivery.
+ */
+void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+                               uint64_t testid, int32_t partition,
+                               int msg_base, int cnt,
+                               const char *payload, size_t size,
+                               int *msgcounterp) {
 	int msg_id;
 	test_timing_t t_all;
-	int remains = 0;
 
 	TEST_SAY("Produce to %s [%"PRId32"]: messages #%d..%d\n",
 		 rd_kafka_topic_name(rkt), partition, msg_base, msg_base+cnt);
@@ -619,27 +627,54 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 			use_size = strlen(buf);
 		}
 
-		remains++;
-
 		if (rd_kafka_produce(rkt, partition,
 				     RD_KAFKA_MSG_F_COPY,
 				     (void *)use_payload, use_size,
 				     key, strlen(key),
-				     &remains) == -1)
+				     msgcounterp) == -1)
 			TEST_FAIL("Failed to produce message %i "
 				  "to partition %i: %s",
 				  msg_id, (int)partition,
 				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
+                (*msgcounterp)++;
+
         }
-
-
-	/* Wait for messages to be delivered */
-	while (remains > 0 && rd_kafka_outq_len(rk) > 0)
-		rd_kafka_poll(rk, 10);
 
 	TIMING_STOP(&t_all);
 }
+
+/**
+ * Waits for the messages tracked by counter \p msgcounterp to be delivered.
+ */
+void test_wait_delivery (rd_kafka_t *rk, int *msgcounterp) {
+	test_timing_t t_all;
+
+        TIMING_START(&t_all, "PRODUCE.DELIVERY.WAIT");
+
+	/* Wait for messages to be delivered */
+	while (*msgcounterp > 0 && rd_kafka_outq_len(rk) > 0)
+		rd_kafka_poll(rk, 10);
+
+	TIMING_STOP(&t_all);
+
+}
+
+/**
+ * Produces \p cnt messages and waits for succesful delivery
+ */
+void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+                        uint64_t testid, int32_t partition,
+                        int msg_base, int cnt,
+			const char *payload, size_t size) {
+	int remains = 0;
+
+        test_produce_msgs_nowait(rk, rkt, testid, partition, msg_base, cnt,
+                                 payload, size, &remains);
+
+        test_wait_delivery(rk, &remains);
+}
+
 
 
 /**

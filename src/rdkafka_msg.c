@@ -384,16 +384,26 @@ int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
                 }
 
                 /* Partition not assigned, run partitioner. */
-                if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)
+                if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA) {
+                        rd_kafka_topic_t *app_rkt;
+                        /* Provide a temporary app_rkt instance
+                         * if the application decided to destroy its
+                         * topic prior to delivery completion (issue #502) */
+                        if (unlikely(!(app_rkt = rkt->rkt_app_rkt)))
+                                app_rkt = rd_kafka_topic_keep_a(rkt);
                         partition = rkt->rkt_conf.
-                                partitioner(rkt->rkt_app_rkt,
+                                partitioner(app_rkt,
                                             rkm->rkm_key->data,
                                             RD_KAFKAP_BYTES_LEN(rkm->
                                                                 rkm_key),
                                             rkt->rkt_partition_cnt,
                                             rkt->rkt_conf.opaque,
                                             rkm->rkm_opaque);
-                else
+
+                        if (unlikely(!rkt->rkt_app_rkt))
+                                rd_kafka_topic_destroy0(
+                                        rd_kafka_topic_a2s(app_rkt));
+                } else
                         partition = rkm->rkm_partition;
 
                 /* Check that partition exists. */

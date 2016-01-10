@@ -126,6 +126,10 @@ typedef struct rd_kafka_cgrp_s {
 						     * to complete */
 #define RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN 0x8       /* Send LeaveGroup when
 						     * unassign is done */
+#define RD_KAFKA_CGRP_F_SUBSCRIPTION 0x10           /* If set:
+                                                     *   subscription
+                                                     * else:
+                                                     *   static assignment */
 
         rd_interval_t      rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t      rkcg_heartbeat_intvl;    /* Heartbeat intvl */

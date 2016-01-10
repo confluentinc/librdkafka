@@ -120,8 +120,12 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 			       rd_kafka_topic_name(rkmessage->rkt),
 			       rkmessage->partition, rkmessage->offset);
 
-			if (exit_eof && --wait_eof == 0)
+			if (exit_eof && --wait_eof == 0) {
+                                fprintf(stderr,
+                                        "%% All partition(s) reached EOF: "
+                                        "exiting\n");
 				run = 0;
+                        }
 
 			return;
 		}
@@ -286,6 +290,7 @@ int main (int argc, char **argv) {
         rd_kafka_resp_err_t err;
         char *group = NULL;
         rd_kafka_topic_partition_list_t *topics;
+        int is_subscription;
         int i;
 
 	quiet = !isatty(STDIN_FILENO);
@@ -436,6 +441,10 @@ int main (int argc, char **argv) {
 			"               Use '-X list' to see the full list\n"
 			"               of supported properties.\n"
 			"\n"
+                        "For balanced consumer groups use the 'topic1 topic2..'"
+                        " format\n"
+                        "and for static assignment use "
+                        "'topic1:part1 topic1:part2 topic2:part1..'\n"
 			"\n",
 			argv[0],
 			rd_kafka_version_str(), rd_kafka_version(),
@@ -518,6 +527,7 @@ int main (int argc, char **argv) {
         rd_kafka_poll_set_consumer(rk);
 
         topics = rd_kafka_topic_partition_list_new(argc - optind);
+        is_subscription = 1;
         for (i = optind ; i < argc ; i++) {
                 /* Parse "topic[:part] */
                 char *topic = argv[i];
@@ -527,6 +537,8 @@ int main (int argc, char **argv) {
                 if ((t = strstr(topic, ":"))) {
                         *t = '\0';
                         partition = atoi(t+1);
+                        is_subscription = 0; /* is assignment */
+                        wait_eof++;
                 }
 
                 rd_kafka_topic_partition_list_add(topics, topic, partition);
@@ -564,10 +576,23 @@ int main (int argc, char **argv) {
         }
 
 
-        if ((err = rd_kafka_subscribe(rk, topics))) {
-                fprintf(stderr, "%% Failed to start consuming topics: %s\n",
-                        rd_kafka_err2str(err));
-                exit(1);
+        if (is_subscription) {
+                fprintf(stderr, "%% Subscribing to %d topics\n", topics->cnt);
+
+                if ((err = rd_kafka_subscribe(rk, topics))) {
+                        fprintf(stderr,
+                                "%% Failed to start consuming topics: %s\n",
+                                rd_kafka_err2str(err));
+                        exit(1);
+                }
+        } else {
+                fprintf(stderr, "%% Assigning %d partitions\n", topics->cnt);
+
+                if ((err = rd_kafka_assign(rk, topics))) {
+                        fprintf(stderr,
+                                "%% Failed to assign partitions: %s\n",
+                                rd_kafka_err2str(err));
+                }
         }
 
         while (run) {

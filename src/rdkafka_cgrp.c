@@ -1110,6 +1110,8 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
 				   rkcg->rkcg_assignment))
 		rd_kafka_cgrp_unassign(rkcg);
 
+        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_SUBSCRIPTION;
+
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -1129,6 +1131,8 @@ rd_kafka_cgrp_subscribe (rd_kafka_cgrp_t *rkcg,
 
         if (!rktparlist)
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_SUBSCRIPTION;
 
         rkcg->rkcg_subscription = rktparlist;
 
@@ -1180,7 +1184,10 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_TERMINATE;
         rkcg->rkcg_reply_rko = rko;
 
-        rd_kafka_cgrp_unsubscribe(rkcg, 1/*leave group*/);
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION)
+                rd_kafka_cgrp_unsubscribe(rkcg, 1/*leave group*/);
+        else
+                rd_kafka_cgrp_unassign(rkcg);
 
         /* If there were no toppars attached the cgrp
          * can be terminated right away. */
@@ -1512,7 +1519,8 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg,
 		break;
 
         case RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED:
-                if (rd_interval(&rkcg->rkcg_heartbeat_intvl,
+                if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&
+                    rd_interval(&rkcg->rkcg_heartbeat_intvl,
                                 rkcg->rkcg_rk->rk_conf.
                                 group_heartbeat_intvl_ms * 1000, 0) > 0)
                         rd_kafka_cgrp_heartbeat(rkcg, rkb);
@@ -1581,8 +1589,14 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb) {
                 /* Waiting for broker transport to come up */
                 if (rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP) {
                         /* FIXME: Query another broker */
-                } else
+                } else {
                         rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_UP);
+
+                        /* Start fetching if we have an assignment. */
+                        if (rkcg->rkcg_assignment)
+                                rd_kafka_cgrp_partitions_fetch_start(
+                                        rkcg, rkcg->rkcg_assignment, 0);
+                }
                 break;
 
         case RD_KAFKA_CGRP_STATE_UP:

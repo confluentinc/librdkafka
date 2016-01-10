@@ -69,11 +69,12 @@ extern int  test_session_timeout_ms; /* Group session timeout */
 	fprintf(stdout, __VA_ARGS__);			\
 	} while(0)
 
-#define TEST_ASSERT(expr,reason...) do {                                \
-                if (!(expr)) {                                          \
-                        TEST_FAIL("Test assertion failed: \"" # expr  "\": " \
-                                  reason);                              \
-                }                                                       \
+/* "..." is a failure reason in printf format, include as much info as needed */
+#define TEST_ASSERT(expr,...) do {            \
+        if (!(expr)) {                        \
+                      TEST_FAIL("Test assertion failed: \"" # expr  "\": " \
+                                __VA_ARGS__);                           \
+                      }                                                 \
         } while (0)
 
 

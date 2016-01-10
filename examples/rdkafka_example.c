@@ -544,6 +544,7 @@ int main (int argc, char **argv) {
 
 		/* Create topic */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+                topic_conf = NULL; /* Now owned by topic */
 
 		if (!quiet)
 			fprintf(stderr,
@@ -622,6 +623,7 @@ int main (int argc, char **argv) {
 
 		/* Create topic */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+                topic_conf = NULL; /* Now owned by topic */
 
 		/* Start consuming */
 		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
@@ -700,9 +702,10 @@ int main (int argc, char **argv) {
 		}
 
                 /* Create topic */
-                if (topic)
+                if (topic) {
                         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
-                else
+                        topic_conf = NULL; /* Now owned by topic */
+                } else
                         rkt = NULL;
 
                 while (run) {
@@ -732,10 +735,17 @@ int main (int argc, char **argv) {
 		/* Destroy the handle */
 		rd_kafka_destroy(rk);
 
+                if (topic_conf)
+                        rd_kafka_topic_conf_destroy(topic_conf);
+
+
                 /* Exit right away, dont wait for background cleanup, we haven't
                  * done anything important anyway. */
                 exit(err ? 2 : 0);
         }
+
+        if (topic_conf)
+                rd_kafka_topic_conf_destroy(topic_conf);
 
 	/* Let background threads clean up and terminate cleanly. */
 	run = 5;

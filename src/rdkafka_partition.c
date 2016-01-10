@@ -1929,7 +1929,9 @@ int rd_kafka_topic_partition_list_set_offsets (
                 if (from_rktp) {
                         shptr_rd_kafka_toppar_t *s_rktp = rktpar->_private;
                         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
+                        rd_kafka_toppar_lock(rktp);
                         rktpar->offset = rktp->rktp_stored_offset;
+                        rd_kafka_toppar_unlock(rktp);
                 } else {
                         rktpar->offset = def_value;
                 }

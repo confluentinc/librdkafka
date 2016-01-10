@@ -70,6 +70,7 @@ static int rd_kafka_err_action (rd_kafka_broker_t *rkb,
         case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
+        case RD_KAFKA_RESP_ERR__WAIT_COORD:
                 /* Request metadata information update */
                 actions |= RD_KAFKA_ERR_ACTION_REFRESH;
                 break;
@@ -464,9 +465,11 @@ err:
                 /* Re-query for coordinator */
                 rd_kafka_cgrp_op(rkb->rkb_rk->rk_cgrp, NULL,
                                  NULL, RD_KAFKA_OP_COORD_QUERY, ErrorCode);
-                /* Schedule a retry */
-                rd_kafka_buf_keep(request);
-                rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+                if (request) {
+                        /* Schedule a retry */
+                        rd_kafka_buf_keep(request);
+                        rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+                }
                 return;
         }
 }

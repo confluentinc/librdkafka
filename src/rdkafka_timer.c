@@ -228,6 +228,11 @@ void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us) {
 			    !rd_kafka_timer_scheduled(rtmr))
 				rd_kafka_timer_schedule(rkts, rtmr, 0);
 		}
+
+		if (timeout_us == RD_POLL_NOWAIT) {
+			/* Only iterate once, even if rd_clock doesn't change */
+			break;
+		}
 	}
 
 	rd_kafka_timers_unlock(rkts);

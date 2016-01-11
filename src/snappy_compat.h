@@ -158,8 +158,12 @@ typedef unsigned long long u64;
 #endif
 
 #if defined(sun)
+#ifndef htole16
 #define htole16(x) LE_16(x)
+#endif
+#ifndef le32toh
 #define le32toh(x) LE_32(x)
+#endif
 #endif
 
 #define BITS_PER_LONG (__SIZEOF_LONG__ * 8)

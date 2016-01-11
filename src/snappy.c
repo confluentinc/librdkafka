@@ -139,7 +139,7 @@ static int __inline rd_clz(u32 x) {
 
 static int __inline rd_ctz(u32 x) {
 	int r = 0;
-	if (_BitScanReverse(&r, x))
+	if (_BitScanForward(&r, x))
 		return r;
 	else
 		return 32;

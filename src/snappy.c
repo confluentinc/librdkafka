@@ -139,7 +139,7 @@ static int __inline rd_clz(u32 x) {
 
 static int __inline rd_ctz(u32 x) {
 	int r = 0;
-	if (_BitScanReverse(&r, x))
+	if (_BitScanForward(&r, x))
 		return r;
 	else
 		return 32;
@@ -283,7 +283,7 @@ struct source {
 /* Only valid at beginning when nothing is consumed */
 static inline int available(struct source *s)
 {
-	return s->total;
+	return (int) s->total;
 }
 
 static inline const char *peek(struct source *s, size_t *len)
@@ -302,7 +302,7 @@ static inline const char *peek(struct source *s, size_t *len)
 static inline void skip(struct source *s, size_t n)
 {
 	struct iovec *iv = &s->iov[s->curvec];
-	s->curoff += n;
+	s->curoff += (int) n;
 	DCHECK_LE((unsigned)s->curoff, (size_t)iv->iov_len);
 	if ((unsigned)s->curoff >= (size_t)iv->iov_len &&
 	    s->curvec + 1 < s->iovlen) {
@@ -326,8 +326,8 @@ static inline void append(struct sink *s, const char *data, size_t n)
 	size_t nlen = min_t(size_t, iov->iov_len - s->curoff, n);
 	if (data != dst)
 		memcpy(dst, data, nlen);
-	s->written += n;
-	s->curoff += nlen;
+	s->written += (int) n;
+	s->curoff += (int) nlen;
 	while ((n -= nlen) > 0) {
 		data += nlen;
 		s->curvec++;
@@ -335,7 +335,7 @@ static inline void append(struct sink *s, const char *data, size_t n)
 		iov++;
 		nlen = min_t(size_t, (size_t)iov->iov_len, n);
 		memcpy(iov->iov_base, data, nlen);
-		s->curoff = nlen;
+		s->curoff = (int) nlen;
 	}
 }
 
@@ -486,7 +486,7 @@ static inline bool writer_append_from_self(struct writer *w, u32 offset,
 {
 	char *const op = w->op;
 	CHECK_LE(op, w->op_limit);
-	const u32 space_left = w->op_limit - op;
+	const u32 space_left = (u32) (w->op_limit - op);
 
 	if ((unsigned)(op - w->base) <= offset - 1u)	/* -1u catches offset==0 */
 		return false;
@@ -514,7 +514,7 @@ static inline bool writer_append(struct writer *w, const char *ip, u32 len)
 {
 	char *const op = w->op;
 	CHECK_LE(op, w->op_limit);
-	const u32 space_left = w->op_limit - op;
+	const u32 space_left = (u32) (w->op_limit - op);
 	if (space_left < len)
 		return false;
 	memcpy(op, ip, len);
@@ -526,7 +526,7 @@ static inline bool writer_try_fast_append(struct writer *w, const char *ip,
 					  u32 available_bytes, u32 len)
 {
 	char *const op = w->op;
-	const int space_left = w->op_limit - op;
+	const int space_left = (int) (w->op_limit - op);
 	if (len <= 16 && available_bytes >= 16 && space_left >= 16) {
 		/* Fast path, used for the majority (~95%) of invocations */
 		unaligned_copy64(ip, op);
@@ -967,7 +967,7 @@ static char *compress_fragment(const char *const input,
 				DCHECK_GE(candidate, baseip);
 				DCHECK_LT(candidate, ip);
 
-				table[hval] = ip - baseip;
+				table[hval] = (u16) (ip - baseip);
 			} while (likely(UNALIGNED_LOAD32(ip) !=
 					UNALIGNED_LOAD32(candidate)));
 
@@ -977,7 +977,7 @@ static char *compress_fragment(const char *const input,
  * bytes [next_emit, ip) are unmatched.  Emit them as "literal bytes."
  */
 			DCHECK_LE(next_emit + 16, ip_end);
-			op = emit_literal(op, next_emit, ip - next_emit, true);
+			op = emit_literal(op, next_emit, (int) (ip - next_emit), true);
 
 /*
  * Step 3: Call EmitCopy, and then see if another EmitCopy could
@@ -1002,7 +1002,7 @@ static char *compress_fragment(const char *const input,
 				    find_match_length(candidate + 4, ip + 4,
 						      ip_end);
 				ip += matched;
-				int offset = base - candidate;
+				int offset = (int) (base - candidate);
 				DCHECK_EQ(0, memcmp(base, candidate, matched));
 				op = emit_copy(op, offset, matched);
 /*
@@ -1018,13 +1018,13 @@ static char *compress_fragment(const char *const input,
 				u32 prev_hash =
 				    hash_bytes(get_u32_at_offset
 					       (input_bytes, 0), shift);
-				table[prev_hash] = ip - baseip - 1;
+				table[prev_hash] = (u16) (ip - baseip - 1);
 				u32 cur_hash =
 				    hash_bytes(get_u32_at_offset
 					       (input_bytes, 1), shift);
 				candidate = baseip + table[cur_hash];
 				candidate_bytes = UNALIGNED_LOAD32(candidate);
-				table[cur_hash] = ip - baseip;
+				table[cur_hash] = (u16) (ip - baseip);
 			} while (get_u32_at_offset(input_bytes, 1) ==
 				 candidate_bytes);
 
@@ -1038,7 +1038,7 @@ static char *compress_fragment(const char *const input,
 emit_remainder:
 	/* Emit the remaining bytes as a literal */
 	if (next_emit < ip_end)
-		op = emit_literal(op, next_emit, ip_end - next_emit, false);
+		op = emit_literal(op, next_emit, (int) (ip_end - next_emit), false);
 
 	return op;
 }
@@ -1196,7 +1196,7 @@ static void decompress_all_tags(struct snappy_decompressor *d,
 
 		if ((c & 0x3) == LITERAL) {
 			u32 literal_length = (c >> 2) + 1;
-			if (writer_try_fast_append(writer, ip, d->ip_limit - ip, 
+			if (writer_try_fast_append(writer, ip, (u32) (d->ip_limit - ip), 
 						   literal_length)) {
 				DCHECK_LT(literal_length, 61);
 				ip += literal_length;
@@ -1211,7 +1211,7 @@ static void decompress_all_tags(struct snappy_decompressor *d,
 				ip += literal_ll;
 			}
 
-			u32 avail = d->ip_limit - ip;
+			u32 avail = (u32) (d->ip_limit - ip);
 			while (avail < literal_length) {
 				if (!writer_append(writer, ip, avail))
 					return;
@@ -1219,7 +1219,7 @@ static void decompress_all_tags(struct snappy_decompressor *d,
 				skip(d->reader, d->peeked);
 				size_t n;
 				ip = peek(d->reader, &n);
-				avail = n;
+				avail = (u32) n;
 				d->peeked = avail;
 				if (avail == 0)
 					return;	/* Premature end of input */
@@ -1263,7 +1263,7 @@ static bool refill_tag(struct snappy_decompressor *d)
 		/* Fetch a new fragment from the reader */
 		skip(d->reader, d->peeked); /* All peeked bytes are used up */
 		ip = peek(d->reader, &n);
-		d->peeked = n;
+		d->peeked = (u32) n;
 		if (n == 0) {
 			d->eof = true;
 			return false;
@@ -1279,7 +1279,7 @@ static bool refill_tag(struct snappy_decompressor *d)
 	DCHECK_LE(needed, sizeof(d->scratch));
 
 	/* Read more bytes from reader if needed */
-	u32 nbuf = d->ip_limit - ip;
+	u32 nbuf = (u32) (d->ip_limit - ip);
 
 	if (nbuf < needed) {
 		/*
@@ -1296,7 +1296,7 @@ static bool refill_tag(struct snappy_decompressor *d)
 			const char *src = peek(d->reader, &length);
 			if (length == 0)
 				return false;
-			u32 to_add = min_t(u32, needed - nbuf, length);
+			u32 to_add = min_t(u32, needed - nbuf, (u32) length);
 			memcpy(d->scratch + nbuf, src, to_add);
 			nbuf += to_add;
 			skip(d->reader, to_add);

@@ -225,9 +225,7 @@
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdrand.c" />
-    <ClCompile Include="..\src\snappy.c">
-      <ExcludedFromBuild>true</ExcludedFromBuild>
-    </ClCompile>
+    <ClCompile Include="..\src\snappy.c" />
     <ClCompile Include="..\src\tinycthread.c" />
     <ClCompile Include="..\src\trex.c" />
   </ItemGroup>

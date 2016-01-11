@@ -60,6 +60,8 @@
 
 #ifdef _MSC_VER
 #include <io.h>
+#include <share.h>
+#include <sys/stat.h>
 #include <Shlwapi.h>
 typedef int mode_t;
 #endif
@@ -134,7 +136,7 @@ int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
         return fd;
 #else
 	int fd;
-	if (_sopen_s(&fd, pathname, flags, 0, mode) != 0)
+	if (_sopen_s(&fd, pathname, flags, _SH_DENYNO, mode) != 0)
 		return -1;
 	return fd;
 #endif
@@ -145,8 +147,13 @@ static int rd_kafka_offset_file_open (rd_kafka_toppar_t *rktp) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         int fd;
 
+#ifndef _MSC_VER
+	mode_t mode = 0644;
+#else
+	mode_t mode = _S_IREAD|_S_IWRITE;
+#endif
 	if ((fd = rk->rk_conf.open_cb(rktp->rktp_offset_path,
-                                      O_CREAT|O_RDWR, 0644,
+                                      O_CREAT|O_RDWR, mode,
                                       rk->rk_conf.opaque)) == -1) {
 		rd_kafka_op_err(rktp->rktp_rkt->rkt_rk,
 				RD_KAFKA_RESP_ERR__FS,
@@ -173,7 +180,7 @@ static int64_t rd_kafka_offset_file_read (rd_kafka_toppar_t *rktp) {
 	char buf[22];
 	char *end;
 	int64_t offset;
-	int r;
+	size_t r;
 
 	if (fseek(rktp->rktp_offset_fp, 0, SEEK_SET) == -1) {
 		rd_kafka_op_err(rktp->rktp_rkt->rkt_rk,
@@ -188,18 +195,7 @@ static int64_t rd_kafka_offset_file_read (rd_kafka_toppar_t *rktp) {
 		return -1;
 	}
 
-	if ((r = fread(buf, 1, sizeof(buf)-1, rktp->rktp_offset_fp)) == -1) {
-		rd_kafka_op_err(rktp->rktp_rkt->rkt_rk,
-				RD_KAFKA_RESP_ERR__FS,
-				"%s [%"PRId32"]: "
-				"Failed to read offset file %s: %s",
-				rktp->rktp_rkt->rkt_topic->str,
-				rktp->rktp_partition,
-				rktp->rktp_offset_path, rd_strerror(errno));
-		rd_kafka_offset_file_close(rktp);
-		return -1;
-	}
-
+	r = fread(buf, 1, sizeof(buf) - 1, rktp->rktp_offset_fp);
 	if (r == 0) {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
 			     "%s [%"PRId32"]: offset file (%s) is empty",
@@ -747,7 +743,7 @@ static char *mk_esc_filename (const char *in, char *out, size_t out_size) {
 
         while (*s) {
                 const char *esc;
-                int esclen;
+                size_t esclen;
 
                 switch (*s)
                 {

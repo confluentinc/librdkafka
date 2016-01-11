@@ -223,7 +223,7 @@ static __inline RD_UNUSED int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
 
 static __inline RD_UNUSED int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
 						     const char *str) {
-	int len = strlen(str);
+	ssize_t len = strlen(str);
 	if (a->len != len)
 		return -1;
 	return memcmp(a->str, str, a->len);
@@ -241,7 +241,7 @@ static __inline RD_UNUSED int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
  */
 typedef struct rd_kafkap_bytes_s {
 	/* convenience header (aligned access, host endian) */
-	int         len;   /* Kafka bytes length (-1=NULL, 0=empty, >0=data) */
+	int32_t     len;   /* Kafka bytes length (-1=NULL, 0=empty, >0=data) */
 	const void *data;  /* points just past the struct, or other memory,
 			    * not NULL-terminated */
 	const char _data[]; /* Bytes following struct when new()ed */
@@ -278,7 +278,7 @@ static RD_UNUSED void rd_kafkap_bytes_destroy (rd_kafkap_bytes_t *kbytes) {
  * Supports Kafka NULL bytes.
  */
 static __inline RD_UNUSED
-rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int len) {
+rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
 	rd_kafkap_bytes_t *kbytes;
 	int32_t klen;
 

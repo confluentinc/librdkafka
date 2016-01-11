@@ -131,13 +131,13 @@ rd_kafka_resp_err_t
 rd_kafka_assignor_run (struct rd_kafka_cgrp_s *rkcg,
                        const char *protocol_name,
                        rd_kafka_metadata_t *metadata,
-                       rd_kafka_group_member_t *members, size_t member_cnt,
+                       rd_kafka_group_member_t *members, int member_cnt,
                        char *errstr, size_t errstr_size);
 
 rd_kafka_assignor_t *
 rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol);
 
-int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, int errstr_size);
+int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size);
 void rd_kafka_assignors_term (rd_kafka_t *rk);
 
 

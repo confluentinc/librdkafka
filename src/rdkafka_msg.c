@@ -73,7 +73,8 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 	if (!key)
 		keylen = 0;
 
-	if (unlikely(len + keylen > (size_t)rkt->rkt_rk->rk_conf.max_msg_size)){
+	if (unlikely(len + keylen > (size_t)rkt->rkt_rk->rk_conf.max_msg_size ||
+		     keylen > INT32_MAX)){
 		*errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
                 errno = EMSGSIZE;
 		return NULL;
@@ -91,7 +92,7 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 	rkm->rkm_len        = len;
 	rkm->rkm_flags      = msgflags;
 	rkm->rkm_opaque     = msg_opaque;
-	rkm->rkm_key        = rd_kafkap_bytes_new(key, keylen);
+	rkm->rkm_key        = rd_kafkap_bytes_new(key, (int32_t) keylen);
 	rkm->rkm_partition  = force_partition;
         rkm->rkm_offset     = 0;
 	if (rkt->rkt_conf.message_timeout_ms == 0) {

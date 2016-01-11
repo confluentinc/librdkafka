@@ -77,8 +77,8 @@ void rd_kafka_buf_alloc_recvbuf (rd_kafka_buf_t *rkbuf, size_t size) {
 /**
  * Rewind write offset pointer and iovec poiner to a previous stored value.
  */
-void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex, int new_of,
-	int new_of_init) {
+void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex, size_t new_of,
+	size_t new_of_init) {
 	rkbuf->rkbuf_msg.msg_iovlen = iovindex;
 	rkbuf->rkbuf_wof = new_of;
 	rkbuf->rkbuf_wof_init = new_of_init;
@@ -303,15 +303,15 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 
 
 
-int rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
-				int64_t Offset, int8_t MagicByte,
-				int8_t Attributes,
-				const rd_kafkap_bytes_t *key,
-				const void *payload, int len,
-				int *outlenp) {
+size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
+				   int64_t Offset, int8_t MagicByte,
+				   int8_t Attributes,
+				   const rd_kafkap_bytes_t *key,
+				   const void *payload, int32_t len,
+				   int *outlenp) {
 	int32_t MessageSize;
-	int begin_of;
-	int of_Crc;
+	size_t begin_of;
+	size_t of_Crc;
 
 	/*
 	 * MessageSet's per-Message header.
@@ -478,7 +478,8 @@ void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
  */
 rd_kafkap_bytes_t *rd_kafkap_bytes_from_buf (const rd_kafka_buf_t *rkbuf) {
         rd_kafka_assert(NULL, rkbuf->rkbuf_msg.msg_iovlen == 1);
-        return rd_kafkap_bytes_new(rkbuf->rkbuf_wbuf, rkbuf->rkbuf_wof);
+        rd_kafka_assert(NULL, rkbuf->rkbuf_wof < INT32_MAX);
+        return rd_kafkap_bytes_new(rkbuf->rkbuf_wbuf, (int32_t) rkbuf->rkbuf_wof);
 }
 
 

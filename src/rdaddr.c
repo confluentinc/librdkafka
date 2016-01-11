@@ -72,7 +72,7 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 
 		
 		if (flags & RD_SOCKADDR2STR_F_PORT) {
-			int len = strlen(ret[reti]);
+			size_t len = strlen(ret[reti]);
 			rd_snprintf(ret[reti]+len, sizeof(ret[reti])-len,
 				 "%s:%s",
 				 a->sinx_family == AF_INET6 ? "]" : "",
@@ -97,7 +97,7 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 	static RD_TLS char ssvc[64];
 	const char *t;
 	const char *svct = NULL;
-	int nodelen = 0;
+	size_t nodelen = 0;
 
 	*snode = '\0';
 	*ssvc = '\0';
@@ -107,7 +107,7 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 		if  (!(t = strchr(nodesvc, ']')))
 			return "Missing close-']'";
 		nodesvc++;
-		nodelen = (int)(t-nodesvc);
+		nodelen = t-nodesvc;
 		svct = t+1;
 
 	} else if (*nodesvc == ':' && *(nodesvc+1) != ':') {
@@ -123,7 +123,7 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 			return "Service name too long";
 		strcpy(ssvc, svct);
 		if (!nodelen)
-			nodelen = (int)(svct - nodesvc)-1;
+			nodelen = svct - nodesvc - 1;
 
 	} else if (!nodelen)
 		nodelen = strlen(nodesvc);

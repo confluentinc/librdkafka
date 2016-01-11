@@ -2026,7 +2026,7 @@ void *rd_kafka_opaque (const rd_kafka_t *rk) {
 
 int rd_kafka_outq_len (rd_kafka_t *rk) {
 	return rd_atomic32_get(&rk->rk_producer.msg_cnt) +
-		rd_atomic32_get(&rk->rk_rep.rkq_qlen);
+                rd_kafka_q_len(&rk->rk_rep);
 }
 
 

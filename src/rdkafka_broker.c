@@ -2919,15 +2919,15 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			rd_rkb_dbg(rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
 				   "Enqueue %i messages on %s [%"PRId32"] "
 				   "fetch queue (qlen %i, v%d)",
-				   rd_atomic32_get(&tmp_opq.rkq_qlen),
+				   rd_kafka_q_len(&tmp_opq),
 				   rktp->rktp_rkt->rkt_topic->str,
 				   rktp->rktp_partition,
 				   rd_kafka_q_len(&rktp->rktp_fetchq),
                                    request->rkbuf_op_version);
 
-			if (rd_atomic32_get(&tmp_opq.rkq_qlen) > 0) {
+			if (rd_kafka_q_len(&tmp_opq) > 0) {
                                 rd_atomic64_add(&rktp->rktp_c.msgs,
-						rd_atomic32_get(&tmp_opq.rkq_qlen));
+						rd_kafka_q_len(&tmp_opq));
 				rd_kafka_q_concat(&rktp->rktp_fetchq, &tmp_opq);
                         }
 

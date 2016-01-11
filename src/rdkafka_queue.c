@@ -14,16 +14,14 @@ void rd_kafka_yield (rd_kafka_t *rk) {
  */
 void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
 
-        rd_kafka_q_fwd_set(rkq, NULL);
-        rd_kafka_q_disable(rkq);
-        rd_kafka_q_purge(rkq);
-
-        mtx_lock(&rkq->rkq_lock); /* for synchronization */
-        mtx_unlock(&rkq->rkq_lock);
+        mtx_lock(&rkq->rkq_lock);
+        rd_kafka_q_fwd_set0(rkq, NULL, 0/*no-lock*/);
+        rd_kafka_q_disable0(rkq, 0/*no-lock*/);
+        rd_kafka_q_purge0(rkq, 0/*no-lock*/);
 	assert(!rkq->rkq_fwdq);
+        mtx_unlock(&rkq->rkq_lock);
 	mtx_destroy(&rkq->rkq_lock);
 	cnd_destroy(&rkq->rkq_cond);
-        rd_refcnt_destroy(&rkq->rkq_refcnt);
 
         if (rkq->rkq_flags & RD_KAFKA_Q_F_ALLOCATED)
                 rd_free(rkq);
@@ -37,7 +35,7 @@ void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
 void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk) {
         rd_kafka_q_reset(rkq);
 	rkq->rkq_fwdq   = NULL;
-        rd_refcnt_init(&rkq->rkq_refcnt, 1);
+        rkq->rkq_refcnt = 1;
         rkq->rkq_flags  = RD_KAFKA_Q_F_READY;
         rkq->rkq_rk     = rk;
 	mtx_init(&rkq->rkq_lock, mtx_plain);
@@ -63,8 +61,11 @@ rd_kafka_q_t *rd_kafka_q_new (rd_kafka_t *rk) {
  *
  * All access to rkq_fwdq are protected by rkq_lock.
  */
-void rd_kafka_q_fwd_set (rd_kafka_q_t *srcq, rd_kafka_q_t *destq) {
-	mtx_lock(&srcq->rkq_lock);
+void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
+                          int do_lock) {
+
+        if (do_lock)
+                mtx_lock(&srcq->rkq_lock);
 	if (srcq->rkq_fwdq) {
 		rd_kafka_q_destroy(srcq->rkq_fwdq);
 		srcq->rkq_fwdq = NULL;
@@ -75,25 +76,28 @@ void rd_kafka_q_fwd_set (rd_kafka_q_t *srcq, rd_kafka_q_t *destq) {
 
 		/* If rkq has ops in queue, append them to fwdq's queue.
 		 * This is an irreversible operation. */
-		if (rd_atomic32_get(&srcq->rkq_qlen) > 0)
+                if (srcq->rkq_qlen > 0)
 			rd_kafka_q_concat(destq, srcq);
 	}
-	mtx_unlock(&srcq->rkq_lock);
+        if (do_lock)
+                mtx_unlock(&srcq->rkq_lock);
 }
 
 /**
  * Purge all entries from a queue.
  */
-int rd_kafka_q_purge (rd_kafka_q_t *rkq) {
+int rd_kafka_q_purge0 (rd_kafka_q_t *rkq, int do_lock) {
 	rd_kafka_op_t *rko, *next;
 	TAILQ_HEAD(, rd_kafka_op_s) tmpq = TAILQ_HEAD_INITIALIZER(tmpq);
         int cnt = 0;
 
-	mtx_lock(&rkq->rkq_lock);
+        if (do_lock)
+                mtx_lock(&rkq->rkq_lock);
 
 	if (rkq->rkq_fwdq) {
 		cnt = rd_kafka_q_purge(rkq->rkq_fwdq);
-		mtx_unlock(&rkq->rkq_lock);
+                if (do_lock)
+                        mtx_unlock(&rkq->rkq_lock);
 		return cnt;
 	}
 
@@ -104,7 +108,8 @@ int rd_kafka_q_purge (rd_kafka_q_t *rkq) {
 	/* Zero out queue */
         rd_kafka_q_reset(rkq);
 
-	mtx_unlock(&rkq->rkq_lock);
+        if (do_lock)
+                mtx_unlock(&rkq->rkq_lock);
 
 	/* Destroy the ops */
 	next = TAILQ_FIRST(&tmpq);
@@ -150,8 +155,8 @@ void rd_kafka_q_purge_toppar_version (rd_kafka_q_t *rkq,
         }
 
 
-        rd_atomic32_sub(&rkq->rkq_qlen, cnt);
-        rd_atomic64_sub(&rkq->rkq_qsize, size);
+        rkq->rkq_qlen -= cnt;
+        rkq->rkq_qsize -= size;
 	mtx_unlock(&rkq->rkq_lock);
 
 	next = TAILQ_FIRST(&tmpq);
@@ -181,23 +186,21 @@ int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 		/* Optimization, if 'cnt' is equal/larger than all
 		 * items of 'srcq' we can move the entire queue. */
 		if (cnt == -1 ||
-		    cnt >= (int)rd_atomic32_get(&srcq->rkq_qlen)) {
+                    cnt >= (int)srcq->rkq_qlen) {
 			TAILQ_CONCAT(&dstq->rkq_q, &srcq->rkq_q, rko_link);
-			mcnt = rd_atomic32_get(&srcq->rkq_qlen);
-			(void)rd_atomic32_add(&dstq->rkq_qlen, rd_atomic32_get(&srcq->rkq_qlen));
-			(void)rd_atomic64_add(&dstq->rkq_qsize, rd_atomic64_get(&srcq->rkq_qsize));
+			mcnt = srcq->rkq_qlen;
+                        dstq->rkq_qlen += srcq->rkq_qlen;
+                        dstq->rkq_qsize += srcq->rkq_qsize;
 			rd_kafka_q_reset(srcq);
 		} else {
 			while (mcnt < cnt &&
 			       (rko = TAILQ_FIRST(&srcq->rkq_q))) {
 				TAILQ_REMOVE(&srcq->rkq_q, rko, rko_link);
 				TAILQ_INSERT_TAIL(&dstq->rkq_q, rko, rko_link);
-				(void)rd_atomic32_sub(&srcq->rkq_qlen, 1);
-				(void)rd_atomic32_add(&dstq->rkq_qlen, 1);
-				(void)rd_atomic64_sub(&srcq->rkq_qsize,
-						    rko->rko_len);
-				(void)rd_atomic64_add(&dstq->rkq_qsize,
-						    rko->rko_len);
+                                srcq->rkq_qlen--;
+                                dstq->rkq_qlen++;
+                                srcq->rkq_qsize -= rko->rko_len;
+                                dstq->rkq_qsize += rko->rko_len;
 				mcnt++;
 			}
 		}
@@ -515,7 +518,9 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 void rd_kafka_queue_destroy (rd_kafka_queue_t *rkqu) {
         int do_destroy;
 
-        do_destroy = rd_refcnt_get(&rkqu->rkqu_q.rkq_refcnt) == 1;
+        mtx_lock(&rkqu->rkqu_q.rkq_lock);
+        do_destroy = rkqu->rkqu_q.rkq_refcnt == 1;
+        mtx_unlock(&rkqu->rkqu_q.rkq_lock);
 	rd_kafka_q_destroy(&rkqu->rkqu_q);
         if (!do_destroy)
 		return; /* Still references */

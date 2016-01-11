@@ -16,7 +16,6 @@ OBJS	 += test.o tinycthread.o
 	$(CXX) $(CPPFLAGS) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka++ -lrdkafka $(LIBS)
 
 all: $(BIN) run_par
-	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh -p ./$(BIN)
 
 run_par:
 	@echo "Running tests in parallel"

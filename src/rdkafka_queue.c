@@ -446,8 +446,11 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                 rd_kafka_q_destroy(fwdq);
 		return cnt;
 	}
+        mtx_unlock(&rkq->rkq_lock);
 
 	while (cnt < rkmessages_size) {
+
+                mtx_lock(&rkq->rkq_lock);
 
 		while (!(rko = TAILQ_FIRST(&rkq->rkq_q))) {
 			if (cnd_timedwait_ms(&rkq->rkq_cond, &rkq->rkq_lock,
@@ -455,10 +458,14 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 				break;
 		}
 
-		if (!rko)
+		if (!rko) {
+                        mtx_unlock(&rkq->rkq_lock);
 			break; /* Timed out */
+                }
 
 		rd_kafka_q_deq0(rkq, rko);
+
+                mtx_unlock(&rkq->rkq_lock);
 
                 if (rko->rko_version && rko->rko_rktp &&
                     rko->rko_version <
@@ -490,8 +497,6 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 		/* Get rkmessage from rko and append to array. */
 		rkmessages[cnt++] = rd_kafka_message_get(rko);
 	}
-
-	mtx_unlock(&rkq->rkq_lock);
 
         /* Discard non-desired and already handled ops */
         next = TAILQ_FIRST(&tmpq);

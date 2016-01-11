@@ -485,6 +485,7 @@ int main(int argc, char **argv) {
         RUN_TEST(0019_list_groups);
         RUN_TEST(0020_destroy_hang);
         RUN_TEST(0021_rkt_destroy);
+        RUN_TEST(0022_consume_batch);
 
         if (tests_run_in_parallel) {
                 mtx_lock(&test_lock);
@@ -555,6 +556,37 @@ rd_kafka_t *test_create_producer (void) {
 
 	return rk;
 }
+
+
+/**
+ * Create topic_t object with va-arg list as key-value config pairs
+ * terminated by NULL.
+ */
+rd_kafka_topic_t *test_create_topic (rd_kafka_t *rk,
+                                     const char *topic, ...) {
+	rd_kafka_topic_t *rkt;
+	rd_kafka_topic_conf_t *topic_conf;
+	va_list ap;
+	const char *name, *val;
+
+	test_conf_init(NULL, &topic_conf, 20);
+
+	va_start(ap, topic);
+	while ((name = va_arg(ap, const char *)) &&
+	       (val = va_arg(ap, const char *))) {
+                test_topic_conf_set(topic_conf, name, val);
+	}
+	va_end(ap);
+
+	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+	if (!rkt)
+		TEST_FAIL("Failed to create topic: %s\n",
+                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+
+	return rkt;
+
+}
+
 
 rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
 	const char *topic, ...) {
@@ -682,13 +714,14 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
  * destroy consumer, and returns the used testid.
  */
 uint64_t
-test_produce_msgs_easy (const char *topic, int32_t partition, int msgcnt) {
+test_produce_msgs_easy (const char *topic, uint64_t testid,
+                        int32_t partition, int msgcnt) {
         rd_kafka_t *rk;
         rd_kafka_topic_t *rkt;
-        uint64_t testid;
         test_timing_t t_produce;
 
-        testid = test_id_generate();
+        if (!testid)
+                testid = test_id_generate();
         rk = test_create_producer();
         rkt = test_create_producer_topic(rk, topic, NULL);
 

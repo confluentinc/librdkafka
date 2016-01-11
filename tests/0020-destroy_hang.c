@@ -57,7 +57,8 @@ static int nonexist_part (void) {
 	int it, iterations = 5;
 
         /* Produce messages */
-        testid = test_produce_msgs_easy(topic, RD_KAFKA_PARTITION_UA, msgcnt);
+        testid = test_produce_msgs_easy(topic, 0,
+                                        RD_KAFKA_PARTITION_UA, msgcnt);
 
 	for (it = 0 ; it < iterations ; it++) {
 		char group_id[32];

@@ -185,7 +185,8 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                         int msg_base, int cnt,
 			const char *payload, size_t size);
 uint64_t
-test_produce_msgs_easy (const char *topic, int32_t partition, int msgcnt);
+test_produce_msgs_easy (const char *topic, uint64_t testid,
+                        int32_t partition, int msgcnt);
 rd_kafka_t *test_create_consumer (const char *group_id,
 				  void (*rebalance_cb) (
 					  rd_kafka_t *rk,
@@ -197,6 +198,8 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 				  void *opaque);
 rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
                                               const char *topic);
+rd_kafka_topic_t *test_create_topic (rd_kafka_t *rk,
+                                     const char *topic, ...);
 void test_consumer_start (const char *what,
                           rd_kafka_topic_t *rkt, int32_t partition,
                           int64_t start_offset);

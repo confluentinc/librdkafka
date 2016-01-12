@@ -1649,6 +1649,12 @@ rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk);
 
 /**
  * @brief Returns the current topic subscription
+ *
+ * @returns An error code on failure, otherwise \p topic is updated
+ *          to point to a newly allocated topic list (possibly empty).
+ *
+ * @remark The application is responsible for calling
+ *         rd_kafka_topic_partition_list_destroy on the returned list.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_subscription (rd_kafka_t *rk,
@@ -1686,7 +1692,6 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
 
 /**
  * @brief Atomic assignment of partitions to consume.
- *
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_assign (rd_kafka_t *rk,
@@ -1694,6 +1699,12 @@ rd_kafka_assign (rd_kafka_t *rk,
 
 /**
  * @brief Returns the current partition assignment
+ *
+ * @returns An error code on failure, otherwise \p partitions is updated
+ *          to point to a newly allocated partition list (possibly empty).
+ *
+ * @remark The application is responsible for calling
+ *         rd_kafka_topic_partition_list_destroy on the returned list.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_assignment (rd_kafka_t *rk,

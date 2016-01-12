@@ -253,6 +253,11 @@ rd_kafka_assignment (rd_kafka_t *rk,
         rko->rko_payload = NULL;
         rd_kafka_op_destroy(rko);
 
+        if (!*partitions && !err) {
+                /* Create an empty list for convenience of the caller */
+                *partitions = rd_kafka_topic_partition_list_new(0);
+        }
+
         return err;
 }
 
@@ -272,6 +277,11 @@ rd_kafka_subscription (rd_kafka_t *rk,
         *topics = rko->rko_payload;
         rko->rko_payload = NULL;
         rd_kafka_op_destroy(rko);
+
+        if (!*topics && !err) {
+                /* Create an empty list for convenience of the caller */
+                *topics = rd_kafka_topic_partition_list_new(0);
+        }
 
         return err;
 }

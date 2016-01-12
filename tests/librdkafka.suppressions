@@ -300,3 +300,10 @@
    fun:_dl_start
    obj:/lib/x86_64-linux-gnu/ld-2.21.so
 }
+{
+   glibc_internals_nss_race1
+   Helgrind:Race
+   ...
+   fun:getaddrinfo
+   ...
+}

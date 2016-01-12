@@ -1105,6 +1105,8 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 		"broker in state %s connecting",
 		rd_kafka_broker_state_names[rkb->rkb_state]);
 
+        rkb->rkb_ts_connect = rd_clock();
+
 	if (rd_kafka_broker_resolve(rkb) == -1)
 		return -1;
 
@@ -2113,9 +2115,12 @@ static void rd_kafka_broker_toppars_serve (rd_kafka_broker_t *rkb) {
 
 /**
  * Idle function for unassigned brokers
+ * If \p timeout_ms is non-zero the serve loop will be exited regardless
+ * of state after this long (approximately).
  */
-static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb) {
+static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb, int timeout_ms) {
 	int initial_state = rkb->rkb_state;
+        rd_ts_t ts_end = timeout_ms ? rd_clock() + timeout_ms * 1000 : 0;
 
 	/* Since ua_idle is used during connection setup 
 	 * in state ..BROKER_STATE_CONNECT we only run this loop
@@ -2123,7 +2128,8 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb) {
 	 * change - most likely to UP, a correct serve() function
 	 * should be used instead. */
 	while (!rd_kafka_broker_terminating(rkb) &&
-	       (int)rkb->rkb_state == initial_state) {
+	       (int)rkb->rkb_state == initial_state &&
+               (!ts_end || ts_end > rd_clock())) {
 
                 rd_kafka_broker_toppars_serve(rkb);
 
@@ -3220,6 +3226,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
 	rd_rkb_dbg(rkb, BROKER, "BRKMAIN", "Enter main broker thread");
 
 	while (!rd_kafka_broker_terminating(rkb)) {
+                rd_ts_t backoff;
+
 		switch (rkb->rkb_state)
 		{
 		case RD_KAFKA_BROKER_STATE_INIT:
@@ -3234,6 +3242,26 @@ static int rd_kafka_broker_thread_main (void *arg) {
 				break;
 			}
 
+                        /* Throttle & jitter reconnects to avoid
+                         * thundering horde of reconnecting clients after
+                         * a broker / network outage. Issue #403 */
+                        if (rkb->rkb_rk->rk_conf.reconnect_jitter_ms &&
+                            rkb->rkb_ts_connect &&
+                            (backoff = rd_clock() - (
+                                    rkb->rkb_ts_connect +
+                                    (rd_jitter(rkb->rkb_rk->rk_conf.
+                                               reconnect_jitter_ms*0.5,
+                                               rkb->rkb_rk->rk_conf.
+                                               reconnect_jitter_ms*1.5)
+                                     * 1000))) < 0) {
+                                rd_rkb_dbg(rkb, BROKER, "RECONNECT",
+                                           "Delaying next reconnect by %dms",
+                                           -(int)(backoff/1000));
+                                rd_kafka_broker_ua_idle(rkb, -backoff / 1000);
+                                rkb->rkb_ts_connect = 0;
+                                continue;
+                        }
+
 			/* Initiate asynchronous connection attempt.
 			 * Only the host lookup is blocking here. */
 			if (rd_kafka_broker_connect(rkb) == -1) {
@@ -3243,18 +3271,17 @@ static int rd_kafka_broker_thread_main (void *arg) {
 				 * tried them all, in which case we sleep a
 				 * short while to avoid the busy looping. */
 				if (!rkb->rkb_rsal ||
-					rkb->rkb_rsal->rsal_cnt == 0 ||
-					rkb->rkb_rsal->rsal_curr + 1 ==
+                                    rkb->rkb_rsal->rsal_cnt == 0 ||
+                                    rkb->rkb_rsal->rsal_curr + 1 ==
                                     rkb->rkb_rsal->rsal_cnt)
-					rd_usleep(1000000 /*1s*/,
-                                                  &rk->rk_terminate);
+                                        rd_kafka_broker_ua_idle(rkb, 1000);
 			}
 			break;
 
 		case RD_KAFKA_BROKER_STATE_CONNECT:
 		case RD_KAFKA_BROKER_STATE_AUTH:
 			/* Asynchronous connect in progress. */
-			rd_kafka_broker_ua_idle(rkb);
+			rd_kafka_broker_ua_idle(rkb, 0);
 
 			if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN) {
 				/* Connect failure.
@@ -3262,11 +3289,10 @@ static int rd_kafka_broker_thread_main (void *arg) {
 				 * tried them all, in which case we sleep a
 				 * short while to avoid the busy looping. */
 				if (!rkb->rkb_rsal ||
-					rkb->rkb_rsal->rsal_cnt == 0 ||
-					rkb->rkb_rsal->rsal_curr + 1 ==
+                                    rkb->rkb_rsal->rsal_cnt == 0 ||
+                                    rkb->rkb_rsal->rsal_curr + 1 ==
                                     rkb->rkb_rsal->rsal_cnt)
-					rd_usleep(1000000/* 1s */,
-                                                  &rk->rk_terminate);
+                                        rd_kafka_broker_ua_idle(rkb, 1000);
 			}
 			break;
 
@@ -3274,7 +3300,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
                         /* FALLTHRU */
 		case RD_KAFKA_BROKER_STATE_UP:
 			if (rkb->rkb_nodeid == RD_KAFKA_NODEID_UA)
-				rd_kafka_broker_ua_idle(rkb);
+				rd_kafka_broker_ua_idle(rkb, 0);
 			else if (rk->rk_type == RD_KAFKA_PRODUCER)
 				rd_kafka_broker_producer_serve(rkb);
 			else if (rk->rk_type == RD_KAFKA_CONSUMER)

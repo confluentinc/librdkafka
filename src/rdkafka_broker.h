@@ -136,6 +136,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         char               *rkb_origname;                      /* Original
                                                                 * host name */
 
+        rd_ts_t             rkb_ts_connect;       /* Last connection attempt */
 
 	rd_kafka_secproto_t rkb_proto;
 

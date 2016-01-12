@@ -204,6 +204,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { AF_INET, "v4" },
                         { AF_INET6, "v6" },
                 } },
+        { _RK_GLOBAL, "reconnect.backoff.jitter.ms", _RK_C_INT,
+          _RK(reconnect_jitter_ms),
+          "Throttle broker reconnection attempts by this value +-50%.",
+          0, 60*60*1000, 0 },
 	{ _RK_GLOBAL, "statistics.interval.ms", _RK_C_INT,
 	  _RK(stats_interval_ms),
 	  "librdkafka statistics emit interval. The application also needs to "

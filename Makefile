@@ -5,7 +5,7 @@ CHECK_FILES+=	CONFIGURATION.md \
 		examples/rdkafka_example_cpp
 
 PACKAGE_NAME?=	librdkafka
-VERSION?=	$(shell python rpm/get_version.py)
+VERSION?=	$(shell python packaging/rpm/get_version.py)
 
 # Jenkins CI integration
 BUILD_NUMBER ?= 1
@@ -69,7 +69,7 @@ srpm: build_prepare
 		--define "__release $(BUILD_NUMBER)"\
 		--resultdir=. \
 		--buildsrpm \
-		--spec=rpm/librdkafka.spec \
+		--spec=packaging/rpm/librdkafka.spec \
 		--sources=SOURCES
 
 rpm: srpm

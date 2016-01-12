@@ -1,5 +1,5 @@
 Name:    librdkafka
-Version: %{version}
+Version: snapshot
 Release: %{release}%{?dist}
 %define soname 1
 
@@ -37,7 +37,7 @@ using librdkafka.
 
 
 %prep
-%setup -qc
+%setup -q -n %{name}-%{version}
 
 %configure
 

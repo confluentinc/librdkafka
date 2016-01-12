@@ -1,11 +1,11 @@
 # Base Makefile providing various standard targets
 # Part of mklove suite but may be used independently.
 
-MKL_RED=\033[031m
-MKL_GREEN=\033[032m
-MKL_YELLOW=\033[033m
-MKL_BLUE=\033[034m
-MKL_CLR_RESET=\033[0m
+MKL_RED?=	\033[031m
+MKL_GREEN?=	\033[032m
+MKL_YELLOW?=	\033[033m
+MKL_BLUE?=	\033[034m
+MKL_CLR_RESET?=	\033[0m
 
 DEPS=		$(OBJS:%.o=%.d)
 
@@ -13,6 +13,10 @@ DEPS=		$(OBJS:%.o=%.d)
 # We do it with two dir calls instead of /.. to support mklove being symlinked.
 MKLOVE_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 TOPDIR = $(MKLOVE_DIR:mklove/=.)
+
+
+# Convert LIBNAME ("libxyz") to "xyz"
+LIBNAME0=$(LIBNAME:lib%=%)
 
 # Silence lousy default ARFLAGS (rv)
 ARFLAGS=
@@ -48,6 +52,7 @@ docdir?=	$(datarootdir)/doc/$(PKGNAME)
 infodir?=	$(datarootdir)/info
 libdir?=	$(prefix)/lib
 localedir?=	$(datarootdir)/locale
+pkgconfigdir?=	$(libdir)/pkgconfig
 mandir?=	$(datarootdir)/man
 man1dir?=	$(mandir)/man1
 man2dir?=	$(mandir)/man2
@@ -62,7 +67,7 @@ man8dir?=	$(mandir)/man8
 # Checks that mklove is set up and ready for building
 mklove-check:
 	@if [ ! -f "$(TOPDIR)/Makefile.config" ]; then \
-	 	echo "$(MKL_RED)$(TOPDIR)/Makefile.config missing: please run ./configure$(MKL_CLR_RESET)" ; \
+		printf "$(MKL_RED)$(TOPDIR)/Makefile.config missing: please run ./configure$(MKL_CLR_RESET)\n" ; \
 		exit 1 ; \
 	fi
 
@@ -73,48 +78,87 @@ mklove-check:
 	$(CXX) -MD -MP $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 
-lib: $(LIBFILENAME) $(LIBNAME).a
+lib: $(LIBFILENAME) $(LIBNAME).a $(LIBFILENAMELINK) lib-gen-pkg-config
 
 $(LIBFILENAME): $(OBJS) $(LIBNAME).lds
-	@echo "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)"
+	@printf "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)\n"
 	$(CC) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS)
 
 $(LIBNAME).a:	$(OBJS)
-	@echo "$(MKL_YELLOW)Creating static library $@$(MKL_CLR_RESET)"
+	@printf "$(MKL_YELLOW)Creating static library $@$(MKL_CLR_RESET)\n"
 	$(AR) rcs$(ARFLAGS) $@ $(OBJS)
+
+$(LIBFILENAMELINK): $(LIBFILENAME)
+	@printf "$(MKL_YELLOW)Creating $@ symlink$(MKL_CLR_RESET)\n"
+	rm -f "$@" && ln -s "$^" "$@"
+
+
+# pkg-config .pc file definition
+ifeq ($(GEN_PKG_CONFIG),y)
+define _PKG_CONFIG_DEF
+prefix=$(prefix)
+libdir=$(libdir)
+includedir=$(includedir)
+
+Name: $(LIBNAME)
+Description: $(MKL_APP_DESC_ONELINE)
+Version: $(MKL_APP_VERSION)
+Cflags: -I$${includedir}
+Libs: -L$${libdir} -l$(LIBNAME0)
+Libs.private: $(patsubst -L%,,$(LIBS))
+endef
+
+export _PKG_CONFIG_DEF
+
+$(LIBNAME0).pc: ../Makefile.config
+	@printf "$(MKL_YELLOW)Generating pkg-config file $@$(MKL_CLR_RESET)\n"
+	@echo "$$_PKG_CONFIG_DEF" > $@
+
+lib-gen-pkg-config: $(LIBNAME0).pc
+
+lib-clean-pkg-config:
+	rm -f $(LIBNAME0).pc
+else
+lib-gen-pkg-config:
+lib-clean-pkg-config:
+endif
 
 
 $(BIN): $(OBJS)
-	@echo "$(MKL_YELLOW)Creating program $@$(MKL_CLR_RESET)"
+	@printf "$(MKL_YELLOW)Creating program $@$(MKL_CLR_RESET)\n"
 	$(CC) $(CPPFLAGS) $(LDFLAGS) $(OBJS) -o $@ $(LIBS)
 
 
 file-check:
-	@(echo "$(MKL_YELLOW)Checking $(LIBNAME) integrity$(MKL_CLR_RESET)" ; \
-	 RET=true ; \
-	 for f in $(CHECK_FILES) ; do \
+	@printf "$(MKL_YELLOW)Checking $(LIBNAME) integrity$(MKL_CLR_RESET)\n"
+	@RET=true ; \
+	for f in $(CHECK_FILES) ; do \
 		printf "%-30s " $$f ; \
 		if [ -f "$$f" ]; then \
-			echo "$(MKL_GREEN)OK$(MKL_CLR_RESET)"; \
+			printf "$(MKL_GREEN)OK$(MKL_CLR_RESET)\n" ; \
 		else \
-			echo "$(MKL_RED)MISSING$(MKL_CLR_RESET)"; \
+			printf "$(MKL_RED)MISSING$(MKL_CLR_RESET)\n" ; \
 			RET=false ; \
-		fi; \
+		fi ; \
 	done ; \
-	$$($$RET))
+	$$RET
 
 
 lib-install:
-	@echo "$(MKL_YELLOW)Install $(LIBNAME) to $$DESTDIR$(prefix)$(MKL_CLR_RESET)"
+	@printf "$(MKL_YELLOW)Install $(LIBNAME) to $$DESTDIR$(prefix)$(MKL_CLR_RESET)\n"
 	$(INSTALL) -d $$DESTDIR$(includedir)/$(PKGNAME) ; \
 	$(INSTALL) -d $$DESTDIR$(libdir) ; \
 	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME) ; \
 	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir) ; \
 	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir) ; \
+	[ -f "$(LIBNAME0).pc" ] && ( \
+		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) ; \
+		$(INSTALL) $(LIBNAME0).pc $$DESTDIR$(pkgconfigdir) \
+	) ; \
 	(cd $$DESTDIR$(libdir) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
 
 lib-uninstall:
-	@echo "$(MKL_YELLOW)Uninstall $(LIBNAME) from $$DESTDIR$(prefix)$(MKL_CLR_RESET)"
+	@printf "$(MKL_YELLOW)Uninstall $(LIBNAME) from $$DESTDIR$(prefix)$(MKL_CLR_RESET)\n"
 	for hdr in $(HDRS) ; do \
 		rm -f $$DESTDIR$(includedir)/$(PKGNAME)/$$hdr ; done
 	rm -f $$DESTDIR$(libdir)/$(LIBNAME).a
@@ -123,20 +167,21 @@ lib-uninstall:
 	rmdir $$DESTDIR$(includedir)/$(PKGNAME) || true
 
 
+
 bin-install:
-	@echo "$(MKL_YELLOW)Install $(BIN) to $$DESTDIR$(prefix)$(MKL_CLR_RESET)"
+	@printf "$(MKL_YELLOW)Install $(BIN) to $$DESTDIR$(prefix)$(MKL_CLR_RESET)\n"
 	$(INSTALL) -d $$DESTDIR$(bindir) && \
 	$(INSTALL) $(BIN) $$DESTDIR$(bindir) 
 
 bin-uninstall:
-	@echo "$(MKL_YELLOW)Uninstall $(BIN) from $$DESTDIR$(prefix)$(MKL_CLR_RESET)"
+	@printf "$(MKL_YELLOW)Uninstall $(BIN) from $$DESTDIR$(prefix)$(MKL_CLR_RESET)\n"
 	rm -f $$DESTDIR$(bindir)/$(BIN)
 
 
 generic-clean:
 	rm -f $(OBJS) $(DEPS)
 
-lib-clean: generic-clean
+lib-clean: generic-clean lib-clean-pkg-config
 	rm -f $(LIBNAME)*.a $(LIBFILENAME) $(LIBFILENAMELINK) \
 		$(LIBNAME).lds
 

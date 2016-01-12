@@ -1,7 +1,7 @@
 librdkafka - Apache Kafka C/C++ client library
 ==============================================
 
-Copyright (c) 2012-2014, [Magnus Edenhill](http://www.edenhill.se/).
+Copyright (c) 2012-2015, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
@@ -22,12 +22,31 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 [![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
 
-**Apache Kafka 0.8 support:**
+**Apache Kafka 0.9 support:**
 
   * Branch: master
   * Producer: supported
-  * Consumer: supported
+  * High-level balanced KafkaConsumer: supported
+  * Simple Consumer: supported
   * Compression: snappy and gzip
+  * Broker version support: >=0.8
+  * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
+  * ZooKeeper: not supported
+  * C API: Stable, ABI safe, backwards compatible with 0.8
+  * C++ API: Stable
+  * Tests: Regression tests in `tests/` directory.
+  * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
+  * Status: Testing
+
+
+**Apache Kafka 0.8 support:**
+
+  * Branch: 0.8
+  * Producer: supported
+  * High-level Consumer: not supported
+  * Simple Consumer: supported
+  * Compression: snappy and gzip
+  * Broker version support: >=0.8
   * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
   * ZooKeeper: not supported
   * C API: Stable, ABI safe, not backwards compatible with 0.7
@@ -41,21 +60,12 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
   * Branch: 0.7
   * Producer: supported
-  * Consumer: supported
+  * High-level Consumer: not supported
+  * Simple Consumer: supported
   * Compression: not supported
+  * Broker version support: 0.7.x
   * ZooKeeper: not supported
-  * C API: backwards compatible with 0.6
-  * Status: Stable
-
-
-**Apache Kafka 0.6 support:**
-
-  * Branch: 0.6
-  * Producer: supported
-  * Consumer: supported
-  * Compression: not supported
-  * ZooKeeper: not supported
-  * Status: Testing
+  * Status: Stable, Deprecated, Unsupported
 
 
 
@@ -65,12 +75,14 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Haskell: [haskakafka](https://github.com/cosbynator/haskakafka)
   * Haskell: [haskell-kafka](https://github.com/yanatan16/haskell-kafka)
   * Node.js: [node-kafka](https://github.com/sutoiku/node-kafka)
-  * Lua: [in progress](https://github.com/edenhill/librdkafka/issues/196)
+  * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
-  * PHP: [phpkafka](https://github.com/salebab/phpkafka)
+  * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)
+  * PHP: [php-rdkafka](https://github.com/arnaud-lb/php-rdkafka)
   * Python: [python-librdkafka](https://bitbucket.org/yungchin/python-librdkafka)
   * Python: [PyKafka](https://github.com/Parsely/pykafka)
   * Ruby: [Hermann](https://github.com/stancampbell3/Hermann)
+  * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
 
 #Users of librdkafka#
 
@@ -80,12 +92,14 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * [rsyslog](http://www.rsyslog.com)
   * [syslog-ng](http://syslog-ng.org)
   * [collectd](http://collectd.org)
+  * [logkafka](https://github.com/Qihoo360/logkafka) - Collect logs and send to Kafka
   * [redBorder](http://www.redborder.net)
   * [Headweb](http://www.headweb.com/)
   * [Produban's log2kafka](https://github.com/Produban/log2kafka) - Web log producer
   * [fuse_kafka](https://github.com/yazgoo/fuse_kafka) - FUSE file system layer
   * [node-kafkacat](https://github.com/Rafflecopter/node-kafkacat)
   * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
+  * [otto.de](http://otto.de)'s [trackdrd](https://github.com/otto-de/trackrdrd) - Varnish log reader
   * large unnamed financial institution
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
@@ -97,7 +111,9 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 	The GNU toolchain
 	GNU make
    	pthreads
-	zlib
+	zlib (optional, for gzip compression support)
+	libssl-dev (optional, for SSL support)
+	libsasl2-dev (optional, for SASL support)
 
 ## Instructions
 
@@ -108,6 +124,9 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
       sudo make install
 
 
+**NOTE**: See [README.win32](README.win32) for instructions how to build
+          on Windows with Microsoft Visual Studio.
+
 ### Usage in code
 
 See [examples/rdkafka_example.c](https://github.com/edenhill/librdkafka/blob/master/examples/rdkafka_example.c) for an example producer and consumer.
@@ -117,9 +136,14 @@ Link your program with `-lrdkafka -lz -lpthread -lrt`.
 
 ## Documentation
 
-The **C** API is documented in [src/rdkafka.h](src/rdkafka.h)
+The public APIs are documented in their respective header files:
+ * The **C** API is documented in [src/rdkafka.h](src/rdkafka.h)
+ * The **C++** API is documented in [src-cpp/rdkafkacpp.h](src-cpp/rdkafkacpp.h)
 
-The **C++** API is documented in [src-cpp/rdkafkacpp.h](src-cpp/rdkafkacpp.h)
+To generate Doxygen documents for the API, type:
+
+    make docs
+
 
 Configuration properties are documented in
 [CONFIGURATION.md](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)

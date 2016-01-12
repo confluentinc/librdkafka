@@ -1,6 +1,15 @@
 #!/bin/bash
 #
 
+mkl_meta_set "description" "name"      "librdkafka"
+mkl_meta_set "description" "oneline"   "The Apache Kafka C/C++ library"
+mkl_meta_set "description" "long"      "Full Apache Kafka protocol support, including producer and consumer"
+mkl_meta_set "description" "copyright" "Copyright (c) 2012-2015 Magnus Edenhill"
+
+# Enable generation of pkg-config .pc file
+mkl_mkvar_set "" GEN_PKG_CONFIG y
+
+
 mkl_require cxx
 mkl_require lib
 mkl_require pic
@@ -14,15 +23,40 @@ mkl_require socket
 verdef=$(grep '^#define  *RD_KAFKA_VERSION  *0x' src/rdkafka.h | sed 's/^#define  *RD_KAFKA_VERSION  *\(0x[a-f0-9]*\)\.*$/\1/')
 mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
 
-mkl_require gen-pkg-config "rdkafka" "The Apache Kafka C/C++ library" \
-    "Full Apache Kafka 0.8 protocol support, including producer and consumer" \
-    "\$RDKAFKA_VERSION_STR"
+mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-code valgrind suppressions" "n"
+
+mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Enable refcnt debugging" "n"
+
+mkl_toggle_option "Development" ENABLE_SHAREDPTR_DEBUG "--enable-sharedptr-debug" "Enable sharedptr debugging" "n"
+
+mkl_toggle_option "Feature" ENABLE_SSL "--enable-ssl" "Enable SSL support" "y"
+mkl_toggle_option "Feature" ENABLE_SASL "--enable-sasl" "Enable SASL support" "y"
+
 
 function checks {
 
     # required libs
     mkl_lib_check "libpthread" "" fail CC "-lpthread"
-    mkl_lib_check "zlib" "" fail CC "-lz"
+
+    # optional libs
+    mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz"
+    mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
+
+    if [[ "$ENABLE_SSL" == "y" ]]; then
+	mkl_meta_set "libssl" "deb" "libssl-dev"
+	mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl"
+    fi
+
+    if [[ "$ENABLE_SASL" == "y" ]]; then
+        mkl_meta_set "libsasl2" "deb" "libsasl2-dev"
+        if ! mkl_lib_check "libsasl2" "WITH_SASL" disable CC "-lsasl2"; then
+	    mkl_lib_check "libsasl" "WITH_SASL" disable CC "-lsasl"
+        fi
+    fi
+
+    # Snappy is currently broken on MSVC Win32, enable for everything else.
+    # (MSVC Win32 does not use configure)
+    mkl_allvar_set WITH_SNAPPY WITH_SNAPPY y
 
     # -lrt is needed on linux for clock_gettime: link it if it exists.
     mkl_lib_check "librt" "" cont CC "-lrt"
@@ -32,14 +66,21 @@ function checks {
 
     # Required on SunOS
     if [[ $MKL_DISTRO == "SunOS" ]]; then
-	mkl_mkvar_append CPPFLAGS CPPFLAGS "-D_POSIX_PTHREAD_SEMANTICS"
+	mkl_mkvar_append CPPFLAGS CPPFLAGS "-D_POSIX_PTHREAD_SEMANTICS -D_REENTRANT -D__EXTENSIONS__"
     fi
+
+    # Check if strndup() is available (isn't on Solaris 10)
+    mkl_compile_check "strndup" "HAVE_STRNDUP" disable CC "" \
+"#include <string.h>
+int main (void) {
+   return strndup("hi", 2) ? 0 : 1;
+}"
 
     # Figure out what tool to use for dumping public symbols.
     # We rely on configure.cc setting up $NM if it exists.
     if mkl_env_check "nm" "" cont "NM" ; then
 	# nm by future mk var
-	if [[ $MKL_DISTRO == "osx" ]]; then
+	if [[ $MKL_DISTRO == "osx" || $MKL_DISTRO == "AIX" ]]; then
 	    mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -g'
 	else
 	    mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -D'
@@ -55,6 +96,11 @@ function checks {
             mkl_err "disabling linker-script since perl is not available"
             mkl_mkvar_set WITH_LDS WITH_LDS "n"
         fi
+    fi
+
+    if [[ "$ENABLE_VALGRIND" == "y" ]]; then
+	mkl_compile_check valgrind WITH_VALGRIND disable CC "" \
+			  "#include <valgrind/memcheck.h>"
     fi
 }
 

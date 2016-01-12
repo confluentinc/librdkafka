@@ -28,11 +28,17 @@
 
 #pragma once
 
+#ifndef _MSC_VER
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#else
+#define WIN32_MEAN_AND_LEAN
+#include <WinSock2.h>
+#include <ws2ipdef.h>
+#endif
 
-#ifdef __FreeBSD__
+#if defined(__FreeBSD__) || defined(_AIX)
 #include <sys/socket.h>
 #endif
 
@@ -97,7 +103,7 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 typedef struct rd_sockaddr_list_s {
 	int rsal_cnt;
 	int rsal_curr;
-	rd_sockaddr_inx_t rsal_addr[0];
+	rd_sockaddr_inx_t rsal_addr[];
 } rd_sockaddr_list_t;
 
 
@@ -117,9 +123,9 @@ typedef struct rd_sockaddr_list_s {
  * 
  */
  
-static inline rd_sockaddr_inx_t *
+static __inline rd_sockaddr_inx_t *
 rd_sockaddr_list_next (rd_sockaddr_list_t *rsal) RD_UNUSED;
-static inline rd_sockaddr_inx_t *
+static __inline rd_sockaddr_inx_t *
 rd_sockaddr_list_next (rd_sockaddr_list_t *rsal) {
 	rsal->rsal_curr = (rsal->rsal_curr + 1) % rsal->rsal_cnt;
 	return &rsal->rsal_addr[rsal->rsal_curr];

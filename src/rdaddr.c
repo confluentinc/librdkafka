@@ -26,14 +26,19 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+
 #include "rd.h"
 #include "rdaddr.h"
 #include "rdrand.h"
 
+#ifdef _MSC_VER
+#include <WS2tcpip.h>
+#endif
+
 const char *rd_sockaddr2str (const void *addr, int flags) {
 	const rd_sockaddr_inx_t *a = (const rd_sockaddr_inx_t *)addr;
-	static __thread char ret[32][INET6_ADDRSTRLEN + 16];
-	static __thread int  reti = 0;
+	static RD_TLS char ret[32][INET6_ADDRSTRLEN + 16];
+	static RD_TLS int  reti = 0;
 	char portstr[64];
 	int of = 0;
 	int niflags = NI_NUMERICSERV;
@@ -45,7 +50,7 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 	case AF_INET:
 	case AF_INET6:
 		if (flags & RD_SOCKADDR2STR_F_FAMILY)
-			of += sprintf(&ret[reti][of], "ipv%i#",
+			of += rd_snprintf(&ret[reti][of], sizeof(ret[reti])-of, "ipv%i#",
 				      a->sinx_family == AF_INET ? 4 : 6);
 
 		if ((flags & RD_SOCKADDR2STR_F_PORT) &&
@@ -67,8 +72,8 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 
 		
 		if (flags & RD_SOCKADDR2STR_F_PORT) {
-			int len = strlen(ret[reti]);
-			snprintf(ret[reti]+len, sizeof(ret[reti])-len,
+			size_t len = strlen(ret[reti]);
+			rd_snprintf(ret[reti]+len, sizeof(ret[reti])-len,
 				 "%s:%s",
 				 a->sinx_family == AF_INET6 ? "]" : "",
 				 portstr);
@@ -79,7 +84,7 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 	
 
 	/* Error-case */
-	snprintf(ret[reti], sizeof(ret[reti]), "<unsupported:%s>",
+	rd_snprintf(ret[reti], sizeof(ret[reti]), "<unsupported:%s>",
 		 rd_family2str(a->sinx_family));
 	
 	return ret[reti];
@@ -88,11 +93,11 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 
 const char *rd_addrinfo_prepare (const char *nodesvc,
 				 char **node, char **svc) {
-	static __thread char snode[256];
-	static __thread char ssvc[64];
+	static RD_TLS char snode[256];
+	static RD_TLS char ssvc[64];
 	const char *t;
 	const char *svct = NULL;
-	int nodelen = 0;
+	size_t nodelen = 0;
 
 	*snode = '\0';
 	*ssvc = '\0';
@@ -102,7 +107,7 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 		if  (!(t = strchr(nodesvc, ']')))
 			return "Missing close-']'";
 		nodesvc++;
-		nodelen = (int)(t-nodesvc);
+		nodelen = t-nodesvc;
 		svct = t+1;
 
 	} else if (*nodesvc == ':' && *(nodesvc+1) != ':') {
@@ -111,14 +116,14 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 		svct = nodesvc;
 	}
 		
-	if ((svct = strrchr(svct ? : nodesvc, ':')) && (*(svct-1) != ':') &&
+	if ((svct = strrchr(svct ? svct : nodesvc, ':')) && (*(svct-1) != ':') &&
 	    *(++svct)) {
 		/* Optional ":service" definition. */
 		if (strlen(svct) >= sizeof(ssvc))
 			return "Service name too long";
 		strcpy(ssvc, svct);
 		if (!nodelen)
-			nodelen = (int)(svct - nodesvc)-1;
+			nodelen = svct - nodesvc - 1;
 
 	} else if (!nodelen)
 		nodelen = strlen(nodesvc);
@@ -159,10 +164,18 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 		defsvc = svc;
 		
 	if ((r = getaddrinfo(node, defsvc, &hints, &ais))) {
+#ifdef EAI_SYSTEM
 		if (r == EAI_SYSTEM)
-			*errstr = strerror(errno);
+#else
+		if (0)
+#endif
+			*errstr = rd_strerror(errno);
 		else {
+#ifdef _MSC_VER
+			*errstr = gai_strerrorA(r);
+#else
 			*errstr = gai_strerror(r);
+#endif
 			errno = EFAULT;
 		}
 		return NULL;
@@ -181,7 +194,7 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 	}
 
 
-	rsal = calloc(1, sizeof(*rsal) + (sizeof(*rsal->rsal_addr) * cnt));
+	rsal = rd_calloc(1, sizeof(*rsal) + (sizeof(*rsal->rsal_addr) * cnt));
 
 	for (ai = ais ; ai != NULL ; ai = ai->ai_next)
 		memcpy(&rsal->rsal_addr[rsal->rsal_cnt++],
@@ -200,6 +213,6 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 
 
 void rd_sockaddr_list_destroy (rd_sockaddr_list_t *rsal) {
-	free(rsal);
+	rd_free(rsal);
 }
 

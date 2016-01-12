@@ -38,13 +38,15 @@
 #include "rdkafka.h"  /* for Kafka driver */
 
 
-int main (int argc, char **argv) {
+int main_0006_symbols (int argc, char **argv) {
 
         if (argc < 0 /* always false */) {
                 rd_kafka_version();
                 rd_kafka_version_str();
+				rd_kafka_get_debug_contexts();
                 rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR);
                 rd_kafka_errno2err(EINVAL);
+                rd_kafka_errno();
                 rd_kafka_conf_new();
                 rd_kafka_conf_destroy(NULL);
                 rd_kafka_conf_dup(NULL);
@@ -55,8 +57,15 @@ int main (int argc, char **argv) {
                 rd_kafka_conf_set_stats_cb(NULL, NULL);
                 rd_kafka_conf_set_log_cb(NULL, NULL);
                 rd_kafka_conf_set_socket_cb(NULL, NULL);
-                rd_kafka_conf_set_open_cb(NULL, NULL);
-                rd_kafka_conf_set_opaque(NULL, NULL);
+		rd_kafka_conf_set_rebalance_cb(NULL, NULL);
+		rd_kafka_conf_set_offset_commit_cb(NULL, NULL);
+		rd_kafka_conf_set_throttle_cb(NULL, NULL);
+		rd_kafka_conf_set_default_topic_conf(NULL, NULL);
+		rd_kafka_conf_get(NULL, NULL, NULL, NULL);
+#ifndef _MSC_VER
+		rd_kafka_conf_set_open_cb(NULL, NULL);
+#endif
+		rd_kafka_conf_set_opaque(NULL, NULL);
                 rd_kafka_opaque(NULL);
                 rd_kafka_conf_dump(NULL, NULL);
                 rd_kafka_topic_conf_dump(NULL, NULL);
@@ -67,12 +76,15 @@ int main (int argc, char **argv) {
                 rd_kafka_topic_conf_destroy(NULL);
                 rd_kafka_topic_conf_set(NULL, NULL, NULL, NULL, 0);
                 rd_kafka_topic_conf_set_opaque(NULL, NULL);
+		rd_kafka_topic_conf_get(NULL, NULL, NULL, NULL);
                 rd_kafka_topic_conf_set_partitioner_cb(NULL, NULL);
                 rd_kafka_topic_partition_available(NULL, 0);
+		rd_kafka_topic_opaque(NULL);
                 rd_kafka_msg_partitioner_random(NULL, NULL, 0, 0, NULL, NULL);
                 rd_kafka_new(0, NULL, NULL, 0);
                 rd_kafka_destroy(NULL);
                 rd_kafka_name(NULL);
+		rd_kafka_memberid(NULL);
                 rd_kafka_topic_new(NULL, NULL, NULL);
                 rd_kafka_topic_destroy(NULL);
                 rd_kafka_topic_name(NULL);
@@ -88,10 +100,12 @@ int main (int argc, char **argv) {
                 rd_kafka_produce_batch(NULL, 0, 0, NULL, 0);
                 rd_kafka_poll(NULL, 0);
                 rd_kafka_brokers_add(NULL, NULL);
-                rd_kafka_set_logger(NULL, NULL);
+                /* DEPRECATED: rd_kafka_set_logger(NULL, NULL); */
                 rd_kafka_set_log_level(NULL, 0);
                 rd_kafka_log_print(NULL, 0, NULL, NULL);
+#ifndef _MSC_VER
                 rd_kafka_log_syslog(NULL, 0, NULL, NULL);
+#endif
                 rd_kafka_outq_len(NULL);
                 rd_kafka_dump(NULL, NULL);
                 rd_kafka_thread_cnt();
@@ -103,6 +117,30 @@ int main (int argc, char **argv) {
                 rd_kafka_consume_queue(NULL, 0);
                 rd_kafka_consume_batch_queue(NULL, 0, NULL, 0);
                 rd_kafka_consume_callback_queue(NULL, 0, NULL, NULL);
+                rd_kafka_seek(NULL, 0, 0, 0);
+                rd_kafka_yield(NULL);
+                rd_kafka_mem_free(NULL, NULL);
+                rd_kafka_list_groups(NULL, NULL, NULL, 0);
+                rd_kafka_group_list_destroy(NULL);
+
+		/* KafkaConsumer API */
+		rd_kafka_subscribe(NULL, NULL);
+		rd_kafka_unsubscribe(NULL);
+		rd_kafka_subscription(NULL, NULL);
+		rd_kafka_consumer_poll(NULL, 0);
+		rd_kafka_consumer_close(NULL);
+		rd_kafka_assign(NULL, NULL);
+		rd_kafka_assignment(NULL, NULL);
+		rd_kafka_commit(NULL, NULL, 0);
+		rd_kafka_commit_message(NULL, NULL, 0);
+                rd_kafka_position(NULL, NULL, 0);
+
+		/* TopicPartition */
+		rd_kafka_topic_partition_list_new(0);
+		rd_kafka_topic_partition_list_destroy(NULL);
+		rd_kafka_topic_partition_list_add(NULL, NULL, 0);
+		rd_kafka_topic_partition_list_add_range(NULL, NULL, 0, 0);
+		rd_kafka_topic_partition_list_copy(NULL);
         }
 
 

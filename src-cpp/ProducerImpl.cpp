@@ -36,7 +36,7 @@
 
 RdKafka::Producer::~Producer () {
 
-};
+}
 
 static void dr_msg_cb_trampoline (rd_kafka_t *rk,
                                   const rd_kafka_message_t *
@@ -84,10 +84,6 @@ RdKafka::Producer *RdKafka::Producer::create (RdKafka::Conf *conf,
 
   rkp->rk_ = rk;
 
-  /* Redirect logging to event callback */
-  if (confimpl && confimpl->event_cb_)
-    rd_kafka_set_logger(rk, RdKafka::log_cb_trampoline);
-
   return rkp;
 }
 
@@ -107,4 +103,42 @@ RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
     return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
 
   return RdKafka::ERR_NO_ERROR;
+}
+
+
+RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
+                                                   int32_t partition,
+                                                   int msgflags,
+                                                   void *payload, size_t len,
+                                                   const void *key,
+                                                   size_t key_len,
+                                                   void *msg_opaque) {
+  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+
+  if (rd_kafka_produce(topicimpl->rkt_, partition, msgflags,
+                       payload, len, key, key_len,
+                       msg_opaque) == -1)
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+
+  return RdKafka::ERR_NO_ERROR;
+}
+
+
+RdKafka::ErrorCode
+RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
+                                int32_t partition,
+                                const std::vector<char> *payload,
+                                const std::vector<char> *key,
+                                void *msg_opaque) {
+  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+
+  if (rd_kafka_produce(topicimpl->rkt_, partition, RD_KAFKA_MSG_F_COPY,
+                       payload ? (void *)&(*payload)[0] : NULL,
+                       payload ? payload->size() : 0,
+                       key ? &(*key)[0] : NULL, key ? key->size() : 0,
+                       msg_opaque) == -1)
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+
+  return RdKafka::ERR_NO_ERROR;
+
 }

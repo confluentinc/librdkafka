@@ -21,8 +21,14 @@
 #ifndef __RDCRC32___H__
 #define __RDCRC32___H__
 
+#include "rd.h"
+
 #include <stdlib.h>
 #include <stdint.h>
+
+#if WITH_ZLIB
+#include <zlib.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,6 +48,10 @@ extern "C" {
  *****************************************************************************/
 typedef uint32_t rd_crc32_t;
 
+#if !WITH_ZLIB
+extern 	const rd_crc32_t crc_table[256];
+#endif
+
 
 /**
  * Reflect all bits of a \a data word of \a data_len bytes.
@@ -58,9 +68,13 @@ rd_crc32_t rd_crc32_reflect(rd_crc32_t data, size_t data_len);
  *
  * \return     The initial crc value.
  *****************************************************************************/
-static inline rd_crc32_t rd_crc32_init(void)
+static __inline rd_crc32_t rd_crc32_init(void)
 {
+#if WITH_ZLIB
+        return crc32(0, NULL, 0);
+#else
     return 0xffffffff;
+#endif
 }
 
 
@@ -72,7 +86,32 @@ static inline rd_crc32_t rd_crc32_init(void)
  * \param data_len Number of bytes in the \a data buffer.
  * \return         The updated crc value.
  *****************************************************************************/
-rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t data_len);
+	/**
+ * Update the crc value with new data.
+ *
+ * \param crc      The current crc value.
+ * \param data     Pointer to a buffer of \a data_len bytes.
+ * \param data_len Number of bytes in the \a data buffer.
+ * \return         The updated crc value.
+ *****************************************************************************/
+static __inline RD_UNUSED
+rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t data_len)
+{
+#if WITH_ZLIB
+        rd_assert(data_len <= UINT_MAX);
+        return crc32(crc, data, (uInt) data_len);
+#else
+    unsigned int tbl_idx;
+
+    while (data_len--) {
+        tbl_idx = (crc ^ *data) & 0xff;
+        crc = (crc_table[tbl_idx] ^ (crc >> 8)) & 0xffffffff;
+
+        data++;
+    }
+    return crc & 0xffffffff;
+#endif
+}
 
 
 /**
@@ -81,16 +120,20 @@ rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t dat
  * \param crc  The current crc value.
  * \return     The final crc value.
  *****************************************************************************/
-static inline rd_crc32_t rd_crc32_finalize(rd_crc32_t crc)
+static __inline rd_crc32_t rd_crc32_finalize(rd_crc32_t crc)
 {
+#if WITH_ZLIB
+        return crc;
+#else
     return crc ^ 0xffffffff;
+#endif
 }
 
 
 /**
  * Wrapper for performing CRC32 on the provided buffer.
  */
-static inline rd_crc32_t rd_crc32 (const char *data, size_t data_len) {
+static __inline rd_crc32_t rd_crc32 (const char *data, size_t data_len) {
 	return rd_crc32_finalize(rd_crc32_update(rd_crc32_init(),
 						 (const unsigned char *)data,
 						 data_len));

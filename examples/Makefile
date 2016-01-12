@@ -1,4 +1,6 @@
-EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp
+EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
+	rdkafka_consumer_example rdkafka_consumer_example_cpp \
+	kafkatest_verifiable_client
 
 all: $(EXAMPLES)
 
@@ -17,14 +19,25 @@ rdkafka_example: ../src/librdkafka.a rdkafka_example.c
 	@echo "# $@ is ready"
 	@echo "#"
 	@echo "# Run producer (write messages on stdin)"
-	@echo "./rdkafka_example -P -t <topic> -p <partition>"
+	@echo "./$@ -P -t <topic> -p <partition>"
 	@echo ""
 	@echo "# or consumer"
-	@echo "./rdkafka_example -C -t <topic> -p <partition>"
+	@echo "./$@ -C -t <topic> -p <partition>"
 	@echo ""
 	@echo "#"
 	@echo "# More usage options:"
-	@echo "./rdkafka_example --help"
+	@echo "./$@ -h"
+
+rdkafka_consumer_example: ../src/librdkafka.a rdkafka_consumer_example.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) rdkafka_consumer_example.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+	@echo "# $@ is ready"
+	@echo "#"
+	@echo "./$@ <topic[:part]> <topic2[:part]> .."
+	@echo ""
+	@echo "#"
+	@echo "# More usage options:"
+	@echo "./$@ -h"
 
 rdkafka_performance: ../src/librdkafka.a rdkafka_performance.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) rdkafka_performance.c -o $@ $(LDFLAGS) \
@@ -39,11 +52,20 @@ rdkafka_performance: ../src/librdkafka.a rdkafka_performance.c
 	@echo ""
 	@echo "#"
 	@echo "# More usage options:"
-	@echo "./$@ --help"
+	@echo "./$@ -h"
 
 
 rdkafka_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_example.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) rdkafka_example.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS) -lstdc++
+
+kafkatest_verifiable_client: ../src-cpp/librdkafka++.a ../src/librdkafka.a kafkatest_verifiable_client.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) kafkatest_verifiable_client.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS) -lstdc++
+
+
+rdkafka_consumer_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_consumer_example.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) rdkafka_consumer_example.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS) -lstdc++
 
 rdkafka_zookeeper_example: ../src/librdkafka.a rdkafka_zookeeper_example.c
@@ -52,14 +74,14 @@ rdkafka_zookeeper_example: ../src/librdkafka.a rdkafka_zookeeper_example.c
 	@echo "# $@ is ready"
 	@echo "#"
 	@echo "# Run producer (write messages on stdin)"
-	@echo "./rdkafka_zookeeper_example -P -t <topic> -p <partition>"
+	@echo "./$@ -P -t <topic> -p <partition>"
 	@echo ""
 	@echo "# or consumer"
-	@echo "./rdkafka_zookeeper_example -C -t <topic> -p <partition>"
+	@echo "./$@ -C -t <topic> -p <partition>"
 	@echo ""
 	@echo "#"
 	@echo "# More usage options:"
-	@echo "./rdkafka_zookeeper_example --help"
+	@echo "./$@ -h"
 
 clean:
 	rm -f $(EXAMPLES)

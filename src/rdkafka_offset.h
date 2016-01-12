@@ -28,15 +28,20 @@
 
 #pragma once
 
+#include "rdkafka_partition.h"
+
+
+const char *rd_kafka_offset2str (int64_t offset);
 
 
 /**
  * Stores the offset for the toppar 'rktp'.
- * The actual commit of the offset to backing store is performed
- * from the main rdkafka thread.
+ * The actual commit of the offset to backing store is usually
+ * performed at a later time (time or threshold based).
+ *
  * See head of rdkafka_offset.c for more information.
  */
-static inline RD_UNUSED
+static __inline RD_UNUSED
 void rd_kafka_offset_store0 (rd_kafka_toppar_t *rktp, int64_t offset,
 			     int lock) {
 	if (lock)
@@ -49,8 +54,25 @@ void rd_kafka_offset_store0 (rd_kafka_toppar_t *rktp, int64_t offset,
 rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *rkt,
 					   int32_t partition, int64_t offset);
 
-void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp);
+rd_kafka_resp_err_t rd_kafka_offset_commit (rd_kafka_toppar_t *rktp);
+rd_kafka_resp_err_t rd_kafka_offset_sync (rd_kafka_toppar_t *rktp);
+
+void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp,
+                                 rd_kafka_resp_err_t err);
+rd_kafka_resp_err_t rd_kafka_offset_store_stop (rd_kafka_toppar_t *rktp);
 void rd_kafka_offset_store_init (rd_kafka_toppar_t *rktp);
 
 void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 			    rd_kafka_resp_err_t err, const char *reason);
+
+void rd_kafka_offset_query_tmr_cb (rd_kafka_timers_t *rkts, void *arg);
+
+void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
+				   rd_kafka_resp_err_t err,
+				   rd_kafka_topic_partition_list_t *offsets);
+
+rd_kafka_resp_err_t
+rd_kafka_commit0 (rd_kafka_t *rk,
+                  const rd_kafka_topic_partition_list_t *offsets,
+                  rd_kafka_q_t *replyq,
+                  void (*op_cb) (rd_kafka_t *, rd_kafka_op_t *));

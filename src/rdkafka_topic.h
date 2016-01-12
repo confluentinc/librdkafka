@@ -28,54 +28,123 @@
 
 #pragma once
 
-extern const char *rd_kafka_fetch_states[];
+#include "rdlist.h"
+
 extern const char *rd_kafka_topic_state_names[];
 
-void rd_kafka_toppar_destroy0 (rd_kafka_toppar_t *rktp);
-void rd_kafka_toppar_insert_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
-void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
-void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
-void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
-				  rd_kafka_msgq_t *rkmq);
-void rd_kafka_toppar_concat_msgq (rd_kafka_toppar_t *rktp,
-				  rd_kafka_msgq_t *rkmq);
 
-#define rd_kafka_topic_keep(rkt) (void)rd_atomic_add(&(rkt->rkt_refcnt), 1)
-void rd_kafka_topic_destroy0 (rd_kafka_topic_t *rkt);
+/* rd_kafka_itopic_t: internal representation of a topic */
+struct rd_kafka_itopic_s {
+	TAILQ_ENTRY(rd_kafka_itopic_s) rkt_link;
 
-rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_topic_t *rkt,
-					int32_t partition,
-					int ua_on_miss);
-rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
-					 const rd_kafkap_str_t *topic,
-					 int32_t partition,
-					 int ua_on_miss);
-rd_kafka_toppar_t *rd_kafka_toppar_get_avail (const rd_kafka_topic_t *rkt,
-                                              int32_t partition,
-                                              int ua_on_miss,
-                                              rd_kafka_resp_err_t *errp);
+	rd_refcnt_t        rkt_refcnt;
 
-rd_kafka_toppar_t *rd_kafka_toppar_desired_get (rd_kafka_topic_t *rkt,
-						int32_t partition);
-rd_kafka_toppar_t *rd_kafka_toppar_desired_add (rd_kafka_topic_t *rkt,
-						int32_t partition);
-void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp);
+	rwlock_t           rkt_lock;
+	rd_kafkap_str_t   *rkt_topic;
 
-rd_kafka_topic_t *rd_kafka_topic_find (rd_kafka_t *rk,
-				       const char *topic, int do_lock);
-rd_kafka_topic_t *rd_kafka_topic_find0 (rd_kafka_t *rk,
-					const rd_kafkap_str_t *topic);
+        rd_kafka_topic_t *rkt_app_rkt;      /* A shared topic pointer
+                                             * to be used for callbacks
+                                             * to the application. */
 
-int rd_kafka_toppar_ua_move (rd_kafka_topic_t *rkt, rd_kafka_msgq_t *rkmq);
+        shptr_rd_kafka_itopic_t *rkt_autosubscribe_rkt; /* Shared pointer for
+                                                         * autosubscribed
+                                                         * topic */
 
-void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
-				      rd_kafka_broker_t *rkb);
+	shptr_rd_kafka_toppar_t  *rkt_ua;  /* unassigned partition */
+	shptr_rd_kafka_toppar_t **rkt_p;
+	int32_t            rkt_partition_cnt;
 
-void rd_kafka_topic_partitions_remove (rd_kafka_topic_t *rkt);
+        rd_list_t          rkt_desp;              /* Desired partitions
+                                                   * that are not yet seen
+                                                   * in the cluster. */
 
-void rd_kafka_topic_metadata_none (rd_kafka_topic_t *rkt);
+	rd_ts_t            rkt_ts_metadata; /* Timestamp of last metadata
+					     * update for this topic. */
+
+	enum {
+		RD_KAFKA_TOPIC_S_UNKNOWN,   /* No cluster information yet */
+		RD_KAFKA_TOPIC_S_EXISTS,    /* Topic exists in cluster */
+		RD_KAFKA_TOPIC_S_NOTEXISTS, /* Topic is not known in cluster */
+	} rkt_state;
+
+        int                rkt_flags;
+#define RD_KAFKA_TOPIC_F_LEADER_QUERY  0x1 /* There is an outstanding
+                                            * leader query for this topic */
+	rd_kafka_t       *rkt_rk;
+
+        shptr_rd_kafka_itopic_t *rkt_shptr_app; /* Application's topic_new() */
+
+	rd_kafka_topic_conf_t rkt_conf;
+};
+
+#define rd_kafka_topic_rdlock(rkt)     rwlock_rdlock(&(rkt)->rkt_lock)
+#define rd_kafka_topic_wrlock(rkt)     rwlock_wrlock(&(rkt)->rkt_lock)
+#define rd_kafka_topic_rdunlock(rkt)   rwlock_rdunlock(&(rkt)->rkt_lock)
+#define rd_kafka_topic_wrunlock(rkt)   rwlock_wrunlock(&(rkt)->rkt_lock)
+
+
+/* Converts a shptr..itopic_t to an internal itopic_t */
+#define rd_kafka_topic_s2i(s_rkt) rd_shared_ptr_obj(s_rkt)
+
+/* Converts an application topic_t (a shptr topic) to an internal itopic_t */
+#define rd_kafka_topic_a2i(app_rkt) \
+        rd_kafka_topic_s2i((shptr_rd_kafka_itopic_t *)app_rkt)
+
+/* Converts a shptr..itopic_t to an app topic_t (they are the same thing) */
+#define rd_kafka_topic_s2a(s_rkt) ((rd_kafka_topic_t *)(s_rkt))
+
+/* Converts an app topic_t to a shptr..itopic_t (they are the same thing) */
+#define rd_kafka_topic_a2s(app_rkt) ((shptr_rd_kafka_itopic_t *)(app_rkt))
+
+
+
+
+
+/**
+ * Returns a shared pointer for the topic.
+ */
+#define rd_kafka_topic_keep(rkt) \
+        rd_shared_ptr_get(rkt, &(rkt)->rkt_refcnt, shptr_rd_kafka_itopic_t)
+
+/* Same, but casts to an app topic_t */
+#define rd_kafka_topic_keep_a(rkt)                                      \
+        ((rd_kafka_topic_t *)rd_shared_ptr_get(rkt, &(rkt)->rkt_refcnt, \
+                                               shptr_rd_kafka_itopic_t))
+
+/**
+ * Frees a shared pointer previously returned by ..topic_keep()
+ */
+#define rd_kafka_topic_destroy0(s_rkt)                                  \
+        rd_shared_ptr_put(s_rkt,                                        \
+                          &rd_kafka_topic_s2i(s_rkt)->rkt_refcnt,       \
+                          rd_kafka_topic_destroy_final(                 \
+                                  rd_kafka_topic_s2i(s_rkt)))
+
+void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt);
+
+
+shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk, const char *topic,
+                                              rd_kafka_topic_conf_t *conf,
+                                              int *existing, int do_lock);
+
+shptr_rd_kafka_itopic_t *rd_kafka_topic_find_fl (const char *func, int line,
+                                                 rd_kafka_t *rk,
+                                                 const char *topic,
+                                                 int do_lock);
+shptr_rd_kafka_itopic_t *rd_kafka_topic_find0_fl (const char *func, int line,
+                                                  rd_kafka_t *rk,
+                                                  const rd_kafkap_str_t *topic);
+#define rd_kafka_topic_find(rk,topic,do_lock)                           \
+        rd_kafka_topic_find_fl(__FUNCTION__,__LINE__,rk,topic,do_lock)
+#define rd_kafka_topic_find0(rk,topic)                                  \
+        rd_kafka_topic_find0_fl(__FUNCTION__,__LINE__,rk,topic)
+
+void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt);
+
+void rd_kafka_topic_metadata_none (rd_kafka_itopic_t *rkt);
 
 int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 				    const struct rd_kafka_metadata_topic *mdt);
 
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
+

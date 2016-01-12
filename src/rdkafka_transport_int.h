@@ -1,7 +1,7 @@
 /*
- * librd - Rapid Development C library
+ * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012, Magnus Edenhill
+ * Copyright (c) 2015, Magnus Edenhill
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,13 +25,50 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#pragma once
 
-#include "rd.h"
+/* This header file is to be used by .c files needing access to the
+ * rd_kafka_transport_t struct internals. */
 
+#if WITH_SASL
+#include <sasl/sasl.h>
+#include "rdkafka_sasl.h"
+#endif
 
-void rd_init (void) {
-	extern void rd_thread_init (void);
-	extern void rd_timers_init();
-	rd_thread_init();
-	rd_timers_init();
-}
+#if WITH_SSL
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#endif
+
+struct rd_kafka_transport_s {	
+	int rktrans_s;
+	
+	rd_kafka_broker_t *rktrans_rkb;
+
+#if WITH_SSL
+	SSL *rktrans_ssl;
+#endif
+
+#if WITH_SASL
+	struct {
+		sasl_conn_t *conn;
+
+		struct msghdr msg;
+		struct iovec  iov[2];
+
+		char          *recv_buf;
+		int            recv_of;    /* Received byte count */
+		int            recv_len;   /* Expected receive length for
+					    * current frame. */
+	} rktrans_sasl;
+#endif
+
+	rd_kafka_buf_t *rktrans_recv_buf;  /* Used with framed_recvmsg */
+	
+#ifndef _MSC_VER
+	struct pollfd rktrans_pfd;
+#else
+	WSAPOLLFD rktrans_pfd;
+#endif
+};
+

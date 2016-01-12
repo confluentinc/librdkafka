@@ -88,7 +88,7 @@ int main (int argc, char **argv) {
 	/* Generate unique topic name */
 	test_conf_init(&conf, &topic_conf, 10);
 
-	snprintf(topic, sizeof(topic), "rdkafkatest1_unk_%x%x",
+	rd_snprintf(topic, sizeof(topic), "rdkafkatest1_unk_%x%x",
 		 rand(), rand());
 
 	TEST_SAY("\033[33mNOTE! This test requires "
@@ -115,7 +115,7 @@ int main (int argc, char **argv) {
 	for (i = 0 ; i < msgcnt ; i++) {
 		int *msgidp = malloc(sizeof(*msgidp));
 		*msgidp = i;
-		snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
+		rd_snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
 		r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
 				     msg, strlen(msg), NULL, 0, msgidp);
 		if (r == -1) {
@@ -154,11 +154,5 @@ int main (int argc, char **argv) {
 	TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
 	rd_kafka_destroy(rk);
 
-	/* Wait for everything to be cleaned up since broker destroys are
-	 * handled in its own thread. */
-	test_wait_exit(10);
-
-	/* If we havent failed at this point then
-	 * there were no threads leaked */
 	return 0;
 }

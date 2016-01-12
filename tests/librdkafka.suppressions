@@ -5,63 +5,298 @@
    fun:calloc
    fun:_dl_allocate_tls
    fun:pthread_create@@GLIBC_2.2.5
-   fun:rd_kafka_broker_add
+}
+
+{
+   helgrind---_dl_allocate_tls
+   Helgrind:Race
+   fun:mempcpy
+   fun:_dl_allocate_tls_init
+   ...
+   fun:pthread_create@@GLIBC_2.2*
+   fun:pthread_create_WRK
+   fun:pthread_create@*
 }
 {
-   libc_gethostbyname_1
-   Helgrind:Race
-   fun:_nss_files_gethostbyname2_r
-   fun:gethostbyname2_r@@GLIBC_2.2.5
+   drd_nss1
+   drd:ConflictingAccess
+   fun:pthread_mutex_lock
+   fun:_nss_files_gethostbyname4_r
    fun:gaih_inet
    fun:getaddrinfo
    fun:rd_getaddrinfo
    fun:rd_kafka_broker_resolve
-}
-{
-   errno_tls_read_1
-   Helgrind:Race
-   fun:rd_kafka_broker_fail
-   fun:rd_kafka_broker_thread_main
-   obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
-   fun:start_thread
-   fun:clone
-}
-{
-   rkb_fields_cleared_in_caller_thread_1
-   drd:ConflictingAccess
-   fun:connect
    fun:rd_kafka_broker_connect
    fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
    obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
    fun:start_thread
    fun:clone
 }
+
 {
-   rkb_fields_cleared_in_caller_thread_2
+   drd_nss2
    drd:ConflictingAccess
-   fun:sendmsg
-   fun:rd_kafka_broker_send
-   fun:rd_kafka_send
-   fun:rd_kafka_broker_io_serve
-   fun:rd_kafka_broker_serve
+   fun:strlen
+   fun:nss_load_library
+   fun:__nss_lookup_function
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
    fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
    obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
    fun:start_thread
    fun:clone
 }
-
 {
-   <stats_are_unprotected1>
-   Helgrind:Race
-   fun:rd_kafka_stats_emit_tmr_cb
-   ...
-}
-{
-   <stats_are_unprotected2>
+   drd_nss3
    drd:ConflictingAccess
-   fun:rd_kafka_stats_emit_tmr_cb
-   fun:rd_kafka_timers_run
-   fun:rd_kafka_thread_main
-   ...
+   fun:__GI_stpcpy
+   fun:nss_load_library
+   fun:__nss_lookup_function
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+{
+   drd_nss4
+   drd:ConflictingAccess
+   fun:strlen
+   fun:__nss_lookup_function
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+{
+   drd_nss5
+   drd:ConflictingAccess
+   fun:strlen
+   fun:__nss_lookup_function
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+{
+   drd_nss6
+   drd:ConflictingAccess
+   fun:internal_setent
+   fun:_nss_files_gethostbyname4_r
+   fun:gaih_inet
+   fun:getaddrinfo
+   fun:rd_getaddrinfo
+   fun:rd_kafka_broker_resolve
+   fun:rd_kafka_broker_connect
+   fun:rd_kafka_broker_thread_main
+   fun:_thrd_wrapper_function
+   obj:/usr/lib/valgrind/vgpreload_drd-amd64-linux.so
+   fun:start_thread
+   fun:clone
+}
+{
+   ssl_read
+   Memcheck:Cond
+   fun:ssl3_read_bytes
+   fun:ssl3_read_internal
 }
 
+
+		    
+{
+   ssl_noterm_leak1
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:SSL_library_init
+}
+{
+   ssl_noterm_leak2
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:OPENSSL_add_all_algorithms_noconf
+}
+{
+   ssl_noterm_leak3
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:OpenSSL_add_all_digests
+}
+{
+   ssl_noterm_leak4
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:EVP_add_digest
+}
+{
+   ssl_noterm_leak5
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:SSL_load_error_strings
+}
+{
+   ssl_noterm_leak6
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   ...
+   fun:OPENSSL_add_all_algorithms_noconf
+}
+{
+   ssl_noterm_leak7
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:ERR_load_SSL_strings
+}
+{
+   ssl_noterm_leak8
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:err_load_strings
+}
+
+{
+   ssl_noterm_leak9
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   ...
+   fun:ERR_load_SSL_strings
+}
+{
+   thrd_tls_alloc_stack
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create@@GLIBC_2.2.5
+   fun:thrd_create
+}
+{
+   more_tls1
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+}
+
+{
+   ssl_uninit1
+   Memcheck:Cond
+   fun:rd_kafka_metadata_handle
+   fun:rd_kafka_broker_metadata_reply
+}
+{
+   ssl_uninit2
+   Memcheck:Value8
+   fun:rd_kafka_metadata_handle
+   fun:rd_kafka_broker_metadata_reply
+}
+{
+   ssl_uninit3
+   Memcheck:Cond
+   fun:memcpy@@GLIBC_2.14
+   fun:rd_kafka_metadata_handle
+   fun:rd_kafka_broker_metadata_reply
+}
+
+{
+   log_races0
+   Helgrind:Race
+   fun:rd_kafka_log0
+}
+{
+   glibc_tls
+   Helgrind:Race
+   fun:mempcpy
+   fun:_dl_allocate_tls_init
+   fun:get_cached_stack
+   fun:allocate_stack
+   fun:pthread_create@@GLIBC_2.2.5
+}
+{
+   false_tls
+   Helgrind:Race
+   fun:thrd_detach
+}
+
+
+# cyrus libsasl2 global/once memory "leaks"
+{
+   leak_sasl_global_init1
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:sasl_client_init
+}
+{
+   leak_sasl_global_init6
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   ...
+   fun:sasl_client_init
+}
+
+{
+   leak_sasl_dlopen
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:?alloc
+   ...
+   fun:_dl_catch_error
+}
+{
+   debian_testing_ld_uninitialized
+   Memcheck:Cond
+   fun:index
+   fun:expand_dynamic_string_token
+   fun:_dl_map_object
+   fun:map_doit
+   fun:_dl_catch_error
+   fun:do_preload
+   fun:dl_main
+   fun:_dl_sysdep_start
+   fun:_dl_start
+   obj:/lib/x86_64-linux-gnu/ld-2.21.so
+}

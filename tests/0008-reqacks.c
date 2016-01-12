@@ -30,9 +30,6 @@
  * Tests request.required.acks (issue #75)
  */
 
-#define _GNU_SOURCE
-#include <sys/time.h>
-#include <time.h>
 
 #include "test.h"
 
@@ -69,7 +66,7 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 }
 
 
-int main (int argc, char **argv) {
+int main_0008_reqacks (int argc, char **argv) {
 	int partition = 0;
 	int r;
 	rd_kafka_t *rk;
@@ -98,9 +95,9 @@ int main (int argc, char **argv) {
                 test_conf_init(&conf, &topic_conf, 10);
 
                 if (!topic)
-                        topic = test_mk_topic_name("generic", 0);
+                        topic = test_mk_topic_name("0008", 0);
 
-                snprintf(tmp, sizeof(tmp), "%i", reqacks);
+                rd_snprintf(tmp, sizeof(tmp), "%i", reqacks);
 
                 if (rd_kafka_topic_conf_set(topic_conf, "request.required.acks",
                                             tmp, errstr, sizeof(errstr)) !=
@@ -123,13 +120,13 @@ int main (int argc, char **argv) {
                 rkt = rd_kafka_topic_new(rk, topic, topic_conf);
                 if (!rkt)
                         TEST_FAIL("Failed to create topic: %s\n",
-                                  strerror(errno));
+                                  rd_strerror(errno));
 
                 /* Produce messages */
                 for (i = 0 ; i < msgcnt ; i++) {
                         int *msgidp = malloc(sizeof(*msgidp));
                         *msgidp = idbase + i;
-                        snprintf(msg, sizeof(msg),
+                        rd_snprintf(msg, sizeof(msg),
                                  "%s test message #%i (acks=%i)",
                                  argv[0], *msgidp, reqacks);
                         r = rd_kafka_produce(rkt, partition,
@@ -137,7 +134,7 @@ int main (int argc, char **argv) {
                                              msg, strlen(msg), NULL, 0, msgidp);
                         if (r == -1)
                                 TEST_FAIL("Failed to produce message #%i: %s\n",
-                                          *msgidp, strerror(errno));
+                                          *msgidp, rd_strerror(errno));
                 }
 
                 TEST_SAY("Produced %i messages, waiting for deliveries\n",
@@ -164,11 +161,5 @@ int main (int argc, char **argv) {
                 rd_kafka_destroy(rk);
         }
 
-	/* Wait for everything to be cleaned up since broker destroys are
-	 * handled in its own thread. */
-	test_wait_exit(10);
-
-	/* If we havent failed at this point then
-	 * there were no threads leaked */
 	return 0;
 }

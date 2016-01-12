@@ -29,6 +29,7 @@
 #pragma once
 
 
+#include "rdendian.h"
 /*
  * Kafka protocol definitions.
  */
@@ -38,7 +39,7 @@
 
 
 /**
- * Request header
+ * Request types
  */
 struct rd_kafkap_reqhdr {
 	int32_t  Size;
@@ -51,11 +52,20 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_StopReplica   5
 #define RD_KAFKAP_OffsetCommit  8
 #define RD_KAFKAP_OffsetFetch   9
-#define RD_KAFKAP_ConsumerMetadata 10
+#define RD_KAFKAP_GroupCoordinator 10
+#define RD_KAFKAP_JoinGroup     11
+#define RD_KAFKAP_Heartbeat     12
+#define RD_KAFKAP_LeaveGroup    13
+#define RD_KAFKAP_SyncGroup     14
+#define RD_KAFKAP_DescribeGroups 15
+#define RD_KAFKAP_ListGroups    16
 	int16_t  ApiVersion;
 	int32_t  CorrId;
 	/* ClientId follows */
-} RD_PACKED;
+};
+
+#define RD_KAFKAP_REQHDR_SIZE (4+2+2+4)
+#define RD_KAFKAP_RESHDR_SIZE (4+4)
 
 /**
  * Response header
@@ -63,7 +73,7 @@ struct rd_kafkap_reqhdr {
 struct rd_kafkap_reshdr {
 	int32_t  Size;
 	int32_t  CorrId;
-} RD_PACKED;
+};
 
 
 
@@ -78,12 +88,18 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 		[RD_KAFKAP_StopReplica] = "StopReplica",
 		[RD_KAFKAP_OffsetCommit] = "OffsetCommit",
 		[RD_KAFKAP_OffsetFetch] = "OffsetFetch",
-		[RD_KAFKAP_ConsumerMetadata] = "ConsumerMetadata"
+		[RD_KAFKAP_GroupCoordinator] = "GroupCoordinator",
+                [RD_KAFKAP_JoinGroup] = "JoinGroup",
+                [RD_KAFKAP_Heartbeat] = "Heartbeat",
+                [RD_KAFKAP_LeaveGroup] = "LeaveGroup",
+                [RD_KAFKAP_SyncGroup] = "SyncGroup",
+		[RD_KAFKAP_DescribeGroups] = "DescribeGroups",
+		[RD_KAFKAP_ListGroups] = "ListGroups"
 	};
-	static __thread char ret[32];
+	static RD_TLS char ret[32];
 
-	if (ApiKey < 0 || ApiKey >= RD_ARRAYSIZE(names)) {
-		snprintf(ret, sizeof(ret), "Unknown-%hd?", ApiKey);
+	if (ApiKey < 0 || ApiKey >= (int)RD_ARRAYSIZE(names)) {
+		rd_snprintf(ret, sizeof(ret), "Unknown-%hd?", ApiKey);
 		return ret;
 	}
 
@@ -93,152 +109,232 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 
 
 
+
+#define RD_KAFKAP_MESSAGESET_HDR_SIZE (8+4)
+#define RD_KAFKAP_MESSAGE_HDR_SIZE    (4+1+1)
+
+
+
 /**
  *
- * Kafka protocol string representation: { uint16, data.. }
+ * Kafka protocol string representation prefixed with a convenience header
+ *
+ * Serialized format:
+ *  { uint16, data.. }
  *
  */
 typedef struct rd_kafkap_str_s {
-	int16_t len;    /* big endian */
-	char    str[0]; /* allocated dynamically */
-} RD_PACKED rd_kafkap_str_t;
+	/* convenience header (aligned access, host endian) */
+	int         len; /* Kafka string length (-1=NULL, 0=empty, >0=string) */
+	const char *str; /* points into data[] or other memory,
+			  * not NULL-terminated */
+} rd_kafkap_str_t;
+
 
 #define RD_KAFKAP_STR_LEN_NULL -1
-/* Returns the actual size of a kafka protocol string representation. */
-#define RD_KAFKAP_STR_SIZE(kstr) (int16_t)(sizeof((kstr)->len) +	\
-					   ((int16_t)ntohs((kstr)->len) == \
-					    RD_KAFKAP_STR_LEN_NULL ?	\
-					    0 : ntohs((kstr)->len)))
-/* Returns the length of the string of a kafka protocol string representation */
-#define RD_KAFKAP_STR_LEN(kstr) (int)((ntohs((kstr)->len) ==		\
-				       RD_KAFKAP_STR_LEN_NULL ?		\
-				       0 : (int16_t)ntohs((kstr)->len)))
+#define RD_KAFKAP_STR_IS_NULL(kstr) ((kstr)->len == RD_KAFKAP_STR_LEN_NULL)
 
+/* Returns the length of the string of a kafka protocol string representation */
+#define RD_KAFKAP_STR_LEN0(len) ((len) == RD_KAFKAP_STR_LEN_NULL ? 0 : (len))
+#define RD_KAFKAP_STR_LEN(kstr) RD_KAFKAP_STR_LEN0((kstr)->len)
+
+/* Returns the actual size of a kafka protocol string representation. */
+#define RD_KAFKAP_STR_SIZE0(len) (2 + RD_KAFKAP_STR_LEN0(len))
+#define RD_KAFKAP_STR_SIZE(kstr) RD_KAFKAP_STR_SIZE0((kstr)->len)
+
+
+/* Serialized Kafka string: only works for _new() kstrs */
+#define RD_KAFKAP_STR_SER(kstr)  ((kstr)+1)
 
 /* Macro suitable for "%.*s" printing. */
-#define RD_KAFKAP_STR_PR(kstr)  \
-	((int16_t)ntohs((kstr)->len) == RD_KAFKAP_STR_LEN_NULL ?	\
-	 0 : (int)ntohs((kstr)->len)), (kstr)->str
+#define RD_KAFKAP_STR_PR(kstr)						\
+	(int)((kstr)->len == RD_KAFKAP_STR_LEN_NULL ? 0 : (kstr)->len), \
+		(kstr)->str
 
-#define RD_KAFKAP_STR_IS_NULL(kstr) \
-	((int16_t)ntohs((kstr)->len) == RD_KAFKAP_STR_LEN_NULL)
+/* strndupa() a Kafka string */
+#define RD_KAFKAP_STR_DUPA(destptr,kstr) \
+	rd_strndupa((destptr), (kstr)->str, RD_KAFKAP_STR_LEN(kstr))
 
-static inline int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
-				     const rd_kafkap_str_t *b) RD_UNUSED;
-static inline int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
-				     const rd_kafkap_str_t *b) {
-	if (a->len != b->len)
-		return -1;
-	return memcmp(a->str, b->str, ntohs(a->len));
-}
+/* strndup() a Kafka string */
+#define RD_KAFKAP_STR_DUP(kstr) rd_strndup((kstr)->str, RD_KAFKAP_STR_LEN(kstr))
 
-static inline int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
-					 const char *str) RD_UNUSED;
-static inline int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
-					 const char *str) {
-	int len = strlen(str);
-	if (ntohs(a->len) != len)
-		return -1;
-	return memcmp(a->str, str, ntohs(a->len));
+/**
+ * Frees a Kafka string previously allocated with `rd_kafkap_str_new()`
+ */
+static RD_UNUSED void rd_kafkap_str_destroy (rd_kafkap_str_t *kstr) {
+	rd_free(kstr);
 }
 
 
-static inline rd_kafkap_str_t *rd_kafkap_str_new (const char *str) RD_UNUSED;
-static inline rd_kafkap_str_t *rd_kafkap_str_new (const char *str) {
+
+/**
+ * Allocate a new Kafka string and make a copy of 'str'.
+ * If 'len' is -1 the length will be calculated.
+ * Supports Kafka NULL strings.
+ * Nul-terminates the string, but the trailing \0 is not part of
+ * the serialized string.
+ */
+static __inline RD_UNUSED
+rd_kafkap_str_t *rd_kafkap_str_new (const char *str, int len) {
 	rd_kafkap_str_t *kstr;
-	int len = 0;
+	int16_t klen;
 
-	if (str)
-		len = strlen(str);
-	else
-		len = 0;
+	if (!str)
+		len = RD_KAFKAP_STR_LEN_NULL;
+	else if (len == -1)
+		len = str ? (int)strlen(str) : RD_KAFKAP_STR_LEN_NULL;
 
-	/* We allocate one more byte so we can null-terminate the string.
-	 * This null-termination is not included in the length so it
-	 * is not sent over the wire. */
-	kstr = malloc(sizeof(*kstr) + len + 1);
+	kstr = rd_malloc(sizeof(*kstr) + 2 +
+			 (len == RD_KAFKAP_STR_LEN_NULL ? 0 : len + 1));
+	kstr->len = len;
 
-	if (str) {
-		kstr->len = ntohs(len);
-		memcpy(kstr->str, str, len+1);
-	} else
-		kstr->len = (int16_t)ntohs(RD_KAFKAP_STR_LEN_NULL);
+	/* Serialised format: 16-bit string length */
+	klen = htobe16(len);
+	memcpy(kstr+1, &klen, 2);
+
+	/* Serialised format: non null-terminated string */
+	if (len == RD_KAFKAP_STR_LEN_NULL)
+		kstr->str = NULL;
+	else {
+		kstr->str = ((const char *)(kstr+1))+2;
+		memcpy((void *)kstr->str, str, len);
+		((char *)kstr->str)[len] = '\0';
+	}
 
 	return kstr;
 }
 
-#define rd_kafkap_str_destroy(kstr) free(kstr)
 
-#define rd_kafkap_strdupa(kstr)  strndupa((kstr)->str,\
-					  RD_KAFKAP_STR_SIZE((kstr)))
+/**
+ * Makes a copy of `src`. The copy will be fully allocated and should
+ * be freed with rd_kafka_pstr_destroy()
+ */
+static __inline RD_UNUSED
+rd_kafkap_str_t *rd_kafkap_str_copy (const rd_kafkap_str_t *src) {
+        return rd_kafkap_str_new(src->str, src->len);
+}
 
+static __inline RD_UNUSED int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
+						 const rd_kafkap_str_t *b) {
+	if (a->len != b->len)
+		return -1;
+	return memcmp(a->str, b->str, a->len);
+}
+
+static __inline RD_UNUSED int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
+						     const char *str) {
+	ssize_t len = strlen(str);
+	if (a->len != len)
+		return -1;
+	return memcmp(a->str, str, a->len);
+}
 
 
 
 /**
  *
- * Kafka protocol bytes representation: { uint32, data.. }
+ * Kafka protocol bytes array representation prefixed with a convenience header
+ *
+ * Serialized format:
+ *  { uint32, data.. }
  *
  */
 typedef struct rd_kafkap_bytes_s {
-	int32_t len;     /* big endian */
-	char    data[0]; /* allocated dynamically */
-} RD_PACKED rd_kafkap_bytes_t;
+	/* convenience header (aligned access, host endian) */
+	int32_t     len;   /* Kafka bytes length (-1=NULL, 0=empty, >0=data) */
+	const void *data;  /* points just past the struct, or other memory,
+			    * not NULL-terminated */
+	const char _data[]; /* Bytes following struct when new()ed */
+} rd_kafkap_bytes_t;
+
 
 #define RD_KAFKAP_BYTES_LEN_NULL -1
-/* Returns the actual size of a kafka protocol bytes representation. */
-#define RD_KAFKAP_BYTES_SIZE(kbytes) (int32_t)(sizeof((kbytes)->len) +	\
-					       ((int32_t)ntohl((kbytes)->len)==\
-						RD_KAFKAP_BYTES_LEN_NULL ? \
-						0 : ntohl((kbytes)->len)))
-/* Returns the length of the string of a kafka protocol bytes representation */
-#define RD_KAFKAP_BYTES_LEN(kbytes) (int32_t)(((int32_t)ntohl((kbytes)->len) ==\
-					       RD_KAFKAP_BYTES_LEN_NULL ? \
-					       0 : \
-					       (int32_t)ntohl((kbytes)->len)))
-
 #define RD_KAFKAP_BYTES_IS_NULL(kbytes) \
-	((int32_t)ntohl((kbytes)->len) == RD_KAFKAP_STR_LEN_NULL)
+	((kbytes)->len == RD_KAFKAP_BYTES_LEN_NULL)
+
+/* Returns the length of the bytes of a kafka protocol bytes representation */
+#define RD_KAFKAP_BYTES_LEN0(len) ((len) == RD_KAFKAP_BYTES_LEN_NULL ? 0:(len))
+#define RD_KAFKAP_BYTES_LEN(kbytes) RD_KAFKAP_BYTES_LEN0((kbytes)->len)
+
+/* Returns the actual size of a kafka protocol bytes representation. */
+#define RD_KAFKAP_BYTES_SIZE0(len) (4 + RD_KAFKAP_BYTES_LEN0(len))
+#define RD_KAFKAP_BYTES_SIZE(kbytes) RD_KAFKAP_BYTES_SIZE0((kbytes)->len)
 
 
-static inline int rd_kafkap_bytes_cmp (const rd_kafkap_bytes_t *a,
-				       const rd_kafkap_bytes_t *b) RD_UNUSED;
-static inline int rd_kafkap_bytes_cmp (const rd_kafkap_bytes_t *a,
-				       const rd_kafkap_bytes_t *b) {
-	if (a->len != b->len)
-		return -1;
-	return memcmp(a->data, b->data, ntohl(a->len));
+/* Serialized Kafka bytes: only works for _new() kbytes */
+#define RD_KAFKAP_BYTES_SER(kbytes)  ((kbytes)+1)
+
+
+/**
+ * Frees a Kafka bytes previously allocated with `rd_kafkap_bytes_new()`
+ */
+static RD_UNUSED void rd_kafkap_bytes_destroy (rd_kafkap_bytes_t *kbytes) {
+	rd_free(kbytes);
 }
 
-static inline int rd_kafkap_bytes_cmp_bytes (const rd_kafkap_bytes_t *a,
-					     const void *data, size_t datalen)
-	RD_UNUSED;
-static inline int rd_kafkap_bytes_cmp_bytes (const rd_kafkap_bytes_t *a,
-					     const void *data, size_t datalen) {
-	if (a->len != datalen)
-		return -1;
-	return memcmp(a->data, data, ntohl(a->len));
-}
 
-
-static inline rd_kafkap_bytes_t *rd_kafkap_bytes_new (const void *data,
-						      size_t datalen) RD_UNUSED;
-static inline rd_kafkap_bytes_t *rd_kafkap_bytes_new (const void *data,
-						      size_t datalen) {
+/**
+ * Allocate a new Kafka bytes and make a copy of 'bytes'.
+ * Supports Kafka NULL bytes.
+ */
+static __inline RD_UNUSED
+rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
 	rd_kafkap_bytes_t *kbytes;
+	int32_t klen;
 
-	kbytes = malloc(sizeof(*kbytes) + datalen);
+	if (!bytes)
+		len = RD_KAFKAP_BYTES_LEN_NULL;
 
-	if (data) {
-		kbytes->len = ntohl(datalen);
-		memcpy(kbytes->data, data, datalen);
-	} else
-		kbytes->len = (int32_t)ntohl(RD_KAFKAP_BYTES_LEN_NULL);
-	
+	kbytes = rd_malloc(sizeof(*kbytes) + 4 +
+			 (len == RD_KAFKAP_BYTES_LEN_NULL ? 0 : len));
+	kbytes->len = len;
+
+	klen = htobe32(len);
+	memcpy(kbytes+1, &klen, 4);
+
+	if (len == RD_KAFKAP_BYTES_LEN_NULL)
+		kbytes->data = NULL;
+	else {
+		kbytes->data = ((const char *)(kbytes+1))+4;
+		memcpy((void *)kbytes->data, bytes, len);
+	}
+
 	return kbytes;
 }
 
-#define rd_kafkap_bytes_destroy(kbytes) free(kbytes)
+
+/**
+ * Makes a copy of `src`. The copy will be fully allocated and should
+ * be freed with rd_kafkap_bytes_destroy()
+ */
+static __inline RD_UNUSED
+rd_kafkap_bytes_t *rd_kafkap_bytes_copy (const rd_kafkap_bytes_t *src) {
+        return rd_kafkap_bytes_new(src->data, src->len);
+}
+
+
+static __inline RD_UNUSED int rd_kafkap_bytes_cmp (const rd_kafkap_bytes_t *a,
+						   const rd_kafkap_bytes_t *b) {
+	if (a->len != b->len)
+		return -1;
+	return memcmp(a->data, b->data, a->len);
+}
+
+static __inline RD_UNUSED
+int rd_kafkap_bytes_cmp_data (const rd_kafkap_bytes_t *a,
+			      const char *data, int len) {
+	if (a->len != len)
+		return -1;
+	return memcmp(a->data, data, a->len);
+}
+
+
+
+
+
+
+
+
 
 
 
@@ -247,7 +343,7 @@ struct rd_kafkap_FetchRequest {
 	int32_t MaxWaitTime;
 	int32_t MinBytes;
 	int32_t TopicArrayCnt;
-} RD_PACKED;
+};
 
 
 
@@ -267,4 +363,8 @@ struct rd_kafka_TopicMetadata {
 	} *PartitionMetadata;
 	int32_t PartitionMetadata_cnt;
 };
+
+
+
+typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 

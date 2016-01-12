@@ -33,11 +33,11 @@
 
 void rd_array_shuffle (void *base, size_t nmemb, size_t entry_size) {
 	int i;
-	void *tmp = alloca(entry_size);
+	void *tmp = rd_alloca(entry_size);
 
 	/* FIXME: Optimized version for word-sized entries. */
 
-	for (i = nmemb - 1 ; i > 0 ; i--) {
+	for (i = (int) nmemb - 1 ; i > 0 ; i--) {
 		int j = rd_jitter(0, i);
 		if (unlikely(i == j))
 			continue;

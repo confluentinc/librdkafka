@@ -52,6 +52,6 @@ endif
 
 $(LIBNAME).lds: $(HDRS)
 	@(printf "$(MKL_YELLOW)Generating linker script $@ from $(HDRS)$(MKL_CLR_RESET)\n" ; \
-	  cat ../src/rdkafka.h | ../lds-gen.pl > $@)
+	  cat ../src/rdkafka.h | ../lds-gen.py > $@)
 
 -include $(DEPS)

@@ -1666,6 +1666,12 @@ rd_kafka_subscription (rd_kafka_t *rk,
  * @brief Poll the consumer for messages or events.
  *
  * Will block for at most \p timeout_ms milliseconds.
+ *
+ * @returns A message object which is a proper message if \p ->err is
+ *          RD_KAFKA_RESP_ERR_NO_ERROR, or an event or error for any other
+ *          value.
+ *
+ * @sa rd_kafka_message_t
  */
 RD_EXPORT
 rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);

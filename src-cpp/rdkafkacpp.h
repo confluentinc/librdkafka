@@ -803,7 +803,7 @@ class RD_EXPORT Handle {
    *   - delivery report callbacks (if an RdKafka::DeliveryCb is configured) [producer]
    *   - event callbacks (if an RdKafka::EventCb is configured) [producer & consumer]
    *
-   * @warning This method must not be used with the RdKafka::KafkaConsumer,
+   * @warning This method MUST NOT be used with the RdKafka::KafkaConsumer,
    *          use its RdKafka::KafkaConsumer::consume() instead.
    *
    * @returns the number of events served.
@@ -1142,6 +1142,8 @@ public:
    * etc.
    *
    * @remark Use \c delete to free the message.
+   *
+   * @remark Application MUST NOT call \p poll() on KafkaConsumer objects.
    *
    * @returns One of:
    *  - proper message (RdKafka::Message::err() is ERR_NO_ERROR)

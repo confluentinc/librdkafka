@@ -90,10 +90,10 @@ int main (void) {
 	mkl_mkvar_set SYMDUMPER SYMDUMPER 'echo'
     fi
 
-    # The linker-script generator (lds-gen.pl) requires perl
+    # The linker-script generator (lds-gen.py) requires python
     if [[ $WITH_LDS == y ]]; then
-        if ! mkl_command_check perl "HAVE_PERL" "disable" "perl -v"; then
-            mkl_err "disabling linker-script since perl is not available"
+        if ! mkl_command_check python "HAVE_PYTHON" "disable" "python -V"; then
+            mkl_err "disabling linker-script since python is not available"
             mkl_mkvar_set WITH_LDS WITH_LDS "n"
         fi
     fi

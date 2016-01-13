@@ -1235,8 +1235,6 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 
 		/* Entire buffer sent, unlink from outbuf */
 		rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
-                rd_atomic32_sub(&rkb->rkb_outbuf_msgcnt,
-                                rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
 
 		/* Store time for RTT calculation */
 		rkbuf->rkbuf_ts_sent = rd_clock();

@@ -123,7 +123,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_kafka_buf_t     *rkb_recv_buf;
 
 	rd_kafka_bufq_t     rkb_outbufs;
-	rd_atomic32_t       rkb_outbuf_msgcnt;
 	rd_kafka_bufq_t     rkb_waitresps;
 	rd_kafka_bufq_t     rkb_retrybufs;
 

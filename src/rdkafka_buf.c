@@ -451,7 +451,7 @@ void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
                 rko->rko_rkbuf = request;
 
                 rko->rko_err = err;
-                if (rd_kafka_q_enq(request->rkbuf_replyq, rko)) {
+                if (likely(rd_kafka_q_enq(request->rkbuf_replyq, rko))) {
                         /* Enqueued */
                         rd_kafka_buf_destroy(request); /* from keep above */
                         return;

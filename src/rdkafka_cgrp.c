@@ -198,13 +198,24 @@ static rd_kafka_broker_t *rd_kafka_cgrp_select_broker (rd_kafka_cgrp_t *rkcg) {
          * This means do not change to another non-coordinator broker
          * while we are waiting for the proper coordinator broker to
          * become available. */
-        if (rkb && rkcg->rkcg_rkb && rkb != rkcg->rkcg_rkb &&
-            !RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg, rkb) &&
-            !RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg, rkcg->rkcg_rkb) &&
-            rkcg->rkcg_rkb->rkb_source != RD_KAFKA_INTERNAL) {
-                rd_kafka_broker_destroy(rkb);
-                rkb = rkcg->rkcg_rkb;
-                rd_kafka_broker_keep(rkb);
+        if (rkb && rkcg->rkcg_rkb && rkb != rkcg->rkcg_rkb) {
+		int old_is_coord, new_is_coord;
+
+		rd_kafka_broker_lock(rkb);
+		old_is_coord = RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg, rkb);
+		rd_kafka_broker_unlock(rkb);
+
+		rd_kafka_broker_lock(rkcg->rkcg_rkb);
+		new_is_coord = RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg,
+							     rkcg->rkcg_rkb);
+		rd_kafka_broker_unlock(rkcg->rkcg_rkb);
+
+		if (!old_is_coord && !new_is_coord &&
+		    rkcg->rkcg_rkb->rkb_source != RD_KAFKA_INTERNAL) {
+			rd_kafka_broker_destroy(rkb);
+			rkb = rkcg->rkcg_rkb;
+			rd_kafka_broker_keep(rkb);
+		}
         }
 
         return rkb;

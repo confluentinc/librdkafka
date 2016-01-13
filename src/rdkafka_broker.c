@@ -1913,8 +1913,12 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                          * so we dont need this if the nodename changed too. */
                         rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
                         rd_kafka_broker_lock(rkb);
-                        rd_kafka_broker_set_state(rkb,
-                                                  RD_KAFKA_BROKER_STATE_UPDATE);
+			/* If broker is currently in state up we need
+			 * to trigger a state change so it exits its
+			 * state&type based .._serve() loop. */
+			if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP)
+				rd_kafka_broker_set_state(
+					rkb, RD_KAFKA_BROKER_STATE_UPDATE);
                         rd_kafka_broker_unlock(rkb);
                 }
                 break;

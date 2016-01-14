@@ -182,7 +182,7 @@ int rd_kafka_brokers_add0 (rd_kafka_t *rk, const char *brokerlist);
 void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state);
 
 void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
-			   rd_kafka_resp_err_t err,
+			   int level, rd_kafka_resp_err_t err,
 			   const char *fmt, ...);
 
 void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,

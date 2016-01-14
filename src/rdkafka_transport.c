@@ -236,7 +236,7 @@ void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
 		if (rd_kafka_sasl_client_new(rkb->rkb_transport, sasl_errstr,
 					     sizeof(sasl_errstr)) == -1) {
 			errno = EINVAL;
-			rd_kafka_broker_fail(rkb,
+			rd_kafka_broker_fail(rkb, LOG_ERR,
 					     RD_KAFKA_RESP_ERR__AUTHENTICATION,
 					     "Failed to initialize "
 					     "SASL authentication: %s",
@@ -548,7 +548,8 @@ rd_kafka_transport_ssl_io_event (rd_kafka_transport_t *rktrans, int events) {
 
  fail:
 	/* Permanent error */
-	rd_kafka_broker_fail(rktrans->rktrans_rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+	rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_ERR,
+                             RD_KAFKA_RESP_ERR__TRANSPORT,
 			     "%s", errstr);
 	return -1;
 }
@@ -564,14 +565,14 @@ static int rd_kafka_transport_ssl_verify (rd_kafka_transport_t *rktrans) {
 	cert = SSL_get_peer_certificate(rktrans->rktrans_ssl);
 	X509_free(cert);
 	if (!cert) {
-		rd_kafka_broker_fail(rktrans->rktrans_rkb,
+		rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_ERR,
 				     RD_KAFKA_RESP_ERR__SSL,
 				     "Broker did not provide a certificate");
 		return -1;
 	}
 
 	if ((rl = SSL_get_verify_result(rktrans->rktrans_ssl)) != X509_V_OK) {
-		rd_kafka_broker_fail(rktrans->rktrans_rkb,
+		rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_ERR,
 				     RD_KAFKA_RESP_ERR__SSL,
 				     "Failed to verify broker certificate: %s",
 				     X509_verify_cert_error_string(rl));
@@ -593,9 +594,8 @@ static int rd_kafka_transport_ssl_handhsake (rd_kafka_transport_t *rktrans) {
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	char errstr[512];
 	int r;
-	
+
 	r = SSL_do_handshake(rktrans->rktrans_ssl);
-	
 	if (r == 1) {
 		/* SSL handshake done. Verify. */
 		if (rd_kafka_transport_ssl_verify(rktrans) == -1)
@@ -603,16 +603,15 @@ static int rd_kafka_transport_ssl_handhsake (rd_kafka_transport_t *rktrans) {
 
 		rd_kafka_transport_connect_done(rktrans, NULL);
 		return 1;
-		
+
 	} else if (rd_kafka_transport_ssl_io_update(rktrans, r,
 						    errstr,
 						    sizeof(errstr)) == -1) {
-		rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__SSL,
+		rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__SSL, LOG_ERR,
 				     "SSL handshake failed: %s%s", errstr,
 				     strstr(errstr, "unexpected message") ?
 				     ": client authentication might be "
 				     "required (see broker log)" : "");
-				     
 		return -1;
 	}
 
@@ -958,7 +957,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		if (getsockopt(rktrans->rktrans_s, SOL_SOCKET,
 			       SO_ERROR, (void *)&r, &intlen) == -1) {
 			rd_kafka_broker_fail(
-                                rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+                                rkb, LOG_ERR, RD_KAFKA_RESP_ERR__TRANSPORT,
                                 "Connect to %s failed: "
                                 "unable to get status from "
                                 "socket %d: %s",
@@ -992,7 +991,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		if (rd_kafka_sasl_io_event(rktrans, events,
 					   errstr, sizeof(errstr)) == -1) {
 			errno = EINVAL;
-			rd_kafka_broker_fail(rkb,
+			rd_kafka_broker_fail(rkb, LOG_ERR,
 					     RD_KAFKA_RESP_ERR__AUTHENTICATION,
 					     "SASL authentication failure: %s",
 					     errstr);
@@ -1010,7 +1009,11 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		}
 
 		if (events & POLLHUP) {
-			rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+			rd_kafka_broker_fail(rkb,
+                                             rkb->rkb_rk->rk_conf.
+                                             log_connection_close ?
+                                             LOG_NOTICE : LOG_DEBUG,
+                                             RD_KAFKA_RESP_ERR__TRANSPORT,
 					     "Connection closed");
 			return;
 		}

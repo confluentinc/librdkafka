@@ -267,13 +267,13 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
                 if (level >= LOG_DEBUG)
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "FAIL",
                                      "%s", rkb->rkb_err.msg);
-                else
+                else {
                         rd_kafka_log(rkb->rkb_rk, level, "FAIL",
                                      "%s", rkb->rkb_err.msg);
-
-		/* Send ERR op back to application for processing. */
-		rd_kafka_op_err(rkb->rkb_rk, err,
-				"%s", rkb->rkb_err.msg);
+                        /* Send ERR op back to application for processing. */
+                        rd_kafka_op_err(rkb->rkb_rk, err,
+                                        "%s", rkb->rkb_err.msg);
+                }
 	}
 
 	rd_kafka_broker_lock(rkb);
@@ -1062,7 +1062,10 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 	return 1;
 
 err:
-	rd_kafka_broker_fail(rkb, LOG_ERR, err_code,
+	rd_kafka_broker_fail(rkb,
+                             !rkb->rkb_rk->rk_conf.log_connection_close &&
+                             !strcmp(errstr, "Disconnected") ?
+                             LOG_DEBUG : LOG_ERR, err_code,
                              "Receive failed: %s", errstr);
 	return -1;
 }

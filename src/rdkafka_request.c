@@ -1419,7 +1419,7 @@ rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
 		   (all_topics ? "all topics":"locally known topics"),
                    reason ? reason : "");
 
-	if (only_rkt || all_topics) {
+	if (only_rkt || !all_topics) {
 		rd_kafka_rdlock(rkb->rkb_rk);
 
 		/* Calculate size to hold requested topics */
@@ -1435,7 +1435,7 @@ rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
 	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1, sizeof(arrsize) + tnamelen);
 	rd_kafka_buf_write_i32(rkbuf, arrsize);
 
-	if (only_rkt || all_topics) {
+	if (only_rkt || !all_topics) {
 		/* Just our locally known topics */
 
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {

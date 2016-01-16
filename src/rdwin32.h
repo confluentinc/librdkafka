@@ -98,8 +98,31 @@ struct msghdr {
 #define PRIdsz  "Id"
 
 #define RD_FORMAT(...)
-#define rd_snprintf(...)  sprintf_s(__VA_ARGS__)
-#define rd_vsnprintf(buf,size,...) vsnprintf_s(buf,size,_TRUNCATE,__VA_ARGS__)
+
+static RD_UNUSED __inline
+int rd_vsnprintf (char *str, size_t size, const char *format, va_list ap) {
+        int cnt = -1;
+
+        if (size != 0)
+                cnt = _vsnprintf_s(str, size, _TRUNCATE, format, ap);
+        if (cnt == -1)
+                cnt = _vscprintf(format, ap);
+
+        return cnt;
+}
+
+static RD_UNUSED __inline
+int rd_snprintf (char *str, size_t size, const char *format, ...) {
+        int cnt;
+        va_list ap;
+
+        va_start(ap, format);
+        cnt = rd_vsnprintf(str, size, format, ap);
+        va_end(ap);
+
+        return cnt;
+}
+
 
 #define rd_strcasecmp(A,B) _stricmp(A,B)
 #define rd_strncasecmp(A,B,N) _strnicmp(A,B,N)

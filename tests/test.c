@@ -486,6 +486,7 @@ int main(int argc, char **argv) {
         RUN_TEST(0020_destroy_hang);
         RUN_TEST(0021_rkt_destroy);
         RUN_TEST(0022_consume_batch);
+        RUN_TEST(0025_timers);
 
         if (tests_run_in_parallel) {
                 mtx_lock(&test_lock);

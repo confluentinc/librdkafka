@@ -41,10 +41,7 @@
 
 static int do_test_consume_batch (void) {
 #define topic_cnt 2
-	const char *topics[topic_cnt] = {
-                test_mk_topic_name(__FUNCTION__, 1),
-                test_mk_topic_name(__FUNCTION__, 1)
-        };
+	char *topics[topic_cnt];
         const int partition_cnt = 2;
 	rd_kafka_t *rk;
         rd_kafka_queue_t *rkq;
@@ -60,6 +57,7 @@ static int do_test_consume_batch (void) {
 
         /* Produce messages */
         for (i = 0 ; i < topic_cnt ; i++) {
+                topics[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
                 for (p = 0 ; p < partition_cnt ; p++)
                         test_produce_msgs_easy(topics[i], testid, p,
                                                msgcnt / topic_cnt /
@@ -133,6 +131,7 @@ static int do_test_consume_batch (void) {
                 }
 
                 rd_kafka_topic_destroy(rkts[i]);
+                rd_free(topics[i]);
         }
 
         rd_kafka_queue_destroy(rkq);

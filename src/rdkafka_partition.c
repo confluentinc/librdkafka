@@ -62,6 +62,11 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 	if (!(rkb = rktp->rktp_leader))
 		return;
 
+        if (rktp->rktp_wait_consumer_lag_resp)
+                return; /* Previous request not finished yet */
+
+        rktp->rktp_wait_consumer_lag_resp = 1;
+
 	/* Ask for oldest offset. The newest offset is automatically
          * propagated in FetchResponse.HighwaterMark. */
         rd_kafka_OffsetRequest(rkb, rktp, RD_KAFKA_OFFSET_BEGINNING,
@@ -117,7 +122,8 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
 
 	/* FIXME: Use a global timer to collect offsets for all partitions */
         if (rktp->rktp_rkt->rkt_rk->rk_conf.stats_interval_ms > 0 &&
-            rkt->rkt_rk->rk_type == RD_KAFKA_CONSUMER)
+            rkt->rkt_rk->rk_type == RD_KAFKA_CONSUMER &&
+            rktp->rktp_partition != RD_KAFKA_PARTITION_UA)
 		rd_kafka_timer_start(&rkt->rkt_rk->rk_timers,
 				     &rktp->rktp_consumer_lag_tmr,
 				     rktp->rktp_rkt->rkt_rk->

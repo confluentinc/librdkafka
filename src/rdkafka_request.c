@@ -304,9 +304,10 @@ void rd_kafka_toppar_lag_handle_Offset (rd_kafka_broker_t *rkb,
         /* Parse and return Offset */
         err = rd_kafka_handle_Offset(rkb, err, rkbuf, request, rktp, &Offset);
 
-
         if (!err)
                 rktp->rktp_lo_offset = Offset;
+
+        rktp->rktp_wait_consumer_lag_resp = 0;
 
         rd_kafka_toppar_destroy(s_rktp); /* from request.opaque */
 }

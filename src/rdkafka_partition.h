@@ -176,6 +176,9 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
         rd_kafka_timer_t rktp_consumer_lag_tmr;  /* Consumer lag monitoring
 						  * timer */
 
+        int rktp_wait_consumer_lag_resp;         /* Waiting for consumer lag
+                                                  * response. */
+
 	struct {
 		rd_atomic64_t tx_msgs;
 		rd_atomic64_t tx_bytes;

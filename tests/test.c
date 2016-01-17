@@ -30,6 +30,7 @@
 #include "test.h"
 #include <signal.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
@@ -45,6 +46,7 @@ static int  test_topic_random = 0;
 static int  tests_run_in_parallel = 0;
 static int  tests_running_cnt = 0;
 const RD_TLS char *test_curr = NULL;
+static RD_TLS FILE *stats_fp;
 RD_TLS int64_t test_start = 0;
 double test_timeout_multiplier  = 1.0;
 
@@ -60,6 +62,14 @@ static void sig_alarm (int sig) {
 static void test_error_cb (rd_kafka_t *rk, int err,
 			   const char *reason, void *opaque) {
 	TEST_FAIL("rdkafka error: %s: %s", rd_kafka_err2str(err), reason);
+}
+
+static int test_stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
+                           void *opaque) {
+        if (stats_fp)
+                fprintf(stats_fp, "{\"instance\":\"%s\", \"stats\": %s}\n",
+                        rd_kafka_name(rk), json);
+        return 0;
 }
 
 static void test_init (void) {
@@ -125,6 +135,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 
                 *conf = rd_kafka_conf_new();
                 rd_kafka_conf_set_error_cb(*conf, test_error_cb);
+                rd_kafka_conf_set_stats_cb(*conf, test_stats_cb);
 
 #ifndef _MSC_VER
                 if ((tmp = getenv("TEST_DEBUG")) && *tmp)
@@ -333,10 +344,19 @@ struct run_args {
 static int run_test0 (struct run_args *run_args) {
 	test_timing_t t_run;
 	int r;
+        char stats_file[256];
+
+        rd_snprintf(stats_file, sizeof(stats_file), "stats_%s_%"PRIu64".json",
+                    run_args->testname, test_id_generate());
+        if (!(stats_fp = fopen(stats_file, "w+")))
+                TEST_SAY("=== Failed to create stats file %s: %s ===\n",
+                         stats_file, strerror(errno));
 
 	test_curr = run_args->testname;
 	TEST_SAY("================= Running test %s =================\n",
 		 run_args->testname);
+        if (stats_fp)
+                TEST_SAY("==== Stats written to file %s ====\n", stats_file);
 	TIMING_START(&t_run, run_args->testname);
 	test_start = t_run.ts_start;
 	r = run_args->test_main(run_args->argc, run_args->argv);
@@ -352,6 +372,14 @@ static int run_test0 (struct run_args *run_args) {
 			 "================= Test %s PASSED ================="
 			 "\033[0m\n",
 			 run_args->testname);
+
+        if (stats_fp) {
+                long pos = ftell(stats_fp);
+                fclose(stats_fp);
+                /* Delete file if nothing was written */
+                if (pos == 0)
+                        unlink(stats_file);
+        }
 
 	return r;
 }

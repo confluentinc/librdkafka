@@ -377,8 +377,13 @@ static int run_test0 (struct run_args *run_args) {
                 long pos = ftell(stats_fp);
                 fclose(stats_fp);
                 /* Delete file if nothing was written */
-                if (pos == 0)
+                if (pos == 0) {
+#ifndef _MSC_VER
                         unlink(stats_file);
+#else
+                        _unlink(stats_file);
+#endif
+                }
         }
 
 	return r;

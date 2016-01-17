@@ -42,3 +42,7 @@ tinycthread.o: ../src/tinycthread.c
 clean:
 	rm -f *.test $(OBJS) $(BIN)
 
+
+clean-output:
+	# Clean test output files
+	rm -f stats_*.json *.offset

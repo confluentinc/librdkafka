@@ -4,3 +4,4 @@ merged
 core
 vgcore.*
 core.*
+stats_*.json

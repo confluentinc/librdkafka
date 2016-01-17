@@ -40,6 +40,7 @@ typedef struct rd_kafka_timers_s {
 	mtx_t       rkts_lock;
 	cnd_t       rkts_cond;
 
+        int         rkts_enabled;
 } rd_kafka_timers_t;
 
 

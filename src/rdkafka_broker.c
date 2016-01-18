@@ -3338,7 +3338,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 rd_kafka_broker_lock(rkb);
 				rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
                                 rd_kafka_broker_unlock(rkb);
-                        } else if (rd_kafka_terminating(rkb->rkb_rk)) {
+                        } else if (!rd_kafka_terminating(rkb->rkb_rk)) {
 				/* Connection torn down, sleep a short while to
 				 * avoid busy-looping on protocol errors */
 				rd_usleep(100*1000/*100ms*/, &rk->rk_terminate);

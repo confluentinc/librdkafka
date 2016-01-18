@@ -586,11 +586,18 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 	size_t of = *ofp;
         int64_t consumer_lag = -1;
         struct offset_stats offs;
+        int32_t leader_nodeid = -1;
+
+        rd_kafka_toppar_lock(rktp);
+
+        if (rktp->rktp_leader) {
+                rd_kafka_broker_lock(rktp->rktp_leader);
+                leader_nodeid = rktp->rktp_leader->rkb_nodeid;
+                rd_kafka_broker_unlock(rktp->rktp_leader);
+        }
 
         /* Grab a copy of the latest finalized offset stats */
-        rd_kafka_toppar_lock(rktp);
         offs = rktp->rktp_offsets_fin;
-        rd_kafka_toppar_unlock(rktp);
 
         if (offs.hi_offset != -1 && offs.fetch_offset > 0) {
                 if (offs.fetch_offset > offs.hi_offset)
@@ -629,7 +636,7 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   first ? "" : ", ",
 		   rktp->rktp_partition,
 		   rktp->rktp_partition,
-		   rktp->rktp_leader ? rktp->rktp_leader->rkb_nodeid : -1,
+                   leader_nodeid,
 		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_DESIRED)?"true":"false",
 		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_UNKNOWN)?"true":"false",
 		   rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
@@ -653,6 +660,8 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rd_atomic64_get(&rktp->rktp_c.tx_bytes),
 		   rd_atomic64_get(&rktp->rktp_c.msgs),
                    rd_atomic64_get(&rktp->rktp_c.rx_ver_drops));
+
+        rd_kafka_toppar_unlock(rktp);
 
 	*bufp = buf;
 	*sizep = size;

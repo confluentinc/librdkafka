@@ -59,11 +59,12 @@ static __inline void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
 static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 	rd_kafka_broker_t *rkb;
 
-	if (!(rkb = rktp->rktp_leader))
-		return;
-
         if (rktp->rktp_wait_consumer_lag_resp)
                 return; /* Previous request not finished yet */
+
+        rkb = rd_kafka_toppar_leader(rktp, 1/*proper brokers only*/);
+        if (!rkb)
+		return;
 
         rktp->rktp_wait_consumer_lag_resp = 1;
 
@@ -73,6 +74,8 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
                                &rktp->rktp_ops,
                                rd_kafka_toppar_lag_handle_Offset,
                                rd_kafka_toppar_keep(rktp));
+
+        rd_kafka_broker_destroy(rkb); /* from toppar_leader() */
 }
 
 
@@ -1638,6 +1641,35 @@ void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
         rko->rko_flags              |= RD_KAFKA_OP_F_FREE;
 
         rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
+}
+
+
+
+
+
+/**
+ * Returns the local leader broker for this toppar.
+ * If \p proper_broker is set NULL will be returned if current handler
+ * is not a proper broker (INTERNAL broker).
+ *
+ * The returned broker has an increased refcount.
+ *
+ * Locks: none
+ */
+rd_kafka_broker_t *rd_kafka_toppar_leader (rd_kafka_toppar_t *rktp,
+                                           int proper_broker) {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_toppar_lock(rktp);
+        rkb = rktp->rktp_leader;
+        if (rkb) {
+                if (proper_broker && rkb->rkb_source == RD_KAFKA_INTERNAL)
+                        rkb = NULL;
+                else
+                        rd_kafka_broker_keep(rkb);
+        }
+        rd_kafka_toppar_unlock(rktp);
+
+        return rkb;
 }
 
 

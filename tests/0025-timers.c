@@ -47,7 +47,10 @@ static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
                       void *opaque) {
         struct state *state = opaque;
         const int64_t now = test_clock();
-        const int64_t elapsed = now - state->ts_last;
+        /* Fake the first elapsed time since we dont really know how
+         * long rd_kafka_new() takes and at what time the timer is started. */
+        const int64_t elapsed = state->ts_last ?
+                now - state->ts_last : state->interval;
         const int64_t overshoot = elapsed - state->interval;
         const int wiggleroom = (state->interval * 0.2);
 
@@ -58,7 +61,7 @@ static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
                  (int64_t)state->interval / 1000, wiggleroom / 1000);
 
         if (overshoot < -wiggleroom || overshoot > wiggleroom) {
-                TEST_SAY("^ outside range\n");
+                TEST_WARN("^ outside range\n");
                 state->fails++;
         }
 
@@ -79,11 +82,11 @@ static void do_test_stats_timer (void) {
         const int exp_calls = 10;
         char errstr[512];
         struct state state;
+        test_timing_t t_new;
 
         memset(&state, 0, sizeof(state));
 
         state.interval = 600*1000;
-        state.ts_last = test_clock();
 
         test_conf_init(&conf, NULL, 200);
 
@@ -92,12 +95,26 @@ static void do_test_stats_timer (void) {
         rd_kafka_conf_set_opaque(conf, &state);
 
 
+        TIMING_START(&t_new, "rd_kafka_new()");
         rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        TIMING_STOP(&t_new);
         if (!rk)
                 TEST_FAIL("Failed to create instance: %s\n", errstr);
 
+        TEST_SAY("Starting wait loop for %d expected stats_cb calls "
+                 "with an interval of %dms\n",
+                 exp_calls, state.interval/1000);
+
+
         while (state.calls < exp_calls) {
+                test_timing_t t_poll;
+                TIMING_START(&t_poll, "rd_kafka_poll()");
                 rd_kafka_poll(rk, 100);
+                TIMING_STOP(&t_poll);
+
+                if (TIMING_DURATION(&t_poll) > 150*1000)
+                        TEST_WARN("rd_kafka_poll(rk,100) "
+                                  "took more than 50%% extra\n");
         }
 
         rd_kafka_destroy(rk);

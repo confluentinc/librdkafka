@@ -99,7 +99,12 @@ static void consume_all (rd_kafka_t **rk_c, int rk_cnt, int exp_msg_cnt,
 			if (!rkmsg)
 				continue;
 			else if (rkmsg->err)
-				TEST_SAY("Message error: %s\n",
+				TEST_SAY("Message error "
+                                         "(at offset %"PRId64" after "
+                                         "%d/%d messages and %dms): %s\n",
+                                         rkmsg->offset,
+                                         consumed_msg_cnt, exp_msg_cnt,
+                                         (int)(test_clock() - ts_start)/1000,
 					 rd_kafka_message_errstr(rkmsg));
 			else
 				consumed_msg_cnt++;
@@ -110,7 +115,7 @@ static void consume_all (rd_kafka_t **rk_c, int rk_cnt, int exp_msg_cnt,
 				static int once = 0;
 				if (!once++)
 					TEST_SAY("All messages consumed\n");
-				break;
+				return;
 			}
 		}
 	}

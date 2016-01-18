@@ -2016,8 +2016,10 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
                 rd_kafka_assert(NULL, rktp->rktp_s_for_rkb == NULL);
 		rktp->rktp_s_for_rkb = rd_kafka_toppar_keep(rktp);
+                rd_kafka_broker_lock(rkb);
 		TAILQ_INSERT_TAIL(&rkb->rkb_toppars, rktp, rktp_rkblink);
 		rkb->rkb_toppar_cnt++;
+                rd_kafka_broker_unlock(rkb);
 		rktp->rktp_leader = rkb;
                 rd_kafka_broker_keep(rkb);
 
@@ -2046,8 +2048,10 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                            rd_kafka_broker_name(rktp->rktp_next_leader) :
                            "(none)");
 
+                rd_kafka_broker_lock(rkb);
 		TAILQ_REMOVE(&rkb->rkb_toppars, rktp, rktp_rkblink);
 		rkb->rkb_toppar_cnt--;
+                rd_kafka_broker_unlock(rkb);
                 rd_kafka_broker_destroy(rktp->rktp_leader);
 		rktp->rktp_leader = NULL;
 

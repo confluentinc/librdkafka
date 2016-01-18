@@ -233,14 +233,21 @@ void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
 			rd_kafka_log0(rk,NULL,LOG_DEBUG,fac,__VA_ARGS__); \
 	} while (0)
 
-#define rd_rkb_log(rkb,level,fac,...)					\
-	rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name, level, fac, __VA_ARGS__)
+#define rd_rkb_log(rkb,level,fac,...) do {                             \
+                mtx_lock(&(rkb)->rkb_logname_lock);                     \
+                rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_logname,        \
+                              level, fac, __VA_ARGS__);                 \
+                mtx_unlock(&(rkb)->rkb_logname_lock);                   \
+        } while (0)
 
 #define rd_rkb_dbg(rkb,ctx,fac,...) do {				\
 		if (unlikely((rkb)->rkb_rk->rk_conf.debug &		\
-			     (RD_KAFKA_DBG_ ## ctx)))			\
-			rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name,	\
-				      LOG_DEBUG, fac, __VA_ARGS__);		\
+			     (RD_KAFKA_DBG_ ## ctx))) {			\
+                        mtx_lock(&(rkb)->rkb_logname_lock);             \
+			rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_logname, \
+				      LOG_DEBUG, fac, __VA_ARGS__);     \
+                        mtx_unlock(&(rkb)->rkb_logname_lock);           \
+                }                                                       \
 	} while (0)
 
 

@@ -1956,7 +1956,8 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
                         rkcg->rkcg_flags);
                 fprintf(fp, "   coord_id %"PRId32", managing broker %s\n",
                         rkcg->rkcg_coord_id,
-                        rkcg->rkcg_rkb ? rkcg->rkcg_rkb->rkb_name : "(none)");
+                        rkcg->rkcg_rkb ?
+                        rd_kafka_broker_name(rkcg->rkcg_rkb) : "(none)");
 
                 fprintf(fp, "  toppars:\n");
                 RD_LIST_FOREACH(s_rktp, &rkcg->rkcg_toppars, i) {

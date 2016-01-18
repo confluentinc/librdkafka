@@ -129,11 +129,17 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_avg_t            rkb_avg_rtt;        /* Current RTT period */
 	rd_avg_t            rkb_avg_throttle;   /* Current throttle period */
 
+        /* These are all protected by rkb_lock */
 	char                rkb_name[RD_KAFKA_NODENAME_SIZE];  /* Displ name */
 	char                rkb_nodename[RD_KAFKA_NODENAME_SIZE]; /* host:port*/
         uint16_t            rkb_port;                          /* TCP port */
         char               *rkb_origname;                      /* Original
                                                                 * host name */
+
+
+        /* Logging name is a copy of rkb_name, protected by its own mutex */
+        char               *rkb_logname;
+        mtx_t               rkb_logname_lock;
 
         rd_ts_t             rkb_ts_connect;       /* Last connection attempt */
 
@@ -237,3 +243,5 @@ rd_kafka_broker_t *rd_kafka_broker_internal (rd_kafka_t *rk);
 void msghdr_print (rd_kafka_t *rk,
 		   const char *what, const struct msghdr *msg,
 		   int hexdump);
+
+const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb);

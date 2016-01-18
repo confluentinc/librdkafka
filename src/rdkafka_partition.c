@@ -638,8 +638,8 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
                      "Migrating topic %.*s [%"PRId32"] from %s to %s",
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition,
-                     old_rkb ? old_rkb->rkb_name : "(none)",
-                     new_rkb ? new_rkb->rkb_name : "(none)");
+                     old_rkb ? rd_kafka_broker_name(old_rkb) : "(none)",
+                     new_rkb ? rd_kafka_broker_name(new_rkb) : "(none)");
 
         rd_kafka_q_enq(&dest_rkb->rkb_ops, rko);
 }
@@ -671,7 +671,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
                              "already on correct broker %s",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
-                             rkb ? rkb->rkb_name : "(none)");
+                             rkb ? rd_kafka_broker_name(rkb) : "(none)");
 
                 if (internal_fallback)
                         rd_kafka_broker_destroy(rkb);
@@ -682,7 +682,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
 			     "Broker %s no longer leader "
 			     "for topic %.*s [%"PRId32"]",
-			     rktp->rktp_leader->rkb_name,
+			     rd_kafka_broker_name(rktp->rktp_leader),
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition);
 
@@ -691,7 +691,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 			     "Broker %s is now leader for topic %.*s "
 			     "[%"PRId32"] with %i messages "
 			     "(%"PRIu64" bytes) queued",
-			     rkb->rkb_name,
+			     rd_kafka_broker_name(rkb),
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
 			     rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),

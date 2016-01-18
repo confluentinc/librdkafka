@@ -1909,6 +1909,12 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 				       rkb->rkb_nodename, rkb->rkb_nodeid,
 				       RD_KAFKA_LEARNED);
                 if (strcmp(rkb->rkb_name, brokername)) {
+                        /* Udate the name copy used for logging. */
+                        mtx_lock(&rkb->rkb_logname_lock);
+                        rd_free(rkb->rkb_logname);
+                        rkb->rkb_logname = rd_strdup(brokername);
+                        mtx_unlock(&rkb->rkb_logname_lock);
+
                         rd_rkb_dbg(rkb, BROKER, "UPDATE",
                                    "Name changed from %s to %s",
                                    rkb->rkb_name, brokername);
@@ -1986,7 +1992,8 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                                    rktp->rktp_rkt->rkt_topic->str,
                                    rktp->rktp_partition,
                                    rktp->rktp_next_leader ?
-                                   rktp->rktp_next_leader->rkb_name : "(none");
+                                   rd_kafka_broker_name(rktp->rktp_next_leader):
+                                   "(none)");
 
                         /* Need temporary refcount so we can safely unlock
                          * after q_enq(). */
@@ -2036,7 +2043,8 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                            "(next leader %s)",
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                            rktp->rktp_next_leader ?
-                           rktp->rktp_next_leader->rkb_name : "(none)");
+                           rd_kafka_broker_name(rktp->rktp_next_leader) :
+                           "(none)");
 
 		TAILQ_REMOVE(&rkb->rkb_toppars, rktp, rktp_rkblink);
 		rkb->rkb_toppar_cnt--;
@@ -3383,6 +3391,12 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
         rd_avg_destroy(&rkb->rkb_avg_rtt);
 	rd_avg_destroy(&rkb->rkb_avg_throttle);
 
+        mtx_lock(&rkb->rkb_logname_lock);
+        rd_free(rkb->rkb_logname);
+        rkb->rkb_logname = NULL;
+        mtx_unlock(&rkb->rkb_logname_lock);
+        mtx_destroy(&rkb->rkb_logname_lock);
+
 	mtx_destroy(&rkb->rkb_lock);
 
         rd_refcnt_destroy(&rkb->rkb_refcnt);
@@ -3440,6 +3454,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rkb->rkb_origname = rd_strdup(name);
 
 	mtx_init(&rkb->rkb_lock, mtx_plain);
+        mtx_init(&rkb->rkb_logname_lock, mtx_plain);
+        rkb->rkb_logname = rd_strdup(rkb->rkb_name);
 	TAILQ_INIT(&rkb->rkb_toppars);
         CIRCLEQ_INIT(&rkb->rkb_fetch_toppars);
 	rd_kafka_bufq_init(&rkb->rkb_outbufs);
@@ -3786,6 +3802,24 @@ void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
 }
 
 
+/**
+ * Returns a thread-safe temporary copy of the broker name.
+ * Must not be called more than 4 times from the same expression.
+ *
+ * Locks: none
+ * Locality: any thread
+ */
+const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb) {
+        static RD_TLS char ret[4][RD_KAFKA_NODENAME_SIZE];
+        static RD_TLS int reti = 0;
+
+        reti = (reti + 1) % 4;
+        mtx_lock(&rkb->rkb_logname_lock);
+        rd_snprintf(ret[reti], sizeof(ret[reti]), "%s", rkb->rkb_logname);
+        mtx_unlock(&rkb->rkb_logname_lock);
+
+        return ret[reti];
+}
 
 void rd_kafka_brokers_init (void) {
 }

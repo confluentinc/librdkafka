@@ -1688,8 +1688,7 @@ void rd_kafka_op_handle_Metadata (rd_kafka_broker_t *rkb,
         rd_kafka_q_t *replyq;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
-		   "===== Received metadata from %s =====",
-		   rkb->rkb_name);
+		   "===== Received metadata =====");
 
 	/* Avoid metadata updates when we're terminating. */
 	if (rd_kafka_terminating(rkb->rkb_rk))

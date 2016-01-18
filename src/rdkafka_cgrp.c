@@ -255,7 +255,8 @@ void rd_kafka_cgrp_assign_broker (rd_kafka_cgrp_t *rkcg,
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "BRKASSIGN",
                      "Group \"%.*s\" management assigned to broker %s",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), rkb->rkb_name);
+                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                     rd_kafka_broker_name(rkb));
 
         rkb->rkb_cgrp = rkcg;
 
@@ -285,7 +286,8 @@ static void rd_kafka_cgrp_unassign_broker (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "BRKUNASSIGN",
                      "Group \"%.*s\" management unassigned "
                      "from broker handle %s",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), rkb->rkb_name);
+                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                     rd_kafka_broker_name(rkb));
 
         rkb->rkb_cgrp = NULL;
 
@@ -323,8 +325,9 @@ static int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg) {
                      "Group \"%.*s\" management reassigned from "
                      "broker %s to %s",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-                     rkcg->rkcg_rkb ? rkcg->rkcg_rkb->rkb_name : "(none)",
-                     rkb ? rkb->rkb_name : "(none)");
+                     rkcg->rkcg_rkb ?
+                     rd_kafka_broker_name(rkcg->rkcg_rkb) : "(none)",
+                     rkb ? rd_kafka_broker_name(rkb) : "(none)");
 
 
         if (rkcg->rkcg_rkb)

@@ -1461,15 +1461,6 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                 }
                 break;
 
-                case RD_KAFKA_OP_RESTART:
-                        /* On coordinator rebalance: 
-                         *  - stop fetching data
-                         *  - commit offsets
-                         *  - send JoinGroupRequest
-                         */
-                        // FIXME, see handle_Heartbeat
-                        break;
-
                 case RD_KAFKA_OP_TERMINATE:
                         rd_kafka_cgrp_terminate0(rkcg, rko);
                         rko = NULL; /* terminate0() takes ownership */

@@ -76,15 +76,12 @@ typedef enum {
                                       * * -> broker op: remove toppar from rkb*/
         RD_KAFKA_OP_REBALANCE,       /* broker thread -> app:
                                       * group rebalance */
-        RD_KAFKA_OP_STOP,            /* For generic use */
         RD_KAFKA_OP_TERMINATE,       /* For generic use */
-        RD_KAFKA_OP_RESTART,         /* For generic use */
         RD_KAFKA_OP_COORD_QUERY,     /* Query for coordinator */
         RD_KAFKA_OP_SUBSCRIBE,       /* New subscription */
         RD_KAFKA_OP_ASSIGN,          /* New assignment */
         RD_KAFKA_OP_GET_SUBSCRIPTION,/* Get current subscription */
         RD_KAFKA_OP_GET_ASSIGNMENT,  /* Get current assignment */
-        RD_KAFKA_OP_SYNCGROUP,       /* SyncGroup response */
 	RD_KAFKA_OP_THROTTLE,        /* Throttle info */
         RD_KAFKA_OP_CALLBACK,        /* Calls rko_op_cb */
 	RD_KAFKA_OP_NAME,            /* Request name */

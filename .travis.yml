@@ -7,6 +7,6 @@ os:
   - osx
 
 script:
-  ./configure && make all examples check
+  ./configure && make all examples check && make -C tests run_local
 
 sudo: false

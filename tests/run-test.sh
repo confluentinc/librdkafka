@@ -7,19 +7,20 @@ CYAN='\033[36m'
 CCLR='\033[0m'
 
 if [ -z "$1" ]; then
-    echo "Usage: $0 [-p] <00xx-...test> [modes..]"
+    echo "Usage: $0 [-..] <execfile> [modes..]"
     echo ""
     echo "  Modes: bare valgrind helgrind drd gdb"
     echo "  Options:"
-    echo "   -p    - run all tests in parallel"
+    echo "   -..    - Command arguments (pass thru)"
     exit 1
 fi
 
 ARGS=
-if [[ $1 == "-p" ]]; then
+
+while [[ $1 == -* ]]; do
     ARGS="$ARGS $1"
     shift
-fi
+done
 
 TEST=$1
 if [ ! -z "$2" ]; then

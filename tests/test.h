@@ -27,25 +27,82 @@
 extern int test_level;
 
 extern int test_seed;
-extern const RD_TLS char *test_curr;
-extern RD_TLS int64_t test_start;
-
+extern RD_TLS struct test *test_curr;
+extern int test_assert_on_fail;
+extern int tests_running_cnt;
 extern double test_timeout_multiplier;
 extern int  test_session_timeout_ms; /* Group session timeout */
 
-#define tmout_multip(msecs)  ((int)(((double)(msecs)) * test_timeout_multiplier))
+extern mtx_t test_mtx;
+
+#define TEST_LOCK()   mtx_lock(&test_mtx)
+#define TEST_UNLOCK() mtx_unlock(&test_mtx)
 
 
-#define TEST_FAIL(...) do {					\
+static __inline RD_UNUSED
+int tmout_multip (int msecs) {
+        int r;
+        TEST_LOCK();
+        r = (int)(((double)(msecs)) * test_timeout_multiplier);
+        TEST_UNLOCK();
+        return r;
+}
+
+
+
+#define _C_CLR "\033[0m"
+#define _C_RED "\033[31m"
+#define _C_GRN "\033[32m"
+#define _C_YEL "\033[33m"
+#define _C_BLU "\033[34m"
+#define _C_MAG "\033[35m"
+#define _C_CYA "\033[36m"
+
+struct test {
+        /**
+         * Setup
+         */
+        const char *name;    /**< e.g. Same as filename minus extension */
+        int (*mainfunc) (int argc, char **argv); /**< test's main func */
+        const int flags;     /**< Test flags */
+#define TEST_F_LOCAL   0x1   /**< Test is local, no broker requirement */
+
+        /**
+         * Runtime
+         */
+        int64_t start;
+        int64_t duration;
+        FILE   *stats_fp;
+        enum {
+                TEST_NOT_STARTED,
+                TEST_SKIPPED,
+                TEST_RUNNING,
+                TEST_PASSED,
+                TEST_FAILED,
+        } state;
+};
+
+
+#define TEST_FAIL(...) do {                                             \
+                int is_thrd = 0;                                        \
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
-			test_curr ? test_curr:"(n/a)",                  \
+			test_curr->name,                                \
                         __FILE__,__LINE__,__FUNCTION__);                \
 		fprintf(stderr, __VA_ARGS__);				\
 		fprintf(stderr, "\n");					\
                 fprintf(stderr, "### Test random seed was %i ###\033[0m\n",    \
                         test_seed);                                     \
-                assert(0);                                              \
-		exit(1);						\
+                TEST_LOCK();                                            \
+                test_curr->state = TEST_FAILED;                         \
+                if (test_curr->mainfunc) {                              \
+                        tests_running_cnt--;                            \
+                        is_thrd = 1;                                    \
+                }                                                       \
+                TEST_UNLOCK();                                          \
+                if (test_assert_on_fail || !is_thrd)                    \
+                        assert(0);                                      \
+                else                                                    \
+                        thrd_exit(0);                                   \
 	} while (0)
 
 
@@ -54,12 +111,24 @@ extern int  test_session_timeout_ms; /* Group session timeout */
 			TEST_FAIL(#call " failed: %s", rd_strerror(errno)); \
 	} while (0)
 
+#define TEST_WARN(...) do {                                              \
+                fprintf(stderr, "\033[33m[%-28s/%7.3fs] WARN: ",	\
+			test_curr->name,                                \
+			test_curr->start ?                              \
+			((float)(test_clock() -                         \
+                                 test_curr->start)/1000000.0f) : 0);    \
+		fprintf(stderr, __VA_ARGS__);				\
+                fprintf(stderr, "\033[0m");                             \
+	} while (0)
+
+#define TEST_SAY0(...)  fprintf(stderr, __VA_ARGS__)
 #define TEST_SAY(...) do {                                              \
 	if (test_level >= 2) {                                          \
                 fprintf(stderr, "\033[36m[%-28s/%7.3fs] ",		\
-			test_curr,					\
-			test_start ?					\
-			((float)(test_clock() - test_start)/1000000.0f) : 0); \
+			test_curr->name,                                \
+			test_curr->start ?                              \
+			((float)(test_clock() -                         \
+                                 test_curr->start)/1000000.0f) : 0);    \
 		fprintf(stderr, __VA_ARGS__);				\
                 fprintf(stderr, "\033[0m");                             \
         }                                                               \
@@ -131,6 +200,8 @@ typedef struct test_timing_s {
 	TEST_SAY("%s: duration %.3fms\n",				\
 		 (TIMING)->name, (float)(TIMING)->duration / 1000.0f);	\
 	} while (0)
+
+#define TIMING_DURATION(TIMING) ((TIMING)->duration)
 
 #ifndef _MSC_VER
 #define rd_sleep(S) sleep(S)

@@ -43,20 +43,105 @@ int test_seed = 0;
 
 static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
-static int  tests_run_in_parallel = 0;
-static int  tests_running_cnt = 0;
-const RD_TLS char *test_curr = NULL;
-static RD_TLS FILE *stats_fp;
-RD_TLS int64_t test_start = 0;
+       int  tests_running_cnt = 0;
+static int  test_concurrent_max = 20;
+int         test_assert_on_fail = 0;
 double test_timeout_multiplier  = 1.0;
 
 int  test_session_timeout_ms = 6000;
 
-static mtx_t test_lock;
+static int test_summary (int do_lock);
+
+/**
+ * Protects shared state, such as tests[]
+ */
+mtx_t test_mtx;
+
+static const char *test_states[] = {
+        "DNS",
+        "SKIPPED",
+        "RUNNING",
+        "PASSED",
+        "FAILED",
+};
+
+
+
+#define _TEST_DECL(NAME)                                                \
+        extern int main_ ## NAME (int, char **)
+#define _TEST(NAME,FLAGS)                                               \
+        { .name = # NAME, .mainfunc = main_ ## NAME, .flags = FLAGS }
+
+
+/**
+ * Declare all tests here
+ */
+_TEST_DECL(0001_multiobj);
+_TEST_DECL(0002_unkpart);
+_TEST_DECL(0003_msgmaxsize);
+_TEST_DECL(0004_conf);
+_TEST_DECL(0005_order);
+_TEST_DECL(0006_symbols);
+_TEST_DECL(0007_autotopic);
+_TEST_DECL(0008_reqacks);
+_TEST_DECL(0011_produce_batch);
+_TEST_DECL(0012_produce_consume);
+_TEST_DECL(0013_null_msgs);
+_TEST_DECL(0014_reconsume_191);
+_TEST_DECL(0015_offsets_seek);
+_TEST_DECL(0017_compression);
+_TEST_DECL(0018_cgrp_term);
+_TEST_DECL(0019_list_groups);
+_TEST_DECL(0020_destroy_hang);
+_TEST_DECL(0021_rkt_destroy);
+_TEST_DECL(0022_consume_batch);
+_TEST_DECL(0025_timers);
+
+
+/**
+ * Define all tests here
+ */
+struct test tests[] = {
+        /* Special MAIN test to hold over-all timings, etc. */
+        { .name = "<MAIN>", .flags = 0xff },
+        _TEST(0001_multiobj, 0),
+        _TEST(0002_unkpart, 0),
+        _TEST(0003_msgmaxsize, 0),
+        _TEST(0004_conf, TEST_F_LOCAL),
+        _TEST(0005_order, 0),
+        _TEST(0006_symbols, TEST_F_LOCAL),
+        _TEST(0007_autotopic, 0),
+        _TEST(0008_reqacks, 0),
+        _TEST(0011_produce_batch, 0),
+        _TEST(0012_produce_consume, 0),
+        _TEST(0013_null_msgs, 0),
+        _TEST(0014_reconsume_191, 0),
+        _TEST(0015_offsets_seek, 0),
+        _TEST(0017_compression, 0),
+        _TEST(0018_cgrp_term, 0),
+        _TEST(0019_list_groups, 0),
+        _TEST(0020_destroy_hang, 0),
+        _TEST(0021_rkt_destroy, 0),
+        _TEST(0022_consume_batch, 0),
+        _TEST(0025_timers, TEST_F_LOCAL),
+        { NULL }
+};
+
+
+RD_TLS struct test *test_curr = &tests[0];
+
 
 
 static void sig_alarm (int sig) {
-	TEST_FAIL("Test timed out");
+        int do_unlock;
+        TEST_SAY0(_C_RED "\nTEST WATCHDOG TRIGGERED\n" _C_CLR);
+        /* The lock may already be held */
+        do_unlock = mtx_trylock(&test_mtx) == thrd_success;
+        test_summary(0/*no-locks*/);
+        if (do_unlock)
+                TEST_UNLOCK();
+	TEST_FAIL("Test timed out (%d tests running)", tests_running_cnt);
+        assert(!*"test timeout");
 }
 
 static void test_error_cb (rd_kafka_t *rk, int err,
@@ -66,9 +151,12 @@ static void test_error_cb (rd_kafka_t *rk, int err,
 
 static int test_stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
                            void *opaque) {
-        if (stats_fp)
-                fprintf(stats_fp, "{\"instance\":\"%s\", \"stats\": %s}\n",
-                        rd_kafka_name(rk), json);
+        struct test *test = test_curr;
+        if (test->stats_fp)
+                fprintf(test->stats_fp,
+                        "{\"test\": \"%s\", \"instance\":\"%s\", "
+                        "\"stats\": %s}\n",
+                        test->name, rd_kafka_name(rk), json);
         return 0;
 }
 
@@ -109,6 +197,103 @@ const char *test_mk_topic_name (const char *suffix, int randomized) {
         return ret;
 }
 
+static void test_read_conf_file (const char *conf_path,
+                                 rd_kafka_conf_t *conf,
+                                 rd_kafka_topic_conf_t *topic_conf,
+                                 int *timeoutp) {
+        FILE *fp;
+	char buf[512];
+	int line = 0;
+
+#ifndef _MSC_VER
+	fp = fopen(conf_path, "r");
+#else
+	fp = NULL;
+	errno = fopen_s(&fp, conf_path, "r");
+#endif
+	if (!fp) {
+		if (errno == ENOENT) {
+			TEST_SAY("Test config file %s not found\n", conf_path);
+                        return;
+		} else
+			TEST_FAIL("Failed to read %s: errno %i",
+				  conf_path, errno);
+	}
+
+	while (fgets(buf, sizeof(buf)-1, fp)) {
+		char *t;
+		char *b = buf;
+		rd_kafka_conf_res_t res = RD_KAFKA_CONF_UNKNOWN;
+		char *name, *val;
+                char errstr[512];
+
+		line++;
+		if ((t = strchr(b, '\n')))
+			*t = '\0';
+
+		if (*b == '#' || !*b)
+			continue;
+
+		if (!(t = strchr(b, '=')))
+			TEST_FAIL("%s:%i: expected name=value format\n",
+				  conf_path, line);
+
+		name = b;
+		*t = '\0';
+		val = t+1;
+
+                if (!strcmp(name, "test.timeout.multiplier")) {
+                        TEST_LOCK();
+                        test_timeout_multiplier = strtod(val, NULL);
+                        TEST_UNLOCK();
+                        *timeoutp = tmout_multip((*timeoutp)*1000);
+                        res = RD_KAFKA_CONF_OK;
+                } else if (!strcmp(name, "test.topic.prefix")) {
+					rd_snprintf(test_topic_prefix, sizeof(test_topic_prefix),
+						"%s", val);
+				    res = RD_KAFKA_CONF_OK;
+                } else if (!strcmp(name, "test.topic.random")) {
+                        if (!strcmp(val, "true") ||
+                            !strcmp(val, "1"))
+                                test_topic_random = 1;
+                        else
+                                test_topic_random = 0;
+                        res = RD_KAFKA_CONF_OK;
+                } else if (!strcmp(name, "test.concurrent.max")) {
+                        TEST_LOCK();
+                        test_concurrent_max = strtod(val, NULL);
+                        TEST_UNLOCK();
+                        res = RD_KAFKA_CONF_OK;
+                } else if (!strncmp(name, "topic.", strlen("topic."))) {
+			name += strlen("topic.");
+                        if (topic_conf)
+                                res = rd_kafka_topic_conf_set(topic_conf,
+                                                              name, val,
+                                                              errstr,
+                                                              sizeof(errstr));
+                        else
+                                res = RD_KAFKA_CONF_OK;
+                        name -= strlen("topic.");
+                }
+
+                if (res == RD_KAFKA_CONF_UNKNOWN) {
+                        if (conf)
+                                res = rd_kafka_conf_set(conf,
+                                                        name, val,
+                                                        errstr, sizeof(errstr));
+                        else
+                                res = RD_KAFKA_CONF_OK;
+                }
+
+		if (res != RD_KAFKA_CONF_OK)
+			TEST_FAIL("%s:%i: %s\n",
+				  conf_path, line, errstr);
+	}
+
+	fclose(fp);
+}
+
+
 
 /**
  * Creates and sets up kafka configuration objects.
@@ -116,17 +301,12 @@ const char *test_mk_topic_name (const char *suffix, int randomized) {
  */
 void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		     int timeout) {
-	FILE *fp;
-	char buf[512];
-	int line = 0;
+        char buf[512];
 	const char *test_conf =
 #ifndef _MSC_VER
 		getenv("RDKAFKA_TEST_CONF") ? getenv("RDKAFKA_TEST_CONF") : 
 #endif
 		"test.conf";
-	char errstr[512];
-
-	test_init();
 
         if (conf) {
 #ifndef _MSC_VER
@@ -155,83 +335,9 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		*topic_conf = rd_kafka_topic_conf_new();
 
 	/* Open and read optional local test configuration file, if any. */
-#ifndef _MSC_VER
-	fp = fopen(test_conf, "r");
-#else
-	fp = NULL;
-	errno = fopen_s(&fp, test_conf, "r");
-#endif
-	if (!fp) {
-		if (errno == ENOENT)
-			TEST_FAIL("%s not found\n", test_conf);
-		else
-			TEST_FAIL("Failed to read %s: errno %i",
-				  test_conf, errno);
-	}
-
-	while (fgets(buf, sizeof(buf)-1, fp)) {
-		char *t;
-		char *b = buf;
-		rd_kafka_conf_res_t res = RD_KAFKA_CONF_UNKNOWN;
-		char *name, *val;
-
-		line++;
-		if ((t = strchr(b, '\n')))
-			*t = '\0';
-
-		if (*b == '#' || !*b)
-			continue;
-
-		if (!(t = strchr(b, '=')))
-			TEST_FAIL("%s:%i: expected name=value format\n",
-				  test_conf, line);
-
-		name = b;
-		*t = '\0';
-		val = t+1;
-
-                if (!strcmp(name, "test.timeout.multiplier")) {
-                        test_timeout_multiplier = strtod(val, NULL);
-                        timeout = tmout_multip(timeout*1000);
-                        res = RD_KAFKA_CONF_OK;
-                } else if (!strcmp(name, "test.topic.prefix")) {
-					rd_snprintf(test_topic_prefix, sizeof(test_topic_prefix),
-						"%s", val);
-				    res = RD_KAFKA_CONF_OK;
-                } else if (!strcmp(name, "test.topic.random")) {
-                        if (!strcmp(val, "true") ||
-                            !strcmp(val, "1"))
-                                test_topic_random = 1;
-                        else
-                                test_topic_random = 0;
-                        res = RD_KAFKA_CONF_OK;
-                } else if (!strncmp(name, "topic.", strlen("topic."))) {
-			name += strlen("topic.");
-                        if (topic_conf)
-                                res = rd_kafka_topic_conf_set(*topic_conf,
-                                                              name, val,
-                                                              errstr,
-                                                              sizeof(errstr));
-                        else
-                                res = RD_KAFKA_CONF_OK;
-                        name -= strlen("topic.");
-                }
-
-                if (res == RD_KAFKA_CONF_UNKNOWN) {
-                        if (conf)
-                                res = rd_kafka_conf_set(*conf,
-                                                        name, val,
-                                                        errstr, sizeof(errstr));
-                        else
-                                res = RD_KAFKA_CONF_OK;
-                }
-
-		if (res != RD_KAFKA_CONF_OK)
-			TEST_FAIL("%s:%i: %s\n",
-				  test_conf, line, errstr);
-	}
-
-	fclose(fp);
+        test_read_conf_file(test_conf,
+                            conf ? *conf : NULL,
+                            topic_conf ? *topic_conf : NULL, &timeout);
 
         if (timeout) {
                 /* Limit the test run time. */
@@ -278,7 +384,6 @@ void test_wait_exit (int timeout) {
  * Generate a "unique" test id.
  */
 uint64_t test_id_generate (void) {
-	test_init();
 	return (((uint64_t)rand()) << 32) | (uint64_t)rand();
 }
 
@@ -335,47 +440,54 @@ void test_msg_parse0 (const char *func, int line,
 
 
 struct run_args {
-        const char *testname;
-        int (*test_main) (int, char **);
+        struct test *test;
         int argc;
         char **argv;
 };
 
 static int run_test0 (struct run_args *run_args) {
+        struct test *test = run_args->test;
 	test_timing_t t_run;
 	int r;
         char stats_file[256];
 
         rd_snprintf(stats_file, sizeof(stats_file), "stats_%s_%"PRIu64".json",
-                    run_args->testname, test_id_generate());
-        if (!(stats_fp = fopen(stats_file, "w+")))
+                    test->name, test_id_generate());
+        if (!(test->stats_fp = fopen(stats_file, "w+")))
                 TEST_SAY("=== Failed to create stats file %s: %s ===\n",
                          stats_file, strerror(errno));
 
-	test_curr = run_args->testname;
+	test_curr = test;
 	TEST_SAY("================= Running test %s =================\n",
-		 run_args->testname);
-        if (stats_fp)
+		 test->name);
+        if (test->stats_fp)
                 TEST_SAY("==== Stats written to file %s ====\n", stats_file);
-	TIMING_START(&t_run, run_args->testname);
-	test_start = t_run.ts_start;
-	r = run_args->test_main(run_args->argc, run_args->argv);
+	TIMING_START(&t_run, test->name);
+        test->start = t_run.ts_start;
+	r = test->mainfunc(run_args->argc, run_args->argv);
 	TIMING_STOP(&t_run);
 
-	if (r)
+        TEST_LOCK();
+        test->duration = TIMING_DURATION(&t_run);
+	if (r) {
+                test->state = TEST_FAILED;
 		TEST_SAY("\033[31m"
 			 "================= Test %s FAILED ================="
 			 "\033[0m\n",
-			 run_args->testname);
-	else
+                         run_args->test->name);
+        } else {
+                test->state = TEST_PASSED;
 		TEST_SAY("\033[32m"
 			 "================= Test %s PASSED ================="
 			 "\033[0m\n",
-			 run_args->testname);
+                         run_args->test->name);
+        }
+        TEST_UNLOCK();
 
-        if (stats_fp) {
-                long pos = ftell(stats_fp);
-                fclose(stats_fp);
+        if (test->stats_fp) {
+                long pos = ftell(test->stats_fp);
+                fclose(test->stats_fp);
+                test->stats_fp = NULL;
                 /* Delete file if nothing was written */
                 if (pos == 0) {
 #ifndef _MSC_VER
@@ -399,9 +511,9 @@ static int run_test_from_thread (void *arg) {
 
 	run_test0(run_args);
 
-        mtx_lock(&test_lock);
+        TEST_LOCK();
         tests_running_cnt--;
-        mtx_unlock(&test_lock);
+        TEST_UNLOCK();
 
         free(run_args);
 
@@ -410,139 +522,272 @@ static int run_test_from_thread (void *arg) {
 
 
 
-static int run_test (const char *testname,
-                     int (*test_main) (int, char **),
-                     int argc, char **argv) {
-        int r = 0;
+static int run_test (struct test *test, int argc, char **argv) {
+        thrd_t thr;
+        struct run_args *run_args = calloc(1, sizeof(*run_args));
 
-        if (tests_run_in_parallel) {
-		thrd_t thr;
-                struct run_args *run_args = calloc(1, sizeof(*run_args));
-                run_args->testname = testname;
-                run_args->test_main = test_main;
-                run_args->argc = argc;
-                run_args->argv = argv;
+        run_args->test = test;
+        run_args->argc = argc;
+        run_args->argv = argv;
 
-                mtx_lock(&test_lock);
-                tests_running_cnt++;
-                mtx_unlock(&test_lock);
-
-		if (thrd_create(&thr, run_test_from_thread, run_args) !=
-		    thrd_success) {
-                        mtx_lock(&test_lock);
-                        tests_running_cnt--;
-                        mtx_unlock(&test_lock);
-
-                        TEST_FAIL("Failed to start thread for test %s\n",
-                                  testname);
-                }
-        } else {
-		struct run_args run_args = { .testname = testname,
-					     .test_main = test_main,
-					     .argc = argc,
-					     .argv = argv };
-
-		tests_running_cnt++;
-		r = run_test0(&run_args);
-		tests_running_cnt--;
-
-                /* Wait for everything to be cleaned up since broker
-                 * destroys are handled in its own thread. */
-                test_wait_exit(5);
-
-		test_curr = NULL;
+        TEST_LOCK();
+        while (tests_running_cnt >= test_concurrent_max) {
+                TEST_SAY("Too many tests running (%d > %d): waiting..\n",
+                         tests_running_cnt, test_concurrent_max);
+                TEST_UNLOCK();
+                rd_sleep(1);
+                TEST_LOCK();
         }
-        return r;
+        tests_running_cnt++;
+        test->state = TEST_RUNNING;
+        TEST_UNLOCK();
+
+        if (thrd_create(&thr, run_test_from_thread, run_args) != thrd_success) {
+                TEST_LOCK();
+                tests_running_cnt--;
+                test->state = TEST_FAILED;
+                TEST_UNLOCK();
+
+                TEST_FAIL("Failed to start thread for test %s\n",
+                          test->name);
+        }
+
+        return 0;
 }
 
+static void run_tests (const char *tests_to_run, int test_flags,
+                       int argc, char **argv) {
+        struct test *test;
+
+        for (test = tests ; test->name ; test++) {
+                char testnum[128];
+                char *t;
+                const char *skip_reason = NULL;
+
+                if (!test->mainfunc)
+                        continue;
+
+                /* Extract test number, as string */
+                strncpy(testnum, test->name, sizeof(testnum)-1);
+                testnum[sizeof(testnum)-1] = '\0';
+                if ((t = strchr(testnum, '_')))
+                        *t = '\0';
+
+                if ((test_flags && (test_flags & test->flags) != test_flags))
+                        skip_reason = "filtered due to test flags";
+
+                if (tests_to_run && !strstr(tests_to_run, testnum))
+                        skip_reason = "not included in TESTS list";
+
+                if (!skip_reason) {
+                        run_test(test, argc, argv);
+                } else {
+                        TEST_SAY("================= Skipping test %s (%s)"
+                                 "================\n", test->name, skip_reason);
+                        TEST_LOCK();
+                        test->state = TEST_SKIPPED;
+                        TEST_UNLOCK();
+                }
+        }
+
+
+}
+
+/**
+ * @brief Print summary for all tests.
+ *
+ * @returns the number of failed tests.
+ */
+static int test_summary (int do_lock) {
+        struct test *test;
+        FILE *report_fp;
+        char report_path[128];
+        time_t t;
+        struct tm *tm;
+        char datestr[64];
+        int64_t total_duration;
+        int tests_run = 0;
+        int tests_failed = 0;
+        int tests_passed = 0;
+
+        t = time(NULL);
+        tm = localtime(&t);
+
+        strftime(datestr, sizeof(datestr), "%Y%m%d%H%M%S", tm);
+        rd_snprintf(report_path, sizeof(report_path), "test_report_%s.json",
+                    datestr);
+
+        report_fp = fopen(report_path, "w+");
+        if (!report_fp)
+                TEST_WARN("Failed to create report file %s: %s\n",
+                          report_path, strerror(errno));
+        else
+                fprintf(report_fp,
+                        "{ \"date\": \"%s\", \"tests\": [", datestr);
+
+        printf("TEST SUMMARY\n"
+               "#==================================================================#\n");
+        if (do_lock)
+                TEST_LOCK();
+        for (test = tests ; test->name ; test++) {
+                const char *color;
+                int64_t duration;
+
+                if (!(duration = test->duration) && test->start > 0)
+                        duration = test_clock() - test->start;
+
+                if (test == tests) /* <MAIN> test accounts for total runtime */
+                        total_duration = duration;
+
+                switch (test->state)
+                {
+                case TEST_PASSED:
+                        color = _C_GRN;
+                        tests_passed++;
+                        tests_run++;
+                        break;
+                case TEST_FAILED:
+                        color = _C_RED;
+                        tests_failed++;
+                        tests_run++;
+                        break;
+                case TEST_RUNNING:
+                        color = _C_MAG;
+                        tests_run++;
+                        break;
+                case TEST_NOT_STARTED:
+                        color = _C_YEL;
+                        break;
+                default:
+                        color = _C_CYA;
+                        break;
+                }
+
+                printf("|%s %-40s | %10s | %7.3fs %s|\n",
+                       color,
+                       test->name, test_states[test->state],
+                       (double)duration/1000000.0, _C_CLR);
+
+                if (report_fp)
+                        fprintf(report_fp,
+                                "%s{"
+                                "\"name\": \"%s\", "
+                                "\"state\": \"%s\", "
+                                "\"duration\": %.3f"
+                                "}",
+                                test == tests ? "": ", ",
+                                test->name, test_states[test->state],
+                                (double)duration/1000000.0);
+        }
+        if (do_lock)
+                TEST_UNLOCK();
+
+        printf("#==================================================================#\n");
+
+        if (report_fp) {
+                fprintf(report_fp,
+                        "], "
+                        "\"tests_run\": %d, "
+                        "\"tests_passed\": %d, "
+                        "\"tests_failed\": %d, "
+                        "\"duration\": %.3f"
+                        "}\n",
+                        tests_run, tests_passed, tests_failed,
+                        (double)total_duration/1000000.0);
+
+                fclose(report_fp);
+                TEST_SAY("# Test report written to %s\n", report_path);
+        }
+
+        return tests_failed;
+}
+
+
 int main(int argc, char **argv) {
-	int r = 0;
         const char *tests_to_run = NULL; /* all */
-        int i;
+        int test_flags = 0;
+        int i, r;
 	test_timing_t t_all;
 
-	mtx_init(&test_lock, mtx_plain);
+	mtx_init(&test_mtx, mtx_plain);
+
+        test_init();
 
 #ifndef _MSC_VER
         tests_to_run = getenv("TESTS");
 #endif
 
         for (i = 1 ; i < argc ; i++) {
-			if (!strcmp(argv[i], "-p"))
-				tests_run_in_parallel = 1;
-			else if (i == 1)
-				tests_to_run = argv[i];
+                if (!strncmp(argv[i], "-p", 2) && strlen(argv[i]) > 2)
+                        test_concurrent_max = strtod(argv[i]+2, NULL);
+                else if (!strcmp(argv[i], "-l"))
+                        test_flags |= TEST_F_LOCAL;
+                else if (!strcmp(argv[i], "-a"))
+                        test_assert_on_fail = 1;
+                else if (*argv[i] != '-')
+                        tests_to_run = argv[i];
                 else {
                         printf("Unknown option: %s\n"
                                "\n"
-							   "Usage: %s [options] [<test-match-substr>]\n"
+                               "Usage: %s [options] [<test-match-substr>]\n"
                                "Options:\n"
-                               "  -p     Run tests in parallel\n"
+                               "  -p<N>  Run N tests in parallel\n"
+                               "  -l     Only run local tests (no broker needed)\n"
+                               "  -a     Assert on failures\n"
                                "\n",
                                argv[0], argv[i]);
                         exit(1);
                 }
         }
 
-	test_curr = "<MAIN>";
-	test_start = test_clock();
+        test_curr = &tests[0];
+        test_curr->state = TEST_PASSED;
+        test_curr->start = test_clock();
 
 	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
+        TEST_SAY("Test filter: %s\n",
+                 (test_flags & TEST_F_LOCAL) ?
+                 "local tests only" : "no filter");
+        TEST_SAY("Action on test failure: %s\n",
+                 test_assert_on_fail ? "assert crash" : "continue other tests");
 
-#define RUN_TEST(NAME) do { \
-	extern int main_ ## NAME (int, char **); \
-        if (!tests_to_run || strstr(# NAME, tests_to_run)) {     \
-                r |= run_test(# NAME, main_ ## NAME, argc, argv);	\
-        } else { \
-                TEST_SAY("================= Skipping test %s "	\
-			 "================\n", # NAME );	\
-        } \
-	} while (0)
+        TIMING_START(&t_all, "ALL-TESTS");
 
-	TIMING_START(&t_all, "ALL-TESTS");
-	RUN_TEST(0001_multiobj);
-	RUN_TEST(0002_unkpart);
-	RUN_TEST(0003_msgmaxsize);
-	RUN_TEST(0004_conf);
-	RUN_TEST(0005_order);
-	RUN_TEST(0006_symbols);
-	RUN_TEST(0007_autotopic);
-	RUN_TEST(0008_reqacks);
-	RUN_TEST(0011_produce_batch);
-	RUN_TEST(0012_produce_consume);
-        RUN_TEST(0013_null_msgs);
-        RUN_TEST(0014_reconsume_191);
-	RUN_TEST(0015_offsets_seek);
-	RUN_TEST(0017_compression);
-	RUN_TEST(0018_cgrp_term);
-        RUN_TEST(0019_list_groups);
-        RUN_TEST(0020_destroy_hang);
-        RUN_TEST(0021_rkt_destroy);
-        RUN_TEST(0022_consume_batch);
-        RUN_TEST(0025_timers);
+        run_tests(tests_to_run, test_flags, argc, argv);
 
-        if (tests_run_in_parallel) {
-                mtx_lock(&test_lock);
-                while (tests_running_cnt > 0) {
-                        TEST_SAY("%d test(s) still running\n",
-                                 tests_running_cnt);
-                        mtx_unlock(&test_lock);
-                        rd_sleep(1);
-                        mtx_lock(&test_lock);
-                }
-                mtx_unlock(&test_lock);
+        TEST_LOCK();
+        while (tests_running_cnt > 0) {
+                struct test *test;
+
+                TEST_SAY("%d test(s) running:", tests_running_cnt);
+                for (test = tests ; test->name ; test++)
+                        if (test->state == TEST_RUNNING)
+                                TEST_SAY0(" %s", test->name);
+                TEST_SAY0("\n");
+                TEST_UNLOCK();
+
+                rd_sleep(1);
+                TEST_LOCK();
         }
 
 	TIMING_STOP(&t_all);
 
+        test_curr = &tests[0];
+        test_curr->duration = test_clock() - test_curr->start;
+
+        TEST_UNLOCK();
+
         /* Wait for everything to be cleaned up since broker destroys are
 	 * handled in its own thread. */
-	test_wait_exit(tests_run_in_parallel ? 10 : 5);
+	test_wait_exit(10);
+
+        r = test_summary(1/*lock*/) ? 1 : 0;
 
 	/* If we havent failed at this point then
 	 * there were no threads leaked */
+        if (r == 0)
+                TEST_SAY("\n============== ALL TESTS PASSED ==============\n");
 
-	TEST_SAY("\n============== ALL TESTS PASSED ==============\n");
 	return r;
 }
 

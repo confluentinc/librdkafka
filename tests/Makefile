@@ -19,15 +19,21 @@ all: $(BIN) run_par
 
 run_par: $(BIN)
 	@echo "Running tests in parallel"
-	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh ./$(BIN)
+	LD_LIBRARY_PATH=../src:../src-cpp \
+	DYLD_LIBRARY_PATH=../src:../src-cpp \
+	./run-test.sh -p5 ./$(BIN)
 
 run_seq: $(BIN)
 	@echo "Running tests sequentially"
-	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh -p1 ./$(BIN)
+	LD_LIBRARY_PATH=../src:../src-cpp \
+	DYLD_LIBRARY_PATH=../src:../src-cpp \
+	./run-test.sh -p1 ./$(BIN)
 
 run_local: $(BIN)
 	@echo "Running local broker-less tests"
-	LD_LIBRARY_PATH=../src:../src-cpp ./run-test.sh -l ./$(BIN)
+	LD_LIBRARY_PATH=../src:../src-cpp \
+	DYLD_LIBRARY_PATH=../src:../src-cpp \
+	./run-test.sh -p5 -l ./$(BIN)
 
 build: $(BIN)
 

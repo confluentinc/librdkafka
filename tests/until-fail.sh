@@ -39,7 +39,12 @@ while true ; do
             echo "##################################################"
             echo "##################################################"
 
-            TESTS=$t ./run-test.sh $ARGS ./merged $mode || (echo "Failed on iteration $iter, test $t, mode $mode" ; exit 1)
+            if [[ $t == all ]]; then
+                unset TESTS
+            else
+                export TESTS=$t
+            fi
+            ./run-test.sh $ARGS ./merged $mode || (echo "Failed on iteration $iter, test $t, mode $mode" ; exit 1)
         done
     done
 

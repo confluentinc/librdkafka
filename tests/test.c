@@ -216,8 +216,8 @@ static void test_read_conf_file (const char *conf_path,
 			TEST_SAY("Test config file %s not found\n", conf_path);
                         return;
 		} else
-			TEST_FAIL("Failed to read %s: errno %i",
-				  conf_path, errno);
+			TEST_FAIL("Failed to read %s: %s",
+				  conf_path, strerror(errno));
 	}
 
 	while (fgets(buf, sizeof(buf)-1, fp)) {
@@ -525,6 +525,7 @@ static int run_test_from_thread (void *arg) {
 static int run_test (struct test *test, int argc, char **argv) {
         thrd_t thr;
         struct run_args *run_args = calloc(1, sizeof(*run_args));
+        int wait_cnt = 0;
 
         run_args->test = test;
         run_args->argc = argc;
@@ -532,8 +533,11 @@ static int run_test (struct test *test, int argc, char **argv) {
 
         TEST_LOCK();
         while (tests_running_cnt >= test_concurrent_max) {
-                TEST_SAY("Too many tests running (%d > %d): waiting..\n",
-                         tests_running_cnt, test_concurrent_max);
+                if (!(wait_cnt++ % 10))
+                        TEST_SAY("Too many tests running (%d >= %d): "
+                                 "postponing %s start...\n",
+                                 tests_running_cnt, test_concurrent_max,
+                                 test->name);
                 TEST_UNLOCK();
                 rd_sleep(1);
                 TEST_LOCK();

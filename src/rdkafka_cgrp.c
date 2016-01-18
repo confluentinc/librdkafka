@@ -1048,7 +1048,7 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 		     rkcg->rkcg_assignment ? rkcg->rkcg_assignment->cnt : 0,
 		     rd_kafka_err2str(err));
 
-	
+
 	switch (err)
 	{
 	case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
@@ -1117,12 +1117,18 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
 	if (leave_group)
 		rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN;
 
-	rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
 
-        /* Remove assignment, if any. (async) */
-	if (!rd_kafka_rebalance_op(rkcg, RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
-				   rkcg->rkcg_assignment))
-		rd_kafka_cgrp_unassign(rkcg);
+
+        /* Remove assignment (async), if any. If there is already an
+         * unassign in progress we dont need to bother. */
+        if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
+                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
+
+                if (!rd_kafka_rebalance_op(rkcg,
+                                           RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
+                                           rkcg->rkcg_assignment))
+                        rd_kafka_cgrp_unassign(rkcg);
+        }
 
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_SUBSCRIPTION;
 
@@ -1203,10 +1209,8 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
         else
                 rd_kafka_cgrp_unassign(rkcg);
 
-        /* If there were no toppars attached the cgrp
-         * can be terminated right away. */
-        if (rd_list_empty(&rkcg->rkcg_toppars))
-                rd_kafka_cgrp_terminated(rkcg);
+        /* Try to terminate right away if all preconditions are met. */
+        rd_kafka_cgrp_try_terminate(rkcg);
 }
 
 

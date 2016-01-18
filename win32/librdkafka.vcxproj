@@ -199,6 +199,7 @@
     <ClInclude Include="..\src\tinycthread.h" />
     <ClInclude Include="..\src\rdwin32.h" />
     <ClInclude Include="..\src\win32_config.h" />
+    <ClInclude Include="..\src\xxhash.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\rdaddr.c" />
@@ -230,6 +231,7 @@
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\snappy.c" />
     <ClCompile Include="..\src\tinycthread.c" />
+    <ClCompile Include="..\src\xxhash.c" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\LICENSE..txt" />

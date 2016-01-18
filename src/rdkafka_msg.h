@@ -38,8 +38,8 @@
  */
 #define RD_KAFKA_MSG_ATTR_GZIP             (1 << 0)
 #define RD_KAFKA_MSG_ATTR_SNAPPY           (1 << 1)
-#define RD_KAFKA_MSG_ATTR_LZ4              (1 << 2)
-#define RD_KAFKA_MSG_ATTR_COMPRESSION_MASK 0x7
+#define RD_KAFKA_MSG_ATTR_LZ4              (3)
+#define RD_KAFKA_MSG_ATTR_COMPRESSION_MASK 0x3
 #define RD_KAFKA_MSG_ATTR_CREATE_TIME      (0 << 3)
 #define RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME  (1 << 3)
 

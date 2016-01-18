@@ -773,6 +773,8 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"rxerrs\":%"PRIu64", "
                            "\"rxcorriderrs\":%"PRIu64", "
                            "\"rxpartial\":%"PRIu64", "
+                           "\"zbuf_grow\":%"PRIu64", "
+                           "\"buf_grow\":%"PRIu64", "
 			   "\"rtt\": {"
 			   " \"min\":%"PRId64","
 			   " \"max\":%"PRId64","
@@ -808,6 +810,8 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rd_atomic64_get(&rkb->rkb_c.rx_err),
 			   rd_atomic64_get(&rkb->rkb_c.rx_corrid_err),
 			   rd_atomic64_get(&rkb->rkb_c.rx_partial),
+                           rd_atomic64_get(&rkb->rkb_c.zbuf_grow),
+                           rd_atomic64_get(&rkb->rkb_c.buf_grow),
 			   rtt.ra_v.minv,
 			   rtt.ra_v.maxv,
 			   rtt.ra_v.avg,

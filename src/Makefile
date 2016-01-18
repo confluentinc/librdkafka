@@ -7,6 +7,7 @@ LIBVER=		1
 SRCS_$(WITH_SASL) += rdkafka_sasl.c
 SRCS_$(WITH_SNAPPY) += snappy.c
 SRCS_$(WITH_ZLIB) += rdgz.c
+SRCS_$(WITH_LZ4) += xxhash.c
 
 SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_conf.c rdkafka_timer.c rdkafka_offset.c \

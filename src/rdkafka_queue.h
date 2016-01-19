@@ -140,7 +140,7 @@ void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         rd_kafka_assert(NULL, rkq->rkq_flags & RD_KAFKA_Q_F_READY);
 	TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
         rkq->rkq_qlen--;
-        rkq->rkq_qlen -= rko->rko_len;
+        rkq->rkq_qsize -= rko->rko_len;
 }
 
 /**

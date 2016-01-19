@@ -1341,8 +1341,10 @@ err:
                 rd_kafka_cgrp_op(rkcg, NULL, NULL, RD_KAFKA_OP_COORD_QUERY,
                                  ErrorCode);
                 /* Schedule a retry */
-                rd_kafka_buf_keep(request);
-                rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+		if (ErrorCode != RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP) {
+			rd_kafka_buf_keep(request);
+			rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+		}
                 return;
         }
 

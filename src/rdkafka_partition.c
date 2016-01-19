@@ -123,16 +123,24 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
         rd_atomic32_set(&rktp->rktp_version, 1);
 
 
-	/* FIXME: Use a global timer to collect offsets for all partitions */
+        /* Consumer: If statistics is available we query the oldest offset
+         * of each partition.
+         * Since the oldest offset only moves on log retention, we cap this
+         * value on the low end to a reasonable value to avoid flooding
+         * the brokers with OffsetRequests when our statistics interval is low.
+         * FIXME: Use a global timer to collect offsets for all partitions */
         if (rktp->rktp_rkt->rkt_rk->rk_conf.stats_interval_ms > 0 &&
             rkt->rkt_rk->rk_type == RD_KAFKA_CONSUMER &&
-            rktp->rktp_partition != RD_KAFKA_PARTITION_UA)
+            rktp->rktp_partition != RD_KAFKA_PARTITION_UA) {
+                int intvl = rkt->rkt_rk->rk_conf.stats_interval_ms;
+                if (intvl < 10 * 1000 /* 10s */)
+                        intvl = 10 * 1000;
 		rd_kafka_timer_start(&rkt->rkt_rk->rk_timers,
 				     &rktp->rktp_consumer_lag_tmr,
-				     rktp->rktp_rkt->rkt_rk->
-				     rk_conf.stats_interval_ms * 1000,
+                                     intvl * 1000,
 				     rd_kafka_toppar_consumer_lag_tmr_cb,
 				     rktp);
+        }
 
         rktp->rktp_s_rkt = rd_kafka_topic_keep(rkt);
 

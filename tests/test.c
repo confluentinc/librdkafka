@@ -160,6 +160,17 @@ static int test_stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
         return 0;
 }
 
+
+void test_timeout_set (int timeout) {
+        /* Limit the test run time. */
+        TEST_SAY("Setting test timeout to %ds\n", timeout);
+#ifndef _MSC_VER
+        alarm(timeout);
+        signal(SIGALRM, sig_alarm);
+#endif
+}
+
+
 static void test_init (void) {
 	int seed;
 #ifndef _MSC_VER
@@ -339,13 +350,8 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
                             conf ? *conf : NULL,
                             topic_conf ? *topic_conf : NULL, &timeout);
 
-        if (timeout) {
-                /* Limit the test run time. */
-#ifndef _MSC_VER
-                alarm(timeout);
-                signal(SIGALRM, sig_alarm);
-#endif
-        }
+        if (timeout)
+                test_timeout_set(timeout);
 }
 
 
@@ -755,6 +761,8 @@ int main(int argc, char **argv) {
         TEST_SAY("Action on test failure: %s\n",
                  test_assert_on_fail ? "assert crash" : "continue other tests");
 
+        test_timeout_set(20);
+
         TIMING_START(&t_all, "ALL-TESTS");
 
         run_tests(tests_to_run, test_flags, argc, argv);
@@ -826,7 +834,7 @@ rd_kafka_t *test_create_producer (void) {
 	rd_kafka_conf_t *conf;
 	char errstr[512];
 
-	test_conf_init(&conf, NULL, 20);
+	test_conf_init(&conf, NULL, 0);
 
 	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
 
@@ -852,7 +860,7 @@ rd_kafka_topic_t *test_create_topic (rd_kafka_t *rk,
 	va_list ap;
 	const char *name, *val;
 
-	test_conf_init(NULL, &topic_conf, 20);
+	test_conf_init(NULL, &topic_conf, 0);
 
 	va_start(ap, topic);
 	while ((name = va_arg(ap, const char *)) &&
@@ -879,7 +887,7 @@ rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
 	va_list ap;
 	const char *name, *val;
 
-	test_conf_init(NULL, &topic_conf, 20);
+	test_conf_init(NULL, &topic_conf, 0);
 
 	va_start(ap, topic);
 	while ((name = va_arg(ap, const char *)) &&
@@ -1032,7 +1040,7 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 	char errstr[512];
 	char tmp[64];
 
-	test_conf_init(&conf, NULL, 20);
+	test_conf_init(&conf, NULL, 0);
 
         if (group_id) {
                 if (rd_kafka_conf_set(conf, "group.id", group_id,
@@ -1069,7 +1077,7 @@ rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
 	rd_kafka_topic_t *rkt;
 	rd_kafka_topic_conf_t *topic_conf;
 
-	test_conf_init(NULL, &topic_conf, 20);
+	test_conf_init(NULL, &topic_conf, 0);
 
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)

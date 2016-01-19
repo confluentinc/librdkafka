@@ -139,6 +139,7 @@ static __inline RD_UNUSED
 void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         rd_kafka_assert(NULL, rkq->rkq_flags & RD_KAFKA_Q_F_READY);
 	TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
+	rd_dassert(rkq->rkq_qlen > 0 && rkq->rkq_qsize >= rko->rko_len);
         rkq->rkq_qlen--;
         rkq->rkq_qsize -= rko->rko_len;
 }
@@ -147,7 +148,6 @@ void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
  * Concat all elements of 'srcq' onto tail of 'rkq'.
  * 'rkq' will be be locked (if 'do_lock'==1), but 'srcq' will not.
  * NOTE: 'srcq' will be reset.
-is not in a usable state after this call.
  *
  * Locality: any thread.
  */

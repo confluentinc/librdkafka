@@ -6,5 +6,5 @@ set -e
 ./configure --clean
 #export CFLAGS='-std=c99 -pedantic -Wshadow'
 #export CXXFLAGS='-std=c++98 -pedantic'
-./configure --enable-werror --disable-optimization
+./configure --enable-devel --enable-werror --disable-optimization
             #--enable-sharedptr-debug #--enable-refcnt-debug

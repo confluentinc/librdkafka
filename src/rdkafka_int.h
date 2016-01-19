@@ -68,6 +68,13 @@ typedef struct rd_ikafka_s rd_ikafka_t;
                                        (rk), "assert: " # cond);        \
         } while (0)
 
+/* Debug assert, only enabled with --enable-devel */
+#if ENABLE_DEVEL == 1
+#define rd_dassert(cond) rd_kafka_assert(NULL, cond)
+#else
+#define rd_dassert(cond)  do {} while (0)
+#endif
+
 void
 RD_NORETURN
 rd_kafka_crash (const char *file, int line, const char *function,

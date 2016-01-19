@@ -240,20 +240,22 @@ void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
 			rd_kafka_log0(rk,NULL,LOG_DEBUG,fac,__VA_ARGS__); \
 	} while (0)
 
-#define rd_rkb_log(rkb,level,fac,...) do {                             \
+/* NOTE: The local copy of _logname is needed due rkb_logname_lock lock-ordering
+ *       when logging another broker's name in the message. */
+#define rd_rkb_log(rkb,level,fac,...) do {				\
+		char _logname[RD_KAFKA_NODENAME_SIZE];			\
                 mtx_lock(&(rkb)->rkb_logname_lock);                     \
-                rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_logname,        \
-                              level, fac, __VA_ARGS__);                 \
+		strncpy(_logname, rkb->rkb_logname, sizeof(_logname)-1); \
+		_logname[RD_KAFKA_NODENAME_SIZE-1] = '\0';		\
                 mtx_unlock(&(rkb)->rkb_logname_lock);                   \
+		rd_kafka_log0((rkb)->rkb_rk, _logname,			\
+                              level, fac, __VA_ARGS__);                 \
         } while (0)
 
 #define rd_rkb_dbg(rkb,ctx,fac,...) do {				\
 		if (unlikely((rkb)->rkb_rk->rk_conf.debug &		\
 			     (RD_KAFKA_DBG_ ## ctx))) {			\
-                        mtx_lock(&(rkb)->rkb_logname_lock);             \
-			rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_logname, \
-				      LOG_DEBUG, fac, __VA_ARGS__);     \
-                        mtx_unlock(&(rkb)->rkb_logname_lock);           \
+			rd_rkb_log(rkb, LOG_DEBUG, fac, __VA_ARGS__);	\
                 }                                                       \
 	} while (0)
 

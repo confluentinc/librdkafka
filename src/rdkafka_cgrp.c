@@ -664,16 +664,22 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
                         shptr_rd_kafka_toppar_t *s_rktp = rktpar->_private;
                         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
 
-                        rd_kafka_assert(rkcg->rkcg_rk, !rktp->rktp_assigned);
-
 			if (!RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset))
 				rd_kafka_offset_store0(rktp, rktpar->offset, 1);
 
-			rd_kafka_toppar_op_fetch_start(rktp, rktpar->offset,
-                                                       &rkcg->rkcg_q, NULL);
+			if (!rktp->rktp_assigned) {
+				rktp->rktp_assigned = 1;
+				rkcg->rkcg_assigned_cnt++;
 
-                        rktp->rktp_assigned = 1;
-			rkcg->rkcg_assigned_cnt++;
+				/* Start fetcher for partition */
+				rd_kafka_toppar_op_fetch_start(rktp, rktpar->offset,
+							       &rkcg->rkcg_q, NULL);
+			} else {
+
+				/* Fetcher already started, just do seek to update offset */
+				rd_kafka_toppar_op_seek(rktp, rktpar->offset, NULL);
+
+			}
                 }
         }
 }

@@ -1941,7 +1941,7 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
         if (rk->rk_internal_rkb)
                 rd_kafka_broker_dump(fp, rk->rk_internal_rkb, locks);
         if (locks)
-                mtx_lock(&rk->rk_internal_rkb_lock);
+                mtx_unlock(&rk->rk_internal_rkb_lock);
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_kafka_broker_dump(fp, rkb, locks);

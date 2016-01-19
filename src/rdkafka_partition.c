@@ -1790,6 +1790,7 @@ rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
         memset(rktpar, 0, sizeof(*rktpar));
         rktpar->topic = rd_strdup(topic);
         rktpar->partition = partition;
+	rktpar->offset = RD_KAFKA_OFFSET_INVALID;
         rktpar->_private = _private;
 
         return rktpar;
@@ -1981,7 +1982,7 @@ int rd_kafka_topic_partition_list_set_offsets (
 			     is_commit ? "committing" : "setting",
 			     from_rktp ? "stored" : "default", rktpar->offset);
 
-		if (rktpar->offset >= 0)
+		if (!RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset))
 			valid_cnt++;
         }
 

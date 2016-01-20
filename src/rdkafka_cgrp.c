@@ -969,15 +969,17 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                 shptr_rd_kafka_toppar_t *s_rktp;
 
                 rktpar = &assignment->elems[i];
+
+                /* Use existing toppar if set */
+                if (rktpar->_private)
+                        continue;
+
                 s_rktp = rd_kafka_toppar_get2(rkcg->rkcg_rk,
                                               rktpar->topic,
                                               rktpar->partition,
                                               0/*no-ua*/, 1/*create-on-miss*/);
-                if (!s_rktp)
-                        continue;
-
-		rd_kafka_assert(NULL, !rktpar->_private);
-                rktpar->_private = s_rktp;
+                if (s_rktp)
+                        rktpar->_private = s_rktp;
         }
 
 

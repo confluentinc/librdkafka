@@ -178,7 +178,8 @@ RdKafka::offset_commit_cb_trampoline (
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
   std::vector<RdKafka::TopicPartition*> offsets;
 
-  c_parts_to_partitions(c_offsets, offsets);
+  if (c_offsets)
+    c_parts_to_partitions(c_offsets, offsets);
 
   handle->offset_commit_cb_->
       offset_commit_cb(static_cast<RdKafka::ErrorCode>(err), offsets);

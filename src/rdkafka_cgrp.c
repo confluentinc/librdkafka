@@ -1070,13 +1070,16 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 	case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
 	case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
 	default:
-		rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
 
-		/* Trigger rebalance_cb, if configured */
-		if (!rd_kafka_rebalance_op(rkcg,
-					   RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
-					   rkcg->rkcg_assignment))
-			rd_kafka_cgrp_unassign(rkcg);
+                if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
+                        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
+
+                        /* Trigger rebalance_cb, if configured */
+                        if (!rd_kafka_rebalance_op(
+                                    rkcg, RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
+                                    rkcg->rkcg_assignment))
+                                rd_kafka_cgrp_unassign(rkcg);
+                }
 		break;
 	}
 }

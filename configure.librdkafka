@@ -73,8 +73,8 @@ function checks {
     # Check if strndup() is available (isn't on Solaris 10)
     mkl_compile_check "strndup" "HAVE_STRNDUP" disable CC "" \
 "#include <string.h>
-int main (void) {
-   return strndup("hi", 2) ? 0 : 1;
+int foo (void) {
+   return strndup(\"hi\", 2) ? 0 : 1;
 }"
 
     # Figure out what tool to use for dumping public symbols.

@@ -58,7 +58,7 @@
 
 static bool run = true;
 static bool exit_eof = false;
-
+static int verbosity = 1;
 
 class Assignment {
 
@@ -405,7 +405,8 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
     case RdKafka::ERR_NO_ERROR:
       {
         /* Real message */
-        std::cerr << now() << ": Read msg from " << msg->topic_name() <<
+	if (verbosity > 2)
+	  std::cerr << now() << ": Read msg from " << msg->topic_name() <<
             " [" << (int)msg->partition() << "]  at offset " <<
             msg->offset() << std::endl;
 
@@ -426,8 +427,11 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
           a->maxOffset = msg->offset();
       
         if (msg->key()) {
-          std::cerr << now() << ": Key: " << *msg->key() << std::endl;
+	  if (verbosity >= 2)
+	    std::cerr << now() << ": Key: " << *msg->key() << std::endl;
         }
+
+	if (verbosity >= 2)
         fprintf(stderr, "%.*s\n",
                 static_cast<int>(msg->len()),
                 static_cast<const char *>(msg->payload()));
@@ -495,10 +499,10 @@ private:
     part_list_json(partitions);
     std::cout << "] }" << std::endl;
 
-    if (err == RdKafka::ERR__REVOKE_PARTITIONS)
-      consumer->unassign();
-    else
+    if (err == RdKafka::ERR__ASSIGN_PARTITIONS)
       consumer->assign(partitions);
+    else
+      consumer->unassign();
   }
 };
 
@@ -521,7 +525,6 @@ class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
         "\"offsets\": [ ";
     assert(offsets.size() > 0);
     for (unsigned int i = 0 ; i < offsets.size() ; i++) {
-      assert(err != 0 || offsets[i]->offset() > -1);
       std::cout << (i == 0 ? "" : ", ") << "{ " <<
           " \"topic\": \"" << offsets[i]->topic() << "\", " <<
           " \"partition\": " << offsets[i]->partition() << ", " <<
@@ -607,6 +610,11 @@ int main (int argc, char **argv) {
 	  std::cerr << now() << ": " << errstr << std::endl;
 	  exit(1);
 	}
+      } else if (!strcmp(name, "--assignment-strategy")) {
+	if  (conf->set("partition.assignment.strategy", val, errstr)) {
+	  std::cerr << now() << ": " << errstr << std::endl;
+	  exit(1);
+	}
       } else if (!strcmp(name, "--debug")) {
 	conf->set("debug", val, errstr);
       } else {
@@ -624,7 +632,11 @@ int main (int argc, char **argv) {
       else if (!strcmp(name, "--enable-autocommit")) {
 	state.consumer.useAutoCommit = true;
 	conf->set("enable.auto.commit", "true", errstr);
-      } else {
+      } else if (!strcmp(name, "-v"))
+	verbosity++;
+      else if (!strcmp(name, "-q"))
+	verbosity--;
+      else {
 	std::cerr << now() << ": Unknown option or missing argument to " << name << std::endl;
 	exit(1);
       }

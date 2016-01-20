@@ -2947,6 +2947,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				rd_kafka_q_destroy(&tmp_opq);
 				rd_kafka_toppar_destroy(s_rktp);/* from get()*/
 				rd_kafka_buf_parse_fail(rkbuf, "messageset handle failed");
+                                RD_NOTREACHED();
 			}
 
 			/* Concat all messages onto the real op queue */

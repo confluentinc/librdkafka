@@ -75,6 +75,10 @@ typedef struct rd_ikafka_s rd_ikafka_t;
 #define rd_dassert(cond)  do {} while (0)
 #endif
 
+
+/** Assert if reached */
+#define RD_NOTREACHED() rd_kafka_assert(NULL, !*"/* NOTREACHED */ violated")
+
 void
 RD_NORETURN
 rd_kafka_crash (const char *file, int line, const char *function,

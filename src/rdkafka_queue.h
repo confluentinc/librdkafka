@@ -177,8 +177,7 @@ void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 /**
  * Prepend all elements of 'srcq' onto head of 'rkq'.
  * 'rkq' will be be locked (if 'do_lock'==1), but 'srcq' will not.
- *
- * NOTE: 'srcq' is not in a usable state after this call.
+ * 'srcq' will be reset.
  *
  * Locality: any thread.
  */
@@ -192,8 +191,10 @@ void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
                 TAILQ_CONCAT(&srcq->rkq_q, &rkq->rkq_q, rko_link);
                 /* Move srcq to rkq */
                 TAILQ_MOVE(&rkq->rkq_q, &srcq->rkq_q, rko_link);
-                srcq->rkq_qlen += rkq->rkq_qlen;
-                srcq->rkq_qsize += rkq->rkq_qsize;
+                rkq->rkq_qlen += srcq->rkq_qlen;
+                rkq->rkq_qsize += srcq->rkq_qsize;
+
+                rd_kafka_q_reset(srcq);
 	} else
 		rd_kafka_q_prepend0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
                                     srcq->rkq_fwdq ? srcq->rkq_fwdq : srcq,

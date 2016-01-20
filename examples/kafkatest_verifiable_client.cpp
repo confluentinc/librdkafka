@@ -41,6 +41,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <assert.h>
+#include <ctype.h>
 
 #ifdef _MSC_VER
 #include "../win32/wingetopt.h"
@@ -611,6 +612,27 @@ int main (int argc, char **argv) {
 	  exit(1);
 	}
       } else if (!strcmp(name, "--assignment-strategy")) {
+	/* The system tests pass the Java class name rather than
+	 * the configuration value. Fix it.
+	 * "org.apache.kafka.clients.consumer.RangeAssignor"
+	 *  -> "Range" -> "range"
+	 */
+	char tmp[128];
+	if (!strncmp(val, "org.apache", strlen("org.apache"))) {
+	  const char *t = rindex(val, '.') + 1;
+	  const char *t2 = strstr(t, "Assignor");
+	  char *t3;
+	  if (!t2)
+	    t2 = t + strlen(t);
+	  strncpy(tmp, t, (int)(t2-t));
+	  tmp[(int)(t2-t)] = '\0';
+	  for (t3 = tmp ; *t3 ; t3++)
+	    *t3 = tolower(*t3);
+	  std::cerr << now() << ": converted " << name << " "
+		    << val << " to " << tmp << std::endl;
+	  val = tmp;
+	}
+
 	if  (conf->set("partition.assignment.strategy", val, errstr)) {
 	  std::cerr << now() << ": " << errstr << std::endl;
 	  exit(1);

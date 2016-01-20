@@ -164,6 +164,8 @@ static int test_stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
 void test_timeout_set (int timeout) {
         /* Limit the test run time. */
         TEST_SAY("Setting test timeout to %ds\n", timeout);
+        if (timeout > 1000)
+                assert(!*"Test timeout out of range");
 #ifndef _MSC_VER
         alarm(timeout);
         signal(SIGALRM, sig_alarm);
@@ -257,7 +259,7 @@ static void test_read_conf_file (const char *conf_path,
                         TEST_LOCK();
                         test_timeout_multiplier = strtod(val, NULL);
                         TEST_UNLOCK();
-                        *timeoutp = tmout_multip((*timeoutp)*1000);
+                        *timeoutp = tmout_multip((*timeoutp)*1000) / 1000;
                         res = RD_KAFKA_CONF_OK;
                 } else if (!strcmp(name, "test.topic.prefix")) {
 					rd_snprintf(test_topic_prefix, sizeof(test_topic_prefix),

@@ -532,7 +532,11 @@ public:
    *
    * The rebalance callback is responsible for updating librdkafka's
    * assignment set based on the two events: RdKafka::ERR__ASSIGN_PARTITIONS
-   * and RdKafka::ERR__REVOKE_PARTITIONS.
+   * and RdKafka::ERR__REVOKE_PARTITIONS but should also be able to handle
+   * arbitrary rebalancing failures where \p err is neither of those.
+   * @remark In this latter case (arbitrary error), the application must
+   *         call unassign() to synchronize state.
+
    *
    * Without a rebalance callback this is done automatically by librdkafka
    * but registering a rebalance callback gives the application flexibility

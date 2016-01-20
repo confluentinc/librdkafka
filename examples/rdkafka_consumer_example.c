@@ -218,6 +218,7 @@ static void rebalance_cb (rd_kafka_t *rk,
 	default:
 		fprintf(stderr, "failed: %s\n",
                         rd_kafka_err2str(err));
+                rd_kafka_assign(rk, NULL);
 		break;
 	}
 }

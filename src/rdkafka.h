@@ -701,7 +701,10 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *
  * The rebalance callback is responsible for updating librdkafka's
  * assignment set based on the two events: RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS
- * andRD_KAFKA_RESP_ERR__REVOKE_PARTITIONS.
+ * and RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS but should also be able to handle
+ * arbitrary rebalancing failures where \p err is neither of those.
+ * @remark In this latter case (arbitrary error), the application must
+ *         call rd_kafka_assign(rk, NULL) to synchronize state.
  *
  * Without a rebalance callback this is done automatically by librdkafka
  * but registering a rebalance callback gives the application flexibility

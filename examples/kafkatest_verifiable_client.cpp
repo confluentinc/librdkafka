@@ -383,7 +383,7 @@ static void do_commit (RdKafka::KafkaConsumer *consumer, int immediate) {
       consumer->commitAsync();
     else
       consumer->commitSync();
-      
+
     state.consumer.consumedMessagesAtLastCommit =
       state.consumer.consumedMessages;
   }
@@ -425,13 +425,13 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
           a->minOffset = msg->offset();
         if (a->maxOffset < msg->offset())
           a->maxOffset = msg->offset();
-      
+
         if (msg->key()) {
-	  if (verbosity >= 2)
+	  if (verbosity >= 3)
 	    std::cerr << now() << ": Key: " << *msg->key() << std::endl;
         }
 
-	if (verbosity >= 2)
+	if (verbosity >= 3)
         fprintf(stderr, "%.*s\n",
                 static_cast<int>(msg->len()),
                 static_cast<const char *>(msg->payload()));
@@ -443,7 +443,7 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
         do_commit(consumer, 0);
       }
       break;
-      
+
     case RdKafka::ERR__PARTITION_EOF:
       /* Last message */
       if (exit_eof) {
@@ -583,12 +583,12 @@ int main (int argc, char **argv) {
     const char *name = argv[i];
     const char *val = i+1 < argc ? argv[i+1] : NULL;
 
-    if (val && !strncmp(val, "--", 2))
+    if (val && !strncmp(val, "-", 1))
       val = NULL;
 
     std::cout << now() << ": argument: " << name << " " <<
         (val?val:"") << std::endl;
-    
+
     if (val) {
       if (!strcmp(name, "--topic"))
 	topics.push_back(val);

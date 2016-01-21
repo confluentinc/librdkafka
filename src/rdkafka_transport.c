@@ -1221,7 +1221,7 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 		/* Workaround for broken WSAPoll() while connecting:
 		 * failed connection attempts are not indicated at all by WSAPoll()
 		 * so we need to check the socket error when Poll returns 0.
-		 * Issue #535 */
+		 * Issue #525 */
 		r = ECONNRESET;
 		if (unlikely(rktrans->rktrans_rkb->rkb_state ==
 			     RD_KAFKA_BROKER_STATE_CONNECT &&

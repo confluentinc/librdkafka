@@ -617,7 +617,7 @@ static int test_summary (int do_lock) {
         time_t t;
         struct tm *tm;
         char datestr[64];
-        int64_t total_duration;
+        int64_t total_duration = 0;
         int tests_run = 0;
         int tests_failed = 0;
         int tests_passed = 0;

@@ -687,7 +687,7 @@ static int rd_kafka_topic_leader_update (rd_kafka_topic_t *rkt,
 		if (mdp->leader == -1)
 			/* Topic lost its leader */;
 		else
-			rd_kafka_log(rk, LOG_NOTICE, "TOPICBRK",
+			rd_kafka_dbg(rk, TOPIC, "TOPICBRK",
 				     "Topic %s [%"PRId32"] migrated to unknown "
 				     "broker %"PRId32": "
 				     "requesting metadata update",

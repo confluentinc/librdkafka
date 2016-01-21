@@ -1183,7 +1183,7 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 
 	if (errstr) {
 		/* Connect failed */
-		if (rkb->rkb_err.err == errno)
+		if (errno != 0 && rkb->rkb_err.err == errno)
 			rd_kafka_broker_fail(rkb, LOG_DEBUG,
                                              RD_KAFKA_RESP_ERR__FAIL,
 					     NULL);

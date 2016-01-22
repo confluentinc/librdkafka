@@ -73,10 +73,10 @@ const char *rd_kafka_broker_state_names[] = {
 };
 
 const char *rd_kafka_secproto_names[] = {
-	[RD_KAFKA_PROTO_PLAINTEXT] = "plaintext",
-	[RD_KAFKA_PROTO_SSL] = "ssl",
-	[RD_KAFKA_PROTO_SASL_PLAINTEXT] = "sasl_plaintext",
-	[RD_KAFKA_PROTO_SASL_SSL] = "sasl_ssl",
+	"plaintext",
+	"ssl",
+	"sasl_plaintext",
+	"sasl_ssl",
 	NULL
 };
 
@@ -2191,8 +2191,12 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
 
         /* Timeout scan */
         if (unlikely(do_timeout_scan)) {
-                rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
-
+#ifndef _MSC_VER
+				rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
+#else
+                rd_kafka_msgq_t timedout;
+				RD_KAFKA_MSGQ_INITIALIZER(timedout);
+#endif
                 if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq,
                                            &timedout, now)) {
                         /* Trigger delivery report for timed out messages */

@@ -188,12 +188,20 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                             int msgflags,
                             rd_kafka_message_t *rkmessages, int message_cnt) {
+#ifndef _MSC_VER
         rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
+#else
+		rd_kafka_msgq_t tmpq;
+#endif
         int i;
         rd_ts_t now = rd_clock();
         int good = 0;
         rd_kafka_resp_err_t all_err = 0;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
+
+#ifdef _MSC_VER
+		RD_KAFKA_MSGQ_INITIALIZER(tmpq);
+#endif
 
         /* For partitioner; hold lock for entire run,
          * for one partition: only acquire when needed at the end. */

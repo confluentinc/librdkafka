@@ -70,7 +70,7 @@ static const char *test_states[] = {
 #define _TEST_DECL(NAME)                                                \
         extern int main_ ## NAME (int, char **)
 #define _TEST(NAME,FLAGS)                                               \
-        { .name = # NAME, .mainfunc = main_ ## NAME, .flags = FLAGS }
+        { # NAME, main_ ## NAME, FLAGS }
 
 
 /**
@@ -103,7 +103,7 @@ _TEST_DECL(0025_timers);
  */
 struct test tests[] = {
         /* Special MAIN test to hold over-all timings, etc. */
-        { .name = "<MAIN>", .flags = 0xff },
+        { "<MAIN>", NULL, 0xff },
         _TEST(0001_multiobj, 0),
         _TEST(0002_unkpart, 0),
         _TEST(0003_msgmaxsize, 0),

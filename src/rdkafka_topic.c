@@ -519,9 +519,16 @@ static void rd_kafka_topic_assign_uas (rd_kafka_itopic_t *rkt) {
 	shptr_rd_kafka_toppar_t *s_rktp_ua;
         rd_kafka_toppar_t *rktp_ua;
 	rd_kafka_msg_t *rkm, *tmp;
+	int cnt;
+#ifndef _MSC_VER
 	rd_kafka_msgq_t uas = RD_KAFKA_MSGQ_INITIALIZER(uas);
 	rd_kafka_msgq_t failed = RD_KAFKA_MSGQ_INITIALIZER(failed);
-	int cnt;
+#else
+	rd_kafka_msgq_t uas;
+	rd_kafka_msgq_t failed;
+	RD_KAFKA_MSGQ_INITIALIZER(uas);
+	RD_KAFKA_MSGQ_INITIALIZER(failed);
+#endif
 
 	if (rkt->rkt_rk->rk_type != RD_KAFKA_PRODUCER)
 		return;

@@ -53,8 +53,13 @@ typedef struct rd_kafka_msgq_s {
 	rd_atomic64_t rkmq_msg_bytes;
 } rd_kafka_msgq_t;
 
+#ifndef _MSC_VER
 #define RD_KAFKA_MSGQ_INITIALIZER(rkmq) \
 	{ .rkmq_msgs = TAILQ_HEAD_INITIALIZER((rkmq).rkmq_msgs) }
+#else
+#define RD_KAFKA_MSGQ_INITIALIZER(rkmq) \
+    { (rkmq).rkmq_msgs.tqh_last = &((rkmq).rkmq_msgs).tqh_first; (rkmq).rkmq_msgs.tqh_first = NULL; }
+#endif
 
 #define RD_KAFKA_MSGQ_FOREACH(elm,head) \
 	TAILQ_FOREACH(elm, &(head)->rkmq_msgs, rkm_link)

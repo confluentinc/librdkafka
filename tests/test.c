@@ -40,7 +40,8 @@
 
 int test_level = 2;
 int test_seed = 0;
-
+static int  test_exit = 0;
+static char test_mode[64] = "bare";
 static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
        int  tests_running_cnt = 0;
@@ -185,6 +186,8 @@ static void test_init (void) {
 #ifndef _MSC_VER
 	if ((tmp = getenv("TEST_LEVEL")))
 		test_level = atoi(tmp);
+	if ((tmp = getenv("TEST_MODE")))
+		strncpy(test_mode, tmp, sizeof(test_mode)-1);
 	if ((tmp = getenv("TEST_SEED")))
 		seed = atoi(tmp);
 	else
@@ -635,10 +638,14 @@ static int test_summary (int do_lock) {
                           report_path, strerror(errno));
         else
                 fprintf(report_fp,
-                        "{ \"date\": \"%s\", \"tests\": [", datestr);
+                        "{ \"id\": \"%s_%s\", \"mode\": \"%s\", "
+			"\"date\": \"%s\", \"tests\": [",
+			datestr, test_mode, test_mode, datestr);
 
-        printf("TEST SUMMARY\n"
-               "#==================================================================#\n");
+        printf("TEST %s (%s) SUMMARY\n"
+               "#==================================================================#\n",
+	       datestr, test_mode);
+
         if (do_lock)
                 TEST_LOCK();
         for (test = tests ; test->name ; test++) {
@@ -752,12 +759,16 @@ int main(int argc, char **argv) {
                 }
         }
 
+	/* Set up fake "<MAIN>" test for all operations performed in
+	 * the main thread rather than the per-test threads.
+	 * Nice side effect is that we get timing and status for main as well.*/
         test_curr = &tests[0];
         test_curr->state = TEST_PASSED;
         test_curr->start = test_clock();
 
 	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
-        TEST_SAY("Test filter: %s\n",
+	TEST_SAY("Test mode   : %s\n", test_mode);
+        TEST_SAY("Test filter : %s\n",
                  (test_flags & TEST_F_LOCAL) ?
                  "local tests only" : "no filter");
         TEST_SAY("Action on test failure: %s\n",
@@ -767,10 +778,11 @@ int main(int argc, char **argv) {
 
         TIMING_START(&t_all, "ALL-TESTS");
 
+	/* Run tests */
         run_tests(tests_to_run, test_flags, argc, argv);
 
         TEST_LOCK();
-        while (tests_running_cnt > 0) {
+        while (tests_running_cnt > 0 && !test_exit) {
                 struct test *test;
 
                 TEST_SAY("%d test(s) running:", tests_running_cnt);

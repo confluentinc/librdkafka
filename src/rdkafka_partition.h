@@ -115,7 +115,7 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                   * fetching from.
                                                   * Locality: toppar thread */
 	int64_t            rktp_app_offset;      /* Last offset delivered to
-						  * application */
+						  * application + 1 */
 	int64_t            rktp_stored_offset;   /* Last stored offset, but
 						  * maybe not committed yet. */
         int64_t            rktp_committing_offset; /* Offset currently being

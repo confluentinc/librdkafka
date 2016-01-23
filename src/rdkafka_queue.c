@@ -494,11 +494,14 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 		if (!rko->rko_err) {
                         rd_kafka_toppar_t *rktp;
                         rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+			rd_kafka_toppar_lock(rktp);
+			rktp->rktp_app_offset = rko->rko_offset+1;
                         if ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit)
                             || rktp->rktp_rkt->rkt_conf.auto_commit)
                                 rd_kafka_offset_store0(rktp,
                                                        rko->rko_offset+1,
-                                                       1/*lock*/);
+                                                       0/* no lock */);
+			rd_kafka_toppar_unlock(rktp);
                 }
 
 		/* Get rkmessage from rko and append to array. */

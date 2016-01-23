@@ -1417,7 +1417,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 					   void *opaque) {
 	shptr_rd_kafka_toppar_t *s_rktp = opaque;
         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
-        int64_t offset = -1;
+        int64_t offset = RD_KAFKA_OFFSET_INVALID;
 
 	rd_rkb_dbg(rkb, MSG, "MSGSET",
 		   "MessageSet with %i message(s) %sdelivered",
@@ -1474,7 +1474,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 	}
 
         /* Propagate assigned offset back to app. */
-        if (likely(offset != -1)) {
+        if (likely(offset != RD_KAFKA_OFFSET_INVALID)) {
                 rd_kafka_msg_t *rkm;
                 if (rktp->rktp_rkt->rkt_conf.produce_offset_report) {
                         /* produce.offset.report: each message */

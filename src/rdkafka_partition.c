@@ -110,9 +110,10 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
 	rktp->rktp_offset_fp = NULL;
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets);
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets_fin);
-        rktp->rktp_lo_offset = -1;
-        rktp->rktp_stored_offset = -1;
-        rktp->rktp_committed_offset = -1;
+        rktp->rktp_lo_offset = RD_KAFKA_OFFSET_INVALID;
+	rktp->rktp_app_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_stored_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_committed_offset = RD_KAFKA_OFFSET_INVALID;
 	rd_kafka_msgq_init(&rktp->rktp_msgq);
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);
 	mtx_init(&rktp->rktp_lock, mtx_plain);
@@ -1008,7 +1009,7 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 						RD_KAFKA_TOPPAR_FETCH_ACTIVE);
 	}
 
-        rktp->rktp_offsets_fin.eof_offset = -1;
+        rktp->rktp_offsets_fin.eof_offset = RD_KAFKA_OFFSET_INVALID;
 
 	rd_kafka_toppar_unlock(rktp);
 
@@ -1131,15 +1132,11 @@ static void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
                 goto err_reply;
         }
 
-        if (offset == RD_KAFKA_OFFSET_BEGINNING ||
-	    offset == RD_KAFKA_OFFSET_END ||
-            offset <= RD_KAFKA_OFFSET_TAIL_BASE) {
+	if (offset == RD_KAFKA_OFFSET_STORED)
+		err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+	else if (RD_KAFKA_OFFSET_IS_LOGICAL(offset))
 		rd_kafka_toppar_next_offset_handle(rktp, offset);
-
-	} else if (offset == RD_KAFKA_OFFSET_STORED) {
-                err = RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-	} else {
+	else {
 		rktp->rktp_next_offset = offset;
                 rd_kafka_toppar_set_fetch_state(rktp,
 						RD_KAFKA_TOPPAR_FETCH_ACTIVE);

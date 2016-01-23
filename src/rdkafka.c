@@ -599,7 +599,7 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
         /* Grab a copy of the latest finalized offset stats */
         offs = rktp->rktp_offsets_fin;
 
-        if (offs.hi_offset != -1 && offs.fetch_offset > 0) {
+        if (offs.hi_offset != RD_KAFKA_OFFSET_INVALID && offs.fetch_offset > 0){
                 if (offs.fetch_offset > offs.hi_offset)
                         consumer_lag = 0;
                 else

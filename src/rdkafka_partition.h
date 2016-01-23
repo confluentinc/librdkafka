@@ -48,8 +48,8 @@ struct offset_stats {
  */
 static RD_UNUSED void rd_kafka_offset_stats_reset (struct offset_stats *offs) {
         offs->fetch_offset = 0;
-        offs->eof_offset = -1;
-        offs->hi_offset = -1;
+        offs->eof_offset = RD_KAFKA_OFFSET_INVALID;
+        offs->hi_offset = RD_KAFKA_OFFSET_INVALID;
 }
 
 

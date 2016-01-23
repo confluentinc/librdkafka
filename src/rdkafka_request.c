@@ -375,7 +375,7 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
                                          *offsets) {
         const int log_decode_errors = 1;
         int32_t TopicArrayCnt;
-        int64_t offset = -1;
+        int64_t offset = RD_KAFKA_OFFSET_INVALID;
         int16_t ErrorCode = 0;
         rd_kafkap_str_t metadata;
         int i;

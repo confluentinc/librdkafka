@@ -2269,6 +2269,11 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
                                         rd_kafka_toppar_unlock(rktp);
                                         continue;
                                 }
+				if (unlikely(RD_KAFKA_TOPPAR_IS_PAUSED(rktp))) {
+					/* Partition is paused */
+					rd_kafka_toppar_unlock(rktp);
+					continue;
+				}
                                 /* Try producing toppar */
                                 cnt += rd_kafka_toppar_producer_serve(
                                         rkb, rktp, do_timeout_scan, now);

@@ -230,3 +230,86 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
   }
 
 }
+
+
+RdKafka::ErrorCode
+RdKafka::HandleImpl::pause (std::vector<RdKafka::TopicPartition*> &partitions) {
+  rd_kafka_topic_partition_list_t *c_parts;
+  rd_kafka_resp_err_t err;
+
+  c_parts = partitions_to_c_parts(partitions);
+
+  err = rd_kafka_pause_partitions(rk_, c_parts);
+
+  if (!err)
+    update_partitions_from_c_parts(partitions, c_parts);
+
+  rd_kafka_topic_partition_list_destroy(c_parts);
+
+  return static_cast<RdKafka::ErrorCode>(err);
+}
+
+
+RdKafka::ErrorCode
+RdKafka::HandleImpl::resume (std::vector<RdKafka::TopicPartition*> &partitions) {
+  rd_kafka_topic_partition_list_t *c_parts;
+  rd_kafka_resp_err_t err;
+
+  c_parts = partitions_to_c_parts(partitions);
+
+  err = rd_kafka_resume_partitions(rk_, c_parts);
+
+  if (!err)
+    update_partitions_from_c_parts(partitions, c_parts);
+
+  rd_kafka_topic_partition_list_destroy(c_parts);
+
+  return static_cast<RdKafka::ErrorCode>(err);
+}
+
+
+namespace RdKafka {
+
+rd_kafka_topic_partition_list_t *
+partitions_to_c_parts (const std::vector<RdKafka::TopicPartition*> &partitions){
+  rd_kafka_topic_partition_list_t *c_parts;
+
+  c_parts = rd_kafka_topic_partition_list_new(partitions.size());
+
+  for (unsigned int i = 0 ; i < partitions.size() ; i++) {
+    const RdKafka::TopicPartitionImpl *tpi =
+        dynamic_cast<const RdKafka::TopicPartitionImpl*>(partitions[i]);
+    rd_kafka_topic_partition_t *rktpar =
+      rd_kafka_topic_partition_list_add(c_parts,
+					tpi->topic_.c_str(), tpi->partition_);
+    rktpar->offset = tpi->offset_;
+  }
+
+  return c_parts;
+}
+
+
+/**
+ * @brief Update the application provided 'partitions' with info from 'c_parts'
+ */
+void
+update_partitions_from_c_parts (std::vector<RdKafka::TopicPartition*> &partitions,
+				const rd_kafka_topic_partition_list_t *c_parts) {
+  for (int i = 0 ; i < c_parts->cnt ; i++) {
+    rd_kafka_topic_partition_t *p = &c_parts->elems[i];
+
+    /* Find corresponding C++ entry */
+    for (unsigned int j = 0 ; j < partitions.size() ; j++) {
+      RdKafka::TopicPartitionImpl *pp =
+	dynamic_cast<RdKafka::TopicPartitionImpl*>(partitions[j]);
+      if (!strcmp(p->topic, pp->topic_.c_str()) &&
+	  p->partition == pp->partition_) {
+	pp->offset_ = p->offset;
+	pp->err_ = static_cast<RdKafka::ErrorCode>(p->err);
+      }
+    }
+  }
+}
+
+};
+

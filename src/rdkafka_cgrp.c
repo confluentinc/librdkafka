@@ -42,6 +42,13 @@ static int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg);
 static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg);
 static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg);
+static void rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
+				  rd_kafka_topic_partition_list_t *assignment);
+static rd_kafka_resp_err_t rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg);
+static void
+rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
+                                      rd_kafka_topic_partition_list_t
+                                      *assignment, int usable_offsets);
 
 
 const char *rd_kafka_cgrp_state_names[] = {
@@ -727,15 +734,27 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
  * application.
  *
  * Returns 1 if a rebalance op was enqueued, else 0.
- * Returns 0 if 'assignment' is NULL.
+ * Returns 0 if there was no rebalance_cb or 'assignment' is NULL,
+ * in which case rd_kafka_cgrp_assign(rkcg,assignment) is called immediately.
  */
 static int
 rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 		       rd_kafka_resp_err_t err,
-		       const rd_kafka_topic_partition_list_t *assignment) {
+		       rd_kafka_topic_partition_list_t *assignment) {
 
-	if (!rkcg->rkcg_rk->rk_conf.rebalance_cb || !assignment)
+	/* Pause current partition set consumers until new assign() is called. */
+	if (rkcg->rkcg_assignment)
+		rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 1,
+					      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
+					      rkcg->rkcg_assignment);
+
+	if (!rkcg->rkcg_rk->rk_conf.rebalance_cb || !assignment) {
+		if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
+			rd_kafka_cgrp_assign(rkcg, assignment);
+		else
+			rd_kafka_cgrp_unassign(rkcg);
 		return 0;
+	}
 
 	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
 		     "Group \"%s\": delegating %s of %d partition(s) "
@@ -980,6 +999,11 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_toppar_unlock(rktp);
         }
 
+	/* Resume partition consumption. */
+	rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 0/*resume*/,
+				      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
+				      rkcg->rkcg_assignment);
+
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_assignment);
         rkcg->rkcg_assignment = NULL;
 
@@ -1063,9 +1087,8 @@ static void
 rd_kafka_cgrp_handle_assignment (rd_kafka_cgrp_t *rkcg,
 				 rd_kafka_topic_partition_list_t *assignment) {
 
-	if (!rd_kafka_rebalance_op(rkcg, RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
-				  assignment))
-		rd_kafka_cgrp_assign(rkcg, assignment);
+	rd_kafka_rebalance_op(rkcg, RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
+			      assignment);
 }
 
 
@@ -1108,11 +1131,10 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
                 if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
                         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
 
-                        /* Trigger rebalance_cb, if configured */
-                        if (!rd_kafka_rebalance_op(
-                                    rkcg, RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
-                                    rkcg->rkcg_assignment))
-                                rd_kafka_cgrp_unassign(rkcg);
+                        /* Trigger rebalance_cb */
+                        rd_kafka_rebalance_op(rkcg,
+					      RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
+					      rkcg->rkcg_assignment);
                 }
 		break;
 	}
@@ -1169,10 +1191,8 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
         if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
 
-                if (!rd_kafka_rebalance_op(rkcg,
-                                           RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
-                                           rkcg->rkcg_assignment))
-                        rd_kafka_cgrp_unassign(rkcg);
+                rd_kafka_rebalance_op(rkcg, RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
+				      rkcg->rkcg_assignment);
         }
 
         rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_SUBSCRIPTION;

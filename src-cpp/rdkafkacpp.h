@@ -839,6 +839,31 @@ class RD_EXPORT Handle {
    */
   virtual ErrorCode metadata (bool all_topics, const Topic *only_rkt,
                               Metadata **metadatap, int timeout_ms) = 0;
+
+
+  /**
+   * @brief Pause producing or consumption for the provided list of partitions.
+   *
+   * Success or error is returned per-partition in the \p partitions list.
+   *
+   * @returns ErrorCode::NO_ERROR
+   *
+   * @sa resume()
+   */
+  virtual ErrorCode pause (std::vector<TopicPartition*> &partitions) = 0;
+
+
+  /**
+   * @brief Resume producing or consumption for the provided list of partitions.
+   *
+   * Success or error is returned per-partition in the \p partitions list.
+   *
+   * @returns ErrorCode::NO_ERROR
+   *
+   * @sa pause()
+   */
+  virtual ErrorCode resume (std::vector<TopicPartition*> &partitions) = 0;
+
 };
 
 
@@ -1208,6 +1233,13 @@ public:
    */
   virtual ErrorCode position (std::vector<TopicPartition*> &partitions,
                               int timeout_ms) = 0;
+
+
+  /**
+   * For pausing and resuming consumption, see
+   * @sa RdKafka::Handle::pause() and RdKafka::Handle::resume()
+   */
+
 
   /**
    * @brief Close and shut down the proper.

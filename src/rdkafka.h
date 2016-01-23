@@ -1283,6 +1283,34 @@ RD_EXPORT
 void rd_kafka_yield (rd_kafka_t *rk);
 
 
+
+
+/**
+ * @brief Pause producing or consumption for the provided list of partitions.
+ *
+ * Success or error is returned per-partition \p err in the \p partitions list.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_pause_partitions (rd_kafka_t *rk,
+			   rd_kafka_topic_partition_list_t *partitions);
+
+
+
+/**
+ * @brief Resume producing consumption for the provided list of partitions.
+ *
+ * Success or error is returned per-partition \p err in the \p partitions list.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_resume_partitions (rd_kafka_t *rk,
+			    rd_kafka_topic_partition_list_t *partitions);
+
+
+
 /**
  * @brief Free pointer returned by librdkafka
  *

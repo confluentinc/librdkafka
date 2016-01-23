@@ -1243,6 +1243,7 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
         rd_kafka_topic_conf_t *tconf;
         rd_kafka_resp_err_t err;
         rd_kafka_topic_partition_list_t *topics;
+	test_msgver_t mv;
 	char grpid0[64];
 
         test_conf_init(NULL, &tconf, 0);
@@ -1269,8 +1270,12 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
 
         rd_kafka_topic_partition_list_destroy(topics);
 
+	test_msgver_init(&mv, testid);
+
         /* Consume messages */
-        test_consumer_poll("consume.easy", rk, testid, -1, -1, exp_msgcnt);
+        test_consumer_poll("consume.easy", rk, testid, -1, -1, exp_msgcnt, &mv);
+
+	test_msgver_clear(&mv);
 
         test_consumer_close(rk);
 
@@ -1309,6 +1314,539 @@ void test_consumer_unassign (const char *what, rd_kafka_t *rk) {
         else
                 TEST_SAY("%s: unassigned current partitions\n", what);
 }
+
+
+
+
+/**
+ * Message verification services
+ *
+ */
+
+void test_msgver_init (test_msgver_t *mv, uint64_t testid) {
+	memset(mv, 0, sizeof(*mv));
+	mv->testid = testid;
+	/* Max warning logs before suppressing. */
+	mv->log_max = (test_level + 1) * 100;
+}
+
+#define TEST_MV_WARN(mv,...) do {			\
+		if ((mv)->log_cnt++ > (mv)->log_max)	\
+			(mv)->log_suppr_cnt++;		\
+		else					\
+			TEST_WARN(__VA_ARGS__);		\
+	} while (0)
+			
+
+
+static void test_mv_mvec_grow (struct test_mv_mvec *mvec, int tot_size) {
+	if (tot_size <= mvec->size)
+		return;
+	mvec->size = tot_size;
+	mvec->m = realloc(mvec->m, sizeof(*mvec->m) * mvec->size);
+}
+
+/**
+ * Make sure there is room for at least \p cnt messages, else grow mvec.
+ */
+static void test_mv_mvec_reserve (struct test_mv_mvec *mvec, int cnt) {
+	test_mv_mvec_grow(mvec, mvec->cnt + cnt);
+}
+
+void test_mv_mvec_init (struct test_mv_mvec *mvec, int exp_cnt) {
+	TEST_ASSERT(mvec->m == NULL, "mvec not cleared");
+
+	if (!exp_cnt)
+		return;
+
+	test_mv_mvec_grow(mvec, exp_cnt);
+}
+
+
+void test_mv_mvec_clear (struct test_mv_mvec *mvec) {
+	if (mvec->m)
+		free(mvec->m);
+}
+
+void test_msgver_clear (test_msgver_t *mv) {
+	int i;
+	for (i = 0 ; i < mv->p_cnt ; i++) {
+		struct test_mv_p *p = mv->p[i];
+		free(p->topic);
+		test_mv_mvec_clear(&p->mvec);
+		free(p);
+	}
+
+	free(mv->p);
+
+	test_msgver_init(mv, mv->testid);
+}
+
+struct test_mv_p *test_msgver_p_get (test_msgver_t *mv, const char *topic,
+				     int32_t partition) {
+	int i;
+	struct test_mv_p *p;
+
+	for (i = 0 ; i < mv->p_cnt ; i++) {
+		p = mv->p[i];
+		if (p->partition == partition && !strcmp(p->topic, topic))
+			return p;
+	}
+
+	if (mv->p_cnt == mv->p_size) {
+		mv->p_size = (mv->p_size + 4) * 2;
+		mv->p = realloc(mv->p, sizeof(*mv->p) * mv->p_size);
+	}
+
+	mv->p[mv->p_cnt++] = p = calloc(1, sizeof(*p));
+
+	p->topic = strdup(topic);
+	p->partition = partition;
+
+	return p;
+}
+
+
+/**
+ * Add (room for) message to message vector.
+ * Resizes the vector as needed.
+ */
+static struct test_mv_m *test_mv_mvec_add (struct test_mv_mvec *mvec) {
+	if (mvec->cnt == mvec->size) {
+		test_mv_mvec_grow(mvec, (mvec->size ? mvec->size * 2 : 10000));
+	}
+
+	mvec->cnt++;
+
+	return &mvec->m[mvec->cnt-1];
+}
+
+/**
+ * Returns message at index \p mi
+ */
+static __inline struct test_mv_m *test_mv_mvec_get (struct test_mv_mvec *mvec,
+						    int mi) {
+	return &mvec->m[mi];
+}
+
+/**
+ * Print message list to \p fp
+ */
+static RD_UNUSED
+void test_mv_mvec_dump (FILE *fp, const struct test_mv_mvec *mvec) {
+	int mi;
+
+	fprintf(fp, "*** Dump mvec with %d messages (capacity %d): ***\n",
+		mvec->cnt, mvec->size);
+	for (mi = 0 ; mi < mvec->cnt ; mi++)
+		fprintf(fp, "  msgid %d, offset %"PRId64"\n",
+			mvec->m[mi].msgid, mvec->m[mi].offset);
+	fprintf(fp, "*** Done ***\n");
+
+}
+
+static void test_mv_mvec_sort (struct test_mv_mvec *mvec,
+			       int (*cmp) (const void *, const void *)) {
+	qsort(mvec->m, mvec->cnt, sizeof(*mvec->m), cmp);
+}
+
+
+/**
+ * Adds a message to the msgver service.
+ *
+ * @returns 1 if message is from the expected testid, else 0 (not added).
+ */
+int test_msgver_add_msg0 (const char *func, int line,
+			  test_msgver_t *mv, rd_kafka_message_t *rkmessage) {
+	uint64_t in_testid;
+	int in_part;
+	int in_msgnum;
+	char buf[128];
+	struct test_mv_p *p;
+	struct test_mv_m *m;
+
+	rd_snprintf(buf, sizeof(buf), "%.*s",
+		 (int)rkmessage->len, (char *)rkmessage->payload);
+
+	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+		   &in_testid, &in_part, &in_msgnum) != 3)
+		TEST_FAIL("%s:%d: Incorrect format: %s", func, line, buf);
+
+	if (mv->fwd)
+		test_msgver_add_msg(mv->fwd, rkmessage);
+
+	if (in_testid != mv->testid)
+		return 0; /* Ignore message */
+
+	p = test_msgver_p_get(mv, rd_kafka_topic_name(rkmessage->rkt),
+			      rkmessage->partition);
+
+	m = test_mv_mvec_add(&p->mvec);
+
+	m->offset = rkmessage->offset;
+	m->msgid  = in_msgnum;
+	
+	if (test_level > 2) {
+		TEST_SAY("%s:%d: "
+			 "Recv msg %s [%"PRId32"] offset %"PRId64" msgid %d\n",
+			 func, line,
+			 p->topic, p->partition, m->offset, m->msgid);
+	}
+
+	mv->msgcnt++;
+
+        return 1;
+}
+
+
+
+/**
+ * Verify that all messages were received in order.
+ *
+ * - Offsets need to occur without gaps
+ * - msgids need to be increasing: but may have gaps, e.g., using partitioner)
+ */
+static int test_mv_mvec_verify_order (test_msgver_t *mv, int flags,
+				      struct test_mv_p *p,
+				      struct test_mv_mvec *mvec,
+				      struct test_mv_vs *vs) {
+	int mi;
+	int fails = 0;
+
+	for (mi = 1/*skip first*/ ; mi < mvec->cnt ; mi++) {
+		struct test_mv_m *prev = test_mv_mvec_get(mvec, mi-1);
+		struct test_mv_m *this = test_mv_mvec_get(mvec, mi);
+
+		if (((flags & TEST_MSGVER_BY_OFFSET) &&
+		     prev->offset + 1 != this->offset) ||
+		    ((flags & TEST_MSGVER_BY_MSGID) &&
+		     prev->msgid > this->msgid)) {
+			TEST_MV_WARN(
+				mv,
+				" %s [%"PRId32"] msg rcvidx #%d/%d: "
+				"out of order (prev vs this): "
+				"offset %"PRId64" vs %"PRId64", "
+				"msgid %d vs %d\n",
+				p ? p->topic : "*",
+				p ? p->partition : -1,
+				mi, mvec->cnt,
+				prev->offset, this->offset,
+				prev->msgid, this->msgid);
+			fails++;
+		}
+	}
+
+	return fails;
+}
+
+
+
+static int test_mv_m_cmp_offset (const void *_a, const void *_b) {
+	const struct test_mv_m *a = _a, *b = _b;
+
+	return a->offset - b->offset;
+}
+
+static int test_mv_m_cmp_msgid (const void *_a, const void *_b) {
+	const struct test_mv_m *a = _a, *b = _b;
+
+	return a->msgid - b->msgid;
+}
+
+
+/**
+ * Verify that there are no duplicate message.
+ *
+ * - Offsets are checked
+ * - msgids are checked
+ *
+ * * NOTE: This sorts the message (.m) array, first by offset, then by msgid
+ *         and leaves the message array sorted (by msgid)
+ */
+static int test_mv_mvec_verify_dup (test_msgver_t *mv, int flags,
+				    struct test_mv_p *p,
+				    struct test_mv_mvec *mvec,
+				    struct test_mv_vs *vs) {
+	int mi;
+	int fails = 0;
+	enum {
+		_P_OFFSET,
+		_P_MSGID
+	} pass;
+
+	for (pass = _P_OFFSET ; pass <= _P_MSGID ; pass++) {
+
+		if (pass == _P_OFFSET) {
+			if (!(flags & TEST_MSGVER_BY_OFFSET))
+				continue;
+			test_mv_mvec_sort(mvec, test_mv_m_cmp_offset);
+		} else if (pass == _P_MSGID) {
+			if (!(flags & TEST_MSGVER_BY_MSGID))
+				continue;
+			test_mv_mvec_sort(mvec, test_mv_m_cmp_msgid);
+		}
+
+		for (mi = 1/*skip first*/ ; mi < mvec->cnt ; mi++) {
+			struct test_mv_m *prev = test_mv_mvec_get(mvec, mi-1);
+			struct test_mv_m *this = test_mv_mvec_get(mvec, mi);
+			int is_dup = 0;
+
+			if (pass == _P_OFFSET)
+				is_dup = prev->offset == this->offset;
+			else if (pass == _P_MSGID)
+				is_dup = prev->msgid == this->msgid;
+
+			if (!is_dup)
+				continue;
+
+			TEST_MV_WARN(mv,
+				     " %s [%"PRId32"] "
+				     "duplicate msg (prev vs this): "
+				     "offset %"PRId64" vs %"PRId64", "
+				     "msgid %d vs %d\n",
+				     p ? p->topic : "*",
+				     p ? p->partition : -1,
+				     prev->offset, this->offset,
+				     prev->msgid,  this->msgid);
+			fails++;
+		}
+	}
+
+	return fails;
+}
+
+
+
+/**
+ * Verify that \p mvec contains the message range (by msgid)
+ * \p vs->msgid_min .. \p vs->msgid_max
+ *
+ * * NOTE: This sorts the message (.m) array by msgid
+ *         and leaves the message array sorted (by msgid)
+ */
+static int test_mv_mvec_verify_range (test_msgver_t *mv, int flags,
+				      struct test_mv_p *p,
+				      struct test_mv_mvec *mvec,
+				      struct test_mv_vs *vs) {
+	int mi;
+	int fails = 0;
+	int cnt = 0;
+	int exp_cnt = vs->msgid_max - vs->msgid_min + 1;
+	int skip_cnt = 0;
+
+	if (!(flags & TEST_MSGVER_BY_MSGID))
+		return 0;
+
+	test_mv_mvec_sort(mvec, test_mv_m_cmp_msgid);
+
+	//test_mv_mvec_dump(stdout, mvec);
+
+	for (mi = 0 ; mi < mvec->cnt ; mi++) {
+		struct test_mv_m *prev = mi ? test_mv_mvec_get(mvec, mi-1):NULL;
+		struct test_mv_m *this = test_mv_mvec_get(mvec, mi);
+
+		if (this->msgid < vs->msgid_min) {
+			skip_cnt++;
+			continue;
+		} else if (this->msgid > vs->msgid_max)
+			break;
+
+		if (cnt++ == 0) {
+			if (this->msgid != vs->msgid_min) {
+				TEST_MV_WARN(mv,
+					     " %s [%"PRId32"] range check: "
+					     "first message #%d (at mi %d) "
+					     "is not first in "
+					     "expected range %d..%d\n",
+					     p ? p->topic : "*",
+					     p ? p->partition : -1,
+					     this->msgid, mi,
+					     vs->msgid_min, vs->msgid_max);
+				fails++;
+			}
+		} else if (cnt > exp_cnt) {
+			TEST_MV_WARN(mv,
+				     " %s [%"PRId32"] range check: "
+				     "too many messages received (%d/%d) at "
+				     "msgid %d for expected range %d..%d\n",
+				     p ? p->topic : "*",
+				     p ? p->partition : -1,
+				     cnt, exp_cnt, this->msgid,
+				     vs->msgid_min, vs->msgid_max);
+			fails++;
+		}
+
+		if (!prev) {
+			skip_cnt++;
+			continue;
+		}
+
+		if (prev->msgid + 1 != this->msgid) {
+			TEST_MV_WARN(mv, " %s [%"PRId32"] range check: "
+				     " %d message(s) missing between "
+				     "msgid %d..%d in expected range %d..%d\n",
+				     p ? p->topic : "*",
+				     p ? p->partition : -1,
+				     this->msgid - prev->msgid - 1,
+				     prev->msgid+1, this->msgid-1,
+				     vs->msgid_min, vs->msgid_max);
+			fails++;
+		}
+		
+	}
+
+	if (cnt != exp_cnt) {
+		TEST_MV_WARN(mv,
+			     " %s [%"PRId32"] range check: "
+			     " wrong number of messages seen, wanted %d got %d "
+			     "in expected range %d..%d (%d messages skipped)\n",
+			     p ? p->topic : "*",
+			     p ? p->partition : -1,
+			     exp_cnt, cnt, vs->msgid_min, vs->msgid_max,
+			     skip_cnt);
+		fails++;
+	}
+
+	return fails;
+}
+
+
+
+/**
+ * Run verifier \p f for all partitions.
+ */
+#define test_mv_p_verify_f(mv,flags,f,vs)	\
+	test_mv_p_verify_f0(mv,flags,f, # f, vs)
+static int test_mv_p_verify_f0 (test_msgver_t *mv, int flags,
+				int (*f) (test_msgver_t *mv,
+					  int flags,
+					  struct test_mv_p *p,
+					  struct test_mv_mvec *mvec,
+					  struct test_mv_vs *vs),
+				const char *f_name,
+				struct test_mv_vs *vs) {
+	int i;
+	int fails = 0;
+
+	for (i = 0 ; i < mv->p_cnt ; i++) {
+		TEST_SAY("Verifying %s [%"PRId32"] %d msgs with %s\n",
+			 mv->p[i]->topic, mv->p[i]->partition,
+			 mv->p[i]->mvec.cnt, f_name);
+		fails += f(mv, flags, mv->p[i], &mv->p[i]->mvec, vs);
+	}
+
+	return fails;
+}
+
+
+/**
+ * Collect all messages from all topics and partitions into vs->mvec
+ */
+static void test_mv_collect_all_msgs (test_msgver_t *mv,
+				      struct test_mv_vs *vs) {
+	int i;
+
+	for (i = 0 ; i < mv->p_cnt ; i++) {
+		struct test_mv_p *p = mv->p[i];
+		int mi;
+
+		test_mv_mvec_reserve(&vs->mvec, p->mvec.cnt);
+		for (mi = 0 ; mi < p->mvec.cnt ; mi++) {
+			struct test_mv_m *m = test_mv_mvec_get(&p->mvec, mi);
+			struct test_mv_m *m_new = test_mv_mvec_add(&vs->mvec);
+			*m_new = *m;
+		}
+	}
+}
+
+
+/**
+ * Verify that all messages (by msgid) in range msg_base+exp_cnt were received
+ * and received only once.
+ * This works across all partitions.
+ */
+static int test_msgver_verify_range (test_msgver_t *mv, int flags,
+				     struct test_mv_vs *vs) {
+	int fails = 0;
+
+	/**
+	 * Create temporary array to hold expected message set,
+	 * then traverse all topics and partitions and move matching messages
+	 * to that set. Then verify the message set.
+	 */
+
+	test_mv_mvec_init(&vs->mvec, vs->exp_cnt);
+
+	/* Collect all msgs into vs mvec */
+	test_mv_collect_all_msgs(mv, vs);
+	
+	fails += test_mv_mvec_verify_range(mv, TEST_MSGVER_BY_MSGID,
+					   NULL, &vs->mvec, vs);
+	fails += test_mv_mvec_verify_dup(mv, TEST_MSGVER_BY_MSGID,
+					 NULL, &vs->mvec, vs);
+
+	test_mv_mvec_clear(&vs->mvec);
+
+	return fails;
+}
+
+/**
+ * Verify that \p exp_cnt messages were received starting at
+ * msgid base \p msg_base.
+ */
+int test_msgver_verify0 (const char *func, int line, const char *what,
+			 test_msgver_t *mv,
+			 int flags, int msg_base, int exp_cnt) {
+	int fails = 0;
+	struct test_mv_vs vs = { .msg_base = msg_base, .exp_cnt = exp_cnt };
+
+	TEST_SAY("%s:%d: %s: Verifying %d received messages (flags 0x%x): "
+		 "expecting msgids %d..%d (%d)\n",
+		 func, line, what, mv->msgcnt, flags,
+		 msg_base, msg_base+exp_cnt, exp_cnt);
+
+	/* Per-partition checks */
+	if (flags & TEST_MSGVER_ORDER)
+		fails += test_mv_p_verify_f(mv, flags,
+					    test_mv_mvec_verify_order, &vs);
+	if (flags & TEST_MSGVER_DUP)
+		fails += test_mv_p_verify_f(mv, flags,
+					    test_mv_mvec_verify_dup, &vs);
+
+	/* Checks across all partitions */
+	if ((flags & TEST_MSGVER_RANGE) && exp_cnt > 0) {
+		vs.msgid_min = msg_base;
+		vs.msgid_max = vs.msgid_min + exp_cnt - 1;
+		fails += test_msgver_verify_range(mv, flags, &vs);
+	}
+
+	if (mv->log_suppr_cnt > 0)
+		TEST_WARN("%s:%d: %s: %d message warning logs suppressed\n",
+			  func, line, what, mv->log_suppr_cnt);
+
+	if (exp_cnt != mv->msgcnt) {
+		TEST_WARN("%s:%d: %s: expected %d messages, got %d\n",
+			  func, line, what, exp_cnt, mv->msgcnt);
+		fails++;
+	}
+
+	if (fails)
+		TEST_FAIL("%s:%d: %s: Verification of %d received messages "
+			  "failed: "
+			  "expected msgids %d..%d (%d): see previous errors\n",
+			  func, line, what,
+			  mv->msgcnt, msg_base, msg_base+exp_cnt, exp_cnt);
+	else
+		TEST_SAY("%s:%d: %s: Verification of %d received messages "
+			 "succeeded: "
+			 "expected msgids %d..%d (%d)\n",
+			 func, line, what,
+			 mv->msgcnt, msg_base, msg_base+exp_cnt, exp_cnt);
+
+	return fails;
+}
+
+
 
 
 void test_verify_rkmessage0 (const char *func, int line,
@@ -1350,10 +1888,74 @@ fail_match:
 }
 
 
+/**
+ * Consumer poll but dont expect any proper messages for \p timeout_ms.
+ */
+void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
+				 uint64_t testid, int timeout_ms) {
+	int64_t tmout = test_clock() + timeout_ms * 1000;
+        int cnt = 0;
+        test_timing_t t_cons;
+	test_msgver_t mv;
 
+	test_msgver_init(&mv, testid);
 
+        TEST_SAY("%s: not expecting any messages for %dms\n",
+		 what, timeout_ms);
+
+        TIMING_START(&t_cons, "CONSUME");
+
+        while (test_clock() < tmout) {
+                rd_kafka_message_t *rkmessage;
+
+                rkmessage = rd_kafka_consumer_poll(rk, 100);
+                if (!rkmessage)
+			continue;
+
+                if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+                        TEST_SAY("%s [%"PRId32"] reached EOF at "
+                                 "offset %"PRId64"\n",
+                                 rd_kafka_topic_name(rkmessage->rkt),
+                                 rkmessage->partition,
+                                 rkmessage->offset);
+
+                } else if (rkmessage->err) {
+                        TEST_SAY("%s [%"PRId32"] error (offset %"PRId64"): %s",
+                                 rkmessage->rkt ?
+                                 rd_kafka_topic_name(rkmessage->rkt) :
+                                 "(no-topic)",
+                                 rkmessage->partition,
+                                 rkmessage->offset,
+                                 rd_kafka_message_errstr(rkmessage));
+
+                } else {
+			if (test_msgver_add_msg(&mv, rkmessage)) {
+				TEST_MV_WARN(&mv,
+					     "Received unexpected message on "
+					     "%s [%"PRId32"] at offset "
+					     "%"PRId64"\n",
+					     rd_kafka_topic_name(rkmessage->
+								 rkt),
+					     rkmessage->partition,
+					     rkmessage->offset);
+				cnt++;
+			}
+                }
+
+                rd_kafka_message_destroy(rkmessage);
+        }
+        TIMING_STOP(&t_cons);
+
+	test_msgver_verify(what, &mv, TEST_MSGVER_ALL, 0, 0);
+	test_msgver_clear(&mv);
+
+	TEST_ASSERT(cnt == 0, "Expected 0 messages, got %d", cnt);
+}
+
+	
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
-                        int exp_eof_cnt, int exp_msg_base, int exp_cnt) {
+                        int exp_eof_cnt, int exp_msg_base, int exp_cnt,
+			test_msgver_t *mv) {
         int eof_cnt = 0;
         int cnt = 0;
         test_timing_t t_cons;
@@ -1368,7 +1970,9 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
 
                 rkmessage = rd_kafka_consumer_poll(rk, 10*1000);
                 if (!rkmessage) /* Shouldn't take this long to get a msg */
-                        TEST_FAIL("%s: consumer_poll() timeout\n", what);
+                        TEST_FAIL("%s: consumer_poll() timeout "
+				  "(%d/%d eof, %d/%d msgs)\n", what,
+				  eof_cnt, exp_eof_cnt, cnt, exp_cnt);
 
 
                 if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
@@ -1389,15 +1993,8 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                                  rd_kafka_message_errstr(rkmessage));
 
                 } else {
-			if (test_level > 2)
-				TEST_SAY("%s [%"PRId32"] "
-					 "message at offset %"PRId64"\n",
-					 rd_kafka_topic_name(rkmessage->rkt),
-					 rkmessage->partition,
-					 rkmessage->offset);
-
-                        test_verify_rkmessage(rkmessage, testid, -1, -1);
-                        cnt++;
+			if (test_msgver_add_msg(mv, rkmessage))
+				cnt++;
                 }
 
                 rd_kafka_message_destroy(rkmessage);

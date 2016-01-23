@@ -367,25 +367,22 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
  * Offsets for included partitions will be propagated through the passed
  * 'offsets' list.
  */
-static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
-                                         rd_kafka_resp_err_t err,
-                                         rd_kafka_buf_t *rkbuf,
-                                         rd_kafka_buf_t *request,
-                                         rd_kafka_topic_partition_list_t
-                                         *offsets) {
+rd_kafka_resp_err_t
+rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
+			     rd_kafka_resp_err_t err,
+			     rd_kafka_buf_t *rkbuf,
+			     rd_kafka_buf_t *request,
+			     rd_kafka_topic_partition_list_t *offsets) {
         const int log_decode_errors = 1;
         int32_t TopicArrayCnt;
         int64_t offset = RD_KAFKA_OFFSET_INVALID;
-        int16_t ErrorCode = 0;
         rd_kafkap_str_t metadata;
         int i;
         int actions;
         int seen_cnt = 0;
 
-        if (err) {
-                ErrorCode = err;
+        if (err)
                 goto err;
-        }
 
         /* Set default offset for all partitions. */
         rd_kafka_topic_partition_list_set_offsets(rkb->rkb_rk, offsets, 0,
@@ -433,6 +430,7 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
 				rktpar->_private = s_rktp;
 			}
 
+			/* broker reports invalid offset as -1 */
 			if (offset == -1)
 				rktpar->offset = RD_KAFKA_OFFSET_INVALID;
 			else
@@ -458,21 +456,22 @@ err:
         rd_rkb_dbg(rkb, TOPIC, "OFFFETCH",
                    "OffsetFetch for %d/%d partition(s) returned %s",
                    seen_cnt,
-                   offsets ? offsets->cnt : -1, rd_kafka_err2str(ErrorCode));
+                   offsets ? offsets->cnt : -1, rd_kafka_err2str(err));
 
-        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
+        actions = rd_kafka_err_action(rkb, err, rkbuf, request);
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
                 rd_kafka_cgrp_op(rkb->rkb_rk->rk_cgrp, NULL,
-                                 NULL, RD_KAFKA_OP_COORD_QUERY, ErrorCode);
+                                 NULL, RD_KAFKA_OP_COORD_QUERY, err);
                 if (request) {
                         /* Schedule a retry */
                         rd_kafka_buf_keep(request);
                         rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
                 }
-                return;
         }
+
+	return err;
 }
 
 

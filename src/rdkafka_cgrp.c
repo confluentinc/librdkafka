@@ -602,32 +602,67 @@ static void rd_kafka_cgrp_partition_del (rd_kafka_cgrp_t *rkcg,
 
 
 
+/**
+ * Reply for OffsetFetch from call below.
+ */
+static void rd_kafka_cgrp_offsets_fetch_response (
+	rd_kafka_broker_t *rkb,
+	rd_kafka_resp_err_t err,
+	rd_kafka_buf_t *reply,
+	rd_kafka_buf_t *request,
+	void *opaque) {
+	rd_kafka_topic_partition_list_t *offsets = opaque;
+	rd_kafka_cgrp_t *rkcg;
+
+	if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* Termination, quick cleanup. */
+		rd_kafka_topic_partition_list_destroy(offsets);
+                return;
+        }
+
+	rkcg = rd_kafka_cgrp_get(rkb->rkb_rk);
+
+	err = rd_kafka_handle_OffsetFetch(rkb, err, reply, request, offsets);
+	if (err) {
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "OFFSET",
+			     "Offset fetch error: %s",
+			     rd_kafka_err2str(err));
+
+		if (err != RD_KAFKA_RESP_ERR__WAIT_COORD)
+			rd_kafka_q_op_err(&rkcg->rkcg_q,
+					  RD_KAFKA_OP_CONSUMER_ERR, err,
+					  0,
+					  "Failed to fetch offsets: %s",
+					  rd_kafka_err2str(err));
+	} else {
+
+		rd_kafka_cgrp_partitions_fetch_start(rkcg, offsets,
+						     1 /* usable offsets */);
+	}
+
+	rd_kafka_topic_partition_list_destroy(offsets);
+}
 
 /**
  * Fetch offsets for a list of partitions
  */
 static void
 rd_kafka_cgrp_offsets_fetch (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb,
-                             rd_kafka_topic_partition_list_t *offsets,
-                             rd_kafka_q_t *replyq) {
+                             const rd_kafka_topic_partition_list_t *offsets) {
+	rd_kafka_topic_partition_list_t *use_offsets;
 
-        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
-
-        rd_kafka_op_payload_set(rko,
-                                rd_kafka_topic_partition_list_copy(offsets),
-                                (void *)rd_kafka_topic_partition_list_destroy);
-
-        rd_kafka_q_keep(replyq);
-        rko->rko_replyq  = replyq;
+	/* Make a copy of the offsets */
+	use_offsets = rd_kafka_topic_partition_list_copy(offsets);
 
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP || !rkb)
-                rd_kafka_op_handle_OffsetFetch(rkb,
-                                               RD_KAFKA_RESP_ERR__WAIT_COORD,
-                                               NULL, NULL, rko);
+		rd_kafka_cgrp_offsets_fetch_response(rkb,
+						     RD_KAFKA_RESP_ERR__WAIT_COORD,
+						     NULL, NULL, use_offsets);
         else
                 rd_kafka_OffsetFetchRequest(
                         rkb, 1, offsets,
-                        &rkcg->rkcg_ops, rd_kafka_op_handle_OffsetFetch, rko);
+                        &rkcg->rkcg_ops, rd_kafka_cgrp_offsets_fetch_response,
+			use_offsets);
 
 }
 
@@ -654,8 +689,7 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
             RD_KAFKA_OFFSET_METHOD_BROKER) {
 
                 /* Fetch offsets for all assigned partitions */
-                rd_kafka_cgrp_offsets_fetch(rkcg, rkcg->rkcg_rkb, assignment,
-                                            &rkcg->rkcg_ops);
+                rd_kafka_cgrp_offsets_fetch(rkcg, rkcg->rkcg_rkb, assignment);
 
         } else {
                 for (i = 0 ; i < assignment->cnt ; i++) {
@@ -1303,35 +1337,6 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                                 rd_kafka_op_handle_OffsetFetch, rko);
                         rko = NULL; /* rko now owned by request */
                         break;
-
-                case RD_KAFKA_OP_OFFSET_FETCH | RD_KAFKA_OP_REPLY:
-                        /* Reply from an OffsetFetch request. */
-                        if (rko->rko_err) {
-				rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "OFFSET",
-					     "Offset fetch error: %s",
-					     rd_kafka_err2str(rko->rko_err));
-
-                                rd_kafka_topic_partition_list_destroy(
-                                        rko->rko_payload);
-                                rko->rko_payload = NULL;
-
-				rd_kafka_q_op_err(&rkcg->rkcg_q,
-                                                  RD_KAFKA_OP_CONSUMER_ERR,
-                                                  rko->rko_err,
-						  0,
-						  "Failed to fetch offsets: %s",
-						  rd_kafka_err2str(rko->
-								   rko_err));
-                                break;
-                        }
-
-                        rd_kafka_cgrp_partitions_fetch_start(
-                                rkcg,
-                                (rd_kafka_topic_partition_list_t *)
-                                rko->rko_payload,
-                                1 /* usable offsets */);
-                        break;
-
 
                 case RD_KAFKA_OP_PARTITION_JOIN:
                         rd_kafka_cgrp_partition_add(rkcg, rktp);

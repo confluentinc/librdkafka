@@ -375,7 +375,7 @@ void test_wait_exit (int timeout) {
 	TEST_SAY("%i thread(s) in use by librdkafka\n", r);
 
 	if (r > 0) {
-		TEST_FAIL("%i thread(s) still active in librdkafka", r);
+		TEST_FAIL_LATER("%i thread(s) still active in librdkafka", r);
 	}
 
         timeout -= (int)(time(NULL) - start);
@@ -383,8 +383,8 @@ void test_wait_exit (int timeout) {
 		TEST_SAY("Waiting %d seconds for all librdkafka memory "
 			 "to be released\n", timeout);
                 if (rd_kafka_wait_destroyed(timeout * 1000) == -1)
-			TEST_FAIL("Not all internal librdkafka "
-				  "objects destroyed\n");
+			TEST_FAIL_LATER("Not all internal librdkafka "
+					"objects destroyed\n");
 	}
 
 }
@@ -672,6 +672,7 @@ static int test_summary (int do_lock) {
                         break;
                 case TEST_RUNNING:
                         color = _C_MAG;
+			tests_failed++; /* All tests should be finished */
                         tests_run++;
                         break;
                 case TEST_NOT_STARTED:
@@ -721,6 +722,13 @@ static int test_summary (int do_lock) {
         return tests_failed;
 }
 
+#ifndef _MSC_VER
+static void test_sig_term (int sig) {
+	if (test_exit)
+		exit(1);
+	test_exit = 1;
+}
+#endif
 
 int main(int argc, char **argv) {
         const char *tests_to_run = NULL; /* all */
@@ -733,6 +741,7 @@ int main(int argc, char **argv) {
         test_init();
 
 #ifndef _MSC_VER
+	signal(SIGINT, test_sig_term);
         tests_to_run = getenv("TESTS");
 #endif
 
@@ -805,7 +814,7 @@ int main(int argc, char **argv) {
 
         /* Wait for everything to be cleaned up since broker destroys are
 	 * handled in its own thread. */
-	test_wait_exit(10);
+	test_wait_exit(3);
 
         r = test_summary(1/*lock*/) ? 1 : 0;
 

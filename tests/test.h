@@ -83,7 +83,7 @@ struct test {
 };
 
 
-#define TEST_FAIL(...) do {                                             \
+#define TEST_FAIL0(fail_now,...) do {					\
                 int is_thrd = 0;                                        \
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
 			test_curr->name,                                \
@@ -99,11 +99,18 @@ struct test {
                         is_thrd = 1;                                    \
                 }                                                       \
                 TEST_UNLOCK();                                          \
+		if (!fail_now) break;					\
                 if (test_assert_on_fail || !is_thrd)                    \
                         assert(0);                                      \
                 else                                                    \
                         thrd_exit(0);                                   \
 	} while (0)
+
+/* Whine and abort test */
+#define TEST_FAIL(...) TEST_FAIL0(1, __VA_ARGS__)
+
+/* Whine right away, mark the test as failed, but continue the test. */
+#define TEST_FAIL_LATER(...) TEST_FAIL0(0, __VA_ARGS__)
 
 
 #define TEST_PERROR(call) do {						\
@@ -419,3 +426,4 @@ void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
 
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions);
+

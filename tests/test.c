@@ -97,6 +97,7 @@ _TEST_DECL(0020_destroy_hang);
 _TEST_DECL(0021_rkt_destroy);
 _TEST_DECL(0022_consume_batch);
 _TEST_DECL(0025_timers);
+_TEST_DECL(0026_consume_pause);
 
 
 /**
@@ -125,6 +126,7 @@ struct test tests[] = {
         _TEST(0021_rkt_destroy, 0),
         _TEST(0022_consume_batch, 0),
         _TEST(0025_timers, TEST_F_LOCAL),
+	_TEST(0026_consume_pause, 0),
         { NULL }
 };
 

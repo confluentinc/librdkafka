@@ -119,13 +119,9 @@ while [[ ! -z $@ ]]; do
     case $name in
         re|reconfigure)
             oldcmd=$(grep '^# configure exec: ' config.log | \
-                sed -e 's/^\# configure exec: //')
-            if [[ -z $oldcmd ]]; then
-                mkl_err "No previous execution found in config.log"
-                exit 1
-            fi
-            echo "Reconfiguring: $oldcmd"
-            exec $oldcmd
+                sed -e 's/^\# configure exec: [^ ]*configure\( \|$\)//')
+            echo "Reconfiguring: $0 $oldcmd"
+            exec $0 $oldcmd
             ;;
 
         list-modules)

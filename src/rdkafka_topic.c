@@ -642,6 +642,20 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
                 return -1;
         }
 
+	/* Ignore metadata completely for temporary errors. (issue #513)
+	 *   LEADER_NOT_AVAILABLE: Broker is rebalancing
+	 */
+	if (mdt->err == RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE &&
+	    mdt->partition_cnt == 0) {
+		rd_rkb_dbg(rkb, TOPIC, "METADATA",
+			   "Temporary error in metadata reply for "
+			   "topic %s (PartCnt %i): %s: ignoring",
+			   mdt->topic, mdt->partition_cnt,
+			   rd_kafka_err2str(mdt->err));
+		return -1;
+	}
+
+
         /* See if this topic matches a cgrp whitelist. */
         if ((rkcg = rd_kafka_cgrp_get(rkb->rkb_rk)))
                 rd_kafka_cgrp_topic_check(rkcg, mdt->topic);

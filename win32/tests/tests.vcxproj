@@ -183,6 +183,7 @@
     <ClCompile Include="..\..\tests\0021-rkt_destroy.c" />
     <ClCompile Include="..\..\tests\0022-consume_batch.c" />
     <ClCompile Include="..\..\tests\0025-timers.c" />
+    <ClCompile Include="..\..\tests\0026-consume_pause.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

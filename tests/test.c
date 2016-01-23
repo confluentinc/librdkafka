@@ -279,7 +279,7 @@ static void test_read_conf_file (const char *conf_path,
                         res = RD_KAFKA_CONF_OK;
                 } else if (!strcmp(name, "test.concurrent.max")) {
                         TEST_LOCK();
-                        test_concurrent_max = strtod(val, NULL);
+                        test_concurrent_max = (int)strtod(val, NULL);
                         TEST_UNLOCK();
                         res = RD_KAFKA_CONF_OK;
                 } else if (!strncmp(name, "topic.", strlen("topic."))) {
@@ -319,7 +319,6 @@ static void test_read_conf_file (const char *conf_path,
  */
 void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		     int timeout) {
-        char buf[512];
 	const char *test_conf =
 #ifndef _MSC_VER
 		getenv("RDKAFKA_TEST_CONF") ? getenv("RDKAFKA_TEST_CONF") : 
@@ -341,11 +340,15 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 #endif
 
 #ifdef SIGIO
-                /* Quick termination */
-                rd_snprintf(buf, sizeof(buf), "%i", SIGIO);
-                rd_kafka_conf_set(*conf, "internal.termination.signal",
-                                  buf, NULL, 0);
-                signal(SIGIO, SIG_IGN);
+		{
+			char buf[64];
+
+			/* Quick termination */
+			rd_snprintf(buf, sizeof(buf), "%i", SIGIO);
+			rd_kafka_conf_set(*conf, "internal.termination.signal",
+					  buf, NULL, 0);
+			signal(SIGIO, SIG_IGN);
+		}
 #endif
         }
 
@@ -749,7 +752,7 @@ int main(int argc, char **argv) {
 
         for (i = 1 ; i < argc ; i++) {
                 if (!strncmp(argv[i], "-p", 2) && strlen(argv[i]) > 2)
-                        test_concurrent_max = strtod(argv[i]+2, NULL);
+                        test_concurrent_max = (int)strtod(argv[i]+2, NULL);
                 else if (!strcmp(argv[i], "-l"))
                         test_flags |= TEST_F_LOCAL;
                 else if (!strcmp(argv[i], "-a"))
@@ -1423,7 +1426,7 @@ struct test_mv_p *test_msgver_p_get (test_msgver_t *mv, const char *topic,
 
 	mv->p[mv->p_cnt++] = p = calloc(1, sizeof(*p));
 
-	p->topic = strdup(topic);
+	p->topic = rd_strdup(topic);
 	p->partition = partition;
 
 	return p;
@@ -1567,7 +1570,7 @@ static int test_mv_mvec_verify_order (test_msgver_t *mv, int flags,
 static int test_mv_m_cmp_offset (const void *_a, const void *_b) {
 	const struct test_mv_m *a = _a, *b = _b;
 
-	return a->offset - b->offset;
+	return (int)(a->offset - b->offset);
 }
 
 static int test_mv_m_cmp_msgid (const void *_a, const void *_b) {

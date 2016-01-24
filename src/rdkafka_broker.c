@@ -339,26 +339,29 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 }
 
 
+
 /**
- * Scan the wait-response queue for message timeouts.
+ * Scan bufq for buffer timeouts, trigger buffer callback on timeout.
  *
- * Locality: Broker thread
+ * @returns the number of timed out buffers.
+ *
+ * @locality broker thread
  */
-static void rd_kafka_broker_waitresp_timeout_scan (rd_kafka_broker_t *rkb,
-						   rd_ts_t now) {
+static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
+					      int is_waitresp_q,
+					      rd_kafka_bufq_t *rkbq,
+					      rd_ts_t now) {
 	rd_kafka_buf_t *rkbuf, *tmp;
 	int cnt = 0;
 
-	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
+	TAILQ_FOREACH_SAFE(rkbuf, &rkbq->rkbq_bufs, rkbuf_link, tmp) {
 
-	TAILQ_FOREACH_SAFE(rkbuf,
-			   &rkb->rkb_waitresps.rkbq_bufs, rkbuf_link, tmp) {
 		if (likely(rkbuf->rkbuf_ts_timeout > now))
 			continue;
 
-		rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
+		rd_kafka_bufq_deq(rkbq, rkbuf);
 
-                if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING)
+		if (is_waitresp_q && rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING)
                         rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1);
 
                 rd_kafka_buf_callback(rkb, RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
@@ -366,13 +369,35 @@ static void rd_kafka_broker_waitresp_timeout_scan (rd_kafka_broker_t *rkb,
 		cnt++;
 	}
 
-	if (cnt > 0) {
-		rd_rkb_dbg(rkb, MSG, "REQTMOUT", "Timed out %i requests", cnt);
+	return cnt;
+}
+
+
+/**
+ * Scan the wait-response and outbuf queues for message timeouts.
+ *
+ * Locality: Broker thread
+ */
+static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
+	int req_cnt, q_cnt;
+
+	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
+
+	/* Outstanding requests waiting for response */
+	req_cnt = rd_kafka_broker_bufq_timeout_scan(rkb, 1,
+						    &rkb->rkb_waitresps, now);
+	/* Requests in local queue not sent yet. */
+	q_cnt = rd_kafka_broker_bufq_timeout_scan(rkb, 0,
+						  &rkb->rkb_outbufs, now);
+
+	if (req_cnt + q_cnt > 0) {
+		rd_rkb_dbg(rkb, MSG, "REQTMOUT", "Timed out %i+%i requests",
+			   req_cnt, q_cnt);
 
                 /* Fail the broker if socket.max.fails is configured and
                  * now exceeded. */
-                rkb->rkb_req_timeouts   += cnt;
-                rd_atomic64_add(&rkb->rkb_c.req_timeouts, cnt);
+                rkb->rkb_req_timeouts   += req_cnt;
+                rd_atomic64_add(&rkb->rkb_c.req_timeouts, req_cnt + q_cnt);
 
                 if (rkb->rkb_rk->rk_conf.socket_max_fails &&
                     rkb->rkb_req_timeouts >=
@@ -2122,7 +2147,7 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 
         /* Scan wait-response queue for timeouts. */
         if (rd_interval(&rkb->rkb_timeout_scan_intvl, 1000000, now) > 0)
-                rd_kafka_broker_waitresp_timeout_scan(rkb, now);
+                rd_kafka_broker_timeout_scan(rkb, now);
 }
 
 

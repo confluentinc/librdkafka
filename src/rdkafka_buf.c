@@ -392,6 +392,7 @@ int rd_kafka_buf_retry (rd_kafka_broker_t *rkb,
                 if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
                     rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
                     ++rkbuf->rkbuf_retries < rkb->rkb_rk->rk_conf.max_retries) {
+			rkbuf->rkbuf_ts_sent = 0;
                         rd_kafka_broker_buf_retry(rkb, rkbuf);
                         return 1;
                 }

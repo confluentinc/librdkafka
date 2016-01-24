@@ -1948,7 +1948,7 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
                                  rkmessage->offset);
 
                 } else if (rkmessage->err) {
-                        TEST_SAY("%s [%"PRId32"] error (offset %"PRId64"): %s",
+                        TEST_SAY("%s [%"PRId32"] error (offset %"PRId64"): %s\n",
                                  rkmessage->rkt ?
                                  rd_kafka_topic_name(rkmessage->rkt) :
                                  "(no-topic)",
@@ -2012,7 +2012,7 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         eof_cnt++;
 
                 } else if (rkmessage->err) {
-                        TEST_SAY("%s [%"PRId32"] error (offset %"PRId64"): %s",
+                        TEST_SAY("%s [%"PRId32"] error (offset %"PRId64"): %s\n",
                                  rkmessage->rkt ?
                                  rd_kafka_topic_name(rkmessage->rkt) :
                                  "(no-topic)",

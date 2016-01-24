@@ -27,6 +27,7 @@
 extern int test_level;
 
 extern int test_seed;
+extern char test_mode[64];
 extern RD_TLS struct test *test_curr;
 extern int test_assert_on_fail;
 extern int tests_running_cnt;

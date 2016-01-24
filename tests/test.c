@@ -40,8 +40,9 @@
 
 int test_level = 2;
 int test_seed = 0;
+
+char test_mode[64] = "bare";
 static int  test_exit = 0;
-static char test_mode[64] = "bare";
 static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
        int  tests_running_cnt = 0;
@@ -731,6 +732,7 @@ static int test_summary (int do_lock) {
 static void test_sig_term (int sig) {
 	if (test_exit)
 		exit(1);
+	fprintf(stderr, "Exiting tests, waiting for running tests to finish.\n");
 	test_exit = 1;
 }
 #endif

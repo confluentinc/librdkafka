@@ -187,6 +187,8 @@ int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 		 * items of 'srcq' we can move the entire queue. */
 		if (cnt == -1 ||
                     cnt >= (int)srcq->rkq_qlen) {
+                        rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
+                                   srcq->rkq_qlen > 0);
 			TAILQ_CONCAT(&dstq->rkq_q, &srcq->rkq_q, rko_link);
 			mcnt = srcq->rkq_qlen;
                         dstq->rkq_qlen += srcq->rkq_qlen;
@@ -321,6 +323,8 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
         int handled = 0;
 
 	mtx_lock(&rkq->rkq_lock);
+
+        rd_dassert(TAILQ_EMPTY(&rkq->rkq_q) || rkq->rkq_qlen > 0);
 	if (rkq->rkq_fwdq) {
                 rd_kafka_q_t *fwdq = rkq->rkq_fwdq;
                 int ret;
@@ -338,8 +342,8 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) && timeout_ms != 0) {
 		if (timeout_ms != RD_POLL_INFINITE) {
 			if (cnd_timedwait_ms(&rkq->rkq_cond,
-						      &rkq->rkq_lock,
-						      timeout_ms) == thrd_timedout)
+                                             &rkq->rkq_lock,
+                                             timeout_ms) == thrd_timedout)
 				break;
 
 			timeout_ms = 0;
@@ -490,11 +494,14 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 		if (!rko->rko_err) {
                         rd_kafka_toppar_t *rktp;
                         rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+			rd_kafka_toppar_lock(rktp);
+			rktp->rktp_app_offset = rko->rko_offset+1;
                         if ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit)
                             || rktp->rktp_rkt->rkt_conf.auto_commit)
                                 rd_kafka_offset_store0(rktp,
                                                        rko->rko_offset+1,
-                                                       1/*lock*/);
+                                                       0/* no lock */);
+			rd_kafka_toppar_unlock(rktp);
                 }
 
 		/* Get rkmessage from rko and append to array. */

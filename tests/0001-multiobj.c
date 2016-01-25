@@ -46,7 +46,7 @@
 int main_0001_multiobj (int argc, char **argv) {
 	int partition = RD_KAFKA_PARTITION_UA; /* random */
 	int i;
-	const int NUM_ITER = 30;
+	const int NUM_ITER = 10;
 #ifndef _MSC_VER
 	struct rlimit rlim = {};
 #endif

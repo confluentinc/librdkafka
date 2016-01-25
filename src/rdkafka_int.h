@@ -68,6 +68,17 @@ typedef struct rd_ikafka_s rd_ikafka_t;
                                        (rk), "assert: " # cond);        \
         } while (0)
 
+/* Debug assert, only enabled with --enable-devel */
+#if ENABLE_DEVEL == 1
+#define rd_dassert(cond) rd_kafka_assert(NULL, cond)
+#else
+#define rd_dassert(cond)  do {} while (0)
+#endif
+
+
+/** Assert if reached */
+#define RD_NOTREACHED() rd_kafka_assert(NULL, !*"/* NOTREACHED */ violated")
+
 void
 RD_NORETURN
 rd_kafka_crash (const char *file, int line, const char *function,
@@ -233,14 +244,23 @@ void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
 			rd_kafka_log0(rk,NULL,LOG_DEBUG,fac,__VA_ARGS__); \
 	} while (0)
 
-#define rd_rkb_log(rkb,level,fac,...)					\
-	rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name, level, fac, __VA_ARGS__)
+/* NOTE: The local copy of _logname is needed due rkb_logname_lock lock-ordering
+ *       when logging another broker's name in the message. */
+#define rd_rkb_log(rkb,level,fac,...) do {				\
+		char _logname[RD_KAFKA_NODENAME_SIZE];			\
+                mtx_lock(&(rkb)->rkb_logname_lock);                     \
+		strncpy(_logname, rkb->rkb_logname, sizeof(_logname)-1); \
+		_logname[RD_KAFKA_NODENAME_SIZE-1] = '\0';		\
+                mtx_unlock(&(rkb)->rkb_logname_lock);                   \
+		rd_kafka_log0((rkb)->rkb_rk, _logname,			\
+                              level, fac, __VA_ARGS__);                 \
+        } while (0)
 
 #define rd_rkb_dbg(rkb,ctx,fac,...) do {				\
 		if (unlikely((rkb)->rkb_rk->rk_conf.debug &		\
-			     (RD_KAFKA_DBG_ ## ctx)))			\
-			rd_kafka_log0((rkb)->rkb_rk, (rkb)->rkb_name,	\
-				      LOG_DEBUG, fac, __VA_ARGS__);		\
+			     (RD_KAFKA_DBG_ ## ctx))) {			\
+			rd_rkb_log(rkb, LOG_DEBUG, fac, __VA_ARGS__);	\
+                }                                                       \
 	} while (0)
 
 

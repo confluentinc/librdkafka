@@ -586,13 +586,20 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 	size_t of = *ofp;
         int64_t consumer_lag = -1;
         struct offset_stats offs;
+        int32_t leader_nodeid = -1;
+
+        rd_kafka_toppar_lock(rktp);
+
+        if (rktp->rktp_leader) {
+                rd_kafka_broker_lock(rktp->rktp_leader);
+                leader_nodeid = rktp->rktp_leader->rkb_nodeid;
+                rd_kafka_broker_unlock(rktp->rktp_leader);
+        }
 
         /* Grab a copy of the latest finalized offset stats */
-        rd_kafka_toppar_lock(rktp);
         offs = rktp->rktp_offsets_fin;
-        rd_kafka_toppar_unlock(rktp);
 
-        if (offs.hi_offset != -1 && offs.fetch_offset > 0) {
+        if (offs.hi_offset != RD_KAFKA_OFFSET_INVALID && offs.fetch_offset > 0){
                 if (offs.fetch_offset > offs.hi_offset)
                         consumer_lag = 0;
                 else
@@ -629,7 +636,7 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   first ? "" : ", ",
 		   rktp->rktp_partition,
 		   rktp->rktp_partition,
-		   rktp->rktp_leader ? rktp->rktp_leader->rkb_nodeid : -1,
+                   leader_nodeid,
 		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_DESIRED)?"true":"false",
 		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_UNKNOWN)?"true":"false",
 		   rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
@@ -653,6 +660,8 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rd_atomic64_get(&rktp->rktp_c.tx_bytes),
 		   rd_atomic64_get(&rktp->rktp_c.msgs),
                    rd_atomic64_get(&rktp->rktp_c.rx_ver_drops));
+
+        rd_kafka_toppar_unlock(rktp);
 
 	*bufp = buf;
 	*sizep = size;
@@ -1426,10 +1435,16 @@ static int rd_kafka_consume_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
         }
 
 	rkmessage = rd_kafka_message_get(rko);
-	if (!rko->rko_err &&
-            ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit) ||
-             rktp->rktp_rkt->rkt_conf.auto_commit))
-		rd_kafka_offset_store0(rktp, rkmessage->offset+1, 1/*lock*/);
+	if (!rko->rko_err) {
+		rd_kafka_toppar_lock(rktp);
+		rktp->rktp_app_offset = rkmessage->offset+1;
+		if ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit) ||
+		    rktp->rktp_rkt->rkt_conf.auto_commit)
+			rd_kafka_offset_store0(rktp, rkmessage->offset+1,
+					       0/*no lock*/);
+		rd_kafka_toppar_unlock(rktp);
+	}
+
 	ctx->consume_cb(rkmessage, ctx->opaque);
 
         return 1;
@@ -1536,10 +1551,13 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 	if (!rko->rko_err) {
                 rd_kafka_toppar_t *rktp;
                 rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+		rd_kafka_toppar_lock(rktp);
+		rktp->rktp_app_offset = rkmessage->offset+1;
                 if ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit)
                     || rktp->rktp_rkt->rkt_conf.auto_commit)
                         rd_kafka_offset_store0(rktp, rkmessage->offset+1,
-                                               1/*lock*/);
+                                               0/*no lock*/);
+		rd_kafka_toppar_unlock(rktp);
         }
 
 	return rkmessage;
@@ -1932,7 +1950,7 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
         if (rk->rk_internal_rkb)
                 rd_kafka_broker_dump(fp, rk->rk_internal_rkb, locks);
         if (locks)
-                mtx_lock(&rk->rk_internal_rkb_lock);
+                mtx_unlock(&rk->rk_internal_rkb_lock);
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rd_kafka_broker_dump(fp, rkb, locks);
@@ -1947,7 +1965,8 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
                         rkcg->rkcg_flags);
                 fprintf(fp, "   coord_id %"PRId32", managing broker %s\n",
                         rkcg->rkcg_coord_id,
-                        rkcg->rkcg_rkb ? rkcg->rkcg_rkb->rkb_name : "(none)");
+                        rkcg->rkcg_rkb ?
+                        rd_kafka_broker_name(rkcg->rkcg_rkb) : "(none)");
 
                 fprintf(fp, "  toppars:\n");
                 RD_LIST_FOREACH(s_rktp, &rkcg->rkcg_toppars, i) {

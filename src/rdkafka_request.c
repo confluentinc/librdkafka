@@ -169,12 +169,9 @@ static rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_broker_t *rkb,
 err:
         actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
-                /* Re-query for coordinator */
-                rd_kafka_toppar_lock(rktp);
-                rd_kafka_broker_metadata_req(rktp->rktp_leader, 0,
-                                             rktp->rktp_rkt, NULL,
-                                             "Offset request failed");
-                rd_kafka_toppar_unlock(rktp);
+                /* Re-query for leader */
+                rd_kafka_topic_leader_query(rktp->rktp_rkt->rkt_rk,
+					    rktp->rktp_rkt);
                 /* Schedule a retry */
                 rd_kafka_buf_keep(request);
                 rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
@@ -304,9 +301,10 @@ void rd_kafka_toppar_lag_handle_Offset (rd_kafka_broker_t *rkb,
         /* Parse and return Offset */
         err = rd_kafka_handle_Offset(rkb, err, rkbuf, request, rktp, &Offset);
 
-
         if (!err)
                 rktp->rktp_lo_offset = Offset;
+
+        rktp->rktp_wait_consumer_lag_resp = 0;
 
         rd_kafka_toppar_destroy(s_rktp); /* from request.opaque */
 }
@@ -366,25 +364,22 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
  * Offsets for included partitions will be propagated through the passed
  * 'offsets' list.
  */
-static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
-                                         rd_kafka_resp_err_t err,
-                                         rd_kafka_buf_t *rkbuf,
-                                         rd_kafka_buf_t *request,
-                                         rd_kafka_topic_partition_list_t
-                                         *offsets) {
+rd_kafka_resp_err_t
+rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
+			     rd_kafka_resp_err_t err,
+			     rd_kafka_buf_t *rkbuf,
+			     rd_kafka_buf_t *request,
+			     rd_kafka_topic_partition_list_t *offsets) {
         const int log_decode_errors = 1;
         int32_t TopicArrayCnt;
-        int64_t offset = -1;
-        int16_t ErrorCode = 0;
+        int64_t offset = RD_KAFKA_OFFSET_INVALID;
         rd_kafkap_str_t metadata;
         int i;
         int actions;
         int seen_cnt = 0;
 
-        if (err) {
-                ErrorCode = err;
+        if (err)
                 goto err;
-        }
 
         /* Set default offset for all partitions. */
         rd_kafka_topic_partition_list_set_offsets(rkb->rkb_rk, offsets, 0,
@@ -432,6 +427,7 @@ static void rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
 				rktpar->_private = s_rktp;
 			}
 
+			/* broker reports invalid offset as -1 */
 			if (offset == -1)
 				rktpar->offset = RD_KAFKA_OFFSET_INVALID;
 			else
@@ -457,21 +453,22 @@ err:
         rd_rkb_dbg(rkb, TOPIC, "OFFFETCH",
                    "OffsetFetch for %d/%d partition(s) returned %s",
                    seen_cnt,
-                   offsets ? offsets->cnt : -1, rd_kafka_err2str(ErrorCode));
+                   offsets ? offsets->cnt : -1, rd_kafka_err2str(err));
 
-        actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
+        actions = rd_kafka_err_action(rkb, err, rkbuf, request);
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
                 rd_kafka_cgrp_op(rkb->rkb_rk->rk_cgrp, NULL,
-                                 NULL, RD_KAFKA_OP_COORD_QUERY, ErrorCode);
+                                 NULL, RD_KAFKA_OP_COORD_QUERY, err);
                 if (request) {
                         /* Schedule a retry */
                         rd_kafka_buf_keep(request);
                         rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
                 }
-                return;
         }
+
+	return err;
 }
 
 
@@ -673,9 +670,12 @@ err:
 
 
 /**
- * Send OffsetCommitRequest for toppar.
+ * @brief Send OffsetCommitRequest for a list of partitions.
+ *
+ * @returns 0 if none of the partitions in \p offsets had valid offsets,
+ *          else 1.
  */
-void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
+int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                                    rd_kafka_cgrp_t *rkcg,
                                    int16_t api_version,
                                    rd_kafka_topic_partition_list_t *offsets,
@@ -718,6 +718,10 @@ void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
         for (i = 0 ; i < offsets->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &offsets->elems[i];
 
+		/* Skip partitions with invalid offset. */
+		if (rktpar->offset == RD_KAFKA_OFFSET_INVALID)
+			continue;
+
                 if (last_topic == NULL || strcmp(last_topic, rktpar->topic)) {
                         /* New topic */
 
@@ -750,6 +754,12 @@ void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                                        rktpar->metadata, rktpar->metadata_size);
         }
 
+	if (TopicCnt == 0) {
+		/* No topic+partitions had valid offsets to commit. */
+		rd_kafka_buf_destroy(rkbuf);
+		return 0;
+	}
+
         /* Finalize previous PartitionCnt */
         if (PartCnt > 0)
                 rd_kafka_buf_update_u32(rkbuf, of_PartCnt,  PartCnt);
@@ -769,6 +779,8 @@ void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_OffsetCommit, rkbuf,
                                        replyq, resp_cb, opaque);
+
+	return 1;
 
 }
 
@@ -1340,8 +1352,10 @@ err:
                 rd_kafka_cgrp_op(rkcg, NULL, NULL, RD_KAFKA_OP_COORD_QUERY,
                                  ErrorCode);
                 /* Schedule a retry */
-                rd_kafka_buf_keep(request);
-                rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+		if (ErrorCode != RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP) {
+			rd_kafka_buf_keep(request);
+			rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+		}
                 return;
         }
 
@@ -1419,7 +1433,7 @@ rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
 		   (all_topics ? "all topics":"locally known topics"),
                    reason ? reason : "");
 
-	if (only_rkt || all_topics) {
+	if (only_rkt || !all_topics) {
 		rd_kafka_rdlock(rkb->rkb_rk);
 
 		/* Calculate size to hold requested topics */
@@ -1435,7 +1449,7 @@ rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
 	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1, sizeof(arrsize) + tnamelen);
 	rd_kafka_buf_write_i32(rkbuf, arrsize);
 
-	if (only_rkt || all_topics) {
+	if (only_rkt || !all_topics) {
 		/* Just our locally known topics */
 
 		TAILQ_FOREACH(rkt, &rkb->rkb_rk->rk_topics, rkt_link) {
@@ -1687,8 +1701,7 @@ void rd_kafka_op_handle_Metadata (rd_kafka_broker_t *rkb,
         rd_kafka_q_t *replyq;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
-		   "===== Received metadata from %s =====",
-		   rkb->rkb_name);
+		   "===== Received metadata =====");
 
 	/* Avoid metadata updates when we're terminating. */
 	if (rd_kafka_terminating(rkb->rkb_rk))

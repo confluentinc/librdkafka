@@ -99,7 +99,12 @@ static void consume_all (rd_kafka_t **rk_c, int rk_cnt, int exp_msg_cnt,
 			if (!rkmsg)
 				continue;
 			else if (rkmsg->err)
-				TEST_SAY("Message error: %s\n",
+				TEST_SAY("Message error "
+                                         "(at offset %"PRId64" after "
+                                         "%d/%d messages and %dms): %s\n",
+                                         rkmsg->offset,
+                                         consumed_msg_cnt, exp_msg_cnt,
+                                         (int)(test_clock() - ts_start)/1000,
 					 rd_kafka_message_errstr(rkmsg));
 			else
 				consumed_msg_cnt++;
@@ -110,7 +115,7 @@ static void consume_all (rd_kafka_t **rk_c, int rk_cnt, int exp_msg_cnt,
 				static int once = 0;
 				if (!once++)
 					TEST_SAY("All messages consumed\n");
-				break;
+				return;
 			}
 		}
 	}
@@ -215,8 +220,32 @@ int main_0018_cgrp_term (int argc, char **argv) {
 	TEST_SAY("Closing remaining consumers\n");
 	for (i = 0 ; i < _CONS_CNT ; i++) {
 		test_timing_t t_close;
+                rd_kafka_topic_partition_list_t *sub;
+                int j;
+
 		if (!rk_c[i])
 			continue;
+
+                /* Query subscription */
+                err = rd_kafka_subscription(rk_c[i], &sub);
+                if (err)
+                        TEST_FAIL("%s: subscription() failed: %s\n",
+                                  rd_kafka_name(rk_c[i]),
+                                  rd_kafka_err2str(err));
+                TEST_SAY("%s: subscription (%d):\n",
+                         rd_kafka_name(rk_c[i]), sub->cnt);
+                for (j = 0 ; j < sub->cnt ; j++)
+                        TEST_SAY(" %s\n", sub->elems[j].topic);
+                rd_kafka_topic_partition_list_destroy(sub);
+
+                /* Run an explicit unsubscribe() (async) prior to close()
+                 * to trigger race condition issues on termination. */
+                TEST_SAY("Unsubscribing instance %s\n", rd_kafka_name(rk_c[i]));
+                err = rd_kafka_unsubscribe(rk_c[i]);
+                if (err)
+                        TEST_FAIL("%s: unsubscribe failed: %s\n",
+                                  rd_kafka_name(rk_c[i]),
+                                  rd_kafka_err2str(err));
 
 		TEST_SAY("Closing %s\n", rd_kafka_name(rk_c[i]));
 		TIMING_START(&t_close, "CONSUMER.CLOSE");

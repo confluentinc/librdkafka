@@ -87,16 +87,27 @@ static int verify_groups (const struct rd_kafka_group_list *grplist,
  */
 static int list_groups (rd_kafka_t *rk, char **groups, int group_cnt,
                         const char *desc) {
-        rd_kafka_resp_err_t err;
+        rd_kafka_resp_err_t err = 0;
         const struct rd_kafka_group_list *grplist;
         int i, r;
         int fails = 0;
         int seen = 0;
         int seen_all = 0;
+	int retries = 5;
 
         TEST_SAY("List groups (expect %d): %s\n", group_cnt, desc);
 
-        err = rd_kafka_list_groups(rk, NULL, &grplist, 5000);
+	/* FIXME: Wait for broker to come up. This should really be abstracted
+	 *        by librdkafka. */
+	do {
+		if (err) {
+			TEST_SAY("Retrying group list in 1s because of: %s\n",
+				 rd_kafka_err2str(err));
+			rd_sleep(1);
+		}
+		err = rd_kafka_list_groups(rk, NULL, &grplist, 5000);
+	} while (err == RD_KAFKA_RESP_ERR__TRANSPORT && retries-- > 0);
+
         if (err) {
                 TEST_SAY("Failed to list all groups: %s\n",
                          rd_kafka_err2str(err));

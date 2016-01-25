@@ -532,7 +532,11 @@ public:
    *
    * The rebalance callback is responsible for updating librdkafka's
    * assignment set based on the two events: RdKafka::ERR__ASSIGN_PARTITIONS
-   * and RdKafka::ERR__REVOKE_PARTITIONS.
+   * and RdKafka::ERR__REVOKE_PARTITIONS but should also be able to handle
+   * arbitrary rebalancing failures where \p err is neither of those.
+   * @remark In this latter case (arbitrary error), the application must
+   *         call unassign() to synchronize state.
+
    *
    * Without a rebalance callback this is done automatically by librdkafka
    * but registering a rebalance callback gives the application flexibility
@@ -803,7 +807,7 @@ class RD_EXPORT Handle {
    *   - delivery report callbacks (if an RdKafka::DeliveryCb is configured) [producer]
    *   - event callbacks (if an RdKafka::EventCb is configured) [producer & consumer]
    *
-   * @warning This method must not be used with the RdKafka::KafkaConsumer,
+   * @warning This method MUST NOT be used with the RdKafka::KafkaConsumer,
    *          use its RdKafka::KafkaConsumer::consume() instead.
    *
    * @returns the number of events served.
@@ -835,6 +839,31 @@ class RD_EXPORT Handle {
    */
   virtual ErrorCode metadata (bool all_topics, const Topic *only_rkt,
                               Metadata **metadatap, int timeout_ms) = 0;
+
+
+  /**
+   * @brief Pause producing or consumption for the provided list of partitions.
+   *
+   * Success or error is returned per-partition in the \p partitions list.
+   *
+   * @returns ErrorCode::NO_ERROR
+   *
+   * @sa resume()
+   */
+  virtual ErrorCode pause (std::vector<TopicPartition*> &partitions) = 0;
+
+
+  /**
+   * @brief Resume producing or consumption for the provided list of partitions.
+   *
+   * Success or error is returned per-partition in the \p partitions list.
+   *
+   * @returns ErrorCode::NO_ERROR
+   *
+   * @sa pause()
+   */
+  virtual ErrorCode resume (std::vector<TopicPartition*> &partitions) = 0;
+
 };
 
 
@@ -1143,6 +1172,8 @@ public:
    *
    * @remark Use \c delete to free the message.
    *
+   * @remark Application MUST NOT call \p poll() on KafkaConsumer objects.
+   *
    * @returns One of:
    *  - proper message (RdKafka::Message::err() is ERR_NO_ERROR)
    *  - error event (RdKafka::Message::err() is != ERR_NO_ERROR)
@@ -1202,6 +1233,13 @@ public:
    */
   virtual ErrorCode position (std::vector<TopicPartition*> &partitions,
                               int timeout_ms) = 0;
+
+
+  /**
+   * For pausing and resuming consumption, see
+   * @sa RdKafka::Handle::pause() and RdKafka::Handle::resume()
+   */
+
 
   /**
    * @brief Close and shut down the proper.

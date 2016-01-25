@@ -123,18 +123,23 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_kafka_buf_t     *rkb_recv_buf;
 
 	rd_kafka_bufq_t     rkb_outbufs;
-	rd_atomic32_t       rkb_outbuf_msgcnt;
 	rd_kafka_bufq_t     rkb_waitresps;
 	rd_kafka_bufq_t     rkb_retrybufs;
 
 	rd_avg_t            rkb_avg_rtt;        /* Current RTT period */
 	rd_avg_t            rkb_avg_throttle;   /* Current throttle period */
 
+        /* These are all protected by rkb_lock */
 	char                rkb_name[RD_KAFKA_NODENAME_SIZE];  /* Displ name */
 	char                rkb_nodename[RD_KAFKA_NODENAME_SIZE]; /* host:port*/
         uint16_t            rkb_port;                          /* TCP port */
         char               *rkb_origname;                      /* Original
                                                                 * host name */
+
+
+        /* Logging name is a copy of rkb_name, protected by its own mutex */
+        char               *rkb_logname;
+        mtx_t               rkb_logname_lock;
 
         rd_ts_t             rkb_ts_connect;       /* Last connection attempt */
 
@@ -183,7 +188,7 @@ int rd_kafka_brokers_add0 (rd_kafka_t *rk, const char *brokerlist);
 void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state);
 
 void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
-			   rd_kafka_resp_err_t err,
+			   int level, rd_kafka_resp_err_t err,
 			   const char *fmt, ...);
 
 void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
@@ -238,3 +243,5 @@ rd_kafka_broker_t *rd_kafka_broker_internal (rd_kafka_t *rk);
 void msghdr_print (rd_kafka_t *rk,
 		   const char *what, const struct msghdr *msg,
 		   int hexdump);
+
+const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb);

@@ -67,6 +67,14 @@ void offset_commit_cb_trampoline (rd_kafka_t *rk,
                                   rd_kafka_topic_partition_list_t *c_offsets,
                                   void *opaque);
 
+rd_kafka_topic_partition_list_t *
+    partitions_to_c_parts (const std::vector<TopicPartition*> &partitions);
+
+/**
+ * @brief Update the application provided 'partitions' with info from 'c_parts'
+ */
+void update_partitions_from_c_parts (std::vector<TopicPartition*> &partitions,
+                                     const rd_kafka_topic_partition_list_t *c_parts);
 
 
 class EventImpl : public Event {
@@ -437,6 +445,9 @@ class HandleImpl : virtual public Handle {
 
   RdKafka::ErrorCode metadata (bool all_topics,const Topic *only_rkt,
             Metadata **metadatap, int timeout_ms);
+
+  ErrorCode pause (std::vector<TopicPartition*> &partitions);
+  ErrorCode resume (std::vector<TopicPartition*> &partitions);
 
 
   rd_kafka_t *rk_;

@@ -1,4 +1,12 @@
-f = open('src/rdkafka.h')
+#!/usr/bin/env python
+
+import sys
+
+if len(sys.argv) != 2:
+    raise Exception('Usage: %s path/to/rdkafka.h' % sys.argv[0])
+
+kafka_h_file = sys.argv[1]
+f = open(kafka_h_file)
 for line in f:
     if '#define RD_KAFKA_VERSION' in line:
         version = line.split()[-1]

@@ -253,13 +253,18 @@ rd_kafka_assignment (rd_kafka_t *rk,
         rko->rko_payload = NULL;
         rd_kafka_op_destroy(rko);
 
+        if (!*partitions && !err) {
+                /* Create an empty list for convenience of the caller */
+                *partitions = rd_kafka_topic_partition_list_new(0);
+        }
+
         return err;
 }
 
 rd_kafka_resp_err_t
 rd_kafka_subscription (rd_kafka_t *rk,
                        rd_kafka_topic_partition_list_t **topics){
-                rd_kafka_op_t *rko;
+	rd_kafka_op_t *rko;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
 
@@ -273,5 +278,27 @@ rd_kafka_subscription (rd_kafka_t *rk,
         rko->rko_payload = NULL;
         rd_kafka_op_destroy(rko);
 
+        if (!*topics && !err) {
+                /* Create an empty list for convenience of the caller */
+                *topics = rd_kafka_topic_partition_list_new(0);
+        }
+
         return err;
 }
+
+
+rd_kafka_resp_err_t
+rd_kafka_pause_partitions (rd_kafka_t *rk,
+			   rd_kafka_topic_partition_list_t *partitions) {
+	return rd_kafka_toppars_pause_resume(rk, 1, RD_KAFKA_TOPPAR_F_APP_PAUSE,
+					     partitions);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_resume_partitions (rd_kafka_t *rk,
+			   rd_kafka_topic_partition_list_t *partitions) {
+	return rd_kafka_toppars_pause_resume(rk, 0, RD_KAFKA_TOPPAR_F_APP_PAUSE,
+					     partitions);
+}
+

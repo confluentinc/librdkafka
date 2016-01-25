@@ -59,8 +59,14 @@ static __inline void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
 static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 	rd_kafka_broker_t *rkb;
 
-	if (!(rkb = rktp->rktp_leader))
+        if (rktp->rktp_wait_consumer_lag_resp)
+                return; /* Previous request not finished yet */
+
+        rkb = rd_kafka_toppar_leader(rktp, 1/*proper brokers only*/);
+        if (!rkb)
 		return;
+
+        rktp->rktp_wait_consumer_lag_resp = 1;
 
 	/* Ask for oldest offset. The newest offset is automatically
          * propagated in FetchResponse.HighwaterMark. */
@@ -68,6 +74,8 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
                                &rktp->rktp_ops,
                                rd_kafka_toppar_lag_handle_Offset,
                                rd_kafka_toppar_keep(rktp));
+
+        rd_kafka_broker_destroy(rkb); /* from toppar_leader() */
 }
 
 
@@ -102,9 +110,10 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
 	rktp->rktp_offset_fp = NULL;
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets);
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets_fin);
-        rktp->rktp_lo_offset = -1;
-        rktp->rktp_stored_offset = -1;
-        rktp->rktp_committed_offset = -1;
+        rktp->rktp_lo_offset = RD_KAFKA_OFFSET_INVALID;
+	rktp->rktp_app_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_stored_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_committed_offset = RD_KAFKA_OFFSET_INVALID;
 	rd_kafka_msgq_init(&rktp->rktp_msgq);
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);
 	mtx_init(&rktp->rktp_lock, mtx_plain);
@@ -115,15 +124,24 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
         rd_atomic32_set(&rktp->rktp_version, 1);
 
 
-	/* FIXME: Use a global timer to collect offsets for all partitions */
+        /* Consumer: If statistics is available we query the oldest offset
+         * of each partition.
+         * Since the oldest offset only moves on log retention, we cap this
+         * value on the low end to a reasonable value to avoid flooding
+         * the brokers with OffsetRequests when our statistics interval is low.
+         * FIXME: Use a global timer to collect offsets for all partitions */
         if (rktp->rktp_rkt->rkt_rk->rk_conf.stats_interval_ms > 0 &&
-            rkt->rkt_rk->rk_type == RD_KAFKA_CONSUMER)
+            rkt->rkt_rk->rk_type == RD_KAFKA_CONSUMER &&
+            rktp->rktp_partition != RD_KAFKA_PARTITION_UA) {
+                int intvl = rkt->rkt_rk->rk_conf.stats_interval_ms;
+                if (intvl < 10 * 1000 /* 10s */)
+                        intvl = 10 * 1000;
 		rd_kafka_timer_start(&rkt->rkt_rk->rk_timers,
 				     &rktp->rktp_consumer_lag_tmr,
-				     rktp->rktp_rkt->rkt_rk->
-				     rk_conf.stats_interval_ms * 1000,
+                                     intvl * 1000,
 				     rd_kafka_toppar_consumer_lag_tmr_cb,
 				     rktp);
+        }
 
         rktp->rktp_s_rkt = rd_kafka_topic_keep(rkt);
 
@@ -632,8 +650,8 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
                      "Migrating topic %.*s [%"PRId32"] from %s to %s",
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition,
-                     old_rkb ? old_rkb->rkb_name : "(none)",
-                     new_rkb ? new_rkb->rkb_name : "(none)");
+                     old_rkb ? rd_kafka_broker_name(old_rkb) : "(none)",
+                     new_rkb ? rd_kafka_broker_name(new_rkb) : "(none)");
 
         rd_kafka_q_enq(&dest_rkb->rkb_ops, rko);
 }
@@ -665,7 +683,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
                              "already on correct broker %s",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
-                             rkb ? rkb->rkb_name : "(none)");
+                             rkb ? rd_kafka_broker_name(rkb) : "(none)");
 
                 if (internal_fallback)
                         rd_kafka_broker_destroy(rkb);
@@ -676,7 +694,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
 			     "Broker %s no longer leader "
 			     "for topic %.*s [%"PRId32"]",
-			     rktp->rktp_leader->rkb_name,
+			     rd_kafka_broker_name(rktp->rktp_leader),
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition);
 
@@ -685,7 +703,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 			     "Broker %s is now leader for topic %.*s "
 			     "[%"PRId32"] with %i messages "
 			     "(%"PRIu64" bytes) queued",
-			     rkb->rkb_name,
+			     rd_kafka_broker_name(rkb),
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
 			     rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
@@ -991,7 +1009,7 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 						RD_KAFKA_TOPPAR_FETCH_ACTIVE);
 	}
 
-        rktp->rktp_offsets_fin.eof_offset = -1;
+        rktp->rktp_offsets_fin.eof_offset = RD_KAFKA_OFFSET_INVALID;
 
 	rd_kafka_toppar_unlock(rktp);
 
@@ -1114,15 +1132,11 @@ static void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
                 goto err_reply;
         }
 
-        if (offset == RD_KAFKA_OFFSET_BEGINNING ||
-	    offset == RD_KAFKA_OFFSET_END ||
-            offset <= RD_KAFKA_OFFSET_TAIL_BASE) {
+	if (offset == RD_KAFKA_OFFSET_STORED)
+		err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+	else if (RD_KAFKA_OFFSET_IS_LOGICAL(offset))
 		rd_kafka_toppar_next_offset_handle(rktp, offset);
-
-	} else if (offset == RD_KAFKA_OFFSET_STORED) {
-                err = RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-	} else {
+	else {
 		rktp->rktp_next_offset = offset;
                 rd_kafka_toppar_set_fetch_state(rktp,
 						RD_KAFKA_TOPPAR_FETCH_ACTIVE);
@@ -1259,7 +1273,12 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
                 rktp->rktp_fetch_version = version;
         }
 
-        if (RD_KAFKA_OFFSET_IS_LOGICAL(rktp->rktp_next_offset)) {
+
+	if (RD_KAFKA_TOPPAR_IS_PAUSED(rktp)) {
+		should_fetch = 0;
+		reason = "paused";
+
+	} else if (RD_KAFKA_OFFSET_IS_LOGICAL(rktp->rktp_next_offset)) {
                 should_fetch = 0;
                 reason = "no concrete offset";
 
@@ -1615,6 +1634,121 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_seek (rd_kafka_toppar_t *rktp,
 
 
 
+/**
+ * Pause or resume a list of partitions.
+ * \p flag is either RD_KAFKA_TOPPAR_F_APP_PAUSE or .._F_LIB_PAUSE
+ * depending on if the app paused or librdkafka.
+ * \p pause is 1 for pausing or 0 for resuming.
+ */
+rd_kafka_resp_err_t
+rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
+			       rd_kafka_topic_partition_list_t *partitions) {
+	int i;
+
+	rd_kafka_dbg(rk, TOPIC, pause ? "PAUSE":"RESUME",
+		     "%s %s %d partition(s)",
+		     flag & RD_KAFKA_TOPPAR_F_APP_PAUSE ? "Application" : "Library",
+		     pause ? "pausing" : "resuming", partitions->cnt);
+
+	for (i = 0 ; i < partitions->cnt ; i++) {
+		rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+		shptr_rd_kafka_toppar_t *s_rktp;
+		rd_kafka_toppar_t *rktp;
+		int32_t version;
+
+		s_rktp = rd_kafka_topic_partition_list_get_toppar(rk,
+								  partitions, i);
+		if (!s_rktp) {
+			rd_kafka_dbg(rk, TOPIC, pause ? "PAUSE":"RESUME",
+				     "%s %s [%"PRId32"]: skipped: "
+				     "unknown partition",
+				     pause ? "Pause":"Resume",
+				     rktpar->topic, rktpar->partition);
+
+			rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+			continue;
+		}
+
+		rktp = rd_kafka_toppar_s2i(s_rktp);
+
+		rd_kafka_toppar_lock(rktp);
+
+		/* New barrier */
+		version = rd_atomic32_add(&rktp->rktp_version, 1);
+
+		if (pause) {
+			/* Pause partition */
+			rktp->rktp_flags |= flag;
+
+			if (rk->rk_type == RD_KAFKA_CONSUMER) {
+				/* Save offset of last consumed message+1 as the
+				 * next message to fetch on resume. */
+				rktp->rktp_next_offset = rktp->rktp_app_offset;
+
+				rd_kafka_dbg(rk, TOPIC, pause?"PAUSE":"RESUME",
+					     "%s %s [%"PRId32"]: at offset %s",
+					     pause ? "Pause":"Resume",
+					     rktpar->topic, rktpar->partition,
+					     rd_kafka_offset2str(
+						     rktp->rktp_next_offset));
+			} else {
+				rd_kafka_dbg(rk, TOPIC, pause?"PAUSE":"RESUME",
+					     "%s %s [%"PRId32"]",
+					     pause ? "Pause":"Resume",
+					     rktpar->topic, rktpar->partition);
+			}
+
+		} else {
+			/* Resume partition */
+			rktp->rktp_flags &= ~flag;
+
+			if (rk->rk_type == RD_KAFKA_CONSUMER) {
+				rd_kafka_dbg(rk, TOPIC, pause?"PAUSE":"RESUME",
+					     "%s %s [%"PRId32"]: at offset %s",
+					     pause ? "Pause":"Resume",
+					     rktpar->topic, rktpar->partition,
+					     rd_kafka_offset2str(
+						     rktp->rktp_next_offset));
+
+				/* If the resuming offset is logical we
+				 * need to trigger a seek (that performs the
+				 * logical->absolute lookup logic) to get
+				 * things going.
+				 * Typical case is when a partition is paused
+				 * before anything has been consumed by app
+				 * yet thus having rktp_app_offset=INVALID. */
+				if (rktp->rktp_next_offset ==
+				    RD_KAFKA_OFFSET_INVALID)
+					rd_kafka_toppar_op_seek(
+						rktp, rktp->rktp_next_offset,
+						NULL);
+
+			} else
+				rd_kafka_dbg(rk, TOPIC, pause?"PAUSE":"RESUME",
+					     "%s %s [%"PRId32"]",
+					     pause ? "Pause":"Resume",
+					     rktpar->topic, rktpar->partition);
+		}
+		rd_kafka_toppar_unlock(rktp);
+
+		if (pause && rk->rk_type == RD_KAFKA_CONSUMER) {
+			/* Flush partition's fetch queue */
+			rd_kafka_q_purge_toppar_version(&rktp->rktp_fetchq, rktp,
+							version);
+		}
+
+
+		rd_kafka_toppar_destroy(s_rktp);
+
+		rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+	}
+
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+
 
 /**
  * Propagate error for toppar
@@ -1635,14 +1769,32 @@ void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
 }
 
 
-rd_kafka_topic_partition_t *rd_kafka_topic_partition_new (const char *topic,
-                                                          int32_t partition) {
-        rd_kafka_topic_partition_t *rktpar = rd_calloc(1, sizeof(*rktpar));
-        return rktpar;
-}
 
-void rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar) {
-        rd_free(rktpar);
+
+
+/**
+ * Returns the local leader broker for this toppar.
+ * If \p proper_broker is set NULL will be returned if current handler
+ * is not a proper broker (INTERNAL broker).
+ *
+ * The returned broker has an increased refcount.
+ *
+ * Locks: none
+ */
+rd_kafka_broker_t *rd_kafka_toppar_leader (rd_kafka_toppar_t *rktp,
+                                           int proper_broker) {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_toppar_lock(rktp);
+        rkb = rktp->rktp_leader;
+        if (rkb) {
+                if (proper_broker && rkb->rkb_source == RD_KAFKA_INTERNAL)
+                        rkb = NULL;
+                else
+                        rd_kafka_broker_keep(rkb);
+        }
+        rd_kafka_toppar_unlock(rktp);
+
+        return rkb;
 }
 
 
@@ -1752,6 +1904,7 @@ rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
         memset(rktpar, 0, sizeof(*rktpar));
         rktpar->topic = rd_strdup(topic);
         rktpar->partition = partition;
+	rktpar->offset = RD_KAFKA_OFFSET_INVALID;
         rktpar->_private = _private;
 
         return rktpar;
@@ -1943,7 +2096,7 @@ int rd_kafka_topic_partition_list_set_offsets (
 			     is_commit ? "committing" : "setting",
 			     from_rktp ? "stored" : "default", rktpar->offset);
 
-		if (rktpar->offset >= 0)
+		if (!RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset))
 			valid_cnt++;
         }
 

@@ -70,6 +70,10 @@ static void rd_kafka_timer_schedule (rd_kafka_timers_t *rkts,
 	if (!rtmr->rtmr_interval)
 		return;
 
+        /* Timers framework is terminating */
+        if (unlikely(!rkts->rkts_enabled))
+                return;
+
 	rtmr->rtmr_next = rd_clock() + rtmr->rtmr_interval + extra_us;
 
 	if (!(first = TAILQ_FIRST(&rkts->rkts_timers)) ||
@@ -242,11 +246,12 @@ void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us) {
 void rd_kafka_timers_destroy (rd_kafka_timers_t *rkts) {
         rd_kafka_timer_t *rtmr;
 
-        rd_kafka_assert(NULL, TAILQ_EMPTY(&rkts->rkts_timers));
-
+        rd_kafka_timers_lock(rkts);
+        rkts->rkts_enabled = 0;
         while ((rtmr = TAILQ_FIRST(&rkts->rkts_timers)))
                 rd_kafka_timer_stop(rkts, rtmr, 0);
         rd_kafka_assert(rkts->rkts_rk, TAILQ_EMPTY(&rkts->rkts_timers));
+        rd_kafka_timers_unlock(rkts);
 
         cnd_destroy(&rkts->rkts_cond);
         mtx_destroy(&rkts->rkts_lock);
@@ -258,4 +263,5 @@ void rd_kafka_timers_init (rd_kafka_timers_t *rkts, rd_kafka_t *rk) {
         TAILQ_INIT(&rkts->rkts_timers);
         mtx_init(&rkts->rkts_lock, mtx_plain);
         cnd_init(&rkts->rkts_cond);
+        rkts->rkts_enabled = 1;
 }

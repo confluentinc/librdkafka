@@ -7,19 +7,20 @@ CYAN='\033[36m'
 CCLR='\033[0m'
 
 if [ -z "$1" ]; then
-    echo "Usage: $0 [-p] <00xx-...test> [modes..]"
+    echo "Usage: $0 [-..] <execfile> [modes..]"
     echo ""
     echo "  Modes: bare valgrind helgrind drd gdb"
     echo "  Options:"
-    echo "   -p    - run all tests in parallel"
+    echo "   -..    - Command arguments (pass thru)"
     exit 1
 fi
 
 ARGS=
-if [[ $1 == "-p" ]]; then
+
+while [[ $1 == -* ]]; do
     ARGS="$ARGS $1"
     shift
-fi
+done
 
 TEST=$1
 if [ ! -z "$2" ]; then
@@ -36,18 +37,19 @@ FAILED=0
 SUPP="--suppressions=librdkafka.suppressions"
 
 # Uncomment to generate valgrind suppressions
-#GEN_SUPP="--gen-suppressions=yes"
+GEN_SUPP="--gen-suppressions=yes"
 
 # Common valgrind arguments
 VALGRIND_ARGS="--error-exitcode=3"
 
 # Enable vgdb on valgrind errors.
-#VALGRIND_ARGS="$VALGRIND_ARGS --vgdb-error=1"
+VALGRIND_ARGS="$VALGRIND_ARGS --vgdb-error=1"
 
 echo -e "${CYAN}############## $TEST ################${CCLR}"
 
 for mode in $MODES; do
     echo -e "${CYAN}### Running test $TEST in $mode mode ###${CCLR}"
+    export TEST_MODE=$mode
     case "$mode" in
 	valgrind)
 	    valgrind $VALGRIND_ARGS --leak-check=full --show-leak-kinds=all \

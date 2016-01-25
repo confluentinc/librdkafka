@@ -208,6 +208,7 @@ struct rd_kafka_conf_s {
                         const char *fac, const char *buf);
         int    log_level;
 	int    log_thread_name;
+        int    log_connection_close;
 
         /* Socket creation callback */
         int (*socket_cb) (int domain, int type, int protocol, void *opaque);

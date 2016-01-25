@@ -5,6 +5,12 @@ DELETE_TOPICS=y
 
 set -e
 
+ARGS=
+while [[ $1 == -* ]]; do
+    ARGS="$ARGS $1"
+    shift
+done
+
 modes=$*
 if [[ -z "$modes" ]]; then
    modes="valgrind"
@@ -33,7 +39,12 @@ while true ; do
             echo "##################################################"
             echo "##################################################"
 
-            TESTS=$t ./run-test.sh ./merged $mode || (echo "Failed on iteration $iter, test $t, mode $mode" ; exit 1)
+            if [[ $t == all ]]; then
+                unset TESTS
+            else
+                export TESTS=$t
+            fi
+            ./run-test.sh $ARGS ./merged $mode || (echo "Failed on iteration $iter, test $t, mode $mode" ; exit 1)
         done
     done
 

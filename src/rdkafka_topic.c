@@ -642,6 +642,20 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
                 return -1;
         }
 
+	/* Ignore metadata completely for temporary errors. (issue #513)
+	 *   LEADER_NOT_AVAILABLE: Broker is rebalancing
+	 */
+	if (mdt->err == RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE &&
+	    mdt->partition_cnt == 0) {
+		rd_rkb_dbg(rkb, TOPIC, "METADATA",
+			   "Temporary error in metadata reply for "
+			   "topic %s (PartCnt %i): %s: ignoring",
+			   mdt->topic, mdt->partition_cnt,
+			   rd_kafka_err2str(mdt->err));
+		return -1;
+	}
+
+
         /* See if this topic matches a cgrp whitelist. */
         if ((rkcg = rd_kafka_cgrp_get(rkb->rkb_rk)))
                 rd_kafka_cgrp_topic_check(rkcg, mdt->topic);
@@ -929,6 +943,7 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
 	int avail;
 	shptr_rd_kafka_toppar_t *s_rktp;
         rd_kafka_toppar_t *rktp;
+        rd_kafka_broker_t *rkb;
 
 	s_rktp = rd_kafka_toppar_get(rd_kafka_topic_a2i(app_rkt),
                                      partition, 0/*no ua-on-miss*/);
@@ -936,9 +951,10 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
 		return 0;
 
         rktp = rd_kafka_toppar_s2i(s_rktp);
-	rd_kafka_toppar_lock(rktp);
-	avail = rktp->rktp_leader ? 1 : 0;
-	rd_kafka_toppar_unlock(rktp);
+        rkb = rd_kafka_toppar_leader(rktp, 1/*proper broker*/);
+        avail = rkb ? 1 : 0;
+        if (rkb)
+                rd_kafka_broker_destroy(rkb);
 	rd_kafka_toppar_destroy(s_rktp);
 	return avail;
 }

@@ -392,6 +392,7 @@ int rd_kafka_buf_retry (rd_kafka_broker_t *rkb,
                 if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
                     rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
                     ++rkbuf->rkbuf_retries < rkb->rkb_rk->rk_conf.max_retries) {
+			rkbuf->rkbuf_ts_sent = 0;
                         rd_kafka_broker_buf_retry(rkb, rkbuf);
                         return 1;
                 }
@@ -428,6 +429,8 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko) {
  *    with op type RD_KAFKA_OP_RECV_BUF.
  *  - else call rkbuf_cb().
  *
+ * \p response may be NULL.
+ *
  * Will decrease refcount for both response and request, eventually.
  */
 void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
@@ -438,11 +441,11 @@ void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
         if (unlikely(err && rd_kafka_buf_retry(rkb, err, request)))
                 return;
 
-        rd_kafka_assert(NULL, !request->rkbuf_response);
-        request->rkbuf_response = response;
-
         if (request->rkbuf_replyq) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
+
+		rd_kafka_assert(NULL, !request->rkbuf_response);
+		request->rkbuf_response = response;
 
                 /* Increment refcnt since rko_rkbuf will be decref:ed
                  * if q_enq() fails and we dont want the rkbuf gone in that
@@ -451,7 +454,7 @@ void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
                 rko->rko_rkbuf = request;
 
                 rko->rko_err = err;
-                if (rd_kafka_q_enq(request->rkbuf_replyq, rko)) {
+                if (likely(rd_kafka_q_enq(request->rkbuf_replyq, rko))) {
                         /* Enqueued */
                         rd_kafka_buf_destroy(request); /* from keep above */
                         return;
@@ -460,6 +463,7 @@ void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
                 /* Enqueue failed because replyq is disabled,
                  * fall through to let callback clean up. */
                 err = RD_KAFKA_RESP_ERR__DESTROY;
+		request->rkbuf_response = NULL;
                 rd_kafka_q_destroy(request->rkbuf_replyq);
                 request->rkbuf_replyq = NULL;
         }
@@ -469,6 +473,8 @@ void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
                                   request->rkbuf_opaque);
 
         rd_kafka_buf_destroy(request);
+	if (response)
+		rd_kafka_buf_destroy(response);
 }
 
 

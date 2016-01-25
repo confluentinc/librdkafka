@@ -23,6 +23,7 @@ mkl_require socket
 verdef=$(grep '^#define  *RD_KAFKA_VERSION  *0x' src/rdkafka.h | sed 's/^#define  *RD_KAFKA_VERSION  *\(0x[a-f0-9]*\)\.*$/\1/')
 mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
 
+mkl_toggle_option "Development" ENABLE_DEVEL "--enable-devel" "Enable development asserts, checks, etc" "n"
 mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-code valgrind suppressions" "n"
 
 mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Enable refcnt debugging" "n"
@@ -72,8 +73,8 @@ function checks {
     # Check if strndup() is available (isn't on Solaris 10)
     mkl_compile_check "strndup" "HAVE_STRNDUP" disable CC "" \
 "#include <string.h>
-int main (void) {
-   return strndup("hi", 2) ? 0 : 1;
+int foo (void) {
+   return strndup(\"hi\", 2) ? 0 : 1;
 }"
 
     # Figure out what tool to use for dumping public symbols.
@@ -90,10 +91,10 @@ int main (void) {
 	mkl_mkvar_set SYMDUMPER SYMDUMPER 'echo'
     fi
 
-    # The linker-script generator (lds-gen.pl) requires perl
+    # The linker-script generator (lds-gen.py) requires python
     if [[ $WITH_LDS == y ]]; then
-        if ! mkl_command_check perl "HAVE_PERL" "disable" "perl -v"; then
-            mkl_err "disabling linker-script since perl is not available"
+        if ! mkl_command_check python "HAVE_PYTHON" "disable" "python -V"; then
+            mkl_err "disabling linker-script since python is not available"
             mkl_mkvar_set WITH_LDS WITH_LDS "n"
         fi
     fi

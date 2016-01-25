@@ -94,7 +94,8 @@ static void test_single_partition (void) {
 	if (!rk)
 		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
 
-	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+	TEST_SAY("test_single_partition: Created kafka instance %s\n",
+		 rd_kafka_name(rk));
 
 	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0),
                                  topic_conf);
@@ -215,7 +216,8 @@ static void test_partitioner (void) {
 	if (!rk)
 		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
 
-	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+	TEST_SAY("test_partitioner: Created kafka instance %s\n",
+		 rd_kafka_name(rk));
 
 	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0),
                                  topic_conf);

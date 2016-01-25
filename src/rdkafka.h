@@ -701,7 +701,10 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *
  * The rebalance callback is responsible for updating librdkafka's
  * assignment set based on the two events: RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS
- * andRD_KAFKA_RESP_ERR__REVOKE_PARTITIONS.
+ * and RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS but should also be able to handle
+ * arbitrary rebalancing failures where \p err is neither of those.
+ * @remark In this latter case (arbitrary error), the application must
+ *         call rd_kafka_assign(rk, NULL) to synchronize state.
  *
  * Without a rebalance callback this is done automatically by librdkafka
  * but registering a rebalance callback gives the application flexibility
@@ -1280,6 +1283,34 @@ RD_EXPORT
 void rd_kafka_yield (rd_kafka_t *rk);
 
 
+
+
+/**
+ * @brief Pause producing or consumption for the provided list of partitions.
+ *
+ * Success or error is returned per-partition \p err in the \p partitions list.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_pause_partitions (rd_kafka_t *rk,
+			   rd_kafka_topic_partition_list_t *partitions);
+
+
+
+/**
+ * @brief Resume producing consumption for the provided list of partitions.
+ *
+ * Success or error is returned per-partition \p err in the \p partitions list.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_resume_partitions (rd_kafka_t *rk,
+			    rd_kafka_topic_partition_list_t *partitions);
+
+
+
 /**
  * @brief Free pointer returned by librdkafka
  *
@@ -1649,6 +1680,12 @@ rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk);
 
 /**
  * @brief Returns the current topic subscription
+ *
+ * @returns An error code on failure, otherwise \p topic is updated
+ *          to point to a newly allocated topic list (possibly empty).
+ *
+ * @remark The application is responsible for calling
+ *         rd_kafka_topic_partition_list_destroy on the returned list.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_subscription (rd_kafka_t *rk,
@@ -1660,6 +1697,12 @@ rd_kafka_subscription (rd_kafka_t *rk,
  * @brief Poll the consumer for messages or events.
  *
  * Will block for at most \p timeout_ms milliseconds.
+ *
+ * @returns A message object which is a proper message if \p ->err is
+ *          RD_KAFKA_RESP_ERR_NO_ERROR, or an event or error for any other
+ *          value.
+ *
+ * @sa rd_kafka_message_t
  */
 RD_EXPORT
 rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
@@ -1686,7 +1729,6 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
 
 /**
  * @brief Atomic assignment of partitions to consume.
- *
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_assign (rd_kafka_t *rk,
@@ -1694,6 +1736,12 @@ rd_kafka_assign (rd_kafka_t *rk,
 
 /**
  * @brief Returns the current partition assignment
+ *
+ * @returns An error code on failure, otherwise \p partitions is updated
+ *          to point to a newly allocated partition list (possibly empty).
+ *
+ * @remark The application is responsible for calling
+ *         rd_kafka_topic_partition_list_destroy on the returned list.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_assignment (rd_kafka_t *rk,

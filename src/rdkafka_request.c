@@ -169,12 +169,9 @@ static rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_broker_t *rkb,
 err:
         actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request);
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
-                /* Re-query for coordinator */
-                rd_kafka_toppar_lock(rktp);
-                rd_kafka_broker_metadata_req(rktp->rktp_leader, 0,
-                                             rktp->rktp_rkt, NULL,
-                                             "Offset request failed");
-                rd_kafka_toppar_unlock(rktp);
+                /* Re-query for leader */
+                rd_kafka_topic_leader_query(rktp->rktp_rkt->rkt_rk,
+					    rktp->rktp_rkt);
                 /* Schedule a retry */
                 rd_kafka_buf_keep(request);
                 rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);

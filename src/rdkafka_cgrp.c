@@ -817,16 +817,16 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
                                                 RD_KAFKA_RESP_ERR__WAIT_COORD,
                                                 NULL, NULL,
                                                 rko);
-        else if (!offsets)
+	else if (!offsets ||
+		 rd_kafka_OffsetCommitRequest(
+			 rkb, rkcg, 1, offsets,
+			 &rkcg->rkcg_ops,
+			 rd_kafka_op_handle_OffsetCommit, rko) == 0)
+		/* No valid offsets */
                 rd_kafka_op_handle_OffsetCommit(rkb,
                                                 RD_KAFKA_RESP_ERR__NO_OFFSET,
                                                 NULL, NULL,
                                                 rko);
-        else
-                rd_kafka_OffsetCommitRequest(
-                        rkb, rkcg, 1, offsets,
-                        &rkcg->rkcg_ops, rd_kafka_op_handle_OffsetCommit, rko);
-
 }
 
 
@@ -1413,7 +1413,8 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 				valid_offset_cnt =
 					rd_kafka_topic_partition_list_set_offsets(
 						rkcg->rkcg_rk,
-						rko->rko_payload, 1, 0,
+						rko->rko_payload, 1,
+						RD_KAFKA_OFFSET_INVALID/* def */,
 						1 /* is commit */);
 
 				if (valid_offset_cnt == 0) {

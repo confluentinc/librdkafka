@@ -670,9 +670,12 @@ err:
 
 
 /**
- * Send OffsetCommitRequest for toppar.
+ * @brief Send OffsetCommitRequest for a list of partitions.
+ *
+ * @returns 0 if none of the partitions in \p offsets had valid offsets,
+ *          else 1.
  */
-void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
+int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                                    rd_kafka_cgrp_t *rkcg,
                                    int16_t api_version,
                                    rd_kafka_topic_partition_list_t *offsets,
@@ -715,6 +718,10 @@ void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
         for (i = 0 ; i < offsets->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &offsets->elems[i];
 
+		/* Skip partitions with invalid offset. */
+		if (rktpar->offset == RD_KAFKA_OFFSET_INVALID)
+			continue;
+
                 if (last_topic == NULL || strcmp(last_topic, rktpar->topic)) {
                         /* New topic */
 
@@ -747,6 +754,12 @@ void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                                        rktpar->metadata, rktpar->metadata_size);
         }
 
+	if (TopicCnt == 0) {
+		/* No topic+partitions had valid offsets to commit. */
+		rd_kafka_buf_destroy(rkbuf);
+		return 0;
+	}
+
         /* Finalize previous PartitionCnt */
         if (PartCnt > 0)
                 rd_kafka_buf_update_u32(rkbuf, of_PartCnt,  PartCnt);
@@ -766,6 +779,8 @@ void rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_OffsetCommit, rkbuf,
                                        replyq, resp_cb, opaque);
+
+	return 1;
 
 }
 

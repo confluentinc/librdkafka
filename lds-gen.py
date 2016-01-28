@@ -32,4 +32,6 @@ if __name__ == '__main__':
         for f in sorted(funcs):
             print('    %s;' % f)
 
+        print('local:\n    *;')
+
     print('};')

@@ -236,7 +236,6 @@ int mtx_trylock(mtx_t *mtx)
 #if defined(_TTHREAD_WIN32_)
   int ret;
 
-
   if (!mtx->mTimed)
   {
     ret = TryEnterCriticalSection(&(mtx->mHandle.cs)) ? thrd_success : thrd_busy;
@@ -405,11 +404,13 @@ static int _cnd_timedwait_win32(cnd_t *cond, mtx_t *mtx, DWORD timeout)
   result = WaitForMultipleObjects(2, cond->mEvents, FALSE, timeout);
   if (result == WAIT_TIMEOUT)
   {
+    /* The mutex is locked again before the function returns, even if an error occurred */
     mtx_lock(mtx);
     return thrd_timedout;
   }
   else if (result == (int)WAIT_FAILED)
   {
+    /* The mutex is locked again before the function returns, even if an error occurred */
     mtx_lock(mtx);
     return thrd_error;
   }
@@ -426,6 +427,7 @@ static int _cnd_timedwait_win32(cnd_t *cond, mtx_t *mtx, DWORD timeout)
   {
     if (ResetEvent(cond->mEvents[_CONDITION_EVENT_ALL]) == 0)
     {
+      /* The mutex is locked again before the function returns, even if an error occurred */
       mtx_lock(mtx);
       return thrd_error;
     }
@@ -451,10 +453,12 @@ int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts)
 {
 #if defined(_TTHREAD_WIN32_)
   struct timespec now;
-  if (timespec_get(&now, TIME_UTC) == 0)
+  if (timespec_get(&now, TIME_UTC) == TIME_UTC)
   {
-    DWORD delta = (DWORD)((ts->tv_sec - now.tv_sec) * 1000 +
-                  (ts->tv_nsec - now.tv_nsec + 500000) / 1000000);
+    unsigned long long nowInMilliseconds = now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    unsigned long long tsInMilliseconds  = ts->tv_sec * 1000 + ts->tv_nsec / 1000000;
+    DWORD delta = (tsInMilliseconds > nowInMilliseconds) ?
+      (DWORD)(tsInMilliseconds - nowInMilliseconds) : 0;
     return _cnd_timedwait_win32(cond, mtx, delta);
   }
   else
@@ -513,7 +517,9 @@ static tss_dtor_t _tinycthread_tss_dtors[1088] = { NULL, };
 static _Thread_local struct TinyCThreadTSSData* _tinycthread_tss_head = NULL;
 static _Thread_local struct TinyCThreadTSSData* _tinycthread_tss_tail = NULL;
 
-static void _tinycthread_tss_cleanup () {
+static void _tinycthread_tss_cleanup (void);
+
+static void _tinycthread_tss_cleanup (void) {
   struct TinyCThreadTSSData* data;
   int iteration;
   unsigned int again = 1;
@@ -559,12 +565,21 @@ static void NTAPI _tinycthread_tss_callback(PVOID h, DWORD dwReason, PVOID pv)
 }
 
 #if defined(_MSC_VER)
-#pragma data_seg(".CRT$XLB")
-PIMAGE_TLS_CALLBACK p_thread_callback = _tinycthread_tss_callback;
-#pragma data_seg()
+  #ifdef _M_X64
+    #pragma const_seg(".CRT$XLB")
+  #else
+    #pragma data_seg(".CRT$XLB")
+  #endif
+  PIMAGE_TLS_CALLBACK p_thread_callback = _tinycthread_tss_callback;
+  #ifdef _M_X64
+    #pragma data_seg()
+  #else
+    #pragma const_seg()
+  #endif
 #else
-PIMAGE_TLS_CALLBACK p_thread_callback __attribute__((section(".CRT$XLB"))) = _tinycthread_tss_callback;
+  PIMAGE_TLS_CALLBACK p_thread_callback __attribute__((section(".CRT$XLB"))) = _tinycthread_tss_callback;
 #endif
+
 #endif /* defined(_TTHREAD_WIN32_) */
 
 /** Information to pass to the new thread (what to run). */
@@ -583,9 +598,6 @@ static void * _thrd_wrapper_function(void * aArg)
   thrd_start_t fun;
   void *arg;
   int  res;
-#if defined(_TTHREAD_POSIX_)
-  void *pres;
-#endif
 
   /* Get thread startup information */
   _thread_start_info *ti = (_thread_start_info *) aArg;
@@ -604,17 +616,9 @@ static void * _thrd_wrapper_function(void * aArg)
     _tinycthread_tss_cleanup();
   }
 
-  return res;
+  return (DWORD)res;
 #else
-  /* Avoid memory leak for detached threads by not allocating a return val */
-  if (thrd_is_detached)
-    return NULL;
-  pres = malloc(sizeof(int));
-  if (pres != NULL)
-  {
-    *(int*)pres = res;
-  }
-  return pres;
+  return (void*)(intptr_t)res;
 #endif
 }
 
@@ -698,12 +702,7 @@ void thrd_exit(int res)
 
   ExitThread(res);
 #else
-  void *pres = malloc(sizeof(int));
-  if (pres != NULL)
-  {
-    *(int*)pres = res;
-  }
-  pthread_exit(pres);
+  pthread_exit((void*)(intptr_t)res);
 #endif
 }
 
@@ -718,25 +717,25 @@ int thrd_join(thrd_t thr, int *res)
   }
   if (res != NULL)
   {
-    GetExitCodeThread(thr, &dwRes);
-    *res = dwRes;
+    if (GetExitCodeThread(thr, &dwRes) != 0)
+    {
+      *res = dwRes;
+    }
+    else
+    {
+      return thrd_error;
+    }
   }
   CloseHandle(thr);
 #elif defined(_TTHREAD_POSIX_)
   void *pres;
-  int ires = 0;
   if (pthread_join(thr, &pres) != 0)
   {
     return thrd_error;
   }
-  if (pres != NULL)
-  {
-    ires = *(int*)pres;
-    free(pres);
-  }
   if (res != NULL)
   {
-    *res = ires;
+    *res = (int)(intptr_t)pres;
   }
 #endif
   return thrd_success;
@@ -817,9 +816,12 @@ void tss_delete(tss_t key)
     else
     {
       prev = _tinycthread_tss_head;
-      while (prev->next != data)
+      if (prev != NULL)
       {
-        prev = prev->next;
+        while (prev->next != data)
+        {
+          prev = prev->next;
+        }
       }
     }
 
@@ -912,11 +914,11 @@ int _tthread_timespec_get(struct timespec *ts, int base)
   }
 
 #if defined(_TTHREAD_WIN32_)
-  _ftime64_s(&tb);
+  _ftime_s(&tb);
   ts->tv_sec = (time_t)tb.time;
   ts->tv_nsec = 1000000L * (long)tb.millitm;
 #elif defined(CLOCK_REALTIME)
-  return (clock_gettime(CLOCK_REALTIME, ts) == 0) ? base : 0;
+  base = (clock_gettime(CLOCK_REALTIME, ts) == 0) ? base : 0;
 #else
   gettimeofday(&tv, NULL);
   ts->tv_sec = (time_t)tv.tv_sec;

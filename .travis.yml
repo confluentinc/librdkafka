@@ -6,7 +6,7 @@ compiler:
 os:
   - linux
   - osx
-before_script: which ccache > /dev/null && ccache -s || echo "CCache is not available."
+before_script: ccache -s || echo "CCache is not available."
 script:
   ./configure && make -j2 all examples check && make -C tests run_local
 

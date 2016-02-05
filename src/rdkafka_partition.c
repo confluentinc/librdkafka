@@ -2056,6 +2056,20 @@ void rd_kafka_topic_partition_list_sort_by_topic (
               rd_kafka_topic_partition_cmp);
 }
 
+rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
+	rd_kafka_topic_partition_list_t *rktparlist,
+	const char *topic, int32_t partition, int64_t offset) {
+	rd_kafka_topic_partition_t *rktpar;
+
+	if (!(rktpar = rd_kafka_topic_partition_list_find(rktparlist,
+							  topic, partition,
+							  NULL)))
+		return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+
+	rktpar->offset = offset;
+
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 
 /**

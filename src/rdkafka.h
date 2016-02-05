@@ -511,6 +511,21 @@ rd_kafka_topic_partition_list_t *
 rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src);
 
 
+
+
+/**
+ * @brief Set offset to \p offset for \p topic and \p partition
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
+ *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION if \p partition was not found
+ *          in the list.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
+	rd_kafka_topic_partition_list_t *rktparlist,
+	const char *topic, int32_t partition, int64_t offset);
+
+
 /**@}*/
 
 

@@ -163,6 +163,7 @@ void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 	if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
                 rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
                            srcq->rkq_qlen > 0);
+		rd_dassert(rkq->rkq_flags & RD_KAFKA_Q_F_READY);
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
                 rkq->rkq_qlen += srcq->rkq_qlen;
                 rkq->rkq_qsize += srcq->rkq_qsize;

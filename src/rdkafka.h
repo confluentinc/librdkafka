@@ -321,9 +321,32 @@ typedef enum {
 	/** Group authorization failed */
 	RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED = 30,
 	/** Cluster authorization failed */
-	RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED = 31
+	RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED = 31,
 
+	RD_KAFKA_RESP_ERR_END,
 } rd_kafka_resp_err_t;
+
+
+/**
+ * @brief Error code value, name and description.
+ *        Typically for use with language bindings to automatically expose
+ *        the full set of librdkafka error codes.
+ */
+struct rd_kafka_err_desc {
+	rd_kafka_resp_err_t code;/**< Error code */
+	const char *name;      /**< Error name, same as code enum sans prefix */
+	const char *desc;      /**< Human readable error description. */
+};
+
+
+/**
+ * @brief Returns the full list of error codes.
+ */
+RD_EXPORT
+void rd_kafka_get_err_descs (const struct rd_kafka_err_desc **errdescs,
+			     size_t *cntp);
+
+
 
 
 /**
@@ -333,6 +356,17 @@ typedef enum {
  */
 RD_EXPORT
 const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
+
+
+
+/**
+ * @brief Returns the error code name (enum name).
+ *
+ * @param err Error code to translate
+ */
+RD_EXPORT
+const char *rd_kafka_err2name (rd_kafka_resp_err_t err);
+
 
 
 /**

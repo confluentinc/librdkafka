@@ -282,11 +282,8 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
                         rd_kafka_wrunlock(rk);
                         return NULL;
                 }
-                s_rkt = rd_kafka_topic_new0(rk, topic,
-                                            rk->rk_conf.topic_conf ?
-                                            rd_kafka_topic_conf_dup(rk->rk_conf.
-                                                                    topic_conf)
-                                            : NULL, NULL, 0/*no-lock*/);
+                s_rkt = rd_kafka_topic_new0(rk, topic, NULL,
+					    NULL, 0/*no-lock*/);
                 if (!s_rkt) {
                         rd_kafka_wrunlock(rk);
                         rd_kafka_log(rk, LOG_ERR, "TOPIC",

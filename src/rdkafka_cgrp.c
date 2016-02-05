@@ -1747,11 +1747,7 @@ int rd_kafka_cgrp_topic_check (rd_kafka_cgrp_t *rkcg, const char *topic) {
         if (!matched)
                 return matched;
 
-        s_rkt = rd_kafka_topic_new0(rk, topic,
-                                    rk->rk_conf.topic_conf ?
-                                    rd_kafka_topic_conf_dup(rk->rk_conf.
-                                                            topic_conf)
-                                    : NULL, &existing, 1/*lock*/);
+        s_rkt = rd_kafka_topic_new0(rk, topic, NULL, &existing, 1/*lock*/);
 
         if (!s_rkt) {
                 rd_kafka_dbg(rkcg->rkcg_rk, TOPIC, "SUBSCRIBE",

@@ -592,6 +592,8 @@ RD_EXPORT
 void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
 
 
+
+
 /**
  * @brief Returns the error string for an errored rd_kafka_message_t or NULL if
  *        there was no error.
@@ -1301,7 +1303,7 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  *
  * Events will cause application provided callbacks to be called.
  *
- * The \p timeout_ms argument specifies the minimum amount of time
+ * The \p timeout_ms argument specifies the maximum amount of time
  * (in milliseconds) that the call will block waiting for events.
  * For non-blocking calls, provide 0 as \p timeout_ms.
  * To wait indefinately for an event, provide -1.
@@ -1721,7 +1723,7 @@ rd_kafka_subscribe (rd_kafka_t *rk,
 
 
 /**
- * @brief Unsubscribe from the current subscriptions et.
+ * @brief Unsubscribe from the current subscription set.
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk);

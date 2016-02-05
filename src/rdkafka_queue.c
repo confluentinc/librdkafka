@@ -251,6 +251,9 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                                int32_t version) {
 	rd_kafka_op_t *rko;
 
+	if (timeout_ms == RD_POLL_INFINITE)
+		timeout_ms = INT_MAX;
+
 	mtx_lock(&rkq->rkq_lock);
 
 	if (!rkq->rkq_fwdq) {
@@ -267,21 +270,19 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                         }
 
                         /* No op, wait for one */
-			if (timeout_ms != RD_POLL_INFINITE) {
-                                rd_ts_t pre = rd_clock();
-				if (cnd_timedwait_ms(&rkq->rkq_cond,
-                                                     &rkq->rkq_lock,
-                                                     timeout_ms) ==
-                                    thrd_timedout) {
-					mtx_unlock(&rkq->rkq_lock);
-					return NULL;
-				}
-                                /* Remove spent time */
-				timeout_ms -= (int) (rd_clock()-pre) / 1000;
-                                if (timeout_ms < 0)
-                                        timeout_ms = RD_POLL_NOWAIT;
-			} else
-				cnd_wait(&rkq->rkq_cond, &rkq->rkq_lock);
+			rd_ts_t pre = rd_clock();
+			if (cnd_timedwait_ms(&rkq->rkq_cond,
+					     &rkq->rkq_lock,
+					     timeout_ms) ==
+			    thrd_timedout) {
+				mtx_unlock(&rkq->rkq_lock);
+				return NULL;
+			}
+			/* Remove spent time */
+			timeout_ms -= (int) (rd_clock()-pre) / 1000;
+			if (timeout_ms < 0)
+				timeout_ms = RD_POLL_NOWAIT;
+
 		} while (timeout_ms != RD_POLL_NOWAIT);
 
                 mtx_unlock(&rkq->rkq_lock);
@@ -338,18 +339,17 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 		return ret;
 	}
 
+	if (timeout_ms == RD_POLL_INFINITE)
+		timeout_ms = INT_MAX;
+
 	/* Wait for op */
 	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) && timeout_ms != 0) {
-		if (timeout_ms != RD_POLL_INFINITE) {
-			if (cnd_timedwait_ms(&rkq->rkq_cond,
-                                             &rkq->rkq_lock,
-                                             timeout_ms) == thrd_timedout)
-				break;
+		if (cnd_timedwait_ms(&rkq->rkq_cond,
+				     &rkq->rkq_lock,
+				     timeout_ms) != thrd_success)
+			break;
 
-			timeout_ms = 0;
-
-		} else
-			cnd_wait(&rkq->rkq_cond, &rkq->rkq_lock);
+		timeout_ms = 0;
 	}
 
 	if (!rko) {

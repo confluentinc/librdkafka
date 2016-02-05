@@ -272,3 +272,5 @@ struct rd_kafka_queue_s {
 };
 
 
+
+extern int RD_TLS rd_kafka_yield_thread;

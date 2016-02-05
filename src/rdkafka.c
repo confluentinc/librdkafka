@@ -1561,10 +1561,18 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 	rd_kafka_op_t *rko;
 	rd_kafka_message_t *rkmessage = NULL;
 
+	rd_kafka_yield_thread = 0;
         while ((rko = rd_kafka_q_pop(rkq, timeout_ms, 0))) {
                 if (rd_kafka_poll_cb(rk, rko, _Q_CB_CONSUMER, NULL)) {
                         /* Message was handled by callback. */
                         rd_kafka_op_destroy(rko);
+
+			if (unlikely(rd_kafka_yield_thread)) {
+				/* Callback called rd_kafka_yield(), we must
+				 * stop dispatching the queue and return. */
+				rko = NULL;
+				break;
+			}
                         continue;
                 }
                 break;

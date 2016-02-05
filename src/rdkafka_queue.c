@@ -2,10 +2,10 @@
 #include "rdkafka_offset.h"
 #include "rdkafka_topic.h"
 
-static int RD_TLS yield_thread = 0;
+int RD_TLS rd_kafka_yield_thread = 0;
 
 void rd_kafka_yield (rd_kafka_t *rk) {
-        yield_thread = 1;
+        rd_kafka_yield_thread = 1;
 }
 
 
@@ -364,7 +364,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
         mtx_unlock(&rkq->rkq_lock);
 
-        yield_thread = 0;
+        rd_kafka_yield_thread = 0;
 
 	/* Call callback for each op */
         while ((rko = TAILQ_FIRST(&localq.rkq_q))) {
@@ -373,7 +373,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 		rd_kafka_op_destroy(rko);
                 cnt++;
 
-                if (unlikely(yield_thread)) {
+                if (unlikely(rd_kafka_yield_thread)) {
                         /* Callback called rd_kafka_yield(), we must
                          * stop our callback dispatching and put the
                          * ops in localq back on the original queue head. */

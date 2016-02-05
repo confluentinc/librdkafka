@@ -713,13 +713,20 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
 				rkcg->rkcg_assigned_cnt++;
 
 				/* Start fetcher for partition */
-				rd_kafka_toppar_op_fetch_start(rktp, rktpar->offset,
-							       &rkcg->rkcg_q, NULL);
+				rd_kafka_toppar_op_fetch_start(
+					rktp, rktpar->offset,
+					&rkcg->rkcg_q, NULL);
 			} else {
-
-				/* Fetcher already started, just do seek to update offset */
-				rd_kafka_toppar_op_seek(rktp, rktpar->offset, NULL);
-
+				int64_t offset;
+				/* Fetcher already started,
+				 * just do seek to update offset */
+				rd_kafka_toppar_lock(rktp);
+				if (rktpar->offset < rktp->rktp_app_offset)
+					offset = rktp->rktp_app_offset;
+				else
+					offset = rktpar->offset;
+				rd_kafka_toppar_unlock(rktp);
+				rd_kafka_toppar_op_seek(rktp, offset, NULL);
 			}
                 }
         }

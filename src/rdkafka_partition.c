@@ -2094,7 +2094,20 @@ int rd_kafka_topic_partition_list_set_offsets (
                         shptr_rd_kafka_toppar_t *s_rktp = rktpar->_private;
                         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
                         rd_kafka_toppar_lock(rktp);
-                        rktpar->offset = rktp->rktp_stored_offset;
+
+			rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_TOPIC, "OFFSET",
+				     "Topic %s [%"PRId32"]: "
+				     "stored off %"PRId64", committted "
+				     "off %"PRId64,
+				     rktpar->topic, rktpar->partition,
+				     rktp->rktp_stored_offset,
+				     rktp->rktp_committed_offset);
+
+			if (rktp->rktp_stored_offset >
+			    rktp->rktp_committed_offset)
+				rktpar->offset = rktp->rktp_stored_offset;
+			else
+				rktpar->offset = RD_KAFKA_OFFSET_INVALID;
                         rd_kafka_toppar_unlock(rktp);
                 } else {
                         rktpar->offset = def_value;

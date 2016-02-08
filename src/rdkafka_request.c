@@ -172,8 +172,12 @@ err:
                 /* Re-query for leader */
                 rd_kafka_topic_leader_query(rktp->rktp_rkt->rkt_rk,
 					    rktp->rktp_rkt);
-                /* Schedule a retry */
+                /*
+		 * Schedule a retry
+		 */
                 rd_kafka_buf_keep(request);
+		/* Acquire new rktp refcount for the retry. */
+		request->rkbuf_opaque = rd_kafka_toppar_keep(rktp);
                 rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
                 return RD_KAFKA_RESP_ERR__IN_PROGRESS;
         }
@@ -245,7 +249,6 @@ void rd_kafka_toppar_handle_Offset (rd_kafka_broker_t *rkb,
                 rd_kafka_offset_reset(rktp, rktp->rktp_query_offset,
                                       err,
                                       "failed to query logical offset");
-                rd_kafka_toppar_unlock(rktp);
 
                 /* Signal error back to application,
                  * unless this is an intermittent problem
@@ -260,6 +263,7 @@ void rd_kafka_toppar_handle_Offset (rd_kafka_broker_t *rkb,
                 else
                         rko->rko_rkmessage.offset =
                                 rktp->rktp_query_offset;
+                rd_kafka_toppar_unlock(rktp);
                 rko->rko_rkmessage.rkt =
                         rd_kafka_topic_keep_a(rktp->rktp_rkt);
                 rko->rko_rkmessage.partition = rktp->rktp_partition;
@@ -270,6 +274,7 @@ void rd_kafka_toppar_handle_Offset (rd_kafka_broker_t *rkb,
                 return;
         }
 
+	rd_kafka_toppar_lock(rktp);
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
                      "Offset %"PRId64" request for %.*s [%"PRId32"] "
                      "returned offset %s (%"PRId64")",
@@ -277,7 +282,6 @@ void rd_kafka_toppar_handle_Offset (rd_kafka_broker_t *rkb,
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition, rd_kafka_offset2str(Offset), Offset);
 
-	rd_kafka_toppar_lock(rktp);
         rd_kafka_toppar_next_offset_handle(rktp, Offset);
 	rd_kafka_toppar_unlock(rktp);
 

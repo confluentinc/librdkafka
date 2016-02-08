@@ -654,9 +654,12 @@ static rd_kafka_resp_err_t rd_kafka_offset_file_term (rd_kafka_toppar_t *rktp) {
 }
 
 static void rd_kafka_offset_reset_op_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
-        rd_kafka_offset_reset(rd_kafka_toppar_s2i(rko->rko_rktp),
+	rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+	rd_kafka_toppar_lock(rktp);
+        rd_kafka_offset_reset(rktp,
                               rko->rko_offset,
                               rko->rko_err, rko->rko_payload);
+	rd_kafka_toppar_unlock(rktp);
 }
 
 /**

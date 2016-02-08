@@ -956,9 +956,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store_stop (rd_kafka_toppar_t *rktp) {
                      rktp->rktp_offsets_fin.eof_offset);
 
         /* Store end offset for empty partitions */
-        if (((!rd_kafka_is_simple_consumer(rktp->rktp_rkt->rkt_rk) &&
-              rktp->rktp_rkt->rkt_rk->rk_conf.enable_auto_commit)
-             || rktp->rktp_rkt->rkt_conf.auto_commit) &&
+        if (rktp->rktp_rkt->rkt_rk->rk_conf.enable_auto_offset_store &&
             rktp->rktp_stored_offset == RD_KAFKA_OFFSET_INVALID &&
             rktp->rktp_offsets_fin.eof_offset > 0)
                 rd_kafka_offset_store0(rktp, rktp->rktp_offsets_fin.eof_offset,

@@ -1469,8 +1469,7 @@ static int rd_kafka_consume_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 	if (!rko->rko_err) {
 		rd_kafka_toppar_lock(rktp);
 		rktp->rktp_app_offset = rkmessage->offset+1;
-		if ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit) ||
-		    rktp->rktp_rkt->rkt_conf.auto_commit)
+		if (rk->rk_conf.enable_auto_offset_store)
 			rd_kafka_offset_store0(rktp, rkmessage->offset+1,
 					       0/*no lock*/);
 		rd_kafka_toppar_unlock(rktp);
@@ -1592,8 +1591,7 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
                 rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
 		rd_kafka_toppar_lock(rktp);
 		rktp->rktp_app_offset = rkmessage->offset+1;
-                if ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit)
-                    || rktp->rktp_rkt->rkt_conf.auto_commit)
+                if (rk->rk_conf.enable_auto_offset_store)
                         rd_kafka_offset_store0(rktp, rkmessage->offset+1,
                                                0/*no lock*/);
 		rd_kafka_toppar_unlock(rktp);

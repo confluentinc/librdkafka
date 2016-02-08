@@ -60,6 +60,7 @@ group.protocol.type                      |  *  |      consumer | Group protocol 
 coordinator.query.interval.ms            |  *  |        600000 | How often to query for the current client group coordinator. If the currently assigned coordinator is down the configured query interval will be divided by ten to more quickly recover in case of coordinator reassignment.
 enable.auto.commit                       |  C  |          true | Automatically and periodically commit offsets in the background.
 auto.commit.interval.ms                  |  C  |          5000 | The frequency in milliseconds that the consumer offsets are commited (written) to offset storage. (0 = disable)
+enable.auto.offset.store                 |  C  |          true | Automatically store offset of last message provided to application.
 queued.min.messages                      |  C  |        100000 | Minimum number of messages per topic+partition in the local consumer queue.
 queued.max.messages.kbytes               |  C  |       1000000 | Maximum number of kilobytes per topic+partition in the local consumer queue. This value may be overshot by fetch.message.max.bytes.
 fetch.wait.max.ms                        |  C  |           100 | Maximum time the broker may wait to fill the response with fetch.min.bytes.

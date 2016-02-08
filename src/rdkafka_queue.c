@@ -416,6 +416,12 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 	if (rko) {
 		rkmessage = &rko->rko_rkmessage;
 		rkmessage->_private = rko;
+
+		if (!rkmessage->rkt && rko->rko_rktp)
+			rkmessage->rkt =
+				rd_kafka_topic_keep_a(
+					rd_kafka_toppar_s2i(rko->rko_rktp)->
+					rktp_rkt);
 	} else
                 rkmessage = rd_kafka_message_new();
 

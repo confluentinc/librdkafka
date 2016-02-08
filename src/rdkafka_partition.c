@@ -1756,7 +1756,7 @@ void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
         rko->rko_err                 = err;
-        rko->rko_rkmessage.rkt = rd_kafka_topic_keep_a(rktp->rktp_rkt);
+        rko->rko_rktp                = rd_kafka_toppar_keep(rktp);
         rko->rko_rkmessage.partition = rktp->rktp_partition;
         rko->rko_payload             = rd_strdup(rd_kafka_err2str(rko->rko_err));
         rko->rko_len                 = strlen(rko->rko_payload);

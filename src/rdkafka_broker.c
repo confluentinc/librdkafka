@@ -2529,7 +2529,6 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rko->rko_rkmessage.len       = Value_len;
 
 			rko->rko_rkmessage.offset    = hdr.Offset;
-			rko->rko_rkmessage.rkt       = rd_kafka_topic_keep_a(rktp->rktp_rkt);
 			rko->rko_rkmessage.partition = rktp->rktp_partition;
 
 			rko->rko_rktp = rd_kafka_toppar_keep(rktp);
@@ -2676,7 +2675,6 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rko->rko_err = RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
                         rko->rko_version = rktp->rktp_fetch_version;
 			rko->rko_rkmessage.offset    = hdr.Offset;
-			rko->rko_rkmessage.rkt       = rd_kafka_topic_keep_a(rktp->rktp_rkt);
 			rko->rko_rkmessage.partition = rktp->rktp_partition;
 
 			rko->rko_rktp = rd_kafka_toppar_keep(rktp);
@@ -2925,8 +2923,6 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					rko->rko_err = hdr.ErrorCode;
 					rko->rko_rkmessage.offset =
 						rktp->rktp_offsets.fetch_offset;
-
-					rko->rko_rkmessage.rkt = rd_kafka_topic_keep_a(rktp->rktp_rkt);
 					rko->rko_rkmessage.partition =
 						rktp->rktp_partition;
 

@@ -264,8 +264,7 @@ void rd_kafka_toppar_handle_Offset (rd_kafka_broker_t *rkb,
                         rko->rko_rkmessage.offset =
                                 rktp->rktp_query_offset;
                 rd_kafka_toppar_unlock(rktp);
-                rko->rko_rkmessage.rkt =
-                        rd_kafka_topic_keep_a(rktp->rktp_rkt);
+                rko->rko_rktp = rd_kafka_toppar_keep(rktp);
                 rko->rko_rkmessage.partition = rktp->rktp_partition;
 
                 rd_kafka_q_enq(&rktp->rktp_fetchq, rko);

@@ -233,7 +233,6 @@ void rd_kafka_op_app (rd_kafka_q_t *rkq, rd_kafka_op_type_t type,
         if (rktp) {
                 rko->rko_rktp = rd_kafka_toppar_keep(rktp);
                 rko->rko_version = rktp->rktp_fetch_version;
-                rko->rko_rkmessage.rkt = rd_kafka_topic_keep_a(rktp->rktp_rkt);
                 rko->rko_rkmessage.partition = rktp->rktp_partition;
         }
 

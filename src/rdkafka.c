@@ -1461,9 +1461,8 @@ static int rd_kafka_consume_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
         rktp = rko->rko_rktp ? rd_kafka_toppar_s2i(rko->rko_rktp) : NULL;
 
         if (unlikely(rko->rko_version && rktp &&
-                     rko->rko_version < rd_atomic32_get(&rktp->rktp_version))) {
+                     rko->rko_version < rd_atomic32_get(&rktp->rktp_version)))
                 return 1;
-        }
 
 	rkmessage = rd_kafka_message_get(rko);
 	if (!rko->rko_err) {
@@ -1758,20 +1757,15 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                 break;
 
 	case RD_KAFKA_OP_FETCH:
-                /* Check if message is outdated */
-                if (rko->rko_version) {
-                        rd_kafka_toppar_t *rktp =
-                                rd_kafka_toppar_s2i(rko->rko_rktp);
-                        if (rko->rko_version <
-                            rd_atomic32_get(&rktp->rktp_version))
-                                break; /* Outdated, discard. */
-                }
+		if (!rk->rk_conf.consume_cb)
+			return 0; /* Dont handle here */
+		{
+			struct consume_ctx ctx = {
+				.consume_cb = rk->rk_conf.consume_cb,
+				.opaque = rk->rk_conf.opaque };
 
-                if (rk->rk_conf.consume_cb)
-                        rk->rk_conf.consume_cb(rd_kafka_message_get(rko),
-                                               rk->rk_conf.opaque);
-                else
-                        return 0; /* Dont handle here. */
+			rd_kafka_consume_cb(rk, rko, _Q_CB_CONSUMER, &ctx);
+		}
 		break;
 
         case RD_KAFKA_OP_REBALANCE:

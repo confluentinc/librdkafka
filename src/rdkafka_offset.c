@@ -715,7 +715,7 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 		rko->rko_payload             = rd_strdup(reason);
 		rko->rko_len                 = strlen(rko->rko_payload);
 		rko->rko_flags              |= RD_KAFKA_OP_F_FREE;
-                rko->rko_rkmessage.rkt = rd_kafka_topic_keep_a(rktp->rktp_rkt);
+                rko->rko_rktp                = rd_kafka_toppar_keep(rktp);
 
 		rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
                 rd_kafka_toppar_set_fetch_state(

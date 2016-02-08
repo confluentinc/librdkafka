@@ -67,6 +67,9 @@ struct test {
         int (*mainfunc) (int argc, char **argv); /**< test's main func */
         const int flags;     /**< Test flags */
 #define TEST_F_LOCAL   0x1   /**< Test is local, no broker requirement */
+#define TEST_F_KNOWN_ISSUE 0x2 /**< Known issue, can fail without affecting
+				*   total test run status. */
+	const char *extra;   /**< Extra information to print in test_summary. */
 
         /**
          * Runtime
@@ -382,8 +385,8 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 				  void *opaque);
 rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
                                               const char *topic);
-rd_kafka_topic_t *test_create_topic (rd_kafka_t *rk,
-                                     const char *topic, ...);
+rd_kafka_topic_t *test_create_topic_object (rd_kafka_t *rk,
+					    const char *topic, ...);
 void test_consumer_start (const char *what,
                           rd_kafka_topic_t *rkt, int32_t partition,
                           int64_t start_offset);
@@ -404,6 +407,8 @@ void test_verify_rkmessage0 (const char *func, int line,
 #define test_verify_rkmessage(rkmessage,testid,partition,msgnum) \
         test_verify_rkmessage0(__FUNCTION__,__LINE__,\
                                rkmessage,testid,partition,msgnum)
+
+void test_consumer_subscribe (rd_kafka_t *rk, const char *topic);
 
 void
 test_consume_msgs_easy (const char *group_id, const char *topic,
@@ -428,3 +433,5 @@ void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions);
 
+void test_create_topic (const char *topicname, int partition_cnt,
+			int replication_factor);

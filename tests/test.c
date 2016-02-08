@@ -49,7 +49,7 @@ static int  test_topic_random = 0;
 static int  test_concurrent_max = 20;
 int         test_assert_on_fail = 0;
 double test_timeout_multiplier  = 1.0;
-
+static char *test_topics_sh = NULL;
 int  test_session_timeout_ms = 6000;
 
 static int test_summary (int do_lock);
@@ -71,8 +71,8 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME)                                                \
         extern int main_ ## NAME (int, char **)
-#define _TEST(NAME,FLAGS)                                               \
-        { .name = # NAME, .mainfunc = main_ ## NAME, .flags = FLAGS }
+#define _TEST(NAME,FLAGS,...)						\
+        { .name = # NAME, .mainfunc = main_ ## NAME, .flags = FLAGS, __VA_ARGS__ }
 
 
 /**
@@ -99,14 +99,15 @@ _TEST_DECL(0021_rkt_destroy);
 _TEST_DECL(0022_consume_batch);
 _TEST_DECL(0025_timers);
 _TEST_DECL(0026_consume_pause);
-
+_TEST_DECL(0027_part_offset);
+_TEST_DECL(0028_long_topicnames);
 
 /**
  * Define all tests here
  */
 struct test tests[] = {
         /* Special MAIN test to hold over-all timings, etc. */
-        { .name = "<MAIN>", .flags = 0xff },
+        { .name = "<MAIN>", .flags = TEST_F_LOCAL },
         _TEST(0001_multiobj, 0),
         _TEST(0002_unkpart, 0),
         _TEST(0003_msgmaxsize, 0),
@@ -128,6 +129,9 @@ struct test tests[] = {
         _TEST(0022_consume_batch, 0),
         _TEST(0025_timers, TEST_F_LOCAL),
 	_TEST(0026_consume_pause, 0),
+	_TEST(0027_part_offset, 0),
+	_TEST(0028_long_topicnames, TEST_F_KNOWN_ISSUE,
+	      "https://github.com/edenhill/librdkafka/issues/529"),
         { NULL }
 };
 
@@ -203,7 +207,7 @@ static void test_init (void) {
 
 
 const char *test_mk_topic_name (const char *suffix, int randomized) {
-        static RD_TLS char ret[128];
+        static RD_TLS char ret[512];
 
         if (test_topic_random || randomized)
                 rd_snprintf(ret, sizeof(ret), "%s_rnd%"PRIx64"_%s",
@@ -283,6 +287,13 @@ static void test_read_conf_file (const char *conf_path,
                         test_concurrent_max = (int)strtod(val, NULL);
                         TEST_UNLOCK();
                         res = RD_KAFKA_CONF_OK;
+		} else if (!strcmp(name, "test.kafka-topics.sh")) {
+			TEST_LOCK();
+			if (test_topics_sh)
+				rd_free(test_topics_sh);
+			test_topics_sh = rd_strdup(val);
+			TEST_UNLOCK();
+			res = RD_KAFKA_CONF_OK;
                 } else if (!strncmp(name, "topic.", strlen("topic."))) {
 			name += strlen("topic.");
                         if (topic_conf)
@@ -629,6 +640,7 @@ static int test_summary (int do_lock) {
         int64_t total_duration = 0;
         int tests_run = 0;
         int tests_failed = 0;
+	int tests_failed_known = 0;
         int tests_passed = 0;
 
         t = time(NULL);
@@ -657,6 +669,7 @@ static int test_summary (int do_lock) {
         for (test = tests ; test->name ; test++) {
                 const char *color;
                 int64_t duration;
+		char extra[128] = "";
 
                 if (!(duration = test->duration) && test->start > 0)
                         duration = test_clock() - test->start;
@@ -672,6 +685,13 @@ static int test_summary (int do_lock) {
                         tests_run++;
                         break;
                 case TEST_FAILED:
+			if (test->flags & TEST_F_KNOWN_ISSUE) {
+				rd_snprintf(extra, sizeof(extra),
+					    " <-- known issue%s%s",
+					    test->extra ? ": " : "",
+					    test->extra ? test->extra : "");
+				tests_failed_known++;
+			}
                         color = _C_RED;
                         tests_failed++;
                         tests_run++;
@@ -689,20 +709,24 @@ static int test_summary (int do_lock) {
                         break;
                 }
 
-                printf("|%s %-40s | %10s | %7.3fs %s|\n",
+                printf("|%s %-40s | %10s | %7.3fs %s|%s\n",
                        color,
                        test->name, test_states[test->state],
-                       (double)duration/1000000.0, _C_CLR);
+                       (double)duration/1000000.0, _C_CLR, extra);
 
                 if (report_fp)
                         fprintf(report_fp,
                                 "%s{"
                                 "\"name\": \"%s\", "
                                 "\"state\": \"%s\", "
+				"\"known_issue\": %s, "
+				"\"extra\": \"%s\", "
                                 "\"duration\": %.3f"
                                 "}",
                                 test == tests ? "": ", ",
                                 test->name, test_states[test->state],
+				test->flags & TEST_F_KNOWN_ISSUE ? "true":"false",
+				test->extra ? test->extra : "",
                                 (double)duration/1000000.0);
         }
         if (do_lock)
@@ -725,7 +749,7 @@ static int test_summary (int do_lock) {
                 TEST_SAY("# Test report written to %s\n", report_path);
         }
 
-        return tests_failed;
+        return tests_failed - tests_failed_known;
 }
 
 #ifndef _MSC_VER
@@ -736,6 +760,15 @@ static void test_sig_term (int sig) {
 	test_exit = 1;
 }
 #endif
+
+/**
+ * @brief Test framework cleanup before termination.
+ */
+static void test_cleanup (void) {
+	if (test_topics_sh)
+		rd_free(test_topics_sh);
+}
+
 
 int main(int argc, char **argv) {
         const char *tests_to_run = NULL; /* all */
@@ -751,6 +784,8 @@ int main(int argc, char **argv) {
 	signal(SIGINT, test_sig_term);
         tests_to_run = getenv("TESTS");
 #endif
+
+	test_conf_init(NULL, NULL, 10);
 
         for (i = 1 ; i < argc ; i++) {
                 if (!strncmp(argv[i], "-p", 2) && strlen(argv[i]) > 2)
@@ -830,6 +865,8 @@ int main(int argc, char **argv) {
         if (r == 0)
                 TEST_SAY("\n============== ALL TESTS PASSED ==============\n");
 
+	test_cleanup();
+
 	return r;
 }
 
@@ -883,8 +920,8 @@ rd_kafka_t *test_create_producer (void) {
  * Create topic_t object with va-arg list as key-value config pairs
  * terminated by NULL.
  */
-rd_kafka_topic_t *test_create_topic (rd_kafka_t *rk,
-                                     const char *topic, ...) {
+rd_kafka_topic_t *test_create_topic_object (rd_kafka_t *rk,
+					    const char *topic, ...) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_topic_conf_t *topic_conf;
 	va_list ap;
@@ -1097,6 +1134,9 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 	if (!rk)
 		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
 
+	if (group_id)
+		rd_kafka_poll_set_consumer(rk);
+
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
 	return rk;
@@ -1269,8 +1309,6 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
                         uint64_t testid, int exp_msgcnt) {
         rd_kafka_t *rk;
         rd_kafka_topic_conf_t *tconf;
-        rd_kafka_resp_err_t err;
-        rd_kafka_topic_partition_list_t *topics;
 	test_msgver_t mv;
 	char grpid0[64];
 
@@ -1284,19 +1322,11 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
 
         rd_kafka_poll_set_consumer(rk);
 
-        topics = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(topics, topic, RD_KAFKA_PARTITION_UA);
-
-        TEST_SAY("Subscribing to topic %s in group %s "
-                 "(expecting %d msgs with testid %"PRIu64")\n",
+	TEST_SAY("Subscribing to topic %s in group %s "
+		 "(expecting %d msgs with testid %"PRIu64")\n",
                  topic, group_id, exp_msgcnt, testid);
 
-        err = rd_kafka_subscribe(rk, topics);
-        if (err)
-                TEST_FAIL("Failed to subscribe to %s: %s\n",
-                          topic, rd_kafka_err2str(err));
-
-        rd_kafka_topic_partition_list_destroy(topics);
+	test_consumer_subscribe(rk, topic);
 
 	test_msgver_init(&mv, testid);
 
@@ -1310,6 +1340,24 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
         rd_kafka_destroy(rk);
 }
 
+/**
+ * @brief Start subscribing for 'topic'
+ */
+void test_consumer_subscribe (rd_kafka_t *rk, const char *topic) {
+        rd_kafka_topic_partition_list_t *topics;
+	rd_kafka_resp_err_t err;
+
+	topics = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(topics, topic,
+					  RD_KAFKA_PARTITION_UA);
+
+        err = rd_kafka_subscribe(rk, topics);
+        if (err)
+                TEST_FAIL("Failed to subscribe to %s: %s\n",
+                          topic, rd_kafka_err2str(err));
+
+        rd_kafka_topic_partition_list_destroy(topics);
+}
 
 
 void test_consumer_assign (const char *what, rd_kafka_t *rk,
@@ -1948,7 +1996,8 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
                                  rkmessage->offset);
 
                 } else if (rkmessage->err) {
-                        TEST_SAY("%s [%"PRId32"] error (offset %"PRId64"): %s\n",
+                        TEST_FAIL("%s [%"PRId32"] error (offset %"PRId64
+				"): %s",
                                  rkmessage->rkt ?
                                  rd_kafka_topic_name(rkmessage->rkt) :
                                  "(no-topic)",
@@ -2012,7 +2061,8 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         eof_cnt++;
 
                 } else if (rkmessage->err) {
-                        TEST_SAY("%s [%"PRId32"] error (offset %"PRId64"): %s\n",
+                        TEST_FAIL("%s [%"PRId32"] error (offset %"PRId64
+				  "): %s",
                                  rkmessage->rkt ?
                                  rd_kafka_topic_name(rkmessage->rkt) :
                                  "(no-topic)",
@@ -2077,4 +2127,39 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
                         partitions->elems[i].topic,
                         partitions->elems[i].partition);
         }
+}
+
+
+/**
+ * @brief Create topic using kafka-topics.sh --create
+ */
+void test_create_topic (const char *topicname, int partition_cnt,
+			int replication_factor) {
+	char cmd[1024];
+	int r;
+	test_timing_t t_run;
+
+	TEST_LOCK();
+	if (!test_topics_sh) {
+		TEST_UNLOCK();
+		TEST_FAIL("\"test.kafka-topics.sh\" not configured, should be "
+			  "\"..path/to/kafka-topics-sh "
+			  "--zookeeper someAddress\"");
+	}
+
+	rd_snprintf(cmd, sizeof(cmd), "%s --create --topic \"%s\" "
+		    "--replication-factor %d --partitions %d",
+		    test_topics_sh, topicname,
+		    replication_factor, partition_cnt);
+	TEST_UNLOCK();
+
+	TEST_SAY("Executing: %s\n", cmd);
+	TIMING_START(&t_run, "exec.create.topic");
+	r = system(cmd);
+	TIMING_STOP(&t_run);
+
+	if (r == 1) {
+		TEST_FAIL("system(%s) failed: %s", cmd, strerror(errno));
+	} else if (!WIFEXITED(r) || WEXITSTATUS(r))
+		TEST_FAIL("system(%s) failed with exit status %d\n", cmd, r);
 }

@@ -52,7 +52,6 @@
 #include "rdkafka_transport.h"
 #include "rdkafka_proto.h"
 #include "rdkafka_buf.h"
-#include "rdkafka_cgrp.h"
 #include "rdkafka_request.h"
 #include "rdkafka_sasl.h"
 #include "rdtime.h"
@@ -1983,11 +1982,6 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 rko->rko_rkbuf = NULL;
                 break;
 
-        case RD_KAFKA_OP_CGRP_DELEGATE:
-                rd_kafka_cgrp_assign_broker(rko->rko_cgrp, rkb);
-                break;
-
-
         case RD_KAFKA_OP_PARTITION_JOIN:
                 /*
 		 * Add partition to broker toppars
@@ -2123,10 +2117,6 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
         while ((rko = rd_kafka_q_pop(&rkb->rkb_ops, timeout_ms,
                                      RD_POLL_NOWAIT)))
                 rd_kafka_broker_op_serve(rkb, rko);
-
-        /* Serve consumer group */
-        if (rkb->rkb_cgrp)
-                rd_kafka_cgrp_serve(rkb->rkb_cgrp, rkb);
 
         now = rd_clock();
 

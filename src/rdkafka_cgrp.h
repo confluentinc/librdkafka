@@ -36,12 +36,10 @@
  *
  * Client groups handling for a single cgrp is assigned to a single
  * rd_kafka_broker_t object at any given time.
- * The broker will call cgrp_serve() to serve its cgrps and possibly reassign
- * the cgrp to another broker in case of coordinator or broker changes.
+ * The main thread will call cgrp_serve() to serve its cgrps.
  *
  * This means that the cgrp itself does not need to be locked since it
- * is only ever used from a single broker thread.
- *
+ * is only ever used from the main thread.
  *
  */
 
@@ -206,7 +204,7 @@ void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg);
 rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
                                     const rd_kafkap_str_t *group_id,
                                     const rd_kafkap_str_t *client_id);
-void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb);
+void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg);
 void rd_kafka_cgrp_assign_broker (rd_kafka_cgrp_t *rkcg,
                                   rd_kafka_broker_t *rkb);
 
@@ -214,6 +212,7 @@ void rd_kafka_cgrp_assign_broker (rd_kafka_cgrp_t *rkcg,
 void rd_kafka_cgrp_op (rd_kafka_cgrp_t *rkcg, rd_kafka_toppar_t *rktp,
                        rd_kafka_q_t *replyq, rd_kafka_op_type_t type,
                        rd_kafka_resp_err_t err);
+void rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko);
 void rd_kafka_cgrp_terminate (rd_kafka_cgrp_t *rkcg, rd_kafka_q_t *replyq);
 
 
@@ -238,5 +237,11 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                                      rd_kafka_resp_err_t err,
                                      const rd_kafkap_bytes_t *member_state);
 void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state);
+
+int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg);
+
+void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
+				rd_kafka_broker_t *rkb,
+				const char *reason);
 
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)

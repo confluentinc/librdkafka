@@ -229,43 +229,25 @@ static rd_kafka_broker_t *rd_kafka_cgrp_select_broker (rd_kafka_cgrp_t *rkcg) {
 }
 
 
-/**
- * Delegate cgrp to broker by sending an op to the broker.
- *
- * Locality: broker thread
- */
-static void rd_kafka_cgrp_delegate_broker (rd_kafka_cgrp_t *rkcg,
-                                           rd_kafka_broker_t *rkb) {
-        rd_kafka_op_t *rko;
-
-        rd_kafka_assert(rkcg->rkcg_rk, rkcg->rkcg_rkb == NULL);
-        rkcg->rkcg_rkb = rkb;
-        rd_kafka_broker_keep(rkb);
-
-        rko = rd_kafka_op_new(RD_KAFKA_OP_CGRP_DELEGATE);
-        rko->rko_cgrp = rkcg;
-
-        rd_kafka_q_enq(&rkb->rkb_ops, rko);
-}
 
 
 /**
  * Assign cgrp to broker.
  *
- * NOTE: Must only be called from the current broker's thread.
- *
- * Locality: broker thread
+ * Locality: main thread
  */
 void rd_kafka_cgrp_assign_broker (rd_kafka_cgrp_t *rkcg,
                                   rd_kafka_broker_t *rkb) {
-        rd_kafka_assert(rkb->rkb_rk, rkcg->rkcg_rkb == rkb);
+
+	rd_kafka_assert(NULL, rkcg->rkcg_rkb == NULL);
+
+	rkcg->rkcg_rkb = rkb;
+	rd_kafka_broker_keep(rkb);
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "BRKASSIGN",
                      "Group \"%.*s\" management assigned to broker %s",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_kafka_broker_name(rkb));
-
-        rkb->rkb_cgrp = rkcg;
 
         /* Reset query interval to trigger an immediate
          * coord query if required */
@@ -281,14 +263,10 @@ void rd_kafka_cgrp_assign_broker (rd_kafka_cgrp_t *rkcg,
 /**
  * Unassign cgrp from current broker.
  *
- * NOTE: Must only be called from the current broker's thread.
- *
- * Locality: broker thread
+ * Locality: main thread
  */
 static void rd_kafka_cgrp_unassign_broker (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_broker_t *rkb = rkcg->rkcg_rkb;
-
-        rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "BRKUNASSIGN",
                      "Group \"%.*s\" management unassigned "
@@ -296,11 +274,8 @@ static void rd_kafka_cgrp_unassign_broker (rd_kafka_cgrp_t *rkcg) {
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_kafka_broker_name(rkb));
 
-        rkb->rkb_cgrp = NULL;
-
-        // FIXME: How do we handle ops in the queue when we have no broker?
         rkcg->rkcg_rkb = NULL;
-        rd_kafka_broker_destroy(rkb); /* from delegate() */
+        rd_kafka_broker_destroy(rkb); /* from assign() */
 }
 
 
@@ -343,7 +318,7 @@ static int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_BROKER);
 
         if (rkb) {
-                rd_kafka_cgrp_delegate_broker(rkcg, rkb);
+		rd_kafka_cgrp_assign_broker(rkcg, rkb);
 		rd_kafka_broker_destroy(rkb); /* from select_broker() */
 	}
 
@@ -443,7 +418,7 @@ err2:
 /**
  * Query for coordinator.
  *
- * Locality: broker thread
+ * Locality: main thread
  */
 static void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
                                        rd_kafka_broker_t *rkb,
@@ -452,8 +427,7 @@ static void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
                    "Group \"%.*s\": querying for coordinator: %s",
                    RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), reason);
 
-        if (rkb->rkb_source == RD_KAFKA_INTERNAL ||
-            rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP)
+        if (rkb->rkb_source == RD_KAFKA_INTERNAL)
                 return;
 
         rd_kafka_GroupCoordinatorRequest(rkb, rkcg->rkcg_group_id,
@@ -1239,15 +1213,17 @@ rd_kafka_cgrp_subscribe (rd_kafka_cgrp_t *rkcg,
 
 
 /**
- * Same as cgrp_terminate() but called from the cgrp thread upon receiving
+ * Same as cgrp_terminate() but called from the cgrp/main thread upon receiving
  * the op 'rko' from cgrp_terminate().
  *
  * NOTE: Takes ownership of 'rko'
  *
- * Locality: cgrp broker thread
+ * Locality: main thread
  */
-static void
+void
 rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
+
+	rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
                      "Terminating group \"%.*s\" in state %s "
@@ -1292,6 +1268,7 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
  * Locality: any thread
  */
 void rd_kafka_cgrp_terminate (rd_kafka_cgrp_t *rkcg, rd_kafka_q_t *replyq) {
+	rd_kafka_assert(NULL, !thrd_is_current(rkcg->rkcg_rk->rk_thread));
         rd_kafka_cgrp_op(rkcg, NULL, replyq, RD_KAFKA_OP_TERMINATE, 0);
 }
 
@@ -1526,11 +1503,6 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 
                 if (rko)
                         rd_kafka_op_destroy(rko);
-
-                /* Bail out if managing broker changed, we must not
-                 * process any more cgrp ops in this broker thread. */
-                if (rkb->rkb_cgrp != rkcg)
-                        break;
         }
 }
 
@@ -1586,10 +1558,20 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg,
 }
 /**
  * Client group handling.
- * Called from broker thread to serve the operational aspects of a cgrp.
+ * Called from main thread to serve the operational aspects of a cgrp.
  */
-void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb) {
+void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
+	rd_kafka_broker_t *rkb = rkcg->rkcg_rkb;
+	int rkb_state;
 
+	if (rkb) {
+		rd_kafka_broker_lock(rkb);
+		rkb_state = rkb->rkb_state;
+		rd_kafka_broker_unlock(rkb);
+	}
+
+#if 0 
+		// FIXME: Anything special we need to keep?
         if (rkb->rkb_source == RD_KAFKA_INTERNAL ||
             rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP) {
                 /* Broker is not up, Try reassigning management
@@ -1598,13 +1580,13 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb) {
                         return; /* Reassignment took place, we are no longer
                                  * managing this cgrp. */
         }
+#endif
 
 
         rd_kafka_cgrp_op_serve(rkcg, rkb);
 
         /* Bail out if we're no longer the managing broker, or terminating. */
-        if (unlikely(rkb->rkb_cgrp != rkcg ||
-                     rd_kafka_terminating(rkcg->rkcg_rk)))
+        if (unlikely(rd_kafka_terminating(rkcg->rkcg_rk)))
                 return;
 
         switch (rkcg->rkcg_state)
@@ -1643,7 +1625,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb) {
 
         case RD_KAFKA_CGRP_STATE_WAIT_BROKER_TRANSPORT:
                 /* Waiting for broker transport to come up */
-                if (rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP) {
+                if (rkb_state < RD_KAFKA_BROKER_STATE_UP) {
                         /* FIXME: Query another broker */
                 } else {
                         rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_UP);

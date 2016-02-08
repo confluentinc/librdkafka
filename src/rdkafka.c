@@ -419,21 +419,8 @@ rd_kafka_resp_err_t rd_kafka_errno2err (int errnox) {
 
 
 static void rd_kafka_simple_consumer_cleanup (rd_kafka_t *rk) {
-        rd_kafka_q_t *tmpq;
-        rd_kafka_resp_err_t err;
-
-        if (!rk->rk_cgrp)
-                return;
-
-        tmpq = rd_kafka_q_new(rk);
-        rd_kafka_cgrp_terminate(rk->rk_cgrp, tmpq);
-        err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
-        rd_kafka_q_destroy(tmpq);
-
-        if (err)
-                rd_kafka_log(rk, LOG_ERR, "CLEANUP",
-                             "Failed to stop consumer group: %s",
-                             rd_kafka_err2str(err));
+        if (rk->rk_cgrp)
+		rd_kafka_cgrp_terminate0(rk->rk_cgrp, NULL);
 }
 
 
@@ -527,7 +514,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
 	/* Brokers pick up on rk_terminate automatically. */
 
-        /* The legacy/simple consumer lacks an API to close down the consumer */
+        /* The legacy/simple consumer lacks an API to close down the consumer*/
         if (rd_kafka_is_simple_consumer(rk))
                 rd_kafka_simple_consumer_cleanup(rk);
 
@@ -568,6 +555,10 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
         rd_kafka_wrunlock(rk);
 
+	/* Purge op-queue */
+        rd_kafka_q_disable(&rk->rk_rep);
+	rd_kafka_q_purge(&rk->rk_rep);
+
 	/* Loose our special reference to the internal broker. */
         mtx_lock(&rk->rk_internal_rkb_lock);
 	if ((rkb = rk->rk_internal_rkb)) {
@@ -590,9 +581,6 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
         rd_list_destroy(&wait_thrds, NULL);
 
-        /* Purge op-queue */
-        rd_kafka_q_disable(&rk->rk_rep);
-	rd_kafka_q_purge(&rk->rk_rep);
 }
 
 
@@ -957,6 +945,9 @@ static int rd_kafka_thread_main (void *arg) {
                                      1000,
                                      rd_kafka_metadata_refresh_cb, NULL);
 
+	if (rk->rk_cgrp)
+		rd_kafka_cgrp_reassign_broker(rk->rk_cgrp);
+
 	while (likely(!rd_kafka_terminating(rk) ||
 		      rd_kafka_q_len(&rk->rk_ops))) {
 		rd_ts_t sleeptime = rd_kafka_timers_next(
@@ -964,6 +955,8 @@ static int rd_kafka_thread_main (void *arg) {
 			rk->rk_conf.socket_blocking_max_ms * 1000, 1/*lock*/);
 		rd_kafka_toppars_q_serve(&rk->rk_ops,
 					 (int)(sleeptime / 1000));
+		if (rk->rk_cgrp)
+			rd_kafka_cgrp_serve(rk->rk_cgrp);
 		rd_kafka_timers_run(&rk->rk_timers, RD_POLL_NOWAIT);
 	}
 
@@ -1096,6 +1089,14 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	}
 #endif
 
+	/* Client group, eligible both in consumer and producer mode. */
+        if (RD_KAFKAP_STR_LEN(rk->rk_conf.group_id) > 0)
+                rk->rk_cgrp = rd_kafka_cgrp_new(rk,
+                                                rk->rk_conf.group_id,
+                                                rk->rk_conf.client_id);
+
+
+
 #ifndef _MSC_VER
         /* Block all signals in newly created thread.
          * To avoid race condition we block all signals in the calling
@@ -1145,12 +1146,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
         rd_atomic32_add(&rd_kafka_handle_cnt_curr, 1);
 
-
-        /* Client group, eligible both in consumer and producer mode. */
-        if (RD_KAFKAP_STR_LEN(rk->rk_conf.group_id) > 0)
-                rk->rk_cgrp = rd_kafka_cgrp_new(rk,
-                                                rk->rk_conf.group_id,
-                                                rk->rk_conf.client_id);
 
 	/* Add initial list of brokers from configuration */
 	if (rk->rk_conf.brokerlist) {

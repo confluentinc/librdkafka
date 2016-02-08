@@ -55,7 +55,6 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 "REPLY:FETCH_START",
                 "REPLY:FETCH_STOP",
                 "REPLY:SEEK",
-                "REPLY:CGRP_DELEGATE",
                 "REPLY:OFFSET_FETCH",
                 "REPLY:PARTITION_JOIN",
                 "REPLY:PARTITION_LEAVE",

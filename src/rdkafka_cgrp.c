@@ -1578,19 +1578,6 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 		rd_kafka_broker_unlock(rkb);
 	}
 
-#if 0 
-		// FIXME: Anything special we need to keep?
-        if (rkb->rkb_source == RD_KAFKA_INTERNAL ||
-            rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP) {
-                /* Broker is not up, Try reassigning management
-                 * to other broker */
-                if (rd_kafka_cgrp_reassign_broker(rkcg))
-                        return; /* Reassignment took place, we are no longer
-                                 * managing this cgrp. */
-        }
-#endif
-
-
         rd_kafka_cgrp_op_serve(rkcg, rkb);
 
         /* Bail out if we're no longer the managing broker, or terminating. */

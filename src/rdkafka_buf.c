@@ -376,30 +376,20 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 int rd_kafka_buf_retry (rd_kafka_broker_t *rkb,
                         rd_kafka_resp_err_t err, rd_kafka_buf_t *rkbuf) {
 
-        /* Request was sent on 'rkb' thread, but was received on the
-         * current broker thread (because cgrp or rktp migrated).
-         * We dont retry on the previous broker 'rkb' in this case. */
-        if (unlikely(!thrd_is_current(rkb->rkb_thread) ||
-                     rd_kafka_terminating(rkb->rkb_rk)))
+	/* FIXME: remove err ^ */
+
+        if (unlikely(rkb->rkb_source == RD_KAFKA_INTERNAL ||
+		     rd_kafka_terminating(rkb->rkb_rk) ||
+		     rkbuf->rkbuf_retries + 1 >
+		     rkb->rkb_rk->rk_conf.max_retries))
                 return 0;
 
-        switch (err)
-        {
-        case RD_KAFKA_RESP_ERR__TRANSPORT:
-        case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
-        case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
-                /* Try again */
-                if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
-                    rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
-                    ++rkbuf->rkbuf_retries < rkb->rkb_rk->rk_conf.max_retries) {
-			rkbuf->rkbuf_ts_sent = 0;
-                        rd_kafka_broker_buf_retry(rkb, rkbuf);
-                        return 1;
-                }
-                return 0;
-        default:
-                return 0;
-        }
+	/* Try again */
+	rkbuf->rkbuf_ts_sent = 0;
+	rkbuf->rkbuf_retries++;
+	rd_kafka_buf_keep(rkbuf);
+	rd_kafka_broker_buf_retry(rkb, rkbuf);
+	return 1;
 }
 
 

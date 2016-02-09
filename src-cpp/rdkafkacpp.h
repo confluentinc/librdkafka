@@ -566,6 +566,7 @@ public:
    *         } else {
    *           std::cerr << "Rebalancing error: <<
    *                        RdKafka::err2str(err) << std::endl;
+   *           consumer->unassign();
    *         }
    *     }
    *  }
@@ -806,6 +807,9 @@ class RD_EXPORT Handle {
    * Events:
    *   - delivery report callbacks (if an RdKafka::DeliveryCb is configured) [producer]
    *   - event callbacks (if an RdKafka::EventCb is configured) [producer & consumer]
+   *
+   * @remark  An application should make sure to call poll() at regular
+   *          intervals to serve any queued callbacks waiting to be called.
    *
    * @warning This method MUST NOT be used with the RdKafka::KafkaConsumer,
    *          use its RdKafka::KafkaConsumer::consume() instead.
@@ -1171,6 +1175,13 @@ public:
    * etc.
    *
    * @remark Use \c delete to free the message.
+   *
+   * @remark  An application should make sure to call consume() at regular
+   *          intervals, even if no messages are expected, to serve any
+   *          queued callbacks waiting to be called. This is especially
+   *          important when a RebalanceCb has been registered as it needs
+   *          to be called and handled properly to synchronize internal
+   *          consumer state.
    *
    * @remark Application MUST NOT call \p poll() on KafkaConsumer objects.
    *

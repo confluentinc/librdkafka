@@ -787,6 +787,7 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *
  *          default:
  *             handle_unlikely_error(err);
+ *             rd_kafka_assign(rk, NULL); // sync state
  *             break;
  *         }
  *    }
@@ -1308,6 +1309,9 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  * For non-blocking calls, provide 0 as \p timeout_ms.
  * To wait indefinately for an event, provide -1.
  *
+ * @remark  An application should make sure to call poll() at regular
+ *          intervals to serve any queued callbacks waiting to be called.
+ *
  * Events:
  *   - delivery report callbacks  (if dr_cb/dr_msg_cb is configured) [producer]
  *   - error callbacks (rd_kafka_conf_set_error_cb()) [all]
@@ -1748,6 +1752,13 @@ rd_kafka_subscription (rd_kafka_t *rk,
  * @brief Poll the consumer for messages or events.
  *
  * Will block for at most \p timeout_ms milliseconds.
+ *
+ * @remark  An application should make sure to call consumer_poll() at regular
+ *          intervals, even if no messages are expected, to serve any
+ *          queued callbacks waiting to be called. This is especially
+ *          important when a rebalance_cb has been registered as it needs
+ *          to be called and handled properly to synchronize internal
+ *          consumer state.
  *
  * @returns A message object which is a proper message if \p ->err is
  *          RD_KAFKA_RESP_ERR_NO_ERROR, or an event or error for any other

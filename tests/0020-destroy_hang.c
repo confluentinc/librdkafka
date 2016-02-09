@@ -130,6 +130,8 @@ static int nonexist_part (void) {
 int main_0020_destroy_hang (int argc, char **argv) {
         int fails = 0;
 
+	test_conf_init(NULL, NULL, 30);
+
         fails += nonexist_part();
 
         if (fails > 0)

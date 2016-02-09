@@ -426,7 +426,12 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
         rko_reply->rko_version = rko->rko_version;
         rd_kafka_op_payload_move(rko_reply, rko); /* move 'offsets' */
 
-        rd_kafka_handle_OffsetFetch(rkb, err, rkbuf, request, offsets);
+	/* If all partitions already had usable offsets then there
+	 * was no request sent and thus no reply, the offsets list is
+	 * good to go. */
+	if (rkbuf)
+		rd_kafka_handle_OffsetFetch(rkb->rkb_rk, rkb, err, rkbuf,
+					    request, offsets);
 
         rd_kafka_q_enq(rko->rko_replyq, rko_reply);
 
@@ -442,6 +447,9 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
  * Send OffsetFetchRequest for toppar.
  *
  * 'parts' must be a sorted list of topic+partitions.
+ * Any partition with a usable offset will be ignored, if all partitions
+ * have usable offsets then no request is sent at all but a empty
+ * reply is enqueued on the replyq.
  */
 void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
                                   int16_t api_version,
@@ -455,6 +463,7 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
         ssize_t of_PartCnt = -1;
         const char *last_topic = NULL;
         int PartCnt = 0;
+	int tot_PartCnt = 0;
         int i;
 
 	rkbuf = rd_kafka_buf_new_growable(
@@ -472,6 +481,17 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
 
         for (i = 0 ; i < parts->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &parts->elems[i];
+
+		/* Ignore partitions with a usable offset. */
+		if (rktpar->offset != RD_KAFKA_OFFSET_INVALID &&
+		    rktpar->offset != RD_KAFKA_OFFSET_STORED) {
+			rd_rkb_dbg(rkb, TOPIC, "OFFSET"
+				   "OffsetFetchRequest: skipping %s [%"PRId32"] "
+				   "with valid offset %s",
+				   rktpar->topic, rktpar->partition,
+				   rd_kafka_offset2str(rktpar->offset));
+			continue;
+		}
 
                 if (last_topic == NULL || strcmp(last_topic, rktpar->topic)) {
                         /* New topic */
@@ -492,6 +512,7 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
                 /* Partition */
                 rd_kafka_buf_write_i32(rkbuf,  rktpar->partition);
                 PartCnt++;
+		tot_PartCnt++;
         }
 
         /* Finalize previous PartitionCnt */
@@ -508,8 +529,23 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_version_set(rkbuf, api_version);
 
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-		   "OffsetFetchRequest(v%d) for %d partition(s)",
-                   api_version, parts->cnt);
+		   "OffsetFetchRequest(v%d) for %d/%d partition(s)",
+                   api_version, tot_PartCnt, parts->cnt);
+
+	if (tot_PartCnt == 0) {
+		/* No partitions needs OffsetFetch, enqueue empty
+		 * response right away. */
+		rkbuf->rkbuf_rkb = rkb;
+		rd_kafka_broker_keep(rkb);
+                rkbuf->rkbuf_replyq = replyq;
+                rd_kafka_q_keep(replyq);
+                rkbuf->rkbuf_cb     = resp_cb;
+                rkbuf->rkbuf_opaque = opaque;
+		rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, NULL, rkbuf);
+		return;
+	}
+
+
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_OffsetFetch, rkbuf,
                                        replyq, resp_cb, opaque);

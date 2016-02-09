@@ -99,8 +99,8 @@ _TEST_DECL(0021_rkt_destroy);
 _TEST_DECL(0022_consume_batch);
 _TEST_DECL(0025_timers);
 _TEST_DECL(0026_consume_pause);
-_TEST_DECL(0027_part_offset);
 _TEST_DECL(0028_long_topicnames);
+_TEST_DECL(0029_assign_offset);
 
 /**
  * Define all tests here
@@ -129,9 +129,9 @@ struct test tests[] = {
         _TEST(0022_consume_batch, 0),
         _TEST(0025_timers, TEST_F_LOCAL),
 	_TEST(0026_consume_pause, 0),
-	_TEST(0027_part_offset, 0),
 	_TEST(0028_long_topicnames, TEST_F_KNOWN_ISSUE,
 	      "https://github.com/edenhill/librdkafka/issues/529"),
+	_TEST(0029_assign_offset, 0),
         { NULL }
 };
 
@@ -1459,7 +1459,7 @@ void test_msgver_clear (test_msgver_t *mv) {
 }
 
 struct test_mv_p *test_msgver_p_get (test_msgver_t *mv, const char *topic,
-				     int32_t partition) {
+				     int32_t partition, int do_create) {
 	int i;
 	struct test_mv_p *p;
 
@@ -1468,6 +1468,9 @@ struct test_mv_p *test_msgver_p_get (test_msgver_t *mv, const char *topic,
 		if (p->partition == partition && !strcmp(p->topic, topic))
 			return p;
 	}
+
+	if (!do_create)
+		TEST_FAIL("Topic %s [%d] not found in msgver", topic, partition);
 
 	if (mv->p_cnt == mv->p_size) {
 		mv->p_size = (mv->p_size + 4) * 2;
@@ -1555,7 +1558,7 @@ int test_msgver_add_msg0 (const char *func, int line,
 		return 0; /* Ignore message */
 
 	p = test_msgver_p_get(mv, rd_kafka_topic_name(rkmessage->rkt),
-			      rkmessage->partition);
+			      rkmessage->partition, 1);
 
 	m = test_mv_mvec_add(&p->mvec);
 
@@ -1866,6 +1869,53 @@ static int test_msgver_verify_range (test_msgver_t *mv, int flags,
 	return fails;
 }
 
+
+/**
+ * Verify that \p exp_cnt messages were received for \p topic and \p partition
+ * starting at msgid base \p msg_base.
+ */
+int test_msgver_verify_part0 (const char *func, int line, const char *what,
+			      test_msgver_t *mv, int flags,
+			      const char *topic, int partition,
+			      int msg_base, int exp_cnt) {
+	int fails = 0;
+	struct test_mv_vs vs = { .msg_base = msg_base, .exp_cnt = exp_cnt };
+	struct test_mv_p *p;
+
+	TEST_SAY("%s:%d: %s: Verifying %d received messages (flags 0x%x) "
+		 "in %s [%d]: expecting msgids %d..%d (%d)\n",
+		 func, line, what, mv->msgcnt, flags, topic, partition,
+		 msg_base, msg_base+exp_cnt, exp_cnt);
+
+	p = test_msgver_p_get(mv, topic, partition, 0);
+
+	/* Per-partition checks */
+	if (flags & TEST_MSGVER_ORDER)
+		fails += test_mv_mvec_verify_order(mv, flags, p, &p->mvec, &vs);
+	if (flags & TEST_MSGVER_DUP)
+		fails += test_mv_mvec_verify_dup(mv, flags, p, &p->mvec, &vs);
+
+	if (mv->log_suppr_cnt > 0)
+		TEST_WARN("%s:%d: %s: %d message warning logs suppressed\n",
+			  func, line, what, mv->log_suppr_cnt);
+
+	if (fails)
+		TEST_FAIL("%s:%d: %s: Verification of %d received messages "
+			  "failed: "
+			  "expected msgids %d..%d (%d): see previous errors\n",
+			  func, line, what,
+			  mv->msgcnt, msg_base, msg_base+exp_cnt, exp_cnt);
+	else
+		TEST_SAY("%s:%d: %s: Verification of %d received messages "
+			 "succeeded: "
+			 "expected msgids %d..%d (%d)\n",
+			 func, line, what,
+			 mv->msgcnt, msg_base, msg_base+exp_cnt, exp_cnt);
+
+	return fails;
+
+}
+
 /**
  * Verify that \p exp_cnt messages were received starting at
  * msgid base \p msg_base.
@@ -2123,9 +2173,13 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions) {
         int i;
         for (i = 0 ; i < partitions->cnt ; i++) {
-		TEST_SAY(" %s [%"PRId32"]\n",
-                        partitions->elems[i].topic,
-                        partitions->elems[i].partition);
+		TEST_SAY(" %s [%"PRId32"] offset %"PRId64"%s%s\n",
+			 partitions->elems[i].topic,
+			 partitions->elems[i].partition,
+			 partitions->elems[i].offset,
+			 partitions->elems[i].err ? ": " : "",
+			 partitions->elems[i].err ?
+			 rd_kafka_err2str(partitions->elems[i].err) : "");
         }
 }
 

@@ -588,6 +588,7 @@ static void rd_kafka_cgrp_partition_del (rd_kafka_cgrp_t *rkcg,
  * Reply for OffsetFetch from call below.
  */
 static void rd_kafka_cgrp_offsets_fetch_response (
+	rd_kafka_t *rk,
 	rd_kafka_broker_t *rkb,
 	rd_kafka_resp_err_t err,
 	rd_kafka_buf_t *reply,
@@ -602,9 +603,14 @@ static void rd_kafka_cgrp_offsets_fetch_response (
                 return;
         }
 
-	rkcg = rd_kafka_cgrp_get(rkb->rkb_rk);
+	rkcg = rd_kafka_cgrp_get(rk);
 
-	err = rd_kafka_handle_OffsetFetch(rkb, err, reply, request, offsets);
+	/* If all partitions already had usable offsets then there
+	 * was no request sent and thus no reply, the offsets list is
+	 * good to go. */
+	if (reply)
+		err = rd_kafka_handle_OffsetFetch(rk, rkb, err,
+						  reply, request, offsets);
 	if (err) {
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "OFFSET",
 			     "Offset fetch error: %s",

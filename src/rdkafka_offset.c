@@ -672,7 +672,6 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 			    rd_kafka_resp_err_t err, const char *reason) {
 	int64_t offset = RD_KAFKA_OFFSET_INVALID;
 	rd_kafka_op_t *rko;
-	int64_t offset_reset = rktp->rktp_rkt->rkt_conf.auto_offset_reset;
 
         /* Enqueue op for toppar handler thread if we're on the wrong thread. */
         if (!thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread)) {
@@ -688,24 +687,12 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
                 return;
         }
 
-	if (!err) {
-		/* No error: Logical offset lookup */
-		rktp->rktp_query_offset = err_offset;
+	if (err_offset == RD_KAFKA_OFFSET_INVALID || err)
+		offset = rktp->rktp_rkt->rkt_conf.auto_offset_reset;
+	else
 		offset = err_offset;
 
-                rd_kafka_toppar_set_fetch_state(
-			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
-
-	} else if (offset_reset == RD_KAFKA_OFFSET_END ||
-		   offset_reset == RD_KAFKA_OFFSET_BEGINNING ||
-		   offset_reset <= RD_KAFKA_OFFSET_TAIL_BASE) {
-		/* Error, use auto.offset.reset */
-		offset = rktp->rktp_rkt->rkt_conf.auto_offset_reset;
-		rktp->rktp_query_offset = offset;
-                rd_kafka_toppar_set_fetch_state(
-			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
-
-	} else if (offset_reset == RD_KAFKA_OFFSET_INVALID) {
+	if (offset == RD_KAFKA_OFFSET_INVALID) {
 		/* Error, auto.offset.reset tells us to error out. */
 		rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
 
@@ -720,8 +707,13 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 		rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
                 rd_kafka_toppar_set_fetch_state(
 			rktp, RD_KAFKA_TOPPAR_FETCH_NONE);
-	}
 
+	} else {
+		/* Query logical offset */
+		rktp->rktp_query_offset = offset;
+                rd_kafka_toppar_set_fetch_state(
+			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
+	}
 
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
 		     "%s [%"PRId32"]: offset reset (at offset %s) "
@@ -732,7 +724,7 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
                      reason, rd_kafka_err2str(err));
 
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
-		rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_offset,0);
+		rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_offset, 0);
 }
 
 

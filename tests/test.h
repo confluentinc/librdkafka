@@ -343,6 +343,14 @@ int test_msgver_add_msg0 (const char *func, int line,
 #define TEST_MSGVER_ALL_PART (TEST_MSGVER_ALL | TEST_MSGVER_BY_MSGID)
 
 
+int test_msgver_verify_part0 (const char *func, int line, const char *what,
+			      test_msgver_t *mv, int flags,
+			      const char *topic, int partition,
+			      int msg_base, int exp_cnt);
+#define test_msgver_verify_part(what,mv,flags,topic,partition,msg_base,exp_cnt) \
+	test_msgver_verify_part0(__FUNCTION__,__LINE__,			\
+				 what,mv,flags,topic,partition,msg_base,exp_cnt)
+
 int test_msgver_verify0 (const char *func, int line, const char *what,
 			 test_msgver_t *mv, int flags,
 			 int msg_base, int exp_cnt);

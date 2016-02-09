@@ -587,7 +587,7 @@ static int run_test (struct test *test, int argc, char **argv) {
         return 0;
 }
 
-static void run_tests (const char *tests_to_run, int test_flags,
+static void run_tests (const char *tests_to_run, int test_flags, int neg_flags,
                        int argc, char **argv) {
         struct test *test;
 
@@ -607,6 +607,8 @@ static void run_tests (const char *tests_to_run, int test_flags,
 
                 if ((test_flags && (test_flags & test->flags) != test_flags))
                         skip_reason = "filtered due to test flags";
+		if (neg_flags & test->flags)
+			skip_reason = "Filtered due to negative test flags";
 
                 if (tests_to_run && !strstr(tests_to_run, testnum))
                         skip_reason = "not included in TESTS list";
@@ -773,6 +775,7 @@ static void test_cleanup (void) {
 int main(int argc, char **argv) {
         const char *tests_to_run = NULL; /* all */
         int test_flags = 0;
+	int neg_flags = 0;
         int i, r;
 	test_timing_t t_all;
 
@@ -792,8 +795,14 @@ int main(int argc, char **argv) {
                         test_concurrent_max = (int)strtod(argv[i]+2, NULL);
                 else if (!strcmp(argv[i], "-l"))
                         test_flags |= TEST_F_LOCAL;
+		else if (!strcmp(argv[i], "-L"))
+                        neg_flags |= TEST_F_LOCAL;
                 else if (!strcmp(argv[i], "-a"))
                         test_assert_on_fail = 1;
+		else if (!strcmp(argv[i], "-k"))
+			test_flags |= TEST_F_KNOWN_ISSUE;
+		else if (!strcmp(argv[i], "-K"))
+			neg_flags |= TEST_F_KNOWN_ISSUE;
                 else if (*argv[i] != '-')
                         tests_to_run = argv[i];
                 else {
@@ -802,7 +811,8 @@ int main(int argc, char **argv) {
                                "Usage: %s [options] [<test-match-substr>]\n"
                                "Options:\n"
                                "  -p<N>  Run N tests in parallel\n"
-                               "  -l     Only run local tests (no broker needed)\n"
+                               "  -l/-L  Only/dont run local tests (no broker needed)\n"
+			       "  -k/-K  Only/dont run tests with known issues\n"
                                "  -a     Assert on failures\n"
                                "\n",
                                argv[0], argv[i]);
@@ -820,8 +830,7 @@ int main(int argc, char **argv) {
 	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 	TEST_SAY("Test mode   : %s\n", test_mode);
         TEST_SAY("Test filter : %s\n",
-                 (test_flags & TEST_F_LOCAL) ?
-                 "local tests only" : "no filter");
+                 (test_flags & TEST_F_LOCAL) ? "local tests only" : "no filter");
         TEST_SAY("Action on test failure: %s\n",
                  test_assert_on_fail ? "assert crash" : "continue other tests");
 
@@ -830,7 +839,7 @@ int main(int argc, char **argv) {
         TIMING_START(&t_all, "ALL-TESTS");
 
 	/* Run tests */
-        run_tests(tests_to_run, test_flags, argc, argv);
+        run_tests(tests_to_run, test_flags, neg_flags, argc, argv);
 
         TEST_LOCK();
         while (tests_running_cnt > 0 && !test_exit) {
@@ -856,7 +865,7 @@ int main(int argc, char **argv) {
 
         /* Wait for everything to be cleaned up since broker destroys are
 	 * handled in its own thread. */
-	test_wait_exit(3);
+	test_wait_exit(1);
 
         r = test_summary(1/*lock*/) ? 1 : 0;
 

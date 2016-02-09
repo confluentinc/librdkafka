@@ -2204,7 +2204,8 @@ struct list_groups_state {
         int grplist_size;
 };
 
-static void rd_kafka_DescribeGroups_resp_cb (rd_kafka_broker_t *rkb,
+static void rd_kafka_DescribeGroups_resp_cb (rd_kafka_t *rk,
+					     rd_kafka_broker_t *rkb,
                                              rd_kafka_resp_err_t err,
                                              rd_kafka_buf_t *reply,
                                              rd_kafka_buf_t *request,
@@ -2310,7 +2311,8 @@ err:
         state->err = err;
 }
 
-static void rd_kafka_ListGroups_resp_cb (rd_kafka_broker_t *rkb,
+static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
+					 rd_kafka_broker_t *rkb,
                                          rd_kafka_resp_err_t err,
                                          rd_kafka_buf_t *reply,
                                          rd_kafka_buf_t *request,

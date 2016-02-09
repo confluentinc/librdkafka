@@ -353,7 +353,8 @@ void rd_kafka_cgrp_coord_update (rd_kafka_cgrp_t *rkcg, int32_t coord_id) {
 /**
  * Handle GroupCoordinator response
  */
-static void rd_kafka_cgrp_handle_GroupCoordinator (rd_kafka_broker_t *rkb,
+static void rd_kafka_cgrp_handle_GroupCoordinator (rd_kafka_t *rk,
+						   rd_kafka_broker_t *rkb,
                                                    rd_kafka_resp_err_t err,
                                                    rd_kafka_buf_t *rkbuf,
                                                    rd_kafka_buf_t *request,
@@ -454,7 +455,7 @@ static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg, int ignore_response) {
                                            ignore_response ? NULL :
                                            rd_kafka_handle_LeaveGroup, rkcg);
         else if (!ignore_response)
-                rd_kafka_handle_LeaveGroup(rkcg->rkcg_rkb,
+                rd_kafka_handle_LeaveGroup(rkcg->rkcg_rk, rkcg->rkcg_rkb,
                                            RD_KAFKA_RESP_ERR__WAIT_COORD,
                                            NULL, NULL, rkcg);
 }
@@ -636,9 +637,9 @@ rd_kafka_cgrp_offsets_fetch (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb,
 	use_offsets = rd_kafka_topic_partition_list_copy(offsets);
 
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP || !rkb)
-		rd_kafka_cgrp_offsets_fetch_response(rkb,
-						     RD_KAFKA_RESP_ERR__WAIT_COORD,
-						     NULL, NULL, use_offsets);
+		rd_kafka_cgrp_offsets_fetch_response(
+			rkcg->rkcg_rk, rkb, RD_KAFKA_RESP_ERR__WAIT_COORD,
+			NULL, NULL, use_offsets);
         else
                 rd_kafka_OffsetFetchRequest(
                         rkb, 1, offsets,
@@ -794,7 +795,7 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
                                           rd_kafka_topic_partition_list_t
                                           *offsets) {
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP || !rkb)
-                rd_kafka_op_handle_OffsetCommit(rkb,
+                rd_kafka_op_handle_OffsetCommit(rkcg->rkcg_rk, rkb,
                                                 RD_KAFKA_RESP_ERR__WAIT_COORD,
                                                 NULL, NULL,
                                                 rko);
@@ -804,7 +805,7 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 			 &rkcg->rkcg_ops,
 			 rd_kafka_op_handle_OffsetCommit, rko) == 0)
 		/* No valid offsets */
-                rd_kafka_op_handle_OffsetCommit(rkb,
+                rd_kafka_op_handle_OffsetCommit(rkcg->rkcg_rk, rkb,
                                                 RD_KAFKA_RESP_ERR__NO_OFFSET,
                                                 NULL, NULL,
                                                 rko);
@@ -1327,7 +1328,8 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP ||
                             (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)) {
                                 rd_kafka_op_handle_OffsetFetch(
-                                        rkb, RD_KAFKA_RESP_ERR__WAIT_COORD,
+                                        rkcg->rkcg_rk, rkb,
+					RD_KAFKA_RESP_ERR__WAIT_COORD,
                                         NULL, NULL, rko);
                                 rko = NULL; /* rko freed by handler */
                                 break;
@@ -1410,7 +1412,7 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 						rkcg->rkcg_group_id->str);
 
 					rd_kafka_op_handle_OffsetCommit(
-						rkcg->rkcg_rkb,
+						rkcg->rkcg_rk, rkcg->rkcg_rkb,
 						RD_KAFKA_RESP_ERR__NO_OFFSET,
 						NULL, NULL, rko);
                                         rko = NULL; /* freed by op_handle */

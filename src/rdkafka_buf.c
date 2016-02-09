@@ -297,7 +297,7 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 		   rd_atomic32_get(&rkbufq->rkbq_cnt));
 
 	TAILQ_FOREACH_SAFE(rkbuf, &rkbufq->rkbq_bufs, rkbuf_link, tmp) {
-                rd_kafka_buf_callback(rkb, err, NULL, rkbuf);
+                rd_kafka_buf_callback(rkb->rkb_rk, rkb, err, NULL, rkbuf);
         }
 }
 
@@ -419,9 +419,12 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko) {
         request->rkbuf_response = NULL;
         rko->rko_rkbuf = NULL;
 
-        rd_kafka_buf_callback(request->rkbuf_rkb, rko->rko_err,
+        rd_kafka_buf_callback(request->rkbuf_rkb->rkb_rk,
+			      request->rkbuf_rkb, rko->rko_err,
                               response, request);
 }
+
+
 
 /**
  * Call request.rkbuf_cb(), but:
@@ -433,7 +436,8 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko) {
  *
  * Will decrease refcount for both response and request, eventually.
  */
-void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
+void rd_kafka_buf_callback (rd_kafka_t *rk,
+			    rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
                             rd_kafka_buf_t *response, rd_kafka_buf_t *request) {
 
         /* Decide if the request should be retried.
@@ -469,7 +473,7 @@ void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
         }
 
         if (request->rkbuf_cb)
-                request->rkbuf_cb(rkb, err, response, request,
+                request->rkbuf_cb(rk, rkb, err, response, request,
                                   request->rkbuf_opaque);
 
         rd_kafka_buf_destroy(request);

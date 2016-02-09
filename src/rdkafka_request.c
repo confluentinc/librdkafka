@@ -84,7 +84,8 @@ static int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 }
 
 
-static void rd_kafka_assignor_handle_Metadata (rd_kafka_broker_t *rkb,
+static void rd_kafka_assignor_handle_Metadata (rd_kafka_t *rk,
+					       rd_kafka_broker_t *rkb,
                                                rd_kafka_resp_err_t err,
                                                rd_kafka_buf_t *rkbuf,
                                                rd_kafka_buf_t *request,
@@ -115,12 +116,13 @@ void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
  * Returns the parsed Offset in '*Offsetp'.
  * Returns 0 on success, else an error.
  */
-static rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_broker_t *rkb,
-                                                   rd_kafka_resp_err_t err,
-                                                   rd_kafka_buf_t *rkbuf,
-                                                   rd_kafka_buf_t *request,
-                                                   rd_kafka_toppar_t *rktp,
-                                                   int64_t *Offsetp) {
+rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
+					    rd_kafka_broker_t *rkb,
+					    rd_kafka_resp_err_t err,
+					    rd_kafka_buf_t *rkbuf,
+					    rd_kafka_buf_t *request,
+					    rd_kafka_toppar_t *rktp,
+					    int64_t *Offsetp) {
         const int log_decode_errors = 1;
         int16_t ErrorCode = 0;
         int32_t TopicArrayCnt;
@@ -368,7 +370,8 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
  * 'offsets' list.
  */
 rd_kafka_resp_err_t
-rd_kafka_handle_OffsetFetch (rd_kafka_broker_t *rkb,
+rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
+			     rd_kafka_broker_t *rkb,
 			     rd_kafka_resp_err_t err,
 			     rd_kafka_buf_t *rkbuf,
 			     rd_kafka_buf_t *request,
@@ -485,7 +488,8 @@ err:
  *
  * Locality: cgrp's broker thread
  */
-void rd_kafka_op_handle_OffsetFetch (rd_kafka_broker_t *rkb,
+void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
+				     rd_kafka_broker_t *rkb,
                                      rd_kafka_resp_err_t err,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_buf_t *request,
@@ -602,7 +606,8 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
  * Handle OffsetCommitResponse
  * Takes the original 'rko' as opaque argument.
  */
-void rd_kafka_op_handle_OffsetCommit (rd_kafka_broker_t *rkb,
+void rd_kafka_op_handle_OffsetCommit (rd_kafka_t *rk,
+				      rd_kafka_broker_t *rkb,
                                       rd_kafka_resp_err_t err,
                                       rd_kafka_buf_t *rkbuf,
                                       rd_kafka_buf_t *request,
@@ -898,7 +903,8 @@ void rd_kafka_SyncGroupRequest (rd_kafka_broker_t *rkb,
  * Handler for SyncGroup responses
  * opaque must be the cgrp handle.
  */
-void rd_kafka_handle_SyncGroup (rd_kafka_broker_t *rkb,
+void rd_kafka_handle_SyncGroup (rd_kafka_t *rk,
+				rd_kafka_broker_t *rkb,
                                 rd_kafka_resp_err_t err,
                                 rd_kafka_buf_t *rkbuf,
                                 rd_kafka_buf_t *request,
@@ -1073,7 +1079,8 @@ err:
  *
  * Locality: cgrp broker thread
  */
-void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_broker_t *rkb,
+void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
+				     rd_kafka_broker_t *rkb,
                                      rd_kafka_resp_err_t err,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_buf_t *request,
@@ -1250,7 +1257,8 @@ void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
  * Handler for LeaveGroup responses
  * opaque must be the cgrp handle.
  */
-void rd_kafka_handle_LeaveGroup (rd_kafka_broker_t *rkb,
+void rd_kafka_handle_LeaveGroup (rd_kafka_t *rk,
+				 rd_kafka_broker_t *rkb,
                                  rd_kafka_resp_err_t err,
                                  rd_kafka_buf_t *rkbuf,
                                  rd_kafka_buf_t *request,
@@ -1330,7 +1338,8 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
  * Generic handler for Heartbeat responses.
  * opaque must be the cgrp handle.
  */
-void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_broker_t *rkb,
+void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
+				     rd_kafka_broker_t *rkb,
                                      rd_kafka_resp_err_t err,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_buf_t *request,
@@ -1694,7 +1703,8 @@ err:
  *
  * Locality: rdkafka main thread
  */
-void rd_kafka_op_handle_Metadata (rd_kafka_broker_t *rkb,
+void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
+				  rd_kafka_broker_t *rkb,
                                   rd_kafka_resp_err_t err,
                                   rd_kafka_buf_t *rkbuf,
                                   rd_kafka_buf_t *request,
@@ -1751,7 +1761,8 @@ void rd_kafka_op_handle_Metadata (rd_kafka_broker_t *rkb,
         }
 }
 
-static void rd_kafka_assignor_handle_Metadata (rd_kafka_broker_t *rkb,
+static void rd_kafka_assignor_handle_Metadata (rd_kafka_t *rk,
+					       rd_kafka_broker_t *rkb,
                                                rd_kafka_resp_err_t err,
                                                rd_kafka_buf_t *rkbuf,
                                                rd_kafka_buf_t *request,

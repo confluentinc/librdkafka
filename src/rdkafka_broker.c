@@ -363,8 +363,9 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 		if (is_waitresp_q && rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING)
                         rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1);
 
-                rd_kafka_buf_callback(rkb, RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
-                                      NULL, rkbuf);
+                rd_kafka_buf_callback(rkb->rkb_rk, rkb,
+				      RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
+				      NULL, rkbuf);
 		cnt++;
 	}
 
@@ -573,11 +574,11 @@ void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
  */
 static int rd_kafka_broker_buf_enq2 (rd_kafka_broker_t *rkb,
 				      rd_kafka_buf_t *rkbuf) {
-        if (unlikely(rkb->rkb_source == RD_KAFKA_INTERNAL /* FIXME||
-							     rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP */)) {
+        if (unlikely(rkb->rkb_source == RD_KAFKA_INTERNAL)) {
                 /* Fail request immediately if this is the internal broker. */
 		// FIXME there is no broker connection. */
-                rd_kafka_buf_callback(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+                rd_kafka_buf_callback(rkb->rkb_rk, rkb,
+				      RD_KAFKA_RESP_ERR__TRANSPORT,
                                       NULL, rkbuf);
                 return -1;
         }
@@ -909,7 +910,7 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 		   (float)req->rkbuf_ts_sent / 1000.0f);
 
 	/* Call callback. */
-        rd_kafka_buf_callback(rkb, 0, rkbuf, req);
+        rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, rkbuf, req);
 
 	return 0;
 }
@@ -1285,7 +1286,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_NO_RESPONSE))
 			rd_kafka_bufq_enq(&rkb->rkb_waitresps, rkbuf);
 		else { /* Call buffer callback for delivery report. */
-                        rd_kafka_buf_callback(rkb, 0, NULL, rkbuf);
+                        rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, NULL, rkbuf);
                 }
 
 		cnt++;
@@ -1434,7 +1435,8 @@ err:
 /**
  * Locality: io thread
  */
-static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
+static void rd_kafka_produce_msgset_reply (rd_kafka_t *rk,
+					   rd_kafka_broker_t *rkb,
 					   rd_kafka_resp_err_t err,
 					   rd_kafka_buf_t *reply,
 					   rd_kafka_buf_t *request,
@@ -3013,7 +3015,8 @@ err:
 
 
 
-static void rd_kafka_broker_fetch_reply (rd_kafka_broker_t *rkb,
+static void rd_kafka_broker_fetch_reply (rd_kafka_t *rk,
+					 rd_kafka_broker_t *rkb,
 					 rd_kafka_resp_err_t err,
 					 rd_kafka_buf_t *reply,
 					 rd_kafka_buf_t *request,

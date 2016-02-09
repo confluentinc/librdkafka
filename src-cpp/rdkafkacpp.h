@@ -33,8 +33,8 @@
  * @brief Apache Kafka C/C++ consumer and producer client library.
  *
  * rdkafkacpp.h contains the public C++ API for librdkafka.
- * The API is documented in this file as comments prefixing the class, function,
- * type, enum, define, etc.
+ * The API is documented in this file as comments prefixing the class,
+ * function, type, enum, define, etc.
  * For more information, see the C interface in rdkafka.h and read the
  * manual in INTRODUCTION.md.
  * The C++ interface is STD C++ '03 compliant and adheres to the
@@ -1221,6 +1221,20 @@ public:
    * @sa RdKafka::KafkaConsummer::commitSync()
    */
   virtual ErrorCode commitAsync (Message *message) = 0;
+
+  /**
+   * @brief Commit offsets for the provided list of partitions.
+   *
+   * @remark This is the synchronous variant.
+   */
+  virtual ErrorCode commitSync (std::vector<TopicPartition*> &offsets) = 0;
+
+  /**
+   * @brief Commit offset for the provided list of partitions.
+   *
+   * @remark This is the asynchronous variant.
+   */
+  virtual ErrorCode commitAsync (const std::vector<TopicPartition*> &offsets) = 0;
 
 
   /**

@@ -144,6 +144,7 @@ int main_0006_symbols (int argc, char **argv) {
 		rd_kafka_topic_partition_list_add_range(NULL, NULL, 0, 0);
 		rd_kafka_topic_partition_list_copy(NULL);
 		rd_kafka_topic_partition_list_set_offset(NULL, NULL, 0, 0);
+		rd_kafka_topic_partition_list_find(NULL, NULL, 0);
         }
 
 

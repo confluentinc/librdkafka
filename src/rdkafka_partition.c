@@ -2089,12 +2089,10 @@ static int rd_kafka_topic_partition_cmp (const void *_a, const void *_b) {
 
 /**
  * Search 'rktparlist' for 'topic' and 'partition'.
- * '*start_idx' is currently ignored but will be used for divide and conquer.
  */
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
-                                    const char *topic, int32_t partition,
-                                    int *start_idx) {
+				     const char *topic, int32_t partition) {
         rd_kafka_topic_partition_t skel;
         int i;
 
@@ -2172,8 +2170,7 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
 	rd_kafka_topic_partition_t *rktpar;
 
 	if (!(rktpar = rd_kafka_topic_partition_list_find(rktparlist,
-							  topic, partition,
-							  NULL)))
+							  topic, partition)))
 		return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 
 	rktpar->offset = offset;

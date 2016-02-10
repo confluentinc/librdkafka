@@ -526,6 +526,17 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
 	const char *topic, int32_t partition, int64_t offset);
 
 
+
+/**
+ * @brief Find element by \p topic and \p partition.
+ *
+ * @returns a pointer to the first matching element, or NULL if not found.
+ */
+RD_EXPORT
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
+				    const char *topic, int32_t partition);
+
 /**@}*/
 
 

@@ -365,10 +365,6 @@ int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 				    const rd_kafka_topic_partition_t *rktpar,
 				    const char *topic, int *matched_by_regex);
 
-rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktarplist,
-                                    const char *topic, int32_t partition,
-                                    int *start_idx);
 
 void rd_kafka_topic_partition_list_sort_by_topic (
         rd_kafka_topic_partition_list_t *rktparlist);

@@ -809,6 +809,10 @@ void rd_kafka_conf_set_rebalance_cb (
  * The results of automatic or manual offset commits will be scheduled
  * for this callback and is served by rd_kafka_consumer_poll().
  *
+ * If no partitions had valid offsets to commit this callback will be called
+ * with \p err == RD_KAFKA_RESP_ERR__NO_OFFSET which is not to be considered
+ * an error.
+ *
  * The \p offsets list contains per-partition information:
  *   - \c offset: committed offset (attempted)
  *   - \c err:    commit error
@@ -1817,6 +1821,7 @@ rd_kafka_assignment (rd_kafka_t *rk,
  *
  * \p offsets should contain \c topic, \c partition, \c offset and possibly
  * \c metadata.
+ * If \p offsets is NULL the current partition assignment will be used instead.
  *
  * If \p async is false this operation will block until the broker offset commit
  * is done, returning the resulting success or error code.

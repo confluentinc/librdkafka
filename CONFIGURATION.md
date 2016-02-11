@@ -41,17 +41,6 @@ internal.termination.signal              |  *  |             0 | Signal that lib
 quota.support.enable                     |  *  |         false | Enables application forwarding of broker's throttle time for Produce and Fetch (consume) requests. Whenever a Produce or Fetch request is returned with a non-zero throttle time (how long the broker throttled the request to enforce configured quota rates) a throttle_cb will be enqueued for the next call to `rd_kafka_poll()`. The same is also true for the first non-throttled request following a throttled request. Requires Kafka brokers >=0.9.0 with quotas enabled.
 protocol.version                         |  *  |             0 | Broker protocol version. Since there is no way for a client to know what protocol version is used by the broker it can't know which API version to use for certain protocol requests. This property is used to hint the client of the broker version. Format is 0xMMmmrrpp where MM=Major, mm=minor, rr=revision, pp=patch, e.g., 0x00080200 for 0.8.2. A version of 0 means an optimistic approach where the client assumes the latest version of APIs are supported.
 security.protocol                        |  *  |     plaintext | Protocol used to communicate with brokers.
-ssl.cipher.suites                        |  *  |               | A cipher suite is a named combination of authentication, encryption, MAC and key exchange algorithm used to negotiate the security settings for a network connection using TLS or SSL network protocol. See manual page for `ciphers(1)` and `SSL_CTX_set_cipher_list(3).
-ssl.key.location                         |  *  |               | Path to client's private key (PEM) used for authentication.
-ssl.key.password                         |  *  |               | Private key passphrase
-ssl.certificate.location                 |  *  |               | Path to client's public key (PEM) used for authentication.
-ssl.ca.location                          |  *  |               | File or directory path to CA certificate(s) for verifying the broker's key.
-sasl.mechanisms                          |  *  |        GSSAPI | Space separated list of eligible SASL mechanisms
-sasl.kerberos.service.name               |  *  |         kafka | Kerberos principal name that Kafka runs as.
-sasl.kerberos.principal                  |  *  |   kafkaclient | This client's Kerberos principal name.
-sasl.kerberos.kinit.cmd                  |  *  |         kinit | Kerberos kinit command path.
-sasl.kerberos.keytab                     |  *  |               | Path to Kerberos keytab file. Uses system default if not set.
-sasl.kerberos.min.time.before.relogin    |  *  |         60000 | Minimum time in milliseconds between key refresh attempts.
 group.id                                 |  *  |               | Client group id string. All clients sharing the same group.id belong to the same group.
 partition.assignment.strategy            |  *  | range,roundrobin | Name of partition assignment strategy to use when elected group leader assigns partitions to group members.
 session.timeout.ms                       |  *  |         30000 | Client group session and failure detection timeout.

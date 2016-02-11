@@ -247,6 +247,9 @@ rd_kafka_assignment (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_GET_ASSIGNMENT);
+	if (!rko)
+		return RD_KAFKA_RESP_ERR__TIMED_OUT;
+
         err = rko->rko_err;
 
         *partitions = rko->rko_payload;
@@ -272,6 +275,9 @@ rd_kafka_subscription (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_GET_SUBSCRIPTION);
+	if (!rko)
+		return RD_KAFKA_RESP_ERR__TIMED_OUT;
+
         err = rko->rko_err;
 
         *topics = rko->rko_payload;

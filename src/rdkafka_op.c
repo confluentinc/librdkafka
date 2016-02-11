@@ -387,8 +387,12 @@ rd_kafka_op_t *rd_kafka_op_req2 (rd_kafka_q_t *destq, rd_kafka_op_type_t type) {
  * Destroys the rko and returns its error.
  */
 rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko) {
-        rd_kafka_resp_err_t err = rko->rko_err;
-        rd_kafka_op_destroy(rko);
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+
+	if (rko) {
+		err = rko->rko_err;
+		rd_kafka_op_destroy(rko);
+	}
         return err;
 }
 

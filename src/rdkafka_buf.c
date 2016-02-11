@@ -373,8 +373,7 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
  * Retry failed request, depending on the error.
  * Returns 1 if the request was scheduled for retry, else 0.
  */
-int rd_kafka_buf_retry (rd_kafka_broker_t *rkb,
-                        rd_kafka_resp_err_t err, rd_kafka_buf_t *rkbuf) {
+int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
 	/* FIXME: remove err ^ */
 
@@ -432,7 +431,7 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
 
         /* Decide if the request should be retried.
          * This is always done in the originating broker thread. */
-        if (unlikely(err && rd_kafka_buf_retry(rkb, err, request)))
+        if (unlikely(err && rd_kafka_buf_retry(rkb, request)))
                 return;
 
         if (request->rkbuf_replyq) {

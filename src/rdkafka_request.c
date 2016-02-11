@@ -206,12 +206,8 @@ err:
 					    rktp->rktp_rkt);
 	}
 	if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-                /*
-		 * Schedule a retry
-		 */
-		if (rd_kafka_buf_retry(rkb, 0/*FIXME*/, request))
+		if (rd_kafka_buf_retry(rkb, request))
 			return RD_KAFKA_RESP_ERR__IN_PROGRESS;
-
 		/* FALLTHRU */
 	}
 

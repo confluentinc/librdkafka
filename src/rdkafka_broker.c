@@ -1462,7 +1462,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_t *rk,
 			   rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
 			   rd_kafka_err2str(err));
 
-                if (rd_kafka_buf_retry(rkb, err, request))
+                if (rd_kafka_buf_retry(rkb, request))
                         return; /* Scheduled for retry */
 
 		switch (err)

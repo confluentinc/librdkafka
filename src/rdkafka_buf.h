@@ -311,8 +311,7 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
                           rd_kafka_bufq_t *rkbufq,
                           rd_kafka_resp_err_t err);
 
-int rd_kafka_buf_retry (rd_kafka_broker_t *rkb,
-                        rd_kafka_resp_err_t err, rd_kafka_buf_t *rkbuf);
+int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf);
 
 void rd_kafka_buf_handle_op (rd_kafka_op_t *rko);
 void rd_kafka_buf_callback (rd_kafka_t *rk,

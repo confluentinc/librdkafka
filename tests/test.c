@@ -2236,8 +2236,12 @@ void test_create_topic (const char *topicname, int partition_cnt,
 	r = system(cmd);
 	TIMING_STOP(&t_run);
 
-	if (r == 1) {
-		TEST_FAIL("system(%s) failed: %s", cmd, strerror(errno));
-	} else if (!WIFEXITED(r) || WEXITSTATUS(r))
-		TEST_FAIL("system(%s) failed with exit status %d\n", cmd, r);
+	if (r == -1)
+		TEST_FAIL("system(\"%s\") failed: %s", cmd, strerror(errno));
+	else if (WIFSIGNALED(r))
+		TEST_FAIL("system(\"%s\") terminated by signal %d\n", cmd,
+			  WTERMSIG(r));
+	else if (WEXITSTATUS(r))
+		TEST_FAIL("system(\"%s\") failed with exit status %d\n",
+			  cmd, WEXITSTATUS(r));
 }

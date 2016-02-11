@@ -340,22 +340,21 @@ rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp) {
 
 /**
  * Trigger offset_commit_cb op, if configured.
- * Takes ownership of `offsets`
+ *
  */
 void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 				   rd_kafka_resp_err_t err,
-				   rd_kafka_topic_partition_list_t *offsets) {
+				   const rd_kafka_topic_partition_list_t *offsets) {
 	rd_kafka_op_t *rko;
 
-        if (!rk->rk_conf.offset_commit_cb) {
-		rd_kafka_topic_partition_list_destroy(offsets);
+        if (!rk->rk_conf.offset_commit_cb)
 		return;
-	}
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
 	rko->rko_err = err;
 	rd_kafka_assert(NULL, offsets->cnt > 0);
-        rd_kafka_op_payload_set(rko, offsets,
+        rd_kafka_op_payload_set(rko,
+				rd_kafka_topic_partition_list_copy(offsets),
                                 (void *)rd_kafka_topic_partition_list_destroy);
 	rd_kafka_q_enq(&rk->rk_rep, rko);
 }
@@ -528,23 +527,10 @@ rd_kafka_commit (rd_kafka_t *rk,
         if (!async)
                 tmpq = rd_kafka_q_new(rk);
 
-        err = rd_kafka_commit0(rk, offsets,
-                               async ? &rkcg->rkcg_ops : tmpq, NULL);
+        err = rd_kafka_commit0(rk, offsets, async ? NULL : tmpq, NULL);
 
         if (!async) {
-                rd_kafka_op_t *rko = rd_kafka_q_pop(tmpq, RD_POLL_INFINITE, 0);
-                err = rko->rko_err;
-
-		/* Enqueue offset_commit_cb if configured */
-		if (rko->rko_payload /* offset list */) {
-			rd_kafka_offset_commit_cb_op(
-				rk, rko->rko_err,
-				(rd_kafka_topic_partition_list_t *)
-				rko->rko_payload);
-			rko->rko_payload = NULL;
-		}
-
-                rd_kafka_op_destroy(rko);
+		err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
                 rd_kafka_q_destroy(tmpq);
         } else {
                 err = RD_KAFKA_RESP_ERR_NO_ERROR;

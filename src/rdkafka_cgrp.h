@@ -118,8 +118,6 @@ typedef struct rd_kafka_cgrp_s {
 
         int                rkcg_flags;
 #define RD_KAFKA_CGRP_F_TERMINATE    0x1            /* Terminate cgrp (async) */
-#define RD_KAFKA_CGRP_F_WAIT_COMMIT  0x2            /* Waiting for OffsetCommit
-                                                     * to complete. */
 #define RD_KAFKA_CGRP_F_WAIT_UNASSIGN 0x4           /* Waiting for unassign
 						     * to complete */
 #define RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN 0x8       /* Send LeaveGroup when
@@ -169,6 +167,9 @@ typedef struct rd_kafka_cgrp_s {
                                                      * decommissioned before
                                                      * transitioning to the
                                                      * next state. */
+
+	int rkcg_wait_commit_cnt;                   /* Waiting for this number
+						     * of commits to finish. */
 
         /* Topic whitelist: topics to subscribe to */
         rd_kafka_pattern_list_t rkcg_whitelist;

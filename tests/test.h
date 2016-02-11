@@ -133,8 +133,8 @@ struct test {
 	} while (0)
 
 #define TEST_SAY0(...)  fprintf(stderr, __VA_ARGS__)
-#define TEST_SAY(...) do {                                              \
-	if (test_level >= 2) {                                          \
+#define TEST_SAYL(LVL,...) do {						\
+	if (test_level >= LVL) {                                        \
                 fprintf(stderr, "\033[36m[%-28s/%7.3fs] ",		\
 			test_curr->name,                                \
 			test_curr->start ?                              \
@@ -144,6 +144,7 @@ struct test {
                 fprintf(stderr, "\033[0m");                             \
         }                                                               \
 	} while (0)
+#define TEST_SAY(...) TEST_SAYL(2, __VA_ARGS__)
 
 #define TEST_REPORT(...) do {		\
 	fprintf(stdout, __VA_ARGS__);			\

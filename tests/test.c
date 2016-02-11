@@ -101,6 +101,7 @@ _TEST_DECL(0025_timers);
 _TEST_DECL(0026_consume_pause);
 _TEST_DECL(0028_long_topicnames);
 _TEST_DECL(0029_assign_offset);
+_TEST_DECL(0030_offset_commit);
 
 /**
  * Define all tests here
@@ -132,6 +133,7 @@ struct test tests[] = {
 	_TEST(0028_long_topicnames, TEST_F_KNOWN_ISSUE,
 	      "https://github.com/edenhill/librdkafka/issues/529"),
 	_TEST(0029_assign_offset, 0),
+	_TEST(0030_offset_commit, 0),
         { NULL }
 };
 

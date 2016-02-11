@@ -188,7 +188,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
  */
 void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp) {
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPPARREMOVE",
-                     "REMOVING toppar %s [%"PRId32"]",
+                     "Removing toppar %s [%"PRId32"]",
                      rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
         rd_kafka_assert(NULL, rktp->rktp_removed==0);
 	rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
@@ -2222,8 +2222,9 @@ int rd_kafka_topic_partition_list_set_offsets (
 
 		rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_TOPIC, "OFFSET",
 			     "Topic %s [%"PRId32"]: "
-			     "%s %s offset %"PRId64,
+			     "%s%s %s offset %"PRId64,
 			     rktpar->topic, rktpar->partition,
+			     RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset) ? "not ":"",
 			     is_commit ? "committing" : "setting",
 			     from_rktp ? "stored" : "default", rktpar->offset);
 

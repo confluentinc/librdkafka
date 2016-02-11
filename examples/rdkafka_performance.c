@@ -59,6 +59,7 @@ static int latency_mode = 0;
 static int report_offset = 0;
 static FILE *latency_fp = NULL;
 static int msgcnt = -1;
+static int incremental_mode = 0;
 
 static void stop (int sig) {
         if (!run)
@@ -81,10 +82,12 @@ static struct {
 	rd_ts_t  t_end;
 	rd_ts_t  t_end_send;
 	uint64_t msgs;
+	uint64_t msgs_last;
         uint64_t msgs_dr_ok;
         uint64_t msgs_dr_err;
         uint64_t bytes_dr_ok;
 	uint64_t bytes;
+	uint64_t bytes_last;
 	uint64_t tx;
 	uint64_t tx_err;
         uint64_t avg_rtt;
@@ -518,9 +521,29 @@ static void print_stats (rd_kafka_t *rk,
                                (float)((cnt.bytes) / (float)t_total),
                                extra);
                 }
+
+                if (incremental_mode && now > cnt.t_last) {
+                        uint64_t i_msgs = cnt.msgs - cnt.msgs_last;
+                        uint64_t i_bytes = cnt.bytes - cnt.bytes_last;
+                        uint64_t i_time = now - cnt.t_last;
+
+                        printf("%% INTERVAL: %"PRIu64" messages "
+                               "(%"PRIu64" bytes) "
+                               "consumed in %"PRIu64"ms: %"PRIu64" msgs/s "
+                               "(%.02f Mb/s)"
+                               "%s\n",
+                               i_msgs, i_bytes,
+                               i_time / 1000,
+                               ((i_msgs * 1000000) / i_time),
+                               (float)((i_bytes) / (float)i_time),
+                               extra);
+
+                }
         }
 
 	cnt.t_last = now;
+	cnt.msgs_last = cnt.msgs;
+	cnt.bytes_last = cnt.bytes;
 }
 
 
@@ -594,7 +617,7 @@ int main (int argc, char **argv) {
 
 	while ((opt =
 		getopt(argc, argv,
-		       "PCt:p:b:s:k:c:fi:Dd:m:S:x:"
+		       "PCt:p:b:s:k:c:fi:MDd:m:S:x:"
                        "R:a:z:o:X:B:eT:G:qvIur:lA:O")) != -1) {
 		switch (opt) {
 		case 'P':
@@ -789,6 +812,10 @@ int main (int argc, char **argv) {
                         report_offset = 1;
                         break;
 
+		case 'M':
+			incremental_mode = 1;
+			break;
+
 		default:
                         fprintf(stderr, "Unknown option: %c\n", opt);
 			goto usage;
@@ -810,6 +837,7 @@ int main (int argc, char **argv) {
 			"  -t <topic>   Topic to fetch / produce\n"
 			"  -p <num>     Partition (defaults to random). "
 			"Multiple partitions are allowed in -C consumer mode.\n"
+			"  -M           Print consumer interval stats\n"
 			"  -b <brokers> Broker address list (host[:port],..)\n"
 			"  -s <size>    Message size (producer)\n"
 			"  -k <key>     Message key (producer)\n"
@@ -997,7 +1025,7 @@ int main (int argc, char **argv) {
                 if (dr_disp_div == 0)
                         dr_disp_div = 10;
 
-		cnt.t_start = rd_clock();
+		cnt.t_start = cnt.t_last = rd_clock();
 
 		while (run && (msgcnt == -1 || (int)cnt.msgs < msgcnt)) {
 			/* Send/Produce message. */

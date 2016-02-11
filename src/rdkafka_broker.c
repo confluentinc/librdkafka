@@ -3297,15 +3297,16 @@ static int rd_kafka_broker_thread_main (void *arg) {
                             rkb->rkb_ts_connect &&
                             (backoff = rd_clock() - (
                                     rkb->rkb_ts_connect +
-                                    (rd_jitter(rkb->rkb_rk->rk_conf.
-                                               reconnect_jitter_ms*0.5,
-                                               rkb->rkb_rk->rk_conf.
-                                               reconnect_jitter_ms*1.5)
+                                    (rd_jitter((int)(rkb->rkb_rk->rk_conf.
+						     reconnect_jitter_ms*0.5),
+                                               (int)(rkb->rkb_rk->rk_conf.
+						     reconnect_jitter_ms*1.5))
                                      * 1000))) < 0) {
                                 rd_rkb_dbg(rkb, BROKER, "RECONNECT",
                                            "Delaying next reconnect by %dms",
                                            -(int)(backoff/1000));
-                                rd_kafka_broker_ua_idle(rkb, -backoff / 1000);
+                                rd_kafka_broker_ua_idle(rkb,
+							(int)(-backoff / 1000));
                                 rkb->rkb_ts_connect = 0;
                                 continue;
                         }

@@ -184,6 +184,9 @@
     <ClCompile Include="..\..\tests\0022-consume_batch.c" />
     <ClCompile Include="..\..\tests\0025-timers.c" />
     <ClCompile Include="..\..\tests\0026-consume_pause.c" />
+    <ClCompile Include="..\..\tests\0028-long_topicnames.c" />
+    <ClCompile Include="..\..\tests\0029-assign_offset.c" />
+    <ClCompile Include="..\..\tests\0030-offset_commit.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

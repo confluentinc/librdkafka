@@ -2260,6 +2260,9 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
  */
 void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor) {
+#ifdef _MSC_VER
+	TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
+#else
 	char cmd[1024];
 	int r;
 	test_timing_t t_run;
@@ -2291,4 +2294,5 @@ void test_create_topic (const char *topicname, int partition_cnt,
 	else if (WEXITSTATUS(r))
 		TEST_FAIL("system(\"%s\") failed with exit status %d\n",
 			  cmd, WEXITSTATUS(r));
+#endif
 }

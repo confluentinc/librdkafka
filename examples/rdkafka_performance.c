@@ -533,7 +533,8 @@ int main (int argc, char **argv) {
 	char mode = 'C';
 	char *topic = NULL;
 	const char *key = NULL;
-	int partition = RD_KAFKA_PARTITION_UA; /* random */
+	size_t partitions_num = 0;
+        int *partitions = NULL;
 	int opt;
 	int sendflags = 0;
 	char *msgpattern = "librdkafka_performance testing!";
@@ -547,6 +548,7 @@ int main (int argc, char **argv) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
+	rd_kafka_queue_t *rkqu = NULL;
 	const char *compression = "no";
 	int64_t start_offset = 0;
 	int batch_size = 0;
@@ -603,8 +605,10 @@ int main (int argc, char **argv) {
 			topic = optarg;
 			break;
 		case 'p':
-			partition = atoi(optarg);
+			partitions = realloc(partitions, ++partitions_num);
+			partitions[partitions_num-1] = atoi(optarg);
 			break;
+
 		case 'b':
 			brokers = optarg;
 			break;
@@ -804,7 +808,8 @@ int main (int argc, char **argv) {
 			" Options:\n"
 			"  -C | -P      Consumer or Producer mode\n"
 			"  -t <topic>   Topic to fetch / produce\n"
-			"  -p <num>     Partition (defaults to random)\n"
+			"  -p <num>     Partition (defaults to random). "
+			"Multiple partitions are allowed in -C consumer mode.\n"
 			"  -b <brokers> Broker address list (host[:port],..)\n"
 			"  -s <size>    Message size (producer)\n"
 			"  -k <key>     Message key (producer)\n"
@@ -927,6 +932,8 @@ int main (int argc, char **argv) {
 		int keylen = key ? strlen(key) : 0;
 		off_t rof = 0;
 		size_t plen = strlen(msgpattern);
+		int partition = partitions ? partitions[0] :
+			RD_KAFKA_PARTITION_UA;
 
                 if (latency_mode) {
                         msgsize = strlen("LATENCY:") + 
@@ -1114,6 +1121,7 @@ int main (int argc, char **argv) {
 		 */
 
 		rd_kafka_message_t **rkmessages = NULL;
+		size_t i = 0;
 
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf,
@@ -1143,13 +1151,20 @@ int main (int argc, char **argv) {
 			rkmessages = malloc(sizeof(*rkmessages) * batch_size);
 
 		/* Start consuming */
-		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
-			fprintf(stderr, "%% Failed to start consuming: %s\n",
-				rd_kafka_err2str(rd_kafka_errno2err(errno)));
-			exit(1);
+		rkqu = rd_kafka_queue_new(rk);
+		for (i=0 ; i<partitions_num ; ++i) {
+			const int r = rd_kafka_consume_start_queue(rkt,
+				partitions[i], start_offset, rkqu);
+
+			if (r == -1) {
+				fprintf(stderr, "%% Error creating queue: %s\n",
+					rd_kafka_err2str(
+						rd_kafka_errno2err(errno)));
+				exit(1);
+			}
 		}
 
-		cnt.t_start = rd_clock();
+		cnt.t_start = cnt.t_last = rd_clock();
 		while (run && (msgcnt == -1 || msgcnt > (int)cnt.msgs)) {
 			/* Consume messages.
 			 * A message may either be a real message, or
@@ -1162,6 +1177,8 @@ int main (int argc, char **argv) {
 
 			if (batch_size) {
 				int i;
+				int partition = partitions ? partitions[0] :
+				    RD_KAFKA_PARTITION_UA;
 
 				/* Batch fetch mode */
 				r = rd_kafka_consume_batch(rkt, partition,
@@ -1170,17 +1187,17 @@ int main (int argc, char **argv) {
 							   batch_size);
 				if (r != -1) {
 					for (i = 0 ; i < r ; i++) {
-						msg_consume(rkmessages[i],NULL);
+						msg_consume(rkmessages[i],
+							NULL);
 						rd_kafka_message_destroy(
 							rkmessages[i]);
 					}
 				}
 			} else {
-				/* Callback mode */
-				r = rd_kafka_consume_callback(rkt, partition,
-							      1000/*timeout*/,
-							      msg_consume,
-							      NULL);
+				/* Queue mode */
+				r = rd_kafka_consume_callback_queue(rkqu, 1000,
+							msg_consume,
+							NULL);
 			}
 
 			cnt.t_fetch_latency += rd_clock() - fetch_latency;
@@ -1197,7 +1214,16 @@ int main (int argc, char **argv) {
 		cnt.t_end = rd_clock();
 
 		/* Stop consuming */
-		rd_kafka_consume_stop(rkt, partition);
+		for (i=0 ; i<partitions_num ; ++i) {
+			int r = rd_kafka_consume_stop(rkt, i);
+			if (r == -1) {
+				fprintf(stderr,
+					"%% Error in consume_stop: %s\n",
+					rd_kafka_err2str(
+						rd_kafka_errno2err(errno)));
+			}
+		}
+		rd_kafka_queue_destroy(rkqu);
 
 		/* Destroy topic */
 		rd_kafka_topic_destroy(rkt);

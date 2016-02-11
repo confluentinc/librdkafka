@@ -142,18 +142,6 @@ RD_TLS struct test *test_curr = &tests[0];
 
 
 
-static void sig_alarm (int sig) {
-        int do_unlock;
-        TEST_SAY0(_C_RED "\nTEST WATCHDOG TRIGGERED\n" _C_CLR);
-        /* The lock may already be held */
-        do_unlock = mtx_trylock(&test_mtx) == thrd_success;
-        test_summary(0/*no-locks*/);
-        if (do_unlock)
-                TEST_UNLOCK();
-	TEST_FAIL("Test timed out (%d tests running)", tests_running_cnt);
-        assert(!*"test timeout");
-}
-
 static void test_error_cb (rd_kafka_t *rk, int err,
 			   const char *reason, void *opaque) {
 	TEST_FAIL("rdkafka error: %s: %s", rd_kafka_err2str(err), reason);
@@ -173,13 +161,12 @@ static int test_stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
 
 void test_timeout_set (int timeout) {
         /* Limit the test run time. */
-        TEST_SAY("Setting test timeout to %ds\n", timeout);
-        if (timeout > 1000)
-                assert(!*"Test timeout out of range");
-#ifndef _MSC_VER
-        alarm(timeout);
-        signal(SIGALRM, sig_alarm);
-#endif
+	TEST_LOCK();
+        TEST_SAY("Setting test timeout to %ds * %.1f\n",
+		 timeout, test_timeout_multiplier);
+	timeout = (int)((double)timeout * test_timeout_multiplier);
+	test_curr->timeout = test_clock() + (timeout * 1000000);
+	TEST_UNLOCK();
 }
 
 
@@ -573,6 +560,7 @@ static int run_test (struct test *test, int argc, char **argv) {
                 TEST_LOCK();
         }
         tests_running_cnt++;
+	test->timeout = test_clock() + (20 * 1000000);
         test->state = TEST_RUNNING;
         TEST_UNLOCK();
 
@@ -829,6 +817,12 @@ int main(int argc, char **argv) {
         test_curr->state = TEST_PASSED;
         test_curr->start = test_clock();
 
+	if (!strcmp(test_mode, "helgrind")) {
+		TEST_LOCK();
+		test_timeout_multiplier *= 5;
+		TEST_UNLOCK();
+	}
+
 	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 	TEST_SAY("Test mode   : %s\n", test_mode);
         TEST_SAY("Test filter : %s\n",
@@ -846,11 +840,30 @@ int main(int argc, char **argv) {
         TEST_LOCK();
         while (tests_running_cnt > 0 && !test_exit) {
                 struct test *test;
+		int64_t now = test_clock();
 
                 TEST_SAY("%d test(s) running:", tests_running_cnt);
-                for (test = tests ; test->name ; test++)
-                        if (test->state == TEST_RUNNING)
-                                TEST_SAY0(" %s", test->name);
+                for (test = tests ; test->name ; test++) {
+                        if (test->state != TEST_RUNNING)
+				continue;
+
+			TEST_SAY0(" %s", test->name);
+
+			/* Timeout check */
+			if (now > test->timeout) {
+				test->state = TEST_FAILED;
+				test_summary(0/*no-locks*/);
+				TEST_UNLOCK();
+				printf("timoeut %"PRId64", now %"PRId64"\n",
+				       test->timeout, now);
+				TEST_FAIL("Test %s timed out "
+					  "(timeout set to %d seconds)\n",
+					  test->name,
+					  (int)(test->timeout-test->start)/1000000);
+				assert(!*"test timeout");
+				TEST_LOCK();
+			}
+		}
                 TEST_SAY0("\n");
                 TEST_UNLOCK();
 
@@ -867,7 +880,7 @@ int main(int argc, char **argv) {
 
         /* Wait for everything to be cleaned up since broker destroys are
 	 * handled in its own thread. */
-	test_wait_exit(1);
+	test_wait_exit(0);
 
         r = test_summary(1/*lock*/) ? 1 : 0;
 

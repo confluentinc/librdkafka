@@ -77,6 +77,7 @@ struct test {
         int64_t start;
         int64_t duration;
         FILE   *stats_fp;
+	int64_t timeout;
         enum {
                 TEST_NOT_STARTED,
                 TEST_SKIPPED,

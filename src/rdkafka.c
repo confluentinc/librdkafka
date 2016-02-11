@@ -1553,6 +1553,14 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 					      int timeout_ms) {
 	rd_kafka_op_t *rko;
 	rd_kafka_message_t *rkmessage = NULL;
+	rd_ts_t ts_end;
+
+	if (timeout_ms == RD_POLL_NOWAIT)
+		ts_end = 0;
+	else if (timeout_ms == RD_POLL_INFINITE)
+		ts_end = INT64_MAX;
+	else
+		ts_end = rd_clock() + timeout_ms * 1000;
 
 	rd_kafka_yield_thread = 0;
         while ((rko = rd_kafka_q_pop(rkq, timeout_ms, 0))) {
@@ -1563,6 +1571,11 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 			if (unlikely(rd_kafka_yield_thread)) {
 				/* Callback called rd_kafka_yield(), we must
 				 * stop dispatching the queue and return. */
+				rko = NULL;
+				break;
+			}
+
+			if (timeout_ms > 0 && rd_clock() > ts_end) {
 				rko = NULL;
 				break;
 			}

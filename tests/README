@@ -30,3 +30,9 @@ configuration, these tests are run with "TESTS=1xxx-yyyyy.test make".
 See comments in the test's source file for specific requirements.
 
 
+
+
+To insert test results into SQLite database make sure the 'sqlite3' utility
+is installed, then add this to test.conf:
+
+test.sql.command=sqlite3 rdktests

@@ -493,6 +493,11 @@ private:
   void rebalance_cb (RdKafka::KafkaConsumer *consumer,
 		     RdKafka::ErrorCode err,
 		     std::vector<RdKafka::TopicPartition*> &partitions) {
+
+    /* Send message report prior to rebalancing event to make sure they
+     * are accounted for on the "right side" of the rebalance. */
+    report_records_consumed(1);
+
     std::cout << "{ " <<
       "\"name\": \"partitions_" << (err == RdKafka::ERR__ASSIGN_PARTITIONS ?
 				    "assigned" : "revoked") << "\", " <<
@@ -502,8 +507,10 @@ private:
 
     if (err == RdKafka::ERR__ASSIGN_PARTITIONS)
       consumer->assign(partitions);
-    else
+    else {
+      do_commit(consumer, 1);
       consumer->unassign();
+    }
   }
 };
 
@@ -518,6 +525,9 @@ class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
     /* No offsets to commit, dont report anything. */
     if (err == RdKafka::ERR__NO_OFFSET)
       return;
+
+    /* Send up-to-date records_consumed report to make sure consumed > committed */
+    report_records_consumed(1);
 
     std::cout << "{ " <<
         "\"name\": \"offsets_committed\", " <<
@@ -578,7 +588,10 @@ int main (int argc, char **argv) {
     conf->set("client.id", std::string("rdkafka@") + hostname, errstr);
   }
 
-  conf->set("debug", "cgrp,topic", errstr);
+  /* auto commit is explicitly enabled with --enable-autocommit */
+  conf->set("enable.auto.commit", "false", errstr);
+
+  conf->set("debug", "cgrp,topic,broker", errstr);
 
   for (int i = 1 ; i < argc ; i++) {
     const char *name = argv[i];
@@ -825,6 +838,8 @@ int main (int argc, char **argv) {
 		<< RdKafka::err2str(resp) << std::endl;
       exit(1);
     }
+
+    watchdog_kick();
 
     /*
      * Consume messages

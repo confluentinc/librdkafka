@@ -321,9 +321,32 @@ typedef enum {
 	/** Group authorization failed */
 	RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED = 30,
 	/** Cluster authorization failed */
-	RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED = 31
+	RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED = 31,
 
+	RD_KAFKA_RESP_ERR_END,
 } rd_kafka_resp_err_t;
+
+
+/**
+ * @brief Error code value, name and description.
+ *        Typically for use with language bindings to automatically expose
+ *        the full set of librdkafka error codes.
+ */
+struct rd_kafka_err_desc {
+	rd_kafka_resp_err_t code;/**< Error code */
+	const char *name;      /**< Error name, same as code enum sans prefix */
+	const char *desc;      /**< Human readable error description. */
+};
+
+
+/**
+ * @brief Returns the full list of error codes.
+ */
+RD_EXPORT
+void rd_kafka_get_err_descs (const struct rd_kafka_err_desc **errdescs,
+			     size_t *cntp);
+
+
 
 
 /**
@@ -333,6 +356,17 @@ typedef enum {
  */
 RD_EXPORT
 const char *rd_kafka_err2str (rd_kafka_resp_err_t err);
+
+
+
+/**
+ * @brief Returns the error code name (enum name).
+ *
+ * @param err Error code to translate
+ */
+RD_EXPORT
+const char *rd_kafka_err2name (rd_kafka_resp_err_t err);
+
 
 
 /**
@@ -477,6 +511,32 @@ rd_kafka_topic_partition_list_t *
 rd_kafka_topic_partition_list_copy (const rd_kafka_topic_partition_list_t *src);
 
 
+
+
+/**
+ * @brief Set offset to \p offset for \p topic and \p partition
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
+ *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION if \p partition was not found
+ *          in the list.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
+	rd_kafka_topic_partition_list_t *rktparlist,
+	const char *topic, int32_t partition, int64_t offset);
+
+
+
+/**
+ * @brief Find element by \p topic and \p partition.
+ *
+ * @returns a pointer to the first matching element, or NULL if not found.
+ */
+RD_EXPORT
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
+				    const char *topic, int32_t partition);
+
 /**@}*/
 
 
@@ -541,6 +601,8 @@ typedef struct rd_kafka_message_s {
  */
 RD_EXPORT
 void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
+
+
 
 
 /**
@@ -736,6 +798,7 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *
  *          default:
  *             handle_unlikely_error(err);
+ *             rd_kafka_assign(rk, NULL); // sync state
  *             break;
  *         }
  *    }
@@ -756,6 +819,10 @@ void rd_kafka_conf_set_rebalance_cb (
  *
  * The results of automatic or manual offset commits will be scheduled
  * for this callback and is served by rd_kafka_consumer_poll().
+ *
+ * If no partitions had valid offsets to commit this callback will be called
+ * with \p err == RD_KAFKA_RESP_ERR__NO_OFFSET which is not to be considered
+ * an error.
  *
  * The \p offsets list contains per-partition information:
  *   - \c offset: committed offset (attempted)
@@ -1252,10 +1319,13 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  *
  * Events will cause application provided callbacks to be called.
  *
- * The \p timeout_ms argument specifies the minimum amount of time
+ * The \p timeout_ms argument specifies the maximum amount of time
  * (in milliseconds) that the call will block waiting for events.
  * For non-blocking calls, provide 0 as \p timeout_ms.
  * To wait indefinately for an event, provide -1.
+ *
+ * @remark  An application should make sure to call poll() at regular
+ *          intervals to serve any queued callbacks waiting to be called.
  *
  * Events:
  *   - delivery report callbacks  (if dr_cb/dr_msg_cb is configured) [producer]
@@ -1672,7 +1742,7 @@ rd_kafka_subscribe (rd_kafka_t *rk,
 
 
 /**
- * @brief Unsubscribe from the current subscriptions et.
+ * @brief Unsubscribe from the current subscription set.
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk);
@@ -1697,6 +1767,13 @@ rd_kafka_subscription (rd_kafka_t *rk,
  * @brief Poll the consumer for messages or events.
  *
  * Will block for at most \p timeout_ms milliseconds.
+ *
+ * @remark  An application should make sure to call consumer_poll() at regular
+ *          intervals, even if no messages are expected, to serve any
+ *          queued callbacks waiting to be called. This is especially
+ *          important when a rebalance_cb has been registered as it needs
+ *          to be called and handled properly to synchronize internal
+ *          consumer state.
  *
  * @returns A message object which is a proper message if \p ->err is
  *          RD_KAFKA_RESP_ERR_NO_ERROR, or an event or error for any other
@@ -1755,6 +1832,7 @@ rd_kafka_assignment (rd_kafka_t *rk,
  *
  * \p offsets should contain \c topic, \c partition, \c offset and possibly
  * \c metadata.
+ * If \p offsets is NULL the current partition assignment will be used instead.
  *
  * If \p async is false this operation will block until the broker offset commit
  * is done, returning the resulting success or error code.

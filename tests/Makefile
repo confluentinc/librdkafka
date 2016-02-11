@@ -1,19 +1,16 @@
-TESTSRCS ?= $(wildcard 0*-*.c) $(wildcard 0*-*.cpp)
-OBJS	  = $(TESTSRCS:%.c=%.o)
-TESTS    ?= $(TESTSRCS:%.cpp=%.test)
-TESTS0    = $(TESTS:%.c=%.test)
+TESTSRCS_C = $(wildcard 0*-*.c)
+TESTSRCS_CXX= $(wildcard 0*-*.cpp)
+OBJS	  = $(TESTSRCS_C:%.c=%.o) $(TESTSRCS_CXX:%.cpp=%.o)
 
 BIN	  = merged
 LIBS	 += -lrdkafka
 OBJS	 += test.o tinycthread.o
+CFLAGS += -I../src
+CXXFLAGS += -I../src -I../src-cpp
+LDFLAGS += -L../src -L../src-cpp
+
 
 -include ../Makefile.config
-
-%.test: ../src/librdkafka.a $(OBJS) %.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka $(LIBS)
-
-%.test: ../src/librdkafka.a $(OBJS) %.cpp
-	$(CXX) $(CPPFLAGS) $(CFLAGS) $^ -o $@ $(LDFLAGS) -lrdkafka++ -lrdkafka $(LIBS)
 
 all: $(BIN) run_par
 
@@ -41,9 +38,6 @@ test.o: ../src/librdkafka.a
 
 
 include ../mklove/Makefile.base
-
-CFLAGS += -I../src -I../src-cpp
-LDFLAGS += -L../src -L../src-cpp
 
 tinycthread.o: ../src/tinycthread.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<

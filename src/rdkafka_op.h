@@ -66,7 +66,6 @@ typedef enum {
         RD_KAFKA_OP_FETCH_START, /* Application -> toppar's Broker thread */
         RD_KAFKA_OP_FETCH_STOP,  /* Application -> toppar's Broker thread */
         RD_KAFKA_OP_SEEK,        /* Application -> toppar's Broker thread */
-        RD_KAFKA_OP_CGRP_DELEGATE, /* any -> Broker thread: delegate cgrp mgmt*/
         RD_KAFKA_OP_OFFSET_FETCH, /* Broker -> broker thread: fetch offsets
                                    * for topic. */
 

@@ -100,6 +100,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * [node-kafkacat](https://github.com/Rafflecopter/node-kafkacat)
   * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
   * [otto.de](http://otto.de)'s [trackdrd](https://github.com/otto-de/trackrdrd) - Varnish log reader
+  * [Microwish](https://github.com/microwish) has a range of Kafka utilites for log aggregation, HDFS integration, etc.
   * large unnamed financial institution
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 

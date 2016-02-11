@@ -128,6 +128,7 @@ struct rd_kafka_conf_s {
                                                    * for automatically
                                                    * subscribed topics. */
         int enable_auto_commit;
+	int enable_auto_offset_store;
         int auto_commit_interval_ms;
         int group_session_timeout_ms;
         int group_heartbeat_intvl_ms;

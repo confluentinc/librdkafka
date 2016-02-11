@@ -52,7 +52,6 @@
 #include "rdkafka_transport.h"
 #include "rdkafka_proto.h"
 #include "rdkafka_buf.h"
-#include "rdkafka_cgrp.h"
 #include "rdkafka_request.h"
 #include "rdkafka_sasl.h"
 #include "rdtime.h"
@@ -364,8 +363,9 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 		if (is_waitresp_q && rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING)
                         rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1);
 
-                rd_kafka_buf_callback(rkb, RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
-                                      NULL, rkbuf);
+                rd_kafka_buf_callback(rkb->rkb_rk, rkb,
+				      RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
+				      NULL, rkbuf);
 		cnt++;
 	}
 
@@ -574,11 +574,11 @@ void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
  */
 static int rd_kafka_broker_buf_enq2 (rd_kafka_broker_t *rkb,
 				      rd_kafka_buf_t *rkbuf) {
-        if (unlikely(rkb->rkb_source == RD_KAFKA_INTERNAL /* FIXME||
-							     rkb->rkb_state < RD_KAFKA_BROKER_STATE_UP */)) {
+        if (unlikely(rkb->rkb_source == RD_KAFKA_INTERNAL)) {
                 /* Fail request immediately if this is the internal broker. */
 		// FIXME there is no broker connection. */
-                rd_kafka_buf_callback(rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+                rd_kafka_buf_callback(rkb->rkb_rk, rkb,
+				      RD_KAFKA_RESP_ERR__TRANSPORT,
                                       NULL, rkbuf);
                 return -1;
         }
@@ -910,7 +910,7 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 		   (float)req->rkbuf_ts_sent / 1000.0f);
 
 	/* Call callback. */
-        rd_kafka_buf_callback(rkb, 0, rkbuf, req);
+        rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, rkbuf, req);
 
 	return 0;
 }
@@ -1286,7 +1286,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_NO_RESPONSE))
 			rd_kafka_bufq_enq(&rkb->rkb_waitresps, rkbuf);
 		else { /* Call buffer callback for delivery report. */
-                        rd_kafka_buf_callback(rkb, 0, NULL, rkbuf);
+                        rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, NULL, rkbuf);
                 }
 
 		cnt++;
@@ -1435,7 +1435,8 @@ err:
 /**
  * Locality: io thread
  */
-static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
+static void rd_kafka_produce_msgset_reply (rd_kafka_t *rk,
+					   rd_kafka_broker_t *rkb,
 					   rd_kafka_resp_err_t err,
 					   rd_kafka_buf_t *reply,
 					   rd_kafka_buf_t *request,
@@ -1461,7 +1462,7 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_broker_t *rkb,
 			   rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
 			   rd_kafka_err2str(err));
 
-                if (rd_kafka_buf_retry(rkb, err, request))
+                if (rd_kafka_buf_retry(rkb, request))
                         return; /* Scheduled for retry */
 
 		switch (err)
@@ -1983,11 +1984,6 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 rko->rko_rkbuf = NULL;
                 break;
 
-        case RD_KAFKA_OP_CGRP_DELEGATE:
-                rd_kafka_cgrp_assign_broker(rko->rko_cgrp, rkb);
-                break;
-
-
         case RD_KAFKA_OP_PARTITION_JOIN:
                 /*
 		 * Add partition to broker toppars
@@ -2123,10 +2119,6 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
         while ((rko = rd_kafka_q_pop(&rkb->rkb_ops, timeout_ms,
                                      RD_POLL_NOWAIT)))
                 rd_kafka_broker_op_serve(rkb, rko);
-
-        /* Serve consumer group */
-        if (rkb->rkb_cgrp)
-                rd_kafka_cgrp_serve(rkb->rkb_cgrp, rkb);
 
         now = rd_clock();
 
@@ -2539,7 +2531,6 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rko->rko_rkmessage.len       = Value_len;
 
 			rko->rko_rkmessage.offset    = hdr.Offset;
-			rko->rko_rkmessage.rkt       = rd_kafka_topic_keep_a(rktp->rktp_rkt);
 			rko->rko_rkmessage.partition = rktp->rktp_partition;
 
 			rko->rko_rktp = rd_kafka_toppar_keep(rktp);
@@ -2686,7 +2677,6 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rko->rko_err = RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
                         rko->rko_version = rktp->rktp_fetch_version;
 			rko->rko_rkmessage.offset    = hdr.Offset;
-			rko->rko_rkmessage.rkt       = rd_kafka_topic_keep_a(rktp->rktp_rkt);
 			rko->rko_rkmessage.partition = rktp->rktp_partition;
 
 			rko->rko_rktp = rd_kafka_toppar_keep(rktp);
@@ -2935,8 +2925,6 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					rko->rko_err = hdr.ErrorCode;
 					rko->rko_rkmessage.offset =
 						rktp->rktp_offsets.fetch_offset;
-
-					rko->rko_rkmessage.rkt = rd_kafka_topic_keep_a(rktp->rktp_rkt);
 					rko->rko_rkmessage.partition =
 						rktp->rktp_partition;
 
@@ -3027,7 +3015,8 @@ err:
 
 
 
-static void rd_kafka_broker_fetch_reply (rd_kafka_broker_t *rkb,
+static void rd_kafka_broker_fetch_reply (rd_kafka_t *rk,
+					 rd_kafka_broker_t *rkb,
 					 rd_kafka_resp_err_t err,
 					 rd_kafka_buf_t *reply,
 					 rd_kafka_buf_t *request,
@@ -3308,15 +3297,16 @@ static int rd_kafka_broker_thread_main (void *arg) {
                             rkb->rkb_ts_connect &&
                             (backoff = rd_clock() - (
                                     rkb->rkb_ts_connect +
-                                    (rd_jitter(rkb->rkb_rk->rk_conf.
-                                               reconnect_jitter_ms*0.5,
-                                               rkb->rkb_rk->rk_conf.
-                                               reconnect_jitter_ms*1.5)
+                                    (rd_jitter((int)(rkb->rkb_rk->rk_conf.
+						     reconnect_jitter_ms*0.5),
+                                               (int)(rkb->rkb_rk->rk_conf.
+						     reconnect_jitter_ms*1.5))
                                      * 1000))) < 0) {
                                 rd_rkb_dbg(rkb, BROKER, "RECONNECT",
                                            "Delaying next reconnect by %dms",
                                            -(int)(backoff/1000));
-                                rd_kafka_broker_ua_idle(rkb, -backoff / 1000);
+                                rd_kafka_broker_ua_idle(rkb,
+							(int)(-backoff / 1000));
                                 rkb->rkb_ts_connect = 0;
                                 continue;
                         }

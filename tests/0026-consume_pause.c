@@ -52,7 +52,7 @@ static int consume_pause (void) {
 	int msg_base = 0;
 	int fails = 0;
 
-	test_conf_init(NULL, &tconf, 20 + (test_session_timeout_ms * 3 / 1000));
+	test_conf_init(NULL, &tconf, 60 + (test_session_timeout_ms * 3 / 1000));
 	test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
 	
         /* Produce messages */

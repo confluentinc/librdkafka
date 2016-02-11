@@ -153,17 +153,14 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
         shptr_rd_kafka_itopic_t *s_rkt;
 
 	/* Verify configuration */
-	if (!topic ||
-	    (conf &&
-	     (conf->message_timeout_ms < 0 ||
-	      conf->request_timeout_ms <= 0))) {
+	if (!topic) {
 		if (conf)
 			rd_kafka_topic_conf_destroy(conf);
 		errno = EINVAL;
 		return NULL;
 	}
 
-        if (do_lock)
+	if (do_lock)
                 rd_kafka_wrlock(rk);
 	if ((s_rkt = rd_kafka_topic_find(rk, topic, 0/*no lock*/))) {
                 if (do_lock)

@@ -31,7 +31,9 @@
 #pragma once
 
 #ifndef _MSC_VER
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE  /* for strndup() */
+#endif
 #define __need_IOV_MAX
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L  /* for timespec on solaris */

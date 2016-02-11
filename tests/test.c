@@ -285,9 +285,11 @@ static void test_read_conf_file (const char *conf_path,
 			TEST_UNLOCK();
 			res = RD_KAFKA_CONF_OK;
 		} else if (!strcmp(name, "test.sql.command")) {
+			TEST_LOCK();
 			if (test_sql_cmd)
 				rd_free(test_sql_cmd);
 			test_sql_cmd = rd_strdup(val);
+			TEST_UNLOCK();
 			res = RD_KAFKA_CONF_OK;
                 } else if (!strncmp(name, "topic.", strlen("topic."))) {
 			name += strlen("topic.");
@@ -777,9 +779,9 @@ static int test_summary (int do_lock) {
 
 	if (sql_fp) {
 		fprintf(sql_fp,
-			"INSERT INTO runs VALUES('%s_%s', '%s', '%s', "
+			"INSERT INTO runs VALUES('%s_%s', '%s', datetime(), "
 			"%d, %d, %d, %f);\n",
-			datestr, test_mode, test_mode, datestr,
+			datestr, test_mode, test_mode,
 			tests_run, tests_passed, tests_failed,
 			(double)total_duration/1000000.0);
 		fclose(sql_fp);

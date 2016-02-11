@@ -2055,10 +2055,10 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 
         TIMING_START(&t_cons, "CONSUME");
 
-        while (test_clock() < tmout) {
+	do {
                 rd_kafka_message_t *rkmessage;
 
-                rkmessage = rd_kafka_consumer_poll(rk, 100);
+                rkmessage = rd_kafka_consumer_poll(rk, timeout_ms);
                 if (!rkmessage)
 			continue;
 
@@ -2094,7 +2094,8 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
                 }
 
                 rd_kafka_message_destroy(rkmessage);
-        }
+        } while (test_clock() <= tmout);
+
         TIMING_STOP(&t_cons);
 
 	test_msgver_verify(what, &mv, TEST_MSGVER_ALL, 0, 0);

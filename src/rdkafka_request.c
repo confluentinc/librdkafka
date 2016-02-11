@@ -350,6 +350,19 @@ rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
 				rktpar->offset = offset;
                         rktpar->err = err2;
 
+			rd_rkb_dbg(rkb, TOPIC, "OFFSETFETCH",
+				   "OffsetFetchResponse: %s [%"PRId32"] offset %"PRId64,
+				   topic_name, partition, offset);
+
+			if (update_toppar && !err2 && s_rktp) {
+				rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
+				/* Update toppar's committed offset */
+				rd_kafka_toppar_lock(rktp);
+				rktp->rktp_committed_offset = rktpar->offset;
+				rd_kafka_toppar_unlock(rktp);
+			}
+
+
                         if (rktpar->metadata)
                                 rd_free(rktpar->metadata);
 
@@ -427,7 +440,7 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 	 * good to go. */
 	if (rkbuf)
 		rd_kafka_handle_OffsetFetch(rkb->rkb_rk, rkb, err, rkbuf,
-					    request, offsets);
+					    request, offsets, 0);
 
         rd_kafka_q_enq(rko->rko_replyq, rko_reply);
 

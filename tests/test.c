@@ -50,6 +50,7 @@ static int  test_concurrent_max = 20;
 int         test_assert_on_fail = 0;
 double test_timeout_multiplier  = 1.0;
 static char *test_topics_sh = NULL;
+static char *test_sql_cmd = NULL;
 int  test_session_timeout_ms = 6000;
 
 static int test_summary (int do_lock);
@@ -282,6 +283,11 @@ static void test_read_conf_file (const char *conf_path,
 				rd_free(test_topics_sh);
 			test_topics_sh = rd_strdup(val);
 			TEST_UNLOCK();
+			res = RD_KAFKA_CONF_OK;
+		} else if (!strcmp(name, "test.sql.command")) {
+			if (test_sql_cmd)
+				rd_free(test_sql_cmd);
+			test_sql_cmd = rd_strdup(val);
 			res = RD_KAFKA_CONF_OK;
                 } else if (!strncmp(name, "topic.", strlen("topic."))) {
 			name += strlen("topic.");
@@ -634,10 +640,10 @@ static int test_summary (int do_lock) {
         int tests_failed = 0;
 	int tests_failed_known = 0;
         int tests_passed = 0;
+	FILE *sql_fp = NULL;
 
         t = time(NULL);
         tm = localtime(&t);
-
         strftime(datestr, sizeof(datestr), "%Y%m%d%H%M%S", tm);
         rd_snprintf(report_path, sizeof(report_path), "test_report_%s.json",
                     datestr);
@@ -652,12 +658,30 @@ static int test_summary (int do_lock) {
 			"\"date\": \"%s\", \"tests\": [",
 			datestr, test_mode, test_mode, datestr);
 
+        if (do_lock)
+                TEST_LOCK();
+
+	if (test_sql_cmd) {
+#ifdef _MSC_VER
+		sql_fp = _popen(test_sql_cmd, "w");
+#else
+		sql_fp = popen(test_sql_cmd, "w");
+#endif
+
+		fprintf(sql_fp,
+			"CREATE TABLE IF NOT EXISTS "
+			"runs(runid text PRIMARY KEY, mode text, "
+			"date datetime, cnt int, passed int, failed int, "
+			"duration numeric);\n"
+			"CREATE TABLE IF NOT EXISTS "
+			"tests(runid text, name text, state text, "
+			"extra text, duration numeric);\n");
+	}
+
         printf("TEST %s (%s) SUMMARY\n"
                "#==================================================================#\n",
 	       datestr, test_mode);
 
-        if (do_lock)
-                TEST_LOCK();
         for (test = tests ; test->name ; test++) {
                 const char *color;
                 int64_t duration;
@@ -720,6 +744,16 @@ static int test_summary (int do_lock) {
 				test->flags & TEST_F_KNOWN_ISSUE ? "true":"false",
 				test->extra ? test->extra : "",
                                 (double)duration/1000000.0);
+
+		if (sql_fp)
+			fprintf(sql_fp,
+				"INSERT INTO tests VALUES("
+				"'%s_%s', '%s', '%s', %d, '%s', %f);\n",
+				datestr, test_mode, test->name,
+				test_states[test->state],
+				!!(test->flags & TEST_F_KNOWN_ISSUE),
+				test->extra ? test->extra : "",
+				(double)duration/1000000.0);
         }
         if (do_lock)
                 TEST_UNLOCK();
@@ -741,6 +775,16 @@ static int test_summary (int do_lock) {
                 TEST_SAY("# Test report written to %s\n", report_path);
         }
 
+	if (sql_fp) {
+		fprintf(sql_fp,
+			"INSERT INTO runs VALUES('%s_%s', '%s', '%s', "
+			"%d, %d, %d, %f);\n",
+			datestr, test_mode, test_mode, datestr,
+			tests_run, tests_passed, tests_failed,
+			(double)total_duration/1000000.0);
+		fclose(sql_fp);
+	}
+
         return tests_failed - tests_failed_known;
 }
 
@@ -759,6 +803,8 @@ static void test_sig_term (int sig) {
 static void test_cleanup (void) {
 	if (test_topics_sh)
 		rd_free(test_topics_sh);
+	if (test_sql_cmd)
+		rd_free(test_sql_cmd);
 }
 
 

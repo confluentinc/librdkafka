@@ -533,7 +533,9 @@ int main (int argc, char **argv) {
 	char mode = 'C';
 	char *topic = NULL;
 	const char *key = NULL;
-	int partition = RD_KAFKA_PARTITION_UA; /* random */
+	size_t partitions_num = 0;
+        int new_partition;
+        int *partitions = NULL;
 	int opt;
 	int sendflags = 0;
 	char *msgpattern = "librdkafka_performance testing!";
@@ -547,6 +549,7 @@ int main (int argc, char **argv) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
+	rd_kafka_queue_t *rkqu = NULL;
 	const char *compression = "no";
 	int64_t start_offset = 0;
 	int batch_size = 0;
@@ -603,8 +606,11 @@ int main (int argc, char **argv) {
 			topic = optarg;
 			break;
 		case 'p':
-			partition = atoi(optarg);
+			new_partition = atoi(optarg);
+			partitions = realloc(partitions, ++partitions_num);
+			partitions[partitions_num-1] = new_partition;
 			break;
+
 		case 'b':
 			brokers = optarg;
 			break;
@@ -927,6 +933,8 @@ int main (int argc, char **argv) {
 		int keylen = key ? strlen(key) : 0;
 		off_t rof = 0;
 		size_t plen = strlen(msgpattern);
+		int partition = partitions ? partitions[0] :
+			RD_KAFKA_PARTITION_UA;
 
                 if (latency_mode) {
                         msgsize = strlen("LATENCY:") + 
@@ -1143,10 +1151,23 @@ int main (int argc, char **argv) {
 			rkmessages = malloc(sizeof(*rkmessages) * batch_size);
 
 		/* Start consuming */
-		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
-			fprintf(stderr, "%% Failed to start consuming: %s\n",
-				rd_kafka_err2str(rd_kafka_errno2err(errno)));
-			exit(1);
+		if (partitions_num == 1) {
+			if (rd_kafka_consume_start(rkt, partitions[0],
+							start_offset) == -1) {
+				fprintf(stderr,
+					"%% Failed to start consuming: %s\n",
+					rd_kafka_err2str(
+						rd_kafka_errno2err(errno)));
+
+				exit(1);
+			}
+		} else {
+			int i = 0;
+			rkqu = rd_kafka_queue_new(rk);
+			for (i=0 ; i<partitions_num ; ++i) {
+				rd_kafka_consume_start_queue(rkt,
+					partitions[i], start_offset, rkqu);
+			}
 		}
 
 		cnt.t_start = rd_clock();
@@ -1162,6 +1183,8 @@ int main (int argc, char **argv) {
 
 			if (batch_size) {
 				int i;
+				int partition = partitions ? partitions[0] :
+				    RD_KAFKA_PARTITION_UA;
 
 				/* Batch fetch mode */
 				r = rd_kafka_consume_batch(rkt, partition,
@@ -1170,12 +1193,20 @@ int main (int argc, char **argv) {
 							   batch_size);
 				if (r != -1) {
 					for (i = 0 ; i < r ; i++) {
-						msg_consume(rkmessages[i],NULL);
+						msg_consume(rkmessages[i],
+							NULL);
 						rd_kafka_message_destroy(
 							rkmessages[i]);
 					}
 				}
+			} else if (partitions_num > 1) {
+				/* Queue mode */
+				r = rd_kafka_consume_callback_queue(rkqu, 1000,
+							msg_consume,
+							NULL);
 			} else {
+				int partition = partitions ? partitions[0] :
+				    RD_KAFKA_PARTITION_UA;
 				/* Callback mode */
 				r = rd_kafka_consume_callback(rkt, partition,
 							      1000/*timeout*/,
@@ -1197,7 +1228,11 @@ int main (int argc, char **argv) {
 		cnt.t_end = rd_clock();
 
 		/* Stop consuming */
-		rd_kafka_consume_stop(rkt, partition);
+		if (partitions_num > 1) {
+			rd_kafka_queue_destroy(rkqu);
+		} else {
+			rd_kafka_consume_stop(rkt, partitions[0]);
+		}
 
 		/* Destroy topic */
 		rd_kafka_topic_destroy(rkt);

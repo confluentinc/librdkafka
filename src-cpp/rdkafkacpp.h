@@ -1440,6 +1440,10 @@ class RD_EXPORT Consumer : public virtual Handle {
    * @brief Converts an offset into the logical offset from the tail of a topic.
    *
    * \p offset is the (positive) number of items from the end.
+   *
+   * @returns the logical offset for message \p offset from the tail, this value
+   *          may be passed to Consumer::start, et.al.
+   * @remark The returned logical offset is specific to librdkafka.
    */
   static int64_t OffsetTail(int64_t offset);
 };

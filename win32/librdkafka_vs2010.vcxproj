@@ -77,7 +77,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>packages\zlib.1.2.8.7\build\native\include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\OpenSSL-Win64\include</IncludePath>
-    <LibraryPath>packages\zlib.1.2.8.7\build\native\lib\v100\x64\Debug\static\cdecl;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);C:\OpenSSL-Win64\lib\VC</LibraryPath>
+    <LibraryPath>packages\zlib.1.2.8.7\build\native\lib\v100\x64\Debug\static\cdecl;$(VCInstallDir)lib\amd64;$(VCInstallDir)atlmfc\lib\amd64;$(WindowsSdkDir)lib\amd64;$(FrameworkSDKDir)\lib\x64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);C:\OpenSSL-Win64\lib\VC</LibraryPath>
     <TargetName>librdkafka</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -89,7 +89,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>packages\zlib.1.2.8.7\build\native\include;$(VCInstallDir)include;$(VCInstallDir)atlmfc\include;$(WindowsSdkDir)include;$(FrameworkSDKDir)\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\OpenSSL-Win64\include</IncludePath>
-    <LibraryPath>packages\zlib.1.2.8.7\build\native\lib\v100\x64\Release\static\cdecl;$(VCInstallDir)lib;$(VCInstallDir)atlmfc\lib;$(WindowsSdkDir)lib;$(FrameworkSDKDir)\lib;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);C:\OpenSSL-Win64\lib\VC</LibraryPath>
+    <LibraryPath>packages\zlib.1.2.8.7\build\native\lib\v100\x64\Release\static\cdecl;$(VCInstallDir)lib\amd64;$(VCInstallDir)atlmfc\lib\amd64;$(WindowsSdkDir)lib\amd64;$(FrameworkSDKDir)\lib\x64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);C:\OpenSSL-Win64\lib\VC</LibraryPath>
     <TargetName>librdkafka</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -102,6 +102,7 @@
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalOptions>/J %(AdditionalOptions)</AdditionalOptions>
       <PreprocessToFile>false</PreprocessToFile>
+      <CompileAs>Default</CompileAs>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

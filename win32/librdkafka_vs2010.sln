@@ -1,11 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.31101.0
-MinimumVisualStudioVersion = 10.0.40219.1
+# Visual Studio 2010
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "librdkafka_vs2010", "librdkafka_vs2010.vcxproj", "{4BEBB59C-477B-4F7A-8AE8-4228D0861E54}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "librdkafkacpp_vs2010", "librdkafkacpp\librdkafkacpp_vs2010.vcxproj", "{E9641737-EE62-4EC8-88C8-792D2E3CE32D}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "librdkafkacpp", "librdkafkacpp\librdkafkacpp_vs2010.vcxproj", "{E9641737-EE62-4EC8-88C8-792D2E3CE32D}"
 	ProjectSection(ProjectDependencies) = postProject
 		{4BEBB59C-477B-4F7A-8AE8-4228D0861E54} = {4BEBB59C-477B-4F7A-8AE8-4228D0861E54}
 	EndProjectSection
@@ -19,6 +17,7 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rdkafka_example_vs2010", "rdkafka_example\rdkafka_example_vs2010.vcxproj", "{84585784-5BDC-43BE-B714-23EA2E7AEA5B}"
 	ProjectSection(ProjectDependencies) = postProject
 		{E9641737-EE62-4EC8-88C8-792D2E3CE32D} = {E9641737-EE62-4EC8-88C8-792D2E3CE32D}
+		{4BEBB59C-477B-4F7A-8AE8-4228D0861E54} = {4BEBB59C-477B-4F7A-8AE8-4228D0861E54}
 	EndProjectSection
 EndProject
 Global

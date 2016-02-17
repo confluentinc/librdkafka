@@ -75,6 +75,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Haskell: [haskakafka](https://github.com/cosbynator/haskakafka)
   * Haskell: [haskell-kafka](https://github.com/yanatan16/haskell-kafka)
   * Node.js: [node-kafka](https://github.com/sutoiku/node-kafka)
+  * Node.js: [kafka-native](https://github.com/jut-io/node-kafka-native)
   * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
   * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)

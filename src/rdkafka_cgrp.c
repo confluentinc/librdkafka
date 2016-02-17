@@ -1602,7 +1602,7 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg,
  */
 void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 	rd_kafka_broker_t *rkb = rkcg->rkcg_rkb;
-	int rkb_state;
+	int rkb_state = RD_KAFKA_BROKER_STATE_INIT;
 
 	if (rkb) {
 		rd_kafka_broker_lock(rkb);

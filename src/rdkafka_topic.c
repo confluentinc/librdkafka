@@ -192,9 +192,9 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                         * just the placeholder. The internal members
                         * were copied on the line above. */
 
-	/* Default partitioner: random */
+	/* Default partitioner: consistent_random */
 	if (!rkt->rkt_conf.partitioner)
-		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_random;
+		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_consistent_random;
 
 	if (rkt->rkt_conf.compression_codec == RD_KAFKA_COMPRESSION_INHERIT)
 		rkt->rkt_conf.compression_codec = rk->rk_conf.compression_codec;

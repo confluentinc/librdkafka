@@ -340,6 +340,27 @@ int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
     return rd_crc32(key, keylen) % partition_cnt;
 }
 
+int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
+                                             const void *key, size_t keylen,
+                                             int32_t partition_cnt,
+                                             void *rkt_opaque,
+                                             void *msg_opaque) {
+    if (keylen == 0)
+      return rd_kafka_msg_partitioner_random(rkt,
+                                             key,
+                                             keylen,
+                                             partition_cnt,
+                                             rkt_opaque,
+                                             msg_opaque);
+    else
+      return rd_kafka_msg_partitioner_consistent(rkt,
+                                                 key,
+                                                 keylen,
+                                                 partition_cnt,
+                                                 rkt_opaque,
+                                                 msg_opaque);
+}
+
 
 /**
  * Assigns a message to a topic partition using a partitioner.

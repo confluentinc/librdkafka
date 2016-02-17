@@ -83,6 +83,8 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_topic_partition_available(NULL, 0);
 		rd_kafka_topic_opaque(NULL);
                 rd_kafka_msg_partitioner_random(NULL, NULL, 0, 0, NULL, NULL);
+                rd_kafka_msg_partitioner_consistent(NULL, NULL, 0, 0, NULL, NULL);
+                rd_kafka_msg_partitioner_consistent_random(NULL, NULL, 0, 0, NULL, NULL);
                 rd_kafka_new(0, NULL, NULL, 0);
                 rd_kafka_destroy(NULL);
                 rd_kafka_name(NULL);

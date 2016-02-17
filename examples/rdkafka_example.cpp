@@ -129,6 +129,8 @@ class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
   void dr_cb (RdKafka::Message &message) {
     std::cout << "Message delivery for (" << message.len() << " bytes): " <<
         message.errstr() << std::endl;
+    if (message.key())
+      std::cout << "Key: " << *(message.key()) << ";" << std::endl;
   }
 };
 

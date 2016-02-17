@@ -52,15 +52,18 @@ static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
         const int64_t elapsed = state->ts_last ?
                 now - state->ts_last : state->interval;
         const int64_t overshoot = elapsed - state->interval;
-        const int wiggleroom = (state->interval * 0.2);
+        const int wiggleroom_up = (int)((double)state->interval *
+					(!strcmp(test_mode, "bare") ? 0.2 : 1.0));
+	const int wiggleroom_down = (int)((double)state->interval * 0.1);
 
         TEST_SAY("Call #%d: after %"PRId64"ms, %.0f%% outside "
-                 "interval %"PRId64" +-%d\n",
+                 "interval %"PRId64"  >-%d <+%d\n",
                  state->calls, elapsed / 1000,
                  ((double)overshoot / state->interval) * 100.0,
-                 (int64_t)state->interval / 1000, wiggleroom / 1000);
+                 (int64_t)state->interval / 1000,
+		 wiggleroom_down / 1000, wiggleroom_up / 1000);
 
-        if (overshoot < -wiggleroom || overshoot > wiggleroom) {
+        if (overshoot < -wiggleroom_down || overshoot > wiggleroom_up) {
                 TEST_WARN("^ outside range\n");
                 state->fails++;
         }

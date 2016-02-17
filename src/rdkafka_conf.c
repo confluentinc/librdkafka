@@ -423,6 +423,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The frequency in milliseconds that the consumer offsets "
 	  "are commited (written) to offset storage. (0 = disable)",
           0, 86400*1000, 5*1000 },
+        { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.offset.store", _RK_C_BOOL,
+          _RK(enable_auto_offset_store),
+          "Automatically store offset of last message provided to "
+	  "application.",
+          0, 1, 1 },
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
 	  _RK(queued_min_msgs),
 	  "Minimum number of messages per topic+partition in the "

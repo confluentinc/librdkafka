@@ -200,8 +200,11 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
  *       toppar, queue, etc) and the callback may not be called in the
  *       correct thread. In this case the callback must perform just
  *       the most minimal cleanup and dont trigger any other operations.
+ *
+ * NOTE: rkb, reply and request may be NULL, depending on error situation.
  */
-typedef void (rd_kafka_resp_cb_t) (rd_kafka_broker_t *rkb,
+typedef void (rd_kafka_resp_cb_t) (rd_kafka_t *rk,
+				   rd_kafka_broker_t *rkb,
                                    rd_kafka_resp_err_t err,
                                    rd_kafka_buf_t *reply,
                                    rd_kafka_buf_t *request,
@@ -308,11 +311,11 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
                           rd_kafka_bufq_t *rkbufq,
                           rd_kafka_resp_err_t err);
 
-int rd_kafka_buf_retry (rd_kafka_broker_t *rkb,
-                        rd_kafka_resp_err_t err, rd_kafka_buf_t *rkbuf);
+int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf);
 
 void rd_kafka_buf_handle_op (rd_kafka_op_t *rko);
-void rd_kafka_buf_callback (rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
+void rd_kafka_buf_callback (rd_kafka_t *rk,
+			    rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
                             rd_kafka_buf_t *response, rd_kafka_buf_t *request);
 
 

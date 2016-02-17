@@ -15,6 +15,11 @@
 #  <prefix>_<randomnumber>_<suffix>
 #test.topic.random=true
 
+# Path to the Kafka-bundled kafka-topics.sh script with a valid ZK argument.
+#test.kafka-topics.sh=~/src/jason/kafka/bin/kafka-topics.sh --zookeeper localhost
+
+# Write test results to sqlite3 database
+#test.sql.command=sqlite3 rdktests
 
 # Bootstrap broker(s)
 metadata.broker.list=localhost:9092

@@ -33,8 +33,8 @@
  * @brief Apache Kafka C/C++ consumer and producer client library.
  *
  * rdkafkacpp.h contains the public C++ API for librdkafka.
- * The API is documented in this file as comments prefixing the class, function,
- * type, enum, define, etc.
+ * The API is documented in this file as comments prefixing the class,
+ * function, type, enum, define, etc.
  * For more information, see the C interface in rdkafka.h and read the
  * manual in INTRODUCTION.md.
  * The C++ interface is STD C++ '03 compliant and adheres to the
@@ -566,6 +566,7 @@ public:
    *         } else {
    *           std::cerr << "Rebalancing error: <<
    *                        RdKafka::err2str(err) << std::endl;
+   *           consumer->unassign();
    *         }
    *     }
    *  }
@@ -587,6 +588,9 @@ public:
    *
    * The results of automatic or manual offset commits will be scheduled
    * for this callback and is served by RdKafka::KafkaConsumer::consume()
+   *
+   * If no partitions had valid offsets to commit this callback will be called
+   * with \p err == ERR__NO_OFFSET which is not to be considered an error.
    *
    * The \p offsets list contains per-partition information:
    *   - \c topic      The topic committed
@@ -807,6 +811,9 @@ class RD_EXPORT Handle {
    *   - delivery report callbacks (if an RdKafka::DeliveryCb is configured) [producer]
    *   - event callbacks (if an RdKafka::EventCb is configured) [producer & consumer]
    *
+   * @remark  An application should make sure to call poll() at regular
+   *          intervals to serve any queued callbacks waiting to be called.
+   *
    * @warning This method MUST NOT be used with the RdKafka::KafkaConsumer,
    *          use its RdKafka::KafkaConsumer::consume() instead.
    *
@@ -839,6 +846,31 @@ class RD_EXPORT Handle {
    */
   virtual ErrorCode metadata (bool all_topics, const Topic *only_rkt,
                               Metadata **metadatap, int timeout_ms) = 0;
+
+
+  /**
+   * @brief Pause producing or consumption for the provided list of partitions.
+   *
+   * Success or error is returned per-partition in the \p partitions list.
+   *
+   * @returns ErrorCode::NO_ERROR
+   *
+   * @sa resume()
+   */
+  virtual ErrorCode pause (std::vector<TopicPartition*> &partitions) = 0;
+
+
+  /**
+   * @brief Resume producing or consumption for the provided list of partitions.
+   *
+   * Success or error is returned per-partition in the \p partitions list.
+   *
+   * @returns ErrorCode::NO_ERROR
+   *
+   * @sa pause()
+   */
+  virtual ErrorCode resume (std::vector<TopicPartition*> &partitions) = 0;
+
 };
 
 
@@ -1147,6 +1179,13 @@ public:
    *
    * @remark Use \c delete to free the message.
    *
+   * @remark  An application should make sure to call consume() at regular
+   *          intervals, even if no messages are expected, to serve any
+   *          queued callbacks waiting to be called. This is especially
+   *          important when a RebalanceCb has been registered as it needs
+   *          to be called and handled properly to synchronize internal
+   *          consumer state.
+   *
    * @remark Application MUST NOT call \p poll() on KafkaConsumer objects.
    *
    * @returns One of:
@@ -1197,6 +1236,20 @@ public:
    */
   virtual ErrorCode commitAsync (Message *message) = 0;
 
+  /**
+   * @brief Commit offsets for the provided list of partitions.
+   *
+   * @remark This is the synchronous variant.
+   */
+  virtual ErrorCode commitSync (std::vector<TopicPartition*> &offsets) = 0;
+
+  /**
+   * @brief Commit offset for the provided list of partitions.
+   *
+   * @remark This is the asynchronous variant.
+   */
+  virtual ErrorCode commitAsync (const std::vector<TopicPartition*> &offsets) = 0;
+
 
   /**
    * @brief Retrieve committed positions (offsets) for topics+partitions.
@@ -1208,6 +1261,13 @@ public:
    */
   virtual ErrorCode position (std::vector<TopicPartition*> &partitions,
                               int timeout_ms) = 0;
+
+
+  /**
+   * For pausing and resuming consumption, see
+   * @sa RdKafka::Handle::pause() and RdKafka::Handle::resume()
+   */
+
 
   /**
    * @brief Close and shut down the proper.

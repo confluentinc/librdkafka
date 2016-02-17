@@ -27,6 +27,7 @@
 extern int test_level;
 
 extern int test_seed;
+extern char test_mode[64];
 extern RD_TLS struct test *test_curr;
 extern int test_assert_on_fail;
 extern int tests_running_cnt;
@@ -66,6 +67,9 @@ struct test {
         int (*mainfunc) (int argc, char **argv); /**< test's main func */
         const int flags;     /**< Test flags */
 #define TEST_F_LOCAL   0x1   /**< Test is local, no broker requirement */
+#define TEST_F_KNOWN_ISSUE 0x2 /**< Known issue, can fail without affecting
+				*   total test run status. */
+	const char *extra;   /**< Extra information to print in test_summary. */
 
         /**
          * Runtime
@@ -73,6 +77,7 @@ struct test {
         int64_t start;
         int64_t duration;
         FILE   *stats_fp;
+	int64_t timeout;
         enum {
                 TEST_NOT_STARTED,
                 TEST_SKIPPED,
@@ -83,7 +88,7 @@ struct test {
 };
 
 
-#define TEST_FAIL(...) do {                                             \
+#define TEST_FAIL0(fail_now,...) do {					\
                 int is_thrd = 0;                                        \
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
 			test_curr->name,                                \
@@ -99,11 +104,18 @@ struct test {
                         is_thrd = 1;                                    \
                 }                                                       \
                 TEST_UNLOCK();                                          \
+		if (!fail_now) break;					\
                 if (test_assert_on_fail || !is_thrd)                    \
                         assert(0);                                      \
                 else                                                    \
                         thrd_exit(0);                                   \
 	} while (0)
+
+/* Whine and abort test */
+#define TEST_FAIL(...) TEST_FAIL0(1, __VA_ARGS__)
+
+/* Whine right away, mark the test as failed, but continue the test. */
+#define TEST_FAIL_LATER(...) TEST_FAIL0(0, __VA_ARGS__)
 
 
 #define TEST_PERROR(call) do {						\
@@ -122,8 +134,8 @@ struct test {
 	} while (0)
 
 #define TEST_SAY0(...)  fprintf(stderr, __VA_ARGS__)
-#define TEST_SAY(...) do {                                              \
-	if (test_level >= 2) {                                          \
+#define TEST_SAYL(LVL,...) do {						\
+	if (test_level >= LVL) {                                        \
                 fprintf(stderr, "\033[36m[%-28s/%7.3fs] ",		\
 			test_curr->name,                                \
 			test_curr->start ?                              \
@@ -133,6 +145,7 @@ struct test {
                 fprintf(stderr, "\033[0m");                             \
         }                                                               \
 	} while (0)
+#define TEST_SAY(...) TEST_SAYL(2, __VA_ARGS__)
 
 #define TEST_REPORT(...) do {		\
 	fprintf(stdout, __VA_ARGS__);			\
@@ -235,6 +248,119 @@ static __inline int jitter (int low, int high) {
  *
  ******************************************************************************/
 
+
+
+/****************************************************************
+ * Message verification services				*
+ *								*
+ *								*
+ *								*
+ ****************************************************************/
+
+
+/**
+ * A test_msgver_t is first fed with messages from any number of
+ * topics and partitions, it is then checked for expected messages, such as:
+ *   - all messages received, based on message payload information.
+ *   - messages received in order
+ */
+typedef struct test_msgver_s {
+	struct test_mv_p **p;  /* Partitions array */
+	int p_cnt;             /* Partition count */
+	int p_size;            /* p size */
+	int msgcnt;            /* Total message count */
+	uint64_t testid;       /* Only accept messages for this testid */
+
+	struct test_msgver_s *fwd;  /* Also forward add_msg() to this mv */
+
+	int log_cnt;           /* Current number of warning logs */
+	int log_max;           /* Max warning logs before suppressing. */
+	int log_suppr_cnt;     /* Number of suppressed log messages. */
+} test_msgver_t;
+
+/* Message */
+struct test_mv_m {
+	int64_t offset;   /* Message offset */
+	int     msgid;    /* Message id */
+};
+
+
+/* Message vector */
+struct test_mv_mvec {
+	struct test_mv_m *m;
+	int cnt;
+	int size;  /* m[] size */
+};
+
+/* Partition */
+struct test_mv_p {
+	char *topic;
+	int32_t partition;
+	struct test_mv_mvec mvec;
+};
+
+/* Verification state */
+struct test_mv_vs {
+	int msg_base;
+	int exp_cnt;
+
+	/* used by verify_range */
+	int msgid_min;
+	int msgid_max;
+
+	struct test_mv_mvec mvec;
+} vs;
+
+
+void test_msgver_init (test_msgver_t *mv, uint64_t testid);
+void test_msgver_clear (test_msgver_t *mv);
+int test_msgver_add_msg0 (const char *func, int line,
+			  test_msgver_t *mv, rd_kafka_message_t *rkm);
+#define test_msgver_add_msg(mv,rkm) \
+	test_msgver_add_msg0(__FUNCTION__,__LINE__,mv,rkm)
+
+/**
+ * Flags to indicate what to verify.
+ */
+#define TEST_MSGVER_ORDER    0x1  /* Order */
+#define TEST_MSGVER_DUP      0x2  /* Duplicates */
+#define TEST_MSGVER_RANGE    0x4  /* Range of messages */
+
+#define TEST_MSGVER_ALL      0xf  /* All verifiers */
+
+#define TEST_MSGVER_BY_MSGID  0x10000 /* Verify by msgid (unique in testid) */
+#define TEST_MSGVER_BY_OFFSET 0x20000 /* Verify by offset (unique in partition)*/
+
+/* Only test per partition, not across all messages received on all partitions.
+ * This is useful when doing incremental verifications with multiple partitions
+ * and the total number of messages has not been received yet.
+ * Can't do range check here since messages may be spread out on multiple
+ * partitions and we might just have read a few partitions. */
+#define TEST_MSGVER_PER_PART ((TEST_MSGVER_ALL & ~TEST_MSGVER_RANGE) | \
+			      TEST_MSGVER_BY_MSGID | TEST_MSGVER_BY_OFFSET)
+
+/* Test on all messages across all partitions.
+ * This can only be used to check with msgid, not offset since that
+ * is partition local. */
+#define TEST_MSGVER_ALL_PART (TEST_MSGVER_ALL | TEST_MSGVER_BY_MSGID)
+
+
+int test_msgver_verify_part0 (const char *func, int line, const char *what,
+			      test_msgver_t *mv, int flags,
+			      const char *topic, int partition,
+			      int msg_base, int exp_cnt);
+#define test_msgver_verify_part(what,mv,flags,topic,partition,msg_base,exp_cnt) \
+	test_msgver_verify_part0(__FUNCTION__,__LINE__,			\
+				 what,mv,flags,topic,partition,msg_base,exp_cnt)
+
+int test_msgver_verify0 (const char *func, int line, const char *what,
+			 test_msgver_t *mv, int flags,
+			 int msg_base, int exp_cnt);
+#define test_msgver_verify(what,mv,flags,msg_base,exp_cnt)		\
+	test_msgver_verify0(__FUNCTION__,__LINE__,			\
+			    what,mv,flags,msg_base,exp_cnt)
+
+
 /**
  * Delivery reported callback.
  * Called for each message once to signal its delivery status.
@@ -269,8 +395,8 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 				  void *opaque);
 rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
                                               const char *topic);
-rd_kafka_topic_t *test_create_topic (rd_kafka_t *rk,
-                                     const char *topic, ...);
+rd_kafka_topic_t *test_create_topic_object (rd_kafka_t *rk,
+					    const char *topic, ...);
 void test_consumer_start (const char *what,
                           rd_kafka_topic_t *rkt, int32_t partition,
                           int64_t start_offset);
@@ -292,12 +418,17 @@ void test_verify_rkmessage0 (const char *func, int line,
         test_verify_rkmessage0(__FUNCTION__,__LINE__,\
                                rkmessage,testid,partition,msgnum)
 
+void test_consumer_subscribe (rd_kafka_t *rk, const char *topic);
+
 void
 test_consume_msgs_easy (const char *group_id, const char *topic,
                         uint64_t testid, int exp_msgcnt);
 
+void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
+				 uint64_t testid, int timeout_ms);
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
-                        int exp_eof_cnt, int exp_msg_base, int exp_cnt);
+                        int exp_eof_cnt, int exp_msg_base, int exp_cnt,
+			test_msgver_t *mv);
 
 void test_consumer_assign (const char *what, rd_kafka_t *rk,
 			   rd_kafka_topic_partition_list_t *parts);
@@ -311,3 +442,6 @@ void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
 
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions);
+
+void test_create_topic (const char *topicname, int partition_cnt,
+			int replication_factor);

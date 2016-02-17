@@ -73,9 +73,10 @@ static int do_test_consume_batch (void) {
 
         for (i = 0 ; i < topic_cnt ; i++) {
                 /* Create topic object */
-                rkts[i] = test_create_topic(rk, topics[i],
-                                            "auto.offset.reset", "smallest",
-                                            NULL);
+                rkts[i] = test_create_topic_object(rk, topics[i],
+						   "auto.offset.reset",
+						   "smallest",
+						   NULL);
 
                 /* Start consuming each partition and redirect
                  * messages to queue */

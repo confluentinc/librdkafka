@@ -49,6 +49,7 @@ echo -e "${CYAN}############## $TEST ################${CCLR}"
 
 for mode in $MODES; do
     echo -e "${CYAN}### Running test $TEST in $mode mode ###${CCLR}"
+    export TEST_MODE=$mode
     case "$mode" in
 	valgrind)
 	    valgrind $VALGRIND_ARGS --leak-check=full --show-leak-kinds=all \

@@ -1153,7 +1153,6 @@ int rd_kafka_topic_partition_available(const rd_kafka_topic_t *rkt,
 /**
  * @brief Random partitioner.
  *
- * This is the default partitioner.
  * Will try not to return unavailable partitions.
  *
  * @returns a random partition between 0 and \p partition_cnt - 1.
@@ -1179,6 +1178,21 @@ int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
 					 int32_t partition_cnt,
 					 void *opaque, void *msg_opaque);
 
+/**
+ * Consistent-Random partitioner.
+ *
+ * This is the default partitioner.
+ * Uses consistent hashing to map identical keys onto identical partitions, and
+ * messages without keys will be assigned via the random partitioner.
+ *
+ * @returns a \"random\" partition between 0 and partition_cnt - 1 based on
+ *          the CRC value of the key (if provided)
+ */
+RD_EXPORT
+int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
+           const void *key, size_t keylen,
+           int32_t partition_cnt,
+           void *opaque, void *msg_opaque);
 
 
 /**@}*/

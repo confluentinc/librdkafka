@@ -1934,8 +1934,8 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                 rd_kafka_buf_read_i32(rkbuf, &PartCnt);
                 while (PartCnt-- > 0) {
                         int32_t Partition;
-						char *topic_name;
-						RD_KAFKAP_STR_DUPA(&topic_name, &Topic);
+			char *topic_name;
+			RD_KAFKAP_STR_DUPA(&topic_name, &Topic);
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
 
                         rd_kafka_topic_partition_list_add(

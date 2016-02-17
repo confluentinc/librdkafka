@@ -1050,9 +1050,9 @@ rd_kafka_group_MemberMetadata_consumer_read (
 
         while (subscription_cnt-- > 0) {
                 rd_kafkap_str_t Topic;
-				char *topic_name;
+		char *topic_name;
                 rd_kafka_buf_read_str(rkbuf, &Topic);
-				RD_KAFKAP_STR_DUPA(&topic_name, &Topic);
+		RD_KAFKAP_STR_DUPA(&topic_name, &Topic);
                 rd_kafka_topic_partition_list_add(rkgm->rkgm_subscription,
                                                   topic_name,
                                                   RD_KAFKA_PARTITION_UA);

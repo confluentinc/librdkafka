@@ -904,12 +904,11 @@ int main(int argc, char **argv) {
 				test->state = TEST_FAILED;
 				test_summary(0/*no-locks*/);
 				TEST_UNLOCK();
-				printf("timoeut %"PRId64", now %"PRId64"\n",
-				       test->timeout, now);
 				TEST_FAIL("Test %s timed out "
 					  "(timeout set to %d seconds)\n",
 					  test->name,
-					  (int)(test->timeout-test->start)/1000000);
+					  (int)(test->timeout-test->start)/
+					  1000000);
 				assert(!*"test timeout");
 				TEST_LOCK();
 			}

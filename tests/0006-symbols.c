@@ -43,8 +43,10 @@ int main_0006_symbols (int argc, char **argv) {
         if (argc < 0 /* always false */) {
                 rd_kafka_version();
                 rd_kafka_version_str();
-				rd_kafka_get_debug_contexts();
+		rd_kafka_get_debug_contexts();
+		rd_kafka_get_err_descs(NULL, NULL);
                 rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR);
+		rd_kafka_err2name(RD_KAFKA_RESP_ERR_NO_ERROR);
                 rd_kafka_errno2err(EINVAL);
                 rd_kafka_errno();
                 rd_kafka_conf_new();
@@ -141,6 +143,8 @@ int main_0006_symbols (int argc, char **argv) {
 		rd_kafka_topic_partition_list_add(NULL, NULL, 0);
 		rd_kafka_topic_partition_list_add_range(NULL, NULL, 0, 0);
 		rd_kafka_topic_partition_list_copy(NULL);
+		rd_kafka_topic_partition_list_set_offset(NULL, NULL, 0, 0);
+		rd_kafka_topic_partition_list_find(NULL, NULL, 0);
         }
 
 

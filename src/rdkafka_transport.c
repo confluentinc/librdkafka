@@ -926,6 +926,28 @@ static void rd_kafka_transport_connected (rd_kafka_transport_t *rktrans) {
 }
 
 
+
+/**
+ * @brief the kernel SO_ERROR in \p errp for the given transport.
+ * @returns 0 if getsockopt() was succesful (and \p and errp can be trusted),
+ * else -1 in which case \p errp 's value is undefined.
+ */
+static int rd_kafka_transport_get_socket_error (rd_kafka_transport_t *rktrans,
+						int *errp) {
+	socklen_t intlen = sizeof(*errp);
+
+	if (getsockopt(rktrans->rktrans_s, SOL_SOCKET,
+		       SO_ERROR, (void *)errp, &intlen) == -1) {
+		rd_rkb_dbg(rktrans->rktrans_rkb, BROKER, "SO_ERROR",
+			   "Failed to get socket error: %s",
+			   socket_strerror(socket_errno));
+		return -1;
+	}
+
+	return 0;
+}
+
+
 /**
  * IO event handler.
  *
@@ -935,7 +957,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 					 int events) {
 	char errstr[512];
 	int r;
-	socklen_t intlen = sizeof(r);
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 
 	switch (rkb->rkb_state)
@@ -954,8 +975,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		if (!(events & (POLLOUT|POLLERR|POLLHUP)))
 			return;
 
-		if (getsockopt(rktrans->rktrans_s, SOL_SOCKET,
-			       SO_ERROR, (void *)&r, &intlen) == -1) {
+		if (rd_kafka_transport_get_socket_error(rktrans, &r) == -1) {
 			rd_kafka_broker_fail(
                                 rkb, LOG_ERR, RD_KAFKA_RESP_ERR__TRANSPORT,
                                 "Connect to %s failed: "
@@ -1197,9 +1217,31 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 	int r;
 
 	r = WSAPoll(&rktrans->rktrans_pfd, 1, tmout);
-	if (r == 0)
-		return 0;
-	else if (r == SOCKET_ERROR)
+	if (r == 0) {
+		/* Workaround for broken WSAPoll() while connecting:
+		 * failed connection attempts are not indicated at all by WSAPoll()
+		 * so we need to check the socket error when Poll returns 0.
+		 * Issue #525 */
+		r = ECONNRESET;
+		if (unlikely(rktrans->rktrans_rkb->rkb_state ==
+			     RD_KAFKA_BROKER_STATE_CONNECT &&
+			     (rd_kafka_transport_get_socket_error(rktrans,
+								  &r) == -1 ||
+			      r != 0))) {
+			char errstr[512];
+			errno = r;
+			rd_snprintf(errstr, sizeof(errstr),
+				    "Connect to %s failed: %s",
+				    rd_sockaddr2str(rktrans->rktrans_rkb->
+						    rkb_addr_last,
+						    RD_SOCKADDR2STR_F_PORT |
+                                                    RD_SOCKADDR2STR_F_FAMILY),
+                                    socket_strerror(r));
+			rd_kafka_transport_connect_done(rktrans, errstr);
+			return -1;
+		} else
+			return 0;
+	} else if (r == SOCKET_ERROR)
 		return -1;
 	return rktrans->rktrans_pfd.revents;
 #endif

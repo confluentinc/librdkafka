@@ -192,7 +192,7 @@ static int64_t rd_kafka_offset_file_read (rd_kafka_toppar_t *rktp) {
 				rktp->rktp_offset_path,
 				rd_strerror(errno));
 		rd_kafka_offset_file_close(rktp);
-		return -1;
+		return RD_KAFKA_OFFSET_INVALID;
 	}
 
 	r = fread(buf, 1, sizeof(buf) - 1, rktp->rktp_offset_fp);
@@ -202,7 +202,7 @@ static int64_t rd_kafka_offset_file_read (rd_kafka_toppar_t *rktp) {
 			     rktp->rktp_rkt->rkt_topic->str,
 			     rktp->rktp_partition,
 			     rktp->rktp_offset_path);
-		return -1;
+		return RD_KAFKA_OFFSET_INVALID;
 	}
 
 	buf[r] = '\0';
@@ -219,7 +219,7 @@ static int64_t rd_kafka_offset_file_read (rd_kafka_toppar_t *rktp) {
 				rktp->rktp_rkt->rkt_topic->str,
 				rktp->rktp_partition,
 				rktp->rktp_offset_path);
-		return -1;
+		return RD_KAFKA_OFFSET_INVALID;
 	}
 
 
@@ -343,22 +343,21 @@ rd_kafka_offset_file_commit (rd_kafka_toppar_t *rktp) {
 
 /**
  * Trigger offset_commit_cb op, if configured.
- * Takes ownership of `offsets`
+ *
  */
 void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 				   rd_kafka_resp_err_t err,
-				   rd_kafka_topic_partition_list_t *offsets) {
+				   const rd_kafka_topic_partition_list_t *offsets) {
 	rd_kafka_op_t *rko;
 
-        if (!rk->rk_conf.offset_commit_cb) {
-		rd_kafka_topic_partition_list_destroy(offsets);
+        if (!rk->rk_conf.offset_commit_cb)
 		return;
-	}
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
 	rko->rko_err = err;
 	rd_kafka_assert(NULL, offsets->cnt > 0);
-        rd_kafka_op_payload_set(rko, offsets,
+        rd_kafka_op_payload_set(rko,
+				rd_kafka_topic_partition_list_copy(offsets),
                                 (void *)rd_kafka_topic_partition_list_destroy);
 	rd_kafka_q_enq(&rk->rk_rep, rko);
 }
@@ -531,23 +530,10 @@ rd_kafka_commit (rd_kafka_t *rk,
         if (!async)
                 tmpq = rd_kafka_q_new(rk);
 
-        err = rd_kafka_commit0(rk, offsets,
-                               async ? &rkcg->rkcg_ops : tmpq, NULL);
+        err = rd_kafka_commit0(rk, offsets, async ? NULL : tmpq, NULL);
 
         if (!async) {
-                rd_kafka_op_t *rko = rd_kafka_q_pop(tmpq, RD_POLL_INFINITE, 0);
-                err = rko->rko_err;
-
-		/* Enqueue offset_commit_cb if configured */
-		if (rko->rko_payload /* offset list */) {
-			rd_kafka_offset_commit_cb_op(
-				rk, rko->rko_err,
-				(rd_kafka_topic_partition_list_t *)
-				rko->rko_payload);
-			rko->rko_payload = NULL;
-		}
-
-                rd_kafka_op_destroy(rko);
+		err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
                 rd_kafka_q_destroy(tmpq);
         } else {
                 err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -605,7 +591,7 @@ rd_kafka_resp_err_t rd_kafka_offset_sync (rd_kafka_toppar_t *rktp) {
  * Store offset.
  * Typically called from application code.
  *
- * NOTE: No lucks must be held.
+ * NOTE: No locks must be held.
  */
 rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *app_rkt,
 					   int32_t partition, int64_t offset) {
@@ -657,9 +643,12 @@ static rd_kafka_resp_err_t rd_kafka_offset_file_term (rd_kafka_toppar_t *rktp) {
 }
 
 static void rd_kafka_offset_reset_op_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
-        rd_kafka_offset_reset(rd_kafka_toppar_s2i(rko->rko_rktp),
+	rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+	rd_kafka_toppar_lock(rktp);
+        rd_kafka_offset_reset(rktp,
                               rko->rko_offset,
                               rko->rko_err, rko->rko_payload);
+	rd_kafka_toppar_unlock(rktp);
 }
 
 /**
@@ -672,7 +661,6 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 			    rd_kafka_resp_err_t err, const char *reason) {
 	int64_t offset = RD_KAFKA_OFFSET_INVALID;
 	rd_kafka_op_t *rko;
-	int64_t offset_reset = rktp->rktp_rkt->rkt_conf.auto_offset_reset;
 
         /* Enqueue op for toppar handler thread if we're on the wrong thread. */
         if (!thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread)) {
@@ -688,24 +676,12 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
                 return;
         }
 
-	if (!err) {
-		/* No error: Logical offset lookup */
-		rktp->rktp_query_offset = err_offset;
+	if (err_offset == RD_KAFKA_OFFSET_INVALID || err)
+		offset = rktp->rktp_rkt->rkt_conf.auto_offset_reset;
+	else
 		offset = err_offset;
 
-                rd_kafka_toppar_set_fetch_state(
-			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
-
-	} else if (offset_reset == RD_KAFKA_OFFSET_END ||
-		   offset_reset == RD_KAFKA_OFFSET_BEGINNING ||
-		   offset_reset <= RD_KAFKA_OFFSET_TAIL_BASE) {
-		/* Error, use auto.offset.reset */
-		offset = rktp->rktp_rkt->rkt_conf.auto_offset_reset;
-		rktp->rktp_query_offset = offset;
-                rd_kafka_toppar_set_fetch_state(
-			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
-
-	} else if (offset_reset == RD_KAFKA_OFFSET_INVALID) {
+	if (offset == RD_KAFKA_OFFSET_INVALID) {
 		/* Error, auto.offset.reset tells us to error out. */
 		rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
 
@@ -715,13 +691,18 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 		rko->rko_payload             = rd_strdup(reason);
 		rko->rko_len                 = strlen(rko->rko_payload);
 		rko->rko_flags              |= RD_KAFKA_OP_F_FREE;
-                rko->rko_rkmessage.rkt = rd_kafka_topic_keep_a(rktp->rktp_rkt);
+                rko->rko_rktp                = rd_kafka_toppar_keep(rktp);
 
 		rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
                 rd_kafka_toppar_set_fetch_state(
 			rktp, RD_KAFKA_TOPPAR_FETCH_NONE);
-	}
 
+	} else {
+		/* Query logical offset */
+		rktp->rktp_query_offset = offset;
+                rd_kafka_toppar_set_fetch_state(
+			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
+	}
 
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
 		     "%s [%"PRId32"]: offset reset (at offset %s) "
@@ -732,7 +713,7 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
                      reason, rd_kafka_err2str(err));
 
 	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
-		rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_offset,0);
+		rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_offset, 0);
 }
 
 
@@ -799,7 +780,7 @@ static void rd_kafka_offset_sync_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
 static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 	char spath[4096];
 	const char *path = rktp->rktp_rkt->rkt_conf.offset_store_path;
-	int64_t offset = -1;
+	int64_t offset = RD_KAFKA_OFFSET_INVALID;
 
 	if (rd_kafka_path_is_dir(path)) {
                 char tmpfile[1024];
@@ -850,14 +831,14 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 		offset = rd_kafka_offset_file_read(rktp);
 	}
 
-	if (offset != -1) {
+	if (offset != RD_KAFKA_OFFSET_INVALID) {
 		/* Start fetching from offset */
 		rktp->rktp_committed_offset = offset;
                 rd_kafka_toppar_next_offset_handle(rktp, offset);
 
 	} else {
 		/* Offset was not usable: perform offset reset logic */
-		rktp->rktp_committed_offset = -1;
+		rktp->rktp_committed_offset = RD_KAFKA_OFFSET_INVALID;
 		rd_kafka_offset_reset(rktp, RD_KAFKA_OFFSET_INVALID,
 				      RD_KAFKA_RESP_ERR__FS,
 				      "non-readable offset file");
@@ -956,10 +937,8 @@ rd_kafka_resp_err_t rd_kafka_offset_store_stop (rd_kafka_toppar_t *rktp) {
                      rktp->rktp_offsets_fin.eof_offset);
 
         /* Store end offset for empty partitions */
-        if (((!rd_kafka_is_simple_consumer(rktp->rktp_rkt->rkt_rk) &&
-              rktp->rktp_rkt->rkt_rk->rk_conf.enable_auto_commit)
-             || rktp->rktp_rkt->rkt_conf.auto_commit) &&
-            rktp->rktp_stored_offset == -1 &&
+        if (rktp->rktp_rkt->rkt_rk->rk_conf.enable_auto_offset_store &&
+            rktp->rktp_stored_offset == RD_KAFKA_OFFSET_INVALID &&
             rktp->rktp_offsets_fin.eof_offset > 0)
                 rd_kafka_offset_store0(rktp, rktp->rktp_offsets_fin.eof_offset,
                                        0/*no lock*/);
@@ -1015,7 +994,7 @@ void rd_kafka_offset_store_init (rd_kafka_toppar_t *rktp) {
                      store_names[rktp->rktp_rkt->rkt_conf.offset_store_method]);
 
         /* The committed offset is unknown at this point. */
-        rktp->rktp_committed_offset = -1;
+        rktp->rktp_committed_offset = RD_KAFKA_OFFSET_INVALID;
 
         /* Set up the commit interval (for simple consumer). */
         if (rd_kafka_is_simple_consumer(rktp->rktp_rkt->rkt_rk) &&

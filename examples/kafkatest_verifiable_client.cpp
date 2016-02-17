@@ -41,6 +41,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <assert.h>
+#include <ctype.h>
 
 #ifdef _MSC_VER
 #include "../win32/wingetopt.h"
@@ -58,7 +59,7 @@
 
 static bool run = true;
 static bool exit_eof = false;
-
+static int verbosity = 1;
 
 class Assignment {
 
@@ -383,7 +384,7 @@ static void do_commit (RdKafka::KafkaConsumer *consumer, int immediate) {
       consumer->commitAsync();
     else
       consumer->commitSync();
-      
+
     state.consumer.consumedMessagesAtLastCommit =
       state.consumer.consumedMessages;
   }
@@ -405,7 +406,8 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
     case RdKafka::ERR_NO_ERROR:
       {
         /* Real message */
-        std::cerr << now() << ": Read msg from " << msg->topic_name() <<
+	if (verbosity > 2)
+	  std::cerr << now() << ": Read msg from " << msg->topic_name() <<
             " [" << (int)msg->partition() << "]  at offset " <<
             msg->offset() << std::endl;
 
@@ -424,10 +426,13 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
           a->minOffset = msg->offset();
         if (a->maxOffset < msg->offset())
           a->maxOffset = msg->offset();
-      
+
         if (msg->key()) {
-          std::cerr << now() << ": Key: " << *msg->key() << std::endl;
+	  if (verbosity >= 3)
+	    std::cerr << now() << ": Key: " << *msg->key() << std::endl;
         }
+
+	if (verbosity >= 3)
         fprintf(stderr, "%.*s\n",
                 static_cast<int>(msg->len()),
                 static_cast<const char *>(msg->payload()));
@@ -439,7 +444,7 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
         do_commit(consumer, 0);
       }
       break;
-      
+
     case RdKafka::ERR__PARTITION_EOF:
       /* Last message */
       if (exit_eof) {
@@ -488,6 +493,11 @@ private:
   void rebalance_cb (RdKafka::KafkaConsumer *consumer,
 		     RdKafka::ErrorCode err,
 		     std::vector<RdKafka::TopicPartition*> &partitions) {
+
+    /* Send message report prior to rebalancing event to make sure they
+     * are accounted for on the "right side" of the rebalance. */
+    report_records_consumed(1);
+
     std::cout << "{ " <<
       "\"name\": \"partitions_" << (err == RdKafka::ERR__ASSIGN_PARTITIONS ?
 				    "assigned" : "revoked") << "\", " <<
@@ -495,10 +505,12 @@ private:
     part_list_json(partitions);
     std::cout << "] }" << std::endl;
 
-    if (err == RdKafka::ERR__REVOKE_PARTITIONS)
-      consumer->unassign();
-    else
+    if (err == RdKafka::ERR__ASSIGN_PARTITIONS)
       consumer->assign(partitions);
+    else {
+      do_commit(consumer, 1);
+      consumer->unassign();
+    }
   }
 };
 
@@ -514,6 +526,9 @@ class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
     if (err == RdKafka::ERR__NO_OFFSET)
       return;
 
+    /* Send up-to-date records_consumed report to make sure consumed > committed */
+    report_records_consumed(1);
+
     std::cout << "{ " <<
         "\"name\": \"offsets_committed\", " <<
         "\"success\": " << (err ? "false" : "true") << ", " <<
@@ -521,7 +536,6 @@ class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
         "\"offsets\": [ ";
     assert(offsets.size() > 0);
     for (unsigned int i = 0 ; i < offsets.size() ; i++) {
-      assert(err != 0 || offsets[i]->offset() > -1);
       std::cout << (i == 0 ? "" : ", ") << "{ " <<
           " \"topic\": \"" << offsets[i]->topic() << "\", " <<
           " \"partition\": " << offsets[i]->partition() << ", " <<
@@ -574,18 +588,21 @@ int main (int argc, char **argv) {
     conf->set("client.id", std::string("rdkafka@") + hostname, errstr);
   }
 
-  conf->set("debug", "cgrp,topic", errstr);
+  /* auto commit is explicitly enabled with --enable-autocommit */
+  conf->set("enable.auto.commit", "false", errstr);
+
+  conf->set("debug", "cgrp,topic,broker", errstr);
 
   for (int i = 1 ; i < argc ; i++) {
     const char *name = argv[i];
     const char *val = i+1 < argc ? argv[i+1] : NULL;
 
-    if (val && !strncmp(val, "--", 2))
+    if (val && !strncmp(val, "-", 1))
       val = NULL;
 
     std::cout << now() << ": argument: " << name << " " <<
         (val?val:"") << std::endl;
-    
+
     if (val) {
       if (!strcmp(name, "--topic"))
 	topics.push_back(val);
@@ -607,6 +624,32 @@ int main (int argc, char **argv) {
 	  std::cerr << now() << ": " << errstr << std::endl;
 	  exit(1);
 	}
+      } else if (!strcmp(name, "--assignment-strategy")) {
+	/* The system tests pass the Java class name rather than
+	 * the configuration value. Fix it.
+	 * "org.apache.kafka.clients.consumer.RangeAssignor"
+	 *  -> "Range" -> "range"
+	 */
+	char tmp[128];
+	if (!strncmp(val, "org.apache", strlen("org.apache"))) {
+	  const char *t = rindex(val, '.') + 1;
+	  const char *t2 = strstr(t, "Assignor");
+	  char *t3;
+	  if (!t2)
+	    t2 = t + strlen(t);
+	  strncpy(tmp, t, (int)(t2-t));
+	  tmp[(int)(t2-t)] = '\0';
+	  for (t3 = tmp ; *t3 ; t3++)
+	    *t3 = tolower(*t3);
+	  std::cerr << now() << ": converted " << name << " "
+		    << val << " to " << tmp << std::endl;
+	  val = tmp;
+	}
+
+	if  (conf->set("partition.assignment.strategy", val, errstr)) {
+	  std::cerr << now() << ": " << errstr << std::endl;
+	  exit(1);
+	}
       } else if (!strcmp(name, "--debug")) {
 	conf->set("debug", val, errstr);
       } else {
@@ -624,7 +667,11 @@ int main (int argc, char **argv) {
       else if (!strcmp(name, "--enable-autocommit")) {
 	state.consumer.useAutoCommit = true;
 	conf->set("enable.auto.commit", "true", errstr);
-      } else {
+      } else if (!strcmp(name, "-v"))
+	verbosity++;
+      else if (!strcmp(name, "-q"))
+	verbosity--;
+      else {
 	std::cerr << now() << ": Unknown option or missing argument to " << name << std::endl;
 	exit(1);
       }
@@ -791,6 +838,8 @@ int main (int argc, char **argv) {
 		<< RdKafka::err2str(resp) << std::endl;
       exit(1);
     }
+
+    watchdog_kick();
 
     /*
      * Consume messages

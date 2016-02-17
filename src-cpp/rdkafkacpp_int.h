@@ -67,6 +67,14 @@ void offset_commit_cb_trampoline (rd_kafka_t *rk,
                                   rd_kafka_topic_partition_list_t *c_offsets,
                                   void *opaque);
 
+rd_kafka_topic_partition_list_t *
+    partitions_to_c_parts (const std::vector<TopicPartition*> &partitions);
+
+/**
+ * @brief Update the application provided 'partitions' with info from 'c_parts'
+ */
+void update_partitions_from_c_parts (std::vector<TopicPartition*> &partitions,
+                                     const rd_kafka_topic_partition_list_t *c_parts);
 
 
 class EventImpl : public Event {
@@ -438,6 +446,9 @@ class HandleImpl : virtual public Handle {
   RdKafka::ErrorCode metadata (bool all_topics,const Topic *only_rkt,
             Metadata **metadatap, int timeout_ms);
 
+  ErrorCode pause (std::vector<TopicPartition*> &partitions);
+  ErrorCode resume (std::vector<TopicPartition*> &partitions);
+
 
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
@@ -558,6 +569,28 @@ public:
 	  return static_cast<ErrorCode>(
                   rd_kafka_commit_message(rk_, msgimpl->rkmessage_,1/*async*/));
   }
+
+  ErrorCode commitSync (std::vector<TopicPartition*> &offsets) {
+	  rd_kafka_topic_partition_list_t *c_parts =
+		  partitions_to_c_parts(offsets);
+	  rd_kafka_resp_err_t err =
+		  rd_kafka_commit(rk_, c_parts, 0);
+	  if (!err)
+		  update_partitions_from_c_parts(offsets, c_parts);
+	  rd_kafka_topic_partition_list_destroy(c_parts);
+	  return static_cast<ErrorCode>(err);
+  }
+
+  ErrorCode commitAsync (const std::vector<TopicPartition*> &offsets) {
+	  rd_kafka_topic_partition_list_t *c_parts =
+		  partitions_to_c_parts(offsets);
+	  rd_kafka_resp_err_t err =
+		  rd_kafka_commit(rk_, c_parts, 1);
+	  rd_kafka_topic_partition_list_destroy(c_parts);
+	  return static_cast<ErrorCode>(err);
+  }
+
+
   ErrorCode position (std::vector<TopicPartition*> &partitions, int timeout_ms);
 
   ErrorCode close ();

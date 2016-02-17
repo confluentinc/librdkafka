@@ -93,6 +93,9 @@
     <ClCompile Include="..\..\tests\0030-offset_commit.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\tests\0031-get_offsets.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\tests\test.h">

@@ -1749,6 +1749,103 @@ rd_kafka_position (rd_kafka_t *rk,
 }
 
 
+
+struct _get_offsets_state {
+	rd_kafka_resp_err_t err;
+	const char *topic;
+	int32_t partition;
+	int64_t offsets[2];
+	size_t  cnt;
+};
+
+static void rd_kafka_get_offsets_resp_cb (rd_kafka_t *rk,
+					  rd_kafka_broker_t *rkb,
+					  rd_kafka_resp_err_t err,
+					  rd_kafka_buf_t *rkbuf,
+					  rd_kafka_buf_t *request,
+					  void *opaque) {
+	struct _get_offsets_state *state = opaque;
+
+	err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request,
+				     state->topic, state->partition,
+				     state->offsets, &state->cnt);
+	if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
+		return; /* Retrying */
+
+	state->err = err;
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
+		      int64_t *low, int64_t *high, int timeout_ms) {
+	rd_kafka_broker_t *rkb;
+	rd_kafka_q_t *replyq;
+	struct _get_offsets_state state;
+	shptr_rd_kafka_toppar_t *s_rktp;
+	rd_kafka_toppar_t *rktp;
+	rd_ts_t ts_end = rd_clock() +
+		(timeout_ms == RD_POLL_INFINITE ? INT_MAX : timeout_ms) * 1000;
+
+	/* Look up toppar so we know which broker to query. */
+	s_rktp = rd_kafka_toppar_get2(rk, topic, partition, 0, 1);
+	if (!s_rktp)
+		return RD_KAFKA_RESP_ERR__INVALID_ARG;
+	rktp = rd_kafka_toppar_s2i(s_rktp);
+
+	/* Get toppar's leader broker. */
+	do {
+		if ((rkb = rd_kafka_toppar_leader(rktp, 1)))
+			break;
+
+		if (timeout_ms > 0)
+			rd_usleep(RD_MIN(10, timeout_ms), &rk->rk_terminate);
+	} while (rd_clock() < ts_end);
+
+	if (!rkb) {
+		rd_kafka_toppar_destroy(s_rktp);
+		return RD_KAFKA_RESP_ERR__WAIT_COORD;
+	}
+
+        replyq = rd_kafka_q_new(rk);
+
+	state.topic = topic;
+	state.partition = partition;
+	state.offsets[0] = RD_KAFKA_OFFSET_BEGINNING;
+	state.offsets[1] = RD_KAFKA_OFFSET_END;
+	state.cnt = 2;
+	state.err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
+
+	rd_kafka_OffsetRequest(rkb, topic, partition, state.offsets, state.cnt,
+			       replyq, rd_kafka_get_offsets_resp_cb, &state);
+        rd_kafka_broker_destroy(rkb);
+
+        /* Wait for reply (or timeout) */
+	while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
+		rd_kafka_q_serve(replyq, 100, 0, _Q_CB_GLOBAL,
+				 rd_kafka_poll_cb, NULL);
+
+        rd_kafka_q_destroy(replyq);
+	rd_kafka_toppar_destroy(s_rktp);
+
+	if (state.err)
+		return state.err;
+	else if (state.cnt != 2)
+		return RD_KAFKA_RESP_ERR__FAIL;
+
+	/* Broker may return offsets in no parcitular order. */
+	if (state.offsets[0] < state.offsets[1]) {
+		*low = state.offsets[0];
+		*high  = state.offsets[1];
+	} else {
+		*low = state.offsets[1];
+		*high = state.offsets[0];
+	}
+
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 /**
  * rd_kafka_poll() (and similar) op callback handler.
  * Will either call registered callback depending on cb_type and op type
@@ -1893,7 +1990,7 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 
         case RD_KAFKA_OP_RECV_BUF:
                 /* Handle response */
-                rd_kafka_buf_handle_op(rko);
+                rd_kafka_buf_handle_op(rko, rko->rko_err);
                 break;
 
 	default:

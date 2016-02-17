@@ -1395,6 +1395,22 @@ rd_kafka_resume_partitions (rd_kafka_t *rk,
 
 
 
+
+/**
+ * @brief Get low (oldest/beginning) and high (newest/end) offsets
+ *        for partition.
+ *
+ * Offsets are returned in \p *low and \p *high respectively.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on failure.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_get_offsets (rd_kafka_t *rk,
+		      const char *topic, int32_t partition,
+		      int64_t *low, int64_t *high, int timeout_ms);
+
+
+
 /**
  * @brief Free pointer returned by librdkafka
  *

@@ -871,6 +871,18 @@ class RD_EXPORT Handle {
    */
   virtual ErrorCode resume (std::vector<TopicPartition*> &partitions) = 0;
 
+
+  /**
+   * @brief Get low (oldest/beginning) and high (newest/end) offsets for
+   *        partition.
+   *
+   * Offsets are returned in \p *low and \p *high respectively.
+   *
+   * @returns RdKafka::ERR_NO_ERROR on success or an error code on failure.
+   */
+  virtual ErrorCode get_offsets (const std::string &topic, int32_t partition,
+				 int64_t *low, int64_t *high,
+				 int timeout_ms) = 0;
 };
 
 

@@ -187,6 +187,7 @@
     <ClCompile Include="..\..\tests\0028-long_topicnames.c" />
     <ClCompile Include="..\..\tests\0029-assign_offset.c" />
     <ClCompile Include="..\..\tests\0030-offset_commit.c" />
+    <ClCompile Include="..\..\tests\0031-get_offsets.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

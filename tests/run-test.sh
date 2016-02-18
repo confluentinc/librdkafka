@@ -43,7 +43,7 @@ GEN_SUPP="--gen-suppressions=yes"
 VALGRIND_ARGS="--error-exitcode=3"
 
 # Enable vgdb on valgrind errors.
-VALGRIND_ARGS="$VALGRIND_ARGS --vgdb-error=1"
+#VALGRIND_ARGS="$VALGRIND_ARGS --vgdb-error=1"
 
 echo -e "${CYAN}############## $TEST ################${CCLR}"
 

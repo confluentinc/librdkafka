@@ -159,9 +159,9 @@ struct test {
                       }                                                 \
         } while (0)
 
-/* Skip the current test. */
-#define TEST_SKIP(reason...) do {		     \
-		TEST_WARN("SKIPPING TEST: " reason); \
+/* Skip the current test. Argument is textual reason (printf format) */
+#define TEST_SKIP(...) do {		     \
+		TEST_WARN("SKIPPING TEST: " __VA_ARGS__); \
 		TEST_LOCK();			     \
 		test_curr->state = TEST_SKIPPED;     \
 		TEST_UNLOCK();			     \
@@ -457,4 +457,4 @@ void test_create_topic (const char *topicname, int partition_cnt,
 int test_check_builtin (const char *feature);
 void test_timeout_set (int timeout);
 
-char *tsprintf (const char *fmt, ...) __attribute__((format (printf, 1, 2)));
+char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);

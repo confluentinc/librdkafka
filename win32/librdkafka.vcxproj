@@ -197,7 +197,6 @@
     <ClInclude Include="..\src\snappy_compat.h" />
     <ClInclude Include="..\src\tinycthread.h" />
     <ClInclude Include="..\src\rdwin32.h" />
-    <ClInclude Include="..\src\trex.h" />
     <ClInclude Include="..\src\win32_config.h" />
   </ItemGroup>
   <ItemGroup>
@@ -228,7 +227,6 @@
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\snappy.c" />
     <ClCompile Include="..\src\tinycthread.c" />
-    <ClCompile Include="..\src\trex.c" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\LICENSE..txt" />

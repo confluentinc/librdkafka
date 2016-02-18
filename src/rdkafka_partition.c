@@ -31,7 +31,10 @@
 #include "rdkafka_request.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_partition.h"
-#include "trex.h"
+
+#if HAVE_REGEX
+#include <regex.h>
+#endif
 
 
 
@@ -2135,28 +2138,40 @@ int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 	int ret = 0;
 
 	if (*rktpar->topic == '^') {
-		TRex *re;
-		const char *error;
+#if HAVE_REGEX
+		regex_t re;
+		int re_err;
 
 		/* FIXME: cache compiled regex */
-		if (!(re = trex_compile(rktpar->topic, &error))) {
+		re_err = regcomp(&re, rktpar->topic, REG_EXTENDED|REG_NOSUB);
+		if (re_err) {
+			char re_errstr[128];
+			regerror(re_err, &re, re_errstr, sizeof(re_errstr));
 			rd_kafka_dbg(rk, CGRP,
 				     "SUBMATCH",
 				     "Invalid regex for member "
 				     "\"%.*s\" subscription \"%s\": %s",
 				     RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
-				     rktpar->topic, error);
+				     rktpar->topic, re_errstr);
 			return 0;
 		}
 
-		if (trex_match(re, topic)) {
+		if (regexec(&re, topic, 0, NULL, 0) != REG_NOMATCH) {
 			if (matched_by_regex)
 				*matched_by_regex = 1;
 
 			ret = 1;
 		}
-
-		trex_free(re);
+		regfree(&re);
+#else
+		rd_kafka_dbg(rk, CGRP,
+			     "SUBMATCH",
+			     "Regex support not built in: can't match member "
+			     "\"%.*s\" subscription \"%s\"",
+			     RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
+			     rktpar->topic);
+		return 0;
+#endif
 
 	} else if (!strcmp(rktpar->topic, topic)) {
 

@@ -55,9 +55,18 @@ function checks {
         fi
     fi
 
-    # Snappy is currently broken on MSVC Win32, enable for everything else.
-    # (MSVC Win32 does not use configure)
-    mkl_allvar_set WITH_SNAPPY WITH_SNAPPY y
+    # Check for libc regex
+    mkl_compile_check "regex" "HAVE_REGEX" disable CC "" \
+"
+#include <stddef.h>
+#include <regex.h>
+void foo (void) {
+   regcomp(NULL, NULL, 0);
+   regexec(NULL, NULL, 0, NULL, 0);
+   regerror(0, NULL, NULL, 0);
+   regfree(NULL);
+}"
+
 
     # -lrt is needed on linux for clock_gettime: link it if it exists.
     mkl_lib_check "librt" "" cont CC "-lrt"

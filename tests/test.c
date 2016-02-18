@@ -104,6 +104,7 @@ _TEST_DECL(0028_long_topicnames);
 _TEST_DECL(0029_assign_offset);
 _TEST_DECL(0030_offset_commit);
 _TEST_DECL(0031_get_offsets);
+_TEST_DECL(0033_regex_subscribe);
 
 /**
  * Define all tests here
@@ -137,6 +138,7 @@ struct test tests[] = {
 	_TEST(0029_assign_offset, 0),
 	_TEST(0030_offset_commit, 0),
 	_TEST(0031_get_offsets, 0),
+	_TEST(0033_regex_subscribe, 0),
         { NULL }
 };
 
@@ -162,8 +164,10 @@ static int test_stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
 }
 
 
+/**
+ * @brief Limit the test run time (in seconds)
+ */
 void test_timeout_set (int timeout) {
-        /* Limit the test run time. */
 	TEST_LOCK();
         TEST_SAY("Setting test timeout to %ds * %.1f\n",
 		 timeout, test_timeout_multiplier);
@@ -496,7 +500,12 @@ static int run_test0 (struct run_args *run_args) {
 
         TEST_LOCK();
         test->duration = TIMING_DURATION(&t_run);
-	if (r) {
+
+	if (test->state == TEST_SKIPPED) {
+		TEST_SAY("================= Test %s SKIPPED "
+			 "=================\n",
+                         run_args->test->name);
+	} else if (r) {
                 test->state = TEST_FAILED;
 		TEST_SAY("\033[31m"
 			 "================= Test %s FAILED ================="
@@ -2154,6 +2163,52 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 	TEST_ASSERT(cnt == 0, "Expected 0 messages, got %d", cnt);
 }
 
+
+
+/**
+ * Call consumer poll once and then return.
+ * Messages are handled.
+ *
+ * \p mv is optional
+ *
+ * @returns 0 on timeout, 1 if a message was received or .._PARTITION_EOF
+ *          if EOF was reached.
+ *          TEST_FAIL()s on all errors.
+ */
+int test_consumer_poll_once (rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms){
+	rd_kafka_message_t *rkmessage;
+
+	rkmessage = rd_kafka_consumer_poll(rk, timeout_ms);
+	if (!rkmessage)
+		return 0;
+
+	if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+		TEST_SAY("%s [%"PRId32"] reached EOF at "
+			 "offset %"PRId64"\n",
+			 rd_kafka_topic_name(rkmessage->rkt),
+			 rkmessage->partition,
+			 rkmessage->offset);
+		rd_kafka_message_destroy(rkmessage);
+		return RD_KAFKA_RESP_ERR__PARTITION_EOF;
+
+	} else if (rkmessage->err) {
+		TEST_FAIL("%s [%"PRId32"] error (offset %"PRId64
+			  "): %s",
+			  rkmessage->rkt ?
+			  rd_kafka_topic_name(rkmessage->rkt) :
+			  "(no-topic)",
+			  rkmessage->partition,
+			  rkmessage->offset,
+			  rd_kafka_message_errstr(rkmessage));
+
+	} else {
+		if (mv)
+			test_msgver_add_msg(mv, rkmessage);
+	}
+
+	rd_kafka_message_destroy(rkmessage);
+	return 1;
+}
 	
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt,
@@ -2300,3 +2355,44 @@ void test_create_topic (const char *topicname, int partition_cnt,
 			  cmd, WEXITSTATUS(r));
 #endif
 }
+
+/**
+ * @brief Check if \p feature is builtin to librdkafka.
+ * @returns returns 1 if feature is built in, else 0.
+ */
+int test_check_builtin (const char *feature) {
+	rd_kafka_conf_t *conf;
+	char errstr[128];
+	int r;
+
+	conf = rd_kafka_conf_new();
+	if (rd_kafka_conf_set(conf, "builtin.features", feature,
+			      errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+		TEST_SAY("Feature \"%s\" not built-in: %s\n",
+			 feature, errstr);
+		r = 0;
+	} else {
+		TEST_SAY("Feature \"%s\" is built-in\n", feature);
+		r = 1;
+	}
+
+	rd_kafka_conf_destroy(conf);
+	return r;
+}
+
+
+char *tsprintf (const char *fmt, ...) {
+	static RD_TLS char ret[8][512];
+	static RD_TLS int i;
+	va_list ap;
+
+
+	i = (i + 1) % 8;
+
+	va_start(ap, fmt);
+	rd_vsnprintf(ret[i], sizeof(ret[i]), fmt, ap);
+	va_end(ap);
+
+	return ret[i];
+}
+

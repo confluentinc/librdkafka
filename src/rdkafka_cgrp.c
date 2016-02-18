@@ -35,9 +35,6 @@
 #include "rdkafka_offset.h"
 #include "rdkafka_cgrp.h"
 
-#include "trex.h"
-
-
 static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg);
 static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg);

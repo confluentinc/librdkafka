@@ -159,6 +159,13 @@ struct test {
                       }                                                 \
         } while (0)
 
+/* Skip the current test. */
+#define TEST_SKIP(reason...) do {		     \
+		TEST_WARN("SKIPPING TEST: " reason); \
+		TEST_LOCK();			     \
+		test_curr->state = TEST_SKIPPED;     \
+		TEST_UNLOCK();			     \
+	} while (0)
 
 const char *test_mk_topic_name (const char *suffix, int randomized);
 
@@ -427,6 +434,7 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
 
 void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 				 uint64_t testid, int timeout_ms);
+int test_consumer_poll_once (rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms);
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt,
 			test_msgver_t *mv);
@@ -446,3 +454,7 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
 
 void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor);
+int test_check_builtin (const char *feature);
+void test_timeout_set (int timeout);
+
+char *tsprintf (const char *fmt, ...) __attribute__((format (printf, 1, 2)));

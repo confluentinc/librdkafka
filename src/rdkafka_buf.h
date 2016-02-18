@@ -313,7 +313,7 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 
 int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf);
 
-void rd_kafka_buf_handle_op (rd_kafka_op_t *rko);
+void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 void rd_kafka_buf_callback (rd_kafka_t *rk,
 			    rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
                             rd_kafka_buf_t *response, rd_kafka_buf_t *request);

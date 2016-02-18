@@ -2552,6 +2552,7 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
                                          rd_kafka_poll_cb, NULL);
         }
 
+	rd_dassert(state.q->rkq_refcnt == 1);
         rd_kafka_q_destroy(state.q);
 
         if (state.err)

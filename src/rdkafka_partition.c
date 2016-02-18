@@ -1637,7 +1637,7 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 
 	case RD_KAFKA_OP_RECV_BUF:
 		/* Handle response */
-		rd_kafka_buf_handle_op(rko);
+		rd_kafka_buf_handle_op(rko, rko->rko_err);
 		break;
 
 	default:

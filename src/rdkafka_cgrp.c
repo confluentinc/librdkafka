@@ -1178,6 +1178,9 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 
 	switch (err)
 	{
+	case RD_KAFKA_RESP_ERR__DESTROY:
+		/* quick cleanup */
+		break;
 	case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
 	case RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
 	case RD_KAFKA_RESP_ERR__TRANSPORT:
@@ -1533,7 +1536,7 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 
                 case RD_KAFKA_OP_RECV_BUF:
                         /* Handle response */
-                        rd_kafka_buf_handle_op(rko);
+                        rd_kafka_buf_handle_op(rko, rko->rko_err);
                         break;
 
                 default:

@@ -171,9 +171,6 @@ typedef struct rd_kafka_cgrp_s {
 	int rkcg_wait_commit_cnt;                   /* Waiting for this number
 						     * of commits to finish. */
 
-        /* Topic whitelist: topics to subscribe to */
-        rd_kafka_pattern_list_t rkcg_whitelist;
-
         rd_kafka_resp_err_t rkcg_last_err;          /* Last error propagated to
                                                      * application.
                                                      * This is for silencing

@@ -104,7 +104,6 @@ void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg) {
 
         rd_kafka_q_destroy(&rkcg->rkcg_q);
         rd_kafka_q_destroy(&rkcg->rkcg_ops);
-        rd_kafka_pattern_list_clear(&rkcg->rkcg_whitelist);
         rd_kafka_assert(rkcg->rkcg_rk, TAILQ_EMPTY(&rkcg->rkcg_topics));
         rd_kafka_assert(rkcg->rkcg_rk, rd_list_empty(&rkcg->rkcg_toppars));
         rd_list_destroy(&rkcg->rkcg_toppars, NULL);
@@ -133,7 +132,6 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
         rd_kafka_q_init(&rkcg->rkcg_q, rk);
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32);
-        rd_kafka_pattern_list_init(&rkcg->rkcg_whitelist, NULL, NULL, 0);
         rd_kafka_cgrp_set_member_id(rkcg, "");
         rd_interval_init(&rkcg->rkcg_coord_query_intvl);
         rd_interval_init(&rkcg->rkcg_heartbeat_intvl);
@@ -1714,109 +1712,6 @@ void rd_kafka_cgrp_op (rd_kafka_cgrp_t *rkcg, rd_kafka_toppar_t *rktp,
 
 
 
-
-/**
- * Removes any matching patterns
- */
-rd_kafka_resp_err_t rd_kafka_cgrp_topic_pattern_del (rd_kafka_cgrp_t *rkcg,
-                                                     const char *pattern) {
-        int cnt = rd_kafka_pattern_list_remove(&rkcg->rkcg_whitelist, pattern);
-        return cnt > 0 ? 0 : RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
-}
-
-/**
- * Adds topic matching pattern (regexp) to cgrp.
- */
-rd_kafka_resp_err_t rd_kafka_cgrp_topic_pattern_add (rd_kafka_cgrp_t *rkcg,
-                                                     const char *pattern) {
-        char errstr[256];
-
-        rd_kafka_cgrp_lock(rkcg);
-        if (rd_kafka_pattern_list_append(&rkcg->rkcg_whitelist, pattern,
-                                         errstr, sizeof(errstr)) == -1) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PATTERN",
-                             "Group \"%.*s\": failed to add pattern \"%s\": %s",
-                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-                             pattern, errstr);
-                rd_kafka_cgrp_unlock(rkcg);
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-        }
-        rd_kafka_cgrp_unlock(rkcg);
-
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
-}
-
-
-/**
- * Checks if the given topic name matches a whitelisted pattern.
- * It is assumed that the global blacklist has already been checked.
- *
- * If a topic is matched it is added to the cgrp (async).
- *
- * Locality: any thread
- */
-int rd_kafka_cgrp_topic_check (rd_kafka_cgrp_t *rkcg, const char *topic) {
-        int matched;
-        shptr_rd_kafka_itopic_t *s_rkt;
-        rd_kafka_itopic_t *rkt;
-        rd_kafka_resp_err_t err;
-        rd_kafka_t *rk = rkcg->rkcg_rk;
-        int existing;
-
-        rd_kafka_cgrp_lock(rkcg);
-        matched = rd_kafka_pattern_match(&rkcg->rkcg_whitelist, topic);
-        rd_kafka_cgrp_unlock(rkcg);
-
-        if (!matched)
-                return matched;
-
-        s_rkt = rd_kafka_topic_new0(rk, topic, NULL, &existing, 1/*lock*/);
-
-        if (!s_rkt) {
-                rd_kafka_dbg(rkcg->rkcg_rk, TOPIC, "SUBSCRIBE",
-                             "Group \"%.*s\": "
-                             "Failed to create whitelist-matched topic \"%s\": "
-                             "%s",
-                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), topic,
-                             rd_kafka_err2str(rd_kafka_errno2err(errno)));
-                return -1;
-        }
-
-        rkt = rd_kafka_topic_s2i(s_rkt);
-
-        if (rkt->rkt_autosubscribe_rkt) {
-                /* Topic is already auto-subscribed */
-                rd_kafka_topic_destroy0(s_rkt);
-                return 0;
-        }
-
-        if ((err = rd_kafka_subscribe_rkt(rkt))) {
-                if (err != RD_KAFKA_RESP_ERR__EXISTING_SUBSCRIPTION)
-                        rd_kafka_dbg(rkcg->rkcg_rk, TOPIC, "SUBSCRIBE",
-                                     "Group \"%.*s\": "
-                                     "failed to subscribe to "
-                                     "whitelits-matched topic \"%s\": %s",
-                                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-                                     topic, rd_kafka_err2str(err));
-                rd_kafka_topic_destroy0(s_rkt);
-                return -1;
-        }
-
-        rd_kafka_dbg(rkcg->rkcg_rk, TOPIC, "SUBSCRIBE",
-                     "Group \"%.*s\": "
-                     "subscribing to whitelits-matched topic \"%s\"",
-                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), topic);
-
-        rkt->rkt_autosubscribe_rkt = s_rkt;
-
-        /* Query for the topic leader (async) */
-        if (!existing)
-                rd_kafka_topic_leader_query(rk, rkt);
-
-
-
-        return 0;
-}
 
 
 

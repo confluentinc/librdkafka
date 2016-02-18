@@ -180,7 +180,7 @@ static rd_kafka_broker_t *rd_kafka_cgrp_select_broker (rd_kafka_cgrp_t *rkcg) {
                 return NULL;
 
         rd_kafka_rdlock(rkcg->rkcg_rk);
-        /* Try to find the coordinator broker, if it not found
+        /* Try to find the coordinator broker, if it isn't found
          * move the cgrp to any other Up broker which will
          * do further coord querying while waiting for the
          * proper broker to materialise.
@@ -205,11 +205,11 @@ static rd_kafka_broker_t *rd_kafka_cgrp_select_broker (rd_kafka_cgrp_t *rkcg) {
 		int old_is_coord, new_is_coord;
 
 		rd_kafka_broker_lock(rkb);
-		old_is_coord = RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg, rkb);
+		new_is_coord = RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg, rkb);
 		rd_kafka_broker_unlock(rkb);
 
 		rd_kafka_broker_lock(rkcg->rkcg_rkb);
-		new_is_coord = RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg,
+		old_is_coord = RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg,
 							     rkcg->rkcg_rkb);
 		rd_kafka_broker_unlock(rkcg->rkcg_rkb);
 
@@ -230,10 +230,10 @@ static rd_kafka_broker_t *rd_kafka_cgrp_select_broker (rd_kafka_cgrp_t *rkcg) {
 /**
  * Assign cgrp to broker.
  *
- * Locality: main thread
+ * Locality: rdkafka main thread
  */
-void rd_kafka_cgrp_assign_broker (rd_kafka_cgrp_t *rkcg,
-                                  rd_kafka_broker_t *rkb) {
+static void rd_kafka_cgrp_assign_broker (rd_kafka_cgrp_t *rkcg,
+					 rd_kafka_broker_t *rkb) {
 
 	rd_kafka_assert(NULL, rkcg->rkcg_rkb == NULL);
 
@@ -290,7 +290,14 @@ int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg) {
         rkb = rd_kafka_cgrp_select_broker(rkcg);
 
         if (rkb == rkcg->rkcg_rkb) {
-                if (rkb && RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg, rkb))
+		int is_coord = 0;
+
+		if (rkb) {
+			rd_kafka_broker_lock(rkb);
+			is_coord = RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg, rkb);
+			rd_kafka_broker_unlock(rkb);
+		}
+		if (is_coord)
                         rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_BROKER_TRANSPORT);
                 else
                         rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_BROKER);

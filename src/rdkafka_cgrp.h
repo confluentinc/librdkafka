@@ -206,9 +206,6 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
                                     const rd_kafkap_str_t *group_id,
                                     const rd_kafkap_str_t *client_id);
 void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg);
-void rd_kafka_cgrp_assign_broker (rd_kafka_cgrp_t *rkcg,
-                                  rd_kafka_broker_t *rkb);
-
 
 void rd_kafka_cgrp_op (rd_kafka_cgrp_t *rkcg, rd_kafka_toppar_t *rktp,
                        rd_kafka_q_t *replyq, rd_kafka_op_type_t type,

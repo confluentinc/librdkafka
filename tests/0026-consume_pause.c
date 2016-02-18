@@ -79,7 +79,7 @@ static int consume_pause (void) {
 		TEST_SAY("Iteration %d/%d, using group.id %s\n", it, iterations,
 			 group_id);
 
-		rk = test_create_consumer(group_id, NULL,
+		rk = test_create_consumer(group_id, NULL, NULL,
 					  rd_kafka_topic_conf_dup(tconf), NULL);
 
 

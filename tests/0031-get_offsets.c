@@ -51,7 +51,7 @@ int main_0031_get_offsets (int argc, char **argv) {
         test_produce_msgs_easy(topic, 0, 0, msgcnt);
 
 	/* Get offsets */
-	rk = test_create_consumer(NULL, NULL, NULL, NULL);
+	rk = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
 
 	TIMING_START(&t_get, "get_offsets");
 	err = rd_kafka_get_offsets(rk, topic, 0, &low, &high, 10*1000);

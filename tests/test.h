@@ -391,6 +391,7 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 					  rd_kafka_topic_partition_list_t
 					  *partitions,
 					  void *opaque),
+				  rd_kafka_conf_t *conf,
                                   rd_kafka_topic_conf_t *default_topic_conf,
 				  void *opaque);
 rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,

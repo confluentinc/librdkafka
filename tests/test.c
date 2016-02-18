@@ -1173,14 +1173,15 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 					  rd_kafka_topic_partition_list_t
 					  *partitions,
 					  void *opaque),
+				  rd_kafka_conf_t *conf,
                                   rd_kafka_topic_conf_t *default_topic_conf,
 				  void *opaque) {
 	rd_kafka_t *rk;
-	rd_kafka_conf_t *conf;
 	char errstr[512];
 	char tmp[64];
 
-	test_conf_init(&conf, NULL, 0);
+	if (!conf)
+		test_conf_init(&conf, NULL, 0);
 
         if (group_id) {
                 if (rd_kafka_conf_set(conf, "group.id", group_id,
@@ -1391,7 +1392,7 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
 		group_id = test_str_id_generate(grpid0, sizeof(grpid0));
 
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
-        rk = test_create_consumer(group_id, NULL, tconf, NULL);
+        rk = test_create_consumer(group_id, NULL, NULL, tconf, NULL);
 
         rd_kafka_poll_set_consumer(rk);
 

@@ -105,7 +105,7 @@ rd_kafka_assign (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
-	if (partitions && partitions->cnt > 0)
+	if (partitions)
                 rd_kafka_op_payload_set(
                         rko,
                         rd_kafka_topic_partition_list_copy(partitions),

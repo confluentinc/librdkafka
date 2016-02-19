@@ -28,12 +28,16 @@
 #pragma once
 
 
-#include "trex.h"
-
+#if HAVE_REGEX
+/* NOTE: These pattern lists are pointless without regex support. */
+#include <regex.h>
+#endif
 
 typedef struct rd_kafka_pattern_s {
         TAILQ_ENTRY(rd_kafka_pattern_s)  rkpat_link;
-        TRex        *rkpat_re;   /* Compiled regex */
+#if HAVE_REGEX
+        regex_t      rkpat_re;   /* Compiled regex */
+#endif
         char        *rkpat_orig;  /* Original pattern */
 } rd_kafka_pattern_t;
 

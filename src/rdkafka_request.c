@@ -144,52 +144,58 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
 					    rd_kafka_resp_err_t err,
 					    rd_kafka_buf_t *rkbuf,
 					    rd_kafka_buf_t *request,
-					    rd_kafka_toppar_t *rktp,
-					    int64_t *Offsetp) {
+					    const char *topic, int32_t partition,
+					    int64_t *offsets,
+					    size_t *offset_cntp) {
+
         const int log_decode_errors = 1;
         int16_t ErrorCode = 0;
         int32_t TopicArrayCnt;
-        int64_t Offset = -1;
-        int hit = 0;
         int actions;
+	size_t offsets_written = 0;
 
         if (err) {
                 ErrorCode = err;
                 goto err;
         }
 
+	/* NOTE:
+	 * Broker may return offsets in a different constellation than
+	 * in the original request .*/
+
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
         while (TopicArrayCnt-- > 0) {
-                rd_kafkap_str_t topic;
+                rd_kafkap_str_t ktopic;
                 int32_t PartArrayCnt;
 
-                rd_kafka_buf_read_str(rkbuf, &topic);
+                rd_kafka_buf_read_str(rkbuf, &ktopic);
                 rd_kafka_buf_read_i32(rkbuf, &PartArrayCnt);
 
                 while (PartArrayCnt-- > 0) {
-                        int32_t partition;
+                        int32_t kpartition;
                         int32_t OffsetArrayCnt;
                         int correct_partition;
 
-                        rd_kafka_buf_read_i32(rkbuf, &partition);
+                        rd_kafka_buf_read_i32(rkbuf, &kpartition);
                         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
                         rd_kafka_buf_read_i32(rkbuf, &OffsetArrayCnt);
 
                         correct_partition =
-                                !rd_kafkap_str_cmp(&topic,
-                                                   rktp->rktp_rkt->rkt_topic) &&
-                                partition == rktp->rktp_partition;
+                                !rd_kafkap_str_cmp_str(&ktopic, topic) &&
+                                kpartition == partition;
 
                         while (OffsetArrayCnt-- > 0) {
+				int64_t Offset;
                                 rd_kafka_buf_read_i64(rkbuf, &Offset);
 
-                                if (correct_partition) {
-                                        hit = 1;
-                                        goto done;
-                                }
+                                if (correct_partition &&
+				    offsets_written < *offset_cntp)
+					offsets[offsets_written++] = Offset;
                         }
                 }
         }
+
+	*offset_cntp = offsets_written;
 	goto done;
 
  err:
@@ -205,8 +211,13 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for leader */
-                rd_kafka_topic_leader_query(rktp->rktp_rkt->rkt_rk,
-					    rktp->rktp_rkt);
+		shptr_rd_kafka_itopic_t *s_rkt;
+
+		if ((s_rkt = rd_kafka_topic_find(rk, topic, 1/*lock*/))) {
+			rd_kafka_topic_leader_query(rk,
+						    rd_kafka_topic_s2i(s_rkt));
+			rd_kafka_topic_destroy0(s_rkt);
+		}
 	}
 	if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
 		if (rd_kafka_buf_retry(rkb, request))
@@ -215,11 +226,8 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
 	}
 
 done:
-        if (!ErrorCode && !hit)
+        if (!ErrorCode && offsets_written == 0)
                 ErrorCode = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
-
-        if (!ErrorCode)
-                *Offsetp = Offset;
 
         return ErrorCode;
 }
@@ -233,44 +241,47 @@ done:
  * Send OffsetRequest for toppar 'rktp'.
  */
 void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
-                             rd_kafka_toppar_t *rktp,
-                             int64_t query_offset,
+                             const char *topic, int32_t partition,
+                             const int64_t *query_offsets, size_t offset_cnt,
                              rd_kafka_q_t *replyq,
                              rd_kafka_resp_cb_t *resp_cb,
                              void *opaque) {
 	rd_kafka_buf_t *rkbuf;
+	size_t i;
 
-	rkbuf = rd_kafka_buf_new(rkb->rkb_rk,
-                                 3,/*Header,topic,subpart*/
-				 /* ReplicaId+TopicArrayCnt */
-				 4+4 +
-				 /* Topic (pushed) */
-				 /* PartArrayCnt+Partition+Time+MaxNumOffs */
-				 4+4+8+4);
+	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1,
+				 /* ReplicaId+TopicArrayCnt+Topic */
+				 4+4+RD_KAFKAP_STR_SIZE0((int)strlen(topic)) +
+				 /* PartArrayCnt */
+				 4 +
+				 /* offset_cnt * Partition+Time+MaxNumOffs */
+				 (offset_cnt * (4+8+4)));
 
 	/* ReplicaId */
 	rd_kafka_buf_write_i32(rkbuf, -1);
 	/* TopicArrayCnt */
 	rd_kafka_buf_write_i32(rkbuf, 1);
-	rd_kafka_buf_autopush(rkbuf);
-
 	/* Topic */
-	rd_kafka_buf_push_kstr(rkbuf, rktp->rktp_rkt->rkt_topic);
-
+	rd_kafka_buf_write_str(rkbuf, topic, -1);
 	/* PartitionArrayCnt */
-	rd_kafka_buf_write_i32(rkbuf, 1);
-	/* Partition */
-	rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
-	/* Time/Offset */
-	rd_kafka_buf_write_i64(rkbuf, query_offset);
-	/* MaxNumberOfOffsets */
-	rd_kafka_buf_write_i32(rkbuf, 1);
+	rd_kafka_buf_write_i32(rkbuf, offset_cnt);
+
+	for (i = 0 ; i < offset_cnt ; i++) {
+		/* Partition */
+		rd_kafka_buf_write_i32(rkbuf, partition);
+
+		/* Time/Offset */
+		rd_kafka_buf_write_i64(rkbuf, query_offsets[i]);
+
+		/* MaxNumberOfOffsets */
+		rd_kafka_buf_write_i32(rkbuf, offset_cnt);
+	}
+
 	rd_kafka_buf_autopush(rkbuf);
 
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-		   "OffsetRequest (%"PRId64") for topic %s [%"PRId32"]",
-                   query_offset,
-                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+		   "OffsetRequest (%"PRIdsz" offsets) for topic %s [%"PRId32"]",
+                   offset_cnt, topic, partition);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Offset,
                                        rkbuf, replyq, resp_cb, opaque);
@@ -1039,9 +1050,9 @@ rd_kafka_group_MemberMetadata_consumer_read (
 
         while (subscription_cnt-- > 0) {
                 rd_kafkap_str_t Topic;
-				char *topic_name;
+		char *topic_name;
                 rd_kafka_buf_read_str(rkbuf, &Topic);
-				RD_KAFKAP_STR_DUPA(&topic_name, &Topic);
+		RD_KAFKAP_STR_DUPA(&topic_name, &Topic);
                 rd_kafka_topic_partition_list_add(rkgm->rkgm_subscription,
                                                   topic_name,
                                                   RD_KAFKA_PARTITION_UA);

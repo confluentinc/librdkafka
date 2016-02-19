@@ -91,9 +91,9 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 
 void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
-	/* Decrease refcount on rkbuf to eventually rd_free the shared buffer */
+	/* Decrease refcount on rkbuf to eventually rd_free the shared buffer*/
 	if (rko->rko_rkbuf)
-		rd_kafka_buf_destroy(rko->rko_rkbuf);
+		rd_kafka_buf_handle_op(rko, RD_KAFKA_RESP_ERR__DESTROY);
 	else if (rko->rko_payload && rko->rko_flags & RD_KAFKA_OP_F_FREE) {
                 if (rko->rko_free_cb)
                         rko->rko_free_cb(rko->rko_payload);

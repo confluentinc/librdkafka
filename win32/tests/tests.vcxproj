@@ -27,7 +27,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v120</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -187,6 +187,8 @@
     <ClCompile Include="..\..\tests\0028-long_topicnames.c" />
     <ClCompile Include="..\..\tests\0029-assign_offset.c" />
     <ClCompile Include="..\..\tests\0030-offset_commit.c" />
+    <ClCompile Include="..\..\tests\0031-get_offsets.c" />
+    <ClCompile Include="..\..\tests\0033-regex_subscribe.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

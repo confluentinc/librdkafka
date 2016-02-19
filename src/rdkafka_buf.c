@@ -371,13 +371,13 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 
 /**
  * Retry failed request, depending on the error.
+ * @remark \p rkbuf may be NULL
  * Returns 1 if the request was scheduled for retry, else 0.
  */
 int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
-	/* FIXME: remove err ^ */
-
-        if (unlikely(rkb->rkb_source == RD_KAFKA_INTERNAL ||
+        if (unlikely(!rkb ||
+		     rkb->rkb_source == RD_KAFKA_INTERNAL ||
 		     rd_kafka_terminating(rkb->rkb_rk) ||
 		     rkbuf->rkbuf_retries + 1 >
 		     rkb->rkb_rk->rk_conf.max_retries))
@@ -393,23 +393,30 @@ int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
 
 /**
- * Handle RD_KAFKA_OP_RECV_BUF
+ * Handle RD_KAFKA_OP_RECV_BUF.
  */
-void rd_kafka_buf_handle_op (rd_kafka_op_t *rko) {
+void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         rd_kafka_buf_t *request, *response;
 
         request = rko->rko_rkbuf;
+        rko->rko_rkbuf = NULL;
 
-        rd_kafka_q_destroy(request->rkbuf_replyq);
-        request->rkbuf_replyq = NULL;
+	if (request->rkbuf_replyq) { /* NULL on op_destroy() */
+		rd_kafka_q_destroy(request->rkbuf_replyq);
+		request->rkbuf_replyq = NULL;
+	}
+
+	if (!request->rkbuf_cb) {
+		rd_kafka_buf_destroy(request);
+		return;
+	}
 
         /* Let buf_callback() do destroy()s */
         response = request->rkbuf_response; /* May be NULL */
         request->rkbuf_response = NULL;
-        rko->rko_rkbuf = NULL;
 
         rd_kafka_buf_callback(request->rkbuf_rkb->rkb_rk,
-			      request->rkbuf_rkb, rko->rko_err,
+			      request->rkbuf_rkb, err,
                               response, request);
 }
 
@@ -427,14 +434,21 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko) {
  */
 void rd_kafka_buf_callback (rd_kafka_t *rk,
 			    rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
-                            rd_kafka_buf_t *response, rd_kafka_buf_t *request) {
+                            rd_kafka_buf_t *response, rd_kafka_buf_t *request){
 
         /* Decide if the request should be retried.
          * This is always done in the originating broker thread. */
-        if (unlikely(err && rd_kafka_buf_retry(rkb, request)))
+        if (unlikely(err && err != RD_KAFKA_RESP_ERR__DESTROY &&
+		     rd_kafka_buf_retry(rkb, request))) {
+		/* refcount for retry was increased in buf_retry() so we can
+		 * let go of this caller's refcounts. */
+		rd_kafka_buf_destroy(request);
+		if (response)
+			rd_kafka_buf_destroy(response);
                 return;
+	}
 
-        if (request->rkbuf_replyq) {
+        if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
 
 		rd_kafka_assert(NULL, !request->rkbuf_response);
@@ -447,18 +461,11 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
                 rko->rko_rkbuf = request;
 
                 rko->rko_err = err;
-                if (likely(rd_kafka_q_enq(request->rkbuf_replyq, rko))) {
-                        /* Enqueued */
-                        rd_kafka_buf_destroy(request); /* from keep above */
-                        return;
-                }
 
-                /* Enqueue failed because replyq is disabled,
-                 * fall through to let callback clean up. */
-                err = RD_KAFKA_RESP_ERR__DESTROY;
-		request->rkbuf_response = NULL;
-                rd_kafka_q_destroy(request->rkbuf_replyq);
-                request->rkbuf_replyq = NULL;
+	        rd_kafka_q_enq(request->rkbuf_replyq, rko);
+
+		rd_kafka_buf_destroy(request); /* from keep above */
+		return;
         }
 
         if (request->rkbuf_cb)

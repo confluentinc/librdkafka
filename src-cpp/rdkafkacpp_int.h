@@ -449,6 +449,14 @@ class HandleImpl : virtual public Handle {
   ErrorCode pause (std::vector<TopicPartition*> &partitions);
   ErrorCode resume (std::vector<TopicPartition*> &partitions);
 
+  ErrorCode get_offsets (const std::string &topic, int32_t partition,
+			 int64_t *low, int64_t *high, int timeout_ms) {
+	  return static_cast<RdKafka::ErrorCode>(
+		  rd_kafka_get_offsets(
+			  rk_, topic.c_str(), partition,
+			  low, high, timeout_ms));
+  }
+
 
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
@@ -504,7 +512,8 @@ public:
   static TopicPartition *create (const std::string &topic, int partition);
 
   TopicPartitionImpl (const std::string &topic, int partition):
-  topic_(topic), partition_(partition), offset_(0), err_(ERR_NO_ERROR) {}
+  topic_(topic), partition_(partition), offset_(RdKafka::Topic::OFFSET_INVALID),
+      err_(ERR_NO_ERROR) {}
 
   TopicPartitionImpl (const rd_kafka_topic_partition_t *c_part) {
     topic_ = std::string(c_part->topic);

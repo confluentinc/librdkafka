@@ -576,7 +576,6 @@ static int rd_kafka_broker_buf_enq2 (rd_kafka_broker_t *rkb,
 				      rd_kafka_buf_t *rkbuf) {
         if (unlikely(rkb->rkb_source == RD_KAFKA_INTERNAL)) {
                 /* Fail request immediately if this is the internal broker. */
-		// FIXME there is no broker connection. */
                 rd_kafka_buf_callback(rkb->rkb_rk, rkb,
 				      RD_KAFKA_RESP_ERR__TRANSPORT,
                                       NULL, rkbuf);
@@ -3494,7 +3493,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_avg_init(&rkb->rkb_avg_rtt, RD_AVG_GAUGE);
 	rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE);
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
-        rd_kafka_broker_keep(rkb); /* Caller's refcount */
+        rd_kafka_broker_keep(rkb); /* rk_broker's refcount */
 
 	/* Set next intervalled metadata refresh, offset by a random
 	 * value to avoid all brokers to be queried simultaneously. */

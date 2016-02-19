@@ -31,7 +31,10 @@
 #include "rdkafka_request.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_partition.h"
-#include "trex.h"
+
+#if HAVE_REGEX
+#include <regex.h>
+#endif
 
 
 
@@ -64,11 +67,14 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
         shptr_rd_kafka_toppar_t *s_rktp = opaque;
         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
         int64_t Offset;
+	size_t offset_cnt = 1;
 
         /* Parse and return Offset */
         err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
-				     rkbuf, request, rktp, &Offset);
-
+				     rkbuf, request,
+				     rktp->rktp_rkt->rkt_topic->str,
+				     rktp->rktp_partition,
+				     &Offset, &offset_cnt);
         if (!err)
                 rktp->rktp_lo_offset = Offset;
 
@@ -86,6 +92,7 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
  */
 static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 	rd_kafka_broker_t *rkb;
+	const int64_t query_offset = RD_KAFKA_OFFSET_BEGINNING;
 
         if (rktp->rktp_wait_consumer_lag_resp)
                 return; /* Previous request not finished yet */
@@ -98,8 +105,11 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 
 	/* Ask for oldest offset. The newest offset is automatically
          * propagated in FetchResponse.HighwaterMark. */
-        rd_kafka_OffsetRequest(rkb, rktp, RD_KAFKA_OFFSET_BEGINNING,
-                               &rktp->rktp_ops,
+        rd_kafka_OffsetRequest(rkb,
+			       rktp->rktp_rkt->rkt_topic->str,
+			       rktp->rktp_partition,
+			       &query_offset, 1,
+			       &rktp->rktp_ops,
                                rd_kafka_toppar_lag_handle_Offset,
                                rd_kafka_toppar_keep(rktp));
 
@@ -901,10 +911,14 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
         shptr_rd_kafka_toppar_t *s_rktp = opaque;
         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
         int64_t Offset;
+	size_t offset_cnt = 1;
 
         /* Parse and return Offset */
         err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
-				     rkbuf, request, rktp, &Offset);
+				     rkbuf, request,
+				     rktp->rktp_rkt->rkt_topic->str,
+				     rktp->rktp_partition,
+				     &Offset, &offset_cnt);
 
         if (err) {
                 rd_kafka_op_t *rko;
@@ -956,9 +970,9 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 
 	rd_kafka_toppar_lock(rktp);
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
-                     "Offset %"PRId64" request for %.*s [%"PRId32"] "
+                     "Offset %s request for %.*s [%"PRId32"] "
                      "returned offset %s (%"PRId64")",
-                     rktp->rktp_query_offset,
+                     rd_kafka_offset2str(rktp->rktp_query_offset),
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition, rd_kafka_offset2str(Offset), Offset);
 
@@ -1038,11 +1052,14 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
                 // FIXME: The op version is lost here.
 
                 s_rktp = rd_kafka_toppar_keep(rktp);
-                rd_kafka_OffsetRequest(rkb, rktp,
-                                       query_offset <=
-                                       RD_KAFKA_OFFSET_TAIL_BASE ?
-                                       RD_KAFKA_OFFSET_END :
-                                       query_offset,
+
+		if (query_offset <= RD_KAFKA_OFFSET_TAIL_BASE)
+			query_offset = RD_KAFKA_OFFSET_END;
+
+                rd_kafka_OffsetRequest(rkb,
+				       rktp->rktp_rkt->rkt_topic->str,
+				       rktp->rktp_partition,
+				       &query_offset, 1,
                                        &rktp->rktp_ops,
                                        rd_kafka_toppar_handle_Offset,
                                        s_rktp);
@@ -1059,14 +1076,16 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
  * Locality: toppar handler thread
  * Locks: none
  */
-static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
-                                         int64_t offset,
-                                         rd_kafka_op_t *rko_orig) {
+void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
+				  int64_t offset, rd_kafka_op_t *rko_orig) {
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_resp_err_t err = 0;
         int32_t version;
 
-        rkcg = rko_orig->rko_cgrp;
+	if (rko_orig)
+		rkcg = rko_orig->rko_cgrp;
+	else
+		rkcg = rd_kafka_cgrp_get(rktp->rktp_rkt->rkt_rk);
 
 	rd_kafka_toppar_lock(rktp);
 
@@ -1122,7 +1141,7 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 
         /* Signal back to caller thread that start has commenced, or err */
 err_reply:
-        if (rko_orig->rko_replyq) {
+        if (rko_orig && rko_orig->rko_replyq) {
                 rd_kafka_op_t *rko;
                 rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH_START);
                 rko->rko_err = err;
@@ -1173,8 +1192,8 @@ void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
  *
  * Locality: toppar handler thread
  */
-static void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
-                                        rd_kafka_op_t *rko_orig) {
+void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
+				 rd_kafka_op_t *rko_orig) {
         int32_t version;
 
 	rd_kafka_toppar_lock(rktp);
@@ -1193,8 +1212,11 @@ static void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
 
         /* Assign the future replyq to propagate stop results. */
         rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_replyq == NULL);
-        rktp->rktp_replyq = rko_orig->rko_replyq;
-        rko_orig->rko_replyq = NULL;
+	if (rko_orig) {
+		rd_kafka_assert(NULL, !rktp->rktp_replyq);
+		rktp->rktp_replyq = rko_orig->rko_replyq;
+		rko_orig->rko_replyq = NULL;
+	}
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_STOPPING);
 
         /* Stop offset store (possibly async).
@@ -1212,8 +1234,8 @@ static void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
  *
  * Locality: toppar handler thread
  */
-static void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
-                                  int64_t offset, rd_kafka_op_t *rko_orig) {
+void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
+			   int64_t offset, rd_kafka_op_t *rko_orig) {
         rd_kafka_resp_err_t err = 0;
         int32_t version;
 
@@ -1253,7 +1275,7 @@ static void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
 err_reply:
 	rd_kafka_toppar_unlock(rktp);
 
-        if (rko_orig->rko_replyq) {
+        if (rko_orig && rko_orig->rko_replyq) {
                 rd_kafka_op_t *rko;
                 rko = rd_kafka_op_new(RD_KAFKA_OP_SEEK);
                 rko->rko_err = err;
@@ -1623,7 +1645,7 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 
 	case RD_KAFKA_OP_RECV_BUF:
 		/* Handle response */
-		rd_kafka_buf_handle_op(rko);
+		rd_kafka_buf_handle_op(rko, rko->rko_err);
 		break;
 
 	default:
@@ -2121,28 +2143,40 @@ int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 	int ret = 0;
 
 	if (*rktpar->topic == '^') {
-		TRex *re;
-		const char *error;
+#if HAVE_REGEX
+		regex_t re;
+		int re_err;
 
 		/* FIXME: cache compiled regex */
-		if (!(re = trex_compile(rktpar->topic, &error))) {
+		re_err = regcomp(&re, rktpar->topic, REG_EXTENDED|REG_NOSUB);
+		if (re_err) {
+			char re_errstr[128];
+			regerror(re_err, &re, re_errstr, sizeof(re_errstr));
 			rd_kafka_dbg(rk, CGRP,
 				     "SUBMATCH",
 				     "Invalid regex for member "
 				     "\"%.*s\" subscription \"%s\": %s",
 				     RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
-				     rktpar->topic, error);
+				     rktpar->topic, re_errstr);
 			return 0;
 		}
 
-		if (trex_match(re, topic)) {
+		if (regexec(&re, topic, 0, NULL, 0) != REG_NOMATCH) {
 			if (matched_by_regex)
 				*matched_by_regex = 1;
 
 			ret = 1;
 		}
-
-		trex_free(re);
+		regfree(&re);
+#else
+		rd_kafka_dbg(rk, CGRP,
+			     "SUBMATCH",
+			     "Regex support not built in: can't match member "
+			     "\"%.*s\" subscription \"%s\"",
+			     RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
+			     rktpar->topic);
+		return 0;
+#endif
 
 	} else if (!strcmp(rktpar->topic, topic)) {
 

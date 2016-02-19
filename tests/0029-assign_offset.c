@@ -110,7 +110,7 @@ int main_0029_assign_offset (int argc, char **argv) {
 
 	/* Simple consumer */
 	TIMING_START(&t_simple, "SIMPLE.CONSUMER");
-	rk = test_create_consumer(topic, NULL, NULL, NULL);
+	rk = test_create_consumer(topic, NULL, NULL, NULL, NULL);
 	test_msgver_init(&mv, testid);
 	test_consumer_assign("SIMPLE.ASSIGN", rk, parts);
 	test_consumer_poll("SIMPLE.CONSUME", rk, testid, -1, 0,
@@ -130,7 +130,7 @@ int main_0029_assign_offset (int argc, char **argv) {
 	 * Offsets are set in rebalance callback. */
 	TIMING_START(&t_hl, "HL.CONSUMER");
 	test_msgver_init(&mv, testid);
-	rk = test_create_consumer(topic, rebalance_cb, NULL, NULL);
+	rk = test_create_consumer(topic, rebalance_cb, NULL, NULL, NULL);
 	test_consumer_subscribe(rk, topic);
 	test_consumer_poll("HL.CONSUME", rk, testid, -1, 0,
 			   partitions * (msgcnt / 2), &mv);

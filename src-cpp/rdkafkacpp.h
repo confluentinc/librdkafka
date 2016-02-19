@@ -871,6 +871,18 @@ class RD_EXPORT Handle {
    */
   virtual ErrorCode resume (std::vector<TopicPartition*> &partitions) = 0;
 
+
+  /**
+   * @brief Get low (oldest/beginning) and high (newest/end) offsets for
+   *        partition.
+   *
+   * Offsets are returned in \p *low and \p *high respectively.
+   *
+   * @returns RdKafka::ERR_NO_ERROR on success or an error code on failure.
+   */
+  virtual ErrorCode get_offsets (const std::string &topic, int32_t partition,
+				 int64_t *low, int64_t *high,
+				 int timeout_ms) = 0;
 };
 
 
@@ -1440,6 +1452,10 @@ class RD_EXPORT Consumer : public virtual Handle {
    * @brief Converts an offset into the logical offset from the tail of a topic.
    *
    * \p offset is the (positive) number of items from the end.
+   *
+   * @returns the logical offset for message \p offset from the tail, this value
+   *          may be passed to Consumer::start, et.al.
+   * @remark The returned logical offset is specific to librdkafka.
    */
   static int64_t OffsetTail(int64_t offset);
 };

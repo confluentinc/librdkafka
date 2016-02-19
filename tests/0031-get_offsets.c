@@ -1,3 +1,4 @@
+
 /*
  * librdkafka - Apache Kafka C library
  *
@@ -34,42 +35,38 @@
 
 
 /**
- * Test long topic names (>=255 characters), issue #529.
- * This broker-side issue only seems to occur when explicitly creating
- * topics with kafka-topics.sh --create, not with auto-created topics.
+ * Verify that rd_kafka_get_offsets() works.
  */
 
 
-int main_0028_long_topicnames (int argc, char **argv) {
-        const int msgcnt = 1000;
-        uint64_t testid;
-	char topic[256];
-	rd_kafka_t *rk_c;
-
-	memset(topic, 'a', sizeof(topic)-1);
-	topic[sizeof(topic)-1] = '\0';
-
-	strncpy(topic, test_mk_topic_name(topic, 1), sizeof(topic)-1);
-
-	TEST_SAY("Using topic name of %d bytes: %s\n",
-		 (int)strlen(topic), topic);
-
-	/* Create topic */
-	test_create_topic(topic, 1, 1);
-
-	/* First try a non-verifying consumer. The consumer has been known
-	 * to crash when the broker bug kicks in. */
-	rk_c = test_create_consumer(topic, NULL, NULL, NULL, NULL);
-	test_consumer_subscribe(rk_c, topic);
-	test_consumer_poll_no_msgs("consume.nomsgs", rk_c, 0, 5000);
-	test_consumer_close(rk_c);
+int main_0031_get_offsets (int argc, char **argv) {
+	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        const int msgcnt = 100;
+	rd_kafka_t *rk;
+	int64_t low = -1234, high = -1235;
+	rd_kafka_resp_err_t err;
+	test_timing_t t_get;
 
         /* Produce messages */
-        testid = test_produce_msgs_easy(topic, 0,
-                                        RD_KAFKA_PARTITION_UA, msgcnt);
+        test_produce_msgs_easy(topic, 0, 0, msgcnt);
 
-	/* Consume messages */
-	test_consume_msgs_easy(NULL, topic, testid, msgcnt);
+	/* Get offsets */
+	rk = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
+
+	TIMING_START(&t_get, "get_offsets");
+	err = rd_kafka_get_offsets(rk, topic, 0, &low, &high, 10*1000);
+	TIMING_STOP(&t_get);
+	if (err)
+		TEST_FAIL("get_offsets failed: %s\n", rd_kafka_err2str(err));
+
+	if (low != 0 && high != msgcnt)
+		TEST_FAIL("Expected low,high %d,%d, but got "
+			  "%"PRId64",%"PRId64,
+			  0, msgcnt, low, high);
+
+	TEST_SAY("Got offsets %"PRId64", %"PRId64"\n", low, high);
+
+	rd_kafka_destroy(rk);
 
         return 0;
 }

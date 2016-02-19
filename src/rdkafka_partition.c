@@ -1076,14 +1076,16 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
  * Locality: toppar handler thread
  * Locks: none
  */
-static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
-                                         int64_t offset,
-                                         rd_kafka_op_t *rko_orig) {
+void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
+				  int64_t offset, rd_kafka_op_t *rko_orig) {
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_resp_err_t err = 0;
         int32_t version;
 
-        rkcg = rko_orig->rko_cgrp;
+	if (rko_orig)
+		rkcg = rko_orig->rko_cgrp;
+	else
+		rkcg = rd_kafka_cgrp_get(rktp->rktp_rkt->rkt_rk);
 
 	rd_kafka_toppar_lock(rktp);
 
@@ -1139,7 +1141,7 @@ static void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 
         /* Signal back to caller thread that start has commenced, or err */
 err_reply:
-        if (rko_orig->rko_replyq) {
+        if (rko_orig && rko_orig->rko_replyq) {
                 rd_kafka_op_t *rko;
                 rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH_START);
                 rko->rko_err = err;
@@ -1190,8 +1192,8 @@ void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
  *
  * Locality: toppar handler thread
  */
-static void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
-                                        rd_kafka_op_t *rko_orig) {
+void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
+				 rd_kafka_op_t *rko_orig) {
         int32_t version;
 
 	rd_kafka_toppar_lock(rktp);
@@ -1210,8 +1212,11 @@ static void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
 
         /* Assign the future replyq to propagate stop results. */
         rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_replyq == NULL);
-        rktp->rktp_replyq = rko_orig->rko_replyq;
-        rko_orig->rko_replyq = NULL;
+	if (rko_orig) {
+		rd_kafka_assert(NULL, !rktp->rktp_replyq);
+		rktp->rktp_replyq = rko_orig->rko_replyq;
+		rko_orig->rko_replyq = NULL;
+	}
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_STOPPING);
 
         /* Stop offset store (possibly async).
@@ -1229,8 +1234,8 @@ static void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
  *
  * Locality: toppar handler thread
  */
-static void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
-                                  int64_t offset, rd_kafka_op_t *rko_orig) {
+void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
+			   int64_t offset, rd_kafka_op_t *rko_orig) {
         rd_kafka_resp_err_t err = 0;
         int32_t version;
 
@@ -1270,7 +1275,7 @@ static void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
 err_reply:
 	rd_kafka_toppar_unlock(rktp);
 
-        if (rko_orig->rko_replyq) {
+        if (rko_orig && rko_orig->rko_replyq) {
                 rd_kafka_op_t *rko;
                 rko = rd_kafka_op_new(RD_KAFKA_OP_SEEK);
                 rko->rko_err = err;

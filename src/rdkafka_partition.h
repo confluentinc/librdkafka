@@ -292,6 +292,13 @@ void rd_kafka_toppar_op (rd_kafka_toppar_t *rktp, rd_kafka_op_type_t type,
                          int64_t offset, rd_kafka_cgrp_t *rkcg,
                          rd_kafka_q_t *replyq);
 
+void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
+				  int64_t offset, rd_kafka_op_t *rko_orig);
+void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
+				 rd_kafka_op_t *rko_orig);
+void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
+			   int64_t offset, rd_kafka_op_t *rko_orig);
+
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start (rd_kafka_toppar_t *rktp,
                                                     int64_t offset,
                                                     rd_kafka_q_t *fwdq,

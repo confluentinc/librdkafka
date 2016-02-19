@@ -40,7 +40,7 @@
 
 
 struct expect {
-	const char *name;    /* sub-test name */
+	char *name;           /* sub-test name */
 	const char *sub[4];  /* subscriptions */
 	const char *exp[4];  /* expected topics */
 	int         stat[4]; /* per exp status */
@@ -173,6 +173,7 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 	/* Wait for assignment, actual messages are ignored. */
 	TIMING_START(&t_assign, "assignment");
 	exp->result = _EXP_NONE;
+	TEST_SAY("%s: waiting for assignment\n", exp->name);
 	while (exp->result == _EXP_NONE)
 		test_consumer_poll_once(rk, NULL, 1000);
 	TIMING_STOP(&t_assign);
@@ -190,6 +191,7 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 
 	/* Wait for revoke, actual messages are ignored. */
 	TIMING_START(&t_assign, "revoke");
+	TEST_SAY("%s: waiting for revoke\n", exp->name);
 	while (exp->result != _EXP_REVOKE)
 		test_consumer_poll_once(rk, NULL, 1000);
 	TIMING_STOP(&t_assign);
@@ -199,7 +201,8 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 	return exp->fails;
 }
 
-int main_0033_regex_subscribe (int argc, char **argv) {
+
+static int do_test (const char *assignor) {
 	static char topics[3][128];
 	static char nonexist_topic[128];
 	const int topic_cnt = 3;
@@ -208,6 +211,7 @@ int main_0033_regex_subscribe (int argc, char **argv) {
 	int i;
 	char groupid[64];
 	int fails = 0;
+	rd_kafka_conf_t *conf;
 
 	if (!test_check_builtin("regex")) {
 		TEST_SKIP("regex support not built in\n");
@@ -240,87 +244,104 @@ int main_0033_regex_subscribe (int argc, char **argv) {
 		test_produce_msgs_easy(topics[i], testid,
 				       RD_KAFKA_PARTITION_UA, msgcnt);
 
+	test_conf_init(&conf, NULL, 0);
+	test_conf_set(conf, "partition.assignment.strategy", assignor);
 
 	/* Create a single consumer to handle all subscriptions.
 	 * Has the nice side affect of testing multiple subscriptions. */
-	rk = test_create_consumer(groupid, rebalance_cb, NULL, NULL, NULL);
+	rk = test_create_consumer(groupid, rebalance_cb, conf, NULL, NULL);
 
-
+	/*
+	 * Test cases
+	 */
 	{
 		struct expect expect = {
-			.name = "no regexps (0&1)",
+			.name = rd_strdup(tsprintf("%s: no regexps (0&1)",
+						   assignor)),
 			.sub = { topics[0], topics[1], NULL },
 			.exp = { topics[0], topics[1], NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
+		rd_free(expect.name);
 	}
 
 	{
 		struct expect expect = {
-			.name = "no regexps (no matches)",
+			.name = rd_strdup(tsprintf("%s: no regexps "
+						   "(no matches)",
+						   assignor)),
 			.sub = { nonexist_topic, NULL },
 			.exp = { NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
+		rd_free(expect.name);
 	}
 
 	{
 		struct expect expect = {
-			.name = "regex all",
+			.name = rd_strdup(tsprintf("%s: regex all", assignor)),
 			.sub = { rd_strdup(tsprintf("^.*_%s", groupid)), NULL },
 			.exp = { topics[0], topics[1], topics[2], NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
-
+		rd_free(expect.name);
 		rd_free((void*)expect.sub[0]);
 	}
 
 	{
 		struct expect expect = {
-			.name = "regex 0&1",
+			.name = rd_strdup(tsprintf("%s: regex 0&1", assignor)),
 			.sub = { rd_strdup(tsprintf("^.*[tToOpPiIcC]_0+[12]_[^_]+_%s",
 						    groupid)), NULL },
 			.exp = { topics[0], topics[1], NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
-
+		rd_free(expect.name);
 		rd_free((void*)expect.sub[0]);
 	}
 
 	{
 		struct expect expect = {
-			.name = "regex 2",
-			.sub = { tsprintf("^.*TOOTHPIC_000._._%s",
-					  groupid), NULL },
+			.name = rd_strdup(tsprintf("%s: regex 2", assignor)),
+			.sub = { rd_strdup(tsprintf("^.*TOOTHPIC_000._._%s",
+						    groupid)), NULL },
 			.exp = { topics[2], NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
+		rd_free(expect.name);
+		rd_free((void *)expect.sub[0]);
 	}
 
 	{
 		struct expect expect = {
-			.name = "regex 2 and nonexistent(not seen)",
-			.sub = { tsprintf("^.*_000[34]_..?_%s",
-					  groupid), NULL },
+			.name = rd_strdup(tsprintf("%s: regex 2 and "
+						   "nonexistent(not seen)",
+						   assignor)),
+			.sub = { rd_strdup(tsprintf("^.*_000[34]_..?_%s",
+						    groupid)), NULL },
 			.exp = { topics[2], NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
+		rd_free(expect.name);
+		rd_free((void *)expect.sub[0]);
 	}
 
 	{
 		struct expect expect = {
-			.name = "broken regex",
+			.name = rd_strdup(tsprintf("%s: broken regex",
+						   assignor)),
 			.sub = { "^.*[0", NULL },
 			.exp = { NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
+		rd_free(expect.name);
 	}
 
 
@@ -332,4 +353,11 @@ int main_0033_regex_subscribe (int argc, char **argv) {
 		TEST_FAIL("See %d previous failures", fails);
 
         return 0;
+}
+
+
+int main_0033_regex_subscribe (int argc, char **argv) {
+	do_test("range");
+	do_test("roundrobin");
+	return 0;
 }

@@ -1536,7 +1536,6 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 	int32_t MessageSetSize = *MessageSetSizep;
 	size_t coutlen = 0;
 	int    outlen;
-	int r;
 #if WITH_SNAPPY
 	int    siovlen = 1;
 	struct snappy_env senv;

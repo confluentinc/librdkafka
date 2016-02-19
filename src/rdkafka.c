@@ -206,8 +206,13 @@ static const char *rd_kafka_type2str (rd_kafka_type_t type) {
 	return types[type];
 }
 
+#ifndef _MSC_VER
 #define _ERR_DESC(ENUM,DESC) \
 	[ENUM - RD_KAFKA_RESP_ERR__BEGIN] = { ENUM, # ENUM + 18/*pfx*/, DESC }
+#else
+#define _ERR_DESC(ENUM,DESC) \
+	{ ENUM, # ENUM + 18/*pfx*/, DESC }
+#endif
 
 static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 	_ERR_DESC(RD_KAFKA_RESP_ERR__BEGIN, NULL),
@@ -1774,8 +1779,8 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			return 0; /* Dont handle here */
 		{
 			struct consume_ctx ctx = {
-				.consume_cb = rk->rk_conf.consume_cb,
-				.opaque = rk->rk_conf.opaque };
+				rk->rk_conf.consume_cb,
+				rk->rk_conf.opaque };
 
 			rd_kafka_consume_cb(rk, rko, _Q_CB_CONSUMER, &ctx);
 		}

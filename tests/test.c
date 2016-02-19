@@ -1950,7 +1950,7 @@ int test_msgver_verify_part0 (const char *func, int line, const char *what,
 			      const char *topic, int partition,
 			      int msg_base, int exp_cnt) {
 	int fails = 0;
-	struct test_mv_vs vs = { .msg_base = msg_base, .exp_cnt = exp_cnt };
+	struct test_mv_vs vs = { msg_base, exp_cnt };
 	struct test_mv_p *p;
 
 	TEST_SAY("%s:%d: %s: Verifying %d received messages (flags 0x%x) "
@@ -1995,7 +1995,7 @@ int test_msgver_verify0 (const char *func, int line, const char *what,
 			 test_msgver_t *mv,
 			 int flags, int msg_base, int exp_cnt) {
 	int fails = 0;
-	struct test_mv_vs vs = { .msg_base = msg_base, .exp_cnt = exp_cnt };
+	struct test_mv_vs vs = { msg_base, exp_cnt };
 
 	TEST_SAY("%s:%d: %s: Verifying %d received messages (flags 0x%x): "
 		 "expecting msgids %d..%d (%d)\n",

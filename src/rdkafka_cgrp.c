@@ -424,6 +424,9 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 				rd_kafka_broker_t *rkb,
 				const char *reason) {
 
+	if (!rkb && !(rkb = rkcg->rkcg_rkb))
+		return;
+
         rd_rkb_dbg(rkb, CGRP, "CGRPQUERY",
                    "Group \"%.*s\": querying for coordinator: %s",
                    RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), reason);

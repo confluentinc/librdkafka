@@ -968,15 +968,35 @@ rd_kafka_metadata_handle (rd_kafka_broker_t *rkb,
          * now update our internal state according to the response. */
 
 	/* Update our list of brokers. */
-	for (i = 0 ; i < md->broker_cnt ; i++) {
-		rd_rkb_dbg(rkb, METADATA, "METADATA",
-			   "  Broker #%i/%i: %s:%i NodeId %"PRId32,
-			   i, md->broker_cnt,
-                           md->brokers[i].host,
-                           md->brokers[i].port,
-                           md->brokers[i].id);
-		rd_kafka_broker_update(rkb->rkb_rk, &md->brokers[i]);
-	}
+        if (rkb->rkb_rk->rk_conf.metadata_refresh_sparse == 0) {
+            for (i = 0 ; i < md->broker_cnt ; i++) {
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                        "  Broker #%i/%i: %s:%i NodeId %"PRId32,
+                        i, md->broker_cnt,
+                        md->brokers[i].host,
+                        md->brokers[i].port,
+                        md->brokers[i].id);
+                rd_kafka_broker_update(rkb->rkb_rk, &md->brokers[i]);
+            }
+        } else {
+            for (i = 0 ; i < md->broker_cnt ; i++) {
+                for (j = 0 ; j < md->topic_cnt ; j++) {
+                    for (k = 0 ; k < md->topics[j].partition_cnt ; k++) {
+                        if (md->topics[j].partitions[k].leader
+                                == md->brokers[i].id) {
+                            rd_rkb_dbg(rkb, METADATA, "METADATA",
+                                    "  Topic: %s, Broker #%i/%i: %s:%i NodeId %"PRId32,
+                                    md->topics[j].topic,
+                                    i, md->broker_cnt,
+                                    md->brokers[i].host,
+                                    md->brokers[i].port,
+                                    md->brokers[i].id);
+                            rd_kafka_broker_update(rkb->rkb_rk, &md->brokers[i]);
+                        }
+                    }
+                }
+            }
+        }
 
 	/* Update partition count and leader for each topic we know about */
 	for (i = 0 ; i < md->topic_cnt ; i++) {

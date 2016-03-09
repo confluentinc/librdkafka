@@ -1847,7 +1847,7 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 
 	if (state.err)
 		return state.err;
-	else if (state.cnt != 2)
+	else if (state.cnt == 0 || state.cnt > 2)
 		return RD_KAFKA_RESP_ERR__FAIL;
 
 	/* Broker may return offsets in no parcitular order. */
@@ -1858,6 +1858,10 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 		*low = state.offsets[1];
 		*high = state.offsets[0];
 	}
+
+	/* If partition is empty only one offset (the last) will be returned. */
+	if (*low < 0 && *high >= 0)
+		*low = *high;
 
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

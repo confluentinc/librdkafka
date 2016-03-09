@@ -1756,6 +1756,7 @@ struct _get_offsets_state {
 	int32_t partition;
 	int64_t offsets[2];
 	size_t  cnt;
+	rd_ts_t ts_end;
 };
 
 static void rd_kafka_get_offsets_resp_cb (rd_kafka_t *rk,
@@ -1771,6 +1772,20 @@ static void rd_kafka_get_offsets_resp_cb (rd_kafka_t *rk,
 				     state->offsets, &state->cnt);
 	if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
 		return; /* Retrying */
+
+	/* Retry if no broker connection is available yet. */
+	if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
+	     err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
+	    rkb &&
+	    rd_clock() + (50 * 1000) < state->ts_end) {
+		/* Sleep and retry */
+		rd_usleep(50 * 1000, &rkb->rkb_rk->rk_terminate);
+
+		request->rkbuf_retries = 0;
+		if (rd_kafka_buf_retry(rkb, request))
+			return; /* Retry in progress */
+		/* FALLTHRU */
+	}
 
 	state->err = err;
 }
@@ -1799,7 +1814,8 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 			break;
 
 		if (timeout_ms > 0)
-			rd_usleep(RD_MIN(10, timeout_ms), &rk->rk_terminate);
+			rd_usleep(RD_MIN(10, timeout_ms)*1000,
+				  &rk->rk_terminate);
 	} while (rd_clock() < ts_end);
 
 	if (!rkb) {
@@ -1815,6 +1831,7 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 	state.offsets[1] = RD_KAFKA_OFFSET_END;
 	state.cnt = 2;
 	state.err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
+	state.ts_end = ts_end;
 
 	rd_kafka_OffsetRequest(rkb, topic, partition, state.offsets, state.cnt,
 			       replyq, rd_kafka_get_offsets_resp_cb, &state);

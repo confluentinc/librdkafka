@@ -21,7 +21,9 @@ LIBNAME0=$(LIBNAME:lib%=%)
 # Silence lousy default ARFLAGS (rv)
 ARFLAGS=
 
+ifndef MKL_MAKEFILE_CONFIG
 -include $(TOPDIR)/Makefile.config
+endif
 
 _UNAME_S := $(shell uname -s)
 ifeq ($(_UNAME_S),Darwin)

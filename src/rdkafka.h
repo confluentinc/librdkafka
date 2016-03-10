@@ -1397,7 +1397,7 @@ rd_kafka_resume_partitions (rd_kafka_t *rk,
 
 
 /**
- * @brief Get low (oldest/beginning) and high (newest/end) offsets
+ * @brief Query broker for low (oldest/beginning) and high (newest/end) offsets
  *        for partition.
  *
  * Offsets are returned in \p *low and \p *high respectively.
@@ -1405,9 +1405,31 @@ rd_kafka_resume_partitions (rd_kafka_t *rk,
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on failure.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_get_offsets (rd_kafka_t *rk,
+rd_kafka_query_watermark_offsets (rd_kafka_t *rk,
 		      const char *topic, int32_t partition,
 		      int64_t *low, int64_t *high, int timeout_ms);
+
+
+/**
+ * @brief Get last known low (oldest/beginning) and high (newest/end) offsets
+ *        for partition.
+ *
+ * The low offset is updated periodically (if statistics.interval.ms is set)
+ * while the high offset is updated on each fetched message set from the broker.
+ *
+ * If there is no cached offset (either low or high, or both) then
+ * RD_KAFKA_OFFSET_INVALID will be returned for the respective offset.
+ *
+ * Offsets are returned in \p *low and \p *high respectively.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on failure.
+ *
+ * @remark Shall only be used with an active consumer instance.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_get_watermark_offsets (rd_kafka_t *rk,
+				const char *topic, int32_t partition,
+				int64_t *low, int64_t *high);
 
 
 

@@ -147,7 +147,8 @@ int main_0006_symbols (int argc, char **argv) {
 		rd_kafka_topic_partition_list_copy(NULL);
 		rd_kafka_topic_partition_list_set_offset(NULL, NULL, 0, 0);
 		rd_kafka_topic_partition_list_find(NULL, NULL, 0);
-		rd_kafka_get_offsets(NULL, NULL, 0, NULL, NULL, 0);
+		rd_kafka_query_watermark_offsets(NULL, NULL, 0, NULL, NULL, 0);
+		rd_kafka_get_watermark_offsets(NULL, NULL, 0, NULL, NULL);
         }
 
 

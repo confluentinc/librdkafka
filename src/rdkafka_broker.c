@@ -2862,12 +2862,14 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 continue;
                         }
 
-
-			rd_kafka_toppar_lock(rktp);
-
                         /* Update hi offset to be able to compute
                          * consumer lag. */
                         rktp->rktp_offsets.hi_offset = hdr.HighwaterMarkOffset;
+
+			rd_kafka_toppar_lock(rktp);
+
+			/* High offset for get_watermark_offsets() */
+			rktp->rktp_hi_offset = hdr.HighwaterMarkOffset;
 
 			/* If this is the last message of the queue,
 			 * signal EOF back to the application. */

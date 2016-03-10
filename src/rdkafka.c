@@ -678,7 +678,7 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rktp->rktp_committed_offset,
                    offs.eof_offset,
 		   rktp->rktp_lo_offset,
-		   offs.hi_offset,
+		   rktp->rktp_hi_offset,
                    consumer_lag,
                    rd_atomic64_get(&rktp->rktp_c.tx_msgs),
 		   rd_atomic64_get(&rktp->rktp_c.tx_bytes),
@@ -1750,7 +1750,7 @@ rd_kafka_position (rd_kafka_t *rk,
 
 
 
-struct _get_offsets_state {
+struct _query_wmark_offsets_state {
 	rd_kafka_resp_err_t err;
 	const char *topic;
 	int32_t partition;
@@ -1759,13 +1759,13 @@ struct _get_offsets_state {
 	rd_ts_t ts_end;
 };
 
-static void rd_kafka_get_offsets_resp_cb (rd_kafka_t *rk,
-					  rd_kafka_broker_t *rkb,
-					  rd_kafka_resp_err_t err,
-					  rd_kafka_buf_t *rkbuf,
-					  rd_kafka_buf_t *request,
-					  void *opaque) {
-	struct _get_offsets_state *state = opaque;
+static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
+						  rd_kafka_broker_t *rkb,
+						  rd_kafka_resp_err_t err,
+						  rd_kafka_buf_t *rkbuf,
+						  rd_kafka_buf_t *request,
+						  void *opaque) {
+	struct _query_wmark_offsets_state *state = opaque;
 
 	err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request,
 				     state->topic, state->partition,
@@ -1792,11 +1792,12 @@ static void rd_kafka_get_offsets_resp_cb (rd_kafka_t *rk,
 
 
 rd_kafka_resp_err_t
-rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
-		      int64_t *low, int64_t *high, int timeout_ms) {
+rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
+				  int32_t partition,
+				  int64_t *low, int64_t *high, int timeout_ms) {
 	rd_kafka_broker_t *rkb;
 	rd_kafka_q_t *replyq;
-	struct _get_offsets_state state;
+	struct _query_wmark_offsets_state state;
 	shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
 	rd_ts_t ts_end = rd_clock() +
@@ -1805,7 +1806,7 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 	/* Look up toppar so we know which broker to query. */
 	s_rktp = rd_kafka_toppar_get2(rk, topic, partition, 0, 1);
 	if (!s_rktp)
-		return RD_KAFKA_RESP_ERR__INVALID_ARG;
+		return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 	rktp = rd_kafka_toppar_s2i(s_rktp);
 
 	/* Get toppar's leader broker. */
@@ -1834,7 +1835,8 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 	state.ts_end = ts_end;
 
 	rd_kafka_OffsetRequest(rkb, topic, partition, state.offsets, state.cnt,
-			       replyq, rd_kafka_get_offsets_resp_cb, &state);
+			       replyq, rd_kafka_query_wmark_offsets_resp_cb,
+			       &state);
         rd_kafka_broker_destroy(rkb);
 
         /* Wait for reply (or timeout) */
@@ -1862,6 +1864,29 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 	/* If partition is empty only one offset (the last) will be returned. */
 	if (*low < 0 && *high >= 0)
 		*low = *high;
+
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_get_watermark_offsets (rd_kafka_t *rk, const char *topic,
+				int32_t partition,
+				int64_t *low, int64_t *high) {
+	shptr_rd_kafka_toppar_t *s_rktp;
+	rd_kafka_toppar_t *rktp;
+
+	s_rktp = rd_kafka_toppar_get2(rk, topic, partition, 0, 1);
+	if (!s_rktp)
+		return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+	rktp = rd_kafka_toppar_s2i(s_rktp);
+
+	rd_kafka_toppar_lock(rktp);
+	*low = rktp->rktp_lo_offset;
+	*high = rktp->rktp_hi_offset;
+	rd_kafka_toppar_unlock(rktp);
+
+	rd_kafka_toppar_destroy(s_rktp);
 
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

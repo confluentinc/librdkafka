@@ -873,16 +873,38 @@ class RD_EXPORT Handle {
 
 
   /**
-   * @brief Get low (oldest/beginning) and high (newest/end) offsets for
-   *        partition.
+   * @brief Query broker for low (oldest/beginning)
+   *        and high (newest/end) offsets for partition.
    *
    * Offsets are returned in \p *low and \p *high respectively.
    *
    * @returns RdKafka::ERR_NO_ERROR on success or an error code on failure.
    */
-  virtual ErrorCode get_offsets (const std::string &topic, int32_t partition,
-				 int64_t *low, int64_t *high,
-				 int timeout_ms) = 0;
+  virtual ErrorCode query_watermark_offsets (const std::string &topic,
+					     int32_t partition,
+					     int64_t *low, int64_t *high,
+					     int timeout_ms) = 0;
+
+  /**
+   * @brief Get last known low (oldest/beginning)
+   *        and high (newest/end) offsets for partition.
+   *
+   * The low offset is updated periodically (if statistics.interval.ms is set)
+   * while the high offset is updated on each fetched message set from the
+   * broker.
+   *
+   * If there is no cached offset (either low or high, or both) then
+   * OFFSET_INVALID will be returned for the respective offset.
+   *
+   * Offsets are returned in \p *low and \p *high respectively.
+   *
+   * @returns RdKafka::ERR_NO_ERROR on success or an error code on failure.
+   *
+   * @remark Shall only be used with an active consumer instance.
+   */
+  virtual ErrorCode get_watermark_offsets (const std::string &topic,
+					   int32_t partition,
+					   int64_t *low, int64_t *high) = 0;
 };
 
 

@@ -632,9 +632,10 @@ int main (int argc, char **argv) {
 
 			/* Only query for hi&lo partition watermarks */
 
-			if ((err = rd_kafka_get_offsets(rk, topic, partition,
-							&lo, &hi, 5000))) {
-				fprintf(stderr, "%% get_offsets() failed: %s\n",
+			if ((err = rd_kafka_query_watermark_offsets(
+				     rk, topic, partition, &lo, &hi, 5000))) {
+				fprintf(stderr, "%% query_watermark_offsets() "
+					"failed: %s\n",
 					rd_kafka_err2str(err));
 				exit(1);
 			}

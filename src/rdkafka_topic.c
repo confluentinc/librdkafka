@@ -235,7 +235,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
         s_rkt = rd_kafka_topic_new0(rk, topic, conf, &existing, 1/*lock*/);
         if (!s_rkt)
-                return rd_kafka_topic_s2a(s_rkt);
+                return NULL;
 
         rkt = rd_kafka_topic_s2i(s_rkt);
 

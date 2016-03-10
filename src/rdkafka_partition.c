@@ -857,6 +857,9 @@ void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
         }
 
         rktp->rktp_next_offset = Offset;
+	/* Bump version barrier. */
+	rd_atomic32_add(&rktp->rktp_version, 1);
+
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_ACTIVE);
 }
 

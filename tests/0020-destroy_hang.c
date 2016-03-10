@@ -69,7 +69,8 @@ static int nonexist_part (void) {
 			 group_id);
 
 		/* Consume messages */
-		test_consume_msgs_easy(group_id, topic, testid, msgcnt);
+		test_consume_msgs_easy(group_id, topic, testid, -1,
+				       msgcnt, NULL);
 
 		/*
 		 * Now start a new consumer and query stored offsets (positions)

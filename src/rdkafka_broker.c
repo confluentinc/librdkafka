@@ -2909,9 +2909,11 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                 rktp->rktp_offsets.fetch_offset;
                                         rktp->rktp_offsets.fetch_offset =
                                                 RD_KAFKA_OFFSET_INVALID;
-					rd_kafka_offset_reset(rktp, err_offset,
-							      hdr.ErrorCode,
-							      "Fetch response");
+					rd_kafka_offset_reset(
+						rktp, err_offset,
+						hdr.ErrorCode,
+						rd_kafka_err2str(hdr.
+								 ErrorCode));
                                 }
                                 break;
 				case RD_KAFKA_RESP_ERR__PARTITION_EOF:

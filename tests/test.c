@@ -105,6 +105,7 @@ _TEST_DECL(0029_assign_offset);
 _TEST_DECL(0030_offset_commit);
 _TEST_DECL(0031_get_offsets);
 _TEST_DECL(0033_regex_subscribe);
+_TEST_DECL(0034_offset_reset);
 
 /**
  * Define all tests here
@@ -139,6 +140,7 @@ struct test tests[] = {
 	_TEST(0030_offset_commit, 0),
 	_TEST(0031_get_offsets, 0),
 	_TEST(0033_regex_subscribe, 0),
+	_TEST(0034_offset_reset, 0),
         { NULL }
 };
 
@@ -1389,13 +1391,14 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
  */
 void
 test_consume_msgs_easy (const char *group_id, const char *topic,
-                        uint64_t testid, int exp_msgcnt) {
+                        uint64_t testid, int exp_eofcnt, int exp_msgcnt,
+			rd_kafka_topic_conf_t *tconf) {
         rd_kafka_t *rk;
-        rd_kafka_topic_conf_t *tconf;
 	test_msgver_t mv;
 	char grpid0[64];
 
-        test_conf_init(NULL, &tconf, 0);
+	if (!tconf)
+		test_conf_init(NULL, &tconf, 0);
 
 	if (!group_id)
 		group_id = test_str_id_generate(grpid0, sizeof(grpid0));
@@ -1414,7 +1417,8 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
 	test_msgver_init(&mv, testid);
 
         /* Consume messages */
-        test_consumer_poll("consume.easy", rk, testid, -1, -1, exp_msgcnt, &mv);
+        test_consumer_poll("consume.easy", rk, testid, exp_eofcnt,
+			   -1, exp_msgcnt, &mv);
 
 	test_msgver_clear(&mv);
 

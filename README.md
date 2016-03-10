@@ -22,52 +22,23 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 [![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
 
-**Apache Kafka 0.9 support:**
+Version support
 
-  * Branch: master
-  * Producer: supported
-  * High-level balanced KafkaConsumer: supported
-  * Simple Consumer: supported
-  * Compression: snappy and gzip
-  * Broker version support: >=0.8
-  * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
-  * ZooKeeper: not supported
-  * C API: Stable, ABI safe, backwards compatible with 0.8
-  * C++ API: Stable
-  * Tests: Regression tests in `tests/` directory.
-  * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
-  * Status: Testing
-
-
-**Apache Kafka 0.8 support:**
-
-  * Branch: 0.8
-  * Producer: supported
-  * High-level Consumer: not supported
-  * Simple Consumer: supported
-  * Compression: snappy and gzip
-  * Broker version support: >=0.8
-  * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
-  * ZooKeeper: not supported
-  * C API: Stable, ABI safe, not backwards compatible with 0.7
-  * C++ API: Testing
-  * Tests: Regression tests in `tests/` directory.
-  * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
-  * Status: Stable
-
-
-**Apache Kafka 0.7 support:**
-
-  * Branch: 0.7
-  * Producer: supported
-  * High-level Consumer: not supported
-  * Simple Consumer: supported
-  * Compression: not supported
-  * Broker version support: 0.7.x
-  * ZooKeeper: not supported
-  * Status: Stable, Deprecated, Unsupported
-
-
+ | 0.9.x | 0.8.x | 0.7.x
+----|-------|-------|------
+Branch | master | 0.8 | 0.7
+Producer | Supported | Supported | Supported
+High-level balanced KafkaConsumer | Supported | - | -
+Simple Consumer | Supported | Supported | Supported
+Compression | Snappy, GZIP | Snappy, GZIP | -
+Broker Version | 0.8+ | 0.8+ | 0.7
+Debian Package | librdkafka1, librdkafka-dev | librdkafka1, librdkafka-dev | -
+Zookeeper | - | - | -
+C API | Stable, ABi safe, backwards compatible with 0.8 | Stable, ABI safe, not backwards compatible with 0.7 | -
+C++ API | Stable | Testing | -
+Tests | Regression tests in `tests/` directory | Regression tests in `tests/` directory | -
+Statistics | JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h` | JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h` | -
+Status | Testing | Stable | Stable, Deprecated, Unsupported
 
 
 #Language bindings#

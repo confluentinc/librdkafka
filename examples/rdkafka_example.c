@@ -39,7 +39,6 @@
 #include <stdlib.h>
 #include <syslog.h>
 #include <sys/time.h>
-#include <errno.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
@@ -575,8 +574,7 @@ int main (int argc, char **argv) {
 					"%% Failed to produce to topic %s "
 					"partition %i: %s\n",
 					rd_kafka_topic_name(rkt), partition,
-					rd_kafka_err2str(
-						rd_kafka_errno2err(errno)));
+					rd_kafka_err2str(rd_kafka_last_error()));
 				/* Poll to handle delivery reports */
 				rd_kafka_poll(rk, 0);
 				continue;
@@ -655,9 +653,10 @@ int main (int argc, char **argv) {
 
 		/* Start consuming */
 		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
+			rd_kafka_resp_err_t err = rd_kafka_last_error();
 			fprintf(stderr, "%% Failed to start consuming: %s\n",
-				rd_kafka_err2str(rd_kafka_errno2err(errno)));
-                        if (errno == EINVAL)
+				rd_kafka_err2str(err));
+                        if (err == RD_KAFKA_RESP_ERR__INVALID_ARG)
                                 fprintf(stderr,
                                         "%% Broker based offset storage "
                                         "requires a group.id, "

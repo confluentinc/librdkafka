@@ -156,7 +156,8 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	if (!topic) {
 		if (conf)
 			rd_kafka_topic_conf_destroy(conf);
-		errno = EINVAL;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
+					EINVAL);
 		return NULL;
 	}
 

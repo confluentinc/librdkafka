@@ -1991,7 +1991,7 @@ rd_kafka_position (rd_kafka_t *rk,
  * @sa Use rd_kafka_errno2err() to convert `errno` to rdkafka error code.
  */
 RD_EXPORT
-int rd_kafka_produce(rd_kafka_topic_t *rkt, int32_t partitition,
+int rd_kafka_produce(rd_kafka_topic_t *rkt, int32_t partition,
 		      int msgflags,
 		      void *payload, size_t len,
 		      const void *key, size_t keylen,

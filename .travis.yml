@@ -1,12 +1,13 @@
 language: c
+cache: ccache
 compiler:
   - gcc
   - clang
 os:
   - linux
   - osx
-
+before_script: ccache -s || echo "CCache is not available."
 script:
-  ./configure && make all examples check && make -C tests run_local
+  ./configure && make -j2 all examples check && make -C tests run_local
 
 sudo: false

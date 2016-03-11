@@ -1200,7 +1200,7 @@ int32_t rd_kafka_msg_partitioner_random(const rd_kafka_topic_t *rkt,
  *
  * Uses consistent hashing to map identical keys onto identical partitions.
  *
- * @returns a \"random\" partition between 0 and partition_cnt - 1 based on
+ * @returns a \"random\" partition between 0 and \p partition_cnt - 1 based on
  *          the CRC value of the key
  */
 RD_EXPORT
@@ -1210,13 +1210,13 @@ int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
 					 void *opaque, void *msg_opaque);
 
 /**
- * Consistent-Random partitioner.
+ * @brief Consistent-Random partitioner.
  *
  * This is the default partitioner.
  * Uses consistent hashing to map identical keys onto identical partitions, and
  * messages without keys will be assigned via the random partitioner.
  *
- * @returns a \"random\" partition between 0 and partition_cnt - 1 based on
+ * @returns a \"random\" partition between 0 and \p partition_cnt - 1 based on
  *          the CRC value of the key (if provided)
  */
 RD_EXPORT

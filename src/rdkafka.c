@@ -369,7 +369,7 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 	int idx = err - RD_KAFKA_RESP_ERR__BEGIN;
 
 	if (unlikely(err <= RD_KAFKA_RESP_ERR__BEGIN ||
-		     err >= RD_KAFKA_RESP_ERR_END ||
+		     err >= RD_KAFKA_RESP_ERR_END_ALL ||
 		     !rd_kafka_err_descs[idx].desc)) {
 		rd_snprintf(ret, sizeof(ret), "Err-%i?", err);
 		return ret;
@@ -384,7 +384,7 @@ const char *rd_kafka_err2name (rd_kafka_resp_err_t err) {
 	int idx = err - RD_KAFKA_RESP_ERR__BEGIN;
 
 	if (unlikely(err <= RD_KAFKA_RESP_ERR__BEGIN ||
-		     err >= RD_KAFKA_RESP_ERR_END ||
+		     err >= RD_KAFKA_RESP_ERR_END_ALL ||
 		     !rd_kafka_err_descs[idx].desc)) {
 		rd_snprintf(ret, sizeof(ret), "ERR_%i?", err);
 		return ret;

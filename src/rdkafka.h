@@ -323,7 +323,7 @@ typedef enum {
 	/** Cluster authorization failed */
 	RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED = 31,
 
-	RD_KAFKA_RESP_ERR_END,
+	RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
 
 

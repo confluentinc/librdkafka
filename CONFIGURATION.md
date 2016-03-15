@@ -24,7 +24,7 @@ socket.keepalive.enable                  |  *  |         false | Enable TCP keep
 socket.max.fails                         |  *  |             3 | Disconnect from broker when this number of send failures (e.g., timed out requests) is reached. Disable with 0. NOTE: The connection is automatically re-established.
 broker.address.ttl                       |  *  |          1000 | How long to cache the broker address resolving results (milliseconds).
 broker.address.family                    |  *  |           any | Allowed broker IP address families: any, v4, v6
-reconnect.backoff.jitter.ms              |  *  |             0 | Throttle broker reconnection attempts by this value +-50%.
+reconnect.backoff.jitter.ms              |  *  |           500 | Throttle broker reconnection attempts by this value +-50%.
 statistics.interval.ms                   |  *  |             0 | librdkafka statistics emit interval. The application also needs to register a stats callback using `rd_kafka_conf_set_stats_cb()`. The granularity is 1000ms. A value of 0 disables statistics.
 error_cb                                 |  *  |               | Error callback (set with rd_kafka_conf_set_error_cb())
 throttle_cb                              |  *  |               | Throttle callback (set with rd_kafka_conf_set_throttle_cb())

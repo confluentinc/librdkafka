@@ -3665,7 +3665,11 @@ static int rd_kafka_broker_name_parse (rd_kafka_t *rk,
 				       const char **host,
 				       uint16_t *port) {
 	char *s = *name;
+	char *orig;
 	char *n, *t, *t2;
+
+	/* Save a temporary copy of the original name for logging purposes */
+	rd_strdupa(&orig, *name);
 
 	/* Find end of this name (either by delimiter or end of string */
 	if ((n = strchr(s, ',')))
@@ -3679,8 +3683,12 @@ static int rd_kafka_broker_name_parse (rd_kafka_t *rk,
 		int i;
 		/* "proto://host[:port]" */
 
-		if (t == s)
-			return -1; /* empty proto */
+		if (t == s) {
+			rd_kafka_log(rk, LOG_WARNING, "BROKER",
+				     "Broker name \"%s\" parse error: "
+				     "empty protocol name", orig);
+			return -1;
+		}
 
 		/* Make protocol uppercase */
 		for (t2 = s ; t2 < t ; t2++)
@@ -3694,14 +3702,27 @@ static int rd_kafka_broker_name_parse (rd_kafka_t *rk,
 				break;
 
 		/* Unsupported protocol */
-		if (i == RD_KAFKA_PROTO_NUM)
+		if (i == RD_KAFKA_PROTO_NUM) {
+			rd_kafka_log(rk, LOG_WARNING, "BROKER",
+				     "Broker name \"%s\" parse error: "
+				     "unsupported protocol \"%s\"", orig, s);
+
 			return -1;
+		}
 
 		*proto = i;
 
                 /* Enforce protocol */
-		if (rk->rk_conf.security_protocol != *proto)
+		if (rk->rk_conf.security_protocol != *proto) {
+			rd_kafka_log(rk, LOG_WARNING, "BROKER",
+				     "Broker name \"%s\" parse error: "
+				     "protocol \"%s\" does not match "
+				     "security.protocol setting \"%s\"",
+				     orig, s,
+				     rd_kafka_secproto_names[
+					     rk->rk_conf.security_protocol]);
 			return -1;
+		}
 
 		/* Hostname starts here */
 		s = t+3;

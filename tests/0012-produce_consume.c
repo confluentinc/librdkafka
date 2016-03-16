@@ -491,7 +491,7 @@ static void test_produce_consume (void) {
 
         /* Read test.conf to configure topic name */
         test_conf_init(NULL, NULL, 20);
-        topic = test_mk_topic_name("0012", 0);
+        topic = test_mk_topic_name("0012", 1);
 
 	TEST_SAY("Topic %s, testid %"PRIu64"\n", topic, testid);
 

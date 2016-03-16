@@ -349,13 +349,14 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 					      int is_waitresp_q,
 					      rd_kafka_bufq_t *rkbq,
+					      rd_kafka_resp_err_t err,
 					      rd_ts_t now) {
 	rd_kafka_buf_t *rkbuf, *tmp;
 	int cnt = 0;
 
 	TAILQ_FOREACH_SAFE(rkbuf, &rkbq->rkbq_bufs, rkbuf_link, tmp) {
 
-		if (likely(rkbuf->rkbuf_ts_timeout > now))
+		if (likely(now && rkbuf->rkbuf_ts_timeout > now))
 			continue;
 
 		rd_kafka_bufq_deq(rkbq, rkbuf);
@@ -363,9 +364,7 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 		if (is_waitresp_q && rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING)
                         rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1);
 
-                rd_kafka_buf_callback(rkb->rkb_rk, rkb,
-				      RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
-				      NULL, rkbuf);
+                rd_kafka_buf_callback(rkb->rkb_rk, rkb, err, NULL, rkbuf);
 		cnt++;
 	}
 
@@ -384,11 +383,11 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
 	/* Outstanding requests waiting for response */
-	req_cnt = rd_kafka_broker_bufq_timeout_scan(rkb, 1,
-						    &rkb->rkb_waitresps, now);
+	req_cnt = rd_kafka_broker_bufq_timeout_scan(
+		rkb, 1, &rkb->rkb_waitresps, RD_KAFKA_RESP_ERR__TIMED_OUT, now);
 	/* Requests in local queue not sent yet. */
-	q_cnt = rd_kafka_broker_bufq_timeout_scan(rkb, 0,
-						  &rkb->rkb_outbufs, now);
+	q_cnt = rd_kafka_broker_bufq_timeout_scan(
+		rkb, 0, &rkb->rkb_outbufs, RD_KAFKA_RESP_ERR__TIMED_OUT, now);
 
 	if (req_cnt + q_cnt > 0) {
 		rd_rkb_dbg(rkb, MSG, "REQTMOUT", "Timed out %i+%i requests",
@@ -3362,12 +3361,36 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 rd_kafka_broker_lock(rkb);
 				rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
                                 rd_kafka_broker_unlock(rkb);
-                        } else if (!rd_kafka_terminating(rkb->rkb_rk)) {
+                        } else if (rd_kafka_terminating(rkb->rkb_rk)) {
+				/* Connection torn down and handle is
+				 * terminating: fail the send+retry queue
+				 * to speed up termination, otherwise we'll
+				 * need to wait for request timeouts. */
+				int r;
+
+				r = rd_kafka_broker_bufq_timeout_scan(
+					rkb, 0, &rkb->rkb_outbufs,
+					RD_KAFKA_RESP_ERR__DESTROY, 0);
+				r += rd_kafka_broker_bufq_timeout_scan(
+					rkb, 0, &rkb->rkb_retrybufs,
+					RD_KAFKA_RESP_ERR__DESTROY, 0);
+				rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+					   "Handle is terminating: "
+					   "failed %d request(s) in "
+					   "retry+outbuf", r);
+
+			} else {
 				/* Connection torn down, sleep a short while to
 				 * avoid busy-looping on protocol errors */
 				rd_usleep(100*1000/*100ms*/, &rk->rk_terminate);
-
 			}
+			rd_rkb_dbg(rkb, BROKER, "X",
+				   "refcnt %d, ops %d, outbuf %d, wait %d, retry %d",
+				   rd_refcnt_get(&rkb->rkb_refcnt),
+				   rd_kafka_q_len(&rkb->rkb_ops),
+				   rkb->rkb_outbufs.rkbq_cnt.val,
+				   rkb->rkb_waitresps.rkbq_cnt.val,
+				   rkb->rkb_retrybufs.rkbq_cnt.val);
 			break;
 		}
 

@@ -75,8 +75,11 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
 				     rktp->rktp_rkt->rkt_topic->str,
 				     rktp->rktp_partition,
 				     &Offset, &offset_cnt);
-        if (!err)
+        if (!err) {
+		rd_kafka_toppar_lock(rktp);
                 rktp->rktp_lo_offset = Offset;
+		rd_kafka_toppar_unlock(rktp);
+	}
 
         rktp->rktp_wait_consumer_lag_resp = 0;
 
@@ -148,7 +151,8 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
 	rktp->rktp_offset_fp = NULL;
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets);
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets_fin);
-        rktp->rktp_lo_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_hi_offset = RD_KAFKA_OFFSET_INVALID;
+	rktp->rktp_lo_offset = RD_KAFKA_OFFSET_INVALID;
 	rktp->rktp_app_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_stored_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_committed_offset = RD_KAFKA_OFFSET_INVALID;
@@ -857,6 +861,9 @@ void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
         }
 
         rktp->rktp_next_offset = Offset;
+	/* Bump version barrier. */
+	rd_atomic32_add(&rktp->rktp_version, 1);
+
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_ACTIVE);
 }
 

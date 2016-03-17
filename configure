@@ -67,6 +67,8 @@ done
 ##
 ##
 
+_SAVE_ARGS="$*"
+
 # Parse arguments
 while [[ ! -z $@ ]]; do
     if [[ $1 != --* ]]; then
@@ -181,7 +183,7 @@ fi
 
 
 # Create output files
-echo "# configure exec: $0 $*" >> $MKL_OUTDBG
+echo "# configure exec: $0 $_SAVE_ARGS" >> $MKL_OUTDBG
 echo "# On $(date)" >> $MKL_OUTDBG
 
 rm -f $MKL_OUTMK $MKL_OUTH

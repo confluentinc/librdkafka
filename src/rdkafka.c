@@ -60,6 +60,13 @@ static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 
 
 /**
+ * Last API error code, per thread.
+ * Shared among all rd_kafka_t instances.
+ */
+rd_kafka_resp_err_t RD_TLS rd_kafka_last_error_code;
+
+
+/**
  * Current number of threads created by rdkafka.
  * This is used in regression tests.
  */
@@ -95,7 +102,8 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
 	while (rd_kafka_thread_cnt() > 0 ||
                rd_atomic32_get(&rd_kafka_handle_cnt_curr) > 0) {
 		if (rd_clock() >= timeout) {
-			errno = ETIMEDOUT;
+			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__TIMED_OUT,
+						ETIMEDOUT);
 #if ENABLE_SHAREDPTR_DEBUG
                         rd_shared_ptrs_dump();
 #endif
@@ -366,7 +374,7 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 	int idx = err - RD_KAFKA_RESP_ERR__BEGIN;
 
 	if (unlikely(err <= RD_KAFKA_RESP_ERR__BEGIN ||
-		     err >= RD_KAFKA_RESP_ERR_END ||
+		     err >= RD_KAFKA_RESP_ERR_END_ALL ||
 		     !rd_kafka_err_descs[idx].desc)) {
 		rd_snprintf(ret, sizeof(ret), "Err-%i?", err);
 		return ret;
@@ -381,7 +389,7 @@ const char *rd_kafka_err2name (rd_kafka_resp_err_t err) {
 	int idx = err - RD_KAFKA_RESP_ERR__BEGIN;
 
 	if (unlikely(err <= RD_KAFKA_RESP_ERR__BEGIN ||
-		     err >= RD_KAFKA_RESP_ERR_END ||
+		     err >= RD_KAFKA_RESP_ERR_END_ALL ||
 		     !rd_kafka_err_descs[idx].desc)) {
 		rd_snprintf(ret, sizeof(ret), "ERR_%i?", err);
 		return ret;
@@ -390,6 +398,10 @@ const char *rd_kafka_err2name (rd_kafka_resp_err_t err) {
 	return rd_kafka_err_descs[idx].name;
 }
 
+
+rd_kafka_resp_err_t rd_kafka_last_error (void) {
+	return rd_kafka_last_error_code;
+}
 
 
 rd_kafka_resp_err_t rd_kafka_errno2err (int errnox) {
@@ -683,7 +695,7 @@ static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rktp->rktp_committed_offset,
                    offs.eof_offset,
 		   rktp->rktp_lo_offset,
-		   offs.hi_offset,
+		   rktp->rktp_hi_offset,
                    consumer_lag,
                    rd_atomic64_get(&rktp->rktp_c.tx_msgs),
 		   rd_atomic64_get(&rktp->rktp_c.tx_bytes),
@@ -1076,7 +1088,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
         if (rd_kafka_assignors_init(rk, errstr, errstr_size) == -1) {
 		rd_kafka_destroy_internal(rk);
-		errno = EINVAL;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
 		return NULL;
 	}
 
@@ -1088,7 +1100,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 						    errstr_size) == -1) {
 
                         rd_kafka_destroy_internal(rk);
-			errno = EINVAL;
+			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
+						EINVAL);
 			return NULL;
 		}
 	}
@@ -1136,7 +1149,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		/* Restore sigmask of caller */
 		pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
-		errno = err;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
+					err);
 		return NULL;
 	}
 
@@ -1163,6 +1177,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	/* Restore sigmask of caller */
 	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
+
+	rd_kafka_set_last_error(0, 0);
 
 	return rk;
 }
@@ -1232,12 +1248,13 @@ int rd_kafka_consume_start0 (rd_kafka_itopic_t *rkt, int32_t partition,
 	shptr_rd_kafka_toppar_t *s_rktp;
 
 	if (partition < 0) {
-		errno = ESRCH;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
+					ESRCH);
 		return -1;
 	}
 
         if (!rd_kafka_simple_consumer_add(rkt->rkt_rk)) {
-                errno = EINVAL;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
                 return -1;
         }
 
@@ -1259,13 +1276,15 @@ int rd_kafka_consume_start0 (rd_kafka_itopic_t *rkt, int32_t partition,
                     RD_KAFKAP_STR_IS_NULL(rkt->rkt_rk->rk_conf.group_id)) {
                         /* Broker based offsets require a group id. */
                         rd_kafka_toppar_destroy(s_rktp);
-                        errno = EINVAL;
+			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
+						EINVAL);
                         return -1;
                 }
 
 	} else if (offset < 0) {
 		rd_kafka_toppar_destroy(s_rktp);
-		errno = EINVAL;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
+					EINVAL);
 		return -1;
 
         }
@@ -1275,6 +1294,7 @@ int rd_kafka_consume_start0 (rd_kafka_itopic_t *rkt, int32_t partition,
 
         rd_kafka_toppar_destroy(s_rktp);
 
+	rd_kafka_set_last_error(0, 0);
 	return 0;
 }
 
@@ -1317,7 +1337,9 @@ static RD_UNUSED int rd_kafka_consume_stop0 (rd_kafka_toppar_t *rktp) {
         err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
         rd_kafka_q_destroy(tmpq);
 
-	return /*FIXME*/ err ? EINVAL : 0;
+	rd_kafka_set_last_error(err, err ? EINVAL : 0);
+
+	return err ? -1 : 0;
 }
 
 
@@ -1327,7 +1349,7 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *app_rkt, int32_t partition) {
         int r;
 
 	if (partition == RD_KAFKA_PARTITION_UA) {
-		errno = EINVAL;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
 		return -1;
 	}
 
@@ -1335,12 +1357,15 @@ int rd_kafka_consume_stop (rd_kafka_topic_t *app_rkt, int32_t partition) {
 	if (!(s_rktp = rd_kafka_toppar_get(rkt, partition, 0)) &&
 	    !(s_rktp = rd_kafka_toppar_desired_get(rkt, partition))) {
 		rd_kafka_topic_wrunlock(rkt);
-		errno = ESRCH;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
+					ESRCH);
 		return -1;
 	}
         rd_kafka_topic_wrunlock(rkt);
 
         r = rd_kafka_consume_stop0(rd_kafka_toppar_s2i(s_rktp));
+	/* set_last_error() called by stop0() */
+
         rd_kafka_toppar_destroy(s_rktp);
 
         return r;
@@ -1423,7 +1448,8 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 
 	if (unlikely(!s_rktp)) {
 		/* No such toppar known */
-		errno = ESRCH;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
+					ESRCH);
 		return -1;
 	}
 
@@ -1434,6 +1460,8 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 					  rkmessages, rkmessages_size);
 
 	rd_kafka_toppar_destroy(s_rktp); /* refcnt from .._get() */
+
+	rd_kafka_set_last_error(0, 0);
 
 	return cnt;
 }
@@ -1520,7 +1548,8 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *app_rkt, int32_t partition,
 
 	if (unlikely(!s_rktp)) {
 		/* No such toppar known */
-		errno = ESRCH;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
+					ESRCH);
 		return -1;
 	}
 
@@ -1530,6 +1559,8 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *app_rkt, int32_t partition,
 				       consume_cb, opaque);
 
 	rd_kafka_toppar_destroy(s_rktp);
+
+	rd_kafka_set_last_error(0, 0);
 
 	return r;
 }
@@ -1591,7 +1622,8 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 
 	if (!rko) {
 		/* Timeout reached with no op returned. */
-		errno = ETIMEDOUT;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__TIMED_OUT,
+					ETIMEDOUT);
 		return NULL;
 	}
 
@@ -1614,6 +1646,8 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 		rd_kafka_toppar_unlock(rktp);
         }
 
+	rd_kafka_set_last_error(0, 0);
+
 	return rkmessage;
 }
 
@@ -1633,7 +1667,8 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *app_rkt,
 
 	if (unlikely(!s_rktp)) {
 		/* No such toppar known */
-		errno = ESRCH;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
+					ESRCH);
 		return NULL;
 	}
 
@@ -1642,6 +1677,8 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *app_rkt,
                                       &rktp->rktp_fetchq, timeout_ms);
 
 	rd_kafka_toppar_destroy(s_rktp); /* refcnt from .._get() */
+
+	rd_kafka_set_last_error(0, 0);
 
 	return rkmessage;
 }
@@ -1755,21 +1792,22 @@ rd_kafka_position (rd_kafka_t *rk,
 
 
 
-struct _get_offsets_state {
+struct _query_wmark_offsets_state {
 	rd_kafka_resp_err_t err;
 	const char *topic;
 	int32_t partition;
 	int64_t offsets[2];
 	size_t  cnt;
+	rd_ts_t ts_end;
 };
 
-static void rd_kafka_get_offsets_resp_cb (rd_kafka_t *rk,
-					  rd_kafka_broker_t *rkb,
-					  rd_kafka_resp_err_t err,
-					  rd_kafka_buf_t *rkbuf,
-					  rd_kafka_buf_t *request,
-					  void *opaque) {
-	struct _get_offsets_state *state = opaque;
+static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
+						  rd_kafka_broker_t *rkb,
+						  rd_kafka_resp_err_t err,
+						  rd_kafka_buf_t *rkbuf,
+						  rd_kafka_buf_t *request,
+						  void *opaque) {
+	struct _query_wmark_offsets_state *state = opaque;
 
 	err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request,
 				     state->topic, state->partition,
@@ -1777,16 +1815,31 @@ static void rd_kafka_get_offsets_resp_cb (rd_kafka_t *rk,
 	if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
 		return; /* Retrying */
 
+	/* Retry if no broker connection is available yet. */
+	if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
+	     err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
+	    rkb &&
+	    rd_clock() + (50 * 1000) < state->ts_end) {
+		/* Sleep and retry */
+		rd_usleep(50 * 1000, &rkb->rkb_rk->rk_terminate);
+
+		request->rkbuf_retries = 0;
+		if (rd_kafka_buf_retry(rkb, request))
+			return; /* Retry in progress */
+		/* FALLTHRU */
+	}
+
 	state->err = err;
 }
 
 
 rd_kafka_resp_err_t
-rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
-		      int64_t *low, int64_t *high, int timeout_ms) {
+rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
+				  int32_t partition,
+				  int64_t *low, int64_t *high, int timeout_ms) {
 	rd_kafka_broker_t *rkb;
 	rd_kafka_q_t *replyq;
-	struct _get_offsets_state state;
+	struct _query_wmark_offsets_state state;
 	shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
 	rd_ts_t ts_end = rd_clock() +
@@ -1795,7 +1848,7 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 	/* Look up toppar so we know which broker to query. */
 	s_rktp = rd_kafka_toppar_get2(rk, topic, partition, 0, 1);
 	if (!s_rktp)
-		return RD_KAFKA_RESP_ERR__INVALID_ARG;
+		return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 	rktp = rd_kafka_toppar_s2i(s_rktp);
 
 	/* Get toppar's leader broker. */
@@ -1804,7 +1857,8 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 			break;
 
 		if (timeout_ms > 0)
-			rd_usleep(RD_MIN(10, timeout_ms), &rk->rk_terminate);
+			rd_usleep(RD_MIN(10, timeout_ms)*1000,
+				  &rk->rk_terminate);
 	} while (rd_clock() < ts_end);
 
 	if (!rkb) {
@@ -1820,9 +1874,11 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 	state.offsets[1] = RD_KAFKA_OFFSET_END;
 	state.cnt = 2;
 	state.err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
+	state.ts_end = ts_end;
 
 	rd_kafka_OffsetRequest(rkb, topic, partition, state.offsets, state.cnt,
-			       replyq, rd_kafka_get_offsets_resp_cb, &state);
+			       replyq, rd_kafka_query_wmark_offsets_resp_cb,
+			       &state);
         rd_kafka_broker_destroy(rkb);
 
         /* Wait for reply (or timeout) */
@@ -1835,7 +1891,7 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 
 	if (state.err)
 		return state.err;
-	else if (state.cnt != 2)
+	else if (state.cnt == 0 || state.cnt > 2)
 		return RD_KAFKA_RESP_ERR__FAIL;
 
 	/* Broker may return offsets in no parcitular order. */
@@ -1846,6 +1902,33 @@ rd_kafka_get_offsets (rd_kafka_t *rk, const char *topic, int32_t partition,
 		*low = state.offsets[1];
 		*high = state.offsets[0];
 	}
+
+	/* If partition is empty only one offset (the last) will be returned. */
+	if (*low < 0 && *high >= 0)
+		*low = *high;
+
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_get_watermark_offsets (rd_kafka_t *rk, const char *topic,
+				int32_t partition,
+				int64_t *low, int64_t *high) {
+	shptr_rd_kafka_toppar_t *s_rktp;
+	rd_kafka_toppar_t *rktp;
+
+	s_rktp = rd_kafka_toppar_get2(rk, topic, partition, 0, 1);
+	if (!s_rktp)
+		return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+	rktp = rd_kafka_toppar_s2i(s_rktp);
+
+	rd_kafka_toppar_lock(rktp);
+	*low = rktp->rktp_lo_offset;
+	*high = rktp->rktp_hi_offset;
+	rd_kafka_toppar_unlock(rktp);
+
+	rd_kafka_toppar_destroy(s_rktp);
 
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

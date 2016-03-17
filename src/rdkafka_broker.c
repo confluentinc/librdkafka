@@ -2866,12 +2866,14 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 continue;
                         }
 
-
-			rd_kafka_toppar_lock(rktp);
-
                         /* Update hi offset to be able to compute
                          * consumer lag. */
                         rktp->rktp_offsets.hi_offset = hdr.HighwaterMarkOffset;
+
+			rd_kafka_toppar_lock(rktp);
+
+			/* High offset for get_watermark_offsets() */
+			rktp->rktp_hi_offset = hdr.HighwaterMarkOffset;
 
 			/* If this is the last message of the queue,
 			 * signal EOF back to the application. */
@@ -2913,9 +2915,11 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                                 rktp->rktp_offsets.fetch_offset;
                                         rktp->rktp_offsets.fetch_offset =
                                                 RD_KAFKA_OFFSET_INVALID;
-					rd_kafka_offset_reset(rktp, err_offset,
-							      hdr.ErrorCode,
-							      "Fetch response");
+					rd_kafka_offset_reset(
+						rktp, err_offset,
+						hdr.ErrorCode,
+						rd_kafka_err2str(hdr.
+								 ErrorCode));
                                 }
                                 break;
 				case RD_KAFKA_RESP_ERR__PARTITION_EOF:

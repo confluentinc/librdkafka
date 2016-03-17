@@ -43,6 +43,9 @@ function checks {
     mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz"
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
 
+    # Snappy support is built-in
+    mkl_allvar_set WITH_SNAPPY WITH_SNAPPY y
+
     if [[ "$ENABLE_SSL" == "y" ]]; then
 	mkl_meta_set "libssl" "deb" "libssl-dev"
 	mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl"

@@ -449,6 +449,9 @@ function mkl_generate {
     mkl_write_mk "# $MKL_CONFIGURE_ARGS"
     mkl_write_mk ""
 
+    # This variable is used by Makefile.base to avoid multiple inclusions.
+    mkl_write_mk "MKL_MAKEFILE_CONFIG=y"
+
     # Export colors to Makefile.config
     mkl_write_mk "MKL_RED=\t${MKL_RED}"
     mkl_write_mk "MKL_GREEN=\t${MKL_GREEN}"
@@ -927,7 +930,7 @@ source: $6"
         local ret=0
     fi
 
-    # OSX XCode toolchain creates dSYM directories when -g set set,
+    # OSX XCode toolchain creates dSYM directories when -g is set,
     # delete them specifically.
     rm -rf "$srcfile" "${srcfile}.o" "$srcfile*dSYM"
 

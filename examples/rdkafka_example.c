@@ -39,7 +39,6 @@
 #include <stdlib.h>
 #include <syslog.h>
 #include <sys/time.h>
-#include <errno.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
@@ -262,6 +261,7 @@ int main (int argc, char **argv) {
 	char tmp[16];
         int64_t seek_offset = 0;
         int64_t tmp_offset = 0;
+	int get_wmarks = 0;
 
 	quiet = !isatty(STDIN_FILENO);
 
@@ -313,6 +313,8 @@ int main (int argc, char **argv) {
 				tmp_offset = RD_KAFKA_OFFSET_STORED;
                         else if (!strcmp(optarg, "report"))
                                 report_offsets = 1;
+			else if (!strcmp(optarg, "wmark"))
+				get_wmarks = 1;
 			else {
 				tmp_offset = strtoll(optarg, NULL, 10);
 
@@ -469,6 +471,8 @@ int main (int argc, char **argv) {
 			"                  none|gzip|snappy\n"
 			"  -o <offset>     Start offset (consumer):\n"
 			"                  beginning, end, NNNNN or -NNNNN\n"
+			"                  wmark returns the current hi&lo "
+			"watermarks.\n"
                         "  -o report       Report message offsets (producer)\n"
 			"  -e              Exit consumer when last message\n"
 			"                  in partition has been received.\n"
@@ -570,8 +574,7 @@ int main (int argc, char **argv) {
 					"%% Failed to produce to topic %s "
 					"partition %i: %s\n",
 					rd_kafka_topic_name(rkt), partition,
-					rd_kafka_err2str(
-						rd_kafka_errno2err(errno)));
+					rd_kafka_err2str(rd_kafka_last_error()));
 				/* Poll to handle delivery reports */
 				rd_kafka_poll(rk, 0);
 				continue;
@@ -621,15 +624,39 @@ int main (int argc, char **argv) {
 			exit(1);
 		}
 
+		if (get_wmarks) {
+			int64_t lo, hi;
+                        rd_kafka_resp_err_t err;
+
+			/* Only query for hi&lo partition watermarks */
+
+			if ((err = rd_kafka_query_watermark_offsets(
+				     rk, topic, partition, &lo, &hi, 5000))) {
+				fprintf(stderr, "%% query_watermark_offsets() "
+					"failed: %s\n",
+					rd_kafka_err2str(err));
+				exit(1);
+			}
+
+			printf("%s [%d]: low - high offsets: "
+			       "%"PRId64" - %"PRId64"\n",
+			       topic, partition, lo, hi);
+
+			rd_kafka_destroy(rk);
+			exit(0);
+		}
+
+
 		/* Create topic */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
                 topic_conf = NULL; /* Now owned by topic */
 
 		/* Start consuming */
 		if (rd_kafka_consume_start(rkt, partition, start_offset) == -1){
+			rd_kafka_resp_err_t err = rd_kafka_last_error();
 			fprintf(stderr, "%% Failed to start consuming: %s\n",
-				rd_kafka_err2str(rd_kafka_errno2err(errno)));
-                        if (errno == EINVAL)
+				rd_kafka_err2str(err));
+                        if (err == RD_KAFKA_RESP_ERR__INVALID_ARG)
                                 fprintf(stderr,
                                         "%% Broker based offset storage "
                                         "requires a group.id, "

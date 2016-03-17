@@ -64,6 +64,7 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
                                           const void *key, size_t keylen,
                                           void *msg_opaque,
                                           rd_kafka_resp_err_t *errp,
+					  int *errnop,
                                           rd_ts_t now) {
 	rd_kafka_msg_t *rkm;
 	size_t mlen = sizeof(*rkm);
@@ -74,9 +75,10 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 		keylen = 0;
 
 	if (unlikely(len + keylen > (size_t)rkt->rkt_rk->rk_conf.max_msg_size ||
-		     keylen > INT32_MAX)){
+		     keylen > INT32_MAX)) {
 		*errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
-                errno = EMSGSIZE;
+		if (errnop)
+			*errnop = EMSGSIZE;
 		return NULL;
 	}
 
@@ -133,29 +135,34 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      void *msg_opaque) {
 	rd_kafka_msg_t *rkm;
 	rd_kafka_resp_err_t err;
+	int errnox;
 
 	if (unlikely(rd_atomic32_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
 		     rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
 		(void)rd_atomic32_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
-		errno = ENOBUFS;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__QUEUE_FULL,
+					ENOBUFS);
 		return -1;
 	}
 
         /* Create message */
         rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
-                                payload, len, key, keylen, msg_opaque, &err,
-                                rd_clock());
+                                payload, len, key, keylen, msg_opaque,
+				&err, &errnox, rd_clock());
         if (unlikely(!rkm)) {
                 /* errno is already set by msg_new() */
                 (void)rd_atomic32_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+		rd_kafka_set_last_error(err, errnox);
                 return -1;
         }
 
 
         /* Partition the message */
 	err = rd_kafka_msg_partitioner(rkt, rkm, 1);
-	if (likely(!err))
+	if (likely(!err)) {
+		rd_kafka_set_last_error(0, 0);
 		return 0;
+	}
 
 	/* Handle partitioner failures: it only fails when the application
 	 * attempts to force a destination partition that does not exist
@@ -168,11 +175,11 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 
 	/* Translate error codes to errnos. */
 	if (err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
-		errno = ESRCH;
+		rd_kafka_set_last_error(err, ESRCH);
 	else if (err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
-		errno = ENOENT;
+		rd_kafka_set_last_error(err, ENOENT);
 	else
-		errno = EINVAL; /* NOTREACHED */
+		rd_kafka_set_last_error(err, EINVAL); /* NOTREACHED */
 
 	return -1;
 }
@@ -240,7 +247,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                         rkmessages[i].key_len,
                                         rkmessages[i]._private,
                                         &rkmessages[i].err,
-                                        now);
+					NULL, now);
                 if (!rkm)
                         continue;
 

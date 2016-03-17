@@ -430,7 +430,8 @@ void test_consumer_subscribe (rd_kafka_t *rk, const char *topic);
 
 void
 test_consume_msgs_easy (const char *group_id, const char *topic,
-                        uint64_t testid, int exp_msgcnt);
+                        uint64_t testid, int exp_eofcnt, int exp_msgcnt,
+			rd_kafka_topic_conf_t *tconf);
 
 void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 				 uint64_t testid, int timeout_ms);

@@ -767,9 +767,15 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_i64(rkbuf, -1);// FIXME: retention time
 
                 /* Metadata */
-                rd_kafka_buf_write_str(rkbuf,
-                                       rktpar->metadata,
-				       rktpar->metadata_size);
+		/* Java client 0.9.0 and broker <0.10.0 can't parse
+		 * Null metadata fields, so as a workaround we send an
+		 * empty string if it's Null. */
+		if (!rktpar->metadata)
+			rd_kafka_buf_write_str(rkbuf, "", 0);
+		else
+			rd_kafka_buf_write_str(rkbuf,
+					       rktpar->metadata,
+					       rktpar->metadata_size);
         }
 
 	if (tot_PartCnt == 0) {

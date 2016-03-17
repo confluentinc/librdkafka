@@ -267,6 +267,17 @@ void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
 
 
 
+extern rd_kafka_resp_err_t RD_TLS rd_kafka_last_error_code;
+
+static RD_UNUSED __inline
+rd_kafka_resp_err_t rd_kafka_set_last_error (rd_kafka_resp_err_t err,
+					     int errnox) {
+	if (errnox)
+		errno = errnox;
+	rd_kafka_last_error_code = err;
+	return err;
+}
+
 
 extern rd_atomic32_t rd_kafka_thread_cnt_curr;
 

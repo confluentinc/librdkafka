@@ -130,6 +130,9 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                * Updated periodically
                                                * by broker thread.
                                                * Locks: toppar_lock */
+
+	int64_t rktp_hi_offset;              /* Current high offset.
+					      * Locks: toppar_lock */
         int64_t rktp_lo_offset;              /* Current broker low offset.
                                               * This is outside of the stats
                                               * struct due to this field

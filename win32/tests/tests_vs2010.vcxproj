@@ -193,6 +193,7 @@
     <ClCompile Include="..\..\tests\0030-offset_commit.c" />
     <ClCompile Include="..\..\tests\0031-get_offsets.c" />
     <ClCompile Include="..\..\tests\0033-regex_subscribe.c" />
+    <ClCompile Include="..\..\tests\0034-offset_reset.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

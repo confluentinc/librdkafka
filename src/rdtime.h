@@ -64,7 +64,7 @@ static __inline rd_ts_t rd_clock (void) {
 	gettimeofday(&tv, NULL);
 	return ((rd_ts_t)tv.tv_sec * 1000000LLU) + (rd_ts_t)tv.tv_usec;
 #elif defined(_MSC_VER)
-	return (rd_ts_t)GetTickCount64() * 1000LLU;
+	return (rd_ts_t)GetTickCount64() * 1000LL;
 #else
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);

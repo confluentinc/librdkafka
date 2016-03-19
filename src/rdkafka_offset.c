@@ -206,8 +206,11 @@ static int64_t rd_kafka_offset_file_read (rd_kafka_toppar_t *rktp) {
 	}
 
 	buf[r] = '\0';
-
+#ifndef _MSC_VER
 	offset = strtoull(buf, &end, 10);
+#else
+	offset = _strtoui64(buf, &end, 10);
+#endif
 	if (buf == end) {
 		rd_kafka_op_err(rktp->rktp_rkt->rkt_rk,
 				RD_KAFKA_RESP_ERR__FS,

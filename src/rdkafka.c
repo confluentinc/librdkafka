@@ -208,14 +208,19 @@ void rd_kafka_set_log_level (rd_kafka_t *rk, int level) {
 
 static const char *rd_kafka_type2str (rd_kafka_type_t type) {
 	static const char *types[] = {
-		[RD_KAFKA_PRODUCER] = "producer",
-		[RD_KAFKA_CONSUMER] = "consumer",
+		"producer",
+		"consumer",
 	};
 	return types[type];
 }
 
+#ifndef _MSC_VER
 #define _ERR_DESC(ENUM,DESC) \
 	[ENUM - RD_KAFKA_RESP_ERR__BEGIN] = { ENUM, # ENUM + 18/*pfx*/, DESC }
+#else
+#define _ERR_DESC(ENUM,DESC) \
+	{ ENUM, # ENUM + 18/*pfx*/, DESC }
+#endif
 
 static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 	_ERR_DESC(RD_KAFKA_RESP_ERR__BEGIN, NULL),
@@ -1516,7 +1521,7 @@ static int rd_kafka_consume_callback0 (rd_kafka_q_t *rkq,
 							   *rkmessage,
 							   void *opaque),
 				       void *opaque) {
-	struct consume_ctx ctx = { .consume_cb = consume_cb, .opaque = opaque };
+	struct consume_ctx ctx = { consume_cb, opaque };
 	return rd_kafka_q_serve(rkq, timeout_ms, max_cnt,
                                 _Q_CB_CONSUMER, rd_kafka_consume_cb, &ctx);
 
@@ -1954,8 +1959,8 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			return 0; /* Dont handle here */
 		{
 			struct consume_ctx ctx = {
-				.consume_cb = rk->rk_conf.consume_cb,
-				.opaque = rk->rk_conf.opaque };
+				rk->rk_conf.consume_cb,
+				rk->rk_conf.opaque };
 
 			rd_kafka_consume_cb(rk, rko, _Q_CB_CONSUMER, &ctx);
 		}
@@ -2013,13 +2018,14 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 
                         if (rk->rk_conf.dr_msg_cb) {
                                 rd_kafka_message_t rkmessage = {
-                                        .payload    = rkm->rkm_payload,
-                                        .len        = rkm->rkm_len,
-                                        .err        = rko->rko_err,
-                                        .offset     = rkm->rkm_offset,
-                                        .rkt        = rko->rko_rkt,
-                                        .partition  = rkm->rkm_partition,
-                                        ._private   = rkm->rkm_opaque,
+									    rko->rko_err,
+										rko->rko_rkt,
+										rkm->rkm_partition,
+                                        rkm->rkm_payload,
+                                        rkm->rkm_len,
+										NULL, 0,
+                                        rkm->rkm_offset,
+                                        rkm->rkm_opaque,
                                 };
 
                                 if (rkm->rkm_key &&

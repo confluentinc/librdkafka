@@ -250,6 +250,7 @@ static __inline rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
 rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                                int32_t version) {
 	rd_kafka_op_t *rko;
+	rd_ts_t pre;
 
 	if (timeout_ms == RD_POLL_INFINITE)
 		timeout_ms = INT_MAX;
@@ -270,7 +271,7 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                         }
 
                         /* No op, wait for one */
-			rd_ts_t pre = rd_clock();
+			pre = rd_clock();
 			if (cnd_timedwait_ms(&rkq->rkq_cond,
 					     &rkq->rkq_lock,
 					     timeout_ms) ==

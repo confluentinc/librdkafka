@@ -72,9 +72,8 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME)                                                \
         extern int main_ ## NAME (int, char **)
-#define _TEST(NAME,FLAGS,...)						\
-        { .name = # NAME, .mainfunc = main_ ## NAME, .flags = FLAGS, __VA_ARGS__ }
-
+#define _TEST(NAME,FLAGS,...)                                               \
+        { # NAME, main_ ## NAME, FLAGS, __VA_ARGS__ }
 
 /**
  * Declare all tests here
@@ -112,7 +111,7 @@ _TEST_DECL(0034_offset_reset);
  */
 struct test tests[] = {
         /* Special MAIN test to hold over-all timings, etc. */
-        { .name = "<MAIN>", .flags = TEST_F_LOCAL },
+        { "<MAIN>", NULL, TEST_F_LOCAL },
         _TEST(0001_multiobj, 0),
         _TEST(0002_unkpart, 0),
         _TEST(0003_msgmaxsize, 0),
@@ -1966,7 +1965,7 @@ int test_msgver_verify_part0 (const char *func, int line, const char *what,
 			      const char *topic, int partition,
 			      int msg_base, int exp_cnt) {
 	int fails = 0;
-	struct test_mv_vs vs = { .msg_base = msg_base, .exp_cnt = exp_cnt };
+	struct test_mv_vs vs = { msg_base, exp_cnt };
 	struct test_mv_p *p;
 
 	TEST_SAY("%s:%d: %s: Verifying %d received messages (flags 0x%x) "
@@ -2011,7 +2010,7 @@ int test_msgver_verify0 (const char *func, int line, const char *what,
 			 test_msgver_t *mv,
 			 int flags, int msg_base, int exp_cnt) {
 	int fails = 0;
-	struct test_mv_vs vs = { .msg_base = msg_base, .exp_cnt = exp_cnt };
+	struct test_mv_vs vs = { msg_base, exp_cnt };
 
 	TEST_SAY("%s:%d: %s: Verifying %d received messages (flags 0x%x): "
 		 "expecting msgids %d..%d (%d)\n",

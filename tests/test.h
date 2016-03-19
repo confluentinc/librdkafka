@@ -194,7 +194,7 @@ static __inline int64_t test_clock (void) {
 	gettimeofday(&tv, NULL);
 	return ((int64_t)tv.tv_sec * 1000000LLU) + (int64_t)tv.tv_usec;
 #elif _MSC_VER
-	return (int64_t)GetTickCount64() * 1000LLU;
+	return (int64_t)GetTickCount64() * 1000LL;
 #else
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);

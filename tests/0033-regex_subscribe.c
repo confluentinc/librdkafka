@@ -256,10 +256,10 @@ static int do_test (const char *assignor) {
 	 */
 	{
 		struct expect expect = {
-			.name = rd_strdup(tsprintf("%s: no regexps (0&1)",
+			rd_strdup(tsprintf("%s: no regexps (0&1)",
 						   assignor)),
-			.sub = { topics[0], topics[1], NULL },
-			.exp = { topics[0], topics[1], NULL }
+			{ topics[0], topics[1], NULL },
+			{ topics[0], topics[1], NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
@@ -268,11 +268,11 @@ static int do_test (const char *assignor) {
 
 	{
 		struct expect expect = {
-			.name = rd_strdup(tsprintf("%s: no regexps "
+			rd_strdup(tsprintf("%s: no regexps "
 						   "(no matches)",
 						   assignor)),
-			.sub = { nonexist_topic, NULL },
-			.exp = { NULL }
+			{ nonexist_topic, NULL },
+			{ NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
@@ -281,22 +281,9 @@ static int do_test (const char *assignor) {
 
 	{
 		struct expect expect = {
-			.name = rd_strdup(tsprintf("%s: regex all", assignor)),
-			.sub = { rd_strdup(tsprintf("^.*_%s", groupid)), NULL },
-			.exp = { topics[0], topics[1], topics[2], NULL }
-		};
-
-		fails += test_subscribe(rk, &expect);
-		rd_free(expect.name);
-		rd_free((void*)expect.sub[0]);
-	}
-
-	{
-		struct expect expect = {
-			.name = rd_strdup(tsprintf("%s: regex 0&1", assignor)),
-			.sub = { rd_strdup(tsprintf("^.*[tToOpPiIcC]_0+[12]_[^_]+_%s",
-						    groupid)), NULL },
-			.exp = { topics[0], topics[1], NULL }
+			rd_strdup(tsprintf("%s: regex all", assignor)),
+			{ rd_strdup(tsprintf("^.*_%s", groupid)), NULL },
+			{ topics[0], topics[1], topics[2], NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
@@ -306,10 +293,23 @@ static int do_test (const char *assignor) {
 
 	{
 		struct expect expect = {
-			.name = rd_strdup(tsprintf("%s: regex 2", assignor)),
-			.sub = { rd_strdup(tsprintf("^.*TOOTHPIC_000._._%s",
+			rd_strdup(tsprintf("%s: regex 0&1", assignor)),
+			{ rd_strdup(tsprintf("^.*[tToOpPiIcC]_0+[12]_[^_]+_%s",
 						    groupid)), NULL },
-			.exp = { topics[2], NULL }
+			{ topics[0], topics[1], NULL }
+		};
+
+		fails += test_subscribe(rk, &expect);
+		rd_free(expect.name);
+		rd_free((void*)expect.sub[0]);
+	}
+
+	{
+		struct expect expect = {
+			rd_strdup(tsprintf("%s: regex 2", assignor)),
+			{ rd_strdup(tsprintf("^.*TOOTHPIC_000._._%s",
+						    groupid)), NULL },
+			{ topics[2], NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
@@ -319,12 +319,12 @@ static int do_test (const char *assignor) {
 
 	{
 		struct expect expect = {
-			.name = rd_strdup(tsprintf("%s: regex 2 and "
+			rd_strdup(tsprintf("%s: regex 2 and "
 						   "nonexistent(not seen)",
 						   assignor)),
-			.sub = { rd_strdup(tsprintf("^.*_000[34]_..?_%s",
+			{ rd_strdup(tsprintf("^.*_000[34]_..?_%s",
 						    groupid)), NULL },
-			.exp = { topics[2], NULL }
+			{ topics[2], NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);
@@ -334,10 +334,10 @@ static int do_test (const char *assignor) {
 
 	{
 		struct expect expect = {
-			.name = rd_strdup(tsprintf("%s: broken regex",
+			rd_strdup(tsprintf("%s: broken regex",
 						   assignor)),
-			.sub = { "^.*[0", NULL },
-			.exp = { NULL }
+			{ "^.*[0", NULL },
+			{ NULL }
 		};
 
 		fails += test_subscribe(rk, &expect);

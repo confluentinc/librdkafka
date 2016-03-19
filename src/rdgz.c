@@ -44,8 +44,11 @@ void *rd_gz_decompress (const void *compressed, int compressed_len,
 	 *                  non-zero).
 	 * Second pass (2): perform actual decompression.
 	 */
-
+#ifndef _MSC_VER
 	if (*decompressed_lenp != 0LLU)
+#else
+	if (*decompressed_lenp != 0LL)
+#endif
 		pass++;
 
 	for (; pass <= 2 ; pass++) {

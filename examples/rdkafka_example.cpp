@@ -290,7 +290,11 @@ int main (int argc, char **argv) {
       else if (!strcmp(optarg, "stored"))
 	start_offset = RdKafka::Topic::OFFSET_STORED;
       else
-	start_offset = strtoll(optarg, NULL, 10);
+#ifndef _MSC_VER
+		  start_offset = strtoll(optarg, NULL, 10);
+#else
+		  start_offset = _strtoi64(optarg, NULL, 10);
+#endif
       break;
     case 'e':
       exit_eof = true;

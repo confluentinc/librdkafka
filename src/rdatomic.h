@@ -12,16 +12,22 @@ typedef struct {
 static __inline int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, int32_t v) {
 #ifndef _MSC_VER
 	return ATOMIC_OP(add, fetch, &ra->val, v);
-#else
+#elif _MSC_VER > 1600
 	return InterlockedAdd(&ra->val, v);
+#else
+	InterlockedExchangeAdd(&ra->val, v);
+	return ra->val;
 #endif
 }
 
 static __inline int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v) {
 #ifndef _MSC_VER
 	return ATOMIC_OP(sub, fetch, &ra->val, v);
-#else
+#elif _MSC_VER > 1600
 	return InterlockedAdd(&ra->val, -v);
+#else
+	InterlockedExchangeAdd(&ra->val, -v);
+	return ra->val;
 #endif
 }
 
@@ -45,16 +51,22 @@ static __inline int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v) 
 static __inline int64_t RD_UNUSED rd_atomic64_add (rd_atomic64_t *ra, int64_t v) {
 #ifndef _MSC_VER
 	return ATOMIC_OP(add, fetch, &ra->val, v);
-#else
+#elif _MSC_VER > 1600
 	return InterlockedAdd64(&ra->val, v);
+#else
+	InterlockedExchangeAdd64(&ra->val, v);
+	return ra->val;
 #endif
 }
 
 static __inline int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v) {
 #ifndef _MSC_VER
 	return ATOMIC_OP(sub, fetch, &ra->val, v);
-#else
+#elif _MSC_VER > 1600
 	return InterlockedAdd64(&ra->val, -v);
+#else
+	InterlockedExchangeAdd64(&ra->val, -v);
+	return ra->val;
 #endif
 }
 

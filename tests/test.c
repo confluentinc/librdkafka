@@ -1719,17 +1719,6 @@ static int test_mv_mvec_verify_order (test_msgver_t *mv, int flags,
 		}
 	}
 
-	if (mvec->cnt < vs->exp_cnt) {
-		TEST_MV_WARN(mv,
-			     " verify_order: "
-			     "%s [%"PRId32"] expected %d messages but only "
-			     "%d received\n",
-			     p ? p->topic : "*",
-			     p ? p->partition : -1,
-			     vs->exp_cnt, mvec->cnt);
-		fails++;
-	}
-
 	return fails;
 }
 
@@ -1804,17 +1793,6 @@ static int test_mv_mvec_verify_dup (test_msgver_t *mv, int flags,
 				     prev->msgid,  this->msgid);
 			fails++;
 		}
-	}
-
-	if (mvec->cnt < vs->exp_cnt) {
-		TEST_MV_WARN(mv,
-			     " verify_dup: "
-			     "%s [%"PRId32"] expected %d messages but only "
-			     "%d received\n",
-			     p ? p->topic : "*",
-			     p ? p->partition : -1,
-			     vs->exp_cnt, mvec->cnt);
-		fails++;
 	}
 
 	return fails;
@@ -1909,17 +1887,6 @@ static int test_mv_mvec_verify_range (test_msgver_t *mv, int flags,
 			     p ? p->partition : -1,
 			     exp_cnt, cnt, vs->msgid_min, vs->msgid_max,
 			     skip_cnt);
-		fails++;
-	}
-
-	if (mvec->cnt < vs->exp_cnt) {
-		TEST_MV_WARN(mv,
-			     " verify_range: "
-			     "%s [%"PRId32"] expected %d messages but only "
-			     "%d received\n",
-			     p ? p->topic : "*",
-			     p ? p->partition : -1,
-			     vs->exp_cnt, mvec->cnt);
 		fails++;
 	}
 
@@ -2031,6 +1998,19 @@ int test_msgver_verify_part0 (const char *func, int line, const char *what,
 		fails += test_mv_mvec_verify_order(mv, flags, p, &p->mvec, &vs);
 	if (flags & TEST_MSGVER_DUP)
 		fails += test_mv_mvec_verify_dup(mv, flags, p, &p->mvec, &vs);
+
+	if (mv->msgcnt < vs.exp_cnt) {
+		TEST_MV_WARN(mv,
+			     "%s:%d: "
+			     "%s [%"PRId32"] expected %d messages but only "
+			     "%d received\n",
+			     func, line,
+			     p ? p->topic : "*",
+			     p ? p->partition : -1,
+			     vs.exp_cnt, mv->msgcnt);
+		fails++;
+	}
+
 
 	if (mv->log_suppr_cnt > 0)
 		TEST_WARN("%s:%d: %s: %d message warning logs suppressed\n",

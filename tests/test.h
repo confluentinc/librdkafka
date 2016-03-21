@@ -270,6 +270,7 @@ static __inline int jitter (int low, int high) {
  * topics and partitions, it is then checked for expected messages, such as:
  *   - all messages received, based on message payload information.
  *   - messages received in order
+ *   - EOF
  */
 typedef struct test_msgver_s {
 	struct test_mv_p **p;  /* Partitions array */
@@ -304,6 +305,7 @@ struct test_mv_p {
 	char *topic;
 	int32_t partition;
 	struct test_mv_mvec mvec;
+	int64_t eof_offset;
 };
 
 /* Verification state */

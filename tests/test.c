@@ -1568,6 +1568,7 @@ struct test_mv_p *test_msgver_p_get (test_msgver_t *mv, const char *topic,
 
 	p->topic = rd_strdup(topic);
 	p->partition = partition;
+	p->eof_offset = RD_KAFKA_OFFSET_INVALID;
 
 	return p;
 }
@@ -1620,6 +1621,8 @@ static void test_mv_mvec_sort (struct test_mv_mvec *mvec,
 /**
  * Adds a message to the msgver service.
  *
+ * Message must be a proper message or PARTITION_EOF.
+ *
  * @returns 1 if message is from the expected testid, else 0 (not added).
  */
 int test_msgver_add_msg0 (const char *func, int line,
@@ -1631,12 +1634,21 @@ int test_msgver_add_msg0 (const char *func, int line,
 	struct test_mv_p *p;
 	struct test_mv_m *m;
 
-	rd_snprintf(buf, sizeof(buf), "%.*s",
-		 (int)rkmessage->len, (char *)rkmessage->payload);
+	if (rkmessage->err) {
+		if (rkmessage->err != RD_KAFKA_RESP_ERR__PARTITION_EOF)
+			return 0; /* Ignore error */
 
-	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
-		   &in_testid, &in_part, &in_msgnum) != 3)
-		TEST_FAIL("%s:%d: Incorrect format: %s", func, line, buf);
+		in_testid = mv->testid;
+
+	} else {
+		rd_snprintf(buf, sizeof(buf), "%.*s",
+			    (int)rkmessage->len, (char *)rkmessage->payload);
+
+		if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+			   &in_testid, &in_part, &in_msgnum) != 3)
+			TEST_FAIL("%s:%d: Incorrect format: %s",
+				  func, line, buf);
+	}
 
 	if (mv->fwd)
 		test_msgver_add_msg(mv->fwd, rkmessage);
@@ -1646,6 +1658,11 @@ int test_msgver_add_msg0 (const char *func, int line,
 
 	p = test_msgver_p_get(mv, rd_kafka_topic_name(rkmessage->rkt),
 			      rkmessage->partition, 1);
+
+	if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+		p->eof_offset = rkmessage->offset;
+		return 1;
+	}
 
 	m = test_mv_mvec_add(&p->mvec);
 
@@ -1700,6 +1717,17 @@ static int test_mv_mvec_verify_order (test_msgver_t *mv, int flags,
 				prev->msgid, this->msgid);
 			fails++;
 		}
+	}
+
+	if (mvec->cnt < vs->exp_cnt) {
+		TEST_MV_WARN(mv,
+			     " verify_order: "
+			     "%s [%"PRId32"] expected %d messages but only "
+			     "%d received\n",
+			     p ? p->topic : "*",
+			     p ? p->partition : -1,
+			     vs->exp_cnt, mvec->cnt);
+		fails++;
 	}
 
 	return fails;
@@ -1776,6 +1804,17 @@ static int test_mv_mvec_verify_dup (test_msgver_t *mv, int flags,
 				     prev->msgid,  this->msgid);
 			fails++;
 		}
+	}
+
+	if (mvec->cnt < vs->exp_cnt) {
+		TEST_MV_WARN(mv,
+			     " verify_dup: "
+			     "%s [%"PRId32"] expected %d messages but only "
+			     "%d received\n",
+			     p ? p->topic : "*",
+			     p ? p->partition : -1,
+			     vs->exp_cnt, mvec->cnt);
+		fails++;
 	}
 
 	return fails;
@@ -1870,6 +1909,17 @@ static int test_mv_mvec_verify_range (test_msgver_t *mv, int flags,
 			     p ? p->partition : -1,
 			     exp_cnt, cnt, vs->msgid_min, vs->msgid_max,
 			     skip_cnt);
+		fails++;
+	}
+
+	if (mvec->cnt < vs->exp_cnt) {
+		TEST_MV_WARN(mv,
+			     " verify_range: "
+			     "%s [%"PRId32"] expected %d messages but only "
+			     "%d received\n",
+			     p ? p->topic : "*",
+			     p ? p->partition : -1,
+			     vs->exp_cnt, mvec->cnt);
 		fails++;
 	}
 
@@ -2131,6 +2181,7 @@ void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
                                  rd_kafka_topic_name(rkmessage->rkt),
                                  rkmessage->partition,
                                  rkmessage->offset);
+			test_msgver_add_msg(&mv, rkmessage);
 
                 } else if (rkmessage->err) {
                         TEST_FAIL("%s [%"PRId32"] error (offset %"PRId64
@@ -2192,6 +2243,8 @@ int test_consumer_poll_once (rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms){
 			 rd_kafka_topic_name(rkmessage->rkt),
 			 rkmessage->partition,
 			 rkmessage->offset);
+		if (mv)
+			test_msgver_add_msg(mv, rkmessage);
 		rd_kafka_message_destroy(rkmessage);
 		return RD_KAFKA_RESP_ERR__PARTITION_EOF;
 
@@ -2226,7 +2279,7 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
         TIMING_START(&t_cons, "CONSUME");
 
         while ((exp_eof_cnt == -1 || eof_cnt < exp_eof_cnt) &&
-               (cnt < exp_cnt)) {
+               (exp_cnt == -1 || cnt < exp_cnt)) {
                 rd_kafka_message_t *rkmessage;
 
                 rkmessage = rd_kafka_consumer_poll(rk, 10*1000);
@@ -2242,6 +2295,7 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                                  rd_kafka_topic_name(rkmessage->rkt),
                                  rkmessage->partition,
                                  rkmessage->offset);
+			test_msgver_add_msg(mv, rkmessage);
                         eof_cnt++;
 
                 } else if (rkmessage->err) {

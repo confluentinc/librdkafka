@@ -2224,6 +2224,7 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
  * Set offset values in partition list based on toppar's last stored offset.
  *
  *  from_rktp - true: set rktp's last stored offset, false: set def_value
+ *  unless a concrete offset is set.
  *  is_commit: indicates that set offset is to be committed (for debug log)
  *
  * Returns the number of valid non-logical offsets (>=0).
@@ -2237,6 +2238,7 @@ int rd_kafka_topic_partition_list_set_offsets (
 
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &rktparlist->elems[i];
+		const char *verb = "setting";
 
                 if (from_rktp) {
                         shptr_rd_kafka_toppar_t *s_rktp = rktpar->_private;
@@ -2252,22 +2254,28 @@ int rd_kafka_topic_partition_list_set_offsets (
 				     rktp->rktp_committed_offset);
 
 			if (rktp->rktp_stored_offset >
-			    rktp->rktp_committed_offset)
+			    rktp->rktp_committed_offset) {
+				verb = "setting stored";
 				rktpar->offset = rktp->rktp_stored_offset;
-			else
+			} else {
 				rktpar->offset = RD_KAFKA_OFFSET_INVALID;
+			}
                         rd_kafka_toppar_unlock(rktp);
                 } else {
-                        rktpar->offset = def_value;
+			if (RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset)) {
+				verb = "setting default";
+				rktpar->offset = def_value;
+			} else
+				verb = "keeping";
                 }
 
 		rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_TOPIC, "OFFSET",
 			     "Topic %s [%"PRId32"]: "
-			     "%s%s %s offset %"PRId64,
+			     "%s offset %s%s",
 			     rktpar->topic, rktpar->partition,
-			     RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset) ? "not ":"",
-			     is_commit ? "committing" : "setting",
-			     from_rktp ? "stored" : "default", rktpar->offset);
+			     verb,
+			     rd_kafka_offset2str(rktpar->offset),
+			     is_commit ? " for commit" : "");
 
 		if (!RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset))
 			valid_cnt++;

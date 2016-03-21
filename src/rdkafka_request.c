@@ -477,7 +477,7 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
  *
  * 'parts' must be a sorted list of topic+partitions.
  * Any partition with a usable offset will be ignored, if all partitions
- * have usable offsets then no request is sent at all but a empty
+ * have usable offsets then no request is sent at all but an empty
  * reply is enqueued on the replyq.
  */
 void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
@@ -514,7 +514,7 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
 		/* Ignore partitions with a usable offset. */
 		if (rktpar->offset != RD_KAFKA_OFFSET_INVALID &&
 		    rktpar->offset != RD_KAFKA_OFFSET_STORED) {
-			rd_rkb_dbg(rkb, TOPIC, "OFFSET"
+			rd_rkb_dbg(rkb, TOPIC, "OFFSET",
 				   "OffsetFetchRequest: skipping %s [%"PRId32"] "
 				   "with valid offset %s",
 				   rktpar->topic, rktpar->partition,

@@ -38,6 +38,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <syslog.h>
+#include <time.h>
 #include <sys/time.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
@@ -120,6 +121,8 @@ static void msg_delivered (rd_kafka_t *rk,
  */
 static void msg_delivered2 (rd_kafka_t *rk,
                             const rd_kafka_message_t *rkmessage, void *opaque) {
+	printf("del: %s: offset %"PRId64"\n",
+	       rd_kafka_err2str(rkmessage->err), rkmessage->offset);
         if (rkmessage->err)
 		fprintf(stderr, "%% Message delivery failed: %s\n",
                         rd_kafka_message_errstr(rkmessage));
@@ -160,9 +163,27 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 		return;
 	}
 
-	if (!quiet)
+	if (!quiet) {
+		rd_kafka_timestamp_type_t tstype;
+		int64_t timestamp;
 		fprintf(stdout, "%% Message (offset %"PRId64", %zd bytes):\n",
 			rkmessage->offset, rkmessage->len);
+
+		timestamp = rd_kafka_message_timestamp(rkmessage, &tstype);
+		if (tstype != RD_KAFKA_TIMESTAMP_NOT_AVAILABLE) {
+			const char *tsname = "?";
+			if (tstype == RD_KAFKA_TIMESTAMP_CREATE_TIME)
+				tsname = "create time";
+			else if (tstype == RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME)
+				tsname = "log append time";
+
+			fprintf(stdout, "%% Message timestamp: %s %"PRId64
+				" (%ds ago)\n",
+				tsname, timestamp,
+				!timestamp ? 0 :
+				(int)time(NULL) - (int)(timestamp/1000));
+		}
+	}
 
 	if (rkmessage->key_len) {
 		if (output == OUTPUT_HEXDUMP)

@@ -56,6 +56,11 @@
 #define TIMESPEC_CLEAR(ts) ((ts)->tv_sec = (ts)->tv_nsec = 0LLU)
 
 
+/**
+ * @returns a monotonically increasing clock in microseconds.
+ * @remark There is no monotonic clock on OSX, the system time
+ *         is returned instead.
+ */
 static __inline rd_ts_t rd_clock (void) RD_UNUSED;
 static __inline rd_ts_t rd_clock (void) {
 #ifdef __APPLE__
@@ -71,6 +76,17 @@ static __inline rd_ts_t rd_clock (void) {
 	return ((rd_ts_t)ts.tv_sec * 1000000LLU) + 
 		((rd_ts_t)ts.tv_nsec / 1000LLU);
 #endif
+}
+
+
+/**
+ * @returns UTC wallclock time as number of microseconds since
+ *          beginning of the epoch.
+ */
+static __inline RD_UNUSED rd_ts_t rd_uclock (void) {
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return ((rd_ts_t)tv.tv_sec * 1000000LLU) + (rd_ts_t)tv.tv_usec;
 }
 
 

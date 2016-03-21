@@ -33,6 +33,17 @@
 #include "rdkafka_proto.h"
 
 
+/**
+ * Message.Attributes
+ */
+#define RD_KAFKA_MSG_ATTR_GZIP             (1 << 0)
+#define RD_KAFKA_MSG_ATTR_SNAPPY           (1 << 1)
+#define RD_KAFKA_MSG_ATTR_LZ4              (1 << 2)
+#define RD_KAFKA_MSG_ATTR_COMPRESSION_MASK 0x7
+#define RD_KAFKA_MSG_ATTR_CREATE_TIME      (0 << 3)
+#define RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME  (1 << 3)
+
+
 typedef struct rd_kafka_msg_s {
 	TAILQ_ENTRY(rd_kafka_msg_s)  rkm_link;
 	int        rkm_flags;
@@ -42,6 +53,11 @@ typedef struct rd_kafka_msg_s {
 	int32_t    rkm_partition;  /* partition specified */
 	rd_kafkap_bytes_t *rkm_key;
         int64_t    rkm_offset;
+	int64_t    rkm_timestamp;  /* Message format V1.
+				    * Meaning of timestamp depends on
+				    * message Attribute LogAppendtime (broker)
+				    * or CreateTime (producer).
+				    * Unit is milliseconds since epoch (UTC).*/
 	rd_ts_t    rkm_ts_timeout;
 } rd_kafka_msg_t;
 

@@ -648,9 +648,6 @@ class RD_EXPORT OpenCb {
 };
 
 
-
-
-
 /**@}*/
 
 
@@ -1027,6 +1024,31 @@ class RD_EXPORT Topic {
 
 
 /**
+ * @brief Message timestamp object
+ *
+ * Represents the number of milliseconds since the epoch (UTC).
+ *
+ * The MessageTimestampType dictates the timestamp type or origin.
+ *
+ * @remark Requires Apache Kafka broker version >= 0.10.0
+ *
+ */
+
+class RD_EXPORT MessageTimestamp {
+public:
+  enum MessageTimestampType {
+    MSG_TIMESTAMP_NOT_AVAILABLE,   /**< Timestamp not available */
+    MSG_TIMESTAMP_CREATE_TIME,     /**< Message creation time (source) */
+    MSG_TIMESTAMP_LOG_APPEND_TIME  /**< Message log append time (broker) */
+  };
+
+  MessageTimestampType type;       /**< Timestamp type */
+  int64_t timestamp;               /**< Milliseconds since epoch (UTC). */
+};
+
+
+
+/**
  * @brief Message object
  * 
  * This object represents either a single consumed or produced message,
@@ -1080,6 +1102,9 @@ class RD_EXPORT Message {
 
   /** @returns Message or error offset (if applicable) */
   virtual int64_t             offset () const = 0;
+
+  /** @returns Message timestamp (if applicable) */
+  virtual MessageTimestamp    timestamp () const = 0;
 
   /** @returns The \p msg_opaque as provided to RdKafka::Producer::produce() */
   virtual void               *msg_opaque () const = 0;

@@ -429,6 +429,21 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 }
 
 
+int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
+				    rd_kafka_timestamp_type_t *tstype) {
+	const rd_kafka_op_t *rko = rkmessage->_private;
+
+	if (!rko || rko->rko_err) {
+		*tstype = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+		return -1;;
+	}
+
+
+	*tstype = rko->rko_tstype;
+
+	return rko->rko_timestamp;
+}
+
 
 
 /**

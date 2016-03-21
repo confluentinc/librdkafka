@@ -293,17 +293,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "request following a throttled request. "
 	  "Requires Kafka brokers >=0.9.0 with quotas enabled.",
 	  0, 1, 0 },
-        { _RK_GLOBAL, "protocol.version", _RK_C_INT,
-          _RK(protocol_version),
-          "Broker protocol version. Since there is no way for a client "
-          "to know what protocol version is used by the broker it can't "
-          "know which API version to use for certain protocol requests. "
-          "This property is used to hint the client of the broker version. "
-          "Format is 0xMMmmrrpp where MM=Major, mm=minor, rr=revision, "
-          "pp=patch, e.g., 0x00080200 for 0.8.2. "
-          "A version of 0 means an optimistic approach where the client "
-          "assumes the latest version of APIs are supported.",
-          0, 0x7fffffff, 0 },
+	{ _RK_GLOBAL, "default.protocol.features", _RK_C_S2F,
+	  _RK(default_protocol_features),
+	  "There is currently no reliable way for a client to know what "
+	  "protocol versions or features a broker supports. "
+	  "This property sets the default list of protocol features assumed "
+	  "to be supported by brokers.",
+	  0, 0xffffff, RD_KAFKA_FEATURE_MSGVER1,
+	  .s2i = {
+			{ RD_KAFKA_FEATURE_MSGVER1,   "msgver1" },
+		}
+	},
 
 	/* Security related global properties */
 	{ _RK_GLOBAL, "security.protocol", _RK_C_S2I,
@@ -1558,7 +1558,6 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 
 		case _RK_C_S2F:
 		default:
-			/* FIXME when needed */
 			fprintf(fp, "%-13s", " ");
 			break;
 		}

@@ -7,8 +7,8 @@
  */
 typedef enum {
 	RD_KAFKA_COMPRESSION_NONE,
-	RD_KAFKA_COMPRESSION_GZIP = 0x1,
-	RD_KAFKA_COMPRESSION_SNAPPY = 0x2,
+	RD_KAFKA_COMPRESSION_GZIP = RD_KAFKA_MSG_ATTR_GZIP,
+	RD_KAFKA_COMPRESSION_SNAPPY = RD_KAFKA_MSG_ATTR_SNAPPY,
 	RD_KAFKA_COMPRESSION_INHERIT /* Inherit setting from global conf */
 } rd_kafka_compression_t;
 
@@ -79,7 +79,7 @@ struct rd_kafka_conf_s {
 	int     term_sig;
 	int     quota_support;
         int     reconnect_jitter_ms;
-        int     protocol_version;
+	int     default_protocol_features;
 	rd_kafka_secproto_t security_protocol;
 
 #if WITH_SSL

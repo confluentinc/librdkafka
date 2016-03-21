@@ -142,6 +142,19 @@ typedef enum rd_kafka_type_t {
 
 
 /**
+ * @enum Timestamp types
+ *
+ * @sa rd_kafka_message_timestamp()
+ */
+typedef enum rd_kafka_timestamp_type_t {
+	RD_KAFKA_TIMESTAMP_NOT_AVAILABLE,   /**< Timestamp not available */
+	RD_KAFKA_TIMESTAMP_CREATE_TIME,     /**< Message creation time */
+	RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME  /**< Log append time */
+} rd_kafka_timestamp_type_t;
+
+
+
+/**
  * @brief Retrieve supported debug contexts for use with the \c \"debug\"
  *        configuration property. (runtime)
  *
@@ -322,6 +335,8 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED = 30,
 	/** Cluster authorization failed */
 	RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED = 31,
+	/** FIXME: Invalid timestamp */
+	RD_KAFKA_RESP_ERR_INVALID_TIMESTAMP = 32,
 
 	RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
@@ -682,6 +697,25 @@ rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
 
 	return rd_kafka_err2str(rkmessage->err);
 }
+
+
+
+/**
+ * @brief Returns the message timestamp for a consumed message.
+ *
+ * The timestamp is the number of milliseconds since the epoch (UTC).
+ *
+ * \p tstype is updated to indicate the type of timestamp.
+ *
+ * @returns message timestamp, or -1 if not available.
+ *
+ * @remark Message timestamps require broker version 0.10.0 or later.
+ */
+RD_EXPORT
+int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
+				    rd_kafka_timestamp_type_t *tstype);
+
+
 
 /**@}*/
 

@@ -611,6 +611,7 @@ static void rd_kafka_cgrp_offsets_fetch_response (
 
 	rkcg = rd_kafka_cgrp_get(rk);
 
+	rd_kafka_topic_partition_list_log(rk, "OFFSETFETCH", offsets);
 	/* If all partitions already had usable offsets then there
 	 * was no request sent and thus no reply, the offsets list is
 	 * good to go. */

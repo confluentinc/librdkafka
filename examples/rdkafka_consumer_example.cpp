@@ -152,6 +152,17 @@ void msg_consume(RdKafka::Message* message, void* opaque) {
       msg_bytes += message->len();
       if (verbosity >= 3)
         std::cerr << "Read msg at offset " << message->offset() << std::endl;
+      RdKafka::MessageTimestamp ts;
+      ts = message->timestamp();
+      if (verbosity >= 2 &&
+	  ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_NOT_AVAILABLE) {
+	std::string tsname = "?";
+	if (ts.type == RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
+	  tsname = "create time";
+        else if (ts.type == RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
+          tsname = "log append time";
+        std::cout << "Timestamp: " << tsname << " " << ts.timestamp << std::endl;
+      }
       if (verbosity >= 2 && message->key()) {
         std::cout << "Key: " << *message->key() << std::endl;
       }

@@ -163,17 +163,10 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 	const char *fac, const char *buf) {
 	int secs, msecs;
-#ifndef _MSC_VER
 	struct timeval tv;
-	gettimeofday(&tv, NULL);
+	rd_gettimeofday(&tv, NULL);
 	secs = (int)tv.tv_sec;
 	msecs = (int)(tv.tv_usec / 1000);
-#else
-	struct __timeb64 tb;
-	_ftime64_s(&tb);
-	secs = (int)tb.time;
-	msecs = (int)tb.millitm;
-#endif
 	fprintf(stdout, "%%%i|%u.%03u|%s|%s| %s\n",
 		level, secs, msecs,
 		fac, rk ? rk->rk_name : "", buf);
@@ -352,6 +345,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Broker: Group authorization failed"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED,
 		  "Broker: Cluster authorization failed"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_TIMESTAMP,
+		  "Broker: Invalid timestamp"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
 };

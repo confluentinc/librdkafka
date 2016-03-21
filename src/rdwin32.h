@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <assert.h>
 
 
@@ -156,7 +157,28 @@ static __inline RD_UNUSED const char *rd_strerror(int err) {
 #define rd_usleep(usec,terminate)  Sleep((usec) / 1000)
 
 
+/**
+ * @brief gettimeofday() for win32
+ */
+static RD_UNUSED
+int rd_gettimeofday (struct timeval *tv, struct timezone *tz) {
+	SYSTEMTIME st;
+	FILETIME   ft;
+	ULARGE_INTEGER d;
+
+	GetSystemTime(&st);
+	SystemTimeToFileTime(&st, &ft);
+	d.HighPart = ft.dwHighDateTime;
+	d.LowPart  = ft.dwLowDateTime;
+	tv->tv_sec  = (long)((d.QuadPart - 116444736000000000llu) / 10000000L);
+	tv->tv_usec = (long)(st.wMilliseconds * 1000);
+
+	return 0;
+}
+
+
 #define rd_assert(EXPR)  assert(EXPR)
+
 
 /**
  * Empty struct initializer

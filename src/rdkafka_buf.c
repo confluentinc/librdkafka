@@ -305,7 +305,7 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 
 size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 				   int64_t Offset, int8_t MagicByte,
-				   int8_t Attributes,
+				   int8_t Attributes, int64_t Timestamp,
 				   const rd_kafkap_bytes_t *key,
 				   const void *payload, int32_t len,
 				   int *outlenp) {
@@ -324,6 +324,9 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 		       RD_KAFKAP_BYTES_SIZE(key) +
 		       4 /* Message.ValueLength */ +
 		       len /* Value length */);
+	if (MagicByte >= 1)
+		MessageSize += 8; /* Timestamp i64 */
+
 	rd_kafka_buf_write_i32(rkbuf, MessageSize);
 
 	/*
@@ -341,6 +344,9 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 	/* Attributes */
 	rd_kafka_buf_write_i8(rkbuf, Attributes);
 
+	/* V1: Timestamp */
+	rd_kafka_buf_write_i64(rkbuf, Timestamp);
+	
 	/* Push write-buffer onto iovec stack */
         rd_kafka_buf_autopush(rkbuf);
 

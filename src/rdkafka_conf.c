@@ -652,7 +652,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Offset commit store method: "
           "'file' - local file store (offset.store.path, et.al), "
           "'broker' - broker commit store "
-          "(requires Apache Kafka 0.8.2 or later on the broker).",
+          "(requires \"group.id\" to be configured and "
+	  "Apache Kafka 0.8.2 or later on the broker.).",
           .vdef = RD_KAFKA_OFFSET_METHOD_BROKER, /* FIXME: warn about default change */
           .s2i = {
                         { RD_KAFKA_OFFSET_METHOD_FILE, "file" },

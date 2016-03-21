@@ -531,6 +531,37 @@ rd_kafka_topic_partition_list_add_range (rd_kafka_topic_partition_list_t
 
 
 /**
+ * @brief Delete partition from list.
+ *
+ * @param rktparlist List to modify
+ * @param topic      Topic name to match
+ * @param partition  Partition to match
+ *
+ * @returns 1 if partition was found (and removed), else 0.
+ *
+ * @remark Any held indices to elems[] are unusable after this call returns 1.
+ */
+RD_EXPORT
+int
+rd_kafka_topic_partition_list_del (rd_kafka_topic_partition_list_t *rktparlist,
+				   const char *topic, int32_t partition);
+
+
+/**
+ * @brief Delete partition from list by elems[] index.
+ *
+ * @returns 1 if partition was found (and removed), else 0.
+ *
+ * @sa rd_kafka_topic_partition_list_del()
+ */
+RD_EXPORT
+int
+rd_kafka_topic_partition_list_del_by_idx (
+	rd_kafka_topic_partition_list_t *rktparlist,
+	int idx);
+
+
+/**
  * @brief Make a copy of an existing list.
  *
  * @param src   The existing list to copy.

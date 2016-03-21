@@ -387,3 +387,7 @@ int rd_kafka_topic_partition_list_set_offsets (
 shptr_rd_kafka_toppar_t *
 rd_kafka_topic_partition_list_get_toppar (
         rd_kafka_t *rk, rd_kafka_topic_partition_list_t *rktparlist, int idx);
+
+void
+rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
+				   const rd_kafka_topic_partition_list_t *rktparlist);

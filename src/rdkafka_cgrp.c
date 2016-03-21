@@ -687,6 +687,9 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
 		     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
 		     usable_offsets ? "yes":"no");
 
+	rd_kafka_topic_partition_list_log(rkcg->rkcg_rk,
+					  "FETCHSTART", assignment);
+
         if (assignment->cnt == 0)
                 return;
 

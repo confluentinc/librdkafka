@@ -1994,6 +1994,18 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new (int size) {
 }
 
 
+static void
+rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar) {
+	if (rktpar->topic)
+		rd_free(rktpar->topic);
+	if (rktpar->metadata)
+		rd_free(rktpar->metadata);
+	if (rktpar->_private)
+		rd_kafka_toppar_destroy((shptr_rd_kafka_toppar_t *)
+					rktpar->_private);
+}
+
+
 /**
  * Destroys a list previously created with .._list_new() and drops
  * any references to contained toppars.
@@ -2002,15 +2014,8 @@ void
 rd_kafka_topic_partition_list_destroy (rd_kafka_topic_partition_list_t *rktparlist) {
         int i;
 
-        for (i = 0 ; i < rktparlist->cnt ; i++) {
-                if (rktparlist->elems[i].topic)
-                        rd_free(rktparlist->elems[i].topic);
-                if (rktparlist->elems[i].metadata)
-                        rd_free(rktparlist->elems[i].metadata);
-                if (rktparlist->elems[i]._private)
-                        rd_kafka_toppar_destroy((shptr_rd_kafka_toppar_t *)
-                                                rktparlist->elems[i]._private);
-        }
+        for (i = 0 ; i < rktparlist->cnt ; i++)
+		rd_kafka_topic_partition_destroy(&rktparlist->elems[i]);
 
         if (rktparlist->elems)
                 rd_free(rktparlist->elems);
@@ -2117,10 +2122,11 @@ static int rd_kafka_topic_partition_cmp (const void *_a, const void *_b) {
 
 
 /**
- * Search 'rktparlist' for 'topic' and 'partition'.
+ * @brief Search 'rktparlist' for 'topic' and 'partition'.
+ * @returns the elems[] index or -1 on miss.
  */
-rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
+int
+rd_kafka_topic_partition_list_find0 (rd_kafka_topic_partition_list_t *rktparlist,
 				     const char *topic, int32_t partition) {
         rd_kafka_topic_partition_t skel;
         int i;
@@ -2131,10 +2137,48 @@ rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 if (!rd_kafka_topic_partition_cmp(&skel,
                                                   &rktparlist->elems[i]))
-                        return &rktparlist->elems[i];
+			return i;
         }
 
-        return NULL;
+        return -1;
+}
+
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
+				     const char *topic, int32_t partition) {
+	int i = rd_kafka_topic_partition_list_find0(rktparlist,
+						    topic, partition);
+	if (i == -1)
+		return NULL;
+	else
+		return &rktparlist->elems[i];
+}
+
+
+int
+rd_kafka_topic_partition_list_del_by_idx (rd_kafka_topic_partition_list_t *rktparlist,
+					  int idx) {
+	if (unlikely(idx < 0 || idx >= rktparlist->cnt))
+		return 0;
+
+	rktparlist->cnt--;
+	rd_kafka_topic_partition_destroy(&rktparlist->elems[idx]);
+	memmove(&rktparlist->elems[idx], &rktparlist->elems[idx+1],
+		rktparlist->cnt - idx);
+
+	return 1;
+}
+
+
+int
+rd_kafka_topic_partition_list_del (rd_kafka_topic_partition_list_t *rktparlist,
+				   const char *topic, int32_t partition) {
+	int i = rd_kafka_topic_partition_list_find0(rktparlist,
+						    topic, partition);
+	if (i == -1)
+		return 0;
+
+	return rd_kafka_topic_partition_list_del_by_idx(rktparlist, i);
 }
 
 
@@ -2306,3 +2350,21 @@ rd_kafka_topic_partition_list_get_toppar (
         return rd_kafka_toppar_get2(rk, rktpar->topic, rktpar->partition, 0, 0);
 }
 
+
+void
+rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
+				   const rd_kafka_topic_partition_list_t *rktparlist) {
+        int i;
+
+	rd_kafka_dbg(rk, TOPIC, fac, "List with %d partition(s):",
+		     rktparlist->cnt);
+        for (i = 0 ; i < rktparlist->cnt ; i++) {
+		const rd_kafka_topic_partition_t *rktpar =
+			&rktparlist->elems[i];
+		rd_kafka_dbg(rk, TOPIC, fac, " %s [%"PRId32"] offset %s%s%s",
+			     rktpar->topic, rktpar->partition,
+			     rd_kafka_offset2str(rktpar->offset),
+			     rktpar->err ? ": error: " : "",
+			     rktpar->err ? rd_kafka_err2str(rktpar->err) : "");
+	}
+}

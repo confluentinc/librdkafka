@@ -1748,6 +1748,10 @@ rd_kafka_position (rd_kafka_t *rk,
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
+	/* Set default offsets. */
+	rd_kafka_topic_partition_list_reset_offsets(partitions,
+						    RD_KAFKA_OFFSET_INVALID);
+
         replyq = rd_kafka_q_new(rk);
         do {
                 rd_kafka_op_t *rko;

@@ -379,6 +379,10 @@ int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 void rd_kafka_topic_partition_list_sort_by_topic (
         rd_kafka_topic_partition_list_t *rktparlist);
 
+void
+rd_kafka_topic_partition_list_reset_offsets (rd_kafka_topic_partition_list_t *rktparlist,
+					     int64_t offset);
+
 int rd_kafka_topic_partition_list_set_offsets (
 	rd_kafka_t *rk,
         rd_kafka_topic_partition_list_t *rktparlist,

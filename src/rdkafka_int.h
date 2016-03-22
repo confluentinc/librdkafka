@@ -48,9 +48,6 @@ typedef int mode_t;
 #include "rdinterval.h"
 #include "rdavg.h"
 
-#define RD_POLL_INFINITE  -1
-#define RD_POLL_NOWAIT     0
-
 #if WITH_SSL
 #include <openssl/ssl.h>
 #endif

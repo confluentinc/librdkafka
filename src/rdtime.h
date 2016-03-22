@@ -56,6 +56,10 @@
 #define TIMESPEC_CLEAR(ts) ((ts)->tv_sec = (ts)->tv_nsec = 0LLU)
 
 
+#define RD_POLL_INFINITE  -1
+#define RD_POLL_NOWAIT     0
+
+
 /**
  * @returns a monotonically increasing clock in microseconds.
  * @remark There is no monotonic clock on OSX, the system time
@@ -106,4 +110,22 @@ static __inline const char *rd_ctime (const time_t *t) {
 	ret[25] = '\0';
 
 	return ret;
+}
+
+
+/**
+ * @brief Adjust relative timeout \p *timeout_msp for spent time using
+ *        absolute timeout \p abs_timeout.
+ *
+ * Understands RD_POLL_INFINITE, RD_POLL_NOWAIT.
+ */
+static __inline void rd_timeout_adjust (rd_ts_t abs_timeout,
+					int *timeout_msp) {
+	if (*timeout_msp == RD_POLL_INFINITE ||
+	    *timeout_msp == RD_POLL_NOWAIT)
+		return; /* No change */
+
+	*timeout_msp = (abs_timeout - rd_clock()) / 1000;
+	if (*timeout_msp < 0)
+		*timeout_msp = RD_POLL_NOWAIT;
 }

@@ -1743,6 +1743,7 @@ rd_kafka_position (rd_kafka_t *rk,
         rd_kafka_q_t *replyq;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
+	rd_ts_t abs_timeout = rd_clock();
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
@@ -1767,13 +1768,17 @@ rd_kafka_position (rd_kafka_t *rk,
                         if (!(err = rko->rko_err)) {
                                 rd_kafka_assert(NULL, offsets == partitions);
                                 rko->rko_payload = NULL;
-                        } else if (err == RD_KAFKA_RESP_ERR__WAIT_COORD)
+                        } else if (err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
+				   err == RD_KAFKA_RESP_ERR__TRANSPORT) {
                                 rd_usleep(10*1000, &rk->rk_terminate);
+				rd_timeout_adjust(abs_timeout, &timeout_ms);
+			}
 
                         rd_kafka_op_destroy(rko);
                 } else
                         err = RD_KAFKA_RESP_ERR__TIMED_OUT;
-        } while (err == RD_KAFKA_RESP_ERR__WAIT_COORD);
+        } while (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+		 err == RD_KAFKA_RESP_ERR__WAIT_COORD);
 
         rd_kafka_q_destroy(replyq);
 

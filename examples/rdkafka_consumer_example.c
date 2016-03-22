@@ -174,22 +174,16 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 }
 
 
-static void print_partition_list (FILE *fp, int is_assigned,
+static void print_partition_list (FILE *fp,
                                   const rd_kafka_topic_partition_list_t
                                   *partitions) {
         int i;
         for (i = 0 ; i < partitions->cnt ; i++) {
-                fprintf(stderr, "%s %s [%"PRId32"]",
+                fprintf(stderr, "%s %s [%"PRId32"] offset %"PRId64,
                         i > 0 ? ",":"",
                         partitions->elems[i].topic,
-                        partitions->elems[i].partition);
-
-		if (is_assigned)
-                        wait_eof++;
-                else {
-                        if (exit_eof && --wait_eof == 0)
-                                run = 0;
-                }
+                        partitions->elems[i].partition,
+			partitions->elems[i].offset);
         }
         fprintf(stderr, "\n");
 
@@ -205,14 +199,16 @@ static void rebalance_cb (rd_kafka_t *rk,
 	{
 	case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
 		fprintf(stderr, "assigned:\n");
-		print_partition_list(stderr, 1, partitions);
+		print_partition_list(stderr, partitions);
 		rd_kafka_assign(rk, partitions);
+		wait_eof += partitions->cnt;
 		break;
 
 	case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
 		fprintf(stderr, "revoked:\n");
-		print_partition_list(stderr, 0, partitions);
+		print_partition_list(stderr, partitions);
 		rd_kafka_assign(rk, NULL);
+		wait_eof = 0;
 		break;
 
 	default:

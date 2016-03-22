@@ -1972,6 +1972,10 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
 /**
  * @brief Retrieve committed positions (offsets) for topics+partitions.
  *
+ * The \p offset field of each requested partition will either be set to
+ * stored offset or to RD_KAFKA_OFFSET_INVALID in case there was no stored
+ * offset for that partition.
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
  *          \p offset or \p err field of each \p partitions' element is filled
  *          in with the stored offset, or a partition specific error.

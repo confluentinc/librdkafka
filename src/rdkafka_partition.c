@@ -2265,6 +2265,19 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (
 
 
 /**
+ * @brief Reset all offsets to the provided value.
+ */
+void
+rd_kafka_topic_partition_list_reset_offsets (rd_kafka_topic_partition_list_t *rktparlist,
+					     int64_t offset) {
+
+        int i;
+        for (i = 0 ; i < rktparlist->cnt ; i++)
+		rktparlist->elems[i].offset = offset;
+}
+
+
+/**
  * Set offset values in partition list based on toppar's last stored offset.
  *
  *  from_rktp - true: set rktp's last stored offset, false: set def_value

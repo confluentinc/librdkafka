@@ -1748,7 +1748,7 @@ rd_kafka_position (rd_kafka_t *rk,
         rd_kafka_q_t *replyq;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
-	rd_ts_t abs_timeout = rd_clock();
+	rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;

@@ -150,8 +150,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "for matching topic names that should be ignored in "
           "broker metadata information as if the topics did not exist." },
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
-	  "A comma-separated list of debug contexts to enable: "
-	  RD_KAFKA_DEBUG_CONTEXTS,
+	  "A comma-separated list of debug contexts to enable.",
 	  .s2i = {
                         { RD_KAFKA_DBG_GENERIC,  "generic" },
 			{ RD_KAFKA_DBG_BROKER,   "broker" },
@@ -1284,6 +1283,60 @@ void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *topic_conf,
 }
 
 
+
+
+/**
+ * @brief Convert flags \p ival to csv-string using S2F property \p prop.
+ *
+ * This function has two modes: size query and write.
+ * To query for needed size call with dest==NULL,
+ * to write to buffer of size dest_size call with dest!=NULL.
+ *
+ * An \p ival of -1 means all.
+ *
+ * @returns the number of bytes written to \p dest (if not NULL), else the
+ *          total number of bytes needed.
+ *
+ */
+size_t rd_kafka_conf_flags2str (char *dest, size_t dest_size, const char *delim,
+				const struct rd_kafka_property *prop,
+				int ival) {
+	size_t of = 0;
+	int j;
+
+	if (dest)
+		*dest = '\0';
+
+	/* Phase 1: scan for set flags, accumulate needed size.
+	 * Phase 2: write to dest */
+	for (j = 0 ; prop->s2i[j].str ; j++) {
+		if (prop->type == _RK_C_S2F && ival != -1 &&
+		    (ival & prop->s2i[j].val) != prop->s2i[j].val)
+			continue;
+		else if (prop->type == _RK_C_S2I &&
+			   ival != -1 && prop->s2i[j].val != ival)
+			continue;
+
+		if (!dest)
+			of += strlen(prop->s2i[j].str) + (of > 0 ? 1 : 0);
+		else {
+			size_t r;
+			r = rd_snprintf(dest+of, dest_size-of,
+					"%s%s",
+					of > 0 ? delim:"",
+					prop->s2i[j].str);
+			if (r > dest_size-of) {
+				r = dest_size-of;
+				break;
+			}
+			of += r;
+		}
+	}
+
+	return of;
+}
+
+
 /**
  * Return "original"(re-created) configuration value string
  */
@@ -1337,39 +1390,20 @@ rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
                         }
                 }
                 break;
+
         case _RK_C_S2F:
         {
                 const int ival = *_RK_PTR(const int *, conf, prop->offset);
-                int phase = 0;
-                size_t of = 0;
 
-                /* Phase 1: scan for set flags, accumulate needed size.
-                 * Phase 2: write to dest */
-                for (phase = 0 ; phase < (dest ? 2 : 1) ; phase++) {
-                        for (j = 0 ; prop->s2i[j].str ; j++) {
-                                if ((ival & prop->s2i[j].val) !=
-                                    prop->s2i[j].val)
-                                        continue;
-
-                                if (phase == 0)
-                                        val_len += strlen(prop->s2i[j].str) +
-                                                (val_len > 0 ? 1 : 0);
-                                else {
-                                        size_t r;
-                                        r = rd_snprintf(dest+of, (*dest_size)-of,
-                                                        "%s%s",
-                                                        of > 0 ? ",":"",
-                                                        prop->s2i[j].str);
-                                        if (r > (*dest_size)-of) {
-                                                r = (*dest_size)-of;
-                                                break;
-                                        }
-                                        of += r;
-                                }
-                        }
-                }
-                break;
-        }
+		val_len = rd_kafka_conf_flags2str(dest, *dest_size, ",",
+						  prop, ival);
+		if (dest) {
+			val_len = 0;
+			val = dest;
+			dest = NULL;
+		}
+		break;
+	}
 
         case _RK_C_PATLIST:
         {
@@ -1505,10 +1539,12 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 	const struct rd_kafka_property *prop;
 	int last = 0;
 	int j;
+	char tmp[512];
 	const char *dash80 = "----------------------------------------"
 		"----------------------------------------";
 
 	for (prop = rd_kafka_properties; prop->name ; prop++) {
+		const char *typeinfo = "";
 
 		if (!(prop->scope & last)) {
 			fprintf(fp,
@@ -1517,10 +1553,12 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 				prop->scope == _RK_GLOBAL ? "Global": "Topic");
 
 			fprintf(fp,
-				"%-40s | %3s | %13s | %-25s\n"
-				"%.*s-|-%.*s-|-%.*s:|-%.*s\n",
-				"Property", "C/P", "Default", "Description",
-				40, dash80, 3, dash80, 13, dash80, 25, dash80);
+				"%-40s | %3s | %-15s | %13s | %-25s\n"
+				"%.*s-|-%.*s-|-%.*s-|-%.*s:|-%.*s\n",
+				"Property", "C/P", "Range",
+				"Default", "Description",
+				40, dash80, 3, dash80, 15, dash80,
+				13, dash80, 25, dash80);
 
 			last = prop->scope & (_RK_GLOBAL|_RK_TOPIC);
 
@@ -1536,16 +1574,30 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 		{
 		case _RK_C_STR:
                 case _RK_C_KSTR:
+			typeinfo = "string";
                 case _RK_C_PATLIST:
-			fprintf(fp, "%13s", prop->sdef ? prop->sdef : "");
+			if (prop->type == _RK_C_PATLIST)
+				typeinfo = "pattern list";
+			fprintf(fp, "%-15s | %13s",
+				"", prop->sdef ? prop->sdef : "");
 			break;
 		case _RK_C_BOOL:
-			fprintf(fp, "%13s", prop->vdef ? "true" : "false");
+			typeinfo = "boolean";
+			fprintf(fp, "%-15s | %13s", "true, false",
+				prop->vdef ? "true" : "false");
 			break;
 		case _RK_C_INT:
-			fprintf(fp, "%13i", prop->vdef);
+			typeinfo = "integer";
+			rd_snprintf(tmp, sizeof(tmp),
+				    "%d .. %d", prop->vmin, prop->vmax);
+			fprintf(fp, "%-15s | %13i", tmp, prop->vdef);
 			break;
 		case _RK_C_S2I:
+			typeinfo = "enum value";
+			rd_kafka_conf_flags2str(tmp, sizeof(tmp), ", ",
+						prop, -1);
+			fprintf(fp, "%-15s | ", tmp);
+
 			for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
 				if (prop->s2i[j].val == prop->vdef) {
 					fprintf(fp, "%13s", prop->s2i[j].str);
@@ -1557,15 +1609,34 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 			break;
 
 		case _RK_C_S2F:
+			typeinfo = "CSV flags";
+			/* Dont duplicate builtin.features value in
+			 * both Range and Default */
+			if (!strcmp(prop->name, "builtin.features"))
+				*tmp = '\0';
+			else
+				rd_kafka_conf_flags2str(tmp, sizeof(tmp), ", ",
+							prop, -1);
+			fprintf(fp, "%-15s | ", tmp);
+			rd_kafka_conf_flags2str(tmp, sizeof(tmp), ", ",
+						prop, prop->vdef);
+			fprintf(fp, "%13s", tmp);
+
+			break;
+
+		case _RK_C_PTR:
+			typeinfo = "pointer";
+			/* FALLTHRU */
 		default:
-			fprintf(fp, "%-13s", " ");
+			fprintf(fp, "%-15s | %-13s", "", " ");
 			break;
 		}
 
 		if (prop->type == _RK_C_ALIAS)
 			fprintf(fp, " | Alias for `%s`\n", prop->sdef);
 		else
-			fprintf(fp, " | %s\n", prop->desc);
+			fprintf(fp, " | %s <br>*Type: %s*\n", prop->desc,
+				typeinfo);
 	}
 	fprintf(fp, "\n");
         fprintf(fp, "### C/P legend: C = Consumer, P = Producer, * = both\n");

@@ -2446,6 +2446,8 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
         /* Set up a shadow rkbuf for parsing the slice of rkbuf_orig
          * pointed out by buf,size. */
         rkbuf = rd_kafka_buf_new_shadow(buf, size);
+	rkbuf->rkbuf_rkb = rkb;
+	rd_kafka_broker_keep(rkb);
 
 	if (rd_kafka_buf_remain(rkbuf) == 0)
 		rd_kafka_buf_parse_fail(rkbuf,

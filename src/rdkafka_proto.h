@@ -30,6 +30,20 @@
 
 
 #include "rdendian.h"
+
+
+/**
+ * Kafka protocol features
+ */
+#define RD_KAFKA_FEATURE_VERALIAS   0x1    /* Indicates a version alias used
+					    * by the conf code.
+					    * NOT A PROTOCOL FEATURE. */
+#define RD_KAFKA_FEATURE_MSGVER1    0x2    /* Message version 1 (MagicByte=1):
+					    *  + relative offsets (KIP-31)
+					    *  + timestamps (KIP-32) */
+
+
+
 /*
  * Kafka protocol definitions.
  */

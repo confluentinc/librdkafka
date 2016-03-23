@@ -292,15 +292,23 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "request following a throttled request. "
 	  "Requires Kafka brokers >=0.9.0 with quotas enabled.",
 	  0, 1, 0 },
-	{ _RK_GLOBAL, "default.protocol.features", _RK_C_S2F,
-	  _RK(default_protocol_features),
+	{ _RK_GLOBAL, "protocol.features", _RK_C_S2F,
+	  _RK(protocol_features),
 	  "There is currently no reliable way for a client to know what "
 	  "protocol versions or features a broker supports. "
 	  "This property sets the default list of protocol features assumed "
-	  "to be supported by brokers.",
+	  "to be supported by brokers. Broker version convenience aliase are "
+	  "available and maps to a set of known features. <br>"
+	  "**Features:**"
+	  "<p>`msgver1`: Message version 1 (timestamps and relative offsets).",
 	  0, 0xffffff, RD_KAFKA_FEATURE_MSGVER1,
 	  .s2i = {
 			{ RD_KAFKA_FEATURE_MSGVER1,   "msgver1" },
+
+			/* Version aliases for convenience */
+			{ RD_KAFKA_FEATURE_VERALIAS | 0, "0.9.0" },
+			{ RD_KAFKA_FEATURE_VERALIAS |
+			  RD_KAFKA_FEATURE_MSGVER1, "0.10.0" }
 		}
 	},
 

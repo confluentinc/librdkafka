@@ -79,7 +79,7 @@ struct rd_kafka_conf_s {
 	int     term_sig;
 	int     quota_support;
         int     reconnect_jitter_ms;
-	int     default_protocol_features;
+	int     protocol_features;
 	rd_kafka_secproto_t security_protocol;
 
 #if WITH_SSL

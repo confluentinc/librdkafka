@@ -1264,7 +1264,7 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "Connected");
 
 	rd_kafka_broker_feature_enable(
-		rkb, rkb->rkb_rk->rk_conf.default_protocol_features);
+		rkb, rkb->rkb_rk->rk_conf.protocol_features);
 
 	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);

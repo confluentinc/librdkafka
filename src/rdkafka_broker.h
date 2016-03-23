@@ -93,10 +93,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                                        * JoinGroup, SyncGroup */
 
 	int                 rkb_features;    /* Protocol features supported
-					      * by this broker. */
-#define RD_KAFKA_FEATURE_MSGVER1      0x1    /* Message version 1 (MagicByte=1):
-					      *  + relative offsets (KIP-31)
-					      *  + timestamps (KIP-32) */
+					      * by this broker.
+					      * See RD_KAFKA_FEATURE_* in
+					      * rdkafka_proto.h */
 
 	rd_kafka_confsource_t  rkb_source;
 	struct {

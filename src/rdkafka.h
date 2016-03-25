@@ -836,7 +836,11 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  * such as fetching offsets from an alternate location (on assign)
  * or manually committing offsets (on revoke).
  *
- * The following example show's the application's responsibilities:
+ * @remark The \p partitions list is destroyed by librdkafka on return
+ *         return from the rebalance_cb and must not be freed or
+ *         saved by the application.
+ * 
+ * The following example shows the application's responsibilities:
  * @code
  *    static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
  *                              rd_kafka_topic_partition_list_t *partitions,

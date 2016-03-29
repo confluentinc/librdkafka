@@ -1,6 +1,6 @@
 Name:    librdkafka
 Version: %{__version}
-Release: %{__release}0%{?dist}
+Release: %{__release}%{?dist}
 %define soname 1
 
 Summary: The Apache Kafka C library

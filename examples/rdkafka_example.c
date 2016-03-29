@@ -113,7 +113,8 @@ static void msg_delivered (rd_kafka_t *rk,
 		fprintf(stderr, "%% Message delivery failed: %s\n",
 			rd_kafka_err2str(error_code));
 	else if (!quiet)
-		fprintf(stderr, "%% Message delivered (%zd bytes)\n", len);
+		fprintf(stderr, "%% Message delivered (%zd bytes): %.*s\n", len,
+			(int)len, (const char *)payload);
 }
 
 /**
@@ -129,8 +130,10 @@ static void msg_delivered2 (rd_kafka_t *rk,
 	else if (!quiet)
 		fprintf(stderr,
                         "%% Message delivered (%zd bytes, offset %"PRId64", "
-                        "partition %"PRId32")\n",
-                        rkmessage->len, rkmessage->offset, rkmessage->partition);
+                        "partition %"PRId32"): %.*s\n",
+                        rkmessage->len, rkmessage->offset,
+			rkmessage->partition,
+			(int)rkmessage->len, (const char *)rkmessage->payload);
 }
 
 
@@ -283,8 +286,6 @@ int main (int argc, char **argv) {
         int64_t seek_offset = 0;
         int64_t tmp_offset = 0;
 	int get_wmarks = 0;
-
-	quiet = !isatty(STDIN_FILENO);
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -524,6 +525,10 @@ int main (int argc, char **argv) {
 			RD_KAFKA_DEBUG_CONTEXTS);
 		exit(1);
 	}
+
+	if ((mode == 'C' && !isatty(STDIN_FILENO)) ||
+	    (mode != 'C' && !isatty(STDOUT_FILENO)))
+		quiet = 1;
 
 
 	signal(SIGINT, stop);

@@ -40,7 +40,13 @@ typedef struct rd_list_s {
         int    rl_cnt;
         void **rl_elems;
 	void (*rl_free_cb) (void *);
-	int    rl_allocated;
+	int    rl_flags;
+#define RD_LIST_F_ALLOCATED  0x1  /* The rd_list_t is allocated,
+				   * will be free on destroy() */
+#define RD_LIST_F_SORTED     0x2  /* Set by sort(), cleared by any mutations.
+				   * When this flag is set bsearch() is used
+				   * by find(), otherwise a linear search. */
+#define RD_LIST_F_FIXED_SIZE 0x4  /* Assert on grow */
 } rd_list_t;
 
 
@@ -59,15 +65,31 @@ rd_list_t *rd_list_new (int initial_size);
 
 
 /**
+ * @brief Preallocate elements to avoid having to pass an allocated pointer to
+ *        rd_list_add(), instead pass NULL to rd_list_add() and use the returned
+ *        pointer as the element.
+ *
+ * @param elemsize element size
+ * @param size number of elements
+ *
+ * @remark Preallocated element lists can't grow past \p size.
+ */
+void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size);
+
+
+/**
  * Set element free callback
  */
 void rd_list_set_free_cb (rd_list_t *rl, void (*free_cb) (void *));
 
 
 /**
- * Append element to list
+ * @brief Append element to list
+ *
+ * @returns \p elem. If \p elem is NULL the default element for that index
+ *          will be returned (for use with set_elems).
  */
-void rd_list_add (rd_list_t *rl, void *elem);
+void *rd_list_add (rd_list_t *rl, void *elem);
 
 
 /**

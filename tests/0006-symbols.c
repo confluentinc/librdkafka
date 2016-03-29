@@ -43,10 +43,13 @@ int main_0006_symbols (int argc, char **argv) {
         if (argc < 0 /* always false */) {
                 rd_kafka_version();
                 rd_kafka_version_str();
-				rd_kafka_get_debug_contexts();
+		rd_kafka_get_debug_contexts();
+		rd_kafka_get_err_descs(NULL, NULL);
                 rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR);
+		rd_kafka_err2name(RD_KAFKA_RESP_ERR_NO_ERROR);
                 rd_kafka_errno2err(EINVAL);
                 rd_kafka_errno();
+		rd_kafka_last_error();
                 rd_kafka_conf_new();
                 rd_kafka_conf_destroy(NULL);
                 rd_kafka_conf_dup(NULL);
@@ -81,6 +84,8 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_topic_partition_available(NULL, 0);
 		rd_kafka_topic_opaque(NULL);
                 rd_kafka_msg_partitioner_random(NULL, NULL, 0, 0, NULL, NULL);
+                rd_kafka_msg_partitioner_consistent(NULL, NULL, 0, 0, NULL, NULL);
+                rd_kafka_msg_partitioner_consistent_random(NULL, NULL, 0, 0, NULL, NULL);
                 rd_kafka_new(0, NULL, NULL, 0);
                 rd_kafka_destroy(NULL);
                 rd_kafka_name(NULL);
@@ -140,7 +145,13 @@ int main_0006_symbols (int argc, char **argv) {
 		rd_kafka_topic_partition_list_destroy(NULL);
 		rd_kafka_topic_partition_list_add(NULL, NULL, 0);
 		rd_kafka_topic_partition_list_add_range(NULL, NULL, 0, 0);
+		rd_kafka_topic_partition_list_del(NULL, NULL, 0);
+		rd_kafka_topic_partition_list_del_by_idx(NULL, 0);
 		rd_kafka_topic_partition_list_copy(NULL);
+		rd_kafka_topic_partition_list_set_offset(NULL, NULL, 0, 0);
+		rd_kafka_topic_partition_list_find(NULL, NULL, 0);
+		rd_kafka_query_watermark_offsets(NULL, NULL, 0, NULL, NULL, 0);
+		rd_kafka_get_watermark_offsets(NULL, NULL, 0, NULL, NULL);
         }
 
 

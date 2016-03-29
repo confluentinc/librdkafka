@@ -130,6 +130,9 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                * Updated periodically
                                                * by broker thread.
                                                * Locks: toppar_lock */
+
+	int64_t rktp_hi_offset;              /* Current high offset.
+					      * Locks: toppar_lock */
         int64_t rktp_lo_offset;              /* Current broker low offset.
                                               * This is outside of the stats
                                               * struct due to this field
@@ -292,6 +295,13 @@ void rd_kafka_toppar_op (rd_kafka_toppar_t *rktp, rd_kafka_op_type_t type,
                          int64_t offset, rd_kafka_cgrp_t *rkcg,
                          rd_kafka_q_t *replyq);
 
+void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
+				  int64_t offset, rd_kafka_op_t *rko_orig);
+void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
+				 rd_kafka_op_t *rko_orig);
+void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
+			   int64_t offset, rd_kafka_op_t *rko_orig);
+
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start (rd_kafka_toppar_t *rktp,
                                                     int64_t offset,
                                                     rd_kafka_q_t *fwdq,
@@ -365,13 +375,13 @@ int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 				    const rd_kafka_topic_partition_t *rktpar,
 				    const char *topic, int *matched_by_regex);
 
-rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktarplist,
-                                    const char *topic, int32_t partition,
-                                    int *start_idx);
 
 void rd_kafka_topic_partition_list_sort_by_topic (
         rd_kafka_topic_partition_list_t *rktparlist);
+
+void
+rd_kafka_topic_partition_list_reset_offsets (rd_kafka_topic_partition_list_t *rktparlist,
+					     int64_t offset);
 
 int rd_kafka_topic_partition_list_set_offsets (
 	rd_kafka_t *rk,
@@ -381,3 +391,44 @@ int rd_kafka_topic_partition_list_set_offsets (
 shptr_rd_kafka_toppar_t *
 rd_kafka_topic_partition_list_get_toppar (
         rd_kafka_t *rk, rd_kafka_topic_partition_list_t *rktparlist, int idx);
+
+void
+rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
+				   const rd_kafka_topic_partition_list_t *rktparlist);
+
+
+
+/**
+ * @brief Toppar + Op version tuple used for mapping Fetched partitions
+ *        back to their fetch versions.
+ */
+struct rd_kafka_toppar_ver {
+	shptr_rd_kafka_toppar_t *s_rktp;
+	int32_t version;
+};
+
+
+/**
+ * @brief Toppar + Op version comparator. Only matches the partition.
+ */
+static __inline RD_UNUSED
+int rd_kafka_toppar_ver_cmp (const void *_a, const void *_b) {
+	const struct rd_kafka_toppar_ver *a = _a, *b = _b;
+	const rd_kafka_toppar_t *rktp_a = rd_kafka_toppar_s2i(a->s_rktp);
+	const rd_kafka_toppar_t *rktp_b = rd_kafka_toppar_s2i(b->s_rktp);
+	int r;
+
+	if ((r = rd_kafkap_str_cmp(rktp_a->rktp_rkt->rkt_topic,
+				   rktp_b->rktp_rkt->rkt_topic)))
+		return r;
+
+	return rktp_a->rktp_partition - rktp_b->rktp_partition;
+}
+
+/**
+ * @brief Frees up resources for \p tver but not the \p tver itself.
+ */
+static __inline RD_UNUSED
+void rd_kafka_toppar_ver_destroy (struct rd_kafka_toppar_ver *tver) {
+	rd_kafka_toppar_destroy(tver->s_rktp);
+}

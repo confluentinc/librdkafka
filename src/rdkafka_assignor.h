@@ -42,7 +42,6 @@ typedef struct rd_kafka_group_member_s {
 
 
 int rd_kafka_group_member_cmp (const void *_a, const void *_b);
-int rd_kafka_group_member_cmp_pp (const void *_a, const void *_b);
 
 int
 rd_kafka_group_member_find_subscription (rd_kafka_t *rk,

@@ -17,7 +17,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_roundrobin_assignor.c \
 		rdcrc32.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
 		rdlog.c \
-		trex.c $(SRCS_y)
+		$(SRCS_y)
 
 HDRS=		rdkafka.h
 

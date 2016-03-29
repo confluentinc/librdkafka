@@ -170,7 +170,7 @@ int main_0018_cgrp_term (int argc, char **argv) {
 	/* Create consumers and start subscription */
 	for (i = 0 ; i < _CONS_CNT ; i++) {
 		rk_c[i] = test_create_consumer(topic/*group_id*/,
-					       rebalance_cb,
+					       rebalance_cb, NULL,
 					       rd_kafka_topic_conf_dup(
 						       default_topic_conf),
 					       NULL);

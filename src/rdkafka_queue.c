@@ -2,10 +2,10 @@
 #include "rdkafka_offset.h"
 #include "rdkafka_topic.h"
 
-static int RD_TLS yield_thread = 0;
+int RD_TLS rd_kafka_yield_thread = 0;
 
 void rd_kafka_yield (rd_kafka_t *rk) {
-        yield_thread = 1;
+        rd_kafka_yield_thread = 1;
 }
 
 
@@ -251,6 +251,9 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                                int32_t version) {
 	rd_kafka_op_t *rko;
 
+	if (timeout_ms == RD_POLL_INFINITE)
+		timeout_ms = INT_MAX;
+
 	mtx_lock(&rkq->rkq_lock);
 
 	if (!rkq->rkq_fwdq) {
@@ -267,21 +270,19 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                         }
 
                         /* No op, wait for one */
-			if (timeout_ms != RD_POLL_INFINITE) {
-                                rd_ts_t pre = rd_clock();
-				if (cnd_timedwait_ms(&rkq->rkq_cond,
-                                                     &rkq->rkq_lock,
-                                                     timeout_ms) ==
-                                    thrd_timedout) {
-					mtx_unlock(&rkq->rkq_lock);
-					return NULL;
-				}
-                                /* Remove spent time */
-				timeout_ms -= (int) (rd_clock()-pre) / 1000;
-                                if (timeout_ms < 0)
-                                        timeout_ms = RD_POLL_NOWAIT;
-			} else
-				cnd_wait(&rkq->rkq_cond, &rkq->rkq_lock);
+			rd_ts_t pre = rd_clock();
+			if (cnd_timedwait_ms(&rkq->rkq_cond,
+					     &rkq->rkq_lock,
+					     timeout_ms) ==
+			    thrd_timedout) {
+				mtx_unlock(&rkq->rkq_lock);
+				return NULL;
+			}
+			/* Remove spent time */
+			timeout_ms -= (int) (rd_clock()-pre) / 1000;
+			if (timeout_ms < 0)
+				timeout_ms = RD_POLL_NOWAIT;
+
 		} while (timeout_ms != RD_POLL_NOWAIT);
 
                 mtx_unlock(&rkq->rkq_lock);
@@ -338,18 +339,17 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 		return ret;
 	}
 
+	if (timeout_ms == RD_POLL_INFINITE)
+		timeout_ms = INT_MAX;
+
 	/* Wait for op */
 	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) && timeout_ms != 0) {
-		if (timeout_ms != RD_POLL_INFINITE) {
-			if (cnd_timedwait_ms(&rkq->rkq_cond,
-                                             &rkq->rkq_lock,
-                                             timeout_ms) == thrd_timedout)
-				break;
+		if (cnd_timedwait_ms(&rkq->rkq_cond,
+				     &rkq->rkq_lock,
+				     timeout_ms) != thrd_success)
+			break;
 
-			timeout_ms = 0;
-
-		} else
-			cnd_wait(&rkq->rkq_cond, &rkq->rkq_lock);
+		timeout_ms = 0;
 	}
 
 	if (!rko) {
@@ -364,7 +364,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
         mtx_unlock(&rkq->rkq_lock);
 
-        yield_thread = 0;
+        rd_kafka_yield_thread = 0;
 
 	/* Call callback for each op */
         while ((rko = TAILQ_FIRST(&localq.rkq_q))) {
@@ -373,7 +373,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 		rd_kafka_op_destroy(rko);
                 cnt++;
 
-                if (unlikely(yield_thread)) {
+                if (unlikely(rd_kafka_yield_thread)) {
                         /* Callback called rd_kafka_yield(), we must
                          * stop our callback dispatching and put the
                          * ops in localq back on the original queue head. */
@@ -416,6 +416,12 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 	if (rko) {
 		rkmessage = &rko->rko_rkmessage;
 		rkmessage->_private = rko;
+
+		if (!rkmessage->rkt && rko->rko_rktp)
+			rkmessage->rkt =
+				rd_kafka_topic_keep_a(
+					rd_kafka_toppar_s2i(rko->rko_rktp)->
+					rktp_rkt);
 	} else
                 rkmessage = rd_kafka_message_new();
 
@@ -496,8 +502,8 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                         rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
 			rd_kafka_toppar_lock(rktp);
 			rktp->rktp_app_offset = rko->rko_offset+1;
-                        if ((rktp->rktp_cgrp && rk->rk_conf.enable_auto_commit)
-                            || rktp->rktp_rkt->rkt_conf.auto_commit)
+                        if (rktp->rktp_cgrp &&
+			    rk->rk_conf.enable_auto_offset_store)
                                 rd_kafka_offset_store0(rktp,
                                                        rko->rko_offset+1,
                                                        0/* no lock */);

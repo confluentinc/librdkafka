@@ -24,7 +24,7 @@ socket.keepalive.enable                  |  *  |         false | Enable TCP keep
 socket.max.fails                         |  *  |             3 | Disconnect from broker when this number of send failures (e.g., timed out requests) is reached. Disable with 0. NOTE: The connection is automatically re-established.
 broker.address.ttl                       |  *  |          1000 | How long to cache the broker address resolving results (milliseconds).
 broker.address.family                    |  *  |           any | Allowed broker IP address families: any, v4, v6
-reconnect.backoff.jitter.ms              |  *  |             0 | Throttle broker reconnection attempts by this value +-50%.
+reconnect.backoff.jitter.ms              |  *  |           500 | Throttle broker reconnection attempts by this value +-50%.
 statistics.interval.ms                   |  *  |             0 | librdkafka statistics emit interval. The application also needs to register a stats callback using `rd_kafka_conf_set_stats_cb()`. The granularity is 1000ms. A value of 0 disables statistics.
 error_cb                                 |  *  |               | Error callback (set with rd_kafka_conf_set_error_cb())
 throttle_cb                              |  *  |               | Throttle callback (set with rd_kafka_conf_set_throttle_cb())
@@ -60,6 +60,7 @@ group.protocol.type                      |  *  |      consumer | Group protocol 
 coordinator.query.interval.ms            |  *  |        600000 | How often to query for the current client group coordinator. If the currently assigned coordinator is down the configured query interval will be divided by ten to more quickly recover in case of coordinator reassignment.
 enable.auto.commit                       |  C  |          true | Automatically and periodically commit offsets in the background.
 auto.commit.interval.ms                  |  C  |          5000 | The frequency in milliseconds that the consumer offsets are commited (written) to offset storage. (0 = disable)
+enable.auto.offset.store                 |  C  |          true | Automatically store offset of last message provided to application.
 queued.min.messages                      |  C  |        100000 | Minimum number of messages per topic+partition in the local consumer queue.
 queued.max.messages.kbytes               |  C  |       1000000 | Maximum number of kilobytes per topic+partition in the local consumer queue. This value may be overshot by fetch.message.max.bytes.
 fetch.wait.max.ms                        |  C  |           100 | Maximum time the broker may wait to fill the response with fetch.min.bytes.
@@ -99,7 +100,7 @@ auto.commit.interval.ms                  |  C  |         60000 | The frequency i
 auto.offset.reset                        |  C  |       largest | Action to take when there is no initial offset in offset store or the desired offset is out of range: 'smallest','earliest' - automatically reset the offset to the smallest offset, 'largest','latest' - automatically reset the offset to the largest offset, 'error' - trigger an error which is retrieved by consuming messages and checking 'message->err'.
 offset.store.path                        |  C  |             . | Path to local file for storing offsets. If the path is a directory a filename will be automatically generated in that directory based on the topic and partition.
 offset.store.sync.interval.ms            |  C  |            -1 | fsync() interval for the offset file, in milliseconds. Use -1 to disable syncing, and 0 for immediate sync after each write.
-offset.store.method                      |  C  |        broker | Offset commit store method: 'file' - local file store (offset.store.path, et.al), 'broker' - broker commit store (requires Apache Kafka 0.8.2 or later on the broker).
+offset.store.method                      |  C  |        broker | Offset commit store method: 'file' - local file store (offset.store.path, et.al), 'broker' - broker commit store (requires "group.id" to be configured and Apache Kafka 0.8.2 or later on the broker.).
 consume.callback.max.messages            |  C  |             0 | Maximum number of messages to dispatch in one `rd_kafka_consume_callback*()` call (0 = unlimited)
 
 ### C/P legend: C = Consumer, P = Producer, * = both

@@ -37,13 +37,15 @@ FAILED=0
 SUPP="--suppressions=librdkafka.suppressions"
 
 # Uncomment to generate valgrind suppressions
-GEN_SUPP="--gen-suppressions=yes"
+#GEN_SUPP="--gen-suppressions=yes"
 
 # Common valgrind arguments
 VALGRIND_ARGS="--error-exitcode=3"
 
 # Enable vgdb on valgrind errors.
-VALGRIND_ARGS="$VALGRIND_ARGS --vgdb-error=1"
+#VALGRIND_ARGS="$VALGRIND_ARGS --vgdb-error=1"
+
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:../src:../src-cpp
 
 echo -e "${CYAN}############## $TEST ################${CCLR}"
 

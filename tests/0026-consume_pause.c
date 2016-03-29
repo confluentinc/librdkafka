@@ -52,7 +52,7 @@ static int consume_pause (void) {
 	int msg_base = 0;
 	int fails = 0;
 
-	test_conf_init(NULL, &tconf, 20 + (test_session_timeout_ms * 3 / 1000));
+	test_conf_init(NULL, &tconf, 60 + (test_session_timeout_ms * 3 / 1000));
 	test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
 	
         /* Produce messages */
@@ -79,7 +79,7 @@ static int consume_pause (void) {
 		TEST_SAY("Iteration %d/%d, using group.id %s\n", it, iterations,
 			 group_id);
 
-		rk = test_create_consumer(group_id, NULL,
+		rk = test_create_consumer(group_id, NULL, NULL,
 					  rd_kafka_topic_conf_dup(tconf), NULL);
 
 

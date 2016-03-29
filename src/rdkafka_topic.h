@@ -46,10 +46,6 @@ struct rd_kafka_itopic_s {
                                              * to be used for callbacks
                                              * to the application. */
 
-        shptr_rd_kafka_itopic_t *rkt_autosubscribe_rkt; /* Shared pointer for
-                                                         * autosubscribed
-                                                         * topic */
-
 	shptr_rd_kafka_toppar_t  *rkt_ua;  /* unassigned partition */
 	shptr_rd_kafka_toppar_t **rkt_p;
 	int32_t            rkt_partition_cnt;

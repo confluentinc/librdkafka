@@ -33,8 +33,8 @@
  * @brief Apache Kafka C/C++ consumer and producer client library.
  *
  * rdkafkacpp.h contains the public C++ API for librdkafka.
- * The API is documented in this file as comments prefixing the class, function,
- * type, enum, define, etc.
+ * The API is documented in this file as comments prefixing the class,
+ * function, type, enum, define, etc.
  * For more information, see the C interface in rdkafka.h and read the
  * manual in INTRODUCTION.md.
  * The C++ interface is STD C++ '03 compliant and adheres to the
@@ -566,6 +566,7 @@ public:
    *         } else {
    *           std::cerr << "Rebalancing error: <<
    *                        RdKafka::err2str(err) << std::endl;
+   *           consumer->unassign();
    *         }
    *     }
    *  }
@@ -587,6 +588,9 @@ public:
    *
    * The results of automatic or manual offset commits will be scheduled
    * for this callback and is served by RdKafka::KafkaConsumer::consume()
+   *
+   * If no partitions had valid offsets to commit this callback will be called
+   * with \p err == ERR__NO_OFFSET which is not to be considered an error.
    *
    * The \p offsets list contains per-partition information:
    *   - \c topic      The topic committed
@@ -807,6 +811,9 @@ class RD_EXPORT Handle {
    *   - delivery report callbacks (if an RdKafka::DeliveryCb is configured) [producer]
    *   - event callbacks (if an RdKafka::EventCb is configured) [producer & consumer]
    *
+   * @remark  An application should make sure to call poll() at regular
+   *          intervals to serve any queued callbacks waiting to be called.
+   *
    * @warning This method MUST NOT be used with the RdKafka::KafkaConsumer,
    *          use its RdKafka::KafkaConsumer::consume() instead.
    *
@@ -864,6 +871,40 @@ class RD_EXPORT Handle {
    */
   virtual ErrorCode resume (std::vector<TopicPartition*> &partitions) = 0;
 
+
+  /**
+   * @brief Query broker for low (oldest/beginning)
+   *        and high (newest/end) offsets for partition.
+   *
+   * Offsets are returned in \p *low and \p *high respectively.
+   *
+   * @returns RdKafka::ERR_NO_ERROR on success or an error code on failure.
+   */
+  virtual ErrorCode query_watermark_offsets (const std::string &topic,
+					     int32_t partition,
+					     int64_t *low, int64_t *high,
+					     int timeout_ms) = 0;
+
+  /**
+   * @brief Get last known low (oldest/beginning)
+   *        and high (newest/end) offsets for partition.
+   *
+   * The low offset is updated periodically (if statistics.interval.ms is set)
+   * while the high offset is updated on each fetched message set from the
+   * broker.
+   *
+   * If there is no cached offset (either low or high, or both) then
+   * OFFSET_INVALID will be returned for the respective offset.
+   *
+   * Offsets are returned in \p *low and \p *high respectively.
+   *
+   * @returns RdKafka::ERR_NO_ERROR on success or an error code on failure.
+   *
+   * @remark Shall only be used with an active consumer instance.
+   */
+  virtual ErrorCode get_watermark_offsets (const std::string &topic,
+					   int32_t partition,
+					   int64_t *low, int64_t *high) = 0;
 };
 
 
@@ -1172,6 +1213,13 @@ public:
    *
    * @remark Use \c delete to free the message.
    *
+   * @remark  An application should make sure to call consume() at regular
+   *          intervals, even if no messages are expected, to serve any
+   *          queued callbacks waiting to be called. This is especially
+   *          important when a RebalanceCb has been registered as it needs
+   *          to be called and handled properly to synchronize internal
+   *          consumer state.
+   *
    * @remark Application MUST NOT call \p poll() on KafkaConsumer objects.
    *
    * @returns One of:
@@ -1221,6 +1269,20 @@ public:
    * @sa RdKafka::KafkaConsummer::commitSync()
    */
   virtual ErrorCode commitAsync (Message *message) = 0;
+
+  /**
+   * @brief Commit offsets for the provided list of partitions.
+   *
+   * @remark This is the synchronous variant.
+   */
+  virtual ErrorCode commitSync (std::vector<TopicPartition*> &offsets) = 0;
+
+  /**
+   * @brief Commit offset for the provided list of partitions.
+   *
+   * @remark This is the asynchronous variant.
+   */
+  virtual ErrorCode commitAsync (const std::vector<TopicPartition*> &offsets) = 0;
 
 
   /**
@@ -1412,6 +1474,10 @@ class RD_EXPORT Consumer : public virtual Handle {
    * @brief Converts an offset into the logical offset from the tail of a topic.
    *
    * \p offset is the (positive) number of items from the end.
+   *
+   * @returns the logical offset for message \p offset from the tail, this value
+   *          may be passed to Consumer::start, et.al.
+   * @remark The returned logical offset is specific to librdkafka.
    */
   static int64_t OffsetTail(int64_t offset);
 };

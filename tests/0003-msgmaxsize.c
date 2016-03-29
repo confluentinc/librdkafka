@@ -73,7 +73,8 @@ int main_0003_msgmaxsize (int argc, char **argv) {
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
-	char msg[100000];
+	char *msg;
+	static const int msgsize = 100000;
 	int msgcnt = 10;
 	int i;
 
@@ -101,7 +102,7 @@ int main_0003_msgmaxsize (int argc, char **argv) {
 		TEST_FAIL("Failed to create topic: %s\n",
 			  rd_strerror(errno));
 
-	memset(msg, 0, sizeof(msg));
+	msg = calloc(1, msgsize);
 
 	/* Produce 'msgcnt' messages, size odd ones larger than max.bytes,
 	 * and even ones smaller than max.bytes. */
@@ -120,7 +121,7 @@ int main_0003_msgmaxsize (int argc, char **argv) {
 			msgs_wait |= (1 << i);
 		}
 
-		rd_snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
+		rd_snprintf(msg, msgsize, "%s test message #%i", argv[0], i);
 		r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
 				     msg, len, NULL, 0, msgidp);
 
@@ -140,6 +141,8 @@ int main_0003_msgmaxsize (int argc, char **argv) {
 
 	if (msgs_wait != 0)
 		TEST_FAIL("Still waiting for messages: 0x%x\n", msgs_wait);
+
+	free(msg);
 
 	/* Destroy topic */
 	rd_kafka_topic_destroy(rkt);

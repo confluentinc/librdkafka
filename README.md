@@ -22,11 +22,11 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 [![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
 
-**Apache Kafka 0.9 support:**
+**Apache Kafka 0.8 & 0.9 support:**
 
   * Branch: master
   * Producer: supported
-  * High-level balanced KafkaConsumer: supported
+  * High-level balanced KafkaConsumer: supported (requires broker >= 0.9)
   * Simple Consumer: supported
   * Compression: snappy and gzip
   * Broker version support: >=0.8
@@ -37,23 +37,6 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Tests: Regression tests in `tests/` directory.
   * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
   * Status: Testing
-
-
-**Apache Kafka 0.8 support:**
-
-  * Branch: 0.8
-  * Producer: supported
-  * High-level Consumer: not supported
-  * Simple Consumer: supported
-  * Compression: snappy and gzip
-  * Broker version support: >=0.8
-  * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
-  * ZooKeeper: not supported
-  * C API: Stable, ABI safe, not backwards compatible with 0.7
-  * C++ API: Testing
-  * Tests: Regression tests in `tests/` directory.
-  * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
-  * Status: Stable
 
 
 **Apache Kafka 0.7 support:**
@@ -75,6 +58,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Haskell: [haskakafka](https://github.com/cosbynator/haskakafka)
   * Haskell: [haskell-kafka](https://github.com/yanatan16/haskell-kafka)
   * Node.js: [node-kafka](https://github.com/sutoiku/node-kafka)
+  * Node.js: [kafka-native](https://github.com/jut-io/node-kafka-native)
   * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
   * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)
@@ -100,6 +84,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * [node-kafkacat](https://github.com/Rafflecopter/node-kafkacat)
   * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
   * [otto.de](http://otto.de)'s [trackdrd](https://github.com/otto-de/trackrdrd) - Varnish log reader
+  * [Microwish](https://github.com/microwish) has a range of Kafka utilites for log aggregation, HDFS integration, etc.
   * large unnamed financial institution
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 

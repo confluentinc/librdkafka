@@ -91,6 +91,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SASL
 		{ 0x8, "sasl" },
 #endif
+#if HAVE_REGEX
+		{ 0x10, "regex" },
+#endif
 		{ 0, NULL }
 		}
 	},
@@ -207,7 +210,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL, "reconnect.backoff.jitter.ms", _RK_C_INT,
           _RK(reconnect_jitter_ms),
           "Throttle broker reconnection attempts by this value +-50%.",
-          0, 60*60*1000, 0 },
+          0, 60*60*1000, 500 },
 	{ _RK_GLOBAL, "statistics.interval.ms", _RK_C_INT,
 	  _RK(stats_interval_ms),
 	  "librdkafka statistics emit interval. The application also needs to "
@@ -415,6 +418,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The frequency in milliseconds that the consumer offsets "
 	  "are commited (written) to offset storage. (0 = disable)",
           0, 86400*1000, 5*1000 },
+        { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.offset.store", _RK_C_BOOL,
+          _RK(enable_auto_offset_store),
+          "Automatically store offset of last message provided to "
+	  "application.",
+          0, 1, 1 },
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
 	  _RK(queued_min_msgs),
 	  "Minimum number of messages per topic+partition in the "
@@ -644,7 +652,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Offset commit store method: "
           "'file' - local file store (offset.store.path, et.al), "
           "'broker' - broker commit store "
-          "(requires Apache Kafka 0.8.2 or later on the broker).",
+          "(requires \"group.id\" to be configured and "
+	  "Apache Kafka 0.8.2 or later on the broker.).",
           .vdef = RD_KAFKA_OFFSET_METHOD_BROKER, /* FIXME: warn about default change */
           .s2i = {
                         { RD_KAFKA_OFFSET_METHOD_FILE, "file" },

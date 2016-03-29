@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rdkafka_op.h"
+#include "rdkafka_int.h"
 
 struct rd_kafka_q_s {
 	mtx_t  rkq_lock;
@@ -89,14 +90,18 @@ void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq, int do_lock);
 #define rd_kafka_q_fwd_set(S,D) rd_kafka_q_fwd_set0(S,D,1/*lock*/)
 
 /**
- * Enqueue the 'rko' op at the tail of the queue 'rkq'.
- * Returns 1 if op was enqueued or 0 if queue is disabled and
+ * @brief Enqueue the 'rko' op at the tail of the queue 'rkq'.
+ *
+ * The provided 'rko' is either enqueued or destroyed.
+ *
+ * @returns 1 if op was enqueued or 0 if queue is disabled and
  * there was no replyq to enqueue on.
  *
  * Locality: any thread.
  */
 static __inline RD_UNUSED
 int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
+	rd_kafka_q_t *fwdq;
 
 	mtx_lock(&rkq->rkq_lock);
 
@@ -117,15 +122,18 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
                 rd_kafka_op_destroy(rko);
                 return r;
         }
-	if (!rkq->rkq_fwdq) {
+	if (!(fwdq = rkq->rkq_fwdq)) {
 		TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
                 rkq->rkq_qlen++;
                 rkq->rkq_qsize += rko->rko_len;
 		cnd_signal(&rkq->rkq_cond);
-	} else
-		rd_kafka_q_enq(rkq->rkq_fwdq, rko);
-
-	mtx_unlock(&rkq->rkq_lock);
+		mtx_unlock(&rkq->rkq_lock);
+	} else {
+		rd_kafka_q_keep(fwdq);
+		mtx_unlock(&rkq->rkq_lock);
+		rd_kafka_q_enq(fwdq, rko);
+		rd_kafka_q_destroy(fwdq);
+	}
 
         return 1;
 }
@@ -163,6 +171,7 @@ void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 	if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
                 rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
                            srcq->rkq_qlen > 0);
+		rd_dassert(rkq->rkq_flags & RD_KAFKA_Q_F_READY);
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
                 rkq->rkq_qlen += srcq->rkq_qlen;
                 rkq->rkq_qsize += srcq->rkq_qsize;
@@ -272,3 +281,5 @@ struct rd_kafka_queue_s {
 };
 
 
+
+extern int RD_TLS rd_kafka_yield_thread;

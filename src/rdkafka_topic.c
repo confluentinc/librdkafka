@@ -153,17 +153,15 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
         shptr_rd_kafka_itopic_t *s_rkt;
 
 	/* Verify configuration */
-	if (!topic ||
-	    (conf &&
-	     (conf->message_timeout_ms < 0 ||
-	      conf->request_timeout_ms <= 0))) {
+	if (!topic) {
 		if (conf)
 			rd_kafka_topic_conf_destroy(conf);
-		errno = EINVAL;
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
+					EINVAL);
 		return NULL;
 	}
 
-        if (do_lock)
+	if (do_lock)
                 rd_kafka_wrlock(rk);
 	if ((s_rkt = rd_kafka_topic_find(rk, topic, 0/*no lock*/))) {
                 if (do_lock)
@@ -195,9 +193,9 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                         * just the placeholder. The internal members
                         * were copied on the line above. */
 
-	/* Default partitioner: random */
+	/* Default partitioner: consistent_random */
 	if (!rkt->rkt_conf.partitioner)
-		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_random;
+		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_consistent_random;
 
 	if (rkt->rkt_conf.compression_codec == RD_KAFKA_COMPRESSION_INHERIT)
 		rkt->rkt_conf.compression_codec = rk->rk_conf.compression_codec;
@@ -237,7 +235,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
 
         s_rkt = rd_kafka_topic_new0(rk, topic, conf, &existing, 1/*lock*/);
         if (!s_rkt)
-                return rd_kafka_topic_s2a(s_rkt);
+                return NULL;
 
         rkt = rd_kafka_topic_s2i(s_rkt);
 
@@ -631,9 +629,8 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
         rd_kafka_broker_t **partbrokers;
         int query_leader = 0;
         int old_state;
-        rd_kafka_cgrp_t *rkcg;
 
-        /* Ignore topics in blacklist */
+	/* Ignore topics in blacklist */
         if (rd_kafka_pattern_match(&rkb->rkb_rk->rk_conf.topic_blacklist,
                                    mdt->topic)) {
                 rd_rkb_dbg(rkb, TOPIC, "BLACKLIST",
@@ -655,10 +652,6 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 		return -1;
 	}
 
-
-        /* See if this topic matches a cgrp whitelist. */
-        if ((rkcg = rd_kafka_cgrp_get(rkb->rkb_rk)))
-                rd_kafka_cgrp_topic_check(rkcg, mdt->topic);
 
 	if (!(s_rkt = rd_kafka_topic_find(rkb->rkb_rk, mdt->topic, 1/*lock*/)))
 		return -1; /* Ignore topics that we dont have locally. */

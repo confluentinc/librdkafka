@@ -32,7 +32,9 @@
 void rd_kafka_pattern_destroy (rd_kafka_pattern_list_t *plist,
                                rd_kafka_pattern_t *rkpat) {
         TAILQ_REMOVE(&plist->rkpl_head, rkpat, rkpat_link);
-		trex_free(rkpat->rkpat_re);
+#if HAVE_REGEX
+	regfree(&rkpat->rkpat_re);
+#endif
         rd_free(rkpat->rkpat_orig);
         rd_free(rkpat);
 }
@@ -44,33 +46,46 @@ void rd_kafka_pattern_add (rd_kafka_pattern_list_t *plist,
 
 rd_kafka_pattern_t *rd_kafka_pattern_new (const char *pattern,
                                           char *errstr, int errstr_size) {
+#if HAVE_REGEX
         rd_kafka_pattern_t *rkpat;
-		TRex *re;
-		const char *error;
+	int re_err;
 
-		/* Verify and precompile pattern */
-		if (!(re = trex_compile(pattern, &error))) {
-			rd_snprintf(errstr, errstr_size, "%s", error);
-			return NULL;
-		}
+	rkpat = rd_calloc(1, sizeof(*rkpat));
 
-        rkpat = rd_calloc(1, sizeof(*rkpat));
-		rkpat->rkpat_re = re;
+	/* Verify and precompile pattern */
+	if ((re_err = regcomp(&rkpat->rkpat_re, pattern,
+			      REG_EXTENDED|REG_NOSUB))) {
+		char re_errstr[128];
+		regerror(re_err, &rkpat->rkpat_re,
+			 re_errstr, sizeof(re_errstr));
+		rd_snprintf(errstr, errstr_size,
+			    "Regex compilation failed: %s", re_errstr);
+		rd_free(rkpat);
+		return NULL;
+	}
 
         rkpat->rkpat_orig = rd_strdup(pattern);
 
         return rkpat;
+#else
+	rd_snprintf(errstr, errstr_size,
+		    "Regex support not built-in");
+	return NULL;
+#endif
 }
 
 
 
 int rd_kafka_pattern_match (rd_kafka_pattern_list_t *plist, const char *str) {
+#if HAVE_REGEX
         rd_kafka_pattern_t *rkpat;
 
         TAILQ_FOREACH(rkpat, &plist->rkpl_head, rkpat_link) {
-                if (trex_match(rkpat->rkpat_re, str))
+
+                if (regexec(&rkpat->rkpat_re, str, 0, NULL, 0) != REG_NOMATCH)
                         return 1;
         }
+#endif
 
         return 0;
 }

@@ -103,7 +103,7 @@
 #define be16toh(x) (x)
 
 #else
-  #error Unknown location for endian.h
+ #include <endian.h>
 #endif
 
 

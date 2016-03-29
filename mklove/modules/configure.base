@@ -449,6 +449,9 @@ function mkl_generate {
     mkl_write_mk "# $MKL_CONFIGURE_ARGS"
     mkl_write_mk ""
 
+    # This variable is used by Makefile.base to avoid multiple inclusions.
+    mkl_write_mk "MKL_MAKEFILE_CONFIG=y"
+
     # Export colors to Makefile.config
     mkl_write_mk "MKL_RED=\t${MKL_RED}"
     mkl_write_mk "MKL_GREEN=\t${MKL_GREEN}"
@@ -899,7 +902,7 @@ function mkl_compile_check {
         cflags="$(mkl_mkvar_get CFLAGS)"
     fi
 
-    local srcfile=$(mktemp _mkltmpXXXXX)
+    local srcfile=$(mktemp _mkltmpXXXXXX)
     mv "$srcfile" "${srcfile}.$ext"
     srcfile="$srcfile.$ext"
     echo "$6" > $srcfile
@@ -927,7 +930,7 @@ source: $6"
         local ret=0
     fi
 
-    # OSX XCode toolchain creates dSYM directories when -g set set,
+    # OSX XCode toolchain creates dSYM directories when -g is set,
     # delete them specifically.
     rm -rf "$srcfile" "${srcfile}.o" "$srcfile*dSYM"
 
@@ -944,7 +947,7 @@ source: $6"
 function mkl_link_check {
     mkl_check_begin "$1" "$2" "$3" "$1 (by linking)" && return $?
 
-    local srcfile=$(mktemp _mktmpXXXXX)
+    local srcfile=$(mktemp _mktmpXXXXXX)
     echo "int main () { return 0; }" > $srcfile
 
     local cmd="${CC} $(mkl_mkvar_get LDFLAGS) -c $srcfile -o ${srcfile}.o $4";
@@ -1315,7 +1318,7 @@ function mkl_module_download {
     # Download
     mkl_info "${MKL_BLUE}downloading missing module $modname from $url${MKL_CLR_RESET}"
 
-    tmpfile=$(mktemp _mkltmpXXXXX)
+    tmpfile=$(mktemp _mkltmpXXXXXX)
     local out=
     out=$(wget -nv -O "$tmpfile" "$url" 2>&1)
 

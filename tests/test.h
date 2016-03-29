@@ -67,6 +67,9 @@ struct test {
         int (*mainfunc) (int argc, char **argv); /**< test's main func */
         const int flags;     /**< Test flags */
 #define TEST_F_LOCAL   0x1   /**< Test is local, no broker requirement */
+#define TEST_F_KNOWN_ISSUE 0x2 /**< Known issue, can fail without affecting
+				*   total test run status. */
+	const char *extra;   /**< Extra information to print in test_summary. */
 
         /**
          * Runtime
@@ -74,6 +77,7 @@ struct test {
         int64_t start;
         int64_t duration;
         FILE   *stats_fp;
+	int64_t timeout;
         enum {
                 TEST_NOT_STARTED,
                 TEST_SKIPPED,
@@ -130,8 +134,8 @@ struct test {
 	} while (0)
 
 #define TEST_SAY0(...)  fprintf(stderr, __VA_ARGS__)
-#define TEST_SAY(...) do {                                              \
-	if (test_level >= 2) {                                          \
+#define TEST_SAYL(LVL,...) do {						\
+	if (test_level >= LVL) {                                        \
                 fprintf(stderr, "\033[36m[%-28s/%7.3fs] ",		\
 			test_curr->name,                                \
 			test_curr->start ?                              \
@@ -141,6 +145,7 @@ struct test {
                 fprintf(stderr, "\033[0m");                             \
         }                                                               \
 	} while (0)
+#define TEST_SAY(...) TEST_SAYL(2, __VA_ARGS__)
 
 #define TEST_REPORT(...) do {		\
 	fprintf(stdout, __VA_ARGS__);			\
@@ -154,6 +159,13 @@ struct test {
                       }                                                 \
         } while (0)
 
+/* Skip the current test. Argument is textual reason (printf format) */
+#define TEST_SKIP(...) do {		     \
+		TEST_WARN("SKIPPING TEST: " __VA_ARGS__); \
+		TEST_LOCK();			     \
+		test_curr->state = TEST_SKIPPED;     \
+		TEST_UNLOCK();			     \
+	} while (0)
 
 const char *test_mk_topic_name (const char *suffix, int randomized);
 
@@ -258,6 +270,7 @@ static __inline int jitter (int low, int high) {
  * topics and partitions, it is then checked for expected messages, such as:
  *   - all messages received, based on message payload information.
  *   - messages received in order
+ *   - EOF
  */
 typedef struct test_msgver_s {
 	struct test_mv_p **p;  /* Partitions array */
@@ -292,6 +305,7 @@ struct test_mv_p {
 	char *topic;
 	int32_t partition;
 	struct test_mv_mvec mvec;
+	int64_t eof_offset;
 };
 
 /* Verification state */
@@ -340,6 +354,14 @@ int test_msgver_add_msg0 (const char *func, int line,
 #define TEST_MSGVER_ALL_PART (TEST_MSGVER_ALL | TEST_MSGVER_BY_MSGID)
 
 
+int test_msgver_verify_part0 (const char *func, int line, const char *what,
+			      test_msgver_t *mv, int flags,
+			      const char *topic, int partition,
+			      int msg_base, int exp_cnt);
+#define test_msgver_verify_part(what,mv,flags,topic,partition,msg_base,exp_cnt) \
+	test_msgver_verify_part0(__FUNCTION__,__LINE__,			\
+				 what,mv,flags,topic,partition,msg_base,exp_cnt)
+
 int test_msgver_verify0 (const char *func, int line, const char *what,
 			 test_msgver_t *mv, int flags,
 			 int msg_base, int exp_cnt);
@@ -378,12 +400,13 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 					  rd_kafka_topic_partition_list_t
 					  *partitions,
 					  void *opaque),
+				  rd_kafka_conf_t *conf,
                                   rd_kafka_topic_conf_t *default_topic_conf,
 				  void *opaque);
 rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
                                               const char *topic);
-rd_kafka_topic_t *test_create_topic (rd_kafka_t *rk,
-                                     const char *topic, ...);
+rd_kafka_topic_t *test_create_topic_object (rd_kafka_t *rk,
+					    const char *topic, ...);
 void test_consumer_start (const char *what,
                           rd_kafka_topic_t *rkt, int32_t partition,
                           int64_t start_offset);
@@ -405,12 +428,16 @@ void test_verify_rkmessage0 (const char *func, int line,
         test_verify_rkmessage0(__FUNCTION__,__LINE__,\
                                rkmessage,testid,partition,msgnum)
 
+void test_consumer_subscribe (rd_kafka_t *rk, const char *topic);
+
 void
 test_consume_msgs_easy (const char *group_id, const char *topic,
-                        uint64_t testid, int exp_msgcnt);
+                        uint64_t testid, int exp_eofcnt, int exp_msgcnt,
+			rd_kafka_topic_conf_t *tconf);
 
 void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 				 uint64_t testid, int timeout_ms);
+int test_consumer_poll_once (rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms);
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt,
 			test_msgver_t *mv);
@@ -428,3 +455,9 @@ void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions);
 
+void test_create_topic (const char *topicname, int partition_cnt,
+			int replication_factor);
+int test_check_builtin (const char *feature);
+void test_timeout_set (int timeout);
+
+char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);

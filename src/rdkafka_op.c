@@ -55,7 +55,6 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 "REPLY:FETCH_START",
                 "REPLY:FETCH_STOP",
                 "REPLY:SEEK",
-                "REPLY:CGRP_DELEGATE",
                 "REPLY:OFFSET_FETCH",
                 "REPLY:PARTITION_JOIN",
                 "REPLY:PARTITION_LEAVE",
@@ -92,9 +91,9 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 
 void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
-	/* Decrease refcount on rkbuf to eventually rd_free the shared buffer */
+	/* Decrease refcount on rkbuf to eventually rd_free the shared buffer*/
 	if (rko->rko_rkbuf)
-		rd_kafka_buf_destroy(rko->rko_rkbuf);
+		rd_kafka_buf_handle_op(rko, RD_KAFKA_RESP_ERR__DESTROY);
 	else if (rko->rko_payload && rko->rko_flags & RD_KAFKA_OP_F_FREE) {
                 if (rko->rko_free_cb)
                         rko->rko_free_cb(rko->rko_payload);
@@ -234,7 +233,6 @@ void rd_kafka_op_app (rd_kafka_q_t *rkq, rd_kafka_op_type_t type,
         if (rktp) {
                 rko->rko_rktp = rd_kafka_toppar_keep(rktp);
                 rko->rko_version = rktp->rktp_fetch_version;
-                rko->rko_rkmessage.rkt = rd_kafka_topic_keep_a(rktp->rktp_rkt);
                 rko->rko_rkmessage.partition = rktp->rktp_partition;
         }
 
@@ -389,8 +387,12 @@ rd_kafka_op_t *rd_kafka_op_req2 (rd_kafka_q_t *destq, rd_kafka_op_type_t type) {
  * Destroys the rko and returns its error.
  */
 rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko) {
-        rd_kafka_resp_err_t err = rko->rko_err;
-        rd_kafka_op_destroy(rko);
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+
+	if (rko) {
+		err = rko->rko_err;
+		rd_kafka_op_destroy(rko);
+	}
         return err;
 }
 

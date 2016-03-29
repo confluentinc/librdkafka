@@ -63,125 +63,6 @@ rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt) {
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-rd_kafka_resp_err_t rd_kafka_subscribe_partition (rd_kafka_t *rk,
-                                                  const char *topic,
-                                                  int32_t partition) {
-        rd_kafka_cgrp_t *rkcg;
-        shptr_rd_kafka_itopic_t *s_rkt;
-        rd_kafka_itopic_t *rkt;
-        int is_regex = *topic == '^';
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        int existing;
-        rd_kafka_q_t *tmpq;
-
-        if (!rd_kafka_high_level_consumer_add(rk))
-                return RD_KAFKA_RESP_ERR__CONFLICT;
-
-        if (!(rkcg = rd_kafka_cgrp_get(rk)))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
-
-        if (is_regex && partition == RD_KAFKA_PARTITION_UA) {
-                /* Simply add regex to cgrp's list of topic patterns.
-                 * Partition is always ignored for regex subscriptions. */
-                err = rd_kafka_cgrp_topic_pattern_add(rkcg, topic);
-                return err;
-        }
-
-        s_rkt = rd_kafka_topic_new0(rk, topic, NULL, &existing, 1/*lock*/);
-        rkt = rd_kafka_topic_s2i(s_rkt);
-
-        /* Query for the topic leader (async) */
-        if (!existing)
-                rd_kafka_topic_leader_query(rk, rkt);
-
-
-        tmpq = rd_kafka_q_new(rk);
-
-        if (partition == RD_KAFKA_PARTITION_UA) {
-                /* Topic-wide subscription */
-                err = rd_kafka_subscribe_rkt(rkt);
-                rd_kafka_assert(NULL, !*"not implemented");
-
-        } else {
-                /* Single partition subscription */
-                shptr_rd_kafka_toppar_t *s_rktp;
-
-                rd_kafka_topic_wrlock(rkt);
-                s_rktp = rd_kafka_toppar_desired_add(rkt, partition);
-                rd_kafka_topic_wrunlock(rkt);
-                if (!s_rktp) {
-                        err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
-                        goto done;
-                }
-
-                err = rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_s2i(s_rktp),
-                                                     RD_KAFKA_OFFSET_STORED,
-                                                     &rkcg->rkcg_q, tmpq);
-                rd_kafka_toppar_destroy(s_rktp);
-        }
-
-done:
-        if (!err)
-                err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
-
-        rd_kafka_q_destroy(tmpq);
-        rd_kafka_topic_destroy0(s_rkt);
-
-        return err;
-}
-
-
-rd_kafka_resp_err_t rd_kafka_unsubscribe_partition (rd_kafka_t *rk,
-                                                    const char *topic,
-                                                    int32_t partition) {
-        rd_kafka_cgrp_t *rkcg;
-        shptr_rd_kafka_toppar_t *s_rktp;
-        rd_kafka_toppar_t *rktp;
-        rd_kafka_itopic_t *rkt;
-        shptr_rd_kafka_itopic_t *s_rkt;
-        int is_regex = *topic == '^';
-        rd_kafka_q_t *tmpq;
-        rd_kafka_resp_err_t err;
-
-        if (!(rkcg = rd_kafka_cgrp_get(rk)))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
-
-        if (is_regex)
-                return rd_kafka_cgrp_topic_pattern_del(rkcg, topic);
-
-        if (!(s_rkt = rd_kafka_topic_find(rk, topic, 1/*lock*/)))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
-
-        rkt = rd_kafka_topic_s2i(s_rkt);
-
-        /* Remove specific partition subscription */
-        rd_kafka_topic_rdlock(rkt);
-        s_rktp = rd_kafka_toppar_get(rkt, partition, 0/*no ua on miss*/);
-        if (unlikely(!s_rktp))
-                s_rktp = rd_kafka_toppar_desired_get(rkt, partition);
-        rd_kafka_topic_rdunlock(rkt);
-
-        if (unlikely(!s_rktp))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
-
-        rktp = rd_kafka_toppar_s2i(s_rktp);
-        rd_kafka_toppar_lock(rktp);
-        rd_kafka_toppar_desired_del(rktp);
-        rd_kafka_toppar_unlock(rktp);
-
-        tmpq = rd_kafka_q_new(rkt->rkt_rk);
-
-        err = rd_kafka_toppar_op_fetch_stop(rd_kafka_toppar_s2i(s_rktp), tmpq);
-        if (!err)
-                err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
-
-        rd_kafka_q_destroy(tmpq);
-        rd_kafka_toppar_destroy(s_rktp);
-        rd_kafka_topic_destroy0(s_rkt);
-
-        return err;
-}
-
 
 rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk) {
         rd_kafka_cgrp_t *rkcg;
@@ -224,7 +105,7 @@ rd_kafka_assign (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
-	if (partitions && partitions->cnt > 0)
+	if (partitions)
                 rd_kafka_op_payload_set(
                         rko,
                         rd_kafka_topic_partition_list_copy(partitions),
@@ -247,6 +128,9 @@ rd_kafka_assignment (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_GET_ASSIGNMENT);
+	if (!rko)
+		return RD_KAFKA_RESP_ERR__TIMED_OUT;
+
         err = rko->rko_err;
 
         *partitions = rko->rko_payload;
@@ -272,6 +156,9 @@ rd_kafka_subscription (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_GET_SUBSCRIPTION);
+	if (!rko)
+		return RD_KAFKA_RESP_ERR__TIMED_OUT;
+
         err = rko->rko_err;
 
         *topics = rko->rko_payload;

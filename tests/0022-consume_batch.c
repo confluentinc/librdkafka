@@ -66,16 +66,17 @@ static int do_test_consume_batch (void) {
 
 
         /* Create simple consumer */
-        rk = test_create_consumer(NULL, NULL, NULL, NULL);
+        rk = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
 
         /* Create generic consume queue */
         rkq = rd_kafka_queue_new(rk);
 
         for (i = 0 ; i < topic_cnt ; i++) {
                 /* Create topic object */
-                rkts[i] = test_create_topic(rk, topics[i],
-                                            "auto.offset.reset", "smallest",
-                                            NULL);
+                rkts[i] = test_create_topic_object(rk, topics[i],
+						   "auto.offset.reset",
+						   "smallest",
+						   NULL);
 
                 /* Start consuming each partition and redirect
                  * messages to queue */

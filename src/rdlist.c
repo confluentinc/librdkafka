@@ -40,6 +40,7 @@ void rd_list_dump (const char *what, const rd_list_t *rl) {
 }
 
 static void rd_list_grow (rd_list_t *rl, int add_size) {
+	rd_assert(!(rl->rl_flags & RD_LIST_F_FIXED_SIZE));
         rl->rl_size += add_size;
         rl->rl_elems = rd_realloc(rl->rl_elems,
                                   sizeof(*rl->rl_elems) * rl->rl_size);
@@ -48,14 +49,42 @@ static void rd_list_grow (rd_list_t *rl, int add_size) {
 void rd_list_init (rd_list_t *rl, int initial_size) {
         memset(rl, 0, sizeof(*rl));
 
-        rd_list_grow(rl, initial_size);
+	if (initial_size > 0)
+		rd_list_grow(rl, initial_size);
 }
 
 rd_list_t *rd_list_new (int initial_size) {
 	rd_list_t *rl = malloc(sizeof(*rl));
 	rd_list_init(rl, initial_size);
-	rl->rl_allocated = 1;
+	rl->rl_flags |= RD_LIST_F_ALLOCATED;
 	return rl;
+}
+
+void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size) {
+	size_t allocsize;
+	char *p;
+	size_t i;
+
+	rd_assert(!rl->rl_elems);
+
+	/* Allocation layout:
+	 *   void *ptrs[cnt];
+	 *   elems[elemsize][cnt];
+	 */
+
+	allocsize = (sizeof(void *) * size) + (elemsize * size);
+	rl->rl_elems = rd_malloc(allocsize);
+
+	/* p points to first element's memory. */
+	p = (char *)&rl->rl_elems[size];
+
+	/* Pointer -> elem mapping */
+	for (i = 0 ; i < size ; i++, p += elemsize)
+		rl->rl_elems[i] = p;
+
+	rl->rl_size = size;
+	rl->rl_cnt = 0;
+	rl->rl_flags |= RD_LIST_F_FIXED_SIZE;
 }
 
 
@@ -64,10 +93,13 @@ void rd_list_set_free_cb (rd_list_t *rl, void (*free_cb) (void *)) {
 }
 
 
-void rd_list_add (rd_list_t *rl, void *elem) {
+void *rd_list_add (rd_list_t *rl, void *elem) {
         if (rl->rl_cnt == rl->rl_size)
                 rd_list_grow(rl, rl->rl_size ? rl->rl_size * 2 : 16);
-        rl->rl_elems[rl->rl_cnt++] = elem;
+	rl->rl_flags &= ~RD_LIST_F_SORTED;
+	if (elem)
+		rl->rl_elems[rl->rl_cnt] = elem;
+	return rl->rl_elems[rl->rl_cnt++];
 }
 
 static void rd_list_remove0 (rd_list_t *rl, int idx) {
@@ -78,6 +110,7 @@ static void rd_list_remove0 (rd_list_t *rl, int idx) {
                         &rl->rl_elems[idx+1],
                         sizeof(*rl->rl_elems) * (rl->rl_cnt - (idx+1)));
         rl->rl_cnt--;
+	rl->rl_flags &= ~RD_LIST_F_SORTED;
 }
 
 void *rd_list_remove (rd_list_t *rl, void *match_elem) {
@@ -112,12 +145,34 @@ void *rd_list_remove_cmp (rd_list_t *rl, void *match_elem,
 }
 
 
+/**
+ * Trampoline to avoid the double pointers in callbacks.
+ *
+ * rl_elems is a **, but to avoid having the application do the cumbersome
+ * ** -> * casting we wrap this here and provide a simple * pointer to the
+ * the callbacks.
+ *
+ * This is true for all list comparator uses, i.e., both sort() and find().
+ */
+static RD_TLS int (*rd_list_cmp_curr) (const void *, const void *);
+
+static __inline
+int rd_list_cmp_trampoline (const void *_a, const void *_b) {
+	const void *a = *(const void **)_a, *b = *(const void **)_b;
+
+	return rd_list_cmp_curr(a, b);
+}
+
 void rd_list_sort (rd_list_t *rl, int (*cmp) (const void *, const void *)) {
-        qsort(rl->rl_elems, rl->rl_cnt, sizeof(*rl->rl_elems), cmp);
+	rd_list_cmp_curr = cmp;
+        qsort(rl->rl_elems, rl->rl_cnt, sizeof(*rl->rl_elems),
+	      rd_list_cmp_trampoline);
+	rl->rl_flags |= RD_LIST_F_SORTED;
 }
 
 void rd_list_clear (rd_list_t *rl) {
         rl->rl_cnt = 0;
+	rl->rl_flags &= ~RD_LIST_F_SORTED;
 }
 
 
@@ -133,10 +188,11 @@ void rd_list_destroy (rd_list_t *rl, void (*free_cb) (void *)) {
                                 if (rl->rl_elems[i])
                                         free_cb(rl->rl_elems[i]);
                 }
-                rd_free(rl->rl_elems);
+
+		rd_free(rl->rl_elems);
         }
 
-	if (rl->rl_allocated)
+	if (rl->rl_flags & RD_LIST_F_ALLOCATED)
 		rd_free(rl);
 }
 
@@ -151,6 +207,15 @@ void *rd_list_find (const rd_list_t *rl, const void *match,
                     int (*cmp) (const void *, const void *)) {
         int i;
         const void *elem;
+
+	if (rl->rl_flags & RD_LIST_F_SORTED) {
+		void **r;
+		rd_list_cmp_curr = cmp;
+		r = bsearch(&match/*ptrptr to match elems*/,
+			    rl->rl_elems, rl->rl_cnt,
+			    sizeof(*rl->rl_elems), rd_list_cmp_trampoline);
+		return r ? *r : NULL;
+	}
 
         RD_LIST_FOREACH(elem, rl, i) {
                 if (!cmp(match, elem))

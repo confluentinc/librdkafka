@@ -56,6 +56,11 @@
 #define TIMESPEC_CLEAR(ts) ((ts)->tv_sec = (ts)->tv_nsec = 0LLU)
 
 
+#define RD_POLL_INFINITE  -1
+#define RD_POLL_NOWAIT     0
+
+
+
 static __inline rd_ts_t rd_clock (void) RD_UNUSED;
 static __inline rd_ts_t rd_clock (void) {
 #ifdef __APPLE__
@@ -90,4 +95,41 @@ static __inline const char *rd_ctime (const time_t *t) {
 	ret[25] = '\0';
 
 	return ret;
+}
+
+
+/**
+ * @brief Initialize an absolute timeout based on the provided \p timeout_ms
+ *
+ * To be used with rd_timeout_adjust().
+ *
+ * Honours RD_POLL_INFINITE, RD_POLL_NOWAIT.
+ *
+ * @returns the absolute timeout which should later be passed
+ *          to rd_timeout_adjust().
+ */
+static __inline rd_ts_t rd_timeout_init (int timeout_ms) {
+	if (timeout_ms == RD_POLL_INFINITE ||
+	    timeout_ms == RD_POLL_NOWAIT)
+		return 0;
+
+	return rd_clock() + (timeout_ms * 1000);
+}
+
+
+/**
+ * @brief Adjust relative timeout \p *timeout_msp for spent time using
+ *        absolute timeout \p abs_timeout.
+ *
+ * Honours RD_POLL_INFINITE, RD_POLL_NOWAIT.
+ */
+static __inline void rd_timeout_adjust (rd_ts_t abs_timeout,
+					int *timeout_msp) {
+	if (*timeout_msp == RD_POLL_INFINITE ||
+	    *timeout_msp == RD_POLL_NOWAIT)
+		return; /* No change */
+
+	*timeout_msp = (rd_ts_t)(abs_timeout - rd_clock()) / 1000;
+	if (*timeout_msp < 0)
+		*timeout_msp = RD_POLL_NOWAIT;
 }

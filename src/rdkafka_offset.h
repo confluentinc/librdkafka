@@ -69,7 +69,7 @@ void rd_kafka_offset_query_tmr_cb (rd_kafka_timers_t *rkts, void *arg);
 
 void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 				   rd_kafka_resp_err_t err,
-				   rd_kafka_topic_partition_list_t *offsets);
+				   const rd_kafka_topic_partition_list_t *offsets);
 
 rd_kafka_resp_err_t
 rd_kafka_commit0 (rd_kafka_t *rk,

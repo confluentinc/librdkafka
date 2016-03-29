@@ -129,7 +129,7 @@ static __inline void rd_timeout_adjust (rd_ts_t abs_timeout,
 	    *timeout_msp == RD_POLL_NOWAIT)
 		return; /* No change */
 
-	*timeout_msp = (abs_timeout - rd_clock()) / 1000;
+	*timeout_msp = (rd_ts_t)(abs_timeout - rd_clock()) / 1000;
 	if (*timeout_msp < 0)
 		*timeout_msp = RD_POLL_NOWAIT;
 }

@@ -72,7 +72,7 @@ rd_kafka_range_assignor_assign_cb (rd_kafka_t *rk,
                 /* For each topic, we lay out the available partitions in
                  * numeric order and the consumers in lexicographic order. */
                 rd_list_sort(&eligible_topic->members,
-			     rd_kafka_group_member_cmp_pp);
+			     rd_kafka_group_member_cmp);
 
                 /* We then divide the number of partitions by the total number of
                  * consumers to determine the number of partitions to assign to

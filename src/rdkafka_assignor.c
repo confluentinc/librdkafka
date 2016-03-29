@@ -67,17 +67,6 @@ int rd_kafka_group_member_cmp (const void *_a, const void *_b) {
         return rd_kafkap_str_cmp(a->rkgm_member_id, b->rkgm_member_id);
 }
 
-/**
- * Member id string comparator (takes rd_kafka_group_member_t **)
- */
-int rd_kafka_group_member_cmp_pp (const void *_a, const void *_b) {
-        const rd_kafka_group_member_t *a =
-                *(const rd_kafka_group_member_t * const *)_a;
-        const rd_kafka_group_member_t *b =
-                *(const rd_kafka_group_member_t * const *)_b;
-
-        return rd_kafkap_str_cmp(a->rkgm_member_id, b->rkgm_member_id);
-}
 
 /**
  * Returns true if member subscribes to topic, else false.

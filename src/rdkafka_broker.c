@@ -2904,6 +2904,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 
 		for (j = 0 ; j < PartitionArrayCnt ; j++) {
 			rd_kafka_q_t tmp_opq; /* Temporary queue for ops */
+			struct rd_kafka_toppar_ver *tver, tver_skel;
 
 			rd_kafka_buf_read_i32(rkbuf, &hdr.Partition);
 			rd_kafka_buf_read_i16(rkbuf, &hdr.ErrorCode);
@@ -2960,6 +2961,30 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                         }
                         rd_kafka_toppar_unlock(rktp);
 
+			/* Check if this Fetch is for an outdated fetch version,
+                         * if so ignore it. */
+			tver_skel.s_rktp = s_rktp;
+			tver = rd_list_find(request->rkbuf_rktp_vers,
+					    &tver_skel,
+					    rd_kafka_toppar_ver_cmp);
+			rd_kafka_assert(NULL, tver &&
+					rd_kafka_toppar_s2i(tver->s_rktp) ==
+					rktp);
+			if (tver->version < rktp->rktp_fetch_version) {
+				rd_rkb_log(rkb, LOG_INFO, "DROP",
+					   "%s [%"PRId32"]: "
+					   "dropping outdated fetch response "
+					   "(v%d < %d)",
+					   rktp->rktp_rkt->rkt_topic->str,
+					   rktp->rktp_partition,
+					   tver->version,
+					   rktp->rktp_fetch_version);
+                                rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
+                                rd_kafka_toppar_destroy(s_rktp); /* from get */
+                                rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
+                                continue;
+                        }
+
 			rd_rkb_dbg(rkb, MSG, "FETCH",
 				   "Topic %.*s [%"PRId32"] MessageSet "
 				   "size %"PRId32", error \"%s\", "
@@ -2969,18 +2994,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   hdr.MessageSetSize,
 				   rd_kafka_err2str(hdr.ErrorCode),
 				   hdr.HighwaterMarkOffset,
-                                   request->rkbuf_op_version,
+                                   tver->version,
                                    rktp->rktp_fetch_version);
 
-                        /* This Fetch is for an outdated fetch version,
-                         * ignore it. */
-                        if (request->rkbuf_op_version <
-                            rktp->rktp_fetch_version) {
-                                rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
-                                rd_kafka_toppar_destroy(s_rktp); /* from get */
-                                rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
-                                continue;
-                        }
 
                         /* Update hi offset to be able to compute
                          * consumer lag. */
@@ -3043,8 +3059,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				default: /* and all other errors */
 					rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
                                         rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-                                        rko->rko_version =
-                                                request->rkbuf_op_version;
+                                        rko->rko_version = tver->version;
 					rko->rko_err = hdr.ErrorCode;
 					rko->rko_rkmessage.offset =
 						rktp->rktp_offsets.fetch_offset;
@@ -3099,7 +3114,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   rktp->rktp_rkt->rkt_topic->str,
 				   rktp->rktp_partition,
 				   rd_kafka_q_len(&rktp->rktp_fetchq),
-                                   request->rkbuf_op_version);
+				   tver->version);
 
 			if (rd_kafka_q_len(&tmp_opq) > 0) {
                                 rd_atomic64_add(&rktp->rktp_c.msgs,
@@ -3239,9 +3254,21 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 	/* Write zero TopicArrayCnt but store pointer for later update */
 	of_TopicArrayCnt = rd_kafka_buf_write_i32(rkbuf, 0);
 
-        /* Round-robin start of the list. */
+	/* Prepare map for storing the fetch version for each partition,
+	 * this will later be checked in Fetch response to purge outdated
+	 * responses (e.g., after a seek). */
+	rkbuf->rkbuf_rktp_vers = rd_list_new(0);
+	rd_list_prealloc_elems(rkbuf->rkbuf_rktp_vers,
+			       sizeof(struct rd_kafka_toppar_ver),
+			       rkb->rkb_fetch_toppar_cnt);
+	rd_list_set_free_cb(rkbuf->rkbuf_rktp_vers,
+			    (void *)rd_kafka_toppar_ver_destroy);
+
+	/* Round-robin start of the list. */
         rktp = rkb->rkb_fetch_toppar_next;
         do {
+		struct rd_kafka_toppar_ver *tver;
+
 		if (rkt_last != rktp->rktp_rkt) {
 			if (rkt_last != NULL) {
 				/* Update PartitionArrayCnt */
@@ -3270,12 +3297,17 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 				       fetch_msg_max_bytes);
 
 		rd_rkb_dbg(rkb, FETCH, "FETCH",
-			   "Fetch topic %.*s [%"PRId32"] at offset %"PRId64,
+			   "Fetch topic %.*s [%"PRId32"] at offset %"PRId64
+			   " (v%d)",
 			   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			   rktp->rktp_partition,
-                           rktp->rktp_offsets.fetch_offset);
+                           rktp->rktp_offsets.fetch_offset,
+			   rktp->rktp_fetch_version);
 
-                rkbuf->rkbuf_op_version = rktp->rktp_fetch_version;
+		/* Add toppar + op version mapping. */
+		tver = rd_list_add(rkbuf->rkbuf_rktp_vers, NULL);
+		tver->s_rktp = rd_kafka_toppar_keep(rktp);
+		tver->version = rktp->rktp_fetch_version;
 
 		cnt++;
 	} while ((rktp = CIRCLEQ_LOOP_NEXT(&rkb->rkb_fetch_toppars,
@@ -3318,6 +3350,9 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 		rd_kafka_buf_version_set(rkbuf, 1);
 
         rd_kafka_buf_autopush(rkbuf);
+
+	/* Sort toppar versions for quicker lookups in Fetch response. */
+	rd_list_sort(rkbuf->rkbuf_rktp_vers, rd_kafka_toppar_ver_cmp);
 
 	rkb->rkb_fetching = 1;
 	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_Fetch, rkbuf,

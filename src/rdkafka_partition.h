@@ -395,3 +395,40 @@ rd_kafka_topic_partition_list_get_toppar (
 void
 rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
 				   const rd_kafka_topic_partition_list_t *rktparlist);
+
+
+
+/**
+ * @brief Toppar + Op version tuple used for mapping Fetched partitions
+ *        back to their fetch versions.
+ */
+struct rd_kafka_toppar_ver {
+	shptr_rd_kafka_toppar_t *s_rktp;
+	int32_t version;
+};
+
+
+/**
+ * @brief Toppar + Op version comparator. Only matches the partition.
+ */
+static __inline RD_UNUSED
+int rd_kafka_toppar_ver_cmp (const void *_a, const void *_b) {
+	const struct rd_kafka_toppar_ver *a = _a, *b = _b;
+	const rd_kafka_toppar_t *rktp_a = rd_kafka_toppar_s2i(a->s_rktp);
+	const rd_kafka_toppar_t *rktp_b = rd_kafka_toppar_s2i(b->s_rktp);
+	int r;
+
+	if ((r = rd_kafkap_str_cmp(rktp_a->rktp_rkt->rkt_topic,
+				   rktp_b->rktp_rkt->rkt_topic)))
+		return r;
+
+	return rktp_a->rktp_partition - rktp_b->rktp_partition;
+}
+
+/**
+ * @brief Frees up resources for \p tver but not the \p tver itself.
+ */
+static __inline RD_UNUSED
+void rd_kafka_toppar_ver_destroy (struct rd_kafka_toppar_ver *tver) {
+	rd_kafka_toppar_destroy(tver->s_rktp);
+}

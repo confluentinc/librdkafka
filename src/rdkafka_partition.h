@@ -409,7 +409,7 @@ struct rd_kafka_toppar_ver {
 
 
 /**
- * @brief Toppar + Op version comparator. Only matches the partition.
+ * @brief Toppar + Op version comparator.
  */
 static __inline RD_UNUSED
 int rd_kafka_toppar_ver_cmp (const void *_a, const void *_b) {
@@ -418,7 +418,8 @@ int rd_kafka_toppar_ver_cmp (const void *_a, const void *_b) {
 	const rd_kafka_toppar_t *rktp_b = rd_kafka_toppar_s2i(b->s_rktp);
 	int r;
 
-	if ((r = rd_kafkap_str_cmp(rktp_a->rktp_rkt->rkt_topic,
+	if (rktp_a->rktp_rkt != rktp_b->rktp_rkt &&
+	    (r = rd_kafkap_str_cmp(rktp_a->rktp_rkt->rkt_topic,
 				   rktp_b->rktp_rkt->rkt_topic)))
 		return r;
 

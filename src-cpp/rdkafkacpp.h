@@ -214,6 +214,8 @@ enum ErrorCode {
 	ERR__AUTHENTICATION = -169,
 	/** No stored offset */
 	ERR__NO_OFFSET = -168,
+	/** Outdated */
+	ERR__OUTDATED = -167,
 	/** End internal error codes */
 	ERR__END = -100,
 

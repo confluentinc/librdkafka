@@ -252,6 +252,8 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__AUTHENTICATION = -169,
 	/** No stored offset */
 	RD_KAFKA_RESP_ERR__NO_OFFSET = -168,
+	/** Outdated */
+	RD_KAFKA_RESP_ERR__OUTDATED = -167,
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
 

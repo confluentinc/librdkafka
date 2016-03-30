@@ -230,17 +230,34 @@ rd_kafkap_str_t *rd_kafkap_str_copy (const rd_kafkap_str_t *src) {
 
 static __inline RD_UNUSED int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
 						 const rd_kafkap_str_t *b) {
-	if (a->len != b->len)
-		return -1;
-	return memcmp(a->str, b->str, a->len);
+	int minlen = RD_MIN(a->len, b->len);
+	int r = memcmp(a->str, b->str, minlen);
+	if (r)
+		return r;
+	else
+		return a->len - b->len;
 }
 
 static __inline RD_UNUSED int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
 						     const char *str) {
-	ssize_t len = strlen(str);
-	if (a->len != len)
-		return -1;
-	return memcmp(a->str, str, a->len);
+	int len = (int)strlen(str);
+	int minlen = RD_MIN(a->len, len);
+	int r = memcmp(a->str, str, minlen);
+	if (r)
+		return r;
+	else
+		return a->len - len;
+}
+
+static __inline RD_UNUSED int rd_kafkap_str_cmp_str2 (const char *str,
+						      const rd_kafkap_str_t *b){
+	int len = (int)strlen(str);
+	int minlen = RD_MIN(b->len, len);
+	int r = memcmp(str, b->str, minlen);
+	if (r)
+		return r;
+	else
+		return len - b->len;
 }
 
 
@@ -329,17 +346,23 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_copy (const rd_kafkap_bytes_t *src) {
 
 static __inline RD_UNUSED int rd_kafkap_bytes_cmp (const rd_kafkap_bytes_t *a,
 						   const rd_kafkap_bytes_t *b) {
-	if (a->len != b->len)
-		return -1;
-	return memcmp(a->data, b->data, a->len);
+	int minlen = RD_MIN(a->len, b->len);
+	int r = memcmp(a->data, b->data, minlen);
+	if (r)
+		return r;
+	else
+		return a->len - b->len;
 }
 
 static __inline RD_UNUSED
 int rd_kafkap_bytes_cmp_data (const rd_kafkap_bytes_t *a,
 			      const char *data, int len) {
-	if (a->len != len)
-		return -1;
-	return memcmp(a->data, data, a->len);
+	int minlen = RD_MIN(a->len, len);
+	int r = memcmp(a->data, data, minlen);
+	if (r)
+		return r;
+	else
+		return a->len - len;
 }
 
 

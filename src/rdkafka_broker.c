@@ -2852,7 +2852,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					rd_kafka_toppar_s2i(tver->s_rktp) ==
 					rktp);
 			if (tver->version < rktp->rktp_fetch_version) {
-				rd_rkb_log(rkb, LOG_INFO, "DROP",
+				rd_rkb_dbg(rkb, MSG, "DROP",
 					   "%s [%"PRId32"]: "
 					   "dropping outdated fetch response "
 					   "(v%d < %d)",

@@ -48,6 +48,7 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
 void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
                              const char *topic, int32_t partition,
                              const int64_t *query_offsets, size_t offset_cnt,
+			     int32_t op_version,
                              rd_kafka_q_t *replyq,
                              rd_kafka_resp_cb_t *resp_cb,
                              void *opaque);

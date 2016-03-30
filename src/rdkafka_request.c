@@ -144,7 +144,8 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
 					    rd_kafka_resp_err_t err,
 					    rd_kafka_buf_t *rkbuf,
 					    rd_kafka_buf_t *request,
-					    const char *topic, int32_t partition,
+					    const char *topic,
+					    int32_t partition,
 					    int64_t *offsets,
 					    size_t *offset_cntp) {
 
@@ -243,6 +244,7 @@ done:
 void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
                              const char *topic, int32_t partition,
                              const int64_t *query_offsets, size_t offset_cnt,
+			     int32_t op_version,
                              rd_kafka_q_t *replyq,
                              rd_kafka_resp_cb_t *resp_cb,
                              void *opaque) {
@@ -279,9 +281,12 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
 
 	rd_kafka_buf_autopush(rkbuf);
 
+	rkbuf->rkbuf_op_version = op_version;
+
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-		   "OffsetRequest (%"PRIdsz" offsets) for topic %s [%"PRId32"]",
-                   offset_cnt, topic, partition);
+		   "OffsetRequest (%"PRIdsz" offsets) for "
+		   "topic %s [%"PRId32"] (v%d)",
+                   offset_cnt, topic, partition, rkbuf->rkbuf_op_version);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Offset,
                                        rkbuf, replyq, resp_cb, opaque);

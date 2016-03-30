@@ -267,8 +267,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 				   * after response: RTT. */
 	rd_ts_t rkbuf_ts_timeout;
 
-        int64_t rkbuf_offset;  /* Used by OffsetCommit */
+        int64_t rkbuf_offset;     /* Used by OffsetCommit */
 
+	int32_t rkbuf_op_version;      /* Single Op version */
 	rd_list_t *rkbuf_rktp_vers;    /* Toppar + Op Version map.
 					* Used by FetchRequest. */
 

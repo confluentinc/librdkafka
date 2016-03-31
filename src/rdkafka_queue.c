@@ -588,3 +588,42 @@ rd_kafka_resp_err_t rd_kafka_q_wait_result (rd_kafka_q_t *rkq, int timeout_ms) {
 
         return err;
 }
+
+
+/**
+ * @brief Convert relative to absolute offsets and also purge any messages
+ *        that are older than \p min_offset.
+ * @remark Error ops with ERR__NOT_IMPLEMENTED will not be purged since
+ *         they are used to indicate unknnown compression codecs and compressed
+ *         messagesets may have a starting offset lower than what we requested.
+ * @remark \p rkq locking is not performed (caller's responsibility)
+ * @remark Must NOT be used on fwdq.
+ */
+void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
+			     int64_t base_offset) {
+	rd_kafka_op_t *rko, *next;
+	int     adj_len  = 0;
+	int64_t adj_size = 0;
+
+	rd_kafka_assert(NULL, !rkq->rkq_fwdq);
+
+	next = TAILQ_FIRST(&rkq->rkq_q);
+	while ((rko = next)) {
+		next = TAILQ_NEXT(next, rko_link);
+
+		if (rko->rko_offset < min_offset &&
+		    rko->rko_err != RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED) {
+			adj_len++;
+			adj_size += rko->rko_len;
+			TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
+			rd_kafka_op_destroy(rko);
+			continue;
+		}
+
+		rko->rko_offset += base_offset;
+	}
+
+
+	rkq->rkq_qlen  -= adj_len;
+	rkq->rkq_qsize -= adj_size;
+}

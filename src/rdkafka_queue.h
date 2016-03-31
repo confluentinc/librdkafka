@@ -3,13 +3,17 @@
 #include "rdkafka_op.h"
 #include "rdkafka_int.h"
 
+
+TAILQ_HEAD(rd_kafka_op_tailq, rd_kafka_op_s);
+
 struct rd_kafka_q_s {
 	mtx_t  rkq_lock;
 	cnd_t  rkq_cond;
 	struct rd_kafka_q_s *rkq_fwdq; /* Forwarded/Routed queue.
 					* Used in place of this queue
 					* for all operations. */
-	TAILQ_HEAD(, rd_kafka_op_s) rkq_q;
+
+	struct rd_kafka_op_tailq rkq_q;  /* TAILQ_HEAD(, rd_kafka_op_s) */
 	int           rkq_qlen;      /* Number of entries in queue */
         int64_t       rkq_qsize;     /* Size of all entries in queue */
         int           rkq_refcnt;
@@ -273,6 +277,27 @@ rd_kafka_message_t *rd_kafka_message_new (void);
 
 rd_kafka_resp_err_t rd_kafka_q_wait_result (rd_kafka_q_t *rkq, int timeout_ms);
 
+void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
+			     int64_t base_offset);
+
+/**
+ * @returns the last op in the queue matching \p op_type and \p allow_err (bool)
+ * @remark The \p rkq must be properly locked before this call, the returned rko
+ *         is not removed from the queue and may thus not be held for longer
+ *         than the lock is held.
+ */
+static __inline RD_UNUSED
+rd_kafka_op_t *rd_kafka_q_last (rd_kafka_q_t *rkq, rd_kafka_op_type_t op_type,
+				int allow_err) {
+	rd_kafka_op_t *rko;
+	TAILQ_FOREACH_REVERSE(rko, &rkq->rkq_q, rd_kafka_op_tailq, rko_link) {
+		if (rko->rko_type == op_type &&
+		    (allow_err || !rko->rko_err))
+			return rko;
+	}
+
+	return NULL;
+}
 
 /* Public interface */
 struct rd_kafka_queue_s {

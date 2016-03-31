@@ -2527,17 +2527,17 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
  * Parses a MessageSet and enqueues internal ops on the local
  * application queue for each Message.
  */
-static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
-						       rd_kafka_toppar_t *rktp,
-						       rd_kafka_q_t *rkq,
-						       int16_t ApiVersion,
-						       int64_t base_offset,
-						       rd_kafka_buf_t *rkbuf_orig,
-						       void *buf, size_t size) {
+static rd_kafka_resp_err_t
+rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
+			    rd_kafka_toppar_t *rktp,
+			    rd_kafka_q_t *rkq,
+			    int16_t ApiVersion,
+			    rd_kafka_buf_t *rkbuf_orig,
+			    void *buf, size_t size) {
         rd_kafka_buf_t *rkbuf; /* Slice of rkbuf_orig */
 	rd_kafka_buf_t *rkbufz;
         /* Dont log decode errors since Fetch replies may be partial. */
-        const int log_decode_errors = 1;
+        const int log_decode_errors = 0;
 
         /* Set up a shadow rkbuf for parsing the slice of rkbuf_orig
          * pointed out by buf,size. */
@@ -2565,12 +2565,11 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		int32_t Value_len;
 		rd_kafka_op_t *rko;
 		size_t outlen;
-		void *outbuf = NULL;
+		void *outbuf = NULL; /* Uncompressed output buffer. */
 		size_t hdrsize = 6; /* Header size following MessageSize */
+		int relative_offsets;
 
 		rd_kafka_buf_read_i64(rkbuf, &hdr.Offset);
-		/* KIP-31: relative offsets, ApiVersion >= 2 */
-		hdr.Offset += base_offset;
 		rd_kafka_buf_read_i32(rkbuf, &hdr.MessageSize);
 		rd_kafka_buf_read_i32(rkbuf, &hdr.Crc);
 		rd_kafka_buf_read_i8(rkbuf, &hdr.MagicByte);
@@ -2593,8 +2592,6 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			 *    Clients should handle this case."
 			 * We're handling it by not passing the error upstream.
 			 */
-			printf("x: %"PRId32" but only %d left\n",
-			       hdr.MessageSize, rd_kafka_buf_remain(rkbuf));
                         goto err;
                 }
 		/* Ignore CRC (for now) */
@@ -2618,8 +2615,22 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
                         /* MessageSets may contain offsets earlier than we
                          * requested (compressed messagesets in particular),
-                         * drop the earlier messages. */
-                        if (hdr.Offset < rktp->rktp_offsets.fetch_offset)
+                         * drop the earlier messages.
+			 * Note: the inner offset may only be trusted for
+			 *       absolute offsets. KIP-31 introduced
+			 *       ApiVersion 2 that maintains relative offsets
+			 *       of compressed messages and the base offset
+			 *       in the outer message is the offset of
+			 *       the *LAST* message in the MessageSet.
+			 *       This requires us to assign messages
+			 *       after all messages have been read from
+			 *       the messageset, and it also means
+			 *       we cant perform this offset check here
+			 *       in that case. */
+			relative_offsets = ApiVersion == 2;
+
+                        if (!relative_offsets &&
+			    hdr.Offset < rktp->rktp_offsets.fetch_offset)
                                 continue;
 
 			/* Create op and push on temporary queue. */
@@ -2651,8 +2662,6 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rko->rko_rkmessage.partition = rktp->rktp_partition;
 
 			rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-
-			rktp->rktp_offsets.fetch_offset = hdr.Offset + 1;
 
 			/* Since all the ops share the same payload buffer
 			 * (rkbuf->rkbuf_buf2) a refcnt is used on the rkbuf
@@ -2773,17 +2782,6 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 				   rktp->rktp_partition,
 				   hdr.Offset, hdr.Attributes);
 
-
-                        /* Pure uncompressed message, this is the innermost
-			 * handler after all compression and cascaded
-			 * messagesets have been peeled off. */
-
-                        /* MessageSets may contain offsets earlier than we
-                         * requested (compressed messagesets in particular),
-                         * drop the earlier messages. */
-                        if (hdr.Offset < rktp->rktp_offsets.fetch_offset)
-                                continue;
-
 			/* Enqueue error messsage */
 			/* Create op and push on temporary queue. */
 			rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
@@ -2798,24 +2796,44 @@ static rd_kafka_resp_err_t rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 			rko->rko_rktp = rd_kafka_toppar_keep(rktp);
 
-			rktp->rktp_offsets.fetch_offset = hdr.Offset + 1;
-
 			rd_kafka_q_enq(rkq, rko);
 			break;
 		}
 
 
 		if (outbuf) {
+			rd_kafka_q_t relq; /* Temporary queue for use with
+					    * relative offsets. */
+			int relative_offsets = ApiVersion == 2;
+
 			/* With a new allocated buffer (outbuf) we need
 			 * a separate rkbuf for it to allow multiple fetch ops
 			 * to share the same payload buffer. */
 			rkbufz = rd_kafka_buf_new_shadow(outbuf, outlen);
 
+			if (relative_offsets)
+				rd_kafka_q_init(&relq, rkb->rkb_rk);
+
 			/* Now parse the contained Messages */
-			rd_kafka_messageset_handle(rkb, rktp, rkq, ApiVersion,
-						   ApiVersion >= 2 ?
-						   hdr.Offset : 0,
+			rd_kafka_messageset_handle(rkb, rktp,
+						   relative_offsets ?
+						   &relq : rkq,
+						   ApiVersion,
 						   rkbufz, outbuf, outlen);
+
+
+			if (relative_offsets) {
+				/* Update messages to absolute offsets
+				 * and purge any messages older than the current
+				 * fetch offset. */
+				rd_kafka_q_fix_offsets(
+					&relq, rktp->rktp_offsets.fetch_offset,
+					hdr.Offset - rd_kafka_q_len(&relq));
+
+				/* Append messages to proper queue. */
+				rd_kafka_q_concat0(rkq, &relq, 0/*no-lock*/);
+				rd_kafka_q_destroy(&relq);
+			}
 
 			/* Loose our refcnt of the rkbuf.
 			 * Individual rko's will have their own. */
@@ -3096,7 +3114,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			/* Parse and handle the message set */
 			err2 = rd_kafka_messageset_handle(
 				rkb, rktp, &tmp_opq,
-				request->rkbuf_reqhdr.ApiVersion, 0,
+				request->rkbuf_reqhdr.ApiVersion,
 				rkbuf, rkbuf->rkbuf_rbuf+rkbuf->rkbuf_of,
 				hdr.MessageSetSize);
 			if (err2) {
@@ -3117,6 +3135,16 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   tver->version);
 
 			if (rd_kafka_q_len(&tmp_opq) > 0) {
+				/* Update partitions fetch offset based on
+				 * last message's offest. */
+				rd_kafka_op_t *rko =
+					rd_kafka_q_last(&tmp_opq,
+							RD_KAFKA_OP_FETCH,
+							0 /* no error ops */);
+
+				if (rko)
+					rktp->rktp_offsets.fetch_offset =
+						rko->rko_offset + 1;
                                 rd_atomic64_add(&rktp->rktp_c.msgs,
 						rd_kafka_q_len(&tmp_opq));
 				rd_kafka_q_concat(&rktp->rktp_fetchq, &tmp_opq);

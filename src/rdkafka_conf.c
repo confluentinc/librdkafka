@@ -301,14 +301,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "available and maps to a set of known features. <br>"
 	  "**Features:**"
 	  "<p>`msgver1`: Message version 1 (timestamps and relative offsets).",
-	  0, 0xffffff, RD_KAFKA_FEATURE_MSGVER1,
+	  0, 0xffffff,RD_KAFKA_FEATURE_0_9_0,
 	  .s2i = {
-			{ RD_KAFKA_FEATURE_MSGVER1,   "msgver1" },
+			{ RD_KAFKA_FEATURE_MSGVER1, "msgver1" },
 
 			/* Version aliases for convenience */
-			{ RD_KAFKA_FEATURE_VERALIAS | 0, "0.9.0" },
-			{ RD_KAFKA_FEATURE_VERALIAS |
-			  RD_KAFKA_FEATURE_MSGVER1, "0.10.0" }
+			{ RD_KAFKA_FEATURE_0_9_0,   "0.9.0" },
+			{ RD_KAFKA_FEATURE_0_10_0,  "0.10.0" }
 		}
 	},
 

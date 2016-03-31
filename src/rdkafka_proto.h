@@ -42,6 +42,10 @@
 					    *  + relative offsets (KIP-31)
 					    *  + timestamps (KIP-32) */
 
+#define RD_KAFKA_FEATURE_0_9_0   (RD_KAFKA_FEATURE_VERALIAS | 0)
+#define RD_KAFKA_FEATURE_0_10_0  (RD_KAFKA_FEATURE_VERALIAS | \
+				  RD_KAFKA_FEATURE_MSGVER1)
+
 
 
 /*

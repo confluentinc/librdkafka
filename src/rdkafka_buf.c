@@ -327,7 +327,7 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 		       RD_KAFKAP_BYTES_SIZE(key) +
 		       4 /* Message.ValueLength */ +
 		       len /* Value length */);
-	if (MagicByte >= 1)
+	if (MagicByte == 1)
 		MessageSize += 8; /* Timestamp i64 */
 
 	rd_kafka_buf_write_i32(rkbuf, MessageSize);
@@ -348,7 +348,8 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 	rd_kafka_buf_write_i8(rkbuf, Attributes);
 
 	/* V1: Timestamp */
-	rd_kafka_buf_write_i64(rkbuf, Timestamp);
+	if (MagicByte == 1)
+		rd_kafka_buf_write_i64(rkbuf, Timestamp);
 	
 	/* Push write-buffer onto iovec stack */
         rd_kafka_buf_autopush(rkbuf);

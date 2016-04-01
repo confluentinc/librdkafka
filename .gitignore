@@ -24,3 +24,4 @@ gmon.out
 *.deb
 *.rpm
 staging-docs
+tmp

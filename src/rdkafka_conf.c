@@ -677,11 +677,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 };
 
 
+typedef enum {
+	_PROP_SET_REPLACE,  /* Replace current value (default) */
+	_PROP_SET_ADD,      /* Add value (S2F) */
+	_PROP_SET_DEL      /* Remove value (S2F) */
+} prop_set_mode_t;
 
 static rd_kafka_conf_res_t
 rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			    const struct rd_kafka_property *prop,
-			    const char *istr, int ival,
+			    const char *istr, int ival, prop_set_mode_t set_mode,
                             char *errstr, size_t errstr_size) {
 #define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
 	switch (prop->type)
@@ -720,8 +725,18 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 		int *val = _RK_PTR(int *, conf, prop->offset);
 
 		if (prop->type == _RK_C_S2F) {
-			/* Flags: OR it in */
-			*val |= ival;
+			switch (set_mode)
+			{
+			case _PROP_SET_REPLACE:
+				*val = ival;
+				break;
+			case _PROP_SET_ADD:
+				*val |= ival;
+				break;
+			case _PROP_SET_DEL:
+				*val &= ~ival;
+				break;
+			}
 		} else {
 			/* Single assignment */
 			*val = ival;
@@ -766,6 +781,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
         case _RK_C_KSTR:
         case _RK_C_PATLIST:
 		return rd_kafka_anyconf_set_prop0(scope, conf, prop, value, 0,
+						  _PROP_SET_REPLACE,
                                                   errstr, errstr_size);
 
 	case _RK_C_PTR:
@@ -799,6 +815,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		}
 
 		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival,
+					   _PROP_SET_REPLACE,
                                            errstr, errstr_size);
 		return RD_KAFKA_CONF_OK;
 
@@ -824,6 +841,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		}
 
 		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival,
+					   _PROP_SET_REPLACE,
                                            errstr, errstr_size);
 		return RD_KAFKA_CONF_OK;
 
@@ -844,6 +862,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		next = value;
 		while (next && *next) {
 			const char *s, *t;
+			prop_set_mode_t set_mode = _PROP_SET_ADD; /* S2F */
 
 			s = next;
 
@@ -866,21 +885,39 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			while (t > s && isspace((int)*t))
 				t--;
 
+			/* S2F: +/- prefix */
+			if (prop->type == _RK_C_S2F) {
+				if (*s == '+') {
+					set_mode = _PROP_SET_ADD;
+					s++;
+				} else if (*s == '-') {
+					set_mode = _PROP_SET_DEL;
+					s++;
+				}
+			}
+
 			/* Empty string? */
 			if (s == t)
 				continue;
 
 			/* Match string to s2i table entry */
 			for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
-				if (!prop->s2i[j].str ||
-				    strlen(prop->s2i[j].str) != (size_t)(t-s) ||
-				    rd_strncasecmp(prop->s2i[j].str, s,
-						   (int)(t-s)))
+				int new_val;
+
+				if (!prop->s2i[j].str)
+					continue;
+
+				if (prop->type == _RK_C_S2F && !strcmp(s, "all"))
+					new_val = prop->vmax;
+				else if (strlen(prop->s2i[j].str) == (size_t)(t-s) &&
+					 !rd_strncasecmp(prop->s2i[j].str, s,
+							 (int)(t-s)))
+					new_val = prop->s2i[j].val;
+				else
 					continue;
 
 				rd_kafka_anyconf_set_prop0(scope, conf, prop,
-							   NULL,
-							   prop->s2i[j].val,
+							   NULL, new_val, set_mode,
                                                            errstr, errstr_size);
 
 				if (prop->type == _RK_C_S2F) {
@@ -930,7 +967,7 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
 			rd_kafka_anyconf_set_prop0(scope, conf, prop,
 						   prop->sdef ?
                                                    prop->sdef : prop->pdef,
-                                                   prop->vdef,
+                                                   prop->vdef, _PROP_SET_REPLACE,
                                                    NULL, 0);
 	}
 }
@@ -1138,7 +1175,7 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 		}
 
 		rd_kafka_anyconf_set_prop0(scope, dst, prop, val, ival,
-                                           NULL, 0);
+                                           _PROP_SET_REPLACE, NULL, 0);
 	}
 }
 

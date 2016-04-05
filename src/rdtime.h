@@ -89,7 +89,7 @@ static __inline rd_ts_t rd_clock (void) {
  */
 static __inline RD_UNUSED rd_ts_t rd_uclock (void) {
 	struct timeval tv;
-	gettimeofday(&tv, NULL);
+	rd_gettimeofday(&tv, NULL);
 	return ((rd_ts_t)tv.tv_sec * 1000000LLU) + (rd_ts_t)tv.tv_usec;
 }
 

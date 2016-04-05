@@ -158,6 +158,16 @@ static __inline RD_UNUSED const char *rd_strerror(int err) {
 
 
 /**
+ * @remark MSVC lacks timeval
+ */
+struct timeval {
+	time_t tv_sec;
+	long tv_usec;
+};
+
+
+
+/**
  * @brief gettimeofday() for win32
  */
 static RD_UNUSED

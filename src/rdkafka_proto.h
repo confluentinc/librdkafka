@@ -63,7 +63,7 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_SyncGroup     14
 #define RD_KAFKAP_DescribeGroups 15
 #define RD_KAFKAP_ListGroups    16
-#define RD_KAFKAP_ApiVersionQuery  17
+#define RD_KAFKAP_ApiVersion    17
 #define RD_KAFKAP__NUM          18
 	int16_t  ApiVersion;
 	int32_t  CorrId;
@@ -101,7 +101,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_SyncGroup] = "SyncGroup",
 		[RD_KAFKAP_DescribeGroups] = "DescribeGroups",
 		[RD_KAFKAP_ListGroups] = "ListGroups",
-		[RD_KAFKAP_ApiVersionQuery] = "ApiVersionQuery"
+		[RD_KAFKAP_ApiVersion] = "ApiVersion"
 	};
 	static RD_TLS char ret[32];
 

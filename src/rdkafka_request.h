@@ -188,14 +188,14 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                                   void *opaque);
 
 rd_kafka_resp_err_t
-rd_kafka_handle_ApiVersionQuery (rd_kafka_t *rk,
-				 rd_kafka_broker_t *rkb,
-				 rd_kafka_resp_err_t err,
-				 rd_kafka_buf_t *rkbuf,
-				 rd_kafka_buf_t *request,
-				 struct rd_kafka_ApiVersion **apis,
-				 size_t *api_cnt);
-void rd_kafka_ApiVersionQueryRequest (rd_kafka_broker_t *rkb,
-				      rd_kafka_q_t *replyq,
-				      rd_kafka_resp_cb_t *resp_cb,
-				      void *opaque);
+rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
+			    rd_kafka_broker_t *rkb,
+			    rd_kafka_resp_err_t err,
+			    rd_kafka_buf_t *rkbuf,
+			    rd_kafka_buf_t *request,
+			    struct rd_kafka_ApiVersion **apis,
+			    size_t *api_cnt);
+void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
+				 rd_kafka_q_t *replyq,
+				 rd_kafka_resp_cb_t *resp_cb,
+				 void *opaque);

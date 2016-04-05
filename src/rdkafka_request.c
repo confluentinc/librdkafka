@@ -1814,7 +1814,7 @@ static void rd_kafka_assignor_handle_Metadata (rd_kafka_t *rk,
 
 
 /**
- * @brief Parses and handles ApiVersionQuery reply.
+ * @brief Parses and handles ApiVersion reply.
  *
  * @param apis will be allocated and populated with broker's supported APIs.
  * @param api_cnt will be set to the number of elements in \p *apis
@@ -1822,13 +1822,13 @@ static void rd_kafka_assignor_handle_Metadata (rd_kafka_t *rk,
  * @returns 0 on success, else an error.
  */
 rd_kafka_resp_err_t
-rd_kafka_handle_ApiVersionQuery (rd_kafka_t *rk,
-				 rd_kafka_broker_t *rkb,
-				 rd_kafka_resp_err_t err,
-				 rd_kafka_buf_t *rkbuf,
-				 rd_kafka_buf_t *request,
-				 struct rd_kafka_ApiVersion **apis,
-				 size_t *api_cnt) {
+rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
+			    rd_kafka_broker_t *rkb,
+			    rd_kafka_resp_err_t err,
+			    rd_kafka_buf_t *rkbuf,
+			    rd_kafka_buf_t *request,
+			    struct rd_kafka_ApiVersion **apis,
+			    size_t *api_cnt) {
         const int log_decode_errors = 1;
         int actions;
 	int32_t ApiArrayCnt;
@@ -1891,12 +1891,12 @@ done:
 
 
 /**
- * Send ApiVersionQueryRequest (KIP-35)
+ * Send ApiVersionRequest (KIP-35)
  */
-void rd_kafka_ApiVersionQueryRequest (rd_kafka_broker_t *rkb,
-				      rd_kafka_q_t *replyq,
-				      rd_kafka_resp_cb_t *resp_cb,
-				      void *opaque) {
+void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
+				 rd_kafka_q_t *replyq,
+				 rd_kafka_resp_cb_t *resp_cb,
+				 void *opaque) {
         rd_kafka_buf_t *rkbuf;
 
         rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1, 4);
@@ -1908,9 +1908,9 @@ void rd_kafka_ApiVersionQueryRequest (rd_kafka_broker_t *rkb,
 	rkbuf->rkbuf_retries = RD_KAFKA_BUF_NO_RETRIES;
 
 	if (replyq)
-		rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_ApiVersionQuery,
+		rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_ApiVersion,
 					       rkbuf, replyq, resp_cb, opaque);
 	else /* in broker thread */
-		rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_ApiVersionQuery, rkbuf,
+		rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_ApiVersion, rkbuf,
 					 resp_cb, opaque);
 }

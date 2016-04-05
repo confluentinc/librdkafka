@@ -1297,24 +1297,24 @@ static void rd_kafka_broker_set_api_versions (rd_kafka_broker_t *rkb,
 
 
 /**
- * Handler for ApiVersionQuery response.
+ * Handler for ApiVersion response.
  */
 static void
-rd_kafka_broker_handle_ApiVersionQuery (rd_kafka_t *rk,
-					rd_kafka_broker_t *rkb,
-					rd_kafka_resp_err_t err,
-					rd_kafka_buf_t *rkbuf,
-					rd_kafka_buf_t *request, void *opaque) {
+rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
+				   rd_kafka_broker_t *rkb,
+				   rd_kafka_resp_err_t err,
+				   rd_kafka_buf_t *rkbuf,
+				   rd_kafka_buf_t *request, void *opaque) {
 	struct rd_kafka_ApiVersion *apis;
 	size_t api_cnt;
 
-	err = rd_kafka_handle_ApiVersionQuery(rk, rkb, err, rkbuf, request,
-					      &apis, &api_cnt);
+	err = rd_kafka_handle_ApiVersion(rk, rkb, err, rkbuf, request,
+					 &apis, &api_cnt);
 
 	if (err) {
 		/* FIXME: What is the error case here, really? */
 		rd_rkb_log(rkb, LOG_WARNING, "APIVERSION",
-			   "ApiVersionQuery request failed: %s",
+			   "ApiVersion request failed: %s",
 			   rd_kafka_err2str(err));
 		apis = NULL;
 	}
@@ -1362,8 +1362,8 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 		rd_kafka_broker_set_state(rkb,RD_KAFKA_BROKER_STATE_APIVERSION_QUERY);
 		rd_kafka_broker_unlock(rkb);
 
-		rd_kafka_ApiVersionQueryRequest(
-			rkb, NULL, rd_kafka_broker_handle_ApiVersionQuery, NULL);
+		rd_kafka_ApiVersionRequest(
+			rkb, NULL, rd_kafka_broker_handle_ApiVersion, NULL);
 	} else {
 
 		/* Use configured broker.version to figure out API versions */
@@ -3797,7 +3797,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 	/* Set default features */
 	if (!strcmp(rk->rk_conf.broker_version, "auto")) {
-		/* Use ApiVersionQuery to query broker for supported API versions. */
+		/* Use ApiVersion to query broker for supported API versions. */
 		rd_kafka_broker_feature_enable(rkb, RD_KAFKA_FEATURE_APIVERSION);
 	}
 

@@ -77,7 +77,7 @@ static const struct rd_kafka_feature_map {
 		 *         even when broker supports it. */
 		.feature = RD_KAFKA_FEATURE_APIVERSION,
 		.depends = {
-			{ RD_KAFKAP_ApiVersionQuery, 0, 0 },
+			{ RD_KAFKAP_ApiVersion, 0, 0 },
 			{ -1 },
 		},
 	},
@@ -330,7 +330,7 @@ const char *rd_kafka_features2str (int features) {
 				rd_kafka_feature_names[i]);
 		if ((size_t)r > sizeof(ret[reti])-of) {
 			/* Out of space */
-			memcpy(&ret[sizeof(ret[reti])-3], "..", 3);
+			memcpy(&ret[reti][sizeof(ret[reti])-3], "..", 3);
 			break;
 		}
 

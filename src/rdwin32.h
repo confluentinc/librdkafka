@@ -35,7 +35,7 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <sys/types.h>
-#include <sys/time.h>
+#include <time.h>
 #include <assert.h>
 
 

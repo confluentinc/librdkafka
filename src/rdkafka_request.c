@@ -1832,12 +1832,17 @@ rd_kafka_handle_ApiVersionQuery (rd_kafka_t *rk,
         const int log_decode_errors = 1;
         int actions;
 	int32_t ApiArrayCnt;
+	int16_t ErrorCode;
 	int i = 0;
 
 	*apis = NULL;
 
         if (err)
                 goto err;
+
+	rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+	if ((err = ErrorCode))
+		goto err;
 
         rd_kafka_buf_read_i32(rkbuf, &ApiArrayCnt);
 	if (ApiArrayCnt > 1000)

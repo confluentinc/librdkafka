@@ -32,20 +32,6 @@
 #include "rdendian.h"
 
 
-/**
- * Kafka protocol features
- */
-#define RD_KAFKA_FEATURE_VERALIAS   0x1    /* Indicates a version alias used
-					    * by the conf code.
-					    * NOT A PROTOCOL FEATURE. */
-#define RD_KAFKA_FEATURE_MSGVER1    0x2    /* Message version 1 (MagicByte=1):
-					    *  + relative offsets (KIP-31)
-					    *  + timestamps (KIP-32) */
-
-#define RD_KAFKA_FEATURE_0_9_0   (RD_KAFKA_FEATURE_VERALIAS | 0)
-#define RD_KAFKA_FEATURE_0_10_0  (RD_KAFKA_FEATURE_VERALIAS | \
-				  RD_KAFKA_FEATURE_MSGVER1)
-
 
 
 /*
@@ -77,6 +63,8 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_SyncGroup     14
 #define RD_KAFKAP_DescribeGroups 15
 #define RD_KAFKAP_ListGroups    16
+#define RD_KAFKAP_ApiVersionQuery  17
+#define RD_KAFKAP__NUM          18
 	int16_t  ApiVersion;
 	int32_t  CorrId;
 	/* ClientId follows */
@@ -112,7 +100,8 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_LeaveGroup] = "LeaveGroup",
                 [RD_KAFKAP_SyncGroup] = "SyncGroup",
 		[RD_KAFKAP_DescribeGroups] = "DescribeGroups",
-		[RD_KAFKAP_ListGroups] = "ListGroups"
+		[RD_KAFKAP_ListGroups] = "ListGroups",
+		[RD_KAFKAP_ApiVersionQuery] = "ApiVersionQuery"
 	};
 	static RD_TLS char ret[32];
 
@@ -130,6 +119,26 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 
 #define RD_KAFKAP_MESSAGESET_HDR_SIZE (8+4)
 #define RD_KAFKAP_MESSAGE_HDR_SIZE    (4+1+1)
+
+
+/**
+ * @brief ApiKey version support tuple.
+ */
+struct rd_kafka_ApiVersion {
+	int16_t ApiKey;
+	int16_t MinVer;
+	int16_t MaxVer;
+};
+
+/**
+ * @brief ApiVersion.ApiKey comparator.
+ */
+static RD_UNUSED int rd_kafka_ApiVersion_key_cmp (const void *_a, const void *_b) {
+	const struct rd_kafka_ApiVersion *a = _a, *b = _b;
+
+	return a->ApiKey - b->ApiKey;
+}
+
 
 
 

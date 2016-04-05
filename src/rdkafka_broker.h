@@ -72,8 +72,13 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 		RD_KAFKA_BROKER_STATE_DOWN,
 		RD_KAFKA_BROKER_STATE_CONNECT,
 		RD_KAFKA_BROKER_STATE_AUTH,
+
+		/* Any state >= STATE_UP means the Kafka protocol layer
+		 * is operational. */
 		RD_KAFKA_BROKER_STATE_UP,
                 RD_KAFKA_BROKER_STATE_UPDATE,
+		RD_KAFKA_BROKER_STATE_APIVERSION_QUERY,
+
 	} rkb_state;
 
         rd_ts_t             rkb_ts_state;        /* Timestamp of last
@@ -96,6 +101,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 					      * by this broker.
 					      * See RD_KAFKA_FEATURE_* in
 					      * rdkafka_proto.h */
+
+	struct rd_kafka_ApiVersion *rkb_ApiVersions;     /* Broker's supported APIs.*/
+	size_t                      rkb_ApiVersions_cnt;
 
 	rd_kafka_confsource_t  rkb_source;
 	struct {

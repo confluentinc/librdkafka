@@ -34,7 +34,7 @@
 #include <stddef.h>
 
 #include "rdkafka_int.h"
-
+#include "rdkafka_feature.h"
 
 struct rd_kafka_property {
 	rd_kafka_conf_scope_t scope;
@@ -61,11 +61,30 @@ struct rd_kafka_property {
 		int val;
 		const char *str;
 	} s2i[16];  /* _RK_C_S2I and _RK_C_S2F */
+
+	/* Value validator */
+	int (*validate) (const struct rd_kafka_property *prop,
+			 const char *val, int ival);
 };
 
 
 #define _RK(field)  offsetof(rd_kafka_conf_t, field)
 #define _RKT(field) offsetof(rd_kafka_topic_conf_t, field)
+
+
+
+/**
+ * @brief Validate \p broker.version property.
+ */
+static int
+rd_kafka_conf_validate_broker_version (const struct rd_kafka_property *prop,
+				       const char *val, int ival) {
+	struct rd_kafka_ApiVersion *apis;
+	size_t api_cnt;
+	if (!strcmp(val, "auto"))
+		return 1;
+	return rd_kafka_get_legacy_ApiVersions(val, &apis, &api_cnt, 0);
+}
 
 
 /**
@@ -280,36 +299,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The application should mask this signal as an internal "
 	  "signal handler is installed.",
 	  0, 128, 0 },
-	{ _RK_GLOBAL, "quota.support.enable", _RK_C_BOOL,
-	  _RK(quota_support),
-	  "Enables application forwarding of broker's throttle time for "
-	  "Produce and Fetch (consume) requests. "
-	  "Whenever a Produce or Fetch request is returned with a non-zero "
-	  "throttle time (how long the broker throttled the request to "
-	  "enforce configured quota rates) a throttle_cb will be enqueued "
-	  "for the next call to `rd_kafka_poll()`. "
-	  "The same is also true for the first non-throttled "
-	  "request following a throttled request. "
-	  "Requires Kafka brokers >=0.9.0 with quotas enabled.",
-	  0, 1, 0 },
-	{ _RK_GLOBAL, "protocol.features", _RK_C_S2F,
-	  _RK(protocol_features),
-	  "There is currently no reliable way for a client to know what "
-	  "protocol versions or features a broker supports. "
-	  "This property sets the default list of protocol features assumed "
-	  "to be supported by brokers. Broker version convenience aliase are "
-	  "available and maps to a set of known features. <br>"
-	  "**Features:**"
-	  "<p>`msgver1`: Message version 1 (timestamps and relative offsets).",
-	  0, 0xffffff,RD_KAFKA_FEATURE_0_9_0,
-	  .s2i = {
-			{ RD_KAFKA_FEATURE_MSGVER1, "msgver1" },
-
-			/* Version aliases for convenience */
-			{ RD_KAFKA_FEATURE_0_9_0,   "0.9.0" },
-			{ RD_KAFKA_FEATURE_0_10_0,  "0.10.0" }
-		}
-	},
+	{ _RK_GLOBAL, "broker.version", _RK_C_STR,
+	  _RK(broker_version),
+	  "Older broker versions (<0.10.0) provides no way for a client to query "
+	  "for supported protocol features (ApiVersionQuery) making it impossible "
+	  "for the client to know what features it may use. "
+	  "As a workaround a user may set this property to the expected broker "
+	  "version and the client will automatically adjust its feature set "
+	  "accordingly. Valid values are: "
+	  "0.9.0, 0.8.2, 0.8.1, 0.8.0, auto (requires broker >=0.10.0)",
+	  .sdef = "0.9.0",
+	  .validate = rd_kafka_conf_validate_broker_version },
 
 	/* Security related global properties */
 	{ _RK_GLOBAL, "security.protocol", _RK_C_S2I,
@@ -688,6 +688,12 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			    const struct rd_kafka_property *prop,
 			    const char *istr, int ival, prop_set_mode_t set_mode,
                             char *errstr, size_t errstr_size) {
+
+	if (prop->validate) {
+		if (!prop->validate(prop, istr, ival))
+			return RD_KAFKA_CONF_INVALID;
+	}
+
 #define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
 	switch (prop->type)
 	{

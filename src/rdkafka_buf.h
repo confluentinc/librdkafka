@@ -73,6 +73,8 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
                 goto err;                                               \
 	} while (0)
 
+
+
 /**
  * Returns the number of remaining bytes available to read.
  */
@@ -260,7 +262,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	rd_refcnt_t rkbuf_refcnt;
 	void   *rkbuf_opaque;
 
-	int     rkbuf_retries;
+	int     rkbuf_retries;            /* Retries so far. */
+#define RD_KAFKA_BUF_NO_RETRIES  INT_MAX  /* Do not retry */
 
 	rd_ts_t rkbuf_ts_enq;
 	rd_ts_t rkbuf_ts_sent;    /* Initially: Absolute time of transmission,

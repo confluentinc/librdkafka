@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -168,6 +168,7 @@
     <ClInclude Include="..\src\rdkafka_buf.h" />
     <ClInclude Include="..\src\rdkafka_cgrp.h" />
     <ClInclude Include="..\src\rdkafka_conf.h" />
+    <ClInclude Include="..\src\rdkafka_feature.h" />
     <ClInclude Include="..\src\rdkafka_op.h" />
     <ClInclude Include="..\src\rdkafka_partition.h" />
     <ClInclude Include="..\src\rdkafka_pattern.h" />
@@ -222,6 +223,7 @@
     <ClCompile Include="..\src\rdkafka_topic.c" />
     <ClCompile Include="..\src\rdkafka_transport.c" />
     <ClCompile Include="..\src\rdkafka_buf.c" />
+    <ClCompile Include="..\src\rdkafka_feature.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdrand.c" />

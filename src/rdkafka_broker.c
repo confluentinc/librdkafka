@@ -67,6 +67,7 @@ const char *rd_kafka_broker_state_names[] = {
 	"DOWN",
 	"CONNECT",
 	"AUTH",
+	"APIVERSION_QUERY",
 	"UP",
         "UPDATE"
 };
@@ -80,39 +81,7 @@ const char *rd_kafka_secproto_names[] = {
 };
 
 
-const char *rd_kafka_features[] = {
-	"msgver1",
-	NULL
-};
 
-static const char *rd_kafka_features2str (int features) {
-	static RD_TLS char ret[128];
-	size_t of = 0;
-	int i;
-
-	*ret = '\0';
-	for (i = 0 ; rd_kafka_features[i] ; i++) {
-		int r;
-		if (!(features & (1 << i)))
-			continue;
-
-		r = rd_snprintf(ret+of, sizeof(ret)-of, "%s%s",
-				of == 0 ? "" : ",",
-				rd_kafka_features[i]);
-		if ((size_t)r > sizeof(ret)-of) {
-			/* Out of space */
-			memcpy(&ret[sizeof(ret)-3], "..", 3);
-			break;
-		}
-
-		of += r;
-	}
-
-	if (!*ret)
-		return "none";
-
-	return ret;
-}
 
 
 static void iov_print (rd_kafka_t *rk,
@@ -192,6 +161,61 @@ static void rd_kafka_mk_brokername (char *dest, size_t dsize,
 	else
 		rd_snprintf(dest, dsize, "%s/%"PRId32, nodename, nodeid);
 }
+
+
+/**
+ * @brief Enable protocol feature(s) for the current broker.
+ *
+ * Locality: broker thread
+ */
+static void rd_kafka_broker_feature_enable (rd_kafka_broker_t *rkb,
+					    int features) {
+	if (features & rkb->rkb_features)
+		return;
+
+	rkb->rkb_features |= features;
+	rd_rkb_dbg(rkb, BROKER, "FEATURE",
+		   "Updated enabled protocol features +%s to %s",
+		   rd_kafka_features2str(features),
+		   rd_kafka_features2str(rkb->rkb_features));
+}
+
+
+/**
+ * @brief Disable protocol feature(s) for the current broker.
+ *
+ * Locality: broker thread
+ */
+static void rd_kafka_broker_feature_disable (rd_kafka_broker_t *rkb,
+						       int features) {
+	if (!(features & rkb->rkb_features))
+		return;
+
+	rkb->rkb_features &= ~features;
+	rd_rkb_dbg(rkb, BROKER, "FEATURE",
+		   "Updated enabled protocol features -%s to %s",
+		   rd_kafka_features2str(features),
+		   rd_kafka_features2str(rkb->rkb_features));
+}
+
+
+/**
+ * @brief Set protocol feature(s) for the current broker.
+ *
+ * @remark This replaces the previous feature set.
+ *
+ * @locality broker thread
+ */
+static void rd_kafka_broker_features_set (rd_kafka_broker_t *rkb, int features) {
+	if (rkb->rkb_features == features)
+		return;
+
+	rkb->rkb_features = features;
+	rd_rkb_dbg(rkb, BROKER, "FEATURE",
+		   "Updated enabled protocol features to %s",
+		   rd_kafka_features2str(rkb->rkb_features));
+}
+
 
 /**
  * Locks: rd_kafka_broker_lock() MUST be held.
@@ -310,6 +334,12 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 	rd_kafka_broker_lock(rkb);
 
+	/* If we're currently asking for ApiVersion and the connection
+	 * went down it probably means the broker does not support that request
+	 * and tore down the connection. In this case we disable that feature flag. */
+	if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY)
+		rd_kafka_broker_feature_disable(rkb, RD_KAFKA_FEATURE_APIVERSION);
+
 	/* Set broker state */
         statechange = rkb->rkb_state != RD_KAFKA_BROKER_STATE_DOWN;
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
@@ -371,38 +401,6 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 }
 
 
-/**
- * @brief Enable protocol feature(s) for the current broker.
- *
- * Locality: broker thread
- */
-static void rd_kafka_broker_feature_enable (rd_kafka_broker_t *rkb,
-					    int features) {
-	if (features & rkb->rkb_features)
-		return;
-
-	rkb->rkb_features |= features;
-	rd_rkb_dbg(rkb, BROKER, "FEATURE",
-		   "Updated enabled protocol features to %s",
-		   rd_kafka_features2str(rkb->rkb_features));
-}
-
-
-/**
- * @brief Disable protocol feature(s) for the current broker.
- *
- * Locality: broker thread
- */
-static RD_UNUSED void rd_kafka_broker_feature_disable (rd_kafka_broker_t *rkb,
-						       int features) {
-	if (!(features & rkb->rkb_features))
-		return;
-
-	rkb->rkb_features &= ~features;
-	rd_rkb_dbg(rkb, BROKER, "FEATURE",
-		   "Updated enabled protocol features to %s",
-		   rd_kafka_features2str(rkb->rkb_features));
-}
 
 
 
@@ -468,7 +466,7 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
                 if (rkb->rkb_rk->rk_conf.socket_max_fails &&
                     rkb->rkb_req_timeouts >=
                     rkb->rkb_rk->rk_conf.socket_max_fails &&
-                    rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
+                    rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP) {
                         errno = ETIMEDOUT;
                         rd_kafka_broker_fail(rkb, LOG_ERR,
                                              RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
@@ -486,7 +484,7 @@ static ssize_t rd_kafka_broker_send (rd_kafka_broker_t *rkb,
 	ssize_t r;
 	char errstr[128];
 
-	rd_kafka_assert(rkb->rkb_rk, rkb->rkb_state>=RD_KAFKA_BROKER_STATE_UP);
+	rd_kafka_assert(rkb->rkb_rk, rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP);
 	rd_kafka_assert(rkb->rkb_rk, rkb->rkb_transport);
 
 	r = rd_kafka_transport_sendmsg(rkb->rkb_transport, msg, errstr, sizeof(errstr));
@@ -1239,6 +1237,95 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 
 
 /**
+ * @brief Call when connection is ready to transition to fully functional
+ *        UP state.
+ *
+ * @locality Broker thread
+ */
+static void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
+	rd_kafka_broker_lock(rkb);
+	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
+	rd_kafka_broker_unlock(rkb);
+
+	/* Request metadata (async) */
+	rd_kafka_broker_metadata_req(rkb,
+				     rkb->rkb_rk->rk_conf.
+				     metadata_refresh_sparse ?
+				     0 /* known topics */ : 1 /* all topics */,
+                                     NULL, NULL, "connected");
+}
+
+
+/**
+ * @brief Specify API versions to use for this connection.
+ *
+ * @param apis is an allocated list of supported partitions.
+ *        If NULL the default set will be used based on the
+ *        \p broker.version property.
+ * @param api_cnt number of elements in \p apis
+ *
+ * @remark \p rkb takes ownership of \p apis.
+ *
+ * @locality Broker thread
+ */
+static void rd_kafka_broker_set_api_versions (rd_kafka_broker_t *rkb,
+					      struct rd_kafka_ApiVersion *apis,
+					      size_t api_cnt) {
+	if (rkb->rkb_ApiVersions)
+		rd_free(rkb->rkb_ApiVersions);
+
+
+	if (!apis) {
+		rd_rkb_dbg(rkb, PROTOCOL | RD_KAFKA_DBG_BROKER, "APIVERSION",
+			   "Using (configuration fallback) %s protocol features",
+			   rkb->rkb_rk->rk_conf.broker_version);
+
+
+		rd_kafka_get_legacy_ApiVersions(rkb->rkb_rk->rk_conf.broker_version,
+						&apis, &api_cnt, 1/*use default*/);
+		/* Make a copy to store on broker. */
+		rd_kafka_ApiVersions_copy(apis, api_cnt, &apis, &api_cnt);
+	}
+
+	rkb->rkb_ApiVersions = apis;
+	rkb->rkb_ApiVersions_cnt = api_cnt;
+
+	/* Update feature set based on supported broker APIs. */
+	rd_kafka_broker_features_set(rkb,
+				     rd_kafka_features_check(rkb, apis, api_cnt));
+}
+
+
+/**
+ * Handler for ApiVersionQuery response.
+ */
+static void
+rd_kafka_broker_handle_ApiVersionQuery (rd_kafka_t *rk,
+					rd_kafka_broker_t *rkb,
+					rd_kafka_resp_err_t err,
+					rd_kafka_buf_t *rkbuf,
+					rd_kafka_buf_t *request, void *opaque) {
+	struct rd_kafka_ApiVersion *apis;
+	size_t api_cnt;
+
+	err = rd_kafka_handle_ApiVersionQuery(rk, rkb, err, rkbuf, request,
+					      &apis, &api_cnt);
+
+	if (err) {
+		/* FIXME: What is the error case here, really? */
+		rd_rkb_log(rkb, LOG_WARNING, "APIVERSION",
+			   "ApiVersionQuery request failed: %s",
+			   rd_kafka_err2str(err));
+		apis = NULL;
+	}
+
+	rd_kafka_broker_set_api_versions(rkb, apis, api_cnt);
+
+	rd_kafka_broker_connect_up(rkb);
+}
+
+
+/**
  * Call when asynchronous connection attempt completes, either succesfully
  * (if errstr is NULL) or fails.
  *
@@ -1262,23 +1349,29 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 	/* Connect succeeded */
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "Connected");
-
-	rd_kafka_broker_feature_enable(
-		rkb, rkb->rkb_rk->rk_conf.protocol_features);
-
-	rd_kafka_broker_lock(rkb);
-	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
-	rd_kafka_broker_unlock(rkb);
 	rkb->rkb_err.err = 0;
 
 	rd_kafka_transport_poll_set(rkb->rkb_transport, POLLIN);
 
-	/* Request metadata (async) */
-        rd_kafka_broker_metadata_req(rkb,
-                                     rkb->rkb_rk->rk_conf.
-                                     metadata_refresh_sparse ?
-                                     0 /* known topics */ : 1 /* all topics */,
-                                     NULL, NULL, "connected");
+	if (rkb->rkb_features & RD_KAFKA_FEATURE_APIVERSION) {
+		/* Query broker for supported API versions.
+		 * This may fail with a disconnect on non-supporting brokers
+		 * so hold off any other requests until we get a response,
+		 * and if the connection is torn down we disable this feature. */
+		rd_kafka_broker_lock(rkb);
+		rd_kafka_broker_set_state(rkb,RD_KAFKA_BROKER_STATE_APIVERSION_QUERY);
+		rd_kafka_broker_unlock(rkb);
+
+		rd_kafka_ApiVersionQueryRequest(
+			rkb, NULL, rd_kafka_broker_handle_ApiVersionQuery, NULL);
+	} else {
+
+		/* Use configured broker.version to figure out API versions */
+		rd_kafka_broker_set_api_versions(rkb, NULL, 0);
+
+		rd_kafka_broker_connect_up(rkb);
+	}
+
 }
 
 
@@ -1293,7 +1386,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
-	while (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP &&
+	while (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
 	       (rkbuf = TAILQ_FIRST(&rkb->rkb_outbufs.rkbq_bufs))) {
 		ssize_t r;
 		struct msghdr *msg = &rkbuf->rkbuf_msg;
@@ -1953,7 +2046,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	rkbuf->rkbuf_ts_timeout =
 		TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->rkm_ts_timeout;
 
-	if (rkb->rkb_rk->rk_conf.quota_support)
+	if (rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)
 		rd_kafka_buf_version_set(rkbuf, 1);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Produce, rkbuf,
@@ -2054,7 +2147,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 			/* If broker is currently in state up we need
 			 * to trigger a state change so it exits its
 			 * state&type based .._serve() loop. */
-			if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP)
+			if (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP)
 				rd_kafka_broker_set_state(
 					rkb, RD_KAFKA_BROKER_STATE_UPDATE);
                         rd_kafka_broker_unlock(rkb);
@@ -3374,7 +3467,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 
 	if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1)
 		rd_kafka_buf_version_set(rkbuf, 2);
-	else if (rkb->rkb_rk->rk_conf.quota_support)
+	else if (rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)
 		rd_kafka_buf_version_set(rkbuf, 1);
 
         rd_kafka_buf_autopush(rkbuf);
@@ -3474,7 +3567,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
 		case RD_KAFKA_BROKER_STATE_DOWN:
 			if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
                                 rd_kafka_broker_lock(rkb);
-				rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
+				rd_kafka_broker_set_state(rkb,
+							  RD_KAFKA_BROKER_STATE_UP);
                                 rd_kafka_broker_unlock(rkb);
 				break;
 			}
@@ -3518,6 +3612,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
 
 		case RD_KAFKA_BROKER_STATE_CONNECT:
 		case RD_KAFKA_BROKER_STATE_AUTH:
+		case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
 			/* Asynchronous connect in progress. */
 			rd_kafka_broker_ua_idle(rkb, 0);
 
@@ -3614,6 +3709,8 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 	if (rkb->rkb_rsal)
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
 
+	if (rkb->rkb_ApiVersions)
+		rd_free(rkb->rkb_ApiVersions);
         rd_free(rkb->rkb_origname);
 
 	rd_kafka_q_purge(&rkb->rkb_ops);
@@ -3697,6 +3794,12 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE);
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */
+
+	/* Set default features */
+	if (!strcmp(rk->rk_conf.broker_version, "auto")) {
+		/* Use ApiVersionQuery to query broker for supported API versions. */
+		rd_kafka_broker_feature_enable(rkb, RD_KAFKA_FEATURE_APIVERSION);
+	}
 
 	/* Set next intervalled metadata refresh, offset by a random
 	 * value to avoid all brokers to be queried simultaneously. */

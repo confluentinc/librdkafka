@@ -77,9 +77,8 @@ struct rd_kafka_conf_s {
 	char   *brokerlist;
 	int     stats_interval_ms;
 	int     term_sig;
-	int     quota_support;
         int     reconnect_jitter_ms;
-	int     protocol_features;
+	char   *broker_version;
 	rd_kafka_secproto_t security_protocol;
 
 #if WITH_SSL

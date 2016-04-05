@@ -1020,6 +1020,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 #endif
 		break;
 
+	case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
 	case RD_KAFKA_BROKER_STATE_UP:
 	case RD_KAFKA_BROKER_STATE_UPDATE:
 

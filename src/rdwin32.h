@@ -37,7 +37,8 @@
 #include <sys/types.h>
 #include <time.h>
 #include <assert.h>
-
+#define WIN32_MEAN_AND_LEAN
+#include <Winsock2.h>  /* for struct timeval */
 
 
 /**
@@ -157,13 +158,6 @@ static __inline RD_UNUSED const char *rd_strerror(int err) {
 #define rd_usleep(usec,terminate)  Sleep((usec) / 1000)
 
 
-/**
- * @remark MSVC lacks timeval
- */
-struct timeval {
-	time_t tv_sec;
-	long tv_usec;
-};
 
 
 

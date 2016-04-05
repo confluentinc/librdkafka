@@ -956,8 +956,7 @@ void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
 /**
  * @brief Set throttle callback.
  *
- * The throttle callback is used in conjunction with
- * \c quota.support.enable=true to forward broker throttle times to the
+ * The throttle callback is used to forward broker throttle times to the
  * application for Produce and Fetch (consume) requests.
  *
  * Callbacks are triggered whenever a non-zero throttle time is returned by
@@ -965,6 +964,8 @@ void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
  *
  * An application must call rd_kafka_poll() or rd_kafka_consumer_poll() at
  * regular intervals to serve queued callbacks.
+ *
+ * @remark Requires broker version 0.9.0 or later.
  */
 RD_EXPORT
 void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,

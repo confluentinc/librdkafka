@@ -419,7 +419,8 @@ void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,
 	 *  - throttle_time > 0
 	 *  - throttle_time == 0 and last throttle_time > 0
 	 */
-	if (!throttle_time && !rd_atomic32_get(&rkb->rkb_rk->rk_last_throttle))
+	if (!rkb->rkb_rk->rk_conf.throttle_cb ||
+	    (!throttle_time && !rd_atomic32_get(&rkb->rkb_rk->rk_last_throttle)))
 		return;
 
 	rd_atomic32_set(&rkb->rkb_rk->rk_last_throttle, throttle_time);

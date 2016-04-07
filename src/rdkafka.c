@@ -283,6 +283,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Local: Authentication failure"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__NO_OFFSET,
 		  "Local: No offset stored"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR__OUTDATED,
+		  "Local: Outdated"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -1881,7 +1883,7 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	state.ts_end = ts_end;
 
 	rd_kafka_OffsetRequest(rkb, topic, partition, state.offsets, state.cnt,
-			       replyq, rd_kafka_query_wmark_offsets_resp_cb,
+			       0, replyq, rd_kafka_query_wmark_offsets_resp_cb,
 			       &state);
         rd_kafka_broker_destroy(rkb);
 

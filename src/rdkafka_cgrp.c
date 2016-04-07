@@ -400,18 +400,17 @@ err2:
                    RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                    rd_kafka_err2str(ErrorCode));
 
-        /* Suppress repeated errors */
-        if (rkcg->rkcg_last_err != ErrorCode) {
+        if (ErrorCode == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE)
+                rd_kafka_cgrp_coord_update(rkcg, -1);
+	else if (rkcg->rkcg_last_err != ErrorCode) {
                 rd_kafka_op_app_fmt(&rkcg->rkcg_q, RD_KAFKA_OP_CONSUMER_ERR,
                                     NULL, ErrorCode,
                                     "GroupCoordinator response error: %s",
                                     rd_kafka_err2str(ErrorCode));
+		/* Suppress repeated errors */
                 rkcg->rkcg_last_err = ErrorCode;
         }
 
-        if (ErrorCode == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE ||
-            ErrorCode == RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP)
-                rd_kafka_cgrp_coord_update(rkcg, -1);
 }
 
 

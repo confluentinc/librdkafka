@@ -380,7 +380,7 @@ static int rd_kafka_assignor_cmp_str (const void *_a, const void *_b) {
         const char *a = _a;
         const rd_kafka_assignor_t *b = _b;
 
-        return rd_kafkap_str_cmp_str(b->rkas_protocol_name, a);
+        return rd_kafkap_str_cmp_str2(a, b->rkas_protocol_name);
 }
 
 /**

@@ -112,7 +112,7 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 			       rktp->rktp_rkt->rkt_topic->str,
 			       rktp->rktp_partition,
 			       &query_offset, 1,
-			       &rktp->rktp_ops,
+			       0, &rktp->rktp_ops,
                                rd_kafka_toppar_lag_handle_Offset,
                                rd_kafka_toppar_keep(rktp));
 
@@ -927,14 +927,22 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 				     rktp->rktp_partition,
 				     &Offset, &offset_cnt);
 
+	if (request->rkbuf_op_version > 0 &&
+	    err != RD_KAFKA_RESP_ERR__DESTROY &&
+	    request->rkbuf_op_version < rd_atomic32_get(&rktp->rktp_version)) {
+		/* Outdated request response, ignore. */
+		    err = RD_KAFKA_RESP_ERR__OUTDATED;
+	}
+
         if (err) {
                 rd_kafka_op_t *rko;
 
                 rd_rkb_dbg(rkb, TOPIC, "OFFSET",
                            "Offset reply error for "
-                           "topic %.*s [%"PRId32"]: %s",
+                           "topic %.*s [%"PRId32"] (v%d): %s",
                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                           rktp->rktp_partition, rd_kafka_err2str(err));
+                           rktp->rktp_partition, request->rkbuf_op_version,
+			   rd_kafka_err2str(err));
 
                 if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                         /* Termination, quick cleanup. */
@@ -943,6 +951,12 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                         rd_kafka_toppar_destroy(s_rktp);
 
                         return;
+
+		} else if (err == RD_KAFKA_RESP_ERR__OUTDATED) {
+			/* Outdated: ignore */
+			rd_kafka_toppar_destroy(s_rktp);
+			return;
+
 		} else if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
 			return; /* Retry in progress */
 
@@ -1056,8 +1070,6 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
                            rd_kafka_offset2str(query_offset),
                            rd_atomic32_get(&rktp->rktp_version));
 
-                // FIXME: The op version is lost here.
-
                 s_rktp = rd_kafka_toppar_keep(rktp);
 
 		if (query_offset <= RD_KAFKA_OFFSET_TAIL_BASE)
@@ -1067,6 +1079,7 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
 				       rktp->rktp_rkt->rkt_topic->str,
 				       rktp->rktp_partition,
 				       &query_offset, 1,
+				       rd_atomic32_get(&rktp->rktp_version),
                                        &rktp->rktp_ops,
                                        rd_kafka_toppar_handle_Offset,
                                        s_rktp);
@@ -1266,11 +1279,18 @@ void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
         } else if (!RD_KAFKA_TOPPAR_FETCH_IS_STARTED(rktp->rktp_fetch_state)) {
                 err = RD_KAFKA_RESP_ERR__STATE;
                 goto err_reply;
-        }
-
-	if (offset == RD_KAFKA_OFFSET_STORED)
+        } else if (offset == RD_KAFKA_OFFSET_STORED) {
 		err = RD_KAFKA_RESP_ERR__INVALID_ARG;
-	else if (RD_KAFKA_OFFSET_IS_LOGICAL(offset))
+		goto err_reply;
+	}
+
+	/* Abort pending offset lookups. */
+	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
+		rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
+				    &rktp->rktp_offset_query_tmr,
+				    1/*lock*/);
+
+	if (RD_KAFKA_OFFSET_IS_LOGICAL(offset))
 		rd_kafka_toppar_next_offset_handle(rktp, offset);
 	else {
 		rktp->rktp_next_offset = offset;

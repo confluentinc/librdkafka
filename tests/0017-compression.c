@@ -94,8 +94,16 @@ int main_0017_compression(int argc, char **argv) {
 				    RD_KAFKA_OFFSET_BEGINNING);
 
 		/* Consume messages */
-		test_consume_msgs(codecs[i], rkt_c, testid, partition, 0,
+		test_consume_msgs(codecs[i], rkt_c, testid, partition,
+				  /* Use offset 0 here, which is wrong, should
+				   * be TEST_NO_SEEK, but it exposed a bug
+				   * where the Offset query was postponed
+				   * till after the seek, causing messages
+				   * to be replayed. */
+				  0,
 				  msg_base, msg_cnt, 1 /* parse format */);
+
+		test_consumer_stop(codecs[i], rkt_c, partition);
 		rd_kafka_topic_destroy(rkt_c);
 	}
 

@@ -968,9 +968,11 @@ void rd_kafka_offset_query_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
 	rd_kafka_toppar_t *rktp = arg;
 	rd_kafka_toppar_lock(rktp);
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
-		     "Topic %s [%"PRId32"]: timed offset query for %s",
+		     "Topic %s [%"PRId32"]: timed offset query for %s in "
+		     "state %s",
 		     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-		     rd_kafka_offset2str(rktp->rktp_query_offset));
+		     rd_kafka_offset2str(rktp->rktp_query_offset),
+		     rd_kafka_fetch_states[rktp->rktp_fetch_state]);
 	rd_kafka_toppar_offset_request(rktp, rktp->rktp_query_offset, 0);
 	rd_kafka_toppar_unlock(rktp);
 }

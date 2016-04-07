@@ -214,6 +214,8 @@ enum ErrorCode {
 	ERR__AUTHENTICATION = -169,
 	/** No stored offset */
 	ERR__NO_OFFSET = -168,
+	/** Outdated */
+	ERR__OUTDATED = -167,
 	/** End internal error codes */
 	ERR__END = -100,
 
@@ -1003,7 +1005,7 @@ class RD_EXPORT Topic {
 
   /**
    * @brief Store offset \p offset for topic partition \p partition.
-   * The offset will be commited (written) to the offset store according
+   * The offset will be committed (written) to the offset store according
    * to \p auto.commit.interval.ms.
    *
    * @remark This API should only be used with the simple RdKafka::Consumer,

@@ -416,7 +416,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RK(auto_commit_interval_ms),
 	  "The frequency in milliseconds that the consumer offsets "
-	  "are commited (written) to offset storage. (0 = disable)",
+	  "are committed (written) to offset storage. (0 = disable)",
           0, 86400*1000, 5*1000 },
         { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.offset.store", _RK_C_BOOL,
           _RK(enable_auto_offset_store),
@@ -598,7 +598,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.enable", _RK_C_BOOL,
 	  _RKT(auto_commit),
 	  "If true, periodically commit offset of the last message handed "
-	  "to the application. This commited offset will be used when the "
+	  "to the application. This committed offset will be used when the "
 	  "process restarts to pick up where it left off. "
 	  "If false, the application will have to call "
 	  "`rd_kafka_offset_store()` to store an offset (optional). "
@@ -614,7 +614,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RKT(auto_commit_interval_ms),
 	  "The frequency in milliseconds that the consumer offsets "
-	  "are commited (written) to offset storage.",
+	  "are committed (written) to offset storage.",
 	  10, 86400*1000, 60*1000 },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.offset.reset", _RK_C_S2I,
 	  _RKT(auto_offset_reset),

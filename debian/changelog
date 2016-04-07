@@ -5,6 +5,7 @@ librdkafka (0.9.1-1) unstable; urgency=medium
     - Remove 0002_hexdump_use_size_t_instead_of_int patch (not needed)
   * Add Build-Depends to libssl-dev/libsasl2-dev, to enable Kafka 0.9
     encryption and authentication.
+  * Bump Standards-Version to 3.9.7 (no changes needed).
 
  -- Faidon Liambotis <paravoid@debian.org>  Thu, 07 Apr 2016 15:02:17 +0300
 

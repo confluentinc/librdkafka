@@ -155,7 +155,7 @@ lib-install:
 	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir) ; \
 	[ -f "$(LIBNAME0).pc" ] && ( \
 		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) ; \
-		$(INSTALL) $(LIBNAME0).pc $$DESTDIR$(pkgconfigdir) \
+		$(INSTALL) -m 0644 $(LIBNAME0).pc $$DESTDIR$(pkgconfigdir) \
 	) ; \
 	(cd $$DESTDIR$(libdir) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
 

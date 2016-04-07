@@ -8,12 +8,3 @@
 
 override_dh_strip:
 	dh_strip --dbgsym-migration='librdkafka1-dbg (<< 0.9.1-1~)'
-
-override_dh_auto_install:
-	dh_auto_install
-	install -D -m 0644 src/rdkafka.pc \
-		debian/librdkafka-dev/usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/rdkafka.pc
-	install -D -m 0644 src-cpp/rdkafka++.pc \
-		debian/librdkafka-dev/usr/lib/${DEB_HOST_MULTIARCH}/pkgconfig/rdkafka++.pc
-
-.PHONY: override_dh_strip override_dh_auth_install

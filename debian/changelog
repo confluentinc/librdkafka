@@ -1,3 +1,22 @@
+librdkafka (0.9.1-1) unstable; urgency=medium
+
+  * New upstream release (Closes: #816047).
+    - Remove 0001-mklove-update-add-disable-silent-rules patch (not needed)
+    - Remove 0002_hexdump_use_size_t_instead_of_int patch (not needed)
+  * Add Build-Depends to libssl-dev/libsasl2-dev, to enable Kafka 0.9
+    encryption and authentication.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Thu, 07 Apr 2016 15:02:17 +0300
+
+librdkafka (0.8.6-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Use size_t instead of int for hexdump to fix FTBFS (Closes: 799993):
+    assuming signed overflow does not occur when
+    assuming that (X + c) >= X is always true
+
+ -- YunQiang Su <syq@debian.org>  Mon, 21 Dec 2015 21:20:59 +0800
+
 librdkafka (0.8.6-1) unstable; urgency=medium
 
   * New upstream release.

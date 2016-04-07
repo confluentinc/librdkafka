@@ -20,12 +20,29 @@ Description: library implementing the Apache Kafka protocol
  consumer. It implements both the 0.8 and 0.9 versions of the protocol.
  .
  More information about Apache Kafka can be found at http://kafka.apache.org/
+ .
+ This package contains the C shared library.
+
+Package: librdkafka++1
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: library implementing the Apache Kafka protocol
+ librdkafka is a C library implementation of the Apache Kafka protocol,
+ containing both Producer and Consumer support. It was designed with message
+ delivery reliability and high performance in mind, current figures exceed
+ 800000 msgs/second for the producer and 3 million msgs/second for the
+ consumer. It implements both the 0.8 and 0.9 versions of the protocol.
+ .
+ More information about Apache Kafka can be found at http://kafka.apache.org/
+ .
+ This package contains the C++ shared library.
 
 Package: librdkafka-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
-Depends: librdkafka1 (= ${binary:Version}), ${misc:Depends}
+Depends: librdkafka1 (= ${binary:Version}), librdkafka++1 (= ${binary:Version}), ${misc:Depends}
 Description: library implementing the Apache Kafka protocol (development headers)
  librdkafka is a C library implementation of the Apache Kafka protocol,
  containing both Producer and Consumer support. It was designed with message

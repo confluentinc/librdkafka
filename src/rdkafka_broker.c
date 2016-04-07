@@ -1321,6 +1321,8 @@ rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
 		apis = NULL;
 	}
 
+	rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
+
 	rd_kafka_broker_set_api_versions(rkb, apis, api_cnt);
 
 	rd_kafka_broker_connect_up(rkb);
@@ -1374,7 +1376,10 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 		rd_kafka_broker_unlock(rkb);
 
 		rd_kafka_ApiVersionRequest(
-			rkb, NULL, rd_kafka_broker_handle_ApiVersion, NULL);
+			rkb, NULL, rd_kafka_broker_handle_ApiVersion, NULL,
+			1 /*Flash message: prepend to transmit queue*/);
+		rkb->rkb_max_inflight = 1; /* Hold back other requests until
+					    * ApiVersionResponse is received. */
 	} else {
 
 		/* Use configured broker.version to figure out API versions */

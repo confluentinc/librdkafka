@@ -1896,10 +1896,11 @@ done:
 void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 				 rd_kafka_q_t *replyq,
 				 rd_kafka_resp_cb_t *resp_cb,
-				 void *opaque) {
+				 void *opaque, int flash_msg) {
         rd_kafka_buf_t *rkbuf;
 
         rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1, 4);
+	rkbuf->rkbuf_flags |= (flash_msg ? RD_KAFKA_OP_F_FLASH : 0);
 	rd_kafka_buf_write_i32(rkbuf, 0); /* Empty array: request all APIs */
 	rd_kafka_buf_autopush(rkbuf);
 

@@ -67,9 +67,9 @@ const char *rd_kafka_broker_state_names[] = {
 	"DOWN",
 	"CONNECT",
 	"AUTH",
-	"APIVERSION_QUERY",
 	"UP",
-        "UPDATE"
+        "UPDATE",
+	"APIVERSION_QUERY"
 };
 
 const char *rd_kafka_secproto_names[] = {
@@ -1282,7 +1282,9 @@ static void rd_kafka_broker_set_api_versions (rd_kafka_broker_t *rkb,
 
 
 		rd_kafka_get_legacy_ApiVersions(rkb->rkb_rk->rk_conf.broker_version,
-						&apis, &api_cnt, 1/*use default*/);
+						&apis, &api_cnt,
+						rkb->rkb_rk->rk_conf.broker_version);
+
 		/* Make a copy to store on broker. */
 		rd_kafka_ApiVersions_copy(apis, api_cnt, &apis, &api_cnt);
 	}
@@ -1352,6 +1354,14 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 	rkb->rkb_err.err = 0;
 
 	rd_kafka_transport_poll_set(rkb->rkb_transport, POLLIN);
+
+	if (rkb->rkb_rk->rk_conf.api_version_request &&
+	    rd_interval(&rkb->rkb_ApiVersion_fail_intvl, 0, 0) > 0) {
+		/* Use ApiVersion to query broker for supported API versions. */
+		rd_kafka_broker_feature_enable(rkb, RD_KAFKA_FEATURE_APIVERSION);
+	}
+
+
 
 	if (rkb->rkb_features & RD_KAFKA_FEATURE_APIVERSION) {
 		/* Query broker for supported API versions.
@@ -3795,10 +3805,11 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */
 
-	/* Set default features */
-	if (!strcmp(rk->rk_conf.broker_version, "auto")) {
-		/* Use ApiVersion to query broker for supported API versions. */
-		rd_kafka_broker_feature_enable(rkb, RD_KAFKA_FEATURE_APIVERSION);
+	/* ApiVersion fallback interval */
+	if (rkb->rkb_rk->rk_conf.api_version_request) {
+		rd_interval_init(&rkb->rkb_ApiVersion_fail_intvl);
+		rd_interval_fixed(&rkb->rkb_ApiVersion_fail_intvl,
+				  rkb->rkb_rk->rk_conf.api_version_fallback_ms*1000);
 	}
 
 	/* Set next intervalled metadata refresh, offset by a random

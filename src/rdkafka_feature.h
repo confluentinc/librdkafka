@@ -57,7 +57,7 @@
 
 int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 				     struct rd_kafka_ApiVersion **apisp,
-				     size_t *api_cntp, int use_default);
+				     size_t *api_cntp, const char *fallback);
 void rd_kafka_ApiVersions_copy (const struct rd_kafka_ApiVersion *src, size_t src_cnt,
 				struct rd_kafka_ApiVersion **dstp, size_t *dst_cntp);
 int rd_kafka_features_check (rd_kafka_broker_t *rkb,

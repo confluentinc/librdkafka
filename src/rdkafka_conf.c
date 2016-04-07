@@ -62,7 +62,7 @@ struct rd_kafka_property {
 		const char *str;
 	} s2i[16];  /* _RK_C_S2I and _RK_C_S2F */
 
-	/* Value validator */
+	/* Value validator (STR) */
 	int (*validate) (const struct rd_kafka_property *prop,
 			 const char *val, int ival);
 };
@@ -81,8 +81,6 @@ rd_kafka_conf_validate_broker_version (const struct rd_kafka_property *prop,
 				       const char *val, int ival) {
 	struct rd_kafka_ApiVersion *apis;
 	size_t api_cnt;
-	if (!strcmp(val, "auto"))
-		return 1;
 	return rd_kafka_get_legacy_ApiVersions(val, &apis, &api_cnt, 0);
 }
 
@@ -299,15 +297,32 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The application should mask this signal as an internal "
 	  "signal handler is installed.",
 	  0, 128, 0 },
+	{ _RK_GLOBAL, "api.version.request", _RK_C_BOOL,
+	  _RK(api_version_request),
+	  "Request broker's supported API versions to adjust functionality to "
+	  "available protocol features. "
+	  "**NOTE**: Depends on broker version >=0.10.0. If the request is not "
+	  "supported by (an older) broker the `broker.version` fallback is used.",
+	  0, 1, 1 },
+	{ _RK_GLOBAL, "api.version.fallback.ms", _RK_C_INT,
+	  _RK(api_version_fallback_ms),
+	  "Dictates how long the `broker.version` fallback is used "
+	  "in the case the ApiVersionRequest fails. "
+	  "**NOTE**: The ApiVersionRequest is only issued when a new connection "
+	  "to the broker is made (such as after an upgrade).",
+	  0, 86400*7*1000, 20*60*1000 /* longer than default Idle timeout (10m)*/ },
+
 	{ _RK_GLOBAL, "broker.version", _RK_C_STR,
 	  _RK(broker_version),
 	  "Older broker versions (<0.10.0) provides no way for a client to query "
-	  "for supported protocol features (ApiVersionQuery) making it impossible "
+	  "for supported protocol features "
+	  "(ApiVersionRequest, see `api.version.request`) making it impossible "
 	  "for the client to know what features it may use. "
 	  "As a workaround a user may set this property to the expected broker "
 	  "version and the client will automatically adjust its feature set "
-	  "accordingly. Valid values are: "
-	  "0.9.0, 0.8.2, 0.8.1, 0.8.0, auto (requires broker >=0.10.0)",
+	  "accordingly if the ApiVersionRequest fails. "
+	  "The fallback broker version will be used for `api.version.fallback.ms`. "
+	  "Valid values are: 0.9.0, 0.8.2, 0.8.1, 0.8.0.",
 	  .sdef = "0.9.0",
 	  .validate = rd_kafka_conf_validate_broker_version },
 
@@ -693,11 +708,6 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			    const char *istr, int ival, prop_set_mode_t set_mode,
                             char *errstr, size_t errstr_size) {
 
-	if (prop->validate) {
-		if (!prop->validate(prop, istr, ival))
-			return RD_KAFKA_CONF_INVALID;
-	}
-
 #define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
 	switch (prop->type)
 	{
@@ -790,6 +800,11 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 	case _RK_C_STR:
         case _RK_C_KSTR:
         case _RK_C_PATLIST:
+		if (prop->validate && !prop->validate(prop, value, -1)) {
+			rd_snprintf(errstr, errstr_size, "Invalid value: %s", value);
+			return RD_KAFKA_CONF_INVALID;
+		}
+
 		return rd_kafka_anyconf_set_prop0(scope, conf, prop, value, 0,
 						  _PROP_SET_REPLACE,
                                                   errstr, errstr_size);

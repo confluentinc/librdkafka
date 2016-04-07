@@ -175,7 +175,7 @@ static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_8_0[] = {
  */
 int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 				     struct rd_kafka_ApiVersion **apisp,
-				     size_t *api_cntp, int use_default) {
+				     size_t *api_cntp, const char *fallback) {
 	static const struct {
 		const char *pfx;
 		struct rd_kafka_ApiVersion *apis;
@@ -189,18 +189,21 @@ int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 		{ NULL }
 	};
 	int i;
+	int fallback_i = -1;
 
 	for (i = 0 ; vermap[i].pfx ; i++) {
 		if (!strncmp(vermap[i].pfx, broker_version, strlen(vermap[i].pfx))) {
 			*apisp = vermap[i].apis;
 			*api_cntp = vermap[i].api_cnt;
 			return 1;
-		}
+		} else if (fallback && !strcmp(vermap[i].pfx, fallback))
+			fallback_i = i;
 	}
 
-	if (use_default) {
-		*apisp    = rd_kafka_ApiVersion_0_9_0;
-		*api_cntp = RD_ARRAYSIZE(rd_kafka_ApiVersion_0_9_0);
+	if (fallback) {
+		rd_kafka_assert(NULL, fallback_i != -1);
+		*apisp    = vermap[fallback_i].apis;
+		*api_cntp = vermap[fallback_i].api_cnt;
 		return 0;
 	}
 

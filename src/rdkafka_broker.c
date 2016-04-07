@@ -2266,18 +2266,32 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 		 */
                 rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
 
+		rd_kafka_toppar_lock(rktp);
+		/* Multiple PARTITION_LEAVEs are possible during partition migration,
+		 * make sure we're supposed to handle this one. */
+		if (unlikely(rktp->rktp_leader != rkb)) {
+			rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
+				   "Topic %s [%"PRId32"]: "
+				   "ignoring PARTITION_LEAVE: broker is not leader",
+				   rktp->rktp_rkt->rkt_topic->str,
+				   rktp->rktp_partition);
+			rd_kafka_toppar_unlock(rktp);
+			break;
+		}
+		rd_kafka_toppar_unlock(rktp);
+
 		/* Remove from fetcher list */
 		rd_kafka_toppar_fetch_decide(rktp, rkb, 1/*force remove*/);
 
-                rd_kafka_toppar_lock(rktp);
+		rd_kafka_toppar_lock(rktp);
 
-                rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
-                           "Topic %s [%"PRId32"]: leaving broker "
-                           "(next leader %s)",
-                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                           rktp->rktp_next_leader ?
-                           rd_kafka_broker_name(rktp->rktp_next_leader) :
-                           "(none)");
+		rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
+			   "Topic %s [%"PRId32"]: leaving broker "
+			   "(next leader %s)",
+			   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+			   rktp->rktp_next_leader ?
+			   rd_kafka_broker_name(rktp->rktp_next_leader) :
+			   "(none)");
 
                 rd_kafka_broker_lock(rkb);
 		TAILQ_REMOVE(&rkb->rkb_toppars, rktp, rktp_rkblink);

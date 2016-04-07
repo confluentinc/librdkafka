@@ -263,7 +263,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	void   *rkbuf_opaque;
 
 	int     rkbuf_retries;            /* Retries so far. */
-#define RD_KAFKA_BUF_NO_RETRIES  INT_MAX  /* Do not retry */
+#define RD_KAFKA_BUF_NO_RETRIES  1000000  /* Do not retry */
 
 	rd_ts_t rkbuf_ts_enq;
 	rd_ts_t rkbuf_ts_sent;    /* Initially: Absolute time of transmission,

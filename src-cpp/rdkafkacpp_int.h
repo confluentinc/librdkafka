@@ -611,7 +611,8 @@ public:
   }
 
 
-  ErrorCode position (std::vector<TopicPartition*> &partitions, int timeout_ms);
+  ErrorCode committed (std::vector<TopicPartition*> &partitions, int timeout_ms);
+  ErrorCode position (std::vector<TopicPartition*> &partitions);
 
   ErrorCode close ();
 };

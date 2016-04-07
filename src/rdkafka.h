@@ -1976,7 +1976,7 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
 
 
 /**
- * @brief Retrieve committed positions (offsets) for topics+partitions.
+ * @brief Retrieve committed offsets for topics+partitions.
  *
  * The \p offset field of each requested partition will either be set to
  * stored offset or to RD_KAFKA_OFFSET_INVALID in case there was no stored
@@ -1988,9 +1988,28 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
  *          Else returns an error code.
  */
 RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_committed (rd_kafka_t *rk,
+		    rd_kafka_topic_partition_list_t *partitions,
+		    int timeout_ms);
+
+
+
+/**
+ * @brief Retrieve current positions (offsets) for topics+partitions.
+ *
+ * The \p offset field of each requested partition will be set to the offset
+ * of the last consumed message + 1, or RD_KAFKA_OFFSET_INVALID in case there was
+ * previous message.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
+ *          \p offset or \p err field of each \p partitions' element is filled
+ *          in with the stored offset, or a partition specific error.
+ *          Else returns an error code.
+ */
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_position (rd_kafka_t *rk,
-                   rd_kafka_topic_partition_list_t *partitions,
-                   int timeout_ms);
+		   rd_kafka_topic_partition_list_t *partitions);
+
 
 /**@}*/
 

@@ -1744,9 +1744,9 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
 
 
 rd_kafka_resp_err_t
-rd_kafka_position (rd_kafka_t *rk,
-                   rd_kafka_topic_partition_list_t *partitions,
-                   int timeout_ms) {
+rd_kafka_committed (rd_kafka_t *rk,
+		    rd_kafka_topic_partition_list_t *partitions,
+		    int timeout_ms) {
         rd_kafka_q_t *replyq;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
@@ -1794,6 +1794,40 @@ rd_kafka_position (rd_kafka_t *rk,
         rd_kafka_q_destroy(replyq);
 
         return err;
+}
+
+
+
+rd_kafka_resp_err_t
+rd_kafka_position (rd_kafka_t *rk,
+		   rd_kafka_topic_partition_list_t *partitions) {
+ 	int i;
+
+	/* Set default offsets. */
+	rd_kafka_topic_partition_list_reset_offsets(partitions,
+						    RD_KAFKA_OFFSET_INVALID);
+
+	for (i = 0 ; i < partitions->cnt ; i++) {
+		rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+		shptr_rd_kafka_toppar_t *s_rktp;
+		rd_kafka_toppar_t *rktp;
+
+		if (!(s_rktp = rd_kafka_toppar_get2(rk, rktpar->topic,
+						    rktpar->partition, 0, 0))) {
+			rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+			rktpar->offset = RD_KAFKA_OFFSET_INVALID;
+			continue;
+		}
+
+		rktp = rd_kafka_toppar_s2i(s_rktp);
+		rd_kafka_toppar_lock(rktp);
+		rktpar->offset = rktp->rktp_app_offset;
+		rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+		rd_kafka_toppar_unlock(rktp);
+		rd_kafka_toppar_destroy(s_rktp);
+	}
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 

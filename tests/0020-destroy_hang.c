@@ -86,11 +86,11 @@ static int nonexist_part (void) {
 		rd_kafka_topic_partition_list_add(parts, topic, 123);
 
 
-		TIMING_START(&t_pos, "POSITION");
-		err = rd_kafka_position(rk, parts, tmout_multip(5000));
+		TIMING_START(&t_pos, "COMMITTED");
+		err = rd_kafka_committed(rk, parts, tmout_multip(5000));
 		TIMING_STOP(&t_pos);
 		if (err)
-			TEST_FAIL("Failed to acquire positions: %s\n",
+			TEST_FAIL("Failed to acquire committed offsets: %s\n",
 				  rd_kafka_err2str(err));
 
 		for (i = 0 ; i < parts->cnt ; i++) {

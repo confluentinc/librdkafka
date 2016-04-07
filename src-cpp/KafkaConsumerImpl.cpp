@@ -172,13 +172,32 @@ RdKafka::KafkaConsumerImpl::assign (const std::vector<TopicPartition*> &partitio
 
 
 RdKafka::ErrorCode
-RdKafka::KafkaConsumerImpl::position (std::vector<RdKafka::TopicPartition*> &partitions, int timeout_ms) {
+RdKafka::KafkaConsumerImpl::committed (std::vector<RdKafka::TopicPartition*> &partitions, int timeout_ms) {
   rd_kafka_topic_partition_list_t *c_parts;
   rd_kafka_resp_err_t err;
 
   c_parts = partitions_to_c_parts(partitions);
 
-  err = rd_kafka_position(rk_, c_parts, timeout_ms);
+  err = rd_kafka_committed(rk_, c_parts, timeout_ms);
+
+  if (!err) {
+    update_partitions_from_c_parts(partitions, c_parts);
+  }
+
+  rd_kafka_topic_partition_list_destroy(c_parts);
+
+  return static_cast<RdKafka::ErrorCode>(err);
+}
+
+
+RdKafka::ErrorCode
+RdKafka::KafkaConsumerImpl::position (std::vector<RdKafka::TopicPartition*> &partitions) {
+  rd_kafka_topic_partition_list_t *c_parts;
+  rd_kafka_resp_err_t err;
+
+  c_parts = partitions_to_c_parts(partitions);
+
+  err = rd_kafka_position(rk_, c_parts);
 
   if (!err) {
     update_partitions_from_c_parts(partitions, c_parts);

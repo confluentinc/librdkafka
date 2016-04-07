@@ -233,8 +233,11 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 
 	if (state == RD_KAFKA_BROKER_STATE_DOWN) {
 		/* Propagate ALL_BROKERS_DOWN event if all brokers are
-		 * now down, unless we're terminating. */
-		if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
+		 * now down, unless we're terminating.
+		 * Dont do this if we're querying for ApiVersion since it
+		 * is bound to fail once on older brokers. */
+		if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_APIVERSION_QUERY &&
+		    rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
 		    rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) &&
 		    !rd_atomic32_get(&rkb->rkb_rk->rk_terminate))
 			rd_kafka_op_err(rkb->rkb_rk,
@@ -298,16 +301,22 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rkb->rkb_recv_buf = NULL;
 	}
 
+	rd_kafka_broker_lock(rkb);
+
 	/* The caller may omit the format if it thinks this is a recurring
 	 * failure, in which case the following things are omitted:
 	 *  - log message
 	 *  - application OP_ERR
 	 *  - metadata request
 	 *
-	 * Dont log anything if this was the termination signal.
+	 * Dont log anything if this was the termination signal, or if the
+	 * socket disconnected while trying ApiVersionRequest.
 	 */
-	if (fmt && !(errno_save == EINTR &&
-                     rd_atomic32_get(&rkb->rkb_rk->rk_terminate))) {
+	if (fmt &&
+	    !(errno_save == EINTR &&
+	      rd_atomic32_get(&rkb->rkb_rk->rk_terminate)) &&
+	    !(err == RD_KAFKA_RESP_ERR__TRANSPORT &&
+	      rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY)) {
 		int of;
 
 		/* Insert broker name in log message if it fits. */
@@ -331,8 +340,6 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
                                         "%s", rkb->rkb_err.msg);
                 }
 	}
-
-	rd_kafka_broker_lock(rkb);
 
 	/* If we're currently asking for ApiVersion and the connection
 	 * went down it probably means the broker does not support that request
@@ -1314,11 +1321,12 @@ rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
 					 &apis, &api_cnt);
 
 	if (err) {
-		/* FIXME: What is the error case here, really? */
-		rd_rkb_log(rkb, LOG_WARNING, "APIVERSION",
-			   "ApiVersion request failed: %s",
-			   rd_kafka_err2str(err));
-		apis = NULL;
+		rd_kafka_broker_fail(rkb, LOG_DEBUG,
+				     RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
+				     "ApiVersionRequest failed: %s: "
+				     "probably due to old broker version",
+				     rd_kafka_err2str(err));
+		return;
 	}
 
 	rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;

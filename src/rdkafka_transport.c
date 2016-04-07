@@ -1040,9 +1040,8 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		}
 
 		if (events & POLLOUT) {
-			if (rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0)
-				while (rd_kafka_send(rkb) > 0)
-					;
+			while (rd_kafka_send(rkb) > 0)
+				;
 		}
 		break;
 
@@ -1062,7 +1061,8 @@ void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	int events;
 
-	if (rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0)
+	if (rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
+	    rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0)
 		rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
 
 	if ((events = rd_kafka_transport_poll(rktrans, timeout_ms)) <= 0)

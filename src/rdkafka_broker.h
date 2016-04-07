@@ -140,6 +140,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 	rd_kafka_buf_t     *rkb_recv_buf;
 
+	int                 rkb_max_inflight;   /* Maximum number of in-flight
+						 * requests to broker.
+						 * Compared to rkb_waitresps length.*/
 	rd_kafka_bufq_t     rkb_outbufs;
 	rd_kafka_bufq_t     rkb_waitresps;
 	rd_kafka_bufq_t     rkb_retrybufs;

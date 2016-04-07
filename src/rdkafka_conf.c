@@ -135,6 +135,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "The value should be at least fetch.message.max.bytes * number of "
           "partitions consumed from + messaging overhead (e.g. 200000 bytes).",
 	  1000, 1000000000, 100000000 },
+	{ _RK_GLOBAL, "max.in.flight.requests.per.connection", _RK_C_INT,
+	  _RK(max_inflight),
+	  "Maximum number of in-flight requests the client will send. "
+	  "This setting applies per broker connection.",
+	  1, 1000000, 1000000 },
 	{ _RK_GLOBAL, "metadata.request.timeout.ms", _RK_C_INT,
 	  _RK(metadata_request_timeout_ms),
 	  "Non-topic request timeout in milliseconds. "

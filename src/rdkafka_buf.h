@@ -286,6 +286,8 @@ typedef struct rd_kafka_bufq_s {
 	rd_atomic32_t  rkbq_msg_cnt;
 } rd_kafka_bufq_t;
 
+#define rd_kafka_bufq_cnt(rkbq) rd_atomic32_get(&(rkbq)->rkbq_cnt)
+
 
 #define rd_kafka_buf_keep(rkbuf) rd_refcnt_add(&(rkbuf)->rkbuf_refcnt)
 #define rd_kafka_buf_destroy(rkbuf)                                     \

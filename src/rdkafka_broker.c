@@ -1352,6 +1352,7 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "Connected");
 	rkb->rkb_err.err = 0;
+	rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
 
 	rd_kafka_transport_poll_set(rkb->rkb_transport, POLLIN);
 
@@ -1397,6 +1398,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
 	while (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
+	       rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
 	       (rkbuf = TAILQ_FIRST(&rkb->rkb_outbufs.rkbq_bufs))) {
 		ssize_t r;
 		struct msghdr *msg = &rkbuf->rkbuf_msg;

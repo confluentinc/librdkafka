@@ -1005,7 +1005,7 @@ class RD_EXPORT Topic {
 
   /**
    * @brief Store offset \p offset for topic partition \p partition.
-   * The offset will be commited (written) to the offset store according
+   * The offset will be committed (written) to the offset store according
    * to \p auto.commit.interval.ms.
    *
    * @remark This API should only be used with the simple RdKafka::Consumer,

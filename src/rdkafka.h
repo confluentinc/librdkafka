@@ -1641,7 +1641,7 @@ int rd_kafka_consume_start_queue(rd_kafka_topic_t *rkt, int32_t partition,
  * all messages currently in the local queue.
  *
  * NOTE: To enforce synchronisation this call will block until the internal
- *       fetcher has terminated and offsets are commited to configured
+ *       fetcher has terminated and offsets are committed to configured
  *       storage method.
  *
  * The application needs to be stop all consumers before calling
@@ -1824,7 +1824,7 @@ int rd_kafka_consume_callback_queue(rd_kafka_queue_t *rkqu,
 /**
  * @brief Store offset \p offset for topic \p rkt partition \p partition.
  *
- * The offset will be commited (written) to the offset store according
+ * The offset will be committed (written) to the offset store according
  * to \c `auto.commit.interval.ms`.
  *
  * @remark \c `auto.commit.enable` must be set to "false" when using this API.

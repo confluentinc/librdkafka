@@ -433,7 +433,7 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 
 /**
  * Populate 'rkmessages' array with messages from 'rkq'.
- * If 'auto_commit' is set, each message's offset will be commited
+ * If 'auto_commit' is set, each message's offset will be committed
  * to the offset store for that toppar.
  *
  * Returns the number of messages added.

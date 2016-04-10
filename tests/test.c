@@ -459,7 +459,7 @@ void test_msg_parse0 (const char *func, int line,
 
 	rd_snprintf(buf, sizeof(buf), "%.*s", (int)size, (char *)ptr);
 
-	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 		   &in_testid, &in_part, msgidp) != 3)
 		TEST_FAIL("%s:%i: Incorrect key format: %s", func, line, buf);
 
@@ -1644,7 +1644,7 @@ int test_msgver_add_msg0 (const char *func, int line,
 		rd_snprintf(buf, sizeof(buf), "%.*s",
 			    (int)rkmessage->len, (char *)rkmessage->payload);
 
-		if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+		if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 			   &in_testid, &in_part, &in_msgnum) != 3)
 			TEST_FAIL("%s:%d: Incorrect format: %s",
 				  func, line, buf);
@@ -2103,7 +2103,7 @@ void test_verify_rkmessage0 (const char *func, int line,
 	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->len, (char *)rkmessage->payload);
 
-	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 		   &in_testid, &in_part, &in_msgnum) != 3)
 		TEST_FAIL("Incorrect format: %s", buf);
 

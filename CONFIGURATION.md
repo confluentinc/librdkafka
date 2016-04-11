@@ -77,6 +77,7 @@ offset_commit_cb                         |  C  |                 |              
 queue.buffering.max.messages             |  P  | 1 .. 10000000   |        100000 | Maximum number of messages allowed on the producer queue. <br>*Type: integer*
 queue.buffering.max.ms                   |  P  | 1 .. 900000     |          1000 | Maximum time, in milliseconds, for buffering data on the producer queue. <br>*Type: integer*
 message.send.max.retries                 |  P  | 0 .. 10000000   |             2 | How many times to retry sending a failing MessageSet. **Note:** retrying may cause reordering. <br>*Type: integer*
+retries                                  |  P  |                 |               | Alias for `message.send.max.retries`
 retry.backoff.ms                         |  P  | 1 .. 300000     |           100 | The backoff time in milliseconds before retrying a message send. <br>*Type: integer*
 compression.codec                        |  P  | none, gzip, snappy |          none | Compression codec to use for compressing message sets: none, gzip or snappy <br>*Type: enum value*
 batch.num.messages                       |  P  | 1 .. 1000000    |          1000 | Maximum number of messages batched in one MessageSet. <br>*Type: integer*
@@ -90,6 +91,7 @@ dr_msg_cb                                |  P  |                 |              
 Property                                 | C/P | Range           |       Default | Description              
 -----------------------------------------|-----|-----------------|--------------:|--------------------------
 request.required.acks                    |  P  | -1 .. 1000      |             1 | This field indicates how many acknowledgements the leader broker must receive from ISR brokers before responding to the request: *0*=broker does not send any response, *1*=broker will wait until the data is written to local log before sending a response, *-1*=broker will block until message is committed by all in sync replicas (ISRs) or broker's `in.sync.replicas` setting before sending response. *1*=Only the leader broker will need to ack the message.  <br>*Type: integer*
+acks                                     |  P  |                 |               | Alias for `request.required.acks`
 request.timeout.ms                       |  P  | 1 .. 900000     |          5000 | The ack timeout of the producer request in milliseconds. This value is only enforced by the broker and relies on `request.required.acks` being > 0. <br>*Type: integer*
 message.timeout.ms                       |  P  | 0 .. 900000     |        300000 | Local message timeout. This value is only enforced locally and limits the time a produced message waits for successful delivery. A time of 0 is infinite. <br>*Type: integer*
 produce.offset.report                    |  P  | true, false     |         false | Report offset of produced message back to application. The application must be use the `dr_msg_cb` to retrieve the offset from `rd_kafka_message_t.offset`. <br>*Type: boolean*

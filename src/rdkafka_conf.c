@@ -913,9 +913,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 				if (!prop->s2i[j].str)
 					continue;
 
-				if (prop->type == _RK_C_S2F && !strcmp(s, "all"))
-					new_val = prop->vmax;
-				else if (strlen(prop->s2i[j].str) == (size_t)(t-s) &&
+				if (strlen(prop->s2i[j].str) == (size_t)(t-s) &&
 					 !rd_strncasecmp(prop->s2i[j].str, s,
 							 (int)(t-s)))
 					new_val = prop->s2i[j].val;

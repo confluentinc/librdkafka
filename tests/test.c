@@ -26,6 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+
+#define _CRT_RAND_S  // rand_s() on MSVC
 #include <stdarg.h>
 #include "test.h"
 #include <signal.h>
@@ -196,9 +198,15 @@ static void test_init (void) {
 	if ((tmp = getenv("TEST_SEED")))
 		seed = atoi(tmp);
 	else
-#endif
-		seed = test_clock() & 0xffffffff;
 
+		seed = test_clock() & 0xffffffff;
+#else
+	{
+		LARGE_INTEGER cycl;
+		QueryPerformanceCounter(&cycl);
+		seed = (int)cycl.QuadPart;
+	}
+#endif
 	srand(seed);
 	test_seed = seed;
 }
@@ -412,12 +420,20 @@ void test_wait_exit (int timeout) {
 }
 
 
-
+static __inline unsigned int test_rand(void) {
+	unsigned int r;
+#if _MSC_VER
+	rand_s(&r);
+#else
+	r = rand();
+#endif
+	return r;
+}
 /**
  * Generate a "unique" test id.
  */
 uint64_t test_id_generate (void) {
-	return (((uint64_t)rand()) << 32) | (uint64_t)rand();
+	return (((uint64_t)test_rand()) << 32) | (uint64_t)test_rand();
 }
 
 

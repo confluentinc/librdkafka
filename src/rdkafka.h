@@ -58,6 +58,7 @@ extern "C" {
 #include <basetsd.h>
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED
+#define RD_INLINE __inline
 #define RD_DEPRECATED
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_EXPORTS
@@ -68,6 +69,7 @@ typedef SSIZE_T ssize_t;
 
 #else
 #define RD_UNUSED __attribute__((unused))
+#define RD_INLINE inline
 #define RD_EXPORT
 #define RD_DEPRECATED __attribute__((deprecated))
 #endif
@@ -688,7 +690,7 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
  * @brief Returns the error string for an errored rd_kafka_message_t or NULL if
  *        there was no error.
  */
-static __inline const char *
+static RD_INLINE const char *
 RD_UNUSED 
 rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
 	if (!rkmessage->err)

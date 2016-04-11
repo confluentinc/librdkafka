@@ -78,7 +78,7 @@ typedef struct rd_kafka_msgq_s {
 /**
  * Returns the number of messages in the specified queue.
  */
-static __inline RD_UNUSED int rd_kafka_msgq_len (rd_kafka_msgq_t *rkmq) {
+static RD_INLINE RD_UNUSED int rd_kafka_msgq_len (rd_kafka_msgq_t *rkmq) {
 	return (int)rd_atomic32_get(&rkmq->rkmq_msg_cnt);
 }
 
@@ -92,7 +92,7 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      void *msg_opaque);
 
 
-static __inline RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
+static RD_INLINE RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
 	TAILQ_INIT(&rkmq->rkmq_msgs);
 	rd_atomic32_set(&rkmq->rkmq_msg_cnt, 0);
 	rd_atomic64_set(&rkmq->rkmq_msg_bytes, 0);
@@ -103,7 +103,7 @@ static __inline RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
  * 'src' will be cleared.
  * Proper locks for 'src' and 'dst' must be held.
  */
-static __inline RD_UNUSED void rd_kafka_msgq_concat (rd_kafka_msgq_t *dst,
+static RD_INLINE RD_UNUSED void rd_kafka_msgq_concat (rd_kafka_msgq_t *dst,
 						   rd_kafka_msgq_t *src) {
 	TAILQ_CONCAT(&dst->rkmq_msgs, &src->rkmq_msgs, rkm_link);
 	(void)rd_atomic32_add(&dst->rkmq_msg_cnt, rd_atomic32_get(&src->rkmq_msg_cnt));
@@ -115,7 +115,7 @@ static __inline RD_UNUSED void rd_kafka_msgq_concat (rd_kafka_msgq_t *dst,
  * Move queue 'src' to 'dst' (overwrites dst)
  * Source will be cleared.
  */
-static __inline RD_UNUSED void rd_kafka_msgq_move (rd_kafka_msgq_t *dst,
+static RD_INLINE RD_UNUSED void rd_kafka_msgq_move (rd_kafka_msgq_t *dst,
 						 rd_kafka_msgq_t *src) {
 	TAILQ_MOVE(&dst->rkmq_msgs, &src->rkmq_msgs, rkm_link);
 	rd_atomic32_set(&dst->rkmq_msg_cnt, rd_atomic32_get(&src->rkmq_msg_cnt));
@@ -127,7 +127,7 @@ static __inline RD_UNUSED void rd_kafka_msgq_move (rd_kafka_msgq_t *dst,
 /**
  * rd_free all msgs in msgq and reinitialize the msgq.
  */
-static __inline RD_UNUSED void rd_kafka_msgq_purge (rd_kafka_t *rk,
+static RD_INLINE RD_UNUSED void rd_kafka_msgq_purge (rd_kafka_t *rk,
                                                     rd_kafka_msgq_t *rkmq) {
 	rd_kafka_msg_t *rkm, *next;
 
@@ -146,7 +146,7 @@ static __inline RD_UNUSED void rd_kafka_msgq_purge (rd_kafka_t *rk,
 /**
  * Remove message from message queue
  */
-static __inline RD_UNUSED 
+static RD_INLINE RD_UNUSED 
 rd_kafka_msg_t *rd_kafka_msgq_deq (rd_kafka_msgq_t *rkmq,
 				   rd_kafka_msg_t *rkm,
 				   int do_count) {
@@ -162,7 +162,7 @@ rd_kafka_msg_t *rd_kafka_msgq_deq (rd_kafka_msgq_t *rkmq,
 	return rkm;
 }
 
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 rd_kafka_msg_t *rd_kafka_msgq_pop (rd_kafka_msgq_t *rkmq) {
 	rd_kafka_msg_t *rkm;
 
@@ -175,7 +175,7 @@ rd_kafka_msg_t *rd_kafka_msgq_pop (rd_kafka_msgq_t *rkmq) {
 /**
  * Insert message at head of message queue.
  */
-static __inline RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
+static RD_INLINE RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
 						   rd_kafka_msg_t *rkm) {
 	TAILQ_INSERT_HEAD(&rkmq->rkmq_msgs, rkm, rkm_link);
 	(void)rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
@@ -185,7 +185,7 @@ static __inline RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
 /**
  * Append message to tail of message queue.
  */
-static __inline RD_UNUSED void rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
+static RD_INLINE RD_UNUSED void rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
 						rd_kafka_msg_t *rkm) {
 	TAILQ_INSERT_TAIL(&rkmq->rkmq_msgs, rkm, rkm_link);
 	(void)rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);

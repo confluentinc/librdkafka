@@ -68,7 +68,7 @@ rd_crc32_t rd_crc32_reflect(rd_crc32_t data, size_t data_len);
  *
  * \return     The initial crc value.
  *****************************************************************************/
-static __inline rd_crc32_t rd_crc32_init(void)
+static RD_INLINE rd_crc32_t rd_crc32_init(void)
 {
 #if WITH_ZLIB
         return crc32(0, NULL, 0);
@@ -94,7 +94,7 @@ static __inline rd_crc32_t rd_crc32_init(void)
  * \param data_len Number of bytes in the \a data buffer.
  * \return         The updated crc value.
  *****************************************************************************/
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t data_len)
 {
 #if WITH_ZLIB
@@ -120,7 +120,7 @@ rd_crc32_t rd_crc32_update(rd_crc32_t crc, const unsigned char *data, size_t dat
  * \param crc  The current crc value.
  * \return     The final crc value.
  *****************************************************************************/
-static __inline rd_crc32_t rd_crc32_finalize(rd_crc32_t crc)
+static RD_INLINE rd_crc32_t rd_crc32_finalize(rd_crc32_t crc)
 {
 #if WITH_ZLIB
         return crc;
@@ -133,7 +133,7 @@ static __inline rd_crc32_t rd_crc32_finalize(rd_crc32_t crc)
 /**
  * Wrapper for performing CRC32 on the provided buffer.
  */
-static __inline rd_crc32_t rd_crc32 (const char *data, size_t data_len) {
+static RD_INLINE rd_crc32_t rd_crc32 (const char *data, size_t data_len) {
 	return rd_crc32_finalize(rd_crc32_update(rd_crc32_init(),
 						 (const unsigned char *)data,
 						 data_len));

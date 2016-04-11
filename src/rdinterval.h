@@ -11,7 +11,7 @@ typedef struct rd_interval_s {
 } rd_interval_t;
 
 
-static __inline RD_UNUSED void rd_interval_init (rd_interval_t *ri) {
+static RD_INLINE RD_UNUSED void rd_interval_init (rd_interval_t *ri) {
         memset(ri, 0, sizeof(*ri));
 }
 
@@ -28,7 +28,7 @@ static __inline RD_UNUSED void rd_interval_init (rd_interval_t *ri) {
  * If 'interval_us' is set to 0 the fixed interval will be used, see
  * 'rd_interval_fixed()'.
  */
-static __inline RD_UNUSED rd_ts_t rd_interval (rd_interval_t *ri,
+static RD_INLINE RD_UNUSED rd_ts_t rd_interval (rd_interval_t *ri,
                                                rd_ts_t interval_us,
                                                rd_ts_t now) {
         rd_ts_t diff;
@@ -52,7 +52,7 @@ static __inline RD_UNUSED rd_ts_t rd_interval (rd_interval_t *ri,
  * Reset the interval to zero, i.e., the next call to rd_interval()
  * will be immediate.
  */
-static __inline RD_UNUSED void rd_interval_reset (rd_interval_t *ri) {
+static RD_INLINE RD_UNUSED void rd_interval_reset (rd_interval_t *ri) {
         ri->ri_ts_last = 0;
         ri->ri_backoff = 0;
 }
@@ -60,7 +60,7 @@ static __inline RD_UNUSED void rd_interval_reset (rd_interval_t *ri) {
 /**
  * Back off the next interval by `backoff_us` microseconds.
  */
-static __inline RD_UNUSED void rd_interval_backoff (rd_interval_t *ri,
+static RD_INLINE RD_UNUSED void rd_interval_backoff (rd_interval_t *ri,
                                                     int backoff_us) {
         ri->ri_backoff = backoff_us;
 }
@@ -70,7 +70,7 @@ static __inline RD_UNUSED void rd_interval_backoff (rd_interval_t *ri,
  * If `expedite_us` is 0 the interval will be set to trigger
  * immedately on the next rd_interval() call.
  */
-static __inline RD_UNUSED void rd_interval_expedite (rd_interval_t *ri,
+static RD_INLINE RD_UNUSED void rd_interval_expedite (rd_interval_t *ri,
 						     int expedite_us) {
 	if (!expedite_us)
 		ri->ri_ts_last = 0;
@@ -82,7 +82,7 @@ static __inline RD_UNUSED void rd_interval_expedite (rd_interval_t *ri,
  * Specifies a fixed interval to use if rd_interval() is called with
  * `interval_us` set to 0.
  */
-static __inline RD_UNUSED void rd_interval_fixed (rd_interval_t *ri,
+static RD_INLINE RD_UNUSED void rd_interval_fixed (rd_interval_t *ri,
                                                   rd_ts_t fixed_us) {
         ri->ri_fixed = fixed_us;
 }
@@ -92,7 +92,7 @@ static __inline RD_UNUSED void rd_interval_fixed (rd_interval_t *ri,
  * A disabled interval will never return a positive value from
  * rd_interval().
  */
-static __inline RD_UNUSED void rd_interval_disable (rd_interval_t *ri) {
+static RD_INLINE RD_UNUSED void rd_interval_disable (rd_interval_t *ri) {
         /* Set last beat to a large value a long time in the future. */
         ri->ri_ts_last = 6000000000000000000LL; /* in about 190000 years */
 }
@@ -100,6 +100,6 @@ static __inline RD_UNUSED void rd_interval_disable (rd_interval_t *ri) {
 /**
  * Returns true if the interval is disabled.
  */
-static __inline RD_UNUSED int rd_interval_disabled (const rd_interval_t *ri) {
+static RD_INLINE RD_UNUSED int rd_interval_disabled (const rd_interval_t *ri) {
         return ri->ri_ts_last == 6000000000000000000LL;
 }

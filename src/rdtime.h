@@ -65,8 +65,8 @@
  * @remark There is no monotonic clock on OSX, the system time
  *         is returned instead.
  */
-static __inline rd_ts_t rd_clock (void) RD_UNUSED;
-static __inline rd_ts_t rd_clock (void) {
+static RD_INLINE rd_ts_t rd_clock (void) RD_UNUSED;
+static RD_INLINE rd_ts_t rd_clock (void) {
 #ifdef __APPLE__
 	/* No monotonic clock on Darwin */
 	struct timeval tv;
@@ -87,7 +87,7 @@ static __inline rd_ts_t rd_clock (void) {
  * @returns UTC wallclock time as number of microseconds since
  *          beginning of the epoch.
  */
-static __inline RD_UNUSED rd_ts_t rd_uclock (void) {
+static RD_INLINE RD_UNUSED rd_ts_t rd_uclock (void) {
 	struct timeval tv;
 	rd_gettimeofday(&tv, NULL);
 	return ((rd_ts_t)tv.tv_sec * 1000000LLU) + (rd_ts_t)tv.tv_usec;
@@ -98,8 +98,8 @@ static __inline RD_UNUSED rd_ts_t rd_uclock (void) {
 /**
  * Thread-safe version of ctime() that strips the trailing newline.
  */
-static __inline const char *rd_ctime (const time_t *t) RD_UNUSED;
-static __inline const char *rd_ctime (const time_t *t) {
+static RD_INLINE const char *rd_ctime (const time_t *t) RD_UNUSED;
+static RD_INLINE const char *rd_ctime (const time_t *t) {
 	static RD_TLS char ret[27];
 
 #ifndef _MSC_VER
@@ -123,7 +123,7 @@ static __inline const char *rd_ctime (const time_t *t) {
  * @returns the absolute timeout which should later be passed
  *          to rd_timeout_adjust().
  */
-static __inline rd_ts_t rd_timeout_init (int timeout_ms) {
+static RD_INLINE rd_ts_t rd_timeout_init (int timeout_ms) {
 	if (timeout_ms == RD_POLL_INFINITE ||
 	    timeout_ms == RD_POLL_NOWAIT)
 		return 0;
@@ -138,7 +138,7 @@ static __inline rd_ts_t rd_timeout_init (int timeout_ms) {
  *
  * Honours RD_POLL_INFINITE, RD_POLL_NOWAIT.
  */
-static __inline void rd_timeout_adjust (rd_ts_t abs_timeout,
+static RD_INLINE void rd_timeout_adjust (rd_ts_t abs_timeout,
 					int *timeout_msp) {
 	if (*timeout_msp == RD_POLL_INFINITE ||
 	    *timeout_msp == RD_POLL_NOWAIT)

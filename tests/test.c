@@ -420,7 +420,7 @@ void test_wait_exit (int timeout) {
 }
 
 
-static __inline unsigned int test_rand(void) {
+static RD_INLINE unsigned int test_rand(void) {
 	unsigned int r;
 #if _MSC_VER
 	rand_s(&r);
@@ -1607,7 +1607,7 @@ static struct test_mv_m *test_mv_mvec_add (struct test_mv_mvec *mvec) {
 /**
  * Returns message at index \p mi
  */
-static __inline struct test_mv_m *test_mv_mvec_get (struct test_mv_mvec *mvec,
+static RD_INLINE struct test_mv_m *test_mv_mvec_get (struct test_mv_mvec *mvec,
 						    int mi) {
 	return &mvec->m[mi];
 }

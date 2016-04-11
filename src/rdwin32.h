@@ -79,6 +79,7 @@ struct msghdr {
 #endif
 
 #define RD_UNUSED
+#define RD_INLINE  __inline
 #define RD_WARN_UNUSED_RESULT
 #define RD_NORETURN __declspec(noreturn)
 #define RD_IS_CONSTANT(p)  (0)
@@ -101,7 +102,7 @@ struct msghdr {
 
 #define RD_FORMAT(...)
 
-static RD_UNUSED __inline
+static RD_UNUSED RD_INLINE
 int rd_vsnprintf (char *str, size_t size, const char *format, va_list ap) {
         int cnt = -1;
 
@@ -113,7 +114,7 @@ int rd_vsnprintf (char *str, size_t size, const char *format, va_list ap) {
         return cnt;
 }
 
-static RD_UNUSED __inline
+static RD_UNUSED RD_INLINE
 int rd_snprintf (char *str, size_t size, const char *format, ...) {
         int cnt;
         va_list ap;
@@ -133,7 +134,7 @@ int rd_snprintf (char *str, size_t size, const char *format, ...) {
 /**
  * Errors
  */
-static __inline RD_UNUSED const char *rd_strerror(int err) {
+static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
 	static RD_TLS char ret[128];
 
 	strerror_s(ret, sizeof(ret) - 1, err);

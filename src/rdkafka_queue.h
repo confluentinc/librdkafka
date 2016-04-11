@@ -38,14 +38,14 @@ rd_kafka_q_t *rd_kafka_q_new (rd_kafka_t *rk);
 void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq);
 
 
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 void rd_kafka_q_keep (rd_kafka_q_t *rkq) {
         mtx_lock(&rkq->rkq_lock);
         rkq->rkq_refcnt++;
         mtx_unlock(&rkq->rkq_lock);
 }
 
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 void rd_kafka_q_destroy (rd_kafka_q_t *rkq) {
         int do_delete = 0;
 
@@ -64,7 +64,7 @@ void rd_kafka_q_destroy (rd_kafka_q_t *rkq) {
  * WARNING: All messages will be lost and leaked.
  * NOTE: No locking is performed.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 void rd_kafka_q_reset (rd_kafka_q_t *rkq) {
 	TAILQ_INIT(&rkq->rkq_q);
         rd_dassert(TAILQ_EMPTY(&rkq->rkq_q));
@@ -77,7 +77,7 @@ void rd_kafka_q_reset (rd_kafka_q_t *rkq) {
  * Disable a queue.
  * Attempting to enqueue messages to the queue will cause an assert.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 void rd_kafka_q_disable0 (rd_kafka_q_t *rkq, int do_lock) {
         if (do_lock)
                 mtx_lock(&rkq->rkq_lock);
@@ -103,7 +103,7 @@ void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq, int do_lock);
  *
  * Locality: any thread.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 	rd_kafka_q_t *fwdq;
 
@@ -149,7 +149,7 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
  * NOTE: rkq_lock MUST be held
  * Locality: any thread
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         rd_dassert(rkq->rkq_flags & RD_KAFKA_Q_F_READY);
 	rd_dassert(rkq->rkq_qlen > 0 &&
@@ -167,7 +167,7 @@ void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
  *
  * Locality: any thread.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 			 int do_lock) {
 	if (do_lock)
@@ -200,7 +200,7 @@ void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
  *
  * Locality: any thread.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
                           int do_lock) {
 	if (do_lock)
@@ -226,7 +226,7 @@ void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 
 
 /* Returns the number of elements in the queue */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 int rd_kafka_q_len (rd_kafka_q_t *rkq) {
 	int qlen;
 	mtx_lock(&rkq->rkq_lock);
@@ -239,7 +239,7 @@ int rd_kafka_q_len (rd_kafka_q_t *rkq) {
 }
 
 /* Returns the total size of elements in the queue */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
 	uint64_t sz;
 	mtx_lock(&rkq->rkq_lock);
@@ -286,7 +286,7 @@ void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
  *         is not removed from the queue and may thus not be held for longer
  *         than the lock is held.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 rd_kafka_op_t *rd_kafka_q_last (rd_kafka_q_t *rkq, rd_kafka_op_type_t op_type,
 				int allow_err) {
 	rd_kafka_op_t *rko;

@@ -358,7 +358,7 @@ static void rd_kafka_transport_ssl_init (void) {
  *
  * Locality: broker thread
  */
-static __inline int
+static RD_INLINE int
 rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
 				  char *errstr, size_t errstr_size) {
 	int serr = SSL_get_error(rktrans->rktrans_ssl, ret);

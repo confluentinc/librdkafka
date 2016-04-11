@@ -223,7 +223,7 @@ int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 /**
  * Filters out outdated ops.
  */
-static __inline rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
+static RD_INLINE rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
                                                    rd_kafka_op_t *rko) {
         if (unlikely(!rko))
                 return NULL;

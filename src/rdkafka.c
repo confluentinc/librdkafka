@@ -610,7 +610,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 /**
  * Emit stats for toppar
  */
-static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
+static RD_INLINE void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 					       size_t *ofp,
 					       rd_kafka_toppar_t *rktp,
 					       int first) {

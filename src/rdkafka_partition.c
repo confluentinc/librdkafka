@@ -48,7 +48,7 @@ const char *rd_kafka_fetch_states[] = {
 };
 
 
-static __inline void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
+static RD_INLINE void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
                                                        rd_kafka_toppar_t *rktp);
 
 
@@ -1320,7 +1320,7 @@ err_reply:
  * Locality: broker thread
  * Locks: none
  */
-static __inline void rd_kafka_broker_fetch_toppar_add (rd_kafka_broker_t *rkb,
+static RD_INLINE void rd_kafka_broker_fetch_toppar_add (rd_kafka_broker_t *rkb,
                                                        rd_kafka_toppar_t *rktp){
         if (rktp->rktp_fetch)
                 return; /* Already added */
@@ -1346,7 +1346,7 @@ static __inline void rd_kafka_broker_fetch_toppar_add (rd_kafka_broker_t *rkb,
  * Locality: broker thread
  * Locks: none
  */
-static __inline void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
+static RD_INLINE void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
                                                        rd_kafka_toppar_t *rktp){
         if (!rktp->rktp_fetch)
                 return; /* Not added */

@@ -186,7 +186,7 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,
 /**
  * Filter out brokers that are currently in a blocking request.
  */
-static __inline RD_UNUSED int
+static RD_INLINE RD_UNUSED int
 rd_kafka_broker_filter_non_blocking (rd_kafka_broker_t *rkb, void *opaque) {
         return rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0;
 }

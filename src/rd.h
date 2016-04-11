@@ -77,29 +77,29 @@
 * allocation fails all hope is lost and the application
 * will fail anyway, so no need to handle it handsomely.
 */
-static __inline RD_UNUSED void *rd_calloc(size_t num, size_t sz) {
+static RD_INLINE RD_UNUSED void *rd_calloc(size_t num, size_t sz) {
 	void *p = calloc(num, sz);
 	assert(p);
 	return p;
 }
 
-static __inline RD_UNUSED void *rd_malloc(size_t sz) {
+static RD_INLINE RD_UNUSED void *rd_malloc(size_t sz) {
 	void *p = malloc(sz);
 	assert(p);
 	return p;
 }
 
-static __inline RD_UNUSED void *rd_realloc(void *ptr, size_t sz) {
+static RD_INLINE RD_UNUSED void *rd_realloc(void *ptr, size_t sz) {
 	void *p = realloc(ptr, sz);
 	assert(p);
 	return p;
 }
 
-static __inline RD_UNUSED void rd_free(void *ptr) {
+static RD_INLINE RD_UNUSED void rd_free(void *ptr) {
 	free(ptr);
 }
 
-static __inline RD_UNUSED char *rd_strdup(const char *s) {
+static RD_INLINE RD_UNUSED char *rd_strdup(const char *s) {
 #ifndef _MSC_VER
 	char *n = strdup(s);
 #else
@@ -109,7 +109,7 @@ static __inline RD_UNUSED char *rd_strdup(const char *s) {
 	return n;
 }
 
-static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
+static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #if HAVE_STRNDUP
 	char *n = strndup(s, len);
 	assert(n);
@@ -190,7 +190,7 @@ static __inline RD_UNUSED char *rd_strndup(const char *s, size_t len) {
  *
  * Use rd_free() to free the returned pointer.
 */
-static __inline RD_UNUSED void *rd_memdup (const void *src, size_t size) {
+static RD_INLINE RD_UNUSED void *rd_memdup (const void *src, size_t size) {
 	void *dst = rd_malloc(size);
 	memcpy(dst, src, size);
 	return dst;
@@ -212,7 +212,7 @@ typedef rd_atomic32_t rd_refcnt_t;
 #endif
 
 #ifdef RD_REFCNT_USE_LOCKS
-static __inline RD_UNUSED int rd_refcnt_init (rd_refcnt_t *R, int v) {
+static RD_INLINE RD_UNUSED int rd_refcnt_init (rd_refcnt_t *R, int v) {
         int r;
         mtx_init(&R->lock, mtx_plain);
         mtx_lock(&R->lock);
@@ -225,7 +225,7 @@ static __inline RD_UNUSED int rd_refcnt_init (rd_refcnt_t *R, int v) {
 #endif
 
 #ifdef RD_REFCNT_USE_LOCKS
-static __inline RD_UNUSED void rd_refcnt_destroy (rd_refcnt_t *R) {
+static RD_INLINE RD_UNUSED void rd_refcnt_destroy (rd_refcnt_t *R) {
         mtx_lock(&R->lock);
         assert(R->v == 0);
         mtx_unlock(&R->lock);
@@ -238,7 +238,7 @@ static __inline RD_UNUSED void rd_refcnt_destroy (rd_refcnt_t *R) {
 
 
 #ifdef RD_REFCNT_USE_LOCKS
-static __inline RD_UNUSED int rd_refcnt_set (rd_refcnt_t *R, int v) {
+static RD_INLINE RD_UNUSED int rd_refcnt_set (rd_refcnt_t *R, int v) {
         int r;
         mtx_lock(&R->lock);
         r = R->v = v;
@@ -251,7 +251,7 @@ static __inline RD_UNUSED int rd_refcnt_set (rd_refcnt_t *R, int v) {
 
 
 #ifdef RD_REFCNT_USE_LOCKS
-static __inline RD_UNUSED int rd_refcnt_add0 (rd_refcnt_t *R) {
+static RD_INLINE RD_UNUSED int rd_refcnt_add0 (rd_refcnt_t *R) {
         int r;
         mtx_lock(&R->lock);
         r = ++(R->v);
@@ -262,7 +262,7 @@ static __inline RD_UNUSED int rd_refcnt_add0 (rd_refcnt_t *R) {
 #define rd_refcnt_add0(R)  rd_atomic32_add(R, 1)
 #endif
 
-static __inline RD_UNUSED int rd_refcnt_sub0 (rd_refcnt_t *R) {
+static RD_INLINE RD_UNUSED int rd_refcnt_sub0 (rd_refcnt_t *R) {
         int r;
 #ifdef RD_REFCNT_USE_LOCKS
         mtx_lock(&R->lock);
@@ -277,7 +277,7 @@ static __inline RD_UNUSED int rd_refcnt_sub0 (rd_refcnt_t *R) {
 }
 
 #ifdef RD_REFCNT_USE_LOCKS
-static __inline RD_UNUSED int rd_refcnt_get (rd_refcnt_t *R) {
+static RD_INLINE RD_UNUSED int rd_refcnt_get (rd_refcnt_t *R) {
         int r;
         mtx_lock(&R->lock);
         r = R->v;
@@ -377,7 +377,7 @@ LIST_HEAD(rd_shptr0_head, rd_shptr0_s);
 extern struct rd_shptr0_head rd_shared_ptr_debug_list;
 extern mtx_t rd_shared_ptr_debug_mtx;
 
-static __inline RD_UNUSED RD_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+static RD_INLINE RD_UNUSED RD_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 rd_shptr0_t *rd_shared_ptr_get0 (const char *func, int line,
                                  const char *typename,
                                  rd_refcnt_t *ref, void *obj) {

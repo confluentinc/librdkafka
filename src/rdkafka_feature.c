@@ -217,7 +217,7 @@ int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
  * @returns 1 if true, else 0.
  * @remark \p apis must be sorted using rd_kafka_ApiVersion_key_cmp()
  */
-static __inline int
+static RD_INLINE int
 rd_kafka_ApiVersion_check (const struct rd_kafka_ApiVersion *apis, size_t api_cnt,
 			   const struct rd_kafka_ApiVersion *match) {
 	const struct rd_kafka_ApiVersion *api;

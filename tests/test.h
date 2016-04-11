@@ -40,7 +40,7 @@ extern mtx_t test_mtx;
 #define TEST_UNLOCK() mtx_unlock(&test_mtx)
 
 
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 int tmout_multip (int msecs) {
         int r;
         TEST_LOCK();
@@ -182,12 +182,12 @@ char *test_str_id_generate (char *dest, size_t dest_size);
 /**
  * A microsecond monotonic clock
  */
-static __inline int64_t test_clock (void)
+static RD_INLINE int64_t test_clock (void)
 #ifndef _MSC_VER
 __attribute__((unused))
 #endif
 ;
-static __inline int64_t test_clock (void) {
+static RD_INLINE int64_t test_clock (void) {
 #ifdef __APPLE__
 	/* No monotonic clock on Darwin */
 	struct timeval tv;
@@ -242,8 +242,8 @@ void test_msg_parse0 (const char *func, int line,
 			testid,ptr,size,exp_partition,msgidp)
 
 
-static __inline int jitter (int low, int high) RD_UNUSED;
-static __inline int jitter (int low, int high) {
+static RD_INLINE int jitter (int low, int high) RD_UNUSED;
+static RD_INLINE int jitter (int low, int high) {
 	return (low + (rand() % (high+1)));
 }
 

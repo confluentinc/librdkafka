@@ -58,6 +58,10 @@
 
 #include "rd.h"
 
+#ifdef _MSC_VER
+#define inline __inline
+#endif
+
 #define CRASH_UNLESS(x) BUG_ON(!(x))
 #define CHECK(cond) CRASH_UNLESS(cond)
 #define CHECK_LE(a, b) CRASH_UNLESS((a) <= (b))
@@ -128,7 +132,7 @@ static inline bool is_little_endian(void)
 #define rd_ctz64(n) __builtin_ctzll(n)
 #else
 #include <intrin.h>
-static int RD_INLINE rd_clz(u32 x) {
+static int inline rd_clz(u32 x) {
 	int r = 0;
 	if (_BitScanForward(&r, x))
 		return 31 - r;
@@ -136,7 +140,7 @@ static int RD_INLINE rd_clz(u32 x) {
 		return 32;
 }
 
-static int RD_INLINE rd_ctz(u32 x) {
+static int inline rd_ctz(u32 x) {
 	int r = 0;
 	if (_BitScanForward(&r, x))
 		return r;
@@ -144,7 +148,7 @@ static int RD_INLINE rd_ctz(u32 x) {
 		return 32;
 }
 
-static int RD_INLINE rd_ctz64(u64 x) {
+static int inline rd_ctz64(u64 x) {
 #ifdef _M_X64
 	int r = 0;
 	if (_BitScanReverse64(&r, x))

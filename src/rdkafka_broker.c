@@ -2912,7 +2912,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 				   "compression codec 0x%hx: message ignored",
 				   rktp->rktp_rkt->rkt_topic->str,
 				   rktp->rktp_partition,
-				   hdr.Offset, hdr.Attributes);
+				   hdr.Offset, (int)hdr.Attributes);
 
 			/* Enqueue error messsage */
 			/* Create op and push on temporary queue. */

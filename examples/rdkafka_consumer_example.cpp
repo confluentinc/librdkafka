@@ -38,15 +38,19 @@
 #include <cstdio>
 #include <csignal>
 #include <cstring>
-#include <unistd.h>
+
+#ifndef _MSC_VER
 #include <sys/time.h>
+#endif
 
 #ifdef _MSC_VER
 #include "../win32/wingetopt.h"
+#include <atltime.h>
 #elif _AIX
 #include <unistd.h>
 #else
 #include <getopt.h>
+#include <unistd.h>
 #endif
 
 /*
@@ -69,15 +73,26 @@ static void sigterm (int sig) {
 }
 
 
+/**
+ * @brief format a string timestamp from the current time
+ */
+static void print_time () {
+#ifndef _MSC_VER
+        struct timeval tv;
+        char buf[64];
+        gettimeofday(&tv, NULL);
+        strftime(buf, sizeof(buf) - 1, "%Y-%m-%d %H:%M:%S", localtime(&tv.tv_sec));
+        fprintf(stderr, "%s.%03d: ", buf, (int)(tv.tv_usec / 1000));
+#else
+        std::wcerr << CTime::GetCurrentTime().Format(_T("%Y-%m-%d %H:%M:%S")).GetString()
+                << ": ";
+#endif
+}
 class ExampleEventCb : public RdKafka::EventCb {
  public:
   void event_cb (RdKafka::Event &event) {
-    struct timeval tv;
-    char buf[64];
 
-    gettimeofday(&tv, NULL);
-    strftime(buf, sizeof(buf)-1, "%Y-%m-%d %H:%M:%S", localtime(&tv.tv_sec));
-    fprintf(stderr, "%s.%03d: ", buf, (int)(tv.tv_usec / 1000));
+    print_time();
 
     switch (event.type())
     {
@@ -441,7 +456,9 @@ int main (int argc, char **argv) {
     delete msg;
   }
 
+#ifndef _MSC_VER
   alarm(10);
+#endif
 
   /*
    * Stop consumer

@@ -503,7 +503,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(max_retries),
 	  "How many times to retry sending a failing MessageSet. "
 	  "**Note:** retrying may cause reordering.",
-	  0, 10000000, 2 },
+          0, 10000000, 2 },
+          { _RK_GLOBAL | _RK_PRODUCER, "retries", _RK_C_ALIAS,
+                .sdef = "message.send.max.retries" },
 	{ _RK_GLOBAL|_RK_PRODUCER, "retry.backoff.ms", _RK_C_INT,
 	  _RK(retry_backoff_ms),
 	  "The backoff time in milliseconds before retrying a message send.",
@@ -555,6 +557,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "in sync replicas (ISRs) or broker's `in.sync.replicas` setting before sending response. "
 	  "*1*=Only the leader broker will need to ack the message. ",
 	  -1, 1000, 1 },
+          { _RK_TOPIC | _RK_PRODUCER, "acks", _RK_C_ALIAS,
+                  .sdef = "request.required.acks" },
 
 	{ _RK_TOPIC|_RK_PRODUCER, "request.timeout.ms", _RK_C_INT,
 	  _RKT(request_timeout_ms),

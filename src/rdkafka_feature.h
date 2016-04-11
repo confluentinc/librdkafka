@@ -1,7 +1,7 @@
 /*
- * librd - Rapid Development C library
+ * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012, Magnus Edenhill
+ * Copyright (c) 2016, Magnus Edenhill
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -25,21 +25,43 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
 #pragma once
 
 
 /**
- * Returns a random (using rand(3)) number between 'low'..'high' (inclusive).
+ * @brief Kafka protocol features
  */
-static RD_INLINE int rd_jitter (int low, int high) RD_UNUSED;
-static RD_INLINE int rd_jitter (int low, int high) {
-	return (low + (rand() % (high+1)));
-	
-}
+
+/* Message version 1 (MagicByte=1):
+ *  + relative offsets (KIP-31)
+ *  + timestamps (KIP-32) */
+#define RD_KAFKA_FEATURE_MSGVER1    0x1
+
+/* ApiVersionQuery support (KIP-35) */
+#define RD_KAFKA_FEATURE_APIVERSION 0x2
+
+ /* >= 0.9: Broker-based Balanced Consumer */
+#define RD_KAFKA_FEATURE_BROKER_BALANCED_CONSUMER 0x4
+
+/* >= 0.9: Produce/Fetch ThrottleTime reporting */
+#define RD_KAFKA_FEATURE_THROTTLETIME 0x8
 
 
-/**
- * Shuffles (randomizes) an array using the modern Fisher-Yates algorithm.
- */
-void rd_array_shuffle (void *base, size_t nmemb, size_t entry_size);
+
+
+
+
+
+
+
+
+int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
+				     struct rd_kafka_ApiVersion **apisp,
+				     size_t *api_cntp, const char *fallback);
+void rd_kafka_ApiVersions_copy (const struct rd_kafka_ApiVersion *src, size_t src_cnt,
+				struct rd_kafka_ApiVersion **dstp, size_t *dst_cntp);
+int rd_kafka_features_check (rd_kafka_broker_t *rkb,
+			     struct rd_kafka_ApiVersion *broker_apis,
+			     size_t broker_api_cnt);
+
+const char *rd_kafka_features2str (int features);

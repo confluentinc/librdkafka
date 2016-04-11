@@ -26,6 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+
+#define _CRT_RAND_S  // rand_s() on MSVC
 #include <stdarg.h>
 #include "test.h"
 #include <signal.h>
@@ -196,9 +198,15 @@ static void test_init (void) {
 	if ((tmp = getenv("TEST_SEED")))
 		seed = atoi(tmp);
 	else
-#endif
-		seed = test_clock() & 0xffffffff;
 
+		seed = test_clock() & 0xffffffff;
+#else
+	{
+		LARGE_INTEGER cycl;
+		QueryPerformanceCounter(&cycl);
+		seed = (int)cycl.QuadPart;
+	}
+#endif
 	srand(seed);
 	test_seed = seed;
 }
@@ -412,12 +420,20 @@ void test_wait_exit (int timeout) {
 }
 
 
-
+static RD_INLINE unsigned int test_rand(void) {
+	unsigned int r;
+#if _MSC_VER
+	rand_s(&r);
+#else
+	r = rand();
+#endif
+	return r;
+}
 /**
  * Generate a "unique" test id.
  */
 uint64_t test_id_generate (void) {
-	return (((uint64_t)rand()) << 32) | (uint64_t)rand();
+	return (((uint64_t)test_rand()) << 32) | (uint64_t)test_rand();
 }
 
 
@@ -459,7 +475,7 @@ void test_msg_parse0 (const char *func, int line,
 
 	rd_snprintf(buf, sizeof(buf), "%.*s", (int)size, (char *)ptr);
 
-	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 		   &in_testid, &in_part, msgidp) != 3)
 		TEST_FAIL("%s:%i: Incorrect key format: %s", func, line, buf);
 
@@ -1591,7 +1607,7 @@ static struct test_mv_m *test_mv_mvec_add (struct test_mv_mvec *mvec) {
 /**
  * Returns message at index \p mi
  */
-static __inline struct test_mv_m *test_mv_mvec_get (struct test_mv_mvec *mvec,
+static RD_INLINE struct test_mv_m *test_mv_mvec_get (struct test_mv_mvec *mvec,
 						    int mi) {
 	return &mvec->m[mi];
 }
@@ -1644,7 +1660,7 @@ int test_msgver_add_msg0 (const char *func, int line,
 		rd_snprintf(buf, sizeof(buf), "%.*s",
 			    (int)rkmessage->len, (char *)rkmessage->payload);
 
-		if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+		if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 			   &in_testid, &in_part, &in_msgnum) != 3)
 			TEST_FAIL("%s:%d: Incorrect format: %s",
 				  func, line, buf);
@@ -2103,7 +2119,7 @@ void test_verify_rkmessage0 (const char *func, int line,
 	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->len, (char *)rkmessage->payload);
 
-	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 		   &in_testid, &in_part, &in_msgnum) != 3)
 		TEST_FAIL("Incorrect format: %s", buf);
 
@@ -2324,6 +2340,15 @@ void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val) {
             RD_KAFKA_CONF_OK)
                 TEST_FAIL("Failed to set config \"%s\"=\"%s\": %s\n",
                           name, val, errstr);
+}
+
+char *test_conf_get (rd_kafka_conf_t *conf, const char *name) {
+	static char ret[256];
+	size_t ret_sz = sizeof(ret);
+	if (rd_kafka_conf_get(conf, name, ret, &ret_sz) != RD_KAFKA_CONF_OK)
+		TEST_FAIL("Failed to get config \"%s\": %s\n", name,
+			  "unknown property");
+	return ret;
 }
 
 

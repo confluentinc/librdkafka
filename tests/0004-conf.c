@@ -221,5 +221,42 @@ int main_0004_conf (int argc, char **argv) {
 	rd_kafka_topic_destroy(rkt);
 	rd_kafka_destroy(rk);
 
+
+	/* Incremental S2F property.
+	 * NOTE: The order of fields returned in get() is hardcoded here. */
+	{
+		static const char *s2fs[] = {
+			"generic,broker,queue,cgrp",
+			"generic,broker,queue,cgrp",
+
+			"-broker,+queue,topic",
+			"generic,topic,queue,cgrp",
+
+			"-all,security,-fetch,+metadata",
+			"metadata,security",
+
+			NULL
+		};
+
+		TEST_SAY("Incremental S2F tests\n");
+		conf = rd_kafka_conf_new();
+
+		for (i = 0 ; s2fs[i] ; i += 2) {
+			const char *val;
+
+			TEST_SAY("  Set: %s\n", s2fs[i]);
+			test_conf_set(conf, "debug", s2fs[i]);
+			val = test_conf_get(conf, "debug");
+			TEST_SAY("  Now: %s\n", val);
+
+			if (strcmp(val, s2fs[i+1]))
+				TEST_FAIL_LATER("\n"
+						"Expected: %s\n"
+						"     Got: %s",
+						s2fs[i+1], val);
+		}
+		rd_kafka_conf_destroy(conf);
+	}
+
 	return 0;
 }

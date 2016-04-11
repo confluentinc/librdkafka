@@ -42,6 +42,7 @@
 #include <sys/time.h>
 #include <assert.h>
 #include <ctype.h>
+#include <strings.h>
 
 #ifdef _MSC_VER
 #include "../win32/wingetopt.h"

@@ -122,6 +122,8 @@ typedef struct rd_kafka_op_s {
 	/* For FETCH */
 	rd_kafka_message_t rko_rkmessage;
 	rd_kafka_buf_t    *rko_rkbuf;
+	rd_kafka_timestamp_type_t rko_tstype;
+	int64_t            rko_timestamp;
 
 	/* For METADATA */
 #define rko_rkt         rko_rkmessage.rkt
@@ -140,7 +142,7 @@ typedef struct rd_kafka_op_s {
         /* For CGRP_DELEGATE */
         struct rd_kafka_cgrp_s *rko_cgrp;
 
-        /* For FETCH_START */
+        /* For FETCH_START, FETCH */
 #define rko_version   rko_intarg
 
         /* For BROKER_UPDATE and THROTTLE */

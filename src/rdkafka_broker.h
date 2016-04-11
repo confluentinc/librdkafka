@@ -72,8 +72,13 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 		RD_KAFKA_BROKER_STATE_DOWN,
 		RD_KAFKA_BROKER_STATE_CONNECT,
 		RD_KAFKA_BROKER_STATE_AUTH,
+
+		/* Any state >= STATE_UP means the Kafka protocol layer
+		 * is operational. */
 		RD_KAFKA_BROKER_STATE_UP,
                 RD_KAFKA_BROKER_STATE_UPDATE,
+		RD_KAFKA_BROKER_STATE_APIVERSION_QUERY,
+
 	} rkb_state;
 
         rd_ts_t             rkb_ts_state;        /* Timestamp of last
@@ -91,6 +96,19 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                                        * the typical processing
                                                        * time, e.g.:
                                                        * JoinGroup, SyncGroup */
+
+	int                 rkb_features;    /* Protocol features supported
+					      * by this broker.
+					      * See RD_KAFKA_FEATURE_* in
+					      * rdkafka_proto.h */
+
+	struct rd_kafka_ApiVersion *rkb_ApiVersions;     /* Broker's supported APIs.*/
+	size_t                      rkb_ApiVersions_cnt;
+	rd_interval_t               rkb_ApiVersion_fail_intvl; /* Controls how long
+								* the fallback proto
+								* will be used after
+								* ApiVersionRequest
+								* failure. */
 
 	rd_kafka_confsource_t  rkb_source;
 	struct {
@@ -122,6 +140,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 	rd_kafka_buf_t     *rkb_recv_buf;
 
+	int                 rkb_max_inflight;   /* Maximum number of in-flight
+						 * requests to broker.
+						 * Compared to rkb_waitresps length.*/
 	rd_kafka_bufq_t     rkb_outbufs;
 	rd_kafka_bufq_t     rkb_waitresps;
 	rd_kafka_bufq_t     rkb_retrybufs;
@@ -173,7 +194,7 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,
 /**
  * Filter out brokers that are currently in a blocking request.
  */
-static __inline RD_UNUSED int
+static RD_INLINE RD_UNUSED int
 rd_kafka_broker_filter_non_blocking (rd_kafka_broker_t *rkb, void *opaque) {
         return rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0;
 }

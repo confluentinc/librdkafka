@@ -1810,3 +1810,108 @@ static void rd_kafka_assignor_handle_Metadata (rd_kafka_t *rk,
                 rd_free(md);
 }
 
+
+
+
+/**
+ * @brief Parses and handles ApiVersion reply.
+ *
+ * @param apis will be allocated and populated with broker's supported APIs.
+ * @param api_cnt will be set to the number of elements in \p *apis
+
+ * @returns 0 on success, else an error.
+ */
+rd_kafka_resp_err_t
+rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
+			    rd_kafka_broker_t *rkb,
+			    rd_kafka_resp_err_t err,
+			    rd_kafka_buf_t *rkbuf,
+			    rd_kafka_buf_t *request,
+			    struct rd_kafka_ApiVersion **apis,
+			    size_t *api_cnt) {
+        const int log_decode_errors = 1;
+        int actions;
+	int32_t ApiArrayCnt;
+	int16_t ErrorCode;
+	int i = 0;
+
+	*apis = NULL;
+
+        if (err)
+                goto err;
+
+	rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+	if ((err = ErrorCode))
+		goto err;
+
+        rd_kafka_buf_read_i32(rkbuf, &ApiArrayCnt);
+	if (ApiArrayCnt > 1000)
+		rd_kafka_buf_parse_fail(rkbuf, "ApiArrayCnt %"PRId32" out of range",
+					ApiArrayCnt);
+
+	rd_rkb_dbg(rkb, PROTOCOL | RD_KAFKA_DBG_BROKER, "APIVERSION",
+		   "Broker API support:");
+
+	*apis = malloc(sizeof(**apis) * ApiArrayCnt);
+
+	for (i = 0 ; i < ApiArrayCnt ; i++) {
+		struct rd_kafka_ApiVersion *api = &(*apis)[i];
+
+		rd_kafka_buf_read_i16(rkbuf, &api->ApiKey);
+		rd_kafka_buf_read_i16(rkbuf, &api->MinVer);
+		rd_kafka_buf_read_i16(rkbuf, &api->MaxVer);
+
+		rd_rkb_dbg(rkb, PROTOCOL | RD_KAFKA_DBG_BROKER, "APIVERSION",
+			   "  ApiKey %s (%hd) Versions %hd..%hd",
+			   rd_kafka_ApiKey2str(api->ApiKey),
+			   api->ApiKey, api->MinVer, api->MaxVer);
+        }
+
+	*api_cnt = ApiArrayCnt;
+	goto done;
+
+ err:
+	if (*apis)
+		rd_free(*apis);
+
+        actions = rd_kafka_err_action(
+		rkb, err, rkbuf, request,
+		RD_KAFKA_ERR_ACTION_END);
+
+	if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+		if (rd_kafka_buf_retry(rkb, request))
+			return RD_KAFKA_RESP_ERR__IN_PROGRESS;
+		/* FALLTHRU */
+	}
+
+done:
+        return err;
+}
+
+
+
+/**
+ * Send ApiVersionRequest (KIP-35)
+ */
+void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
+				 rd_kafka_q_t *replyq,
+				 rd_kafka_resp_cb_t *resp_cb,
+				 void *opaque, int flash_msg) {
+        rd_kafka_buf_t *rkbuf;
+
+        rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1, 4);
+	rkbuf->rkbuf_flags |= (flash_msg ? RD_KAFKA_OP_F_FLASH : 0);
+	rd_kafka_buf_write_i32(rkbuf, 0); /* Empty array: request all APIs */
+	rd_kafka_buf_autopush(rkbuf);
+
+	/* Non-supporting brokers will tear down the conneciton when they receive
+	 * an unknown API request, so dont retry request on failure. */
+	rkbuf->rkbuf_retries = RD_KAFKA_BUF_NO_RETRIES;
+
+	if (replyq)
+		rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_ApiVersion,
+					       rkbuf, replyq, resp_cb, opaque);
+	else /* in broker thread */
+		rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_ApiVersion, rkbuf,
+					 resp_cb, opaque);
+}

@@ -2,6 +2,9 @@
 #
 
 DELETE_TOPICS=y
+if [[ -z $ZK_ADDRESS ]]; then
+    ZK_ADDRESS="localhost"
+fi
 
 set -e
 
@@ -50,7 +53,7 @@ while true ; do
 
 
     if [[ "$DELETE_TOPICS" == "y" ]]; then
-	./delete-test-topics.sh localhost ~/src/jason/kafka/bin/kafka-topics.sh ^rdkafkatest_rnd || true
+	./delete-test-topics.sh $ZK_ADDRESS ~/src/kafka/bin/kafka-topics.sh || true
     fi
 done
 

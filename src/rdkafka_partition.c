@@ -48,7 +48,7 @@ const char *rd_kafka_fetch_states[] = {
 };
 
 
-static __inline void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
+static RD_INLINE void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
                                                        rd_kafka_toppar_t *rktp);
 
 
@@ -1320,7 +1320,7 @@ err_reply:
  * Locality: broker thread
  * Locks: none
  */
-static __inline void rd_kafka_broker_fetch_toppar_add (rd_kafka_broker_t *rkb,
+static RD_INLINE void rd_kafka_broker_fetch_toppar_add (rd_kafka_broker_t *rkb,
                                                        rd_kafka_toppar_t *rktp){
         if (rktp->rktp_fetch)
                 return; /* Already added */
@@ -1346,7 +1346,7 @@ static __inline void rd_kafka_broker_fetch_toppar_add (rd_kafka_broker_t *rkb,
  * Locality: broker thread
  * Locks: none
  */
-static __inline void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
+static RD_INLINE void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
                                                        rd_kafka_toppar_t *rktp){
         if (!rktp->rktp_fetch)
                 return; /* Not added */
@@ -1547,8 +1547,11 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
                 shptr_rd_kafka_toppar_t *s_rktp;
 
                 s_rktp = offsets->elems[0]._private;
-                rko->rko_offset = offsets->elems[0].offset;
-                rko->rko_err = offsets->elems[0].err;
+                if (!rko->rko_err) {
+                        /* Request succeeded but per-partition might have failed */
+                        rko->rko_offset = offsets->elems[0].offset;
+                        rko->rko_err = offsets->elems[0].err;
+                }
                 offsets->elems[0]._private = NULL;
                 rd_kafka_topic_partition_list_destroy(offsets);
 		rko->rko_payload = NULL;
@@ -1572,7 +1575,6 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 				     rd_kafka_err2str(rko->rko_err));
 
 			/* Keep on querying until we succeed. */
-			rd_kafka_assert(NULL, !*"FIXME");
 			rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 
 			rd_kafka_toppar_unlock(rktp);

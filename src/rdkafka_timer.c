@@ -32,21 +32,21 @@
 #include "rdsysqueue.h"
 
 
-static __inline void rd_kafka_timers_lock (rd_kafka_timers_t *rkts) {
+static RD_INLINE void rd_kafka_timers_lock (rd_kafka_timers_t *rkts) {
         mtx_lock(&rkts->rkts_lock);
 }
 
-static __inline void rd_kafka_timers_unlock (rd_kafka_timers_t *rkts) {
+static RD_INLINE void rd_kafka_timers_unlock (rd_kafka_timers_t *rkts) {
         mtx_unlock(&rkts->rkts_lock);
 }
 
 
-static __inline int rd_kafka_timer_started (const rd_kafka_timer_t *rtmr) {
+static RD_INLINE int rd_kafka_timer_started (const rd_kafka_timer_t *rtmr) {
 	return rtmr->rtmr_interval ? 1 : 0;
 }
 
 
-static __inline int rd_kafka_timer_scheduled (const rd_kafka_timer_t *rtmr) {
+static RD_INLINE int rd_kafka_timer_scheduled (const rd_kafka_timer_t *rtmr) {
 	return rtmr->rtmr_next ? 1 : 0;
 }
 

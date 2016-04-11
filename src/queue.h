@@ -681,8 +681,8 @@ struct {								\
 #ifdef _MSC_VER
 #define __launder_type(x)  ((const void *)(x))
 #else
-static __inline const void * __launder_type(const void *);
-static __inline const void *
+static inline const void * __launder_type(const void *);
+static inline const void *
 __launder_type(const void *__x)
 {
 	__asm __volatile("" : "+r" (__x));

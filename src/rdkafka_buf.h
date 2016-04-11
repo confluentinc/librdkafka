@@ -73,6 +73,8 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
                 goto err;                                               \
 	} while (0)
 
+
+
 /**
  * Returns the number of remaining bytes available to read.
  */
@@ -260,7 +262,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	rd_refcnt_t rkbuf_refcnt;
 	void   *rkbuf_opaque;
 
-	int     rkbuf_retries;
+	int     rkbuf_retries;            /* Retries so far. */
+#define RD_KAFKA_BUF_NO_RETRIES  1000000  /* Do not retry */
 
 	rd_ts_t rkbuf_ts_enq;
 	rd_ts_t rkbuf_ts_sent;    /* Initially: Absolute time of transmission,
@@ -282,6 +285,8 @@ typedef struct rd_kafka_bufq_s {
 	rd_atomic32_t  rkbq_cnt;
 	rd_atomic32_t  rkbq_msg_cnt;
 } rd_kafka_bufq_t;
+
+#define rd_kafka_bufq_cnt(rkbq) rd_atomic32_get(&(rkbq)->rkbq_cnt)
 
 
 #define rd_kafka_buf_keep(rkbuf) rd_refcnt_add(&(rkbuf)->rkbuf_refcnt)
@@ -332,7 +337,7 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
 /**
  * Set request API type version
  */
-static __inline void rd_kafka_buf_version_set (rd_kafka_buf_t *rkbuf,
+static RD_INLINE void rd_kafka_buf_version_set (rd_kafka_buf_t *rkbuf,
                                                int16_t version) {
         rkbuf->rkbuf_reqhdr.ApiVersion = version;
 }
@@ -343,7 +348,7 @@ void rd_kafka_buf_grow (rd_kafka_buf_t *rkbuf, size_t needed_len);
 /**
  * Set buffer write position.
  */
-static __inline RD_UNUSED void rd_kafka_buf_write_seek (rd_kafka_buf_t *rkbuf,
+static RD_INLINE RD_UNUSED void rd_kafka_buf_write_seek (rd_kafka_buf_t *rkbuf,
 							int of) {
 	rd_kafka_assert(NULL, of >= 0 && of < (int)rkbuf->rkbuf_size);
 	rkbuf->rkbuf_wof = of;
@@ -354,7 +359,7 @@ static __inline RD_UNUSED void rd_kafka_buf_write_seek (rd_kafka_buf_t *rkbuf,
  * There must be enough space allocated in the rkbuf.
  * Returns offset to written destination buffer.
  */
-static __inline size_t rd_kafka_buf_write (rd_kafka_buf_t *rkbuf,
+static RD_INLINE size_t rd_kafka_buf_write (rd_kafka_buf_t *rkbuf,
                                         const void *data, size_t len) {
         ssize_t remain = rkbuf->rkbuf_size - (rkbuf->rkbuf_wof + len);
 
@@ -376,7 +381,7 @@ static __inline size_t rd_kafka_buf_write (rd_kafka_buf_t *rkbuf,
  * Returns pointer to buffer at 'offset' and makes sure at least 'len'
  * following bytes are available, else returns NULL.
  */
-static __inline RD_UNUSED void *rd_kafka_buf_at (rd_kafka_buf_t *rkbuf,
+static RD_INLINE RD_UNUSED void *rd_kafka_buf_at (rd_kafka_buf_t *rkbuf,
 						 int of, int len) {
 	ssize_t remain = rkbuf->rkbuf_size - (of + len);
 
@@ -395,7 +400,7 @@ static __inline RD_UNUSED void *rd_kafka_buf_at (rd_kafka_buf_t *rkbuf,
  * NOTE: rd_kafka_buf_update() MUST NOT be called when a CRC calculation
  *       is in progress (between rd_kafka_buf_crc_init() & .._crc_finalize())
  */
-static __inline void rd_kafka_buf_update (rd_kafka_buf_t *rkbuf, size_t of,
+static RD_INLINE void rd_kafka_buf_update (rd_kafka_buf_t *rkbuf, size_t of,
                                           const void *data, size_t len) {
         ssize_t remain = rkbuf->rkbuf_size - (of + len);
         rd_kafka_assert(NULL, remain >= 0);
@@ -408,7 +413,7 @@ static __inline void rd_kafka_buf_update (rd_kafka_buf_t *rkbuf, size_t of,
 /**
  * Write int8_t to buffer.
  */
-static __inline size_t rd_kafka_buf_write_i8 (rd_kafka_buf_t *rkbuf,
+static RD_INLINE size_t rd_kafka_buf_write_i8 (rd_kafka_buf_t *rkbuf,
 					      int8_t v) {
         return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
 }
@@ -417,7 +422,7 @@ static __inline size_t rd_kafka_buf_write_i8 (rd_kafka_buf_t *rkbuf,
  * Update int8_t in buffer at offset 'of'.
  * 'of' should have been previously returned by `.._buf_write_i8()`.
  */
-static __inline void rd_kafka_buf_update_i8 (rd_kafka_buf_t *rkbuf,
+static RD_INLINE void rd_kafka_buf_update_i8 (rd_kafka_buf_t *rkbuf,
 					     size_t of, int8_t v) {
         rd_kafka_buf_update(rkbuf, of, &v, sizeof(v));
 }
@@ -426,7 +431,7 @@ static __inline void rd_kafka_buf_update_i8 (rd_kafka_buf_t *rkbuf,
  * Write int16_t to buffer.
  * The value will be endian-swapped before write.
  */
-static __inline size_t rd_kafka_buf_write_i16 (rd_kafka_buf_t *rkbuf,
+static RD_INLINE size_t rd_kafka_buf_write_i16 (rd_kafka_buf_t *rkbuf,
 					       int16_t v) {
         v = htobe16(v);
         return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
@@ -436,7 +441,7 @@ static __inline size_t rd_kafka_buf_write_i16 (rd_kafka_buf_t *rkbuf,
  * Update int16_t in buffer at offset 'of'.
  * 'of' should have been previously returned by `.._buf_write_i16()`.
  */
-static __inline void rd_kafka_buf_update_i16 (rd_kafka_buf_t *rkbuf,
+static RD_INLINE void rd_kafka_buf_update_i16 (rd_kafka_buf_t *rkbuf,
                                               size_t of, int16_t v) {
         v = htobe16(v);
         rd_kafka_buf_update(rkbuf, of, &v, sizeof(v));
@@ -446,7 +451,7 @@ static __inline void rd_kafka_buf_update_i16 (rd_kafka_buf_t *rkbuf,
  * Write int32_t to buffer.
  * The value will be endian-swapped before write.
  */
-static __inline size_t rd_kafka_buf_write_i32 (rd_kafka_buf_t *rkbuf,
+static RD_INLINE size_t rd_kafka_buf_write_i32 (rd_kafka_buf_t *rkbuf,
                                                int32_t v) {
         v = htobe32(v);
         return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
@@ -456,7 +461,7 @@ static __inline size_t rd_kafka_buf_write_i32 (rd_kafka_buf_t *rkbuf,
  * Update int32_t in buffer at offset 'of'.
  * 'of' should have been previously returned by `.._buf_write_i32()`.
  */
-static __inline void rd_kafka_buf_update_i32 (rd_kafka_buf_t *rkbuf,
+static RD_INLINE void rd_kafka_buf_update_i32 (rd_kafka_buf_t *rkbuf,
                                               size_t of, int32_t v) {
         v = htobe32(v);
         rd_kafka_buf_update(rkbuf, of, &v, sizeof(v));
@@ -466,7 +471,7 @@ static __inline void rd_kafka_buf_update_i32 (rd_kafka_buf_t *rkbuf,
  * Update int32_t in buffer at offset 'of'.
  * 'of' should have been previously returned by `.._buf_write_i32()`.
  */
-static __inline void rd_kafka_buf_update_u32 (rd_kafka_buf_t *rkbuf,
+static RD_INLINE void rd_kafka_buf_update_u32 (rd_kafka_buf_t *rkbuf,
                                               size_t of, uint32_t v) {
         v = htobe32(v);
         rd_kafka_buf_update(rkbuf, of, &v, sizeof(v));
@@ -477,7 +482,7 @@ static __inline void rd_kafka_buf_update_u32 (rd_kafka_buf_t *rkbuf,
  * Write int64_t to buffer.
  * The value will be endian-swapped before write.
  */
-static __inline size_t rd_kafka_buf_write_i64 (rd_kafka_buf_t *rkbuf, int64_t v) {
+static RD_INLINE size_t rd_kafka_buf_write_i64 (rd_kafka_buf_t *rkbuf, int64_t v) {
         v = htobe64(v);
         return rd_kafka_buf_write(rkbuf, &v, sizeof(v));
 }
@@ -486,7 +491,7 @@ static __inline size_t rd_kafka_buf_write_i64 (rd_kafka_buf_t *rkbuf, int64_t v)
  * Update int64_t in buffer at address 'ptr'.
  * 'of' should have been previously returned by `.._buf_write_i64()`.
  */
-static __inline void rd_kafka_buf_update_i64 (rd_kafka_buf_t *rkbuf,
+static RD_INLINE void rd_kafka_buf_update_i64 (rd_kafka_buf_t *rkbuf,
                                               size_t of, int64_t v) {
         v = htobe64(v);
         rd_kafka_buf_update(rkbuf, of, &v, sizeof(v));
@@ -496,7 +501,7 @@ static __inline void rd_kafka_buf_update_i64 (rd_kafka_buf_t *rkbuf,
 /**
  * Write (copy) Kafka string to buffer.
  */
-static __inline size_t rd_kafka_buf_write_kstr (rd_kafka_buf_t *rkbuf,
+static RD_INLINE size_t rd_kafka_buf_write_kstr (rd_kafka_buf_t *rkbuf,
                                                 const rd_kafkap_str_t *kstr) {
         return rd_kafka_buf_write(rkbuf, RD_KAFKAP_STR_SER(kstr),
 				  RD_KAFKAP_STR_SIZE(kstr));
@@ -505,7 +510,7 @@ static __inline size_t rd_kafka_buf_write_kstr (rd_kafka_buf_t *rkbuf,
 /**
  * Write (copy) char * string to buffer.
  */
-static __inline size_t rd_kafka_buf_write_str (rd_kafka_buf_t *rkbuf,
+static RD_INLINE size_t rd_kafka_buf_write_str (rd_kafka_buf_t *rkbuf,
                                                const char *str, size_t len) {
         size_t r;
         if (!str)
@@ -522,7 +527,7 @@ static __inline size_t rd_kafka_buf_write_str (rd_kafka_buf_t *rkbuf,
 /**
  * Push (i.e., no copy) Kafka string to buffer iovec
  */
-static __inline void rd_kafka_buf_push_kstr (rd_kafka_buf_t *rkbuf,
+static RD_INLINE void rd_kafka_buf_push_kstr (rd_kafka_buf_t *rkbuf,
                                              const rd_kafkap_str_t *kstr) {
 	rd_kafka_buf_push(rkbuf, RD_KAFKAP_STR_SER(kstr),
 			  RD_KAFKAP_STR_SIZE(kstr));
@@ -533,7 +538,7 @@ static __inline void rd_kafka_buf_push_kstr (rd_kafka_buf_t *rkbuf,
 /**
  * Write (copy) Kafka bytes to buffer.
  */
-static __inline size_t rd_kafka_buf_write_kbytes (rd_kafka_buf_t *rkbuf,
+static RD_INLINE size_t rd_kafka_buf_write_kbytes (rd_kafka_buf_t *rkbuf,
 					          const rd_kafkap_bytes_t *kbytes){
         return rd_kafka_buf_write(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
                                   RD_KAFKAP_BYTES_SIZE(kbytes));
@@ -542,7 +547,7 @@ static __inline size_t rd_kafka_buf_write_kbytes (rd_kafka_buf_t *rkbuf,
 /**
  * Push (i.e., no copy) Kafka bytes to buffer iovec
  */
-static __inline void rd_kafka_buf_push_kbytes (rd_kafka_buf_t *rkbuf,
+static RD_INLINE void rd_kafka_buf_push_kbytes (rd_kafka_buf_t *rkbuf,
 					       const rd_kafkap_bytes_t *kbytes){
 	rd_kafka_buf_push(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
 			  RD_KAFKAP_BYTES_SIZE(kbytes));
@@ -551,7 +556,7 @@ static __inline void rd_kafka_buf_push_kbytes (rd_kafka_buf_t *rkbuf,
 /**
  * Write (copy) binary bytes to buffer as Kafka bytes encapsulate data.
  */
-static __inline size_t rd_kafka_buf_write_bytes (rd_kafka_buf_t *rkbuf,
+static RD_INLINE size_t rd_kafka_buf_write_bytes (rd_kafka_buf_t *rkbuf,
                                                  const void *payload, size_t size) {
         size_t r;
         if (!payload)
@@ -573,7 +578,7 @@ static __inline size_t rd_kafka_buf_write_bytes (rd_kafka_buf_t *rkbuf,
  */
 size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 				   int64_t Offset, int8_t MagicByte,
-				   int8_t Attributes,
+				   int8_t Attributes, int64_t Timestamp,
 				   const rd_kafkap_bytes_t *key,
 				   const void *payload, int32_t len,
 				   int *outlenp);
@@ -581,7 +586,7 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 /**
  * Start calculating CRC from now and track it in '*crcp'.
  */
-static __inline RD_UNUSED void rd_kafka_buf_crc_init (rd_kafka_buf_t *rkbuf) {
+static RD_INLINE RD_UNUSED void rd_kafka_buf_crc_init (rd_kafka_buf_t *rkbuf) {
 	rd_kafka_assert(NULL, !(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC));
 	rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_CRC;
 	rkbuf->rkbuf_crc = rd_crc32_init();
@@ -590,7 +595,7 @@ static __inline RD_UNUSED void rd_kafka_buf_crc_init (rd_kafka_buf_t *rkbuf) {
 /**
  * Finalizes CRC calculation and returns the calculated checksum.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 rd_crc32_t rd_kafka_buf_crc_finalize (rd_kafka_buf_t *rkbuf) {
 	rkbuf->rkbuf_flags &= ~RD_KAFKA_OP_F_CRC;
 	return rd_crc32_finalize(rkbuf->rkbuf_crc);
@@ -600,7 +605,7 @@ rd_crc32_t rd_kafka_buf_crc_finalize (rd_kafka_buf_t *rkbuf) {
 /**
  * Returns the number of remaining unused iovecs in buffer.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 int rd_kafka_buf_iov_remain (const rd_kafka_buf_t *rkbuf) {
 	return rkbuf->rkbuf_iovcnt - rkbuf->rkbuf_msg.msg_iovlen;
 }

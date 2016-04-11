@@ -65,6 +65,7 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
                                           void *msg_opaque,
                                           rd_kafka_resp_err_t *errp,
 					  int *errnop,
+					  rd_ts_t utc_now,
                                           rd_ts_t now) {
 	rd_kafka_msg_t *rkm;
 	size_t mlen = sizeof(*rkm);
@@ -97,6 +98,8 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 	rkm->rkm_key        = rd_kafkap_bytes_new(key, (int32_t) keylen);
 	rkm->rkm_partition  = force_partition;
         rkm->rkm_offset     = 0;
+	rkm->rkm_timestamp  = utc_now / 1000;
+
 	if (rkt->rkt_conf.message_timeout_ms == 0) {
 		rkm->rkm_ts_timeout = INT64_MAX;
 	} else {
@@ -148,7 +151,7 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
         /* Create message */
         rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
                                 payload, len, key, keylen, msg_opaque,
-				&err, &errnox, rd_clock());
+				&err, &errnox, rd_uclock(), rd_clock());
         if (unlikely(!rkm)) {
                 /* errno is already set by msg_new() */
                 (void)rd_atomic32_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
@@ -197,6 +200,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                             rd_kafka_message_t *rkmessages, int message_cnt) {
         rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
         int i;
+	rd_ts_t utc_now = rd_uclock();
         rd_ts_t now = rd_clock();
         int good = 0;
         rd_kafka_resp_err_t all_err = 0;
@@ -239,7 +243,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                         rkmessages[i].key_len,
                                         rkmessages[i]._private,
                                         &rkmessages[i].err,
-					NULL, now);
+					NULL, utc_now, now);
                 if (!rkm)
                         continue;
 

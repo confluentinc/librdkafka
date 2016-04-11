@@ -610,6 +610,7 @@ static void rd_kafka_cgrp_offsets_fetch_response (
 
 	rkcg = rd_kafka_cgrp_get(rk);
 
+	rd_kafka_topic_partition_list_log(rk, "OFFSETFETCH", offsets);
 	/* If all partitions already had usable offsets then there
 	 * was no request sent and thus no reply, the offsets list is
 	 * good to go. */
@@ -1224,17 +1225,18 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 	case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
 	case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
 	default:
+                rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
 
                 if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
                         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
 
                         /* Trigger rebalance_cb */
                         rd_kafka_rebalance_op(
-				rkcg, RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
-				rkcg->rkcg_assignment, rd_kafka_err2str(err));
+                                rkcg, RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
+                                rkcg->rkcg_assignment, rd_kafka_err2str(err));
                 }
-		break;
-	}
+                break;
+        }
 }
 
 

@@ -358,7 +358,7 @@ static void rd_kafka_transport_ssl_init (void) {
  *
  * Locality: broker thread
  */
-static __inline int
+static RD_INLINE int
 rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
 				  char *errstr, size_t errstr_size) {
 	int serr = SSL_get_error(rktrans->rktrans_ssl, ret);
@@ -1020,6 +1020,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 #endif
 		break;
 
+	case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
 	case RD_KAFKA_BROKER_STATE_UP:
 	case RD_KAFKA_BROKER_STATE_UPDATE:
 
@@ -1039,9 +1040,8 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		}
 
 		if (events & POLLOUT) {
-			if (rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0)
-				while (rd_kafka_send(rkb) > 0)
-					;
+			while (rd_kafka_send(rkb) > 0)
+				;
 		}
 		break;
 
@@ -1061,7 +1061,8 @@ void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	int events;
 
-	if (rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0)
+	if (rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
+	    rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0)
 		rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
 
 	if ((events = rd_kafka_transport_poll(rktrans, timeout_ms)) <= 0)

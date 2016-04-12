@@ -100,7 +100,8 @@ int main_0002_unkpart (int argc, char **argv) {
 
         /* Request metadata so that we know the cluster is up before producing
          * messages, otherwise erroneous partitions will not fail immediately.*/
-        if ((r = rd_kafka_metadata(rk, 0, rkt, &metadata, tmout_multip(2000))) !=
+        if ((r = rd_kafka_metadata(rk, 0, rkt, &metadata,
+				   tmout_multip(15000))) !=
             RD_KAFKA_RESP_ERR_NO_ERROR)
                 TEST_FAIL("Failed to acquire metadata: %s\n",
                           rd_kafka_err2str(r));

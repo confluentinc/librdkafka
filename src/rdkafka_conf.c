@@ -309,7 +309,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "`broker.version` will be used. "
 	  "**NOTE**: Depends on broker version >=0.10.0. If the request is not "
 	  "supported by (an older) broker the `broker.version` fallback is used.",
-	  0, 1, 1 },
+	  0, 1, 0 },
 	{ _RK_GLOBAL, "api.version.fallback.ms", _RK_C_INT,
 	  _RK(api_version_fallback_ms),
 	  "Dictates how long the `broker.version` fallback is used "

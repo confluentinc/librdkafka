@@ -2036,11 +2036,7 @@ rd_kafka_committed (rd_kafka_t *rk,
  *
  * The \p offset field of each requested partition will be set to the offset
  * of the last consumed message + 1, or RD_KAFKA_OFFSET_INVALID in case there was
- * previous message.
- *
- * The \p offset field of each requested partition will either be set to
- * stored offset or to RD_KAFKA_OFFSET_INVALID in case there was no stored
- * offset for that partition.
+ * no previous message.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
  *          \p offset or \p err field of each \p partitions' element is filled

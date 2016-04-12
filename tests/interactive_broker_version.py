@@ -44,7 +44,9 @@ def test_version (version):
 
     # Generate test config file
     fd, test_conf_file = tempfile.mkstemp(prefix='test_conf', text=True)
-    os.write(fd, 'bootstrap.servers=%s\n' % bootstrap_servers)
+    os.write(fd, ('bootstrap.servers=%s\n' % bootstrap_servers).encode('ascii'))
+    if version != 'trunk':
+        os.write(fd, ('broker.version=%s\n' % version).encode('ascii'))
     os.close(fd)
 
     print('# Deploying cluster')
@@ -59,7 +61,7 @@ def test_version (version):
         raise TimeoutError('Cluster did not go operational')
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
-    subprocess.call('RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s] \u@\h:\w$ "\')' % (test_conf_file, zk_address, cluster.name), shell=True, executable='/bin/bash')
+    subprocess.call('RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (test_conf_file, zk_address, cluster.name, version), shell=True, executable='/bin/bash')
 
     os.remove(test_conf_file)
 

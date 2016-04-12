@@ -1630,12 +1630,10 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg,
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC:
                 break;
 
-        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB:
-                break;
-
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN:
 		break;
 
+        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB:
         case RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED:
                 if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&
                     rd_interval(&rkcg->rkcg_heartbeat_intvl,

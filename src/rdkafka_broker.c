@@ -559,10 +559,6 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 				      rd_kafka_buf_t *rkbuf, int at_head) {
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
-	/* Update CorrId header field. */
-        rkbuf->rkbuf_corrid = ++rkb->rkb_corrid;
-	rd_kafka_buf_update_i32(rkbuf, 4+2+2, rkbuf->rkbuf_corrid);
-
         rkbuf->rkbuf_ts_enq = rd_clock();
 
         /* Set timeout if not already set */
@@ -1423,6 +1419,15 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		struct msghdr *msg = &rkbuf->rkbuf_msg;
 		struct msghdr msg2;
 		struct iovec iov[IOV_MAX];
+
+		/* Set CorrId header field, unless this is the latter part
+		 * of a partial send in which ccase the corrid has already
+		 * been set. */
+		if (rkbuf->rkbuf_of == 0) {
+			rkbuf->rkbuf_corrid = ++rkb->rkb_corrid;
+			rd_kafka_buf_update_i32(rkbuf, 4+2+2,
+						rkbuf->rkbuf_corrid);
+		}
 
 		if (rkbuf->rkbuf_of != 0) {
 			/* If message has been partially sent we need

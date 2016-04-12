@@ -370,6 +370,8 @@ int test_msgver_verify0 (const char *func, int line, const char *what,
 			    what,mv,flags,msg_base,exp_cnt)
 
 
+rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf);
+
 /**
  * Delivery reported callback.
  * Called for each message once to signal its delivery status.

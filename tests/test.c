@@ -996,23 +996,28 @@ void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 }
 
 
-rd_kafka_t *test_create_producer (void) {
+rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf) {
 	rd_kafka_t *rk;
-	rd_kafka_conf_t *conf;
 	char errstr[512];
 
-	test_conf_init(&conf, NULL, 0);
-
-	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
-
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+	rk = rd_kafka_new(mode, conf, errstr, sizeof(errstr));
 	if (!rk)
 		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
 
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
 	return rk;
+}
+
+
+rd_kafka_t *test_create_producer (void) {
+	rd_kafka_conf_t *conf;
+
+	test_conf_init(&conf, NULL, 0);
+	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+
+	return test_create_handle(RD_KAFKA_PRODUCER, conf);
 }
 
 

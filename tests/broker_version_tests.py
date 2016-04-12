@@ -92,7 +92,12 @@ if __name__ == '__main__':
     results = dict()
     timing = dict()
     for version in kafka_versions:
-        results[version], timing[version] = test_version(version)
+        try:
+            results[version], timing[version] = test_version(version)
+        except Exception as e:
+            print('EXCEPTION: ', str(e))
+            results[version] = False
+            timing[version] = -1
 
     print('\033[35mTEST RESULTS:\033[0m')
     for version in results:

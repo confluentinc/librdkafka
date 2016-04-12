@@ -305,7 +305,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "api.version.request", _RK_C_BOOL,
 	  _RK(api_version_request),
 	  "Request broker's supported API versions to adjust functionality to "
-	  "available protocol features. "
+	  "available protocol features. If set to false the fallback version "
+	  "`broker.version` will be used. "
 	  "**NOTE**: Depends on broker version >=0.10.0. If the request is not "
 	  "supported by (an older) broker the `broker.version` fallback is used.",
 	  0, 1, 1 },

@@ -566,19 +566,20 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
         	rkbuf->rkbuf_ts_timeout = rkbuf->rkbuf_ts_enq +
                         rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
 
-
 	if (unlikely(at_head)) {
 		/* Insert message at head of queue */
-		rd_kafka_buf_t *prev;
+		rd_kafka_buf_t *prev, *after = NULL;
 
 		/* Put us behind any flash messages. */
-		TAILQ_FOREACH(prev, &rkb->rkb_outbufs.rkbq_bufs, rkbuf_link)
+		TAILQ_FOREACH(prev, &rkb->rkb_outbufs.rkbq_bufs, rkbuf_link) {
 			if (!(prev->rkbuf_flags & RD_KAFKA_OP_F_FLASH))
 				break;
+			after = prev;
+		}
 
-		if (prev)
+		if (after)
 			TAILQ_INSERT_AFTER(&rkb->rkb_outbufs.rkbq_bufs,
-					   prev, rkbuf, rkbuf_link);
+					   after, rkbuf, rkbuf_link);
 		else
 			TAILQ_INSERT_HEAD(&rkb->rkb_outbufs.rkbq_bufs,
 					  rkbuf, rkbuf_link);

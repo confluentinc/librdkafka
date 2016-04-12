@@ -926,7 +926,8 @@ int main(int argc, char **argv) {
                         if (test->state != TEST_RUNNING)
 				continue;
 
-			TEST_SAY0(" %s", test->name);
+			if (test_level >= 2)
+				TEST_SAY0(" %s", test->name);
 
 			/* Timeout check */
 			if (now > test->timeout) {

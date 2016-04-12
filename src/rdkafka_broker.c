@@ -276,7 +276,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	va_list ap;
 	int errno_save = errno;
 	rd_kafka_toppar_t *rktp, *rktp_tmp;
-	rd_kafka_bufq_t tmpq;
+	rd_kafka_bufq_t tmpq_waitresp, tmpq;
         int statechange;
 	rd_kafka_broker_t *internal_rkb;
 
@@ -356,15 +356,21 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 	/*
 	 * Purge all buffers
-	 * (put bufs on a temporary queue since bufs may be requeued)
+	 * (put bufs on a temporary queue since bufs may be requeued,
+	 *  make sure outstanding requests are re-enqueued before
+	 *  bufs on outbufs queue.)
 	 */
+	rd_kafka_bufq_init(&tmpq_waitresp);
 	rd_kafka_bufq_init(&tmpq);
-	rd_kafka_bufq_concat(&tmpq, &rkb->rkb_waitresps);
+	rd_kafka_bufq_concat(&tmpq_waitresp, &rkb->rkb_waitresps);
 	rd_kafka_bufq_concat(&tmpq, &rkb->rkb_outbufs);
         rd_atomic32_set(&rkb->rkb_blocking_request_cnt, 0);
 
-	/* Purge the buffers */
-	rd_kafka_bufq_purge(rkb, &tmpq, err);
+	/* Purge the buffers (might get re-enqueued in case of retries) */
+	rd_kafka_bufq_purge(rkb, &tmpq_waitresp, err);
+
+	/* Put the outbufs back on queue */
+	rd_kafka_bufq_concat(&rkb->rkb_outbufs, &tmpq);
 
 	internal_rkb = rd_kafka_broker_internal(rkb->rkb_rk);
 

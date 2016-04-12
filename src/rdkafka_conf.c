@@ -81,7 +81,7 @@ rd_kafka_conf_validate_broker_version (const struct rd_kafka_property *prop,
 				       const char *val, int ival) {
 	struct rd_kafka_ApiVersion *apis;
 	size_t api_cnt;
-	return rd_kafka_get_legacy_ApiVersions(val, &apis, &api_cnt, 0);
+	return rd_kafka_get_legacy_ApiVersions(val, &apis, &api_cnt, NULL);
 }
 
 
@@ -806,7 +806,8 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
         case _RK_C_KSTR:
         case _RK_C_PATLIST:
 		if (prop->validate && !prop->validate(prop, value, -1)) {
-			rd_snprintf(errstr, errstr_size, "Invalid value: %s", value);
+			rd_snprintf(errstr, errstr_size,
+				    "Invalid value: %s", value);
 			return RD_KAFKA_CONF_INVALID;
 		}
 

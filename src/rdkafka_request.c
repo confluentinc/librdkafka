@@ -727,7 +727,7 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_member_id);
                 /* v2: RetentionTime */
                 if (api_version == 2)
-                        rd_kafka_buf_write_i64(rkbuf, 0);
+                        rd_kafka_buf_write_i64(rkbuf, -1);
         }
 
         /* Sort offsets by topic */

@@ -1910,9 +1910,8 @@ err:
                 rd_kafka_buf_destroy(rkbuf);
         }
 
-        /* FIXME: How to handle error? Propagate to app and shut down?*/
-        rd_kafka_log(rkcg->rkcg_rk, LOG_ERR, "GRPSYNC",
-                     "Group \"%s\": synchronization failed: %s",
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "GRPSYNC",
+                     "Group \"%s\": synchronization failed: %s: rejoining",
                      rkcg->rkcg_group_id->str, rd_kafka_err2str(err));
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
 }

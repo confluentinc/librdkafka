@@ -108,6 +108,7 @@ _TEST_DECL(0030_offset_commit);
 _TEST_DECL(0031_get_offsets);
 _TEST_DECL(0033_regex_subscribe);
 _TEST_DECL(0034_offset_reset);
+_TEST_DECL(0035_api_version);
 
 /**
  * Define all tests here
@@ -143,6 +144,7 @@ struct test tests[] = {
 	_TEST(0031_get_offsets, 0),
 	_TEST(0033_regex_subscribe, 0),
 	_TEST(0034_offset_reset, 0),
+	_TEST(0035_api_version, 0),
         { NULL }
 };
 

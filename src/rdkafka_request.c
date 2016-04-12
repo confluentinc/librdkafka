@@ -1908,6 +1908,12 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 	 * receive  an unknown API request, so dont retry request on failure. */
 	rkbuf->rkbuf_retries = RD_KAFKA_BUF_NO_RETRIES;
 
+	/* 0.9.0.x brokers will not close the connection on unsupported
+	 * API requests, so we minimize the timeout of the request.
+	 * This is a regression on the broker part. */
+	if (rkb->rkb_rk->rk_conf.socket_timeout_ms > 10*1000)
+		rkbuf->rkbuf_ts_timeout = rd_clock() + (10 * 1000);
+
 	if (replyq)
 		rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_ApiVersion,
 					       rkbuf, replyq, resp_cb, opaque);

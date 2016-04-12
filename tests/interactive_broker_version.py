@@ -23,7 +23,7 @@ kafka_path='/home/maglun/src/kafka'
 
 
 
-def test_version (version):
+def test_version (version, cmd=None):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
@@ -61,7 +61,11 @@ def test_version (version):
         raise TimeoutError('Cluster did not go operational')
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
-    subprocess.call('RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (test_conf_file, zk_address, cluster.name, version), shell=True, executable='/bin/bash')
+
+    cmd_env = 'RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s KAFKA_VERSION=%s' % (test_conf_file, zk_address, version)
+    if not cmd:
+        cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
+    subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
 
     os.remove(test_conf_file)
 
@@ -72,4 +76,12 @@ def test_version (version):
 
 if __name__ == '__main__':
 
-    test_version(sys.argv[1])
+    cmd = None
+    if len(sys.argv) == 3:
+        cmd = sys.argv[2]
+    if len(sys.argv) >= 2:
+        version = sys.argv[1]
+    else:
+        raise Exception('Usage: %s <kafka-version> [<cmd-to-execute>]' % sys.argv[0])
+
+    test_version(version, cmd)

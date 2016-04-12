@@ -49,7 +49,9 @@ def test_version (version):
 
     # Generate test config file
     fd, test_conf_file = tempfile.mkstemp(prefix='test_conf', text=True)
-    os.write(fd, 'bootstrap.servers=%s\n' % bootstrap_servers)
+    os.write(fd, ('bootstrap.servers=%s\n' % bootstrap_servers).encode('ascii'))
+    if version != 'trunk':
+        os.write(fd, ('broker.version=%s\n' % version).encode('ascii'))
     os.close(fd)
 
     print('# Deploying cluster')
@@ -67,6 +69,7 @@ def test_version (version):
 
         
     print('\033[32mCluster started.. Executing librdkafka tests\033[0m')
+    t_start = time.time()
     r = subprocess.call('TEST_LEVEL=%d RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s make' % (test_level, test_conf_file, zk_address), shell=True)
     if r == 0:
         print('\033[37;42mTests PASSED on broker version %s\033[0m' % version)
@@ -74,26 +77,28 @@ def test_version (version):
     else:
         print('\033[33;41mTests FAILED on broker version %s (ret %d)\033[0m' % (version, r))
         ret = False
+    timing = time.time() - t_start
 
     os.remove(test_conf_file)
 
     cluster.stop(force=True)
 
     cluster.cleanup(keeptypes=['log'])
-    return ret
+    return ret, timing
 
 
 if __name__ == '__main__':
 
     results = dict()
+    timing = dict()
     for version in kafka_versions:
-        results[version] = test_version(version)
+        results[version], timing[version] = test_version(version)
 
     print('\033[35mTEST RESULTS:\033[0m')
     for version in results:
         if results[version]:
-            print('\033[37;42mBroker version %s PASSED\033[0m' % version)
+            print('\033[37;42mBroker version %s PASSED in %ds\033[0m' % (version, timing[version]))
         else:
-            print('\033[33;41mBroker version %s FAILED\033[0m' % version)
+            print('\033[33;41mBroker version %s FAILED in %ds\033[0m' % (version, timing[version]))
             
 

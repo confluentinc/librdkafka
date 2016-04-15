@@ -63,7 +63,7 @@ static void stop (int sig) {
 
 static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 	const char *p = (const char *)ptr;
-	unsigned int of = 0;
+	size_t of = 0;
 
 
 	if (name)
@@ -82,7 +82,7 @@ static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 			cof += sprintf(charen+cof, "%c",
 				       isprint((int)p[i]) ? p[i] : '.');
 		}
-		fprintf(fp, "%08x: %-48s %-16s\n",
+		fprintf(fp, "%08zx: %-48s %-16s\n",
 			of, hexen, charen);
 	}
 }

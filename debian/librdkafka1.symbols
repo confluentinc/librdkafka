@@ -5,6 +5,7 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_brokers_add@Base 0.8.0
  rd_kafka_commit@Base 0.9.0
  rd_kafka_commit_message@Base 0.9.0
+ rd_kafka_committed@Base 0.9.1
  rd_kafka_conf_destroy@Base 0.8.0
  rd_kafka_conf_dump@Base 0.8.3
  rd_kafka_conf_dump_free@Base 0.8.3
@@ -54,6 +55,7 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_mem_free@Base 0.9.1
  rd_kafka_memberid@Base 0.9.0
  rd_kafka_message_destroy@Base 0.8.0
+ rd_kafka_message_timestamp@Base 0.9.1
  rd_kafka_metadata@Base 0.8.4
  rd_kafka_metadata_destroy@Base 0.8.4
  rd_kafka_msg_partitioner_consistent@Base 0.9.0

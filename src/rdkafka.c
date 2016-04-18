@@ -167,7 +167,7 @@ void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 	rd_gettimeofday(&tv, NULL);
 	secs = (int)tv.tv_sec;
 	msecs = (int)(tv.tv_usec / 1000);
-	fprintf(stdout, "%%%i|%u.%03u|%s|%s| %s\n",
+	fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n",
 		level, secs, msecs,
 		fac, rk ? rk->rk_name : "", buf);
 }

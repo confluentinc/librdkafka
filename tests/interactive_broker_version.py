@@ -23,7 +23,7 @@ kafka_path='/home/maglun/src/kafka'
 
 
 
-def test_version (version, cmd=None):
+def test_version (version, cmd=None, deploy=True):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
@@ -49,8 +49,11 @@ def test_version (version, cmd=None):
         os.write(fd, ('broker.version=%s\n' % version).encode('ascii'))
     os.close(fd)
 
-    print('# Deploying cluster')
-    cluster.deploy()
+    if deploy:
+        print('# Deploying cluster')
+        cluster.deploy()
+    else:
+        print('# Not deploying')
 
     print('# Starting cluster')
     cluster.start()
@@ -77,11 +80,15 @@ def test_version (version, cmd=None):
 if __name__ == '__main__':
 
     cmd = None
+    deploy=True
+    if len(sys.argv) > 1 and sys.argv[1] == '--no-deploy':
+        deploy = False
+        sys.argv = [sys.argv[0]] + sys.argv[2:]
     if len(sys.argv) == 3:
         cmd = sys.argv[2]
     if len(sys.argv) >= 2:
         version = sys.argv[1]
     else:
-        raise Exception('Usage: %s <kafka-version> [<cmd-to-execute>]' % sys.argv[0])
+        raise Exception('Usage: %s [--no-deploy] <kafka-version> [<cmd-to-execute>]' % sys.argv[0])
 
-    test_version(version, cmd)
+    test_version(version, cmd, deploy=deploy)

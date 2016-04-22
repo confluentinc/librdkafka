@@ -416,26 +416,30 @@ err2:
 
 /**
  * Query for coordinator.
+ * Ask any broker in state UP
  *
  * Locality: main thread
  */
 void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
-				rd_kafka_broker_t *rkb,
 				const char *reason) {
+	rd_kafka_broker_t *rkb;
 
-	if (!rkb && !(rkb = rkcg->rkcg_rkb))
+	rd_kafka_rdlock(rkcg->rkcg_rk);
+	rkb = rd_kafka_broker_any(rkcg->rkcg_rk, RD_KAFKA_BROKER_STATE_UP,
+				  rd_kafka_broker_filter_non_blocking, NULL);
+	rd_kafka_rdunlock(rkcg->rkcg_rk);
+
+	if (!rkb) {
+		rd_rkb_dbg(rkb, CGRP, "CGRPQUERY",
+			   "Group \"%.*s\": "
+			   "no broker available for coordinator query: %s",
+			   RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), reason);
 		return;
+	}
 
         rd_rkb_dbg(rkb, CGRP, "CGRPQUERY",
                    "Group \"%.*s\": querying for coordinator: %s",
                    RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), reason);
-
-	rd_dassert(thrd_is_current(rkcg->rkcg_rk->rk_thread));
-	if (!thrd_is_current(rkcg->rkcg_rk->rk_thread))
-		return;
-
-        if (rkb->rkb_source == RD_KAFKA_INTERNAL)
-                return;
 
         rd_kafka_GroupCoordinatorRequest(rkb, rkcg->rkcg_group_id,
                                          &rkcg->rkcg_ops,
@@ -445,6 +449,7 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_QUERY_COORD)
                 rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_COORD);
 
+	rd_kafka_broker_destroy(rkb);
 }
 
 
@@ -1519,7 +1524,7 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                         break;
 
                 case RD_KAFKA_OP_COORD_QUERY:
-                        rd_kafka_cgrp_coord_query(rkcg, rkb,
+                        rd_kafka_cgrp_coord_query(rkcg,
                                                   rko->rko_err ?
                                                   rd_kafka_err2str(rko->
                                                                    rko_err):
@@ -1656,11 +1661,18 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 		rd_kafka_broker_lock(rkb);
 		rkb_state = rkb->rkb_state;
 		rd_kafka_broker_unlock(rkb);
+
+		/* Go back to querying state if we lost the current coordinator
+		 * connection. */
+		if (rkb_state < RD_KAFKA_BROKER_STATE_UP &&
+		    rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP)
+			rd_kafka_cgrp_set_state(rkcg,
+						RD_KAFKA_CGRP_STATE_QUERY_COORD);
 	}
 
         rd_kafka_cgrp_op_serve(rkcg, rkb);
 
-        /* Bail out if we're no longer the managing broker, or terminating. */
+        /* Bail out if we're terminating. */
         if (unlikely(rd_kafka_terminating(rkcg->rkcg_rk)))
                 return;
 
@@ -1676,7 +1688,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
         case RD_KAFKA_CGRP_STATE_QUERY_COORD:
                 /* Query for coordinator. */
                 if (rd_interval(&rkcg->rkcg_coord_query_intvl, 500*1000, 0) > 0)
-                        rd_kafka_cgrp_coord_query(rkcg, rkb,
+                        rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in "
                                                   "state query-coord");
                 break;
@@ -1693,7 +1705,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
                 /* Coordinator query */
                 if (rd_interval(&rkcg->rkcg_coord_query_intvl,
                                 1000*1000, 0) > 0)
-                        rd_kafka_cgrp_coord_query(rkcg, rkb,
+                        rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in "
                                                   "state wait-broker");
                 break;
@@ -1701,7 +1713,14 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
         case RD_KAFKA_CGRP_STATE_WAIT_BROKER_TRANSPORT:
                 /* Waiting for broker transport to come up */
                 if (rkb_state < RD_KAFKA_BROKER_STATE_UP) {
-                        /* FIXME: Query another broker */
+			/* Coordinator query */
+			if (rd_interval(&rkcg->rkcg_coord_query_intvl,
+					1000*1000, 0) > 0)
+				rd_kafka_cgrp_coord_query(
+					rkcg,
+					"intervaled in state "
+					"wait-broker-transport");
+
                 } else {
                         rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_UP);
 
@@ -1719,7 +1738,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
                 if (rd_interval(&rkcg->rkcg_coord_query_intvl,
                                 rkcg->rkcg_rk->rk_conf.
                                 coord_query_intvl_ms * 1000, 0) > 0)
-                        rd_kafka_cgrp_coord_query(rkcg, rkb,
+                        rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in state up");
 
                 rd_kafka_cgrp_join_state_serve(rkcg, rkb);

@@ -236,7 +236,6 @@ void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state);
 int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg);
 
 void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
-				rd_kafka_broker_t *rkb,
 				const char *reason);
 
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)

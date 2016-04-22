@@ -673,7 +673,7 @@ err:
 
 	if (actions & RD_KAFKA_ERR_ACTION_REFRESH && rk->rk_cgrp) {
 		/* Re-query for coordinator */
-		rd_kafka_cgrp_coord_query(rk->rk_cgrp, rkb,
+		rd_kafka_cgrp_coord_query(rk->rk_cgrp,
 					  "OffsetCommitRequest failed");
 	}
 	if (actions & RD_KAFKA_ERR_ACTION_RETRY) {

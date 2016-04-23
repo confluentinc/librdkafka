@@ -2418,6 +2418,7 @@ rd_kafka_partition_set_consumer_queue(rd_kafka_t *rk,
     rktp = rd_kafka_toppar_s2i(s_rktp);
 
     rd_kafka_q_fwd_set(&rktp->rktp_fetchq, &rkqu->rkqu_q);
+    rd_kafka_toppar_destroy(s_rktp);
 
     return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

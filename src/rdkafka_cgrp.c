@@ -716,8 +716,10 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
 
 				/* Forward partition's fetchq to
 				 * consumer groups queue. */
-				rd_kafka_q_fwd_set(&rktp->rktp_fetchq,
-						   &rkcg->rkcg_q);
+				if (!rktp->rktp_fetchq.rkq_fwdq) {
+					rd_kafka_q_fwd_set(&rktp->rktp_fetchq,
+							   &rkcg->rkcg_q);
+				}
 
 				/* Start fetcher for partition */
 				rd_kafka_toppar_fetch_start(rktp,

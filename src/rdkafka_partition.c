@@ -2403,3 +2403,21 @@ rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
 			     rktpar->err ? rd_kafka_err2str(rktpar->err) : "");
 	}
 }
+
+
+rd_kafka_resp_err_t
+rd_kafka_partition_set_consumer_queue(rd_kafka_t *rk,
+                                      const char *topic,
+                                      int32_t partition,
+                                      rd_kafka_queue_t *rkqu)
+{
+    shptr_rd_kafka_toppar_t *s_rktp;
+    rd_kafka_toppar_t *rktp;
+
+    s_rktp = rd_kafka_toppar_get2(rk, topic, partition, 0/*no-ua*/, 1/*create-on-miss*/);
+    rktp = rd_kafka_toppar_s2i(s_rktp);
+
+    rd_kafka_q_fwd_set(&rktp->rktp_fetchq, &rkqu->rkqu_q);
+
+    return RD_KAFKA_RESP_ERR_NO_ERROR;
+}

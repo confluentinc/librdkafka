@@ -183,8 +183,8 @@ RdKafka::KafkaConsumerImpl::assign (const std::vector<TopicPartition*> &partitio
 
 
 RdKafka::ErrorCode
-RdKafka::KafkaConsumerImpl::redirectPartitionQueue (const TopicPartition *partition,
-                                                    Queue *queue) {
+RdKafka::KafkaConsumerImpl::setPartitionQueue (const TopicPartition *partition,
+                                               Queue *queue) {
     rd_kafka_resp_err_t err;
     const TopicPartitionImpl *partimpl;
     QueueImpl *qimpl;

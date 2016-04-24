@@ -1979,10 +1979,10 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
  *         intervals to serve any queued callbacks waiting to be called.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_partition_set_consumer_queue(rd_kafka_t *rk,
-                                      const char *topic,
-                                      int32_t partition,
-                                      rd_kafka_queue_t *rkqu);
+rd_kafka_partition_set_consumer_queue (rd_kafka_t *rk,
+                                       const char *topic,
+                                       int32_t partition,
+                                       rd_kafka_queue_t *rkqu);
 
 /**
  * @brief Atomic assignment of partitions to consume.

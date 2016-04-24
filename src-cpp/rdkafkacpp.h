@@ -1260,8 +1260,8 @@ public:
    *         `consume(int)` at regular intervals to serve any queued callbacks
    *         waiting to be called.
    */
-  virtual ErrorCode redirectPartitionQueue(const TopicPartition *partition,
-                                           Queue *queue) = 0;
+  virtual ErrorCode setPartitionQueue (const TopicPartition *partition,
+                                       Queue *queue) = 0;
 
   /**
    * @brief Consume message or get error event, triggers callbacks.

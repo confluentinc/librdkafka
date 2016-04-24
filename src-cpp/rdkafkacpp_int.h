@@ -581,7 +581,10 @@ public:
 	  std::vector<TopicPartition*> empty;
 	  return assign(empty);
   }
+  ErrorCode redirectPartitionQueue(const TopicPartition *partition,
+                                   Queue *queue);
   Message *consume (int timeout_ms);
+  Message *consume (Queue *queue, int timeout_ms);
   ErrorCode commitSync () {
     return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 0/*sync*/));
   }

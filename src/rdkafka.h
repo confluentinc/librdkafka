@@ -1932,6 +1932,9 @@ rd_kafka_subscription (rd_kafka_t *rk,
  *          to be called and handled properly to synchronize internal
  *          consumer state.
  *
+ * @remark  This will not return messages on partitions that got redirected
+ *          with `rd_kafka_partition_set_consumer_queue()`.
+ *
  * @returns A message object which is a proper message if \p ->err is
  *          RD_KAFKA_RESP_ERR_NO_ERROR, or an event or error for any other
  *          value.
@@ -1959,7 +1962,27 @@ rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
 
-
+/**
+ * @brief Redirect incoming messages of a partition to the provided queue \p rkqu
+ * (which must have been previouly allocated with `rd_kafka_queue_new()`.
+ *
+ * The application must use one of the `rd_kafka_consume_*_queue()` functions
+ * to receive fetched messages.
+ *
+ * @remark This should be called before `rd_kafka_assign()` if you want to
+ *         redirect in the KafkaConsumer without spilling some incoming messages
+ *         in the internal queue that is read by `rd_kafka_consumer_poll()`.
+ *
+ * @remark Even if you redirect all partitions, you still want to call
+ *         `rd_kafka_poll()` (or `rd_kafka_consumer_poll` if you redirected
+ *         the main queue with `rd_kafka_poll_set_consumer()` at regular
+ *         intervals to serve any queued callbacks waiting to be called.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_partition_set_consumer_queue (rd_kafka_t *rk,
+                                       const char *topic,
+                                       int32_t partition,
+                                       rd_kafka_queue_t *rkqu);
 
 /**
  * @brief Atomic assignment of partitions to consume.

@@ -119,6 +119,17 @@ RdKafka::Message *RdKafka::KafkaConsumerImpl::consume (int timeout_ms) {
 }
 
 
+RdKafka::Message *
+RdKafka::KafkaConsumerImpl::consume (Queue *queue, int timeout_ms) {
+  QueueImpl *qimpl = dynamic_cast<QueueImpl *>(queue);
+  rd_kafka_message_t *rkmessage = rd_kafka_consume_queue(qimpl->queue_, timeout_ms);
+
+  if (!rkmessage)
+    return new RdKafka::MessageImpl(NULL, RdKafka::ERR__TIMED_OUT);
+
+  return new RdKafka::MessageImpl(rkmessage);
+}
+
 
 RdKafka::ErrorCode
 RdKafka::KafkaConsumerImpl::assignment (std::vector<RdKafka::TopicPartition*> &partitions) {
@@ -168,6 +179,24 @@ RdKafka::KafkaConsumerImpl::assign (const std::vector<TopicPartition*> &partitio
 
   rd_kafka_topic_partition_list_destroy(c_parts);
   return static_cast<RdKafka::ErrorCode>(err);
+}
+
+
+RdKafka::ErrorCode
+RdKafka::KafkaConsumerImpl::setPartitionQueue (const TopicPartition *partition,
+                                               Queue *queue) {
+    rd_kafka_resp_err_t err;
+    const TopicPartitionImpl *partimpl;
+    QueueImpl *qimpl;
+
+    partimpl = dynamic_cast<const TopicPartitionImpl *>(partition);
+    qimpl = dynamic_cast<QueueImpl *>(queue);
+    err = rd_kafka_partition_set_consumer_queue(rk_,
+                                                partimpl->topic_.c_str(),
+                                                partimpl->partition_,
+                                                qimpl->queue_);
+
+    return static_cast<ErrorCode>(err);
 }
 
 

@@ -1250,6 +1250,20 @@ public:
   virtual ErrorCode unassign () = 0;
 
   /**
+   * @brief Redirect incoming messages of a partition to the provided \p queue.
+   *
+   * @remark This should be called before `assign()` if you want to redirect
+   *         without spilling some incoming messages in the internal queue
+   *         that is read by `consume(int)`.
+   *
+   * @remark Even if you redirect all partitions, you still want to call
+   *         `consume(int)` at regular intervals to serve any queued callbacks
+   *         waiting to be called.
+   */
+  virtual ErrorCode setPartitionQueue (const TopicPartition *partition,
+                                       Queue *queue) = 0;
+
+  /**
    * @brief Consume message or get error event, triggers callbacks.
    *
    * Will automatically call registered callbacks for any such queued events,
@@ -1274,6 +1288,22 @@ public:
    *    (RdKafka::Message::err() is ERR__TIMED_OUT)
    */
   virtual Message *consume (int timeout_ms) = 0;
+
+  /**
+   * @brief Consume message from a queue.
+   *
+   * The queue should have been redirected to by atleast one partiton via
+   * `redirectPartitionQueue()`.
+   *
+   * @remark Use \c delete to free the message.
+   *
+   * @returns One of:
+   *  - proper message (RdKafka::Message::err() is ERR_NO_ERROR)
+   *  - error event (RdKafka::Message::err() is != ERR_NO_ERROR)
+   *  - timeout due to no message or event in \p timeout_ms
+   *    (RdKafka::Message::err() is ERR__TIMED_OUT)
+   */
+  virtual Message *consume (Queue *queue, int timeout_ms) = 0;
 
   /**
    * @brief Commit offsets for the current assignment.

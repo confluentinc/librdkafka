@@ -635,9 +635,9 @@ rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
 
 /**
  * @brief A Kafka message as returned by the \c rd_kafka_consume*() family
- *        of functions.
+ *        of functions as well as provided to the Producer \c dr_msg_cb().
  *
- * This object has two purposes:
+ * For the consumer this object has two purposes:
  *  - provide the application with a consumed message. (\c err == 0)
  *  - report per-topic+partition consumer errors (\c err != 0)
  *
@@ -650,7 +650,8 @@ typedef struct rd_kafka_message_s {
 	rd_kafka_resp_err_t err;   /**< Non-zero for error signaling. */
 	rd_kafka_topic_t *rkt;     /**< Topic */
 	int32_t partition;         /**< Partition */
-	void   *payload;           /**< Depends on the value of \c err :
+	void   *payload;           /**< Producer: original message payload.
+				    * Consumer: Depends on the value of \c err :
 				    * - \c err==0: Message payload.
 				    * - \c err!=0: Error string */
 	size_t  len;               /**< Depends on the value of \c err :

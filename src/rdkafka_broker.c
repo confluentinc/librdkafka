@@ -1271,7 +1271,7 @@ static void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
  *
  * @param apis is an allocated list of supported partitions.
  *        If NULL the default set will be used based on the
- *        \p broker.version property.
+ *        \p broker.version.fallback property.
  * @param api_cnt number of elements in \p apis
  *
  * @remark \p rkb takes ownership of \p apis.
@@ -1288,12 +1288,14 @@ static void rd_kafka_broker_set_api_versions (rd_kafka_broker_t *rkb,
 	if (!apis) {
 		rd_rkb_dbg(rkb, PROTOCOL | RD_KAFKA_DBG_BROKER, "APIVERSION",
 			   "Using (configuration fallback) %s protocol features",
-			   rkb->rkb_rk->rk_conf.broker_version);
+			   rkb->rkb_rk->rk_conf.broker_version_fallback);
 
 
-		rd_kafka_get_legacy_ApiVersions(rkb->rkb_rk->rk_conf.broker_version,
+		rd_kafka_get_legacy_ApiVersions(rkb->rkb_rk->rk_conf.
+						broker_version_fallback,
 						&apis, &api_cnt,
-						rkb->rkb_rk->rk_conf.broker_version);
+						rkb->rkb_rk->rk_conf.
+						broker_version_fallback);
 
 		/* Make a copy to store on broker. */
 		rd_kafka_ApiVersions_copy(apis, api_cnt, &apis, &api_cnt);
@@ -1393,7 +1395,8 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 					    * ApiVersionResponse is received. */
 	} else {
 
-		/* Use configured broker.version to figure out API versions */
+		/* Use configured broker.version.fallback to
+		 * figure out API versions */
 		rd_kafka_broker_set_api_versions(rkb, NULL, 0);
 
 		rd_kafka_broker_connect_up(rkb);

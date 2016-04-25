@@ -238,8 +238,9 @@ rd_kafka_ApiVersion_check (const struct rd_kafka_ApiVersion *apis, size_t api_cn
  * @brief Compare broker's supported API versions to our feature request map
  *        and enable/disable features accordingly.
  *
- * @param broker_apis Broker's supported APIs. If NULL the \p broker.version
- *        configuration property will specify a default legacy version to use.
+ * @param broker_apis Broker's supported APIs. If NULL the
+ *        \p broker.version.fallback configuration property will specify a
+ *        default legacy version to use.
  * @param broker_api_cnt Number of elements in \p broker_apis
  *
  * @returns the supported features (bitmask) to enable.

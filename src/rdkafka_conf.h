@@ -81,7 +81,7 @@ struct rd_kafka_conf_s {
         int     reconnect_jitter_ms;
 	int     api_version_request;
 	int     api_version_fallback_ms;
-	char   *broker_version;
+	char   *broker_version_fallback;
 	rd_kafka_secproto_t security_protocol;
 
 #if WITH_SSL

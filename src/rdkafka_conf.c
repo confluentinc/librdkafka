@@ -74,7 +74,7 @@ struct rd_kafka_property {
 
 
 /**
- * @brief Validate \p broker.version property.
+ * @brief Validate \p broker.version.fallback property.
  */
 static int
 rd_kafka_conf_validate_broker_version (const struct rd_kafka_property *prop,
@@ -306,27 +306,27 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(api_version_request),
 	  "Request broker's supported API versions to adjust functionality to "
 	  "available protocol features. If set to false the fallback version "
-	  "`broker.version` will be used. "
+	  "`broker.version.fallback` will be used. "
 	  "**NOTE**: Depends on broker version >=0.10.0. If the request is not "
-	  "supported by (an older) broker the `broker.version` fallback is used.",
+	  "supported by (an older) broker the `broker.version.fallback` fallback is used.",
 	  0, 1, 0 },
 	{ _RK_GLOBAL, "api.version.fallback.ms", _RK_C_INT,
 	  _RK(api_version_fallback_ms),
-	  "Dictates how long the `broker.version` fallback is used "
+	  "Dictates how long the `broker.version.fallback` fallback is used "
 	  "in the case the ApiVersionRequest fails. "
 	  "**NOTE**: The ApiVersionRequest is only issued when a new connection "
 	  "to the broker is made (such as after an upgrade).",
 	  0, 86400*7*1000, 20*60*1000 /* longer than default Idle timeout (10m)*/ },
 
-	{ _RK_GLOBAL, "broker.version", _RK_C_STR,
-	  _RK(broker_version),
+	{ _RK_GLOBAL, "broker.version.fallback", _RK_C_STR,
+	  _RK(broker_version_fallback),
 	  "Older broker versions (<0.10.0) provides no way for a client to query "
 	  "for supported protocol features "
 	  "(ApiVersionRequest, see `api.version.request`) making it impossible "
 	  "for the client to know what features it may use. "
 	  "As a workaround a user may set this property to the expected broker "
 	  "version and the client will automatically adjust its feature set "
-	  "accordingly if the ApiVersionRequest fails. "
+	  "accordingly if the ApiVersionRequest fails (or is disabled). "
 	  "The fallback broker version will be used for `api.version.fallback.ms`. "
 	  "Valid values are: 0.9.0, 0.8.2, 0.8.1, 0.8.0.",
 	  .sdef = "0.9.0",

@@ -130,6 +130,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
         mtx_init(&rkcg->rkcg_lock, mtx_plain);
         rd_kafka_q_init(&rkcg->rkcg_ops, rk);
         rd_kafka_q_init(&rkcg->rkcg_q, rk);
+	rd_kafka_q_init(&rkcg->rkcg_wait_coord_q, rk);
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32);
         rd_kafka_cgrp_set_member_id(rkcg, "");
@@ -330,8 +331,12 @@ int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg) {
  */
 void rd_kafka_cgrp_coord_update (rd_kafka_cgrp_t *rkcg, int32_t coord_id) {
 
-        if (rkcg->rkcg_coord_id == coord_id)
+        if (rkcg->rkcg_coord_id == coord_id) {
+		if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_WAIT_COORD)
+			rd_kafka_cgrp_set_state(rkcg,
+						RD_KAFKA_CGRP_STATE_WAIT_BROKER);
                 return;
+	}
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPCOORD",
                      "Group \"%.*s\" changing coordinator %"PRId32" -> %"PRId32,
@@ -430,10 +435,10 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 	rd_kafka_rdunlock(rkcg->rkcg_rk);
 
 	if (!rkb) {
-		rd_rkb_dbg(rkb, CGRP, "CGRPQUERY",
-			   "Group \"%.*s\": "
-			   "no broker available for coordinator query: %s",
-			   RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), reason);
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPQUERY",
+			     "Group \"%.*s\": "
+			     "no broker available for coordinator query: %s",
+			     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), reason);
 		return;
 	}
 
@@ -514,6 +519,7 @@ static void rd_kafka_cgrp_terminated (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_offset_commit_tmr, 1/*lock*/);
 
+	rd_kafka_q_purge(&rkcg->rkcg_wait_coord_q);
 
 	/* Disable and empty ops queue since there will be no
 	 * (broker) thread serving it anymore after the unassign_broker
@@ -936,19 +942,38 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 		return;
 	}
 
-	rkcg->rkcg_wait_commit_cnt++;
+	/* Reprocessing ops will have increased wait_commit_cnt already. */
+	if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS))
+		rkcg->rkcg_wait_commit_cnt++;
 
-        if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP || !rkcg->rkcg_rkb ||
-	    rkcg->rkcg_rkb->rkb_source == RD_KAFKA_INTERNAL)
-                rd_kafka_cgrp_op_handle_OffsetCommit(rkcg->rkcg_rk, NULL,
-						     RD_KAFKA_RESP_ERR__WAIT_COORD,
+
+	if (!offsets) {
+		rd_kafka_cgrp_op_handle_OffsetCommit(rkcg->rkcg_rk, rkcg->rkcg_rkb,
+						     RD_KAFKA_RESP_ERR__NO_OFFSET,
 						     NULL, NULL,
 						     rko);
-	else if (!offsets ||
-		 rd_kafka_OffsetCommitRequest(
-			 rkcg->rkcg_rkb, rkcg, 1, offsets,
-			 &rkcg->rkcg_ops,
-			 rd_kafka_cgrp_op_handle_OffsetCommit, rko) == 0) {
+		return;
+	}
+
+
+        if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP || !rkcg->rkcg_rkb ||
+	    rkcg->rkcg_rkb->rkb_source == RD_KAFKA_INTERNAL) {
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
+			     "Group \"%s\": "
+			     "unable to OffsetCommit in state %s: "
+			     "coordinator (%s) is unavailable: retrying later",
+			     rkcg->rkcg_group_id->str,
+			     rd_kafka_cgrp_state_names[rkcg->rkcg_state],
+			     rkcg->rkcg_rkb ?
+			     rd_kafka_broker_name(rkcg->rkcg_rkb) : "none");
+		// FIXME: commit timeout waiting for coord?
+		rko->rko_flags |= RD_KAFKA_OP_F_REPROCESS;
+		rd_kafka_q_enq(&rkcg->rkcg_wait_coord_q, rko);
+
+	} else if (rd_kafka_OffsetCommitRequest(
+			   rkcg->rkcg_rkb, rkcg, 1, offsets,
+			   &rkcg->rkcg_ops,
+			   rd_kafka_cgrp_op_handle_OffsetCommit, rko) == 0) {
 		/* No valid offsets */
 		if (silent_empty) {
 			rd_kafka_op_destroy(rko);
@@ -1734,6 +1759,10 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
                 break;
 
         case RD_KAFKA_CGRP_STATE_UP:
+		/* Move any ops awaiting the coordinator to the ops queue
+		 * for reprocessing. */
+		rd_kafka_q_concat(&rkcg->rkcg_ops, &rkcg->rkcg_wait_coord_q);
+
                 /* Relaxed coordinator queries. */
                 if (rd_interval(&rkcg->rkcg_coord_query_intvl,
                                 rkcg->rkcg_rk->rk_conf.

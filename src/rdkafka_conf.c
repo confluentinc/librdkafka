@@ -573,15 +573,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(required_acks),
 	  "This field indicates how many acknowledgements the leader broker "
 	  "must receive from ISR brokers before responding to the request: "
-	  "*0*=broker does not send any response, "
-	  "*1*=broker will wait until the data is written to local "
-	  "log before sending a response, "
-	  "*-1*=broker will block until message is committed by all "
-	  "in sync replicas (ISRs) or broker's `in.sync.replicas` setting before sending response. "
-	  "*1*=Only the leader broker will need to ack the message. ",
-	  -1, 1000, 1 },
-          { _RK_TOPIC | _RK_PRODUCER, "acks", _RK_C_ALIAS,
-                  .sdef = "request.required.acks" },
+	  "*0*=Broker does not send any response/ack to client, "
+	  "*1*=Only the leader broker will need to ack the message, "
+	  "*-1* or *all*=broker will block until message is committed by all "
+	  "in sync replicas (ISRs) or broker's `in.sync.replicas` "
+	  "setting before sending response. ",
+	  -1, 1000, 1,
+	  .s2i = {
+			{ -1, "all" },
+		}
+	},
+	{ _RK_TOPIC | _RK_PRODUCER, "acks", _RK_C_ALIAS,
+	  .sdef = "request.required.acks" },
 
 	{ _RK_TOPIC|_RK_PRODUCER, "request.timeout.ms", _RK_C_INT,
 	  _RKT(request_timeout_ms),

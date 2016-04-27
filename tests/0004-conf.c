@@ -258,5 +258,63 @@ int main_0004_conf (int argc, char **argv) {
 		rd_kafka_conf_destroy(conf);
 	}
 
+	/* Canonical int values and aliases */
+	{
+		static const struct {
+			const char *prop;
+			const char *val;
+			const char *exp;
+		} props[] = {
+			{ "request.required.acks", "0", "0" },
+			{ "request.required.acks", "-1", "-1" },
+			{ "request.required.acks", "1", "1" },
+			{ "acks", "3", "3" }, /* alias test */
+			{ "request.required.acks", "393", "393" },
+			{ "request.required.acks", "bad", NULL },
+			{ "request.required.acks", "all", "-1" },
+			{ "acks", "0", "0" }, /* alias test */
+			{ NULL }
+		};
+
+		TEST_SAY("Canonical tests\n");
+		tconf = rd_kafka_topic_conf_new();
+
+		for (i = 0 ; props[i].prop ; i++) {
+			char dest[64];
+			size_t destsz;
+			rd_kafka_conf_res_t res;
+
+			TEST_SAY("  Set: %s=%s expect %s\n",
+				 props[i].prop, props[i].val, props[i].exp);
+
+
+			/* Set value */
+			res = rd_kafka_topic_conf_set(tconf,
+						      props[i].prop,
+						      props[i].val,
+						      errstr, sizeof(errstr));
+			if ((res == RD_KAFKA_CONF_OK ? 1:0) !=
+			    (props[i].exp ? 1:0))
+				TEST_FAIL("Expected %s",
+					  props[i].exp ? "success" : "failure");
+
+
+			if (!props[i].exp)
+				continue;
+
+			/* Get value and compare to expected result */
+			destsz = sizeof(dest);
+			res = rd_kafka_topic_conf_get(tconf, props[i].prop,
+						      dest, &destsz);
+			TEST_ASSERT(res == RD_KAFKA_CONF_OK,
+				    "topic_conf_get() returned %d", res);
+
+			TEST_ASSERT(!strcmp(props[i].exp, dest),
+				    "Expected \"%s\", got \"%s\"",
+				    props[i].exp, dest);
+		}
+		rd_kafka_topic_conf_destroy(tconf);
+	}
+
 	return 0;
 }

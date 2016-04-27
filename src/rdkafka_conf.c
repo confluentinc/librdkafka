@@ -42,7 +42,9 @@ struct rd_kafka_property {
 	enum {
 		_RK_C_STR,
 		_RK_C_INT,
-		_RK_C_S2I,  /* String to Integer mapping */
+		_RK_C_S2I,  /* String to Integer mapping.
+			     * Supports limited canonical str->int mappings
+			     * using s2i[] */
 		_RK_C_S2F,  /* CSV String to Integer flag mapping (OR:ed) */
 		_RK_C_BOOL,
 		_RK_C_PTR,  /* Only settable through special set functions */
@@ -852,6 +854,10 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		return RD_KAFKA_CONF_OK;
 
 	case _RK_C_INT:
+	{
+		int j;
+		const char *end;
+
 		if (!value) {
 			rd_snprintf(errstr, errstr_size,
 				 "Integer configuration "
@@ -860,7 +866,29 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			return RD_KAFKA_CONF_INVALID;
 		}
 
-		ival = atoi(value);
+		ival = (int)strtol(value, (char **)&end, 0);
+		if (end == value) {
+			/* Non numeric, check s2i for string mapping */
+			int match = 0;
+
+			for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
+				if (prop->s2i[j].str &&
+				    !rd_strcasecmp(prop->s2i[j].str, value)) {
+					ival = prop->s2i[j].val;
+					match = 1;
+					break;
+				}
+			}
+
+			if (!match) {
+				rd_snprintf(errstr, errstr_size,
+					    "Invalid value for "
+					    "configuration property \"%s\"",
+					    prop->name);
+				return RD_KAFKA_CONF_INVALID;
+			}
+		}
+
 		if (ival < prop->vmin ||
 		    ival > prop->vmax) {
 			rd_snprintf(errstr, errstr_size,
@@ -876,6 +904,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 					   _PROP_SET_REPLACE,
                                            errstr, errstr_size);
 		return RD_KAFKA_CONF_OK;
+	}
 
 	case _RK_C_S2I:
 	case _RK_C_S2F:

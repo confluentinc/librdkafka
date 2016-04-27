@@ -102,24 +102,6 @@ rd_kafka_assignor_get_metadata (rd_kafka_assignor_t *rkpas,
                                 const rd_kafka_topic_partition_list_t
                                 *subscription);
 
-rd_kafka_resp_err_t
-rd_kafka_assignor_add (rd_kafka_t *rk,
-                       const char *protocol_type,
-                       const char *protocol_name,
-                       rd_kafka_resp_err_t (*assign_cb) (
-                               rd_kafka_t *rk,
-                               const char *member_id,
-                               const char *protocol_name,
-                               const rd_kafka_metadata_t *metadata,
-                               rd_kafka_group_member_t *members,
-                               size_t member_cnt,
-                               rd_kafka_assignor_topic_t **eligible_topics,
-                               size_t eligible_topic_cnt,
-                               char *errstr, size_t errstr_size, void *opaque),
-                       void *opaque);
-
-
-
 
 void rd_kafka_assignor_update_subscription (rd_kafka_assignor_t *rkpas,
                                             const rd_kafka_topic_partition_list_t

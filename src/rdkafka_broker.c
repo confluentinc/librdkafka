@@ -2355,8 +2355,7 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 	rd_ts_t now;
 
 	/* Serve broker ops */
-        while ((rko = rd_kafka_q_pop(&rkb->rkb_ops, timeout_ms,
-                                     RD_POLL_NOWAIT)))
+        while ((rko = rd_kafka_q_pop(&rkb->rkb_ops, timeout_ms, 0)))
                 rd_kafka_broker_op_serve(rkb, rko);
 
         now = rd_clock();
@@ -2391,7 +2390,7 @@ static void rd_kafka_broker_toppars_serve (rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp, *rktp_tmp;
 
         TAILQ_FOREACH_SAFE(rktp, &rkb->rkb_toppars, rktp_rkblink, rktp_tmp) {
-                /* Serve toppar op queue to update desired rktp state */
+                /* Serve toppar to update desired rktp state */
 		rd_kafka_broker_consumer_toppar_serve(rkb, rktp);
         }
 }

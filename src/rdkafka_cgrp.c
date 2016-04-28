@@ -1834,25 +1834,32 @@ void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id){
 static void
 rd_kafka_cgrp_assignor_run (rd_kafka_cgrp_t *rkcg,
                             const char *protocol_name,
+			    rd_kafka_resp_err_t err,
                             rd_kafka_metadata_t *metadata,
                             rd_kafka_group_member_t *members,
                             int member_cnt) {
-        rd_kafka_resp_err_t err = 0;
         char errstr[512];
 
-        *errstr = '\0';
+	if (err) {
+		rd_snprintf(errstr, sizeof(errstr),
+			    "Failed to get cluster metadata: %s",
+			    rd_kafka_err2str(err));
+		goto err;
+	}
 
-        /* Run assignor */
-        err = rd_kafka_assignor_run(rkcg, protocol_name, metadata,
-                                    members, member_cnt,
-                                    errstr, sizeof(errstr));
+	*errstr = '\0';
 
-        if (err) {
-                if (!*errstr)
-                        rd_snprintf(errstr, sizeof(errstr), "%s",
-                                    rd_kafka_err2str(err));
-                goto err;
-        }
+	/* Run assignor */
+	err = rd_kafka_assignor_run(rkcg, protocol_name, metadata,
+				    members, member_cnt,
+				    errstr, sizeof(errstr));
+
+	if (err) {
+		if (!*errstr)
+			rd_snprintf(errstr, sizeof(errstr), "%s",
+				    rd_kafka_err2str(err));
+		goto err;
+	}
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGNOR",
                      "Group \"%s\": \"%s\" assignor run for %d member(s)",
@@ -1888,7 +1895,7 @@ void rd_kafka_cgrp_handle_Metadata (rd_kafka_cgrp_t *rkcg,
 
         rd_kafka_cgrp_assignor_run(rkcg,
                                    rkcg->rkcg_group_leader.protocol,
-                                   md,
+                                   err, md,
                                    rkcg->rkcg_group_leader.members,
                                    rkcg->rkcg_group_leader.member_cnt);
 }

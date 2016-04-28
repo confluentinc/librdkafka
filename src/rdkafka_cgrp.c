@@ -1905,6 +1905,10 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
         rd_kafkap_bytes_t UserData;
         rd_kafka_group_member_t rkgm;
 
+	/* Dont handle new assignments when terminating */
+	if (!err && rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)
+		err = RD_KAFKA_RESP_ERR__DESTROY;
+
         if (err)
                 goto err;
 

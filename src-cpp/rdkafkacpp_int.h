@@ -577,10 +577,8 @@ public:
   ErrorCode subscribe (const std::vector<std::string> &topics);
   ErrorCode unsubscribe ();
   ErrorCode assign (const std::vector<TopicPartition*> &partitions);
-  ErrorCode unassign () {
-	  std::vector<TopicPartition*> empty;
-	  return assign(empty);
-  }
+  ErrorCode unassign ();
+
   Message *consume (int timeout_ms);
   ErrorCode commitSync () {
     return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 0/*sync*/));

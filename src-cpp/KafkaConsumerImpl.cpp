@@ -172,6 +172,12 @@ RdKafka::KafkaConsumerImpl::assign (const std::vector<TopicPartition*> &partitio
 
 
 RdKafka::ErrorCode
+RdKafka::KafkaConsumerImpl::unassign () {
+  return static_cast<RdKafka::ErrorCode>(rd_kafka_assign(rk_, NULL));
+}
+
+
+RdKafka::ErrorCode
 RdKafka::KafkaConsumerImpl::committed (std::vector<RdKafka::TopicPartition*> &partitions, int timeout_ms) {
   rd_kafka_topic_partition_list_t *c_parts;
   rd_kafka_resp_err_t err;

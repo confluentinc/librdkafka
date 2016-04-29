@@ -1367,7 +1367,7 @@ public:
    *  - Commit offsets
    *  - Leave group
    *
-   * The maxiumum blocking time is roughly limited to session.timeout.ms.
+   * The maximum blocking time is roughly limited to session.timeout.ms.
    *
    * @remark Callbacks, such as RdKafka::RebalanceCb and
    *         RdKafka::OffsetCommitCb, etc, may be called.

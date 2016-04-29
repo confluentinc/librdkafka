@@ -1948,7 +1948,7 @@ rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
  * @remark This call will block until the consumer has revoked its assignment,
  *         calling the \c rebalance_cb if it is configured, committed offsets
  *         to broker, and left the consumer group.
- *         The maxiumum blocking time is roughly limited to session.timeout.ms.
+ *         The maximum blocking time is roughly limited to session.timeout.ms.
  *
  * @returns An error code indicating if the consumer close was succesful
  *          or not.

@@ -103,7 +103,6 @@ struct rd_kafka_conf_s {
 		char *kinit_cmd;
 		char *keytab;
 		int   relogin_min_time;
-		char  kinit_refresh_cmdline[512]; /* Full cached command line */
 	} sasl;
 #endif
 

@@ -218,66 +218,57 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
 static int rd_kafka_sasl_kinit_refresh (rd_kafka_broker_t *rkb) {
 	rd_kafka_t *rk = rkb->rkb_rk;
 	int r;
+	char cmd[512];
+	char keytab[512];
+	char *hostname, *t;
 
 	if (!rk->rk_conf.sasl.kinit_cmd)
 		return 0; /* kinit not configured */
 
-	/* Just set up refresh command the first time then cache it. */
-	if (!*rk->rk_conf.sasl.kinit_refresh_cmdline) {
-		char cmd[512];
-		char keytab[512];
-		char *hostname, *t;
+	/* Build kinit refresh command line for this broker. */
+	rd_kafka_broker_lock(rkb);
+	rd_strdupa(&hostname, rkb->rkb_nodename);
+	rd_kafka_broker_unlock(rkb);
 
-		rd_kafka_broker_lock(rkb);
-		rd_strdupa(&hostname, rkb->rkb_nodename);
-		rd_kafka_broker_unlock(rkb);
+	if ((t = strchr(hostname, ':')))
+		*t = '\0';  /* remove ":port" */
 
-		if ((t = strchr(hostname, ':')))
-			*t = '\0';  /* remove ":port" */
+	if (rk->rk_conf.sasl.keytab)
+		rd_snprintf(keytab, sizeof(keytab),
+			    "-k -t \"%s\"",
+			    rk->rk_conf.sasl.keytab);
+	else /* default path */
+		rd_snprintf(keytab, sizeof(keytab), "-k -i");
 
-		if (rk->rk_conf.sasl.keytab)
-			rd_snprintf(keytab, sizeof(keytab),
-				    "-k -t \"%s\"",
-				    rk->rk_conf.sasl.keytab);
-		else /* default path */
-			rd_snprintf(keytab, sizeof(keytab), "-k -i");
+	rd_snprintf(cmd, sizeof(cmd), "%s -S \"%s/%s\" %s %s",
+		    rk->rk_conf.sasl.kinit_cmd,
+		    rk->rk_conf.sasl.service_name, hostname,
+		    keytab,
+		    rk->rk_conf.sasl.principal);
 
-		rd_snprintf(cmd, sizeof(cmd), "%s -S \"%s/%s\" %s %s",
-			    rk->rk_conf.sasl.kinit_cmd,
-			    rk->rk_conf.sasl.service_name, hostname,
-			    keytab,
-			    rk->rk_conf.sasl.principal);
-
-		strncpy(rk->rk_conf.sasl.kinit_refresh_cmdline,
-			cmd, sizeof(rk->rk_conf.sasl.kinit_refresh_cmdline)-1);
-	}
-
-
-	rd_kafka_dbg(rk, SECURITY, "SASLREFRESH",
-		     "Refreshing SASL keys with command: %s",
-		     rk->rk_conf.sasl.kinit_refresh_cmdline);
-	r = system(rk->rk_conf.sasl.kinit_refresh_cmdline);
+	/* Execute kinit */
+	rd_rkb_dbg(rkb, SECURITY, "SASLREFRESH",
+		   "Refreshing SASL keys with command: %s", cmd);
+	r = system(cmd);
 
 	if (r == -1) {
-		rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-			     "SASL key refresh failed: Failed to execute %s",
-			     rk->rk_conf.sasl.kinit_refresh_cmdline);
+		rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
+			   "SASL key refresh failed: Failed to execute %s",
+			   cmd);
 		return -1;
 	} else if (WIFSIGNALED(r)) {
-		rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-			     "SASL key refresh failed: %s: received signal %d",
-			     rk->rk_conf.sasl.kinit_refresh_cmdline,
-			     WTERMSIG(r));
+		rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
+			   "SASL key refresh failed: %s: received signal %d",
+			   cmd, WTERMSIG(r));
 		return -1;
 	} else if (WIFEXITED(r) && WEXITSTATUS(r) != 0) {
-		rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
-			     "SASL key refresh failed: %s: exited with code %d",
-			     rk->rk_conf.sasl.kinit_refresh_cmdline,
-			     WEXITSTATUS(r));
+		rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
+			   "SASL key refresh failed: %s: exited with code %d",
+			   cmd, WEXITSTATUS(r));
 		return -1;
 	}
 
-	rd_kafka_dbg(rk, SECURITY, "SASLREFRESH", "SASL key refreshed");
+	rd_rkb_dbg(rkb, SECURITY, "SASLREFRESH", "SASL key refreshed");
 	return 0;
 }
 

@@ -26,6 +26,15 @@ struct rd_kafka_q_s {
 };
 
 
+/**
+ * @return true if queue is ready/enabled, else false.
+ * @remark queue luck must be held by caller (if applicable)
+ */
+static RD_INLINE RD_UNUSED
+int rd_kafka_q_ready (rd_kafka_q_t *rkq) {
+	return rkq->rkq_flags & RD_KAFKA_Q_F_READY;
+}
+
 
 enum {
         _Q_CB_GLOBAL,   /* rd_kafka_poll() */

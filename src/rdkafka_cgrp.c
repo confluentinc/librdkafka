@@ -548,10 +548,26 @@ static void rd_kafka_cgrp_terminated (rd_kafka_cgrp_t *rkcg) {
  * then progress to final termination and return 1.
  * Else returns 0.
  */
-static int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
+static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 
-        if ((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) &&
-            rd_list_empty(&rkcg->rkcg_toppars) &&
+	if (likely(!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)))
+		return 0;
+
+	/* Check if wait-coord queue has timed out. */
+	if (rd_kafka_q_len(&rkcg->rkcg_wait_coord_q) > 0 &&
+	    rkcg->rkcg_ts_terminate +
+	    (rkcg->rkcg_rk->rk_conf.group_session_timeout_ms * 1000) <
+	    rd_clock()) {
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP,"CGRPTERM",
+			     "Group \"%s\": timing out %d op(s) in "
+			     "wait-for-coordinator queue",
+			     rkcg->rkcg_group_id->str,
+			     rd_kafka_q_len(&rkcg->rkcg_wait_coord_q));
+		rd_kafka_q_disable(&rkcg->rkcg_wait_coord_q);
+		rd_kafka_q_concat(&rkcg->rkcg_ops, &rkcg->rkcg_wait_coord_q);
+	}
+
+	if (rd_list_empty(&rkcg->rkcg_toppars) &&
 	    rkcg->rkcg_wait_unassign_cnt == 0 &&
 	    rkcg->rkcg_wait_commit_cnt == 0 &&
             !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
@@ -863,6 +879,7 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
 /**
  * Handle OffsetCommitResponse
  * Takes the original 'rko' as opaque argument.
+ * @remark \p rkb is NULL in a number of error cases (e.g., _NO_OFFSET)
  */
 static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 						  rd_kafka_broker_t *rkb,
@@ -875,7 +892,8 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
         rd_kafka_q_t *replyq;
 	rd_kafka_topic_partition_list_t *offsets = rko_orig->rko_payload;
 
-	err = rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf, request, offsets);
+	err = rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf,
+					   request, offsets);
 
 	if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
 		return; /* Retrying */
@@ -915,8 +933,9 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
                                           rd_kafka_op_t *rko,
 					  int silent_empty) {
-
 	rd_kafka_topic_partition_list_t *offsets;
+	rd_kafka_resp_err_t err;
+
 	/* If offsets is NULL we shall use the current assignment. */
 	if (!rko->rko_payload && rkcg->rkcg_assignment) {
 		/* Copy assignment and fill in offsets */
@@ -948,43 +967,51 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 
 
 	if (!offsets) {
-		rd_kafka_cgrp_op_handle_OffsetCommit(rkcg->rkcg_rk, rkcg->rkcg_rkb,
-						     RD_KAFKA_RESP_ERR__NO_OFFSET,
-						     NULL, NULL,
-						     rko);
-		return;
+		err = RD_KAFKA_RESP_ERR__NO_OFFSET;
+		goto err;
 	}
-
 
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP || !rkcg->rkcg_rkb ||
 	    rkcg->rkcg_rkb->rkb_source == RD_KAFKA_INTERNAL) {
-		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
-			     "Group \"%s\": "
-			     "unable to OffsetCommit in state %s: "
-			     "coordinator (%s) is unavailable: retrying later",
-			     rkcg->rkcg_group_id->str,
-			     rd_kafka_cgrp_state_names[rkcg->rkcg_state],
-			     rkcg->rkcg_rkb ?
-			     rd_kafka_broker_name(rkcg->rkcg_rkb) : "none");
-		// FIXME: commit timeout waiting for coord?
-		rko->rko_flags |= RD_KAFKA_OP_F_REPROCESS;
-		rd_kafka_q_enq(&rkcg->rkcg_wait_coord_q, rko);
+		/* wait_coord_q is disabled session.timeout.ms after
+		 * group close() has been initated. */
+		if (rd_kafka_q_ready(&rkcg->rkcg_wait_coord_q)) {
+			rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
+				     "Group \"%s\": "
+				     "unable to OffsetCommit in state %s: "
+				     "coordinator (%s) is unavailable: "
+				     "retrying later",
+				     rkcg->rkcg_group_id->str,
+				     rd_kafka_cgrp_state_names[rkcg->rkcg_state],
+				     rkcg->rkcg_rkb ?
+				     rd_kafka_broker_name(rkcg->rkcg_rkb) :
+				     "none");
+			rko->rko_flags |= RD_KAFKA_OP_F_REPROCESS;
+			rd_kafka_q_enq(&rkcg->rkcg_wait_coord_q, rko);
+			return;
+		}
+
+		err = RD_KAFKA_RESP_ERR__WAIT_COORD;
 
 	} else if (rd_kafka_OffsetCommitRequest(
 			   rkcg->rkcg_rkb, rkcg, 1, offsets,
 			   &rkcg->rkcg_ops,
-			   rd_kafka_cgrp_op_handle_OffsetCommit, rko) == 0) {
-		/* No valid offsets */
-		if (silent_empty) {
-			rd_kafka_op_destroy(rko);
-			rkcg->rkcg_wait_commit_cnt--;
-			return;
-		}
-                rd_kafka_cgrp_op_handle_OffsetCommit(rkcg->rkcg_rk, rkcg->rkcg_rkb,
-						     RD_KAFKA_RESP_ERR__NO_OFFSET,
-						     NULL, NULL,
-						     rko);
+			   rd_kafka_cgrp_op_handle_OffsetCommit, rko) != 0)
+		return;
+	else
+		err = RD_KAFKA_RESP_ERR__NO_OFFSET;
+
+ err:
+	/* No valid offsets */
+	if (silent_empty) {
+		rd_kafka_op_destroy(rko);
+		rkcg->rkcg_wait_commit_cnt--;
+		return;
 	}
+
+	/* Propagate error to whoever wanted offset committed. */
+	rd_kafka_cgrp_op_handle_OffsetCommit(rkcg->rkcg_rk, NULL, err,
+					     NULL, NULL, rko);
 }
 
 
@@ -1416,6 +1443,7 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
         /* Mark for stopping, the actual state transition
          * is performed when all toppars have left. */
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_TERMINATE;
+	rkcg->rkcg_ts_terminate = rd_clock();
         rkcg->rkcg_reply_rko = rko;
 
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION)
@@ -1696,6 +1724,10 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 	}
 
         rd_kafka_cgrp_op_serve(rkcg, rkb);
+
+	/* Check for cgrp termination */
+	if (unlikely(rd_kafka_cgrp_try_terminate(rkcg)))
+		return; /* cgrp terminated */
 
         /* Bail out if we're terminating. */
         if (unlikely(rd_kafka_terminating(rkcg->rkcg_rk)))

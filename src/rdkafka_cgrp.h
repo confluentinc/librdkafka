@@ -183,6 +183,10 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_op_t     *rkcg_reply_rko;          /* Send reply for op
                                                      * (OP_TERMINATE)
                                                      * to this rko's queue. */
+
+	rd_ts_t            rkcg_ts_terminate;       /* Timestamp of when
+						     * cgrp termination was
+						     * initiated. */
 } rd_kafka_cgrp_t;
 
 

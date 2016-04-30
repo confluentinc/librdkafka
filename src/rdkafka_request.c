@@ -1921,3 +1921,39 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 		rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_ApiVersion, rkbuf,
 					 resp_cb, opaque);
 }
+
+
+/**
+ * Send SaslHandshakeRequest (KIP-43)
+ */
+void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
+				    const char *mechanism,
+				    rd_kafka_q_t *replyq,
+				    rd_kafka_resp_cb_t *resp_cb,
+				    void *opaque, int flash_msg) {
+        rd_kafka_buf_t *rkbuf;
+	int mechlen = strlen(mechanism);
+
+        rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1, RD_KAFKAP_STR_SIZE0(mechlen));
+	rkbuf->rkbuf_flags |= (flash_msg ? RD_KAFKA_OP_F_FLASH : 0);
+	rd_kafka_buf_write_str(rkbuf, mechanism, mechlen);
+	rd_kafka_buf_autopush(rkbuf);
+
+	/* Non-supporting brokers will tear down the conneciton when they
+	 * receive an unknown API request or where the SASL GSSAPI
+	 * token type is not recognized, so dont retry request on failure. */
+	rkbuf->rkbuf_retries = RD_KAFKA_BUF_NO_RETRIES;
+
+	/* 0.9.0.x brokers will not close the connection on unsupported
+	 * API requests, so we minimize the timeout of the request.
+	 * This is a regression on the broker part. */
+	if (rkb->rkb_rk->rk_conf.socket_timeout_ms > 10*1000)
+		rkbuf->rkbuf_ts_timeout = rd_clock() + (10 * 1000);
+
+	if (replyq)
+		rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_SaslHandshake,
+					       rkbuf, replyq, resp_cb, opaque);
+	else /* in broker thread */
+		rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_SaslHandshake, rkbuf,
+					 resp_cb, opaque);
+}

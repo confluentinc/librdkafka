@@ -37,6 +37,8 @@ static const char *rd_kafka_feature_names[] = {
 	"ApiVersion",
 	"BrokerBalancedConsumer",
 	"ThrottleTime",
+	"Sasl",
+	"SaslHandshake",
 	NULL
 };
 
@@ -104,6 +106,26 @@ static const struct rd_kafka_feature_map {
 			{ -1 },
 		},
 
+	},
+	{
+		/* @brief >=0.9.0: SASL (GSSAPI) authentication.
+		 * Sincne SASL is not using the Kafka protocol
+		 * we must use something else to map us to the
+		 * proper broker version support:
+		 * JoinGroup was released along with SASL in 0.9.0. */
+		.feature = RD_KAFKA_FEATURE_SASL,
+		.depends = {
+			{ RD_KAFKAP_JoinGroup, 0, 0 },
+			{ -1 },
+		},
+	},
+	{
+		/* @brief >=0.10.0: SASL mechanism handshake (KIP-43) */
+		.feature = RD_KAFKA_FEATURE_SASL_HANDSHAKE,
+		.depends = {
+			{ RD_KAFKAP_SaslHandshake, 0, 0 },
+			{ -1 },
+		},
 	},
 	{ .feature = 0 }, /* sentinel */
 };

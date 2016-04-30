@@ -103,6 +103,8 @@ struct rd_kafka_conf_s {
 		char *kinit_cmd;
 		char *keytab;
 		int   relogin_min_time;
+		char *username;
+		char *password;
 	} sasl;
 #endif
 

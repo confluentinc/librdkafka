@@ -86,6 +86,15 @@ rd_kafka_conf_validate_broker_version (const struct rd_kafka_property *prop,
 	return rd_kafka_get_legacy_ApiVersions(val, &apis, &api_cnt, NULL);
 }
 
+/**
+ * @brief Validate that string is a single item, without delimters (, space).
+ */
+static int
+rd_kafka_conf_validate_single (const struct rd_kafka_property *prop,
+				const char *val, int ival) {
+	return !strchr(val, ',') && !strchr(val, ' ');
+}
+
 
 /**
  * librdkafka configuration property definitions.
@@ -384,8 +393,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SASL
 	{_RK_GLOBAL,"sasl.mechanisms", _RK_C_STR,
 	 _RK(sasl.mechanisms),
-	 "Space separated list of eligible SASL mechanisms",
-	 .sdef = "GSSAPI" },
+	 "SASL mechanism to use for authentication. "
+	 "Supported: GSSAPI, PLAIN. "
+	 "**NOTE**: Despite the name only one mechanism must be configured.",
+	 .sdef = "GSSAPI",
+	 .s2i = {
+			{ 0, "GSSAPI" },
+			{ 0, "PLAIN" }
+		},
+	 .validate = rd_kafka_conf_validate_single },
 	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
 	  _RK(sasl.service_name),
 	  "Kerberos principal name that Kafka runs as.",
@@ -405,6 +421,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(sasl.relogin_min_time),
 	  "Minimum time in milliseconds between key refresh attempts.",
 	  1, 86400*1000, 60*1000 },
+	{ _RK_GLOBAL, "sasl.username", _RK_C_STR,
+	  _RK(sasl.username),
+	  "SASL username for use with the PLAIN mechanism" },
+	{ _RK_GLOBAL, "sasl.password", _RK_C_STR,
+	  _RK(sasl.password),
+	  "SASL password for use with the PLAIN mechanism" },
 #endif
 
         /* Global client group properties */
@@ -799,6 +821,25 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 	return RD_KAFKA_CONF_INVALID;
 }
 
+
+/**
+ * @brief Find s2i (string-to-int mapping) entry and return its array index,
+ *        or -1 on miss.
+ */
+static int rd_kafka_conf_s2i_find (const struct rd_kafka_property *prop,
+				   const char *value) {
+	int j;
+
+	for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
+		if (prop->s2i[j].str &&
+		    !rd_strcasecmp(prop->s2i[j].str, value))
+			return j;
+	}
+
+	return -1;
+}
+
+
 static rd_kafka_conf_res_t
 rd_kafka_anyconf_set_prop (int scope, void *conf,
 			   const struct rd_kafka_property *prop,
@@ -810,8 +851,26 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 	{
 	case _RK_C_STR:
         case _RK_C_KSTR:
+		if (prop->s2i[0].str) {
+			int match;
+
+			if (!value ||
+			    (match = rd_kafka_conf_s2i_find(prop, value)) == -1){
+				rd_snprintf(errstr, errstr_size,
+					    "Invalid value for "
+					    "configuration property \"%s\": "
+					    "%s",
+					    prop->name, value);
+				return RD_KAFKA_CONF_INVALID;
+			}
+
+			/* Replace value string with canonical form */
+			value = prop->s2i[match].str;
+		}
+		/* FALLTHRU */
         case _RK_C_PATLIST:
-		if (prop->validate && !prop->validate(prop, value, -1)) {
+		if (prop->validate &&
+		    (!value || !prop->validate(prop, value, -1))) {
 			rd_snprintf(errstr, errstr_size,
 				    "Invalid value: %s", value);
 			return RD_KAFKA_CONF_INVALID;
@@ -858,7 +917,6 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 
 	case _RK_C_INT:
 	{
-		int j;
 		const char *end;
 
 		if (!value) {
@@ -872,24 +930,17 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		ival = (int)strtol(value, (char **)&end, 0);
 		if (end == value) {
 			/* Non numeric, check s2i for string mapping */
-			int match = 0;
+			int match = rd_kafka_conf_s2i_find(prop, value);
 
-			for (j = 0 ; j < (int)RD_ARRAYSIZE(prop->s2i); j++) {
-				if (prop->s2i[j].str &&
-				    !rd_strcasecmp(prop->s2i[j].str, value)) {
-					ival = prop->s2i[j].val;
-					match = 1;
-					break;
-				}
-			}
-
-			if (!match) {
+			if (match == -1) {
 				rd_snprintf(errstr, errstr_size,
 					    "Invalid value for "
 					    "configuration property \"%s\"",
 					    prop->name);
 				return RD_KAFKA_CONF_INVALID;
 			}
+
+			ival = prop->s2i[match].val;
 		}
 
 		if (ival < prop->vmin ||
@@ -1684,8 +1735,15 @@ void rd_kafka_conf_properties_show (FILE *fp) {
                 case _RK_C_PATLIST:
 			if (prop->type == _RK_C_PATLIST)
 				typeinfo = "pattern list";
-			fprintf(fp, "%-15s | %13s",
-				"", prop->sdef ? prop->sdef : "");
+			if (prop->s2i[0].str) {
+				rd_kafka_conf_flags2str(tmp, sizeof(tmp), ", ",
+							prop, -1);
+				fprintf(fp, "%-15s | %13s",
+					tmp, prop->sdef ? prop->sdef : "");
+			} else {
+				fprintf(fp, "%-15s | %13s",
+					"", prop->sdef ? prop->sdef : "");
+			}
 			break;
 		case _RK_C_BOOL:
 			typeinfo = "boolean";

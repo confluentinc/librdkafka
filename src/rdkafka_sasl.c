@@ -110,6 +110,10 @@ static int rd_kafka_sasl_handle_recv (rd_kafka_transport_t *rktrans,
 	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
 		   "Received SASL frame from broker (%"PRIdsz" bytes)",
 		   rkbuf ? rkbuf->rkbuf_len : 0);
+
+	if (rktrans->rktrans_sasl.complete && (!rkbuf || rkbuf->rkbuf_len == 0))
+		goto auth_successful;
+
 	do {
 		sasl_interact_t *interact = NULL;
 		const char *out;
@@ -122,6 +126,8 @@ static int rd_kafka_sasl_handle_recv (rd_kafka_transport_t *rktrans,
 				     &interact,
 				     &out, &outlen);
 
+		rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
+			   "recvd, stepped, r now %d", r);
 		if (rkbuf) {
 			rd_kafka_buf_destroy(rkbuf);
 			rkbuf = NULL;
@@ -154,8 +160,8 @@ static int rd_kafka_sasl_handle_recv (rd_kafka_transport_t *rktrans,
 		return -1;
 	}
 
-	/* Authentication succesfull */
-
+	/* Authentication successful */
+auth_successful:
 	if (rktrans->rktrans_rkb->rkb_rk->rk_conf.debug &
 	    RD_KAFKA_DBG_SECURITY) {
 		const char *user, *mech, *authsrc;
@@ -177,7 +183,7 @@ static int rd_kafka_sasl_handle_recv (rd_kafka_transport_t *rktrans,
 			   user, mech, authsrc);
 	}
 
-	rd_kafka_broker_connect_done(rktrans->rktrans_rkb, NULL);
+	rd_kafka_broker_connect_up(rktrans->rktrans_rkb);
 
 	return 0;
 }
@@ -222,7 +228,7 @@ static int rd_kafka_sasl_kinit_refresh (rd_kafka_broker_t *rkb) {
 	char keytab[512];
 	char *hostname, *t;
 
-	if (!rk->rk_conf.sasl.kinit_cmd)
+	if (!rk->rk_conf.sasl.kinit_cmd || !strstr(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
 		return 0; /* kinit not configured */
 
 	/* Build kinit refresh command line for this broker. */
@@ -330,10 +336,20 @@ static int rd_kafka_sasl_cb_getsimple (void *context, int id,
 				       const char **result, unsigned *len) {
 	rd_kafka_transport_t *rktrans = context;
 
-	*result = NULL;
+	switch (id)
+	{
+	case SASL_CB_USER:
+	case SASL_CB_AUTHNAME:
+		*result = rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.username;
+		break;
+
+	default:
+		*result = NULL;
+		break;
+	}
 
 	if (len)
-		*len = strlen(*result);
+		*len = *result ? strlen(*result) : 0;
 
 	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "LIBSASL",
 		   "CB_GETSIMPLE: id 0x%x: returning %s", id, *result);
@@ -345,8 +361,18 @@ static int rd_kafka_sasl_cb_getsimple (void *context, int id,
 static int rd_kafka_sasl_cb_getsecret (sasl_conn_t *conn, void *context,
 				       int id, sasl_secret_t **psecret) {
 	rd_kafka_transport_t *rktrans = context;
+	const char *password;
 
-	*psecret = NULL;
+	password = rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.password;
+
+	if (!password) {
+		*psecret = NULL;
+	} else {
+		size_t passlen = strlen(password);
+		*psecret = rd_realloc(*psecret, sizeof(**psecret) + passlen);
+		(*psecret)->len = passlen;
+		memcpy((*psecret)->data, password, passlen);
+	}
 
 	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "LIBSASL",
 		   "CB_GETSECRET: id 0x%x: returning %s",
@@ -396,16 +422,23 @@ static RD_UNUSED int rd_kafka_sasl_cb_canon (sasl_conn_t *conn,
 					     unsigned *out_len) {
 	rd_kafka_transport_t *rktrans = context;
 
-	*out_len = rd_snprintf(out, out_max, "%.*s", inlen, in);
-	*out_len = rd_snprintf(out,  out_max, "%s",
-			       rktrans->rktrans_rkb->rkb_rk->
-			       rk_conf.sasl.principal);
+	if (strstr(rktrans->rktrans_rkb->rkb_rk->rk_conf.
+		   sasl.mechanisms, "GSSAPI")) {
+		*out_len = rd_snprintf(out, out_max, "%.*s", inlen, in);
+		*out_len = rd_snprintf(out, out_max, "%s",
+				       rktrans->rktrans_rkb->rkb_rk->
+				       rk_conf.sasl.principal);
+	} else if (!strcmp(rktrans->rktrans_rkb->rkb_rk->rk_conf.
+			   sasl.mechanisms, "PLAIN")) {
+		*out_len = rd_snprintf(out, out_max, "%.*s", inlen, in);
+	} else
+		out = NULL;
 
 	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "LIBSASL",
-		   "CB_CANON: flags 0x%x, \"%.*s\" @ \"%s\": returning %s",
-		   flags, (int)inlen, in, user_realm, out);
+		   "CB_CANON: flags 0x%x, \"%.*s\" @ \"%s\": returning \"%.*s\"",
+		   flags, (int)inlen, in, user_realm, (int)(*out_len), out);
 
-	return SASL_OK;
+	return out ? SASL_OK : SASL_FAIL;
 }
 
 
@@ -425,7 +458,7 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 	sasl_callback_t callbacks[] = {
 		// { SASL_CB_GETOPT, (void *)rd_kafka_sasl_cb_getopt, rktrans },
 		{ SASL_CB_LOG, (void *)rd_kafka_sasl_cb_log, rktrans },
-		//{ SASL_CB_USER, (void *)rd_kafka_sasl_cb_getsimple, rktrans },
+		{ SASL_CB_USER, (void *)rd_kafka_sasl_cb_getsimple, rktrans },
 		{ SASL_CB_AUTHNAME, (void *)rd_kafka_sasl_cb_getsimple, rktrans },
 		{ SASL_CB_PASS, (void *)rd_kafka_sasl_cb_getsecret, rktrans },
 		{ SASL_CB_ECHOPROMPT, (void *)rd_kafka_sasl_cb_chalprompt, rktrans },
@@ -461,7 +494,7 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 		sasl_listmech(rktrans->rktrans_sasl.conn, NULL, NULL, " ", NULL,
 			      &avail_mechs, NULL, NULL);
 		rd_rkb_dbg(rkb, SECURITY, "SASL",
-			   "Available SASL mechanisms: %s", avail_mechs);
+			   "My supported SASL mechanisms: %s", avail_mechs);
 	}
 
 
@@ -471,7 +504,7 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 		const char *out;
 		unsigned int outlen;
 		const char *mech = NULL;
-		
+
 		r = sasl_client_start(rktrans->rktrans_sasl.conn,
 				      rk->rk_conf.sasl.mechanisms,
 				      NULL, &out, &outlen, &mech);
@@ -482,10 +515,17 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 				return -1;
 	} while (r == SASL_INTERACT);
 
-	if (r != SASL_CONTINUE) {
+	if (r == SASL_OK) {
+		/* PLAIN is appearantly done here, but we still need to make sure
+		 * the PLAIN frame is sent and we get a response back (but we must
+		 * not pass the response to libsasl or it will fail). */
+		rktrans->rktrans_sasl.complete = 1;
+		return 0;
+
+	} else if (r != SASL_CONTINUE) {
 		rd_snprintf(errstr, errstr_size,
-			    "SASL handshake failed (start): %s",
-			    sasl_errdetail(rktrans->rktrans_sasl.conn));
+			    "SASL handshake failed (start (%d)): %s",
+			    r, sasl_errdetail(rktrans->rktrans_sasl.conn));
 		return -1;
 	}
 
@@ -520,7 +560,8 @@ void rd_kafka_broker_sasl_term (rd_kafka_broker_t *rkb) {
 void rd_kafka_broker_sasl_init (rd_kafka_broker_t *rkb) {
 	rd_kafka_t *rk = rkb->rkb_rk;
 
-	if (rk->rk_conf.sasl.kinit_cmd)
+	if (!rk->rk_conf.sasl.kinit_cmd ||
+	    !strstr(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
 		return; /* kinit not configured, no need to start timer */
 
 	rd_kafka_timer_start(&rk->rk_timers, &rkb->rkb_sasl_kinit_refresh_tmr,

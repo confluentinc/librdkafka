@@ -258,12 +258,13 @@ int main_0004_conf (int argc, char **argv) {
 		rd_kafka_conf_destroy(conf);
 	}
 
-	/* Canonical int values and aliases */
+	/* Canonical int values, aliases, s2i-verified strings */
 	{
 		static const struct {
 			const char *prop;
 			const char *val;
 			const char *exp;
+			int is_global;
 		} props[] = {
 			{ "request.required.acks", "0", "0" },
 			{ "request.required.acks", "-1", "-1" },
@@ -273,11 +274,20 @@ int main_0004_conf (int argc, char **argv) {
 			{ "request.required.acks", "bad", NULL },
 			{ "request.required.acks", "all", "-1" },
 			{ "acks", "0", "0" }, /* alias test */
+#if WITH_SASL
+			{ "sasl.mechanisms", "GSSAPI", "GSSAPI", 1 },
+			{ "sasl.mechanisms", "PLAIN", "PLAIN", 1  },
+			{ "sasl.mechanisms", "GSSAPI,PLAIN", NULL, 1  },
+			{ "sasl.mechanisms", "", NULL, 1  },
+			{ "sasl.mechanisms", "foobar", NULL, 1  },
+			{ "sasl.mechanisms", "plain", "PLAIN", 1  },
+#endif
 			{ NULL }
 		};
 
 		TEST_SAY("Canonical tests\n");
 		tconf = rd_kafka_topic_conf_new();
+		conf = rd_kafka_conf_new();
 
 		for (i = 0 ; props[i].prop ; i++) {
 			char dest[64];
@@ -289,31 +299,47 @@ int main_0004_conf (int argc, char **argv) {
 
 
 			/* Set value */
-			res = rd_kafka_topic_conf_set(tconf,
+			if (props[i].is_global)
+				res = rd_kafka_conf_set(conf,
 						      props[i].prop,
 						      props[i].val,
 						      errstr, sizeof(errstr));
+			else
+				res = rd_kafka_topic_conf_set(tconf,
+							      props[i].prop,
+							      props[i].val,
+							      errstr,
+							      sizeof(errstr));
 			if ((res == RD_KAFKA_CONF_OK ? 1:0) !=
 			    (props[i].exp ? 1:0))
-				TEST_FAIL("Expected %s",
-					  props[i].exp ? "success" : "failure");
-
+				TEST_FAIL("Expected %s, got %s",
+					  props[i].exp ? "success" : "failure",
+					  (res == RD_KAFKA_CONF_OK ? "OK" :
+					   (res == RD_KAFKA_CONF_INVALID ? "INVALID" :
+					    "UNKNOWN")));
 
 			if (!props[i].exp)
 				continue;
 
 			/* Get value and compare to expected result */
 			destsz = sizeof(dest);
-			res = rd_kafka_topic_conf_get(tconf, props[i].prop,
-						      dest, &destsz);
+			if (props[i].is_global)
+				res = rd_kafka_conf_get(conf,
+							props[i].prop,
+							dest, &destsz);
+			else
+				res = rd_kafka_topic_conf_get(tconf,
+							      props[i].prop,
+							      dest, &destsz);
 			TEST_ASSERT(res == RD_KAFKA_CONF_OK,
-				    "topic_conf_get() returned %d", res);
+				    ".._conf_get() returned %d", res);
 
 			TEST_ASSERT(!strcmp(props[i].exp, dest),
 				    "Expected \"%s\", got \"%s\"",
 				    props[i].exp, dest);
 		}
 		rd_kafka_topic_conf_destroy(tconf);
+		rd_kafka_conf_destroy(conf);
 	}
 
 	return 0;

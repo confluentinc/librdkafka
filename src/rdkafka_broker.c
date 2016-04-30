@@ -69,7 +69,8 @@ const char *rd_kafka_broker_state_names[] = {
 	"AUTH",
 	"UP",
         "UPDATE",
-	"APIVERSION_QUERY"
+	"APIVERSION_QUERY",
+	"AUTH_HANDSHAKE"
 };
 
 const char *rd_kafka_secproto_names[] = {
@@ -1252,7 +1253,10 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
  *
  * @locality Broker thread
  */
-static void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
+void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
+
+	rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
+
 	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
 	rd_kafka_broker_unlock(rkb);
@@ -1263,6 +1267,150 @@ static void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
 				     metadata_refresh_sparse ?
 				     0 /* known topics */ : 1 /* all topics */,
                                      NULL, NULL, "connected");
+}
+
+
+
+static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb);
+
+
+#if WITH_SASL
+/**
+ * @brief Parses and handles SaslMechanism response, transitions
+ *        the broker state.
+ *
+ */
+static void
+rd_kafka_broker_handle_SaslHandshake (rd_kafka_t *rk,
+				      rd_kafka_broker_t *rkb,
+				      rd_kafka_resp_err_t err,
+				      rd_kafka_buf_t *rkbuf,
+				      rd_kafka_buf_t *request,
+				      void *opaque) {
+        const int log_decode_errors = 1;
+	int32_t MechCnt;
+	int16_t ErrorCode;
+	int i = 0;
+	char *mechs = "(n/a)";
+	size_t msz, mof = 0;
+
+        if (err)
+                goto err;
+
+	rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+        rd_kafka_buf_read_i32(rkbuf, &MechCnt);
+
+	/* Build a CSV string of supported mechanisms. */
+	msz = RD_MIN(511, MechCnt * 32);
+	mechs = rd_alloca(msz);
+	*mechs = '\0';
+
+	for (i = 0 ; i < MechCnt ; i++) {
+		rd_kafkap_str_t mech;
+		rd_kafka_buf_read_str(rkbuf, &mech);
+
+		mof += rd_snprintf(mechs+mof, msz-mof, "%s%.*s",
+				   i ? ",":"", RD_KAFKAP_STR_PR(&mech));
+
+		if (mof >= msz)
+			break;
+        }
+
+	rd_rkb_dbg(rkb,
+		   PROTOCOL | RD_KAFKA_DBG_SECURITY | RD_KAFKA_DBG_BROKER,
+		   "SASLMECHS", "Broker supported SASL mechanisms: %s",
+		   mechs);
+
+	if (ErrorCode) {
+		err = ErrorCode;
+		goto err;
+	}
+
+	/* Circle back to connect_auth() to start proper AUTH state. */
+	rd_kafka_broker_connect_auth(rkb);
+	return;
+
+ err:
+	rd_kafka_broker_fail(rkb, LOG_ERR,
+			     RD_KAFKA_RESP_ERR__AUTHENTICATION,
+			     "SASL mechanism handshake failed: %s: "
+			     "broker's supported mechanisms: %s",
+			     rd_kafka_err2str(err), mechs);
+}
+#endif
+
+
+/**
+ * @brief Transition state to:
+ *        - AUTH_HANDSHAKE (if SASL is configured and handshakes supported)
+ *        - AUTH (if SASL is configured but no handshake is required or
+ *                not supported, or has already taken place.)
+ *        - UP (if SASL is not configured)
+ */
+static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb) {
+
+#if WITH_SASL
+	if ((rkb->rkb_proto == RD_KAFKA_PROTO_SASL_PLAINTEXT ||
+	     rkb->rkb_proto == RD_KAFKA_PROTO_SASL_SSL)) {
+
+		rd_rkb_dbg(rkb, SECURITY | RD_KAFKA_DBG_BROKER, "AUTH",
+			   "Auth in state %s (handshake %ssupported)",
+			   rd_kafka_broker_state_names[rkb->rkb_state],
+			   (rkb->rkb_features&RD_KAFKA_FEATURE_SASL_HANDSHAKE)
+			   ? "" : "not ");
+
+		/* Broker >= 0.10.0: send request to select mechanism */
+		if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE &&
+		    (rkb->rkb_features & RD_KAFKA_FEATURE_SASL_HANDSHAKE)) {
+
+			rd_kafka_broker_lock(rkb);
+			rd_kafka_broker_set_state(
+				rkb, RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE);
+			rd_kafka_broker_unlock(rkb);
+
+			rd_kafka_SaslHandshakeRequest(
+				rkb, rkb->rkb_rk->rk_conf.sasl.mechanisms,
+				NULL, rd_kafka_broker_handle_SaslHandshake,
+				NULL, 1 /* flash */);
+
+		} else {
+			/* Either Handshake succeeded (protocol selected)
+			 * or Handshakes were not supported.
+			 * In both cases continue with authentication. */
+			char sasl_errstr[512];
+
+			rd_kafka_broker_lock(rkb);
+			rd_kafka_broker_set_state(rkb,
+						  RD_KAFKA_BROKER_STATE_AUTH);
+			rd_kafka_broker_unlock(rkb);
+
+			if (rd_kafka_sasl_client_new(
+				    rkb->rkb_transport, sasl_errstr,
+				    sizeof(sasl_errstr)) == -1) {
+				errno = EINVAL;
+				rd_kafka_broker_fail(
+					rkb, LOG_ERR,
+					RD_KAFKA_RESP_ERR__AUTHENTICATION,
+					"Failed to initialize "
+					"SASL authentication: %s",
+					sasl_errstr);
+				return;
+			}
+
+			/* Enter non-Kafka-protocol-framed SASL communication
+			 * state handled in rdkafka_sasl.c */
+			rd_kafka_broker_lock(rkb);
+			rd_kafka_broker_set_state(rkb,
+						  RD_KAFKA_BROKER_STATE_AUTH);
+			rd_kafka_broker_unlock(rkb);
+		}
+
+		return;
+	}
+#endif
+
+	/* No authentication required. */
+	rd_kafka_broker_connect_up(rkb);
 }
 
 
@@ -1334,11 +1482,9 @@ rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
 		return;
 	}
 
-	rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
-
 	rd_kafka_broker_set_api_versions(rkb, apis, api_cnt);
 
-	rd_kafka_broker_connect_up(rkb);
+	rd_kafka_broker_connect_auth(rkb);
 }
 
 
@@ -1367,7 +1513,9 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "Connected");
 	rkb->rkb_err.err = 0;
-	rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
+	rkb->rkb_max_inflight = 1; /* Hold back other requests until
+				    * ApiVersion, SaslHandshake, etc
+				    * are done. */
 
 	rd_kafka_transport_poll_set(rkb->rkb_transport, POLLIN);
 
@@ -1391,15 +1539,14 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 		rd_kafka_ApiVersionRequest(
 			rkb, NULL, rd_kafka_broker_handle_ApiVersion, NULL,
 			1 /*Flash message: prepend to transmit queue*/);
-		rkb->rkb_max_inflight = 1; /* Hold back other requests until
-					    * ApiVersionResponse is received. */
 	} else {
 
 		/* Use configured broker.version.fallback to
 		 * figure out API versions */
 		rd_kafka_broker_set_api_versions(rkb, NULL, 0);
 
-		rd_kafka_broker_connect_up(rkb);
+		/* Authenticate if necessary */
+		rd_kafka_broker_connect_auth(rkb);
 	}
 
 }
@@ -3665,6 +3812,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
 
 		case RD_KAFKA_BROKER_STATE_CONNECT:
 		case RD_KAFKA_BROKER_STATE_AUTH:
+		case RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE:
 		case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
 			/* Asynchronous connect in progress. */
 			rd_kafka_broker_ua_idle(rkb, 0);

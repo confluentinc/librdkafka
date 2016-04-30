@@ -199,3 +199,9 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 				 rd_kafka_q_t *replyq,
 				 rd_kafka_resp_cb_t *resp_cb,
 				 void *opaque, int flash_msg);
+
+void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
+				    const char *mechanism,
+				    rd_kafka_q_t *replyq,
+				    rd_kafka_resp_cb_t *resp_cb,
+				    void *opaque, int flash_msg);

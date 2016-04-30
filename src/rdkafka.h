@@ -339,8 +339,14 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED = 30,
 	/** Cluster authorization failed */
 	RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED = 31,
-	/** FIXME: Invalid timestamp */
+	/** Invalid timestamp */
 	RD_KAFKA_RESP_ERR_INVALID_TIMESTAMP = 32,
+	/** Unsupported SASL mechanism */
+	RD_KAFKA_RESP_ERR_UNSUPPORTED_SASL_MECHANISM = 33,
+	/** Illegal SASL state */
+	RD_KAFKA_RESP_ERR_ILLEGAL_SASL_STATE = 34,
+	/** Unuspported version */
+	RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION = 35,
 
 	RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

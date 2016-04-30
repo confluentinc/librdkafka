@@ -228,31 +228,6 @@ void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
 				      char *errstr) {
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 
-#if WITH_SASL
-	if (!errstr &&
-	    (rkb->rkb_proto == RD_KAFKA_PROTO_SASL_PLAINTEXT ||
-	     rkb->rkb_proto == RD_KAFKA_PROTO_SASL_SSL)) {
-		char sasl_errstr[512];
-		if (rd_kafka_sasl_client_new(rkb->rkb_transport, sasl_errstr,
-					     sizeof(sasl_errstr)) == -1) {
-			errno = EINVAL;
-			rd_kafka_broker_fail(rkb, LOG_ERR,
-					     RD_KAFKA_RESP_ERR__AUTHENTICATION,
-					     "Failed to initialize "
-					     "SASL authentication: %s",
-					     sasl_errstr);
-			return;
-
-		}
-
-		rd_kafka_broker_lock(rkb);
-		rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_AUTH);
-		rd_kafka_broker_unlock(rkb);
-
-		return;
-	}
-#endif
-
 	rd_kafka_broker_connect_done(rkb, errstr);
 }
 
@@ -1021,11 +996,13 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		break;
 
 	case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
+	case RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE:
 	case RD_KAFKA_BROKER_STATE_UP:
 	case RD_KAFKA_BROKER_STATE_UPDATE:
 
 		if (events & POLLIN) {
-			while (rd_kafka_recv(rkb) > 0)
+			while (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
+			       rd_kafka_recv(rkb) > 0)
 				;
 		}
 
@@ -1045,7 +1022,8 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		}
 		break;
 
-	default:
+	case RD_KAFKA_BROKER_STATE_INIT:
+	case RD_KAFKA_BROKER_STATE_DOWN:
 		rd_kafka_assert(rkb->rkb_rk, !*"bad state");
 	}
 }

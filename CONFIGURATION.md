@@ -48,12 +48,14 @@ ssl.key.location                         |  *  |                 |              
 ssl.key.password                         |  *  |                 |               | Private key passphrase <br>*Type: string*
 ssl.certificate.location                 |  *  |                 |               | Path to client's public key (PEM) used for authentication. <br>*Type: string*
 ssl.ca.location                          |  *  |                 |               | File or directory path to CA certificate(s) for verifying the broker's key. <br>*Type: string*
-sasl.mechanisms                          |  *  |                 |        GSSAPI | Space separated list of eligible SASL mechanisms <br>*Type: string*
+sasl.mechanisms                          |  *  | GSSAPI, PLAIN   |        GSSAPI | SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN. **NOTE**: Despite the name only one mechanism must be configured. <br>*Type: string*
 sasl.kerberos.service.name               |  *  |                 |         kafka | Kerberos principal name that Kafka runs as. <br>*Type: string*
 sasl.kerberos.principal                  |  *  |                 |   kafkaclient | This client's Kerberos principal name. <br>*Type: string*
 sasl.kerberos.kinit.cmd                  |  *  |                 |         kinit | Kerberos kinit command path. <br>*Type: string*
 sasl.kerberos.keytab                     |  *  |                 |               | Path to Kerberos keytab file. Uses system default if not set. <br>*Type: string*
 sasl.kerberos.min.time.before.relogin    |  *  | 1 .. 86400000   |         60000 | Minimum time in milliseconds between key refresh attempts. <br>*Type: integer*
+sasl.username                            |  *  |                 |               | SASL username for use with the PLAIN mechanism <br>*Type: string*
+sasl.password                            |  *  |                 |               | SASL password for use with the PLAIN mechanism <br>*Type: string*
 group.id                                 |  *  |                 |               | Client group id string. All clients sharing the same group.id belong to the same group. <br>*Type: string*
 partition.assignment.strategy            |  *  |                 | range,roundrobin | Name of partition assignment strategy to use when elected group leader assigns partitions to group members. <br>*Type: string*
 session.timeout.ms                       |  *  | 1 .. 3600000    |         30000 | Client group session and failure detection timeout. <br>*Type: integer*

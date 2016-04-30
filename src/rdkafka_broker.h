@@ -74,11 +74,11 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 		RD_KAFKA_BROKER_STATE_AUTH,
 
 		/* Any state >= STATE_UP means the Kafka protocol layer
-		 * is operational. */
+		 * is operational (to some degree). */
 		RD_KAFKA_BROKER_STATE_UP,
                 RD_KAFKA_BROKER_STATE_UPDATE,
 		RD_KAFKA_BROKER_STATE_APIVERSION_QUERY,
-
+		RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE
 	} rkb_state;
 
         rd_ts_t             rkb_ts_state;        /* Timestamp of last
@@ -229,6 +229,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					const char *name, uint16_t port,
 					int32_t nodeid);
 
+void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb);
 void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr);
 
 int rd_kafka_send (rd_kafka_broker_t *rkb);

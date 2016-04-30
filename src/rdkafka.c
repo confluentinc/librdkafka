@@ -349,6 +349,12 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Broker: Cluster authorization failed"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_TIMESTAMP,
 		  "Broker: Invalid timestamp"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_SASL_MECHANISM,
+		  "Broker: Unsupported SASL mechanism"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_ILLEGAL_SASL_STATE,
+		  "Broker: Request not valid in current SASL state"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION,
+		  "Broker: API version not supported"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
 };

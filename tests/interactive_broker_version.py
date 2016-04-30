@@ -65,7 +65,8 @@ def test_version (version, cmd=None, deploy=True):
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
 
-    cmd_env = 'RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s KAFKA_VERSION=%s' % (test_conf_file, zk_address, version)
+    cmd_env = 'RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s BROKERS=%s KAFKA_VERSION=%s' % \
+              (test_conf_file, zk_address, bootstrap_servers, version)
     if not cmd:
         cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
     subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')

@@ -142,6 +142,8 @@ int main_0018_cgrp_term (int argc, char **argv) {
 
 	testid = test_id_generate();
 
+	test_create_topic(topic, partition_cnt, 1);
+
 	/* Produce messages */
 	rk_p = test_create_producer();
 	rkt_p = test_create_producer_topic(rk_p, topic, NULL);

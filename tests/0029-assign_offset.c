@@ -112,6 +112,8 @@ int main_0029_assign_offset (int argc, char **argv) {
 	test_conf_init(NULL, &tconf, 20 + (test_session_timeout_ms * 3 / 1000));
 	test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
 
+    test_create_topic(topic, partitions, 1);
+
 	/* Produce X messages to Y partitions so we get a 
 	 * nice seekable 0..X offset one each partition. */
         /* Produce messages */

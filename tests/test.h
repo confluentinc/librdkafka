@@ -69,6 +69,9 @@ struct test {
 #define TEST_F_LOCAL   0x1   /**< Test is local, no broker requirement */
 #define TEST_F_KNOWN_ISSUE 0x2 /**< Known issue, can fail without affecting
 				*   total test run status. */
+	int minver;          /**< Limit tests to broker version range. */
+	int maxver;
+
 	const char *extra;   /**< Extra information to print in test_summary. */
 
         /**
@@ -86,6 +89,16 @@ struct test {
                 TEST_FAILED,
         } state;
 };
+
+
+/** @brief Broker version to int */
+#define TEST_BRKVER(A,B,C,D) \
+	(((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
+/** @brief return single version component from int */
+#define TEST_BRKVER_X(V,I) \
+	(((V) >> (24-((I)*8))) & 0xff)
+
+extern int test_broker_version;
 
 
 #define TEST_FAIL0(fail_now,...) do {					\

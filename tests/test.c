@@ -34,7 +34,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
@@ -54,6 +53,8 @@ double test_timeout_multiplier  = 1.0;
 static char *test_topics_sh = NULL;
 static char *test_sql_cmd = NULL;
 int  test_session_timeout_ms = 6000;
+int          test_broker_version;
+static char *test_broker_version_str = "0.9.0.0";
 
 static int test_summary (int do_lock);
 
@@ -130,15 +131,15 @@ struct test tests[] = {
         _TEST(0014_reconsume_191, 0),
         _TEST(0015_offsets_seek, 0),
         _TEST(0017_compression, 0),
-        _TEST(0018_cgrp_term, 0),
-        _TEST(0019_list_groups, 0),
+        _TEST(0018_cgrp_term, 0, TEST_BRKVER(0,9,0,0)),
+        _TEST(0019_list_groups, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0020_destroy_hang, 0),
         _TEST(0021_rkt_destroy, 0),
         _TEST(0022_consume_batch, 0),
         _TEST(0025_timers, TEST_F_LOCAL),
-	_TEST(0026_consume_pause, 0),
+	_TEST(0026_consume_pause, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0028_long_topicnames, TEST_F_KNOWN_ISSUE,
-	      "https://github.com/edenhill/librdkafka/issues/529"),
+	      .extra = "https://github.com/edenhill/librdkafka/issues/529"),
 	_TEST(0029_assign_offset, 0),
 	_TEST(0030_offset_commit, 0),
 	_TEST(0031_get_offsets, 0),
@@ -624,6 +625,7 @@ static void run_tests (const char *tests_to_run, int test_flags, int neg_flags,
                 char testnum[128];
                 char *t;
                 const char *skip_reason = NULL;
+		char tmp[128];
 
                 if (!test->mainfunc)
                         continue;
@@ -638,6 +640,18 @@ static void run_tests (const char *tests_to_run, int test_flags, int neg_flags,
                         skip_reason = "filtered due to test flags";
 		if (neg_flags & test->flags)
 			skip_reason = "Filtered due to negative test flags";
+		if (test_broker_version &&
+		    (test->minver > test_broker_version ||
+		     (test->maxver && test->maxver < test_broker_version))) {
+			rd_snprintf(tmp, sizeof(tmp),
+				    "not applicable for broker "
+				    "version %d.%d.%d.%d",
+				    TEST_BRKVER_X(test_broker_version, 0),
+				    TEST_BRKVER_X(test_broker_version, 1),
+				    TEST_BRKVER_X(test_broker_version, 2),
+				    TEST_BRKVER_X(test_broker_version, 3));
+			skip_reason = tmp;
+		}
 
                 if (tests_to_run && !strstr(tests_to_run, testnum))
                         skip_reason = "not included in TESTS list";
@@ -674,12 +688,19 @@ static int test_summary (int do_lock) {
 	int tests_failed_known = 0;
         int tests_passed = 0;
 	FILE *sql_fp = NULL;
+	char *tmp;
 
         t = time(NULL);
         tm = localtime(&t);
         strftime(datestr, sizeof(datestr), "%Y%m%d%H%M%S", tm);
-        rd_snprintf(report_path, sizeof(report_path), "test_report_%s.json",
-                    datestr);
+
+#ifndef _MSC_VER
+	if ((tmp = getenv("TEST_REPORT")) && *tmp)
+		rd_snprintf(report_path, sizeof(report_path), "%s", tmp);
+	else
+#endif
+		rd_snprintf(report_path, sizeof(report_path), "test_report_%s.json",
+			    datestr);
 
         report_fp = fopen(report_path, "w+");
         if (!report_fp)
@@ -719,19 +740,27 @@ static int test_summary (int do_lock) {
                 const char *color;
                 int64_t duration;
 		char extra[128] = "";
+		int do_count = 1;
 
                 if (!(duration = test->duration) && test->start > 0)
                         duration = test_clock() - test->start;
 
-                if (test == tests) /* <MAIN> test accounts for total runtime */
+                if (test == tests) {
+			/* <MAIN> test:
+			 * test accounts for total runtime.
+			 * dont include in passed/run/failed counts. */
                         total_duration = duration;
+			do_count = 0;
+		}
 
                 switch (test->state)
                 {
                 case TEST_PASSED:
                         color = _C_GRN;
-                        tests_passed++;
-                        tests_run++;
+			if (do_count) {
+				tests_passed++;
+				tests_run++;
+			}
                         break;
                 case TEST_FAILED:
 			if (test->flags & TEST_F_KNOWN_ISSUE) {
@@ -739,16 +768,21 @@ static int test_summary (int do_lock) {
 					    " <-- known issue%s%s",
 					    test->extra ? ": " : "",
 					    test->extra ? test->extra : "");
-				tests_failed_known++;
+				if (do_count)
+					tests_failed_known++;
 			}
                         color = _C_RED;
-                        tests_failed++;
-                        tests_run++;
+			if (do_count) {
+				tests_failed++;
+				tests_run++;
+			}
                         break;
                 case TEST_RUNNING:
                         color = _C_MAG;
-			tests_failed++; /* All tests should be finished */
-                        tests_run++;
+			if (do_count) {
+				tests_failed++; /* All tests should be finished */
+				tests_run++;
+			}
                         break;
                 case TEST_NOT_STARTED:
                         color = _C_YEL;
@@ -847,6 +881,7 @@ int main(int argc, char **argv) {
 	int neg_flags = 0;
         int i, r;
 	test_timing_t t_all;
+	int a,b,c,d;
 
 	mtx_init(&test_mtx, mtx_plain);
 
@@ -855,6 +890,8 @@ int main(int argc, char **argv) {
 #ifndef _MSC_VER
 	signal(SIGINT, test_sig_term);
         tests_to_run = getenv("TESTS");
+	if (getenv("TEST_KAFKA_VERSION"))
+		test_broker_version_str = getenv("TEST_KAFKA_VERSION");
 #endif
 
 	test_conf_init(NULL, NULL, 10);
@@ -872,7 +909,9 @@ int main(int argc, char **argv) {
 			test_flags |= TEST_F_KNOWN_ISSUE;
 		else if (!strcmp(argv[i], "-K"))
 			neg_flags |= TEST_F_KNOWN_ISSUE;
-                else if (*argv[i] != '-')
+		else if (!strcmp(argv[i], "-V") && i+1 < argc)
+ 			test_broker_version_str = argv[++i];
+		else if (*argv[i] != '-')
                         tests_to_run = argv[i];
                 else {
                         printf("Unknown option: %s\n"
@@ -883,11 +922,38 @@ int main(int argc, char **argv) {
                                "  -l/-L  Only/dont run local tests (no broker needed)\n"
 			       "  -k/-K  Only/dont run tests with known issues\n"
                                "  -a     Assert on failures\n"
+			       "  -V <N.N.N.N> Broker version.\n"
+			       "\n"
+			       "Environment variables:\n"
+			       "  TESTS - substring matched test to run (e.g., 0033)\n"
+			       "  TEST_KAFKA_VERSION - broker version (e.g., 0.9.0.1)\n"
+			       "  TEST_LEVEL - Test verbosity level\n"
+			       "  TEST_MODE - bare, helgrind, valgrind\n"
+			       "  TEST_SEED - random seed\n"
+			       "  RDKAFKA_TEST_CONF - test config file (test.conf)\n"
                                "\n",
                                argv[0], argv[i]);
                         exit(1);
                 }
         }
+
+	if (!strcmp(test_broker_version_str, "trunk"))
+		test_broker_version_str = "0.10.0.0"; /* for now */
+
+	if (sscanf(test_broker_version_str, "%d.%d.%d.%d",
+		   &a, &b, &c, &d) != 4) {
+		printf("%% Expected broker version to be in format "
+		       "N.N.N.N (N=int), not %s\n",
+		       test_broker_version_str);
+		exit(1);
+	}
+	test_broker_version = TEST_BRKVER(a, b, c, d);
+	TEST_SAY("Broker version: %s (%d.%d.%d.%d)\n",
+		 test_broker_version_str,
+		 TEST_BRKVER_X(test_broker_version, 0),
+		 TEST_BRKVER_X(test_broker_version, 1),
+		 TEST_BRKVER_X(test_broker_version, 2),
+		 TEST_BRKVER_X(test_broker_version, 3));
 
 	/* Set up fake "<MAIN>" test for all operations performed in
 	 * the main thread rather than the per-test threads.

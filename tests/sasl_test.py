@@ -112,7 +112,7 @@ def print_summary (fullreport):
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Run librdkafka tests on a range of broker versions')
+    parser = argparse.ArgumentParser(description='Run librdkafka test suit using SASL on a trivupped cluster')
 
     parser.add_argument('--conf', type=str, dest='conf', default=None,
                         help='trivup JSON config object (not file)')
@@ -122,11 +122,19 @@ if __name__ == '__main__':
                         help='Test to run (e.g., "0002")')
     parser.add_argument('--report', type=str, dest='report', default=None,
                         help='Write test suites report to this filename')
-    parser.add_argument('versions', type=str, nargs='*',
-                        default=['0.8.2.1', '0.9.0.1', 'trunk'],
-                        help='Broker versions to test')
+    parser.add_argument('--read-report', type=str, dest='read_report', default=None,
+                        help='Show summary from existing test suites report file')
 
     args = parser.parse_args()
+
+    if args.read_report is not None:
+        passed = False
+        with open(args.read_report, 'r') as f:
+            passed = print_summary(json.load(f))
+        if passed:
+            sys.exit(0)
+        else:
+            sys.exit(1)
 
     conf = dict()
     rdkconf = dict()
@@ -141,8 +149,17 @@ if __name__ == '__main__':
         tests = None
 
     # Test version + suite matrix
-    versions = args.versions
-    suites = [{'name': 'standard'}]
+    versions = ['0.8.2.1', '0.9.0.1', 'trunk']
+    sasl_plain_conf = {'sasl_mechanisms': 'PLAIN',
+                       'sasl_users': 'myuser=mypassword'}
+    suites = [{'name': 'SASL PLAIN',
+               'conf': sasl_plain_conf,
+               'expect_fail': ['0.8.2.1', '0.9.0.1']},
+              {'name': 'PLAINTEXT (no SASL)'},
+              {'name': 'SASL PLAIN with wrong username',
+               'conf': sasl_plain_conf,
+               'rdkconf': {'sasl_users': 'wrongjoe=mypassword'},
+               'expect_fail': ['all']}]
 
     pass_cnt = 0
     fail_cnt = 0

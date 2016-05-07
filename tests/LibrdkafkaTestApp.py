@@ -1,0 +1,86 @@
+#!/usr/bin/env python
+#
+# librdkafka test trivup app module
+#
+# Requires:
+#  trivup python module
+#  Kafka git clone (kafka_path below)
+#  gradle in your PATH
+
+from trivup.trivup import Cluster, App, UuidAllocator
+from trivup.apps.ZookeeperApp import ZookeeperApp
+from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
+
+import json
+
+
+class LibrdkafkaTestApp(App):
+    """ Sets up and executes the librdkafka regression tests.
+        Assumes tests are in the current directory.
+        Must be instantiated after ZookeeperApp and KafkaBrokerApp """
+    def __init__(self, cluster, version, conf=None, tests=None):
+        super(LibrdkafkaTestApp, self).__init__(cluster, conf=conf)
+
+        self.appid = UuidAllocator(self.cluster).next(trunc=8)
+        self.autostart = False
+
+        # Generate test config file
+        conf_blob = list()
+        security_protocol='PLAINTEXT'
+
+        f, test_conf_file = self.open_file('test.conf', 'perm')
+        f.write(('\n'.join(conf_blob)).encode('ascii'))
+
+        if version != 'trunk':
+            conf_blob.append('broker.version.fallback=%s' % version)
+        else:
+            conf_blob.append('api.version.request=true')
+
+        # SASL (only one mechanism supported)
+        mech = self.conf.get('sasl_mechanisms', '').split(',')[0]
+        if mech != '':
+            conf_blob.append('sasl.mechanisms=%s' % mech)
+            if mech == 'PLAIN':
+                security_protocol='SASL_PLAINTEXT'
+                # Use first user as SASL user/pass
+                for up in self.conf.get('sasl_users', '').split(','):
+                    u,p = up.split('=')
+                    conf_blob.append('sasl.username=%s' % u)
+                    conf_blob.append('sasl.password=%s' % p)
+                    break
+            else:
+                self.log('WARNING: FIXME: SASL %s client config not written to %s' % (mech, test_conf_file))
+
+        # Define bootstrap brokers based on selected security protocol
+        self.log('Using client security.protocol=%s' % security_protocol)
+        all_listeners = (','.join(cluster.get_all('listeners', '', KafkaBrokerApp))).split(',')
+        bootstrap_servers = ','.join([x for x in all_listeners if x.startswith(security_protocol)])
+        conf_blob.append(('bootstrap.servers=%s' % bootstrap_servers).encode('ascii'))
+        conf_blob.append('security.protocol=%s' % security_protocol)
+
+        f.write(('\n'.join(conf_blob)).encode('ascii'))
+        f.close()
+
+        self.env_add('RDKAFKA_TEST_CONF', test_conf_file)
+        self.env_add('TEST_KAFKA_VERSION', version)
+
+        self.test_report_file = self.mkpath('test_report', pathtype='perm')
+        self.env_add('TEST_REPORT', self.test_report_file)
+
+        if tests is not None:
+            self.env_add('TESTS', ','.join(tests))
+
+        self.conf['start_cmd'] = './run-test.sh -p5 -K -L ./merged'
+
+
+    def report (self):
+        try:
+            with open(self.test_report_file, 'r') as f:
+                res = json.load(f)
+        except Exception as e:
+            self.log('Failed to read report %s: %s' % (self.test_report_file, str(e)))
+            return {'root_path': self.root_path(), 'error': str(e)}
+        return res
+
+    def deploy (self):
+        pass

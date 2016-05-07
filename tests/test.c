@@ -141,9 +141,9 @@ struct test tests[] = {
 	_TEST(0028_long_topicnames, TEST_F_KNOWN_ISSUE,
 	      .extra = "https://github.com/edenhill/librdkafka/issues/529"),
 	_TEST(0029_assign_offset, 0),
-	_TEST(0030_offset_commit, 0),
+	_TEST(0030_offset_commit, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0031_get_offsets, 0),
-	_TEST(0033_regex_subscribe, 0),
+	_TEST(0033_regex_subscribe, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0034_offset_reset, 0),
 	_TEST(0035_api_version, 0),
         { NULL }

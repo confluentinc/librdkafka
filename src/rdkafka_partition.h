@@ -109,6 +109,10 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_FETCH_IS_STARTED(fetch_state) \
         ((fetch_state) >= RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
 
+	int32_t            rktp_fetch_msg_max_bytes; /* Max number of bytes to
+                                                      * fetch.
+                                                      * Locality: broker thread
+                                                      */
 
 	int64_t            rktp_query_offset;    /* Offset to query broker for*/
 	int64_t            rktp_next_offset;     /* Next offset to start

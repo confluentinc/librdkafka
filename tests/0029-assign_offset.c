@@ -102,6 +102,7 @@ int main_0029_assign_offset (int argc, char **argv) {
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
+	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *tconf;
 	rd_kafka_topic_partition_list_t *parts;
         uint64_t testid;
@@ -109,7 +110,8 @@ int main_0029_assign_offset (int argc, char **argv) {
 	test_timing_t t_simple, t_hl;
 	test_msgver_t mv;
 
-	test_conf_init(NULL, &tconf, 20 + (test_session_timeout_ms * 3 / 1000));
+	test_conf_init(&conf, &tconf, 20 + (test_session_timeout_ms * 3 / 1000));
+	test_conf_set(conf, "enable.auto.commit", "false");
 	test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
 
     test_create_topic(topic, partitions, 1);
@@ -125,6 +127,7 @@ int main_0029_assign_offset (int argc, char **argv) {
 
 	for (i = 0 ; i < partitions ; i++) {
 		test_produce_msgs(rk, rkt, testid, i, 0, msgcnt, NULL, 0);
+		/* Set start offset */
 		rd_kafka_topic_partition_list_add(parts, topic, i)->offset =
 			msgcnt / 2;
 	}

@@ -500,7 +500,8 @@ static void test_produce_consume (const char *offset_store_method) {
 
 
 int main_0014_reconsume_191 (int argc, char **argv) {
-	test_produce_consume("broker");
+	if (test_broker_version >= TEST_BRKVER(0,8,2,0))
+		test_produce_consume("broker");
         test_produce_consume("file");
 	return 0;
 }

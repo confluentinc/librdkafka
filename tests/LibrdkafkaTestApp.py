@@ -23,6 +23,8 @@ class LibrdkafkaTestApp(App):
 
         self.appid = UuidAllocator(self.cluster).next(trunc=8)
         self.autostart = False
+        self.local_tests = True
+        self.test_mode = ''  # Default mode (bare) to run-test.sh
 
         # Generate test config file
         conf_blob = list()
@@ -49,12 +51,16 @@ class LibrdkafkaTestApp(App):
                     conf_blob.append('sasl.password=%s' % p)
                     break
             else:
-                self.log('WARNING: FIXME: SASL %s client config not written to %s' % (mech, test_conf_file))
+                self.log('WARNING: FIXME: SASL %s client config not written to %s: unhandled mechanism' % (mech, test_conf_file))
 
         # Define bootstrap brokers based on selected security protocol
-        self.log('Using client security.protocol=%s' % security_protocol)
+        self.dbg('Using client security.protocol=%s' % security_protocol)
         all_listeners = (','.join(cluster.get_all('listeners', '', KafkaBrokerApp))).split(',')
         bootstrap_servers = ','.join([x for x in all_listeners if x.startswith(security_protocol)])
+        if len(bootstrap_servers) == 0:
+            bootstrap_servers = all_listeners[0]
+            self.log('WARNING: No eligible listeners for security.protocol=%s: falling back to first listener: %s: tests will fail (which might be the intention)' % (security_protocol, bootstrap_servers))
+
         conf_blob.append(('bootstrap.servers=%s' % bootstrap_servers).encode('ascii'))
         conf_blob.append('security.protocol=%s' % security_protocol)
 
@@ -70,7 +76,12 @@ class LibrdkafkaTestApp(App):
         if tests is not None:
             self.env_add('TESTS', ','.join(tests))
 
-        self.conf['start_cmd'] = './run-test.sh -p5 -K -L ./merged'
+    def start_cmd (self):
+        extra_args = list()
+        mode = self.test_mode
+        if not self.local_tests:
+            extra_args.append('-L')
+        return './run-test.sh -p5 -K %s ./merged %s' % (' '.join(extra_args), mode)
 
 
     def report (self):

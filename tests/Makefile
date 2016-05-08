@@ -14,6 +14,11 @@ LDFLAGS += -L../src -L../src-cpp
 
 all: $(BIN) run_par
 
+# Run the full test suite(s)
+full: build
+	./broker_version_tests.py
+	./sasl_test.py
+
 run_par: $(BIN)
 	@echo "Running tests in parallel"
 	./run-test.sh -p5 ./$(BIN)

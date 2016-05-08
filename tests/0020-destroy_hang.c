@@ -126,52 +126,13 @@ static int nonexist_part (void) {
 }
 
 
-/**
- * Issue #530:
- * "Legacy Consumer. Delete hangs if done right after RdKafka::Consumer::create.
- *  But If I put a start and stop in between, there is no issue."
- */
-static int legacy_consumer_early_destroy (void) {
-	rd_kafka_t *rk;
-	rd_kafka_topic_t *rkt;
-	char errstr[512];
-	int pass;
-	const char *topic = test_mk_topic_name(__FUNCTION__, 0);
-
-	for (pass = 0 ; pass < 2 ; pass++) {
-		TEST_SAY("%s: pass #%d\n", __FUNCTION__, pass);
-
-		rk = rd_kafka_new(RD_KAFKA_CONSUMER, NULL,
-				  errstr, sizeof(errstr));
-		TEST_ASSERT(rk, "failed to create consumer: %s", errstr);
-
-		if (pass == 1) {
-			/* Second pass, create a topic too. */
-			rkt = rd_kafka_topic_new(rk, topic, NULL);
-			TEST_ASSERT(rkt, "failed to create topic: %s",
-				    rd_kafka_err2str(
-					    rd_kafka_errno2err(errno)));
-			rd_sleep(1);
-			rd_kafka_topic_destroy(rkt);
-		}
-
-		rd_kafka_destroy(rk);
-	}
-
-	return 0;
-}
-
 
 int main_0020_destroy_hang (int argc, char **argv) {
         int fails = 0;
 
 	test_conf_init(NULL, NULL, 30);
 
-	if (test_broker_version >= TEST_BRKVER(0,9,0,0))
-		fails += nonexist_part();
-
-	fails += legacy_consumer_early_destroy();
-
+	fails += nonexist_part();
         if (fails > 0)
                 TEST_FAIL("See %d previous error(s)\n", fails);
 

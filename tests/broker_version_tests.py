@@ -9,7 +9,7 @@
 #  Kafka git clone (kafka_path below)
 #  gradle in your PATH
 
-from cluster_testing import LibrdkafkaTestCluster
+from cluster_testing import LibrdkafkaTestCluster, print_report_summary
 from LibrdkafkaTestApp import LibrdkafkaTestApp
 
 
@@ -27,7 +27,8 @@ kafka_path='/home/maglun/src/kafka'
 
 
 
-def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None):
+def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None,
+             interact=False):
                   
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
@@ -45,9 +46,8 @@ def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None):
     if deploy:
         cluster.deploy()
 
-    cluster.start(wait_operational=30)
+    cluster.start(timeout=30)
 
-    print('# Connect to cluster with bootstrap.servers %s' % cluster.bootstrap_servers())
     rdkafka.start()
     print('# librdkafka regression tests started, logs in %s' % rdkafka.root_path())
     rdkafka.wait_stopped(timeout=60*10)
@@ -55,6 +55,11 @@ def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None):
 
     report = rdkafka.report()
     report['root_path'] = rdkafka.root_path()
+
+    if report.get('tests_failed', 0) > 0 and interact:
+        print('# Connect to cluster with bootstrap.servers %s' % cluster.bootstrap_servers())
+        print('# Exiting the shell will bring down the cluster. Good luck.')
+        subprocess.call('bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version), shell=True, executable='/bin/bash')
 
     cluster.stop(force=True)
 
@@ -88,26 +93,6 @@ def handle_report (report, version, suite):
             return (True, 'All %d/%d tests passed as expected' % (passed, test_cnt))
 
 
-def print_summary (fullreport):
-    """ Print summary from a full report suite """
-    print('#### Full test suite report')
-    for suite in fullreport.get('suites', list()):
-        for version,report in suite.get('version', {}).iteritems():
-            passed =report.get('PASSED', False)
-            if passed:
-                resstr = '\033[42mPASSED\033[0m'
-            else:
-                resstr = '\033[41mFAILED\033[0m'
-
-            print('# %6s: %-50s: %s' %
-                  (resstr, '%s @ %s' % (suite.get('name','n/a'), version),
-                   report.get('REASON', 'n/a')))
-            if not passed:
-                print('# %6s   --> %s/%s' %
-                      ('', report.get('root_path', '.'), 'stderr.log'))
-               
-    print('#### %d suites \033[42mPASSED\033[0m, %d suites \033[41mFAILED\033[0m' % (fullreport.get('pass_cnt', -1), fullreport.get('fail_cnt', -1)))
-
         
 
 if __name__ == '__main__':
@@ -122,8 +107,11 @@ if __name__ == '__main__':
                         help='Test to run (e.g., "0002")')
     parser.add_argument('--report', type=str, dest='report', default=None,
                         help='Write test suites report to this filename')
+    parser.add_argument('--interact', action='store_true', dest='interact',
+                        default=False,
+                        help='On test failure start a shell before bringing the cluster down.')
     parser.add_argument('versions', type=str, nargs='*',
-                        default=['0.8.2.1', '0.9.0.1', 'trunk'],
+                        default=['0.8.1.1', '0.8.2.2', '0.9.0.1', 'trunk'],
                         help='Broker versions to test')
 
     args = parser.parse_args()
@@ -164,7 +152,7 @@ if __name__ == '__main__':
             # Run tests
             print('#### Version %s, suite %s: STARTING' % (version, suite['name']))
             report = test_it(version, tests=tests, conf=_conf, rdkconf=_rdkconf,
-                             deploy=deploy)
+                             deploy=deploy, interact=args.interact)
 
             # Handle test report
             report['version'] = version
@@ -201,7 +189,7 @@ if __name__ == '__main__':
     f.close()
 
     print('\n\n\n')
-    print_summary(full_report)
+    print_report_summary(full_report)
     print('#### Full test suites report in: %s' % test_suite_report_file)
 
     if pass_cnt == 0 or fail_cnt > 0:

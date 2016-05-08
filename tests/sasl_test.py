@@ -9,7 +9,7 @@
 #  Kafka git clone (kafka_path below)
 #  gradle in your PATH
 
-from cluster_testing import LibrdkafkaTestCluster
+from cluster_testing import LibrdkafkaTestCluster, print_report_summary, print_test_report_summary
 from LibrdkafkaTestApp import LibrdkafkaTestApp
 
 
@@ -27,31 +27,34 @@ kafka_path='/home/maglun/src/kafka'
 
 
 
-def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None):
+def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None, debug=False):
                   
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
     """
     
-    cluster = LibrdkafkaTestCluster(version, conf, kafka_path=kafka_path)
+    cluster = LibrdkafkaTestCluster(version, conf, kafka_path=kafka_path,
+                                    debug=debug)
 
     # librdkafka's regression tests, as an App.
-    _rdkconf = conf.copy() # Base rdkconf on cluster conf + rdkconf
-    _rdkconf.update(rdkconf)
     rdkafka = LibrdkafkaTestApp(cluster, version, _rdkconf, tests=tests)
     rdkafka.do_cleanup = False
+    rdkafka.local_tests = False
 
     if deploy:
         cluster.deploy()
 
-    cluster.start(wait_operational=30)
+    cluster.start(timeout=30)
 
     print('# Connect to cluster with bootstrap.servers %s' % cluster.bootstrap_servers())
     rdkafka.start()
     print('# librdkafka regression tests started, logs in %s' % rdkafka.root_path())
-    rdkafka.wait_stopped(timeout=60*10)
-    print('wait stopped: %s, runtime %ds' % (rdkafka.state, rdkafka.runtime()))
+    try:
+        rdkafka.wait_stopped(timeout=60*10)
+        rdkafka.dbg('wait stopped: %s, runtime %ds' % (rdkafka.state, rdkafka.runtime()))
+    except KeyboardInterrupt:
+        print('# Aborted by user')
 
     report = rdkafka.report()
     report['root_path'] = rdkafka.root_path()
@@ -88,27 +91,6 @@ def handle_report (report, version, suite):
             return (True, 'All %d/%d tests passed as expected' % (passed, test_cnt))
 
 
-def print_summary (fullreport):
-    """ Print summary from a full report suite """
-    print('#### Full test suite report')
-    for suite in fullreport.get('suites', list()):
-        for version,report in suite.get('version', {}).iteritems():
-            passed =report.get('PASSED', False)
-            if passed:
-                resstr = '\033[42mPASSED\033[0m'
-            else:
-                resstr = '\033[41mFAILED\033[0m'
-
-            print('# %6s: %-50s: %s' %
-                  (resstr, '%s @ %s' % (suite.get('name','n/a'), version),
-                   report.get('REASON', 'n/a')))
-            if not passed:
-                print('# %6s   --> %s/%s' %
-                      ('', report.get('root_path', '.'), 'stderr.log'))
-               
-    print('#### %d suites \033[42mPASSED\033[0m, %d suites \033[41mFAILED\033[0m' % (fullreport.get('pass_cnt', -1), fullreport.get('fail_cnt', -1)))
-
-        
 
 if __name__ == '__main__':
 
@@ -122,19 +104,11 @@ if __name__ == '__main__':
                         help='Test to run (e.g., "0002")')
     parser.add_argument('--report', type=str, dest='report', default=None,
                         help='Write test suites report to this filename')
-    parser.add_argument('--read-report', type=str, dest='read_report', default=None,
-                        help='Show summary from existing test suites report file')
-
+    parser.add_argument('--debug', action='store_true', dest='debug', default=False,
+                        help='Enable trivup debugging')
+    parser.add_argument('versions', type=str, default=None,
+                        nargs='*', help='Limit broker versions to these')
     args = parser.parse_args()
-
-    if args.read_report is not None:
-        passed = False
-        with open(args.read_report, 'r') as f:
-            passed = print_summary(json.load(f))
-        if passed:
-            sys.exit(0)
-        else:
-            sys.exit(1)
 
     conf = dict()
     rdkconf = dict()
@@ -148,13 +122,15 @@ if __name__ == '__main__':
     else:
         tests = None
 
-    # Test version + suite matrix
-    versions = ['0.8.2.1', '0.9.0.1', 'trunk']
+    # Test version,supported mechs + suite matrix
+    versions = [('trunk', ['PLAIN','GSSAPI']),
+                ('0.9.0.1', ['GSSAPI']),
+                ('0.8.2.2', [])]
     sasl_plain_conf = {'sasl_mechanisms': 'PLAIN',
                        'sasl_users': 'myuser=mypassword'}
     suites = [{'name': 'SASL PLAIN',
                'conf': sasl_plain_conf,
-               'expect_fail': ['0.8.2.1', '0.9.0.1']},
+               'expect_fail': ['0.9.0.1', '0.8.2.2']},
               {'name': 'PLAINTEXT (no SASL)'},
               {'name': 'SASL PLAIN with wrong username',
                'conf': sasl_plain_conf,
@@ -163,11 +139,16 @@ if __name__ == '__main__':
 
     pass_cnt = 0
     fail_cnt = 0
-    for version in versions:
+    for version,supported in versions:
+        if len(args.versions) > 0 and version not in args.versions:
+            print('### Skipping version %s' % version)
+            continue
+
         for suite in suites:
             _conf = conf.copy()
             _conf.update(suite.get('conf', {}))
-            _rdkconf = rdkconf.copy()
+            _rdkconf = _conf.copy()
+            _rdkconf.update(rdkconf)
             _rdkconf.update(suite.get('rdkconf', {}))
 
             if 'version' not in suite:
@@ -177,11 +158,18 @@ if __name__ == '__main__':
                 deploy = False
             else:
                 deploy = True
+
+            # Disable SASL broker config if broker version does
+            # not support the selected mechanism
+            mech = suite.get('conf', dict()).get('sasl_mechanisms', None)
+            if mech is not None and mech not in supported:
+                print('# Disabled SASL for broker version %s' % version)
+                _conf.pop('sasl_mechanisms', None)
                 
             # Run tests
             print('#### Version %s, suite %s: STARTING' % (version, suite['name']))
             report = test_it(version, tests=tests, conf=_conf, rdkconf=_rdkconf,
-                             deploy=deploy)
+                             deploy=deploy, debug=args.debug)
 
             # Handle test report
             report['version'] = version
@@ -196,6 +184,8 @@ if __name__ == '__main__':
             else:
                 print('\033[41m#### Version %s, suite %s: FAILED: %s\033[0m' %
                       (version, suite['name'], reason))
+                print_test_report_summary('%s @ %s' % \
+                                          (suite['name'], version), report)
                 fail_cnt += 1
             print('#### Test output: %s/stderr.log' % (report['root_path']))
 
@@ -218,7 +208,7 @@ if __name__ == '__main__':
     f.close()
 
     print('\n\n\n')
-    print_summary(full_report)
+    print_report_summary(full_report)
     print('#### Full test suites report in: %s' % test_suite_report_file)
 
     if pass_cnt == 0 or fail_cnt > 0:

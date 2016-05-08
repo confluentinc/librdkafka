@@ -33,6 +33,8 @@ extern int test_assert_on_fail;
 extern int tests_running_cnt;
 extern double test_timeout_multiplier;
 extern int  test_session_timeout_ms; /* Group session timeout */
+extern int  test_flags;
+extern int  test_neg_flags;
 
 extern mtx_t test_mtx;
 

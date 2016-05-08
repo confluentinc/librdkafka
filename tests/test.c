@@ -55,6 +55,8 @@ static char *test_sql_cmd = NULL;
 int  test_session_timeout_ms = 6000;
 int          test_broker_version;
 static char *test_broker_version_str = "0.9.0.0";
+int          test_flags = 0;
+int          test_neg_flags = 0;
 
 static int test_summary (int do_lock);
 
@@ -111,6 +113,7 @@ _TEST_DECL(0033_regex_subscribe);
 _TEST_DECL(0034_offset_reset);
 _TEST_DECL(0035_api_version);
 _TEST_DECL(0036_partial_fetch);
+_TEST_DECL(0037_destroy_hang_local);
 
 /**
  * Define all tests here
@@ -134,7 +137,7 @@ struct test tests[] = {
         _TEST(0017_compression, 0),
         _TEST(0018_cgrp_term, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0019_list_groups, 0, TEST_BRKVER(0,9,0,0)),
-        _TEST(0020_destroy_hang, 0),
+        _TEST(0020_destroy_hang, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0021_rkt_destroy, 0),
         _TEST(0022_consume_batch, 0),
         _TEST(0025_timers, TEST_F_LOCAL),
@@ -148,6 +151,7 @@ struct test tests[] = {
 	_TEST(0034_offset_reset, 0),
 	_TEST(0035_api_version, 0),
 	_TEST(0036_partial_fetch, 0),
+	_TEST(0037_destroy_hang_local, TEST_F_LOCAL),
         { NULL }
 };
 
@@ -619,7 +623,7 @@ static int run_test (struct test *test, int argc, char **argv) {
         return 0;
 }
 
-static void run_tests (const char *tests_to_run, int test_flags, int neg_flags,
+static void run_tests (const char *tests_to_run,
                        int argc, char **argv) {
         struct test *test;
 
@@ -640,7 +644,7 @@ static void run_tests (const char *tests_to_run, int test_flags, int neg_flags,
 
                 if ((test_flags && (test_flags & test->flags) != test_flags))
                         skip_reason = "filtered due to test flags";
-		if (neg_flags & test->flags)
+		if (test_neg_flags & test->flags)
 			skip_reason = "Filtered due to negative test flags";
 		if (test_broker_version &&
 		    (test->minver > test_broker_version ||
@@ -879,8 +883,6 @@ static void test_cleanup (void) {
 
 int main(int argc, char **argv) {
         const char *tests_to_run = NULL; /* all */
-        int test_flags = 0;
-	int neg_flags = 0;
         int i, r;
 	test_timing_t t_all;
 	int a,b,c,d;
@@ -904,13 +906,13 @@ int main(int argc, char **argv) {
                 else if (!strcmp(argv[i], "-l"))
                         test_flags |= TEST_F_LOCAL;
 		else if (!strcmp(argv[i], "-L"))
-                        neg_flags |= TEST_F_LOCAL;
+                        test_neg_flags |= TEST_F_LOCAL;
                 else if (!strcmp(argv[i], "-a"))
                         test_assert_on_fail = 1;
 		else if (!strcmp(argv[i], "-k"))
 			test_flags |= TEST_F_KNOWN_ISSUE;
 		else if (!strcmp(argv[i], "-K"))
-			neg_flags |= TEST_F_KNOWN_ISSUE;
+			test_neg_flags |= TEST_F_KNOWN_ISSUE;
 		else if (!strcmp(argv[i], "-V") && i+1 < argc)
  			test_broker_version_str = argv[++i];
 		else if (*argv[i] != '-')
@@ -982,7 +984,7 @@ int main(int argc, char **argv) {
         TIMING_START(&t_all, "ALL-TESTS");
 
 	/* Run tests */
-        run_tests(tests_to_run, test_flags, neg_flags, argc, argv);
+        run_tests(tests_to_run, argc, argv);
 
         TEST_LOCK();
         while (tests_running_cnt > 0 && !test_exit) {
@@ -1037,6 +1039,9 @@ int main(int argc, char **argv) {
                 TEST_SAY("\n============== ALL TESTS PASSED ==============\n");
 
 	test_cleanup();
+
+	if (r > 0)
+		TEST_FAIL("%d test(s) failed, see previous errors", r);
 
 	return r;
 }

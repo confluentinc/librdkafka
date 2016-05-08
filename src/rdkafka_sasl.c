@@ -126,8 +126,6 @@ static int rd_kafka_sasl_handle_recv (rd_kafka_transport_t *rktrans,
 				     &interact,
 				     &out, &outlen);
 
-		rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
-			   "recvd, stepped, r now %d", r);
 		if (rkbuf) {
 			rd_kafka_buf_destroy(rkbuf);
 			rkbuf = NULL;
@@ -424,7 +422,6 @@ static RD_UNUSED int rd_kafka_sasl_cb_canon (sasl_conn_t *conn,
 
 	if (strstr(rktrans->rktrans_rkb->rkb_rk->rk_conf.
 		   sasl.mechanisms, "GSSAPI")) {
-		*out_len = rd_snprintf(out, out_max, "%.*s", inlen, in);
 		*out_len = rd_snprintf(out, out_max, "%s",
 				       rktrans->rktrans_rkb->rkb_rk->
 				       rk_conf.sasl.principal);
@@ -455,10 +452,9 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	rd_kafka_t *rk = rkb->rkb_rk;
 	char *hostname, *t;
-	sasl_callback_t callbacks[] = {
+	sasl_callback_t callbacks[16] = {
 		// { SASL_CB_GETOPT, (void *)rd_kafka_sasl_cb_getopt, rktrans },
 		{ SASL_CB_LOG, (void *)rd_kafka_sasl_cb_log, rktrans },
-		{ SASL_CB_USER, (void *)rd_kafka_sasl_cb_getsimple, rktrans },
 		{ SASL_CB_AUTHNAME, (void *)rd_kafka_sasl_cb_getsimple, rktrans },
 		{ SASL_CB_PASS, (void *)rd_kafka_sasl_cb_getsecret, rktrans },
 		{ SASL_CB_ECHOPROMPT, (void *)rd_kafka_sasl_cb_chalprompt, rktrans },
@@ -466,6 +462,20 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 		{ SASL_CB_CANON_USER, (void *)rd_kafka_sasl_cb_canon, rktrans },
 		{ SASL_CB_LIST_END }
 	};
+
+	/* SASL_CB_USER is needed for PLAIN but breaks GSSAPI */
+	if (!strcmp(rk->rk_conf.sasl.service_name, "PLAIN")) {
+		int endidx;
+		/* Find end of callbacks array */
+		for (endidx = 0 ;
+		     callbacks[endidx].id != SASL_CB_LIST_END ; endidx++)
+			;
+
+		callbacks[endidx].id = SASL_CB_USER;
+		callbacks[endidx].proc = (void *)rd_kafka_sasl_cb_getsimple;
+		endidx++;
+		callbacks[endidx].id = SASL_CB_LIST_END;
+	}
 
 	rd_strdupa(&hostname, rktrans->rktrans_rkb->rkb_nodename);
 	if ((t = strchr(hostname, ':')))

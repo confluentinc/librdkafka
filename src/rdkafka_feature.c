@@ -118,7 +118,7 @@ static const struct rd_kafka_feature_map {
 	},
 	{
 		/* @brief >=0.9.0: SASL (GSSAPI) authentication.
-		 * Sincne SASL is not using the Kafka protocol
+		 * Since SASL is not using the Kafka protocol
 		 * we must use something else to map us to the
 		 * proper broker version support:
 		 * JoinGroup was released along with SASL in 0.9.0. */

@@ -52,7 +52,8 @@
 /* >= 0.10: SaslMechanismRequest (KIP-43) */
 #define RD_KAFKA_FEATURE_SASL_HANDSHAKE 0x20
 
-
+/* >= 0.8.2.0: Broker-based Group coordinator */
+#define RD_KAFKA_FEATURE_BROKER_GROUP_COORD 0x40
 
 
 

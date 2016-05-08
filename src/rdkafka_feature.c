@@ -39,6 +39,7 @@ static const char *rd_kafka_feature_names[] = {
 	"ThrottleTime",
 	"Sasl",
 	"SaslHandshake",
+	"BrokerGroupCoordinator",
 	NULL
 };
 
@@ -80,6 +81,14 @@ static const struct rd_kafka_feature_map {
 		.feature = RD_KAFKA_FEATURE_APIVERSION,
 		.depends = {
 			{ RD_KAFKAP_ApiVersion, 0, 0 },
+			{ -1 },
+		},
+	},
+	{
+		/* @brief >=0.8.2.0: Broker-based Group coordinator */
+		.feature = RD_KAFKA_FEATURE_BROKER_GROUP_COORD,
+		.depends = {
+			{ RD_KAFKAP_GroupCoordinator, 0, 0 },
 			{ -1 },
 		},
 	},
@@ -161,7 +170,8 @@ static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_8_2[] = {
 	{ RD_KAFKAP_Offset, 0, 0 },
 	{ RD_KAFKAP_Metadata, 0, 0 },
 	{ RD_KAFKAP_OffsetCommit, 0, 1 },
-	{ RD_KAFKAP_OffsetFetch, 0, 1 }
+	{ RD_KAFKAP_OffsetFetch, 0, 1 },
+	{ RD_KAFKAP_GroupCoordinator, 0, 0 }
 };
 
 /* =~ 0.8.1 */

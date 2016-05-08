@@ -2365,6 +2365,21 @@ int rd_kafka_topic_partition_list_set_offsets (
 
 
 /**
+ * @returns the number of partitions with absolute (non-logical) offsets set.
+ */
+int rd_kafka_topic_partition_list_count_abs_offsets (
+	const rd_kafka_topic_partition_list_t *rktparlist) {
+	int i;
+	int valid_cnt = 0;
+
+        for (i = 0 ; i < rktparlist->cnt ; i++)
+		if (!RD_KAFKA_OFFSET_IS_LOGICAL(rktparlist->elems[i].offset))
+			valid_cnt++;
+
+	return valid_cnt;
+}
+
+/**
  * Returns a new shared toppar pointer for partition at index 'idx',
  * or NULL if not set, not found, or out of range.
  */

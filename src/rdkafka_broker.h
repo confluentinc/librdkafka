@@ -28,6 +28,9 @@
 
 #pragma once
 
+#include "rdkafka_feature.h"
+
+
 extern const char *rd_kafka_broker_state_names[];
 extern const char *rd_kafka_secproto_names[];
 
@@ -182,6 +185,17 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 #define rd_kafka_broker_unlock(rkb) mtx_unlock(&(rkb)->rkb_lock)
 
 
+/**
+ * @returns true if broker supports \p features, else false.
+ */
+static RD_UNUSED
+int rd_kafka_broker_supports (rd_kafka_broker_t *rkb, int features) {
+	int r;
+	rd_kafka_broker_lock(rkb);
+	r = (rkb->rkb_features & features) == features;
+	rd_kafka_broker_unlock(rkb);
+	return r;
+}
 
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 						   int32_t nodeid);
@@ -197,6 +211,15 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,
 static RD_INLINE RD_UNUSED int
 rd_kafka_broker_filter_non_blocking (rd_kafka_broker_t *rkb, void *opaque) {
         return rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0;
+}
+
+/**
+ * Filter out brokers that cant do GroupCoordinator requests right now.
+ */
+static RD_INLINE RD_UNUSED int
+rd_kafka_broker_filter_can_group_query (rd_kafka_broker_t *rkb, void *opaque) {
+        return rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0 ||
+		!(rkb->rkb_features & RD_KAFKA_FEATURE_BROKER_GROUP_COORD);
 }
 
 rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,

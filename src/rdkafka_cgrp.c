@@ -46,6 +46,15 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
                                       rd_kafka_topic_partition_list_t
                                       *assignment, int usable_offsets);
 
+/**
+ * @returns true if cgrp can start partition fetchers, which is true if
+ *          there is a subscription and the group is fully joined, or there
+ *          is no subscription (in which case the join state is irrelevant) - 
+ *          such as for an assign() without subscribe(). */
+#define RD_KAFKA_CGRP_CAN_FETCH_START(rkcg) \
+	(!((rkcg)->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION) ||	\
+	 ((rkcg)->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED))
+
 
 const char *rd_kafka_cgrp_state_names[] = {
         "init",
@@ -431,7 +440,7 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 
 	rd_kafka_rdlock(rkcg->rkcg_rk);
 	rkb = rd_kafka_broker_any(rkcg->rkcg_rk, RD_KAFKA_BROKER_STATE_UP,
-				  rd_kafka_broker_filter_non_blocking, NULL);
+				  rd_kafka_broker_filter_can_group_query, NULL);
 	rd_kafka_rdunlock(rkcg->rkcg_rk);
 
 	if (!rkb) {
@@ -657,7 +666,7 @@ static void rd_kafka_cgrp_offsets_fetch_response (
 					  "Failed to fetch offsets: %s",
 					  rd_kafka_err2str(err));
 	} else {
-		if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED)
+		if (RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
 			rd_kafka_cgrp_partitions_fetch_start(
 				rkcg, offsets, 1 /* usable offsets */);
 		else
@@ -719,6 +728,14 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
 
         if (assignment->cnt == 0)
                 return;
+
+	/* Check if offsets are really unusable, this is to catch the
+	 * case where the entire assignment has absolute offsets set which
+	 * should make us skip offset lookups. */
+	if (!usable_offsets)
+		usable_offsets =
+			rd_kafka_topic_partition_list_count_abs_offsets(
+				assignment) == assignment->cnt;
 
         if (!usable_offsets &&
             rkcg->rkcg_rk->rk_conf.offset_store_method ==
@@ -1212,8 +1229,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
 	} else
 		rkcg->rkcg_assignment = NULL;
 
-        if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED &&
-	    rkcg->rkcg_assignment) {
+        if (RD_KAFKA_CGRP_CAN_FETCH_START(rkcg) && rkcg->rkcg_assignment) {
                 /* No existing assignment that needs to be decommissioned,
                  * start partition fetchers right away */
                 rd_kafka_cgrp_partitions_fetch_start(
@@ -1768,8 +1784,11 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
                 break;
 
         case RD_KAFKA_CGRP_STATE_WAIT_BROKER_TRANSPORT:
-                /* Waiting for broker transport to come up */
-                if (rkb_state < RD_KAFKA_BROKER_STATE_UP) {
+                /* Waiting for broker transport to come up.
+		 * Also make sure broker supports groups. */
+                if (rkb_state < RD_KAFKA_BROKER_STATE_UP || !rkb ||
+		    !rd_kafka_broker_supports(
+			    rkb, RD_KAFKA_FEATURE_BROKER_GROUP_COORD)) {
 			/* Coordinator query */
 			if (rd_interval(&rkcg->rkcg_coord_query_intvl,
 					1000*1000, 0) > 0)
@@ -1783,8 +1802,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 
                         /* Start fetching if we have an assignment. */
                         if (rkcg->rkcg_assignment &&
-			    rkcg->rkcg_join_state ==
-			    RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED)
+			    RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
                                 rd_kafka_cgrp_partitions_fetch_start(
                                         rkcg, rkcg->rkcg_assignment, 0);
                 }
@@ -1802,7 +1820,10 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
                         rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in state up");
 
-                rd_kafka_cgrp_join_state_serve(rkcg, rkb);
+		if (rkb &&
+		    rd_kafka_broker_supports(
+			    rkb, RD_KAFKA_FEATURE_BROKER_BALANCED_CONSUMER))
+			rd_kafka_cgrp_join_state_serve(rkcg, rkb);
                 break;
 
         }

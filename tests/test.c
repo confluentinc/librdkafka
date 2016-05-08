@@ -110,6 +110,7 @@ _TEST_DECL(0031_get_offsets);
 _TEST_DECL(0033_regex_subscribe);
 _TEST_DECL(0034_offset_reset);
 _TEST_DECL(0035_api_version);
+_TEST_DECL(0036_partial_fetch);
 
 /**
  * Define all tests here
@@ -146,6 +147,7 @@ struct test tests[] = {
 	_TEST(0033_regex_subscribe, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0034_offset_reset, 0),
 	_TEST(0035_api_version, 0),
+	_TEST(0036_partial_fetch, 0),
         { NULL }
 };
 
@@ -1160,6 +1162,13 @@ rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
  * \p msgcounterp is incremented for each produced messages and passed
  * as \p msg_opaque which is later used in test_dr_cb to decrement
  * the counter on delivery.
+ *
+ * If \p payload is NULL the message key and payload will be formatted
+ * according to standard test format, otherwise the key will be NULL and
+ * payload send as message payload.
+ *
+ * Default message size is 128 bytes, if \p size is non-zero and \p payload
+ * is NULL the message size of \p size will be used.
  */
 void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                uint64_t testid, int32_t partition,
@@ -1168,6 +1177,16 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                int *msgcounterp) {
 	int msg_id;
 	test_timing_t t_all;
+	char key[128];
+	void *buf;
+
+	if (payload)
+		buf = (void *)payload;
+	else {
+		if (size == 0)
+			size = 128;
+		buf = calloc(1, size);
+	}
 
 	TEST_SAY("Produce to %s [%"PRId32"]: messages #%d..%d\n",
 		 rd_kafka_topic_name(rkt), partition, msg_base, msg_base+cnt);
@@ -1175,26 +1194,17 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	TIMING_START(&t_all, "PRODUCE");
 
 	for (msg_id = msg_base ; msg_id < msg_base + cnt ; msg_id++) {
-		char key[128];
-		char buf[128];
-		const char *use_payload;
-		size_t use_size;
-
-		if (payload) {
-			use_payload = payload;
-			use_size = size;
-		} else {
+		if (!payload) {
 			test_msg_fmt(key, sizeof(key), testid, partition,
 				     msg_id);
-			rd_snprintf(buf, sizeof(buf), "%s: data", key);
-			use_payload = buf;
-			use_size = strlen(buf);
+			memcpy(buf, key, RD_MIN(size, sizeof(key)));
 		}
 
 		if (rd_kafka_produce(rkt, partition,
 				     RD_KAFKA_MSG_F_COPY,
-				     (void *)use_payload, use_size,
-				     key, strlen(key),
+				     buf, size,
+				     !payload ? key : NULL,
+				     !payload ? strlen(key) : 0,
 				     msgcounterp) == -1)
 			TEST_FAIL("Failed to produce message %i "
 				  "to partition %i: %s",
@@ -1204,6 +1214,9 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                 (*msgcounterp)++;
 
         }
+
+	if (!payload)
+		free(buf);
 
 	TIMING_STOP(&t_all);
 }
@@ -1289,17 +1302,17 @@ rd_kafka_t *test_create_consumer (const char *group_id,
                                       errstr, sizeof(errstr)) !=
                     RD_KAFKA_CONF_OK)
                         TEST_FAIL("Conf failed: %s\n", errstr);
-        }
 
-	rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
-	if (rd_kafka_conf_set(conf, "session.timeout.ms", tmp,
-			      errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
-		TEST_FAIL("Conf failed: %s\n", errstr);
+		rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
+		test_conf_set(conf, "session.timeout.ms", tmp);
+
+		if (rebalance_cb)
+			rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
+	} else {
+		TEST_ASSERT(!rebalance_cb);
+	}
 
 	rd_kafka_conf_set_opaque(conf, opaque);
-
-	if (rebalance_cb)
-		rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
         if (default_topic_conf)
                 rd_kafka_conf_set_default_topic_conf(conf, default_topic_conf);
@@ -1312,7 +1325,7 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 	if (group_id)
 		rd_kafka_poll_set_consumer(rk);
 
-	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+	TEST_SAY("Created kafka instance %s\n", rd_kafka_name(rk));
 
 	return rk;
 }

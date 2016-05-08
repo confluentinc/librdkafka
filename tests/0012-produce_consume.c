@@ -495,8 +495,6 @@ static void test_produce_consume (void) {
 
 	TEST_SAY("Topic %s, testid %"PRIu64"\n", topic, testid);
 
-	test_create_topic(topic, partition_cnt, 1);
-
 	/* Produce messages */
 	produce_messages(testid, topic, partition_cnt, msgcnt);
 

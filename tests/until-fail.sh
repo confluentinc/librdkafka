@@ -1,7 +1,8 @@
 #!/bin/bash
 #
 
-DELETE_TOPICS=y
+[[ -z "$DELETE_TOPICS" ]] && DELETE_TOPICS=y
+
 if [[ -z $ZK_ADDRESS ]]; then
     ZK_ADDRESS="localhost"
 fi

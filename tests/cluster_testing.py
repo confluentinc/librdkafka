@@ -11,6 +11,7 @@
 from trivup.trivup import Cluster, UuidAllocator
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
+from trivup.apps.KerberosKdcApp import KerberosKdcApp
 
 import sys, json, argparse
 
@@ -34,7 +35,14 @@ class LibrdkafkaTestCluster(Cluster):
         # One ZK (from Kafka repo)
         ZookeeperApp(self, bin_path=kafka_path + '/bin/zookeeper-server-start.sh')
 
-        # Two brokers
+        # Start Kerberos KDC if GSSAPI (Kerberos) is configured
+        if 'GSSAPI' in conf.get('sasl_mechanisms', []):
+            kdc = KerberosKdcApp(self, 'MYREALM')
+            # Kerberos needs to be started prior to Kafka so that principals
+            # and keytabs are available at the time of Kafka config generation.
+            kdc.start()
+
+        # Brokers
         defconf = {'replication_factor': min(num_brokers, 3), 'num_partitions': 4, 'version': version,
                    'security.protocol': 'PLAINTEXT'}
         defconf.update(conf)

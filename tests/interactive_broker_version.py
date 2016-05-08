@@ -11,6 +11,7 @@
 from trivup.trivup import Cluster
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
+from trivup.apps.KerberosKdcApp import KerberosKdcApp
 
 import subprocess
 import time
@@ -26,17 +27,21 @@ kafka_path='/home/maglun/src/kafka'
 
 
 
-def test_version (version, cmd=None, deploy=True, conf={}):
+def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
     """
     
-    cluster = Cluster('librdkafkaInteractiveBrokerVersionTests', 'tmp')
+    cluster = Cluster('librdkafkaInteractiveBrokerVersionTests', 'tmp', debug=debug)
 
     # One ZK (from Kafka repo)
     zk1 = ZookeeperApp(cluster, bin_path=kafka_path + '/bin/zookeeper-server-start.sh')
     zk_address = zk1.get('address')
+
+    # Start Kerberos KDC if GSSAPI is configured
+    if 'GSSAPI' in args.conf.get('sasl_mechanisms', []):
+        KerberosKdcApp(cluster, 'MYREALM').start()
 
     # Three brokers
     defconf = {'replication_factor': 3, 'num_partitions': 4, 'version': version}
@@ -122,10 +127,13 @@ if __name__ == '__main__':
                         help='JSON config object (not file)')
     parser.add_argument('-c', type=str, dest='cmd', default=None,
                         help='Command to execute instead of shell')
+    parser.add_argument('--debug', action='store_true', dest='debug', default=False,
+                        help='Enable trivup debugging')
 
     args = parser.parse_args()
     if args.conf is not None:
         args.conf = json.loads(args.conf)
     else:
         args.conf = {}
-    test_version(args.version[0], cmd=args.cmd, deploy=args.deploy, conf=args.conf)
+
+    test_version(args.version[0], cmd=args.cmd, deploy=args.deploy, conf=args.conf, debug=args.debug)

@@ -10,6 +10,7 @@
 from trivup.trivup import Cluster, App, UuidAllocator
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
+from trivup.apps.KerberosKdcApp import KerberosKdcApp
 
 import json
 
@@ -38,7 +39,7 @@ class LibrdkafkaTestApp(App):
         else:
             conf_blob.append('api.version.request=true')
 
-        # SASL (only one mechanism supported)
+        # SASL (only one mechanism supported at a time)
         mech = self.conf.get('sasl_mechanisms', '').split(',')[0]
         if mech != '':
             conf_blob.append('sasl.mechanisms=%s' % mech)
@@ -50,6 +51,20 @@ class LibrdkafkaTestApp(App):
                     conf_blob.append('sasl.username=%s' % u)
                     conf_blob.append('sasl.password=%s' % p)
                     break
+
+            elif mech == 'GSSAPI':
+                security_protocol='SASL_PLAINTEXT'
+                kdc = cluster.find_app(KerberosKdcApp)
+                if kdc is None:
+                    self.log('WARNING: sasl_mechanisms is GSSAPI set but no KerberosKdcApp available: client SASL config will be invalid (which might be intentional)')
+                else:
+                    self.env_add('KRB5_CONFIG', kdc.conf['krb5_conf'])
+                    principal,keytab = kdc.add_principal(self.name, self.node.name)
+                    conf_blob.append('sasl.kerberos.service.name=%s' % \
+                                     self.conf.get('sasl_servicename'))
+                    conf_blob.append('sasl.kerberos.keytab=%s' % keytab)
+                    conf_blob.append('sasl.kerberos.principal=%s' % principal.split('@')[0])
+
             else:
                 self.log('WARNING: FIXME: SASL %s client config not written to %s: unhandled mechanism' % (mech, test_conf_file))
 

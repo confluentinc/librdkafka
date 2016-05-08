@@ -28,14 +28,13 @@ kafka_path='/home/maglun/src/kafka'
 
 
 def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None, debug=False):
-                  
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
     """
     
-    cluster = LibrdkafkaTestCluster(version, conf, kafka_path=kafka_path,
-                                    debug=debug)
+    cluster = LibrdkafkaTestCluster(version, conf,
+                                    kafka_path=kafka_path, debug=debug)
 
     # librdkafka's regression tests, as an App.
     rdkafka = LibrdkafkaTestApp(cluster, version, _rdkconf, tests=tests)
@@ -128,6 +127,8 @@ if __name__ == '__main__':
                 ('0.8.2.2', [])]
     sasl_plain_conf = {'sasl_mechanisms': 'PLAIN',
                        'sasl_users': 'myuser=mypassword'}
+    sasl_kerberos_conf = {'sasl_mechanisms': 'GSSAPI',
+                          'sasl_servicename': 'kafka'}
     suites = [{'name': 'SASL PLAIN',
                'conf': sasl_plain_conf,
                'expect_fail': ['0.9.0.1', '0.8.2.2']},
@@ -135,7 +136,11 @@ if __name__ == '__main__':
               {'name': 'SASL PLAIN with wrong username',
                'conf': sasl_plain_conf,
                'rdkconf': {'sasl_users': 'wrongjoe=mypassword'},
-               'expect_fail': ['all']}]
+               'expect_fail': ['all']},
+              {'name': 'SASL Kerberos',
+               'conf': sasl_kerberos_conf,
+               'expect_fail': ['0.8.2.2']}]
+
 
     pass_cnt = 0
     fail_cnt = 0

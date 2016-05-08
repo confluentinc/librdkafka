@@ -305,6 +305,39 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 }
 
 
+/**
+ * @brief Purge connection-setup API requests from the queue.
+ *
+ * Request types purged:
+ *   ApiVersion
+ *   SaslHandshake
+ */
+void rd_kafka_bufq_purge_connsetup (rd_kafka_broker_t *rkb,
+				    rd_kafka_bufq_t *rkbufq) {
+	rd_kafka_buf_t *rkbuf, *tmp;
+
+	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
+
+	rd_rkb_dbg(rkb, QUEUE, "BUFQ", "Purging connection-setup requests "
+		   "from bufq with %i buffers",
+		   rd_atomic32_get(&rkbufq->rkbq_cnt));
+
+	TAILQ_FOREACH_SAFE(rkbuf, &rkbufq->rkbq_bufs, rkbuf_link, tmp) {
+		switch (rkbuf->rkbuf_reqhdr.ApiKey)
+		{
+		case RD_KAFKAP_ApiVersion:
+		case RD_KAFKAP_SaslHandshake:
+			rd_kafka_bufq_deq(rkbufq, rkbuf);
+			rd_kafka_buf_callback(rkb->rkb_rk, rkb,
+					      RD_KAFKA_RESP_ERR__DESTROY,
+					      NULL, rkbuf);
+			break;
+		default:
+			break;
+		}
+        }
+}
+
 
 size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 				   int64_t Offset, int8_t MagicByte,

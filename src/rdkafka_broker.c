@@ -373,6 +373,10 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	/* Put the outbufs back on queue */
 	rd_kafka_bufq_concat(&rkb->rkb_outbufs, &tmpq);
 
+	/* Purge connection-setup requests from outbufs since they will be
+	 * reissued on the next connect. */
+	rd_kafka_bufq_purge_connsetup(rkb, &rkb->rkb_outbufs);
+
 	internal_rkb = rd_kafka_broker_internal(rkb->rkb_rk);
 
 	/* Undelegate all toppars from this broker. */
@@ -1294,6 +1298,9 @@ rd_kafka_broker_handle_SaslHandshake (rd_kafka_t *rk,
 	char *mechs = "(n/a)";
 	size_t msz, mof = 0;
 
+	if (err == RD_KAFKA_RESP_ERR__DESTROY)
+		return;
+
         if (err)
                 goto err;
 
@@ -1469,6 +1476,9 @@ rd_kafka_broker_handle_ApiVersion (rd_kafka_t *rk,
 				   rd_kafka_buf_t *request, void *opaque) {
 	struct rd_kafka_ApiVersion *apis;
 	size_t api_cnt;
+
+	if (err == RD_KAFKA_RESP_ERR__DESTROY)
+		return;
 
 	err = rd_kafka_handle_ApiVersion(rk, rkb, err, rkbuf, request,
 					 &apis, &api_cnt);

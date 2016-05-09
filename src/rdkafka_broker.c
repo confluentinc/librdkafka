@@ -3131,7 +3131,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 				 * fetch offset. */
 				rd_kafka_q_fix_offsets(
 					&relq, rktp->rktp_offsets.fetch_offset,
-					hdr.Offset - rd_kafka_q_len(&relq));
+					hdr.Offset - rd_kafka_q_len(&relq) + 1);
 
 				/* Append messages to proper queue. */
 				rd_kafka_q_concat0(rkq, &relq, 0/*no-lock*/);

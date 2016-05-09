@@ -3486,7 +3486,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 err:
         if (s_rkt)
                 rd_kafka_topic_destroy0(s_rkt);
-	rd_rkb_dbg(rkb, MSG, "BADMSG", "Bad message");
+	rd_rkb_dbg(rkb, MSG, "BADMSG", "Bad message (Fetch v%d): "
+		   "is broker.version.fallback incorrectly set?",
+		   (int)request->rkbuf_reqhdr.ApiVersion);
 	return RD_KAFKA_RESP_ERR__BAD_MSG;
 }
 

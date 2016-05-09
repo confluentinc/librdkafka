@@ -14,6 +14,10 @@ LDFLAGS += -L../src -L../src-cpp
 
 all: $(BIN) run_par
 
+trunk: build
+	./broker_version_tests.py trunk
+	./sasl_test.py trunk
+
 # Run the full test suite(s)
 full: build
 	./broker_version_tests.py

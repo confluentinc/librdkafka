@@ -32,6 +32,8 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
     """
+
+    print('## Test version %s' % version)
     
     cluster = Cluster('librdkafkaInteractiveBrokerVersionTests', 'tmp', debug=debug)
 
@@ -102,8 +104,8 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
 
-    cmd_env = 'RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s BROKERS=%s TEST_KAFKA_VERSION=%s' % \
-              (test_conf_file, zk_address, bootstrap_servers, version)
+    cmd_env = 'KAFKA_PATH=%s RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s BROKERS=%s TEST_KAFKA_VERSION=%s' % \
+              (broker1.conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version)
     if not cmd:
         cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
     subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
@@ -119,8 +121,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Start a Kafka cluster and provide an interactive shell')
 
-    parser.add_argument('version', type=str, default=None, nargs=1,
-                        help='Kafka version to deploy')
+    parser.add_argument('versions', type=str, default=None, nargs='+',
+                        help='Kafka version(s) to deploy')
     parser.add_argument('--no-deploy', action='store_false', dest='deploy', default=True,
                         help='Dont deploy applications, assume already deployed.')
     parser.add_argument('--conf', type=str, dest='conf', default=None,
@@ -136,4 +138,5 @@ if __name__ == '__main__':
     else:
         args.conf = {}
 
-    test_version(args.version[0], cmd=args.cmd, deploy=args.deploy, conf=args.conf, debug=args.debug)
+    for version in args.versions:
+        test_version(version, cmd=args.cmd, deploy=args.deploy, conf=args.conf, debug=args.debug)

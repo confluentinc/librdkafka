@@ -34,10 +34,10 @@ class LibrdkafkaTestApp(App):
         f, test_conf_file = self.open_file('test.conf', 'perm')
         f.write(('\n'.join(conf_blob)).encode('ascii'))
 
-        if version != 'trunk':
-            conf_blob.append('broker.version.fallback=%s' % version)
-        else:
+        if version == 'trunk' or version.startswith('0.10.'):
             conf_blob.append('api.version.request=true')
+        else:
+            conf_blob.append('broker.version.fallback=%s' % version)
 
         # SASL (only one mechanism supported at a time)
         mech = self.conf.get('sasl_mechanisms', '').split(',')[0]

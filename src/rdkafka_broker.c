@@ -3445,12 +3445,19 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 							RD_KAFKA_OP_FETCH,
 							0 /* no error ops */);
 
-				if (rko)
-					rktp->rktp_offsets.fetch_offset =
-						rko->rko_offset + 1;
-                                rd_atomic64_add(&rktp->rktp_c.msgs,
-						rd_kafka_q_len(&tmp_opq));
-				rd_kafka_q_concat(&rktp->rktp_fetchq, &tmp_opq);
+				if (rd_kafka_q_concat(&rktp->rktp_fetchq,
+						      &tmp_opq) == -1) {
+					/* rktp fetchq disabled, probably
+					 * shutting down. Drop messages. */
+					rd_kafka_q_purge0(&tmp_opq,
+							  0/*no-lock*/);
+				} else {
+					if (rko)
+						rktp->rktp_offsets.fetch_offset =
+							rko->rko_offset + 1;
+					rd_atomic64_add(&rktp->rktp_c.msgs,
+							rd_kafka_q_len(&tmp_opq));
+				}
                         }
 
 			rd_kafka_toppar_destroy(s_rktp); /* from get() */

@@ -573,7 +573,11 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 			     rkcg->rkcg_group_id->str,
 			     rd_kafka_q_len(&rkcg->rkcg_wait_coord_q));
 		rd_kafka_q_disable(&rkcg->rkcg_wait_coord_q);
-		rd_kafka_q_concat(&rkcg->rkcg_ops, &rkcg->rkcg_wait_coord_q);
+		if (rd_kafka_q_concat(&rkcg->rkcg_ops,
+				      &rkcg->rkcg_wait_coord_q) == -1) {
+			/* ops queue shut down, purge coord queue */
+			rd_kafka_q_purge(&rkcg->rkcg_wait_coord_q);
+		}
 	}
 
 	if (rd_list_empty(&rkcg->rkcg_toppars) &&

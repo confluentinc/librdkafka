@@ -76,8 +76,10 @@ void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
 
 		/* If rkq has ops in queue, append them to fwdq's queue.
 		 * This is an irreversible operation. */
-                if (srcq->rkq_qlen > 0)
+                if (srcq->rkq_qlen > 0) {
+			rd_dassert(destq->rkq_flags & RD_KAFKA_Q_F_READY);
 			rd_kafka_q_concat(destq, srcq);
+		}
 	}
         if (do_lock)
                 mtx_unlock(&srcq->rkq_lock);

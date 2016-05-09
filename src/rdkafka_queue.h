@@ -175,16 +175,21 @@ void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
  * NOTE: 'srcq' will be reset.
  *
  * Locality: any thread.
+ *
+ * @returns 0 if operation was performed or -1 if rkq is disabled.
  */
 static RD_INLINE RD_UNUSED
-void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
-			 int do_lock) {
+int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
+	int r = 0;
 	if (do_lock)
 		mtx_lock(&rkq->rkq_lock);
 	if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
                 rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
                            srcq->rkq_qlen > 0);
-		rd_dassert(rkq->rkq_flags & RD_KAFKA_Q_F_READY);
+		if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
+			mtx_unlock(&rkq->rkq_lock);
+			return -1;
+		}
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
                 rkq->rkq_qlen += srcq->rkq_qlen;
                 rkq->rkq_qsize += srcq->rkq_qsize;
@@ -192,11 +197,13 @@ void rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 
                 rd_kafka_q_reset(srcq);
 	} else
-		rd_kafka_q_concat0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
-				   srcq->rkq_fwdq ? srcq->rkq_fwdq : srcq,
-				   rkq->rkq_fwdq ? do_lock : 0);
+		r = rd_kafka_q_concat0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
+				       srcq->rkq_fwdq ? srcq->rkq_fwdq : srcq,
+				       rkq->rkq_fwdq ? do_lock : 0);
 	if (do_lock)
 		mtx_unlock(&rkq->rkq_lock);
+
+	return r;
 }
 
 #define rd_kafka_q_concat(dstq,srcq) rd_kafka_q_concat0(dstq,srcq,1/*lock*/)

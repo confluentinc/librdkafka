@@ -388,6 +388,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "File or directory path to CA certificate(s) for verifying "
 	  "the broker's key."
 	},
+	{ _RK_GLOBAL, "ssl.crl.location", _RK_C_STR,
+	  _RK(ssl.crl_location),
+	  "Path to CRL for verifying broker's certificate validity."
+	},
 #endif /* WITH_SSL */
 
 #if WITH_SASL

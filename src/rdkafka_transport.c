@@ -665,6 +665,26 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 			goto fail;
 	}
 
+	if (rk->rk_conf.ssl.crl_location) {
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+			     "Loading CRL from file %s",
+			     rk->rk_conf.ssl.crl_location);
+
+		r = SSL_CTX_load_verify_locations(ctx,
+						  rk->rk_conf.ssl.crl_location,
+						  NULL);
+
+		if (r != 1)
+			goto fail;
+
+
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+			     "Enabling CRL checks");
+
+		X509_STORE_set_flags(SSL_CTX_get_cert_store(ctx),
+				     X509_V_FLAG_CRL_CHECK);
+	}
+
 	if (rk->rk_conf.ssl.cert_location) {
 		rd_kafka_dbg(rk, SECURITY, "SSL",
 			     "Loading certificate from file %s",

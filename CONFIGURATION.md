@@ -48,6 +48,7 @@ ssl.key.location                         |  *  |                 |              
 ssl.key.password                         |  *  |                 |               | Private key passphrase <br>*Type: string*
 ssl.certificate.location                 |  *  |                 |               | Path to client's public key (PEM) used for authentication. <br>*Type: string*
 ssl.ca.location                          |  *  |                 |               | File or directory path to CA certificate(s) for verifying the broker's key. <br>*Type: string*
+ssl.crl.location                         |  *  |                 |               | Path to CRL for verifying broker's certificate validity. <br>*Type: string*
 sasl.mechanisms                          |  *  | GSSAPI, PLAIN   |        GSSAPI | SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN. **NOTE**: Despite the name only one mechanism must be configured. <br>*Type: string*
 sasl.kerberos.service.name               |  *  |                 |         kafka | Kerberos principal name that Kafka runs as. <br>*Type: string*
 sasl.kerberos.principal                  |  *  |                 |   kafkaclient | This client's Kerberos principal name. <br>*Type: string*

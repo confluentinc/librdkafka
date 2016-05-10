@@ -286,14 +286,14 @@ reliable bootstrap broker.
 Apache Kafka broker version 0.10.0 added support for the ApiVersionRequest API
 which allows a client to query a broker for its range of supported API versions.
 
-librdkafka supports this functionality and will by default query each
-broker on connect for this information and use it to enable or disable
+librdkafka supports this functionality and will query each broker on connect
+for this information (if `api.version.request=true`) and use it to enable or disable
 various protocol features, such as MessageVersion 1 (timestamps), KafkaConsumer, etc.
 
 If the broker fails to respond to the ApiVersionRequest librdkafka will
 assume the broker is too old to support the API and fall back to an older
 broker version's API. These fallback versions are hardcoded in librdkafka
-and is controlled by the `broker.version` configuration property.
+and is controlled by the `broker.version.fallback` configuration property.
 
 
 

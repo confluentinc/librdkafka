@@ -147,7 +147,7 @@ void *rd_list_elem (const rd_list_t *rl, int idx);
 /**
  * Returns the number of elements in list.
  */
-static __inline RD_UNUSED int rd_list_cnt (const rd_list_t *rl) {
+static RD_INLINE RD_UNUSED int rd_list_cnt (const rd_list_t *rl) {
         return rl->rl_cnt;
 }
 

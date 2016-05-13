@@ -411,8 +411,9 @@ static void rd_kafka_assignor_destroy (rd_kafka_assignor_t *rkas) {
 /**
  * Add an assignor, overwriting any previous one with the same protocol_name.
  */
-rd_kafka_resp_err_t
+static rd_kafka_resp_err_t
 rd_kafka_assignor_add (rd_kafka_t *rk,
+		       rd_kafka_assignor_t **rkasp,
                        const char *protocol_type,
                        const char *protocol_name,
                        rd_kafka_resp_err_t (*assign_cb) (
@@ -428,13 +429,19 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
                        void *opaque) {
         rd_kafka_assignor_t *rkas;
 
+	if (rkasp)
+		*rkasp = NULL;
+
         if (rd_kafkap_str_cmp_str(rk->rk_conf.group_protocol_type,
                                   protocol_type))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_PROTOCOL;
 
         /* Dont overwrite application assignors */
-        if ((rkas = rd_kafka_assignor_find(rk, protocol_name)))
+        if ((rkas = rd_kafka_assignor_find(rk, protocol_name))) {
+		if (rkasp)
+			*rkasp = rkas;
 		return RD_KAFKA_RESP_ERR__CONFLICT;
+	}
 
         rkas = rd_calloc(1, sizeof(*rkas));
 
@@ -445,6 +452,9 @@ rd_kafka_assignor_add (rd_kafka_t *rk,
         rkas->rkas_opaque = opaque;
 
         rd_list_add(&rk->rk_conf.partition_assignors, rkas);
+
+	if (rkasp)
+		*rkasp = rkas;
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -471,20 +481,11 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 	char *wanted;
 	char *s;
 
-	/* Add builtin assignors */
-	rd_kafka_assignor_add(rk, "consumer", "range",
-                              rd_kafka_range_assignor_assign_cb,
-                              NULL);
-        rd_kafka_assignor_add(rk, "consumer", "roundrobin",
-                              rd_kafka_roundrobin_assignor_assign_cb,
-                              NULL);
-
-
 	rd_strdupa(&wanted, rk->rk_conf.partition_assignment_strategy);
 
 	s = wanted;
 	while (*s) {
-		rd_kafka_assignor_t *rkas;
+		rd_kafka_assignor_t *rkas = NULL;
 		char *t;
 
 		/* Left trim */
@@ -501,14 +502,21 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 		/* Right trim */
 		rtrim(s);
 
-		if (!(rkas = rd_kafka_assignor_find(rk, s))) {
-			rd_snprintf(errstr, errstr_size,
-				    "Unsupported "
-				    "partition.assignment.strategy \"%s\" "
-				    "for group.protocol.type=\"%s\"",
-				    s, rk->rk_conf.group_protocol_type->str);
-			return -1;
-		} else {
+		/* Match builtin consumer assignors */
+		if (!strcmp(s, "range"))
+			rd_kafka_assignor_add(
+				rk, &rkas, "consumer", "range",
+				rd_kafka_range_assignor_assign_cb,
+				NULL);
+		else if (!strcmp(s, "roundrobin"))
+			rd_kafka_assignor_add(
+				rk, &rkas, "consumer", "roundrobin",
+				rd_kafka_roundrobin_assignor_assign_cb,
+				NULL);
+		else /* Input already validatd by .._conf.c */
+			RD_NOTREACHED();
+
+		if (rkas) {
 			if (!rkas->rkas_enabled) {
 				rkas->rkas_enabled = 1;
 				rk->rk_conf.enabled_assignor_cnt++;

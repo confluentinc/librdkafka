@@ -44,7 +44,7 @@ typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 #define RD_KAFKA_OP_F_NO_RESPONSE 0x4  /* rkbuf: Not expecting a response */
 #define RD_KAFKA_OP_F_CRC         0x8  /* rkbuf: Perform CRC calculation */
 #define RD_KAFKA_OP_F_BLOCKING    0x10 /* rkbuf: blocking protocol request */
-
+#define RD_KAFKA_OP_F_REPROCESS   0x20 /* cgrp: Reprocess at a later time. */
 
 
 typedef enum {
@@ -122,6 +122,8 @@ typedef struct rd_kafka_op_s {
 	/* For FETCH */
 	rd_kafka_message_t rko_rkmessage;
 	rd_kafka_buf_t    *rko_rkbuf;
+	rd_kafka_timestamp_type_t rko_tstype;
+	int64_t            rko_timestamp;
 
 	/* For METADATA */
 #define rko_rkt         rko_rkmessage.rkt
@@ -140,7 +142,7 @@ typedef struct rd_kafka_op_s {
         /* For CGRP_DELEGATE */
         struct rd_kafka_cgrp_s *rko_cgrp;
 
-        /* For FETCH_START */
+        /* For FETCH_START, FETCH */
 #define rko_version   rko_intarg
 
         /* For BROKER_UPDATE and THROTTLE */

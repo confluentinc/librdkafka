@@ -44,7 +44,7 @@
  * A rd_kafka_t handle can never migrate from simple to high-level, or
  * vice versa, so we dont need a ..consumer_del().
  */
-static __inline int rd_kafka_high_level_consumer_add (rd_kafka_t *rk) {
+static RD_INLINE int rd_kafka_high_level_consumer_add (rd_kafka_t *rk) {
         if (rd_atomic32_get(&rk->rk_simple_cnt) > 0)
                 return 0;
 

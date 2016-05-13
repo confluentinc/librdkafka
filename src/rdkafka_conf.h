@@ -7,8 +7,8 @@
  */
 typedef enum {
 	RD_KAFKA_COMPRESSION_NONE,
-	RD_KAFKA_COMPRESSION_GZIP = 0x1,
-	RD_KAFKA_COMPRESSION_SNAPPY = 0x2,
+	RD_KAFKA_COMPRESSION_GZIP = RD_KAFKA_MSG_ATTR_GZIP,
+	RD_KAFKA_COMPRESSION_SNAPPY = RD_KAFKA_MSG_ATTR_SNAPPY,
 	RD_KAFKA_COMPRESSION_INHERIT /* Inherit setting from global conf */
 } rd_kafka_compression_t;
 
@@ -58,6 +58,7 @@ struct rd_kafka_conf_s {
 	 */
 	int     max_msg_size;
         int     recv_max_msg_size;
+	int     max_inflight;
 	int     metadata_request_timeout_ms;
 	int     metadata_refresh_interval_ms;
 	int     metadata_refresh_fast_cnt;
@@ -77,9 +78,10 @@ struct rd_kafka_conf_s {
 	char   *brokerlist;
 	int     stats_interval_ms;
 	int     term_sig;
-	int     quota_support;
         int     reconnect_jitter_ms;
-        int     protocol_version;
+	int     api_version_request;
+	int     api_version_fallback_ms;
+	char   *broker_version_fallback;
 	rd_kafka_secproto_t security_protocol;
 
 #if WITH_SSL
@@ -90,6 +92,7 @@ struct rd_kafka_conf_s {
 		char *key_password;
 		char *cert_location;
 		char *ca_location;
+		char *crl_location;
 	} ssl;
 #endif
 
@@ -101,7 +104,8 @@ struct rd_kafka_conf_s {
 		char *kinit_cmd;
 		char *keytab;
 		int   relogin_min_time;
-		char  kinit_refresh_cmdline[512]; /* Full cached command line */
+		char *username;
+		char *password;
 	} sasl;
 #endif
 

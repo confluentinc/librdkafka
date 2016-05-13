@@ -41,7 +41,7 @@ const char *rd_kafka_offset2str (int64_t offset);
  *
  * See head of rdkafka_offset.c for more information.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 void rd_kafka_offset_store0 (rd_kafka_toppar_t *rktp, int64_t offset,
 			     int lock) {
 	if (lock)

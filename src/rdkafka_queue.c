@@ -76,8 +76,10 @@ void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
 
 		/* If rkq has ops in queue, append them to fwdq's queue.
 		 * This is an irreversible operation. */
-                if (srcq->rkq_qlen > 0)
+                if (srcq->rkq_qlen > 0) {
+			rd_dassert(destq->rkq_flags & RD_KAFKA_Q_F_READY);
 			rd_kafka_q_concat(destq, srcq);
+		}
 	}
         if (do_lock)
                 mtx_unlock(&srcq->rkq_lock);
@@ -223,7 +225,7 @@ int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 /**
  * Filters out outdated ops.
  */
-static __inline rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
+static RD_INLINE rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
                                                    rd_kafka_op_t *rko) {
         if (unlikely(!rko))
                 return NULL;
@@ -429,6 +431,21 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 }
 
 
+int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
+				    rd_kafka_timestamp_type_t *tstype) {
+	const rd_kafka_op_t *rko = rkmessage->_private;
+
+	if (!rko || rko->rko_err) {
+		*tstype = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+		return -1;;
+	}
+
+
+	*tstype = rko->rko_tstype;
+
+	return rko->rko_timestamp;
+}
+
 
 
 /**
@@ -572,4 +589,43 @@ rd_kafka_resp_err_t rd_kafka_q_wait_result (rd_kafka_q_t *rkq, int timeout_ms) {
         }
 
         return err;
+}
+
+
+/**
+ * @brief Convert relative to absolute offsets and also purge any messages
+ *        that are older than \p min_offset.
+ * @remark Error ops with ERR__NOT_IMPLEMENTED will not be purged since
+ *         they are used to indicate unknnown compression codecs and compressed
+ *         messagesets may have a starting offset lower than what we requested.
+ * @remark \p rkq locking is not performed (caller's responsibility)
+ * @remark Must NOT be used on fwdq.
+ */
+void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
+			     int64_t base_offset) {
+	rd_kafka_op_t *rko, *next;
+	int     adj_len  = 0;
+	int64_t adj_size = 0;
+
+	rd_kafka_assert(NULL, !rkq->rkq_fwdq);
+
+	next = TAILQ_FIRST(&rkq->rkq_q);
+	while ((rko = next)) {
+		next = TAILQ_NEXT(next, rko_link);
+
+		if (rko->rko_offset < min_offset &&
+		    rko->rko_err != RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED) {
+			adj_len++;
+			adj_size += rko->rko_len;
+			TAILQ_REMOVE(&rkq->rkq_q, rko, rko_link);
+			rd_kafka_op_destroy(rko);
+			continue;
+		}
+
+		rko->rko_offset += base_offset;
+	}
+
+
+	rkq->rkq_qlen  -= adj_len;
+	rkq->rkq_qsize -= adj_size;
 }

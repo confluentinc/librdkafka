@@ -29,6 +29,7 @@
 #pragma once
 
 #include "rdkafka_cgrp.h"
+#include "rdkafka_feature.h"
 
 void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
                                        const rd_kafkap_str_t *cgrp,
@@ -185,3 +186,22 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                                   rd_kafka_buf_t *rkbuf,
                                   rd_kafka_buf_t *request,
                                   void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
+			    rd_kafka_broker_t *rkb,
+			    rd_kafka_resp_err_t err,
+			    rd_kafka_buf_t *rkbuf,
+			    rd_kafka_buf_t *request,
+			    struct rd_kafka_ApiVersion **apis,
+			    size_t *api_cnt);
+void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
+				 rd_kafka_q_t *replyq,
+				 rd_kafka_resp_cb_t *resp_cb,
+				 void *opaque, int flash_msg);
+
+void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
+				    const char *mechanism,
+				    rd_kafka_q_t *replyq,
+				    rd_kafka_resp_cb_t *resp_cb,
+				    void *opaque, int flash_msg);

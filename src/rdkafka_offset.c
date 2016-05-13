@@ -352,7 +352,6 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
 	rko->rko_err = err;
-	rd_kafka_assert(NULL, offsets->cnt > 0);
         rd_kafka_op_payload_set(rko,
 				rd_kafka_topic_partition_list_copy(offsets),
                                 (void *)rd_kafka_topic_partition_list_destroy);
@@ -426,7 +425,7 @@ rd_kafka_offset_broker_commit (rd_kafka_toppar_t *rktp) {
                 offsets, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
         rktpar->offset = rktp->rktp_committing_offset;
 
-        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, CGRP, "OFFSETCMT",
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSETCMT",
                      "%.*s [%"PRId32"]: committing offset %"PRId64,
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition, rktp->rktp_committing_offset);

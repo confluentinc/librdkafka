@@ -30,6 +30,10 @@
 
 
 #include "rdendian.h"
+
+
+
+
 /*
  * Kafka protocol definitions.
  */
@@ -59,6 +63,9 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_SyncGroup     14
 #define RD_KAFKAP_DescribeGroups 15
 #define RD_KAFKAP_ListGroups    16
+#define RD_KAFKAP_SaslHandshake 17
+#define RD_KAFKAP_ApiVersion    18
+#define RD_KAFKAP__NUM          19
 	int16_t  ApiVersion;
 	int32_t  CorrId;
 	/* ClientId follows */
@@ -94,7 +101,10 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_LeaveGroup] = "LeaveGroup",
                 [RD_KAFKAP_SyncGroup] = "SyncGroup",
 		[RD_KAFKAP_DescribeGroups] = "DescribeGroups",
-		[RD_KAFKAP_ListGroups] = "ListGroups"
+		[RD_KAFKAP_ListGroups] = "ListGroups",
+		[RD_KAFKAP_SaslHandshake] = "SaslHandshake",
+		[RD_KAFKAP_ApiVersion] = "ApiVersion"
+
 	};
 	static RD_TLS char ret[32];
 
@@ -112,6 +122,26 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 
 #define RD_KAFKAP_MESSAGESET_HDR_SIZE (8+4)
 #define RD_KAFKAP_MESSAGE_HDR_SIZE    (4+1+1)
+
+
+/**
+ * @brief ApiKey version support tuple.
+ */
+struct rd_kafka_ApiVersion {
+	int16_t ApiKey;
+	int16_t MinVer;
+	int16_t MaxVer;
+};
+
+/**
+ * @brief ApiVersion.ApiKey comparator.
+ */
+static RD_UNUSED int rd_kafka_ApiVersion_key_cmp (const void *_a, const void *_b) {
+	const struct rd_kafka_ApiVersion *a = _a, *b = _b;
+
+	return a->ApiKey - b->ApiKey;
+}
+
 
 
 
@@ -174,7 +204,7 @@ static RD_UNUSED void rd_kafkap_str_destroy (rd_kafkap_str_t *kstr) {
  * Nul-terminates the string, but the trailing \0 is not part of
  * the serialized string.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 rd_kafkap_str_t *rd_kafkap_str_new (const char *str, int len) {
 	rd_kafkap_str_t *kstr;
 	int16_t klen;
@@ -209,12 +239,12 @@ rd_kafkap_str_t *rd_kafkap_str_new (const char *str, int len) {
  * Makes a copy of `src`. The copy will be fully allocated and should
  * be freed with rd_kafka_pstr_destroy()
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 rd_kafkap_str_t *rd_kafkap_str_copy (const rd_kafkap_str_t *src) {
         return rd_kafkap_str_new(src->str, src->len);
 }
 
-static __inline RD_UNUSED int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
+static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
 						 const rd_kafkap_str_t *b) {
 	int minlen = RD_MIN(a->len, b->len);
 	int r = memcmp(a->str, b->str, minlen);
@@ -224,7 +254,7 @@ static __inline RD_UNUSED int rd_kafkap_str_cmp (const rd_kafkap_str_t *a,
 		return a->len - b->len;
 }
 
-static __inline RD_UNUSED int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
+static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
 						     const char *str) {
 	int len = (int)strlen(str);
 	int minlen = RD_MIN(a->len, len);
@@ -235,7 +265,7 @@ static __inline RD_UNUSED int rd_kafkap_str_cmp_str (const rd_kafkap_str_t *a,
 		return a->len - len;
 }
 
-static __inline RD_UNUSED int rd_kafkap_str_cmp_str2 (const char *str,
+static RD_INLINE RD_UNUSED int rd_kafkap_str_cmp_str2 (const char *str,
 						      const rd_kafkap_str_t *b){
 	int len = (int)strlen(str);
 	int minlen = RD_MIN(b->len, len);
@@ -294,7 +324,7 @@ static RD_UNUSED void rd_kafkap_bytes_destroy (rd_kafkap_bytes_t *kbytes) {
  * Allocate a new Kafka bytes and make a copy of 'bytes'.
  * Supports Kafka NULL bytes.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
 	rd_kafkap_bytes_t *kbytes;
 	int32_t klen;
@@ -324,13 +354,13 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
  * Makes a copy of `src`. The copy will be fully allocated and should
  * be freed with rd_kafkap_bytes_destroy()
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 rd_kafkap_bytes_t *rd_kafkap_bytes_copy (const rd_kafkap_bytes_t *src) {
         return rd_kafkap_bytes_new(src->data, src->len);
 }
 
 
-static __inline RD_UNUSED int rd_kafkap_bytes_cmp (const rd_kafkap_bytes_t *a,
+static RD_INLINE RD_UNUSED int rd_kafkap_bytes_cmp (const rd_kafkap_bytes_t *a,
 						   const rd_kafkap_bytes_t *b) {
 	int minlen = RD_MIN(a->len, b->len);
 	int r = memcmp(a->data, b->data, minlen);
@@ -340,7 +370,7 @@ static __inline RD_UNUSED int rd_kafkap_bytes_cmp (const rd_kafkap_bytes_t *a,
 		return a->len - b->len;
 }
 
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 int rd_kafkap_bytes_cmp_data (const rd_kafkap_bytes_t *a,
 			      const char *data, int len) {
 	int minlen = RD_MIN(a->len, len);

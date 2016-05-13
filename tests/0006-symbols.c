@@ -95,6 +95,7 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_topic_name(NULL);
                 rd_kafka_message_destroy(NULL);
                 rd_kafka_message_errstr(NULL);
+		rd_kafka_message_timestamp(NULL, NULL);
                 rd_kafka_consume_start(NULL, 0, 0);
                 rd_kafka_consume_stop(NULL, 0);
                 rd_kafka_consume(NULL, 0, 0);
@@ -138,7 +139,8 @@ int main_0006_symbols (int argc, char **argv) {
 		rd_kafka_assignment(NULL, NULL);
 		rd_kafka_commit(NULL, NULL, 0);
 		rd_kafka_commit_message(NULL, NULL, 0);
-                rd_kafka_position(NULL, NULL, 0);
+                rd_kafka_committed(NULL, NULL, 0);
+		rd_kafka_position(NULL, NULL);
 
 		/* TopicPartition */
 		rd_kafka_topic_partition_list_new(0);

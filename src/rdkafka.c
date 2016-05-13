@@ -163,18 +163,11 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 	const char *fac, const char *buf) {
 	int secs, msecs;
-#ifndef _MSC_VER
 	struct timeval tv;
-	gettimeofday(&tv, NULL);
+	rd_gettimeofday(&tv, NULL);
 	secs = (int)tv.tv_sec;
 	msecs = (int)(tv.tv_usec / 1000);
-#else
-	struct __timeb64 tb;
-	_ftime64_s(&tb);
-	secs = (int)tb.time;
-	msecs = (int)tb.millitm;
-#endif
-	fprintf(stdout, "%%%i|%u.%03u|%s|%s| %s\n",
+	fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n",
 		level, secs, msecs,
 		fac, rk ? rk->rk_name : "", buf);
 }
@@ -354,6 +347,14 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Broker: Group authorization failed"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED,
 		  "Broker: Cluster authorization failed"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_TIMESTAMP,
+		  "Broker: Invalid timestamp"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_SASL_MECHANISM,
+		  "Broker: Unsupported SASL mechanism"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_ILLEGAL_SASL_STATE,
+		  "Broker: Request not valid in current SASL state"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION,
+		  "Broker: API version not supported"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
 };
@@ -615,7 +616,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 /**
  * Emit stats for toppar
  */
-static __inline void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
+static RD_INLINE void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 					       size_t *ofp,
 					       rd_kafka_toppar_t *rktp,
 					       int first) {
@@ -914,7 +915,7 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
                 rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
                                              NULL, "periodic refresh");
 
-		rd_kafka_broker_destroy(rkb);
+        rd_kafka_broker_destroy(rkb);
 }
 
 
@@ -1744,9 +1745,9 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
 
 
 rd_kafka_resp_err_t
-rd_kafka_position (rd_kafka_t *rk,
-                   rd_kafka_topic_partition_list_t *partitions,
-                   int timeout_ms) {
+rd_kafka_committed (rd_kafka_t *rk,
+		    rd_kafka_topic_partition_list_t *partitions,
+		    int timeout_ms) {
         rd_kafka_q_t *replyq;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
@@ -1794,6 +1795,40 @@ rd_kafka_position (rd_kafka_t *rk,
         rd_kafka_q_destroy(replyq);
 
         return err;
+}
+
+
+
+rd_kafka_resp_err_t
+rd_kafka_position (rd_kafka_t *rk,
+		   rd_kafka_topic_partition_list_t *partitions) {
+ 	int i;
+
+	/* Set default offsets. */
+	rd_kafka_topic_partition_list_reset_offsets(partitions,
+						    RD_KAFKA_OFFSET_INVALID);
+
+	for (i = 0 ; i < partitions->cnt ; i++) {
+		rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+		shptr_rd_kafka_toppar_t *s_rktp;
+		rd_kafka_toppar_t *rktp;
+
+		if (!(s_rktp = rd_kafka_toppar_get2(rk, rktpar->topic,
+						    rktpar->partition, 0, 0))) {
+			rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+			rktpar->offset = RD_KAFKA_OFFSET_INVALID;
+			continue;
+		}
+
+		rktp = rd_kafka_toppar_s2i(s_rktp);
+		rd_kafka_toppar_lock(rktp);
+		rktpar->offset = rktp->rktp_app_offset;
+		rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+		rd_kafka_toppar_unlock(rktp);
+		rd_kafka_toppar_destroy(s_rktp);
+	}
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 

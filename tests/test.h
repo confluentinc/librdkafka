@@ -33,6 +33,8 @@ extern int test_assert_on_fail;
 extern int tests_running_cnt;
 extern double test_timeout_multiplier;
 extern int  test_session_timeout_ms; /* Group session timeout */
+extern int  test_flags;
+extern int  test_neg_flags;
 
 extern mtx_t test_mtx;
 
@@ -40,7 +42,7 @@ extern mtx_t test_mtx;
 #define TEST_UNLOCK() mtx_unlock(&test_mtx)
 
 
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 int tmout_multip (int msecs) {
         int r;
         TEST_LOCK();
@@ -69,6 +71,9 @@ struct test {
 #define TEST_F_LOCAL   0x1   /**< Test is local, no broker requirement */
 #define TEST_F_KNOWN_ISSUE 0x2 /**< Known issue, can fail without affecting
 				*   total test run status. */
+	int minver;          /**< Limit tests to broker version range. */
+	int maxver;
+
 	const char *extra;   /**< Extra information to print in test_summary. */
 
         /**
@@ -86,6 +91,16 @@ struct test {
                 TEST_FAILED,
         } state;
 };
+
+
+/** @brief Broker version to int */
+#define TEST_BRKVER(A,B,C,D) \
+	(((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
+/** @brief return single version component from int */
+#define TEST_BRKVER_X(V,I) \
+	(((V) >> (24-((I)*8))) & 0xff)
+
+extern int test_broker_version;
 
 
 #define TEST_FAIL0(fail_now,...) do {					\
@@ -182,12 +197,12 @@ char *test_str_id_generate (char *dest, size_t dest_size);
 /**
  * A microsecond monotonic clock
  */
-static __inline int64_t test_clock (void)
+static RD_INLINE int64_t test_clock (void)
 #ifndef _MSC_VER
 __attribute__((unused))
 #endif
 ;
-static __inline int64_t test_clock (void) {
+static RD_INLINE int64_t test_clock (void) {
 #ifdef __APPLE__
 	/* No monotonic clock on Darwin */
 	struct timeval tv;
@@ -242,8 +257,8 @@ void test_msg_parse0 (const char *func, int line,
 			testid,ptr,size,exp_partition,msgidp)
 
 
-static __inline int jitter (int low, int high) RD_UNUSED;
-static __inline int jitter (int low, int high) {
+static RD_INLINE int jitter (int low, int high) RD_UNUSED;
+static RD_INLINE int jitter (int low, int high) {
 	return (low + (rand() % (high+1)));
 }
 
@@ -370,6 +385,8 @@ int test_msgver_verify0 (const char *func, int line, const char *what,
 			    what,mv,flags,msg_base,exp_cnt)
 
 
+rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf);
+
 /**
  * Delivery reported callback.
  * Called for each message once to signal its delivery status.
@@ -449,6 +466,7 @@ void test_consumer_unassign (const char *what, rd_kafka_t *rk);
 void test_consumer_close (rd_kafka_t *rk);
 
 void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val);
+char *test_conf_get (rd_kafka_conf_t *conf, const char *name);
 void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
                           const char *name, const char *val);
 

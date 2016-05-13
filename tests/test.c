@@ -26,12 +26,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+
+#define _CRT_RAND_S  // rand_s() on MSVC
 #include <stdarg.h>
 #include "test.h"
 #include <signal.h>
 #include <stdlib.h>
 #include <stdio.h>
-
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
@@ -52,6 +53,10 @@ double test_timeout_multiplier  = 1.0;
 static char *test_topics_sh = NULL;
 static char *test_sql_cmd = NULL;
 int  test_session_timeout_ms = 6000;
+int          test_broker_version;
+static char *test_broker_version_str = "0.9.0.0";
+int          test_flags = 0;
+int          test_neg_flags = 0;
 
 static int test_summary (int do_lock);
 
@@ -106,6 +111,9 @@ _TEST_DECL(0030_offset_commit);
 _TEST_DECL(0031_get_offsets);
 _TEST_DECL(0033_regex_subscribe);
 _TEST_DECL(0034_offset_reset);
+_TEST_DECL(0035_api_version);
+_TEST_DECL(0036_partial_fetch);
+_TEST_DECL(0037_destroy_hang_local);
 
 /**
  * Define all tests here
@@ -127,20 +135,23 @@ struct test tests[] = {
         _TEST(0014_reconsume_191, 0),
         _TEST(0015_offsets_seek, 0),
         _TEST(0017_compression, 0),
-        _TEST(0018_cgrp_term, 0),
-        _TEST(0019_list_groups, 0),
-        _TEST(0020_destroy_hang, 0),
+        _TEST(0018_cgrp_term, 0, TEST_BRKVER(0,9,0,0)),
+        _TEST(0019_list_groups, 0, TEST_BRKVER(0,9,0,0)),
+        _TEST(0020_destroy_hang, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0021_rkt_destroy, 0),
         _TEST(0022_consume_batch, 0),
         _TEST(0025_timers, TEST_F_LOCAL),
-	_TEST(0026_consume_pause, 0),
+	_TEST(0026_consume_pause, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0028_long_topicnames, TEST_F_KNOWN_ISSUE,
-	      "https://github.com/edenhill/librdkafka/issues/529"),
+	      .extra = "https://github.com/edenhill/librdkafka/issues/529"),
 	_TEST(0029_assign_offset, 0),
-	_TEST(0030_offset_commit, 0),
+	_TEST(0030_offset_commit, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0031_get_offsets, 0),
-	_TEST(0033_regex_subscribe, 0),
+	_TEST(0033_regex_subscribe, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0034_offset_reset, 0),
+	_TEST(0035_api_version, 0),
+	_TEST(0036_partial_fetch, 0),
+	_TEST(0037_destroy_hang_local, TEST_F_LOCAL),
         { NULL }
 };
 
@@ -196,9 +207,15 @@ static void test_init (void) {
 	if ((tmp = getenv("TEST_SEED")))
 		seed = atoi(tmp);
 	else
-#endif
-		seed = test_clock() & 0xffffffff;
 
+		seed = test_clock() & 0xffffffff;
+#else
+	{
+		LARGE_INTEGER cycl;
+		QueryPerformanceCounter(&cycl);
+		seed = (int)cycl.QuadPart;
+	}
+#endif
 	srand(seed);
 	test_seed = seed;
 }
@@ -412,12 +429,20 @@ void test_wait_exit (int timeout) {
 }
 
 
-
+static RD_INLINE unsigned int test_rand(void) {
+	unsigned int r;
+#if _MSC_VER
+	rand_s(&r);
+#else
+	r = rand();
+#endif
+	return r;
+}
 /**
  * Generate a "unique" test id.
  */
 uint64_t test_id_generate (void) {
-	return (((uint64_t)rand()) << 32) | (uint64_t)rand();
+	return (((uint64_t)test_rand()) << 32) | (uint64_t)test_rand();
 }
 
 
@@ -459,7 +484,7 @@ void test_msg_parse0 (const char *func, int line,
 
 	rd_snprintf(buf, sizeof(buf), "%.*s", (int)size, (char *)ptr);
 
-	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 		   &in_testid, &in_part, msgidp) != 3)
 		TEST_FAIL("%s:%i: Incorrect key format: %s", func, line, buf);
 
@@ -598,7 +623,7 @@ static int run_test (struct test *test, int argc, char **argv) {
         return 0;
 }
 
-static void run_tests (const char *tests_to_run, int test_flags, int neg_flags,
+static void run_tests (const char *tests_to_run,
                        int argc, char **argv) {
         struct test *test;
 
@@ -606,6 +631,7 @@ static void run_tests (const char *tests_to_run, int test_flags, int neg_flags,
                 char testnum[128];
                 char *t;
                 const char *skip_reason = NULL;
+		char tmp[128];
 
                 if (!test->mainfunc)
                         continue;
@@ -618,8 +644,20 @@ static void run_tests (const char *tests_to_run, int test_flags, int neg_flags,
 
                 if ((test_flags && (test_flags & test->flags) != test_flags))
                         skip_reason = "filtered due to test flags";
-		if (neg_flags & test->flags)
+		if (test_neg_flags & test->flags)
 			skip_reason = "Filtered due to negative test flags";
+		if (test_broker_version &&
+		    (test->minver > test_broker_version ||
+		     (test->maxver && test->maxver < test_broker_version))) {
+			rd_snprintf(tmp, sizeof(tmp),
+				    "not applicable for broker "
+				    "version %d.%d.%d.%d",
+				    TEST_BRKVER_X(test_broker_version, 0),
+				    TEST_BRKVER_X(test_broker_version, 1),
+				    TEST_BRKVER_X(test_broker_version, 2),
+				    TEST_BRKVER_X(test_broker_version, 3));
+			skip_reason = tmp;
+		}
 
                 if (tests_to_run && !strstr(tests_to_run, testnum))
                         skip_reason = "not included in TESTS list";
@@ -656,12 +694,19 @@ static int test_summary (int do_lock) {
 	int tests_failed_known = 0;
         int tests_passed = 0;
 	FILE *sql_fp = NULL;
+	char *tmp;
 
         t = time(NULL);
         tm = localtime(&t);
         strftime(datestr, sizeof(datestr), "%Y%m%d%H%M%S", tm);
-        rd_snprintf(report_path, sizeof(report_path), "test_report_%s.json",
-                    datestr);
+
+#ifndef _MSC_VER
+	if ((tmp = getenv("TEST_REPORT")) && *tmp)
+		rd_snprintf(report_path, sizeof(report_path), "%s", tmp);
+	else
+#endif
+		rd_snprintf(report_path, sizeof(report_path), "test_report_%s.json",
+			    datestr);
 
         report_fp = fopen(report_path, "w+");
         if (!report_fp)
@@ -701,19 +746,27 @@ static int test_summary (int do_lock) {
                 const char *color;
                 int64_t duration;
 		char extra[128] = "";
+		int do_count = 1;
 
                 if (!(duration = test->duration) && test->start > 0)
                         duration = test_clock() - test->start;
 
-                if (test == tests) /* <MAIN> test accounts for total runtime */
+                if (test == tests) {
+			/* <MAIN> test:
+			 * test accounts for total runtime.
+			 * dont include in passed/run/failed counts. */
                         total_duration = duration;
+			do_count = 0;
+		}
 
                 switch (test->state)
                 {
                 case TEST_PASSED:
                         color = _C_GRN;
-                        tests_passed++;
-                        tests_run++;
+			if (do_count) {
+				tests_passed++;
+				tests_run++;
+			}
                         break;
                 case TEST_FAILED:
 			if (test->flags & TEST_F_KNOWN_ISSUE) {
@@ -721,16 +774,21 @@ static int test_summary (int do_lock) {
 					    " <-- known issue%s%s",
 					    test->extra ? ": " : "",
 					    test->extra ? test->extra : "");
-				tests_failed_known++;
+				if (do_count)
+					tests_failed_known++;
 			}
                         color = _C_RED;
-                        tests_failed++;
-                        tests_run++;
+			if (do_count) {
+				tests_failed++;
+				tests_run++;
+			}
                         break;
                 case TEST_RUNNING:
                         color = _C_MAG;
-			tests_failed++; /* All tests should be finished */
-                        tests_run++;
+			if (do_count) {
+				tests_failed++; /* All tests should be finished */
+				tests_run++;
+			}
                         break;
                 case TEST_NOT_STARTED:
                         color = _C_YEL;
@@ -825,10 +883,9 @@ static void test_cleanup (void) {
 
 int main(int argc, char **argv) {
         const char *tests_to_run = NULL; /* all */
-        int test_flags = 0;
-	int neg_flags = 0;
         int i, r;
 	test_timing_t t_all;
+	int a,b,c,d;
 
 	mtx_init(&test_mtx, mtx_plain);
 
@@ -837,6 +894,8 @@ int main(int argc, char **argv) {
 #ifndef _MSC_VER
 	signal(SIGINT, test_sig_term);
         tests_to_run = getenv("TESTS");
+	if (getenv("TEST_KAFKA_VERSION"))
+		test_broker_version_str = getenv("TEST_KAFKA_VERSION");
 #endif
 
 	test_conf_init(NULL, NULL, 10);
@@ -847,14 +906,16 @@ int main(int argc, char **argv) {
                 else if (!strcmp(argv[i], "-l"))
                         test_flags |= TEST_F_LOCAL;
 		else if (!strcmp(argv[i], "-L"))
-                        neg_flags |= TEST_F_LOCAL;
+                        test_neg_flags |= TEST_F_LOCAL;
                 else if (!strcmp(argv[i], "-a"))
                         test_assert_on_fail = 1;
 		else if (!strcmp(argv[i], "-k"))
 			test_flags |= TEST_F_KNOWN_ISSUE;
 		else if (!strcmp(argv[i], "-K"))
-			neg_flags |= TEST_F_KNOWN_ISSUE;
-                else if (*argv[i] != '-')
+			test_neg_flags |= TEST_F_KNOWN_ISSUE;
+		else if (!strcmp(argv[i], "-V") && i+1 < argc)
+ 			test_broker_version_str = argv[++i];
+		else if (*argv[i] != '-')
                         tests_to_run = argv[i];
                 else {
                         printf("Unknown option: %s\n"
@@ -865,11 +926,38 @@ int main(int argc, char **argv) {
                                "  -l/-L  Only/dont run local tests (no broker needed)\n"
 			       "  -k/-K  Only/dont run tests with known issues\n"
                                "  -a     Assert on failures\n"
+			       "  -V <N.N.N.N> Broker version.\n"
+			       "\n"
+			       "Environment variables:\n"
+			       "  TESTS - substring matched test to run (e.g., 0033)\n"
+			       "  TEST_KAFKA_VERSION - broker version (e.g., 0.9.0.1)\n"
+			       "  TEST_LEVEL - Test verbosity level\n"
+			       "  TEST_MODE - bare, helgrind, valgrind\n"
+			       "  TEST_SEED - random seed\n"
+			       "  RDKAFKA_TEST_CONF - test config file (test.conf)\n"
                                "\n",
                                argv[0], argv[i]);
                         exit(1);
                 }
         }
+
+	if (!strcmp(test_broker_version_str, "trunk"))
+		test_broker_version_str = "0.10.0.0"; /* for now */
+
+	if (sscanf(test_broker_version_str, "%d.%d.%d.%d",
+		   &a, &b, &c, &d) != 4) {
+		printf("%% Expected broker version to be in format "
+		       "N.N.N.N (N=int), not %s\n",
+		       test_broker_version_str);
+		exit(1);
+	}
+	test_broker_version = TEST_BRKVER(a, b, c, d);
+	TEST_SAY("Broker version: %s (%d.%d.%d.%d)\n",
+		 test_broker_version_str,
+		 TEST_BRKVER_X(test_broker_version, 0),
+		 TEST_BRKVER_X(test_broker_version, 1),
+		 TEST_BRKVER_X(test_broker_version, 2),
+		 TEST_BRKVER_X(test_broker_version, 3));
 
 	/* Set up fake "<MAIN>" test for all operations performed in
 	 * the main thread rather than the per-test threads.
@@ -896,7 +984,7 @@ int main(int argc, char **argv) {
         TIMING_START(&t_all, "ALL-TESTS");
 
 	/* Run tests */
-        run_tests(tests_to_run, test_flags, neg_flags, argc, argv);
+        run_tests(tests_to_run, argc, argv);
 
         TEST_LOCK();
         while (tests_running_cnt > 0 && !test_exit) {
@@ -908,7 +996,8 @@ int main(int argc, char **argv) {
                         if (test->state != TEST_RUNNING)
 				continue;
 
-			TEST_SAY0(" %s", test->name);
+			if (test_level >= 2)
+				TEST_SAY0(" %s", test->name);
 
 			/* Timeout check */
 			if (now > test->timeout) {
@@ -951,6 +1040,9 @@ int main(int argc, char **argv) {
 
 	test_cleanup();
 
+	if (r > 0)
+		TEST_FAIL("%d test(s) failed, see previous errors", r);
+
 	return r;
 }
 
@@ -980,23 +1072,28 @@ void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 }
 
 
-rd_kafka_t *test_create_producer (void) {
+rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf) {
 	rd_kafka_t *rk;
-	rd_kafka_conf_t *conf;
 	char errstr[512];
 
-	test_conf_init(&conf, NULL, 0);
-
-	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
-
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+	rk = rd_kafka_new(mode, conf, errstr, sizeof(errstr));
 	if (!rk)
 		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
 
 	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
 	return rk;
+}
+
+
+rd_kafka_t *test_create_producer (void) {
+	rd_kafka_conf_t *conf;
+
+	test_conf_init(&conf, NULL, 0);
+	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+
+	return test_create_handle(RD_KAFKA_PRODUCER, conf);
 }
 
 
@@ -1070,6 +1167,13 @@ rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
  * \p msgcounterp is incremented for each produced messages and passed
  * as \p msg_opaque which is later used in test_dr_cb to decrement
  * the counter on delivery.
+ *
+ * If \p payload is NULL the message key and payload will be formatted
+ * according to standard test format, otherwise the key will be NULL and
+ * payload send as message payload.
+ *
+ * Default message size is 128 bytes, if \p size is non-zero and \p payload
+ * is NULL the message size of \p size will be used.
  */
 void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                uint64_t testid, int32_t partition,
@@ -1078,6 +1182,16 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                int *msgcounterp) {
 	int msg_id;
 	test_timing_t t_all;
+	char key[128];
+	void *buf;
+
+	if (payload)
+		buf = (void *)payload;
+	else {
+		if (size == 0)
+			size = 128;
+		buf = calloc(1, size);
+	}
 
 	TEST_SAY("Produce to %s [%"PRId32"]: messages #%d..%d\n",
 		 rd_kafka_topic_name(rkt), partition, msg_base, msg_base+cnt);
@@ -1085,26 +1199,17 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	TIMING_START(&t_all, "PRODUCE");
 
 	for (msg_id = msg_base ; msg_id < msg_base + cnt ; msg_id++) {
-		char key[128];
-		char buf[128];
-		const char *use_payload;
-		size_t use_size;
-
-		if (payload) {
-			use_payload = payload;
-			use_size = size;
-		} else {
+		if (!payload) {
 			test_msg_fmt(key, sizeof(key), testid, partition,
 				     msg_id);
-			rd_snprintf(buf, sizeof(buf), "%s: data", key);
-			use_payload = buf;
-			use_size = strlen(buf);
+			memcpy(buf, key, RD_MIN(size, sizeof(key)));
 		}
 
 		if (rd_kafka_produce(rkt, partition,
 				     RD_KAFKA_MSG_F_COPY,
-				     (void *)use_payload, use_size,
-				     key, strlen(key),
+				     buf, size,
+				     !payload ? key : NULL,
+				     !payload ? strlen(key) : 0,
 				     msgcounterp) == -1)
 			TEST_FAIL("Failed to produce message %i "
 				  "to partition %i: %s",
@@ -1114,6 +1219,9 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                 (*msgcounterp)++;
 
         }
+
+	if (!payload)
+		free(buf);
 
 	TIMING_STOP(&t_all);
 }
@@ -1199,17 +1307,17 @@ rd_kafka_t *test_create_consumer (const char *group_id,
                                       errstr, sizeof(errstr)) !=
                     RD_KAFKA_CONF_OK)
                         TEST_FAIL("Conf failed: %s\n", errstr);
-        }
 
-	rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
-	if (rd_kafka_conf_set(conf, "session.timeout.ms", tmp,
-			      errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK)
-		TEST_FAIL("Conf failed: %s\n", errstr);
+		rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
+		test_conf_set(conf, "session.timeout.ms", tmp);
+
+		if (rebalance_cb)
+			rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
+	} else {
+		TEST_ASSERT(!rebalance_cb);
+	}
 
 	rd_kafka_conf_set_opaque(conf, opaque);
-
-	if (rebalance_cb)
-		rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
         if (default_topic_conf)
                 rd_kafka_conf_set_default_topic_conf(conf, default_topic_conf);
@@ -1222,7 +1330,7 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 	if (group_id)
 		rd_kafka_poll_set_consumer(rk);
 
-	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+	TEST_SAY("Created kafka instance %s\n", rd_kafka_name(rk));
 
 	return rk;
 }
@@ -1591,7 +1699,7 @@ static struct test_mv_m *test_mv_mvec_add (struct test_mv_mvec *mvec) {
 /**
  * Returns message at index \p mi
  */
-static __inline struct test_mv_m *test_mv_mvec_get (struct test_mv_mvec *mvec,
+static RD_INLINE struct test_mv_m *test_mv_mvec_get (struct test_mv_mvec *mvec,
 						    int mi) {
 	return &mvec->m[mi];
 }
@@ -1644,7 +1752,7 @@ int test_msgver_add_msg0 (const char *func, int line,
 		rd_snprintf(buf, sizeof(buf), "%.*s",
 			    (int)rkmessage->len, (char *)rkmessage->payload);
 
-		if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+		if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 			   &in_testid, &in_part, &in_msgnum) != 3)
 			TEST_FAIL("%s:%d: Incorrect format: %s",
 				  func, line, buf);
@@ -2103,7 +2211,7 @@ void test_verify_rkmessage0 (const char *func, int line,
 	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->len, (char *)rkmessage->payload);
 
-	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 		   &in_testid, &in_part, &in_msgnum) != 3)
 		TEST_FAIL("Incorrect format: %s", buf);
 
@@ -2324,6 +2432,15 @@ void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val) {
             RD_KAFKA_CONF_OK)
                 TEST_FAIL("Failed to set config \"%s\"=\"%s\": %s\n",
                           name, val, errstr);
+}
+
+char *test_conf_get (rd_kafka_conf_t *conf, const char *name) {
+	static char ret[256];
+	size_t ret_sz = sizeof(ret);
+	if (rd_kafka_conf_get(conf, name, ret, &ret_sz) != RD_KAFKA_CONF_OK)
+		TEST_FAIL("Failed to get config \"%s\": %s\n", name,
+			  "unknown property");
+	return ret;
 }
 
 

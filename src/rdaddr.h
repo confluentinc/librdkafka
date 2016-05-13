@@ -123,9 +123,9 @@ typedef struct rd_sockaddr_list_s {
  * 
  */
  
-static __inline rd_sockaddr_inx_t *
+static RD_INLINE rd_sockaddr_inx_t *
 rd_sockaddr_list_next (rd_sockaddr_list_t *rsal) RD_UNUSED;
-static __inline rd_sockaddr_inx_t *
+static RD_INLINE rd_sockaddr_inx_t *
 rd_sockaddr_list_next (rd_sockaddr_list_t *rsal) {
 	rsal->rsal_curr = (rsal->rsal_curr + 1) % rsal->rsal_cnt;
 	return &rsal->rsal_addr[rsal->rsal_curr];

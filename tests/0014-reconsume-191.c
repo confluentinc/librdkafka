@@ -252,7 +252,7 @@ static void verify_consumed_msg0 (const char *func, int line,
 	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->key_len, (char *)rkmessage->key);
 
-	if (sscanf(buf, "testid=%"SCNd64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 		   &in_testid, &in_part, &in_msgnum) != 3)
 		TEST_FAIL("Incorrect key format: %s", buf);
 
@@ -500,7 +500,8 @@ static void test_produce_consume (const char *offset_store_method) {
 
 
 int main_0014_reconsume_191 (int argc, char **argv) {
-	test_produce_consume("broker");
+	if (test_broker_version >= TEST_BRKVER(0,8,2,0))
+		test_produce_consume("broker");
         test_produce_consume("file");
 	return 0;
 }

@@ -281,6 +281,21 @@ addresses for each connection attempt.
 A DNS record containing all broker address can thus be used to provide a
 reliable bootstrap broker.
 
+### Feature discovery
+
+Apache Kafka broker version 0.10.0 added support for the ApiVersionRequest API
+which allows a client to query a broker for its range of supported API versions.
+
+librdkafka supports this functionality and will query each broker on connect
+for this information (if `api.version.request=true`) and use it to enable or disable
+various protocol features, such as MessageVersion 1 (timestamps), KafkaConsumer, etc.
+
+If the broker fails to respond to the ApiVersionRequest librdkafka will
+assume the broker is too old to support the API and fall back to an older
+broker version's API. These fallback versions are hardcoded in librdkafka
+and is controlled by the `broker.version.fallback` configuration property.
+
+
 
 ### Producer API
 
@@ -424,10 +439,8 @@ There is currently no support for offset management with ZooKeeper.
 
 #### Consumer groups
 
-There is currently no support for consumer groups, the librdkafka consumer API
-resembles the official scala Simple Consumer.
-The application should provide its own consumer group management until
-librdkafka adds support for it.
+Broker based consumer groups (requires Apache Kafka broker >=0.9) are supported,
+see KafkaConsumer in rdkafka.h or rdkafkacpp.h
 
 
 ### Topics

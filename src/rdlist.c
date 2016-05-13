@@ -156,7 +156,7 @@ void *rd_list_remove_cmp (rd_list_t *rl, void *match_elem,
  */
 static RD_TLS int (*rd_list_cmp_curr) (const void *, const void *);
 
-static __inline
+static RD_INLINE
 int rd_list_cmp_trampoline (const void *_a, const void *_b) {
 	const void *a = *(const void **)_a, *b = *(const void **)_b;
 

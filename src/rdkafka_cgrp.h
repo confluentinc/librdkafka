@@ -113,7 +113,7 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_kafka_q_t       rkcg_q;                  /* Application poll queue */
         rd_kafka_q_t       rkcg_ops;                /* Manager ops queue */
-
+	rd_kafka_q_t       rkcg_wait_coord_q;       /* Ops awaiting coord */
         mtx_t              rkcg_lock;
 
         int                rkcg_flags;
@@ -183,6 +183,10 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_op_t     *rkcg_reply_rko;          /* Send reply for op
                                                      * (OP_TERMINATE)
                                                      * to this rko's queue. */
+
+	rd_ts_t            rkcg_ts_terminate;       /* Timestamp of when
+						     * cgrp termination was
+						     * initiated. */
 } rd_kafka_cgrp_t;
 
 
@@ -236,7 +240,6 @@ void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state);
 int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg);
 
 void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
-				rd_kafka_broker_t *rkb,
 				const char *reason);
 
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)

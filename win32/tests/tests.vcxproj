@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -190,6 +190,9 @@
     <ClCompile Include="..\..\tests\0031-get_offsets.c" />
     <ClCompile Include="..\..\tests\0033-regex_subscribe.c" />
     <ClCompile Include="..\..\tests\0034-offset_reset.c" />
+    <ClCompile Include="..\..\tests\0035-api_version.c" />
+    <ClCompile Include="..\..\tests\0036-partial_fetch.c" />
+    <ClCompile Include="..\..\tests\0037-destroy_hang_local.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

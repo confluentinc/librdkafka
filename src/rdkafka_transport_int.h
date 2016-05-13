@@ -53,6 +53,10 @@ struct rd_kafka_transport_s {
 	struct {
 		sasl_conn_t *conn;
 
+		int           complete;    /* Auth was completed early
+					    * from the client's perspective
+					    * but we must still wait for
+					    * reply from server. */
 		struct msghdr msg;
 		struct iovec  iov[2];
 

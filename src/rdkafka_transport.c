@@ -228,31 +228,6 @@ void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
 				      char *errstr) {
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 
-#if WITH_SASL
-	if (!errstr &&
-	    (rkb->rkb_proto == RD_KAFKA_PROTO_SASL_PLAINTEXT ||
-	     rkb->rkb_proto == RD_KAFKA_PROTO_SASL_SSL)) {
-		char sasl_errstr[512];
-		if (rd_kafka_sasl_client_new(rkb->rkb_transport, sasl_errstr,
-					     sizeof(sasl_errstr)) == -1) {
-			errno = EINVAL;
-			rd_kafka_broker_fail(rkb, LOG_ERR,
-					     RD_KAFKA_RESP_ERR__AUTHENTICATION,
-					     "Failed to initialize "
-					     "SASL authentication: %s",
-					     sasl_errstr);
-			return;
-
-		}
-
-		rd_kafka_broker_lock(rkb);
-		rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_AUTH);
-		rd_kafka_broker_unlock(rkb);
-
-		return;
-	}
-#endif
-
 	rd_kafka_broker_connect_done(rkb, errstr);
 }
 
@@ -358,7 +333,7 @@ static void rd_kafka_transport_ssl_init (void) {
  *
  * Locality: broker thread
  */
-static __inline int
+static RD_INLINE int
 rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
 				  char *errstr, size_t errstr_size) {
 	int serr = SSL_get_error(rktrans->rktrans_ssl, ret);
@@ -688,6 +663,26 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 
 		if (r != 1)
 			goto fail;
+	}
+
+	if (rk->rk_conf.ssl.crl_location) {
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+			     "Loading CRL from file %s",
+			     rk->rk_conf.ssl.crl_location);
+
+		r = SSL_CTX_load_verify_locations(ctx,
+						  rk->rk_conf.ssl.crl_location,
+						  NULL);
+
+		if (r != 1)
+			goto fail;
+
+
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+			     "Enabling CRL checks");
+
+		X509_STORE_set_flags(SSL_CTX_get_cert_store(ctx),
+				     X509_V_FLAG_CRL_CHECK);
 	}
 
 	if (rk->rk_conf.ssl.cert_location) {
@@ -1020,11 +1015,14 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 #endif
 		break;
 
+	case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
+	case RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE:
 	case RD_KAFKA_BROKER_STATE_UP:
 	case RD_KAFKA_BROKER_STATE_UPDATE:
 
 		if (events & POLLIN) {
-			while (rd_kafka_recv(rkb) > 0)
+			while (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
+			       rd_kafka_recv(rkb) > 0)
 				;
 		}
 
@@ -1039,13 +1037,13 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		}
 
 		if (events & POLLOUT) {
-			if (rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0)
-				while (rd_kafka_send(rkb) > 0)
-					;
+			while (rd_kafka_send(rkb) > 0)
+				;
 		}
 		break;
 
-	default:
+	case RD_KAFKA_BROKER_STATE_INIT:
+	case RD_KAFKA_BROKER_STATE_DOWN:
 		rd_kafka_assert(rkb->rkb_rk, !*"bad state");
 	}
 }
@@ -1061,7 +1059,8 @@ void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	int events;
 
-	if (rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0)
+	if (rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
+	    rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0)
 		rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
 
 	if ((events = rd_kafka_transport_poll(rktrans, timeout_ms)) <= 0)

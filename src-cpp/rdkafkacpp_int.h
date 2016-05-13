@@ -186,6 +186,15 @@ class MessageImpl : public Message {
   size_t              key_len () const { return rkmessage_->key_len; }
 
   int64_t             offset () const { return rkmessage_->offset; }
+
+  MessageTimestamp   timestamp () const {
+	  MessageTimestamp ts;
+	  rd_kafka_timestamp_type_t tstype;
+	  ts.timestamp = rd_kafka_message_timestamp(rkmessage_, &tstype);
+	  ts.type = static_cast<MessageTimestamp::MessageTimestampType>(tstype);
+	  return ts;
+  }
+
   void               *msg_opaque () const { return rkmessage_->_private; };
 
   RdKafka::Topic *topic_;
@@ -568,10 +577,8 @@ public:
   ErrorCode subscribe (const std::vector<std::string> &topics);
   ErrorCode unsubscribe ();
   ErrorCode assign (const std::vector<TopicPartition*> &partitions);
-  ErrorCode unassign () {
-	  std::vector<TopicPartition*> empty;
-	  return assign(empty);
-  }
+  ErrorCode unassign ();
+
   Message *consume (int timeout_ms);
   ErrorCode commitSync () {
     return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 0/*sync*/));
@@ -611,7 +618,8 @@ public:
   }
 
 
-  ErrorCode position (std::vector<TopicPartition*> &partitions, int timeout_ms);
+  ErrorCode committed (std::vector<TopicPartition*> &partitions, int timeout_ms);
+  ErrorCode position (std::vector<TopicPartition*> &partitions);
 
   ErrorCode close ();
 };

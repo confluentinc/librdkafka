@@ -544,7 +544,7 @@ int main (int argc, char **argv) {
         if (mode == 'O') {
                 /* Offset query */
 
-                err = rd_kafka_position(rk, topics, 5000);
+                err = rd_kafka_committed(rk, topics, 5000);
                 if (err) {
                         fprintf(stderr, "%% Failed to fetch offsets: %s\n",
                                 rd_kafka_err2str(err));

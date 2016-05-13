@@ -58,6 +58,7 @@ extern "C" {
 #include <basetsd.h>
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED
+#define RD_INLINE __inline
 #define RD_DEPRECATED
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_EXPORTS
@@ -68,6 +69,7 @@ typedef SSIZE_T ssize_t;
 
 #else
 #define RD_UNUSED __attribute__((unused))
+#define RD_INLINE inline
 #define RD_EXPORT
 #define RD_DEPRECATED __attribute__((deprecated))
 #endif
@@ -139,6 +141,19 @@ typedef enum rd_kafka_type_t {
 	RD_KAFKA_PRODUCER, /**< Producer client */
 	RD_KAFKA_CONSUMER  /**< Consumer client */
 } rd_kafka_type_t;
+
+
+/**
+ * @enum Timestamp types
+ *
+ * @sa rd_kafka_message_timestamp()
+ */
+typedef enum rd_kafka_timestamp_type_t {
+	RD_KAFKA_TIMESTAMP_NOT_AVAILABLE,   /**< Timestamp not available */
+	RD_KAFKA_TIMESTAMP_CREATE_TIME,     /**< Message creation time */
+	RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME  /**< Log append time */
+} rd_kafka_timestamp_type_t;
+
 
 
 /**
@@ -324,6 +339,14 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED = 30,
 	/** Cluster authorization failed */
 	RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED = 31,
+	/** Invalid timestamp */
+	RD_KAFKA_RESP_ERR_INVALID_TIMESTAMP = 32,
+	/** Unsupported SASL mechanism */
+	RD_KAFKA_RESP_ERR_UNSUPPORTED_SASL_MECHANISM = 33,
+	/** Illegal SASL state */
+	RD_KAFKA_RESP_ERR_ILLEGAL_SASL_STATE = 34,
+	/** Unuspported version */
+	RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION = 35,
 
 	RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
@@ -618,9 +641,9 @@ rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
 
 /**
  * @brief A Kafka message as returned by the \c rd_kafka_consume*() family
- *        of functions.
+ *        of functions as well as provided to the Producer \c dr_msg_cb().
  *
- * This object has two purposes:
+ * For the consumer this object has two purposes:
  *  - provide the application with a consumed message. (\c err == 0)
  *  - report per-topic+partition consumer errors (\c err != 0)
  *
@@ -633,7 +656,8 @@ typedef struct rd_kafka_message_s {
 	rd_kafka_resp_err_t err;   /**< Non-zero for error signaling. */
 	rd_kafka_topic_t *rkt;     /**< Topic */
 	int32_t partition;         /**< Partition */
-	void   *payload;           /**< Depends on the value of \c err :
+	void   *payload;           /**< Producer: original message payload.
+				    * Consumer: Depends on the value of \c err :
 				    * - \c err==0: Message payload.
 				    * - \c err!=0: Error string */
 	size_t  len;               /**< Depends on the value of \c err :
@@ -673,7 +697,7 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
  * @brief Returns the error string for an errored rd_kafka_message_t or NULL if
  *        there was no error.
  */
-static __inline const char *
+static RD_INLINE const char *
 RD_UNUSED 
 rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
 	if (!rkmessage->err)
@@ -684,6 +708,25 @@ rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
 
 	return rd_kafka_err2str(rkmessage->err);
 }
+
+
+
+/**
+ * @brief Returns the message timestamp for a consumed message.
+ *
+ * The timestamp is the number of milliseconds since the epoch (UTC).
+ *
+ * \p tstype is updated to indicate the type of timestamp.
+ *
+ * @returns message timestamp, or -1 if not available.
+ *
+ * @remark Message timestamps require broker version 0.10.0 or later.
+ */
+RD_EXPORT
+int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
+				    rd_kafka_timestamp_type_t *tstype);
+
+
 
 /**@}*/
 
@@ -922,8 +965,7 @@ void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
 /**
  * @brief Set throttle callback.
  *
- * The throttle callback is used in conjunction with
- * \c quota.support.enable=true to forward broker throttle times to the
+ * The throttle callback is used to forward broker throttle times to the
  * application for Produce and Fetch (consume) requests.
  *
  * Callbacks are triggered whenever a non-zero throttle time is returned by
@@ -931,6 +973,8 @@ void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
  *
  * An application must call rd_kafka_poll() or rd_kafka_consumer_poll() at
  * regular intervals to serve queued callbacks.
+ *
+ * @remark Requires broker version 0.9.0 or later.
  */
 RD_EXPORT
 void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
@@ -1910,6 +1954,7 @@ rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
  * @remark This call will block until the consumer has revoked its assignment,
  *         calling the \c rebalance_cb if it is configured, committed offsets
  *         to broker, and left the consumer group.
+ *         The maximum blocking time is roughly limited to session.timeout.ms.
  *
  * @returns An error code indicating if the consumer close was succesful
  *          or not.
@@ -1976,7 +2021,7 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
 
 
 /**
- * @brief Retrieve committed positions (offsets) for topics+partitions.
+ * @brief Retrieve committed offsets for topics+partitions.
  *
  * The \p offset field of each requested partition will either be set to
  * stored offset or to RD_KAFKA_OFFSET_INVALID in case there was no stored
@@ -1988,9 +2033,28 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
  *          Else returns an error code.
  */
 RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_committed (rd_kafka_t *rk,
+		    rd_kafka_topic_partition_list_t *partitions,
+		    int timeout_ms);
+
+
+
+/**
+ * @brief Retrieve current positions (offsets) for topics+partitions.
+ *
+ * The \p offset field of each requested partition will be set to the offset
+ * of the last consumed message + 1, or RD_KAFKA_OFFSET_INVALID in case there was
+ * no previous message.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
+ *          \p offset or \p err field of each \p partitions' element is filled
+ *          in with the stored offset, or a partition specific error.
+ *          Else returns an error code.
+ */
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_position (rd_kafka_t *rk,
-                   rd_kafka_topic_partition_list_t *partitions,
-                   int timeout_ms);
+		   rd_kafka_topic_partition_list_t *partitions);
+
 
 /**@}*/
 

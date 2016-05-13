@@ -31,12 +31,6 @@
  * Issue #20
  */
 
-#ifndef _MSC_VER
-#define _GNU_SOURCE
-#include <sys/time.h>
-#include <sys/resource.h>
-#endif
-
 #include "test.h"
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
@@ -47,20 +41,7 @@ int main_0001_multiobj (int argc, char **argv) {
 	int partition = RD_KAFKA_PARTITION_UA; /* random */
 	int i;
 	const int NUM_ITER = 10;
-#ifndef _MSC_VER
-	struct rlimit rlim = {};
-#endif
         const char *topic = NULL;
-
-#ifndef _MSC_VER
-	/*
-	 * Put some limits to catch bad cleanups by librdkafka (issue #20)
-	 */
-	
-	/* File descriptors. One or two per broker. */
-	rlim.rlim_cur = rlim.rlim_max = NUM_ITER * 5;
-	setrlimit(RLIMIT_NOFILE, &rlim); /* best effort, fails under valgrind */
-#endif
 
 	TEST_SAY("Creating and destroying %i kafka instances\n", NUM_ITER);
 

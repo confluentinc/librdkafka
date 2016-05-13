@@ -14,22 +14,25 @@ LDFLAGS += -L../src -L../src-cpp
 
 all: $(BIN) run_par
 
+trunk: build
+	./broker_version_tests.py trunk
+	./sasl_test.py trunk
+
+# Run the full test suite(s)
+full: build
+	./broker_version_tests.py
+	./sasl_test.py
+
 run_par: $(BIN)
 	@echo "Running tests in parallel"
-	LD_LIBRARY_PATH=../src:../src-cpp \
-	DYLD_LIBRARY_PATH=../src:../src-cpp \
 	./run-test.sh -p5 ./$(BIN)
 
 run_seq: $(BIN)
 	@echo "Running tests sequentially"
-	LD_LIBRARY_PATH=../src:../src-cpp \
-	DYLD_LIBRARY_PATH=../src:../src-cpp \
 	./run-test.sh -p1 ./$(BIN)
 
 run_local: $(BIN)
 	@echo "Running local broker-less tests"
-	LD_LIBRARY_PATH=../src:../src-cpp \
-	DYLD_LIBRARY_PATH=../src:../src-cpp \
 	./run-test.sh -p5 -l ./$(BIN)
 
 build: $(BIN)

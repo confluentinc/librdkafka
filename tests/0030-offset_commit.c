@@ -107,6 +107,7 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	char errstr[512];
 	rd_kafka_topic_partition_list_t *parts;
 	rd_kafka_topic_partition_t *rktpar;
+	int64_t next_offset = -1;
 
 	test_conf_init(&conf, &tconf, 20);
 	test_conf_set(conf, "enable.auto.commit", auto_commit ? "true":"false");
@@ -164,6 +165,9 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 			TEST_FAIL("%s: Consumer error: %s",
 				  what, rd_kafka_message_errstr(rkm));
 
+		/* Offset of next message. */
+		next_offset = rkm->offset + 1;
+
 		if (cnt < msgcnt / 2) {
 			if (!auto_store) {
 				err = rd_kafka_offset_store(rkm->rkt,rkm->partition,
@@ -193,12 +197,25 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	TEST_SAY("%s: done consuming after %d messages, at offset %"PRId64"\n",
 		 what, cnt, expected_offset);
 
-	/* Pause messages while waiting so we can serve callbacks
-	 * without having more messages received. */
 	if ((err = rd_kafka_assignment(rk, &parts)))
 		TEST_FAIL("%s: failed to get assignment(): %s\n",
 			  what, rd_kafka_err2str(err));
 
+	/* Verify position */
+	if ((err = rd_kafka_position(rk, parts)))
+		TEST_FAIL("%s: failed to get position(): %s\n",
+			  what, rd_kafka_err2str(err));
+	if (!(rktpar = rd_kafka_topic_partition_list_find(parts,
+							  topic, partition)))
+		TEST_FAIL("%s: position(): topic lost\n", what);
+	if (rktpar->offset != next_offset)
+		TEST_FAIL("%s: Expected position() offset %"PRId64", got %"PRId64,
+			  what, next_offset, rktpar->offset);
+	TEST_SAY("%s: Position is at %"PRId64", good!\n",
+		 what, rktpar->offset);
+
+	/* Pause messages while waiting so we can serve callbacks
+	 * without having more messages received. */
 	if ((err = rd_kafka_pause_partitions(rk, parts)))
 		TEST_FAIL("%s: failed to pause partitions: %s\n",
 			  what, rd_kafka_err2str(err));
@@ -237,16 +254,17 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	parts = rd_kafka_topic_partition_list_new(1);
 	rd_kafka_topic_partition_list_add(parts, topic, partition);
 
-	err = rd_kafka_position(rk, parts, tmout_multip(5*1000));
+	err = rd_kafka_committed(rk, parts, tmout_multip(5*1000));
 	if (err)
-		TEST_FAIL("%s: position() failed: %s", what, rd_kafka_err2str(err));
+		TEST_FAIL("%s: committed() failed: %s", what, rd_kafka_err2str(err));
 	if (!(rktpar = rd_kafka_topic_partition_list_find(parts,
 							  topic, partition)))
-		TEST_FAIL("%s: position(): topic lost\n", what);
+		TEST_FAIL("%s: committed(): topic lost\n", what);
 	if (rktpar->offset != expected_offset)
-		TEST_FAIL("%s: Expected position() offset %"PRId64", got %"PRId64,
+		TEST_FAIL("%s: Expected committed() offset %"PRId64", got %"PRId64,
 			  what, expected_offset, rktpar->offset);
-	TEST_SAY("%s: Position is at %"PRId64", good!\n", what, rktpar->offset);
+	TEST_SAY("%s: Committed offset is at %"PRId64", good!\n",
+		 what, rktpar->offset);
 
 	rd_kafka_topic_partition_list_destroy(parts);
 	test_consumer_close(rk);

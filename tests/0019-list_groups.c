@@ -106,7 +106,9 @@ static int list_groups (rd_kafka_t *rk, char **groups, int group_cnt,
 			rd_sleep(1);
 		}
 		err = rd_kafka_list_groups(rk, NULL, &grplist, 5000);
-	} while (err == RD_KAFKA_RESP_ERR__TRANSPORT && retries-- > 0);
+	} while ((err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+		  err == RD_KAFKA_RESP_ERR_GROUP_LOAD_IN_PROGRESS) &&
+		 retries-- > 0);
 
         if (err) {
                 TEST_SAY("Failed to list all groups: %s\n",

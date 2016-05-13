@@ -320,7 +320,7 @@ void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
 /**
  * Updates the current toppar fetch round-robin next pointer.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 void rd_kafka_broker_fetch_toppar_next (rd_kafka_broker_t *rkb,
                                         rd_kafka_toppar_t *sugg_next) {
         if (CIRCLEQ_EMPTY(&rkb->rkb_fetch_toppars) ||
@@ -388,6 +388,9 @@ int rd_kafka_topic_partition_list_set_offsets (
         rd_kafka_topic_partition_list_t *rktparlist,
         int from_rktp, int64_t def_value, int is_commit);
 
+int rd_kafka_topic_partition_list_count_abs_offsets (
+	const rd_kafka_topic_partition_list_t *rktparlist);
+
 shptr_rd_kafka_toppar_t *
 rd_kafka_topic_partition_list_get_toppar (
         rd_kafka_t *rk, rd_kafka_topic_partition_list_t *rktparlist, int idx);
@@ -411,7 +414,7 @@ struct rd_kafka_toppar_ver {
 /**
  * @brief Toppar + Op version comparator.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 int rd_kafka_toppar_ver_cmp (const void *_a, const void *_b) {
 	const struct rd_kafka_toppar_ver *a = _a, *b = _b;
 	const rd_kafka_toppar_t *rktp_a = rd_kafka_toppar_s2i(a->s_rktp);
@@ -429,7 +432,7 @@ int rd_kafka_toppar_ver_cmp (const void *_a, const void *_b) {
 /**
  * @brief Frees up resources for \p tver but not the \p tver itself.
  */
-static __inline RD_UNUSED
+static RD_INLINE RD_UNUSED
 void rd_kafka_toppar_ver_destroy (struct rd_kafka_toppar_ver *tver) {
 	rd_kafka_toppar_destroy(tver->s_rktp);
 }

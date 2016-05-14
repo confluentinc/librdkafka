@@ -58,6 +58,7 @@ static char *test_broker_version_str = "0.9.0.0";
 int          test_flags = 0;
 int          test_neg_flags = 0;
 
+static int show_summary = 1;
 static int test_summary (int do_lock);
 
 /**
@@ -738,9 +739,10 @@ static int test_summary (int do_lock) {
 			"extra text, duration numeric);\n");
 	}
 
-        printf("TEST %s (%s) SUMMARY\n"
-               "#==================================================================#\n",
-	       datestr, test_mode);
+	if (show_summary)
+		printf("TEST %s (%s) SUMMARY\n"
+		       "#==================================================================#\n",
+		       datestr, test_mode);
 
         for (test = tests ; test->name ; test++) {
                 const char *color;
@@ -798,10 +800,11 @@ static int test_summary (int do_lock) {
                         break;
                 }
 
-                printf("|%s %-40s | %10s | %7.3fs %s|%s\n",
-                       color,
-                       test->name, test_states[test->state],
-                       (double)duration/1000000.0, _C_CLR, extra);
+		if (show_summary)
+			printf("|%s %-40s | %10s | %7.3fs %s|%s\n",
+			       color,
+			       test->name, test_states[test->state],
+			       (double)duration/1000000.0, _C_CLR, extra);
 
                 if (report_fp)
                         fprintf(report_fp,
@@ -831,7 +834,8 @@ static int test_summary (int do_lock) {
         if (do_lock)
                 TEST_UNLOCK();
 
-        printf("#==================================================================#\n");
+	if (show_summary)
+		printf("#==================================================================#\n");
 
         if (report_fp) {
                 fprintf(report_fp,
@@ -915,6 +919,8 @@ int main(int argc, char **argv) {
 			test_neg_flags |= TEST_F_KNOWN_ISSUE;
 		else if (!strcmp(argv[i], "-V") && i+1 < argc)
  			test_broker_version_str = argv[++i];
+		else if (!strcmp(argv[i], "-S"))
+			show_summary = 0;
 		else if (*argv[i] != '-')
                         tests_to_run = argv[i];
                 else {
@@ -926,6 +932,7 @@ int main(int argc, char **argv) {
                                "  -l/-L  Only/dont run local tests (no broker needed)\n"
 			       "  -k/-K  Only/dont run tests with known issues\n"
                                "  -a     Assert on failures\n"
+			       "  -S     Dont show test summary\n"
 			       "  -V <N.N.N.N> Broker version.\n"
 			       "\n"
 			       "Environment variables:\n"
@@ -1013,7 +1020,8 @@ int main(int argc, char **argv) {
 				TEST_LOCK();
 			}
 		}
-                TEST_SAY0("\n");
+		if (test_level >= 2)
+			TEST_SAY0("\n");
                 TEST_UNLOCK();
 
                 rd_sleep(1);

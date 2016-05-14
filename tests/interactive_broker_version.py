@@ -104,7 +104,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
 
-    cmd_env = 'KAFKA_PATH=%s RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s BROKERS=%s TEST_KAFKA_VERSION=%s' % \
+    cmd_env = 'export KAFKA_PATH=%s RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s BROKERS=%s TEST_KAFKA_VERSION=%s;' % \
               (broker1.conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version)
     if not cmd:
         cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)

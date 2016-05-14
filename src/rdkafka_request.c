@@ -1761,6 +1761,8 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                                              rd_kafka_topic_a2i(rko->rko_rkt):
                                              NULL,
                                              rkbuf);
+		if (!md)
+			err = RD_KAFKA_RESP_ERR__BAD_MSG;
         }
 
         if (rko->rko_rkt) {

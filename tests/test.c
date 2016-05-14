@@ -115,6 +115,7 @@ _TEST_DECL(0034_offset_reset);
 _TEST_DECL(0035_api_version);
 _TEST_DECL(0036_partial_fetch);
 _TEST_DECL(0037_destroy_hang_local);
+_TEST_DECL(0038_performance);
 
 /**
  * Define all tests here
@@ -153,6 +154,7 @@ struct test tests[] = {
 	_TEST(0035_api_version, 0),
 	_TEST(0036_partial_fetch, 0),
 	_TEST(0037_destroy_hang_local, TEST_F_LOCAL),
+	_TEST(0038_performance, 0),
         { NULL }
 };
 

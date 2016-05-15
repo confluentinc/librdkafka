@@ -1262,6 +1262,8 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 
                 (*msgcounterp)++;
 
+		rd_kafka_poll(rk, 0);
+
         }
 
 	if (!payload)

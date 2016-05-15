@@ -1580,17 +1580,22 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		struct msghdr *msg = &rkbuf->rkbuf_msg;
 		struct msghdr msg2;
 		struct iovec iov[IOV_MAX];
+		size_t of = rkbuf->rkbuf_of;
 
 		/* Set CorrId header field, unless this is the latter part
-		 * of a partial send in which ccase the corrid has already
-		 * been set. */
-		if (rkbuf->rkbuf_of == 0) {
+		 * of a partial send in which case the corrid has already
+		 * been set.
+		 * Due to how SSL_write() will accept a buffer but still
+		 * return 0 in some cases we can't rely on the buffer offset
+		 * but need to use corrid to check this. SSL_write() expects
+		 * us to send the same buffer again when 0 is returned.
+		 */
+		if (rkbuf->rkbuf_corrid == 0) {
+			rd_kafka_assert(NULL, rkbuf->rkbuf_of == 0);
 			rkbuf->rkbuf_corrid = ++rkb->rkb_corrid;
 			rd_kafka_buf_update_i32(rkbuf, 4+2+2,
 						rkbuf->rkbuf_corrid);
-		}
-
-		if (rkbuf->rkbuf_of != 0) {
+		} else if (rkbuf->rkbuf_of > 0) {
 			/* If message has been partially sent we need
 			 * to construct a new msg+iovec skipping the
 			 * sent bytes. */
@@ -1620,15 +1625,25 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 
 		/* Partial send? Continue next time. */
 		if (rkbuf->rkbuf_of < rkbuf->rkbuf_len) {
+			rd_rkb_dbg(rkb, PROTOCOL, "SEND",
+				   "Sent partial %sRequest "
+				   "(v%hd, "
+				   "%"PRIdsz"+%"PRIdsz"/%"PRIdsz" bytes, "
+				   "CorrId %"PRId32")",
+				   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.
+						       ApiKey),
+				   rkbuf->rkbuf_reqhdr.ApiVersion,
+				   rkbuf->rkbuf_of-r, r, rkbuf->rkbuf_len,
+				   rkbuf->rkbuf_corrid);
 			return 0;
 		}
 
 		rd_rkb_dbg(rkb, PROTOCOL, "SEND",
-			   "Sent %sRequest (v%hd, %"PRIdsz" bytes, "
+			   "Sent %sRequest (v%hd, %"PRIdsz" bytes @ %"PRIdsz", "
 			   "CorrId %"PRId32")",
 			   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
                            rkbuf->rkbuf_reqhdr.ApiVersion,
-			   rkbuf->rkbuf_len, rkbuf->rkbuf_corrid);
+			   rkbuf->rkbuf_len, of, rkbuf->rkbuf_corrid);
 
 		/* Entire buffer sent, unlink from outbuf */
 		rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
@@ -1679,6 +1694,7 @@ void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 		(rkb->rkb_rk->rk_conf.retry_backoff_ms * 1000);
 	/* Reset send offset */
 	rkbuf->rkbuf_of = 0;
+	rkbuf->rkbuf_corrid = 0;
 
 	rd_kafka_bufq_enq(&rkb->rkb_retrybufs, rkbuf);
 }

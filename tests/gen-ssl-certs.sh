@@ -99,7 +99,7 @@ elif [[ $OP == "client" && ! -z "$CA_CERT" && ! -z "$PFX" && ! -z "$CN" ]]; then
     if [[ $USE_KEYTOOL == 1 ]]; then
 	echo "############ Creating client truststore"
 
-	[[ -f ${PFX}client.truststore.jsk ]] || keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}client.truststore.jks -alias CARoot -import -file $CA_CERT <<EOF
+	[[ -f ${PFX}client.truststore.jks ]] || keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}client.truststore.jks -alias CARoot -import -file $CA_CERT <<EOF
 yes
 EOF
 

@@ -56,7 +56,7 @@ int main_0038_performance (int argc, char **argv) {
 	TEST_SAY("Producing %d messages of size %d to %s [%d]\n",
 		 msgcnt, (int)msgsize, topic, partition);
 	testid = test_id_generate();
-	test_conf_init(&conf, NULL, 60);
+	test_conf_init(&conf, NULL, 120);
 	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
 	test_conf_set(conf, "queue.buffering.max.messages", "10000000");
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
@@ -77,7 +77,7 @@ int main_0038_performance (int argc, char **argv) {
 	rd_kafka_destroy(rk);
 
 	TEST_SAY("Creating consumer\n");
-	test_conf_init(&conf, NULL, 60);
+	test_conf_init(&conf, NULL, 120);
 	rk = test_create_consumer(NULL, NULL, conf, NULL, NULL);
 	rkt = rd_kafka_topic_new(rk, topic, NULL);
 

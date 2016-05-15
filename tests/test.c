@@ -57,6 +57,7 @@ int          test_broker_version;
 static char *test_broker_version_str = "0.9.0.0";
 int          test_flags = 0;
 int          test_neg_flags = 0;
+static char *test_git_version = "HEAD";
 
 static int show_summary = 1;
 static int test_summary (int do_lock);
@@ -718,8 +719,13 @@ static int test_summary (int do_lock) {
         else
                 fprintf(report_fp,
                         "{ \"id\": \"%s_%s\", \"mode\": \"%s\", "
-			"\"date\": \"%s\", \"tests\": [",
-			datestr, test_mode, test_mode, datestr);
+			"\"date\": \"%s\", "
+			"\"git_version\": \"%s\", "
+			"\"broker_version\": \"%s\", "
+			"\"tests\": {",
+			datestr, test_mode, test_mode, datestr,
+			test_git_version,
+			test_broker_version_str);
 
         if (do_lock)
                 TEST_LOCK();
@@ -811,7 +817,7 @@ static int test_summary (int do_lock) {
                 if (report_fp) {
 			int i;
                         fprintf(report_fp,
-                                "%s{"
+                                "%s\"%s\": {"
                                 "\"name\": \"%s\", "
                                 "\"state\": \"%s\", "
 				"\"known_issue\": %s, "
@@ -819,6 +825,7 @@ static int test_summary (int do_lock) {
                                 "\"duration\": %.3f, "
 				"\"report\": [ ",
                                 test == tests ? "": ", ",
+				test->name,
                                 test->name, test_states[test->state],
 				test->flags & TEST_F_KNOWN_ISSUE ? "true":"false",
 				test->extra ? test->extra : "",
@@ -851,7 +858,7 @@ static int test_summary (int do_lock) {
 
         if (report_fp) {
                 fprintf(report_fp,
-                        "], "
+                        "}, "
                         "\"tests_run\": %d, "
                         "\"tests_passed\": %d, "
                         "\"tests_failed\": %d, "
@@ -925,6 +932,8 @@ int main(int argc, char **argv) {
         tests_to_run = getenv("TESTS");
 	if (getenv("TEST_KAFKA_VERSION"))
 		test_broker_version_str = getenv("TEST_KAFKA_VERSION");
+	if (!(test_git_version = getenv("RDKAFKA_GITVER")))
+		test_git_version = "HEAD";
 #endif
 
 	test_conf_init(NULL, NULL, 10);
@@ -972,6 +981,8 @@ int main(int argc, char **argv) {
                         exit(1);
                 }
         }
+
+	TEST_SAY("Git version: %s\n", test_git_version);
 
 	if (!strcmp(test_broker_version_str, "trunk"))
 		test_broker_version_str = "0.10.0.0"; /* for now */

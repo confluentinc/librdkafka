@@ -33,6 +33,8 @@ fi
 
 FAILED=0
 
+export RDKAFKA_GITVER="$(git rev-parse --short HEAD)@$(git symbolic-ref -q --short HEAD)"
+
 # Enable valgrind suppressions for false positives
 SUPP="--suppressions=librdkafka.suppressions"
 

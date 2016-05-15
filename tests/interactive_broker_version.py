@@ -129,7 +129,8 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
               (broker1.conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version)
     if not cmd:
         cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
-    subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
+    for i in range(0, exec_cnt):
+        subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
 
     os.remove(test_conf_file)
 
@@ -150,6 +151,8 @@ if __name__ == '__main__':
                         help='JSON config object (not file)')
     parser.add_argument('-c', type=str, dest='cmd', default=None,
                         help='Command to execute instead of shell')
+    parser.add_argument('-n', type=int, dest='exec_cnt', default=1,
+                        help='Number of times to execute -c ..')
     parser.add_argument('--debug', action='store_true', dest='debug', default=False,
                         help='Enable trivup debugging')
 
@@ -160,4 +163,5 @@ if __name__ == '__main__':
         args.conf = {}
 
     for version in args.versions:
-        test_version(version, cmd=args.cmd, deploy=args.deploy, conf=args.conf, debug=args.debug)
+        test_version(version, cmd=args.cmd, deploy=args.deploy,
+                     conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt)

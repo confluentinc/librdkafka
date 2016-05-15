@@ -83,7 +83,7 @@ def print_test_report_summary (name, report):
     print('%6s  %-50s: %s' % (resstr, name, report.get('REASON', 'n/a')))
     if not passed:
         # Print test details
-        for test in report.get('tests', []):
+        for name,test in report.get('tests', {}).iteritems():
             testres = test.get('state', '')
             if testres == 'SKIPPED':
                 continue

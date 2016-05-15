@@ -12,6 +12,7 @@ from trivup.trivup import Cluster
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
+from trivup.apps.SslApp import SslApp
 
 import subprocess
 import time
@@ -27,7 +28,7 @@ kafka_path='/home/maglun/src/kafka'
 
 
 
-def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
+def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
@@ -36,6 +37,10 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
     print('## Test version %s' % version)
     
     cluster = Cluster('librdkafkaInteractiveBrokerVersionTests', 'tmp', debug=debug)
+
+    # Enable SSL if desired
+    if 'SSL' in conf.get('security.protocol', ''):
+        cluster.ssl = SslApp(cluster, conf)
 
     # One ZK (from Kafka repo)
     zk1 = ZookeeperApp(cluster, bin_path=kafka_path + '/bin/zookeeper-server-start.sh')
@@ -77,6 +82,22 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
                 break
         else:
             print('# FIXME: SASL %s client config not written to %s' % (mech, test_conf_file))
+
+    # SSL support
+    ssl = getattr(cluster, 'ssl', None)
+    if ssl is not None:
+        if 'SASL' in security_protocol:
+            security_protocol = 'SSL_SASL'
+        else:
+            security_protocol = 'SSL'
+
+        key, req, pem = ssl.create_key('librdkafka')
+
+        os.write(fd, 'ssl.ca.location=%s\n' % ssl.ca_cert)
+        os.write(fd, 'ssl.certificate.location=%s\n' % pem)
+        os.write(fd, 'ssl.key.location=%s\n' % key)
+        os.write(fd, 'ssl.key.password=%s\n' % ssl.conf.get('ssl_key_pass'))
+
 
     # Define bootstrap brokers based on selected security protocol
     print('# Using client security.protocol=%s' % security_protocol)

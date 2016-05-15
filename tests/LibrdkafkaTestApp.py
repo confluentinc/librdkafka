@@ -68,6 +68,22 @@ class LibrdkafkaTestApp(App):
             else:
                 self.log('WARNING: FIXME: SASL %s client config not written to %s: unhandled mechanism' % (mech, test_conf_file))
 
+        # SSL config
+        if getattr(cluster, 'ssl', None) is not None:
+            ssl = cluster.ssl
+
+            key, req, pem = ssl.create_key('librdkafka%s' % self.appid)
+
+            conf_blob.append('ssl.ca.location=%s' % ssl.ca_cert)
+            conf_blob.append('ssl.certificate.location=%s' % pem)
+            conf_blob.append('ssl.key.location=%s' % key)
+            conf_blob.append('ssl.key.password=%s' % ssl.conf.get('ssl_key_pass'))
+
+            if 'SASL' in security_protocol:
+                security_protocol = 'SSL_SASL'
+            else:
+                security_protocol = 'SSL'
+
         # Define bootstrap brokers based on selected security protocol
         self.dbg('Using client security.protocol=%s' % security_protocol)
         all_listeners = (','.join(cluster.get_all('listeners', '', KafkaBrokerApp))).split(',')

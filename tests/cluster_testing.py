@@ -12,6 +12,7 @@ from trivup.trivup import Cluster, UuidAllocator
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
+from trivup.apps.SslApp import SslApp
 
 import sys, json, argparse
 
@@ -29,6 +30,10 @@ class LibrdkafkaTestCluster(Cluster):
         """
 
         super(LibrdkafkaTestCluster, self).__init__(self.__class__.__name__, 'tmp', debug=debug)
+
+        # Enable SSL if desired
+        if 'SSL' in conf.get('security.protocol', ''):
+            self.ssl = SslApp(self, conf)
 
         self.brokers = list()
 

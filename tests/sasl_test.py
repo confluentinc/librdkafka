@@ -127,12 +127,20 @@ if __name__ == '__main__':
                 ('0.8.2.2', [])]
     sasl_plain_conf = {'sasl_mechanisms': 'PLAIN',
                        'sasl_users': 'myuser=mypassword'}
+    ssl_sasl_plain_conf = {'sasl_mechanisms': 'PLAIN',
+                           'sasl_users': 'myuser=mypassword',
+                           'security.protocol': 'SSL'}
     sasl_kerberos_conf = {'sasl_mechanisms': 'GSSAPI',
                           'sasl_servicename': 'kafka'}
     suites = [{'name': 'SASL PLAIN',
                'conf': sasl_plain_conf,
                'expect_fail': ['0.9.0.1', '0.8.2.2']},
               {'name': 'PLAINTEXT (no SASL)'},
+              {'name': 'SSL (no SASL)', 'security.protocol': 'SSL',
+               'expect_fail': ['0.8.2.2']},
+              {'name': 'SSL_SASL PLAIN',
+               'conf': ssl_sasl_plain_conf,
+               'expect_fail': ['0.9.0.1', '0.8.2.2']},
               {'name': 'SASL PLAIN with wrong username',
                'conf': sasl_plain_conf,
                'rdkconf': {'sasl_users': 'wrongjoe=mypassword'},

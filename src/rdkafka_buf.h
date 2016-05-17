@@ -36,6 +36,8 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 #define RD_KAFKA_HEADERS_IOV_CNT   2
 #define RD_KAFKA_PAYLOAD_IOV_MAX  (IOV_MAX-RD_KAFKA_HEADERS_IOV_CNT)
 
+/* Align X (upwards) to STRIDE, which must be power of 2. */
+#define _ALIGN(X,STRIDE) (((X) + ((STRIDE) - 1)) & -(STRIDE))
 
 /* Advance/allocate used space in marshall buffer.
  * Point PTR to available space of size LEN on success. */
@@ -47,7 +49,7 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 						"%"PRIdsz"+%"PRIdsz" > %"PRIdsz, \
 						msh_of, __LEN, msh_size); \
                 (PTR) = (void *)(msh_buf+msh_of);                       \
-                msh_of += __LEN;                                        \
+                msh_of += _ALIGN(__LEN, 8);				\
         } while(0)
 
 

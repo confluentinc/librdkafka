@@ -87,7 +87,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     ssl = getattr(cluster, 'ssl', None)
     if ssl is not None:
         if 'SASL' in security_protocol:
-            security_protocol = 'SSL_SASL'
+            security_protocol = 'SASL_SSL'
         else:
             security_protocol = 'SSL'
 

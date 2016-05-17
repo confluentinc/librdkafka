@@ -24,7 +24,7 @@ class LibrdkafkaTestCluster(Cluster):
         @brief Create, deploy and start a Kafka cluster using Kafka \p version
         
         Supported \p conf keys:
-         * security.protocol - PLAINTEXT, SASL_PLAINTEXT, SSL_SASL
+         * security.protocol - PLAINTEXT, SASL_PLAINTEXT, SASL_SSL
     
         \p conf dict is passed to KafkaBrokerApp classes, etc.
         """

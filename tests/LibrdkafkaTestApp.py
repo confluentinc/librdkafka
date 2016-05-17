@@ -80,7 +80,7 @@ class LibrdkafkaTestApp(App):
             conf_blob.append('ssl.key.password=%s' % ssl.conf.get('ssl_key_pass'))
 
             if 'SASL' in security_protocol:
-                security_protocol = 'SSL_SASL'
+                security_protocol = 'SASL_SSL'
             else:
                 security_protocol = 'SSL'
 

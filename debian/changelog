@@ -1,23 +1,3 @@
-librdkafka (0.9.1-1) unstable; urgency=medium
-
-  * New upstream release (Closes: #816047).
-    - Remove 0001-mklove-update-add-disable-silent-rules patch (not needed)
-    - Remove 0002_hexdump_use_size_t_instead_of_int patch (not needed)
-  * Add Build-Depends to libssl-dev/libsasl2-dev, to enable Kafka 0.9
-    encryption and authentication.
-  * Update the long description to mention 0.9 protocol support and also the
-    high-performance aspect, by copying upstream's description almost
-    verbatim.
-  * Bump Standards-Version to 3.9.7 (no changes needed).
-  * Switch Vcs-Git to GitHub's https (from git://)
-  * Migrate from our own -dbg package to the automatic -dbgsym package.
-  * Update librdkafka1.symbols with 0.9.0' and 0.9.1's new symbols.
-  * Ship the new C++ library, by shipping a new binary package, librdkafka++1.
-  * Ship pkg-config files in the -dev package for both the C and C++
-    libraries.
-
- -- Faidon Liambotis <paravoid@debian.org>  Thu, 07 Apr 2016 15:02:17 +0300
-
 librdkafka (0.8.6-1.1) unstable; urgency=medium
 
   * Non-maintainer upload.

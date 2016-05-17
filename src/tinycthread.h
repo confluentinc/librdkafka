@@ -513,10 +513,4 @@ typedef pthread_rwlock_t rwlock_t;
 }
 #endif
 
-
-
-#ifdef __cplusplus
-}
-#endif
-
 #endif /* _TINYTHREAD_H_ */

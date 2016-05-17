@@ -76,6 +76,10 @@ struct test {
 
 	const char *extra;   /**< Extra information to print in test_summary. */
 
+	char **report_arr;   /**< Test-specific reporting, JSON array of objects. */
+	int report_cnt;
+	int report_size;
+
         /**
          * Runtime
          */
@@ -162,9 +166,11 @@ extern int test_broker_version;
 	} while (0)
 #define TEST_SAY(...) TEST_SAYL(2, __VA_ARGS__)
 
-#define TEST_REPORT(...) do {		\
-	fprintf(stdout, __VA_ARGS__);			\
-	} while(0)
+/**
+ * Append JSON object (as string) to this tests' report array.
+ */
+#define TEST_REPORT(...) test_report_add(test_curr, __VA_ARGS__)
+
 
 /* "..." is a failure reason in printf format, include as much info as needed */
 #define TEST_ASSERT(expr,...) do {            \
@@ -479,3 +485,5 @@ int test_check_builtin (const char *feature);
 void test_timeout_set (int timeout);
 
 char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);
+
+void test_report_add (struct test *test, const char *fmt, ...);

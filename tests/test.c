@@ -57,7 +57,9 @@ int          test_broker_version;
 static char *test_broker_version_str = "0.9.0.0";
 int          test_flags = 0;
 int          test_neg_flags = 0;
+static char *test_git_version = "HEAD";
 
+static int show_summary = 1;
 static int test_summary (int do_lock);
 
 /**
@@ -114,6 +116,7 @@ _TEST_DECL(0034_offset_reset);
 _TEST_DECL(0035_api_version);
 _TEST_DECL(0036_partial_fetch);
 _TEST_DECL(0037_destroy_hang_local);
+_TEST_DECL(0038_performance);
 
 /**
  * Define all tests here
@@ -152,6 +155,7 @@ struct test tests[] = {
 	_TEST(0035_api_version, 0),
 	_TEST(0036_partial_fetch, 0),
 	_TEST(0037_destroy_hang_local, TEST_F_LOCAL),
+	_TEST(0038_performance, 0),
         { NULL }
 };
 
@@ -715,8 +719,13 @@ static int test_summary (int do_lock) {
         else
                 fprintf(report_fp,
                         "{ \"id\": \"%s_%s\", \"mode\": \"%s\", "
-			"\"date\": \"%s\", \"tests\": [",
-			datestr, test_mode, test_mode, datestr);
+			"\"date\": \"%s\", "
+			"\"git_version\": \"%s\", "
+			"\"broker_version\": \"%s\", "
+			"\"tests\": {",
+			datestr, test_mode, test_mode, datestr,
+			test_git_version,
+			test_broker_version_str);
 
         if (do_lock)
                 TEST_LOCK();
@@ -738,9 +747,10 @@ static int test_summary (int do_lock) {
 			"extra text, duration numeric);\n");
 	}
 
-        printf("TEST %s (%s) SUMMARY\n"
-               "#==================================================================#\n",
-	       datestr, test_mode);
+	if (show_summary)
+		printf("TEST %s (%s) SUMMARY\n"
+		       "#==================================================================#\n",
+		       datestr, test_mode);
 
         for (test = tests ; test->name ; test++) {
                 const char *color;
@@ -798,25 +808,37 @@ static int test_summary (int do_lock) {
                         break;
                 }
 
-                printf("|%s %-40s | %10s | %7.3fs %s|%s\n",
-                       color,
-                       test->name, test_states[test->state],
-                       (double)duration/1000000.0, _C_CLR, extra);
+		if (show_summary)
+			printf("|%s %-40s | %10s | %7.3fs %s|%s\n",
+			       color,
+			       test->name, test_states[test->state],
+			       (double)duration/1000000.0, _C_CLR, extra);
 
-                if (report_fp)
+                if (report_fp) {
+			int i;
                         fprintf(report_fp,
-                                "%s{"
+                                "%s\"%s\": {"
                                 "\"name\": \"%s\", "
                                 "\"state\": \"%s\", "
 				"\"known_issue\": %s, "
 				"\"extra\": \"%s\", "
-                                "\"duration\": %.3f"
-                                "}",
+                                "\"duration\": %.3f, "
+				"\"report\": [ ",
                                 test == tests ? "": ", ",
+				test->name,
                                 test->name, test_states[test->state],
 				test->flags & TEST_F_KNOWN_ISSUE ? "true":"false",
 				test->extra ? test->extra : "",
                                 (double)duration/1000000.0);
+
+			for (i = 0 ; i < test->report_cnt ; i++) {
+				fprintf(report_fp, "%s%s ",
+					i == 0 ? "":",",
+					test->report_arr[i]);
+			}
+
+			fprintf(report_fp, "] }");
+		}
 
 		if (sql_fp)
 			fprintf(sql_fp,
@@ -831,11 +853,12 @@ static int test_summary (int do_lock) {
         if (do_lock)
                 TEST_UNLOCK();
 
-        printf("#==================================================================#\n");
+	if (show_summary)
+		printf("#==================================================================#\n");
 
         if (report_fp) {
                 fprintf(report_fp,
-                        "], "
+                        "}, "
                         "\"tests_run\": %d, "
                         "\"tests_passed\": %d, "
                         "\"tests_failed\": %d, "
@@ -874,6 +897,19 @@ static void test_sig_term (int sig) {
  * @brief Test framework cleanup before termination.
  */
 static void test_cleanup (void) {
+	struct test *test;
+
+	/* Free report arrays */
+	for (test = tests ; test->name ; test++) {
+		int i;
+		if (!test->report_arr)
+			continue;
+		for (i = 0 ; i < test->report_cnt ; i++)
+			rd_free(test->report_arr[i]);
+		rd_free(test->report_arr);
+		test->report_arr = NULL;
+	}
+
 	if (test_topics_sh)
 		rd_free(test_topics_sh);
 	if (test_sql_cmd)
@@ -896,6 +932,8 @@ int main(int argc, char **argv) {
         tests_to_run = getenv("TESTS");
 	if (getenv("TEST_KAFKA_VERSION"))
 		test_broker_version_str = getenv("TEST_KAFKA_VERSION");
+	if (!(test_git_version = getenv("RDKAFKA_GITVER")))
+		test_git_version = "HEAD";
 #endif
 
 	test_conf_init(NULL, NULL, 10);
@@ -915,6 +953,8 @@ int main(int argc, char **argv) {
 			test_neg_flags |= TEST_F_KNOWN_ISSUE;
 		else if (!strcmp(argv[i], "-V") && i+1 < argc)
  			test_broker_version_str = argv[++i];
+		else if (!strcmp(argv[i], "-S"))
+			show_summary = 0;
 		else if (*argv[i] != '-')
                         tests_to_run = argv[i];
                 else {
@@ -926,6 +966,7 @@ int main(int argc, char **argv) {
                                "  -l/-L  Only/dont run local tests (no broker needed)\n"
 			       "  -k/-K  Only/dont run tests with known issues\n"
                                "  -a     Assert on failures\n"
+			       "  -S     Dont show test summary\n"
 			       "  -V <N.N.N.N> Broker version.\n"
 			       "\n"
 			       "Environment variables:\n"
@@ -940,6 +981,8 @@ int main(int argc, char **argv) {
                         exit(1);
                 }
         }
+
+	TEST_SAY("Git version: %s\n", test_git_version);
 
 	if (!strcmp(test_broker_version_str, "trunk"))
 		test_broker_version_str = "0.10.0.0"; /* for now */
@@ -1013,7 +1056,8 @@ int main(int argc, char **argv) {
 				TEST_LOCK();
 			}
 		}
-                TEST_SAY0("\n");
+		if (test_level >= 2)
+			TEST_SAY0("\n");
                 TEST_UNLOCK();
 
                 rd_sleep(1);
@@ -1031,7 +1075,7 @@ int main(int argc, char **argv) {
 	 * handled in its own thread. */
 	test_wait_exit(0);
 
-        r = test_summary(1/*lock*/) ? 1 : 0;
+	r = test_summary(1/*lock*/) ? 1 : 0;
 
 	/* If we havent failed at this point then
 	 * there were no threads leaked */
@@ -1217,6 +1261,8 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
                 (*msgcounterp)++;
+
+		rd_kafka_poll(rk, 0);
 
         }
 
@@ -2551,3 +2597,31 @@ char *tsprintf (const char *fmt, ...) {
 	return ret[i];
 }
 
+
+/**
+ * @brief Add a test report JSON object.
+ * These will be written as a JSON array to the test report file.
+ */
+void test_report_add (struct test *test, const char *fmt, ...) {
+	va_list ap;
+	char buf[512];
+
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+
+	if (test->report_cnt == test->report_size) {
+		if (test->report_size == 0)
+			test->report_size = 8;
+		else
+			test->report_size *= 2;
+
+		test->report_arr = realloc(test->report_arr,
+					   sizeof(*test->report_arr) *
+					   test->report_size);
+	}
+
+	test->report_arr[test->report_cnt++] = rd_strdup(buf);
+
+	TEST_SAYL(1, "Report #%d: %s\n", test->report_cnt-1, buf);
+}

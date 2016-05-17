@@ -12,6 +12,7 @@ from trivup.trivup import Cluster, UuidAllocator
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
+from trivup.apps.SslApp import SslApp
 
 import sys, json, argparse
 
@@ -23,12 +24,16 @@ class LibrdkafkaTestCluster(Cluster):
         @brief Create, deploy and start a Kafka cluster using Kafka \p version
         
         Supported \p conf keys:
-         * security.protocol - PLAINTEXT, SASL_PLAINTEXT, SSL_SASL
+         * security.protocol - PLAINTEXT, SASL_PLAINTEXT, SASL_SSL
     
         \p conf dict is passed to KafkaBrokerApp classes, etc.
         """
 
         super(LibrdkafkaTestCluster, self).__init__(self.__class__.__name__, 'tmp', debug=debug)
+
+        # Enable SSL if desired
+        if 'SSL' in conf.get('security.protocol', ''):
+            self.ssl = SslApp(self, conf)
 
         self.brokers = list()
 
@@ -78,7 +83,7 @@ def print_test_report_summary (name, report):
     print('%6s  %-50s: %s' % (resstr, name, report.get('REASON', 'n/a')))
     if not passed:
         # Print test details
-        for test in report.get('tests', []):
+        for name,test in report.get('tests', {}).iteritems():
             testres = test.get('state', '')
             if testres == 'SKIPPED':
                 continue

@@ -193,6 +193,7 @@
     <ClCompile Include="..\..\tests\0035-api_version.c" />
     <ClCompile Include="..\..\tests\0036-partial_fetch.c" />
     <ClCompile Include="..\..\tests\0037-destroy_hang_local.c" />
+    <ClCompile Include="..\..\tests\0038-performance.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

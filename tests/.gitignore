@@ -11,3 +11,5 @@ test_suite_*.json
 *.pyc
 # sqlite3 db:
 rdktests
+*.log
+*.png

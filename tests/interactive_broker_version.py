@@ -12,6 +12,7 @@ from trivup.trivup import Cluster
 from trivup.apps.ZookeeperApp import ZookeeperApp
 from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
+from trivup.apps.SslApp import SslApp
 
 import subprocess
 import time
@@ -27,7 +28,7 @@ kafka_path='/home/maglun/src/kafka'
 
 
 
-def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
+def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
@@ -36,6 +37,10 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
     print('## Test version %s' % version)
     
     cluster = Cluster('librdkafkaInteractiveBrokerVersionTests', 'tmp', debug=debug)
+
+    # Enable SSL if desired
+    if 'SSL' in conf.get('security.protocol', ''):
+        cluster.ssl = SslApp(cluster, conf)
 
     # One ZK (from Kafka repo)
     zk1 = ZookeeperApp(cluster, bin_path=kafka_path + '/bin/zookeeper-server-start.sh')
@@ -78,6 +83,22 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
         else:
             print('# FIXME: SASL %s client config not written to %s' % (mech, test_conf_file))
 
+    # SSL support
+    ssl = getattr(cluster, 'ssl', None)
+    if ssl is not None:
+        if 'SASL' in security_protocol:
+            security_protocol = 'SASL_SSL'
+        else:
+            security_protocol = 'SSL'
+
+        key, req, pem = ssl.create_key('librdkafka')
+
+        os.write(fd, 'ssl.ca.location=%s\n' % ssl.ca_cert)
+        os.write(fd, 'ssl.certificate.location=%s\n' % pem)
+        os.write(fd, 'ssl.key.location=%s\n' % key)
+        os.write(fd, 'ssl.key.password=%s\n' % ssl.conf.get('ssl_key_pass'))
+
+
     # Define bootstrap brokers based on selected security protocol
     print('# Using client security.protocol=%s' % security_protocol)
     all_listeners = (','.join(cluster.get_all('listeners', '', KafkaBrokerApp))).split(',')
@@ -104,11 +125,12 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False):
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
 
-    cmd_env = 'KAFKA_PATH=%s RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s BROKERS=%s TEST_KAFKA_VERSION=%s' % \
+    cmd_env = 'export KAFKA_PATH=%s RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s BROKERS=%s TEST_KAFKA_VERSION=%s;' % \
               (broker1.conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version)
     if not cmd:
         cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
-    subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
+    for i in range(0, exec_cnt):
+        subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
 
     os.remove(test_conf_file)
 
@@ -129,6 +151,8 @@ if __name__ == '__main__':
                         help='JSON config object (not file)')
     parser.add_argument('-c', type=str, dest='cmd', default=None,
                         help='Command to execute instead of shell')
+    parser.add_argument('-n', type=int, dest='exec_cnt', default=1,
+                        help='Number of times to execute -c ..')
     parser.add_argument('--debug', action='store_true', dest='debug', default=False,
                         help='Enable trivup debugging')
 
@@ -139,4 +163,5 @@ if __name__ == '__main__':
         args.conf = {}
 
     for version in args.versions:
-        test_version(version, cmd=args.cmd, deploy=args.deploy, conf=args.conf, debug=args.debug)
+        test_version(version, cmd=args.cmd, deploy=args.deploy,
+                     conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt)

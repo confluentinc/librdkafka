@@ -3456,10 +3456,14 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			if (rd_kafka_q_len(&tmp_opq) > 0) {
 				/* Update partitions fetch offset based on
 				 * last message's offest. */
+				int64_t last_offset = -1;
 				rd_kafka_op_t *rko =
 					rd_kafka_q_last(&tmp_opq,
 							RD_KAFKA_OP_FETCH,
 							0 /* no error ops */);
+
+				if (rko)
+					last_offset = rko->rko_offset;
 
 				if (rd_kafka_q_concat(&rktp->rktp_fetchq,
 						      &tmp_opq) == -1) {
@@ -3468,9 +3472,9 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					rd_kafka_q_purge0(&tmp_opq,
 							  0/*no-lock*/);
 				} else {
-					if (rko)
+					if (last_offset != -1)
 						rktp->rktp_offsets.fetch_offset =
-							rko->rko_offset + 1;
+							last_offset + 1;
 					rd_atomic64_add(&rktp->rktp_c.msgs,
 							rd_kafka_q_len(&tmp_opq));
 				}

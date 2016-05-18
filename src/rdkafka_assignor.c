@@ -117,7 +117,10 @@ rd_kafka_consumer_protocol_member_metadata_new (
         rd_kafka_buf_write_i32(rkbuf, subscription->cnt);
         for (i = 0 ; i < subscription->cnt ; i++)
                 rd_kafka_buf_write_str(rkbuf, subscription->elems[i].topic,-1);
-        rd_kafka_buf_write_bytes(rkbuf, userdata, userdata_size);
+	if (userdata)
+		rd_kafka_buf_write_bytes(rkbuf, userdata, userdata_size);
+	else /* Kafka 0.9.0.0 cant parse NULL bytes, so we provide empty. */
+		rd_kafka_buf_write_bytes(rkbuf, "", 0);
 
         rd_kafka_buf_autopush(rkbuf);
 

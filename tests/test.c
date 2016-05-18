@@ -56,7 +56,7 @@ int  test_session_timeout_ms = 6000;
 int          test_broker_version;
 static char *test_broker_version_str = "0.9.0.0";
 int          test_flags = 0;
-int          test_neg_flags = 0;
+int          test_neg_flags = TEST_F_KNOWN_ISSUE;
 static char *test_git_version = "HEAD";
 
 static int show_summary = 1;
@@ -1246,7 +1246,7 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 		if (!payload) {
 			test_msg_fmt(key, sizeof(key), testid, partition,
 				     msg_id);
-			memcpy(buf, key, RD_MIN(size, sizeof(key)));
+			memcpy(buf, key, RD_MIN(size, strlen(key)));
 		}
 
 		if (rd_kafka_produce(rkt, partition,

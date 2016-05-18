@@ -36,7 +36,8 @@
 
 typedef struct rd_kafka_transport_s rd_kafka_transport_t;
 
-void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
+void rd_kafka_transport_io_serve (rd_kafka_transport_t **rktrans,
+								  int relevant_transport_count,
                                   int timeout_ms);
 
 ssize_t rd_kafka_transport_sendmsg(rd_kafka_transport_t *rktrans, const struct msghdr *msg,
@@ -55,8 +56,6 @@ void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
 void rd_kafka_transport_close(rd_kafka_transport_t *rktrans);
 void rd_kafka_transport_poll_set(rd_kafka_transport_t *rktrans, int event);
 void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event);
-int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout);
-
 #if WITH_SSL
 void rd_kafka_transport_ssl_ctx_term (rd_kafka_t *rk);
 int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,

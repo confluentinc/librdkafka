@@ -450,6 +450,17 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         rd_kafka_wrlock(rk);
         rd_kafka_wrunlock(rk);
 
+		int i;
+		rd_kafka_broker_thread_t *t;
+		for (i = 0; i < rk->rk_broker_thread_count; i++) {
+			t = &rk->rk_broker_threads[i];
+			cnd_destroy(&t->last_op_push_cond);
+			mtx_destroy(&t->last_op_push_mtx);
+			mtx_destroy(&t->broker_addition_lock);
+		}
+		rd_free(rk->rk_broker_threads);
+		mtx_destroy(&rk->rk_broker_thread_allocation_lock);
+
         rd_kafka_assignors_term(rk);
 
         rd_kafka_timers_destroy(&rk->rk_timers);
@@ -486,6 +497,7 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
         thrd_t thrd;
 
         rd_kafka_dbg(rk, ALL, "DESTROY", "Terminating instance");
+		/* Loose our special reference to the internal broker. */
         rd_kafka_wrlock(rk);
         thrd = rk->rk_thread;
 	rd_atomic32_add(&rk->rk_terminate, 1);
@@ -520,7 +532,6 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
  */
 static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 	rd_kafka_itopic_t *rkt, *rkt_tmp;
-	rd_kafka_broker_t *rkb, *rkb_tmp;
         rd_list_t wait_thrds;
         thrd_t *thrd;
         int i;
@@ -546,45 +557,30 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 		rd_kafka_wrlock(rk);
 	}
 
-        /* Decommission brokers.
-         * Broker thread holds a refcount and detects when broker refcounts
-         * reaches 1 and then decommissions itself. */
-        TAILQ_FOREACH_SAFE(rkb, &rk->rk_brokers, rkb_link, rkb_tmp) {
-                /* Add broker's thread to wait_thrds list for later joining */
-                thrd = malloc(sizeof(*thrd));
-                *thrd = rkb->rkb_thread;
-                rd_list_add(&wait_thrds, thrd);
-                rd_kafka_wrunlock(rk);
-
+    /* Decommission broker-threads. */
+	rd_kafka_assert(rk, mtx_lock(&rk->rk_broker_thread_allocation_lock) == thrd_success);
+	i = rk->rk_broker_thread_count;
+	while(i > 0) {
+		thrd = rd_malloc(sizeof(*thrd));
+		rd_kafka_broker_thread_t *rkbt = &rk->rk_broker_threads[--i];
+		rd_kafka_assert(rk, mtx_lock(&rkbt->last_op_push_mtx) == thrd_success);
+		rkbt->last_op_pushed = 1;
+		cnd_signal(&rkbt->last_op_push_cond);
+		mtx_unlock(&rkbt->last_op_push_mtx);
+		*thrd = rkbt->thd;
+		rd_list_add(&wait_thrds, thrd);
 #ifndef _MSC_VER
-                /* Interrupt IO threads to speed up termination. */
-                if (rk->rk_conf.term_sig)
-			pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
+		/* Interrupt IO threads to speed up termination. */
+		if (rk->rk_conf.term_sig)
+			pthread_kill(rkbt->thd, rk->rk_conf.term_sig);
 #endif
-
-                rd_kafka_broker_destroy(rkb);
-
-                rd_kafka_wrlock(rk);
-        }
-
-
-        rd_kafka_wrunlock(rk);
-
+	}
+	mtx_unlock(&rk->rk_broker_thread_allocation_lock);
+    rd_kafka_wrunlock(rk);
+    
 	/* Purge op-queue */
         rd_kafka_q_disable(&rk->rk_rep);
 	rd_kafka_q_purge(&rk->rk_rep);
-
-	/* Loose our special reference to the internal broker. */
-        mtx_lock(&rk->rk_internal_rkb_lock);
-	if ((rkb = rk->rk_internal_rkb)) {
-                rk->rk_internal_rkb = NULL;
-                thrd = malloc(sizeof(*thrd));
-                *thrd = rkb->rkb_thread;
-                rd_list_add(&wait_thrds, thrd);
-        }
-        mtx_unlock(&rk->rk_internal_rkb_lock);
-	if (rkb)
-		rd_kafka_broker_destroy(rkb);
 
 
         /* Join broker threads */
@@ -595,6 +591,12 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         }
 
         rd_list_destroy(&wait_thrds, NULL);
+
+		mtx_lock(&rk->rk_internal_rkb_lock);
+		rk->rk_internal_rkb->rkb_thread = thrd_current();
+		rd_kafka_broker_destroy(rk->rk_internal_rkb);
+		rk->rk_internal_rkb = NULL;
+		mtx_unlock(&rk->rk_internal_rkb_lock);
 
 }
 
@@ -1164,6 +1166,34 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 					err);
 		return NULL;
 	}
+	/* Create broker threads and initialize related things */
+	mtx_init(&rk->rk_broker_thread_allocation_lock, mtx_plain);
+	rk->rk_broker_threads = rd_calloc(rk->rk_conf.broker_thread_count, sizeof(rd_kafka_broker_thread_t));
+	while(rk->rk_broker_thread_count < rk->rk_conf.broker_thread_count) {
+		rd_kafka_broker_thread_t *b_thd = &rk->rk_broker_threads[rk->rk_broker_thread_count];
+		b_thd->rk = rk;
+		mtx_init(&b_thd->broker_addition_lock, mtx_plain);
+		mtx_init(&b_thd->last_op_push_mtx, mtx_plain);
+		cnd_init(&b_thd->last_op_push_cond);
+		TAILQ_INIT(&b_thd->brokers);
+		if ((err = thrd_create(&b_thd->thd, rd_kafka_brokers_main, b_thd)) != thrd_success) {
+				if (errstr)
+						rd_snprintf(errstr, errstr_size,
+									"Failed to create broker thread: %s (%i)",
+									rd_strerror(err), err);
+				rd_kafka_wrunlock(rk);
+				rd_kafka_destroy_internal(rk);
+#ifndef _MSC_VER
+				/* Restore sigmask of caller */
+				pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+#endif
+				rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
+										err);
+				return NULL;
+		}
+		rk->rk_broker_thread_count++;
+	}
+	
 
         rd_kafka_wrunlock(rk);
 

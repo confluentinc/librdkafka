@@ -76,6 +76,7 @@ struct rd_kafka_conf_s {
 	char   *client_id_str;
         rd_kafkap_str_t *client_id;
 	char   *brokerlist;
+	int    broker_thread_count;
 	int     stats_interval_ms;
 	int     term_sig;
         int     reconnect_jitter_ms;

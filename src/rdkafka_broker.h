@@ -38,6 +38,7 @@ extern const char *rd_kafka_secproto_names[];
 
 struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	TAILQ_ENTRY(rd_kafka_broker_s) rkb_link;
+	TAILQ_ENTRY(rd_kafka_broker_s) assigned_thd_link;
 
 	int32_t             rkb_nodeid;
 #define RD_KAFKA_NODEID_UA -1
@@ -178,6 +179,21 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 		char msg[512];
 		int  err;  /* errno */
 	} rkb_err;
+
+	int rkb_do_iopoll; /* only accessed in broker thread */
+};
+
+struct rd_kafka_broker_thread_s {
+	thrd_t thd;
+	mtx_t broker_addition_lock;
+	/* brokers assigned to this thread */
+	TAILQ_HEAD(, rd_kafka_broker_s) brokers;
+	rd_kafka_t *rk;
+	int brokers_assigned;
+	int broker_assignment_changed;
+	mtx_t last_op_push_mtx;
+	cnd_t last_op_push_cond;
+	int last_op_pushed;
 };
 
 #define rd_kafka_broker_keep(rkb)   rd_refcnt_add(&(rkb)->rkb_refcnt)
@@ -290,3 +306,5 @@ void msghdr_print (rd_kafka_t *rk,
 		   int hexdump);
 
 const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb);
+
+int rd_kafka_brokers_main (void *arg);

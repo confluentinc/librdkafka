@@ -40,6 +40,12 @@
 #include <openssl/err.h>
 #endif
 
+#ifndef _MSC_VER
+typedef struct pollfd rd_kafka_pollfd_t;
+#else
+typedef WSAPOLLFD rd_kafka_pollfd_t;
+#endif
+
 struct rd_kafka_transport_s {	
 	int rktrans_s;
 	
@@ -69,10 +75,6 @@ struct rd_kafka_transport_s {
 
 	rd_kafka_buf_t *rktrans_recv_buf;  /* Used with framed_recvmsg */
 	
-#ifndef _MSC_VER
-	struct pollfd rktrans_pfd;
-#else
-	WSAPOLLFD rktrans_pfd;
-#endif
+	rd_kafka_pollfd_t rktrans_pfd;
 };
 

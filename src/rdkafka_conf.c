@@ -132,6 +132,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Initial list of brokers. "
 	  "The application may also use `rd_kafka_brokers_add()` to add "
 	  "brokers during runtime." },
+	{ _RK_GLOBAL, "broker.thread.count", _RK_C_INT, _RK(broker_thread_count),
+	  "Broker threads to be run. "
+	  "Should be set to a value less than (starting at 1) or equal to "
+	  "the number of brokers as appropriate for the workload.",
+	  1, 1000, 1},
 	{ _RK_GLOBAL, "bootstrap.servers", _RK_C_ALIAS, 0,
 	  "See metadata.broker.list",
 	  .sdef = "metadata.broker.list" },

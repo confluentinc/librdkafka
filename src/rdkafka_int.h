@@ -88,6 +88,8 @@ struct rd_kafka_itopic_s;
 struct rd_kafka_msg_s;
 struct rd_kafka_broker_s;
 
+typedef struct rd_kafka_broker_thread_s rd_kafka_broker_thread_t;
+
 typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_toppar_s) shptr_rd_kafka_toppar_t;
 typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 
@@ -176,6 +178,9 @@ struct rd_kafka_s {
 
         rd_kafka_timers_t rk_timers;
 	thrd_t rk_thread;
+	mtx_t rk_broker_thread_allocation_lock;
+	rd_kafka_broker_thread_t *rk_broker_threads;
+	int rk_broker_thread_count;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)

@@ -1054,21 +1054,64 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
  *
  * Locality: broker thread 
  */
-void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
+void rd_kafka_transport_io_serve (rd_kafka_transport_t **rktrans,
+								  int relevant_transport_count,
                                   int timeout_ms) {
-	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
+	rd_kafka_pollfd_t *fds = rd_malloc(sizeof(rd_kafka_pollfd_t) * relevant_transport_count);
+	int i;
 	int events;
+	for(i = 0; i < relevant_transport_count; i++) {
+		rd_kafka_broker_t *rkb = rktrans[i]->rktrans_rkb;
 
-	if (rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
-	    rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0)
-		rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
+		if (rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
+			rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0)
+				rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
+		fds[i].fd = rktrans[i]->rktrans_pfd.fd;
+		fds[i].events = rkb->rkb_transport->rktrans_pfd.events;
+	}
 
-	if ((events = rd_kafka_transport_poll(rktrans, timeout_ms)) <= 0)
-                return;
+	int r;
+#ifndef _MSC_VER
+	r = poll(fds, relevant_transport_count, timeout_ms);
+#else
+	r = WSAPoll(fds, relevant_transport_count, timeout_ms);
+	if (r == 0) {
+			/* Workaround for broken WSAPoll() while connecting:
+			 * failed connection attempts are not indicated at all by WSAPoll()
+			 * so we need to check the socket error when Poll returns 0.
+			 * Issue #525 */
+			r = ECONNRESET;
+			rd_kafka_transport_t *transport;
+			for(i = 0; i < relevant_transport_count; i++) {
+				transport = rktrans[i];
+				if (unlikely(transport->rktrans_rkb->rkb_state ==
+						 RD_KAFKA_BROKER_STATE_CONNECT &&
+						 (rd_kafka_transport_get_socket_error(transport,
+															  &r) == -1 ||
+						  r != 0))) {
+					char errstr[512];
+					errno = r;
+					rd_snprintf(errstr, sizeof(errstr),
+								"Connect to %s failed: %s",
+								rd_sockaddr2str(transport->rktrans_rkb->
+												rkb_addr_last,
+												RD_SOCKADDR2STR_F_PORT |
+												RD_SOCKADDR2STR_F_FAMILY),
+								socket_strerror(r));
+					rd_kafka_transport_connect_done(transport, errstr);
+				}
+			}
+	}
+#endif
 
-        rd_kafka_transport_poll_clear(rktrans, POLLOUT);
-
-	rd_kafka_transport_io_event(rktrans, events);
+	if (r > 0) {
+		for(i = 0; i < relevant_transport_count; i++) {
+			events = rktrans[i]->rktrans_pfd.revents = fds[i].revents;
+			rd_kafka_transport_poll_clear(rktrans[i], POLLOUT);
+			rd_kafka_transport_io_event(rktrans[i], events);
+		}
+	}
+	rd_free(fds);
 }
 
 
@@ -1202,53 +1245,6 @@ void rd_kafka_transport_poll_set(rd_kafka_transport_t *rktrans, int event) {
 void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event) {
 	rktrans->rktrans_pfd.events &= ~event;
 }
-
-
-int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
-#ifndef _MSC_VER
-	int r;
-
-	r = poll(&rktrans->rktrans_pfd, 1, tmout);
-	if (r <= 0)
-		return r;
-	return rktrans->rktrans_pfd.revents;
-#else
-	int r;
-
-	r = WSAPoll(&rktrans->rktrans_pfd, 1, tmout);
-	if (r == 0) {
-		/* Workaround for broken WSAPoll() while connecting:
-		 * failed connection attempts are not indicated at all by WSAPoll()
-		 * so we need to check the socket error when Poll returns 0.
-		 * Issue #525 */
-		r = ECONNRESET;
-		if (unlikely(rktrans->rktrans_rkb->rkb_state ==
-			     RD_KAFKA_BROKER_STATE_CONNECT &&
-			     (rd_kafka_transport_get_socket_error(rktrans,
-								  &r) == -1 ||
-			      r != 0))) {
-			char errstr[512];
-			errno = r;
-			rd_snprintf(errstr, sizeof(errstr),
-				    "Connect to %s failed: %s",
-				    rd_sockaddr2str(rktrans->rktrans_rkb->
-						    rkb_addr_last,
-						    RD_SOCKADDR2STR_F_PORT |
-                                                    RD_SOCKADDR2STR_F_FAMILY),
-                                    socket_strerror(r));
-			rd_kafka_transport_connect_done(rktrans, errstr);
-			return -1;
-		} else
-			return 0;
-	} else if (r == SOCKET_ERROR)
-		return -1;
-	return rktrans->rktrans_pfd.revents;
-#endif
-}
-
-
-
-
 
 #if 0
 /**

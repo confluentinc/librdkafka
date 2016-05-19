@@ -44,14 +44,19 @@
 int main_0038_performance (int argc, char **argv) {
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 	const int partition = 0;
-	const int totsize = 1024*1024*128;
 	const int msgsize = 100;
-	const int msgcnt = totsize / msgsize;
 	uint64_t testid;
 	rd_kafka_conf_t *conf;
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	test_timing_t t_create, t_produce, t_consume;
+	int totsize = 1024*1024*128;
+	int msgcnt;
+
+	if (!strcmp(test_mode, "helgrind"))
+		totsize = 1024*1024*8; /* 8 meg, helgrind is slow. */
+
+	msgcnt = totsize / msgsize;
 
 	TEST_SAY("Producing %d messages of size %d to %s [%d]\n",
 		 msgcnt, (int)msgsize, topic, partition);

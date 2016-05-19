@@ -102,17 +102,13 @@ int main_0029_assign_offset (int argc, char **argv) {
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
-	rd_kafka_conf_t *conf;
-	rd_kafka_topic_conf_t *tconf;
 	rd_kafka_topic_partition_list_t *parts;
         uint64_t testid;
 	int i;
 	test_timing_t t_simple, t_hl;
 	test_msgver_t mv;
 
-	test_conf_init(&conf, &tconf, 20 + (test_session_timeout_ms * 3 / 1000));
-	test_conf_set(conf, "enable.auto.commit", "false");
-	test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
+	test_conf_init(NULL, NULL, 20 + (test_session_timeout_ms * 3 / 1000));
 
 	/* Produce X messages to Y partitions so we get a 
 	 * nice seekable 0..X offset one each partition. */
@@ -195,8 +191,6 @@ int main_0029_assign_offset (int argc, char **argv) {
 		rd_kafka_destroy(rk);
 		TIMING_STOP(&t_hl);
 	}
-
-	rd_kafka_topic_conf_destroy(tconf);
 
         return 0;
 }

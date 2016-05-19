@@ -228,12 +228,14 @@ typedef struct test_timing_s {
 	char name[64];
 	int64_t ts_start;
 	int64_t duration;
+	int64_t ts_every; /* Last every */
 } test_timing_t;
 
 #define TIMING_START(TIMING,NAME) do {					\
 	rd_snprintf((TIMING)->name, sizeof((TIMING)->name), "%s", (NAME)); \
 	(TIMING)->ts_start = test_clock();				\
 	(TIMING)->duration = 0;						\
+	(TIMING)->ts_every = (TIMING)->ts_start;			\
 	} while (0)
 
 #define TIMING_STOP(TIMING) do {				\
@@ -242,7 +244,18 @@ typedef struct test_timing_s {
 		 (TIMING)->name, (float)(TIMING)->duration / 1000.0f);	\
 	} while (0)
 
-#define TIMING_DURATION(TIMING) ((TIMING)->duration)
+#define TIMING_DURATION(TIMING) ((TIMING)->duration ? (TIMING)->duration : \
+				 (test_clock() - (TIMING)->ts_start))
+
+/* Trigger something every US microseconds. */
+static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
+	int64_t now = test_clock();
+	if (timing->ts_every + us <= now) {
+		timing->ts_every = now;
+		return 1;
+	}
+	return 0;
+}
 
 #ifndef _MSC_VER
 #define rd_sleep(S) sleep(S)

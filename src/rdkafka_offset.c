@@ -829,6 +829,7 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 
 	if (offset != RD_KAFKA_OFFSET_INVALID) {
 		/* Start fetching from offset */
+		rktp->rktp_stored_offset = offset;
 		rktp->rktp_committed_offset = offset;
                 rd_kafka_toppar_next_offset_handle(rktp, offset);
 

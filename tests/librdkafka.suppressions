@@ -199,6 +199,38 @@
    fun:ERR_load_SSL_strings
 }
 {
+   ssl_noterm_leak10
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:OPENSSL_init_library
+}
+{
+   ssl_noterm_leak10b
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   ...
+   fun:OPENSSL_init_library
+}
+{
+   ssl_noterm_leak11
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:EVP_SignFinal
+}
+{
+   ssl_noterm_leak12
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:FIPS_mode_set
+}
+{
    thrd_tls_alloc_stack
    Memcheck:Leak
    match-leak-kinds: possible

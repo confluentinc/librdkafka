@@ -56,7 +56,7 @@ int  test_session_timeout_ms = 6000;
 int          test_broker_version;
 static char *test_broker_version_str = "0.9.0.0";
 int          test_flags = 0;
-int          test_neg_flags = 0;
+int          test_neg_flags = TEST_F_KNOWN_ISSUE;
 static char *test_git_version = "HEAD";
 
 static int show_summary = 1;
@@ -1009,9 +1009,14 @@ int main(int argc, char **argv) {
         test_curr->state = TEST_PASSED;
         test_curr->start = test_clock();
 
-	if (!strcmp(test_mode, "helgrind")) {
+	if (!strcmp(test_mode, "helgrind") ||
+	    !strcmp(test_mode, "drd")) {
 		TEST_LOCK();
 		test_timeout_multiplier *= 5;
+		TEST_UNLOCK();
+	} else if (!strcmp(test_mode, "valgrind")) {
+		TEST_LOCK();
+		test_timeout_multiplier *= 3;
 		TEST_UNLOCK();
 	}
 
@@ -1246,7 +1251,7 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 		if (!payload) {
 			test_msg_fmt(key, sizeof(key), testid, partition,
 				     msg_id);
-			memcpy(buf, key, RD_MIN(size, sizeof(key)));
+			memcpy(buf, key, RD_MIN(size, strlen(key)));
 		}
 
 		if (rd_kafka_produce(rkt, partition,
@@ -1264,6 +1269,12 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 
 		rd_kafka_poll(rk, 0);
 
+		if (TIMING_EVERY(&t_all, 5*1000000))
+			TEST_SAY("produced %3d%%: %d/%d messages (%d msgs/s)\n",
+				 ((msg_id - msg_base) * 100) / cnt,
+				 msg_id - msg_base, cnt,
+				 (int)((msg_id - msg_base) /
+				       (TIMING_DURATION(&t_all) / 1000000)));
         }
 
 	if (!payload)
@@ -1476,6 +1487,14 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 		int msg_id;
 
 		rkmessage = rd_kafka_consume(rkt, partition, 5000);
+
+		if (TIMING_EVERY(&t_all, 5*1000000))
+			TEST_SAY("%s: "
+				 "consumed %3d%%: %d/%d messages (%d msgs/s)\n",
+				 what, cnt * 100 / exp_cnt, cnt, exp_cnt,
+				 (int)(cnt /
+				       (TIMING_DURATION(&t_all) / 1000000)));
+
 		if (!rkmessage)
 			TEST_FAIL("%s: consume_msgs: %s [%"PRId32"]: "
 				  "expected msg #%d (%d/%d): timed out\n",

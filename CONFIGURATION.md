@@ -52,8 +52,8 @@ ssl.crl.location                         |  *  |                 |              
 sasl.mechanisms                          |  *  | GSSAPI, PLAIN   |        GSSAPI | SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN. **NOTE**: Despite the name only one mechanism must be configured. <br>*Type: string*
 sasl.kerberos.service.name               |  *  |                 |         kafka | Kerberos principal name that Kafka runs as. <br>*Type: string*
 sasl.kerberos.principal                  |  *  |                 |   kafkaclient | This client's Kerberos principal name. <br>*Type: string*
-sasl.kerberos.kinit.cmd                  |  *  |                 |         kinit | Kerberos kinit command path. <br>*Type: string*
-sasl.kerberos.keytab                     |  *  |                 |               | Path to Kerberos keytab file. Uses system default if not set. <br>*Type: string*
+sasl.kerberos.kinit.cmd                  |  *  |                 | kinit -S "%{sasl.kerberos.service.name}/%{broker.name}" -k -i %{sasl.kerberos.principal} | Full kerberos kinit command string, %{config.prop.name} is replaced by corresponding config object value, %{broker.name} returns the broker's hostname. <br>*Type: string*
+sasl.kerberos.keytab                     |  *  |                 |               | Path to Kerberos keytab file. Uses system default if not set.**NOTE**: This is not automatically used but must be added to the template in sasl.kerberos.kinit.cmd as ` ... -k %{sasl.kerberos.keytab}`. <br>*Type: string*
 sasl.kerberos.min.time.before.relogin    |  *  | 1 .. 86400000   |         60000 | Minimum time in milliseconds between key refresh attempts. <br>*Type: integer*
 sasl.username                            |  *  |                 |               | SASL username for use with the PLAIN mechanism <br>*Type: string*
 sasl.password                            |  *  |                 |               | SASL password for use with the PLAIN mechanism <br>*Type: string*

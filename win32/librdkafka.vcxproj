@@ -226,6 +226,7 @@
     <ClCompile Include="..\src\rdkafka_feature.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
+    <ClCompile Include="..\src\rdstring.c" />
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\snappy.c" />
     <ClCompile Include="..\src\tinycthread.c" />

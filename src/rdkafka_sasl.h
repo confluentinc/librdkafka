@@ -40,3 +40,5 @@ void rd_kafka_broker_sasl_init (rd_kafka_broker_t *rkb);
 
 int rd_kafka_sasl_global_init (void);
 
+int rd_kafka_sasl_conf_validate (rd_kafka_t *rk,
+				 char *errstr, size_t errstr_size);

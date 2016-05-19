@@ -34,6 +34,8 @@
 
 #include <sasl/sasl.h>
 
+static mtx_t rd_kafka_sasl_kinit_lock;
+
 
 /**
  * Send auth message with framing.
@@ -280,7 +282,10 @@ static int rd_kafka_sasl_kinit_refresh (rd_kafka_broker_t *rkb) {
 	/* Execute kinit */
 	rd_rkb_dbg(rkb, SECURITY, "SASLREFRESH",
 		   "Refreshing SASL keys with command: %s", cmd);
+
+	mtx_lock(&rd_kafka_sasl_kinit_lock);
 	r = system(cmd);
+	mtx_unlock(&rd_kafka_sasl_kinit_lock);
 
 	if (r == -1) {
 		rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
@@ -651,9 +656,8 @@ int rd_kafka_sasl_conf_validate (rd_kafka_t *rk,
  */
 void rd_kafka_sasl_global_term (void) {
 	sasl_done();
+	mtx_destroy(&rd_kafka_sasl_kinit_lock);
 }
-
-
 
 
 /**
@@ -661,6 +665,8 @@ void rd_kafka_sasl_global_term (void) {
  */
 int rd_kafka_sasl_global_init (void) {
 	int r;
+
+	mtx_init(&rd_kafka_sasl_kinit_lock, mtx_plain);
 
 	r = sasl_client_init(NULL);
 	if (r != SASL_OK) {

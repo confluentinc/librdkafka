@@ -1090,6 +1090,19 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		return NULL;
 	}
 
+#if WITH_SASL
+	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
+	    rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) {
+		/* Validate SASL config */
+		if (rd_kafka_sasl_conf_validate(rk, errstr, errstr_size) == -1) {
+                        rd_kafka_destroy_internal(rk);
+			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
+						EINVAL);
+			return NULL;
+		}
+	}
+#endif
+
 #if WITH_SSL
 	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL ||
 	    rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL) {

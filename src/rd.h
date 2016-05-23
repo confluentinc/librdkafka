@@ -123,6 +123,14 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 }
 
 
+char *rd_string_render (const char *template,
+			char *errstr, size_t errstr_size,
+			ssize_t (*callback) (const char *key,
+					     char *buf, size_t size,
+					     void *opaque),
+			void *opaque);
+
+
 
 /*
  * Portability

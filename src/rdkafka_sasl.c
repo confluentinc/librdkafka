@@ -34,6 +34,8 @@
 
 #include <sasl/sasl.h>
 
+static mtx_t rd_kafka_sasl_kinit_lock;
+
 
 /**
  * Send auth message with framing.
@@ -210,6 +212,42 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
 
 
 
+static ssize_t render_callback (const char *key, char *buf,
+				size_t size, void *opaque) {
+	rd_kafka_broker_t *rkb = opaque;
+
+	if (!strcmp(key, "broker.name")) {
+		char *val, *t;
+		size_t len;
+		rd_kafka_broker_lock(rkb);
+		rd_strdupa(&val, rkb->rkb_nodename);
+		rd_kafka_broker_unlock(rkb);
+
+		/* Just the broker name, no port */
+		if ((t = strchr(val, ':')))
+			len = (size_t)(t-val);
+		else
+			len = strlen(val);
+
+		if (buf)
+			memcpy(buf, val, RD_MIN(len, size));
+
+		return len;
+
+	} else {
+		rd_kafka_conf_res_t res;
+		size_t destsize = size;
+
+		/* Try config lookup. */
+		res = rd_kafka_conf_get(&rkb->rkb_rk->rk_conf, key,
+					buf, &destsize);
+		if (res != RD_KAFKA_CONF_OK)
+			return -1;
+
+		/* Dont include \0 in returned size */
+		return (destsize > 0 ? destsize-1 : destsize);
+	}
+}
 
 
 /**
@@ -222,55 +260,54 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
 static int rd_kafka_sasl_kinit_refresh (rd_kafka_broker_t *rkb) {
 	rd_kafka_t *rk = rkb->rkb_rk;
 	int r;
-	char cmd[512];
-	char keytab[512];
-	char *hostname, *t;
+	char *cmd;
+	char errstr[128];
 
-	if (!rk->rk_conf.sasl.kinit_cmd || !strstr(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
+	if (!rk->rk_conf.sasl.kinit_cmd ||
+	    !strstr(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
 		return 0; /* kinit not configured */
 
-	/* Build kinit refresh command line for this broker. */
-	rd_kafka_broker_lock(rkb);
-	rd_strdupa(&hostname, rkb->rkb_nodename);
-	rd_kafka_broker_unlock(rkb);
-
-	if ((t = strchr(hostname, ':')))
-		*t = '\0';  /* remove ":port" */
-
-	if (rk->rk_conf.sasl.keytab)
-		rd_snprintf(keytab, sizeof(keytab),
-			    "-k -t \"%s\"",
-			    rk->rk_conf.sasl.keytab);
-	else /* default path */
-		rd_snprintf(keytab, sizeof(keytab), "-k -i");
-
-	rd_snprintf(cmd, sizeof(cmd), "%s -S \"%s/%s\" %s %s",
-		    rk->rk_conf.sasl.kinit_cmd,
-		    rk->rk_conf.sasl.service_name, hostname,
-		    keytab,
-		    rk->rk_conf.sasl.principal);
+	/* Build kinit refresh command line using string rendering and config */
+	cmd = rd_string_render(rk->rk_conf.sasl.kinit_cmd,
+			       errstr, sizeof(errstr),
+			       render_callback, rkb);
+	if (!cmd) {
+		rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
+			   "Failed to construct kinit command "
+			   "from sasl.kerberos.kinit.cmd template: %s",
+			   errstr);
+		return -1;
+	}
 
 	/* Execute kinit */
 	rd_rkb_dbg(rkb, SECURITY, "SASLREFRESH",
 		   "Refreshing SASL keys with command: %s", cmd);
+
+	mtx_lock(&rd_kafka_sasl_kinit_lock);
 	r = system(cmd);
+	mtx_unlock(&rd_kafka_sasl_kinit_lock);
 
 	if (r == -1) {
 		rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
 			   "SASL key refresh failed: Failed to execute %s",
 			   cmd);
+		rd_free(cmd);
 		return -1;
 	} else if (WIFSIGNALED(r)) {
 		rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
 			   "SASL key refresh failed: %s: received signal %d",
 			   cmd, WTERMSIG(r));
+		rd_free(cmd);
 		return -1;
 	} else if (WIFEXITED(r) && WEXITSTATUS(r) != 0) {
 		rd_rkb_log(rkb, LOG_ERR, "SASLREFRESH",
 			   "SASL key refresh failed: %s: exited with code %d",
 			   cmd, WEXITSTATUS(r));
+		rd_free(cmd);
 		return -1;
 	}
+
+	rd_free(cmd);
 
 	rd_rkb_dbg(rkb, SECURITY, "SASLREFRESH", "SASL key refreshed");
 	return 0;
@@ -579,15 +616,48 @@ void rd_kafka_broker_sasl_init (rd_kafka_broker_t *rkb) {
 			     rd_kafka_sasl_kinit_refresh_tmr_cb, rkb);
 }
 
+
+
+int rd_kafka_sasl_conf_validate (rd_kafka_t *rk,
+				 char *errstr, size_t errstr_size) {
+	rd_kafka_broker_t rkb;
+	char *cmd;
+	char tmperr[128];
+
+	if (strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
+		return 0;
+
+	memset(&rkb, 0, sizeof(rkb));
+	strcpy(rkb.rkb_nodename, "ATestBroker:9092");
+	rkb.rkb_rk = rk;
+	mtx_init(&rkb.rkb_lock, mtx_plain);
+
+	cmd = rd_string_render(rk->rk_conf.sasl.kinit_cmd,
+			       tmperr, sizeof(tmperr),
+			       render_callback, &rkb);
+
+	mtx_destroy(&rkb.rkb_lock);
+
+	if (!cmd) {
+		rd_snprintf(errstr, errstr_size,
+			    "Invalid sasl.kerberos.kinit.cmd value: %s",
+			    tmperr);
+		return -1;
+	}
+
+	rd_free(cmd);
+	return 0;
+}
+
+
 /**
  * Global SASL termination.
  * NOTE: Should not be called since the application may be using SASL too.
  */
 void rd_kafka_sasl_global_term (void) {
 	sasl_done();
+	mtx_destroy(&rd_kafka_sasl_kinit_lock);
 }
-
-
 
 
 /**
@@ -595,6 +665,8 @@ void rd_kafka_sasl_global_term (void) {
  */
 int rd_kafka_sasl_global_init (void) {
 	int r;
+
+	mtx_init(&rd_kafka_sasl_kinit_lock, mtx_plain);
 
 	r = sasl_client_init(NULL);
 	if (r != SASL_OK) {

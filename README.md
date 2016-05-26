@@ -1,7 +1,7 @@
 librdkafka - Apache Kafka C/C++ client library
 ==============================================
 
-Copyright (c) 2012-2015, [Magnus Edenhill](http://www.edenhill.se/).
+Copyright (c) 2012-2016, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
@@ -22,7 +22,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 [![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
 
-**Apache Kafka 0.8 & 0.9 support:**
+**Apache Kafka 0.8 & 0.9 & 0.10 support:**
 
   * Branch: master
   * Producer: supported
@@ -32,7 +32,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Broker version support: >=0.8
   * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
   * ZooKeeper: not supported
-  * C API: Stable, ABI safe, backwards compatible with 0.8
+  * C API: Stable, ABI safe
   * C++ API: Stable
   * Tests: Regression tests in `tests/` directory.
   * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
@@ -63,7 +63,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
   * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)
   * PHP: [php-rdkafka](https://github.com/arnaud-lb/php-rdkafka)
-  * Python: [python-librdkafka](https://bitbucket.org/yungchin/python-librdkafka)
+  * Python: [confluent-kafka-python](https://github.com/confluentinc/confluent-kafka-python)
   * Python: [PyKafka](https://github.com/Parsely/pykafka)
   * Ruby: [Hermann](https://github.com/stancampbell3/Hermann)
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)

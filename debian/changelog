@@ -16,8 +16,10 @@ librdkafka (0.9.1-1) unstable; urgency=medium
   * Ship the new C++ library, by shipping a new binary package, librdkafka++1.
   * Ship pkg-config files in the -dev package for both the C and C++
     libraries.
+  * Replace the perl build-dependency by python, as the build system (among
+    others) now requires it.
 
- -- Faidon Liambotis <paravoid@debian.org>  Mon, 30 May 2016 15:57:32 +0300
+ -- Faidon Liambotis <paravoid@debian.org>  Mon, 30 May 2016 16:07:33 +0300
 
 librdkafka (0.8.6-1.1) unstable; urgency=medium
 

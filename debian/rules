@@ -7,4 +7,4 @@
 	dh $@
 
 override_dh_strip:
-	dh_strip --dbgsym-migration='librdkafka1-dbg (<< 0.9.1-1~)'
+	dh_strip -O--dbgsym-migration='librdkafka1-dbg (<< 0.9.1-1~)'

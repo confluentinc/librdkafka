@@ -9,7 +9,7 @@ librdkafka (0.9.1-1) unstable; urgency=medium
   * Update the long description to mention 0.9 protocol support and also the
     high-performance aspect, by copying upstream's description almost
     verbatim.
-  * Bump Standards-Version to 3.9.7 (no changes needed).
+  * Bump Standards-Version to 3.9.8 (no changes needed).
   * Switch Vcs-Git to GitHub's https (from git://)
   * Migrate from our own -dbg package to the automatic -dbgsym package.
   * Update librdkafka1.symbols with 0.9.0' and 0.9.1's new symbols.

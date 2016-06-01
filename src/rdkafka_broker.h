@@ -28,7 +28,9 @@
 
 #pragma once
 
+#include "rdkafka.h"           // for rd_kafka_metadata_t
 #include "rdkafka_feature.h"
+#include "rdtypes.h"           // for rd_ts_t
 
 
 extern const char *rd_kafka_broker_state_names[];
@@ -154,12 +156,13 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_avg_t            rkb_avg_throttle;   /* Current throttle period */
 
         /* These are all protected by rkb_lock */
-	char                rkb_name[RD_KAFKA_NODENAME_SIZE];  /* Displ name */
-	char                rkb_nodename[RD_KAFKA_NODENAME_SIZE]; /* host:port*/
-        uint16_t            rkb_port;                          /* TCP port */
-        char               *rkb_origname;                      /* Original
+  char                 rkb_name[RD_KAFKA_NODENAME_SIZE];  /* Displ name */
+  char                 rkb_nodename[RD_KAFKA_NODENAME_SIZE]; /* host:port*/
+        uint16_t             rkb_port;                          /* TCP port */
+        char                *rkb_origname;                      /* Original
                                                                 * host name */
-
+        rd_kafka_metadata_t *rkb_metadata;  /* Latest Metadata */
+        rd_ts_t              rkb_metadata_time; /* Time metadata was received */
 
         /* Logging name is a copy of rkb_name, protected by its own mutex */
         char               *rkb_logname;
@@ -290,3 +293,6 @@ void msghdr_print (rd_kafka_t *rk,
 		   int hexdump);
 
 const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb);
+
+rd_kafka_metadata_t* rd_kafka_copy_metadata (
+        const rd_kafka_metadata_t* metadatap);

@@ -2380,40 +2380,35 @@ rd_kafka_crash (const char *file, int line, const char *function,
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
-                   rd_kafka_topic_t *only_rkt,
-                   const struct rd_kafka_metadata **metadatap,
-                   int timeout_ms) {
+static rd_kafka_resp_err_t
+rd_kafka_metadata_cached (rd_kafka_broker_t *rkb,
+                          const struct rd_kafka_metadata **metadatap,
+                          int timeout_ms) {
+        if (rkb->rkb_metadata)
+              *metadatap = rd_kafka_copy_metadata(rkb->rkb_metadata);
+
+        return *metadatap ? RD_KAFKA_RESP_ERR_NO_ERROR :
+                            RD_KAFKA_RESP_ERR__TIMED_OUT;
+}
+
+static rd_kafka_resp_err_t
+rd_kafka_metadata_queue (rd_kafka_t *rk, int all_topics,
+                         rd_kafka_broker_t *rkb,
+                         rd_kafka_topic_t *only_rkt,
+                         const struct rd_kafka_metadata **metadatap,
+                         int timeout_ms) {
         rd_kafka_q_t *replyq;
-        rd_kafka_broker_t *rkb;
         rd_kafka_op_t *rko;
-
-        /* Query any broker that is up, and if none are up pick the first one,
-         * if we're lucky it will be up before the timeout */
-        rd_kafka_rdlock(rk);
-        if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
-                                        rd_kafka_broker_filter_non_blocking,
-                                        NULL))) {
-                rkb = TAILQ_FIRST(&rk->rk_brokers);
-                if (rkb)
-                        rd_kafka_broker_keep(rkb);
-        }
-        rd_kafka_rdunlock(rk);
-
-        if (!rkb)
-                return RD_KAFKA_RESP_ERR__TRANSPORT;
 
         replyq = rd_kafka_q_new(rk);
 
+        printf("queue\n");
         /* Async: request metadata */
         rd_kafka_broker_metadata_req(rkb, all_topics,
                                      only_rkt ?
                                      rd_kafka_topic_a2i(only_rkt) : NULL,
                                      replyq,
                                      "application requested");
-
-        rd_kafka_broker_destroy(rkb);
 
         /* Wait for reply (or timeout) */
         rko = rd_kafka_q_pop(replyq, timeout_ms, 0);
@@ -2438,6 +2433,60 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         rd_kafka_op_destroy(rko);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
+                   rd_kafka_topic_t *only_rkt,
+                   const struct rd_kafka_metadata **metadatap,
+                   int timeout_ms) {
+        rd_kafka_broker_t *rkb;
+
+        /* Query any broker that is up, and if none are up pick the first one,
+         * if we're lucky it will be up before the timeout */
+        rd_kafka_rdlock(rk);
+        if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
+                                        rd_kafka_broker_filter_non_blocking,
+                                        NULL))) {
+                rkb = TAILQ_FIRST(&rk->rk_brokers);
+                if (rkb)
+                        rd_kafka_broker_keep(rkb);
+        }
+        rd_kafka_rdunlock(rk);
+
+        if (!rkb)
+                return RD_KAFKA_RESP_ERR__TRANSPORT;
+
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        printf("metadata...\n");
+        rd_kafka_broker_lock(rkb);
+        rd_ts_t now = rd_clock();
+        printf("now: %d, timeout, %d, last %d ", now, timeout_ms, rkb->rkb_metadata_time);
+        if (timeout_ms < 0 &&
+            (now + (timeout_ms * 1000)< rkb->rkb_metadata_time)) {
+                printf("recent\n");
+                err = rd_kafka_metadata_cached(rkb, metadatap, timeout_ms);
+                rd_kafka_broker_unlock(rkb);
+        }
+        else {
+                if (timeout_ms < 0)
+                        timeout_ms = -timeout_ms;
+                printf("queue\n");
+                rd_kafka_broker_unlock(rkb);
+                err = rd_kafka_metadata_queue(rk,
+                                              all_topics,
+                                              rkb,
+                                              only_rkt,
+                                              metadatap,
+                                              timeout_ms);
+        }
+
+        rd_kafka_broker_lock(rkb);
+        rd_refcnt_sub(&(rkb)->rkb_refcnt);
+        rd_kafka_broker_unlock(rkb);
+
+        return err;
 }
 
 void rd_kafka_metadata_destroy (const struct rd_kafka_metadata *metadata) {

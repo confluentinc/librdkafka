@@ -799,7 +799,6 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
                 rko->rko_flags |= RD_KAFKA_OP_F_FREE;
         }
 
-        printf("metadata request: %s\n", rko->rko_reason);
         rd_kafka_broker_metadata_req_op(rkb, rko);
 }
 

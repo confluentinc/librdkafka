@@ -2402,14 +2402,13 @@ rd_kafka_metadata_queue (rd_kafka_t *rk, int all_topics,
 
         replyq = rd_kafka_q_new(rk);
 
-        printf("queue\n");
         /* Async: request metadata */
         rd_kafka_broker_metadata_req(rkb, all_topics,
                                      only_rkt ?
                                      rd_kafka_topic_a2i(only_rkt) : NULL,
                                      replyq,
                                      "application requested");
-
+        
         /* Wait for reply (or timeout) */
         rko = rd_kafka_q_pop(replyq, timeout_ms, 0);
 
@@ -2459,20 +2458,18 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
 
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        printf("metadata...\n");
         rd_kafka_broker_lock(rkb);
         rd_ts_t now = rd_clock();
-        printf("now: %d, timeout, %d, last %d ", now, timeout_ms, rkb->rkb_metadata_time);
         if (timeout_ms < 0 &&
             (now + (timeout_ms * 1000)< rkb->rkb_metadata_time)) {
-                printf("recent\n");
                 err = rd_kafka_metadata_cached(rkb, metadatap, timeout_ms);
+                
                 rd_kafka_broker_unlock(rkb);
         }
         else {
                 if (timeout_ms < 0)
                         timeout_ms = -timeout_ms;
-                printf("queue\n");
+                
                 rd_kafka_broker_unlock(rkb);
                 err = rd_kafka_metadata_queue(rk,
                                               all_topics,
@@ -2482,10 +2479,8 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
                                               timeout_ms);
         }
 
-        rd_kafka_broker_lock(rkb);
-        rd_refcnt_sub(&(rkb)->rkb_refcnt);
-        rd_kafka_broker_unlock(rkb);
-
+        rd_kafka_broker_destroy(rkb);
+                        
         return err;
 }
 

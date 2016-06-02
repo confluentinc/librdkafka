@@ -1741,7 +1741,6 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                                   rd_kafka_buf_t *request,
                                   void *opaque) {
         rd_kafka_op_t *rko = opaque;
-          printf("Handle meta: %s\n", rko->rko_reason);
         struct rd_kafka_metadata *md = NULL;
         rd_kafka_q_t *replyq;
 

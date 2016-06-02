@@ -484,7 +484,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
 static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
         thrd_t thrd;
-
+#ifndef _MSC_VER
+	int term_sig = rk->rk_conf.term_sig;
+#endif
         rd_kafka_dbg(rk, ALL, "DESTROY", "Terminating instance");
         rd_kafka_wrlock(rk);
         thrd = rk->rk_thread;
@@ -494,8 +496,8 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 
 #ifndef _MSC_VER
         /* Interrupt main kafka thread to speed up termination. */
-        if (rk->rk_conf.term_sig)
-                pthread_kill(thrd, rk->rk_conf.term_sig);
+	if (term_sig)
+                pthread_kill(thrd, term_sig);
 #endif
 
         if (!blocking)

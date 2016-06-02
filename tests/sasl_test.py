@@ -122,9 +122,14 @@ if __name__ == '__main__':
         tests = None
 
     # Test version,supported mechs + suite matrix
-    versions = [('trunk', ['PLAIN','GSSAPI']),
-                ('0.9.0.1', ['GSSAPI']),
-                ('0.8.2.2', [])]
+    versions = list()
+    if len(args.versions):
+        for v in args.versions:
+            versions.append((v, ['PLAIN','GSSAPI']))
+    else:
+        versions = [('trunk', ['PLAIN','GSSAPI']),
+                    ('0.9.0.1', ['GSSAPI']),
+                    ('0.8.2.2', [])]
     sasl_plain_conf = {'sasl_mechanisms': 'PLAIN',
                        'sasl_users': 'myuser=mypassword'}
     ssl_sasl_plain_conf = {'sasl_mechanisms': 'PLAIN',

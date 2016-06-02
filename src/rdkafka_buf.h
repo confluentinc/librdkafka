@@ -67,7 +67,8 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 #define rd_kafka_buf_parse_fail(rkbuf,...) do {				\
                 if (log_decode_errors) {                                \
                         rd_rkb_log(rkbuf->rkbuf_rkb, LOG_WARNING, "PROTOERR", \
-                                   "Protocol parse failure at %s:%i",   \
+                                   "Protocol parse failure at %s:%i " \
+				   "(incorrect broker.version.fallback?)",   \
                                    __FUNCTION__, __LINE__);             \
                         rd_rkb_log(rkbuf->rkbuf_rkb, LOG_WARNING,	\
 				   "PROTOERR", __VA_ARGS__);		\

@@ -572,8 +572,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(compression_codec),
 	  "compression codec to use for compressing message sets. "
 	  "This is the default value for all topics, may be overriden by "
-	  "the topic configuration property `compression.codec`. "
-	  "*Note*: lz4 requires broker version >= 0.10.0.0",
+	  "the topic configuration property `compression.codec`. ",
 	  .vdef = RD_KAFKA_COMPRESSION_NONE,
 	  .s2i = {
 			{ RD_KAFKA_COMPRESSION_NONE,   "none" },
@@ -654,8 +653,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
 	{ _RK_TOPIC | _RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RKT(compression_codec),
-	  "Compression codec to use for compressing message sets. "
-	  "*Note*: lz4 requires broker version >= 0.10.0.0",
+	  "Compression codec to use for compressing message sets. ",
 	  .vdef = RD_KAFKA_COMPRESSION_INHERIT,
 	  .s2i = {
 		  { RD_KAFKA_COMPRESSION_NONE, "none" },

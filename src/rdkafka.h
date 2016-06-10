@@ -815,6 +815,15 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
 
 
 /**
+ * @brief Enable event sourcing.
+ * \p events is a bitmask of \c RD_KAFKA_EVENT_* of events to enable
+ * for consumption by `rd_kafka_queue_poll()`.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_events(rd_kafka_conf_t *conf, int events);
+
+
+/**
  @deprecated See rd_kafka_conf_set_dr_msg_cb()
 */
 RD_EXPORT
@@ -1593,6 +1602,34 @@ rd_kafka_queue_t *rd_kafka_queue_new(rd_kafka_t *rk);
  */
 RD_EXPORT
 void rd_kafka_queue_destroy(rd_kafka_queue_t *rkqu);
+
+
+/**
+ * @returns a reference to the main librdkafka event queue.
+ * This is the queue served by rd_kafka_poll().
+ *
+ * Use rd_kafka_queue_destroy() to loose the reference.
+ */
+RD_EXPORT
+rd_kafka_queue_t *rd_kafka_queue_get_main (rd_kafka_t *rk);
+
+
+/**
+ * @returns a reference to the librdkafka consumer queue.
+ * This is the queue served by rd_kafka_consumer_poll().
+ *
+ * Use rd_kafka_queue_destroy() to loose the reference.
+ */
+RD_EXPORT
+rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk);
+
+
+/**
+ * @brief Forward/re-route queue \p src to \p dst.
+ * If \p dst is \c NULL the forwarding is removed.
+ */
+RD_EXPORT
+void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
 
 
 /**@}*/
@@ -2498,6 +2535,82 @@ int rd_kafka_wait_destroyed(int timeout_ms);
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
+
+
+/**@}*/
+
+/**
+ * @name Event interface
+ * @{
+ */
+typedef enum rd_kafka_event_type_t {
+	RD_KAFKA_EVENT_NONE,
+	RD_KAFKA_EVENT_DR,        /**< Delivery report (producer) */
+	RD_KAFKA_EVENT_FETCH,     /**< Fetched message (consumer) */
+	RD_KAFKA_EVENT_LOG,       /**< Log message */
+	RD_KAFKA_EVENT_ERROR,     /**< Error */
+	RD_KAFKA_EVENT_REBALANCE, /**< Group rebalance (consumer) */
+} rd_kafka_event_type_t;
+
+typedef struct rd_kafka_op_s rd_kafka_event_t;
+
+
+/**
+ * @brief Enable events \p events (or:ed RD_KAFKA_EVENT_*)
+ * FIXME
+ */
+RD_EXPORT
+void rd_kafka_events_enable (rd_kafka_t *rk, int events);
+
+/**
+ * @brief Disable events \p events (or:ed RD_KAFKA_EVENT_*)
+ * FIXME
+ */
+RD_EXPORT
+void rd_kafka_events_disable (rd_kafka_t *rk, int events);
+
+/**
+ * @remark As a convenience it is okay to pass \p rkev as NULL in which case
+ *         RD_KAFKA_EVENT_NONE is returned.
+ */
+RD_EXPORT
+rd_kafka_event_type_t rd_kafka_event_type (const rd_kafka_event_t *rkev);
+
+/**
+ * @remark As a convenience it is okay to pass \p rkev as NULL in which case
+ *         the name for RD_KAFKA_EVENT_NONE is returned.
+ */
+RD_EXPORT
+const char *rd_kafka_event_name (const rd_kafka_event_t *rkev);
+
+/**
+ * @remark As a convenience it is okay to pass \p rkev as NULL in which case
+ *         no action is performed.
+ */
+RD_EXPORT
+void rd_kafka_event_destroy (rd_kafka_event_t *rkev);
+
+RD_EXPORT
+const rd_kafka_message_t *rd_kafka_event_message (rd_kafka_event_t *rkev);
+
+RD_EXPORT
+size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
+
+
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev);
+
+
+RD_EXPORT
+int rd_kafka_event_log (rd_kafka_event_t *rkev,
+			const char **fac, const char **str, int *level);
+
+RD_EXPORT rd_kafka_topic_partition_list_t *
+rd_kafka_event_topic_partition_list (rd_kafka_event_t *rkev);
+
+RD_EXPORT
+rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms);
+
 
 /**@}*/
 

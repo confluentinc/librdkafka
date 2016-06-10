@@ -252,6 +252,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "register a stats callback using `rd_kafka_conf_set_stats_cb()`. "
 	  "The granularity is 1000ms. A value of 0 disables statistics.",
 	  0, 86400*1000, 0 },
+	{ _RK_GLOBAL, "enabled_events", _RK_C_INT,
+	  _RK(enabled_events),
+	  "See `rd_kafka_conf_set_events()`",
+	  0, 0x7fffffff, 0 },
 	{ _RK_GLOBAL, "error_cb", _RK_C_PTR,
 	  _RK(error_cb),
 	  "Error callback (set with rd_kafka_conf_set_error_cb())" },
@@ -1329,6 +1333,11 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
 	rd_kafka_anyconf_copy(_RK_TOPIC, new, conf);
 
 	return new;
+}
+
+
+void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
+	conf->enabled_events = events;
 }
 
 

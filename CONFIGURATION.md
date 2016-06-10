@@ -27,6 +27,7 @@ broker.address.ttl                       |  *  | 0 .. 86400000   |          1000
 broker.address.family                    |  *  | any, v4, v6     |           any | Allowed broker IP address families: any, v4, v6 <br>*Type: enum value*
 reconnect.backoff.jitter.ms              |  *  | 0 .. 3600000    |           500 | Throttle broker reconnection attempts by this value +-50%. <br>*Type: integer*
 statistics.interval.ms                   |  *  | 0 .. 86400000   |             0 | librdkafka statistics emit interval. The application also needs to register a stats callback using `rd_kafka_conf_set_stats_cb()`. The granularity is 1000ms. A value of 0 disables statistics. <br>*Type: integer*
+enabled_events                           |  *  | 0 .. 2147483647 |             0 | See `rd_kafka_conf_set_events()` <br>*Type: integer*
 error_cb                                 |  *  |                 |               | Error callback (set with rd_kafka_conf_set_error_cb()) <br>*Type: pointer*
 throttle_cb                              |  *  |                 |               | Throttle callback (set with rd_kafka_conf_set_throttle_cb()) <br>*Type: pointer*
 stats_cb                                 |  *  |                 |               | Statistics callback (set with rd_kafka_conf_set_stats_cb()) <br>*Type: pointer*

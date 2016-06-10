@@ -108,6 +108,8 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
                 rd_kafka_metadata_destroy(rko->rko_metadata);
         if (rko->rko_replyq)
                 rd_kafka_q_destroy(rko->rko_replyq);
+	if (unlikely(rko->rko_flags & RD_KAFKA_OP_F_MSGQ2))
+		rd_kafka_msgq_purge(rko->rko_rk, &rko->rko_msgq2);
 
         if (rd_atomic32_sub(&rd_kafka_op_cnt, 1) < 0)
                 rd_kafka_assert(NULL, !*"rd_kafka_op_cnt < 0");

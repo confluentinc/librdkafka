@@ -57,6 +57,7 @@ struct rd_kafka_conf_s {
 	/*
 	 * Generic configuration
 	 */
+	int     enabled_events;
 	int     max_msg_size;
         int     recv_max_msg_size;
 	int     max_inflight;

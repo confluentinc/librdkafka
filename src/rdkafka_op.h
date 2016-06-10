@@ -45,7 +45,7 @@ typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 #define RD_KAFKA_OP_F_CRC         0x8  /* rkbuf: Perform CRC calculation */
 #define RD_KAFKA_OP_F_BLOCKING    0x10 /* rkbuf: blocking protocol request */
 #define RD_KAFKA_OP_F_REPROCESS   0x20 /* cgrp: Reprocess at a later time. */
-
+#define RD_KAFKA_OP_F_MSGQ2       0x40 /* rko_msgq2 is initialized */
 
 typedef enum {
         RD_KAFKA_OP_NONE,
@@ -95,14 +95,17 @@ typedef enum {
 typedef struct rd_kafka_op_s {
 	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
 
-	rd_kafka_op_type_t rko_type;
+	rd_kafka_op_type_t    rko_type;   /* Internal op type */
+	rd_kafka_event_type_t rko_evtype; /* Public event type */
 	int                rko_flags;  /* See RD_KAFKA_OP_F_... above */
 
         /* Generic fields */
 	rd_kafka_msgq_t rko_msgq;
+	rd_kafka_msgq_t rko_msgq2;
         rd_kafka_q_t   *rko_replyq;    /* Indicates request: enq reply
                                         * on this queue. Refcounted. */
         int             rko_intarg;    /* Generic integer argument */
+	rd_kafka_t     *rko_rk;
 
         /* RD_KAFKA_OP_CALLBACK */
         void          (*rko_op_cb) (rd_kafka_t *rk, struct rd_kafka_op_s *rko);

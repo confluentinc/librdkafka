@@ -816,7 +816,8 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 					      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
 					      rkcg->rkcg_assignment);
 
-	if (!rkcg->rkcg_rk->rk_conf.rebalance_cb || !assignment) {
+	if (!(rkcg->rkcg_rk->rk_conf.enabled_events & RD_KAFKA_EVENT_REBALANCE)
+	    || !assignment) {
 		if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
 			rd_kafka_cgrp_assign(rkcg, assignment);
 		else

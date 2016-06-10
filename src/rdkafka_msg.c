@@ -140,9 +140,13 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 	rd_kafka_resp_err_t err;
 	int errnox;
 
-	if (unlikely(rd_atomic32_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
-		     rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
-		(void)rd_atomic32_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+	while (unlikely(rd_atomic32_add(&rkt->rkt_rk->rk_producer.msg_cnt, 1) >
+			rkt->rkt_rk->rk_conf.queue_buffering_max_msgs)) {
+		rd_atomic32_sub(&rkt->rkt_rk->rk_producer.msg_cnt, 1);
+		if (unlikely(msgflags & RD_KAFKA_MSG_F_BLOCK)) {
+			rd_usleep(1000, &rkt->rkt_rk->rk_terminate);
+			continue;
+		}
 		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__QUEUE_FULL,
 					ENOBUFS);
 		return -1;

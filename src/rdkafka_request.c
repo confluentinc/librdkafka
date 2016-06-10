@@ -963,7 +963,7 @@ err:
         if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY)
                 return; /* Termination */
 
-        rd_kafka_cgrp_handle_SyncGroup(rkcg, ErrorCode, &MemberState);
+        rd_kafka_cgrp_handle_SyncGroup(rkcg, rkb, ErrorCode, &MemberState);
 }
 
 

@@ -1959,6 +1959,7 @@ void rd_kafka_cgrp_handle_Metadata (rd_kafka_cgrp_t *rkcg,
 
 
 void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
+				     rd_kafka_broker_t *rkb,
                                      rd_kafka_resp_err_t err,
                                      const rd_kafkap_bytes_t *member_state) {
         rd_kafka_buf_t *rkbuf = NULL;
@@ -1977,9 +1978,22 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                 goto err;
 
 
+	if (RD_KAFKAP_BYTES_LEN(member_state) == 0) {
+		/* Empty assignment. */
+		assignment = rd_kafka_topic_partition_list_new(0);
+		memset(&UserData, 0, sizeof(UserData));
+		goto done;
+	}
+
         /* Parse assignment from MemberState */
         rkbuf = rd_kafka_buf_new_shadow(member_state->data,
                                         RD_KAFKAP_BYTES_LEN(member_state));
+	/* Protocol parser needs a broker handle to log errors on. */
+	if (rkb) {
+		rkbuf->rkbuf_rkb = rkb;
+		rd_kafka_broker_keep(rkb);
+	} else
+		rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rkcg->rkcg_rk);
 
         rd_kafka_buf_read_i16(rkbuf, &Version);
         rd_kafka_buf_read_i32(rkbuf, &TopicCnt);
@@ -2007,7 +2021,10 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
         }
 
         rd_kafka_buf_read_bytes(rkbuf, &UserData);
+        rkbuf->rkbuf_buf2 = NULL; /* Avoid free of underlying memory */
+        rd_kafka_buf_destroy(rkbuf);
 
+ done:
         memset(&rkgm, 0, sizeof(rkgm));
         rkgm.rkgm_assignment = assignment;
         rkgm.rkgm_userdata = &UserData;
@@ -2017,8 +2034,6 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
 
         rd_kafka_topic_partition_list_destroy(assignment);
 
-        rkbuf->rkbuf_buf2 = NULL; /* Avoid free of underlying memory */
-        rd_kafka_buf_destroy(rkbuf);
         return;
 err:
         if (rkbuf) {

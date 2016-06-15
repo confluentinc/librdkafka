@@ -1833,7 +1833,7 @@ rd_kafka_position (rd_kafka_t *rk,
 		rd_kafka_toppar_t *rktp;
 
 		if (!(s_rktp = rd_kafka_toppar_get2(rk, rktpar->topic,
-						    rktpar->partition, 0, 0))) {
+						    rktpar->partition, 0, 1))) {
 			rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 			rktpar->offset = RD_KAFKA_OFFSET_INVALID;
 			continue;

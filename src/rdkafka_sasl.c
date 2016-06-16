@@ -620,32 +620,36 @@ void rd_kafka_broker_sasl_init (rd_kafka_broker_t *rkb) {
 
 int rd_kafka_sasl_conf_validate (rd_kafka_t *rk,
 				 char *errstr, size_t errstr_size) {
-	rd_kafka_broker_t rkb;
-	char *cmd;
-	char tmperr[128];
 
 	if (strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
 		return 0;
 
-	memset(&rkb, 0, sizeof(rkb));
-	strcpy(rkb.rkb_nodename, "ATestBroker:9092");
-	rkb.rkb_rk = rk;
-	mtx_init(&rkb.rkb_lock, mtx_plain);
+	if (rk->rk_conf.sasl.kinit_cmd) {
+		rd_kafka_broker_t rkb;
+		char *cmd;
+		char tmperr[128];
 
-	cmd = rd_string_render(rk->rk_conf.sasl.kinit_cmd,
-			       tmperr, sizeof(tmperr),
-			       render_callback, &rkb);
+		memset(&rkb, 0, sizeof(rkb));
+		strcpy(rkb.rkb_nodename, "ATestBroker:9092");
+		rkb.rkb_rk = rk;
+		mtx_init(&rkb.rkb_lock, mtx_plain);
 
-	mtx_destroy(&rkb.rkb_lock);
+		cmd = rd_string_render(rk->rk_conf.sasl.kinit_cmd,
+				       tmperr, sizeof(tmperr),
+				       render_callback, &rkb);
 
-	if (!cmd) {
-		rd_snprintf(errstr, errstr_size,
-			    "Invalid sasl.kerberos.kinit.cmd value: %s",
-			    tmperr);
-		return -1;
+		mtx_destroy(&rkb.rkb_lock);
+
+		if (!cmd) {
+			rd_snprintf(errstr, errstr_size,
+				    "Invalid sasl.kerberos.kinit.cmd value: %s",
+				    tmperr);
+			return -1;
+		}
+
+		rd_free(cmd);
 	}
 
-	rd_free(cmd);
 	return 0;
 }
 

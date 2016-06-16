@@ -484,7 +484,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
 static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
         thrd_t thrd;
-
+#ifndef _MSC_VER
+	int term_sig = rk->rk_conf.term_sig;
+#endif
         rd_kafka_dbg(rk, ALL, "DESTROY", "Terminating instance");
         rd_kafka_wrlock(rk);
         thrd = rk->rk_thread;
@@ -494,8 +496,8 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 
 #ifndef _MSC_VER
         /* Interrupt main kafka thread to speed up termination. */
-        if (rk->rk_conf.term_sig)
-                pthread_kill(thrd, rk->rk_conf.term_sig);
+	if (term_sig)
+                pthread_kill(thrd, term_sig);
 #endif
 
         if (!blocking)
@@ -771,6 +773,8 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "\"rxerrs\":%"PRIu64", "
                            "\"rxcorriderrs\":%"PRIu64", "
                            "\"rxpartial\":%"PRIu64", "
+                           "\"zbuf_grow\":%"PRIu64", "
+                           "\"buf_grow\":%"PRIu64", "
 			   "\"rtt\": {"
 			   " \"min\":%"PRId64","
 			   " \"max\":%"PRId64","
@@ -806,6 +810,8 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rd_atomic64_get(&rkb->rkb_c.rx_err),
 			   rd_atomic64_get(&rkb->rkb_c.rx_corrid_err),
 			   rd_atomic64_get(&rkb->rkb_c.rx_partial),
+                           rd_atomic64_get(&rkb->rkb_c.zbuf_grow),
+                           rd_atomic64_get(&rkb->rkb_c.buf_grow),
 			   rtt.ra_v.minv,
 			   rtt.ra_v.maxv,
 			   rtt.ra_v.avg,
@@ -1827,7 +1833,7 @@ rd_kafka_position (rd_kafka_t *rk,
 		rd_kafka_toppar_t *rktp;
 
 		if (!(s_rktp = rd_kafka_toppar_get2(rk, rktpar->topic,
-						    rktpar->partition, 0, 0))) {
+						    rktpar->partition, 0, 1))) {
 			rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 			rktpar->offset = RD_KAFKA_OFFSET_INVALID;
 			continue;

@@ -55,8 +55,8 @@
 /* >= 0.8.2.0: Broker-based Group coordinator */
 #define RD_KAFKA_FEATURE_BROKER_GROUP_COORD 0x40
 
-
-
+/* >= 0.8.2.0: LZ4 compression (with bad and proper HC checksums) */
+#define RD_KAFKA_FEATURE_LZ4 0x80
 
 
 

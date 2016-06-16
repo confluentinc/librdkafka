@@ -625,6 +625,10 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	if (!ctx)
 		goto fail;
 
+#ifdef SSL_OP_NO_SSLv3
+	/* Disable SSLv3 (unsafe) */
+	SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv3);
+#endif
 
 	/* Key file password callback */
 	SSL_CTX_set_default_passwd_cb(ctx, rd_kafka_transport_ssl_passwd_cb);

@@ -122,6 +122,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if HAVE_REGEX
 		{ 0x10, "regex" },
 #endif
+#if WITH_LZ4
+		{ 0x20, "lz4" },
+#endif
 		{ 0, NULL }
 		}
 	},
@@ -567,8 +570,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  1, 300*1000, 100 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),
-	  "Compression codec to use for compressing message sets: "
-	  "none, gzip or snappy",
+	  "compression codec to use for compressing message sets. "
+	  "This is the default value for all topics, may be overriden by "
+	  "the topic configuration property `compression.codec`. ",
 	  .vdef = RD_KAFKA_COMPRESSION_NONE,
 	  .s2i = {
 			{ RD_KAFKA_COMPRESSION_NONE,   "none" },
@@ -577,6 +581,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
 #if WITH_SNAPPY
 			{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
+#endif
+#if WITH_LZ4
+                        { RD_KAFKA_COMPRESSION_LZ4, "lz4" },
 #endif
 			{ 0 }
 		} },
@@ -646,8 +653,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
 	{ _RK_TOPIC | _RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RKT(compression_codec),
-	  "Compression codec to use for compressing message sets: "
-	  "none, gzip or snappy",
+	  "Compression codec to use for compressing message sets. ",
 	  .vdef = RD_KAFKA_COMPRESSION_INHERIT,
 	  .s2i = {
 		  { RD_KAFKA_COMPRESSION_NONE, "none" },
@@ -657,6 +663,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SNAPPY
 		  { RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
 #endif
+#if WITH_LZ4
+		  { RD_KAFKA_COMPRESSION_LZ4, "lz4" },
+#endif
+
 		  { RD_KAFKA_COMPRESSION_INHERIT, "inherit" },
 		  { 0 }
 		} },

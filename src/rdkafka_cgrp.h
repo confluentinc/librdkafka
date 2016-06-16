@@ -233,6 +233,7 @@ void rd_kafka_cgrp_handle_Metadata (rd_kafka_cgrp_t *rkcg,
                                     rd_kafka_resp_err_t err,
                                     rd_kafka_metadata_t *md);
 void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
+				     rd_kafka_broker_t *rkb,
                                      rd_kafka_resp_err_t err,
                                      const rd_kafkap_bytes_t *member_state);
 void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state);

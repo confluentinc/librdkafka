@@ -128,7 +128,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 		rd_atomic64_t rx_err;
 		rd_atomic64_t rx_corrid_err; /* CorrId misses */
 		rd_atomic64_t rx_partial;    /* Partial messages received
-					 * and dropped. */
+                                              * and dropped. */
+                rd_atomic64_t zbuf_grow;     /* Compression/decompression buffer grows needed */
+                rd_atomic64_t buf_grow;      /* rkbuf grows needed */
 	} rkb_c;
 
         int                 rkb_req_timeouts;  /* Current value */

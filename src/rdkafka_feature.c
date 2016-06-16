@@ -40,6 +40,7 @@ static const char *rd_kafka_feature_names[] = {
 	"Sasl",
 	"SaslHandshake",
 	"BrokerGroupCoordinator",
+	"LZ4",
 	NULL
 };
 
@@ -136,6 +137,20 @@ static const struct rd_kafka_feature_map {
 			{ -1 },
 		},
 	},
+	{
+		/* @brief >=0.8.2: LZ4 compression.
+		 * Since LZ4 initially did not rely on a specific API
+		 * type or version (it does in >=0.10.0)
+		 * we must use something else to map us to the
+		 * proper broker version support:
+		 * GrooupCoordinator was released in 0.8.2 */
+		.feature = RD_KAFKA_FEATURE_LZ4,
+		.depends = {
+			{ RD_KAFKAP_GroupCoordinator, 0, 0 },
+			{ -1 },
+		},
+	},
+
 	{ .feature = 0 }, /* sentinel */
 };
 

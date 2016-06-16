@@ -99,3 +99,18 @@ To run all tests, including the broker version and SASL tests, etc, use
 
 **NOTE**: Passing the full test run is a prerequisite to
           checking in any code / filing a PR.
+
+
+
+Manual testing notes
+====================
+
+The following manual tests are currently performed manually, they should be
+implemented as automatic tests.
+
+LZ4 interop
+-----------
+
+ `./interactive_broker_version.py -c ./lz4_manual_test.py 0.8.2.2 0.9.0.1 trunk`
+
+ Check the output and follow the instructions.

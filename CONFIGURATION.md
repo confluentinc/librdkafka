@@ -3,7 +3,7 @@
 
 Property                                 | C/P | Range           |       Default | Description              
 -----------------------------------------|-----|-----------------|--------------:|--------------------------
-builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
+builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4 | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
 client.id                                |  *  |                 |       rdkafka | Client identifier. <br>*Type: string*
 metadata.broker.list                     |  *  |                 |               | Initial list of brokers. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime. <br>*Type: string*
 bootstrap.servers                        |  *  |                 |               | Alias for `metadata.broker.list`
@@ -82,7 +82,7 @@ queue.buffering.max.ms                   |  P  | 1 .. 900000     |          1000
 message.send.max.retries                 |  P  | 0 .. 10000000   |             2 | How many times to retry sending a failing MessageSet. **Note:** retrying may cause reordering. <br>*Type: integer*
 retries                                  |  P  |                 |               | Alias for `message.send.max.retries`
 retry.backoff.ms                         |  P  | 1 .. 300000     |           100 | The backoff time in milliseconds before retrying a message send. <br>*Type: integer*
-compression.codec                        |  P  | none, gzip, snappy |          none | Compression codec to use for compressing message sets: none, gzip or snappy <br>*Type: enum value*
+compression.codec                        |  P  | none, gzip, snappy, lz4 |          none | compression codec to use for compressing message sets. This is the default value for all topics, may be overriden by the topic configuration property `compression.codec`.  <br>*Type: enum value*
 batch.num.messages                       |  P  | 1 .. 1000000    |          1000 | Maximum number of messages batched in one MessageSet. <br>*Type: integer*
 delivery.report.only.error               |  P  | true, false     |         false | Only provide delivery reports for failed messages. <br>*Type: boolean*
 dr_cb                                    |  P  |                 |               | Delivery report callback (set with rd_kafka_conf_set_dr_cb()) <br>*Type: pointer*
@@ -100,7 +100,7 @@ message.timeout.ms                       |  P  | 0 .. 900000     |        300000
 produce.offset.report                    |  P  | true, false     |         false | Report offset of produced message back to application. The application must be use the `dr_msg_cb` to retrieve the offset from `rd_kafka_message_t.offset`. <br>*Type: boolean*
 partitioner_cb                           |  P  |                 |               | Partitioner callback (set with rd_kafka_topic_conf_set_partitioner_cb()) <br>*Type: pointer*
 opaque                                   |  *  |                 |               | Application opaque (set with rd_kafka_topic_conf_set_opaque()) <br>*Type: pointer*
-compression.codec                        |  P  | none, gzip, snappy, inherit |       inherit | Compression codec to use for compressing message sets: none, gzip or snappy <br>*Type: enum value*
+compression.codec                        |  P  | none, gzip, snappy, lz4, inherit |       inherit | Compression codec to use for compressing message sets.  <br>*Type: enum value*
 auto.commit.enable                       |  C  | true, false     |          true | If true, periodically commit offset of the last message handed to the application. This committed offset will be used when the process restarts to pick up where it left off. If false, the application will have to call `rd_kafka_offset_store()` to store an offset (optional). **NOTE:** This property should only be used with the simple legacy consumer, when using the high-level KafkaConsumer the global `auto.commit.enable` property must be used instead. **NOTE:** There is currently no zookeeper integration, offsets will be written to broker or local file according to offset.store.method. <br>*Type: boolean*
 enable.auto.commit                       |  C  |                 |               | Alias for `auto.commit.enable`
 auto.commit.interval.ms                  |  C  | 10 .. 86400000  |         60000 | The frequency in milliseconds that the consumer offsets are committed (written) to offset storage. <br>*Type: integer*

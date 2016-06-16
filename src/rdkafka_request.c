@@ -1500,6 +1500,12 @@ rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
 
 	rd_kafka_buf_autopush(rkbuf);
 
+        // Make sure the request times-out
+        rkbuf->rkbuf_ts_timeout = rd_clock() +
+            (rkb->rkb_rk->rk_conf.metadata_request_timeout_ms * 1000);
+        // Make sure the request doesn't retry
+        rkbuf->rkbuf_retries = rkb->rkb_rk->rk_conf.max_retries;
+
 
 	return rkbuf;
 }
@@ -1763,6 +1769,16 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                                              rkbuf);
 		if (!md)
 			err = RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+        if (md) {
+                // Cache the latest metadata with it's broker
+                rd_kafka_broker_lock(rkb);
+                if (rkb->rkb_metadata)
+                        rd_kafka_metadata_destroy(rkb->rkb_metadata);
+                rkb->rkb_metadata = rd_kafka_copy_metadata(md);
+                rkb->rkb_metadata_time = rd_clock();
+                rd_kafka_broker_unlock(rkb);
         }
 
         if (rko->rko_rkt) {

@@ -927,7 +927,7 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
                 rd_kafka_topic_wrunlock(rkt);
         }
 
-	rd_kafka_broker_metadata_req(rkb, 0, rkt, NULL, "leader query");
+        rd_kafka_broker_metadata_req(rkb, 0, rkt, NULL, "leader query");
 
 	/* Release refcnt from rd_kafka_broker_any() */
 	rd_kafka_broker_destroy(rkb);
@@ -2957,7 +2957,7 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
                      !rkb->rkb_rk->rk_conf.metadata_refresh_sparse &&
                      now >= rkb->rkb_ts_metadata_poll))
 		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
-		NULL, "periodic refresh");
+                NULL, "periodic refresh");
 
 	/* Serve IO events */
         if (likely(rkb->rkb_transport != NULL))
@@ -4378,7 +4378,6 @@ static int rd_kafka_broker_thread_main (void *arg) {
  * Final destructor. Refcnt must be 0.
  */
 void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
-
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 	rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_outbufs.rkbq_bufs));
 	rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_toppars));
@@ -4399,6 +4398,7 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 	if (rkb->rkb_ApiVersions)
 		rd_free(rkb->rkb_ApiVersions);
         rd_free(rkb->rkb_origname);
+        rd_kafka_metadata_destroy(rkb->rkb_metadata);
 
 	rd_kafka_q_purge(&rkb->rkb_ops);
 	rd_kafka_q_destroy(&rkb->rkb_ops);
@@ -4467,6 +4467,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rkb->rkb_proto = proto;
         rkb->rkb_port = port;
         rkb->rkb_origname = rd_strdup(name);
+        rkb->rkb_metadata = NULL;
+        rkb->rkb_metadata_time = 0;
 
 	mtx_init(&rkb->rkb_lock, mtx_plain);
         mtx_init(&rkb->rkb_logname_lock, mtx_plain);
@@ -4867,7 +4869,74 @@ const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb) {
 void rd_kafka_brokers_init (void) {
 }
 
+/**
+ * Copy a metadata struct
+ */
+rd_kafka_metadata_t* rd_kafka_copy_metadata (
+        const rd_kafka_metadata_t* metadatap) {
+        int i, j, k;
 
+        size_t str_len = strlen(metadatap->orig_broker_name) + 1;
+        size_t md_size = sizeof(*metadatap);
+        rd_kafka_metadata_t *copy = (rd_kafka_metadata_t*)malloc(md_size);
+
+        /** Broker Info **/
+        copy->orig_broker_id = metadatap->orig_broker_id;
+        copy->orig_broker_name = malloc(str_len);
+        memcpy(copy->orig_broker_name, metadatap->orig_broker_name, str_len);
+
+        /** Copy Brokers **/
+        copy->broker_cnt = metadatap->broker_cnt;
+        copy->brokers = malloc(metadatap->broker_cnt * sizeof(*metadatap->brokers));
+
+        for (i = 0; i < copy->broker_cnt; ++i) {
+                copy->brokers[i].id = metadatap->brokers[i].id;
+                str_len = strlen(metadatap->brokers[i].host) + 1;
+                copy->brokers[i].host = malloc(str_len);
+                memcpy(copy->brokers[i].host,
+                       metadatap->brokers[i].host,
+                       str_len);
+                copy->brokers[i].port = metadatap->brokers[i].port;
+        }
+
+        /** Copy Topics **/
+        copy->topic_cnt = metadatap->topic_cnt;
+        copy->topics = malloc(metadatap->topic_cnt * sizeof(*metadatap->topics));
+
+        for (i = 0; i < copy->topic_cnt; ++i) {
+                str_len = strlen(metadatap->topics[i].topic) + 1;
+                copy->topics[i].topic = malloc(str_len);
+                memcpy(copy->topics[i].topic, metadatap->topics[i].topic, str_len);
+                copy->topics[i].partition_cnt = metadatap->topics[i].partition_cnt;
+                copy->topics[i].partitions = malloc(metadatap->topics[i].partition_cnt * sizeof(*metadatap->topics[i].partitions));
+
+                /** Partition Metadata **/
+                for (j = 0; j < copy->topics[i].partition_cnt; ++j) {
+                        copy->topics[i].partitions[j].id = metadatap->topics[i].partitions[j].id;
+                        copy->topics[i].partitions[j].err = metadatap->topics[i].partitions[j].err;
+                        copy->topics[i].partitions[j].leader = metadatap->topics[i].partitions[j].leader;
+                        copy->topics[i].partitions[j].replica_cnt = metadatap->topics[i].partitions[j].replica_cnt;
+                        copy->topics[i].partitions[j].replicas = malloc(metadatap->topics[i].partitions[j].replica_cnt * sizeof(int32_t));
+
+                        /** Replicas **/
+                         for (k = 0; k < copy->topics[i].partitions[j].replica_cnt; ++k) {
+                                copy->topics[i].partitions[j].replicas[k] = metadatap->topics[i].partitions[j].replicas[k];
+                         }
+
+                         copy->topics[i].partitions[j].isr_cnt = metadatap->topics[i].partitions[j].isr_cnt;
+                         copy->topics[i].partitions[j].isrs = malloc(metadatap->topics[i].partitions[j].isr_cnt * sizeof(int32_t));
+
+                         /** ISR's **/
+                         for (k = 0; k < copy->topics[i].partitions[j].isr_cnt; ++k) {
+                                copy->topics[i].partitions[j].isrs[k] = metadatap->topics[i].partitions[j].isrs[k];
+                         }
+                }
+
+                copy->topics[i].err = metadatap->topics[i].err;
+        }
+
+        return copy;
+}
 
 
 

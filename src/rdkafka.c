@@ -1911,6 +1911,9 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 		return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 	rktp = rd_kafka_toppar_s2i(s_rktp);
 
+	/* Query for the topic leader (async) */
+	rd_kafka_topic_leader_query(rk, rktp->rktp_rkt);
+
 	/* Get toppar's leader broker. */
 	do {
 		if ((rkb = rd_kafka_toppar_leader(rktp, 1)))

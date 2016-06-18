@@ -261,6 +261,8 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 
 	rkb->rkb_state = state;
         rkb->rkb_ts_state = rd_clock();
+
+	rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
 }
 
 
@@ -452,8 +454,9 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 
 		rd_kafka_bufq_deq(rkbq, rkbuf);
 
-		if (is_waitresp_q && rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING)
-                        rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1);
+		if (is_waitresp_q && rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING
+		    && rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1) == 0)
+			rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
 
                 rd_kafka_buf_callback(rkb->rkb_rk, rkb, err, NULL, rkbuf);
 		cnt++;
@@ -810,6 +813,49 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
         rd_kafka_broker_metadata_req_op(rkb, rko);
 }
 
+
+
+
+/**
+ * @brief Wait at most \p timeout_ms for any state change for any broker.
+ *
+ * Triggers:
+ *   - broker state changes
+ *   - broker transitioning from blocking to non-blocking
+ *   - partition leader changes
+ *   - group state changes
+ *
+ * @remark There is no guarantee that a state change actually took place.
+ *
+ * @returns 1 if a state change was signaled (maybe), else 0 (timeout)
+ *
+ * @locality any thread
+ */
+int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int timeout_ms) {
+	int r;
+	mtx_lock(&rk->rk_broker_state_change_lock);
+	r = cnd_timedwait_ms(&rk->rk_broker_state_change_cnd,
+			     &rk->rk_broker_state_change_lock,
+			     timeout_ms) == thrd_success;
+	mtx_unlock(&rk->rk_broker_state_change_lock);
+	return r;
+}
+
+
+/**
+ * @brief Broadcast broker state change to listeners, if any.
+ *
+ * @locality any thread
+ */
+void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
+	rd_kafka_dbg(rk, GENERIC, "BROADCAST",
+		     "Broadcasting state change");
+	mtx_lock(&rk->rk_broker_state_change_lock);
+	cnd_broadcast(&rk->rk_broker_state_change_cnd);
+	mtx_unlock(&rk->rk_broker_state_change_lock);
+}
+
+
 /**
  * all_topics := if 1: retreive all topics&partitions from the broker
  *               if 0: just retrieve the topics we know about.
@@ -852,6 +898,37 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
 	}
 
         return good;
+}
+
+
+/**
+ * @brief Spend at most \p timeout_ms to acquire a usable (Up && non-blocking)
+ *        broker.
+ *
+ * @returns A probably usable broker with increased refcount, or NULL on timeout
+ */
+rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms) {
+	const rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+
+	while (1) {
+		rd_kafka_broker_t *rkb;
+		int remains;
+
+		rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
+					  rd_kafka_broker_filter_non_blocking,
+					  NULL);
+
+		if (rkb)
+			return rkb;
+
+		remains = rd_timeout_remains(ts_end);
+		if (rd_timeout_expired(remains))
+			return NULL;
+
+		rd_kafka_brokers_wait_state_change(rk, remains);
+	}
+
+	return NULL;
 }
 
 
@@ -951,9 +1028,11 @@ static rd_kafka_buf_t *rd_kafka_waitresp_find (rd_kafka_broker_t *rkb,
 			rkbuf->rkbuf_ts_sent = now - rkbuf->rkbuf_ts_sent;
 			rd_avg_add(&rkb->rkb_avg_rtt, rkbuf->rkbuf_ts_sent);
 
-                        if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING)
-                                rd_atomic32_sub(&rkb->rkb_blocking_request_cnt,
-                                                1);
+                        if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING &&
+			    rd_atomic32_sub(&rkb->rkb_blocking_request_cnt,
+					    1) == 1)
+				rd_kafka_brokers_broadcast_state_change(
+					rkb->rkb_rk);
 
 			rd_kafka_bufq_deq(&rkb->rkb_waitresps, rkbuf);
 			return rkbuf;
@@ -1659,8 +1738,9 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		/* Store time for RTT calculation */
 		rkbuf->rkbuf_ts_sent = rd_clock();
 
-                if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING)
-                        rd_atomic32_add(&rkb->rkb_blocking_request_cnt, 1);
+                if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING &&
+		    rd_atomic32_add(&rkb->rkb_blocking_request_cnt, 1) == 1)
+			rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
 
 		/* Put buffer on response wait list unless we are not
 		 * expecting a response (required_acks=0). */
@@ -2865,6 +2945,8 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 rktp->rktp_next_leader = NULL;
 
                 rd_kafka_toppar_unlock(rktp);
+
+		rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
                 break;
 
         case RD_KAFKA_OP_PARTITION_LEAVE:
@@ -2921,6 +3003,8 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
                 rd_kafka_toppar_unlock(rktp);
                 rd_kafka_toppar_destroy(s_rktp);
+
+		rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
                 break;
 
 

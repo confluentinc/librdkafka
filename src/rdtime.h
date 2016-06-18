@@ -126,25 +126,36 @@ static RD_INLINE const char *rd_ctime (const time_t *t) {
 static RD_INLINE rd_ts_t rd_timeout_init (int timeout_ms) {
 	if (timeout_ms == RD_POLL_INFINITE ||
 	    timeout_ms == RD_POLL_NOWAIT)
-		return 0;
+		return timeout_ms;
 
 	return rd_clock() + (timeout_ms * 1000);
 }
 
 
 /**
- * @brief Adjust relative timeout \p *timeout_msp for spent time using
- *        absolute timeout \p abs_timeout.
+ * @returns the remaining timeout for timeout \p abs_timeout previously set
+ *          up by rd_timeout_init()
  *
  * Honours RD_POLL_INFINITE, RD_POLL_NOWAIT.
  */
-static RD_INLINE void rd_timeout_adjust (rd_ts_t abs_timeout,
-					int *timeout_msp) {
-	if (*timeout_msp == RD_POLL_INFINITE ||
-	    *timeout_msp == RD_POLL_NOWAIT)
-		return; /* No change */
+static RD_INLINE int rd_timeout_remains (rd_ts_t abs_timeout) {
+	int timeout_ms;
 
-	*timeout_msp = (int)((abs_timeout - rd_clock()) / 1000);
-	if (*timeout_msp < 0)
-		*timeout_msp = RD_POLL_NOWAIT;
+	if (abs_timeout == RD_POLL_INFINITE ||
+	    abs_timeout == RD_POLL_NOWAIT)
+		return (int)abs_timeout;
+
+	timeout_ms = (int)((abs_timeout - rd_clock()) / 1000);
+	if (timeout_ms <= 0)
+		return RD_POLL_NOWAIT;
+	else
+		return timeout_ms;
+}
+
+/**
+ * @returns 1 if the **relative** timeout as returned by rd_timeout_remains()
+ *          has timed out / expired, else 0.
+ */
+static RD_INLINE int rd_timeout_expired (int timeout_ms) {
+	return timeout_ms == RD_POLL_NOWAIT;
 }

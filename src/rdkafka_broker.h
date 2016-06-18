@@ -228,6 +228,9 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
                                         int (*filter) (rd_kafka_broker_t *rkb,
                                                        void *opaque),
                                         void *opaque);
+
+rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms);
+
 rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state);
 
 int rd_kafka_brokers_add0 (rd_kafka_t *rk, const char *brokerlist);
@@ -292,3 +295,6 @@ void msghdr_print (rd_kafka_t *rk,
 		   int hexdump);
 
 const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb);
+
+int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int timeout_ms);
+void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk);

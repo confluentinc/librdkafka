@@ -88,6 +88,8 @@ static void rd_kafka_cgrp_set_state (rd_kafka_cgrp_t *rkcg, int state) {
                      rd_kafka_cgrp_state_names[state]);
         rkcg->rkcg_state = state;
         rkcg->rkcg_ts_statechange = rd_clock();
+
+	rd_kafka_brokers_broadcast_state_change(rkcg->rkcg_rk);
 }
 
 

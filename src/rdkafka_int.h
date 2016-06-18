@@ -136,6 +136,11 @@ struct rd_kafka_s {
         mtx_t                      rk_internal_rkb_lock;
 	rd_kafka_broker_t         *rk_internal_rkb;
 
+	/* Broadcasting of broker state changes to wake up
+	 * functions waiting for a state change. */
+	cnd_t                      rk_broker_state_change_cnd;
+	mtx_t                      rk_broker_state_change_lock;
+
 
 	TAILQ_HEAD(, rd_kafka_itopic_s)  rk_topics;
 	int              rk_topic_cnt;

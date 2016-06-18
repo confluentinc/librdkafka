@@ -13,7 +13,7 @@ mkl_mkvar_set "" GEN_PKG_CONFIG y
 mkl_require cxx
 mkl_require lib
 mkl_require pic
-mkl_require atomics must pass
+mkl_require atomics
 mkl_require good_cflags
 mkl_require socket
 

@@ -94,8 +94,8 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 
 static RD_INLINE RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
 	TAILQ_INIT(&rkmq->rkmq_msgs);
-	rd_atomic32_set(&rkmq->rkmq_msg_cnt, 0);
-	rd_atomic64_set(&rkmq->rkmq_msg_bytes, 0);
+	rd_atomic32_init(&rkmq->rkmq_msg_cnt, 0);
+	rd_atomic64_init(&rkmq->rkmq_msg_bytes, 0);
 }
 
 /**

@@ -163,7 +163,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
         rd_refcnt_init(&rktp->rktp_refcnt, 0);
 	rd_kafka_q_init(&rktp->rktp_fetchq, rkt->rkt_rk);
         rd_kafka_q_init(&rktp->rktp_ops, rkt->rkt_rk);
-        rd_atomic32_set(&rktp->rktp_version, 1);
+        rd_atomic32_init(&rktp->rktp_version, 1);
 
 
         /* Consumer: If statistics is available we query the oldest offset

@@ -229,7 +229,7 @@ static RD_INLINE RD_UNUSED int rd_refcnt_init (rd_refcnt_t *R, int v) {
         return r;
 }
 #else
-#define rd_refcnt_init(R,v)  rd_atomic32_set(R, v)
+#define rd_refcnt_init(R,v)  rd_atomic32_init(R, v)
 #endif
 
 #ifdef RD_REFCNT_USE_LOCKS

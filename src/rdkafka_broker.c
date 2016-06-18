@@ -375,7 +375,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	rd_kafka_bufq_init(&tmpq);
 	rd_kafka_bufq_concat(&tmpq_waitresp, &rkb->rkb_waitresps);
 	rd_kafka_bufq_concat(&tmpq, &rkb->rkb_outbufs);
-        rd_atomic32_set(&rkb->rkb_blocking_request_cnt, 0);
+        rd_atomic32_init(&rkb->rkb_blocking_request_cnt, 0);
 
 	/* Purge the buffers (might get re-enqueued in case of retries) */
 	rd_kafka_bufq_purge(rkb, &tmpq_waitresp, err);

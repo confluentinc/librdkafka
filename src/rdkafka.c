@@ -1920,6 +1920,9 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 		if ((rkb = rd_kafka_toppar_leader(rktp, 1)))
 			break;
 
+		/* Trigger a leader query (async) */
+		rd_kafka_topic_leader_query(rk, rktp->rktp_rkt);
+
 		if (!rd_kafka_brokers_wait_state_change(
 			    rk, rd_timeout_remains(ts_end)))
 			break;

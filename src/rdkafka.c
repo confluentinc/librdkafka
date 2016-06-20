@@ -470,9 +470,6 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 		rd_kafka_transport_ssl_ctx_term(rk);
 #endif
 
-	cnd_destroy(&rk->rk_broker_state_change_cnd);
-	mtx_destroy(&rk->rk_broker_state_change_lock);
-
 	rd_kafkap_str_destroy(rk->rk_conf.client_id);
         rd_kafkap_str_destroy(rk->rk_conf.group_id);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
@@ -1063,9 +1060,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	rwlock_init(&rk->rk_lock);
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
-
-	cnd_init(&rk->rk_broker_state_change_cnd);
-	mtx_init(&rk->rk_broker_state_change_lock, mtx_plain);
 
 	rd_kafka_q_init(&rk->rk_rep, rk);
 	rd_kafka_q_init(&rk->rk_ops, rk);
@@ -1797,7 +1791,7 @@ rd_kafka_committed (rd_kafka_t *rk,
 
                 rd_kafka_q_enq(&rkcg->rkcg_ops, rko);
 
-                rko = rd_kafka_q_pop(replyq, rd_timeout_remains(abs_timeout), 0);
+                rko = rd_kafka_q_pop(replyq, timeout_ms, 0);
                 if (rko) {
                         rd_kafka_topic_partition_list_t *offsets =
                                 rko->rko_payload;
@@ -1805,11 +1799,11 @@ rd_kafka_committed (rd_kafka_t *rk,
                         if (!(err = rko->rko_err)) {
                                 rd_kafka_assert(NULL, offsets == partitions);
                                 rko->rko_payload = NULL;
-                        } else if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
-				    err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
-				   !rd_kafka_brokers_wait_state_change(
-					   rk, rd_timeout_remains(abs_timeout)))
-				err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                        } else if (err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
+				   err == RD_KAFKA_RESP_ERR__TRANSPORT) {
+                                rd_usleep(10*1000, &rk->rk_terminate);
+				rd_timeout_adjust(abs_timeout, &timeout_ms);
+			}
 
                         rd_kafka_op_destroy(rko);
                 } else
@@ -1885,9 +1879,10 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
 	if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
 	     err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
 	    rkb &&
-	    rd_kafka_brokers_wait_state_change(
-		    rkb->rkb_rk, rd_timeout_remains(state->ts_end))) {
-		/* Retry */
+	    rd_clock() + (50 * 1000) < state->ts_end) {
+		/* Sleep and retry */
+		rd_usleep(50 * 1000, &rkb->rkb_rk->rk_terminate);
+
 		request->rkbuf_retries = 0;
 		if (rd_kafka_buf_retry(rkb, request))
 			return; /* Retry in progress */
@@ -1907,8 +1902,8 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	struct _query_wmark_offsets_state state;
 	shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
-	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
-	int queried = 0;
+	rd_ts_t ts_end = rd_clock() +
+		(timeout_ms == RD_POLL_INFINITE ? INT_MAX : timeout_ms) * 1000;
 
 	/* Look up toppar so we know which broker to query. */
 	s_rktp = rd_kafka_toppar_get2(rk, topic, partition, 0, 1);
@@ -1917,18 +1912,14 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	rktp = rd_kafka_toppar_s2i(s_rktp);
 
 	/* Get toppar's leader broker. */
-	while (1) {
+	do {
 		if ((rkb = rd_kafka_toppar_leader(rktp, 1)))
 			break;
 
-		/* Trigger a leader query once (async) */
-		if (queried++ == 0)
-			rd_kafka_topic_leader_query(rk, rktp->rktp_rkt);
-
-		if (!rd_kafka_brokers_wait_state_change(
-			    rk, rd_timeout_remains(ts_end)))
-			break;
-	}
+		if (timeout_ms > 0)
+			rd_usleep(RD_MIN(10, timeout_ms)*1000,
+				  &rk->rk_terminate);
+	} while (rd_clock() < ts_end);
 
 	if (!rkb) {
 		rd_kafka_toppar_destroy(s_rktp);
@@ -2403,13 +2394,21 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         rd_kafka_q_t *replyq;
         rd_kafka_broker_t *rkb;
         rd_kafka_op_t *rko;
-	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
 
         /* Query any broker that is up, and if none are up pick the first one,
          * if we're lucky it will be up before the timeout */
-	rkb = rd_kafka_broker_any_usable(rk, timeout_ms);
-	if (!rkb)
-		return RD_KAFKA_RESP_ERR__TRANSPORT;
+        rd_kafka_rdlock(rk);
+        if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
+                                        rd_kafka_broker_filter_non_blocking,
+                                        NULL))) {
+                rkb = TAILQ_FIRST(&rk->rk_brokers);
+                if (rkb)
+                        rd_kafka_broker_keep(rkb);
+        }
+        rd_kafka_rdunlock(rk);
+
+        if (!rkb)
+                return RD_KAFKA_RESP_ERR__TRANSPORT;
 
         replyq = rd_kafka_q_new(rk);
 
@@ -2423,7 +2422,7 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         rd_kafka_broker_destroy(rkb);
 
         /* Wait for reply (or timeout) */
-        rko = rd_kafka_q_pop(replyq, rd_timeout_remains(ts_end), 0);
+        rko = rd_kafka_q_pop(replyq, timeout_ms, 0);
 
         rd_kafka_q_destroy(replyq);
 
@@ -2647,7 +2646,9 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
         rd_kafka_broker_t *rkb;
         int rkb_cnt = 0;
         struct list_groups_state state = RD_ZERO_INIT;
-        rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+        rd_ts_t tmout;
+
+        tmout = rd_clock() + (timeout_ms * 1000);
 
         /* Wait until metadata has been fetched from cluster so
          * that we have a full broker list. */
@@ -2655,10 +2656,10 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
         while (!rk->rk_ts_metadata) {
                 rd_kafka_rdunlock(rk);
 
-		if (!rd_kafka_brokers_wait_state_change(
-			    rk, rd_timeout_remains(ts_end)))
+                if (rd_clock() > tmout)
                         return RD_KAFKA_RESP_ERR__TIMED_OUT;
 
+                rd_usleep(5*1000, &rk->rk_terminate);
                 rd_kafka_rdlock(rk);
         }
 
@@ -2802,3 +2803,17 @@ void rd_shared_ptrs_dump (void) {
         printf("#########################################################\n");
 }
 #endif
+
+
+//////  yangyuqi@sina.com add the api
+int rd_kafka_brokers_are_all_down (rd_kafka_t *rk)
+{
+    int broker_cnt = rd_atomic32_get(&rk->rk_broker_cnt);
+    int broker_down_cnt = rd_atomic32_get(&rk->rk_broker_down_cnt);
+    if( broker_cnt == broker_down_cnt )
+	return 1;
+    else
+	return 0;
+}
+
+

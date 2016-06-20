@@ -728,18 +728,18 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
 	rd_kafka_buf_t *rkbuf;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
-		   "Request metadata for %s: %s",
+		   "Request metadata for %s: %s%s",
 		   rko->rko_rkt ?
                    rd_kafka_topic_a2i(rko->rko_rkt)->rkt_topic->str :
 		   (rko->rko_all_topics ? "all topics":"locally known topics"),
-                   (char *)rko->rko_reason ? (char *)rko->rko_reason : "");
+                   (char *)rko->rko_reason ? (char *)rko->rko_reason : "",
+		   thrd_is_current(rkb->rkb_thread) ? "" :
+		   ": scheduled: not in broker thread");
 
 	/* If called from other thread than the broker's own then post an
 	 * op for the broker's thread instead since all transmissions must
 	 * be performed by the broker thread. */
 	if (!thrd_is_current(rkb->rkb_thread)) {
-		rd_rkb_dbg(rkb, METADATA, "METADATA",
-			"Request metadata: scheduled: not in broker thread");
                 rd_kafka_q_enq(&rkb->rkb_ops, rko);
 		return;
 	}

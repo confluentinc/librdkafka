@@ -710,8 +710,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  .s2i = {
 			{ RD_KAFKA_OFFSET_BEGINNING, "smallest" },
 			{ RD_KAFKA_OFFSET_BEGINNING, "earliest" },
+			{ RD_KAFKA_OFFSET_BEGINNING, "beginning" },
 			{ RD_KAFKA_OFFSET_END, "largest" },
 			{ RD_KAFKA_OFFSET_END, "latest" },
+			{ RD_KAFKA_OFFSET_END, "end" },
 			{ RD_KAFKA_OFFSET_INVALID, "error" },
 		}
 	},

@@ -1131,7 +1131,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 #endif
 
 	/* Client group, eligible both in consumer and producer mode. */
-        if (RD_KAFKAP_STR_LEN(rk->rk_conf.group_id) > 0)
+        if (type == RD_KAFKA_CONSUMER &&
+	    RD_KAFKAP_STR_LEN(rk->rk_conf.group_id) > 0)
                 rk->rk_cgrp = rd_kafka_cgrp_new(rk,
                                                 rk->rk_conf.group_id,
                                                 rk->rk_conf.client_id);

@@ -126,6 +126,28 @@ static int nonexist_part (void) {
 }
 
 
+/**
+ * Issue #691: Producer hangs on destroy if group.id is configured.
+ */
+static int producer_groupid (void) {
+	rd_kafka_conf_t *conf;
+	rd_kafka_t *rk;
+	char errstr[512];
+
+	TEST_SAY("producer_groupid hang test\n");
+	test_conf_init(&conf, NULL, 10);
+
+	test_conf_set(conf, "group.id", "dummy");
+
+	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+	if (!rk)
+		TEST_FAIL("%s\n", errstr);
+
+	TEST_SAY("Destroying producer\n");
+	rd_kafka_destroy(rk);
+
+	return 0;
+}
 
 int main_0020_destroy_hang (int argc, char **argv) {
         int fails = 0;
@@ -133,6 +155,7 @@ int main_0020_destroy_hang (int argc, char **argv) {
 	test_conf_init(NULL, NULL, 30);
 
 	fails += nonexist_part();
+	fails += producer_groupid();
         if (fails > 0)
                 TEST_FAIL("See %d previous error(s)\n", fails);
 

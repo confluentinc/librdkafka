@@ -1908,6 +1908,7 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
 	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+	int queried = 0;
 
 	/* Look up toppar so we know which broker to query. */
 	s_rktp = rd_kafka_toppar_get2(rk, topic, partition, 0, 1);
@@ -1920,8 +1921,9 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 		if ((rkb = rd_kafka_toppar_leader(rktp, 1)))
 			break;
 
-		/* Trigger a leader query (async) */
-		rd_kafka_topic_leader_query(rk, rktp->rktp_rkt);
+		/* Trigger a leader query once (async) */
+		if (queried++ == 0)
+			rd_kafka_topic_leader_query(rk, rktp->rktp_rkt);
 
 		if (!rd_kafka_brokers_wait_state_change(
 			    rk, rd_timeout_remains(ts_end)))

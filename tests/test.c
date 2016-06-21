@@ -1821,8 +1821,9 @@ int test_msgver_add_msg0 (const char *func, int line,
 
 		if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 			   &in_testid, &in_part, &in_msgnum) != 3)
-			TEST_FAIL("%s:%d: Incorrect format: %s",
-				  func, line, buf);
+			TEST_FAIL("%s:%d: Incorrect format at offset %"PRId64
+				  ": %s",
+				  func, line, rkmessage->offset, buf);
 	}
 
 	if (mv->fwd)

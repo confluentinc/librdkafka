@@ -53,8 +53,9 @@ int main_0038_performance (int argc, char **argv) {
 	int totsize = 1024*1024*128;
 	int msgcnt;
 
-	if (!strcmp(test_mode, "helgrind"))
-		totsize = 1024*1024*8; /* 8 meg, helgrind is slow. */
+	if (!strcmp(test_mode, "valgrind") || !strcmp(test_mode, "helgrind") ||
+	    !strcmp(test_mode, "drd"))
+		totsize = 1024*1024*8; /* 8 meg, valgrind is slow. */
 
 	msgcnt = totsize / msgsize;
 

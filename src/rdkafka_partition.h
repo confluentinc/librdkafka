@@ -365,6 +365,11 @@ rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
 			       rd_kafka_topic_partition_list_t *partitions);
 
 
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_new (const char *topic,
+							  int32_t partition);
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_new_from_rktp (rd_kafka_toppar_t *rktp);
+
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
                                     const char *topic, int32_t partition,

@@ -1999,8 +1999,32 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_new (int size) {
 }
 
 
+
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_new (const char *topic,
+							  int32_t partition) {
+	rd_kafka_topic_partition_t *rktpar = rd_calloc(1, sizeof(*rktpar));
+
+	rktpar->topic = rd_strdup(topic);
+	rktpar->partition = partition;
+
+	return rktpar;
+}
+
+
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_new_from_rktp (rd_kafka_toppar_t *rktp) {
+	rd_kafka_topic_partition_t *rktpar = rd_calloc(1, sizeof(*rktpar));
+
+	rktpar->topic = RD_KAFKAP_STR_DUP(rktp->rktp_rkt->rkt_topic);
+	rktpar->partition = rktp->rktp_partition;
+
+	return rktpar;
+}
+
+
+
 static void
-rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar) {
+rd_kafka_topic_partition_destroy0 (rd_kafka_topic_partition_t *rktpar, int do_free) {
 	if (rktpar->topic)
 		rd_free(rktpar->topic);
 	if (rktpar->metadata)
@@ -2008,6 +2032,13 @@ rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar) {
 	if (rktpar->_private)
 		rd_kafka_toppar_destroy((shptr_rd_kafka_toppar_t *)
 					rktpar->_private);
+
+	if (do_free)
+		rd_free(rktpar);
+}
+
+void rd_kafka_topic_partition_destroy (rd_kafka_topic_partition_t *rktpar) {
+	rd_kafka_topic_partition_destroy0(rktpar, 1);
 }
 
 
@@ -2020,7 +2051,7 @@ rd_kafka_topic_partition_list_destroy (rd_kafka_topic_partition_list_t *rktparli
         int i;
 
         for (i = 0 ; i < rktparlist->cnt ; i++)
-		rd_kafka_topic_partition_destroy(&rktparlist->elems[i]);
+		rd_kafka_topic_partition_destroy0(&rktparlist->elems[i], 0);
 
         if (rktparlist->elems)
                 rd_free(rktparlist->elems);
@@ -2167,7 +2198,7 @@ rd_kafka_topic_partition_list_del_by_idx (rd_kafka_topic_partition_list_t *rktpa
 		return 0;
 
 	rktparlist->cnt--;
-	rd_kafka_topic_partition_destroy(&rktparlist->elems[idx]);
+	rd_kafka_topic_partition_destroy0(&rktparlist->elems[idx], 0);
 	memmove(&rktparlist->elems[idx], &rktparlist->elems[idx+1],
 		(rktparlist->cnt - idx) * sizeof(rktparlist->elems[idx]));
 

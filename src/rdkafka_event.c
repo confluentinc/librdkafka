@@ -35,7 +35,10 @@ static const char *rd_kafka_event_names[] = {
 	"(NONE)",
 	"DeliveryReport",
 	"Fetch",
+	"BatchFetch",
+	"Log",
 	"Error",
+	"Rebalance"
 };
 
 rd_kafka_event_type_t rd_kafka_event_type (const rd_kafka_event_t *rkev) {

@@ -47,7 +47,7 @@ static int fails = 0;
 static void handle_drs (rd_kafka_event_t *rkev) {
 	const rd_kafka_message_t *rkmessage;
 
-	while ((rkmessage = rd_kafka_event_message(rkev))) {
+	while ((rkmessage = rd_kafka_event_message_next(rkev))) {
 		int msgid = *(int *)rkmessage->_private;
 
 		free(rkmessage->_private);

@@ -1634,6 +1634,8 @@ rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk);
 /**
  * @brief Forward/re-route queue \p src to \p dst.
  * If \p dst is \c NULL the forwarding is removed.
+ *
+ * The internal refcounts for both queues are increased.
  */
 RD_EXPORT
 void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
@@ -2555,8 +2557,9 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
  */
 typedef enum rd_kafka_event_type_t {
 	RD_KAFKA_EVENT_NONE,
-	RD_KAFKA_EVENT_DR,        /**< Delivery report (producer) */
+	RD_KAFKA_EVENT_DR,        /**< Delivery report batch (producer) */
 	RD_KAFKA_EVENT_FETCH,     /**< Fetched message (consumer) */
+	RD_KAFKA_EVENT_BATCH_FETCH,/**< Fetched message batch (consumer) */
 	RD_KAFKA_EVENT_LOG,       /**< Log message */
 	RD_KAFKA_EVENT_ERROR,     /**< Error */
 	RD_KAFKA_EVENT_REBALANCE, /**< Group rebalance (consumer) */
@@ -2601,7 +2604,7 @@ RD_EXPORT
 void rd_kafka_event_destroy (rd_kafka_event_t *rkev);
 
 RD_EXPORT
-const rd_kafka_message_t *rd_kafka_event_message (rd_kafka_event_t *rkev);
+const rd_kafka_message_t *rd_kafka_event_message_next (rd_kafka_event_t *rkev);
 
 RD_EXPORT
 size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
@@ -2617,6 +2620,19 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev,
 
 RD_EXPORT rd_kafka_topic_partition_list_t *
 rd_kafka_event_topic_partition_list (rd_kafka_event_t *rkev);
+
+
+/**
+ * @returns a newly allocated topic_partition container, if applicable for the event type,
+ *          else NULL.
+ *
+ * The returned pointer must be freed with rd_kafka_topic_partition_destroy().
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_ERROR  (for partition level errors)
+ */
+RD_EXPORT rd_kafka_topic_partition_t *
+rd_kafka_event_topic_partition (rd_kafka_event_t *rkev);
 
 RD_EXPORT
 rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms);

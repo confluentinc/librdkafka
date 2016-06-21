@@ -448,9 +448,41 @@ rd_kafka_message_t *rd_kafka_message_new (void) {
         return rkmessage;
 }
 
+
+static rd_kafka_message_t *
+rd_kafka_message_setup (rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
+	rd_kafka_itopic_t *rkt;
+	rd_kafka_toppar_t *rktp = NULL;
+	if (rko->rko_type == RD_KAFKA_OP_DR) {
+		rkt = rd_kafka_topic_a2i(rko->rko_u.dr.rkt);
+	} else {
+		if (rko->rko_rktp) {
+			rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+			rkt = rktp->rktp_rkt;
+		}
+
+		rkmessage->_private = rko;
+	}
+
+
+	if (!rkmessage->rkt)
+		rkmessage->rkt = rd_kafka_topic_keep_a(rkt);
+
+	if (rktp)
+		rkmessage->partition = rktp->rktp_partition;
+
+	return rkmessage;
+}
+
+
+
+rd_kafka_message_t *rd_kafka_message_get_from_rkm (rd_kafka_op_t *rko,
+						   rd_kafka_msg_t *rkm) {
+	return rd_kafka_message_setup(rko, &rkm->rkm_rkmessage);
+}
+
 rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 	rd_kafka_message_t *rkmessage;
-	rd_kafka_toppar_t *rktp = NULL;
 
 	if (!rko)
 		return rd_kafka_message_new(); /* empty */
@@ -474,22 +506,7 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 		break;
 	}
 
-	rkmessage->_private = rko;
-
-	if (rko->rko_rktp) {
-		rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
-
-		if (!rkmessage->rkt)
-			rkmessage->rkt =
-				rd_kafka_topic_keep_a(rktp->rktp_rkt);
-
-		rkmessage->partition = rktp->rktp_partition;
-
-	} else {
-		rkmessage->partition = RD_KAFKA_PARTITION_UA;
-	}
-
-	return rkmessage;
+	return rd_kafka_message_setup(rko, rkmessage);
 }
 
 

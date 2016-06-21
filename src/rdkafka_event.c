@@ -81,7 +81,7 @@ rd_kafka_event_message_next (rd_kafka_event_t *rkev) {
 		if (rko->rko_u.fetch.evidx++ > 0)
 			return NULL;
 
-		return &rko->rko_u.fetch.rkm.rkm_rkmessage;
+		return rd_kafka_message_get(rko);
 
 	default:
 		return NULL;
@@ -95,7 +95,7 @@ rd_kafka_event_message_next (rd_kafka_event_t *rkev) {
 	/* Put rkm on secondary message queue which will be purged later. */
 	rd_kafka_msgq_enq(rkmq2, rkm);
 
-	return &rkm->rkm_rkmessage;
+	return rd_kafka_message_get_from_rkm(rko, rkm);
 }
 
 

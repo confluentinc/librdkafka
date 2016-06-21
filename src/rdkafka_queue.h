@@ -290,6 +290,8 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                                  rd_kafka_message_t **rkmessages,
                                  size_t rkmessages_size);
 rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko);
+rd_kafka_message_t *rd_kafka_message_get_from_rkm (rd_kafka_op_t *rko,
+						   rd_kafka_msg_t *rkm);
 rd_kafka_message_t *rd_kafka_message_new (void);
 
 rd_kafka_resp_err_t rd_kafka_q_wait_result (rd_kafka_q_t *rkq, int timeout_ms);

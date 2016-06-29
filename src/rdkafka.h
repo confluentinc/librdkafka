@@ -2501,6 +2501,26 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
 
 /**@}*/
 
+
+
+/**
+ * @name yangyuqi@sina.com  extend APIs
+ * @{
+ */
+
+/**
+ * @brief You can call the api for check all brokers whether lost connect.
+ *        Mybe you will refuse client datas when this situation.
+ *
+ * return 1 : brokers are all down!
+ * return 0 : not all brokers down.
+ * 
+ */
+RD_EXPORT
+int rd_kafka_brokers_are_all_down (rd_kafka_t *rk);
+
+/**@}*/
+
 #ifdef __cplusplus
 }
 #endif

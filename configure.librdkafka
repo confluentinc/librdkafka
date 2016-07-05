@@ -42,7 +42,10 @@ function checks {
     # optional libs
     mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz"
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
-    mkl_lib_check "liblz4" "WITH_LZ4" disable CC "-llz4"
+    mkl_lib_check "liblz4" "WITH_LZ4" disable CC "-llz4" \
+		  "
+#include <lz4frame.h>
+"
 
     # Snappy support is built-in
     mkl_allvar_set WITH_SNAPPY WITH_SNAPPY y

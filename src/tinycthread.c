@@ -476,6 +476,8 @@ int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts)
 
 
 int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
+  if (timeout_ms == -1 /* INFINITE*/)
+    return cnd_wait(cnd, mtx);
 #if defined(_TTHREAD_WIN32_)
 	return _cnd_timedwait_win32(cnd, mtx, (DWORD)timeout_ms);
 #else

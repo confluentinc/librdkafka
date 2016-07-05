@@ -220,6 +220,10 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 		return;
 	}
 
+	/* Start measuring from first message received */
+	if (!cnt.t_start)
+		cnt.t_start = cnt.t_last = rd_clock();
+
         cnt.offset = rkmessage->offset;
 	cnt.msgs++;
 	cnt.bytes += rkmessage->len;
@@ -412,8 +416,10 @@ static void print_stats (rd_kafka_t *rk,
 		t_total = cnt.t_end_send - cnt.t_start;
 	else if (cnt.t_end)
 		t_total = cnt.t_end - cnt.t_start;
-	else
+	else if (cnt.t_start)
 		t_total = now - cnt.t_start;
+	else
+		t_total = 1;
 
         if (mode == 'P') {
 
@@ -558,7 +564,7 @@ static void print_stats (rd_kafka_t *rk,
                 if (incremental_mode && now > cnt.t_last) {
                         uint64_t i_msgs = cnt.msgs - cnt.msgs_last;
                         uint64_t i_bytes = cnt.bytes - cnt.bytes_last;
-                        uint64_t i_time = now - cnt.t_last;
+                        uint64_t i_time = cnt.t_last ? now - cnt.t_last : 0;
 
                         printf("%% INTERVAL: %"PRIu64" messages "
                                "(%"PRIu64" bytes) "
@@ -1240,7 +1246,6 @@ int main (int argc, char **argv) {
 			}
 		}
 
-		cnt.t_start = cnt.t_last = rd_clock();
 		while (run && (msgcnt == -1 || msgcnt > (int)cnt.msgs)) {
 			/* Consume messages.
 			 * A message may either be a real message, or

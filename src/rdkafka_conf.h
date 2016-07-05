@@ -160,6 +160,7 @@ struct rd_kafka_conf_s {
 	 * Producer configuration
 	 */
 	int    queue_buffering_max_msgs;
+	int    queue_buffering_max_kbytes;
 	int    buffering_max_ms;
 	int    max_retries;
 	int    retry_backoff_ms;

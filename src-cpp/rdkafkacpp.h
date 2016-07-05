@@ -1580,6 +1580,21 @@ class RD_EXPORT Producer : public virtual Handle {
                                        * and the \p payload pointer will not
                                        * be used by rdkafka after the
                                        * call returns. */
+  static const int RK_MSG_BLOCK = 0x4; /**< Block produce*() on message queue
+					*   full.
+					*   WARNING:
+					*   If a delivery report callback
+					*   is used the application MUST
+					*   call rd_kafka_poll() (or equiv.)
+					*   to make sure delivered messages
+					*   are drained from the internal
+					*   delivery report queue.
+					*   Failure to do so will result
+					*   in indefinately blocking on
+					*   the produce() call when the
+					*   message queue is full.
+					*/
+
 
   /**@cond NO_DOC*/
   /* For backwards compatibility: */
@@ -1600,6 +1615,16 @@ class RD_EXPORT Producer : public virtual Handle {
    *   - a fixed partition (0..N)
    *
    * \p msgflags is zero or more of the following flags OR:ed together:
+   *    RK_MSG_BLOCK - block \p produce*() call if
+   *                   \p queue.buffering.max.messages or
+   *                   \p queue.buffering.max.kbytes are exceeded.
+   *                   Messages are considered in-queue from the point they
+   *                   are accepted by produce() until their corresponding
+   *                   delivery report callback/event returns.
+   *                   It is thus a requirement to call 
+   *                   poll() (or equiv.) from a separate
+   *                   thread when RK_MSG_BLOCK is used.
+   *                   See WARNING on \c RK_MSG_BLOCK above.
    *    RK_MSG_FREE - rdkafka will free(3) \p payload when it is done with it.
    *    RK_MSG_COPY - the \p payload data will be copied and the \p payload
    *               pointer will not be used by rdkafka after the

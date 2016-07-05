@@ -465,6 +465,11 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 		rd_kafka_transport_ssl_ctx_term(rk);
 #endif
 
+	if (rk->rk_type == RD_KAFKA_PRODUCER) {
+		cnd_destroy(&rk->rk_curr_msgs.cnd);
+		mtx_destroy(&rk->rk_curr_msgs.lock);
+	}
+
 	cnd_destroy(&rk->rk_broker_state_change_cnd);
 	mtx_destroy(&rk->rk_broker_state_change_lock);
 
@@ -719,10 +724,13 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 	shptr_rd_kafka_toppar_t *s_rktp;
 	rd_ts_t now;
 	rd_kafka_op_t *rko;
+	unsigned int tot_cnt;
+	size_t tot_size;
 
 	buf = rd_malloc(size);
 
 
+	rd_kafka_curr_msgs_get(rk, &tot_cnt, &tot_size);
 	rd_kafka_rdlock(rk);
 
 	now = rd_clock();
@@ -732,8 +740,10 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		   "\"ts\":%"PRId64", "
 		   "\"time\":%lli, "
 		   "\"replyq\":%i, "
-                   "\"msg_cnt\":%i, "
-                   "\"msg_max\":%i, "
+                   "\"msg_cnt\":%u, "
+		   "\"msg_size\":%"PRIdsz", "
+                   "\"msg_max\":%u, "
+		   "\"msg_size_max\":%"PRIdsz", "
                    "\"simple_cnt\":%i, "
 		   "\"brokers\":{ "/*open brokers*/,
                    rk->rk_name,
@@ -741,8 +751,8 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		   now,
 		   (signed long long)time(NULL),
 		   rd_kafka_q_len(&rk->rk_rep),
-                   rd_atomic32_get(&rk->rk_producer.msg_cnt),
-                   rk->rk_conf.queue_buffering_max_msgs,
+		   tot_cnt, tot_size,
+		   rk->rk_curr_msgs.max_cnt, rk->rk_curr_msgs.max_size,
                    rd_atomic32_get(&rk->rk_simple_cnt));
 
 
@@ -1099,6 +1109,14 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         rk->rk_conf.queued_max_msg_bytes =
                 (int64_t)rk->rk_conf.queued_max_msg_kbytes * 1000ll;
 
+	if (rk->rk_type == RD_KAFKA_PRODUCER) {
+		mtx_init(&rk->rk_curr_msgs.lock, mtx_plain);
+		cnd_init(&rk->rk_curr_msgs.cnd);
+		rk->rk_curr_msgs.max_cnt =
+			rk->rk_conf.queue_buffering_max_msgs;
+		rk->rk_curr_msgs.max_size =
+			(size_t)rk->rk_conf.queue_buffering_max_kbytes * 1024;
+	}
 
         if (rd_kafka_assignors_init(rk, errstr, errstr_size) == -1) {
 		rd_kafka_destroy_internal(rk);
@@ -2239,6 +2257,10 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
 	rd_kafka_toppar_t *rktp;
         shptr_rd_kafka_toppar_t *s_rktp;
         int i;
+	unsigned int tot_cnt;
+	size_t tot_size;
+
+	rd_kafka_curr_msgs_get(rk, &tot_cnt, &tot_size);
 
 	if (locks)
                 rd_kafka_rdlock(rk);
@@ -2246,8 +2268,8 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
         fprintf(fp, "rd_kafka_op_cnt: %d\n", rd_atomic32_get(&rd_kafka_op_cnt));
 	fprintf(fp, "rd_kafka_t %p: %s\n", rk, rk->rk_name);
 
-	fprintf(fp, " producer.msg_cnt %i\n",
-		rd_atomic32_get(&rk->rk_producer.msg_cnt));
+	fprintf(fp, " producer.msg_cnt %u (%"PRIdsz" bytes)\n",
+		tot_cnt, tot_size);
 	fprintf(fp, " rk_rep reply queue: %i ops\n",
 		rd_kafka_q_len(&rk->rk_rep));
 
@@ -2351,8 +2373,8 @@ void *rd_kafka_opaque (const rd_kafka_t *rk) {
 
 
 int rd_kafka_outq_len (rd_kafka_t *rk) {
-	return rd_atomic32_get(&rk->rk_producer.msg_cnt) +
-                rd_kafka_q_len(&rk->rk_rep);
+	return rd_kafka_curr_msgs_cnt(rk) + rd_kafka_q_len(&rk->rk_rep);
+}
 }
 
 

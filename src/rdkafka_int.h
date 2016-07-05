@@ -171,13 +171,14 @@ struct rd_kafka_s {
 
 	const rd_kafkap_bytes_t *rk_null_bytes;
 
-	union {
-		struct {
-			rd_atomic32_t msg_cnt;  /* current message count */
-		} producer;
-	} rk_u;
-#define rk_consumer rk_u.consumer
-#define rk_producer rk_u.producer
+	struct {
+		mtx_t lock;       /* Protects acces to this struct */
+		cnd_t cnd;        /* For waking up blocking injectors */
+		unsigned int cnt; /* Current message count */
+		size_t size;      /* Current message size sum */
+	        unsigned int max_cnt; /* Max limit */
+		size_t max_size; /* Max limit */
+	} rk_curr_msgs;
 
         rd_kafka_timers_t rk_timers;
 	thrd_t rk_thread;
@@ -187,6 +188,90 @@ struct rd_kafka_s {
 #define rd_kafka_rdlock(rk)    rwlock_rdlock(&(rk)->rk_lock)
 #define rd_kafka_rdunlock(rk)    rwlock_rdunlock(&(rk)->rk_lock)
 #define rd_kafka_wrunlock(rk)    rwlock_wrunlock(&(rk)->rk_lock)
+
+/**
+ * @brief Add \p cnt messages and of total size \p size bytes to the
+ *        internal bookkeeping of current message counts.
+ *        If the total message count or size after add would exceed the
+ *        configured limits \c queue.buffering.max.messages and
+ *        \c queue.buffering.max.kbytes then depending on the value of
+ *        \p block the function either blocks until enough space is available
+ *        if \p block is 1, else immediately returns
+ *        RD_KAFKA_RESP_ERR__QUEUE_FULL.
+ */
+static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
+rd_kafka_curr_msgs_add (rd_kafka_t *rk, unsigned int cnt, size_t size,
+			int block) {
+
+	if (rk->rk_type != RD_KAFKA_PRODUCER)
+		return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+	mtx_lock(&rk->rk_curr_msgs.lock);
+	while (unlikely(rk->rk_curr_msgs.cnt + cnt >
+			rk->rk_curr_msgs.max_cnt ||
+			rk->rk_curr_msgs.size + size >
+			rk->rk_curr_msgs.max_size)) {
+		if (!block) {
+			mtx_unlock(&rk->rk_curr_msgs.lock);
+			return RD_KAFKA_RESP_ERR__QUEUE_FULL;
+		}
+
+		cnd_wait(&rk->rk_curr_msgs.cnd, &rk->rk_curr_msgs.lock);
+	}
+
+	rk->rk_curr_msgs.cnt  += cnt;
+	rk->rk_curr_msgs.size += size;
+	mtx_unlock(&rk->rk_curr_msgs.lock);
+
+	return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Subtract \p cnt messages of total size \p size from the
+ *        current bookkeeping and broadcast a wakeup on the condvar
+ *        for any waiting & blocking threads.
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_curr_msgs_sub (rd_kafka_t *rk, unsigned int cnt, size_t size) {
+	if (rk->rk_type != RD_KAFKA_PRODUCER)
+		return;
+
+	mtx_lock(&rk->rk_curr_msgs.lock);
+	rd_kafka_assert(NULL,
+			rk->rk_curr_msgs.cnt >= cnt &&
+			rk->rk_curr_msgs.size >= size);
+	rk->rk_curr_msgs.cnt  -= cnt;
+	rk->rk_curr_msgs.size -= size;
+	cnd_broadcast(&rk->rk_curr_msgs.cnd);
+	mtx_unlock(&rk->rk_curr_msgs.lock);
+}
+
+static RD_INLINE RD_UNUSED void
+rd_kafka_curr_msgs_get (rd_kafka_t *rk, unsigned int *cntp, size_t *sizep) {
+	if (rk->rk_type != RD_KAFKA_PRODUCER) {
+		*cntp = 0;
+		*sizep = 0;
+	}
+
+	mtx_lock(&rk->rk_curr_msgs.lock);
+	*cntp = rk->rk_curr_msgs.cnt;
+	*sizep = rk->rk_curr_msgs.size;
+	mtx_unlock(&rk->rk_curr_msgs.lock);
+}
+
+static RD_INLINE RD_UNUSED int
+rd_kafka_curr_msgs_cnt (rd_kafka_t *rk) {
+	int cnt;
+	if (rk->rk_type != RD_KAFKA_PRODUCER)
+		return 0;
+
+	mtx_lock(&rk->rk_curr_msgs.lock);
+	cnt = rk->rk_curr_msgs.cnt;
+	mtx_unlock(&rk->rk_curr_msgs.lock);
+
+	return cnt;
+}
 
 
 void rd_kafka_destroy_final (rd_kafka_t *rk);

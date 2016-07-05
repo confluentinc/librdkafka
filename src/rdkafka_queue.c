@@ -453,23 +453,28 @@ static rd_kafka_message_t *
 rd_kafka_message_setup (rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
 	rd_kafka_itopic_t *rkt;
 	rd_kafka_toppar_t *rktp = NULL;
+
 	if (rko->rko_type == RD_KAFKA_OP_DR) {
 		rkt = rd_kafka_topic_a2i(rko->rko_u.dr.rkt);
 	} else {
 		if (rko->rko_rktp) {
 			rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
 			rkt = rktp->rktp_rkt;
-		}
+		} else
+			rkt = NULL;
 
 		rkmessage->_private = rko;
 	}
 
 
-	if (!rkmessage->rkt)
+	if (!rkmessage->rkt && rkt)
 		rkmessage->rkt = rd_kafka_topic_keep_a(rkt);
 
 	if (rktp)
 		rkmessage->partition = rktp->rktp_partition;
+
+	if (!rkmessage->err)
+		rkmessage->err = rko->rko_err;
 
 	return rkmessage;
 }
@@ -496,7 +501,6 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 
 	case RD_KAFKA_OP_CONSUMER_ERR:
 		rkmessage = rd_kafka_message_new();
-		rkmessage->err = rko->rko_err;
 		rkmessage->payload = rko->rko_u.err.errstr;
 		rkmessage->offset  = rko->rko_u.err.offset;
 		break;

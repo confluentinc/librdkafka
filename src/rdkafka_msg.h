@@ -117,8 +117,6 @@ static RD_INLINE RD_UNUSED int rd_kafka_msgq_len (rd_kafka_msgq_t *rkmq) {
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm);
 
-rd_kafka_msg_t *rd_kafka_msg_new_empty (void);
-
 int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      int msgflags,
 		      char *payload, size_t len,

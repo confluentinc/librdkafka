@@ -53,14 +53,6 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 }
 
 
-rd_kafka_msg_t *rd_kafka_msg_new_empty (void) {
-	rd_kafka_msg_t *rkm;
-	rkm = rd_calloc(1, sizeof(*rkm));
-	rkm->rkm_flags |= RD_KAFKA_MSG_F_FREE_RKM;
-	return rkm;
-}
-
-
 /**
  * @brief Create a new message.
  *
@@ -120,6 +112,8 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 	rkm->rkm_len        = len;
 	rkm->rkm_flags      = msgflags;
 	rkm->rkm_opaque     = msg_opaque;
+	rkm->rkm_rkmessage.rkt = rd_kafka_topic_keep_a(rkt);
+
 	if (key) {
 		rkm->rkm_key     = rd_memdup(key, keylen);
 		rkm->rkm_key_len = keylen;

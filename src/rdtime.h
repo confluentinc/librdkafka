@@ -153,6 +153,20 @@ static RD_INLINE int rd_timeout_remains (rd_ts_t abs_timeout) {
 }
 
 /**
+ * @brief Like rd_timeout_remains() but limits the maximum time to \p limit_ms
+ */
+static RD_INLINE int
+rd_timeout_remains_limit (rd_ts_t abs_timeout, int limit_ms) {
+	int timeout_ms = rd_timeout_remains(abs_timeout);
+
+	if (timeout_ms == RD_POLL_INFINITE || timeout_ms > limit_ms)
+		return limit_ms;
+	else
+		return timeout_ms;
+}
+
+
+/**
  * @returns 1 if the **relative** timeout as returned by rd_timeout_remains()
  *          has timed out / expired, else 0.
  */

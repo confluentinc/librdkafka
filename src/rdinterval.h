@@ -27,10 +27,18 @@ static RD_INLINE RD_UNUSED void rd_interval_init (rd_interval_t *ri) {
  *
  * If 'interval_us' is set to 0 the fixed interval will be used, see
  * 'rd_interval_fixed()'.
+ *
+ * If this is the first time rd_interval() is called after an _init() or
+ * _reset() and the \p immediate parameter is true, then a positive value
+ * will be returned immediately even though the initial interval has not passed.
  */
-static RD_INLINE RD_UNUSED rd_ts_t rd_interval (rd_interval_t *ri,
-                                               rd_ts_t interval_us,
-                                               rd_ts_t now) {
+#define rd_interval(ri,interval_us,now) rd_interval0(ri,interval_us,now,0)
+#define rd_interval_immediate(ri,interval_us,now) \
+	rd_interval0(ri,interval_us,now,1)
+static RD_INLINE RD_UNUSED rd_ts_t rd_interval0 (rd_interval_t *ri,
+						 rd_ts_t interval_us,
+						 rd_ts_t now,
+						 int immediate) {
         rd_ts_t diff;
 
         if (!now)

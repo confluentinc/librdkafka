@@ -1622,11 +1622,10 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 	rd_kafka_transport_poll_set(rkb->rkb_transport, POLLIN);
 
 	if (rkb->rkb_rk->rk_conf.api_version_request &&
-	    rd_interval(&rkb->rkb_ApiVersion_fail_intvl, 0, 0) > 0) {
+	    rd_interval_immediate(&rkb->rkb_ApiVersion_fail_intvl, 0, 0) > 0) {
 		/* Use ApiVersion to query broker for supported API versions. */
 		rd_kafka_broker_feature_enable(rkb, RD_KAFKA_FEATURE_APIVERSION);
 	}
-
 
 
 	if (rkb->rkb_features & RD_KAFKA_FEATURE_APIVERSION) {

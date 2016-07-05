@@ -1698,7 +1698,8 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg,
                 if (!rkcg->rkcg_subscription)
                         break;
 
-                if (rd_interval(&rkcg->rkcg_join_intvl, 1000*1000, 0) > 0)
+                if (rd_interval_immediate(&rkcg->rkcg_join_intvl,
+					  1000*1000, 0) > 0)
                         rd_kafka_cgrp_join(rkcg);
                 break;
 
@@ -1767,7 +1768,8 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 
         case RD_KAFKA_CGRP_STATE_QUERY_COORD:
                 /* Query for coordinator. */
-                if (rd_interval(&rkcg->rkcg_coord_query_intvl, 500*1000, 0) > 0)
+                if (rd_interval_immediate(&rkcg->rkcg_coord_query_intvl,
+					  500*1000, 0) > 0)
                         rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in "
                                                   "state query-coord");
@@ -1784,7 +1786,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 
                 /* Coordinator query */
                 if (rd_interval(&rkcg->rkcg_coord_query_intvl,
-                                1000*1000, 0) > 0)
+				1000*1000, 0) > 0)
                         rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in "
                                                   "state wait-broker");

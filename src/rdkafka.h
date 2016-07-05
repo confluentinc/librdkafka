@@ -2642,6 +2642,11 @@ RD_EXPORT
 const rd_kafka_message_t *rd_kafka_event_message_next (rd_kafka_event_t *rkev);
 
 RD_EXPORT
+size_t rd_kafka_event_message_array (rd_kafka_event_t *rkev,
+				     const rd_kafka_message_t **rkmessages, size_t size);
+
+
+RD_EXPORT
 size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
 
 

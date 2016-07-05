@@ -99,6 +99,18 @@ rd_kafka_event_message_next (rd_kafka_event_t *rkev) {
 }
 
 
+size_t rd_kafka_event_message_array (rd_kafka_event_t *rkev,
+				     const rd_kafka_message_t **rkmessages, size_t size) {
+	size_t cnt = 0;
+	const rd_kafka_message_t *rkmessage;
+
+	while ((rkmessage = rd_kafka_event_message_next(rkev)))
+		rkmessages[cnt++] = rkmessage;
+
+	return cnt;
+}
+
+
 size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev) {
 	switch (rkev->rko_evtype)
 	{

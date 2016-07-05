@@ -52,8 +52,6 @@ rd_kafka_event_type_t rd_kafka_op2event (rd_kafka_op_type_t optype) {
 static RD_UNUSED RD_INLINE
 int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 	rko->rko_evtype = rd_kafka_op2event(rko->rko_type);
-	printf("Try %s to %d\n", rd_kafka_op2str(rko->rko_type),
-	       rko->rko_evtype);
 	switch (rko->rko_evtype)
 	{
 	case RD_KAFKA_EVENT_NONE:

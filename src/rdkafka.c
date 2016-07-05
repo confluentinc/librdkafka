@@ -497,6 +497,8 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
         rd_kafka_timers_interrupt(&rk->rk_timers);
         rd_kafka_wrunlock(rk);
 
+	rd_kafka_brokers_broadcast_state_change(rk);
+
 #ifndef _MSC_VER
         /* Interrupt main kafka thread to speed up termination. */
 	if (term_sig)

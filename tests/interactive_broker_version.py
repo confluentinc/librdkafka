@@ -28,7 +28,8 @@ kafka_path='/home/maglun/src/kafka'
 
 
 
-def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1):
+def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
+                  root_path='tmp'):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
@@ -36,7 +37,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
     print('## Test version %s' % version)
     
-    cluster = Cluster('librdkafkaInteractiveBrokerVersionTests', 'tmp', debug=debug)
+    cluster = Cluster('librdkafkaInteractiveBrokerVersionTests', root_path, debug=debug)
 
     # Enable SSL if desired
     if 'SSL' in conf.get('security.protocol', ''):
@@ -155,6 +156,7 @@ if __name__ == '__main__':
                         help='Number of times to execute -c ..')
     parser.add_argument('--debug', action='store_true', dest='debug', default=False,
                         help='Enable trivup debugging')
+    parser.add_argument('--root', type=str, default='tmp', help='Root working directory')
 
     args = parser.parse_args()
     if args.conf is not None:
@@ -164,4 +166,5 @@ if __name__ == '__main__':
 
     for version in args.versions:
         test_version(version, cmd=args.cmd, deploy=args.deploy,
-                     conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt)
+                     conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt,
+                     root_path=args.root)

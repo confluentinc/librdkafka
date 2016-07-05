@@ -240,13 +240,16 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 		     rd_kafka_broker_state_names[rkb->rkb_state],
 		     rd_kafka_broker_state_names[state]);
 
-	if (state == RD_KAFKA_BROKER_STATE_DOWN) {
+	if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
+		/* no-op */
+	} else if (state == RD_KAFKA_BROKER_STATE_DOWN &&
+		   !rkb->rkb_down_reported &&
+		   rkb->rkb_state != RD_KAFKA_BROKER_STATE_APIVERSION_QUERY) {
 		/* Propagate ALL_BROKERS_DOWN event if all brokers are
 		 * now down, unless we're terminating.
 		 * Dont do this if we're querying for ApiVersion since it
 		 * is bound to fail once on older brokers. */
-		if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_APIVERSION_QUERY &&
-		    rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
+		if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
 		    rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) &&
 		    !rd_atomic32_get(&rkb->rkb_rk->rk_terminate))
 			rd_kafka_op_err(rkb->rkb_rk,
@@ -256,8 +259,13 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
                                                         rk_broker_down_cnt),
 					rd_atomic32_get(&rkb->rkb_rk->
                                                         rk_broker_cnt));
-	} else if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN)
+		rkb->rkb_down_reported = 1;
+
+	} else if (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
+		   rkb->rkb_down_reported) {
 		rd_atomic32_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
+		rkb->rkb_down_reported = 0;
+	}
 
 	rkb->rkb_state = state;
         rkb->rkb_ts_state = rd_clock();

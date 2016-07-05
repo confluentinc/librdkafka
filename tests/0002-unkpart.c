@@ -142,8 +142,7 @@ int main_0002_unkpart (int argc, char **argv) {
 	}
 
 	/* Wait for messages to time out */
-	while (rd_kafka_outq_len(rk) > 0)
-		rd_kafka_poll(rk, 50);
+	rd_kafka_flush(rk, -1);
 
 	if (msgs_wait != 0)
 		TEST_FAIL("Still waiting for messages: 0x%x\n", msgs_wait);

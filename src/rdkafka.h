@@ -2233,6 +2233,21 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *rkt, int32_t partition,
 
 
 
+/**
+ * @brief Wait until all outstanding produce requests, et.al, are completed.
+ *        This should typically be done prior to destroying a producer instance
+ *        to make sure all queued and in-flight produce requests are completed
+ *        before terminating.
+ *
+ * @remark This function will call rd_kafka_poll() and thus trigger callbacks.
+ *
+ * @returns RD_KAFKA_RESP_ERR__TIMED_OUT if \p timeout_ms was reached before all
+ *          outstanding requests were completed, else RD_KAFKA_RESP_ERR_NO_ERROR
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms);
+
+
 /**@}*/
 
 

@@ -1683,6 +1683,20 @@ class RD_EXPORT Producer : public virtual Handle {
                              const std::vector<char> *payload,
                              const std::vector<char> *key,
                              void *msg_opaque) = 0;
+
+
+  /**
+   * @brief Wait until all outstanding produce requests, et.al, are completed.
+   *        This should typically be done prior to destroying a producer instance
+   *        to make sure all queued and in-flight produce requests are completed
+   *        before terminating.
+   *
+   * @remark This function will call poll() and thus trigger callbacks.
+   *
+   * @returns ERR__TIMED_OUT if \p timeout_ms was reached before all
+   *          outstanding requests were completed, else ERR_NO_ERROR
+   */
+  virtual ErrorCode flush (int timeout_ms) = 0;
 };
 
 /**@}*/

@@ -88,6 +88,7 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_msg_partitioner_consistent_random(NULL, NULL, 0, 0, NULL, NULL);
                 rd_kafka_new(0, NULL, NULL, 0);
                 rd_kafka_destroy(NULL);
+		rd_kafka_flush(NULL, 0);
                 rd_kafka_name(NULL);
 		rd_kafka_memberid(NULL);
                 rd_kafka_topic_new(NULL, NULL, NULL);

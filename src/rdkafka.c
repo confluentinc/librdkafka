@@ -2375,7 +2375,25 @@ void *rd_kafka_opaque (const rd_kafka_t *rk) {
 int rd_kafka_outq_len (rd_kafka_t *rk) {
 	return rd_kafka_curr_msgs_cnt(rk) + rd_kafka_q_len(&rk->rk_rep);
 }
+
+
+rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
+	unsigned int msg_cnt;
+	int qlen;
+	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+
+	if (rk->rk_type != RD_KAFKA_PRODUCER)
+		return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
+
+	while ((qlen = rd_kafka_q_len(&rk->rk_rep)) > 0 ||
+	       (msg_cnt = rd_kafka_curr_msgs_cnt(rk)) > 0) {
+		rd_kafka_poll(rk, rd_timeout_remains_limit(ts_end, 100));
+	}
+
+	return qlen + msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
+		RD_KAFKA_RESP_ERR_NO_ERROR;
 }
+
 
 
 int rd_kafka_version (void) {

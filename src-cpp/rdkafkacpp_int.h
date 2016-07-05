@@ -709,6 +709,11 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                      const std::vector<char> *key,
                      void *msg_opaque);
 
+  ErrorCode flush (int timeout_ms) {
+	  return static_cast<RdKafka::ErrorCode>(rd_kafka_flush(rk_,
+								timeout_ms));
+  }
+
   static Producer *create (Conf *conf, std::string &errstr);
 
 };

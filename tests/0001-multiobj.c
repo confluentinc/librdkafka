@@ -80,8 +80,7 @@ int main_0001_multiobj (int argc, char **argv) {
 				 msg, strlen(msg), NULL, 0, NULL);
 		
 		/* Wait for it to be sent (and possibly acked) */
-		while (rd_kafka_outq_len(rk) > 0)
-			rd_kafka_poll(rk, 50);
+		rd_kafka_flush(rk, -1);
 
 		/* Destroy topic */
 		rd_kafka_topic_destroy(rkt);

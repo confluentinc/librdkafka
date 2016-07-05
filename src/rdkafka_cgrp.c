@@ -820,6 +820,7 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 
 	if (!(rkcg->rkcg_rk->rk_conf.enabled_events & RD_KAFKA_EVENT_REBALANCE)
 	    || !assignment) {
+	no_delegation:
 		if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
 			rd_kafka_cgrp_assign(rkcg, assignment);
 		else
@@ -841,7 +842,11 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 	rko->rko_err = err;
 	rko->rko_u.rebalance.partitions =
 		rd_kafka_topic_partition_list_copy(assignment);
-	rd_kafka_q_enq(&rkcg->rkcg_q, rko);
+
+	if (rd_kafka_q_enq(&rkcg->rkcg_q, rko) == 0) {
+		/* Queue disabled, handle assignment here. */
+		goto no_delegation;
+	}
 
 	return 1;
 }

@@ -623,6 +623,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 
 
 void rd_kafka_queue_destroy (rd_kafka_queue_t *rkqu) {
+	rd_kafka_q_disable(rkqu->rkqu_q);
 	rd_kafka_q_destroy(rkqu->rkqu_q);
 	rd_free(rkqu);
 }

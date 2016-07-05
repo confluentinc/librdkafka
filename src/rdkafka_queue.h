@@ -85,7 +85,7 @@ void rd_kafka_q_reset (rd_kafka_q_t *rkq) {
 
 /**
  * Disable a queue.
- * Attempting to enqueue messages to the queue will cause an assert.
+ * Attempting to enqueue messages to the queue will destroy them.
  */
 static RD_INLINE RD_UNUSED
 void rd_kafka_q_disable0 (rd_kafka_q_t *rkq, int do_lock) {
@@ -102,6 +102,21 @@ void rd_kafka_q_disable0 (rd_kafka_q_t *rkq, int do_lock) {
  */
 void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq, int do_lock);
 #define rd_kafka_q_fwd_set(S,D) rd_kafka_q_fwd_set0(S,D,1/*lock*/)
+
+
+/**
+ * @returns true if queue is forwarded, else false.
+ *
+ * @remark Thread-safe.
+ */
+static RD_INLINE RD_UNUSED int rd_kafka_q_is_fwded (rd_kafka_q_t *rkq) {
+	int r;
+	mtx_lock(&rkq->rkq_lock);
+	r = rkq->rkq_fwdq ? 1 : 0;
+	mtx_unlock(&rkq->rkq_lock);
+	return r;
+}
+
 
 /**
  * @brief Enqueue the 'rko' op at the tail of the queue 'rkq'.

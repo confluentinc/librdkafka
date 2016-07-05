@@ -1768,14 +1768,27 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_op_t *rko;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+	rd_kafka_q_t *rkq = NULL;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        rd_kafka_q_keep(&rkcg->rkcg_q);
-        rd_kafka_cgrp_terminate(rkcg, &rkcg->rkcg_q); /* async */
+	/* If the consumer queue has been forwarded or is disabled
+	 * we use a temporary queue to signal termination completion. */
+	mtx_lock(&rkcg->rkcg_q.rkq_lock);
+	if (!rkcg->rkcg_q.rkq_fwdq &&
+	    (rkcg->rkcg_q.rkq_flags & RD_KAFKA_Q_F_READY)) {
+		rkq = &rkcg->rkcg_q;
+		rd_kafka_q_keep(rkq);
+	}
+	mtx_unlock(&rkcg->rkcg_q.rkq_lock);
 
-        while ((rko = rd_kafka_q_pop(&rkcg->rkcg_q, RD_POLL_INFINITE, 0))) {
+	if (!rkq)
+		rkq = rd_kafka_q_new(rk);
+
+        rd_kafka_cgrp_terminate(rkcg, rkq); /* async */
+
+        while ((rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0))) {
                 if (rko->rko_type == RD_KAFKA_OP_TERMINATE) {
                         err = rko->rko_err;
                         rd_kafka_op_destroy(rko);
@@ -1785,7 +1798,7 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
                 rd_kafka_op_destroy(rko);
         }
 
-        rd_kafka_q_destroy(&rkcg->rkcg_q);
+        rd_kafka_q_destroy(rkq);
         return err;
 }
 

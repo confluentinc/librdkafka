@@ -682,7 +682,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "`rd_kafka_offset_store()` to store an offset (optional). "
           "**NOTE:** This property should only be used with the simple "
           "legacy consumer, when using the high-level KafkaConsumer the global "
-          "`auto.commit.enable` property must be used instead. "
+          "`enable.auto.commit` property must be used instead. "
 	  "**NOTE:** There is currently no zookeeper integration, offsets "
 	  "will be written to broker or local file according to "
           "offset.store.method.",

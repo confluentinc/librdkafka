@@ -1,7 +1,7 @@
 //@file
 ## Global configuration properties
 
-Property                                 | C/P | Range           |       Default | Description              
+Property                                 | C/P | Range           |       Default | Description
 -----------------------------------------|-----|-----------------|--------------:|--------------------------
 builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4 | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
 client.id                                |  *  |                 |       rdkafka | Client identifier. <br>*Type: string*
@@ -91,7 +91,7 @@ dr_msg_cb                                |  P  |                 |              
 
 ## Topic configuration properties
 
-Property                                 | C/P | Range           |       Default | Description              
+Property                                 | C/P | Range           |       Default | Description
 -----------------------------------------|-----|-----------------|--------------:|--------------------------
 request.required.acks                    |  P  | -1 .. 1000      |             1 | This field indicates how many acknowledgements the leader broker must receive from ISR brokers before responding to the request: *0*=Broker does not send any response/ack to client, *1*=Only the leader broker will need to ack the message, *-1* or *all*=broker will block until message is committed by all in sync replicas (ISRs) or broker's `in.sync.replicas` setting before sending response.  <br>*Type: integer*
 acks                                     |  P  |                 |               | Alias for `request.required.acks`
@@ -101,7 +101,7 @@ produce.offset.report                    |  P  | true, false     |         false
 partitioner_cb                           |  P  |                 |               | Partitioner callback (set with rd_kafka_topic_conf_set_partitioner_cb()) <br>*Type: pointer*
 opaque                                   |  *  |                 |               | Application opaque (set with rd_kafka_topic_conf_set_opaque()) <br>*Type: pointer*
 compression.codec                        |  P  | none, gzip, snappy, lz4, inherit |       inherit | Compression codec to use for compressing message sets.  <br>*Type: enum value*
-auto.commit.enable                       |  C  | true, false     |          true | If true, periodically commit offset of the last message handed to the application. This committed offset will be used when the process restarts to pick up where it left off. If false, the application will have to call `rd_kafka_offset_store()` to store an offset (optional). **NOTE:** This property should only be used with the simple legacy consumer, when using the high-level KafkaConsumer the global `auto.commit.enable` property must be used instead. **NOTE:** There is currently no zookeeper integration, offsets will be written to broker or local file according to offset.store.method. <br>*Type: boolean*
+auto.commit.enable                       |  C  | true, false     |          true | If true, periodically commit offset of the last message handed to the application. This committed offset will be used when the process restarts to pick up where it left off. If false, the application will have to call `rd_kafka_offset_store()` to store an offset (optional). **NOTE:** This property should only be used with the simple legacy consumer, when using the high-level KafkaConsumer the global `enable.auto.commit` property must be used instead. **NOTE:** There is currently no zookeeper integration, offsets will be written to broker or local file according to offset.store.method. <br>*Type: boolean*
 enable.auto.commit                       |  C  |                 |               | Alias for `auto.commit.enable`
 auto.commit.interval.ms                  |  C  | 10 .. 86400000  |         60000 | The frequency in milliseconds that the consumer offsets are committed (written) to offset storage. <br>*Type: integer*
 auto.offset.reset                        |  C  | smallest, earliest, largest, latest, error |       largest | Action to take when there is no initial offset in offset store or the desired offset is out of range: 'smallest','earliest' - automatically reset the offset to the smallest offset, 'largest','latest' - automatically reset the offset to the largest offset, 'error' - trigger an error which is retrieved by consuming messages and checking 'message->err'. <br>*Type: enum value*

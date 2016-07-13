@@ -384,41 +384,6 @@ int rd_kafkap_bytes_cmp_data (const rd_kafkap_bytes_t *a,
 
 
 
-
-
-
-
-
-
-
-struct rd_kafkap_FetchRequest {
-	int32_t ReplicaId;
-	int32_t MaxWaitTime;
-	int32_t MinBytes;
-	int32_t TopicArrayCnt;
-};
-
-
-
-/* Non-protocol representation of a topic's metadata. */
-struct rd_kafka_TopicMetadata {
-	int16_t          ErrorCode;
-	rd_kafkap_str_t *Name;
-	struct {
-		int16_t  ErrorCode;
-		int32_t  PartitionId;
-		int32_t  Leader;
-		struct rd_kafka_broker_s *rkb;
-		int32_t *Replicas;
-		int32_t  Replicas_cnt;
-		int32_t *Isr;
-		int32_t  Isr_cnt;
-	} *PartitionMetadata;
-	int32_t PartitionMetadata_cnt;
-};
-
-
-
 typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 
 

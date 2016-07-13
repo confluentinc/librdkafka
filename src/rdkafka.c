@@ -1779,7 +1779,7 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
 	if (!rkcg->rkcg_q.rkq_fwdq &&
 	    (rkcg->rkcg_q.rkq_flags & RD_KAFKA_Q_F_READY)) {
 		rkq = &rkcg->rkcg_q;
-		rd_kafka_q_keep(rkq);
+		rd_kafka_q_keep_nolock(rkq);
 	}
 	mtx_unlock(&rkcg->rkcg_q.rkq_lock);
 

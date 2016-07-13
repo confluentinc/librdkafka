@@ -56,6 +56,11 @@ void rd_kafka_q_keep (rd_kafka_q_t *rkq) {
 }
 
 static RD_INLINE RD_UNUSED
+void rd_kafka_q_keep_nolock (rd_kafka_q_t *rkq) {
+        rkq->rkq_refcnt++;
+}
+
+static RD_INLINE RD_UNUSED
 void rd_kafka_q_destroy (rd_kafka_q_t *rkq) {
         int do_delete = 0;
 

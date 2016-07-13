@@ -39,18 +39,88 @@
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
-	if (rk && rk->rk_type == RD_KAFKA_PRODUCER)
-		rd_kafka_curr_msgs_sub(rk, 1, rkm->rkm_len);
+	if (rkm->rkm_flags & RD_KAFKA_MSG_F_ACCOUNT) {
+		rd_dassert(rk || rkm->rkm_rkmessage.rkt);
+		rd_kafka_curr_msgs_sub(
+			rk ? rk :
+			rd_kafka_topic_a2i(rkm->rkm_rkmessage.rkt)->rkt_rk,
+			1, rkm->rkm_len);
+	}
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
 		rd_free(rkm->rkm_payload);
 
-	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE_KEY)
-		rd_free(rkm->rkm_key);
-
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE_RKM)
 		rd_free(rkm);
 }
+
+
+
+
+/**
+ * @brief Create a new message, copying the payload as indicated by msgflags.
+ *
+ * @returns the new message
+ */
+rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
+				    int32_t partition,
+				    int msgflags,
+				    char *payload, size_t len,
+				    const void *key, size_t keylen,
+				    void *msg_opaque) {
+	rd_kafka_msg_t *rkm;
+	size_t mlen = sizeof(*rkm);
+	char *p;
+
+	/* If we are to make a copy of the payload, allocate space for it too */
+	if (msgflags & RD_KAFKA_MSG_F_COPY) {
+		msgflags &= ~RD_KAFKA_MSG_F_FREE;
+		mlen += len;
+	}
+
+	mlen += keylen;
+
+	/* Note: using rd_malloc here, not rd_calloc, so make sure all fields
+	 *       are properly set up. */
+	rkm                 = rd_malloc(mlen);
+	rkm->rkm_err        = 0;
+	rkm->rkm_flags      = RD_KAFKA_MSG_F_FREE_RKM;
+	rkm->rkm_len        = len;
+	rkm->rkm_flags      = msgflags;
+	rkm->rkm_opaque     = msg_opaque;
+	rkm->rkm_rkmessage.rkt = rd_kafka_topic_keep_a(rkt);
+
+	rkm->rkm_partition  = partition;
+        rkm->rkm_offset     = 0;
+	rkm->rkm_timestamp  = 0;
+	rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+
+	p = (char *)(rkm+1);
+
+	if (payload && msgflags & RD_KAFKA_MSG_F_COPY) {
+		/* Copy payload to space following the ..msg_t */
+		rkm->rkm_payload = p;
+		memcpy(rkm->rkm_payload, payload, len);
+		p += len;
+
+	} else {
+		/* Just point to the provided payload. */
+		rkm->rkm_payload = payload;
+	}
+
+	if (key) {
+		rkm->rkm_key     = p;
+		rkm->rkm_key_len = keylen;
+	} else {
+		rkm->rkm_key = NULL;
+		rkm->rkm_key_len = 0;
+	}
+
+
+        return rkm;
+}
+
+
 
 
 /**
@@ -72,7 +142,6 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 					  rd_ts_t utc_now,
                                           rd_ts_t now) {
 	rd_kafka_msg_t *rkm;
-	size_t mlen = sizeof(*rkm);
 
 	if (unlikely(!payload))
 		len = 0;
@@ -97,32 +166,11 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 	}
 
 
+	rkm = rd_kafka_msg_new00(rkt, force_partition, msgflags,
+				 payload, len, key, keylen, msg_opaque);
 
-	/* If we are to make a copy of the payload, allocate space for it too */
-	if (msgflags & RD_KAFKA_MSG_F_COPY) {
-		msgflags &= ~RD_KAFKA_MSG_F_FREE;
-		mlen += len;
-	}
+	rkm->rkm_flags     |= RD_KAFKA_MSG_F_ACCOUNT; /* curr_msg_add() */
 
-	/* Note: using rd_malloc here, not rd_calloc, so make sure all fields
-	 *       are properly set up. */
-	rkm                 = rd_malloc(mlen);
-	rkm->rkm_err        = 0;
-	rkm->rkm_flags     |= RD_KAFKA_MSG_F_FREE_RKM;
-	rkm->rkm_len        = len;
-	rkm->rkm_flags      = msgflags;
-	rkm->rkm_opaque     = msg_opaque;
-	rkm->rkm_rkmessage.rkt = rd_kafka_topic_keep_a(rkt);
-
-	if (key) {
-		rkm->rkm_key     = rd_memdup(key, keylen);
-		rkm->rkm_key_len = keylen;
-	} else {
-		rkm->rkm_key = NULL;
-		rkm->rkm_key_len = 0;
-	}
-	rkm->rkm_partition  = force_partition;
-        rkm->rkm_offset     = 0;
 	rkm->rkm_timestamp  = utc_now / 1000;
 	rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_CREATE_TIME;
 
@@ -131,16 +179,6 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 	} else {
 		rkm->rkm_ts_timeout = now +
 			rkt->rkt_conf.message_timeout_ms * 1000;
-	}
-
-	if (payload && msgflags & RD_KAFKA_MSG_F_COPY) {
-		/* Copy payload to space following the ..msg_t */
-		rkm->rkm_payload = (void *)(rkm+1);
-		memcpy(rkm->rkm_payload, payload, len);
-
-	} else {
-		/* Just point to the provided payload. */
-		rkm->rkm_payload = payload;
 	}
 
         return rkm;

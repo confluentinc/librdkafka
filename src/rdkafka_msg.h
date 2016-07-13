@@ -62,7 +62,7 @@ typedef struct rd_kafka_msg_s {
 	/* @remark These additional flags must not collide with
 	 *         the RD_KAFKA_MSG_F_* flags in rdkafka.h */
 #define RD_KAFKA_MSG_F_FREE_RKM     0x10000 /* msg_t is allocated */
-#define RD_KAFKA_MSG_F_FREE_KEY     0x20000 /* key is allocated */
+#define RD_KAFKA_MSG_F_ACCOUNT      0x20000 /* accounted for in curr_msgs */
 
 	int64_t    rkm_timestamp;  /* Message format V1.
 				    * Meaning of timestamp depends on
@@ -70,6 +70,7 @@ typedef struct rd_kafka_msg_s {
 				    * or CreateTime (producer).
 				    * Unit is milliseconds since epoch (UTC).*/
 	rd_kafka_timestamp_type_t rkm_tstype; /* rkm_timestamp type */
+
 	union {
 		struct {
 			rd_ts_t ts_timeout;
@@ -85,13 +86,15 @@ TAILQ_HEAD(rd_kafka_msg_head_s, rd_kafka_msg_s);
 
 
 /**
- * @returns the enveloping rd_kafka_msg_t pointer for a
+ * @returns the enveloping rd_kafka_msg_t pointer for a rd_kafka_msg_t
  *          wrapped rd_kafka_message_t.
  */
 static RD_INLINE RD_UNUSED
 rd_kafka_msg_t *rd_kafka_message2msg (rd_kafka_message_t *rkmessage) {
 	return (rd_kafka_msg_t *)rkmessage;
 }
+
+
 
 
 
@@ -122,6 +125,12 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      char *payload, size_t len,
 		      const void *keydata, size_t keylen,
 		      void *msg_opaque);
+rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
+				    int32_t partition,
+				    int msgflags,
+				    char *payload, size_t len,
+				    const void *key, size_t keylen,
+				    void *msg_opaque);
 
 
 static RD_INLINE RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {

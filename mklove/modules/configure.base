@@ -1685,8 +1685,3 @@ function mkl_toggle_option_lib {
     eval "function _tmp_func { mkl_lib_check \"$2\" \"$3\" \"$4\" CC \"$7\"; }"
     mkl_func_push MKL_CHECKS "$MKL_MODULE" _tmp_func
 }
-
-
-
-
-

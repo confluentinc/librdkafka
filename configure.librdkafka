@@ -42,7 +42,10 @@ function checks {
     # optional libs
     mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz"
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
-    mkl_lib_check "liblz4" "WITH_LZ4" disable CC "-llz4"
+
+    if mkl_compile_check "llz4" "WITH_LZ4" disable CC "#include <lz4frame.h>"; then
+        mkl_lib_check "llz4" "" disable CC "-llz4"
+    fi
 
     # Snappy support is built-in
     mkl_allvar_set WITH_SNAPPY WITH_SNAPPY y
@@ -117,4 +120,3 @@ int foo (void) {
 			  "#include <valgrind/memcheck.h>"
     fi
 }
-

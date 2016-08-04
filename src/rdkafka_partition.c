@@ -2186,7 +2186,7 @@ rd_kafka_topic_partition_list_del_by_idx (rd_kafka_topic_partition_list_t *rktpa
 	rktparlist->cnt--;
 	rd_kafka_topic_partition_destroy(&rktparlist->elems[idx]);
 	memmove(&rktparlist->elems[idx], &rktparlist->elems[idx+1],
-		rktparlist->cnt - idx);
+		(rktparlist->cnt - idx) * sizeof(rktparlist->elems[idx]));
 
 	return 1;
 }

@@ -499,6 +499,7 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 		rkmessage = &rko->rko_u.fetch.rkm.rkm_rkmessage;
 		break;
 
+	case RD_KAFKA_OP_ERR:
 	case RD_KAFKA_OP_CONSUMER_ERR:
 		rkmessage = rd_kafka_message_new();
 		rkmessage->payload = rko->rko_u.err.errstr;

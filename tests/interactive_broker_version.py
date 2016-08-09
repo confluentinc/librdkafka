@@ -104,7 +104,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     all_listeners = (','.join(cluster.get_all('listeners', '', KafkaBrokerApp))).split(',')
     bootstrap_servers = ','.join([x for x in all_listeners if x.startswith(security_protocol)])
     os.write(fd, ('bootstrap.servers=%s\n' % bootstrap_servers).encode('ascii'))
-    os.write(fd, 'security.protocol=%s\n' % security_protocol)
+    os.write(fd, ('security.protocol=%s\n' % security_protocol).encode('ascii'))
     os.close(fd)
 
     if deploy:

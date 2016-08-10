@@ -2243,7 +2243,7 @@ RD_EXPORT
 rd_kafka_resp_err_t
 rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
                    rd_kafka_topic_t *only_rkt,
-                   const struct rd_kafka_metadata **metadatap,
+                   const rd_kafka_metadata_t **metadatap,
                    int timeout_ms);
 
 /**

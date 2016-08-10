@@ -1447,18 +1447,23 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                      rd_list_cnt(&rkcg->rkcg_toppars));
 
-        if (unlikely(rkcg->rkcg_reply_rko != NULL)) {
-                /* Already handling a previous terminate */
-                rd_kafka_q_t *replyq = rko->rko_replyq;
-                rko->rko_replyq = NULL;
-                rd_kafka_q_op_err(replyq, RD_KAFKA_OP_CONSUMER_ERR,
-                                  RD_KAFKA_RESP_ERR__IN_PROGRESS,
-                                  rkcg->rkcg_reply_rko->rko_version,
-                                  "Group is busy handling %s",
-                                  rd_kafka_op2str(rkcg->rkcg_reply_rko->
-                                                  rko_type));
-                rd_kafka_q_destroy(replyq);
-                rd_kafka_op_destroy(rko);
+        if (unlikely((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) ||
+		     rkcg->rkcg_reply_rko != NULL)) {
+                /* Already terminating or handling a previous terminate */
+		if (rko) {
+			rd_kafka_q_t *replyq = rko->rko_replyq;
+			rko->rko_replyq = NULL;
+			rd_kafka_q_op_err(replyq, RD_KAFKA_OP_CONSUMER_ERR,
+					  RD_KAFKA_RESP_ERR__IN_PROGRESS,
+					  rkcg->rkcg_reply_rko ?
+					  rkcg->rkcg_reply_rko->rko_version : 0,
+					  NULL, 0,
+					  "Group is %s",
+					  rkcg->rkcg_reply_rko ?
+					  "terminating":"terminated");
+			rd_kafka_q_destroy(replyq);
+			rd_kafka_op_destroy(rko);
+		}
                 return;
         }
 

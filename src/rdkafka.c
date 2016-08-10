@@ -433,12 +433,6 @@ rd_kafka_resp_err_t rd_kafka_errno2err (int errnox) {
 
 
 
-static void rd_kafka_simple_consumer_cleanup (rd_kafka_t *rk) {
-        if (rk->rk_cgrp)
-		rd_kafka_cgrp_terminate0(rk->rk_cgrp, NULL);
-}
-
-
 /**
  * Final destructor for rd_kafka_t, must only be called with refcnt 0.
  */
@@ -535,8 +529,8 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 	/* Brokers pick up on rk_terminate automatically. */
 
         /* The legacy/simple consumer lacks an API to close down the consumer*/
-        if (rd_kafka_is_simple_consumer(rk))
-                rd_kafka_simple_consumer_cleanup(rk);
+	if (rk->rk_cgrp)
+		rd_kafka_cgrp_terminate0(rk->rk_cgrp, NULL);
 
         /* List of (broker) threads to join to synchronize termination */
         rd_list_init(&wait_thrds, rd_atomic32_get(&rk->rk_broker_cnt));

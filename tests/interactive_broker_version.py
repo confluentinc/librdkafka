@@ -66,19 +66,19 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     if version != 'trunk':
         os.write(fd, ('broker.version.fallback=%s\n' % version).encode('ascii'))
     else:
-        os.write(fd, 'api.version.request=true\n')
+        os.write(fd, 'api.version.request=true\n'.encode('ascii'))
     # SASL (only one mechanism supported)
     mech = defconf.get('sasl_mechanisms', '').split(',')[0]
     if mech != '':
-        os.write(fd, 'sasl.mechanisms=%s\n' % mech)
+        os.write(fd, ('sasl.mechanisms=%s\n' % mech).encode('ascii'))
         if mech == 'PLAIN':
             print('# Writing SASL PLAIN client config to %s' % test_conf_file)
             security_protocol='SASL_PLAINTEXT'
             # Use first user as SASL user/pass
             for up in defconf.get('sasl_users', '').split(','):
                 u,p = up.split('=')
-                os.write(fd, 'sasl.username=%s\n' % u)
-                os.write(fd, 'sasl.password=%s\n' % p)
+                os.write(fd, ('sasl.username=%s\n' % u).encode('ascii'))
+                os.write(fd, ('sasl.password=%s\n' % p).encode('ascii'))
                 break
         else:
             print('# FIXME: SASL %s client config not written to %s' % (mech, test_conf_file))
@@ -93,10 +93,10 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
         key, req, pem = ssl.create_key('librdkafka')
 
-        os.write(fd, 'ssl.ca.location=%s\n' % ssl.ca_cert)
-        os.write(fd, 'ssl.certificate.location=%s\n' % pem)
-        os.write(fd, 'ssl.key.location=%s\n' % key)
-        os.write(fd, 'ssl.key.password=%s\n' % ssl.conf.get('ssl_key_pass'))
+        os.write(fd, ('ssl.ca.location=%s\n' % ssl.ca_cert).encode('ascii'))
+        os.write(fd, ('ssl.certificate.location=%s\n' % pem).encode('ascii'))
+        os.write(fd, ('ssl.key.location=%s\n' % key).encode('ascii'))
+        os.write(fd, ('ssl.key.password=%s\n' % ssl.conf.get('ssl_key_pass')).encode('ascii'))
 
 
     # Define bootstrap brokers based on selected security protocol

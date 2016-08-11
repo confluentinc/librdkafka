@@ -28,7 +28,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Producer: supported
   * High-level balanced KafkaConsumer: supported (requires broker >= 0.9)
   * Simple Consumer: supported
-  * Compression: snappy and gzip
+  * Compression: snappy, gzip, lz4
   * Broker version support: >=0.8
   * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
   * ZooKeeper: not supported
@@ -100,6 +100,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 	zlib (optional, for gzip compression support)
 	libssl-dev (optional, for SSL support)
 	libsasl2-dev (optional, for SASL support)
+	liblz4-dev (optional, for LZ4 compression support)
 
 ## Instructions
 

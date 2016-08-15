@@ -23,6 +23,14 @@ struct rd_kafka_q_s {
                                       * Flag is cleared on destroy */
 
         rd_kafka_t   *rkq_rk;
+	struct rd_kafka_q_io *rkq_qio;   /* FD-based application signalling */
+};
+
+
+struct rd_kafka_q_io {
+	int    fd;
+	void  *payload;
+	size_t size;
 };
 
 
@@ -123,6 +131,34 @@ static RD_INLINE RD_UNUSED int rd_kafka_q_is_fwded (rd_kafka_q_t *rkq) {
 }
 
 
+
+/**
+ * @brief Trigger an IO event for this queue.
+ *
+ * @remark Queue MUST be locked
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
+	ssize_t r;
+
+	if (likely(!rkq->rkq_qio))
+		return;
+
+	r = write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, rkq->rkq_qio->size);
+	if (r == -1) {
+		fprintf(stderr,
+			"[ERROR:librdkafka:rd_kafka_q_io_event: "
+			"write(%d,..,%d) failed: %s: "
+			"disabling further IO events]\n",
+			rkq->rkq_qio->fd, (int)rkq->rkq_qio->size,
+			rd_strerror(errno));
+		/* FIXME: Log this, somehow */
+		rd_free(rkq->rkq_qio);
+		rkq->rkq_qio = NULL;
+	}
+}
+
+
 /**
  * @brief Enqueue the 'rko' op at the tail of the queue 'rkq'.
  *
@@ -153,6 +189,8 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
                 rkq->rkq_qlen++;
                 rkq->rkq_qsize += rko->rko_len;
 		cnd_signal(&rkq->rkq_cond);
+		if (rkq->rkq_qlen == 1)
+			rd_kafka_q_io_event(rkq);
 		mtx_unlock(&rkq->rkq_lock);
 	} else {
 		rd_kafka_q_keep(fwdq);
@@ -204,6 +242,8 @@ int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
 			return -1;
 		}
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
+		if (rkq->rkq_qlen == 0 && srcq->rkq_qlen > 0)
+			rd_kafka_q_io_event(rkq);
                 rkq->rkq_qlen += srcq->rkq_qlen;
                 rkq->rkq_qsize += srcq->rkq_qsize;
 		cnd_signal(&rkq->rkq_cond);
@@ -239,6 +279,8 @@ void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
                 TAILQ_CONCAT(&srcq->rkq_q, &rkq->rkq_q, rko_link);
                 /* Move srcq to rkq */
                 TAILQ_MOVE(&rkq->rkq_q, &srcq->rkq_q, rko_link);
+		if (rkq->rkq_qlen == 0 && srcq->rkq_qlen > 0)
+			rd_kafka_q_io_event(rkq);
                 rkq->rkq_qlen += srcq->rkq_qlen;
                 rkq->rkq_qsize += srcq->rkq_qsize;
 

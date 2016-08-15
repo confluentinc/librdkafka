@@ -15,6 +15,10 @@ void rd_kafka_yield (rd_kafka_t *rk) {
 void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
 
         mtx_lock(&rkq->rkq_lock);
+	if (unlikely(rkq->rkq_qio != NULL)) {
+		rd_free(rkq->rkq_qio);
+		rkq->rkq_qio = NULL;
+	}
         rd_kafka_q_fwd_set0(rkq, NULL, 0/*no-lock*/);
         rd_kafka_q_disable0(rkq, 0/*no-lock*/);
         rd_kafka_q_purge0(rkq, 0/*no-lock*/);
@@ -38,6 +42,7 @@ void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk) {
         rkq->rkq_refcnt = 1;
         rkq->rkq_flags  = RD_KAFKA_Q_F_READY;
         rkq->rkq_rk     = rk;
+	rkq->rkq_qio    = NULL;
 	mtx_init(&rkq->rkq_lock, mtx_plain);
 	cnd_init(&rkq->rkq_cond);
 }
@@ -185,6 +190,9 @@ int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 	}
 
 	if (!dstq->rkq_fwdq && !srcq->rkq_fwdq) {
+		if (cnt > 0 && dstq->rkq_qlen == 0)
+			rd_kafka_q_io_event(dstq);
+
 		/* Optimization, if 'cnt' is equal/larger than all
 		 * items of 'srcq' we can move the entire queue. */
 		if (cnt == -1 ||
@@ -674,6 +682,32 @@ void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst) {
 	rd_kafka_q_fwd_set(src->rkqu_q, dst ? dst->rkqu_q : NULL);
 }
 
+
+void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
+				     const void *payload, size_t size) {
+	rd_kafka_q_t *rkq = rkqu->rkqu_q;
+	struct rd_kafka_q_io *qio;
+
+	if (fd != -1) {
+		qio = rd_malloc(sizeof(*qio) + size);
+		qio->fd = fd;
+		qio->size = size;
+		qio->payload = (void *)(qio+1);
+		memcpy(qio->payload, payload, size);
+	}
+
+	mtx_lock(&rkq->rkq_lock);
+	if (rkq->rkq_qio) {
+		rd_free(rkq->rkq_qio);
+		rkq->rkq_qio = NULL;
+	}
+
+	if (fd != -1) {
+		rkq->rkq_qio = qio;
+	}
+
+	mtx_unlock(&rkq->rkq_lock);
+}
 
 
 /**

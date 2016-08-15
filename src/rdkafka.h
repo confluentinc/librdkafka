@@ -1644,6 +1644,26 @@ RD_EXPORT
 void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
 
 
+
+/**
+ * @brief Enable IO event triggering for queue.
+ *
+ * To ease integration with IO based polling loops this API
+ * allows an application to create a separate file-descriptor
+ * that librdkafka will write \p payload (of size \p size) to
+ * whenever a new element is enqueued on a previously empty queue.
+ *
+ * To remove event triggering call with \p fd = -1.
+ *
+ * librdkafka will maintain a copy of the \p payload.
+ *
+ * @remark When using forwarded queues the IO event must only be enabled
+ *         on the final forwarded-to (destination) queue.
+ */
+RD_EXPORT
+void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
+				     const void *payload, size_t size);
+
 /**@}*/
 
 /**

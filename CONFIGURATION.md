@@ -78,6 +78,7 @@ offset.store.method                      |  C  | none, file, broker |        bro
 consume_cb                               |  C  |                 |               | Message consume callback (set with rd_kafka_conf_set_consume_cb()) <br>*Type: pointer*
 rebalance_cb                             |  C  |                 |               | Called after consumer group has been rebalanced (set with rd_kafka_conf_set_rebalance_cb()) <br>*Type: pointer*
 offset_commit_cb                         |  C  |                 |               | Offset commit result propagation callback. (set with rd_kafka_conf_set_offset_commit_cb()) <br>*Type: pointer*
+enable.partition.eof                     |  C  | true, false     |          true | Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the consumer reaches the end of a partition. <br>*Type: boolean*
 queue.buffering.max.messages             |  P  | 1 .. 10000000   |        100000 | Maximum number of messages allowed on the producer queue. <br>*Type: integer*
 queue.buffering.max.kbytes               |  P  | 1 .. 2147483647 |       4000000 | Maximum total message size sum allowed on the producer queue. <br>*Type: integer*
 queue.buffering.max.ms                   |  P  | 1 .. 900000     |          1000 | Maximum time, in milliseconds, for buffering data on the producer queue. <br>*Type: integer*

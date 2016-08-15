@@ -549,7 +549,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(offset_commit_cb),
 	  "Offset commit result propagation callback. "
           "(set with rd_kafka_conf_set_offset_commit_cb())" },
-
+	{ _RK_GLOBAL|_RK_CONSUMER, "enable.partition.eof", _RK_C_BOOL,
+	  _RK(enable_partition_eof),
+	  "Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the "
+	  "consumer reaches the end of a partition.",
+	  0, 1, 1 },
 
 	/* Global producer properties */
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.messages", _RK_C_INT,

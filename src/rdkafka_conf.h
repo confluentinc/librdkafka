@@ -155,6 +155,7 @@ struct rd_kafka_conf_s {
                                   void *opaque);
 
         rd_kafka_offset_method_t offset_store_method;
+	int enable_partition_eof;
 
 	/*
 	 * Producer configuration

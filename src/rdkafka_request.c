@@ -98,6 +98,7 @@ static int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 		actions |= RD_KAFKA_ERR_ACTION_RETRY;
 		break;
         case RD_KAFKA_RESP_ERR__DESTROY:
+	case RD_KAFKA_RESP_ERR_INVALID_SESSION_TIMEOUT:
         default:
                 actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
                 break;
@@ -1146,10 +1147,10 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                      ErrorCode ? rd_kafka_err2str(ErrorCode) : "(no error)");
 
         if (!ErrorCode) {
-			    char *my_member_id;
-				RD_KAFKAP_STR_DUPA(&my_member_id, &MyMemberId);
+		char *my_member_id;
+		RD_KAFKAP_STR_DUPA(&my_member_id, &MyMemberId);
                 rkcg->rkcg_generation_id = GenerationId;
-				rd_kafka_cgrp_set_member_id(rkcg, my_member_id);
+		rd_kafka_cgrp_set_member_id(rkcg, my_member_id);
                 i_am_leader = !rd_kafkap_str_cmp(&LeaderId, &MyMemberId);
         } else {
                 rd_interval_backoff(&rkcg->rkcg_join_intvl, 1000*1000);
@@ -1245,6 +1246,13 @@ err:
         if (ErrorCode) {
                 if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY)
                         return; /* Termination */
+
+		if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
+			rd_kafka_q_op_err(&rkcg->rkcg_q,
+					  RD_KAFKA_OP_CONSUMER_ERR,
+					  ErrorCode, 0, NULL, 0,
+					  "JoinGroup failed: %s",
+					  rd_kafka_err2str(ErrorCode));
 
                 if (ErrorCode == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID)
                         rd_kafka_cgrp_set_member_id(rkcg, "");

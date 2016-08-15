@@ -161,6 +161,12 @@ static const struct rd_kafka_feature_map {
  *        lists that corresponds to older broker versions.
  */
 
+/* >= 0.10.0.0: dummy for all future versions that support ApiVersionRequest */
+static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_Queryable[] = {
+	{ RD_KAFKAP_ApiVersion, 0, 0 }
+};
+
+
 /* =~ 0.9.0 */
 static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_9_0[] = {
 	{ RD_KAFKAP_Produce, 0, 1 },
@@ -233,6 +239,9 @@ int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 		_VERMAP("0.8.2", rd_kafka_ApiVersion_0_8_2),
 		_VERMAP("0.8.1", rd_kafka_ApiVersion_0_8_1),
 		_VERMAP("0.8.0", rd_kafka_ApiVersion_0_8_0),
+		{ "0.7.", NULL }, /* Unsupported */
+		{ "0.6.", NULL }, /* Unsupported */
+		_VERMAP("", rd_kafka_ApiVersion_Queryable),
 		{ NULL }
 	};
 	int i;
@@ -240,6 +249,8 @@ int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 
 	for (i = 0 ; vermap[i].pfx ; i++) {
 		if (!strncmp(vermap[i].pfx, broker_version, strlen(vermap[i].pfx))) {
+			if (!vermap[i].apis)
+				return 0;
 			*apisp = vermap[i].apis;
 			*api_cntp = vermap[i].api_cnt;
 			return 1;
@@ -255,6 +266,23 @@ int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 	}
 
 	return 0;
+}
+
+
+/**
+ * @returns 1 if the provided broker version (probably)
+ *          supports api.version.request.
+ */
+int rd_kafka_ApiVersion_is_queryable (const char *broker_version) {
+	struct rd_kafka_ApiVersion *apis;
+	size_t api_cnt;
+
+
+	if (!rd_kafka_get_legacy_ApiVersions(broker_version,
+					     &apis, &api_cnt, 0))
+		return 0;
+
+	return apis == rd_kafka_ApiVersion_Queryable;
 }
 
 

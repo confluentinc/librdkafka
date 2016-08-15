@@ -902,7 +902,9 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		if (prop->validate &&
 		    (!value || !prop->validate(prop, value, -1))) {
 			rd_snprintf(errstr, errstr_size,
-				    "Invalid value: %s", value);
+				    "Invalid value for "
+				    "configuration property \"%s\": %s",
+				    prop->name, value);
 			return RD_KAFKA_CONF_INVALID;
 		}
 

@@ -111,6 +111,7 @@ rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
 	if (key) {
 		rkm->rkm_key     = p;
 		rkm->rkm_key_len = keylen;
+		memcpy(rkm->rkm_key, key, keylen);
 	} else {
 		rkm->rkm_key = NULL;
 		rkm->rkm_key_len = 0;

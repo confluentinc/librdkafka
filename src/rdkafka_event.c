@@ -61,7 +61,8 @@ void rd_kafka_event_destroy (rd_kafka_event_t *rkev) {
 
 /**
  * @returns the next message from the event's message queue.
- * @remark messages will be freed automatically when event is destroyed.
+ * @remark messages will be freed automatically when event is destroyed,
+ *         application MUST NOT call rd_kafka_message_destroy()
  */
 const rd_kafka_message_t *
 rd_kafka_event_message_next (rd_kafka_event_t *rkev) {
@@ -126,6 +127,10 @@ size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev) {
 
 rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev) {
 	return rkev->rko_err;
+}
+
+const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev) {
+	return rkev->rko_u.err.errstr;
 }
 
 

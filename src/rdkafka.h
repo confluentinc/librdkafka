@@ -2653,6 +2653,8 @@ size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev);
 
+RD_EXPORT
+const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev);
 
 RD_EXPORT
 int rd_kafka_event_log (rd_kafka_event_t *rkev,

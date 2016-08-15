@@ -1626,6 +1626,9 @@ rd_kafka_queue_t *rd_kafka_queue_get_main (rd_kafka_t *rk);
  * This is the queue served by rd_kafka_consumer_poll().
  *
  * Use rd_kafka_queue_destroy() to loose the reference.
+ *
+ * @remark rd_kafka_queue_destroy() MUST be called on this queue
+ *         prior to calling rd_kafka_consumer_close().
  */
 RD_EXPORT
 rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk);
@@ -2588,13 +2591,23 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
 
 /**
  * @name Event interface
+ *
+ * @brief The event API provides an alternative pollable non-callback interface
+ *        to librdkafka's message and event queues.
+ *
  * @{
+ */
+
+
+/**
+ * @enum rd_kafka_event_type
+ *
+ * @brief rd_kafka_event_t type.
  */
 typedef enum rd_kafka_event_type_t {
 	RD_KAFKA_EVENT_NONE,
 	RD_KAFKA_EVENT_DR,        /**< Delivery report batch (producer) */
 	RD_KAFKA_EVENT_FETCH,     /**< Fetched message (consumer) */
-	RD_KAFKA_EVENT_BATCH_FETCH,/**< Fetched message batch (consumer) */
 	RD_KAFKA_EVENT_LOG,       /**< Log message */
 	RD_KAFKA_EVENT_ERROR,     /**< Error */
 	RD_KAFKA_EVENT_REBALANCE, /**< Group rebalance (consumer) */
@@ -2603,21 +2616,10 @@ typedef enum rd_kafka_event_type_t {
 typedef struct rd_kafka_op_s rd_kafka_event_t;
 
 
-/**
- * @brief Enable events \p events (or:ed RD_KAFKA_EVENT_*)
- * FIXME
- */
-RD_EXPORT
-void rd_kafka_events_enable (rd_kafka_t *rk, int events);
 
 /**
- * @brief Disable events \p events (or:ed RD_KAFKA_EVENT_*)
- * FIXME
- */
-RD_EXPORT
-void rd_kafka_events_disable (rd_kafka_t *rk, int events);
-
-/**
+ * @returns the event type for the given event.
+ *
  * @remark As a convenience it is okay to pass \p rkev as NULL in which case
  *         RD_KAFKA_EVENT_NONE is returned.
  */
@@ -2625,41 +2627,110 @@ RD_EXPORT
 rd_kafka_event_type_t rd_kafka_event_type (const rd_kafka_event_t *rkev);
 
 /**
+ * @returns the event type's name for the given event.
+ *
  * @remark As a convenience it is okay to pass \p rkev as NULL in which case
  *         the name for RD_KAFKA_EVENT_NONE is returned.
  */
 RD_EXPORT
 const char *rd_kafka_event_name (const rd_kafka_event_t *rkev);
 
+
 /**
+ * @brief Destroy an event.
+ *
+ * @remark Any references to this event, such as extracted messages,
+ *         will not be usable after this call.
+ *
  * @remark As a convenience it is okay to pass \p rkev as NULL in which case
  *         no action is performed.
  */
 RD_EXPORT
 void rd_kafka_event_destroy (rd_kafka_event_t *rkev);
 
+
+/**
+ * @returns the next message from an event.
+ *
+ * Call repeatedly until it returns NULL.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_FETCH  (1 message)
+ *  - RD_KAFKA_EVENT_DR     (>=1 message(s))
+ *
+ * @remark The returned message(s) MUST NOT be
+ *         freed with rd_kafka_message_destroy().
+ */
 RD_EXPORT
 const rd_kafka_message_t *rd_kafka_event_message_next (rd_kafka_event_t *rkev);
 
+
+/**
+ * @brief Extacts \p size message(s) from the event into the
+ *        pre-allocated array \p rkmessages.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_FETCH  (1 message)
+ *  - RD_KAFKA_EVENT_DR     (>=1 message(s))
+ *
+ * @returns the number of messages extracted.
+ */
 RD_EXPORT
 size_t rd_kafka_event_message_array (rd_kafka_event_t *rkev,
 				     const rd_kafka_message_t **rkmessages, size_t size);
 
 
+/**
+ * @returns the number of remaining messages in the event.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_FETCH  (1 message)
+ *  - RD_KAFKA_EVENT_DR     (>=1 message(s))
+ */
 RD_EXPORT
 size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
 
 
+/**
+ * @returns the error code for the event.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_ERROR
+ */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev);
 
+
+/**
+ * @returns the error string (if any) for an RD_KAFKA_EVENT_ERROR event.
+ * Event types:
+ *  - RD_KAFKA_EVENT_ERROR
+ */
 RD_EXPORT
 const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev);
 
+
+/**
+ * @brief Extract log message from the event.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_LOG
+ *
+ * @returns 0 on success or -1 if unsupported event type.
+ */
 RD_EXPORT
 int rd_kafka_event_log (rd_kafka_event_t *rkev,
 			const char **fac, const char **str, int *level);
 
+
+/**
+ * @returns the topic partition list from the event.
+ *
+ * @remark The list MUST NOT be freed with rd_kafka_topic_partition_list_destroy()
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_REBALANCE
+ */
 RD_EXPORT rd_kafka_topic_partition_list_t *
 rd_kafka_event_topic_partition_list (rd_kafka_event_t *rkev);
 
@@ -2668,7 +2739,7 @@ rd_kafka_event_topic_partition_list (rd_kafka_event_t *rkev);
  * @returns a newly allocated topic_partition container, if applicable for the event type,
  *          else NULL.
  *
- * The returned pointer must be freed with rd_kafka_topic_partition_destroy().
+ * @remark The returned pointer MUST be freed with rd_kafka_topic_partition_destroy().
  *
  * Event types:
  *   RD_KAFKA_EVENT_ERROR  (for partition level errors)
@@ -2676,6 +2747,14 @@ rd_kafka_event_topic_partition_list (rd_kafka_event_t *rkev);
 RD_EXPORT rd_kafka_topic_partition_t *
 rd_kafka_event_topic_partition (rd_kafka_event_t *rkev);
 
+
+/**
+ * @brief Poll a queue for an event for max \p timeout_ms.
+ *
+ * @returns an event, or NULL.
+ *
+ * @remark Use rd_kafka_event_destroy() to free the event.
+ */
 RD_EXPORT
 rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms);
 

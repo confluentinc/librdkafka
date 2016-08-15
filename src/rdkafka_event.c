@@ -35,7 +35,6 @@ static const char *rd_kafka_event_names[] = {
 	"(NONE)",
 	"DeliveryReport",
 	"Fetch",
-	"BatchFetch",
 	"Log",
 	"Error",
 	"Rebalance"
@@ -139,6 +138,7 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev, const char **fac, const char **s
 	if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_LOG))
 		return -1;
 
+	// FIXME
 	if (likely(fac != NULL))
 		;//*fac = rkev->rkev_u.log.fac;
 	if (likely(str != NULL))

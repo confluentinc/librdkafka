@@ -683,6 +683,10 @@ void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst) {
 }
 
 
+size_t rd_kafka_queue_length (rd_kafka_queue_t *rkqu) {
+	return (size_t)rd_kafka_q_len(rkqu->rkqu_q);
+}
+
 void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
 				     const void *payload, size_t size) {
 	rd_kafka_q_t *rkq = rkqu->rkqu_q;

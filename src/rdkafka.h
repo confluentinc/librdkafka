@@ -1644,6 +1644,12 @@ RD_EXPORT
 void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
 
 
+/**
+ * @returns the current number of elements in queue.
+ */
+RD_EXPORT
+size_t rd_kafka_queue_length (rd_kafka_queue_t *rkqu);
+
 
 /**
  * @brief Enable IO event triggering for queue.

@@ -594,9 +594,10 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 		/* Insert message at head of queue */
 		rd_kafka_buf_t *prev, *after = NULL;
 
-		/* Put us behind any flash messages. */
+		/* Put us behind any flash messages and partially sent buffers. */
 		TAILQ_FOREACH(prev, &rkb->rkb_outbufs.rkbq_bufs, rkbuf_link) {
-			if (!(prev->rkbuf_flags & RD_KAFKA_OP_F_FLASH))
+			if (!(prev->rkbuf_flags & RD_KAFKA_OP_F_FLASH) &&
+			    prev->rkbuf_of == 0)
 				break;
 			after = prev;
 		}

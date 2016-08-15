@@ -53,17 +53,6 @@ static RD_INLINE int rd_kafka_high_level_consumer_add (rd_kafka_t *rk) {
 }
 
 
-/* FIXME: Remove these */
-rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt) {
-
-        rd_kafka_topic_wrlock(rkt);
-        /* FIXME: mark for subscription */
-        rd_kafka_topic_wrunlock(rkt);
-
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
-}
-
-
 rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk) {
         rd_kafka_cgrp_t *rkcg;
 

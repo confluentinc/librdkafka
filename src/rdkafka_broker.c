@@ -4005,6 +4005,31 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					rd_atomic64_add(&rktp->rktp_c.msgs,
 							rd_kafka_q_len(&tmp_opq));
 				}
+                        } else {
+                                /* The message set didn't contain any full
+                                 * message. This means that the size limit was
+                                 * too tight. */
+                                if (rktp->rktp_fetch_msg_max_bytes < (1 << 30)) {
+                                        rktp->rktp_fetch_msg_max_bytes *= 2;
+					rd_rkb_dbg(rkb, FETCH, "CONSUME",
+						   "Topic %s [%"PRId32"]: Increasing "
+						   "max fetch bytes to %"PRId32,
+						   rktp->rktp_rkt->rkt_topic->str,
+						   rktp->rktp_partition,
+						   rktp->rktp_fetch_msg_max_bytes);
+				} else {
+					rd_kafka_q_op_err(
+						&rktp->rktp_fetchq,
+						RD_KAFKA_OP_CONSUMER_ERR,
+						RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
+						tver->version,
+						rktp,
+						rktp->rktp_offsets.fetch_offset,
+						"Message at offset %"PRId64" "
+						"is too large to fetch, try increasing "
+						"receive.message.max.bytes",
+						rktp->rktp_offsets.fetch_offset);
+				}
                         }
 
 			rd_kafka_toppar_destroy(s_rktp); /* from get() */
@@ -4180,8 +4205,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 		/* FetchOffset */
 		rd_kafka_buf_write_i64(rkbuf, rktp->rktp_offsets.fetch_offset);
 		/* MaxBytes */
-		rd_kafka_buf_write_i32(rkbuf, rkb->rkb_rk->rk_conf.
-				       fetch_msg_max_bytes);
+		rd_kafka_buf_write_i32(rkbuf, rktp->rktp_fetch_msg_max_bytes);
 
 		rd_rkb_dbg(rkb, FETCH, "FETCH",
 			   "Fetch topic %.*s [%"PRId32"] at offset %"PRId64

@@ -194,6 +194,9 @@
     <ClCompile Include="..\..\tests\0036-partial_fetch.c" />
     <ClCompile Include="..\..\tests\0037-destroy_hang_local.c" />
     <ClCompile Include="..\..\tests\0038-performance.c" />
+    <ClCompile Include="..\..\tests\0039-event.c" />
+    <ClCompile Include="..\..\tests\0040-io_event.c" />
+    <ClCompile Include="..\..\tests\0041-fetch_max_bytes.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

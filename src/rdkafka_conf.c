@@ -509,8 +509,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  0, 300*1000, 100 },
         { _RK_GLOBAL|_RK_CONSUMER, "fetch.message.max.bytes", _RK_C_INT,
           _RK(fetch_msg_max_bytes),
-          "Maximum number of bytes per topic+partition to request when "
-          "fetching messages from the broker.",
+          "Initial maximum number of bytes per topic+partition to request when "
+          "fetching messages from the broker. "
+	  "If the client encounters a message larger than this value "
+	  "it will gradually try to increase it until the "
+	  "entire message can be fetched.",
           1, 1000000000, 1024*1024 },
 	{ _RK_GLOBAL|_RK_CONSUMER, "max.partition.fetch.bytes", _RK_C_ALIAS,
 	  .sdef = "fetch.message.max.bytes" },

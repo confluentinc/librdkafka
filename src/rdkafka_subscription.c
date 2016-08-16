@@ -86,9 +86,7 @@ rd_kafka_subscribe (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
-        rd_kafka_op_payload_set(rko,
-                                rd_kafka_topic_partition_list_copy(topics),
-                                (void *)rd_kafka_topic_partition_list_destroy);
+	rko->rko_u.subscribe.topics = rd_kafka_topic_partition_list_copy(topics);
 
         return rd_kafka_op_err_destroy(
                 rd_kafka_op_req(&rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
@@ -106,10 +104,8 @@ rd_kafka_assign (rd_kafka_t *rk,
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_ASSIGN);
 	if (partitions)
-                rd_kafka_op_payload_set(
-                        rko,
-                        rd_kafka_topic_partition_list_copy(partitions),
-			(void *)rd_kafka_topic_partition_list_destroy);
+		rko->rko_u.assign.partitions =
+                        rd_kafka_topic_partition_list_copy(partitions);
 
         return rd_kafka_op_err_destroy(
                 rd_kafka_op_req(&rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
@@ -133,8 +129,8 @@ rd_kafka_assignment (rd_kafka_t *rk,
 
         err = rko->rko_err;
 
-        *partitions = rko->rko_payload;
-        rko->rko_payload = NULL;
+        *partitions = rko->rko_u.assign.partitions;
+	rko->rko_u.assign.partitions = NULL;
         rd_kafka_op_destroy(rko);
 
         if (!*partitions && !err) {
@@ -161,8 +157,8 @@ rd_kafka_subscription (rd_kafka_t *rk,
 
         err = rko->rko_err;
 
-        *topics = rko->rko_payload;
-        rko->rko_payload = NULL;
+        *topics = rko->rko_u.subscribe.topics;
+	rko->rko_u.subscribe.topics = NULL;
         rd_kafka_op_destroy(rko);
 
         if (!*topics && !err) {

@@ -60,12 +60,13 @@ int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 
 	case RD_KAFKA_EVENT_DR:
 		rko->rko_rk = rk;
-		rd_dassert(!(rko->rko_flags & RD_KAFKA_OP_F_MSGQ2));
-		rd_kafka_msgq_init(&rko->rko_msgq2);
-		rko->rko_flags |= RD_KAFKA_OP_F_MSGQ2;
+		rd_dassert(!rko->rko_u.dr.do_purge2);
+		rd_kafka_msgq_init(&rko->rko_u.dr.msgq2);
+		rko->rko_u.dr.do_purge2 = 1;
 		return 1;
 
 	case RD_KAFKA_EVENT_REBALANCE:
+	case RD_KAFKA_EVENT_ERROR:
 		return 1;
 
 	default:

@@ -45,7 +45,7 @@ typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 #define RD_KAFKA_OP_F_CRC         0x8  /* rkbuf: Perform CRC calculation */
 #define RD_KAFKA_OP_F_BLOCKING    0x10 /* rkbuf: blocking protocol request */
 #define RD_KAFKA_OP_F_REPROCESS   0x20 /* cgrp: Reprocess at a later time. */
-#define RD_KAFKA_OP_F_MSGQ2       0x40 /* rko_msgq2 is initialized */
+
 
 typedef enum {
         RD_KAFKA_OP_NONE,
@@ -79,82 +79,127 @@ typedef enum {
         RD_KAFKA_OP_COORD_QUERY,     /* Query for coordinator */
         RD_KAFKA_OP_SUBSCRIBE,       /* New subscription */
         RD_KAFKA_OP_ASSIGN,          /* New assignment */
-        RD_KAFKA_OP_GET_SUBSCRIPTION,/* Get current subscription */
-        RD_KAFKA_OP_GET_ASSIGNMENT,  /* Get current assignment */
+        RD_KAFKA_OP_GET_SUBSCRIPTION,/* Get current subscription.
+				      * Reuses u.subscribe */
+        RD_KAFKA_OP_GET_ASSIGNMENT,  /* Get current assignment.
+				      * Reuses u.assign */
 	RD_KAFKA_OP_THROTTLE,        /* Throttle info */
-        RD_KAFKA_OP_CALLBACK,        /* Calls rko_op_cb */
 	RD_KAFKA_OP_NAME,            /* Request name */
+	RD_KAFKA_OP_OFFSET_RESET,    /* Offset reset */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
-
 /* Flags used with op_type_t */
-#define RD_KAFKA_OP_REPLY  (1 << 31)  /* Reply op. */
+#define RD_KAFKA_OP_CB        (1 << 30)  /* Callback op. */
+#define RD_KAFKA_OP_REPLY     (1 << 31)  /* Reply op. */
+#define RD_KAFKA_OP_FLAGMASK  (RD_KAFKA_OP_CB | RD_KAFKA_OP_REPLY)
 
+
+#define RD_KAFKA_OP_TYPE_ASSERT(rko,type) \
+	rd_kafka_assert(NULL, (rko)->rko_type == (type) && # type)
 
 typedef struct rd_kafka_op_s {
 	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
 
 	rd_kafka_op_type_t    rko_type;   /* Internal op type */
-	rd_kafka_event_type_t rko_evtype; /* Public event type */
-	int                rko_flags;  /* See RD_KAFKA_OP_F_... above */
+	rd_kafka_event_type_t rko_evtype;
+	int                   rko_flags;  /* See RD_KAFKA_OP_F_... above */
+	int32_t               rko_version;
+	rd_kafka_resp_err_t   rko_err;
+	int32_t               rko_len;    /* Depends on type, typically the
+					   * message length. */
+
+	shptr_rd_kafka_toppar_t *rko_rktp;
 
         /* Generic fields */
-	rd_kafka_msgq_t rko_msgq;
-	rd_kafka_msgq_t rko_msgq2;
         rd_kafka_q_t   *rko_replyq;    /* Indicates request: enq reply
                                         * on this queue. Refcounted. */
-        int             rko_intarg;    /* Generic integer argument */
 	rd_kafka_t     *rko_rk;
 
-        /* RD_KAFKA_OP_CALLBACK */
+        /* RD_KAFKA_OP_CB */
         void          (*rko_op_cb) (rd_kafka_t *rk, struct rd_kafka_op_s *rko);
 
-        void          (*rko_free_cb) (void *);/* Callback to free rko_payload if
-                                               * RD_KAFKA_OP_F_FREE flag is set.
-                                               * Default is rd_free() */
+	union {
+		struct {
+			rd_kafka_buf_t *rkbuf;
+			rd_kafka_msg_t  rkm;
+			int evidx;
+		} fetch;
 
-	/* For PRODUCE */
-	rd_kafka_msg_t *rko_rkm;
+		struct {
+			rd_kafka_topic_partition_list_t *partitions;
+			int do_free; /* free .partitions on destroy() */
+		} offset_fetch;
 
-	/* For ERR */
-#define rko_err     rko_rkmessage.err
-#define rko_payload rko_rkmessage.payload
-#define rko_len     rko_rkmessage.len
+		struct {
+			rd_kafka_topic_partition_list_t *partitions;
+		} offset_commit;
 
-	/* For FETCH */
-	rd_kafka_message_t rko_rkmessage;
-	rd_kafka_buf_t    *rko_rkbuf;
-	rd_kafka_timestamp_type_t rko_tstype;
-	int64_t            rko_timestamp;
+		struct {
+			rd_kafka_topic_partition_list_t *topics;
+		} subscribe; /* also used for GET_SUBSCRIPTION */
 
-	/* For METADATA */
-#define rko_rkt         rko_rkmessage.rkt
-#define rko_all_topics  rko_intarg
-#define rko_reason      rko_rkmessage.payload
-        struct rd_kafka_metadata *rko_metadata;
+		struct {
+			rd_kafka_topic_partition_list_t *partitions;
+		} assign; /* also used for GET_ASSIGNMENT */
 
-	/* For STATS */
-#define rko_json      rko_rkmessage.payload
-#define rko_json_len  rko_rkmessage.len
+		struct {
+			rd_kafka_topic_partition_list_t *partitions;
+		} rebalance;
 
-        /* For OFFSET_COMMIT, FETCH_START */
-        shptr_rd_kafka_toppar_t *rko_rktp;
-#define rko_offset    rko_rkmessage.offset
+		struct {
+			char *str;
+		} name;
 
-        /* For CGRP_DELEGATE */
-        struct rd_kafka_cgrp_s *rko_cgrp;
+		struct {
+			int64_t offset;
+			char *errstr;
+		} err;  /* used for ERR and CONSUMER_ERR */
 
-        /* For FETCH_START, FETCH */
-#define rko_version   rko_intarg
+		struct {
+			int throttle_time;
+			int32_t nodeid;
+			char *nodename;
+		} throttle;
 
-        /* For BROKER_UPDATE and THROTTLE */
-#define rko_nodename  rko_rkmessage.payload
-#define rko_nodeid    rko_rkmessage.partition
+		struct {
+			char *json;
+			size_t json_len;
+		} stats;
 
-	/* For THROTTLE */
-#define rko_throttle_time rko_rkmessage.offset
+		struct {
+			rd_kafka_buf_t *rkbuf;
+		} xbuf; /* XMIT_BUF and RECV_BUF */
 
+		struct {
+			rd_kafka_topic_t *rkt;
+			int  all_topics;
+			char reason[128];
+			struct rd_kafka_metadata *metadata;
+		} metadata;
+
+		struct {
+			rd_kafka_topic_t *rkt;
+			rd_kafka_msgq_t msgq;
+			rd_kafka_msgq_t msgq2;
+			int do_purge2;
+		} dr;
+
+		struct {
+			int32_t nodeid;
+			char    nodename[RD_KAFKA_NODENAME_SIZE];
+		} node;
+
+		struct {
+			int64_t offset;
+			char *reason;
+		} offset_reset;
+
+		struct {
+			int64_t offset;
+			struct rd_kafka_cgrp_s *rkcg;
+		} fetch_start; /* reused for SEEK */
+	} rko_u;
 } rd_kafka_op_t;
 
 TAILQ_HEAD(rd_kafka_op_head_s, rd_kafka_op_s);
@@ -165,50 +210,26 @@ TAILQ_HEAD(rd_kafka_op_head_s, rd_kafka_op_s);
 const char *rd_kafka_op2str (rd_kafka_op_type_t type);
 void rd_kafka_op_destroy (rd_kafka_op_t *rko);
 rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type);
-rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig);
-void rd_kafka_op_payload_move (rd_kafka_op_t *dst, rd_kafka_op_t *src);
-
-/**
- * Sets the op payload to \p payload and if \p free_cb is set also
- * assigns it as the free callback as well as sets the RD_KAFKA_OP_F_FREE flag.
- */
-static RD_UNUSED void rd_kafka_op_payload_set (rd_kafka_op_t *rko,
-                                               void *payload,
-                                               void (*free_cb) (void *)) {
-        rko->rko_payload = payload;
-        if (free_cb) {
-                rko->rko_flags |= RD_KAFKA_OP_F_FREE;
-                rko->rko_free_cb = free_cb;
-        }
-}
+rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
+				      rd_kafka_resp_err_t err);
 
 
-void rd_kafka_op_app_reply2 (rd_kafka_t *rk, rd_kafka_op_t *rko);
-void rd_kafka_op_app_reply (rd_kafka_q_t *rkq,
-                            rd_kafka_op_type_t type,
-                            rd_kafka_resp_err_t err,
-                            int32_t version,
-                            void *payload, size_t len);
 
-int rd_kafka_op_reply (rd_kafka_op_t *orig_rko,
-                       rd_kafka_resp_err_t err,
-                       void *payload, size_t len, void (*free_cb) (void *));
-void rd_kafka_op_sprintf (rd_kafka_op_t *rko, const char *fmt, ...);
+int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 
-void rd_kafka_op_err (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-		      const char *fmt, ...);
+#define rd_kafka_op_err(rk,err,fmt...) do {				\
+		if (!(rk)->rk_conf.error_cb) {				\
+			rd_kafka_log(rk, LOG_ERR, "ERROR", fmt);	\
+			break;						\
+		}							\
+		rd_kafka_q_op_err(&(rk)->rk_rep, RD_KAFKA_OP_ERR, err, 0, \
+				  NULL, 0, fmt);			\
+	} while (0)
+
 void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,
                         rd_kafka_resp_err_t err, int32_t version,
-                        const char *fmt, ...);
-void rd_kafka_op_app (rd_kafka_q_t *rkq, rd_kafka_op_type_t type,
-                      int op_flags, rd_kafka_toppar_t *rktp,
-                      rd_kafka_resp_err_t err,
-                      void *payload, size_t len,
-                      void (*free_cb) (void *));
-void rd_kafka_op_app_fmt (rd_kafka_q_t *rkq, rd_kafka_op_type_t type,
-                          rd_kafka_toppar_t *rktp,
-                          rd_kafka_resp_err_t err,
-                          const char *fmt, ...);
+                        rd_kafka_toppar_t *rktp, int64_t offset,
+			const char *fmt, ...);
 rd_kafka_op_t *rd_kafka_op_req (rd_kafka_q_t *destq,
                                 rd_kafka_op_t *rko,
                                 int timeout_ms);
@@ -220,5 +241,7 @@ void rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_op_t *rko);
 void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
 				rd_kafka_q_t *rkq,
 				int throttle_time);
+
+int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko);
 
 extern rd_atomic32_t rd_kafka_op_cnt;

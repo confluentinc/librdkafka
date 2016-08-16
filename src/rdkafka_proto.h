@@ -421,3 +421,6 @@ struct rd_kafka_TopicMetadata {
 
 typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 
+
+#define RD_KAFKA_NODENAME_SIZE  128
+

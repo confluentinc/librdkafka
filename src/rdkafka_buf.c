@@ -342,7 +342,7 @@ void rd_kafka_bufq_purge_connsetup (rd_kafka_broker_t *rkb,
 size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 				   int64_t Offset, int8_t MagicByte,
 				   int8_t Attributes, int64_t Timestamp,
-				   const rd_kafkap_bytes_t *key,
+				   const void *key, int32_t key_len,
 				   const void *payload, int32_t len,
 				   int *outlenp) {
 	int32_t MessageSize;
@@ -357,8 +357,8 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 
 	/* MessageSize */
 	MessageSize = (4 + 1 + 1 + /* Crc+MagicByte+Attributes */
-		       RD_KAFKAP_BYTES_SIZE(key) +
-		       4 /* Message.ValueLength */ +
+		       4 /* KeyLength */ + key_len +
+		       4 /* ValueLength */ +
 		       len /* Value length */);
 	if (MagicByte == 1)
 		MessageSize += 8; /* Timestamp i64 */
@@ -384,11 +384,15 @@ size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 	if (MagicByte == 1)
 		rd_kafka_buf_write_i64(rkbuf, Timestamp);
 	
-	/* Push write-buffer onto iovec stack */
-        rd_kafka_buf_autopush(rkbuf);
-
 	/* Message Key */
-	rd_kafka_buf_push_kbytes(rkbuf, key);
+	if (key) {
+		rd_kafka_buf_write_i32(rkbuf, key_len);
+		/* Push write-buffer onto iovec stack */
+		rd_kafka_buf_autopush(rkbuf);
+		rd_kafka_buf_push(rkbuf, key, key_len);
+	} else {
+		rd_kafka_buf_write_i32(rkbuf, RD_KAFKAP_BYTES_LEN_NULL);
+	}
 
 	/* Value(payload) length */
 	rd_kafka_buf_write_i32(rkbuf, payload ? len : RD_KAFKAP_BYTES_LEN_NULL);
@@ -441,8 +445,8 @@ int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         rd_kafka_buf_t *request, *response;
 
-        request = rko->rko_rkbuf;
-        rko->rko_rkbuf = NULL;
+        request = rko->rko_u.xbuf.rkbuf;
+        rko->rko_u.xbuf.rkbuf = NULL;
 
 	if (request->rkbuf_replyq) { /* NULL on op_destroy() */
 		rd_kafka_q_destroy(request->rkbuf_replyq);
@@ -501,7 +505,7 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
                  * if q_enq() fails and we dont want the rkbuf gone in that
                  * case. */
                 rd_kafka_buf_keep(request);
-                rko->rko_rkbuf = request;
+                rko->rko_u.xbuf.rkbuf = request;
 
                 rko->rko_err = err;
 

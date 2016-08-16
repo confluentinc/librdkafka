@@ -57,62 +57,50 @@ void rd_kafka_event_destroy (rd_kafka_event_t *rkev) {
 
 
 /**
- * @brief RD_KAFKA_EVENT_DR
- * @returns the next message from the dr queue
+ * @returns the next message from the event's message queue.
+ * @remark messages will be freed automatically when event is destroyed.
  */
-static const rd_kafka_message_t *
-rd_kafka_event_dr_message_next (rd_kafka_event_t *rkev) {
+const rd_kafka_message_t *
+rd_kafka_event_message_next (rd_kafka_event_t *rkev) {
 	rd_kafka_op_t *rko = rkev;
 	rd_kafka_msg_t *rkm;
+	rd_kafka_msgq_t *rkmq, *rkmq2;
 
-	/* Delivery report:
-	 * call application DR callback for each message. */
-
-	if (unlikely(!(rkm = TAILQ_FIRST(&rko->rko_msgq.rkmq_msgs))))
-		return NULL;
-
-	rd_kafka_msgq_deq(&rko->rko_msgq, rkm, 1);
-
-	/* Put rkm on secondary message queue which will be purged later. */
-	rd_kafka_msgq_enq(&rko->rko_msgq2, rkm);
-
-	/* Convert private rkm to public rkmessage */
-        rko->rko_rkmessage.payload    = rkm->rkm_payload;
-        rko->rko_rkmessage.len        = rkm->rkm_len;
-        rko->rko_rkmessage.err        = rko->rko_err;
-        rko->rko_rkmessage.offset     = rkm->rkm_offset;
-        rko->rko_rkmessage.rkt        = rko->rko_rkt;
-        rko->rko_rkmessage.partition  = rkm->rkm_partition;
-        rko->rko_rkmessage._private   = rkm->rkm_opaque;
-
-	if (rkm->rkm_key && !RD_KAFKAP_BYTES_IS_NULL(rkm->rkm_key)) {
-		rko->rko_rkmessage.key = (void *)rkm->rkm_key->data;
-		rko->rko_rkmessage.key_len = RD_KAFKAP_BYTES_LEN(rkm->rkm_key);
-	} else {
-		rko->rko_rkmessage.key = NULL;
-		rko->rko_rkmessage.key_len = 0;
-	}
-
-	return &rko->rko_rkmessage;
-}
-
-const rd_kafka_message_t *rd_kafka_event_message (rd_kafka_event_t *rkev) {
-	switch (rkev->rko_evtype)
+	switch (rkev->rko_type)
 	{
-	case RD_KAFKA_EVENT_DR:
-		return rd_kafka_event_dr_message_next(rkev);
-	case RD_KAFKA_EVENT_FETCH:
-		return rd_kafka_message_get(rkev);
+	case RD_KAFKA_OP_DR:
+		rkmq = &rko->rko_u.dr.msgq;
+		rkmq2 = &rko->rko_u.dr.msgq2;
+		break;
+
+	case RD_KAFKA_OP_FETCH:
+		/* Just one message */
+		if (rko->rko_u.fetch.evidx++ > 0)
+			return NULL;
+
+		return &rko->rko_u.fetch.rkm.rkm_rkmessage;
+
 	default:
 		return NULL;
 	}
+
+	if (unlikely(!(rkm = TAILQ_FIRST(&rkmq->rkmq_msgs))))
+		return NULL;
+
+	rd_kafka_msgq_deq(rkmq, rkm, 1);
+
+	/* Put rkm on secondary message queue which will be purged later. */
+	rd_kafka_msgq_enq(rkmq2, rkm);
+
+	return &rkm->rkm_rkmessage;
 }
+
 
 size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev) {
 	switch (rkev->rko_evtype)
 	{
 	case RD_KAFKA_EVENT_DR:
-		return rd_atomic32_get(&rkev->rko_msgq.rkmq_msg_cnt);
+		return rd_atomic32_get(&rkev->rko_u.dr.msgq.rkmq_msg_cnt);
 	case RD_KAFKA_EVENT_FETCH:
 		return 1;
 	default:
@@ -147,5 +135,31 @@ rd_kafka_event_topic_partition_list (rd_kafka_event_t *rkev) {
 	if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_REBALANCE))
 		return NULL;
 
-	return (rd_kafka_topic_partition_list_t *)rkev->rko_payload;
+	return rkev->rko_u.rebalance.partitions;
+}
+
+
+rd_kafka_topic_partition_t *
+rd_kafka_event_topic_partition (rd_kafka_event_t *rkev) {
+	rd_kafka_topic_partition_t *rktpar;
+
+	if (unlikely(!rkev->rko_rktp))
+		return NULL;
+
+	rktpar = rd_kafka_topic_partition_new_from_rktp(rkev->rko_rktp);
+
+	switch (rkev->rko_type)
+	{
+	case RD_KAFKA_OP_ERR:
+	case RD_KAFKA_OP_CONSUMER_ERR:
+		rktpar->offset = rkev->rko_u.err.offset;
+		break;
+	default:
+		break;
+	}
+
+	rktpar->err = rkev->rko_err;
+
+	return rktpar;
+
 }

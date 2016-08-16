@@ -230,10 +230,7 @@ static RD_INLINE rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
         if (unlikely(!rko))
                 return NULL;
 
-        if (unlikely(rko->rko_version && rko->rko_rktp &&
-                     rko->rko_version <
-                     rd_atomic32_get(&rd_kafka_toppar_s2i(rko->rko_rktp)->
-                                     rktp_version))) {
+        if (unlikely(rd_kafka_op_version_outdated(rko))) {
 		rd_kafka_q_deq0(rkq, rko);
                 rd_kafka_op_destroy(rko);
                 return NULL;
@@ -438,8 +435,10 @@ void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
 
 	if (likely((rko = (rd_kafka_op_t *)rkmessage->_private) != NULL))
 		rd_kafka_op_destroy(rko);
-	else
-		rd_free(rkmessage);
+	else {
+		rd_kafka_msg_t *rkm = rd_kafka_message2msg(rkmessage);
+		rd_kafka_msg_destroy(NULL, rkm);
+	}
 }
 
 
@@ -451,18 +450,44 @@ rd_kafka_message_t *rd_kafka_message_new (void) {
 
 rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 	rd_kafka_message_t *rkmessage;
+	rd_kafka_toppar_t *rktp = NULL;
 
-	if (rko) {
-		rkmessage = &rko->rko_rkmessage;
-		rkmessage->_private = rko;
+	if (!rko)
+		return rd_kafka_message_new(); /* empty */
 
-		if (!rkmessage->rkt && rko->rko_rktp)
+	switch (rko->rko_type)
+	{
+	case RD_KAFKA_OP_FETCH:
+		/* Use embedded rkmessage */
+		rkmessage = &rko->rko_u.fetch.rkm.rkm_rkmessage;
+		break;
+
+	case RD_KAFKA_OP_CONSUMER_ERR:
+		rkmessage = rd_kafka_message_new();
+		rkmessage->err = rko->rko_err;
+		rkmessage->payload = rko->rko_u.err.errstr;
+		rkmessage->offset  = rko->rko_u.err.offset;
+		break;
+
+	default:
+		rd_kafka_assert(NULL, !*"unhandled optype");
+		break;
+	}
+
+	rkmessage->_private = rko;
+
+	if (rko->rko_rktp) {
+		rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+
+		if (!rkmessage->rkt)
 			rkmessage->rkt =
-				rd_kafka_topic_keep_a(
-					rd_kafka_toppar_s2i(rko->rko_rktp)->
-					rktp_rkt);
-	} else
-                rkmessage = rd_kafka_message_new();
+				rd_kafka_topic_keep_a(rktp->rktp_rkt);
+
+		rkmessage->partition = rktp->rktp_partition;
+
+	} else {
+		rkmessage->partition = RD_KAFKA_PARTITION_UA;
+	}
 
 	return rkmessage;
 }
@@ -470,17 +495,18 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 
 int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
 				    rd_kafka_timestamp_type_t *tstype) {
-	const rd_kafka_op_t *rko = rkmessage->_private;
+	rd_kafka_msg_t *rkm;
 
-	if (!rko || rko->rko_err) {
+	if (rkmessage->err) {
 		*tstype = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
-		return -1;;
+		return -1;
 	}
 
+	rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
 
-	*tstype = rko->rko_tstype;
+	*tstype = rkm->rkm_tstype;
 
-	return rko->rko_timestamp;
+	return rkm->rkm_timestamp;
 }
 
 
@@ -534,10 +560,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 
                 mtx_unlock(&rkq->rkq_lock);
 
-                if (rko->rko_version && rko->rko_rktp &&
-                    rko->rko_version <
-                    rd_atomic32_get(&rd_kafka_toppar_s2i(rko->rko_rktp)->
-                                    rktp_version)) {
+		if (rd_kafka_op_version_outdated(rko)) {
                         /* Outdated op, put on discard queue */
                         TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
                         continue;
@@ -551,15 +574,15 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                 }
 
 		/* Auto-commit offset, if enabled. */
-		if (!rko->rko_err) {
+		if (!rko->rko_err && rko->rko_type == RD_KAFKA_OP_FETCH) {
                         rd_kafka_toppar_t *rktp;
                         rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
 			rd_kafka_toppar_lock(rktp);
-			rktp->rktp_app_offset = rko->rko_offset+1;
+			rktp->rktp_app_offset = rko->rko_u.fetch.rkm.rkm_offset+1;
                         if (rktp->rktp_cgrp &&
 			    rk->rk_conf.enable_auto_offset_store)
                                 rd_kafka_offset_store0(rktp,
-                                                       rko->rko_offset+1,
+						       rktp->rktp_app_offset,
                                                        0/* no lock */);
 			rd_kafka_toppar_unlock(rktp);
                 }
@@ -671,7 +694,10 @@ void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
 	while ((rko = next)) {
 		next = TAILQ_NEXT(next, rko_link);
 
-		if (rko->rko_offset < min_offset &&
+		if (unlikely(rko->rko_type != RD_KAFKA_OP_FETCH))
+			continue;
+
+		if (rko->rko_u.fetch.rkm.rkm_offset < min_offset &&
 		    rko->rko_err != RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED) {
 			adj_len++;
 			adj_size += rko->rko_len;
@@ -680,7 +706,7 @@ void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
 			continue;
 		}
 
-		rko->rko_offset += base_offset;
+		rko->rko_u.fetch.rkm.rkm_offset += base_offset;
 	}
 
 

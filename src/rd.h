@@ -204,6 +204,11 @@ static RD_INLINE RD_UNUSED void *rd_memdup (const void *src, size_t size) {
 	return dst;
 }
 
+/**
+ * @brief Memset &OBJ to 0, does automatic sizeof(OBJ).
+ */
+#define RD_MEMZERO(OBJ) memset(&(OBJ), 0, sizeof(OBJ))
+
 
 /**
  * Generic refcnt interface
@@ -421,3 +426,6 @@ rd_shptr0_t *rd_shared_ptr_get0 (const char *func, int line,
 
 void rd_shared_ptrs_dump (void);
 #endif
+
+
+#define RD_IF_FREE(PTR,FUNC) do { if ((PTR)) FUNC(PTR); } while (0)

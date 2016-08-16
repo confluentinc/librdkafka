@@ -445,7 +445,10 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
                                      void *opaque) {
         rd_kafka_op_t *rko = opaque;
         rd_kafka_op_t *rko_reply;
-        rd_kafka_topic_partition_list_t *offsets = rko->rko_payload;
+        rd_kafka_topic_partition_list_t *offsets =
+		rko->rko_u.offset_fetch.partitions;
+
+	RD_KAFKA_OP_TYPE_ASSERT(rko, RD_KAFKA_OP_OFFSET_FETCH);
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* Termination, quick cleanup. */
@@ -458,7 +461,9 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
         rko_reply = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH|RD_KAFKA_OP_REPLY);
         rko_reply->rko_err = err;
         rko_reply->rko_version = rko->rko_version;
-        rd_kafka_op_payload_move(rko_reply, rko); /* move 'offsets' */
+	/* Move offset & partitions to reply op. */
+	rko_reply->rko_u.offset_fetch = rko->rko_u.offset_fetch;
+	RD_MEMZERO(rko->rko_u.offset_fetch);
 
 	/* If all partitions already had usable offsets then there
 	 * was no request sent and thus no reply, the offsets list is
@@ -1737,6 +1742,7 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
         rd_kafka_op_t *rko = opaque;
         struct rd_kafka_metadata *md = NULL;
         rd_kafka_q_t *replyq;
+	rd_kafka_itopic_t *rkt;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
 		   "===== Received metadata =====");
@@ -1744,6 +1750,11 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
 	/* Avoid metadata updates when we're terminating. */
 	if (rd_kafka_terminating(rkb->rkb_rk))
                 err = RD_KAFKA_RESP_ERR__DESTROY;
+
+	if (rko->rko_u.metadata.rkt)
+		rkt = rd_kafka_topic_a2i(rko->rko_u.metadata.rkt);
+	else
+		rkt = NULL;
 
 	if (unlikely(err)) {
 		/* FIXME: handle error */
@@ -1756,17 +1767,12 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                            "Metadata request failed: %s",
                            rd_kafka_err2str(err));
 	} else {
-		md = rd_kafka_parse_Metadata(rkb,
-                                             rko->rko_rkt ?
-                                             rd_kafka_topic_a2i(rko->rko_rkt):
-                                             NULL,
-                                             rkbuf);
+		md = rd_kafka_parse_Metadata(rkb, rkt, rkbuf);
 		if (!md)
 			err = RD_KAFKA_RESP_ERR__BAD_MSG;
         }
 
-        if (rko->rko_rkt) {
-                rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(rko->rko_rkt);
+        if (rkt) {
                 rd_kafka_topic_wrlock(rkt);
                 rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_QUERY;
                 rd_kafka_topic_wrunlock(rkt);
@@ -1777,7 +1783,7 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                  * Reuse requesting rko for the reply. */
                 rko->rko_replyq = NULL;
                 rko->rko_err = err;
-                rko->rko_metadata = md;
+                rko->rko_u.metadata.metadata = md;
                 rd_kafka_q_enq(replyq, rko);
                 /* Drop refcount to queue */
                 rd_kafka_q_destroy(replyq);

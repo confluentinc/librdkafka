@@ -39,20 +39,35 @@
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
-	rd_kafka_assert(rk, rd_atomic32_get(&rk->rk_producer.msg_cnt) > 0);
-	(void)rd_atomic32_sub(&rk->rk_producer.msg_cnt, 1);
+	if (rk && rk->rk_type == RD_KAFKA_PRODUCER) {
+		int r;
+		r = (int)rd_atomic32_sub(&rk->rk_producer.msg_cnt, 1);
+		rd_kafka_assert(rk, r >= 0);
+	}
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
 		rd_free(rkm->rkm_payload);
 
-	if (rkm->rkm_key)
-		rd_kafkap_bytes_destroy(rkm->rkm_key);
+	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE_KEY)
+		rd_free(rkm->rkm_key);
 
-	rd_free(rkm);
+	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE_RKM)
+		rd_free(rkm);
 }
 
+
+rd_kafka_msg_t *rd_kafka_msg_new_empty (void) {
+	rd_kafka_msg_t *rkm;
+	rkm = rd_calloc(1, sizeof(*rkm));
+	rkm->rkm_flags |= RD_KAFKA_MSG_F_FREE_RKM;
+	return rkm;
+}
+
+
 /**
- * Create a new message.
+ * @brief Create a new message.
+ *
+ * @remark Must only be used by producer code.
  *
  * Returns 0 on success or -1 on error.
  * Both errno and 'errp' are set appropriately.
@@ -91,14 +106,23 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 
 	/* Note: using rd_malloc here, not rd_calloc, so make sure all fields
 	 *       are properly set up. */
-	rkm = rd_malloc(mlen);
+	rkm                 = rd_malloc(mlen);
+	rkm->rkm_err        = 0;
+	rkm->rkm_flags     |= RD_KAFKA_MSG_F_FREE_RKM;
 	rkm->rkm_len        = len;
 	rkm->rkm_flags      = msgflags;
 	rkm->rkm_opaque     = msg_opaque;
-	rkm->rkm_key        = rd_kafkap_bytes_new(key, (int32_t) keylen);
+	if (key) {
+		rkm->rkm_key     = rd_memdup(key, keylen);
+		rkm->rkm_key_len = keylen;
+	} else {
+		rkm->rkm_key = NULL;
+		rkm->rkm_key_len = 0;
+	}
 	rkm->rkm_partition  = force_partition;
         rkm->rkm_offset     = 0;
 	rkm->rkm_timestamp  = utc_now / 1000;
+	rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_CREATE_TIME;
 
 	if (rkt->rkt_conf.message_timeout_ms == 0) {
 		rkm->rkm_ts_timeout = INT64_MAX;
@@ -430,9 +454,8 @@ int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
                                 app_rkt = rd_kafka_topic_keep_a(rkt);
                         partition = rkt->rkt_conf.
                                 partitioner(app_rkt,
-                                            rkm->rkm_key->data,
-                                            RD_KAFKAP_BYTES_LEN(rkm->
-                                                                rkm_key),
+                                            rkm->rkm_key,
+					    rkm->rkm_key_len,
                                             rkt->rkt_partition_cnt,
                                             rkt->rkt_conf.opaque,
                                             rkm->rkm_opaque);

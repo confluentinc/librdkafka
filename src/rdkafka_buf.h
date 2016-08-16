@@ -585,7 +585,7 @@ static RD_INLINE size_t rd_kafka_buf_write_bytes (rd_kafka_buf_t *rkbuf,
 size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
 				   int64_t Offset, int8_t MagicByte,
 				   int8_t Attributes, int64_t Timestamp,
-				   const rd_kafkap_bytes_t *key,
+				   const void *key, int32_t key_len,
 				   const void *payload, int32_t len,
 				   int *outlenp);
 

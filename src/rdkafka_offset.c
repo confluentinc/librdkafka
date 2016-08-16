@@ -352,9 +352,9 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
 	rko->rko_err = err;
-        rd_kafka_op_payload_set(rko,
-				rd_kafka_topic_partition_list_copy(offsets),
-                                (void *)rd_kafka_topic_partition_list_destroy);
+	if (offsets)
+		rko->rko_u.offset_commit.partitions =
+			rd_kafka_topic_partition_list_copy(offsets);
 	rd_kafka_q_enq(&rk->rk_rep, rko);
 }
 
@@ -369,7 +369,8 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
  */
 static void rd_kafka_offset_broker_commit_op_cb (rd_kafka_t *rk,
                                                  rd_kafka_op_t *rko) {
-        rd_kafka_topic_partition_list_t *offsets = rko->rko_payload;
+        rd_kafka_topic_partition_list_t *offsets =
+		rko->rko_u.offset_commit.partitions;
         shptr_rd_kafka_toppar_t *s_rktp;
         rd_kafka_toppar_t *rktp;
         rd_kafka_resp_err_t err;
@@ -500,9 +501,8 @@ rd_kafka_commit0 (rd_kafka_t *rk,
                 rd_kafka_q_keep(rko->rko_replyq);
 
         if (offsets)
-                rd_kafka_op_payload_set(
-                        rko, rd_kafka_topic_partition_list_copy(offsets),
-                        (void *)rd_kafka_topic_partition_list_destroy);
+		rko->rko_u.offset_commit.partitions =
+                        rd_kafka_topic_partition_list_copy(offsets);
 
         rd_kafka_q_enq(&rkcg->rkcg_ops, rko);
 
@@ -639,11 +639,12 @@ static rd_kafka_resp_err_t rd_kafka_offset_file_term (rd_kafka_toppar_t *rktp) {
 }
 
 static void rd_kafka_offset_reset_op_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
-	rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+	rd_kafka_toppar_t *rktp =
+		rd_kafka_toppar_s2i(rko->rko_rktp);
 	rd_kafka_toppar_lock(rktp);
         rd_kafka_offset_reset(rktp,
-                              rko->rko_offset,
-                              rko->rko_err, rko->rko_payload);
+                              rko->rko_u.offset_reset.offset,
+                              rko->rko_err, rko->rko_u.offset_reset.reason);
 	rd_kafka_toppar_unlock(rktp);
 }
 
@@ -660,14 +661,13 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 
         /* Enqueue op for toppar handler thread if we're on the wrong thread. */
         if (!thrd_is_current(rktp->rktp_rkt->rkt_rk->rk_thread)) {
-                rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_CALLBACK);
+                rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_RESET |
+						     RD_KAFKA_OP_CB);
                 rko->rko_op_cb = rd_kafka_offset_reset_op_cb;
-                rko->rko_rktp = rd_kafka_toppar_keep(rktp);
                 rko->rko_err = err;
-                rko->rko_offset = err_offset;
-                rko->rko_flags |= RD_KAFKA_OP_F_FREE;
-                rko->rko_payload = rd_strdup(reason);
-                rko->rko_len = strlen(reason);
+                rko->rko_rktp = rd_kafka_toppar_keep(rktp);
+                rko->rko_u.offset_reset.offset = err_offset;
+		rko->rko_u.offset_reset.reason = rd_strdup(reason);
                 rd_kafka_q_enq(&rktp->rktp_ops, rko);
                 return;
         }
@@ -681,13 +681,10 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 		/* Error, auto.offset.reset tells us to error out. */
 		rko = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
 
-		rko->rko_err                 = err;
-		rko->rko_rkmessage.offset    = err_offset;
-		rko->rko_rkmessage.partition = rktp->rktp_partition;
-		rko->rko_payload             = rd_strdup(reason);
-		rko->rko_len                 = strlen(rko->rko_payload);
-		rko->rko_flags              |= RD_KAFKA_OP_F_FREE;
-                rko->rko_rktp                = rd_kafka_toppar_keep(rktp);
+		rko->rko_err               = err;
+		rko->rko_u.err.offset      = err_offset;
+		rko->rko_u.err.errstr      = rd_strdup(reason);
+                rko->rko_rktp        = rd_kafka_toppar_keep(rktp);
 
 		rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
                 rd_kafka_toppar_set_fetch_state(

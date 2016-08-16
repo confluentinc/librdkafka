@@ -44,24 +44,56 @@
 #define RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME  (1 << 3)
 
 
+
 typedef struct rd_kafka_msg_s {
+	rd_kafka_message_t rkm_rkmessage;  /* MUST be first field */
+#define rkm_len               rkm_rkmessage.len
+#define rkm_payload           rkm_rkmessage.payload
+#define rkm_opaque            rkm_rkmessage._private
+#define rkm_partition         rkm_rkmessage.partition
+#define rkm_offset            rkm_rkmessage.offset
+#define rkm_key               rkm_rkmessage.key
+#define rkm_key_len           rkm_rkmessage.key_len
+#define rkm_err               rkm_rkmessage.err
+
 	TAILQ_ENTRY(rd_kafka_msg_s)  rkm_link;
+
 	int        rkm_flags;
-	size_t     rkm_len;
-	void      *rkm_payload;
-	void      *rkm_opaque;
-	int32_t    rkm_partition;  /* partition specified */
-	rd_kafkap_bytes_t *rkm_key;
-        int64_t    rkm_offset;
+	/* @remark These additional flags must not collide with
+	 *         the RD_KAFKA_MSG_F_* flags in rdkafka.h */
+#define RD_KAFKA_MSG_F_FREE_RKM     0x10000 /* msg_t is allocated */
+#define RD_KAFKA_MSG_F_FREE_KEY     0x20000 /* key is allocated */
+
 	int64_t    rkm_timestamp;  /* Message format V1.
 				    * Meaning of timestamp depends on
 				    * message Attribute LogAppendtime (broker)
 				    * or CreateTime (producer).
 				    * Unit is milliseconds since epoch (UTC).*/
-	rd_ts_t    rkm_ts_timeout;
+	rd_kafka_timestamp_type_t rkm_tstype; /* rkm_timestamp type */
+	union {
+		struct {
+			rd_ts_t ts_timeout;
+		} producer;
+#define rkm_ts_timeout rkm_u.producer.ts_timeout
+		struct {
+		} consumer;
+	} rkm_u;
 } rd_kafka_msg_t;
 
 TAILQ_HEAD(rd_kafka_msg_head_s, rd_kafka_msg_s);
+
+
+
+/**
+ * @returns the enveloping rd_kafka_msg_t pointer for a
+ *          wrapped rd_kafka_message_t.
+ */
+static RD_INLINE RD_UNUSED
+rd_kafka_msg_t *rd_kafka_message2msg (rd_kafka_message_t *rkmessage) {
+	return (rd_kafka_msg_t *)rkmessage;
+}
+
+
 
 typedef struct rd_kafka_msgq_s {
 	TAILQ_HEAD(, rd_kafka_msg_s) rkmq_msgs;
@@ -84,6 +116,8 @@ static RD_INLINE RD_UNUSED int rd_kafka_msgq_len (rd_kafka_msgq_t *rkmq) {
 
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm);
+
+rd_kafka_msg_t *rd_kafka_msg_new_empty (void);
 
 int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      int msgflags,

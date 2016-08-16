@@ -1895,7 +1895,7 @@ struct _query_wmark_offsets_state {
 	const char *topic;
 	int32_t partition;
 	int64_t offsets[2];
-	size_t  cnt;
+	int     offidx;  /* next offset to set from response */
 	rd_ts_t ts_end;
 };
 
@@ -1906,10 +1906,11 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
 						  rd_kafka_buf_t *request,
 						  void *opaque) {
 	struct _query_wmark_offsets_state *state = opaque;
+	size_t sz = 1;
 
 	err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request,
 				     state->topic, state->partition,
-				     state->offsets, &state->cnt);
+				     &state->offsets[state->offidx], &sz);
 	if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
 		return; /* Retrying */
 
@@ -1926,7 +1927,13 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
 		/* FALLTHRU */
 	}
 
-	state->err = err;
+	if (sz == 0) /* Partition not seen in response. */
+		err = RD_KAFKA_RESP_ERR__BAD_MSG;
+
+	state->offidx++;
+
+	if (err || state->offidx == 2) /* Error or Done */
+		state->err = err;
 }
 
 
@@ -1969,17 +1976,23 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 
         replyq = rd_kafka_q_new(rk);
 
+	/* Due to KAFKA-1588 we need to send a request for each wanted offset,
+	 * in this case one for the low watermark and one for the high. */
 	state.topic = topic;
 	state.partition = partition;
 	state.offsets[0] = RD_KAFKA_OFFSET_BEGINNING;
 	state.offsets[1] = RD_KAFKA_OFFSET_END;
-	state.cnt = 2;
+	state.offidx = 0;
 	state.err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
 	state.ts_end = ts_end;
 
-	rd_kafka_OffsetRequest(rkb, topic, partition, state.offsets, state.cnt,
+	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[0], 1,
 			       0, replyq, rd_kafka_query_wmark_offsets_resp_cb,
 			       &state);
+	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[1], 1,
+			       0, replyq, rd_kafka_query_wmark_offsets_resp_cb,
+			       &state);
+
         rd_kafka_broker_destroy(rkb);
 
         /* Wait for reply (or timeout) */
@@ -1992,10 +2005,10 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 
 	if (state.err)
 		return state.err;
-	else if (state.cnt == 0 || state.cnt > 2)
+	else if (state.offidx != 2)
 		return RD_KAFKA_RESP_ERR__FAIL;
 
-	/* Broker may return offsets in no parcitular order. */
+	/* We are not certain about the returned order. */
 	if (state.offsets[0] < state.offsets[1]) {
 		*low = state.offsets[0];
 		*high  = state.offsets[1];

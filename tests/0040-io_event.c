@@ -91,6 +91,9 @@ int main_0040_io_event (int argc, char **argv) {
 	
 	rd_kafka_queue_io_event_enable(queue, fds[1], "1", 1);
 
+	pfd.fd = fds[0];
+	pfd.events = POLLIN;
+	pfd.revents = 0;
 
 	/**
 	 * 1) Wait for rebalance event

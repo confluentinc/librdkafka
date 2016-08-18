@@ -154,6 +154,7 @@ typedef struct rd_kafka_op_s {
 		struct {
 			int64_t offset;
 			char *errstr;
+			rd_kafka_msg_t rkm;
 		} err;  /* used for ERR and CONSUMER_ERR */
 
 		struct {

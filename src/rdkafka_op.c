@@ -122,6 +122,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 	switch (rko->rko_type & ~RD_KAFKA_OP_REPLY)
 	{
 	case RD_KAFKA_OP_FETCH:
+		rd_kafka_msg_destroy(NULL, &rko->rko_u.fetch.rkm);
 		/* Decrease refcount on rkbuf to eventually rd_free shared buf*/
 		if (rko->rko_u.fetch.rkbuf)
 			rd_kafka_buf_handle_op(rko, RD_KAFKA_RESP_ERR__DESTROY);
@@ -164,6 +165,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 	case RD_KAFKA_OP_ERR:
 	case RD_KAFKA_OP_CONSUMER_ERR:
 		RD_IF_FREE(rko->rko_u.err.errstr, rd_free);
+		rd_kafka_msg_destroy(NULL, &rko->rko_u.err.rkm);
 		break;
 
 		break;

@@ -47,6 +47,9 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 			1, rkm->rkm_len);
 	}
 
+	if (likely(rkm->rkm_rkmessage.rkt != NULL))
+		rd_kafka_topic_destroy(rkm->rkm_rkmessage.rkt);
+
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
 		rd_free(rkm->rkm_payload);
 
@@ -84,9 +87,8 @@ rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
 	 *       are properly set up. */
 	rkm                 = rd_malloc(mlen);
 	rkm->rkm_err        = 0;
-	rkm->rkm_flags      = RD_KAFKA_MSG_F_FREE_RKM;
+	rkm->rkm_flags      = RD_KAFKA_MSG_F_FREE_RKM | msgflags;
 	rkm->rkm_len        = len;
-	rkm->rkm_flags      = msgflags;
 	rkm->rkm_opaque     = msg_opaque;
 	rkm->rkm_rkmessage.rkt = rd_kafka_topic_keep_a(rkt);
 
@@ -167,10 +169,9 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 	}
 
 
-	rkm = rd_kafka_msg_new00(rkt, force_partition, msgflags,
+	rkm = rd_kafka_msg_new00(rkt, force_partition,
+				 msgflags|RD_KAFKA_MSG_F_ACCOUNT /* curr_msgs_add() */,
 				 payload, len, key, keylen, msg_opaque);
-
-	rkm->rkm_flags     |= RD_KAFKA_MSG_F_ACCOUNT; /* curr_msg_add() */
 
 	rkm->rkm_timestamp  = utc_now / 1000;
 	rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_CREATE_TIME;

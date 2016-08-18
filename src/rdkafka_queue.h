@@ -3,6 +3,10 @@
 #include "rdkafka_op.h"
 #include "rdkafka_int.h"
 
+#ifdef _MSC_VER
+#include <io.h> /* for _write() */
+#endif
+
 
 TAILQ_HEAD(rd_kafka_op_tailq, rd_kafka_op_s);
 
@@ -144,7 +148,11 @@ void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
 	if (likely(!rkq->rkq_qio))
 		return;
 
-	r = write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, rkq->rkq_qio->size);
+#ifdef _MSC_VER
+	r = _write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, rkq->rkq_qio->size);
+#else
+        r = write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, rkq->rkq_qio->size);
+#endif
 	if (r == -1) {
 		fprintf(stderr,
 			"[ERROR:librdkafka:rd_kafka_q_io_event: "

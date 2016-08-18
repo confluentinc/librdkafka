@@ -168,6 +168,7 @@
     <ClInclude Include="..\src\rdkafka_buf.h" />
     <ClInclude Include="..\src\rdkafka_cgrp.h" />
     <ClInclude Include="..\src\rdkafka_conf.h" />
+    <ClInclude Include="..\src\rdkafka_event.h" />
     <ClInclude Include="..\src\rdkafka_feature.h" />
     <ClInclude Include="..\src\rdkafka_op.h" />
     <ClInclude Include="..\src\rdkafka_partition.h" />
@@ -210,6 +211,7 @@
     <ClCompile Include="..\src\rdkafka_broker.c" />
     <ClCompile Include="..\src\rdkafka_cgrp.c" />
     <ClCompile Include="..\src\rdkafka_conf.c" />
+    <ClCompile Include="..\src\rdkafka_event.c" />
     <ClCompile Include="..\src\rdkafka_msg.c" />
     <ClCompile Include="..\src\rdkafka_offset.c" />
     <ClCompile Include="..\src\rdkafka_op.c" />

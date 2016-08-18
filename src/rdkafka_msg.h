@@ -76,8 +76,6 @@ typedef struct rd_kafka_msg_s {
 			rd_ts_t ts_timeout;
 		} producer;
 #define rkm_ts_timeout rkm_u.producer.ts_timeout
-		struct {
-		} consumer;
 	} rkm_u;
 } rd_kafka_msg_t;
 

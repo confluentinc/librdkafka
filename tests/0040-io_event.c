@@ -38,8 +38,13 @@
 #include "rdkafka.h"  /* for Kafka driver */
 
 #include <fcntl.h>
+#ifdef _MSC_VER
+#include <io.h>
+#else
 #include <unistd.h>
 #include <poll.h>
+#endif
+
 
 
 int main_0040_io_event (int argc, char **argv) {
@@ -53,6 +58,7 @@ int main_0040_io_event (int argc, char **argv) {
 	int recvd = 0;
 	int fds[2];
 	struct pollfd pfd;
+        int r;
 	enum {
 		_NOPE,
 		_YEP,
@@ -75,14 +81,14 @@ int main_0040_io_event (int argc, char **argv) {
 
 	test_consumer_subscribe(rk_c, topic);
 
-	if (pipe(fds) == -1)
+#ifndef _MSC_VER
+        r = pipe(fds);
+#else
+        r = _pipe(fds, 2, _O_BINARY);
+#endif
+        if (r == -1)
 		TEST_FAIL("pipe() failed: %s\n", strerror(errno));
 	
-	pfd.fd = fds[0];
-
-	pfd.revents = 0;
-	pfd.events = POLLIN;
-
 	rd_kafka_queue_io_event_enable(queue, fds[1], "1", 1);
 
 
@@ -100,7 +106,11 @@ int main_0040_io_event (int argc, char **argv) {
 	while (recvd < msgcnt) {
 		int r;
 
+#ifndef _MSC_VER
 		r = poll(&pfd, 1, 1000);
+#else
+                r = WSAPoll(&pfd, 1, 1000);
+#endif
 		if (r == -1) {
 			TEST_FAIL("poll() failed: %s", strerror(errno));
 			
@@ -117,9 +127,13 @@ int main_0040_io_event (int argc, char **argv) {
 			}
 
 			TEST_SAY("POLLIN\n");
-			r = read(pfd.fd, &b, 1); /* Read signaling token to
-						  * purge socket queue and
-						  * eventually silence POLLIN */
+                        /* Read signaling token to purge socket queue and
+                         * eventually silence POLLIN */
+#ifndef _MSC_VER
+			r = read(pfd.fd, &b, 1);
+#else
+                        r = _read(pfd.fd, &b, 1);
+#endif
 			if (r == -1)
 				TEST_FAIL("read failed: %s\n", strerror(errno));
 
@@ -191,8 +205,13 @@ int main_0040_io_event (int argc, char **argv) {
 	rd_kafka_consumer_close(rk_c);
 	rd_kafka_destroy(rk_c);
 
+#ifndef _MSC_VER
 	close(fds[0]);
 	close(fds[1]);
+#else
+        _close(fds[0]);
+        _close(fds[1]);
+#endif
 
 	return 0;
 }

@@ -294,6 +294,7 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
  */
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
 	rd_kafka_q_t *replyq = rko->rko_replyq;
+	int r;
 
         if (!replyq) {
 		rd_kafka_op_destroy(rko);
@@ -305,7 +306,11 @@ int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
 		(rko->rko_op_cb ? RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY);
         rko->rko_err    = err;
 
-        return rd_kafka_q_enq(replyq, rko);
+	r = rd_kafka_q_enq(replyq, rko);
+
+	rd_kafka_q_destroy(replyq); /* rko_replyq refcnt */
+
+	return r;
 }
 
 

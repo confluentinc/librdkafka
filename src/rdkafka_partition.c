@@ -1596,6 +1596,8 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 						  rd_kafka_err2str(rko->rko_err));
 			}
 
+			rd_kafka_toppar_destroy(s_rktp);
+
 			break;
 		}
 

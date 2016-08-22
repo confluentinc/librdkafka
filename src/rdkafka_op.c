@@ -119,7 +119,7 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 
 void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
-	switch (rko->rko_type & ~RD_KAFKA_OP_REPLY)
+	switch (rko->rko_type & ~RD_KAFKA_OP_FLAGMASK)
 	{
 	case RD_KAFKA_OP_FETCH:
 		rd_kafka_msg_destroy(NULL, &rko->rko_u.fetch.rkm);

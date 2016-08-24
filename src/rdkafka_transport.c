@@ -1063,8 +1063,9 @@ void rd_kafka_transport_io_serve (rd_kafka_transport_t **rktrans,
 	for(i = 0; i < relevant_transport_count; i++) {
 		rd_kafka_broker_t *rkb = rktrans[i]->rktrans_rkb;
 
-		if (rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
-			rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0)
+		if ((rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
+             rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0) ||
+            (rkb->rkb_state == RD_KAFKA_BROKER_STATE_CONNECT))
 				rd_kafka_transport_poll_set(rkb->rkb_transport, POLLOUT);
 		fds[i].fd = rktrans[i]->rktrans_pfd.fd;
 		fds[i].events = rkb->rkb_transport->rktrans_pfd.events;
@@ -1219,9 +1220,6 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 	rktrans->rktrans_rkb = rkb;
 	rktrans->rktrans_s = s;
 	rktrans->rktrans_pfd.fd = s;
-
-	/* Poll writability to trigger on connection success/failure. */
-	rd_kafka_transport_poll_set(rktrans, POLLOUT);
 
 	return rktrans;
 

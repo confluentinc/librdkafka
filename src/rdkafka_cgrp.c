@@ -726,12 +726,16 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
                                       *assignment, int usable_offsets) {
         int i;
 
+	rkcg->rkcg_version++;
+
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "FETCHSTART",
                      "Group \"%s\": starting fetchers for %d assigned "
-                     "partition(s) in join-state %s (usable_offsets=%s)",
+                     "partition(s) in join-state %s "
+		     "(usable_offsets=%s, v%"PRId32")",
                      rkcg->rkcg_group_id->str, assignment->cnt,
 		     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
-		     usable_offsets ? "yes":"no");
+		     usable_offsets ? "yes":"no",
+		     rkcg->rkcg_version);
 
 	rd_kafka_topic_partition_list_log(rkcg->rkcg_rk,
 					  "FETCHSTART", assignment);
@@ -815,7 +819,9 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 		       const char *reason) {
 	rd_kafka_op_t *rko;
 
-	/* Pause current partition set consumers until new assign() is called. */
+	rkcg->rkcg_version++;
+
+	/* Pause current partition set consumers until new assign() is called */
 	if (rkcg->rkcg_assignment)
 		rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 1,
 					      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
@@ -1032,7 +1038,7 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 
 	} else if (rd_kafka_OffsetCommitRequest(
 			   rkcg->rkcg_rkb, rkcg, 1, offsets,
-			   &rkcg->rkcg_ops,
+			   RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, rkcg->rkcg_version),
 			   rd_kafka_cgrp_op_handle_OffsetCommit, rko) != 0)
 		return;
 	else
@@ -1144,9 +1150,12 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 	}
 
-        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
-                     "Group \"%s\": unassigning %d partition(s)",
-                     rkcg->rkcg_group_id->str, rkcg->rkcg_assignment->cnt);
+	rkcg->rkcg_version++;
+
+	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
+                     "Group \"%s\": unassigning %d partition(s) (v%"PRId32")",
+                     rkcg->rkcg_group_id->str, rkcg->rkcg_assignment->cnt,
+		     rkcg->rkcg_version);
 
         rd_kafka_cgrp_set_join_state(rkcg,
                                      RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN);
@@ -1364,12 +1373,13 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
 
 	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNSUBSCRIBE",
 		     "Group \"%.*s\": unsubscribe from current %ssubscription "
-		     "of %d topics (leave group=%s, join state %s)",
+		     "of %d topics (leave group=%s, join state %s, v%"PRId32")",
 		     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
 		     rkcg->rkcg_subscription ? "" : "unset ",
 		     rkcg->rkcg_subscription ? rkcg->rkcg_subscription->cnt : 0,
 		     leave_group ? "yes":"no",
-		     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
+		     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
+		     rkcg->rkcg_version);
 
         if (rkcg->rkcg_subscription) {
                 rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
@@ -1515,7 +1525,8 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                                     rd_kafka_broker_t *rkb) {
         rd_kafka_op_t *rko;
 
-        while ((rko = rd_kafka_q_pop(&rkcg->rkcg_ops, RD_POLL_NOWAIT, 0))) {
+        while ((rko = rd_kafka_q_pop(&rkcg->rkcg_ops, RD_POLL_NOWAIT,
+				     rkcg->rkcg_version))) {
                 rd_kafka_toppar_t *rktp = rko->rko_rktp ?
                         rd_kafka_toppar_s2i(rko->rko_rktp) : NULL;
                 rd_kafka_resp_err_t err;
@@ -1524,21 +1535,24 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                 if (rktp && !silent_op)
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPOP",
                                      "Group \"%.*s\" received op %s in state %s "
-                                     "(join state %s) for %.*s [%"PRId32"]",
+                                     "(join state %s, v%"PRId32") "
+				     "for %.*s [%"PRId32"]",
                                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                                      rd_kafka_op2str(rko->rko_type),
                                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
+				     rkcg->rkcg_version,
                                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                                      rktp->rktp_partition);
                 else if (!silent_op)
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPOP",
                                      "Group \"%.*s\" received op %s in state %s "
-                                     "(join state %s)",
+                                     "(join state %s, v%"PRId32")",
                                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                                      rd_kafka_op2str(rko->rko_type),
                                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
-                                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
+                                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
+				     rkcg->rkcg_version);
 
                 switch ((int)rko->rko_type)
                 {
@@ -1565,7 +1579,8 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                         rd_kafka_OffsetFetchRequest(
                                 rkb, 1,
 				rko->rko_u.offset_fetch.partitions,
-                                &rkcg->rkcg_ops,
+                                RD_KAFKA_REPLYQ(&rkcg->rkcg_ops,
+						rkcg->rkcg_version),
                                 rd_kafka_op_handle_OffsetFetch, rko);
                         rko = NULL; /* rko now owned by request */
                         break;

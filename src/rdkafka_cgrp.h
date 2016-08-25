@@ -114,6 +114,11 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_q_t       rkcg_q;                  /* Application poll queue */
         rd_kafka_q_t       rkcg_ops;                /* Manager ops queue */
 	rd_kafka_q_t       rkcg_wait_coord_q;       /* Ops awaiting coord */
+	int32_t            rkcg_version;            /* Ops queue version barrier
+						     * Increased by:
+						     *  Rebalance delegation
+						     *  Assign/Unassign
+						     */
         mtx_t              rkcg_lock;
 
         int                rkcg_flags;

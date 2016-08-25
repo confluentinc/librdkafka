@@ -76,6 +76,28 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
         return names[type & ~RD_KAFKA_OP_FLAGMASK]+skiplen;
 }
 
+
+void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
+	fprintf(fp,
+		"%s((rd_kafka_op_t*)%p)\n"
+		" Type: %s (0x%x), Version: %"PRId32"\n",
+		prefix, rko,
+		rd_kafka_op2str(rko->rko_type), rko->rko_type,
+		rko->rko_version);
+	if (rko->rko_err)
+		fprintf(fp, "%s Error: %s\n",
+			prefix, rd_kafka_err2str(rko->rko_err));
+	if (rko->rko_rktp) {
+		rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+		fprintf(fp, "%s ((rd_kafka_toppar_t*)%p) "
+			"%s [%"PRId32"] v%d (shptr %p)\n",
+			prefix, rktp, rktp->rktp_rkt->rkt_topic->str,
+			rktp->rktp_partition,
+			rd_atomic32_get(&rktp->rktp_version), rko->rko_rktp);
+	}
+}
+
+
 rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 	rd_kafka_op_t *rko;
 	static const size_t op2size[RD_KAFKA_OP__END] = {

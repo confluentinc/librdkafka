@@ -264,3 +264,5 @@ void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
 int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko);
 
 extern rd_atomic32_t rd_kafka_op_cnt;
+
+void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko);

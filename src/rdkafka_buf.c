@@ -448,10 +448,8 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         request = rko->rko_u.xbuf.rkbuf;
         rko->rko_u.xbuf.rkbuf = NULL;
 
-	if (request->rkbuf_replyq) { /* NULL on op_destroy() */
-		rd_kafka_q_destroy(request->rkbuf_replyq);
-		request->rkbuf_replyq = NULL;
-	}
+	if (request->rkbuf_replyq.q) /* NULL on op_destroy() */
+		rd_kafka_replyq_destroy(&request->rkbuf_replyq);
 
 	if (!request->rkbuf_cb) {
 		rd_kafka_buf_destroy(request);
@@ -495,8 +493,10 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
                 return;
 	}
 
-        if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq) {
+        if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq.q) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
+
+		rko->rko_version = request->rkbuf_replyq.version;
 
 		rd_kafka_assert(NULL, !request->rkbuf_response);
 		request->rkbuf_response = response;
@@ -509,7 +509,7 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
 
                 rko->rko_err = err;
 
-	        rd_kafka_q_enq(request->rkbuf_replyq, rko);
+	        rd_kafka_q_enq(request->rkbuf_replyq.q, rko);
 
 		rd_kafka_buf_destroy(request); /* from keep above */
 		return;

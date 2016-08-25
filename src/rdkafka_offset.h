@@ -74,5 +74,5 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_commit0 (rd_kafka_t *rk,
                   const rd_kafka_topic_partition_list_t *offsets,
-                  rd_kafka_q_t *replyq,
+                  rd_kafka_replyq_t replyq,
                   void (*op_cb) (rd_kafka_t *, rd_kafka_op_t *));

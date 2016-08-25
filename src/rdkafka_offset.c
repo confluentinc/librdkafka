@@ -434,7 +434,8 @@ rd_kafka_offset_broker_commit (rd_kafka_toppar_t *rktp) {
         rd_kafka_q_keep(&rktp->rktp_ops);
 
         rd_kafka_commit0(rktp->rktp_rkt->rkt_rk, offsets,
-                         &rktp->rktp_ops, rd_kafka_offset_broker_commit_op_cb);
+			 RD_KAFKA_REPLYQ(&rktp->rktp_ops, 0),
+			 rd_kafka_offset_broker_commit_op_cb);
 
         rd_kafka_topic_partition_list_destroy(offsets);
 
@@ -486,8 +487,8 @@ rd_kafka_resp_err_t rd_kafka_offset_commit (rd_kafka_toppar_t *rktp) {
 rd_kafka_resp_err_t
 rd_kafka_commit0 (rd_kafka_t *rk,
                   const rd_kafka_topic_partition_list_t *offsets,
-                  rd_kafka_q_t *replyq, void (*op_cb) (rd_kafka_t *,
-                                                       rd_kafka_op_t *)) {
+                  rd_kafka_replyq_t replyq, void (*op_cb) (rd_kafka_t *,
+							   rd_kafka_op_t *)) {
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_op_t *rko;
 
@@ -496,15 +497,14 @@ rd_kafka_commit0 (rd_kafka_t *rk,
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT);
         rko->rko_op_cb = op_cb;
-        rko->rko_replyq = replyq;
-        if (replyq)
-                rd_kafka_q_keep(rko->rko_replyq);
+	rko->rko_replyq = replyq;
 
         if (offsets)
 		rko->rko_u.offset_commit.partitions =
                         rd_kafka_topic_partition_list_copy(offsets);
 
-        rd_kafka_q_enq(&rkcg->rkcg_ops, rko);
+        if (rd_kafka_q_enq(&rkcg->rkcg_ops, rko) == 0)
+		printf("OP_OFFSET_COMMIT dropped\n");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -526,7 +526,9 @@ rd_kafka_commit (rd_kafka_t *rk,
         if (!async)
                 tmpq = rd_kafka_q_new(rk);
 
-        err = rd_kafka_commit0(rk, offsets, async ? NULL : tmpq, NULL);
+        err = rd_kafka_commit0(rk, offsets,
+			       async ? RD_KAFKA_NO_REPLYQ :
+			       RD_KAFKA_REPLYQ(tmpq, 0), NULL);
 
         if (!async) {
 		err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);

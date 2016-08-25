@@ -120,7 +120,7 @@ static void rd_kafka_assignor_handle_Metadata (rd_kafka_t *rk,
  */
 void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
                                        const rd_kafkap_str_t *cgrp,
-                                       rd_kafka_q_t *replyq,
+                                       rd_kafka_replyq_t replyq,
                                        rd_kafka_resp_cb_t *resp_cb,
                                        void *opaque) {
         rd_kafka_buf_t *rkbuf;
@@ -245,8 +245,7 @@ done:
 void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
                              const char *topic, int32_t partition,
                              const int64_t *query_offsets, size_t offset_cnt,
-			     int32_t op_version,
-                             rd_kafka_q_t *replyq,
+                             rd_kafka_replyq_t replyq,
                              rd_kafka_resp_cb_t *resp_cb,
                              void *opaque) {
 	rd_kafka_buf_t *rkbuf;
@@ -282,12 +281,10 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
 
 	rd_kafka_buf_autopush(rkbuf);
 
-	rkbuf->rkbuf_op_version = op_version;
-
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
 		   "OffsetRequest (%"PRIdsz" offsets) for "
 		   "topic %s [%"PRId32"] (v%d)",
-                   offset_cnt, topic, partition, rkbuf->rkbuf_op_version);
+                   offset_cnt, topic, partition, rkbuf->rkbuf_replyq.version);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Offset,
                                        rkbuf, replyq, resp_cb, opaque);
@@ -416,7 +413,8 @@ err:
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
                 rd_kafka_cgrp_op(rkb->rkb_rk->rk_cgrp, NULL,
-                                 NULL, RD_KAFKA_OP_COORD_QUERY, err);
+                                 RD_KAFKA_NO_REPLYQ,
+				 RD_KAFKA_OP_COORD_QUERY, err);
                 if (request) {
                         /* Schedule a retry */
                         rd_kafka_buf_keep(request);
@@ -461,7 +459,8 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 
         rko_reply = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH|RD_KAFKA_OP_REPLY);
         rko_reply->rko_err = err;
-        rko_reply->rko_version = rko->rko_version;
+	rd_kafka_op_get_reply_version(rko_reply, rko);
+
 	/* Move offset & partitions to reply op. */
 	rko_reply->rko_u.offset_fetch = rko->rko_u.offset_fetch;
 	RD_MEMZERO(rko->rko_u.offset_fetch);
@@ -473,7 +472,7 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 		rd_kafka_handle_OffsetFetch(rkb->rkb_rk, rkb, err, rkbuf,
 					    request, offsets, 0);
 
-        rd_kafka_q_enq(rko->rko_replyq, rko_reply);
+        rd_kafka_q_enq(rko->rko_replyq.q, rko_reply);
 
         rd_kafka_op_destroy(rko);
 }
@@ -494,7 +493,7 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
                                   int16_t api_version,
                                   const rd_kafka_topic_partition_list_t *parts,
-                                  rd_kafka_q_t *replyq,
+				  rd_kafka_replyq_t replyq,
                                   rd_kafka_resp_cb_t *resp_cb,
                                   void *opaque) {
 	rd_kafka_buf_t *rkbuf;
@@ -578,7 +577,6 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
 		rkbuf->rkbuf_rkb = rkb;
 		rd_kafka_broker_keep(rkb);
                 rkbuf->rkbuf_replyq = replyq;
-                rd_kafka_q_keep(replyq);
                 rkbuf->rkbuf_cb     = resp_cb;
                 rkbuf->rkbuf_opaque = opaque;
 		rd_kafka_buf_callback(rkb->rkb_rk, rkb, 0, NULL, rkbuf);
@@ -705,7 +703,7 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                                    rd_kafka_cgrp_t *rkcg,
                                    int16_t api_version,
                                    rd_kafka_topic_partition_list_t *offsets,
-                                   rd_kafka_q_t *replyq,
+                                   rd_kafka_replyq_t replyq,
                                    rd_kafka_resp_cb_t *resp_cb,
                                    void *opaque) {
 	rd_kafka_buf_t *rkbuf;
@@ -884,7 +882,7 @@ void rd_kafka_SyncGroupRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafka_group_member_t
                                 *assignments,
                                 int assignment_cnt,
-                                rd_kafka_q_t *replyq,
+                                rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque) {
         rd_kafka_buf_t *rkbuf;
@@ -956,7 +954,8 @@ err:
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
-                rd_kafka_cgrp_op(rkcg, NULL, NULL, RD_KAFKA_OP_COORD_QUERY,
+                rd_kafka_cgrp_op(rkcg, NULL, RD_KAFKA_NO_REPLYQ,
+				 RD_KAFKA_OP_COORD_QUERY,
                                  ErrorCode);
                 /* FALLTHRU */
         }
@@ -982,7 +981,7 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *protocol_type,
                                 const rd_kafka_topic_partition_list_t
                                 *subscription,
-                                rd_kafka_q_t *replyq,
+                                rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque) {
         rd_kafka_buf_t *rkbuf;
@@ -1217,7 +1216,7 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                  * and run the assignor when we get a reply. */
                 rd_kafka_MetadataRequest(rkb, 1 /* all topics */, NULL,
                                          "partition assignor",
-                                         &rkcg->rkcg_ops,
+                                         RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, 0),
                                          rd_kafka_assignor_handle_Metadata,
                                          rkcg);
         } else {
@@ -1228,7 +1227,7 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                                           rkcg->rkcg_generation_id,
                                           rkcg->rkcg_member_id,
                                           NULL, 0,
-                                          &rkcg->rkcg_ops,
+                                          RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, 0),
                                           rd_kafka_handle_SyncGroup, rkcg);
 
         }
@@ -1239,8 +1238,8 @@ err:
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
-                rd_kafka_cgrp_op(rkcg, NULL, NULL, RD_KAFKA_OP_COORD_QUERY,
-                                 ErrorCode);
+                rd_kafka_cgrp_op(rkcg, NULL, RD_KAFKA_NO_REPLYQ,
+				 RD_KAFKA_OP_COORD_QUERY, ErrorCode);
         }
 
         if (ErrorCode) {
@@ -1269,7 +1268,7 @@ err:
 void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
                                  const rd_kafkap_str_t *group_id,
                                  const rd_kafkap_str_t *member_id,
-                                 rd_kafka_q_t *replyq,
+                                 rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
@@ -1318,8 +1317,8 @@ err:
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
-                rd_kafka_cgrp_op(rkcg, NULL, NULL, RD_KAFKA_OP_COORD_QUERY,
-                                 ErrorCode);
+                rd_kafka_cgrp_op(rkcg, NULL, RD_KAFKA_NO_REPLYQ,
+				 RD_KAFKA_OP_COORD_QUERY, ErrorCode);
                 /* Schedule a retry */
                 rd_kafka_buf_keep(request);
                 rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
@@ -1344,7 +1343,7 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *group_id,
                                 int32_t generation_id,
                                 const rd_kafkap_str_t *member_id,
-                                rd_kafka_q_t *replyq,
+                                rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque) {
         rd_kafka_buf_t *rkbuf;
@@ -1399,8 +1398,8 @@ err:
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
-                rd_kafka_cgrp_op(rkcg, NULL, NULL, RD_KAFKA_OP_COORD_QUERY,
-                                 ErrorCode);
+                rd_kafka_cgrp_op(rkcg, NULL, RD_KAFKA_NO_REPLYQ,
+				 RD_KAFKA_OP_COORD_QUERY, ErrorCode);
                 /* Schedule a retry */
 		if (ErrorCode != RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP) {
 			rd_kafka_buf_keep(request);
@@ -1420,7 +1419,7 @@ err:
  * Send ListGroupsRequest
  */
 void rd_kafka_ListGroupsRequest (rd_kafka_broker_t *rkb,
-                                 rd_kafka_q_t *replyq,
+                                 rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
@@ -1437,7 +1436,7 @@ void rd_kafka_ListGroupsRequest (rd_kafka_broker_t *rkb,
  */
 void rd_kafka_DescribeGroupsRequest (rd_kafka_broker_t *rkb,
                                      const char **groups, int group_cnt,
-                                     rd_kafka_q_t *replyq,
+                                     rd_kafka_replyq_t replyq,
                                      rd_kafka_resp_cb_t *resp_cb,
                                      void *opaque) {
         rd_kafka_buf_t *rkbuf;
@@ -1522,7 +1521,7 @@ void rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                                int all_topics,
                                rd_kafka_itopic_t *only_rkt,
                                const char *reason,
-                               rd_kafka_q_t *replyq,
+                               rd_kafka_replyq_t replyq,
                                rd_kafka_resp_cb_t *resp_cb,
                                void *opaque) {
         rd_kafka_buf_t *rkbuf = rd_kafka_MetadataRequest0(rkb, all_topics,
@@ -1749,7 +1748,7 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                                   void *opaque) {
         rd_kafka_op_t *rko = opaque;
         struct rd_kafka_metadata *md = NULL;
-        rd_kafka_q_t *replyq;
+        rd_kafka_q_t *rkq;
 	rd_kafka_itopic_t *rkt;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
@@ -1786,15 +1785,16 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                 rd_kafka_topic_wrunlock(rkt);
         }
 
-        if ((replyq = rko->rko_replyq)) {
+        if ((rkq = rko->rko_replyq.q)) {
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */
-                rko->rko_replyq = NULL;
+                rko->rko_replyq.q = NULL;
+		rd_kafka_op_get_reply_version(rko, rko);
                 rko->rko_err = err;
                 rko->rko_u.metadata.metadata = md;
-                rd_kafka_q_enq(replyq, rko);
+                rd_kafka_q_enq(rkq, rko);
                 /* Drop refcount to queue */
-                rd_kafka_q_destroy(replyq);
+                rd_kafka_q_destroy(rkq);
         } else {
                 if (md)
                         rd_free(md);
@@ -1910,7 +1910,7 @@ done:
  * Send ApiVersionRequest (KIP-35)
  */
 void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
-				 rd_kafka_q_t *replyq,
+				 rd_kafka_replyq_t replyq,
 				 rd_kafka_resp_cb_t *resp_cb,
 				 void *opaque, int flash_msg) {
         rd_kafka_buf_t *rkbuf;
@@ -1930,7 +1930,7 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 	if (rkb->rkb_rk->rk_conf.socket_timeout_ms > 10*1000)
 		rkbuf->rkbuf_ts_timeout = rd_clock() + (10 * 1000);
 
-	if (replyq)
+	if (replyq.q)
 		rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_ApiVersion,
 					       rkbuf, replyq, resp_cb, opaque);
 	else /* in broker thread */
@@ -1944,7 +1944,7 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
  */
 void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    const char *mechanism,
-				    rd_kafka_q_t *replyq,
+				    rd_kafka_replyq_t replyq,
 				    rd_kafka_resp_cb_t *resp_cb,
 				    void *opaque, int flash_msg) {
         rd_kafka_buf_t *rkbuf;
@@ -1966,7 +1966,7 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 	if (rkb->rkb_rk->rk_conf.socket_timeout_ms > 10*1000)
 		rkbuf->rkbuf_ts_timeout = rd_clock() + (10 * 1000);
 
-	if (replyq)
+	if (replyq.q)
 		rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_SaslHandshake,
 					       rkbuf, replyq, resp_cb, opaque);
 	else /* in broker thread */

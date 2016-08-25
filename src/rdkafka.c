@@ -930,10 +930,12 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
 
         if (rk->rk_conf.metadata_refresh_sparse)
                 rd_kafka_broker_metadata_req(rkb, 0 /* known topics */, NULL,
-                                             NULL, "sparse periodic refresh");
+					     RD_KAFKA_NO_REPLYQ,
+                                             "sparse periodic refresh");
         else
                 rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
-                                             NULL, "periodic refresh");
+                                             RD_KAFKA_NO_REPLYQ,
+					     "periodic refresh");
 
         rd_kafka_broker_destroy(rkb);
 }
@@ -1343,7 +1345,7 @@ int rd_kafka_consume_start0 (rd_kafka_itopic_t *rkt, int32_t partition,
         }
 
         rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_s2i(s_rktp), offset,
-                                      rkq, NULL);
+				       rkq, RD_KAFKA_NO_REPLYQ);
 
         rd_kafka_toppar_destroy(s_rktp);
 
@@ -1384,7 +1386,7 @@ static RD_UNUSED int rd_kafka_consume_stop0 (rd_kafka_toppar_t *rktp) {
 
         tmpq = rd_kafka_q_new(rktp->rktp_rkt->rkt_rk);
 
-        rd_kafka_toppar_op_fetch_stop(rktp, tmpq);
+        rd_kafka_toppar_op_fetch_stop(rktp, RD_KAFKA_REPLYQ(tmpq, 0));
 
         /* Synchronisation: Wait for stop reply from broker thread */
         err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
@@ -1453,7 +1455,8 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
                 tmpq = rd_kafka_q_new(rkt->rkt_rk);
 
         rktp = rd_kafka_toppar_s2i(s_rktp);
-        if ((err = rd_kafka_toppar_op_seek(rktp, offset, tmpq))) {
+        if ((err = rd_kafka_toppar_op_seek(rktp, offset,
+					   RD_KAFKA_REPLYQ(tmpq, 0)))) {
                 if (tmpq)
                         rd_kafka_q_destroy(tmpq);
                 rd_kafka_toppar_destroy(s_rktp);
@@ -1782,7 +1785,7 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
 	if (!rkq)
 		rkq = rd_kafka_q_new(rk);
 
-        rd_kafka_cgrp_terminate(rkcg, rkq); /* async */
+        rd_kafka_cgrp_terminate(rkcg, RD_KAFKA_REPLYQ(rkq, 0)); /* async */
 
         while ((rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0))) {
                 if (rko->rko_type == RD_KAFKA_OP_TERMINATE) {
@@ -1804,7 +1807,7 @@ rd_kafka_resp_err_t
 rd_kafka_committed (rd_kafka_t *rk,
 		    rd_kafka_topic_partition_list_t *partitions,
 		    int timeout_ms) {
-        rd_kafka_q_t *replyq;
+        rd_kafka_q_t *rkq;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
 	rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
@@ -1816,20 +1819,20 @@ rd_kafka_committed (rd_kafka_t *rk,
 	rd_kafka_topic_partition_list_reset_offsets(partitions,
 						    RD_KAFKA_OFFSET_INVALID);
 
-        replyq = rd_kafka_q_new(rk);
+	rkq = rd_kafka_q_new(rk);
+
         do {
                 rd_kafka_op_t *rko;
 
                 rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
-                rko->rko_replyq = replyq;
-                rd_kafka_q_keep(rko->rko_replyq);
+		rd_kafka_op_set_replyq(rko, rkq, NULL);
 
 		rko->rko_u.offset_fetch.partitions = partitions;
 		rko->rko_u.offset_fetch.do_free = 0;
 
                 rd_kafka_q_enq(&rkcg->rkcg_ops, rko);
 
-                rko = rd_kafka_q_pop(replyq, rd_timeout_remains(abs_timeout), 0);
+                rko = rd_kafka_q_pop(rkq, rd_timeout_remains(abs_timeout), 0);
                 if (rko) {
                         rd_kafka_topic_partition_list_t *offsets =
 				rko->rko_u.offset_fetch.partitions;
@@ -1849,7 +1852,7 @@ rd_kafka_committed (rd_kafka_t *rk,
         } while (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
 		 err == RD_KAFKA_RESP_ERR__WAIT_COORD);
 
-        rd_kafka_q_destroy(replyq);
+        rd_kafka_q_destroy(rkq);
 
         return err;
 }
@@ -1942,7 +1945,7 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 				  int32_t partition,
 				  int64_t *low, int64_t *high, int timeout_ms) {
 	rd_kafka_broker_t *rkb;
-	rd_kafka_q_t *replyq;
+	rd_kafka_q_t *rkq;
 	struct _query_wmark_offsets_state state;
 	shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
@@ -1974,7 +1977,7 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 		return RD_KAFKA_RESP_ERR__WAIT_COORD;
 	}
 
-        replyq = rd_kafka_q_new(rk);
+	rkq = rd_kafka_q_new(rk);
 
 	/* Due to KAFKA-1588 we need to send a request for each wanted offset,
 	 * in this case one for the low watermark and one for the high. */
@@ -1987,20 +1990,22 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	state.ts_end = ts_end;
 
 	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[0], 1,
-			       0, replyq, rd_kafka_query_wmark_offsets_resp_cb,
+			       RD_KAFKA_REPLYQ(rkq, 0),
+			       rd_kafka_query_wmark_offsets_resp_cb,
 			       &state);
 	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[1], 1,
-			       0, replyq, rd_kafka_query_wmark_offsets_resp_cb,
+			       RD_KAFKA_REPLYQ(rkq, 0),
+			       rd_kafka_query_wmark_offsets_resp_cb,
 			       &state);
 
         rd_kafka_broker_destroy(rkb);
 
         /* Wait for reply (or timeout) */
 	while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
-		rd_kafka_q_serve(replyq, 100, 0, _Q_CB_GLOBAL,
+		rd_kafka_q_serve(rkq, 100, 0, _Q_CB_GLOBAL,
 				 rd_kafka_poll_cb, NULL);
 
-        rd_kafka_q_destroy(replyq);
+        rd_kafka_q_destroy(rkq);
 	rd_kafka_toppar_destroy(s_rktp);
 
 	if (state.err)
@@ -2471,7 +2476,7 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
                    rd_kafka_topic_t *only_rkt,
                    const struct rd_kafka_metadata **metadatap,
                    int timeout_ms) {
-        rd_kafka_q_t *replyq;
+        rd_kafka_q_t *rkq;
         rd_kafka_broker_t *rkb;
         rd_kafka_op_t *rko;
 	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
@@ -2482,21 +2487,21 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
 	if (!rkb)
 		return RD_KAFKA_RESP_ERR__TRANSPORT;
 
-        replyq = rd_kafka_q_new(rk);
+        rkq = rd_kafka_q_new(rk);
 
         /* Async: request metadata */
         rd_kafka_broker_metadata_req(rkb, all_topics,
                                      only_rkt ?
                                      rd_kafka_topic_a2i(only_rkt) : NULL,
-                                     replyq,
+                                     RD_KAFKA_REPLYQ(rkq, 0),
                                      "application requested");
 
         rd_kafka_broker_destroy(rkb);
 
         /* Wait for reply (or timeout) */
-        rko = rd_kafka_q_pop(replyq, rd_timeout_remains(ts_end), 0);
+        rko = rd_kafka_q_pop(rkq, rd_timeout_remains(ts_end), 0);
 
-        rd_kafka_q_destroy(replyq);
+        rd_kafka_q_destroy(rkq);
 
         /* Timeout */
         if (!rko)
@@ -2751,7 +2756,8 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
 
                 state.wait_cnt++;
                 rd_kafka_ListGroupsRequest(rkb,
-                                           state.q, rd_kafka_ListGroups_resp_cb,
+                                           RD_KAFKA_REPLYQ(state.q, 0),
+					   rd_kafka_ListGroups_resp_cb,
                                            &state);
 
                 rkb_cnt++;

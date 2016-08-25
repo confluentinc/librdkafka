@@ -154,9 +154,10 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 
         int                rktp_assigned;   /* Partition in cgrp assignment */
 
-        rd_kafka_q_t      *rktp_replyq;     /* Current replyq for propagating
-                                             * major operations, e.g.,
-                                             * FETCH_STOP. */
+        rd_kafka_replyq_t  rktp_replyq; /* Current replyq+version
+					 * for propagating
+					 * major operations, e.g.,
+					 * FETCH_STOP. */
         //LOCK: toppar_lock().  RD_KAFKA_TOPPAR_F_DESIRED
         //LOCK: toppar_lock().  RD_KAFKA_TOPPAR_F_UNKNOWN
 	int                rktp_flags;
@@ -297,7 +298,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 				      rd_kafka_broker_t *rkb);
 void rd_kafka_toppar_op (rd_kafka_toppar_t *rktp, rd_kafka_op_type_t type,
                          int64_t offset, rd_kafka_cgrp_t *rkcg,
-                         rd_kafka_q_t *replyq);
+                         rd_kafka_replyq_t replyq);
 
 void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 				  int64_t offset, rd_kafka_op_t *rko_orig);
@@ -309,14 +310,14 @@ void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start (rd_kafka_toppar_t *rktp,
                                                     int64_t offset,
                                                     rd_kafka_q_t *fwdq,
-                                                    rd_kafka_q_t *replyq);
+                                                    rd_kafka_replyq_t replyq);
 
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_stop (rd_kafka_toppar_t *rktp,
-                                                   rd_kafka_q_t *replyq);
+                                                   rd_kafka_replyq_t replyq);
 
 rd_kafka_resp_err_t rd_kafka_toppar_op_seek (rd_kafka_toppar_t *rktp,
                                              int64_t offset,
-                                             rd_kafka_q_t *replyq);
+                                             rd_kafka_replyq_t replyq);
 
 void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
                                     rd_kafka_resp_err_t err);
@@ -350,7 +351,7 @@ void rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
 
 
 void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
-                                   rd_kafka_q_t *replyq);
+                                   rd_kafka_replyq_t replyq);
 
 void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
 				     int64_t query_offset, int backoff_ms);

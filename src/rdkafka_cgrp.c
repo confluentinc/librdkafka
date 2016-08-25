@@ -459,7 +459,7 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
                    RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), reason);
 
         rd_kafka_GroupCoordinatorRequest(rkb, rkcg->rkcg_group_id,
-                                         &rkcg->rkcg_ops,
+                                         RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, 0),
                                          rd_kafka_cgrp_handle_GroupCoordinator,
                                          rkcg);
 
@@ -479,7 +479,7 @@ static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg, int ignore_response) {
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP)
                 rd_kafka_LeaveGroupRequest(rkcg->rkcg_rkb, rkcg->rkcg_group_id,
                                            rkcg->rkcg_member_id,
-                                           &rkcg->rkcg_ops,
+                                           RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, 0),
                                            ignore_response ? NULL :
                                            rd_kafka_handle_LeaveGroup, rkcg);
         else if (!ignore_response)
@@ -504,7 +504,7 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
                                   rkcg->rkcg_member_id,
                                   rkcg->rkcg_rk->rk_conf.group_protocol_type,
                                   rkcg->rkcg_subscription,
-                                  &rkcg->rkcg_ops,
+                                  RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, 0),
                                   rd_kafka_cgrp_handle_JoinGroup, rkcg);
 }
 
@@ -514,7 +514,7 @@ static void rd_kafka_cgrp_heartbeat (rd_kafka_cgrp_t *rkcg,
         rd_kafka_HeartbeatRequest(rkb, rkcg->rkcg_group_id,
                                   rkcg->rkcg_generation_id,
                                   rkcg->rkcg_member_id,
-                                  &rkcg->rkcg_ops,
+                                  RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, 0),
                                   rd_kafka_cgrp_handle_Heartbeat, rkcg);
 }
 
@@ -545,12 +545,14 @@ static void rd_kafka_cgrp_terminated (rd_kafka_cgrp_t *rkcg) {
 		rd_kafka_cgrp_unassign_broker(rkcg);
 
         if (rkcg->rkcg_reply_rko) {
-                rd_kafka_q_t *replyq = rkcg->rkcg_reply_rko->rko_replyq;
+                rd_kafka_q_t *rkq = rkcg->rkcg_reply_rko->rko_replyq.q;
                 /* Signal back to application. */
-                rkcg->rkcg_reply_rko->rko_replyq = NULL;
-                rd_kafka_q_enq(replyq, rkcg->rkcg_reply_rko);
+		rd_kafka_op_get_reply_version(rkcg->rkcg_reply_rko,
+					      rkcg->rkcg_reply_rko);
+		rd_kafka_replyq_clear(&rkcg->rkcg_reply_rko->rko_replyq.q);
+                rd_kafka_q_enq(rkq, rkcg->rkcg_reply_rko);
                 rkcg->rkcg_reply_rko = NULL;
-                rd_kafka_q_destroy(replyq);
+                rd_kafka_q_destroy(rkq);
         }
 }
 
@@ -708,7 +710,8 @@ rd_kafka_cgrp_offsets_fetch (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb,
         else
                 rd_kafka_OffsetFetchRequest(
                         rkb, 1, offsets,
-                        &rkcg->rkcg_ops, rd_kafka_cgrp_offsets_fetch_response,
+                        RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, rkcg->rkcg_version),
+			rd_kafka_cgrp_offsets_fetch_response,
 			use_offsets);
 
 }
@@ -922,7 +925,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 						  void *opaque) {
 	rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
         rd_kafka_op_t *rko_orig = opaque;
-        rd_kafka_q_t *replyq;
+        rd_kafka_q_t *rkq;
 	rd_kafka_topic_partition_list_t *offsets =
 		rko_orig->rko_u.offset_commit.partitions;
 
@@ -943,12 +946,13 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 	}
 
 	rd_kafka_cgrp_handle_OffsetCommit(rkcg, err, offsets);
-	if ((replyq = rko_orig->rko_replyq)) {
+	if ((rkq = rko_orig->rko_replyq.q)) {
                 rd_kafka_op_t *rko_reply = rd_kafka_op_new_reply(rko_orig, err);
+		rd_kafka_op_get_reply_version(rko_reply, rko_orig);
 		/* Move offset & partitions to reply op */
 		rko_reply->rko_u.offset_commit = rko_orig->rko_u.offset_commit;
 		RD_MEMZERO(rko_orig->rko_u.offset_commit);
-                rd_kafka_q_enq(replyq, rko_reply);
+                rd_kafka_q_enq(rkq, rko_reply);
         }
 
         rd_kafka_op_destroy(rko_orig);
@@ -1168,8 +1172,7 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
 			rd_kafka_op_t *rko;
 			/* Place-holder for providing replyq to fetch_stop() */
 			rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH_STOP);
-			rko->rko_replyq = &rkcg->rkcg_ops;
-			rd_kafka_q_keep(rko->rko_replyq);
+			rd_kafka_op_set_replyq(rko, &rkcg->rkcg_ops, NULL);
                         rd_kafka_toppar_fetch_stop(rktp, rko);
                         rkcg->rkcg_wait_unassign_cnt++;
 			rd_kafka_op_destroy(rko);
@@ -1461,17 +1464,16 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
 		     rkcg->rkcg_reply_rko != NULL)) {
                 /* Already terminating or handling a previous terminate */
 		if (rko) {
-			rd_kafka_q_t *replyq = rko->rko_replyq;
-			rko->rko_replyq = NULL;
-			rd_kafka_q_op_err(replyq, RD_KAFKA_OP_CONSUMER_ERR,
+			rd_kafka_q_t *rkq = rko->rko_replyq.q;
+			rko->rko_replyq.q = NULL;
+			rd_kafka_q_op_err(rkq, RD_KAFKA_OP_CONSUMER_ERR,
 					  RD_KAFKA_RESP_ERR__IN_PROGRESS,
-					  rkcg->rkcg_reply_rko ?
-					  rkcg->rkcg_reply_rko->rko_version : 0,
+					  rko->rko_replyq.version,
 					  NULL, 0,
 					  "Group is %s",
 					  rkcg->rkcg_reply_rko ?
 					  "terminating":"terminated");
-			rd_kafka_q_destroy(replyq);
+			rd_kafka_q_destroy(rkq);
 			rd_kafka_op_destroy(rko);
 		}
                 return;
@@ -1498,7 +1500,7 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
  *
  * Locality: any thread
  */
-void rd_kafka_cgrp_terminate (rd_kafka_cgrp_t *rkcg, rd_kafka_q_t *replyq) {
+void rd_kafka_cgrp_terminate (rd_kafka_cgrp_t *rkcg, rd_kafka_replyq_t replyq) {
 	rd_kafka_assert(NULL, !thrd_is_current(rkcg->rkcg_rk->rk_thread));
         rd_kafka_cgrp_op(rkcg, NULL, replyq, RD_KAFKA_OP_TERMINATE, 0);
 }
@@ -1853,17 +1855,15 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
  * Locality: any thread
  */
 void rd_kafka_cgrp_op (rd_kafka_cgrp_t *rkcg, rd_kafka_toppar_t *rktp,
-                       rd_kafka_q_t *replyq, rd_kafka_op_type_t type,
+                       rd_kafka_replyq_t replyq, rd_kafka_op_type_t type,
                        rd_kafka_resp_err_t err) {
         rd_kafka_op_t *rko;
 
         rko = rd_kafka_op_new(type);
         rko->rko_err = err;
-        if (replyq) {
-                rko->rko_replyq = replyq;
-                rd_kafka_q_keep(replyq);
-        }
-        if (rktp)
+	rko->rko_replyq = replyq;
+
+	if (rktp)
                 rko->rko_rktp = rd_kafka_toppar_keep(rktp);
 
         rd_kafka_q_enq(&rkcg->rkcg_ops, rko);
@@ -1937,7 +1937,7 @@ rd_kafka_cgrp_assignor_run (rd_kafka_cgrp_t *rkcg,
                                   rkcg->rkcg_group_id, rkcg->rkcg_generation_id,
                                   rkcg->rkcg_member_id,
                                   members, err ? 0 : member_cnt,
-                                  &rkcg->rkcg_ops,
+                                  RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, 0),
                                   rd_kafka_handle_SyncGroup, rkcg);
         return;
 

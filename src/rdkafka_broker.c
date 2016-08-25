@@ -699,7 +699,7 @@ static int rd_kafka_broker_buf_enq2 (rd_kafka_broker_t *rkb,
 void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
                                      int16_t ApiKey,
                                      rd_kafka_buf_t *rkbuf,
-                                     rd_kafka_q_t *replyq,
+                                     rd_kafka_replyq_t replyq,
                                      rd_kafka_resp_cb_t *resp_cb,
                                      void *opaque) {
 
@@ -708,7 +708,6 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
         rd_kafka_broker_keep(rkb);
         if (resp_cb) {
                 rkbuf->rkbuf_replyq = replyq;
-                rd_kafka_q_keep(replyq);
                 rkbuf->rkbuf_cb     = resp_cb;
                 rkbuf->rkbuf_opaque = opaque;
         }
@@ -781,7 +780,10 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
                                           rko->rko_u.metadata.reason);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Metadata, rkbuf,
-				       &rkb->rkb_rk->rk_ops,
+				       /* Handle response thru rk_ops,
+					* but forward parsed result to
+					* rko's replyq when done. */
+				       RD_KAFKA_REPLYQ(&rkb->rkb_rk->rk_ops, 0),
 				       rd_kafka_op_handle_Metadata, rko);
 }
 
@@ -799,7 +801,7 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
 void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
                                    int all_topics,
                                    rd_kafka_itopic_t *only_rkt,
-                                   rd_kafka_q_t *replyq,
+                                   rd_kafka_replyq_t replyq,
                                    const char *reason) {
         rd_kafka_op_t *rko;
 
@@ -808,10 +810,7 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
         if (only_rkt)
                 rko->rko_u.metadata.rkt = rd_kafka_topic_keep_a(only_rkt);
 
-        if (replyq) {
-                rko->rko_replyq = replyq;
-                rd_kafka_q_keep(replyq);
-        }
+	rko->rko_replyq = replyq;
 
 	strncpy(rko->rko_u.metadata.reason, reason,
 		sizeof(rko->rko_u.metadata.reason)-1);
@@ -1010,7 +1009,8 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
                 rd_kafka_topic_wrunlock(rkt);
         }
 
-	rd_kafka_broker_metadata_req(rkb, 0, rkt, NULL, "leader query");
+	rd_kafka_broker_metadata_req(rkb, 0, rkt, RD_KAFKA_NO_REPLYQ,
+				     "leader query");
 
 	/* Release refcnt from rd_kafka_broker_any() */
 	rd_kafka_broker_destroy(rkb);
@@ -1363,7 +1363,7 @@ void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
 				     rkb->rkb_rk->rk_conf.
 				     metadata_refresh_sparse ?
 				     0 /* known topics */ : 1 /* all topics */,
-                                     NULL, NULL, "connected");
+                                     NULL, RD_KAFKA_NO_REPLYQ, "connected");
 }
 
 
@@ -1470,7 +1470,8 @@ static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb) {
 
 			rd_kafka_SaslHandshakeRequest(
 				rkb, rkb->rkb_rk->rk_conf.sasl.mechanisms,
-				NULL, rd_kafka_broker_handle_SaslHandshake,
+				RD_KAFKA_NO_REPLYQ,
+				rd_kafka_broker_handle_SaslHandshake,
 				NULL, 1 /* flash */);
 
 		} else {
@@ -1639,7 +1640,8 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 		rd_kafka_broker_unlock(rkb);
 
 		rd_kafka_ApiVersionRequest(
-			rkb, NULL, rd_kafka_broker_handle_ApiVersion, NULL,
+			rkb, RD_KAFKA_NO_REPLYQ,
+			rd_kafka_broker_handle_ApiVersion, NULL,
 			1 /*Flash message: prepend to transmit queue*/);
 	} else {
 
@@ -2771,7 +2773,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		rd_kafka_buf_version_set(rkbuf, 1);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Produce, rkbuf,
-                                       &rktp->rktp_ops,
+                                       RD_KAFKA_REPLYQ(&rktp->rktp_ops, 0),
                                        rd_kafka_produce_msgset_reply,
                                        /* refcount for msgset_reply() */
                                        rd_kafka_toppar_keep(rktp));
@@ -2878,7 +2880,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
         case RD_KAFKA_OP_XMIT_BUF:
                 rd_kafka_broker_buf_enq2(rkb, rko->rko_u.xbuf.rkbuf);
                 rko->rko_u.xbuf.rkbuf = NULL; /* buffer now owned by broker */
-                if (rko->rko_replyq) {
+                if (rko->rko_replyq.q) {
                         /* Op will be reused for forwarding response. */
                         rko = NULL;
                 }
@@ -3050,7 +3052,8 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
                      !rkb->rkb_rk->rk_conf.metadata_refresh_sparse &&
                      now >= rkb->rkb_ts_metadata_poll))
 		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
-		NULL, "periodic refresh");
+					     RD_KAFKA_NO_REPLYQ,
+					     "periodic refresh");
 
 	/* Serve IO events */
         if (likely(rkb->rkb_transport != NULL))

@@ -33,6 +33,19 @@
 /* Forward declarations */
 typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
+typedef struct rd_kafka_op_s rd_kafka_op_t;
+
+/* One-off reply queue + reply version.
+ * All APIs that take a rd_kafka_replyq_t makes a copy of the
+ * struct as-is and grabs hold of the existing .q refcount.
+ * Think of replyq as a (Q,VERSION) tuple. */
+typedef struct rd_kafka_replyq_s {
+	rd_kafka_q_t *q;
+	int32_t       version;
+} rd_kafka_replyq_t;
+
+
+
 
 /**
  * Flags used by:
@@ -98,7 +111,7 @@ typedef enum {
 #define RD_KAFKA_OP_TYPE_ASSERT(rko,type) \
 	rd_kafka_assert(NULL, (rko)->rko_type == (type) && # type)
 
-typedef struct rd_kafka_op_s {
+struct rd_kafka_op_s {
 	TAILQ_ENTRY(rd_kafka_op_s) rko_link;
 
 	rd_kafka_op_type_t    rko_type;   /* Internal op type */
@@ -111,9 +124,14 @@ typedef struct rd_kafka_op_s {
 
 	shptr_rd_kafka_toppar_t *rko_rktp;
 
-        /* Generic fields */
-        rd_kafka_q_t   *rko_replyq;    /* Indicates request: enq reply
-                                        * on this queue. Refcounted. */
+        /*
+	 * Generic fields
+	 */
+
+	/* Indicates request: enqueue reply on rko_replyq.q with .version.
+	 * .q is refcounted. */
+	rd_kafka_replyq_t rko_replyq;
+
 	rd_kafka_t     *rko_rk;
 
         /* RD_KAFKA_OP_CB */
@@ -201,7 +219,7 @@ typedef struct rd_kafka_op_s {
 			struct rd_kafka_cgrp_s *rkcg;
 		} fetch_start; /* reused for SEEK */
 	} rko_u;
-} rd_kafka_op_t;
+};
 
 TAILQ_HEAD(rd_kafka_op_head_s, rd_kafka_op_s);
 

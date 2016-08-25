@@ -215,8 +215,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
 	RD_IF_FREE(rko->rko_rktp, rd_kafka_toppar_destroy);
 
-        if (rko->rko_replyq)
-                rd_kafka_q_destroy(rko->rko_replyq);
+	rd_kafka_replyq_destroy(&rko->rko_replyq);
 
         if (rd_atomic32_sub(&rd_kafka_op_cnt, 1) < 0)
                 rd_kafka_assert(NULL, !*"rd_kafka_op_cnt < 0");
@@ -277,8 +276,8 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
         rko = rd_kafka_op_new(rko_orig->rko_type |
 			      (rko_orig->rko_op_cb ?
 			       RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY));
+	rd_kafka_op_get_reply_version(rko, rko_orig);
 	rko->rko_op_cb   = rko_orig->rko_op_cb;
-        rko->rko_version = rko_orig->rko_version;
 	rko->rko_err     = err;
 
         return rko;
@@ -293,22 +292,22 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
  * @returns 1 if op was enqueued, else 0 and rko is destroyed.
  */
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
-	rd_kafka_q_t *replyq = rko->rko_replyq;
+	rd_kafka_q_t *rkq = rko->rko_replyq.q;
 	int r;
 
-        if (!replyq) {
+        if (!rkq) {
 		rd_kafka_op_destroy(rko);
                 return 0;
 	}
 
-	rko->rko_replyq = NULL;
-	rko->rko_type  |= rko->rko_type |
-		(rko->rko_op_cb ? RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY);
-        rko->rko_err    = err;
+	rko->rko_replyq.q = NULL;
+	rd_kafka_op_get_reply_version(rko, rko);
+	rko->rko_type |= (rko->rko_op_cb ? RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY);
+        rko->rko_err   = err;
 
-	r = rd_kafka_q_enq(replyq, rko);
+	r = rd_kafka_q_enq(rkq, rko);
 
-	rd_kafka_q_destroy(replyq); /* rko_replyq refcnt */
+	rd_kafka_q_destroy(rkq); /* rko_replyq refcnt */
 
 	return r;
 }
@@ -324,9 +323,7 @@ rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
         rd_kafka_op_t *reply;
 
         /* Indicate to destination where to send reply. */
-        rko->rko_replyq = recvq;
-        if (recvq)
-                rd_kafka_q_keep(rko->rko_replyq);
+	rd_kafka_op_set_replyq(rko, recvq, NULL);
 
         /* Enqueue op */
         rd_kafka_q_enq(destq, rko);

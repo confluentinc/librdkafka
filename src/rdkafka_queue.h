@@ -61,15 +61,17 @@ void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq);
 
 
 static RD_INLINE RD_UNUSED
-void rd_kafka_q_keep (rd_kafka_q_t *rkq) {
+rd_kafka_q_t *rd_kafka_q_keep (rd_kafka_q_t *rkq) {
         mtx_lock(&rkq->rkq_lock);
         rkq->rkq_refcnt++;
         mtx_unlock(&rkq->rkq_lock);
+	return rkq;
 }
 
 static RD_INLINE RD_UNUSED
-void rd_kafka_q_keep_nolock (rd_kafka_q_t *rkq) {
+rd_kafka_q_t *rd_kafka_q_keep_nolock (rd_kafka_q_t *rkq) {
         rkq->rkq_refcnt++;
+	return rkq;
 }
 
 static RD_INLINE RD_UNUSED
@@ -330,6 +332,57 @@ uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
 	return sz;
 }
 
+
+
+/* Construct temporary on-stack replyq with increased Q refcount and
+ * optional VERSION. */
+#define RD_KAFKA_REPLYQ(Q,VERSION) \
+	(rd_kafka_replyq_t){rd_kafka_q_keep(Q), VERSION}
+
+/* Construct temporary on-stack replyq for indicating no replyq. */
+#define RD_KAFKA_NO_REPLYQ  (rd_kafka_replyq_t){NULL, 0}
+
+/**
+ * Set up replyq.
+ * Q refcnt is increased.
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_set_replyq (rd_kafka_replyq_t *replyq,
+		     rd_kafka_q_t *rkq, int32_t version) {
+	replyq->q = rkq ? rd_kafka_q_keep(rkq) : NULL;
+	replyq->version = version;
+}
+
+/**
+ * Set rko's replyq with an optional version (versionptr != NULL).
+ * Q refcnt is increased.
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_op_set_replyq (rd_kafka_op_t *rko, rd_kafka_q_t *rkq,
+			rd_atomic32_t *versionptr) {
+	rd_kafka_set_replyq(&rko->rko_replyq, rkq,
+			    versionptr ? rd_atomic32_get(versionptr) : 0);
+}
+
+/* Set reply rko's version from replyq's version */
+#define rd_kafka_op_get_reply_version(REPLY_RKO, ORIG_RKO) do {		\
+		(REPLY_RKO)->rko_version = (ORIG_RKO)->rko_replyq.version; \
+	} while (0)
+
+
+/* Clear replyq holder without decreasing any .q references. */
+#define rd_kafka_replyq_clear(REPLYQ) \
+	memset(REPLYQ, 0, sizeof(rd_kafka_replyq_t))
+
+/**
+ * Clear replyq holder and destroy any .q references.
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_replyq_destroy (rd_kafka_replyq_t *replyq) {
+	if (replyq->q)
+		rd_kafka_q_destroy(replyq->q);
+	rd_kafka_replyq_clear(replyq);
+}
 
 
 rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,

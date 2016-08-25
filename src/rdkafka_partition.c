@@ -112,7 +112,7 @@ static void rd_kafka_toppar_consumer_lag_req (rd_kafka_toppar_t *rktp) {
 			       rktp->rktp_rkt->rkt_topic->str,
 			       rktp->rktp_partition,
 			       &query_offset, 1,
-			       0, &rktp->rktp_ops,
+			       RD_KAFKA_REPLYQ(&rktp->rktp_ops, 0),
                                rd_kafka_toppar_lag_handle_Offset,
                                rd_kafka_toppar_keep(rktp));
 
@@ -234,8 +234,7 @@ void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp) {
 	rd_kafka_q_destroy(&rktp->rktp_fetchq);
         rd_kafka_q_destroy(&rktp->rktp_ops);
 
-        if (rktp->rktp_replyq)
-                rd_kafka_q_destroy(rktp->rktp_replyq);
+	rd_kafka_replyq_destroy(&rktp->rktp_replyq);
 
 	rd_kafka_topic_destroy0(rktp->rktp_s_rkt);
 
@@ -877,7 +876,7 @@ void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
  * Locality: toppar thread
  */
 void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
-                                   rd_kafka_q_t *replyq) {
+                                   rd_kafka_replyq_t replyq) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         rd_kafka_topic_partition_list_t *part;
         rd_kafka_op_t *rko;
@@ -896,12 +895,11 @@ void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,
                                            rd_kafka_toppar_keep(rktp));
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
+	rko->rko_replyq = replyq;
+
 	rko->rko_u.offset_fetch.partitions = part;
 	rko->rko_u.offset_fetch.do_free = 1;
 
-        rko->rko_replyq = replyq;
-        rd_kafka_q_keep(replyq);
-        rko->rko_version = rd_atomic32_get(&rktp->rktp_version);
         rd_kafka_q_enq(&rktp->rktp_cgrp->rkcg_ops, rko);
 }
 
@@ -930,9 +928,10 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 				     rktp->rktp_partition,
 				     &Offset, &offset_cnt);
 
-	if (request->rkbuf_op_version > 0 &&
+	if (request->rkbuf_replyq.version > 0 &&
 	    err != RD_KAFKA_RESP_ERR__DESTROY &&
-	    request->rkbuf_op_version < rd_atomic32_get(&rktp->rktp_version)) {
+	    request->rkbuf_replyq.version <
+	    rd_atomic32_get(&rktp->rktp_version)) {
 		/* Outdated request response, ignore. */
 		    err = RD_KAFKA_RESP_ERR__OUTDATED;
 	}
@@ -944,7 +943,7 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                            "Offset reply error for "
                            "topic %.*s [%"PRId32"] (v%d): %s",
                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                           rktp->rktp_partition, request->rkbuf_op_version,
+                           rktp->rktp_partition, request->rkbuf_replyq.version,
 			   rd_kafka_err2str(err));
 
                 if (err == RD_KAFKA_RESP_ERR__DESTROY) {
@@ -1055,7 +1054,10 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
                  * Get stored offset from broker based storage:
                  * ask cgrp manager for offsets
                  */
-                rd_kafka_toppar_offset_fetch(rktp, &rktp->rktp_ops);
+                rd_kafka_toppar_offset_fetch(
+			rktp,
+			RD_KAFKA_REPLYQ(&rktp->rktp_ops,
+					rd_atomic32_get(&rktp->rktp_version)));
 
 	} else {
                 shptr_rd_kafka_toppar_t *s_rktp;
@@ -1080,8 +1082,8 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
 				       rktp->rktp_rkt->rkt_topic->str,
 				       rktp->rktp_partition,
 				       &query_offset, 1,
-				       rd_atomic32_get(&rktp->rktp_version),
-                                       &rktp->rktp_ops,
+                                       RD_KAFKA_REPLYQ(&rktp->rktp_ops,
+						       rd_atomic32_get(&rktp->rktp_version)),
                                        rd_kafka_toppar_handle_Offset,
                                        s_rktp);
         }
@@ -1131,7 +1133,7 @@ void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
                 rd_kafka_assert(rktp->rktp_rkt->rkt_rk, !rktp->rktp_cgrp);
                 /* Attach toppar to cgrp */
                 rktp->rktp_cgrp = rkcg;
-                rd_kafka_cgrp_op(rkcg, rktp, NULL,
+                rd_kafka_cgrp_op(rkcg, rktp, RD_KAFKA_NO_REPLYQ,
                                  RD_KAFKA_OP_PARTITION_JOIN, 0);
         }
 
@@ -1162,12 +1164,13 @@ void rd_kafka_toppar_fetch_start (rd_kafka_toppar_t *rktp,
 
         /* Signal back to caller thread that start has commenced, or err */
 err_reply:
-        if (rko_orig && rko_orig->rko_replyq) {
+        if (rko_orig && rko_orig->rko_replyq.q) {
                 rd_kafka_op_t *rko;
                 rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH_START);
+		rd_kafka_op_get_reply_version(rko, rko_orig);
                 rko->rko_err = err;
                 rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-                rd_kafka_q_enq(rko_orig->rko_replyq, rko);
+                rd_kafka_q_enq(rko_orig->rko_replyq.q, rko);
         }
 }
 
@@ -1189,20 +1192,20 @@ void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
 
         if (rktp->rktp_cgrp) {
                 /* Detach toppar from cgrp */
-                rd_kafka_cgrp_op(rktp->rktp_cgrp, rktp, NULL,
+                rd_kafka_cgrp_op(rktp->rktp_cgrp, rktp, RD_KAFKA_NO_REPLYQ,
                                  RD_KAFKA_OP_PARTITION_LEAVE, 0);
                 rktp->rktp_cgrp = NULL;
         }
 
         /* Signal back to application thread that stop is done. */
-	if (rktp->rktp_replyq) {
+	if (rktp->rktp_replyq.q) {
 		rd_kafka_op_t *rko;
 		rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH_STOP|RD_KAFKA_OP_REPLY);
+		rko->rko_version = rktp->rktp_replyq.version;
                 rko->rko_err = err;
 		rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-		rd_kafka_q_enq(rktp->rktp_replyq, rko);
-                rd_kafka_q_destroy(rktp->rktp_replyq);
-                rktp->rktp_replyq = NULL;
+		rd_kafka_q_enq(rktp->rktp_replyq.q, rko);
+		rd_kafka_replyq_destroy(&rktp->rktp_replyq);
 	}
 }
 
@@ -1232,11 +1235,10 @@ void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
         rd_kafka_q_fwd_set(&rktp->rktp_fetchq, NULL);
 
         /* Assign the future replyq to propagate stop results. */
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_replyq == NULL);
+        rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_replyq.q == NULL);
 	if (rko_orig) {
-		rd_kafka_assert(NULL, !rktp->rktp_replyq);
 		rktp->rktp_replyq = rko_orig->rko_replyq;
-		rko_orig->rko_replyq = NULL;
+		rd_kafka_replyq_clear(&rko_orig->rko_replyq);
 	}
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_STOPPING);
 
@@ -1303,13 +1305,14 @@ void rd_kafka_toppar_seek (rd_kafka_toppar_t *rktp,
 err_reply:
 	rd_kafka_toppar_unlock(rktp);
 
-        if (rko_orig && rko_orig->rko_replyq) {
+        if (rko_orig && rko_orig->rko_replyq.q) {
                 rd_kafka_op_t *rko;
                 rko = rd_kafka_op_new(RD_KAFKA_OP_SEEK|RD_KAFKA_OP_REPLY);
+		rd_kafka_op_get_reply_version(rko, rko_orig);
                 rko->rko_err = err;
 		rko->rko_u.fetch_start.offset = rko_orig->rko_u.fetch_start.offset;
                 rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-                rd_kafka_q_enq(rko_orig->rko_replyq, rko);
+                rd_kafka_q_enq(rko_orig->rko_replyq.q, rko);
         }
 }
 
@@ -1630,10 +1633,12 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 		 * The rko is the original rko, so forward the reply
 		 * to a replyq if it is set. */
 		if (rko->rko_err) {
-			rd_kafka_q_op_err(rko->rko_replyq ?
-					  rko->rko_replyq : &rktp->rktp_fetchq,
+			rd_kafka_q_op_err(rko->rko_replyq.q ?
+					  rko->rko_replyq.q :
+					  &rktp->rktp_fetchq,
                                           RD_KAFKA_OP_CONSUMER_ERR,
-					  rko->rko_err, rko->rko_version,
+					  rko->rko_err,
+					  rko->rko_replyq.version,
 					  rktp, 0,
 					  "Offset commit failed: %s",
 					  rd_kafka_err2str(rko->
@@ -1654,12 +1659,13 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 		rd_kafka_toppar_unlock(rktp);
 
 		/* Send reply to replyq. We must make a copy here. */
-		if (rko->rko_replyq) {
+		if (rko->rko_replyq.q) {
 			rko_reply = rd_kafka_op_new_reply(rko, rko->rko_err);
+			rd_kafka_op_get_reply_version(rko_reply, rko);
 			rko_reply->rko_u.offset_commit =
 				rko->rko_u.offset_commit;
 			RD_MEMZERO(rko->rko_u.offset_commit);
-			rd_kafka_q_enq(rko->rko_replyq, rko_reply);
+			rd_kafka_q_enq(rko->rko_replyq.q, rko_reply);
 		}
 		break;
 
@@ -1681,14 +1687,13 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 
 /**
  * Send command op to toppar (handled by toppar's thread).
- * If 'new_barrier' is true a new barrier will be inserted.
  *
  * Locality: any thread
  */
 void rd_kafka_toppar_op (rd_kafka_toppar_t *rktp,
                             rd_kafka_op_type_t type,
                             int64_t offset, rd_kafka_cgrp_t *rkcg,
-                            rd_kafka_q_t *replyq) {
+                            rd_kafka_replyq_t replyq) {
         rd_kafka_op_t *rko;
 
         rko = rd_kafka_op_new(type);
@@ -1700,10 +1705,7 @@ void rd_kafka_toppar_op (rd_kafka_toppar_t *rktp,
 	}
 
         rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-        if (replyq) {
-                rko->rko_replyq = replyq;
-                rd_kafka_q_keep(replyq);
-        }
+	rko->rko_replyq = replyq;
 
         rd_kafka_q_enq(&rktp->rktp_ops, rko);
 }
@@ -1722,7 +1724,7 @@ void rd_kafka_toppar_op (rd_kafka_toppar_t *rktp,
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start (rd_kafka_toppar_t *rktp,
                                                     int64_t offset,
                                                     rd_kafka_q_t *fwdq,
-                                                    rd_kafka_q_t *replyq) {
+                                                    rd_kafka_replyq_t replyq) {
         if (fwdq)
                 rd_kafka_q_fwd_set(&rktp->rktp_fetchq, fwdq);
 
@@ -1746,7 +1748,7 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start (rd_kafka_toppar_t *rktp,
  * Locality: any thread
  */
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_stop (rd_kafka_toppar_t *rktp,
-                                                   rd_kafka_q_t *replyq) {
+                                                   rd_kafka_replyq_t replyq) {
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "CONSUMER",
 		     "Stop consuming %.*s [%"PRId32"]",
@@ -1768,7 +1770,7 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_stop (rd_kafka_toppar_t *rktp,
  */
 rd_kafka_resp_err_t rd_kafka_toppar_op_seek (rd_kafka_toppar_t *rktp,
                                              int64_t offset,
-                                             rd_kafka_q_t *replyq) {
+                                             rd_kafka_replyq_t replyq) {
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "CONSUMER",
 		     "Seek %.*s [%"PRId32"] to "
 		     "offset %s",
@@ -1869,7 +1871,7 @@ rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
 				    RD_KAFKA_OFFSET_INVALID)
 					rd_kafka_toppar_op_seek(
 						rktp, rktp->rktp_next_offset,
-						NULL);
+						RD_KAFKA_NO_REPLYQ);
 
 			} else
 				rd_kafka_dbg(rk, TOPIC, pause?"PAUSE":"RESUME",

@@ -56,6 +56,7 @@ int main_0041_fetch_max_bytes (int argc, char **argv) {
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 
+	test_conf_init(NULL, NULL, 60);
 	
 	testid = test_id_generate();
 	rk = test_create_producer();

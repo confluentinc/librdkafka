@@ -114,20 +114,20 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     else:
         print('# Not deploying')
 
-    print('# Starting cluster')
+    print('# Starting cluster, instance path %s' % cluster.instance_path())
     cluster.start()
 
     print('# Waiting for brokers to come up')
 
     if not cluster.wait_operational(30):
         cluster.stop(force=True)
-        raise Exception('Cluster did not go operational, see logs in %s' % \
-                        (cluster.root_path))
+        raise Exception('Cluster %s did not go operational, see logs in %s/%s' % \
+                        (cluster.name, cluster.root_path, cluster.instance))
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
 
-    cmd_env = 'export KAFKA_PATH=%s RDKAFKA_TEST_CONF=%s ZK_ADDRESS=%s BROKERS=%s TEST_KAFKA_VERSION=%s;' % \
-              (broker1.conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version)
+    cmd_env = 'export KAFKA_PATH="%s" RDKAFKA_TEST_CONF="%s" ZK_ADDRESS="%s" BROKERS="%s" TEST_KAFKA_VERSION="%s" TRIVUP_ROOT="%s"; ' % \
+              (broker1.conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version, cluster.instance_path())
     if not cmd:
         cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
     for i in range(0, exec_cnt):
@@ -157,6 +157,8 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', dest='debug', default=False,
                         help='Enable trivup debugging')
     parser.add_argument('--root', type=str, default='tmp', help='Root working directory')
+    parser.add_argument('--port', default=None, help='Base TCP port to start allocating from')
+    parser.add_argument('--kafka-src', dest='kafka_path', type=str, default=None, help='Path to Kafka git repo checkout (used for version=trunk)')
 
     args = parser.parse_args()
     if args.conf is not None:
@@ -164,6 +166,12 @@ if __name__ == '__main__':
     else:
         args.conf = {}
 
+    if args.port is not None:
+        args.conf['port_base'] = int(args.port)
+    if args.kafka_path is not None:
+        args.conf['kafka_path'] = args.kafka_path
+
+    args.conf['conf'] = ["log.retention.bytes=1000000000"]
     for version in args.versions:
         test_version(version, cmd=args.cmd, deploy=args.deploy,
                      conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt,

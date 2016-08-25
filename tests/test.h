@@ -109,6 +109,7 @@ extern int test_broker_version;
 
 #define TEST_FAIL0(fail_now,...) do {					\
                 int is_thrd = 0;                                        \
+		TEST_SAYL(0, "TEST FAILURE\n");				\
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
 			test_curr->name,                                \
                         __FILE__,__LINE__,__FUNCTION__);                \

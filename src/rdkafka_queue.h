@@ -31,11 +31,13 @@ struct rd_kafka_q_s {
 };
 
 
+/* FD-based application signalling state holder. */
 struct rd_kafka_q_io {
 	int    fd;
 	void  *payload;
 	size_t size;
 };
+
 
 
 /**

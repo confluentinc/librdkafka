@@ -49,6 +49,7 @@
 
 int main_0040_io_event (int argc, char **argv) {
 	rd_kafka_conf_t *conf;
+	rd_kafka_topic_conf_t *tconf;
 	rd_kafka_t *rk_p, *rk_c;
 	const char *topic;
 	rd_kafka_topic_t *rkt_p;
@@ -57,6 +58,7 @@ int main_0040_io_event (int argc, char **argv) {
 	int msgcnt = 100;
 	int recvd = 0;
 	int fds[2];
+	int wait_multiplier = 1;
 	struct pollfd pfd;
         int r;
 	enum {
@@ -71,11 +73,12 @@ int main_0040_io_event (int argc, char **argv) {
 	rk_p = test_create_producer();
 	rkt_p = test_create_producer_topic(rk_p, topic, NULL);
 
-	test_conf_init(&conf, NULL, 0);
+	test_conf_init(&conf, &tconf, 0);
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
 	test_conf_set(conf, "session.timeout.ms", "6000");
 	test_conf_set(conf, "enable.partition.eof", "false");
-	rk_c = test_create_consumer(topic, NULL, conf, NULL, NULL);
+	test_topic_conf_set(tconf, "auto.offset.reset", "earliest");
+	rk_c = test_create_consumer(topic, NULL, conf, tconf, NULL);
 
 	queue = rd_kafka_queue_get_consumer(rk_c);
 
@@ -110,9 +113,9 @@ int main_0040_io_event (int argc, char **argv) {
 		int r;
 
 #ifndef _MSC_VER
-		r = poll(&pfd, 1, 1000);
+		r = poll(&pfd, 1, 1000 * wait_multiplier);
 #else
-                r = WSAPoll(&pfd, 1, 1000);
+                r = WSAPoll(&pfd, 1, 1000 * wait_multiplier);
 #endif
 		if (r == -1) {
 			TEST_FAIL("poll() failed: %s", strerror(errno));
@@ -181,6 +184,7 @@ int main_0040_io_event (int argc, char **argv) {
 			}
 			TEST_SAY("%d events, Consumed %d/%d messages\n", eventcnt, recvd, msgcnt);
 
+			wait_multiplier = 1;
 
 		} else {
 			if (expecting_io == _REBALANCE) {
@@ -197,6 +201,10 @@ int main_0040_io_event (int argc, char **argv) {
 					  NULL, 10);
 
 			expecting_io = _YEP;
+			/* When running slowly (e.g., valgrind) it might take
+			 * some time before the first message is received
+			 * after producing. */
+			wait_multiplier = 3;
 		}
 	}
 	TEST_SAY("Done\n");

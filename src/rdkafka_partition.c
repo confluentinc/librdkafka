@@ -2077,7 +2077,7 @@ rd_kafka_topic_partition_list_destroy (rd_kafka_topic_partition_list_t *rktparli
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
                                     const char *topic, int32_t partition,
-                                    void *_private) {
+				    shptr_rd_kafka_toppar_t *_private) {
         rd_kafka_topic_partition_t *rktpar;
         if (rktparlist->cnt == rktparlist->size)
                 rd_kafka_topic_partition_list_grow(rktparlist, 1);

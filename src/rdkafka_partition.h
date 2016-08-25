@@ -378,7 +378,7 @@ rd_kafka_topic_partition_new_from_rktp (rd_kafka_toppar_t *rktp);
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
                                     const char *topic, int32_t partition,
-                                    void *_private);
+				    shptr_rd_kafka_toppar_t *_private);
 
 int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 				    const rd_kafka_group_member_t *rkgm,

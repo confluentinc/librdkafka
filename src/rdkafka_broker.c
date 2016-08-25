@@ -820,9 +820,26 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 
 
+/**
+ * @returns the current broker state change version.
+ *          Pass this value to fugure rd_kafka_brokers_wait_state_change() calls
+ *          to avoid the race condition where a state-change happens between
+ *          an initial call to some API that fails and the sub-sequent
+ *          .._wait_state_change() call.
+ */
+int rd_kafka_brokers_get_state_version (rd_kafka_t *rk) {
+	int version;
+	mtx_lock(&rk->rk_broker_state_change_lock);
+	version = rk->rk_broker_state_change_version;
+	mtx_unlock(&rk->rk_broker_state_change_lock);
+	return version;
+}
 
 /**
  * @brief Wait at most \p timeout_ms for any state change for any broker.
+ *        \p stored_version is the value previously returned by
+ *        rd_kafka_brokers_get_state_version() prior to another API call
+ *        that failed due to invalid state.
  *
  * Triggers:
  *   - broker state changes
@@ -836,12 +853,16 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
  *
  * @locality any thread
  */
-int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int timeout_ms) {
+int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int stored_version,
+					int timeout_ms) {
 	int r;
 	mtx_lock(&rk->rk_broker_state_change_lock);
-	r = cnd_timedwait_ms(&rk->rk_broker_state_change_cnd,
-			     &rk->rk_broker_state_change_lock,
-			     timeout_ms) == thrd_success;
+	if (stored_version != rk->rk_broker_state_change_version)
+		r = 1;
+	else
+		r = cnd_timedwait_ms(&rk->rk_broker_state_change_cnd,
+				     &rk->rk_broker_state_change_lock,
+				     timeout_ms) == thrd_success;
 	mtx_unlock(&rk->rk_broker_state_change_lock);
 	return r;
 }
@@ -856,6 +877,7 @@ void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
 	rd_kafka_dbg(rk, GENERIC, "BROADCAST",
 		     "Broadcasting state change");
 	mtx_lock(&rk->rk_broker_state_change_lock);
+	rk->rk_broker_state_change_version++;
 	cnd_broadcast(&rk->rk_broker_state_change_cnd);
 	mtx_unlock(&rk->rk_broker_state_change_lock);
 }
@@ -918,6 +940,7 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms) {
 	while (1) {
 		rd_kafka_broker_t *rkb;
 		int remains;
+		int version = rd_kafka_brokers_get_state_version(rk);
 
 		rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
 					  rd_kafka_broker_filter_non_blocking,
@@ -930,7 +953,7 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms) {
 		if (rd_timeout_expired(remains))
 			return NULL;
 
-		rd_kafka_brokers_wait_state_change(rk, remains);
+		rd_kafka_brokers_wait_state_change(rk, version, remains);
 	}
 
 	return NULL;

@@ -1823,6 +1823,7 @@ rd_kafka_committed (rd_kafka_t *rk,
 
         do {
                 rd_kafka_op_t *rko;
+		int state_version = rd_kafka_brokers_get_state_version(rk);
 
                 rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
 		rd_kafka_op_set_replyq(rko, rkq, NULL);
@@ -1843,7 +1844,8 @@ rd_kafka_committed (rd_kafka_t *rk,
                         } else if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
 				    err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
 				   !rd_kafka_brokers_wait_state_change(
-					   rk, rd_timeout_remains(abs_timeout)))
+					   rk, state_version,
+					   rd_timeout_remains(abs_timeout)))
 				err = RD_KAFKA_RESP_ERR__TIMED_OUT;
 
                         rd_kafka_op_destroy(rko);
@@ -1900,6 +1902,7 @@ struct _query_wmark_offsets_state {
 	int64_t offsets[2];
 	int     offidx;  /* next offset to set from response */
 	rd_ts_t ts_end;
+	int     state_version;  /* Broker state version */
 };
 
 static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
@@ -1922,8 +1925,10 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
 	     err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
 	    rkb &&
 	    rd_kafka_brokers_wait_state_change(
-		    rkb->rkb_rk, rd_timeout_remains(state->ts_end))) {
+		    rkb->rkb_rk, state->state_version,
+		    rd_timeout_remains(state->ts_end))) {
 		/* Retry */
+		state->state_version = rd_kafka_brokers_get_state_version(rk);
 		request->rkbuf_retries = 0;
 		if (rd_kafka_buf_retry(rkb, request))
 			return; /* Retry in progress */
@@ -1960,6 +1965,8 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 
 	/* Get toppar's leader broker. */
 	while (1) {
+		int state_version = rd_kafka_brokers_get_state_version(rk);
+
 		if ((rkb = rd_kafka_toppar_leader(rktp, 1)))
 			break;
 
@@ -1968,7 +1975,7 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 			rd_kafka_topic_leader_query(rk, rktp->rktp_rkt);
 
 		if (!rd_kafka_brokers_wait_state_change(
-			    rk, rd_timeout_remains(ts_end)))
+			    rk, state_version, rd_timeout_remains(ts_end)))
 			break;
 	}
 
@@ -1988,6 +1995,7 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	state.offidx = 0;
 	state.err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
 	state.ts_end = ts_end;
+	state.state_version = rd_kafka_brokers_get_state_version(rk);
 
 	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[0], 1,
 			       RD_KAFKA_REPLYQ(rkq, 0),
@@ -2701,7 +2709,7 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
                 state->wait_cnt++;
                 rd_kafka_DescribeGroupsRequest(rkb,
                                                (const char **)grps, i,
-                                               state->q,
+                                               RD_KAFKA_REPLYQ(state->q, 0),
                                                rd_kafka_DescribeGroups_resp_cb,
                                                state);
 
@@ -2724,15 +2732,18 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
         int rkb_cnt = 0;
         struct list_groups_state state = RD_ZERO_INIT;
         rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+	int state_version = rd_kafka_brokers_get_state_version(rk);
 
         /* Wait until metadata has been fetched from cluster so
-         * that we have a full broker list. */
+         * that we have a full broker list.
+	 * This state only happens during initial client setup, after that
+	 * there'll always be a cached metadata copy. */
         rd_kafka_rdlock(rk);
         while (!rk->rk_ts_metadata) {
                 rd_kafka_rdunlock(rk);
 
 		if (!rd_kafka_brokers_wait_state_change(
-			    rk, rd_timeout_remains(ts_end)))
+			    rk, state_version, rd_timeout_remains(ts_end)))
                         return RD_KAFKA_RESP_ERR__TIMED_OUT;
 
                 rd_kafka_rdlock(rk);

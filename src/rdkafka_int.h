@@ -140,6 +140,7 @@ struct rd_kafka_s {
 	 * functions waiting for a state change. */
 	cnd_t                      rk_broker_state_change_cnd;
 	mtx_t                      rk_broker_state_change_lock;
+	int                        rk_broker_state_change_version;
 
 
 	TAILQ_HEAD(, rd_kafka_itopic_s)  rk_topics;

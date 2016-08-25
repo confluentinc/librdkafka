@@ -23,11 +23,6 @@ import argparse
 import json
 
 
-# Path to Kafka git clone
-kafka_path='/home/maglun/src/kafka'
-
-
-
 def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
                   root_path='tmp'):
     """
@@ -44,7 +39,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
         cluster.ssl = SslApp(cluster, conf)
 
     # One ZK (from Kafka repo)
-    zk1 = ZookeeperApp(cluster, bin_path=kafka_path + '/bin/zookeeper-server-start.sh')
+    zk1 = ZookeeperApp(cluster)
     zk_address = zk1.get('address')
 
     # Start Kerberos KDC if GSSAPI is configured
@@ -57,9 +52,9 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
     print('conf: ', defconf)
 
-    broker1 = KafkaBrokerApp(cluster, defconf, kafka_path=kafka_path)
-    broker2 = KafkaBrokerApp(cluster, defconf, kafka_path=kafka_path)
-    broker3 = KafkaBrokerApp(cluster, defconf, kafka_path=kafka_path)
+    broker1 = KafkaBrokerApp(cluster, defconf)
+    broker2 = KafkaBrokerApp(cluster, defconf)
+    broker3 = KafkaBrokerApp(cluster, defconf)
 
     # Generate test config file
     security_protocol='PLAINTEXT'

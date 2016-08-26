@@ -1155,13 +1155,13 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 		   rd_kafka_secproto_names[rkb->rkb_proto], s);
 
 	/* Connect to broker */
-	if (connect(s, (struct sockaddr *)sinx,
-		    RD_SOCKADDR_INX_LEN(sinx)) == SOCKET_ERROR &&
-	    (socket_errno != EINPROGRESS
+	int test_broker_connection = socket_errno != EINPROGRESS;
 #ifdef _MSC_VER
-		&& socket_errno != WSAEWOULDBLOCK
+	test_broker_connection = test_broker_connection && socket_errno != WSAEWOULDBLOCK;
 #endif
-		)) {
+	test_broker_connection = test_broker_connection && connect(s, (struct sockaddr *)sinx,
+	RD_SOCKADDR_INX_LEN(sinx)) == SOCKET_ERROR;
+	if (test_broker_connection) {
 		rd_rkb_dbg(rkb, BROKER, "CONNECT",
 			   "couldn't connect to %s: %s (%i)",
 			   rd_sockaddr2str(sinx,

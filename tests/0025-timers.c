@@ -99,7 +99,7 @@ static void do_test_stats_timer (void) {
 
 
         TIMING_START(&t_new, "rd_kafka_new()");
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         TIMING_STOP(&t_new);
         if (!rk)
                 TEST_FAIL("Failed to create instance: %s\n", errstr);

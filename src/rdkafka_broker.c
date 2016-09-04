@@ -123,7 +123,7 @@ void msghdr_print (rd_kafka_t *rk,
 #define rd_kafka_broker_terminating(rkb) \
         (rd_refcnt_get(&(rkb)->rkb_refcnt) <= 1)
 
-static size_t rd_kafka_msghdr_size (const struct msghdr *msg) {
+static RD_UNUSED size_t rd_kafka_msghdr_size (const struct msghdr *msg) {
 	int i;
 	size_t tot = 0;
 
@@ -641,8 +641,11 @@ static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
 
 	/* Calculate total message buffer length. */
 	rkbuf->rkbuf_of          = 0;  /* Indicates send position */
-	rkbuf->rkbuf_len         = rd_kafka_msghdr_size(&rkbuf->rkbuf_msg);
 
+	rd_dassert(rkbuf->rkbuf_len == rd_kafka_msghdr_size(&rkbuf->rkbuf_msg));
+
+	rd_kafka_assert(NULL,
+			rkbuf->rkbuf_len-4 < (size_t)rk->rk_conf.max_msg_size);
 	rd_kafka_buf_update_i32(rkbuf, of_Size, (int32_t) rkbuf->rkbuf_len-4);
 }
 
@@ -1114,31 +1117,32 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
  * Rebuilds 'src' into 'dst' starting at byte offset 'of'.
  */
 static void rd_kafka_msghdr_rebuild (struct msghdr *dst, size_t dst_len,
-				     struct msghdr *src,
-				     ssize_t of) {
-	int i;
-	size_t len = 0;
-	void *iov = dst->msg_iov;
+				     size_t max_bytes,
+				     struct msghdr *src, ssize_t of) {
+	struct iovec *siov = src->msg_iov, *s_end = &src->msg_iov[src->msg_iovlen];
+	struct iovec *diov = dst->msg_iov, *d_end = &dst->msg_iov[dst_len];
+
 	*dst = *src;
-	dst->msg_iov = iov;
+	dst->msg_iov = diov;
 	dst->msg_iovlen = 0;
 
-	for (i = 0 ; i < (int)src->msg_iovlen ; i++) {
-		ssize_t vof = of - len;
+	for ( ; max_bytes > 0 && siov < s_end && diov < d_end ; siov++) {
+		ssize_t rlen;
 
-		if (vof < 0)
-			vof = 0;
-
-		if ((size_t)vof < (size_t)src->msg_iov[i].iov_len) {
-			rd_kafka_assert(NULL, (size_t)dst->msg_iovlen < dst_len);
-			dst->msg_iov[dst->msg_iovlen].iov_base =
-				(char *)src->msg_iov[i].iov_base + vof;
-			dst->msg_iov[dst->msg_iovlen].iov_len =
-				src->msg_iov[i].iov_len - vof;
-			dst->msg_iovlen++;
+		if (of >= (ssize_t)siov->iov_len) {
+			of -= siov->iov_len;
+			continue;
 		}
 
-		len += src->msg_iov[i].iov_len;
+		rlen = RD_MIN(siov->iov_len - of, max_bytes);
+
+		diov->iov_base = ((char *)(siov->iov_base)) + of;
+		diov->iov_len  = rlen;
+		rd_dassert(rlen > 0);
+		max_bytes     -= rlen;
+		of             = 0;
+		dst->msg_iovlen++;
+		diov++;
 	}
 }
 
@@ -1198,6 +1202,7 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 
 		rkbuf->rkbuf_msg.msg_iov = rkbuf->rkbuf_iov;
 		rkbuf->rkbuf_msg.msg_iovlen = 1;
+		rkbuf->rkbuf_len = 0; /* read bytes is zero */
 
 		msg = rkbuf->rkbuf_msg;
 
@@ -1210,11 +1215,12 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 		/* Receive in progress: adjust the msg to allow more data. */
 		msg.msg_iov = &iov;
 		rd_kafka_msghdr_rebuild(&msg, rkbuf->rkbuf_msg.msg_iovlen,
+					rkb->rkb_rk->rk_conf.recv_max_msg_size,
 					&rkbuf->rkbuf_msg,
 					rkbuf->rkbuf_wof);
 	}
 
-	rd_kafka_assert(rkb->rkb_rk, rd_kafka_msghdr_size(&msg) > 0);
+	rd_dassert(rd_kafka_msghdr_size(&msg) > 0);
 
 	r = rd_kafka_transport_recvmsg(rkb->rkb_transport, &msg,
 				       errstr, sizeof(errstr));
@@ -1694,8 +1700,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 	       rd_kafka_bufq_cnt(&rkb->rkb_waitresps) < rkb->rkb_max_inflight &&
 	       (rkbuf = TAILQ_FIRST(&rkb->rkb_outbufs.rkbq_bufs))) {
 		ssize_t r;
-		struct msghdr *msg = &rkbuf->rkbuf_msg;
-		struct msghdr msg2;
+		struct msghdr *msg;
 		struct iovec iov[IOV_MAX];
 		size_t of = rkbuf->rkbuf_of;
 
@@ -1713,15 +1718,28 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 			rd_kafka_buf_update_i32(rkbuf, 4+2+2,
 						rkbuf->rkbuf_corrid);
 		} else if (rkbuf->rkbuf_of > 0) {
-			/* If message has been partially sent we need
-			 * to construct a new msg+iovec skipping the
-			 * sent bytes. */
+			rd_kafka_assert(NULL, rkbuf->rkbuf_connver == rkb->rkb_connver);
+                }
+
+		if (rkbuf->rkbuf_of > 0 ||
+		    rkbuf->rkbuf_iovcnt > IOV_MAX) {
+			struct msghdr msg2;
+
+			/* If message has been partially sent or contains
+			 * too many iovecs for sendmsg() we need to construct
+			 * a new msg+iovec skipping the sent bytes or
+			 * excessive iovecs. */
+
 			msg2.msg_iov = iov;
 			rd_kafka_msghdr_rebuild(&msg2, IOV_MAX,
+						rkb->rkb_rk->rk_conf.
+						max_msg_size,
 						&rkbuf->rkbuf_msg,
 						rkbuf->rkbuf_of);
 			msg = &msg2;
-                }
+		} else
+			msg = &rkbuf->rkbuf_msg;
+
 
 		if (0) {
 			rd_rkb_dbg(rkb, PROTOCOL, "SEND",
@@ -2655,7 +2673,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	 *  msgcntmax * messagepayload (ext memory)
 	 * = 1 + (4 * msgcntmax)
 	 *
-	 * We are bound both by configuration and IOV_MAX
+	 * We are bound by configuration.
 	 */
 
 	if (rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) > 0)
@@ -2665,11 +2683,6 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 			   rkb->rkb_rk->rk_conf.batch_num_messages);
 	rd_kafka_assert(rkb->rkb_rk, msgcntmax > 0);
 	iovcnt = 1 + (4 * msgcntmax);
-
-	if (iovcnt > RD_KAFKA_PAYLOAD_IOV_MAX) {
-		iovcnt = RD_KAFKA_PAYLOAD_IOV_MAX;
-		msgcntmax = ((iovcnt / 4) - 1);
-	}
 
 	/* Allocate iovecs to hold all headers and messages,
 	 * and allocate auxilliery space for the headers. */
@@ -2721,7 +2734,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	while (msgcnt < msgcntmax &&
 	       (rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs))) {
 
-		if (MessageSetSize + rkm->rkm_len >
+		if (of_firstmsg + MessageSetSize + rd_kafka_msg_wire_size(rkm) >
 		    (size_t)rkb->rkb_rk->rk_conf.max_msg_size) {
 			rd_rkb_dbg(rkb, MSG, "PRODUCE",
 				   "No more space in current message "
@@ -2752,6 +2765,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 		msgcnt++;
 		MessageSetSize += outlen;
+		rd_dassert(outlen <= rd_kafka_msg_wire_size(rkm));
 	}
 
 	/* No messages added, bail out early. */

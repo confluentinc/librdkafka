@@ -34,7 +34,6 @@
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
 #define RD_KAFKA_HEADERS_IOV_CNT   2
-#define RD_KAFKA_PAYLOAD_IOV_MAX  (IOV_MAX-RD_KAFKA_HEADERS_IOV_CNT)
 
 /* Align X (upwards) to STRIDE, which must be power of 2. */
 #define _ALIGN(X,STRIDE) (((X) + ((STRIDE) - 1)) & -(STRIDE))

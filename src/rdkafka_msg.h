@@ -84,6 +84,17 @@ TAILQ_HEAD(rd_kafka_msg_head_s, rd_kafka_msg_s);
 
 
 /**
+ * @returns the message's total maximum on-wire size.
+ * @remark Depending on message version (MagicByte) the actual size
+ *         may be smaller.
+ */
+static RD_INLINE RD_UNUSED
+int32_t rd_kafka_msg_wire_size (const rd_kafka_msg_t *rkm) {
+	return RD_KAFKAP_MESSAGE_OVERHEAD + rkm->rkm_len + rkm->rkm_key_len;
+}
+
+
+/**
  * @returns the enveloping rd_kafka_msg_t pointer for a rd_kafka_msg_t
  *          wrapped rd_kafka_message_t.
  */

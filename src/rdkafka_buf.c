@@ -85,6 +85,7 @@ void rd_kafka_buf_rewind (rd_kafka_buf_t *rkbuf, int iovindex, size_t new_of,
 	rkbuf->rkbuf_msg.msg_iovlen = iovindex;
 	rkbuf->rkbuf_wof = new_of;
 	rkbuf->rkbuf_wof_init = new_of_init;
+	rkbuf->rkbuf_len = new_of;
 
 }
 
@@ -107,6 +108,8 @@ void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
 
 	iov->iov_base = (void *)buf;
 	iov->iov_len = len;
+
+	rkbuf->rkbuf_len += len;
 
 	if (allow_crc_calc && (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC))
 		rkbuf->rkbuf_crc = rd_crc32_update(rkbuf->rkbuf_crc, buf, len);
@@ -204,7 +207,6 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
         rkbuf->rkbuf_flags = flags;
 	rkbuf->rkbuf_iov = (struct iovec *)(rkbuf+1);
 	rkbuf->rkbuf_iovcnt = iovcnt;
-	rd_kafka_assert(NULL, rkbuf->rkbuf_iovcnt <= IOV_MAX);
 	rkbuf->rkbuf_msg.msg_iov = rkbuf->rkbuf_iov;
 
         if (growable)
@@ -216,9 +218,7 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
 
         if (rk) {
                 /* save the first iovecs for the header + clientid */
-                rkbuf->rkbuf_iov[0].iov_base = rkbuf->rkbuf_buf;
-                rkbuf->rkbuf_iov[0].iov_len  = headersize;
-                rkbuf->rkbuf_msg.msg_iovlen = 1;
+		rd_kafka_buf_push0(rkbuf, rkbuf->rkbuf_buf, headersize, 0);
         }
 
 	rkbuf->rkbuf_size     = size;

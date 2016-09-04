@@ -86,7 +86,8 @@ message.send.max.retries                 |  P  | 0 .. 10000000   |             2
 retries                                  |  P  |                 |               | Alias for `message.send.max.retries`
 retry.backoff.ms                         |  P  | 1 .. 300000     |           100 | The backoff time in milliseconds before retrying a message send. <br>*Type: integer*
 compression.codec                        |  P  | none, gzip, snappy, lz4 |          none | compression codec to use for compressing message sets. This is the default value for all topics, may be overriden by the topic configuration property `compression.codec`.  <br>*Type: enum value*
-batch.num.messages                       |  P  | 1 .. 1000000    |          1000 | Maximum number of messages batched in one MessageSet. <br>*Type: integer*
+batch.num.messages                       |  P  | 1 .. 1000000    |         10000 | Maximum number of messages batched in one MessageSet. The total MessageSet size is also limited by message.max.bytes.
+ <br>*Type: integer*
 delivery.report.only.error               |  P  | true, false     |         false | Only provide delivery reports for failed messages. <br>*Type: boolean*
 dr_cb                                    |  P  |                 |               | Delivery report callback (set with rd_kafka_conf_set_dr_cb()) <br>*Type: pointer*
 dr_msg_cb                                |  P  |                 |               | Delivery report callback (set with rd_kafka_conf_set_dr_msg_cb()) <br>*Type: pointer*

@@ -668,14 +668,14 @@ rd_kafka_queue_t *rd_kafka_queue_new (rd_kafka_t *rk) {
 
 
 rd_kafka_queue_t *rd_kafka_queue_get_main (rd_kafka_t *rk) {
-	return rd_kafka_queue_new0(rk, &rk->rk_rep);
+	return rd_kafka_queue_new0(rk, rk->rk_rep);
 }
 
 
 rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk) {
 	if (!rk->rk_cgrp)
 		return NULL;
-	return rd_kafka_queue_new0(rk, &rk->rk_cgrp->rkcg_q);
+	return rd_kafka_queue_new0(rk, rk->rk_cgrp->rkcg_q);
 }
 
 void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst) {

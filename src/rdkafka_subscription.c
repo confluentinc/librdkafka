@@ -59,7 +59,7 @@ rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk) {
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        return rd_kafka_op_err_destroy(rd_kafka_op_req2(&rkcg->rkcg_ops,
+        return rd_kafka_op_err_destroy(rd_kafka_op_req2(rkcg->rkcg_ops,
                                                         RD_KAFKA_OP_SUBSCRIBE));
 }
 
@@ -78,7 +78,7 @@ rd_kafka_subscribe (rd_kafka_t *rk,
 	rko->rko_u.subscribe.topics = rd_kafka_topic_partition_list_copy(topics);
 
         return rd_kafka_op_err_destroy(
-                rd_kafka_op_req(&rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+                rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
 }
 
 
@@ -97,7 +97,7 @@ rd_kafka_assign (rd_kafka_t *rk,
                         rd_kafka_topic_partition_list_copy(partitions);
 
         return rd_kafka_op_err_destroy(
-                rd_kafka_op_req(&rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+                rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
 }
 
 
@@ -112,7 +112,7 @@ rd_kafka_assignment (rd_kafka_t *rk,
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_GET_ASSIGNMENT);
+        rko = rd_kafka_op_req2(rkcg->rkcg_ops, RD_KAFKA_OP_GET_ASSIGNMENT);
 	if (!rko)
 		return RD_KAFKA_RESP_ERR__TIMED_OUT;
 
@@ -140,7 +140,7 @@ rd_kafka_subscription (rd_kafka_t *rk,
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_GET_SUBSCRIPTION);
+        rko = rd_kafka_op_req2(rkcg->rkcg_ops, RD_KAFKA_OP_GET_SUBSCRIPTION);
 	if (!rko)
 		return RD_KAFKA_RESP_ERR__TIMED_OUT;
 

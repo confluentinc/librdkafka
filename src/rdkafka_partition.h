@@ -87,10 +87,10 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
         int                rktp_fetch;     /* On rkb_fetch_toppars list */
 
 	/* Consumer */
-	rd_kafka_q_t       rktp_fetchq;          /* Queue of fetched messages
+	rd_kafka_q_t      *rktp_fetchq;          /* Queue of fetched messages
 						  * from broker.
                                                   * Broker thread -> App */
-        rd_kafka_q_t       rktp_ops;             /* * -> Broker thread */
+        rd_kafka_q_t      *rktp_ops;             /* * -> Broker thread */
 
         rd_atomic32_t      rktp_version;         /* Latest op version.
                                                   * Authoritative (app thread)*/

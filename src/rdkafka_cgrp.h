@@ -111,9 +111,9 @@ typedef struct rd_kafka_cgrp_s {
                 int member_cnt;
         } rkcg_group_leader;
 
-        rd_kafka_q_t       rkcg_q;                  /* Application poll queue */
-        rd_kafka_q_t       rkcg_ops;                /* Manager ops queue */
-	rd_kafka_q_t       rkcg_wait_coord_q;       /* Ops awaiting coord */
+        rd_kafka_q_t      *rkcg_q;                  /* Application poll queue */
+        rd_kafka_q_t      *rkcg_ops;                /* Manager ops queue */
+	rd_kafka_q_t      *rkcg_wait_coord_q;       /* Ops awaiting coord */
 	int32_t            rkcg_version;            /* Ops queue version barrier
 						     * Increased by:
 						     *  Rebalance delegation

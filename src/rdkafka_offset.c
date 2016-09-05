@@ -355,7 +355,7 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 	if (offsets)
 		rko->rko_u.offset_commit.partitions =
 			rd_kafka_topic_partition_list_copy(offsets);
-	rd_kafka_q_enq(&rk->rk_rep, rko);
+	rd_kafka_q_enq(rk->rk_rep, rko);
 }
 
 
@@ -434,7 +434,7 @@ rd_kafka_offset_broker_commit (rd_kafka_toppar_t *rktp) {
         rd_kafka_q_keep(&rktp->rktp_ops);
 
         rd_kafka_commit0(rktp->rktp_rkt->rkt_rk, offsets,
-			 RD_KAFKA_REPLYQ(&rktp->rktp_ops, 0),
+			 RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
 			 rd_kafka_offset_broker_commit_op_cb);
 
         rd_kafka_topic_partition_list_destroy(offsets);
@@ -503,7 +503,7 @@ rd_kafka_commit0 (rd_kafka_t *rk,
 		rko->rko_u.offset_commit.partitions =
                         rd_kafka_topic_partition_list_copy(offsets);
 
-        if (rd_kafka_q_enq(&rkcg->rkcg_ops, rko) == 0)
+        if (rd_kafka_q_enq(rkcg->rkcg_ops, rko) == 0)
 		printf("OP_OFFSET_COMMIT dropped\n");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -670,7 +670,7 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
                 rko->rko_rktp = rd_kafka_toppar_keep(rktp);
                 rko->rko_u.offset_reset.offset = err_offset;
 		rko->rko_u.offset_reset.reason = rd_strdup(reason);
-                rd_kafka_q_enq(&rktp->rktp_ops, rko);
+                rd_kafka_q_enq(rktp->rktp_ops, rko);
                 return;
         }
 
@@ -688,7 +688,7 @@ void rd_kafka_offset_reset (rd_kafka_toppar_t *rktp, int64_t err_offset,
 		rko->rko_u.err.errstr      = rd_strdup(reason);
                 rko->rko_rktp        = rd_kafka_toppar_keep(rktp);
 
-		rd_kafka_q_enq(&rktp->rktp_fetchq, rko);
+		rd_kafka_q_enq(rktp->rktp_fetchq, rko);
                 rd_kafka_toppar_set_fetch_state(
 			rktp, RD_KAFKA_TOPPAR_FETCH_NONE);
 

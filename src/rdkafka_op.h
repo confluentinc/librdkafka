@@ -236,13 +236,16 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
 
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 
+
+
+
 #define rd_kafka_op_err(rk,err,...) do {				\
 		if (!(rk)->rk_conf.error_cb) {				\
-			rd_kafka_log(rk, LOG_ERR, "ERROR", __VA_ARGS__);	\
+			rd_kafka_log(rk, LOG_ERR, "ERROR", __VA_ARGS__); \
 			break;						\
 		}							\
-		rd_kafka_q_op_err(&(rk)->rk_rep, RD_KAFKA_OP_ERR, err, 0, \
-				  NULL, 0, __VA_ARGS__);			\
+		rd_kafka_q_op_err((rk)->rk_rep, RD_KAFKA_OP_ERR, err, 0, \
+				  NULL, 0, __VA_ARGS__);		\
 	} while (0)
 
 void rd_kafka_q_op_err (rd_kafka_q_t *rkq, rd_kafka_op_type_t optype,

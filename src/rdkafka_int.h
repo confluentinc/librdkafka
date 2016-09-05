@@ -127,8 +127,8 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 typedef RD_SHARED_PTR_TYPE(shptr_rd_ikafka_s, rd_ikafka_t) shptr_rd_ikafka_t;
 
 struct rd_kafka_s {
-	rd_kafka_q_t rk_rep;   /* kafka -> application reply queue */
-	rd_kafka_q_t rk_ops;   /* any -> rdkafka main thread ops */
+	rd_kafka_q_t *rk_rep;   /* kafka -> application reply queue */
+	rd_kafka_q_t *rk_ops;   /* any -> rdkafka main thread ops */
 
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
 	rd_atomic32_t              rk_broker_cnt;

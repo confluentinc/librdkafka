@@ -452,13 +452,13 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         /* Destroy cgrp */
         if (rk->rk_cgrp) {
                 /* Reset queue forwarding (rep -> cgrp) */
-                rd_kafka_q_fwd_set(&rk->rk_rep, NULL);
+                rd_kafka_q_fwd_set(rk->rk_rep, NULL);
                 rd_kafka_cgrp_destroy_final(rk->rk_cgrp);
         }
 
 	/* Purge op-queues */
-	rd_kafka_q_destroy(&rk->rk_rep);
-	rd_kafka_q_destroy(&rk->rk_ops);
+	rd_kafka_q_destroy(rk->rk_rep);
+	rd_kafka_q_destroy(rk->rk_ops);
 
 #if WITH_SSL
 	if (rk->rk_conf.ssl.ctx)
@@ -578,8 +578,8 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         rd_kafka_wrunlock(rk);
 
 	/* Purge op-queue */
-        rd_kafka_q_disable(&rk->rk_rep);
-	rd_kafka_q_purge(&rk->rk_rep);
+        rd_kafka_q_disable(rk->rk_rep);
+	rd_kafka_q_purge(rk->rk_rep);
 
 	/* Loose our special reference to the internal broker. */
         mtx_lock(&rk->rk_internal_rkb_lock);
@@ -689,8 +689,8 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   rd_atomic64_get(&rktp->rktp_msgq.rkmq_msg_bytes),
 		   rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt),
 		   rd_atomic64_get(&rktp->rktp_xmit_msgq.rkmq_msg_bytes),
-		   rd_kafka_q_len(&rktp->rktp_fetchq),
-		   rd_kafka_q_size(&rktp->rktp_fetchq),
+		   rd_kafka_q_len(rktp->rktp_fetchq),
+		   rd_kafka_q_size(rktp->rktp_fetchq),
 		   rd_kafka_fetch_states[rktp->rktp_fetch_state],
 		   rktp->rktp_query_offset,
                    offs.fetch_offset,
@@ -752,7 +752,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                    rd_kafka_type2str(rk->rk_type),
 		   now,
 		   (signed long long)time(NULL),
-		   rd_kafka_q_len(&rk->rk_rep),
+		   rd_kafka_q_len(rk->rk_rep),
 		   tot_cnt, tot_size,
 		   rk->rk_curr_msgs.max_cnt, rk->rk_curr_msgs.max_size,
                    rd_atomic32_get(&rk->rk_simple_cnt));
@@ -901,7 +901,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 	rko = rd_kafka_op_new(RD_KAFKA_OP_STATS);
 	rko->rko_u.stats.json = buf;
 	rko->rko_u.stats.json_len = of;
-	rd_kafka_q_enq(&rk->rk_rep, rko);
+	rd_kafka_q_enq(rk->rk_rep, rko);
 }
 
 
@@ -986,19 +986,19 @@ static int rd_kafka_thread_main (void *arg) {
 		rd_kafka_cgrp_reassign_broker(rk->rk_cgrp);
 
 	while (likely(!rd_kafka_terminating(rk) ||
-		      rd_kafka_q_len(&rk->rk_ops))) {
+		      rd_kafka_q_len(rk->rk_ops))) {
 		rd_ts_t sleeptime = rd_kafka_timers_next(
 			&rk->rk_timers,
 			rk->rk_conf.socket_blocking_max_ms * 1000, 1/*lock*/);
-		rd_kafka_toppars_q_serve(&rk->rk_ops,
+		rd_kafka_toppars_q_serve(rk->rk_ops,
 					 (int)(sleeptime / 1000));
 		if (rk->rk_cgrp)
 			rd_kafka_cgrp_serve(rk->rk_cgrp);
 		rd_kafka_timers_run(&rk->rk_timers, RD_POLL_NOWAIT);
 	}
 
-	rd_kafka_q_disable(&rk->rk_ops);
-	rd_kafka_q_purge(&rk->rk_ops);
+	rd_kafka_q_disable(rk->rk_ops);
+	rd_kafka_q_purge(rk->rk_ops);
 
         rd_kafka_timer_stop(&rk->rk_timers, &tmr_topic_scan, 1);
         rd_kafka_timer_stop(&rk->rk_timers, &tmr_stats_emit, 1);
@@ -1080,8 +1080,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	cnd_init(&rk->rk_broker_state_change_cnd);
 	mtx_init(&rk->rk_broker_state_change_lock, mtx_plain);
 
-	rd_kafka_q_init(&rk->rk_rep, rk);
-	rd_kafka_q_init(&rk->rk_ops, rk);
+	rk->rk_rep = rd_kafka_q_new(rk);
+	rk->rk_ops = rd_kafka_q_new(rk);
 
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
@@ -1512,7 +1512,7 @@ ssize_t rd_kafka_consume_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         rktp = rd_kafka_toppar_s2i(s_rktp);
 
 	/* Populate application's rkmessages array. */
-	cnt = rd_kafka_q_serve_rkmessages(&rktp->rktp_fetchq, timeout_ms,
+	cnt = rd_kafka_q_serve_rkmessages(rktp->rktp_fetchq, timeout_ms,
 					  rkmessages, rkmessages_size);
 
 	rd_kafka_toppar_destroy(s_rktp); /* refcnt from .._get() */
@@ -1609,7 +1609,7 @@ int rd_kafka_consume_callback (rd_kafka_topic_t *app_rkt, int32_t partition,
 	}
 
         rktp = rd_kafka_toppar_s2i(s_rktp);
-	r = rd_kafka_consume_callback0(&rktp->rktp_fetchq, timeout_ms,
+	r = rd_kafka_consume_callback0(rktp->rktp_fetchq, timeout_ms,
                                        rkt->rkt_conf.consume_callback_max_msgs,
 				       consume_cb, opaque);
 
@@ -1718,7 +1718,7 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *app_rkt,
 
         rktp = rd_kafka_toppar_s2i(s_rktp);
 	rkmessage = rd_kafka_consume0(rkt->rkt_rk,
-                                      &rktp->rktp_fetchq, timeout_ms);
+                                      rktp->rktp_fetchq, timeout_ms);
 
 	rd_kafka_toppar_destroy(s_rktp); /* refcnt from .._get() */
 
@@ -1742,7 +1742,7 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk) {
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        rd_kafka_q_fwd_set(&rk->rk_rep, &rkcg->rkcg_q);
+        rd_kafka_q_fwd_set(rk->rk_rep, rkcg->rkcg_q);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -1759,7 +1759,7 @@ rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk,
                 return rkmessage;
         }
 
-        return rd_kafka_consume0(rk, &rkcg->rkcg_q, timeout_ms);
+        return rd_kafka_consume0(rk, rkcg->rkcg_q, timeout_ms);
 }
 
 
@@ -1774,13 +1774,13 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
 
 	/* If the consumer queue has been forwarded or is disabled
 	 * we use a temporary queue to signal termination completion. */
-	mtx_lock(&rkcg->rkcg_q.rkq_lock);
-	if (!rkcg->rkcg_q.rkq_fwdq &&
-	    (rkcg->rkcg_q.rkq_flags & RD_KAFKA_Q_F_READY)) {
-		rkq = &rkcg->rkcg_q;
+	mtx_lock(&rkcg->rkcg_q->rkq_lock);
+	if (!rkcg->rkcg_q->rkq_fwdq &&
+	    (rkcg->rkcg_q->rkq_flags & RD_KAFKA_Q_F_READY)) {
+		rkq = rkcg->rkcg_q;
 		rd_kafka_q_keep_nolock(rkq);
 	}
-	mtx_unlock(&rkcg->rkcg_q.rkq_lock);
+	mtx_unlock(&rkcg->rkcg_q->rkq_lock);
 
 	if (!rkq)
 		rkq = rd_kafka_q_new(rk);
@@ -1831,7 +1831,7 @@ rd_kafka_committed (rd_kafka_t *rk,
 		rko->rko_u.offset_fetch.partitions = partitions;
 		rko->rko_u.offset_fetch.do_free = 0;
 
-                rd_kafka_q_enq(&rkcg->rkcg_ops, rko);
+                rd_kafka_q_enq(rkcg->rkcg_ops, rko);
 
                 rko = rd_kafka_q_pop(rkq, rd_timeout_remains(abs_timeout), 0);
                 if (rko) {
@@ -2212,7 +2212,7 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 }
 
 int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
-	return rd_kafka_q_serve(&rk->rk_rep, timeout_ms, 0,
+	return rd_kafka_q_serve(rk->rk_rep, timeout_ms, 0,
 				_Q_CB_GLOBAL, rd_kafka_poll_cb, NULL);
 }
 
@@ -2306,7 +2306,7 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
 	fprintf(fp, " producer.msg_cnt %u (%"PRIdsz" bytes)\n",
 		tot_cnt, tot_size);
 	fprintf(fp, " rk_rep reply queue: %i ops\n",
-		rd_kafka_q_len(&rk->rk_rep));
+		rd_kafka_q_len(rk->rk_rep));
 
 	fprintf(fp, " brokers:\n");
         if (locks)
@@ -2391,7 +2391,7 @@ char *rd_kafka_memberid (const rd_kafka_t *rk) {
 	if (!(rkcg = rd_kafka_cgrp_get(rk)))
 		return NULL;
 
-	rko = rd_kafka_op_req2(&rkcg->rkcg_ops, RD_KAFKA_OP_NAME);
+	rko = rd_kafka_op_req2(rkcg->rkcg_ops, RD_KAFKA_OP_NAME);
 	if (!rko)
 		return NULL;
 	memberid = rko->rko_u.name.str;
@@ -2408,7 +2408,7 @@ void *rd_kafka_opaque (const rd_kafka_t *rk) {
 
 
 int rd_kafka_outq_len (rd_kafka_t *rk) {
-	return rd_kafka_curr_msgs_cnt(rk) + rd_kafka_q_len(&rk->rk_rep);
+	return rd_kafka_curr_msgs_cnt(rk) + rd_kafka_q_len(rk->rk_rep);
 }
 
 
@@ -2420,7 +2420,7 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
 	if (rk->rk_type != RD_KAFKA_PRODUCER)
 		return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
 
-	while ((qlen = rd_kafka_q_len(&rk->rk_rep)) > 0 ||
+	while ((qlen = rd_kafka_q_len(rk->rk_rep)) > 0 ||
 	       (msg_cnt = rd_kafka_curr_msgs_cnt(rk)) > 0) {
 		rd_kafka_poll(rk, rd_timeout_remains_limit(ts_end, 100));
 	}

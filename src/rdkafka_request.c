@@ -1216,7 +1216,7 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                  * and run the assignor when we get a reply. */
                 rd_kafka_MetadataRequest(rkb, 1 /* all topics */, NULL,
                                          "partition assignor",
-                                         RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, 0),
+                                         RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                          rd_kafka_assignor_handle_Metadata,
                                          rkcg);
         } else {
@@ -1227,7 +1227,7 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                                           rkcg->rkcg_generation_id,
                                           rkcg->rkcg_member_id,
                                           NULL, 0,
-                                          RD_KAFKA_REPLYQ(&rkcg->rkcg_ops, 0),
+                                          RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                           rd_kafka_handle_SyncGroup, rkcg);
 
         }
@@ -1247,7 +1247,7 @@ err:
                         return; /* Termination */
 
 		if (actions & RD_KAFKA_ERR_ACTION_PERMANENT)
-			rd_kafka_q_op_err(&rkcg->rkcg_q,
+			rd_kafka_q_op_err(rkcg->rkcg_q,
 					  RD_KAFKA_OP_CONSUMER_ERR,
 					  ErrorCode, 0, NULL, 0,
 					  "JoinGroup failed: %s",

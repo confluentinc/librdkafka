@@ -724,7 +724,7 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 	} else {
 		rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_XMIT_BUF);
 		rko->rko_u.xbuf.rkbuf = rkbuf;
-		rd_kafka_q_enq(&rkb->rkb_ops, rko);
+		rd_kafka_q_enq(rkb->rkb_ops, rko);
 	}
 }
 
@@ -754,7 +754,7 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
 	 * op for the broker's thread instead since all transmissions must
 	 * be performed by the broker thread. */
 	if (!thrd_is_current(rkb->rkb_thread)) {
-                rd_kafka_q_enq(&rkb->rkb_ops, rko);
+                rd_kafka_q_enq(rkb->rkb_ops, rko);
 		return;
 	}
 
@@ -786,7 +786,7 @@ static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
 				       /* Handle response thru rk_ops,
 					* but forward parsed result to
 					* rko's replyq when done. */
-				       RD_KAFKA_REPLYQ(&rkb->rkb_rk->rk_ops, 0),
+				       RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0),
 				       rd_kafka_op_handle_Metadata, rko);
 }
 
@@ -1814,7 +1814,7 @@ void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
         if (!thrd_is_current(rkb->rkb_thread)) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_XMIT_RETRY);
                 rko->rko_u.xbuf.rkbuf = rkbuf;
-                rd_kafka_q_enq(&rkb->rkb_ops, rko);
+                rd_kafka_q_enq(rkb->rkb_ops, rko);
                 return;
         }
 
@@ -1878,7 +1878,7 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 		/* Move all messages to op's msgq */
 		rd_kafka_msgq_move(&rko->rko_u.dr.msgq, rkmq);
 
-		rd_kafka_q_enq(&rk->rk_rep, rko);
+		rd_kafka_q_enq(rk->rk_rep, rko);
 
 	} else {
 		/* No delivery report callback, destroy the messages
@@ -1931,7 +1931,7 @@ rd_kafka_produce_reply_handle (rd_kafka_broker_t *rkb,
 		int32_t Throttle_Time;
 		rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
 
-		rd_kafka_op_throttle_time(rkb, &rkb->rkb_rk->rk_rep,
+		rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
 					  Throttle_Time);
 	}
 
@@ -2810,7 +2810,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		rd_kafka_buf_version_set(rkbuf, 1);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Produce, rkbuf,
-                                       RD_KAFKA_REPLYQ(&rktp->rktp_ops, 0),
+                                       RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
                                        rd_kafka_produce_msgset_reply,
                                        /* refcount for msgset_reply() */
                                        rd_kafka_toppar_keep(rktp));
@@ -2965,7 +2965,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                         s_rktp = rd_kafka_toppar_keep(rktp);
 
                         /* No, forward this op to the new next leader. */
-                        rd_kafka_q_enq(&rktp->rktp_next_leader->rkb_ops, rko);
+                        rd_kafka_q_enq(rktp->rktp_next_leader->rkb_ops, rko);
                         rko = NULL;
 
                         rd_kafka_toppar_unlock(rktp);
@@ -3044,7 +3044,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 if (rktp->rktp_next_leader) {
                         /* There is a next leader we need to migrate to. */
                         rko->rko_type = RD_KAFKA_OP_PARTITION_JOIN;
-                        rd_kafka_q_enq(&rktp->rktp_next_leader->rkb_ops, rko);
+                        rd_kafka_q_enq(rktp->rktp_next_leader->rkb_ops, rko);
                         rko = NULL;
                 }
 
@@ -3079,7 +3079,7 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 	rd_ts_t now;
 
 	/* Serve broker ops */
-        while ((rko = rd_kafka_q_pop(&rkb->rkb_ops, timeout_ms, 0)))
+        while ((rko = rd_kafka_q_pop(rkb->rkb_ops, timeout_ms, 0)))
                 rd_kafka_broker_op_serve(rkb, rko);
 
         now = rd_clock();
@@ -3775,7 +3775,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 		int32_t Throttle_Time;
 		rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
 
-		rd_kafka_op_throttle_time(rkb, &rkb->rkb_rk->rk_rep,
+		rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
 					  Throttle_Time);
 	}
 
@@ -3966,7 +3966,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
 				default: /* and all other errors */
 					rd_kafka_q_op_err(
-						&rktp->rktp_fetchq,
+						rktp->rktp_fetchq,
 						RD_KAFKA_OP_CONSUMER_ERR,
 						hdr.ErrorCode, tver->version,
 						rktp,
@@ -4019,7 +4019,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   rd_kafka_q_len(&tmp_opq),
 				   rktp->rktp_rkt->rkt_topic->str,
 				   rktp->rktp_partition,
-				   rd_kafka_q_len(&rktp->rktp_fetchq),
+				   rd_kafka_q_len(rktp->rktp_fetchq),
 				   tver->version);
 
 			if (rd_kafka_q_len(&tmp_opq) > 0) {
@@ -4034,7 +4034,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				if (rko)
 					last_offset = rko->rko_u.fetch.rkm.rkm_offset;
 
-				if (rd_kafka_q_concat(&rktp->rktp_fetchq,
+				if (rd_kafka_q_concat(rktp->rktp_fetchq,
 						      &tmp_opq) == -1) {
 					/* rktp fetchq disabled, probably
 					 * shutting down. Drop messages. */
@@ -4061,7 +4061,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 						   rktp->rktp_fetch_msg_max_bytes);
 				} else {
 					rd_kafka_q_op_err(
-						&rktp->rktp_fetchq,
+						rktp->rktp_fetchq,
 						RD_KAFKA_OP_CONSUMER_ERR,
 						RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
 						tver->version,
@@ -4546,8 +4546,8 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 		rd_free(rkb->rkb_ApiVersions);
         rd_free(rkb->rkb_origname);
 
-	rd_kafka_q_purge(&rkb->rkb_ops);
-	rd_kafka_q_destroy(&rkb->rkb_ops);
+	rd_kafka_q_purge(rkb->rkb_ops);
+	rd_kafka_q_destroy(rkb->rkb_ops);
 
         rd_avg_destroy(&rkb->rkb_avg_rtt);
 	rd_avg_destroy(&rkb->rkb_avg_throttle);
@@ -4622,7 +4622,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_bufq_init(&rkb->rkb_outbufs);
 	rd_kafka_bufq_init(&rkb->rkb_waitresps);
 	rd_kafka_bufq_init(&rkb->rkb_retrybufs);
-	rd_kafka_q_init(&rkb->rkb_ops, rk);
+	rkb->rkb_ops = rd_kafka_q_new(rk);
 	rd_avg_init(&rkb->rkb_avg_rtt, RD_AVG_GAUGE);
 	rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE);
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
@@ -4984,7 +4984,7 @@ void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                         strncpy(rko->rko_u.node.nodename, nodename,
 				sizeof(rko->rko_u.node.nodename)-1);
                         rko->rko_u.node.nodeid   = mdb->id;
-                        rd_kafka_q_enq(&rkb->rkb_ops, rko);
+                        rd_kafka_q_enq(rkb->rkb_ops, rko);
                 }
                 rd_kafka_broker_destroy(rkb);
         }

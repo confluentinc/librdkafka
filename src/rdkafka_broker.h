@@ -48,7 +48,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 	uint32_t            rkb_corrid;
 
-	rd_kafka_q_t        rkb_ops;
+	rd_kafka_q_t       *rkb_ops;
 
         /* Toppars handled by this broker */
 	TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;

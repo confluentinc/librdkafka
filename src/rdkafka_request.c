@@ -432,7 +432,7 @@ err:
  * rko->rko_payload MUST be a `rd_kafka_topic_partition_list_t *` which will
  * be filled in with fetch offsets.
  *
- * A reply will be sent on 'rko->rko_replyq' with type RD_KAFKA_OP_COMMIT.
+ * A reply will be sent on 'rko->rko_replyq' with type RD_KAFKA_OP_OFFSET_FETCH.
  *
  * Locality: cgrp's broker thread
  */
@@ -459,7 +459,9 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 
         rko_reply = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH|RD_KAFKA_OP_REPLY);
         rko_reply->rko_err = err;
-	rd_kafka_op_get_reply_version(rko_reply, rko);
+	if (rko->rko_rktp)
+		rko_reply->rko_rktp = rd_kafka_toppar_keep(
+			rd_kafka_toppar_s2i(rko->rko_rktp));
 
 	/* Move offset & partitions to reply op. */
 	rko_reply->rko_u.offset_fetch = rko->rko_u.offset_fetch;
@@ -472,7 +474,7 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 		rd_kafka_handle_OffsetFetch(rkb->rkb_rk, rkb, err, rkbuf,
 					    request, offsets, 0);
 
-        rd_kafka_q_enq(rko->rko_replyq.q, rko_reply);
+	rd_kafka_replyq_enq(&rko->rko_replyq, rko_reply, 0);
 
         rd_kafka_op_destroy(rko);
 }
@@ -789,6 +791,7 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
 
 	if (tot_PartCnt == 0) {
 		/* No topic+partitions had valid offsets to commit. */
+		rd_kafka_replyq_destroy(&replyq);
 		rd_kafka_buf_destroy(rkbuf);
 		return 0;
 	}
@@ -1748,7 +1751,6 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                                   void *opaque) {
         rd_kafka_op_t *rko = opaque;
         struct rd_kafka_metadata *md = NULL;
-        rd_kafka_q_t *rkq;
 	rd_kafka_itopic_t *rkt;
 
 	rd_rkb_dbg(rkb, METADATA, "METADATA",
@@ -1785,16 +1787,13 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                 rd_kafka_topic_wrunlock(rkt);
         }
 
-        if ((rkq = rko->rko_replyq.q)) {
+        if (rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */
-                rko->rko_replyq.q = NULL;
-		rd_kafka_op_get_reply_version(rko, rko);
                 rko->rko_err = err;
                 rko->rko_u.metadata.metadata = md;
-                rd_kafka_q_enq(rkq, rko);
-                /* Drop refcount to queue */
-                rd_kafka_q_destroy(rkq);
+
+                rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
         } else {
                 if (md)
                         rd_free(md);

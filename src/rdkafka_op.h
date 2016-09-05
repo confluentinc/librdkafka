@@ -42,6 +42,11 @@ typedef struct rd_kafka_op_s rd_kafka_op_t;
 typedef struct rd_kafka_replyq_s {
 	rd_kafka_q_t *q;
 	int32_t       version;
+#if ENABLE_DEVEL
+	char *_id; /* Devel id used for debugging reference leaks.
+		    * Is a strdup() of the caller's function name,
+		    * which makes for easy debugging with valgrind. */
+#endif
 } rd_kafka_replyq_t;
 
 

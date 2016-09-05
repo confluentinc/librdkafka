@@ -713,7 +713,9 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
                 rkbuf->rkbuf_replyq = replyq;
                 rkbuf->rkbuf_cb     = resp_cb;
                 rkbuf->rkbuf_opaque = opaque;
-        }
+        } else {
+		rd_dassert(!replyq.q);
+	}
 
         rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf, ApiKey);
 

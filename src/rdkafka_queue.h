@@ -335,11 +335,16 @@ uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
 }
 
 
-
 /* Construct temporary on-stack replyq with increased Q refcount and
  * optional VERSION. */
+#if ENABLE_DEVEL
+#define RD_KAFKA_REPLYQ(Q,VERSION) \
+	(rd_kafka_replyq_t){rd_kafka_q_keep(Q), VERSION, \
+			rd_strdup(__FUNCTION__) }
+#else
 #define RD_KAFKA_REPLYQ(Q,VERSION) \
 	(rd_kafka_replyq_t){rd_kafka_q_keep(Q), VERSION}
+#endif
 
 /* Construct temporary on-stack replyq for indicating no replyq. */
 #define RD_KAFKA_NO_REPLYQ  (rd_kafka_replyq_t){NULL, 0}
@@ -353,6 +358,9 @@ rd_kafka_set_replyq (rd_kafka_replyq_t *replyq,
 		     rd_kafka_q_t *rkq, int32_t version) {
 	replyq->q = rkq ? rd_kafka_q_keep(rkq) : NULL;
 	replyq->version = version;
+#if ENABLE_DEVEL
+	replyq->_id = strdup(__FUNCTION__);
+#endif
 }
 
 /**
@@ -373,8 +381,11 @@ rd_kafka_op_set_replyq (rd_kafka_op_t *rko, rd_kafka_q_t *rkq,
 
 
 /* Clear replyq holder without decreasing any .q references. */
-#define rd_kafka_replyq_clear(REPLYQ) \
-	memset(REPLYQ, 0, sizeof(rd_kafka_replyq_t))
+static RD_INLINE RD_UNUSED void
+rd_kafka_replyq_clear (rd_kafka_replyq_t *replyq) {
+	memset(replyq, 0, sizeof(*replyq));
+}
+
 
 /**
  * Clear replyq holder and destroy any .q references.
@@ -383,8 +394,57 @@ static RD_INLINE RD_UNUSED void
 rd_kafka_replyq_destroy (rd_kafka_replyq_t *replyq) {
 	if (replyq->q)
 		rd_kafka_q_destroy(replyq->q);
+#if ENABLE_DEVEL
+	if (replyq->_id) {
+		rd_free(replyq->_id);
+		replyq->_id = NULL;
+	}
+#endif
 	rd_kafka_replyq_clear(replyq);
 }
+
+
+/**
+ * @brief Wrapper for rd_kafka_q_enq() that takes a replyq,
+ *        steals its queue reference, enqueues the op with the replyq version,
+ *        and then destroys the queue reference.
+ *
+ *        If \p version is non-zero it will be updated, else replyq->version.
+ *
+ * @returns Same as rd_kafka_q_enq()
+ */
+static RD_INLINE RD_UNUSED int
+rd_kafka_replyq_enq (rd_kafka_replyq_t *replyq, rd_kafka_op_t *rko,
+		     int version) {
+	rd_kafka_q_t *rkq = replyq->q;
+	int r;
+
+	if (version)
+		rko->rko_version = version;
+	else
+		rko->rko_version = replyq->version;
+
+	/* The replyq queue reference is done after we've enqueued the rko
+	 * so clear it here. */
+	replyq->q = NULL;
+
+#if ENABLE_DEVEL
+	if (replyq->_id) {
+		rd_free(replyq->_id);
+		replyq->_id = NULL;
+	}
+#endif
+
+	/* Retain replyq->version since it is used by buf_callback
+	 * when dispatching the callback. */
+
+	r = rd_kafka_q_enq(rkq, rko);
+
+	rd_kafka_q_destroy(rkq);
+
+	return r;
+}
+
 
 
 rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,

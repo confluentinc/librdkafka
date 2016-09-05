@@ -87,6 +87,15 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 	if (rko->rko_err)
 		fprintf(fp, "%s Error: %s\n",
 			prefix, rd_kafka_err2str(rko->rko_err));
+	if (rko->rko_replyq.q)
+		fprintf(fp, "%s Replyq %p v%d (%s)\n",
+			prefix, rko->rko_replyq.q, rko->rko_replyq.version,
+#if ENABLE_DEVEL
+			rko->rko_replyq._id
+#else
+			""
+#endif
+			);
 	if (rko->rko_rktp) {
 		rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
 		fprintf(fp, "%s ((rd_kafka_toppar_t*)%p) "
@@ -314,24 +323,16 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
  * @returns 1 if op was enqueued, else 0 and rko is destroyed.
  */
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
-	rd_kafka_q_t *rkq = rko->rko_replyq.q;
-	int r;
 
-        if (!rkq) {
+        if (!rko->rko_replyq.q) {
 		rd_kafka_op_destroy(rko);
                 return 0;
 	}
 
-	rko->rko_replyq.q = NULL;
-	rd_kafka_op_get_reply_version(rko, rko);
 	rko->rko_type |= (rko->rko_op_cb ? RD_KAFKA_OP_CB : RD_KAFKA_OP_REPLY);
         rko->rko_err   = err;
 
-	r = rd_kafka_q_enq(rkq, rko);
-
-	rd_kafka_q_destroy(rkq); /* rko_replyq refcnt */
-
-	return r;
+	return rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
 }
 
 

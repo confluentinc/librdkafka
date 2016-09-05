@@ -35,6 +35,8 @@ void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
         if (rkbuf->rkbuf_response)
                 rd_kafka_buf_destroy(rkbuf->rkbuf_response);
 
+	rd_kafka_replyq_destroy(&rkbuf->rkbuf_replyq);
+
         if (rkbuf->rkbuf_buf2)
                 rd_free(rkbuf->rkbuf_buf2);
 
@@ -448,8 +450,14 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         request = rko->rko_u.xbuf.rkbuf;
         rko->rko_u.xbuf.rkbuf = NULL;
 
-	if (request->rkbuf_replyq.q) /* NULL on op_destroy() */
+	/* NULL on op_destroy() */
+	if (request->rkbuf_replyq.q) {
+		int32_t version = request->rkbuf_replyq.version;
 		rd_kafka_replyq_destroy(&request->rkbuf_replyq);
+		/* Callback might need to version check so we retain the
+		 * version across the destroy call which clears it. */
+		request->rkbuf_replyq.version = version;
+	}
 
 	if (!request->rkbuf_cb) {
 		rd_kafka_buf_destroy(request);
@@ -496,20 +504,18 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
         if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq.q) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
 
-		rko->rko_version = request->rkbuf_replyq.version;
-
 		rd_kafka_assert(NULL, !request->rkbuf_response);
 		request->rkbuf_response = response;
 
                 /* Increment refcnt since rko_rkbuf will be decref:ed
-                 * if q_enq() fails and we dont want the rkbuf gone in that
+                 * if replyq_enq() fails and we dont want the rkbuf gone in that
                  * case. */
                 rd_kafka_buf_keep(request);
                 rko->rko_u.xbuf.rkbuf = request;
 
                 rko->rko_err = err;
 
-	        rd_kafka_q_enq(request->rkbuf_replyq.q, rko);
+	        rd_kafka_replyq_enq(&request->rkbuf_replyq, rko, 0);
 
 		rd_kafka_buf_destroy(request); /* from keep above */
 		return;

@@ -495,7 +495,8 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
 		rkb, 0, &rkb->rkb_outbufs, RD_KAFKA_RESP_ERR__TIMED_OUT, now);
 
 	if (req_cnt + retry_cnt + q_cnt > 0) {
-		rd_rkb_dbg(rkb, MSG, "REQTMOUT", "Timed out %i+%i+%i requests",
+		rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_BROKER,
+			   "REQTMOUT", "Timed out %i+%i+%i requests",
 			   req_cnt, retry_cnt, q_cnt);
 
                 /* Fail the broker if socket.max.fails is configured and
@@ -503,9 +504,13 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
                 rkb->rkb_req_timeouts   += req_cnt;
                 rd_atomic64_add(&rkb->rkb_c.req_timeouts, req_cnt + q_cnt);
 
-                if (rkb->rkb_rk->rk_conf.socket_max_fails &&
-                    rkb->rkb_req_timeouts >=
-                    rkb->rkb_rk->rk_conf.socket_max_fails &&
+		/* If this was an in-flight request that timed out, or
+		 * the other queues has reached the socket.max.fails threshold,
+		 * we need to take down the connection. */
+                if ((req_cnt > 0 ||
+		     (rkb->rkb_rk->rk_conf.socket_max_fails &&
+		      rkb->rkb_req_timeouts >=
+		      rkb->rkb_rk->rk_conf.socket_max_fails)) &&
                     rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP) {
                         errno = ETIMEDOUT;
                         rd_kafka_broker_fail(rkb, LOG_ERR,

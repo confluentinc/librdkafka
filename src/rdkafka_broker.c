@@ -1983,45 +1983,46 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_t *rk,
 
 
 	if (err) {
+		int actions;
+
+		actions = rd_kafka_err_action(
+			rkb, err, reply, request,
+
+			RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+			RD_KAFKA_RESP_ERR__TRANSPORT,
+
+			RD_KAFKA_ERR_ACTION_REFRESH,
+			RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+
+			RD_KAFKA_ERR_ACTION_END);
+
 		rd_rkb_dbg(rkb, MSG, "MSGSET", "MessageSet with %i message(s) "
-			   "encountered error: %s",
+			   "encountered error: %s (actions 0x%x)",
 			   rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
-			   rd_kafka_err2str(err));
+			   rd_kafka_err2str(err), actions);
 
-                if (rd_kafka_buf_retry(rkb, request))
-                        return; /* Scheduled for retry */
-
-		switch (err)
-		{
-		case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-		case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
-		case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
-		case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
-		case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
-		case RD_KAFKA_RESP_ERR__TRANSPORT:
+		if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
 			/* Request metadata information update */
 			rkb->rkb_metadata_fast_poll_cnt =
 				rkb->rkb_rk->rk_conf.metadata_refresh_fast_cnt;
 			rd_kafka_topic_leader_query(rkb->rkb_rk,
 						    rktp->rktp_rkt);
 
-			/* FIXME: Should message retries be incremented? */
-
 			/* Move messages (in the rkbuf) back to the partition's
 			 * queue head. They will be resent when a new leader
 			 * is delegated. */
 			rd_kafka_toppar_insert_msgq(rktp, &request->rkbuf_msgq);
-			goto done;
-
-		case RD_KAFKA_RESP_ERR__DESTROY:
-		case RD_KAFKA_RESP_ERR_INVALID_MSG:
-		case RD_KAFKA_RESP_ERR_INVALID_MSG_SIZE:
-		case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
-		default:
-			/* Fatal errors: no message transmission retries */
-			break;
 		}
 
+		if ((actions & RD_KAFKA_ERR_ACTION_RETRY) &&
+		    rd_kafka_buf_retry(rkb, request))
+                        return; /* Scheduled for retry */
+
+		if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
+			goto done;
+
+
+		/* Fatal errors: no message transmission retries */
 		/* FALLTHRU */
 	}
 

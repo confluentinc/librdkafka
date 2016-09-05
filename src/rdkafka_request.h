@@ -31,6 +31,20 @@
 #include "rdkafka_cgrp.h"
 #include "rdkafka_feature.h"
 
+
+#define RD_KAFKA_ERR_ACTION_PERMANENT  0x1 /* Permanent error */
+#define RD_KAFKA_ERR_ACTION_IGNORE     0x2 /* Error can be ignored */
+#define RD_KAFKA_ERR_ACTION_REFRESH    0x4 /* Refresh state (e.g., metadata) */
+#define RD_KAFKA_ERR_ACTION_RETRY      0x8 /* Retry request after backoff */
+#define RD_KAFKA_ERR_ACTION_INFORM    0x10 /* Inform application about err */
+#define RD_KAFKA_ERR_ACTION_END          0 /* var-arg sentinel */
+
+int rd_kafka_err_action (rd_kafka_broker_t *rkb,
+			 rd_kafka_resp_err_t err,
+			 rd_kafka_buf_t *rkbuf,
+			 rd_kafka_buf_t *request, ...);
+
+
 void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
                                        const rd_kafkap_str_t *cgrp,
                                        rd_kafka_replyq_t replyq,

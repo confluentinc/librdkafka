@@ -70,6 +70,7 @@ static void stop (int sig) {
 }
 
 static long int msgs_wait_cnt = 0;
+static long int msgs_wait_produce_cnt = 0;
 static rd_ts_t t_end;
 static rd_kafka_t *global_rk;
 
@@ -171,7 +172,7 @@ static void msg_delivered (rd_kafka_t *rk,
         if (report_offset)
                 cnt.last_offset = rkmessage->offset;
 
-	if (msgs_wait_cnt == 0 && !forever) {
+	if (msgs_wait_produce_cnt == 0 && msgs_wait_cnt == 0 && !forever) {
 		if (verbosity >= 2)
 			printf("All messages delivered!\n");
 		t_end = rd_clock();
@@ -1081,6 +1082,8 @@ int main (int argc, char **argv) {
 
 		cnt.t_start = cnt.t_last = rd_clock();
 
+		msgs_wait_produce_cnt = msgcnt;
+
 		while (run && (msgcnt == -1 || (int)cnt.msgs < msgcnt)) {
 			/* Send/Produce message. */
 
@@ -1148,6 +1151,8 @@ int main (int argc, char **argv) {
 			}
 
 			msgs_wait_cnt++;
+			if (msgs_wait_produce_cnt != -1)
+				msgs_wait_produce_cnt--;
 			cnt.msgs++;
 			cnt.bytes += msgsize;
 

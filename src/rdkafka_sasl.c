@@ -501,7 +501,7 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 	};
 
 	/* SASL_CB_USER is needed for PLAIN but breaks GSSAPI */
-	if (!strcmp(rk->rk_conf.sasl.service_name, "PLAIN")) {
+	if (!strcmp(rk->rk_conf.sasl.mechanisms, "PLAIN")) {
 		int endidx;
 		/* Find end of callbacks array */
 		for (endidx = 0 ;
@@ -510,6 +510,7 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 
 		callbacks[endidx].id = SASL_CB_USER;
 		callbacks[endidx].proc = (void *)rd_kafka_sasl_cb_getsimple;
+		callbacks[endidx].context = rktrans;
 		endidx++;
 		callbacks[endidx].id = SASL_CB_LIST_END;
 	}

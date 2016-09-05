@@ -480,20 +480,23 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
  * Locality: Broker thread
  */
 static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
-	int req_cnt, q_cnt;
+	int req_cnt, retry_cnt, q_cnt;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
 	/* Outstanding requests waiting for response */
 	req_cnt = rd_kafka_broker_bufq_timeout_scan(
 		rkb, 1, &rkb->rkb_waitresps, RD_KAFKA_RESP_ERR__TIMED_OUT, now);
+	/* Requests in retry queue */
+	retry_cnt = rd_kafka_broker_bufq_timeout_scan(
+		rkb, 0, &rkb->rkb_retrybufs, RD_KAFKA_RESP_ERR__TIMED_OUT, now);
 	/* Requests in local queue not sent yet. */
 	q_cnt = rd_kafka_broker_bufq_timeout_scan(
 		rkb, 0, &rkb->rkb_outbufs, RD_KAFKA_RESP_ERR__TIMED_OUT, now);
 
-	if (req_cnt + q_cnt > 0) {
-		rd_rkb_dbg(rkb, MSG, "REQTMOUT", "Timed out %i+%i requests",
-			   req_cnt, q_cnt);
+	if (req_cnt + retry_cnt + q_cnt > 0) {
+		rd_rkb_dbg(rkb, MSG, "REQTMOUT", "Timed out %i+%i+%i requests",
+			   req_cnt, retry_cnt, q_cnt);
 
                 /* Fail the broker if socket.max.fails is configured and
                  * now exceeded. */

@@ -452,10 +452,17 @@ void rd_kafka_toppar_ver_destroy (struct rd_kafka_toppar_ver *tver) {
  * @returns 1 if rko version is outdated, else 0.
  */
 static RD_INLINE RD_UNUSED
-int rd_kafka_op_version_outdated (rd_kafka_op_t *rko) {
-	if (!rko->rko_version || !rko->rko_rktp)
+int rd_kafka_op_version_outdated (rd_kafka_op_t *rko, int version) {
+	if (!rko->rko_version)
 		return 0;
 
-	return rko->rko_version <
-		rd_atomic32_get(&rd_kafka_toppar_s2i(rko->rko_rktp)->rktp_version);
+	if (rko->rko_rktp)
+		return rko->rko_version <
+			rd_atomic32_get(&rd_kafka_toppar_s2i(
+						rko->rko_rktp)->rktp_version);
+
+	if (version)
+		return rko->rko_version < version;
+
+	return 0;
 }

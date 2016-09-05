@@ -234,11 +234,12 @@ int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
  * Filters out outdated ops.
  */
 static RD_INLINE rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
-                                                   rd_kafka_op_t *rko) {
+						    rd_kafka_op_t *rko,
+						    int version) {
         if (unlikely(!rko))
                 return NULL;
 
-        if (unlikely(rd_kafka_op_version_outdated(rko))) {
+        if (unlikely(rd_kafka_op_version_outdated(rko, version))) {
 		rd_kafka_q_deq0(rkq, rko);
                 rd_kafka_op_destroy(rko);
                 return NULL;
@@ -282,7 +283,7 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
                 do {
                         /* Filter out outdated ops */
                         while ((rko = TAILQ_FIRST(&rkq->rkq_q)) &&
-                               !(rko = rd_kafka_op_filter(rkq, rko)))
+                               !(rko = rd_kafka_op_filter(rkq, rko, version)))
                                 ;
 
                         if (rko) {
@@ -590,7 +591,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 
                 mtx_unlock(&rkq->rkq_lock);
 
-		if (rd_kafka_op_version_outdated(rko)) {
+		if (rd_kafka_op_version_outdated(rko, 0)) {
                         /* Outdated op, put on discard queue */
                         TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
                         continue;

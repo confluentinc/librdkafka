@@ -1549,7 +1549,7 @@ static int rd_kafka_consume_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 
         rktp = rko->rko_rktp ? rd_kafka_toppar_s2i(rko->rko_rktp) : NULL;
 
-        if (unlikely(rd_kafka_op_version_outdated(rko)))
+        if (unlikely(rd_kafka_op_version_outdated(rko, 0)))
                 return 1;
 
 	rkmessage = rd_kafka_message_get(rko);

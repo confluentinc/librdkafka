@@ -106,6 +106,19 @@ void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state){
 }
 
 
+static RD_INLINE void
+rd_kafka_cgrp_version_new_barrier0 (rd_kafka_cgrp_t *rkcg,
+				    const char *func, int line) {
+	rkcg->rkcg_version++;
+	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "BARRIER",
+		     "Group \"%.*s\": %s:%d: new version barrier v%d",
+		     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), func, line,
+		     rkcg->rkcg_version);
+}
+
+#define rd_kafka_cgrp_version_new_barrier(rkcg) \
+	rd_kafka_cgrp_version_new_barrier0(rkcg, __FUNCTION__, __LINE__)
+
 
 void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_assignment);
@@ -727,7 +740,7 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
                                       *assignment, int usable_offsets) {
         int i;
 
-	rkcg->rkcg_version++;
+	rd_kafka_cgrp_version_new_barrier(rkcg);
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "FETCHSTART",
                      "Group \"%s\": starting fetchers for %d assigned "
@@ -820,7 +833,7 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 		       const char *reason) {
 	rd_kafka_op_t *rko;
 
-	rkcg->rkcg_version++;
+	rd_kafka_cgrp_version_new_barrier(rkcg);
 
 	/* Pause current partition set consumers until new assign() is called */
 	if (rkcg->rkcg_assignment)
@@ -1151,7 +1164,7 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 	}
 
-	rkcg->rkcg_version++;
+	rd_kafka_cgrp_version_new_barrier(rkcg);
 
 	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
                      "Group \"%s\": unassigning %d partition(s) (v%"PRId32")",
@@ -1238,6 +1251,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                         rktpar->_private = s_rktp;
         }
 
+	rd_kafka_cgrp_version_new_barrier(rkcg);
 
         /* Remove existing assignment (async operation) */
 	if (rkcg->rkcg_assignment)

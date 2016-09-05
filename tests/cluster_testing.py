@@ -5,7 +5,6 @@
 #
 # Requires:
 #  trivup python module
-#  Kafka git clone (kafka_path below)
 #  gradle in your PATH
 
 from trivup.trivup import Cluster, UuidAllocator
@@ -14,12 +13,11 @@ from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
 from trivup.apps.SslApp import SslApp
 
-import sys, json, argparse
+import os, sys, json, argparse
 
 
 class LibrdkafkaTestCluster(Cluster):
-    def __init__(self, version, conf={}, num_brokers=3, kafka_path=None,
-                 debug=False):
+    def __init__(self, version, conf={}, num_brokers=3, debug=False):
         """
         @brief Create, deploy and start a Kafka cluster using Kafka \p version
         
@@ -29,7 +27,8 @@ class LibrdkafkaTestCluster(Cluster):
         \p conf dict is passed to KafkaBrokerApp classes, etc.
         """
 
-        super(LibrdkafkaTestCluster, self).__init__(self.__class__.__name__, 'tmp', debug=debug)
+        super(LibrdkafkaTestCluster, self).__init__(self.__class__.__name__,
+                                                    os.environ.get('TRIVUP_ROOT', 'tmp'), debug=debug)
 
         # Enable SSL if desired
         if 'SSL' in conf.get('security.protocol', ''):
@@ -38,7 +37,7 @@ class LibrdkafkaTestCluster(Cluster):
         self.brokers = list()
 
         # One ZK (from Kafka repo)
-        ZookeeperApp(self, bin_path=kafka_path + '/bin/zookeeper-server-start.sh')
+        ZookeeperApp(self)
 
         # Start Kerberos KDC if GSSAPI (Kerberos) is configured
         if 'GSSAPI' in conf.get('sasl_mechanisms', []):
@@ -54,7 +53,7 @@ class LibrdkafkaTestCluster(Cluster):
         self.conf = defconf
 
         for n in range(0, num_brokers):
-            self.brokers.append(KafkaBrokerApp(self, defconf, kafka_path=kafka_path))
+            self.brokers.append(KafkaBrokerApp(self, defconf))
 
 
     def bootstrap_servers (self):

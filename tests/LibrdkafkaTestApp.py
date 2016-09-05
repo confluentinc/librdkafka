@@ -4,7 +4,6 @@
 #
 # Requires:
 #  trivup python module
-#  Kafka git clone (kafka_path below)
 #  gradle in your PATH
 
 from trivup.trivup import Cluster, App, UuidAllocator
@@ -92,7 +91,7 @@ class LibrdkafkaTestApp(App):
             bootstrap_servers = all_listeners[0]
             self.log('WARNING: No eligible listeners for security.protocol=%s: falling back to first listener: %s: tests will fail (which might be the intention)' % (security_protocol, bootstrap_servers))
 
-        conf_blob.append(('bootstrap.servers=%s' % bootstrap_servers).encode('ascii'))
+        conf_blob.append('bootstrap.servers=%s' % bootstrap_servers)
         conf_blob.append('security.protocol=%s' % security_protocol)
 
         f.write(('\n'.join(conf_blob)).encode('ascii'))

@@ -6,7 +6,6 @@
 #
 # Requires:
 #  trivup python module
-#  Kafka git clone (kafka_path below)
 #  gradle in your PATH
 
 from cluster_testing import LibrdkafkaTestCluster, print_report_summary
@@ -22,20 +21,15 @@ import argparse
 import json
 import tempfile
 
-# Path to Kafka git clone
-kafka_path='/home/maglun/src/kafka'
-
-
-
 def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None,
-             interact=False):
+             interact=False, debug=False):
                   
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
     """
     
-    cluster = LibrdkafkaTestCluster(version, conf, kafka_path=kafka_path)
+    cluster = LibrdkafkaTestCluster(version, conf, debug=debug)
 
     # librdkafka's regression tests, as an App.
     _rdkconf = conf.copy() # Base rdkconf on cluster conf + rdkconf
@@ -98,6 +92,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Run librdkafka tests on a range of broker versions')
 
+    parser.add_argument('--debug', action='store_true', default=False,
+                        help='Enable trivup debugging')
     parser.add_argument('--conf', type=str, dest='conf', default=None,
                         help='trivup JSON config object (not file)')
     parser.add_argument('--rdkconf', type=str, dest='rdkconf', default=None,
@@ -143,15 +139,10 @@ if __name__ == '__main__':
             if 'version' not in suite:
                 suite['version'] = dict()
 
-            if version == 'trunk':
-                deploy = False
-            else:
-                deploy = True
-                
             # Run tests
             print('#### Version %s, suite %s: STARTING' % (version, suite['name']))
             report = test_it(version, tests=tests, conf=_conf, rdkconf=_rdkconf,
-                             deploy=deploy, interact=args.interact)
+                             interact=args.interact, debug=args.debug)
 
             # Handle test report
             report['version'] = version

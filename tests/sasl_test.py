@@ -6,7 +6,6 @@
 #
 # Requires:
 #  trivup python module
-#  Kafka git clone (kafka_path below)
 #  gradle in your PATH
 
 from cluster_testing import LibrdkafkaTestCluster, print_report_summary, print_test_report_summary
@@ -22,19 +21,13 @@ import argparse
 import json
 import tempfile
 
-# Path to Kafka git clone
-kafka_path='/home/maglun/src/kafka'
-
-
-
 def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None, debug=False):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
     """
     
-    cluster = LibrdkafkaTestCluster(version, conf,
-                                    kafka_path=kafka_path, debug=debug)
+    cluster = LibrdkafkaTestCluster(version, conf, debug=debug)
 
     # librdkafka's regression tests, as an App.
     rdkafka = LibrdkafkaTestApp(cluster, version, _rdkconf, tests=tests)
@@ -173,11 +166,6 @@ if __name__ == '__main__':
             if 'version' not in suite:
                 suite['version'] = dict()
 
-            if version == 'trunk':
-                deploy = False
-            else:
-                deploy = True
-
             # Disable SASL broker config if broker version does
             # not support the selected mechanism
             mech = suite.get('conf', dict()).get('sasl_mechanisms', None)
@@ -188,7 +176,7 @@ if __name__ == '__main__':
             # Run tests
             print('#### Version %s, suite %s: STARTING' % (version, suite['name']))
             report = test_it(version, tests=tests, conf=_conf, rdkconf=_rdkconf,
-                             deploy=deploy, debug=args.debug)
+                             debug=args.debug)
 
             # Handle test report
             report['version'] = version

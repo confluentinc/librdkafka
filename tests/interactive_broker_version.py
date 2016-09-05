@@ -5,7 +5,6 @@
 #
 # Requires:
 #  trivup python module
-#  Kafka git clone (kafka_path below)
 #  gradle in your PATH
 
 from trivup.trivup import Cluster
@@ -32,7 +31,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
     print('## Test version %s' % version)
     
-    cluster = Cluster('librdkafkaInteractiveBrokerVersionTests', root_path, debug=debug)
+    cluster = Cluster('LibrdkafkaTestCluster', root_path, debug=debug)
 
     # Enable SSL if desired
     if 'SSL' in conf.get('security.protocol', ''):
@@ -150,7 +149,7 @@ if __name__ == '__main__':
                         help='Number of times to execute -c ..')
     parser.add_argument('--debug', action='store_true', dest='debug', default=False,
                         help='Enable trivup debugging')
-    parser.add_argument('--root', type=str, default='tmp', help='Root working directory')
+    parser.add_argument('--root', type=str, default=os.environ.get('TRIVUP_ROOT', 'tmp'), help='Root working directory')
     parser.add_argument('--port', default=None, help='Base TCP port to start allocating from')
     parser.add_argument('--kafka-src', dest='kafka_path', type=str, default=None, help='Path to Kafka git repo checkout (used for version=trunk)')
     parser.add_argument('--brokers', dest='broker_cnt', type=int, default=3, help='Number of Kafka brokers')

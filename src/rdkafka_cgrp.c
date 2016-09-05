@@ -493,6 +493,8 @@ static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg, int ignore_response) {
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP)
                 rd_kafka_LeaveGroupRequest(rkcg->rkcg_rkb, rkcg->rkcg_group_id,
                                            rkcg->rkcg_member_id,
+					   ignore_response ?
+					   RD_KAFKA_NO_REPLYQ :
                                            RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                            ignore_response ? NULL :
                                            rd_kafka_handle_LeaveGroup, rkcg);

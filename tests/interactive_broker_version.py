@@ -153,6 +153,9 @@ if __name__ == '__main__':
     parser.add_argument('--port', default=None, help='Base TCP port to start allocating from')
     parser.add_argument('--kafka-src', dest='kafka_path', type=str, default=None, help='Path to Kafka git repo checkout (used for version=trunk)')
     parser.add_argument('--brokers', dest='broker_cnt', type=int, default=3, help='Number of Kafka brokers')
+    parser.add_argument('--ssl', dest='ssl', action='store_true', default=False,
+                        help='Enable SSL endpoints')
+    parser.add_argument('--sasl', dest='sasl', type=str, default=None, help='SASL mechanism (PLAIN, GSSAPI)')
 
     args = parser.parse_args()
     if args.conf is not None:
@@ -164,8 +167,15 @@ if __name__ == '__main__':
         args.conf['port_base'] = int(args.port)
     if args.kafka_path is not None:
         args.conf['kafka_path'] = args.kafka_path
+    if args.ssl:
+        args.conf['security.protocol'] = 'SSL'
+    if args.sasl:
+        if args.sasl == 'PLAIN' and 'sasl_users' not in args.conf:
+            args.conf['sasl_users'] = 'testuser=testpass'
+        args.conf['sasl_mechanisms'] = args.sasl
 
     args.conf['conf'] = ["log.retention.bytes=1000000000"]
+
     for version in args.versions:
         test_version(version, cmd=args.cmd, deploy=args.deploy,
                      conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt,

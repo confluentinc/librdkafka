@@ -47,6 +47,11 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_kafka_transport_t *rkb_transport;
 
 	uint32_t            rkb_corrid;
+	int                 rkb_connid;    /* Connection id, increased by
+					    * one for each connection by
+					    * this broker. Used as a safe-guard
+					    * to help troubleshooting buffer
+					    * problems across disconnects. */
 
 	rd_kafka_q_t       *rkb_ops;
 

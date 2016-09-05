@@ -1645,8 +1645,9 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 	}
 
 	/* Connect succeeded */
-
-	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "Connected");
+	rkb->rkb_connid++;
+	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "Connected (#%d)",
+		   rkb->rkb_connid);
 	rkb->rkb_err.err = 0;
 	rkb->rkb_max_inflight = 1; /* Hold back other requests until
 				    * ApiVersion, SaslHandshake, etc
@@ -1714,13 +1715,16 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		 * but need to use corrid to check this. SSL_write() expects
 		 * us to send the same buffer again when 0 is returned.
 		 */
-		if (rkbuf->rkbuf_corrid == 0) {
+		if (rkbuf->rkbuf_corrid == 0 ||
+		    rkbuf->rkbuf_connid != rkb->rkb_connid) {
 			rd_kafka_assert(NULL, rkbuf->rkbuf_of == 0);
 			rkbuf->rkbuf_corrid = ++rkb->rkb_corrid;
 			rd_kafka_buf_update_i32(rkbuf, 4+2+2,
 						rkbuf->rkbuf_corrid);
+			rkbuf->rkbuf_connid = rkb->rkb_connid;
 		} else if (rkbuf->rkbuf_of > 0) {
-			rd_kafka_assert(NULL, rkbuf->rkbuf_connver == rkb->rkb_connver);
+			rd_kafka_assert(NULL,
+					rkbuf->rkbuf_connid == rkb->rkb_connid);
                 }
 
 		if (rkbuf->rkbuf_of > 0 ||

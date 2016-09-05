@@ -227,6 +227,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	struct msghdr rkbuf_msg;
 	struct iovec *rkbuf_iov;
 	int           rkbuf_iovcnt;
+	int     rkbuf_connid;      /* broker connection id (used when buffer
+				    * was partially sent). */
 	size_t  rkbuf_of;          /* send: send offset,
 				    * recv: parse offset */
 	size_t  rkbuf_len;         /* send: total length,

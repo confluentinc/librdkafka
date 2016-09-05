@@ -334,3 +334,10 @@
    fun:getaddrinfo
    ...
 }
+{
+   nss_files
+   Helgrind:Race
+   ...
+   fun:_dl_runtime_resolve_avx
+   ...
+}

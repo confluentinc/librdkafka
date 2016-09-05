@@ -1746,13 +1746,14 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		if (0) {
 			rd_rkb_dbg(rkb, PROTOCOL, "SEND",
 				   "Send %s corrid %"PRId32" at "
-				   "offset %"PRIdsz"/%"PRIdsz"",
+				   "offset %"PRIdsz"/%"PRIdsz,
 				   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.
 						       ApiKey),
 				   rkbuf->rkbuf_corrid,
 				   rkbuf->rkbuf_of, rkbuf->rkbuf_len);
 			msghdr_print(rkb->rkb_rk, "SEND", msg, 1);
 		}
+
 		if ((r = rd_kafka_broker_send(rkb, msg)) == -1) {
 			/* FIXME: */
 			return -1;

@@ -81,9 +81,9 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
 void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 	fprintf(fp,
 		"%s((rd_kafka_op_t*)%p)\n"
-		" Type: %s (0x%x), Version: %"PRId32"\n",
+		"%s Type: %s (0x%x), Version: %"PRId32"\n",
 		prefix, rko,
-		rd_kafka_op2str(rko->rko_type), rko->rko_type,
+		prefix, rd_kafka_op2str(rko->rko_type), rko->rko_type,
 		rko->rko_version);
 	if (rko->rko_err)
 		fprintf(fp, "%s Error: %s\n",
@@ -104,6 +104,30 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 			prefix, rktp, rktp->rktp_rkt->rkt_topic->str,
 			rktp->rktp_partition,
 			rd_atomic32_get(&rktp->rktp_version), rko->rko_rktp);
+	}
+
+	switch (rko->rko_type)
+	{
+	case RD_KAFKA_OP_FETCH:
+		fprintf(fp,  "%s Offset: %"PRId64"\n",
+			prefix, rko->rko_u.fetch.rkm.rkm_offset);
+		break;
+	case RD_KAFKA_OP_CONSUMER_ERR:
+		fprintf(fp,  "%s Offset: %"PRId64"\n",
+			prefix, rko->rko_u.err.offset);
+		/* FALLTHRU */
+	case RD_KAFKA_OP_ERR:
+		fprintf(fp, "%s Reason: %s\n", prefix, rko->rko_u.err.errstr);
+		break;
+	case RD_KAFKA_OP_DR:
+		fprintf(fp, "%s %"PRId32" messages on %s\n", prefix,
+			rd_atomic32_get(&rko->rko_u.dr.msgq.rkmq_msg_cnt),
+			rko->rko_u.dr.rkt ?
+			rd_kafka_topic_a2i(rko->rko_u.dr.rkt)->
+			rkt_topic->str : "(n/a)");
+		break;
+	default:
+		break;
 	}
 }
 
@@ -137,8 +161,8 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 		[RD_KAFKA_OP_GET_SUBSCRIPTION] = sizeof(rko->rko_u.subscribe),
 		[RD_KAFKA_OP_GET_ASSIGNMENT] = sizeof(rko->rko_u.assign),
 		[RD_KAFKA_OP_THROTTLE] = sizeof(rko->rko_u.throttle),
-		[RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
 		[RD_KAFKA_OP_NAME] = sizeof(rko->rko_u.name),
+		[RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 

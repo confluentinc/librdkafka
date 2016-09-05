@@ -93,7 +93,7 @@ static void rd_kafka_cgrp_set_state (rd_kafka_cgrp_t *rkcg, int state) {
 }
 
 
-void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state){
+void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state) {
         if ((int)rkcg->rkcg_join_state == join_state)
                 return;
 
@@ -717,12 +717,16 @@ rd_kafka_cgrp_offsets_fetch (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb,
 		rd_kafka_cgrp_offsets_fetch_response(
 			rkcg->rkcg_rk, rkb, RD_KAFKA_RESP_ERR__WAIT_COORD,
 			NULL, NULL, use_offsets);
-        else
+        else {
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "OFFSET",
+			     "Fetch %d offsets with v%d\n",
+			     use_offsets->cnt, rkcg->rkcg_version);
                 rd_kafka_OffsetFetchRequest(
                         rkb, 1, offsets,
                         RD_KAFKA_REPLYQ(rkcg->rkcg_ops, rkcg->rkcg_version),
 			rd_kafka_cgrp_offsets_fetch_response,
 			use_offsets);
+	}
 
 }
 
@@ -1551,10 +1555,11 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                                      rktp->rktp_partition);
                 else if (!silent_op)
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPOP",
-                                     "Group \"%.*s\" received op %s in state %s "
+                                     "Group \"%.*s\" received op %s (v%d) in state %s "
                                      "(join state %s, v%"PRId32")",
                                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                                      rd_kafka_op2str(rko->rko_type),
+				     rko->rko_version,
                                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
 				     rkcg->rkcg_version);

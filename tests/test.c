@@ -1239,6 +1239,7 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	test_timing_t t_all;
 	char key[128];
 	void *buf;
+	int64_t tot_bytes = 0;
 
 	if (payload)
 		buf = (void *)payload;
@@ -1254,15 +1255,18 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	TIMING_START(&t_all, "PRODUCE");
 
 	for (msg_id = msg_base ; msg_id < msg_base + cnt ; msg_id++) {
+		size_t len = size;
+
 		if (!payload) {
 			test_msg_fmt(key, sizeof(key), testid, partition,
 				     msg_id);
-			memcpy(buf, key, RD_MIN(size, strlen(key)));
+			len = strlen(key);
+			memcpy(buf, key, RD_MIN(size, len));
 		}
 
 		if (rd_kafka_produce(rkt, partition,
 				     RD_KAFKA_MSG_F_COPY,
-				     buf, size,
+				     buf, len,
 				     !payload ? key : NULL,
 				     !payload ? strlen(key) : 0,
 				     msgcounterp) == -1)
@@ -1272,14 +1276,18 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
                 (*msgcounterp)++;
+		tot_bytes += len;
 
 		rd_kafka_poll(rk, 0);
 
-		if (TIMING_EVERY(&t_all, 5*1000000))
-			TEST_SAY("produced %3d%%: %d/%d messages (%d msgs/s)\n",
+		if (TIMING_EVERY(&t_all, 3*1000000))
+			TEST_SAY("produced %3d%%: %d/%d messages "
+				 "(%d msgs/s, %d bytes/s)\n",
 				 ((msg_id - msg_base) * 100) / cnt,
 				 msg_id - msg_base, cnt,
 				 (int)((msg_id - msg_base) /
+				       (TIMING_DURATION(&t_all) / 1000000)),
+				 (int)((tot_bytes) /
 				       (TIMING_DURATION(&t_all) / 1000000)));
         }
 
@@ -1464,6 +1472,7 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 	int msg_next = exp_msg_base;
 	int fails = 0;
 	int64_t offset_last = -1;
+	int64_t tot_bytes = 0;
 	test_timing_t t_first, t_all;
 
 	TEST_SAY("%s: consume_msgs: %s [%"PRId32"]: expect msg #%d..%d "
@@ -1494,11 +1503,14 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 
 		rkmessage = rd_kafka_consume(rkt, partition, 5000);
 
-		if (TIMING_EVERY(&t_all, 5*1000000))
+		if (TIMING_EVERY(&t_all, 3*1000000))
 			TEST_SAY("%s: "
-				 "consumed %3d%%: %d/%d messages (%d msgs/s)\n",
+				 "consumed %3d%%: %d/%d messages "
+				 "(%d msgs/s, %d bytes/s)\n",
 				 what, cnt * 100 / exp_cnt, cnt, exp_cnt,
 				 (int)(cnt /
+				       (TIMING_DURATION(&t_all) / 1000000)),
+				 (int)(tot_bytes /
 				       (TIMING_DURATION(&t_all) / 1000000)));
 
 		if (!rkmessage)
@@ -1541,6 +1553,7 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 		}
 
 		cnt++;
+		tot_bytes += rkmessage->len;
 		msg_next++;
 		offset_last = rkmessage->offset;
 

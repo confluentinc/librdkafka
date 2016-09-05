@@ -790,7 +790,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 		if (istr)
 			*str = rd_strdup(istr);
 		else
-			*str = NULL;
+			*str = prop->sdef ? rd_strdup(prop->sdef) : NULL;
 		return RD_KAFKA_CONF_OK;
 	}
         case _RK_C_KSTR:
@@ -802,7 +802,8 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
                 if (istr)
                         *kstr = rd_kafkap_str_new(istr, -1);
                 else
-                        *kstr = NULL;
+                        *kstr = prop->sdef ?
+				rd_kafkap_str_new(prop->sdef, -1) : NULL;
                 return RD_KAFKA_CONF_OK;
         }
 	case _RK_C_PTR:

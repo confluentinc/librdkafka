@@ -791,6 +791,7 @@ int rd_kafka_transport_framed_recvmsg (rd_kafka_transport_t *rktrans,
 		/* Point read buffer to main buffer. */
 		rkbuf->rkbuf_rbuf = rkbuf->rkbuf_buf;
 		rd_kafka_buf_push(rkbuf, rkbuf->rkbuf_buf, 4);
+		rkbuf->rkbuf_len = 0; /* read bytes is zero */
 
 		rktrans->rktrans_recv_buf = rkbuf;
 	}

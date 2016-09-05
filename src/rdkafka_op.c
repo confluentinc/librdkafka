@@ -55,6 +55,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 "REPLY:FETCH_START",
                 "REPLY:FETCH_STOP",
                 "REPLY:SEEK",
+		"REPLY:PAUSE",
                 "REPLY:OFFSET_FETCH",
                 "REPLY:PARTITION_JOIN",
                 "REPLY:PARTITION_LEAVE",
@@ -124,6 +125,7 @@ rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
 		[RD_KAFKA_OP_FETCH_START] = sizeof(rko->rko_u.fetch_start),
 		[RD_KAFKA_OP_FETCH_STOP] = 0,
 		[RD_KAFKA_OP_SEEK] = sizeof(rko->rko_u.fetch_start),
+		[RD_KAFKA_OP_PAUSE] = sizeof(rko->rko_u.pause),
 		[RD_KAFKA_OP_OFFSET_FETCH] = sizeof(rko->rko_u.offset_fetch),
 		[RD_KAFKA_OP_PARTITION_JOIN] = 0,
 		[RD_KAFKA_OP_PARTITION_LEAVE] = 0,
@@ -443,10 +445,12 @@ void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,
  * @returns 1 if handled, else 0.
  */
 int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko) {
-	if (rko->rko_type & RD_KAFKA_OP_CB) {
+	if (rko->rko_type & RD_KAFKA_OP_CB)
 		rko->rko_op_cb(rk, rko);
-		return 1;
-	}
+	else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
+		rd_kafka_buf_handle_op(rko, rko->rko_err);
+	else
+		return 0;
 
-	return 0;
+	return 1;
 }

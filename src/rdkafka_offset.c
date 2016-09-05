@@ -431,8 +431,6 @@ rd_kafka_offset_broker_commit (rd_kafka_toppar_t *rktp) {
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition, rktp->rktp_committing_offset);
 
-        rd_kafka_q_keep(&rktp->rktp_ops);
-
         rd_kafka_commit0(rktp->rktp_rkt->rkt_rk, offsets,
 			 RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
 			 rd_kafka_offset_broker_commit_op_cb);

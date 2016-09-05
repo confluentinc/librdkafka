@@ -81,9 +81,10 @@ typedef enum {
         RD_KAFKA_OP_XMIT_BUF, /* transmit buffer: any -> broker thread */
         RD_KAFKA_OP_RECV_BUF, /* received response buffer: broker thr -> any */
         RD_KAFKA_OP_XMIT_RETRY, /* retry buffer xmit: any -> broker thread */
-        RD_KAFKA_OP_FETCH_START, /* Application -> toppar's Broker thread */
-        RD_KAFKA_OP_FETCH_STOP,  /* Application -> toppar's Broker thread */
-        RD_KAFKA_OP_SEEK,        /* Application -> toppar's Broker thread */
+        RD_KAFKA_OP_FETCH_START, /* Application -> toppar's handler thread */
+        RD_KAFKA_OP_FETCH_STOP,  /* Application -> toppar's handler thread */
+        RD_KAFKA_OP_SEEK,        /* Application -> toppar's handler thread */
+	RD_KAFKA_OP_PAUSE,       /* Application -> toppar's handler thread */
         RD_KAFKA_OP_OFFSET_FETCH, /* Broker -> broker thread: fetch offsets
                                    * for topic. */
 
@@ -223,6 +224,11 @@ struct rd_kafka_op_s {
 			int64_t offset;
 			struct rd_kafka_cgrp_s *rkcg;
 		} fetch_start; /* reused for SEEK */
+
+		struct {
+			int pause;
+			int flag;
+		} pause;
 	} rko_u;
 };
 

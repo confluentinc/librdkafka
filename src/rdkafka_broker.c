@@ -3406,6 +3406,7 @@ static rd_kafka_resp_err_t
 rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			    rd_kafka_toppar_t *rktp,
 			    rd_kafka_q_t *rkq,
+			    struct rd_kafka_toppar_ver *tver,
 			    int16_t ApiVersion,
 			    rd_kafka_buf_t *rkbuf_orig,
 			    void *buf, size_t size) {
@@ -3514,7 +3515,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 
 			rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH);
 			rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-			rko->rko_version = rktp->rktp_fetch_version;
+			rko->rko_version = tver->version;
 			rkm = &rko->rko_u.fetch.rkm;
 
 			/* Since all the ops share the same payload buffer
@@ -3688,7 +3689,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			/* Create op and push on temporary queue. */
 			rd_kafka_q_op_err(rkq, RD_KAFKA_OP_CONSUMER_ERR,
 					  RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
-					  rktp->rktp_fetch_version, rktp,
+					  tver->version, rktp,
 					  hdr.Offset,
 					  "Unsupported compression codec "
 					  "0x%hx", hdr.Attributes);
@@ -3712,7 +3713,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			/* Now parse the contained Messages */
 			rd_kafka_messageset_handle(rkb, rktp,
 						   relative_offsets ?
-						   &relq : rkq,
+						   &relq : rkq, tver,
 						   ApiVersion,
 						   rkbufz, outbuf, outlen);
 
@@ -3792,6 +3793,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 		rd_kafkap_str_t topic;
 		rd_kafka_toppar_t *rktp;
 		shptr_rd_kafka_toppar_t *s_rktp = NULL;
+		int32_t fetch_version;
 		int32_t PartitionArrayCnt;
 		struct {
 			int32_t Partition;
@@ -3868,6 +3870,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
                                 continue;
                         }
+			fetch_version = rktp->rktp_fetch_version;
                         rd_kafka_toppar_unlock(rktp);
 
 			/* Check if this Fetch is for an outdated fetch version,
@@ -3879,15 +3882,14 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			rd_kafka_assert(NULL, tver &&
 					rd_kafka_toppar_s2i(tver->s_rktp) ==
 					rktp);
-			if (tver->version < rktp->rktp_fetch_version) {
+			if (tver->version < fetch_version) {
 				rd_rkb_dbg(rkb, MSG, "DROP",
 					   "%s [%"PRId32"]: "
 					   "dropping outdated fetch response "
 					   "(v%d < %d)",
 					   rktp->rktp_rkt->rkt_topic->str,
 					   rktp->rktp_partition,
-					   tver->version,
-					   rktp->rktp_fetch_version);
+					   tver->version, fetch_version);
                                 rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
                                 rd_kafka_toppar_destroy(s_rktp); /* from get */
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
@@ -3903,8 +3905,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				   hdr.MessageSetSize,
 				   rd_kafka_err2str(hdr.ErrorCode),
 				   hdr.HighwaterMarkOffset,
-                                   tver->version,
-                                   rktp->rktp_fetch_version);
+                                   tver->version, fetch_version);
 
 
                         /* Update hi offset to be able to compute
@@ -3967,6 +3968,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					/* FALLTHRU */
 				case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
 				default: /* and all other errors */
+					rd_dassert(tver->version > 0);
 					rd_kafka_q_op_err(
 						rktp->rktp_fetchq,
 						RD_KAFKA_OP_CONSUMER_ERR,
@@ -4003,7 +4005,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 
 			/* Parse and handle the message set */
 			err2 = rd_kafka_messageset_handle(
-				rkb, rktp, &tmp_opq,
+				rkb, rktp, &tmp_opq, tver,
 				request->rkbuf_reqhdr.ApiVersion,
 				rkbuf, rkbuf->rkbuf_rbuf+rkbuf->rkbuf_of,
 				hdr.MessageSetSize);

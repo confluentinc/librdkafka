@@ -782,15 +782,12 @@ rd_kafka_cgrp_partitions_fetch_start (rd_kafka_cgrp_t *rkcg,
 				rktp->rktp_assigned = 1;
 				rkcg->rkcg_assigned_cnt++;
 
-				/* Forward partition's fetchq to
+				/* Start fetcher for partition and
+				 * forward partition's fetchq to
 				 * consumer groups queue. */
-				rd_kafka_q_fwd_set(&rktp->rktp_fetchq,
-						   &rkcg->rkcg_q);
-
-				/* Start fetcher for partition */
-				rd_kafka_toppar_fetch_start(rktp,
-							    rktpar->offset,
-							    NULL);
+				rd_kafka_toppar_op_fetch_start(
+					rktp, rktpar->offset,
+					rkcg->rkcg_q, RD_KAFKA_NO_REPLYQ);
 			} else {
 				int64_t offset;
 				/* Fetcher already started,
@@ -1690,11 +1687,6 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                 case RD_KAFKA_OP_TERMINATE:
                         rd_kafka_cgrp_terminate0(rkcg, rko);
                         rko = NULL; /* terminate0() takes ownership */
-                        break;
-
-                case RD_KAFKA_OP_RECV_BUF:
-                        /* Handle response */
-                        rd_kafka_buf_handle_op(rko, rko->rko_err);
                         break;
 
                 default:

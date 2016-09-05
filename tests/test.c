@@ -160,7 +160,7 @@ struct test tests[] = {
 	_TEST(0037_destroy_hang_local, TEST_F_LOCAL),
 	_TEST(0038_performance, 0),
 	_TEST(0039_event, 0),
-	_TEST(0040_io_event, 0),
+	_TEST(0040_io_event, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0041_fetch_max_bytes, 0),
         { NULL }
 };

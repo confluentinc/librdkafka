@@ -24,7 +24,7 @@ import json
 
 
 def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
-                  root_path='tmp'):
+                  root_path='tmp', broker_cnt=3):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
@@ -46,15 +46,14 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     if 'GSSAPI' in args.conf.get('sasl_mechanisms', []):
         KerberosKdcApp(cluster, 'MYREALM').start()
 
-    # Three brokers
-    defconf = {'replication_factor': 3, 'num_partitions': 4, 'version': version}
+    defconf = {'replication_factor': min(broker_cnt, 3), 'num_partitions': 4, 'version': version}
     defconf.update(conf)
 
     print('conf: ', defconf)
 
-    broker1 = KafkaBrokerApp(cluster, defconf)
-    broker2 = KafkaBrokerApp(cluster, defconf)
-    broker3 = KafkaBrokerApp(cluster, defconf)
+    brokers = []
+    for n in range(0, broker_cnt):
+        brokers.append(KafkaBrokerApp(cluster, defconf))
 
     # Generate test config file
     security_protocol='PLAINTEXT'
@@ -122,7 +121,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
 
     cmd_env = 'export KAFKA_PATH="%s" RDKAFKA_TEST_CONF="%s" ZK_ADDRESS="%s" BROKERS="%s" TEST_KAFKA_VERSION="%s" TRIVUP_ROOT="%s"; ' % \
-              (broker1.conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version, cluster.instance_path())
+              (brokers[0].conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version, cluster.instance_path())
     if not cmd:
         cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
     for i in range(0, exec_cnt):
@@ -154,6 +153,7 @@ if __name__ == '__main__':
     parser.add_argument('--root', type=str, default='tmp', help='Root working directory')
     parser.add_argument('--port', default=None, help='Base TCP port to start allocating from')
     parser.add_argument('--kafka-src', dest='kafka_path', type=str, default=None, help='Path to Kafka git repo checkout (used for version=trunk)')
+    parser.add_argument('--brokers', dest='broker_cnt', type=int, default=3, help='Number of Kafka brokers')
 
     args = parser.parse_args()
     if args.conf is not None:
@@ -170,4 +170,4 @@ if __name__ == '__main__':
     for version in args.versions:
         test_version(version, cmd=args.cmd, deploy=args.deploy,
                      conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt,
-                     root_path=args.root)
+                     root_path=args.root, broker_cnt=args.broker_cnt)

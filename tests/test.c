@@ -704,7 +704,9 @@ static int test_summary (int do_lock) {
 	int tests_failed_known = 0;
         int tests_passed = 0;
 	FILE *sql_fp = NULL;
+#ifndef _MSC_VER
 	char *tmp;
+#endif
 
         t = time(NULL);
         tm = localtime(&t);

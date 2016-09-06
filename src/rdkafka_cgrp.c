@@ -440,6 +440,9 @@ err2:
 
 		/* Suppress repeated errors */
                 rkcg->rkcg_last_err = ErrorCode;
+
+		/* Continue querying */
+		rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_QUERY_COORD);
         }
 
 }

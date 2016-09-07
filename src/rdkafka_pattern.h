@@ -66,3 +66,5 @@ int rd_kafka_pattern_list_init (rd_kafka_pattern_list_t *plist,
 rd_kafka_pattern_list_t *rd_kafka_pattern_list_new (const char *patternlist,
                                                     char *errstr,
                                                     int errstr_size);
+rd_kafka_pattern_list_t *
+rd_kafka_pattern_list_copy (rd_kafka_pattern_list_t *src);

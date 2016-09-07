@@ -631,7 +631,8 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
         int old_state;
 
 	/* Ignore topics in blacklist */
-        if (rd_kafka_pattern_match(&rkb->rkb_rk->rk_conf.topic_blacklist,
+        if (rkb->rkb_rk->rk_conf.topic_blacklist &&
+	    rd_kafka_pattern_match(rkb->rkb_rk->rk_conf.topic_blacklist,
                                    mdt->topic)) {
                 rd_rkb_dbg(rkb, TOPIC, "BLACKLIST",
                            "Ignoring blacklisted topic \"%s\" in metadata",

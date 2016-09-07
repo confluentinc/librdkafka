@@ -129,7 +129,7 @@ struct rd_kafka_conf_s {
         char  *group_id_str;
         rd_kafkap_str_t   *group_id;    /* Consumer group id */
 
-        rd_kafka_pattern_list_t topic_blacklist;
+        rd_kafka_pattern_list_t *topic_blacklist;
         struct rd_kafka_topic_conf_s *topic_conf; /* Default topic config
                                                    * for automatically
                                                    * subscribed topics. */

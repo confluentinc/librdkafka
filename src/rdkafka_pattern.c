@@ -229,3 +229,14 @@ rd_kafka_pattern_list_t *rd_kafka_pattern_list_new (const char *patternlist,
 
         return plist;
 }
+
+
+/**
+ * Make a copy of a pattern list.
+ */
+rd_kafka_pattern_list_t *
+rd_kafka_pattern_list_copy (rd_kafka_pattern_list_t *src) {
+	char errstr[16];
+	return rd_kafka_pattern_list_new(src->rkpl_orig,
+					 errstr, sizeof(errstr));
+}

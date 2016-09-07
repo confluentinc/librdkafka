@@ -118,6 +118,7 @@ int main_0004_conf (int argc, char **argv) {
 		"message.max.bytes", "12345", /* int property */
 		"client.id", "my id", /* string property */
 		"debug", "topic,metadata", /* S2F property */
+		"topic.blacklist", "__.*", /* #778 */
 #if WITH_ZLIB
 		"compression.codec", "gzip", /* S2I property */
 #endif

@@ -120,6 +120,7 @@ _TEST_DECL(0038_performance);
 _TEST_DECL(0039_event);
 _TEST_DECL(0040_io_event);
 _TEST_DECL(0041_fetch_max_bytes);
+_TEST_DECL(0042_many_topics);
 
 /**
  * Define all tests here
@@ -162,6 +163,7 @@ struct test tests[] = {
 	_TEST(0039_event, 0),
 	_TEST(0040_io_event, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0041_fetch_max_bytes, 0),
+	_TEST(0042_many_topics, 0),
         { NULL }
 };
 
@@ -2510,6 +2512,22 @@ void test_consumer_close (rd_kafka_t *rk) {
         if (err)
                 TEST_FAIL("Failed to close consumer: %s\n",
                           rd_kafka_err2str(err));
+}
+
+
+void test_flush (rd_kafka_t *rk, int timeout_ms) {
+	test_timing_t timing;
+	rd_kafka_resp_err_t err;
+
+	TEST_SAY("%s: Flushing %d messages\n",
+		 rd_kafka_name(rk), rd_kafka_outq_len(rk));
+	TIMING_START(&timing, "FLUSH");
+	err = rd_kafka_flush(rk, timeout_ms);
+	TIMING_STOP(&timing);
+	if (err)
+		TEST_FAIL("Failed to flush(%s, %d): %s\n",
+			  rd_kafka_name(rk), timeout_ms,
+			  rd_kafka_err2str(err));
 }
 
 

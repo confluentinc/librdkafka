@@ -130,7 +130,14 @@ rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev) {
 }
 
 const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev) {
-	return rkev->rko_u.err.errstr;
+	switch (rkev->rko_type)
+	{
+	case RD_KAFKA_OP_ERR:
+	case RD_KAFKA_OP_CONSUMER_ERR:
+		return rkev->rko_u.err.errstr;
+	default:
+		return rd_kafka_err2str(rkev->rko_err);
+	}
 }
 
 

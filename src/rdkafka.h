@@ -2735,7 +2735,8 @@ const rd_kafka_message_t *rd_kafka_event_message_next (rd_kafka_event_t *rkev);
  */
 RD_EXPORT
 size_t rd_kafka_event_message_array (rd_kafka_event_t *rkev,
-				     const rd_kafka_message_t **rkmessages, size_t size);
+				     const rd_kafka_message_t **rkmessages,
+				     size_t size);
 
 
 /**
@@ -2753,16 +2754,19 @@ size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
  * @returns the error code for the event.
  *
  * Event types:
- *  - RD_KAFKA_EVENT_ERROR
+ *  - all
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev);
 
 
 /**
- * @returns the error string (if any) for an RD_KAFKA_EVENT_ERROR event.
+ * @returns the error string (if any).
+ *          An application should check that rd_kafka_event_error() returns
+ *          non-zero before calling this function.
+ *
  * Event types:
- *  - RD_KAFKA_EVENT_ERROR
+ *  - all
  */
 RD_EXPORT
 const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev);

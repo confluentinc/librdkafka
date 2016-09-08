@@ -499,6 +499,13 @@ private:
      * are accounted for on the "right side" of the rebalance. */
     report_records_consumed(1);
 
+    if (err == RdKafka::ERR__ASSIGN_PARTITIONS)
+      consumer->assign(partitions);
+    else {
+      do_commit(consumer, 1);
+      consumer->unassign();
+    }
+
     std::cout << "{ " <<
       "\"name\": \"partitions_" << (err == RdKafka::ERR__ASSIGN_PARTITIONS ?
 				    "assigned" : "revoked") << "\", " <<
@@ -506,12 +513,7 @@ private:
     part_list_json(partitions);
     std::cout << "] }" << std::endl;
 
-    if (err == RdKafka::ERR__ASSIGN_PARTITIONS)
-      consumer->assign(partitions);
-    else {
-      do_commit(consumer, 1);
-      consumer->unassign();
-    }
+
   }
 };
 
@@ -591,8 +593,6 @@ int main (int argc, char **argv) {
 
   /* auto commit is explicitly enabled with --enable-autocommit */
   conf->set("enable.auto.commit", "false", errstr);
-
-  conf->set("debug", "cgrp,topic,broker", errstr);
 
   for (int i = 1 ; i < argc ; i++) {
     const char *name = argv[i];

@@ -4435,11 +4435,11 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                                (int)(rkb->rkb_rk->rk_conf.
 						     reconnect_jitter_ms*1.5))
                                      * 1000))) < 0) {
+				backoff = RD_MAX(-backoff / 1000, 100);
                                 rd_rkb_dbg(rkb, BROKER, "RECONNECT",
                                            "Delaying next reconnect by %dms",
-                                           -(int)(backoff/1000));
-                                rd_kafka_broker_ua_idle(rkb,
-							(int)(-backoff / 1000));
+                                           (int)backoff);
+                                rd_kafka_broker_ua_idle(rkb, (int)backoff);
                                 rkb->rkb_ts_connect = 0;
                                 continue;
                         }

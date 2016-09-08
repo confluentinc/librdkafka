@@ -922,9 +922,6 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
 		}
 	}
 
-	if (offsets)
-		rd_kafka_offset_commit_cb_op(rkcg->rkcg_rk, err, offsets);
-
         if (rd_kafka_cgrp_try_terminate(rkcg))
                 return; /* terminated */
 
@@ -967,16 +964,18 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 		return;
 	}
 
-	rd_kafka_cgrp_handle_OffsetCommit(rkcg, err, offsets);
 	if (rko_orig->rko_replyq.q) {
                 rd_kafka_op_t *rko_reply = rd_kafka_op_new_reply(rko_orig, err);
 
-		/* Move offset & partitions to reply op */
+		/* Copy offset & partitions & callbacks to reply op */
 		rko_reply->rko_u.offset_commit = rko_orig->rko_u.offset_commit;
-		RD_MEMZERO(rko_orig->rko_u.offset_commit);
+		rko_reply->rko_u.offset_commit.partitions =
+			rd_kafka_topic_partition_list_copy(offsets);
 
                 rd_kafka_replyq_enq(&rko_orig->rko_replyq, rko_reply, 0);
         }
+
+	rd_kafka_cgrp_handle_OffsetCommit(rkcg, err, offsets);
 
         rd_kafka_op_destroy(rko_orig);
 }
@@ -990,7 +989,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
  * The offset list will be altered.
  *
  * \p silent_empty: if there are no offsets to commit bail out silently without
- *                  calling the offset_commit_cb.
+ *                  posting an op on the reply queue.
  *
  * Locality: cgrp thread
  */
@@ -1082,8 +1081,15 @@ static void rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_op_t *rko;
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT);
+	if (rkcg->rkcg_rk->rk_conf.offset_commit_cb) {
+		rd_kafka_op_set_replyq(rko, rkcg->rkcg_rk->rk_rep, 0);
+		rko->rko_u.offset_commit.cb =
+			rkcg->rkcg_rk->rk_conf.offset_commit_cb;
+		rko->rko_u.offset_commit.opaque = rkcg->rkcg_rk->rk_conf.opaque;
+	}
         /* NULL partitions means current assignment */
-        rd_kafka_cgrp_offsets_commit(rkcg, rko, 1/*skip-early if no offsets*/);
+        rd_kafka_cgrp_offsets_commit(rkcg, rko,
+				     1/*skip-silently if no offsets*/);
 }
 
 

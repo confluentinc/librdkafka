@@ -37,7 +37,8 @@ static const char *rd_kafka_event_names[] = {
 	"Fetch",
 	"Log",
 	"Error",
-	"Rebalance"
+	"Rebalance",
+	"OffsetCommit"
 };
 
 rd_kafka_event_type_t rd_kafka_event_type (const rd_kafka_event_t *rkev) {
@@ -133,8 +134,19 @@ const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev) {
 }
 
 
-int rd_kafka_event_log (rd_kafka_event_t *rkev, const char **fac, const char **str,
-			int *level) {
+void *rd_kafka_event_opaque (rd_kafka_event_t *rkev) {
+	switch (rkev->rko_type)
+	{
+	case RD_KAFKA_OP_OFFSET_COMMIT:
+		return rkev->rko_u.offset_commit.opaque;
+	default:
+		return NULL;
+	}
+}
+
+
+int rd_kafka_event_log (rd_kafka_event_t *rkev, const char **fac,
+			const char **str, int *level) {
 	if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_LOG))
 		return -1;
 
@@ -152,10 +164,15 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev, const char **fac, const char **s
 
 rd_kafka_topic_partition_list_t *
 rd_kafka_event_topic_partition_list (rd_kafka_event_t *rkev) {
-	if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_REBALANCE))
+	switch (rkev->rko_evtype)
+	{
+	case RD_KAFKA_EVENT_REBALANCE:
+		return rkev->rko_u.rebalance.partitions;
+	case RD_KAFKA_EVENT_OFFSET_COMMIT:
+		return rkev->rko_u.offset_commit.partitions;
+	default:
 		return NULL;
-
-	return rkev->rko_u.rebalance.partitions;
+	}
 }
 
 

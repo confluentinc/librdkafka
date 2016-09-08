@@ -2105,10 +2105,12 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 		break;
 
         case RD_KAFKA_OP_OFFSET_COMMIT | RD_KAFKA_OP_REPLY:
-                rk->rk_conf.offset_commit_cb(
+		if (!rko->rko_u.offset_commit.cb)
+			return 0; /* Dont handle here */
+		rko->rko_u.offset_commit.cb(
                         rk, rko->rko_err,
 			rko->rko_u.offset_commit.partitions,
-                        rk->rk_conf.opaque);
+			rko->rko_u.offset_commit.opaque);
                 break;
 
         case RD_KAFKA_OP_CONSUMER_ERR:

@@ -602,6 +602,7 @@ public:
    *
    * The results of automatic or manual offset commits will be scheduled
    * for this callback and is served by RdKafka::KafkaConsumer::consume()
+   * or RdKafka::KafkaConsumer::commitSync()
    *
    * If no partitions had valid offsets to commit this callback will be called
    * with \p err == ERR__NO_OFFSET which is not to be considered an error.

@@ -176,6 +176,7 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 					TEST_FAIL("%s: offset_store failed: %s\n",
 						  what, rd_kafka_err2str(err));
 			}
+			expected_offset = rkm->offset+1;
 			if (!auto_commit) {
 				test_timing_t t_commit;
 				TIMING_START(&t_commit,
@@ -186,7 +187,7 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 					TEST_FAIL("%s: commit failed: %s\n",
 						  what, rd_kafka_err2str(err));
 			}
-			expected_offset = rkm->offset+1;
+
 		} else if (auto_store && auto_commit)
 			expected_offset = rkm->offset+1;
 

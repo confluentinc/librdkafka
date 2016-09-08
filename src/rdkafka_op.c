@@ -106,7 +106,7 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 			rd_atomic32_get(&rktp->rktp_version), rko->rko_rktp);
 	}
 
-	switch (rko->rko_type)
+	switch (rko->rko_type & ~RD_KAFKA_OP_FLAGMASK)
 	{
 	case RD_KAFKA_OP_FETCH:
 		fprintf(fp,  "%s Offset: %"PRId64"\n",
@@ -126,6 +126,16 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 			rd_kafka_topic_a2i(rko->rko_u.dr.rkt)->
 			rkt_topic->str : "(n/a)");
 		break;
+	case RD_KAFKA_OP_OFFSET_COMMIT:
+		fprintf(fp, "%s Callback: %p (opaque %p)\n",
+			prefix, rko->rko_u.offset_commit.cb,
+			rko->rko_u.offset_commit.opaque);
+		fprintf(fp, "%s %d partitions\n",
+			prefix,
+			rko->rko_u.offset_commit.partitions ?
+			rko->rko_u.offset_commit.partitions->cnt : 0);
+		break;
+
 	default:
 		break;
 	}
@@ -336,6 +346,9 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
 	rd_kafka_op_get_reply_version(rko, rko_orig);
 	rko->rko_op_cb   = rko_orig->rko_op_cb;
 	rko->rko_err     = err;
+	if (rko_orig->rko_rktp)
+		rko->rko_rktp = rd_kafka_toppar_keep(
+			rd_kafka_toppar_s2i(rko_orig->rko_rktp));
 
         return rko;
 }

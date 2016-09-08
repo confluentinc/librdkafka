@@ -28,8 +28,8 @@
 
 
 /**
- * @brief Set up public event type based on op type
- * @returns the event type, if applicable, else 0.
+ * @brief Converts op type to event type.
+ * @returns the event type, or 0 if the op cannot be mapped to an event.
  */
 static RD_UNUSED RD_INLINE
 rd_kafka_event_type_t rd_kafka_op2event (rd_kafka_op_type_t optype) {
@@ -38,10 +38,11 @@ rd_kafka_event_type_t rd_kafka_op2event (rd_kafka_op_type_t optype) {
 		[RD_KAFKA_OP_FETCH] = RD_KAFKA_EVENT_FETCH,
 		[RD_KAFKA_OP_ERR] = RD_KAFKA_EVENT_ERROR,
 		[RD_KAFKA_OP_CONSUMER_ERR] = RD_KAFKA_EVENT_ERROR,
-		[RD_KAFKA_OP_REBALANCE] = RD_KAFKA_EVENT_REBALANCE
+		[RD_KAFKA_OP_REBALANCE] = RD_KAFKA_EVENT_REBALANCE,
+		[RD_KAFKA_OP_OFFSET_COMMIT] = RD_KAFKA_EVENT_OFFSET_COMMIT
 	};
 
-	return map[(int)optype];
+	return map[(int)optype & ~RD_KAFKA_OP_FLAGMASK];
 }
 
 

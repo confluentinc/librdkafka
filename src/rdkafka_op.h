@@ -157,6 +157,11 @@ struct rd_kafka_op_s {
 
 		struct {
 			rd_kafka_topic_partition_list_t *partitions;
+			void (*cb) (rd_kafka_t *rk,
+				    rd_kafka_resp_err_t err,
+				    rd_kafka_topic_partition_list_t *offsets,
+				    void *opaque);
+			void *opaque;
 		} offset_commit;
 
 		struct {

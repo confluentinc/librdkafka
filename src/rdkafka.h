@@ -2037,7 +2037,6 @@ rd_kafka_message_t *rd_kafka_consumer_poll (rd_kafka_t *rk, int timeout_ms);
  * @remark The application still needs to call rd_kafka_destroy() after
  *         this call finishes to clean up the underlying handle resources.
  *
- *
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
@@ -2046,6 +2045,16 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
 
 /**
  * @brief Atomic assignment of partitions to consume.
+ *
+ * The new \p partitions will replace the existing assignment.
+ *
+ * When used from a rebalance callback the application shall pass the
+ * partition list passed to the callback (or a copy of it) (even if the list
+ * is empty) rather than NULL to maintain internal join state.
+
+ * A zero-length \p partitions will treat the partitions as a valid,
+ * albeit empty, assignment, and maintain internal state, while a \c NULL
+ * value for \p partitions will reset and clear the internal state.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_assign (rd_kafka_t *rk,

@@ -486,6 +486,15 @@ int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 		rko->rko_op_cb(rk, rko);
 	else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
 		rd_kafka_buf_handle_op(rko, rko->rko_err);
+	else if ((int)rko->rko_type ==
+		 (RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY)
+		 && rko->rko_u.offset_commit.cb)
+		rko->rko_u.offset_commit.cb(rk, rko->rko_err,
+					    rko->rko_u.offset_commit.partitions,
+					    rko->rko_u.offset_commit.opaque);
+	else if (rko->rko_type & RD_KAFKA_OP_REPLY &&
+		 rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
+		return 1; /* dest queue was probably disabled. */
 	else
 		return 0;
 

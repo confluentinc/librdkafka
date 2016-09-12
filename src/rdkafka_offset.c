@@ -526,6 +526,8 @@ rd_kafka_offset_broker_commit_cb (rd_kafka_t *rk,
         if (!err)
                 err = offsets->elems[0].err;
 
+	rd_kafka_toppar_offset_commit_result(rktp, err, offsets);
+
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
                      "%s [%"PRId32"]: offset %"PRId64" committed: %s",
                      rktp->rktp_rkt->rkt_topic->str,
@@ -919,6 +921,11 @@ static void rd_kafka_offset_broker_init (rd_kafka_toppar_t *rktp) {
 void rd_kafka_offset_store_term (rd_kafka_toppar_t *rktp,
                                  rd_kafka_resp_err_t err) {
         rd_kafka_resp_err_t err2;
+
+	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "STORETERM",
+		     "%s [%"PRId32"]: offset store terminating",
+                     rktp->rktp_rkt->rkt_topic->str,
+		     rktp->rktp_partition);
 
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_OFFSET_STORE_STOPPING;
 

@@ -99,9 +99,12 @@ typedef struct rd_kafka_cgrp_s {
                 /* all: waiting for application's rebalance_cb to operate */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB,
 
-                /* all: synchronized, assigned and operational.
+                /* all: synchronized and assigned
                  *      may be an empty assignment. */
                 RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED,
+
+		/* all: fetchers are started and operational */
+		RD_KAFKA_CGRP_JOIN_STATE_STARTED
         } rkcg_join_state;
 
         /* State when group leader */

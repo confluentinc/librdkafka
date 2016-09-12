@@ -493,13 +493,17 @@ int rd_kafka_op_version_outdated (rd_kafka_op_t *rko, int version) {
 	if (!rko->rko_version)
 		return 0;
 
+	if (version)
+		return rko->rko_version < version;
+
 	if (rko->rko_rktp)
 		return rko->rko_version <
 			rd_atomic32_get(&rd_kafka_toppar_s2i(
 						rko->rko_rktp)->rktp_version);
-
-	if (version)
-		return rko->rko_version < version;
-
 	return 0;
 }
+
+void
+rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
+				      rd_kafka_resp_err_t err,
+				      rd_kafka_topic_partition_list_t *offsets);

@@ -864,8 +864,6 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 		       const char *reason) {
 	rd_kafka_op_t *rko;
 
-	rd_kafka_cgrp_version_new_barrier(rkcg);
-
 	/* Pause current partition set consumers until new assign() is called */
 	if (rkcg->rkcg_assignment)
 		rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 1,

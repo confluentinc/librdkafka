@@ -77,7 +77,6 @@ void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
 	}
 	if (destq) {
 		rd_kafka_q_keep(destq);
-		srcq->rkq_fwdq = destq;
 
 		/* If rkq has ops in queue, append them to fwdq's queue.
 		 * This is an irreversible operation. */
@@ -85,6 +84,8 @@ void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
 			rd_dassert(destq->rkq_flags & RD_KAFKA_Q_F_READY);
 			rd_kafka_q_concat(destq, srcq);
 		}
+
+		srcq->rkq_fwdq = destq;
 	}
         if (do_lock)
                 mtx_unlock(&srcq->rkq_lock);

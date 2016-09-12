@@ -308,20 +308,23 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 
 
 /**
- * @brief Purge connection-setup API requests from the queue.
+ * @brief Update bufq for connection reset:
+ *
+ * - Purge connection-setup API requests from the queue.
+ * - Reset any partially sent buffer's offset. (issue #756)
  *
  * Request types purged:
  *   ApiVersion
  *   SaslHandshake
  */
-void rd_kafka_bufq_purge_connsetup (rd_kafka_broker_t *rkb,
-				    rd_kafka_bufq_t *rkbufq) {
+void rd_kafka_bufq_connection_reset (rd_kafka_broker_t *rkb,
+				     rd_kafka_bufq_t *rkbufq) {
 	rd_kafka_buf_t *rkbuf, *tmp;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
-	rd_rkb_dbg(rkb, QUEUE, "BUFQ", "Purging connection-setup requests "
-		   "from bufq with %i buffers",
+	rd_rkb_dbg(rkb, QUEUE, "BUFQ",
+		   "Updating %d buffers on connection reset",
 		   rd_atomic32_get(&rkbufq->rkbq_cnt));
 
 	TAILQ_FOREACH_SAFE(rkbuf, &rkbufq->rkbq_bufs, rkbuf_link, tmp) {
@@ -335,6 +338,8 @@ void rd_kafka_bufq_purge_connsetup (rd_kafka_broker_t *rkb,
 					      NULL, rkbuf);
 			break;
 		default:
+			if (rkbuf->rkbuf_of > 0)
+				rkbuf->rkbuf_of = 0;
 			break;
 		}
         }

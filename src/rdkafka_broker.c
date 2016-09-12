@@ -391,9 +391,12 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	/* Put the outbufs back on queue */
 	rd_kafka_bufq_concat(&rkb->rkb_outbufs, &tmpq);
 
-	/* Purge connection-setup requests from outbufs since they will be
-	 * reissued on the next connect. */
-	rd_kafka_bufq_purge_connsetup(rkb, &rkb->rkb_outbufs);
+	/* Update bufq for connection reset:
+	 *  - Purge connection-setup requests from outbufs since they will be
+	 *    reissued on the next connect.
+	 *  - Reset any partially sent buffer's offset.
+	 */
+	rd_kafka_bufq_connection_reset(rkb, &rkb->rkb_outbufs);
 
 	internal_rkb = rd_kafka_broker_internal(rkb->rkb_rk);
 

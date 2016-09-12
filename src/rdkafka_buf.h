@@ -322,8 +322,8 @@ void rd_kafka_bufq_concat (rd_kafka_bufq_t *dst, rd_kafka_bufq_t *src);
 void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
                           rd_kafka_bufq_t *rkbufq,
                           rd_kafka_resp_err_t err);
-void rd_kafka_bufq_purge_connsetup (rd_kafka_broker_t *rkb,
-				    rd_kafka_bufq_t *rkbufq);
+void rd_kafka_bufq_connection_reset (rd_kafka_broker_t *rkb,
+				     rd_kafka_bufq_t *rkbufq);
 
 int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf);
 

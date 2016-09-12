@@ -238,8 +238,10 @@ int main_0042_many_topics (int argc, char **argv) {
 
 	produce_many(topics, topic_cnt, testid);
 	legacy_consume_many(topics, topic_cnt, testid);
-	subscribe_consume_many(topics, topic_cnt, testid);
-	assign_consume_many(topics, topic_cnt, testid);
+	if (test_broker_version >= TEST_BRKVER(0,9,0,0)) {
+		subscribe_consume_many(topics, topic_cnt, testid);
+		assign_consume_many(topics, topic_cnt, testid);
+	}
 
 	for (i = 0 ; i < topic_cnt ; i++)
 		free(topics[i]);

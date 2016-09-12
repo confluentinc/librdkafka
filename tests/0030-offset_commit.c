@@ -104,7 +104,6 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	int cnt = 0;
 	const int extra_cnt = 5;
 	rd_kafka_resp_err_t err;
-	char errstr[512];
 	rd_kafka_topic_partition_list_t *parts;
 	rd_kafka_topic_partition_t *rktpar;
 	int64_t next_offset = -1;
@@ -140,11 +139,8 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	 */
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_CONSUMER, rd_kafka_conf_dup(conf),
-			  errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("%s: Failed to create rdkafka instance: %s\n",
-			  what, errstr);
+	rk = test_create_handle(RD_KAFKA_CONSUMER, rd_kafka_conf_dup(conf));
+
 	rd_kafka_poll_set_consumer(rk);
 
 	test_consumer_subscribe(rk, topic);
@@ -275,10 +271,7 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 
 	/* Fire up a new consumer and continue from where we left off. */
 	TEST_SAY("%s: phase 2: starting new consumer to resume consumption\n",what);
-	rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("%s: Failed to create rdkafka instance: %s\n",
-			  what, errstr);
+	rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 	rd_kafka_poll_set_consumer(rk);
 
 	test_consumer_subscribe(rk, topic);

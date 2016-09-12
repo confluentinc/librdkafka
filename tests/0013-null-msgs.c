@@ -84,12 +84,7 @@ static void produce_null_messages (uint64_t testid, const char *topic,
                                 errstr, sizeof(errstr));
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
-			       errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
-
-	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
@@ -278,17 +273,12 @@ static void consume_messages (uint64_t testid, const char *topic,
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
-	char errstr[512];
 	int i;
 
 	test_conf_init(&conf, &topic_conf, 20);
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
-
-	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+	rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
@@ -343,7 +333,6 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	rd_kafka_queue_t *rkqu;
-	char errstr[512];
 	int i;
 	int32_t partition;
 	int batch_cnt = msgcnt / partition_cnt;
@@ -351,11 +340,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 	test_conf_init(&conf, &topic_conf, 20);
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
-
-	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+	rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
 	/* Create queue */
 	rkqu = rd_kafka_queue_new(rk);

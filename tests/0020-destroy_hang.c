@@ -132,16 +132,13 @@ static int nonexist_part (void) {
 static int producer_groupid (void) {
 	rd_kafka_conf_t *conf;
 	rd_kafka_t *rk;
-	char errstr[512];
 
 	TEST_SAY("producer_groupid hang test\n");
 	test_conf_init(&conf, NULL, 10);
 
 	test_conf_set(conf, "group.id", "dummy");
 
-	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("%s\n", errstr);
+	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 	TEST_SAY("Destroying producer\n");
 	rd_kafka_destroy(rk);

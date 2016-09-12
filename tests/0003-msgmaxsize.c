@@ -89,12 +89,7 @@ int main_0003_msgmaxsize (int argc, char **argv) {
 	rd_kafka_conf_set_dr_cb(conf, dr_cb);
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
-			  errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
-
-	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0003", 0),
                                  topic_conf);

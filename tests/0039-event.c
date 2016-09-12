@@ -81,7 +81,6 @@ int main_0039_event (int argc, char **argv) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
-	char errstr[512];
 	char msg[128];
 	int msgcnt = 50000;
 	int i;
@@ -96,14 +95,9 @@ int main_0039_event (int argc, char **argv) {
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_DR);
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
-			  errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
+	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 	eventq = rd_kafka_queue_get_main(rk);
-
-	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
 
 	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0005", 0),
                                  topic_conf);

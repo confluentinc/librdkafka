@@ -83,7 +83,6 @@ static void do_test_stats_timer (void) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         const int exp_calls = 10;
-        char errstr[512];
         struct state state;
         test_timing_t t_new;
 
@@ -99,10 +98,8 @@ static void do_test_stats_timer (void) {
 
 
         TIMING_START(&t_new, "rd_kafka_new()");
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
         TIMING_STOP(&t_new);
-        if (!rk)
-                TEST_FAIL("Failed to create instance: %s\n", errstr);
 
         TEST_SAY("Starting wait loop for %d expected stats_cb calls "
                  "with an interval of %dms\n",

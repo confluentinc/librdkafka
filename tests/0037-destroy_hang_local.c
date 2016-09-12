@@ -49,16 +49,13 @@
 static int legacy_consumer_early_destroy (void) {
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
-	char errstr[512];
 	int pass;
 	const char *topic = test_mk_topic_name(__FUNCTION__, 0);
 
 	for (pass = 0 ; pass < 2 ; pass++) {
 		TEST_SAY("%s: pass #%d\n", __FUNCTION__, pass);
 
-		rk = rd_kafka_new(RD_KAFKA_CONSUMER, NULL,
-				  errstr, sizeof(errstr));
-		TEST_ASSERT(rk, "failed to create consumer: %s", errstr);
+		rk = test_create_handle(RD_KAFKA_CONSUMER, NULL);
 
 		if (pass == 1) {
 			/* Second pass, create a topic too. */

@@ -1371,17 +1371,13 @@ rd_kafka_t *test_create_consumer (const char *group_id,
                                   rd_kafka_topic_conf_t *default_topic_conf,
 				  void *opaque) {
 	rd_kafka_t *rk;
-	char errstr[512];
 	char tmp[64];
 
 	if (!conf)
 		test_conf_init(&conf, NULL, 0);
 
         if (group_id) {
-                if (rd_kafka_conf_set(conf, "group.id", group_id,
-                                      errstr, sizeof(errstr)) !=
-                    RD_KAFKA_CONF_OK)
-                        TEST_FAIL("Conf failed: %s\n", errstr);
+		test_conf_set(conf, "group.id", group_id);
 
 		rd_snprintf(tmp, sizeof(tmp), "%d", test_session_timeout_ms);
 		test_conf_set(conf, "session.timeout.ms", tmp);
@@ -1398,14 +1394,10 @@ rd_kafka_t *test_create_consumer (const char *group_id,
                 rd_kafka_conf_set_default_topic_conf(conf, default_topic_conf);
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
+	rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
 	if (group_id)
 		rd_kafka_poll_set_consumer(rk);
-
-	TEST_SAY("Created kafka instance %s\n", rd_kafka_name(rk));
 
 	return rk;
 }

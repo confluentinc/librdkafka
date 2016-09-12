@@ -75,7 +75,6 @@ int main_0007_autotopic (int argc, char **argv) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
-	char errstr[512];
 	char msg[128];
 	int msgcnt = 10;
 	int i;
@@ -91,12 +90,7 @@ int main_0007_autotopic (int argc, char **argv) {
 	rd_kafka_conf_set_dr_cb(conf, dr_cb);
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
-			  errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
-
-	TEST_SAY("Created    kafka instance %s\n", rd_kafka_name(rk));
+	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0007_autotopic", 1),
                                  topic_conf);

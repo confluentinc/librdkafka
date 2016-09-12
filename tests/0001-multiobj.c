@@ -51,7 +51,6 @@ int main_0001_multiobj (int argc, char **argv) {
 		rd_kafka_topic_t *rkt;
 		rd_kafka_conf_t *conf;
 		rd_kafka_topic_conf_t *topic_conf;
-		char errstr[512];
 		char msg[128];
                 test_timing_t t_destroy;
 
@@ -60,11 +59,7 @@ int main_0001_multiobj (int argc, char **argv) {
                 if (!topic)
                         topic = test_mk_topic_name("0001", 0);
 
-		rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
-				  errstr, sizeof(errstr));
-		if (!rk)
-			TEST_FAIL("Failed to create rdkafka instance #%i: %s\n",
-				  i, errstr);
+		rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 		if (!rkt)

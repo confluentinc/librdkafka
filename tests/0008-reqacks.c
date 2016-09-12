@@ -108,11 +108,7 @@ int main_0008_reqacks (int argc, char **argv) {
                 rd_kafka_conf_set_dr_cb(conf, dr_cb);
 
                 /* Create kafka instance */
-                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
-                                  errstr, sizeof(errstr));
-                if (!rk)
-                        TEST_FAIL("Failed to create rdkafka instance: %s\n",
-                                  errstr);
+                rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
                 TEST_SAY("Created    kafka instance %s with required acks %i\n",
                          rd_kafka_name(rk), reqacks);

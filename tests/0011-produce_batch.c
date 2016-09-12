@@ -74,7 +74,6 @@ static void test_single_partition (void) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
-	char errstr[512];
 	char msg[128];
 	int msgcnt = 100000;
 	int failcnt = 0;
@@ -89,10 +88,7 @@ static void test_single_partition (void) {
 	rd_kafka_conf_set_dr_cb(conf, dr_single_partition_cb);
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
-			  errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
+	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 	TEST_SAY("test_single_partition: Created kafka instance %s\n",
 		 rd_kafka_name(rk));
@@ -196,7 +192,6 @@ static void test_partitioner (void) {
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
-	char errstr[512];
 	char msg[128];
 	int msgcnt = 100000;
         int failcnt = 0;
@@ -211,10 +206,7 @@ static void test_partitioner (void) {
 	rd_kafka_conf_set_dr_cb(conf, dr_partitioner_cb);
 
 	/* Create kafka instance */
-	rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
-			  errstr, sizeof(errstr));
-	if (!rk)
-		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
+	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 	TEST_SAY("test_partitioner: Created kafka instance %s\n",
 		 rd_kafka_name(rk));

@@ -1264,8 +1264,8 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 		if (!payload) {
 			test_msg_fmt(key, sizeof(key), testid, partition,
 				     msg_id);
-			len = strlen(key);
-			memcpy(buf, key, RD_MIN(size, len));
+			len = RD_MIN(size, strlen(key));
+			memcpy(buf, key, len);
 		}
 
 		if (rd_kafka_produce(rkt, partition,

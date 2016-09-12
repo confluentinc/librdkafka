@@ -2462,8 +2462,8 @@ int rd_kafka_topic_partition_list_set_offsets (
 
 			rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_TOPIC, "OFFSET",
 				     "Topic %s [%"PRId32"]: "
-				     "stored off %"PRId64", committted "
-				     "off %"PRId64,
+				     "stored offset %"PRId64", committed "
+				     "offset %"PRId64,
 				     rktpar->topic, rktpar->partition,
 				     rktp->rktp_stored_offset,
 				     rktp->rktp_committed_offset);

@@ -1135,6 +1135,11 @@ rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf) {
 	rd_kafka_t *rk;
 	char errstr[512];
 
+	if (!conf)
+		conf = rd_kafka_conf_new();
+
+	test_conf_set(conf, "client.id", test_curr->name);
+
 	/* Create kafka instance */
 	rk = rd_kafka_new(mode, conf, errstr, sizeof(errstr));
 	if (!rk)

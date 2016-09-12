@@ -1490,7 +1490,8 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                      rd_list_cnt(&rkcg->rkcg_toppars));
 
-        if (unlikely((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) ||
+        if (unlikely(rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_TERM ||
+		     (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) ||
 		     rkcg->rkcg_reply_rko != NULL)) {
                 /* Already terminating or handling a previous terminate */
 		if (rko) {

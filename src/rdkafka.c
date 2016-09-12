@@ -491,6 +491,11 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 	int term_sig = rk->rk_conf.term_sig;
 #endif
         rd_kafka_dbg(rk, ALL, "DESTROY", "Terminating instance");
+
+	/* The legacy/simple consumer lacks an API to close down the consumer*/
+	if (rk->rk_cgrp)
+		rd_kafka_consumer_close(rk);
+
         rd_kafka_wrlock(rk);
         thrd = rk->rk_thread;
 	rd_atomic32_add(&rk->rk_terminate, 1);
@@ -535,10 +540,6 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         rd_kafka_dbg(rk, ALL, "DESTROY", "Destroy internal");
 
 	/* Brokers pick up on rk_terminate automatically. */
-
-        /* The legacy/simple consumer lacks an API to close down the consumer*/
-	if (rk->rk_cgrp)
-		rd_kafka_cgrp_terminate0(rk->rk_cgrp, NULL);
 
         /* List of (broker) threads to join to synchronize termination */
         rd_list_init(&wait_thrds, rd_atomic32_get(&rk->rk_broker_cnt));
@@ -1767,28 +1768,22 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_op_t *rko;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
-	rd_kafka_q_t *rkq = NULL;
+	rd_kafka_q_t *rkq;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-	/* If the consumer queue has been forwarded or is disabled
-	 * we use a temporary queue to signal termination completion. */
-	mtx_lock(&rkcg->rkcg_q->rkq_lock);
-	if (!rkcg->rkcg_q->rkq_fwdq &&
-	    (rkcg->rkcg_q->rkq_flags & RD_KAFKA_Q_F_READY)) {
-		rkq = rkcg->rkcg_q;
-		rd_kafka_q_keep_nolock(rkq);
-	}
-	mtx_unlock(&rkcg->rkcg_q->rkq_lock);
-
-	if (!rkq)
-		rkq = rd_kafka_q_new(rk);
+	/* Redirect cgrp queue to our temporary queue to make sure
+	 * all posted ops (e.g., rebalance callbacks) are served by
+	 * this function. */
+	rkq = rd_kafka_q_new(rk);
+	rd_kafka_q_fwd_set(rkcg->rkcg_q, rkq);
 
         rd_kafka_cgrp_terminate(rkcg, RD_KAFKA_REPLYQ(rkq, 0)); /* async */
 
         while ((rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0))) {
-                if (rko->rko_type == RD_KAFKA_OP_TERMINATE) {
+                if ((rko->rko_type & ~RD_KAFKA_OP_FLAGMASK) ==
+		    RD_KAFKA_OP_TERMINATE) {
                         err = rko->rko_err;
                         rd_kafka_op_destroy(rko);
                         break;
@@ -1798,6 +1793,9 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
         }
 
         rd_kafka_q_destroy(rkq);
+
+	rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
+
         return err;
 }
 

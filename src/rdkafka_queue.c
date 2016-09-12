@@ -51,10 +51,15 @@ void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk) {
 /**
  * Allocate a new queue and initialize it.
  */
-rd_kafka_q_t *rd_kafka_q_new (rd_kafka_t *rk) {
+rd_kafka_q_t *rd_kafka_q_new0 (rd_kafka_t *rk, const char *func, int line) {
         rd_kafka_q_t *rkq = rd_malloc(sizeof(*rkq));
         rd_kafka_q_init(rkq, rk);
         rkq->rkq_flags |= RD_KAFKA_Q_F_ALLOCATED;
+#if ENABLE_DEVEL
+	rd_snprintf(rkq->rkq_name, sizeof(rkq->rkq_name), "%s:%d", func, line);
+#else
+	rkq->rkq_name = func;
+#endif
         return rkq;
 }
 

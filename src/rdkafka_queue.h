@@ -28,6 +28,12 @@ struct rd_kafka_q_s {
 
         rd_kafka_t   *rkq_rk;
 	struct rd_kafka_q_io *rkq_qio;   /* FD-based application signalling */
+
+#if ENABLE_DEVEL
+	char rkq_name[64];       /* Debugging: queue name (FUNC:LINE) */
+#else
+	const char *rkq_name;    /* Debugging: queue name (FUNC) */
+#endif
 };
 
 
@@ -58,7 +64,8 @@ enum {
 
 
 void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk);
-rd_kafka_q_t *rd_kafka_q_new (rd_kafka_t *rk);
+rd_kafka_q_t *rd_kafka_q_new0 (rd_kafka_t *rk, const char *func, int line);
+#define rd_kafka_q_new(rk) rd_kafka_q_new0(rk,__FUNCTION__,__LINE__)
 void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq);
 
 
@@ -75,6 +82,32 @@ rd_kafka_q_t *rd_kafka_q_keep_nolock (rd_kafka_q_t *rkq) {
         rkq->rkq_refcnt++;
 	return rkq;
 }
+
+
+/**
+ * @returns the queue's name (used for debugging)
+ */
+static RD_INLINE RD_UNUSED
+const char *rd_kafka_q_name (rd_kafka_q_t *rkq) {
+	return rkq->rkq_name;
+}
+
+/**
+ * @returns the final destination queue name (after forwarding)
+ * @remark rkq MUST NOT be locked
+ */
+static RD_INLINE RD_UNUSED
+const char *rd_kafka_q_dest_name (rd_kafka_q_t *rkq) {
+	const char *ret;
+	mtx_lock(&rkq->rkq_lock);
+	if (rkq->rkq_fwdq)
+		ret = rd_kafka_q_dest_name(rkq->rkq_fwdq);
+	else
+		ret = rd_kafka_q_name(rkq);
+	mtx_unlock(&rkq->rkq_lock);
+	return ret;
+}
+
 
 static RD_INLINE RD_UNUSED
 void rd_kafka_q_destroy (rd_kafka_q_t *rkq) {
@@ -160,10 +193,10 @@ void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
 	if (r == -1) {
 		fprintf(stderr,
 			"[ERROR:librdkafka:rd_kafka_q_io_event: "
-			"write(%d,..,%d) failed: %s: "
+			"write(%d,..,%d) failed on queue %p \"%s\": %s: "
 			"disabling further IO events]\n",
 			rkq->rkq_qio->fd, (int)rkq->rkq_qio->size,
-			rd_strerror(errno));
+			rkq, rd_kafka_q_name(rkq), rd_strerror(errno));
 		/* FIXME: Log this, somehow */
 		rd_free(rkq->rkq_qio);
 		rkq->rkq_qio = NULL;

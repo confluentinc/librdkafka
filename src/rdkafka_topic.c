@@ -791,24 +791,32 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
  * WARNING: Any messages in partition queues will be LOST.
  */
 void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
-	rd_kafka_toppar_t *rktp;
         shptr_rd_kafka_toppar_t *s_rktp;
         shptr_rd_kafka_itopic_t *s_rkt;
 	int i;
+	rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
+
+	/* Move all partition's queued messages to our temporary queue
+	 * and purge that queue later outside the topic_wrlock since
+	 * a message can hold a reference to the topic_t and thus
+	 * would trigger a recursive lock dead-lock. */
 
 	s_rkt = rd_kafka_topic_keep(rkt);
 	rd_kafka_topic_wrlock(rkt);
 
+	/* Setting the partition count to 0 moves all partitions to
+	 * the desired list (rktp_desp). */
         rd_kafka_topic_partition_cnt_update(rkt, 0);
 
-        /* Remove desired partitions.
+        /* Now clean out the desired partitions list.
          * Use reverse traversal to avoid excessive memory shuffling
          * in rd_list_remove() */
         RD_LIST_FOREACH_REVERSE(s_rktp, &rkt->rkt_desp, i) {
-                shptr_rd_kafka_toppar_t *s_rktp2;
-                rktp = rd_kafka_toppar_s2i(s_rktp);
-                s_rktp2 = rd_kafka_toppar_keep(rktp);
+		rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
+		/* Our reference */
+		shptr_rd_kafka_toppar_t *s_rktp2 = rd_kafka_toppar_keep(rktp);
                 rd_kafka_toppar_lock(rktp);
+		rd_kafka_toppar_move_queues(rktp, &tmpq);
                 rd_kafka_toppar_desired_del(rktp);
                 rd_kafka_toppar_unlock(rktp);
                 rd_kafka_toppar_destroy(s_rktp2);
@@ -823,11 +831,21 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
 	rkt->rkt_partition_cnt = 0;
 
         if ((s_rktp = rkt->rkt_ua)) {
+		rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
+		rd_kafka_toppar_move_queues(rktp, &tmpq);
                 rkt->rkt_ua = NULL;
                 rd_kafka_toppar_destroy(s_rktp);
 	}
 
 	rd_kafka_topic_wrunlock(rkt);
+
+	/* Now purge the messages outside the topic lock. */
+	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPIC", "%.*s: purging %d messages",
+		     RD_KAFKAP_STR_PR(rkt->rkt_topic),
+		     rd_kafka_msgq_len(&tmpq));
+
+	rd_kafka_msgq_purge(rkt->rkt_rk, &tmpq);
+
 	rd_kafka_topic_destroy0(s_rkt);
 }
 

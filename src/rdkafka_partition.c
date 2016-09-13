@@ -658,6 +658,16 @@ void rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp) {
         rd_kafka_q_purge(rktp->rktp_ops);
 }
 
+/**
+ * Move all messages in partition's message queues to the provided queue.
+ * Locks: rd_kafka_toppar_lock() MUST be held
+ */
+void rd_kafka_toppar_move_queues (rd_kafka_toppar_t *rktp,
+				  rd_kafka_msgq_t *msgq) {
+	rd_kafka_msgq_concat(msgq, &rktp->rktp_msgq);
+	rd_kafka_msgq_concat(msgq, &rktp->rktp_xmit_msgq);
+}
+
 
 
 /**

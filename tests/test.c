@@ -121,6 +121,7 @@ _TEST_DECL(0039_event);
 _TEST_DECL(0040_io_event);
 _TEST_DECL(0041_fetch_max_bytes);
 _TEST_DECL(0042_many_topics);
+_TEST_DECL(0043_no_connection);
 
 /**
  * Define all tests here
@@ -164,6 +165,7 @@ struct test tests[] = {
 	_TEST(0040_io_event, 0, TEST_BRKVER(0,9,0,0)),
 	_TEST(0041_fetch_max_bytes, 0),
 	_TEST(0042_many_topics, 0),
+	_TEST(0043_no_connection, 0),
         { NULL }
 };
 

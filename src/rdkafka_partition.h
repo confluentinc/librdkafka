@@ -295,6 +295,8 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
 void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp);
+void rd_kafka_toppar_move_queues (rd_kafka_toppar_t *rktp,
+				  rd_kafka_msgq_t *msgq);
 void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
                                       int fetch_state);
 void rd_kafka_toppar_insert_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);

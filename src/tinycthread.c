@@ -640,9 +640,13 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg)
 #if defined(_TTHREAD_WIN32_)
   *thr = CreateThread(NULL, 0, _thrd_wrapper_function, (LPVOID) ti, 0, NULL);
 #elif defined(_TTHREAD_POSIX_)
-  if(pthread_create(thr, NULL, _thrd_wrapper_function, (void *)ti) != 0)
   {
-    *thr = 0;
+          int err;
+          if((err = pthread_create(thr, NULL, _thrd_wrapper_function,
+                                   (void *)ti)) != 0) {
+                  errno = err;
+                  *thr = 0;
+          }
   }
 #endif
 

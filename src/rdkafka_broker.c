@@ -4616,7 +4616,6 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					const char *name, uint16_t port,
 					int32_t nodeid) {
 	rd_kafka_broker_t *rkb;
-	int err;
 #ifndef _MSC_VER
 	sigset_t newset, oldset;
 #endif
@@ -4685,12 +4684,12 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	 * the broker thread until we've finalized the rkb. */
 	rd_kafka_broker_lock(rkb);
         rd_kafka_broker_keep(rkb); /* broker thread's refcnt */
-	if ((err = thrd_create(&rkb->rkb_thread,
-		rd_kafka_broker_thread_main, rkb)) != thrd_success) {
+	if (thrd_create(&rkb->rkb_thread,
+			rd_kafka_broker_thread_main, rkb) != thrd_success) {
 		char tmp[512];
 		rd_snprintf(tmp, sizeof(tmp),
 			 "Unable to create broker thread: %s (%i)",
-			 rd_strerror(err), err);
+			 rd_strerror(errno), errno);
 		rd_kafka_log(rk, LOG_CRIT, "THREAD", "%s", tmp);
 
 		rd_kafka_broker_unlock(rkb);

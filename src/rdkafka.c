@@ -1042,7 +1042,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 #ifndef _MSC_VER
         sigset_t newset, oldset;
 #endif
-	int err;
 
 	call_once(&rd_kafka_global_init_once, rd_kafka_global_init);
 
@@ -1193,12 +1192,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	rd_kafka_wrlock(rk);
 
 	/* Create handler thread */
-	if ((err = thrd_create(&rk->rk_thread,
-			       rd_kafka_thread_main, rk)) != thrd_success) {
+	if ((thrd_create(&rk->rk_thread,
+			 rd_kafka_thread_main, rk)) != thrd_success) {
 		if (errstr)
 			rd_snprintf(errstr, errstr_size,
-				 "Failed to create thread: %s (%i)",
-				    rd_strerror(err), err);
+				    "Failed to create thread: %s (%i)",
+				    rd_strerror(errno), errno);
 		rd_kafka_wrunlock(rk);
                 rd_kafka_destroy_internal(rk);
 #ifndef _MSC_VER
@@ -1206,7 +1205,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
 		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
-					err);
+					errno);
 		return NULL;
 	}
 

@@ -592,7 +592,7 @@ static void sig_usr1 (int sig) {
 }
 
 int main (int argc, char **argv) {
-	char *brokers = "localhost";
+	char *brokers = NULL;
 	char mode = 'C';
 	char *topic = NULL;
 	const char *key = NULL;
@@ -1062,7 +1062,7 @@ int main (int argc, char **argv) {
 			rd_kafka_set_log_level(rk, 7);
 
 		/* Add broker(s) */
-		if (rd_kafka_brokers_add(rk, brokers) < 1) {
+		if (brokers && rd_kafka_brokers_add(rk, brokers) < 1) {
 			fprintf(stderr, "%% No valid brokers specified\n");
 			exit(1);
 		}
@@ -1225,7 +1225,7 @@ int main (int argc, char **argv) {
 			rd_kafka_set_log_level(rk, 7);
 
 		/* Add broker(s) */
-		if (rd_kafka_brokers_add(rk, brokers) < 1) {
+		if (brokers && rd_kafka_brokers_add(rk, brokers) < 1) {
 			fprintf(stderr, "%% No valid brokers specified\n");
 			exit(1);
 		}
@@ -1349,7 +1349,7 @@ int main (int argc, char **argv) {
 			rd_kafka_set_log_level(rk, 7);
 
 		/* Add broker(s) */
-		if (rd_kafka_brokers_add(rk, brokers) < 1) {
+		if (brokers && rd_kafka_brokers_add(rk, brokers) < 1) {
 			fprintf(stderr, "%% No valid brokers specified\n");
 			exit(1);
 		}

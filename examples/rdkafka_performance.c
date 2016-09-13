@@ -1202,6 +1202,8 @@ int main (int argc, char **argv) {
 		rd_kafka_destroy(rk);
                 global_rk = rk = NULL;
 
+		free(sbuf);
+
 	} else if (mode == 'C') {
 		/*
 		 * Consumer

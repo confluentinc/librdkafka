@@ -3483,7 +3483,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		void *outbuf = NULL; /* Uncompressed output buffer. */
 		size_t hdrsize = 6; /* Header size following MessageSize */
 		int relative_offsets;
-                rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                rd_kafka_resp_err_t err RD_UNUSED = RD_KAFKA_RESP_ERR_NO_ERROR;
 
 		rd_kafka_buf_read_i64(rkbuf, &hdr.Offset);
 		rd_kafka_buf_read_i32(rkbuf, &hdr.MessageSize);

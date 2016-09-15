@@ -141,6 +141,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
 	  "Maximum transmit message size.",
 	  1000, 1000000000, 1000000 },
+	{ _RK_GLOBAL, "message.copy.max.bytes", _RK_C_INT,
+	  _RK(msg_copy_max_size),
+	  "Maximum size for message to be copied to buffer. "
+	  "Messages larger than this will be passed by reference (zero-copy) "
+	  "at the expense of larger iovecs.",
+	  0, 1000000000, 0xffff },
 	{ _RK_GLOBAL, "receive.message.max.bytes", _RK_C_INT,
           _RK(recv_max_msg_size),
 	  "Maximum receive message size. "

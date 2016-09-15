@@ -8,6 +8,7 @@ client.id                                |  *  |                 |       rdkafka
 metadata.broker.list                     |  *  |                 |               | Initial list of brokers. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime. <br>*Type: string*
 bootstrap.servers                        |  *  |                 |               | Alias for `metadata.broker.list`
 message.max.bytes                        |  *  | 1000 .. 1000000000 |       1000000 | Maximum transmit message size. <br>*Type: integer*
+message.copy.max.bytes                   |  *  | 0 .. 1000000000 |         65535 | Maximum size for message to be copied to buffer. Messages larger than this will be passed by reference (zero-copy) at the expense of larger iovecs. <br>*Type: integer*
 receive.message.max.bytes                |  *  | 1000 .. 1000000000 |     100000000 | Maximum receive message size. This is a safety precaution to avoid memory exhaustion in case of protocol hickups. The value should be at least fetch.message.max.bytes * number of partitions consumed from + messaging overhead (e.g. 200000 bytes). <br>*Type: integer*
 max.in.flight.requests.per.connection    |  *  | 1 .. 1000000    |       1000000 | Maximum number of in-flight requests the client will send. This setting applies per broker connection. <br>*Type: integer*
 metadata.request.timeout.ms              |  *  | 10 .. 900000    |         60000 | Non-topic request timeout in milliseconds. This is for metadata requests, etc. <br>*Type: integer*

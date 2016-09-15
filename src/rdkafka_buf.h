@@ -305,9 +305,9 @@ void rd_kafka_buf_rewind(rd_kafka_buf_t *rkbuf, int iovindex, size_t new_of,
 	size_t new_of_init);
 struct iovec *rd_kafka_buf_iov_next (rd_kafka_buf_t *rkbuf);
 void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
-			int allow_crc_calc);
+			 int allow_crc_calc, int auto_push);
 #define rd_kafka_buf_push(rkbuf,buf,len) \
-	rd_kafka_buf_push0(rkbuf,buf,len,1/*allow_crc*/)
+	rd_kafka_buf_push0(rkbuf,buf,len,1/*allow_crc*/, 1)
 void rd_kafka_buf_autopush (rd_kafka_buf_t *rkbuf);
 rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk,
                                            int iovcnt, size_t init_size);
@@ -359,6 +359,14 @@ static RD_INLINE RD_UNUSED void rd_kafka_buf_write_seek (rd_kafka_buf_t *rkbuf,
 	rd_kafka_assert(NULL, of >= 0 && of < (int)rkbuf->rkbuf_size);
 	rkbuf->rkbuf_wof = of;
 }
+
+/**
+ * @returns the number of bytes remaining in the write buffer.
+ */
+static RD_INLINE size_t rd_kafka_buf_write_remain (rd_kafka_buf_t *rkbuf) {
+	return rkbuf->rkbuf_size - rkbuf->rkbuf_wof;
+}
+
 
 /**
  * Write (copy) data to buffer at current write-buffer position.
@@ -582,7 +590,8 @@ static RD_INLINE size_t rd_kafka_buf_write_bytes (rd_kafka_buf_t *rkbuf,
  *
  * Returns the buffer offset of the first byte.
  */
-size_t rd_kafka_buf_write_Message (rd_kafka_buf_t *rkbuf,
+size_t rd_kafka_buf_write_Message (rd_kafka_broker_t *rkb,
+				   rd_kafka_buf_t *rkbuf,
 				   int64_t Offset, int8_t MagicByte,
 				   int8_t Attributes, int64_t Timestamp,
 				   const void *key, int32_t key_len,

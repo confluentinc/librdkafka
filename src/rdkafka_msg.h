@@ -126,6 +126,13 @@ static RD_INLINE RD_UNUSED int rd_kafka_msgq_len (rd_kafka_msgq_t *rkmq) {
 	return (int)rd_atomic32_get(&rkmq->rkmq_msg_cnt);
 }
 
+/**
+ * Returns the total number of bytes in the specified queue.
+ */
+static RD_INLINE RD_UNUSED size_t rd_kafka_msgq_size (rd_kafka_msgq_t *rkmq) {
+	return (size_t)rd_atomic64_get(&rkmq->rkmq_msg_bytes);
+}
+
 
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm);
 
@@ -156,8 +163,8 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
 static RD_INLINE RD_UNUSED void rd_kafka_msgq_concat (rd_kafka_msgq_t *dst,
 						   rd_kafka_msgq_t *src) {
 	TAILQ_CONCAT(&dst->rkmq_msgs, &src->rkmq_msgs, rkm_link);
-	(void)rd_atomic32_add(&dst->rkmq_msg_cnt, rd_atomic32_get(&src->rkmq_msg_cnt));
-	(void)rd_atomic64_add(&dst->rkmq_msg_bytes, rd_atomic64_get(&src->rkmq_msg_bytes));
+	rd_atomic32_add(&dst->rkmq_msg_cnt, rd_atomic32_get(&src->rkmq_msg_cnt));
+	rd_atomic64_add(&dst->rkmq_msg_bytes, rd_atomic64_get(&src->rkmq_msg_bytes));
 	rd_kafka_msgq_init(src);
 }
 
@@ -202,9 +209,10 @@ rd_kafka_msg_t *rd_kafka_msgq_deq (rd_kafka_msgq_t *rkmq,
 				   int do_count) {
 	if (likely(do_count)) {
 		rd_kafka_assert(NULL, rd_atomic32_get(&rkmq->rkmq_msg_cnt) > 0);
-		rd_kafka_assert(NULL, rd_atomic64_get(&rkmq->rkmq_msg_bytes) >= (int64_t)rkm->rkm_len);
-		(void)rd_atomic32_sub(&rkmq->rkmq_msg_cnt, 1);
-		(void)rd_atomic64_sub(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
+		rd_kafka_assert(NULL, rd_atomic64_get(&rkmq->rkmq_msg_bytes) >= (int64_t)(rkm->rkm_len+rkm->rkm_key_len));
+		rd_atomic32_sub(&rkmq->rkmq_msg_cnt, 1);
+		rd_atomic64_sub(&rkmq->rkmq_msg_bytes,
+				rkm->rkm_len+rkm->rkm_key_len);
 	}
 
 	TAILQ_REMOVE(&rkmq->rkmq_msgs, rkm, rkm_link);
@@ -228,8 +236,8 @@ rd_kafka_msg_t *rd_kafka_msgq_pop (rd_kafka_msgq_t *rkmq) {
 static RD_INLINE RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
 						   rd_kafka_msg_t *rkm) {
 	TAILQ_INSERT_HEAD(&rkmq->rkmq_msgs, rkm, rkm_link);
-	(void)rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
-	(void)rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
+	rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
+	rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len+rkm->rkm_key_len);
 }
 
 /**
@@ -238,8 +246,8 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
 static RD_INLINE RD_UNUSED void rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
 						rd_kafka_msg_t *rkm) {
 	TAILQ_INSERT_TAIL(&rkmq->rkmq_msgs, rkm, rkm_link);
-	(void)rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
-	(void)rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len);
+	rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
+	rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len+rkm->rkm_key_len);
 }
 
 

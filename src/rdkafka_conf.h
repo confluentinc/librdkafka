@@ -59,6 +59,7 @@ struct rd_kafka_conf_s {
 	 */
 	int     enabled_events;
 	int     max_msg_size;
+	int     msg_copy_max_size;
         int     recv_max_msg_size;
 	int     max_inflight;
 	int     metadata_request_timeout_ms;

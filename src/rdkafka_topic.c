@@ -152,8 +152,11 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rd_kafka_itopic_t *rkt;
         shptr_rd_kafka_itopic_t *s_rkt;
 
-	/* Verify configuration */
-	if (!topic) {
+	/* Verify configuration.
+	 * Maximum topic name size + headers must never exceed message.max.bytes
+	 * which is min-capped to 1000.
+	 * See rd_kafka_broker_produce_toppar() and rdkafka_conf.c */
+	if (!topic || strlen(topic) > 512) {
 		if (conf)
 			rd_kafka_topic_conf_destroy(conf);
 		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,

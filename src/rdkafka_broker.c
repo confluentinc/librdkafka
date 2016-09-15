@@ -638,6 +638,9 @@ static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
 				   int16_t ApiKey) {
 	size_t of_Size;
 
+	/* Autopush final buffer work space if not already done. */
+	rd_kafka_buf_autopush(rkbuf);
+
 	rkbuf->rkbuf_reqhdr.ApiKey = ApiKey;
 
 	/* Write header */
@@ -2639,7 +2642,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 	rd_kafka_buf_rewind(rkbuf, iov_firstmsg, of_firstmsg, of_init_firstmsg);
 
 	rd_kafka_assert(rkb->rkb_rk, coutlen < INT32_MAX);
-	rd_kafka_buf_write_Message(rkbuf, 0, MsgVersion,
+	rd_kafka_buf_write_Message(rkb, rkbuf, 0, MsgVersion,
 				   rktp->rktp_rkt->rkt_conf.compression_codec,
 				   timestamp_firstmsg,
 				   NULL, 0,
@@ -2668,7 +2671,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	rd_kafka_buf_t *rkbuf;
 	rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
 	int iovcnt;
-	int iov_firstmsg;
+	size_t iov_firstmsg;
 	size_t of_firstmsg;
 	size_t of_init_firstmsg;
 	size_t of_MessageSetSize;
@@ -2677,6 +2680,9 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	int MsgVersion = 0;
 	int use_relative_offsets = 0;
 	int64_t timestamp_firstmsg = 0;
+	int queued_cnt;
+	size_t queued_bytes;
+	size_t buffer_space;
 
 	if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1) {
 		MsgVersion = 1;
@@ -2687,7 +2693,6 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	/* iovs:
 	 *  1 * (RequiredAcks + Timeout + Topic + Partition + MessageSetSize)
 	 *  msgcntmax * messagehdr
-	 *  msgcntmax * key (ext memory)
 	 *  msgcntmax * Value_len
 	 *  msgcntmax * messagepayload (ext memory)
 	 * = 1 + (4 * msgcntmax)
@@ -2698,27 +2703,38 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	if (rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) > 0)
 		rd_kafka_assert(rkb->rkb_rk,
                                 TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs));
-	msgcntmax = RD_MIN(rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt),
-			   rkb->rkb_rk->rk_conf.batch_num_messages);
+
+	queued_cnt = rd_kafka_msgq_len(&rktp->rktp_xmit_msgq);
+	queued_bytes = rd_kafka_msgq_size(&rktp->rktp_xmit_msgq);
+
+	msgcntmax = RD_MIN(queued_cnt, rkb->rkb_rk->rk_conf.batch_num_messages);
 	rd_kafka_assert(rkb->rkb_rk, msgcntmax > 0);
-	iovcnt = 1 + (4 * msgcntmax);
+	iovcnt = 1 + (3 * msgcntmax);
 
 	/* Allocate iovecs to hold all headers and messages,
-	 * and allocate auxilliery space for the headers. */
+	 * and allocate enough to allow copies of small messages.
+	 * The allocated size is the minimum of message.max.bytes
+	 * or queued_bytes + queued_cnt * per_msg_overhead */
+
+	buffer_space =
+		/* RequiredAcks + Timeout + TopicCnt */
+		2 + 4 + 4 +
+		/* Topic */
+		RD_KAFKAP_STR_SIZE(rkt->rkt_topic) +
+		/* PartitionCnt + Partition + MessageSetSize */
+		4 + 4 + 4;
+
+	if (rkb->rkb_rk->rk_conf.msg_copy_max_size > 0)
+		buffer_space += queued_bytes +
+			msgcntmax * RD_KAFKAP_MESSAGE_OVERHEAD;
+	else
+		buffer_space += msgcntmax * RD_KAFKAP_MESSAGE_OVERHEAD;
+
+
 	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, iovcnt,
-				 /* RequiredAcks + Timeout + TopicCnt */
-				 2 + 4 + 4 +
-				 /* Topic */
-				 RD_KAFKAP_STR_SIZE(rkt->rkt_topic) +
-				 /* PartitionCnt + Partition + MessageSetSize */
-				 4 + 4 + 4 +
-				 /* MessageSet+Message * msgcntmax */
-				 ((8 + 4 + /* Offset+MessageSize*/
-				   /* Crc+Magic+Attr+KeyLen+ValueLen */
-				   4 + 1 + 1 + 4 + 4 +
-				   (MsgVersion == 1 ?
-				    8 /* Timestamp */ : 0))
-				  * msgcntmax));
+				 RD_MIN((size_t)rkb->rkb_rk->rk_conf.
+					max_msg_size,
+					buffer_space));
 
 	/*
 	 * Insert first part of Produce header
@@ -2743,8 +2759,9 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	/* MessageSetSize: Will be finalized later*/
 	of_MessageSetSize = rd_kafka_buf_write_i32(rkbuf, 0);
 
-	/* Push write-buffer onto iovec stack */
-        rd_kafka_buf_autopush(rkbuf);
+	/* Push write-buffer onto iovec stack to create a clean iovec boundary
+	 * for the compression codecs. */
+	rd_kafka_buf_autopush(rkbuf);
 
 	iov_firstmsg = rkbuf->rkbuf_msg.msg_iovlen;
 	of_firstmsg = rkbuf->rkbuf_wof;
@@ -2772,7 +2789,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
 		/* Write message to buffer */
 		rd_kafka_assert(rkb->rkb_rk, rkm->rkm_len < INT32_MAX);
-		rd_kafka_buf_write_Message(rkbuf,
+		rd_kafka_buf_write_Message(rkb, rkbuf,
 					   use_relative_offsets ? msgcnt : 0,
 					   MsgVersion,
 					   RD_KAFKA_COMPRESSION_NONE,
@@ -2793,6 +2810,8 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		return -1;
 	}
 
+	/* Push final (copied) message, if any. */
+	rd_kafka_buf_autopush(rkbuf);
 
 	/* Compress the message(s) */
 	if (rktp->rktp_rkt->rkt_conf.compression_codec)

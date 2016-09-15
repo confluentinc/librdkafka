@@ -122,7 +122,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 
 /* Offset + MessageSize */
 #define RD_KAFKAP_MESSAGESET_HDR_SIZE (8+4)
-/* CRC + Magic + Attr + KeyLen + ValueLen.
+/* CRC + Magic + Attr + KeyLen + ValueLen + [Timestamp]
  * @remark This includes the optional (MsgVer=1) Timestamp field (8 bytes) */
 #define RD_KAFKAP_MESSAGE_HDR_SIZE    (4+1+1+4+4+8)
 /* Maximum per-message overhead. */

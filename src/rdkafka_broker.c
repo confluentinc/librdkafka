@@ -3718,7 +3718,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rd_rkb_dbg(rkb, MSG, "CODEC",
 				   "%s [%"PRId32"]: Message at offset %"PRId64
 				   " with unsupported "
-				   "compression codec 0x%hx: message ignored",
+				   "compression codec 0x%x: message ignored",
 				   rktp->rktp_rkt->rkt_topic->str,
 				   rktp->rktp_partition,
 				   hdr.Offset, (int)hdr.Attributes);
@@ -3731,7 +3731,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 					  tver->version, rktp,
 					  hdr.Offset,
 					  "Unsupported compression codec "
-					  "0x%hx", hdr.Attributes);
+					  "0x%x", (int)hdr.Attributes);
 			break;
 		}
 

@@ -237,7 +237,7 @@ static int describe_groups (rd_kafka_t *rk, const char *group) {
                 const struct rd_kafka_group_info *gi = &grplist->groups[i];
                 int j;
 
-                printf("Group \"%s\" in state %s on broker %d (%s:%hu)\n",
+                printf("Group \"%s\" in state %s on broker %d (%s:%d)\n",
                        gi->group, gi->state,
                        gi->broker.id, gi->broker.host, gi->broker.port);
                 if (gi->err)

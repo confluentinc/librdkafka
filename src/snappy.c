@@ -170,12 +170,12 @@ static inline int log2_floor(u32 n)
 	return n == 0 ? -1 : 31 ^ rd_clz(n);
 }
 
-static inline int find_lsb_set_non_zero(u32 n)
+static inline RD_UNUSED int find_lsb_set_non_zero(u32 n)
 {
 	return rd_ctz(n);
 }
 
-static inline int find_lsb_set_non_zero64(u64 n)
+static inline RD_UNUSED int find_lsb_set_non_zero64(u64 n)
 {
 	return rd_ctz64(n);
 }

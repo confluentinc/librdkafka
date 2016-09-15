@@ -37,22 +37,6 @@
 #include "rdkafka_subscription.h"
 
 
-/**
- * Checks that a high level consumer can be added (no previous simple consumers)
- * Returns 1 if okay, else 0.
- *
- * A rd_kafka_t handle can never migrate from simple to high-level, or
- * vice versa, so we dont need a ..consumer_del().
- */
-static RD_INLINE int rd_kafka_high_level_consumer_add (rd_kafka_t *rk) {
-        if (rd_atomic32_get(&rk->rk_simple_cnt) > 0)
-                return 0;
-
-        rd_atomic32_sub(&rk->rk_simple_cnt, 1);
-        return 1;
-}
-
-
 rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk) {
         rd_kafka_cgrp_t *rkcg;
 

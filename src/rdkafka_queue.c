@@ -523,7 +523,8 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
 
 	default:
 		rd_kafka_assert(NULL, !*"unhandled optype");
-		break;
+		RD_NOTREACHED();
+		return NULL;
 	}
 
 	return rd_kafka_message_setup(rko, rkmessage);

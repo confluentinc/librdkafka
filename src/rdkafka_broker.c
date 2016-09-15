@@ -605,10 +605,13 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 		/* Insert message at head of queue */
 		rd_kafka_buf_t *prev, *after = NULL;
 
-		/* Put us behind any flash messages and partially sent buffers. */
+		/* Put us behind any flash messages and partially sent buffers.
+		 * We need to check if buf corrid is set rather than
+		 * rkbuf_of since SSL_write may return 0 and expect the
+		 * exact same arguments the next call. */
 		TAILQ_FOREACH(prev, &rkb->rkb_outbufs.rkbq_bufs, rkbuf_link) {
 			if (!(prev->rkbuf_flags & RD_KAFKA_OP_F_FLASH) &&
-			    prev->rkbuf_of == 0)
+			    prev->rkbuf_corrid == 0)
 				break;
 			after = prev;
 		}

@@ -407,10 +407,12 @@ rd_shptr0_t *rd_shared_ptr_get0 (const char *func, int line,
         return sptr;
 }
 
-#define rd_shared_ptr_get(OBJ,REF,SPTR_TYPE)                            \
+#define rd_shared_ptr_get_src(FUNC,LINE,OBJ,REF,SPTR_TYPE)		\
         (rd_refcnt_add(REF),                                            \
-         (SPTR_TYPE *)rd_shared_ptr_get0(__FUNCTION__,__LINE__,         \
-                                         #SPTR_TYPE,REF,OBJ))
+         (SPTR_TYPE *)rd_shared_ptr_get0(FUNC,LINE, #SPTR_TYPE,REF,OBJ))
+#define rd_shared_ptr_get(OBJ,REF,SPTR_TYPE)	\
+	rd_shared_ptr_get_src(__FUNCTION__, __LINE__, OBJ, REF, SPTR_TYPE)
+
 
 
 #define rd_shared_ptr_obj(SPTR) (SPTR)->obj

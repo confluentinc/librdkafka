@@ -153,8 +153,9 @@ static void rd_kafka_toppar_consumer_lag_tmr_cb (rd_kafka_timers_t *rkts,
  * Locks: rd_kafka_topic_wrlock() must be held.
  * Locks: rd_kafka_wrlock() must be held.
  */
-shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
-                                              int32_t partition) {
+shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
+					       int32_t partition,
+					       const char *func, int line) {
 	rd_kafka_toppar_t *rktp;
 
 	rktp = rd_calloc(1, sizeof(*rktp));
@@ -205,7 +206,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
 
 	rd_kafka_q_fwd_set(rktp->rktp_ops, rkt->rkt_rk->rk_ops);
 
-	return rd_kafka_toppar_keep(rktp);
+	return rd_kafka_toppar_keep_src(func, line, rktp);
 }
 
 

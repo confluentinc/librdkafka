@@ -263,6 +263,10 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 #define rd_kafka_toppar_keep(rktp)                                      \
         rd_shared_ptr_get(rktp, &(rktp)->rktp_refcnt, shptr_rd_kafka_toppar_t)
 
+#define rd_kafka_toppar_keep_src(func,line,rktp)			\
+        rd_shared_ptr_get_src(func, line, rktp,				\
+			      &(rktp)->rktp_refcnt, shptr_rd_kafka_toppar_t)
+
 
 /**
  * Frees a shared pointer previously returned by ..toppar_keep()
@@ -290,8 +294,11 @@ static const char *rd_kafka_toppar_name (const rd_kafka_toppar_t *rktp) {
 
 	return ret;
 }
-shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
-                                              int32_t partition);
+shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
+					       int32_t partition,
+					       const char *func, int line);
+#define rd_kafka_toppar_new(rkt,partition) \
+	rd_kafka_toppar_new0(rkt, partition, __FUNCTION__, __LINE__)
 void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp);

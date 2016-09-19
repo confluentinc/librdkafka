@@ -155,7 +155,10 @@ static void msg_delivered (rd_kafka_t *rk,
 	    (int)(now - last) >= dispintvl * 1000 ||
             verbosity >= 3) {
 		if (rkmessage->err && verbosity >= 2)
-			printf("%% Message delivery failed: %s (%li remain)\n",
+			printf("%% Message delivery failed: %s [%"PRId32"]: "
+			       "%s (%li remain)\n",
+			       rd_kafka_topic_name(rkmessage->rkt),
+			       rkmessage->partition,
 			       rd_kafka_err2str(rkmessage->err),
 			       msgs_wait_cnt);
 		else if (verbosity >= 2)

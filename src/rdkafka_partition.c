@@ -205,6 +205,9 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
         rktp->rktp_s_rkt = rd_kafka_topic_keep(rkt);
 
 	rd_kafka_q_fwd_set(rktp->rktp_ops, rkt->rkt_rk->rk_ops);
+	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPPARNEW", "NEW %s [%"PRId32"] %p (at %s:%d)",
+		     rkt->rkt_topic->str, rktp->rktp_partition, rktp,
+		     func, line);
 
 	return rd_kafka_toppar_keep_src(func, line, rktp);
 }
@@ -213,15 +216,15 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
 
 /**
  * Removes a toppar from its duties, global lists, etc.
- * Must only be called from ..partitions_remove() FIXME
  *
  * Locks: rd_kafka_toppar_lock() MUST be held
  */
-void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp) {
+static void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp) {
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPPARREMOVE",
-                     "Removing toppar %s [%"PRId32"]",
-                     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
-        rd_kafka_assert(NULL, rktp->rktp_removed==0);
+                     "Removing toppar %s [%"PRId32"] %p",
+                     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+		     rktp);
+
 	rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
 			    &rktp->rktp_offset_query_tmr, 1/*lock*/);
 	rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
@@ -230,7 +233,6 @@ void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp) {
 	rd_kafka_q_fwd_set(rktp->rktp_ops, NULL);
 
         rd_kafka_toppar_purge_queues(rktp);
-        rktp->rktp_removed = 1;
 }
 
 
@@ -240,10 +242,15 @@ void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp) {
 void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp) {
 
         rd_kafka_toppar_remove(rktp);
-        rd_kafka_assert(NULL, rktp->rktp_removed);
+
+	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "DESTROY",
+		     "%s [%"PRId32"]: %p DESTROY_FINAL",
+		     rktp->rktp_rkt->rkt_topic->str,
+                     rktp->rktp_partition, rktp);
+
 	/* Clear queues */
-	rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_xmit_msgq,
-			 RD_KAFKA_RESP_ERR__DESTROY);
+	rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
+			rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) == 0);
 	rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
 			 RD_KAFKA_RESP_ERR__DESTROY);
 	rd_kafka_q_destroy(rktp->rktp_fetchq);
@@ -557,20 +564,6 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp) {
 
 
 /**
- * Move all messages from toppar 'src' to 'dst'.
- * This is used when messages migrate between partitions.
- *
- * NOTE: Both dst and src must be locked.
- */
-void rd_kafka_toppar_move_msgs (rd_kafka_toppar_t *dst, rd_kafka_toppar_t *src){
-        shptr_rd_kafka_toppar_t *s_rktp;
-	s_rktp = rd_kafka_toppar_keep(src);
-	rd_kafka_msgq_concat(&dst->rktp_msgq, &src->rktp_msgq);
-	rd_kafka_toppar_destroy(s_rktp);
-}
-
-
-/**
  * Insert message at head of 'rktp' message queue.
  * This is typically for non-data flash messages.
  */
@@ -651,24 +644,11 @@ int rd_kafka_toppar_ua_move (rd_kafka_itopic_t *rkt, rd_kafka_msgq_t *rkmq) {
  * Locks: rd_kafka_toppar_lock() MUST be held
  */
 void rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp) {
-        rd_kafka_msgq_purge(rktp->rktp_rkt->rkt_rk, &rktp->rktp_msgq);
-
         rd_kafka_q_disable(rktp->rktp_fetchq);
         rd_kafka_q_purge(rktp->rktp_fetchq);
         rd_kafka_q_disable(rktp->rktp_ops);
         rd_kafka_q_purge(rktp->rktp_ops);
 }
-
-/**
- * Move all messages in partition's message queues to the provided queue.
- * Locks: rd_kafka_toppar_lock() MUST be held
- */
-void rd_kafka_toppar_move_queues (rd_kafka_toppar_t *rktp,
-				  rd_kafka_msgq_t *msgq) {
-	rd_kafka_msgq_concat(msgq, &rktp->rktp_msgq);
-	rd_kafka_msgq_concat(msgq, &rktp->rktp_xmit_msgq);
-}
-
 
 
 /**
@@ -712,11 +692,51 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
         rko->rko_rktp = rd_kafka_toppar_keep(rktp);
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKMIGR",
-                     "Migrating topic %.*s [%"PRId32"] from %s to %s",
+                     "Migrating topic %.*s [%"PRId32"] %p from %s to %s "
+		     "(sending %s to %s)",
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                     rktp->rktp_partition,
+                     rktp->rktp_partition, rktp,
                      old_rkb ? rd_kafka_broker_name(old_rkb) : "(none)",
-                     new_rkb ? rd_kafka_broker_name(new_rkb) : "(none)");
+                     new_rkb ? rd_kafka_broker_name(new_rkb) : "(none)",
+		     rd_kafka_op2str(rko->rko_type),
+		     rd_kafka_broker_name(dest_rkb));
+
+        rd_kafka_q_enq(dest_rkb->rkb_ops, rko);
+}
+
+
+/**
+ * Async toppar leave from broker.
+ * Only use this when partitions are to be removed.
+ *
+ * Locks: rd_kafka_toppar_lock() MUST be held
+ */
+void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp) {
+        rd_kafka_op_t *rko;
+        rd_kafka_broker_t *dest_rkb;
+
+
+	if (rktp->rktp_next_leader)
+		dest_rkb = rktp->rktp_next_leader;
+	else if (rktp->rktp_leader)
+		dest_rkb = rktp->rktp_leader;
+	else {
+		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPPARDEL",
+			     "%.*s [%"PRId32"] %p not handled by any broker: "
+			     "not sending LEAVE for remove",
+			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+			     rktp->rktp_partition, rktp);
+		return;
+	}
+
+	rko = rd_kafka_op_new(RD_KAFKA_OP_PARTITION_LEAVE);
+        rko->rko_rktp = rd_kafka_toppar_keep(rktp);
+
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKMIGR",
+                     "%.*s [%"PRId32"] %p sending final LEAVE for removal by %s",
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition, rktp,
+                     rd_kafka_broker_name(dest_rkb));
 
         rd_kafka_q_enq(dest_rkb->rkb_ops, rko);
 }
@@ -731,18 +751,28 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
  *        AND rd_kafka_toppar_lock(rktp) held.
  */
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
-				      rd_kafka_broker_t *rkb) {
+				      rd_kafka_broker_t *rkb,
+				      int for_removal) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         int internal_fallback = 0;
 
+	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
+		     "====> %s [%"PRId32"]: %p delegate to %s (term %d, ref %d), for removal %d\n",
+		     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+		     rktp,
+		     rkb ? rkb->rkb_name : "NULL",
+		     rd_kafka_terminating(rk),
+		     rd_refcnt_get(&rktp->rktp_refcnt),
+		     for_removal);
+
         /* Delegate toppars with no leader to the
          * internal broker for bookkeeping. */
-        if (!rkb && !rd_kafka_terminating(rk)) {
+        if (!rkb && !for_removal && !rd_kafka_terminating(rk)) {
                 rkb = rd_kafka_broker_internal(rk);
                 internal_fallback = 1;
         }
 
-	if (rktp->rktp_leader == rkb) {
+	if (rktp->rktp_leader == rkb && !rktp->rktp_next_leader) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
 			     "Not updating broker for topic %.*s [%"PRId32"]: "
                              "already on correct broker %s",
@@ -1550,6 +1580,12 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 	/* Forced removal from fetch list */
 	if (unlikely(force_remove)) {
 		reason = "forced removal";
+		should_fetch = 0;
+		goto done;
+	}
+
+	if (unlikely((rktp->rktp_flags & RD_KAFKA_TOPPAR_F_REMOVE) != 0)) {
+		reason = "partition removed";
 		should_fetch = 0;
 		goto done;
 	}

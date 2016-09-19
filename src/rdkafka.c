@@ -1288,10 +1288,10 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk) {
  *          - offset commits
  *
  * Communication between the two are:
- *    app side -> broker side: rktp_ops
- *    broker side -> app side: rktp_fetchq
+ *    app side -> rdkafka main side: rktp_ops
+ *    broker thread -> app side: rktp_fetchq
  *
- * There is no shared state between these two sides (threads), instead
+ * There is no shared state between these threads, instead
  * state is communicated through the two op queues, and state synchronization
  * is performed by version barriers.
  *

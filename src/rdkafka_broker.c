@@ -405,7 +405,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
                 shptr_rd_kafka_itopic_t *s_rkt;
                 shptr_rd_kafka_toppar_t *s_rktp;
-
+		break; // FIXME
 		s_rkt = rd_kafka_topic_keep(rkt); /* Hold on to rkt */
 		s_rktp = rd_kafka_toppar_keep(rktp);
 
@@ -420,10 +420,10 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rd_kafka_topic_wrlock(rktp->rktp_rkt);
                 rd_kafka_toppar_lock(rktp);
 		/* Undelegate
-                 * (async operation, will remain on rkb_topaprs for some time)*/
+                 * (async operation, will remain on rkb_toppars for some time)*/
 		rd_kafka_toppar_broker_delegate(rktp,
 						rkb != internal_rkb ?
-						internal_rkb : NULL);
+						internal_rkb : NULL, 0);
                 rd_kafka_toppar_unlock(rktp);
 		rd_kafka_topic_wrunlock(rktp->rktp_rkt);
 
@@ -2976,13 +2976,22 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
                 rd_kafka_toppar_lock(rktp);
 
+		rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
+			   "Topic %s [%"PRId32"]: JOIN: %p",
+			   rktp->rktp_rkt->rkt_topic->str,
+			   rktp->rktp_partition, rktp);
+
                 /* Abort join if instance is terminating */
-                if (rd_kafka_terminating(rkb->rkb_rk)) {
+                if (rd_kafka_terminating(rkb->rkb_rk) ||
+		    (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_REMOVE)) {
                         rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
                                    "Topic %s [%"PRId32"]: not joining broker: "
-                                   "instance is terminating",
+                                   "%s",
                                    rktp->rktp_rkt->rkt_topic->str,
-                                   rktp->rktp_partition);
+                                   rktp->rktp_partition,
+				   rd_kafka_terminating(rkb->rkb_rk) ?
+				   "instance is terminating" :
+				   "partition removed");
 
                         rd_kafka_broker_destroy(rktp->rktp_next_leader);
                         rktp->rktp_next_leader = NULL;
@@ -3044,14 +3053,23 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
 
 		rd_kafka_toppar_lock(rktp);
-		/* Multiple PARTITION_LEAVEs are possible during partition migration,
-		 * make sure we're supposed to handle this one. */
+
+		rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
+			   "Topic %s [%"PRId32"]: LEAVE: %p",
+			   rktp->rktp_rkt->rkt_topic->str,
+			   rktp->rktp_partition, rktp);
+
+		/* Multiple PARTITION_LEAVEs are possible during partition
+		 * migration, make sure we're supposed to handle this one. */
 		if (unlikely(rktp->rktp_leader != rkb)) {
 			rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
 				   "Topic %s [%"PRId32"]: "
-				   "ignoring PARTITION_LEAVE: broker is not leader",
+				   "ignoring PARTITION_LEAVE: broker is not leader (%s)",
 				   rktp->rktp_rkt->rkt_topic->str,
-				   rktp->rktp_partition);
+				   rktp->rktp_partition,
+				   rktp->rktp_leader ?
+				   rd_kafka_broker_name(rktp->rktp_leader) :
+				   "none");
 			rd_kafka_toppar_unlock(rktp);
 			break;
 		}
@@ -3064,11 +3082,19 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
 		rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
 			   "Topic %s [%"PRId32"]: leaving broker "
-			   "(next leader %s)",
+			   "(%d messages in xmitq, next leader %s)",
 			   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+			   rd_kafka_msgq_len(&rktp->rktp_xmit_msgq),
 			   rktp->rktp_next_leader ?
 			   rd_kafka_broker_name(rktp->rktp_next_leader) :
 			   "(none)");
+
+		/* Prepend xmitq(broker-local) messages on the msgq(global).
+		 * There is no msgq_prepend() so we append msgq to xmitq
+		 * and then move the queue altogether back over to msgq. */
+		rd_kafka_msgq_concat(&rktp->rktp_xmit_msgq,
+				     &rktp->rktp_msgq);
+		rd_kafka_msgq_move(&rktp->rktp_msgq, &rktp->rktp_xmit_msgq);
 
                 rd_kafka_broker_lock(rkb);
 		TAILQ_REMOVE(&rkb->rkb_toppars, rktp, rktp_rkblink);
@@ -3087,7 +3113,19 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                         rko->rko_type = RD_KAFKA_OP_PARTITION_JOIN;
                         rd_kafka_q_enq(rktp->rktp_next_leader->rkb_ops, rko);
                         rko = NULL;
-                }
+                } else {
+			rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
+				   "Topic %s [%"PRId32"]: HOPEFULLY REMOVING TOPPAR "
+				   "with %d msgs",
+				   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+				   rd_kafka_msgq_len(&rktp->rktp_msgq));
+			rd_kafka_assert(NULL, rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) == 0);
+			rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
+					 rd_kafka_terminating(rkb->rkb_rk) ?
+					 RD_KAFKA_RESP_ERR__DESTROY :
+					 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
+
+		}
 
                 rd_kafka_toppar_unlock(rktp);
                 rd_kafka_toppar_destroy(s_rktp);
@@ -3136,8 +3174,7 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 	/* Serve IO events */
         if (likely(rkb->rkb_transport != NULL))
                 rd_kafka_transport_io_serve(rkb->rkb_transport,
-                                            !rd_atomic32_get(&rkb->rkb_rk->
-                                                             rk_terminate) ?
+                                            !rd_kafka_terminating(rkb->rkb_rk) ?
                                             rkb->rkb_rk->rk_conf.
                                             socket_blocking_max_ms : 1);
 
@@ -3156,7 +3193,7 @@ static void rd_kafka_broker_toppars_serve (rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp, *rktp_tmp;
 
         TAILQ_FOREACH_SAFE(rktp, &rkb->rkb_toppars, rktp_rkblink, rktp_tmp) {
-                /* Serve toppar to update desired rktp state */
+		/* Serve toppar to update desired rktp state */
 		rd_kafka_broker_consumer_toppar_serve(rkb, rktp);
         }
 }

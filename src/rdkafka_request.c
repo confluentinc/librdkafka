@@ -35,6 +35,7 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 
+#include "rdrand.h"
 
 /**
  * Kafka protocol request and response handling.
@@ -1600,7 +1601,6 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         _MSH_ALLOC(rkbuf, md->topics, md->topic_cnt * sizeof(*md->topics));
 
 	for (i = 0 ; i < md->topic_cnt ; i++) {
-
 		rd_kafka_buf_read_i16a(rkbuf, md->topics[i].err);
 		rd_kafka_buf_read_str_msh(rkbuf, md->topics[i].topic);
 
@@ -1694,6 +1694,13 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
 	/* Update partition count and leader for each topic we know about */
 	for (i = 0 ; i < md->topic_cnt ; i++) {
+		int max_parts;
+		max_parts = rd_jitter(1, md->topics[i].partition_cnt);
+		rd_kafka_log(rkb->rkb_rk, LOG_WARNING, "METADATA",
+			     "JITTER PARTITIONS %d -> %d\n",
+			     md->topics[i].partition_cnt, max_parts);
+		md->topics[i].partition_cnt = max_parts;
+
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "  Topic #%i/%i: %s with %i partitions%s%s",
                            i, md->topic_cnt, md->topics[i].topic,

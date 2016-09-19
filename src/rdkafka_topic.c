@@ -296,36 +296,17 @@ const char *rd_kafka_topic_name (const rd_kafka_topic_t *app_rkt) {
  * Returns 1 if the leader was changed, else 0, or -1 if leader is unknown.
  * NOTE: rd_kafka_topic_wrlock(rkt) MUST be held.
  */
-static int rd_kafka_topic_leader_update (rd_kafka_itopic_t *rkt,
-                                         int32_t partition, int32_t leader_id,
-					 rd_kafka_broker_t *rkb) {
-	rd_kafka_t *rk = rkt->rkt_rk;
-	rd_kafka_toppar_t *rktp;
-        shptr_rd_kafka_toppar_t *s_rktp;
-
-	s_rktp = rd_kafka_toppar_get(rkt, partition, 0);
-        if (unlikely(!s_rktp)) {
-                /* Have only seen this in issue #132.
-                 * Probably caused by corrupt broker state. */
-                rd_kafka_log(rk, LOG_WARNING, "LEADER",
-                             "Topic %s: partition [%"PRId32"] is unknown "
-                             "(partition_cnt %i)",
-                             rkt->rkt_topic->str, partition,
-                             rkt->rkt_partition_cnt);
-                return -1;
-        }
-
-        rktp = rd_kafka_toppar_s2i(s_rktp);
+static int rd_kafka_toppar_leader_update (rd_kafka_toppar_t *rktp,
+					  rd_kafka_broker_t *rkb) {
 
         rd_kafka_toppar_lock(rktp);
 
 	if (!rkb) {
 		int had_leader = rktp->rktp_leader ? 1 : 0;
 
-		rd_kafka_toppar_broker_delegate(rktp, NULL);
+		rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
 
                 rd_kafka_toppar_unlock(rktp);
-		rd_kafka_toppar_destroy(s_rktp); /* from get() */
 
 		return had_leader ? -1 : 0;
 	}
@@ -335,23 +316,51 @@ static int rd_kafka_topic_leader_update (rd_kafka_itopic_t *rkt,
 		if (rktp->rktp_leader == rkb) {
 			/* No change in broker */
                         rd_kafka_toppar_unlock(rktp);
-			rd_kafka_toppar_destroy(s_rktp); /* from get() */
 			return 0;
 		}
 
-		rd_kafka_dbg(rk, TOPIC, "TOPICUPD",
+		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPICUPD",
 			     "Topic %s [%"PRId32"] migrated from "
 			     "broker %"PRId32" to %"PRId32,
-			     rkt->rkt_topic->str, partition,
+			     rktp->rktp_rkt->rkt_topic->str,
+			     rktp->rktp_partition,
 			     rktp->rktp_leader->rkb_nodeid, rkb->rkb_nodeid);
 	}
 
-	rd_kafka_toppar_broker_delegate(rktp, rkb);
+	rd_kafka_toppar_broker_delegate(rktp, rkb, 0);
 
         rd_kafka_toppar_unlock(rktp);
-	rd_kafka_toppar_destroy(s_rktp); /* from get() */
 
 	return 1;
+}
+
+
+static int rd_kafka_toppar_leader_update2 (rd_kafka_itopic_t *rkt,
+					   int32_t partition,
+					   rd_kafka_broker_t *rkb) {
+	rd_kafka_toppar_t *rktp;
+        shptr_rd_kafka_toppar_t *s_rktp;
+	int r;
+
+	s_rktp = rd_kafka_toppar_get(rkt, partition, 0);
+        if (unlikely(!s_rktp)) {
+                /* Have only seen this in issue #132.
+                 * Probably caused by corrupt broker state. */
+                rd_kafka_log(rkt->rkt_rk, LOG_WARNING, "LEADER",
+                             "%s [%"PRId32"] is unknown "
+                             "(partition_cnt %i)",
+                             rkt->rkt_topic->str, partition,
+                             rkt->rkt_partition_cnt);
+                return -1;
+        }
+
+        rktp = rd_kafka_toppar_s2i(s_rktp);
+
+	r = rd_kafka_toppar_leader_update(rktp, rkb);
+
+	rd_kafka_toppar_destroy(s_rktp); /* from get() */
+
+	return r;
 }
 
 
@@ -367,6 +376,7 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 	shptr_rd_kafka_toppar_t *rktp_ua;
         shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
+	rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
 	int32_t i;
 
 	if (likely(rkt->rkt_partition_cnt == partition_cnt))
@@ -416,8 +426,11 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 				s_rktp = rd_kafka_toppar_new(rkt, i);
 			rktps[i] = s_rktp;
 		} else {
-			/* Move existing partition */
-			rktps[i] = rkt->rkt_p[i];
+			/* Existing partition, grab our own reference. */
+			rktps[i] = rd_kafka_toppar_keep(
+				rd_kafka_toppar_s2i(rkt->rkt_p[i]));
+			/* Loose previous ref */
+			rd_kafka_toppar_destroy(rkt->rkt_p[i]);
 		}
 	}
 
@@ -428,25 +441,16 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                 rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp),
                                           RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
 
-	/* Remove excessive partitions if partition count decreased. */
-	for (; i < rkt->rkt_partition_cnt ; i++) {
+	/* Remove excessive partitions */
+	for (i = partition_cnt ; i < rkt->rkt_partition_cnt ; i++) {
 		s_rktp = rkt->rkt_p[i];
                 rktp = rd_kafka_toppar_s2i(s_rktp);
 
+		rd_kafka_dbg(rkt->rkt_rk, TOPIC, "REMOVE",
+			     "%s [%"PRId32"] no longer reported in metadata",
+			     rkt->rkt_topic->str, rktp->rktp_partition);
+
 		rd_kafka_toppar_lock(rktp);
-
-                rd_kafka_toppar_broker_delegate(rktp, NULL);
-
-		/* Partition has gone away, move messages to UA or error-out */
-		if (likely(rktp_ua != NULL))
-			rd_kafka_toppar_move_msgs(rd_kafka_toppar_s2i(rktp_ua),
-                                                  rktp);
-		else
-                        rd_kafka_dr_msgq(rkt, &rktp->rktp_msgq,
-                                         RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
-
-
-                rd_kafka_toppar_purge_queues(rktp);
 
 		if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_DESIRED) {
                         rd_kafka_dbg(rkt->rkt_rk, TOPIC, "DESIRED",
@@ -467,14 +471,53 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                                 rd_kafka_toppar_enq_error(
                                         rktp,
                                         RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
+
+		} else {
+			/* Tell handling broker to let go of the toppar */
+			rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_REMOVE;
+			rd_kafka_toppar_broker_leave_for_remove(rktp);
 		}
+
 		rd_kafka_toppar_unlock(rktp);
 
 		rd_kafka_toppar_destroy(s_rktp);
 	}
 
-	if (likely(rktp_ua != NULL))
+	if (likely(rktp_ua != NULL)) {
+		/* Move messages from removed partitions to UA for
+		 * further processing. */
+		rktp = rd_kafka_toppar_s2i(rktp_ua);
+
+		// FIXME: tmpq not used
+		if (rd_kafka_msgq_len(&tmpq) > 0) {
+			rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPPARMOVE",
+				     "Moving %d messages (%zd bytes) from "
+				     "%d removed partitions to UA partition",
+				     rd_kafka_msgq_len(&tmpq),
+				     rd_kafka_msgq_size(&tmpq),
+				     i - partition_cnt);
+
+
+			rd_kafka_toppar_lock(rktp);
+			rd_kafka_msgq_concat(&rktp->rktp_msgq, &tmpq);
+			rd_kafka_toppar_unlock(rktp);
+		}
+
 		rd_kafka_toppar_destroy(rktp_ua); /* .._get() above */
+	} else {
+		/* No UA, fail messages from removed partitions. */
+		if (rd_kafka_msgq_len(&tmpq) > 0) {
+			rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPPARMOVE",
+				     "Failing %d messages (%zd bytes) from "
+				     "%d removed partitions",
+				     rd_kafka_msgq_len(&tmpq),
+				     rd_kafka_msgq_size(&tmpq),
+				     i - partition_cnt);
+
+			rd_kafka_dr_msgq(rkt, &tmpq,
+					 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
+		}
+	}
 
 	if (rkt->rkt_p)
 		rd_free(rkt->rkt_p);
@@ -729,10 +772,9 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 		partbrokers[j] = NULL;
 
 		/* Update leader for partition */
-		r = rd_kafka_topic_leader_update(rkt,
-                                                 mdt->partitions[j].id,
-                                                 mdt->partitions[j].leader,
-						 leader);
+		r = rd_kafka_toppar_leader_update2(rkt,
+						   mdt->partitions[j].id,
+						   leader);
 
                 if (r == -1)
                         query_leader = 1;
@@ -756,7 +798,7 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
                         rktp = rd_kafka_toppar_s2i(rkt->rkt_p[j]);
                         rd_kafka_toppar_lock(rktp);
-                        rd_kafka_toppar_broker_delegate(rktp, NULL);
+                        rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
                         rd_kafka_toppar_unlock(rktp);
                 }
         }
@@ -791,13 +833,11 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 /**
  * Remove all partitions from a topic, including the ua.
- * WARNING: Any messages in partition queues will be LOST.
  */
 void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
         shptr_rd_kafka_toppar_t *s_rktp;
         shptr_rd_kafka_itopic_t *s_rkt;
 	int i;
-	rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
 
 	/* Move all partition's queued messages to our temporary queue
 	 * and purge that queue later outside the topic_wrlock since
@@ -819,7 +859,6 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
 		/* Our reference */
 		shptr_rd_kafka_toppar_t *s_rktp2 = rd_kafka_toppar_keep(rktp);
                 rd_kafka_toppar_lock(rktp);
-		rd_kafka_toppar_move_queues(rktp, &tmpq);
                 rd_kafka_toppar_desired_del(rktp);
                 rd_kafka_toppar_unlock(rktp);
                 rd_kafka_toppar_destroy(s_rktp2);
@@ -835,19 +874,13 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
 
         if ((s_rktp = rkt->rkt_ua)) {
 		rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
-		rd_kafka_toppar_move_queues(rktp, &tmpq);
+		rd_kafka_toppar_lock(rktp);
+		rd_kafka_toppar_unlock(rktp);
                 rkt->rkt_ua = NULL;
                 rd_kafka_toppar_destroy(s_rktp);
 	}
 
 	rd_kafka_topic_wrunlock(rkt);
-
-	/* Now purge the messages outside the topic lock. */
-	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPIC", "%.*s: purging %d messages",
-		     RD_KAFKAP_STR_PR(rkt->rkt_topic),
-		     rd_kafka_msgq_len(&tmpq));
-
-	rd_kafka_msgq_purge(rkt->rkt_rk, &tmpq);
 
 	rd_kafka_topic_destroy0(s_rkt);
 }

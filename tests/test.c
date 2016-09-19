@@ -58,6 +58,8 @@ static char *test_broker_version_str = "0.9.0.0";
 int          test_flags = 0;
 int          test_neg_flags = TEST_F_KNOWN_ISSUE;
 static char *test_git_version = "HEAD";
+static char *test_zk_address = NULL;
+static char *test_kafka_path = NULL;
 
 static int show_summary = 1;
 static int test_summary (int do_lock);
@@ -946,6 +948,9 @@ int main(int argc, char **argv) {
 		test_broker_version_str = getenv("TEST_KAFKA_VERSION");
 	if (!(test_git_version = getenv("RDKAFKA_GITVER")))
 		test_git_version = "HEAD";
+	if ((test_zk_address = getenv("ZK_ADDRESS")) &&
+	    (test_kafka_path = getenv("KAFKA_PATH")))
+	    test_flags |= TEST_F_TRIVUP;
 #endif
 
 	test_conf_init(NULL, NULL, 10);
@@ -2572,6 +2577,47 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
         }
 }
 
+/**
+ * @brief Execute kafka-topics.sh from the Kafka distribution.
+ */
+void test_kafka_topics (const char *fmt, ...) {
+#ifdef _MSC_VER
+	TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
+#else
+	char cmd[512];
+	int r;
+	va_list ap;
+	test_timing_t t_cmd;
+
+	if (!test_kafka_path || !test_zk_address)
+		TEST_FAIL("%s: KAFKA_PATH and ZK_ADDRESS must be set",
+			  __FUNCTION__);
+
+	r = rd_snprintf(cmd, sizeof(cmd),
+			"%s/bin/kafka-topics.sh --zookeeper %s ",
+			test_kafka_path, test_zk_address);
+	TEST_ASSERT(r < (int)sizeof(cmd));
+
+	va_start(ap, fmt);
+	rd_vsnprintf(cmd+r, sizeof(cmd)-r, fmt, ap);
+	va_end(ap);
+
+	TEST_SAY("Executing: %s\n", cmd);
+	TIMING_START(&t_cmd, "exec");
+	r = system(cmd);
+	TIMING_STOP(&t_cmd);
+
+	if (r == -1)
+		TEST_FAIL("system(\"%s\") failed: %s", cmd, strerror(errno));
+	else if (WIFSIGNALED(r))
+		TEST_FAIL("system(\"%s\") terminated by signal %d\n", cmd,
+			  WTERMSIG(r));
+	else if (WEXITSTATUS(r))
+		TEST_FAIL("system(\"%s\") failed with exit status %d\n",
+			  cmd, WEXITSTATUS(r));
+#endif
+}
+
 
 /**
  * @brief Create topic using kafka-topics.sh --create
@@ -2614,6 +2660,7 @@ void test_create_topic (const char *topicname, int partition_cnt,
 			  cmd, WEXITSTATUS(r));
 #endif
 }
+
 
 /**
  * @brief Check if \p feature is builtin to librdkafka.

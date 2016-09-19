@@ -71,6 +71,7 @@ struct test {
 #define TEST_F_LOCAL   0x1   /**< Test is local, no broker requirement */
 #define TEST_F_KNOWN_ISSUE 0x2 /**< Known issue, can fail without affecting
 				*   total test run status. */
+#define TEST_F_TRIVUP 0x4    /**< Test must be run under trivup */
 	int minver;          /**< Limit tests to broker version range. */
 	int maxver;
 
@@ -495,6 +496,7 @@ void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions);
 
+void test_kafka_topics (const char *fmt, ...);
 void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor);
 int test_check_builtin (const char *feature);

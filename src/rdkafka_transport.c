@@ -582,7 +582,7 @@ static int rd_kafka_transport_ssl_handhsake (rd_kafka_transport_t *rktrans) {
 	} else if (rd_kafka_transport_ssl_io_update(rktrans, r,
 						    errstr,
 						    sizeof(errstr)) == -1) {
-		rd_kafka_broker_fail(rkb, RD_KAFKA_RESP_ERR__SSL, LOG_ERR,
+		rd_kafka_broker_fail(rkb, LOG_ERR, RD_KAFKA_RESP_ERR__SSL,
 				     "SSL handshake failed: %s%s", errstr,
 				     strstr(errstr, "unexpected message") ?
 				     ": client authentication might be "

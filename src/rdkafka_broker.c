@@ -3089,7 +3089,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 			   rd_kafka_broker_name(rktp->rktp_next_leader) :
 			   "(none)");
 
-		/* Prepend xmitq(broker-local) messages on the msgq(global).
+		/* Prepend xmitq(broker-local) messages to the msgq(global).
 		 * There is no msgq_prepend() so we append msgq to xmitq
 		 * and then move the queue altogether back over to msgq. */
 		rd_kafka_msgq_concat(&rktp->rktp_xmit_msgq,

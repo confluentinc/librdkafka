@@ -948,9 +948,6 @@ int main(int argc, char **argv) {
 		test_broker_version_str = getenv("TEST_KAFKA_VERSION");
 	if (!(test_git_version = getenv("RDKAFKA_GITVER")))
 		test_git_version = "HEAD";
-	if ((test_zk_address = getenv("ZK_ADDRESS")) &&
-	    (test_kafka_path = getenv("KAFKA_PATH")))
-	    test_flags |= TEST_F_TRIVUP;
 #endif
 
 	test_conf_init(NULL, NULL, 10);

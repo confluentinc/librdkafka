@@ -360,6 +360,8 @@ static RD_INLINE RD_UNUSED int rd_refcnt_get (rd_refcnt_t *R) {
 #define RD_SHARED_PTR_TYPE(STRUCT_NAME,WRAPPED_TYPE) WRAPPED_TYPE
 
 
+#define rd_shared_ptr_get_src(FUNC,LINE,OBJ,REFCNT,SPTR_TYPE)	\
+        (rd_refcnt_add(REFCNT), (OBJ))
 #define rd_shared_ptr_get(OBJ,REFCNT,SPTR_TYPE)          \
         (rd_refcnt_add(REFCNT), (OBJ))
 

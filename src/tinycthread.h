@@ -501,12 +501,13 @@ typedef struct rwlock_t {
 
 #else
 typedef pthread_rwlock_t rwlock_t;
-#define rwlock_init(rwl)     pthread_rwlock_init(rwl, NULL)
-#define rwlock_destroy(rwl)  pthread_rwlock_destroy(rwl)
-#define rwlock_rdlock(rwl)   pthread_rwlock_rdlock(rwl)
-#define rwlock_wrlock(rwl)   pthread_rwlock_wrlock(rwl)
-#define rwlock_rdunlock(rwl) pthread_rwlock_unlock(rwl)
-#define rwlock_wrunlock(rwl) pthread_rwlock_unlock(rwl)
+
+int rwlock_init (rwlock_t *rwl);
+int rwlock_destroy (rwlock_t *rwl);
+int rwlock_rdlock (rwlock_t *rwl);
+int rwlock_wrlock (rwlock_t *rwl);
+int rwlock_rdunlock (rwlock_t *rwl);
+int rwlock_wrunlock (rwlock_t *rwl);
 
 #endif
 #ifdef __cplusplus

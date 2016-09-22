@@ -472,6 +472,8 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                                         rktp,
                                         RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
 
+			rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
+
 		} else {
 			/* Tell handling broker to let go of the toppar */
 			rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_REMOVE;
@@ -832,17 +834,65 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 
 /**
+ * @returns a list of all partitions (s_rktp's) for a topic.
+ * @remark rd_kafka_topic_*lock() MUST be held.
+ */
+static rd_list_t *rd_kafka_topic_get_all_partitions (rd_kafka_itopic_t *rkt) {
+	rd_list_t *list;
+	shptr_rd_kafka_toppar_t *s_rktp;
+	int i;
+
+	list = rd_list_new(rkt->rkt_partition_cnt +
+			   rd_list_cnt(&rkt->rkt_desp) + 1/*ua*/);
+
+	for (i = 0 ; i < rkt->rkt_partition_cnt ; i++)
+		rd_list_add(list, rd_kafka_toppar_keep(
+				    rd_kafka_toppar_s2i(rkt->rkt_p[i])));
+
+	RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i)
+		rd_list_add(list, rd_kafka_toppar_keep(
+				    rd_kafka_toppar_s2i(rkt->rkt_p[i])));
+
+	if (rkt->rkt_ua)
+		rd_list_add(list, rd_kafka_toppar_keep(
+				    rd_kafka_toppar_s2i(rkt->rkt_ua)));
+
+	return list;
+}
+
+
+
+
+/**
  * Remove all partitions from a topic, including the ua.
+ * Must only be called during rd_kafka_t termination.
+ *
+ * Locality: main thread
  */
 void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
         shptr_rd_kafka_toppar_t *s_rktp;
         shptr_rd_kafka_itopic_t *s_rkt;
+	rd_list_t *partitions;
 	int i;
 
-	/* Move all partition's queued messages to our temporary queue
-	 * and purge that queue later outside the topic_wrlock since
+	/* Purge messages for all partitions outside the topic_wrlock since
 	 * a message can hold a reference to the topic_t and thus
 	 * would trigger a recursive lock dead-lock. */
+	rd_kafka_topic_rdlock(rkt);
+	partitions = rd_kafka_topic_get_all_partitions(rkt);
+	rd_kafka_topic_rdunlock(rkt);
+
+	RD_LIST_FOREACH(s_rktp, partitions, i) {
+		rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
+
+		rd_kafka_toppar_lock(rktp);
+		rd_kafka_msgq_purge(rkt->rkt_rk, &rktp->rktp_msgq);
+		rd_kafka_toppar_purge_queues(rktp);
+		rd_kafka_toppar_unlock(rktp);
+
+		rd_kafka_toppar_destroy(s_rktp);
+	}
+	rd_list_destroy(partitions, NULL);
 
 	s_rkt = rd_kafka_topic_keep(rkt);
 	rd_kafka_topic_wrlock(rkt);
@@ -873,9 +923,6 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
 	rkt->rkt_partition_cnt = 0;
 
         if ((s_rktp = rkt->rkt_ua)) {
-		rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
-		rd_kafka_toppar_lock(rktp);
-		rd_kafka_toppar_unlock(rktp);
                 rkt->rkt_ua = NULL;
                 rd_kafka_toppar_destroy(s_rktp);
 	}

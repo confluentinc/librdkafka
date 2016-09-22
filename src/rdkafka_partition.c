@@ -231,8 +231,6 @@ static void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp) {
 			    &rktp->rktp_consumer_lag_tmr, 1/*lock*/);
 
 	rd_kafka_q_fwd_set(rktp->rktp_ops, NULL);
-
-        rd_kafka_toppar_purge_queues(rktp);
 }
 
 

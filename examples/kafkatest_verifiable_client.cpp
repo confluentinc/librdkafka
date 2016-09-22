@@ -532,7 +532,7 @@ private:
       "\"partitions\": [ " << part_list_json(partitions) << "] }" << std::endl;
 
     if (!deferr) {
-      std::cerr << now() << ": Deferring until later: " << deferred_reports;
+      std::cerr << now() << ": Deferring until later: " << deferred_reports.str();
       std::cout << deferred_reports.str();
       deferred_reports.str("");
     }

@@ -2473,7 +2473,8 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                                  rd_kafka_topic_name(rkmessage->rkt),
                                  rkmessage->partition,
                                  rkmessage->offset);
-			test_msgver_add_msg(mv, rkmessage);
+			if (mv)
+				test_msgver_add_msg(mv, rkmessage);
                         eof_cnt++;
 
                 } else if (rkmessage->err) {
@@ -2487,7 +2488,7 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                                  rd_kafka_message_errstr(rkmessage));
 
                 } else {
-			if (test_msgver_add_msg(mv, rkmessage))
+			if (!mv || test_msgver_add_msg(mv, rkmessage))
 				cnt++;
                 }
 

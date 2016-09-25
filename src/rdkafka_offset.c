@@ -483,12 +483,35 @@ rd_kafka_commit_queue (rd_kafka_t *rk,
 				   rd_kafka_topic_partition_list_t *offsets,
 				   void *opaque),
 		       void *opaque) {
+	rd_kafka_q_t *rkq;
+	rd_kafka_resp_err_t err;
+
         if (!rd_kafka_cgrp_get(rk))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        return rd_kafka_commit0(rk, offsets, NULL,
-				RD_KAFKA_REPLYQ(rkqu->rkqu_q, 0),
-				cb, opaque);
+	if (rkqu)
+		rkq = rkqu->rkqu_q;
+	else
+		rkq = rd_kafka_q_new(rk);
+
+	err = rd_kafka_commit0(rk, offsets, NULL,
+			       RD_KAFKA_REPLYQ(rkq, 0),
+			       cb, opaque);
+
+	if (!rkqu) {
+		rd_kafka_op_t *rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0);
+		if (!rko)
+			err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+		else {
+			err = rko->rko_err;
+			rd_kafka_op_handle_std(rk, rko);
+			rd_kafka_op_destroy(rko);
+		}
+
+                rd_kafka_q_destroy(rkq);
+	}
+
+	return err;
 }
 
 

@@ -2121,6 +2121,9 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
  * will be returned as an RD_KAFKA_EVENT_COMMIT event. The \p opaque
  * value will be available with rd_kafka_event_opaque()
  *
+ * If \p rkqu is NULL a temporary queue will be created and the callback will
+ * be served by this call.
+ *
  * @sa rd_kafka_commit()
  * @sa rd_kafka_conf_set_offset_commit_cb()
  */

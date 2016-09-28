@@ -75,9 +75,16 @@ int main_0017_compression(int argc, char **argv) {
 		rkt_p = test_create_producer_topic(rk_p, topics[i],
 			"compression.codec", codecs[i], NULL);
 
+		/* Produce small message that will not decrease with
+		 * compression (issue #781) */
 		test_produce_msgs(rk_p, rkt_p, testid, partition,
-				  msg_base + (partition*msg_cnt), msg_cnt,
-				  NULL, 0);
+				  msg_base + (partition*msg_cnt), 1,
+				  NULL, 5);
+
+		/* Produce standard sized messages */
+		test_produce_msgs(rk_p, rkt_p, testid, partition,
+				  msg_base + (partition*msg_cnt) + 1, msg_cnt-1,
+				  NULL, 512);
 		rd_kafka_topic_destroy(rkt_p);
 	}
 

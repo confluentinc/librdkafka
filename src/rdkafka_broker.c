@@ -2601,6 +2601,14 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 
 	}
 
+	if (unlikely(RD_KAFKAP_MESSAGE_OVERHEAD + coutlen >
+		     (size_t)MessageSetSize)) {
+		/* If the compressed data is larger than the
+		 * uncompressed throw it away and send as uncompressed. */
+		rd_free(siov.iov_base);
+		return 0;
+	}
+
 	/* Rewind rkbuf to the pre-message checkpoint.
 	 * This is to replace all the original Messages with just the
 	 * Message containing the compressed payload. */

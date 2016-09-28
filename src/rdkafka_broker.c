@@ -804,6 +804,9 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
 
 
 
+
+
+
 /**
  * @returns the current broker state change version.
  *          Pass this value to fugure rd_kafka_brokers_wait_state_change() calls
@@ -3958,10 +3961,11 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                          * consumer lag. */
                         rktp->rktp_offsets.hi_offset = hdr.HighwaterMarkOffset;
 
-			rd_kafka_toppar_lock(rktp);
 
 			/* High offset for get_watermark_offsets() */
+			rd_kafka_toppar_lock(rktp);
 			rktp->rktp_hi_offset = hdr.HighwaterMarkOffset;
+			rd_kafka_toppar_unlock(rktp);
 
 			/* If this is the last message of the queue,
 			 * signal EOF back to the application. */
@@ -4026,8 +4030,6 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					break;
 				}
 
-				rd_kafka_toppar_unlock(rktp);
-
                                 /* FIXME: only back off this rktp */
 				rd_kafka_broker_fetch_backoff(rkb);
 
@@ -4036,8 +4038,6 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
 				continue;
 			}
-
-			rd_kafka_toppar_unlock(rktp);
 
 			if (hdr.MessageSetSize <= 0) {
 				rd_kafka_toppar_destroy(s_rktp); /*from get()*/

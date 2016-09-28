@@ -294,10 +294,8 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			   const char *fmt, ...) {
 	va_list ap;
 	int errno_save = errno;
-	rd_kafka_toppar_t *rktp, *rktp_tmp;
 	rd_kafka_bufq_t tmpq_waitresp, tmpq;
         int statechange;
-	rd_kafka_broker_t *internal_rkb;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
@@ -397,42 +395,6 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	 *  - Reset any partially sent buffer's offset.
 	 */
 	rd_kafka_bufq_connection_reset(rkb, &rkb->rkb_outbufs);
-
-	internal_rkb = rd_kafka_broker_internal(rkb->rkb_rk);
-
-	/* Undelegate all toppars from this broker. */
-        TAILQ_FOREACH_SAFE(rktp, &rkb->rkb_toppars, rktp_rkblink, rktp_tmp) {
-		rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
-                shptr_rd_kafka_itopic_t *s_rkt;
-                shptr_rd_kafka_toppar_t *s_rktp;
-		break; // FIXME
-		s_rkt = rd_kafka_topic_keep(rkt); /* Hold on to rkt */
-		s_rktp = rd_kafka_toppar_keep(rktp);
-
-		/* Update fetch decision (remove from fetcher list) */
-		rd_kafka_toppar_fetch_decide(rktp, rkb, 0);
-
-		rd_rkb_dbg(rkb, TOPIC, "BRKTP",
-			   "Undelegating %.*s [%"PRId32"]",
-			   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-			   rktp->rktp_partition);
-
-		rd_kafka_topic_wrlock(rktp->rktp_rkt);
-                rd_kafka_toppar_lock(rktp);
-		/* Undelegate
-                 * (async operation, will remain on rkb_toppars for some time)*/
-		rd_kafka_toppar_broker_delegate(rktp,
-						rkb != internal_rkb ?
-						internal_rkb : NULL, 0);
-                rd_kafka_toppar_unlock(rktp);
-		rd_kafka_topic_wrunlock(rktp->rktp_rkt);
-
-		rd_kafka_toppar_destroy(s_rktp);
-		rd_kafka_topic_destroy0(s_rkt); /* Let go of rkt */
-	}
-
-	if (internal_rkb)
-		rd_kafka_broker_destroy(internal_rkb);
 
 	/* Query for the topic leaders (async) */
 	if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY && statechange)

@@ -38,19 +38,98 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 /* Align X (upwards) to STRIDE, which must be power of 2. */
 #define _ALIGN(X,STRIDE) (((X) + ((STRIDE) - 1)) & -(STRIDE))
 
-/* Advance/allocate used space in marshall buffer.
- * Point PTR to available space of size LEN on success. */
-#define _MSH_ALLOC(rkbuf,PTR,LEN)  do {					\
-                size_t __LEN = (LEN);                                   \
-                if (msh_of + __LEN >= msh_size)                         \
-                        rd_kafka_buf_parse_fail(rkbuf,			\
-						"Not enough room in marshall buffer: " \
-						"%"PRIdsz"+%"PRIdsz" > %"PRIdsz, \
-						msh_of, __LEN, msh_size); \
-                (PTR) = (void *)(msh_buf+msh_of);                       \
-                msh_of += _ALIGN(__LEN, 8);				\
-        } while(0)
 
+/**
+ * Temporary buffer with memory aligned writes to accommodate
+ * effective and platform safe struct writes.
+ */
+typedef struct rd_tmpabuf_s {
+	size_t size;
+	size_t of;
+	char  *buf;
+	int    failed;
+	int    assert_on_fail;
+} rd_tmpabuf_t;
+
+/**
+ * @brief Allocate new tmpabuf with \p size bytes pre-allocated.
+ */
+static RD_UNUSED void
+rd_tmpabuf_new (rd_tmpabuf_t *tab, size_t size, int assert_on_fail) {
+	tab->buf = rd_malloc(size);
+	tab->size = size;
+	tab->of = 0;
+	tab->failed = 0;
+	tab->assert_on_fail = assert_on_fail;
+}
+
+/**
+ * @brief Free memory allocated by tmpabuf
+ */
+static RD_UNUSED void
+rd_tmpabuf_destroy (rd_tmpabuf_t *tab) {
+	rd_free(tab->buf);
+}
+
+/**
+ * @returns 1 if a previous operation failed.
+ */
+static RD_UNUSED RD_INLINE int
+rd_tmpabuf_failed (rd_tmpabuf_t *tab) {
+	return tab->failed;
+}
+
+/**
+ * @brief Allocate \p size bytes for writing returning an aligned pointer
+ *        to the memory.
+ * @returns the allocated pointer (within the tmpabuf) on success or
+ *          NULL if the requested number of bytes + alignment is not available
+ *          in the tmpabuf.
+ */
+static RD_UNUSED void *
+rd_tmpabuf_alloc (rd_tmpabuf_t *tab, size_t size) {
+	void *ptr;
+
+	if (unlikely(tab->failed))
+		return NULL;
+
+	if (unlikely(tab->of + size >= tab->size)) {
+		if (tab->assert_on_fail)
+			assert(!*"rd_tmpabuf_alloc: not enough size in buffer");
+		return NULL;
+	}
+
+        ptr = (void *)(tab->buf + tab->of);
+	tab->of += _ALIGN(size, 8);
+
+	return ptr;
+}
+
+/**
+ * @brief Write \p buf of \p size bytes to tmpabuf memory in an aligned fashion.
+ *
+ * @returns the allocated and written-to pointer (within the tmpabuf) on success
+ *          or NULL if the requested number of bytes + alignment is not available
+ *          in the tmpabuf.
+ */
+static RD_UNUSED void *
+rd_tmpabuf_write (rd_tmpabuf_t *tab, const void *buf, size_t size) {
+	void *ptr = rd_tmpabuf_alloc(tab, size);
+
+	if (ptr)
+		memcpy(ptr, buf, size);
+
+	return ptr;
+}
+
+
+/**
+ * @brief Wrapper for rd_tmpabuf_write() that takes a nul-terminated string.
+ */
+static RD_UNUSED char *
+rd_tmpabuf_write_str (rd_tmpabuf_t *tab, const char *str) {
+	return rd_tmpabuf_write(tab, str, strlen(str)+1);
+}
 
 
 /**
@@ -163,16 +242,24 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 		rd_kafka_buf_skip(rkbuf, _ksize);			\
 	} while (0)
 
-/* Read Kafka String representation (2+N) into nul-terminated C string.
- * Depends on a marshalling environment. */
-#define rd_kafka_buf_read_str_msh(rkbuf, dst) do {			\
+/* Read Kafka String representation (2+N) and write it to the \p tmpabuf
+ * with a trailing nul byte. */
+#define rd_kafka_buf_read_str_tmpabuf(rkbuf, tmpabuf, dst) do {		\
                 rd_kafkap_str_t _kstr;					\
-		int _slen;						\
+		size_t _slen;						\
+		char *_dst;						\
 		rd_kafka_buf_read_str(rkbuf, &_kstr);			\
 		_slen = RD_KAFKAP_STR_LEN(&_kstr);			\
-                _MSH_ALLOC(rkbuf, dst, _slen+1);			\
-                memcpy(dst, _kstr.str, _slen);				\
-                dst[_slen] = '\0';					\
+		if (!(_dst =						\
+		      rd_tmpabuf_write(tmpabuf, _kstr.str, _slen+1)))	\
+			rd_kafka_buf_parse_fail(			\
+				rkbuf,					\
+				"Not enough room in tmpabuf: "		\
+				"%"PRIdsz"+%"PRIdsz			\
+				" > %"PRIdsz,				\
+				(tmpabuf)->of, _slen+1, (tmpabuf)->size); \
+		_dst[_slen] = '\0';					\
+		dst = (void *)_dst;					\
 	} while (0)
 
 /**

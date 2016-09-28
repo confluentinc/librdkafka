@@ -33,6 +33,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_assignor.h"
 #include "rdkafka_offset.h"
+#include "rdkafka_metadata.h"
 #include "rdkafka_cgrp.h"
 
 static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg);
@@ -138,7 +139,8 @@ void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, TAILQ_EMPTY(&rkcg->rkcg_topics));
         rd_kafka_assert(rkcg->rkcg_rk, rd_list_empty(&rkcg->rkcg_toppars));
         rd_list_destroy(&rkcg->rkcg_toppars, NULL);
-
+	rd_list_destroy(rkcg->rkcg_subscribed_topics,
+			(void *)rd_kafka_topic_info_destroy);
         rd_free(rkcg);
 }
 
@@ -166,6 +168,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
         TAILQ_INIT(&rkcg->rkcg_topics);
         rd_list_init(&rkcg->rkcg_toppars, 32);
         rd_kafka_cgrp_set_member_id(rkcg, "");
+	rkcg->rkcg_subscribed_topics = rd_list_new(0);
         rd_interval_init(&rkcg->rkcg_coord_query_intvl);
         rd_interval_init(&rkcg->rkcg_heartbeat_intvl);
         rd_interval_init(&rkcg->rkcg_join_intvl);
@@ -514,25 +517,183 @@ static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg, int ignore_response) {
                                            NULL, NULL, rkcg);
 }
 
+
+/**
+ * Enqueue a rebalance op (if configured). 'partitions' is copied.
+ * This delegates the responsibility of assign() and unassign() to the
+ * application.
+ *
+ * Returns 1 if a rebalance op was enqueued, else 0.
+ * Returns 0 if there was no rebalance_cb or 'assignment' is NULL,
+ * in which case rd_kafka_cgrp_assign(rkcg,assignment) is called immediately.
+ */
+static int
+rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
+		       rd_kafka_resp_err_t err,
+		       rd_kafka_topic_partition_list_t *assignment,
+		       const char *reason) {
+	rd_kafka_op_t *rko;
+
+	/* Pause current partition set consumers until new assign() is called */
+	if (rkcg->rkcg_assignment)
+		rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 1,
+					      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
+					      rkcg->rkcg_assignment);
+
+	if (!(rkcg->rkcg_rk->rk_conf.enabled_events & RD_KAFKA_EVENT_REBALANCE)
+	    || !assignment) {
+	no_delegation:
+		if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
+			rd_kafka_cgrp_assign(rkcg, assignment);
+		else
+			rd_kafka_cgrp_unassign(rkcg);
+		return 0;
+	}
+
+	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
+		     "Group \"%s\": delegating %s of %d partition(s) "
+		     "to application rebalance callback on queue %s: %s",
+		     rkcg->rkcg_group_id->str,
+		     err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS ?
+		     "revoke":"assign", assignment->cnt,
+		     rd_kafka_q_dest_name(rkcg->rkcg_q), reason);
+
+        rd_kafka_cgrp_set_join_state(
+                rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB);
+
+	rko = rd_kafka_op_new(RD_KAFKA_OP_REBALANCE);
+	rko->rko_err = err;
+	rko->rko_u.rebalance.partitions =
+		rd_kafka_topic_partition_list_copy(assignment);
+
+	if (rd_kafka_q_enq(rkcg->rkcg_q, rko) == 0) {
+		/* Queue disabled, handle assignment here. */
+		goto no_delegation;
+	}
+
+	return 1;
+}
+
+
+
 static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
 
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP ||
             rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_INIT)
                 return;
 
-        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
-                     "Group \"%.*s\": join with %d subscribed topic(s)",
+	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
+                     "Group \"%.*s\": join with %d (%d) subscribed topic(s)",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-                     rkcg->rkcg_subscription->cnt);
+                     rd_list_cnt(rkcg->rkcg_subscribed_topics),
+		     rkcg->rkcg_subscription->cnt);
+
+
+	/* We need up-to-date full metadata to continue.
+	 * The + 1000 is since metadata.refresh.interval.ms can be set to 0. */
+	if (rkcg->rkcg_rk->rk_ts_full_metadata +
+	    rkcg->rkcg_rk->rk_conf.metadata_refresh_interval_ms + 1000 <
+	    rd_clock()) {
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
+			     "Group \"%.*s\": "
+			     "postponing join until full metadata is available",
+			     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
+		/* Trigger metadata request */
+		rd_kafka_metadata0(rkcg->rkcg_rk, 1 /* all topics */, NULL,
+				   RD_KAFKA_NO_REPLYQ, "consumer join");
+	}
+
+	if (rd_list_empty(rkcg->rkcg_subscribed_topics))
+		return;
 
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN);
         rd_kafka_JoinGroupRequest(rkcg->rkcg_rkb, rkcg->rkcg_group_id,
                                   rkcg->rkcg_member_id,
                                   rkcg->rkcg_rk->rk_conf.group_protocol_type,
-                                  rkcg->rkcg_subscription,
+                                  rkcg->rkcg_subscribed_topics,
                                   RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                   rd_kafka_cgrp_handle_JoinGroup, rkcg);
 }
+
+/**
+ * Rejoin group on update to effective subscribed topics list
+ */
+static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
+        /*
+         * Clean-up group leader duties, if any.
+         */
+        rd_kafka_cgrp_group_leader_reset(rkcg);
+
+        /* Remove assignment (async), if any. If there is already an
+         * unassign in progress we dont need to bother. */
+        if (rkcg->rkcg_assignment) {
+		if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
+			rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
+
+			rd_kafka_rebalance_op(
+				rkcg,
+				RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
+				rkcg->rkcg_assignment, "unsubscribe");
+		}
+	} else {
+		rd_kafka_cgrp_join(rkcg);
+	}
+}
+
+/**
+ * Update the effective list of subscribed topics and trigger a rejoin
+ * if it changed.
+ *
+ * @returns 1 on change, else 0.
+ *
+ * @remark Takes ownership of \p topics
+ */
+static int rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
+						   rd_list_t *topics) {
+	rd_kafka_topic_info_t *tinfo;
+	int i;
+
+	if (rd_list_cnt(topics) == 0)
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
+			     "Group \"%.*s\": "
+			     "no topics in metadata matched subscription",
+			     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
+
+	/* Sort for comparison */
+	rd_list_sort(topics, rd_kafka_topic_info_cmp);
+
+	/* Compare to existing to see if anything changed. */
+	if (!rd_list_cmp(rkcg->rkcg_subscribed_topics, topics,
+			 rd_kafka_topic_info_cmp)) {
+		/* No change */
+		rd_list_destroy(topics, (void *)rd_kafka_topic_info_destroy);
+		return 0;
+	}
+
+	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
+		     "Group \"%.*s\": effective subscription list changed "
+		     "from %d to %d topic(s):",
+		     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+		     rd_list_cnt(rkcg->rkcg_subscribed_topics),
+		     rd_list_cnt(topics));
+
+	RD_LIST_FOREACH(tinfo, topics, i)
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
+			     " Topic %s with %d partition(s)",
+			     tinfo->topic, tinfo->partition_cnt);
+
+	rd_list_destroy(rkcg->rkcg_subscribed_topics,
+			(void *)rd_kafka_topic_info_destroy);
+
+	rkcg->rkcg_subscribed_topics = topics;
+
+
+	rd_kafka_cgrp_rejoin(rkcg);
+
+	return 1;
+}
+
+
 
 
 static void rd_kafka_cgrp_heartbeat (rd_kafka_cgrp_t *rkcg,
@@ -848,61 +1009,6 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
 
 
 
-/**
- * Enqueue a rebalance op (if configured). 'partitions' is copied.
- * This delegates the responsibility of assign() and unassign() to the
- * application.
- *
- * Returns 1 if a rebalance op was enqueued, else 0.
- * Returns 0 if there was no rebalance_cb or 'assignment' is NULL,
- * in which case rd_kafka_cgrp_assign(rkcg,assignment) is called immediately.
- */
-static int
-rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
-		       rd_kafka_resp_err_t err,
-		       rd_kafka_topic_partition_list_t *assignment,
-		       const char *reason) {
-	rd_kafka_op_t *rko;
-
-	/* Pause current partition set consumers until new assign() is called */
-	if (rkcg->rkcg_assignment)
-		rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 1,
-					      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
-					      rkcg->rkcg_assignment);
-
-	if (!(rkcg->rkcg_rk->rk_conf.enabled_events & RD_KAFKA_EVENT_REBALANCE)
-	    || !assignment) {
-	no_delegation:
-		if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
-			rd_kafka_cgrp_assign(rkcg, assignment);
-		else
-			rd_kafka_cgrp_unassign(rkcg);
-		return 0;
-	}
-
-	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
-		     "Group \"%s\": delegating %s of %d partition(s) "
-		     "to application rebalance callback on queue %s: %s",
-		     rkcg->rkcg_group_id->str,
-		     err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS ?
-		     "revoke":"assign", assignment->cnt,
-		     rd_kafka_q_dest_name(rkcg->rkcg_q), reason);
-
-        rd_kafka_cgrp_set_join_state(
-                rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB);
-
-	rko = rd_kafka_op_new(RD_KAFKA_OP_REBALANCE);
-	rko->rko_err = err;
-	rko->rko_u.rebalance.partitions =
-		rd_kafka_topic_partition_list_copy(assignment);
-
-	if (rd_kafka_q_enq(rkcg->rkcg_q, rko) == 0) {
-		/* Queue disabled, handle assignment here. */
-		goto no_delegation;
-	}
-
-	return 1;
-}
 
 
 /**
@@ -1426,6 +1532,9 @@ void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg){
         }
 }
 
+
+
+
 /**
  * Remove existing topic subscription.
  */
@@ -1445,6 +1554,10 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
         if (rkcg->rkcg_subscription) {
                 rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
                 rkcg->rkcg_subscription = NULL;
+
+		rd_list_destroy(rkcg->rkcg_subscribed_topics,
+				(void *)rd_kafka_topic_info_destroy);
+		rkcg->rkcg_subscribed_topics = rd_list_new(0);
         }
 
         /*
@@ -2040,6 +2153,36 @@ void rd_kafka_cgrp_handle_Metadata (rd_kafka_cgrp_t *rkcg,
                                    err, md,
                                    rkcg->rkcg_group_leader.members,
                                    rkcg->rkcg_group_leader.member_cnt);
+}
+
+/**
+ * Check if the latest metadata affects the current subscription:
+ * - matched topic added
+ * - matched topic removed
+ * - matched topic's partition count change
+ */
+void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
+					  const struct rd_kafka_metadata *md) {
+	rd_list_t *topics;
+
+	rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
+
+	if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
+		return;
+
+	/*
+	 * Create a list of the topics in metadata that matches our subscription
+	 */
+	topics = rd_list_new(rkcg->rkcg_subscription->cnt);
+
+	rd_kafka_metadata_topic_match(rkcg->rkcg_rk,
+				      topics, md, rkcg->rkcg_subscription);
+
+
+	/*
+	 * Update
+	 */
+	rd_kafka_cgrp_update_subscribed_topics(rkcg, topics);
 }
 
 

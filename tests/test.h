@@ -199,6 +199,7 @@ void test_wait_exit (int timeout);
 
 uint64_t test_id_generate (void);
 char *test_str_id_generate (char *dest, size_t dest_size);
+const char *test_str_id_generate_tmp (void);
 
 
 /**
@@ -504,3 +505,8 @@ void test_timeout_set (int timeout);
 char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 
 void test_report_add (struct test *test, const char *fmt, ...);
+int test_can_create_topics (void);
+
+rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
+				   rd_kafka_event_type_t event_type,
+				   int timeout_ms);

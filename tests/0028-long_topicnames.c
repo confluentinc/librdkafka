@@ -46,6 +46,12 @@ int main_0028_long_topicnames (int argc, char **argv) {
 	char topic[256];
 	rd_kafka_t *rk_c;
 
+	if (!test_can_create_topics()) {
+		TEST_SKIP("Cannot create topics "
+			  "(set KAFKA_PATH and ZK_ADDRESS)\n");
+		return 0;
+	}
+
 	memset(topic, 'a', sizeof(topic)-1);
 	topic[sizeof(topic)-1] = '\0';
 

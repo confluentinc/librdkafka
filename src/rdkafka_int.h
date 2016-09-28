@@ -164,6 +164,9 @@ struct rd_kafka_s {
         rd_ts_t          rk_ts_metadata;    /* Timestamp of most recent
                                              * metadata. */
 
+	struct rd_kafka_metadata *rk_full_metadata; /* Last full metadata. */
+	rd_ts_t          rk_ts_full_metadata;       /* Timesstamp of .. */
+
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,
          *   0: No consumers running

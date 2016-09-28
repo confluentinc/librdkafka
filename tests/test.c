@@ -50,7 +50,6 @@ static int  test_topic_random = 0;
 static int  test_concurrent_max = 20;
 int         test_assert_on_fail = 0;
 double test_timeout_multiplier  = 1.0;
-static char *test_topics_sh = NULL;
 static char *test_sql_cmd = NULL;
 int  test_session_timeout_ms = 6000;
 int          test_broker_version;
@@ -58,8 +57,6 @@ static char *test_broker_version_str = "0.9.0.0";
 int          test_flags = 0;
 int          test_neg_flags = TEST_F_KNOWN_ISSUE;
 static char *test_git_version = "HEAD";
-static char *test_zk_address = NULL;
-static char *test_kafka_path = NULL;
 
 static int show_summary = 1;
 static int test_summary (int do_lock);
@@ -124,6 +121,8 @@ _TEST_DECL(0040_io_event);
 _TEST_DECL(0041_fetch_max_bytes);
 _TEST_DECL(0042_many_topics);
 _TEST_DECL(0043_no_connection);
+_TEST_DECL(0045_subscribe_update);
+_TEST_DECL(0045_subscribe_update_topic_remove);
 
 /**
  * Define all tests here
@@ -168,6 +167,8 @@ struct test tests[] = {
 	_TEST(0041_fetch_max_bytes, 0),
 	_TEST(0042_many_topics, 0),
 	_TEST(0043_no_connection, TEST_F_LOCAL),
+	_TEST(0045_subscribe_update, 0),
+	_TEST(0045_subscribe_update_topic_remove, TEST_F_KNOWN_ISSUE),
         { NULL }
 };
 
@@ -318,13 +319,6 @@ static void test_read_conf_file (const char *conf_path,
                         test_concurrent_max = (int)strtod(val, NULL);
                         TEST_UNLOCK();
                         res = RD_KAFKA_CONF_OK;
-		} else if (!strcmp(name, "test.kafka-topics.sh")) {
-			TEST_LOCK();
-			if (test_topics_sh)
-				rd_free(test_topics_sh);
-			test_topics_sh = rd_strdup(val);
-			TEST_UNLOCK();
-			res = RD_KAFKA_CONF_OK;
 		} else if (!strcmp(name, "test.sql.command")) {
 			TEST_LOCK();
 			if (test_sql_cmd)
@@ -470,6 +464,13 @@ char *test_str_id_generate (char *dest, size_t dest_size) {
 	return dest;
 }
 
+/**
+ * Same as test_str_id_generate but returns a temporary string.
+ */
+const char *test_str_id_generate_tmp (void) {
+	static RD_TLS char ret[64];
+	return test_str_id_generate(ret, sizeof(ret));
+}
 
 /**
  * Format a message token
@@ -660,7 +661,7 @@ static void run_tests (const char *tests_to_run,
 
                 if ((test_flags && (test_flags & test->flags) != test_flags))
                         skip_reason = "filtered due to test flags";
-		if (test_neg_flags & test->flags)
+		if ((test_neg_flags & ~test_flags) & test->flags)
 			skip_reason = "Filtered due to negative test flags";
 		if (test_broker_version &&
 		    (test->minver > test_broker_version ||
@@ -924,8 +925,6 @@ static void test_cleanup (void) {
 		test->report_arr = NULL;
 	}
 
-	if (test_topics_sh)
-		rd_free(test_topics_sh);
 	if (test_sql_cmd)
 		rd_free(test_sql_cmd);
 }
@@ -990,6 +989,8 @@ int main(int argc, char **argv) {
 			       "  TEST_MODE - bare, helgrind, valgrind\n"
 			       "  TEST_SEED - random seed\n"
 			       "  RDKAFKA_TEST_CONF - test config file (test.conf)\n"
+			       "  KAFKA_PATH - Path to kafka source dir\n"
+			       "  ZK_ADDRESS - Zookeeper address\n"
                                "\n",
                                argv[0], argv[i]);
                         exit(1);
@@ -2586,14 +2587,17 @@ void test_kafka_topics (const char *fmt, ...) {
 	int r;
 	va_list ap;
 	test_timing_t t_cmd;
+	const char *kpath, *zk;
 
-	if (!test_kafka_path || !test_zk_address)
+	kpath = getenv("KAFKA_PATH");
+	zk = getenv("ZK_ADDRESS");
+
+	if (!kpath || !*kpath || !zk || !*zk)
 		TEST_FAIL("%s: KAFKA_PATH and ZK_ADDRESS must be set",
 			  __FUNCTION__);
 
 	r = rd_snprintf(cmd, sizeof(cmd),
-			"%s/bin/kafka-topics.sh --zookeeper %s ",
-			test_kafka_path, test_zk_address);
+			"%s/bin/kafka-topics.sh --zookeeper %s ", kpath, zk);
 	TEST_ASSERT(r < (int)sizeof(cmd));
 
 	va_start(ap, fmt);
@@ -2622,41 +2626,9 @@ void test_kafka_topics (const char *fmt, ...) {
  */
 void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor) {
-#ifdef _MSC_VER
-	TEST_FAIL("%s not supported on Windows, yet", __FUNCTION__);
-#else
-	char cmd[1024];
-	int r;
-	test_timing_t t_run;
-
-	TEST_LOCK();
-	if (!test_topics_sh) {
-		TEST_UNLOCK();
-		TEST_FAIL("\"test.kafka-topics.sh\" not configured, should be "
-			  "\"..path/to/kafka-topics-sh "
-			  "--zookeeper someAddress\"");
-	}
-
-	rd_snprintf(cmd, sizeof(cmd), "%s --create --topic \"%s\" "
+	return test_kafka_topics("--create --topic \"%s\" "
 		    "--replication-factor %d --partitions %d",
-		    test_topics_sh, topicname,
-		    replication_factor, partition_cnt);
-	TEST_UNLOCK();
-
-	TEST_SAY("Executing: %s\n", cmd);
-	TIMING_START(&t_run, "exec.create.topic");
-	r = system(cmd);
-	TIMING_STOP(&t_run);
-
-	if (r == -1)
-		TEST_FAIL("system(\"%s\") failed: %s", cmd, strerror(errno));
-	else if (WIFSIGNALED(r))
-		TEST_FAIL("system(\"%s\") terminated by signal %d\n", cmd,
-			  WTERMSIG(r));
-	else if (WEXITSTATUS(r))
-		TEST_FAIL("system(\"%s\") failed with exit status %d\n",
-			  cmd, WEXITSTATUS(r));
-#endif
+		    topicname, replication_factor, partition_cnt);
 }
 
 
@@ -2727,4 +2699,63 @@ void test_report_add (struct test *test, const char *fmt, ...) {
 	test->report_arr[test->report_cnt++] = rd_strdup(buf);
 
 	TEST_SAYL(1, "Report #%d: %s\n", test->report_cnt-1, buf);
+}
+
+/**
+ * Returns 1 if KAFKA_PATH and ZK_ADDRESS is set to se we can use the
+ * kafka-topics.sh script to manually create topics.
+ */
+int test_can_create_topics (void) {
+#ifdef _MSC_VER
+	return 0
+#else
+	const char *s;
+
+	if (!(s = getenv("KAFKA_PATH")) || !*s)
+		return 0;
+	if (!(s = getenv("ZK_ADDRESS")) || !*s)
+		return 0;
+
+	return 1;
+#endif
+}
+
+
+/**
+ * Wait for \p event_type, discarding all other events prior to it.
+ */
+rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
+				   rd_kafka_event_type_t event_type,
+				   int timeout_ms) {
+	test_timing_t t_w;
+	int64_t abs_timeout = test_clock() + (timeout_ms * 1000);
+
+	TIMING_START(&t_w, "wait_event");
+	while (test_clock() < abs_timeout) {
+		rd_kafka_event_t *rkev;
+
+		rkev = rd_kafka_queue_poll(eventq,
+					   (abs_timeout - test_clock())/1000);
+
+		if (rd_kafka_event_type(rkev) == event_type) {
+			TIMING_STOP(&t_w);
+			return rkev;
+		}
+
+		if (!rkev)
+			continue;
+
+		if (rd_kafka_event_error(rkev))
+			TEST_SAY("discarding ignored event %s: %s\n",
+				 rd_kafka_event_name(rkev),
+				 rd_kafka_event_error_string(rkev));
+		else
+			TEST_SAY("discarding ignored event %s\n",
+				 rd_kafka_event_name(rkev));
+		rd_kafka_event_destroy(rkev);
+
+	}
+	TIMING_STOP(&t_w);
+
+	return NULL;
 }

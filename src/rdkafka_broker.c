@@ -715,8 +715,8 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 
 
 
-static void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
-                                             rd_kafka_op_t *rko) {
+void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
+				      rd_kafka_op_t *rko) {
 	rd_kafka_buf_t *rkbuf;
 	rd_kafka_itopic_t *rkt =
 		rko->rko_u.metadata.rkt ?

@@ -1066,3 +1066,42 @@ int rd_kafka_topic_partition_available (const rd_kafka_topic_t *app_rkt,
 void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
         return rd_kafka_topic_a2i(app_rkt)->rkt_conf.opaque;
 }
+
+
+
+int rd_kafka_topic_info_cmp (const void *_a, const void *_b) {
+	const rd_kafka_topic_info_t *a = _a, *b = _b;
+	int r;
+
+	if ((r = strcmp(a->topic, b->topic)))
+		return r;
+
+	return a->partition_cnt - b->partition_cnt;
+}
+
+
+/**
+ * Allocate new topic_info.
+ * \p topic is copied.
+ */
+rd_kafka_topic_info_t *rd_kafka_topic_info_new (const char *topic,
+						int partition_cnt) {
+	rd_kafka_topic_info_t *ti;
+	size_t tlen = strlen(topic) + 1;
+
+	/* Allocate space for the topic along with the struct */
+	ti = rd_malloc(sizeof(*ti) + tlen);
+	ti->topic = (char *)(ti+1);
+	memcpy((char *)ti->topic, topic, tlen);
+	ti->partition_cnt = partition_cnt;
+
+	return ti;
+}
+
+/**
+ * Destroy/free topic_info
+ */
+void rd_kafka_topic_info_destroy (rd_kafka_topic_info_t *ti) {
+	rd_free(ti);
+}
+

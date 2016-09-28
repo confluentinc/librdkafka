@@ -171,6 +171,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The metadata is automatically refreshed on error and connect. "
 	  "Use -1 to disable the intervalled refresh.",
 	  -1, 3600*1000, 5*60*1000 },
+	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_ALIAS,
+	  .sdef = "topic.metadata.refresh.interval.ms" },
 	{ _RK_GLOBAL, "topic.metadata.refresh.fast.cnt", _RK_C_INT,
 	  _RK(metadata_refresh_fast_cnt),
 	  "When a topic looses its leader this number of metadata requests "

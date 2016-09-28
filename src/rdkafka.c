@@ -473,6 +473,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 	cnd_destroy(&rk->rk_broker_state_change_cnd);
 	mtx_destroy(&rk->rk_broker_state_change_lock);
 
+	if (rk->rk_full_metadata)
+		rd_kafka_metadata_destroy(rk->rk_full_metadata);
 	rd_kafkap_str_destroy(rk->rk_conf.client_id);
         rd_kafkap_str_destroy(rk->rk_conf.group_id);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
@@ -929,7 +931,11 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
         if (!rkb)
                 return;
 
-        if (rk->rk_conf.metadata_refresh_sparse)
+	/* Dont do sparse requests if there is a consumer group with an
+	 * active subscription since subscriptions need to be able to match
+	 * on all topics. */
+        if (rk->rk_conf.metadata_refresh_sparse &&
+	    (!rk->rk_cgrp || !rk->rk_cgrp->rkcg_subscription))
                 rd_kafka_broker_metadata_req(rkb, 0 /* known topics */, NULL,
 					     RD_KAFKA_NO_REPLYQ,
                                              "sparse periodic refresh");
@@ -2477,62 +2483,6 @@ rd_kafka_crash (const char *file, int line, const char *function,
         abort();
 }
 
-
-rd_kafka_resp_err_t
-rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
-                   rd_kafka_topic_t *only_rkt,
-                   const struct rd_kafka_metadata **metadatap,
-                   int timeout_ms) {
-        rd_kafka_q_t *rkq;
-        rd_kafka_broker_t *rkb;
-        rd_kafka_op_t *rko;
-	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
-
-        /* Query any broker that is up, and if none are up pick the first one,
-         * if we're lucky it will be up before the timeout */
-	rkb = rd_kafka_broker_any_usable(rk, timeout_ms);
-	if (!rkb)
-		return RD_KAFKA_RESP_ERR__TRANSPORT;
-
-        rkq = rd_kafka_q_new(rk);
-
-        /* Async: request metadata */
-        rd_kafka_broker_metadata_req(rkb, all_topics,
-                                     only_rkt ?
-                                     rd_kafka_topic_a2i(only_rkt) : NULL,
-                                     RD_KAFKA_REPLYQ(rkq, 0),
-                                     "application requested");
-
-        rd_kafka_broker_destroy(rkb);
-
-        /* Wait for reply (or timeout) */
-        rko = rd_kafka_q_pop(rkq, rd_timeout_remains(ts_end), 0);
-
-        rd_kafka_q_destroy(rkq);
-
-        /* Timeout */
-        if (!rko)
-                return RD_KAFKA_RESP_ERR__TIMED_OUT;
-
-        /* Error */
-        if (rko->rko_err) {
-                rd_kafka_resp_err_t err = rko->rko_err;
-                rd_kafka_op_destroy(rko);
-                return err;
-        }
-
-        /* Reply: pass metadata pointer to application who now owns it*/
-        rd_kafka_assert(rk, rko->rko_u.metadata.metadata);
-        *metadatap = rko->rko_u.metadata.metadata;
-        rko->rko_u.metadata.metadata = NULL;
-        rd_kafka_op_destroy(rko);
-
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
-}
-
-void rd_kafka_metadata_destroy (const struct rd_kafka_metadata *metadata) {
-        rd_free((void *)metadata);
-}
 
 
 

@@ -13,6 +13,7 @@ receive.message.max.bytes                |  *  | 1000 .. 1000000000 |     100000
 max.in.flight.requests.per.connection    |  *  | 1 .. 1000000    |       1000000 | Maximum number of in-flight requests the client will send. This setting applies per broker connection. <br>*Type: integer*
 metadata.request.timeout.ms              |  *  | 10 .. 900000    |         60000 | Non-topic request timeout in milliseconds. This is for metadata requests, etc. <br>*Type: integer*
 topic.metadata.refresh.interval.ms       |  *  | -1 .. 3600000   |        300000 | Topic metadata refresh interval in milliseconds. The metadata is automatically refreshed on error and connect. Use -1 to disable the intervalled refresh. <br>*Type: integer*
+metadata.max.age.ms                      |  *  |                 |               | Alias for `topic.metadata.refresh.interval.ms`
 topic.metadata.refresh.fast.cnt          |  *  | 0 .. 1000       |            10 | When a topic looses its leader this number of metadata requests are sent with `topic.metadata.refresh.fast.interval.ms` interval disregarding the `topic.metadata.refresh.interval.ms` value. This is used to recover quickly from transitioning leader brokers. <br>*Type: integer*
 topic.metadata.refresh.fast.interval.ms  |  *  | 1 .. 60000      |           250 | See `topic.metadata.refresh.fast.cnt` description <br>*Type: integer*
 topic.metadata.refresh.sparse            |  *  | true, false     |          true | Sparse metadata requests (consumes less network bandwidth) <br>*Type: boolean*

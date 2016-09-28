@@ -144,3 +144,15 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
 
+
+typedef struct rd_kafka_topic_info_s {
+	const char *topic;          /**< Allocated along with struct */
+	int   partition_cnt;
+} rd_kafka_topic_info_t;
+
+
+int rd_kafka_topic_info_cmp (const void *_a, const void *_b);
+rd_kafka_topic_info_t *rd_kafka_topic_info_new (const char *topic,
+						int partition_cnt);
+void rd_kafka_topic_info_destroy (rd_kafka_topic_info_t *ti);
+

@@ -271,16 +271,16 @@ static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
 void test_msg_fmt (char *dest, size_t dest_size,
 		   uint64_t testid, int32_t partition, int msgid);
 void test_msg_parse0 (const char *func, int line,
-		      uint64_t testid, const void *ptr, size_t size,
+		      uint64_t testid, rd_kafka_message_t *rkmessage,
 		      int32_t exp_partition, int *msgidp);
-#define test_msg_parse(testid,ptr,size,exp_partition,msgidp)	\
+#define test_msg_parse(testid,rkmessage,exp_partition,msgidp)	\
 	test_msg_parse0(__FUNCTION__,__LINE__,\
-			testid,ptr,size,exp_partition,msgidp)
+			testid,rkmessage,exp_partition,msgidp)
 
 
 static RD_INLINE int jitter (int low, int high) RD_UNUSED;
 static RD_INLINE int jitter (int low, int high) {
-	return (low + (rand() % (high+1)));
+	return (low + (rand() % ((high-low)+1)));
 }
 
 

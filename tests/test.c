@@ -489,17 +489,21 @@ void test_msg_fmt (char *dest, size_t dest_size,
  * Parse a message token
  */
 void test_msg_parse0 (const char *func, int line,
-		      uint64_t testid, const void *ptr, size_t size,
+		      uint64_t testid, rd_kafka_message_t *rkmessage,
 		      int32_t exp_partition, int *msgidp) {
 	char buf[128];
 	uint64_t in_testid;
 	int in_part;
 
-	if (!ptr)
-		TEST_FAIL("%s:%i: Message has empty key\n",
-			  func, line);
+	if (!rkmessage->key)
+		TEST_FAIL("%s:%i: Message (%s [%"PRId32"] @ %"PRId64") "
+			  "has empty key\n",
+			  func, line,
+			  rd_kafka_topic_name(rkmessage->rkt),
+			  rkmessage->partition, rkmessage->offset);
 
-	rd_snprintf(buf, sizeof(buf), "%.*s", (int)size, (char *)ptr);
+	rd_snprintf(buf, sizeof(buf), "%.*s", (int)rkmessage->key_len,
+		    (char *)rkmessage->key);
 
 	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
 		   &in_testid, &in_part, msgidp) != 3)
@@ -1536,8 +1540,7 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 			TIMING_STOP(&t_first);
 
 		if (parse_fmt)
-			test_msg_parse(testid, rkmessage->key,
-				       rkmessage->key_len, partition, &msg_id);
+			test_msg_parse(testid, rkmessage, partition, &msg_id);
 		else
 			msg_id = 0;
 

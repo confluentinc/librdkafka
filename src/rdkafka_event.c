@@ -134,7 +134,9 @@ const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev) {
 	{
 	case RD_KAFKA_OP_ERR:
 	case RD_KAFKA_OP_CONSUMER_ERR:
-		return rkev->rko_u.err.errstr;
+		if (rkev->rko_u.err.errstr)
+			return rkev->rko_u.err.errstr;
+		/* FALLTHRU */
 	default:
 		return rd_kafka_err2str(rkev->rko_err);
 	}

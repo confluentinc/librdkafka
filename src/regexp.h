@@ -4,9 +4,9 @@
 typedef struct Reprog Reprog;
 typedef struct Resub Resub;
 
-Reprog *regcomp(const char *pattern, int cflags, const char **errorp);
-int regexec(Reprog *prog, const char *string, Resub *sub, int eflags);
-void regfree(Reprog *prog);
+Reprog *re_regcomp(const char *pattern, int cflags, const char **errorp);
+int re_regexec(Reprog *prog, const char *string, Resub *sub, int eflags);
+void re_regfree(Reprog *prog);
 
 enum {
 	/* regcomp flags */

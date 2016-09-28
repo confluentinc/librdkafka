@@ -156,3 +156,5 @@ rd_kafka_topic_info_t *rd_kafka_topic_info_new (const char *topic,
 						int partition_cnt);
 void rd_kafka_topic_info_destroy (rd_kafka_topic_info_t *ti);
 
+int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
+			  const char *topic);

@@ -36,7 +36,7 @@
 #include "rdlog.h"
 #include "rdsysqueue.h"
 #include "rdtime.h"
-
+#include "rdregex.h"
 
 
 const char *rd_kafka_topic_state_names[] = {
@@ -1103,5 +1103,30 @@ rd_kafka_topic_info_t *rd_kafka_topic_info_new (const char *topic,
  */
 void rd_kafka_topic_info_destroy (rd_kafka_topic_info_t *ti) {
 	rd_free(ti);
+}
+
+
+/**
+ * @brief Match \p topic to \p pattern.
+ *
+ * If pattern begins with "^" it is considered a regexp,
+ * otherwise a simple string comparison is performed.
+ *
+ * @returns 1 on match, else 0.
+ */
+int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
+			  const char *topic) {
+	char errstr[128];
+
+	if (*pattern == '^') {
+		int r = rd_regex_match(pattern, topic, errstr, sizeof(errstr));
+		if (unlikely(r == -1))
+			rd_kafka_dbg(rk, TOPIC, "TOPICREGEX",
+				     "Topic \"%s\" regex \"%s\" "
+				     "matching failed: %s",
+				     topic, pattern, errstr);
+		return r == 1;
+	} else
+		return !strcmp(pattern, topic);
 }
 

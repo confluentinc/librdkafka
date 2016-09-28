@@ -119,9 +119,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SASL
 		{ 0x8, "sasl" },
 #endif
-#if HAVE_REGEX
 		{ 0x10, "regex" },
-#endif
 #if WITH_LZ4
 		{ 0x20, "lz4" },
 #endif

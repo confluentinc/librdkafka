@@ -1,3 +1,5 @@
+#include "rd.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <setjmp.h>
@@ -821,19 +823,19 @@ static void dumpprog(Reprog *prog)
 }
 #endif
 
-Reprog *regcomp(const char *pattern, int cflags, const char **errorp)
+Reprog *re_regcomp(const char *pattern, int cflags, const char **errorp)
 {
 	Renode *node;
 	Reinst *split, *jump;
 	int i;
 
-	g.prog = malloc(sizeof (Reprog));
-	g.pstart = g.pend = malloc(sizeof (Renode) * strlen(pattern) * 2);
+	g.prog = rd_malloc(sizeof (Reprog));
+	g.pstart = g.pend = rd_malloc(sizeof (Renode) * strlen(pattern) * 2);
 
 	if (setjmp(g.kaboom)) {
 		if (errorp) *errorp = g.error;
-		free(g.pstart);
-		free(g.prog);
+		rd_free(g.pstart);
+		rd_free(g.prog);
 		return NULL;
 	}
 
@@ -853,7 +855,7 @@ Reprog *regcomp(const char *pattern, int cflags, const char **errorp)
 		die("syntax error");
 
 	g.prog->nsub = g.nsub;
-	g.prog->start = g.prog->end = malloc((count(node) + 6) * sizeof (Reinst));
+	g.prog->start = g.prog->end = rd_malloc((count(node) + 6) * sizeof (Reinst));
 
 	split = emit(g.prog, I_SPLIT);
 	split->x = split + 3;
@@ -872,17 +874,17 @@ Reprog *regcomp(const char *pattern, int cflags, const char **errorp)
 	dumpprog(g.prog);
 #endif
 
-	free(g.pstart);
+	rd_free(g.pstart);
 
 	if (errorp) *errorp = NULL;
 	return g.prog;
 }
 
-void regfree(Reprog *prog)
+void re_regfree(Reprog *prog)
 {
 	if (prog) {
-		free(prog->start);
-		free(prog);
+		rd_free(prog->start);
+		rd_free(prog);
 	}
 }
 
@@ -1101,7 +1103,7 @@ dead: ;
 	return 0;
 }
 
-int regexec(Reprog *prog, const char *sp, Resub *sub, int eflags)
+int re_regexec(Reprog *prog, const char *sp, Resub *sub, int eflags)
 {
 	Resub scratch;
 	int i;

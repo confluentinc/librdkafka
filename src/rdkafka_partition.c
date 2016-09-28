@@ -31,12 +31,7 @@
 #include "rdkafka_request.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_partition.h"
-
-#if HAVE_REGEX
-#include <regex.h>
-#endif
-
-
+#include "rdregex.h"
 
 const char *rd_kafka_fetch_states[] = {
 	"none",
@@ -2397,40 +2392,22 @@ int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 	int ret = 0;
 
 	if (*rktpar->topic == '^') {
-#if HAVE_REGEX
-		regex_t re;
-		int re_err;
+		char errstr[128];
 
-		/* FIXME: cache compiled regex */
-		re_err = regcomp(&re, rktpar->topic, REG_EXTENDED|REG_NOSUB);
-		if (re_err) {
-			char re_errstr[128];
-			regerror(re_err, &re, re_errstr, sizeof(re_errstr));
+		ret = rd_regex_match(rktpar->topic, topic,
+				     errstr, sizeof(errstr));
+		if (ret == -1) {
 			rd_kafka_dbg(rk, CGRP,
 				     "SUBMATCH",
 				     "Invalid regex for member "
 				     "\"%.*s\" subscription \"%s\": %s",
 				     RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
-				     rktpar->topic, re_errstr);
+				     rktpar->topic, errstr);
 			return 0;
 		}
 
-		if (regexec(&re, topic, 0, NULL, 0) != REG_NOMATCH) {
-			if (matched_by_regex)
-				*matched_by_regex = 1;
-
-			ret = 1;
-		}
-		regfree(&re);
-#else
-		rd_kafka_dbg(rk, CGRP,
-			     "SUBMATCH",
-			     "Regex support not built in: can't match member "
-			     "\"%.*s\" subscription \"%s\"",
-			     RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
-			     rktpar->topic);
-		return 0;
-#endif
+		if (ret && matched_by_regex)
+			*matched_by_regex = 1;
 
 	} else if (!strcmp(rktpar->topic, topic)) {
 

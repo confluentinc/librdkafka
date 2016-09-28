@@ -32,9 +32,7 @@
 void rd_kafka_pattern_destroy (rd_kafka_pattern_list_t *plist,
                                rd_kafka_pattern_t *rkpat) {
         TAILQ_REMOVE(&plist->rkpl_head, rkpat, rkpat_link);
-#if HAVE_REGEX
-	regfree(&rkpat->rkpat_re);
-#endif
+	rd_regex_destroy(rkpat->rkpat_re);
         rd_free(rkpat->rkpat_orig);
         rd_free(rkpat);
 }
@@ -46,20 +44,12 @@ void rd_kafka_pattern_add (rd_kafka_pattern_list_t *plist,
 
 rd_kafka_pattern_t *rd_kafka_pattern_new (const char *pattern,
                                           char *errstr, int errstr_size) {
-#if HAVE_REGEX
         rd_kafka_pattern_t *rkpat;
-	int re_err;
 
 	rkpat = rd_calloc(1, sizeof(*rkpat));
 
 	/* Verify and precompile pattern */
-	if ((re_err = regcomp(&rkpat->rkpat_re, pattern,
-			      REG_EXTENDED|REG_NOSUB))) {
-		char re_errstr[128];
-		regerror(re_err, &rkpat->rkpat_re,
-			 re_errstr, sizeof(re_errstr));
-		rd_snprintf(errstr, errstr_size,
-			    "Regex compilation failed: %s", re_errstr);
+	if (!(rkpat->rkpat_re = rd_regex_comp(pattern, errstr, errstr_size))) {
 		rd_free(rkpat);
 		return NULL;
 	}
@@ -67,25 +57,17 @@ rd_kafka_pattern_t *rd_kafka_pattern_new (const char *pattern,
         rkpat->rkpat_orig = rd_strdup(pattern);
 
         return rkpat;
-#else
-	rd_snprintf(errstr, errstr_size,
-		    "Regex support not built-in");
-	return NULL;
-#endif
 }
 
 
 
 int rd_kafka_pattern_match (rd_kafka_pattern_list_t *plist, const char *str) {
-#if HAVE_REGEX
         rd_kafka_pattern_t *rkpat;
 
         TAILQ_FOREACH(rkpat, &plist->rkpl_head, rkpat_link) {
-
-                if (regexec(&rkpat->rkpat_re, str, 0, NULL, 0) != REG_NOMATCH)
+		if (rd_regex_exec(rkpat->rkpat_re, str))
                         return 1;
         }
-#endif
 
         return 0;
 }

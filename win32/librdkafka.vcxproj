@@ -201,6 +201,7 @@
     <ClInclude Include="..\src\rdwin32.h" />
     <ClInclude Include="..\src\win32_config.h" />
     <ClInclude Include="..\src\xxhash.h" />
+    <ClInclude Include="..\src\regexp.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\rdaddr.c" />
@@ -234,6 +235,7 @@
     <ClCompile Include="..\src\snappy.c" />
     <ClCompile Include="..\src\tinycthread.c" />
     <ClCompile Include="..\src\xxhash.c" />
+    <ClCompile Include="..\src\regexp.c" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\LICENSE..txt" />

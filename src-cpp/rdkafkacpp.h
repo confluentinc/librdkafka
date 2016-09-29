@@ -1452,6 +1452,23 @@ class RD_EXPORT Consumer : public virtual Handle {
   virtual ErrorCode stop (Topic *topic, int32_t partition) = 0;
 
   /**
+   * @brief Seek consumer for topic+partition to \p offset which is either an
+   *        absolute or logical offset.
+   *
+   * If \p timeout_ms is not 0 the call will wait this long for the
+   * seek to be performed. If the timeout is reached the internal state
+   * will be unknown and this function returns `ERR__TIMED_OUT`.
+   * If \p timeout_ms is 0 it will initiate the seek but return
+   * immediately without any error reporting (e.g., async).
+   *
+   * This call triggers a fetch queue barrier flush.
+   *
+   * @returns an ErrorCode to indicate success or failure.
+   */
+  virtual ErrorCode seek (Topic *topic, int32_t partition, int64_t offset,
+			  int timeout_ms) = 0;
+
+  /**
    * @brief Consume a single message from \p topic and \p partition.
    *
    * \p timeout_ms is maximum amount of time to wait for a message to be

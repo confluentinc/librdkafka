@@ -87,15 +87,20 @@ rd_tmpabuf_failed (rd_tmpabuf_t *tab) {
  *          in the tmpabuf.
  */
 static RD_UNUSED void *
-rd_tmpabuf_alloc (rd_tmpabuf_t *tab, size_t size) {
+rd_tmpabuf_alloc0 (const char *func, int line, rd_tmpabuf_t *tab, size_t size) {
 	void *ptr;
 
 	if (unlikely(tab->failed))
 		return NULL;
 
-	if (unlikely(tab->of + size >= tab->size)) {
-		if (tab->assert_on_fail)
+	if (unlikely(tab->of + size > tab->size)) {
+		if (tab->assert_on_fail) {
+			fprintf(stderr,
+				"%s: %s:%d: requested size %zd + %zd > %zd\n",
+				__FUNCTION__, func, line, tab->of, size,
+				tab->size);
 			assert(!*"rd_tmpabuf_alloc: not enough size in buffer");
+		}
 		return NULL;
 	}
 
@@ -105,6 +110,9 @@ rd_tmpabuf_alloc (rd_tmpabuf_t *tab, size_t size) {
 	return ptr;
 }
 
+#define rd_tmpabuf_alloc(tab,size) \
+	rd_tmpabuf_alloc0(__FUNCTION__,__LINE__,tab,size)
+
 /**
  * @brief Write \p buf of \p size bytes to tmpabuf memory in an aligned fashion.
  *
@@ -113,23 +121,30 @@ rd_tmpabuf_alloc (rd_tmpabuf_t *tab, size_t size) {
  *          in the tmpabuf.
  */
 static RD_UNUSED void *
-rd_tmpabuf_write (rd_tmpabuf_t *tab, const void *buf, size_t size) {
-	void *ptr = rd_tmpabuf_alloc(tab, size);
+rd_tmpabuf_write0 (const char *func, int line,
+		   rd_tmpabuf_t *tab, const void *buf, size_t size) {
+	void *ptr = rd_tmpabuf_alloc0(func, line, tab, size);
 
 	if (ptr)
 		memcpy(ptr, buf, size);
 
 	return ptr;
 }
+#define rd_tmpabuf_write(tab,buf,size) \
+	rd_tmpabuf_write0(__FUNCTION__, __LINE__, tab, buf, size)
 
 
 /**
  * @brief Wrapper for rd_tmpabuf_write() that takes a nul-terminated string.
  */
 static RD_UNUSED char *
-rd_tmpabuf_write_str (rd_tmpabuf_t *tab, const char *str) {
-	return rd_tmpabuf_write(tab, str, strlen(str)+1);
+rd_tmpabuf_write_str0 (const char *func, int line,
+		       rd_tmpabuf_t *tab, const char *str) {
+	return rd_tmpabuf_write0(func, line, tab, str, strlen(str)+1);
 }
+#define rd_tmpabuf_write_str(tab,str) \
+	rd_tmpabuf_write_str0(__FUNCTION__, __LINE__, tab, str)
+
 
 
 /**

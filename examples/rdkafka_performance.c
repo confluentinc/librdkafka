@@ -212,7 +212,7 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 
 		printf("%% Consume error for topic \"%s\" [%"PRId32"] "
 		       "offset %"PRId64": %s\n",
-		       rd_kafka_topic_name(rkmessage->rkt),
+		       rkmessage->rkt ? rd_kafka_topic_name(rkmessage->rkt):"",
 		       rkmessage->partition,
 		       rkmessage->offset,
 		       rd_kafka_message_errstr(rkmessage));

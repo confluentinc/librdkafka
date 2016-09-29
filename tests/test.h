@@ -505,7 +505,7 @@ void test_timeout_set (int timeout);
 char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 
 void test_report_add (struct test *test, const char *fmt, ...);
-int test_can_create_topics (void);
+int test_can_create_topics (int skip);
 
 rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
 				   rd_kafka_event_type_t event_type,

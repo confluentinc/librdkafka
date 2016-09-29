@@ -121,6 +121,7 @@ _TEST_DECL(0040_io_event);
 _TEST_DECL(0041_fetch_max_bytes);
 _TEST_DECL(0042_many_topics);
 _TEST_DECL(0043_no_connection);
+_TEST_DECL(0044_partition_cnt);
 _TEST_DECL(0045_subscribe_update);
 _TEST_DECL(0045_subscribe_update_topic_remove);
 
@@ -167,6 +168,7 @@ struct test tests[] = {
 	_TEST(0041_fetch_max_bytes, 0),
 	_TEST(0042_many_topics, 0),
 	_TEST(0043_no_connection, TEST_F_LOCAL),
+	_TEST(0044_partition_cnt, 0),
 	_TEST(0045_subscribe_update, 0),
 	_TEST(0045_subscribe_update_topic_remove, TEST_F_KNOWN_ISSUE),
         { NULL }
@@ -2707,17 +2709,25 @@ void test_report_add (struct test *test, const char *fmt, ...) {
 /**
  * Returns 1 if KAFKA_PATH and ZK_ADDRESS is set to se we can use the
  * kafka-topics.sh script to manually create topics.
+ *
+ * If \p skip is set TEST_SKIP() will be called with a helpful message.
  */
-int test_can_create_topics (void) {
+int test_can_create_topics (int skip) {
 #ifdef _MSC_VER
+	if (skip)
+		TEST_SKIP("Cannot create topics on Win32");
 	return 0;
 #else
 	const char *s;
 
-	if (!(s = getenv("KAFKA_PATH")) || !*s)
+	if (!(s = getenv("KAFKA_PATH")) || !*s ||
+	    !(s = getenv("ZK_ADDRESS")) || !*s) {
+		if (skip)
+			TEST_SKIP("Cannot create topics "
+				  "(set KAFKA_PATH and ZK_ADDRESS)\n");
 		return 0;
-	if (!(s = getenv("ZK_ADDRESS")) || !*s)
-		return 0;
+	}
+
 
 	return 1;
 #endif

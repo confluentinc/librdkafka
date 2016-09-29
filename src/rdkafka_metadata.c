@@ -512,7 +512,6 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk,
 			cnt++;
 		}
         }
-	rd_kafka_dbg(rk, TOPIC, "MATCH",
-		     "%zd matched", cnt);
+
 	return cnt;
 }

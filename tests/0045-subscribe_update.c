@@ -350,11 +350,8 @@ static void do_test_topic_remove (void) {
 
 int main_0045_subscribe_update (int argc, char **argv) {
 
-	if (!test_can_create_topics()) {
-		TEST_SKIP("Cannot create topics "
-			  "(set KAFKA_PATH and ZK_ADDRESS)\n");
+	if (!test_can_create_topics(1))
 		return 0;
-	}
 	
 	do_test_non_exist_and_partchange();
 	do_test_regex();
@@ -365,11 +362,8 @@ int main_0045_subscribe_update (int argc, char **argv) {
 
 int main_0045_subscribe_update_topic_remove (int argc, char **argv) {
 
-	if (!test_can_create_topics()) {
-		TEST_SKIP("Cannot create topics "
-			  "(set KAFKA_PATH and ZK_ADDRESS)\n");
+	if (!test_can_create_topics(1))
 		return 0;
-	}
 
 	do_test_topic_remove();
 

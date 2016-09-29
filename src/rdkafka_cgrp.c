@@ -880,7 +880,7 @@ static void rd_kafka_cgrp_offsets_fetch_response (
  */
 static void
 rd_kafka_cgrp_offsets_fetch (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb,
-                             const rd_kafka_topic_partition_list_t *offsets) {
+                             rd_kafka_topic_partition_list_t *offsets) {
 	rd_kafka_topic_partition_list_t *use_offsets;
 
 	/* Make a copy of the offsets */

@@ -490,14 +490,13 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 /**
  * Send OffsetFetchRequest for toppar.
  *
- * 'parts' must be a sorted list of topic+partitions.
  * Any partition with a usable offset will be ignored, if all partitions
  * have usable offsets then no request is sent at all but an empty
  * reply is enqueued on the replyq.
  */
 void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
                                   int16_t api_version,
-                                  const rd_kafka_topic_partition_list_t *parts,
+                                  rd_kafka_topic_partition_list_t *parts,
 				  rd_kafka_replyq_t replyq,
                                   rd_kafka_resp_cb_t *resp_cb,
                                   void *opaque) {
@@ -520,7 +519,11 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
         /* ConsumerGroup */
         rd_kafka_buf_write_kstr(rkbuf, rkb->rkb_rk->
                                 rk_conf.group_id);
-        /* TopicArrayCnt */
+
+        /* Sort partitions by topic */
+        rd_kafka_topic_partition_list_sort_by_topic(parts);
+
+	/* TopicArrayCnt */
         of_TopicCnt = rd_kafka_buf_write_i32(rkbuf, 0); /* Updated later */
 
         for (i = 0 ; i < parts->cnt ; i++) {
@@ -550,6 +553,7 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
                         /* PartitionCnt, finalized later */
                         of_PartCnt = rd_kafka_buf_write_i32(rkbuf, 0);
                         PartCnt = 0;
+			last_topic = rktpar->topic;
                         TopicCnt++;
                 }
 
@@ -765,6 +769,7 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                         /* PartitionCnt, finalized later */
                         of_PartCnt = rd_kafka_buf_write_i32(rkbuf, 0);
                         PartCnt = 0;
+			last_topic = rktpar->topic;
                         TopicCnt++;
                 }
 

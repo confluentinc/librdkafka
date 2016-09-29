@@ -279,6 +279,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Local: No offset stored"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__OUTDATED,
 		  "Local: Outdated"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE,
+		  "Local: Timed out in queue"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),

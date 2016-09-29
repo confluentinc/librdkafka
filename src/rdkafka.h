@@ -269,6 +269,9 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__NO_OFFSET = -168,
 	/** Outdated */
 	RD_KAFKA_RESP_ERR__OUTDATED = -167,
+	/** Timed out in queue */
+	RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE = -166,
+
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
 

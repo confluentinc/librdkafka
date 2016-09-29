@@ -216,6 +216,9 @@ enum ErrorCode {
 	ERR__NO_OFFSET = -168,
 	/** Outdated */
 	ERR__OUTDATED = -167,
+	/** Timed out in queue */
+	ERR__TIMED_OUT_QUEUE = -166,
+
 	/** End internal error codes */
 	ERR__END = -100,
 

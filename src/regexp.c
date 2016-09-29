@@ -266,7 +266,7 @@ static int lexclass(void)
 {
 	int type = L_CCLASS;
 	int quoted, havesave, havedash;
-	Rune save;
+	Rune save = 0;
 
 	newcclass();
 
@@ -463,7 +463,7 @@ static void next(void)
 	g.lookahead = lex();
 }
 
-static int accept(int t)
+static int re_accept(int t)
 {
 	if (g.lookahead == t) {
 		next();
@@ -504,36 +504,36 @@ static Renode *parseatom(void)
 		next();
 		return atom;
 	}
-	if (accept('.'))
+	if (re_accept('.'))
 		return newnode(P_ANY);
-	if (accept('(')) {
+	if (re_accept('(')) {
 		atom = newnode(P_PAR);
 		if (g.nsub == MAXSUB)
 			die("too many captures");
 		atom->n = g.nsub++;
 		atom->x = parsealt();
 		g.sub[atom->n] = atom;
-		if (!accept(')'))
+		if (!re_accept(')'))
 			die("unmatched '('");
 		return atom;
 	}
-	if (accept(L_NC)) {
+	if (re_accept(L_NC)) {
 		atom = parsealt();
-		if (!accept(')'))
+		if (!re_accept(')'))
 			die("unmatched '('");
 		return atom;
 	}
-	if (accept(L_PLA)) {
+	if (re_accept(L_PLA)) {
 		atom = newnode(P_PLA);
 		atom->x = parsealt();
-		if (!accept(')'))
+		if (!re_accept(')'))
 			die("unmatched '('");
 		return atom;
 	}
-	if (accept(L_NLA)) {
+	if (re_accept(L_NLA)) {
 		atom = newnode(P_NLA);
 		atom->x = parsealt();
-		if (!accept(')'))
+		if (!re_accept(')'))
 			die("unmatched '('");
 		return atom;
 	}
@@ -545,10 +545,10 @@ static Renode *parserep(void)
 {
 	Renode *atom;
 
-	if (accept('^')) return newnode(P_BOL);
-	if (accept('$')) return newnode(P_EOL);
-	if (accept(L_WORD)) return newnode(P_WORD);
-	if (accept(L_NWORD)) return newnode(P_NWORD);
+	if (re_accept('^')) return newnode(P_BOL);
+	if (re_accept('$')) return newnode(P_EOL);
+	if (re_accept(L_WORD)) return newnode(P_WORD);
+	if (re_accept(L_NWORD)) return newnode(P_NWORD);
 
 	atom = parseatom();
 	if (g.lookahead == L_COUNT) {
@@ -556,11 +556,11 @@ static Renode *parserep(void)
 		next();
 		if (max < min)
 			die("invalid quantifier");
-		return newrep(atom, accept('?'), min, max);
+		return newrep(atom, re_accept('?'), min, max);
 	}
-	if (accept('*')) return newrep(atom, accept('?'), 0, REPINF);
-	if (accept('+')) return newrep(atom, accept('?'), 1, REPINF);
-	if (accept('?')) return newrep(atom, accept('?'), 0, 1);
+	if (re_accept('*')) return newrep(atom, re_accept('?'), 0, REPINF);
+	if (re_accept('+')) return newrep(atom, re_accept('?'), 1, REPINF);
+	if (re_accept('?')) return newrep(atom, re_accept('?'), 0, 1);
 	return atom;
 }
 
@@ -584,7 +584,7 @@ static Renode *parsealt(void)
 {
 	Renode *alt, *x;
 	alt = parsecat();
-	while (accept('|')) {
+	while (re_accept('|')) {
 		x = alt;
 		alt = newnode(P_ALT);
 		alt->x = x;

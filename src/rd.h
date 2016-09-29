@@ -136,6 +136,9 @@ char *rd_string_render (const char *template,
  * Portability
  */
 
+#define rd_kafka_broker_terminating(rkb) \
+        (rd_refcnt_get(&(rkb)->rkb_refcnt) <= 1)
+
 #ifdef strndupa
 #define rd_strndupa(DESTPTR,PTR,LEN)  (*(DESTPTR) = strndupa(PTR,LEN))
 #else

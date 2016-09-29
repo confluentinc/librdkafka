@@ -569,9 +569,9 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 if (rk->rk_conf.term_sig)
 			pthread_kill(rkb->rkb_thread, rk->rk_conf.term_sig);
 #endif
-
-                rd_kafka_broker_destroy(rkb);
-
+		while(rd_kafka_broker_terminating(rkb)) {
+                	rd_kafka_broker_destroy(rkb);
+		}
                 rd_kafka_wrlock(rk);
         }
 

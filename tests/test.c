@@ -2629,9 +2629,9 @@ void test_kafka_topics (const char *fmt, ...) {
  */
 void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor) {
-	return test_kafka_topics("--create --topic \"%s\" "
-		    "--replication-factor %d --partitions %d",
-		    topicname, replication_factor, partition_cnt);
+	test_kafka_topics("--create --topic \"%s\" "
+			  "--replication-factor %d --partitions %d",
+			  topicname, replication_factor, partition_cnt);
 }
 
 
@@ -2710,7 +2710,7 @@ void test_report_add (struct test *test, const char *fmt, ...) {
  */
 int test_can_create_topics (void) {
 #ifdef _MSC_VER
-	return 0
+	return 0;
 #else
 	const char *s;
 
@@ -2738,7 +2738,8 @@ rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
 		rd_kafka_event_t *rkev;
 
 		rkev = rd_kafka_queue_poll(eventq,
-					   (abs_timeout - test_clock())/1000);
+					   (int)(abs_timeout - test_clock())/
+					   1000);
 
 		if (rd_kafka_event_type(rkev) == event_type) {
 			TIMING_STOP(&t_w);

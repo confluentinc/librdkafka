@@ -577,6 +577,7 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 
 
 static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
+	int metadata_age;
 
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP ||
             rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_INIT)
@@ -662,6 +663,8 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
  * Update the effective list of subscribed topics and trigger a rejoin
  * if it changed.
  *
+ * Set \p topics to NULL for clearing the list.
+ *
  * @returns 1 on change, else 0.
  *
  * @remark Takes ownership of \p topics
@@ -671,7 +674,16 @@ static int rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
 	rd_kafka_topic_info_t *tinfo;
 	int i;
 
-	if (rd_list_cnt(topics) == 0)
+	if (!topics) {
+		if (!rd_list_empty(rkcg->rkcg_subscribed_topics))
+			rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
+				     "Group \"%.*s\": "
+				     "clearing subscribed topics list (%d)",
+				     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+				     rd_list_cnt(rkcg->rkcg_subscribed_topics));
+		topics = rd_list_new(0);
+
+	} else if (rd_list_cnt(topics) == 0)
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
 			     "Group \"%.*s\": "
 			     "no topics in metadata matched subscription",
@@ -704,9 +716,6 @@ static int rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
 			(void *)rd_kafka_topic_info_destroy);
 
 	rkcg->rkcg_subscribed_topics = topics;
-
-
-	rd_kafka_cgrp_rejoin(rkcg);
 
 	return 1;
 }
@@ -1572,11 +1581,9 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
         if (rkcg->rkcg_subscription) {
                 rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
                 rkcg->rkcg_subscription = NULL;
-
-		rd_list_destroy(rkcg->rkcg_subscribed_topics,
-				(void *)rd_kafka_topic_info_destroy);
-		rkcg->rkcg_subscribed_topics = rd_list_new(0);
         }
+
+	rd_kafka_cgrp_update_subscribed_topics(rkcg, NULL);
 
         /*
          * Clean-up group leader duties, if any.
@@ -1916,14 +1923,8 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg,
                 break;
 
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN:
-                break;
-
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA:
-                break;
-
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC:
-                break;
-
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN:
 		break;
 
@@ -2200,7 +2201,10 @@ void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
 	/*
 	 * Update
 	 */
-	rd_kafka_cgrp_update_subscribed_topics(rkcg, topics);
+	if (rd_kafka_cgrp_update_subscribed_topics(rkcg, topics)) {
+		/* List of subscribed topics changed, trigger rejoin. */
+		rd_kafka_cgrp_rejoin(rkcg);
+	}
 }
 
 

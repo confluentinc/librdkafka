@@ -1307,6 +1307,12 @@ void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
 
 	rktp->rktp_op_version = version;
 
+	/* Abort pending offset lookups. */
+	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
+		rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
+				    &rktp->rktp_offset_query_tmr,
+				    1/*lock*/);
+
         /* Clear out the forwarding queue. */
         rd_kafka_q_fwd_set(rktp->rktp_fetchq, NULL);
 

@@ -427,6 +427,12 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 		if (likely(now && rkbuf->rkbuf_ts_timeout > now))
 			continue;
 
+		/* Convert rkbuf_ts_sent to elapsed time since request */
+		if (rkbuf->rkbuf_ts_sent)
+			rkbuf->rkbuf_ts_sent = now - rkbuf->rkbuf_ts_sent;
+		else
+			rkbuf->rkbuf_ts_sent = now - rkbuf->rkbuf_ts_enq;
+
 		rd_kafka_bufq_deq(rkbq, rkbuf);
 
 		if (is_waitresp_q && rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING

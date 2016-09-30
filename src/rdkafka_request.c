@@ -1244,6 +1244,9 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
 
 err:
         actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request,
+				      RD_KAFKA_ERR_ACTION_IGNORE,
+				      RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
+
 				      RD_KAFKA_ERR_ACTION_END);
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {

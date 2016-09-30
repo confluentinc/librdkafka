@@ -345,8 +345,7 @@ int rd_kafka_features_check (rd_kafka_broker_t *rkb,
 			r = rd_kafka_ApiVersion_check(broker_apis, broker_api_cnt,
 						      match);
 
-			rd_rkb_dbg(rkb, PROTOCOL | RD_KAFKA_DBG_BROKER,
-				   "APIVERSION",
+			rd_rkb_dbg(rkb, FEATURE, "APIVERSION",
 				   " Feature %s: %s (%hd..%hd) "
 				   "%ssupported by broker",
 				   rd_kafka_features2str(rd_kafka_feature_map[i].
@@ -358,8 +357,8 @@ int rd_kafka_features_check (rd_kafka_broker_t *rkb,
 			fails += !r;
 		}
 
-		rd_rkb_dbg(rkb, PROTOCOL | RD_KAFKA_DBG_BROKER,
-			   "APIVERSION", "%s feature %s",
+		rd_rkb_dbg(rkb, FEATURE, "APIVERSION",
+			   "%s feature %s",
 			   fails ? "Disabling" : "Enabling",
 			   rd_kafka_features2str(rd_kafka_feature_map[i].feature));
 

@@ -314,7 +314,7 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 #define RD_KAFKA_DBG_BROKER     0x2
 #define RD_KAFKA_DBG_TOPIC      0x4
 #define RD_KAFKA_DBG_METADATA   0x8
-#define RD_KAFKA_DBG_PRODUCER   0x10
+#define RD_KAFKA_DBG_FEATURE    0x10
 #define RD_KAFKA_DBG_QUEUE      0x20
 #define RD_KAFKA_DBG_MSG        0x40
 #define RD_KAFKA_DBG_PROTOCOL   0x80

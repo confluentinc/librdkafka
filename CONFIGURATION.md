@@ -18,7 +18,7 @@ topic.metadata.refresh.fast.cnt          |  *  | 0 .. 1000       |            10
 topic.metadata.refresh.fast.interval.ms  |  *  | 1 .. 60000      |           250 | See `topic.metadata.refresh.fast.cnt` description <br>*Type: integer*
 topic.metadata.refresh.sparse            |  *  | true, false     |          true | Sparse metadata requests (consumes less network bandwidth) <br>*Type: boolean*
 topic.blacklist                          |  *  |                 |               | Topic blacklist, a comma-separated list of regular expressions for matching topic names that should be ignored in broker metadata information as if the topics did not exist. <br>*Type: pattern list*
-debug                                    |  *  | generic, broker, topic, metadata, producer, queue, msg, protocol, cgrp, security, fetch, all |               | A comma-separated list of debug contexts to enable. <br>*Type: CSV flags*
+debug                                    |  *  | generic, broker, topic, metadata, queue, msg, protocol, cgrp, security, fetch, feature, all |               | A comma-separated list of debug contexts to enable. Debugging the Producer: broker,topic,msg. Consumer: cgrp,topic,fetch <br>*Type: CSV flags*
 socket.timeout.ms                        |  *  | 10 .. 300000    |         60000 | Timeout for network requests. <br>*Type: integer*
 socket.blocking.max.ms                   |  *  | 1 .. 60000      |           100 | Maximum time a broker socket operation may block. A lower value improves responsiveness at the expense of slightly higher CPU usage. <br>*Type: integer*
 socket.send.buffer.bytes                 |  *  | 0 .. 100000000  |             0 | Broker socket send buffer size. System default is used if 0. <br>*Type: integer*

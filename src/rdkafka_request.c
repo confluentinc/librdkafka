@@ -1673,10 +1673,11 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 
         rd_kafka_buf_read_i32(rkbuf, &ApiArrayCnt);
 	if (ApiArrayCnt > 1000)
-		rd_kafka_buf_parse_fail(rkbuf, "ApiArrayCnt %"PRId32" out of range",
+		rd_kafka_buf_parse_fail(rkbuf,
+					"ApiArrayCnt %"PRId32" out of range",
 					ApiArrayCnt);
 
-	rd_rkb_dbg(rkb, PROTOCOL | RD_KAFKA_DBG_BROKER, "APIVERSION",
+	rd_rkb_dbg(rkb, FEATURE, "APIVERSION",
 		   "Broker API support:");
 
 	*apis = malloc(sizeof(**apis) * ApiArrayCnt);
@@ -1688,7 +1689,7 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 		rd_kafka_buf_read_i16(rkbuf, &api->MinVer);
 		rd_kafka_buf_read_i16(rkbuf, &api->MaxVer);
 
-		rd_rkb_dbg(rkb, PROTOCOL | RD_KAFKA_DBG_BROKER, "APIVERSION",
+		rd_rkb_dbg(rkb, FEATURE, "APIVERSION",
 			   "  ApiKey %s (%hd) Versions %hd..%hd",
 			   rd_kafka_ApiKey2str(api->ApiKey),
 			   api->ApiKey, api->MinVer, api->MaxVer);

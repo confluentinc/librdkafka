@@ -183,7 +183,8 @@ static void rd_kafka_broker_feature_enable (rd_kafka_broker_t *rkb,
 		return;
 
 	rkb->rkb_features |= features;
-	rd_rkb_dbg(rkb, BROKER, "FEATURE",
+	rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_PROTOCOL | RD_KAFKA_DBG_FEATURE,
+		   "FEATURE",
 		   "Updated enabled protocol features +%s to %s",
 		   rd_kafka_features2str(features),
 		   rd_kafka_features2str(rkb->rkb_features));
@@ -201,7 +202,8 @@ static void rd_kafka_broker_feature_disable (rd_kafka_broker_t *rkb,
 		return;
 
 	rkb->rkb_features &= ~features;
-	rd_rkb_dbg(rkb, BROKER, "FEATURE",
+	rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_PROTOCOL | RD_KAFKA_DBG_FEATURE,
+		   "FEATURE",
 		   "Updated enabled protocol features -%s to %s",
 		   rd_kafka_features2str(features),
 		   rd_kafka_features2str(rkb->rkb_features));
@@ -299,7 +301,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
-	rd_kafka_dbg(rkb->rkb_rk, BROKER, "BROKERFAIL",
+	rd_kafka_dbg(rkb->rkb_rk, BROKER | RD_KAFKA_DBG_PROTOCOL, "BROKERFAIL",
 		     "%s: failed: err: %s: (errno: %s)",
 		     rkb->rkb_name, rd_kafka_err2str(err),
 		     rd_strerror(errno_save));
@@ -1631,8 +1633,8 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 
 	/* Connect succeeded */
 	rkb->rkb_connid++;
-	rd_rkb_dbg(rkb, BROKER, "CONNECTED", "Connected (#%d)",
-		   rkb->rkb_connid);
+	rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_PROTOCOL,
+		   "CONNECTED", "Connected (#%d)", rkb->rkb_connid);
 	rkb->rkb_err.err = 0;
 	rkb->rkb_max_inflight = 1; /* Hold back other requests until
 				    * ApiVersion, SaslHandshake, etc

@@ -1522,6 +1522,9 @@ rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
 
 	rd_kafka_buf_autopush(rkbuf);
 
+	/* Metadata requests are part of the important control plane
+	 * and should go before other requests (Produce, Fetch, etc). */
+	rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_FLASH;
 
 	return rkbuf;
 }

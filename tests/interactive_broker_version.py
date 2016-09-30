@@ -174,7 +174,7 @@ if __name__ == '__main__':
             args.conf['sasl_users'] = 'testuser=testpass'
         args.conf['sasl_mechanisms'] = args.sasl
 
-    args.conf['conf'] = ["log.retention.bytes=1000000000"]
+    args.conf.get('conf', list()).append("log.retention.bytes=1000000000")
 
     for version in args.versions:
         test_version(version, cmd=args.cmd, deploy=args.deploy,

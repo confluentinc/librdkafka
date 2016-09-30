@@ -59,6 +59,12 @@
 
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 
+/**
+ * @brief Global counter+lock for all active librdkafka instances
+ */
+mtx_t rd_kafka_global_lock;
+int rd_kafka_global_cnt;
+
 
 /**
  * Last API error code, per thread.
@@ -85,12 +91,67 @@ int rd_kafka_thread_cnt (void) {
  */
 char RD_TLS rd_kafka_thread_name[64] = "app";
 
+
+
+static void rd_kafka_global_init (void) {
+#if ENABLE_SHAREDPTR_DEBUG
+        LIST_INIT(&rd_shared_ptr_debug_list);
+        mtx_init(&rd_shared_ptr_debug_mtx, mtx_plain);
+        atexit(rd_shared_ptrs_dump);
+#endif
+	mtx_init(&rd_kafka_global_lock, mtx_plain);
+}
+
 /**
- * Current number of live rd_kafka_t handles.
- * This is used by rd_kafka_wait_destroyed() to know when the library
- * has fully cleaned up after itself.
+ * @returns the current number of active librdkafka instances
  */
-static rd_atomic32_t rd_kafka_handle_cnt_curr; /* atomic */
+static int rd_kafka_global_cnt_get (void) {
+	int r;
+	mtx_lock(&rd_kafka_global_lock);
+	r = rd_kafka_global_cnt;
+	mtx_unlock(&rd_kafka_global_lock);
+	return r;
+}
+
+
+/**
+ * @brief Increase counter for active librdkafka instances.
+ * If this is the first instance the global constructors will be called, if any.
+ */
+static void rd_kafka_global_cnt_incr (void) {
+	mtx_lock(&rd_kafka_global_lock);
+	rd_kafka_global_cnt++;
+	if (rd_kafka_global_cnt == 1) {
+		rd_kafka_transport_init();
+#if WITH_SSL
+		rd_kafka_transport_ssl_init();
+#endif
+#if WITH_SASL
+		rd_kafka_sasl_global_init();
+#endif
+	}
+	mtx_unlock(&rd_kafka_global_lock);
+}
+
+/**
+ * @brief Decrease counter for active librdkafka instances.
+ * If this counter reaches 0 the global destructors will be called, if any.
+ */
+static void rd_kafka_global_cnt_decr (void) {
+	mtx_lock(&rd_kafka_global_lock);
+	rd_kafka_assert(NULL, rd_kafka_global_cnt > 0);
+	rd_kafka_global_cnt--;
+	if (rd_kafka_global_cnt == 0) {
+#if WITH_SASL
+		rd_kafka_sasl_global_term();
+#endif
+#if WITH_SSL
+		rd_kafka_transport_ssl_term();
+#endif
+	}
+	mtx_unlock(&rd_kafka_global_lock);
+}
+
 
 /**
  * Wait for all rd_kafka_t objects to be destroyed.
@@ -101,7 +162,7 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
 	rd_ts_t timeout = rd_clock() + (timeout_ms * 1000);
 
 	while (rd_kafka_thread_cnt() > 0 ||
-               rd_atomic32_get(&rd_kafka_handle_cnt_curr) > 0) {
+	       rd_kafka_global_cnt_get() > 0) {
 		if (rd_clock() >= timeout) {
 			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__TIMED_OUT,
 						ETIMEDOUT);
@@ -485,7 +546,7 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 	rwlock_destroy(&rk->rk_lock);
 
 	rd_free(rk);
-        rd_atomic32_sub(&rd_kafka_handle_cnt_curr, 1);
+	rd_kafka_global_cnt_decr();
 }
 
 
@@ -1031,17 +1092,6 @@ static void rd_kafka_term_sig_handler (int sig) {
 	/* nop */
 }
 
-static void rd_kafka_global_init (void) {
-#if ENABLE_SHAREDPTR_DEBUG
-        LIST_INIT(&rd_shared_ptr_debug_list);
-        mtx_init(&rd_shared_ptr_debug_mtx, mtx_plain);
-        atexit(rd_shared_ptrs_dump);
-#endif
-	rd_kafka_transport_init();
-#if WITH_SASL
-	rd_kafka_sasl_global_init();
-#endif
-}
 
 rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			  char *errstr, size_t errstr_size) {
@@ -1071,6 +1121,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                 rd_kafka_conf_destroy(conf);
                 return NULL;
         }
+
+	rd_kafka_global_cnt_incr();
 
 	/*
 	 * Set up the handle.
@@ -1149,6 +1201,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                         rd_kafka_destroy_internal(rk);
 			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
 						EINVAL);
+			rd_kafka_global_cnt_decr();
 			return NULL;
 		}
 	}
@@ -1164,6 +1217,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                         rd_kafka_destroy_internal(rk);
 			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
 						EINVAL);
+			rd_kafka_global_cnt_decr();
 			return NULL;
 		}
 	}
@@ -1214,6 +1268,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 #endif
 		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
 					errno);
+		rd_kafka_global_cnt_decr();
 		return NULL;
 	}
 
@@ -1224,10 +1279,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 						  RD_KAFKA_PROTO_PLAINTEXT,
 						  "", 0, RD_KAFKA_NODEID_UA);
         mtx_unlock(&rk->rk_internal_rkb_lock);
-
-
-        rd_atomic32_add(&rd_kafka_handle_cnt_curr, 1);
-
 
 	/* Add initial list of brokers from configuration */
 	if (rk->rk_conf.brokerlist) {

@@ -38,6 +38,7 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 void rd_kafka_broker_sasl_term (rd_kafka_broker_t *rkb);
 void rd_kafka_broker_sasl_init (rd_kafka_broker_t *rkb);
 
+void rd_kafka_sasl_global_term (void);
 int rd_kafka_sasl_global_init (void);
 
 int rd_kafka_sasl_conf_validate (rd_kafka_t *rk,

@@ -65,8 +65,6 @@
 #if WITH_SSL
 static mtx_t *rd_kafka_ssl_locks;
 static int    rd_kafka_ssl_locks_cnt;
-
-static once_flag rd_kafka_ssl_init_once = ONCE_FLAG_INIT;
 #endif
 
 
@@ -290,25 +288,25 @@ static unsigned long rd_kafka_transport_ssl_threadid_cb (void) {
 
 /**
  * Global OpenSSL cleanup.
- *
- * NOTE: This function is never called, see rd_kafka_transport_term()
  */
-static RD_UNUSED void rd_kafka_transport_ssl_term (void) {
+void rd_kafka_transport_ssl_term (void) {
 	int i;
 
-	ERR_free_strings();
+	CRYPTO_set_id_callback(NULL);
+	CRYPTO_set_locking_callback(NULL);
 
 	for (i = 0 ; i < rd_kafka_ssl_locks_cnt ; i++)
 		mtx_destroy(&rd_kafka_ssl_locks[i]);
 
 	rd_free(rd_kafka_ssl_locks);
+
 }
 
 
 /**
  * Global OpenSSL init.
  */
-static void rd_kafka_transport_ssl_init (void) {
+void rd_kafka_transport_ssl_init (void) {
 	int i;
 	
 	rd_kafka_ssl_locks_cnt = CRYPTO_num_locks();
@@ -618,9 +616,6 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	int r;
 	SSL_CTX *ctx;
 
-	call_once(&rd_kafka_ssl_init_once, rd_kafka_transport_ssl_init);
-
-	
 	ctx = SSL_CTX_new(SSLv23_client_method());
 	if (!ctx)
 		goto fail;
@@ -1260,18 +1255,12 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
  * Global cleanup.
  * This is dangerous and SHOULD NOT be called since it will rip
  * the rug from under the application if it uses any of this functionality
- * in its own code. This means we will leak some memory (in the OpenSSL case)
- * on exit.
+ * in its own code. This means we might leak some memory on exit.
  */
 void rd_kafka_transport_term (void) {
 #ifdef _MSC_VER
 	(void)WSACleanup(); /* FIXME: dangerous */
 #endif
-
-#if WITH_SSL
-	rd_kafka_transport_ssl_term();
-#endif
-
 }
 #endif
  

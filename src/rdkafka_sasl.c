@@ -657,10 +657,10 @@ int rd_kafka_sasl_conf_validate (rd_kafka_t *rk,
 
 /**
  * Global SASL termination.
- * NOTE: Should not be called since the application may be using SASL too.
  */
 void rd_kafka_sasl_global_term (void) {
-	sasl_done();
+	/* NOTE: Should not be called since the application may be using SASL too*/
+	/* sasl_done(); */
 	mtx_destroy(&rd_kafka_sasl_kinit_lock);
 }
 

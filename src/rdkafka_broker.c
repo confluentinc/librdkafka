@@ -882,13 +882,6 @@ void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
 
 
 /**
- * all_topics := if 1: retreive all topics&partitions from the broker
- *               if 0: just retrieve the topics we know about.
- * rkt        := all_topics=0 && only_rkt is set: only ask for specified topic.
- */
-
-
-/**
  * Returns a random broker (with refcnt increased) in state 'state'.
  * Uses Reservoir sampling.
  *

@@ -57,7 +57,9 @@ static void await_assignment (const char *pfx, rd_kafka_t *rk,
 	int exp_part_cnt = 0;
 
 	TEST_SAY("%s: waiting for assignment\n", pfx);
-	rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE, 10000);
+	rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE, 30000);
+	if (!rkev)
+		TEST_FAIL("timed out waiting for assignment");
 	TEST_ASSERT(rd_kafka_event_error(rkev) ==
 		    RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
 		    "expected ASSIGN, got %s",
@@ -106,7 +108,9 @@ static void await_revoke (const char *pfx, rd_kafka_t *rk,
 	rd_kafka_event_t *rkev;
 
 	TEST_SAY("%s: waiting for revoke\n", pfx);
-	rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE, 10000);
+	rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE, 30000);
+	if (!rkev)
+		TEST_FAIL("timed out waiting for revoke");
 	TEST_ASSERT(rd_kafka_event_error(rkev) ==
 		    RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
 		    "expected REVOKE, got %s",
@@ -162,7 +166,7 @@ static void do_test_non_exist_and_partchange (void) {
 	test_consumer_subscribe(rk, topic_a);
 
 	/* Should not see a rebalance since no topics are matched. */
-	await_no_rebalance("#1: empty", rk, queue, 5000);
+	await_no_rebalance("#1: empty", rk, queue, 10000);
 
 	TEST_SAY("#1: creating topic %s\n", topic_a);
 	test_create_topic(topic_a, 2, 1);
@@ -238,7 +242,7 @@ static void do_test_regex (void) {
 	test_create_topic(topic_c, 4, 1);
 
 	/* Should not see a rebalance since no topics are matched. */
-	await_no_rebalance("Regex: empty", rk, queue, 5000);
+	await_no_rebalance("Regex: empty", rk, queue, 10000);
 
 	TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_d);
 	test_create_topic(topic_d, 1, 1);
@@ -337,7 +341,7 @@ static void do_test_topic_remove (void) {
 		     rk, queue);
 
 	/* Should not see another rebalance since all topics now removed */
-	await_no_rebalance("Topic removal: empty", rk, queue, 5000);
+	await_no_rebalance("Topic removal: empty", rk, queue, 10000);
 
 	test_consumer_close(rk);
 	rd_kafka_queue_destroy(queue);

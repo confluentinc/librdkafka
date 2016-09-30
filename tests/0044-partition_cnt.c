@@ -54,7 +54,6 @@ static void test_producer_partition_cnt_change (void) {
 	const int partition_cnt = 4;
 	int msgcnt = 100000;
 	test_timing_t t_destroy;
-	int delivered = 0;
 	int produced = 0;
 
 	test_kafka_topics("--create --topic %s --replication-factor 1 "

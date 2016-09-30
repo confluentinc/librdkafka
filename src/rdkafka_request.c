@@ -1583,14 +1583,17 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                 }
 
                 rd_rkb_log(rkb, LOG_WARNING, "METADATA",
-                           "Metadata request failed: %s",
-                           rd_kafka_err2str(err));
+                           "Metadata request failed: %s (%dms)",
+                           rd_kafka_err2str(err),
+			   (int)(request->rkbuf_ts_sent/1000));
 	} else {
 		md = rd_kafka_parse_Metadata(rkb, rkt, rkbuf,
 					     rko->rko_u.metadata.all_topics);
-		if (!md)
+		if (!md) {
+			if (rd_kafka_buf_retry(rkb, request))
+				return;
 			err = RD_KAFKA_RESP_ERR__BAD_MSG;
-		else if (rkb->rkb_rk->rk_cgrp &&
+		} else if (rkb->rkb_rk->rk_cgrp &&
 			 rko->rko_u.metadata.all_topics)
 			rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
 							    md);
@@ -1630,8 +1633,11 @@ static void rd_kafka_assignor_handle_Metadata (rd_kafka_t *rk,
 
         if (!err) {
                 md = rd_kafka_parse_Metadata(rkb, NULL, rkbuf, 1/*all_topics*/);
-                if (!md)
+		if (!md) {
+			if (rd_kafka_buf_retry(rkb, request))
+				return;
                         err = RD_KAFKA_RESP_ERR__BAD_MSG;
+		}
         }
 
         rd_kafka_cgrp_handle_Metadata(rkcg, err, md);

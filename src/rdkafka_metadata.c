@@ -404,6 +404,12 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 	if (rd_kafka_terminating(rkb->rkb_rk))
                 goto done;
 
+	if (md->broker_cnt == 0 && md->topic_cnt == 0) {
+		rd_rkb_dbg(rkb, METADATA, "METADATA",
+			   "No brokers or topics in metadata: retrying");
+		goto err;
+	}
+
 	/* Update our list of brokers. */
 	for (i = 0 ; i < md->broker_cnt ; i++) {
 		rd_rkb_dbg(rkb, METADATA, "METADATA",

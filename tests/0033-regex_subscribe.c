@@ -276,8 +276,10 @@ static int do_test (const char *assignor) {
 		test_produce_msgs_easy(topics[i], testid,
 				       RD_KAFKA_PARTITION_UA, msgcnt);
 
-	test_conf_init(&conf, NULL, 0);
+	test_conf_init(&conf, NULL, 20);
 	test_conf_set(conf, "partition.assignment.strategy", assignor);
+	/* Speed up propagation of new topics */
+	test_conf_set(conf, "metadata.max.age.ms", "5000");
 
 	/* Create a single consumer to handle all subscriptions.
 	 * Has the nice side affect of testing multiple subscriptions. */

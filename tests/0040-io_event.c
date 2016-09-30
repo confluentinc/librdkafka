@@ -77,6 +77,8 @@ int main_0040_io_event (int argc, char **argv) {
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
 	test_conf_set(conf, "session.timeout.ms", "6000");
 	test_conf_set(conf, "enable.partition.eof", "false");
+	/* Speed up propagation of new topics */
+	test_conf_set(conf, "metadata.max.age.ms", "5000");
 	test_topic_conf_set(tconf, "auto.offset.reset", "earliest");
 	rk_c = test_create_consumer(topic, NULL, conf, tconf, NULL);
 
@@ -100,7 +102,7 @@ int main_0040_io_event (int argc, char **argv) {
 
 	/**
 	 * 1) Wait for rebalance event
-	 * 2) Wait 1 interval (1s) expectin no IO (nothing produced).
+	 * 2) Wait 1 interval (1s) expecting no IO (nothing produced).
 	 * 3) Produce half the messages
 	 * 4) Expect IO
 	 * 5) Consume the available messages

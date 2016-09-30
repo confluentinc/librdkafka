@@ -590,21 +590,39 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
 
 
 	/* We need up-to-date full metadata to continue.
-	 * The + 1000 is since metadata.refresh.interval.ms can be set to 0. */
-	if (rkcg->rkcg_rk->rk_ts_full_metadata +
-	    rkcg->rkcg_rk->rk_conf.metadata_refresh_interval_ms + 1000 <
-	    rd_clock()) {
+	 * The +1000 is since metadata.refresh.interval.ms can be set to 0. */
+	metadata_age = rkcg->rkcg_rk->rk_ts_full_metadata ?
+		(int)(rd_clock() - rkcg->rkcg_rk->rk_ts_full_metadata)/1000 :-1;
+	if (metadata_age == -1 ||
+	    metadata_age >
+	    rkcg->rkcg_rk->rk_conf.metadata_refresh_interval_ms + 1000) {
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
 			     "Group \"%.*s\": "
-			     "postponing join until full metadata is available",
-			     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
+			     "postponing join until full metadata is available"
+			     " (current metadata age %dms > "
+			     "metadata.max.age.ms %dms)",
+			     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+			     metadata_age,
+			     rkcg->rkcg_rk->rk_conf.
+			     metadata_refresh_interval_ms);
+
 		/* Trigger metadata request */
 		rd_kafka_metadata0(rkcg->rkcg_rk, 1 /* all topics */, NULL,
 				   RD_KAFKA_NO_REPLYQ, "consumer join");
+		return;
 	}
 
-	if (rd_list_empty(rkcg->rkcg_subscribed_topics))
+	if (rd_list_empty(rkcg->rkcg_subscribed_topics)) {
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
+			     "Group \"%.*s\": "
+			     "no matching topics based on %dms old metadata: "
+			     "next metadata refresh in %dms",
+			     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+			     metadata_age,
+			     rkcg->rkcg_rk->rk_conf.
+			     metadata_refresh_interval_ms - metadata_age);
 		return;
+	}
 
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN);
         rd_kafka_JoinGroupRequest(rkcg->rkcg_rkb, rkcg->rkcg_group_id,

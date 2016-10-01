@@ -253,6 +253,7 @@ rd_kafka_curr_msgs_get (rd_kafka_t *rk, unsigned int *cntp, size_t *sizep) {
 	if (rk->rk_type != RD_KAFKA_PRODUCER) {
 		*cntp = 0;
 		*sizep = 0;
+		return;
 	}
 
 	mtx_lock(&rk->rk_curr_msgs.lock);

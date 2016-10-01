@@ -490,6 +490,10 @@ class RD_EXPORT Event {
 
   /**
    * @returns Log message string.
+   *
+   * \c EVENT_LOG: Log message string.
+   * \c EVENT_STATS: JSON object (as string).
+   *
    * @remark Applies to LOG event type.
    */
   virtual std::string str () const = 0;

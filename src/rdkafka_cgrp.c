@@ -1160,10 +1160,10 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
  * Locality: cgrp thread
  */
 static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
-                                          rd_kafka_op_t *rko,
-					  int silent_empty) {
+                                          rd_kafka_op_t *rko) {
 	rd_kafka_topic_partition_list_t *offsets;
 	rd_kafka_resp_err_t err;
+	int silent_empty = rko->rko_u.offset_commit.silent_empty;
 
 	/* If offsets is NULL we shall use the current assignment. */
 	if (!rko->rko_u.offset_commit.partitions && rkcg->rkcg_assignment) {
@@ -1263,8 +1263,8 @@ static void rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg) {
 		rko->rko_u.offset_commit.opaque = rkcg->rkcg_rk->rk_conf.opaque;
 	}
         /* NULL partitions means current assignment */
-        rd_kafka_cgrp_offsets_commit(rkcg, rko,
-				     1/*skip-silently if no offsets*/);
+	rko->rko_u.offset_commit.silent_empty = 1;
+        rd_kafka_cgrp_offsets_commit(rkcg, rko);
 }
 
 
@@ -1823,7 +1823,7 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 
                 case RD_KAFKA_OP_OFFSET_COMMIT:
                         /* Trigger offsets commit. */
-                        rd_kafka_cgrp_offsets_commit(rkcg, rko, 0);
+                        rd_kafka_cgrp_offsets_commit(rkcg, rko);
                         rko = NULL; /* rko now owned by request */
                         break;
 

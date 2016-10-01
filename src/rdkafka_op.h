@@ -162,6 +162,8 @@ struct rd_kafka_op_s {
 				    rd_kafka_topic_partition_list_t *offsets,
 				    void *opaque);
 			void *opaque;
+			int silent_empty; /**< Fail silently if there are no
+					   *   offsets to commit. */
 		} offset_commit;
 
 		struct {

@@ -144,7 +144,7 @@ const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev) {
 
 
 void *rd_kafka_event_opaque (rd_kafka_event_t *rkev) {
-	switch (rkev->rko_type)
+	switch (rkev->rko_type & ~RD_KAFKA_OP_FLAGMASK)
 	{
 	case RD_KAFKA_OP_OFFSET_COMMIT:
 		return rkev->rko_u.offset_commit.opaque;

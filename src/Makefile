@@ -4,6 +4,8 @@ LIBVER=		1
 
 -include ../Makefile.config
 
+CPPFLAGS += -DLIBRDKAFKA_GIT_VERSION="\"$(shell git describe --abbrev=6 --dirty --tags 2>/dev/null)\""
+
 SRCS_$(WITH_SASL) += rdkafka_sasl.c
 SRCS_$(WITH_SNAPPY) += snappy.c
 SRCS_$(WITH_ZLIB) += rdgz.c

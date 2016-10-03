@@ -2497,10 +2497,22 @@ int rd_kafka_version (void) {
 }
 
 const char *rd_kafka_version_str (void) {
-	static char ret[64];
-	int ver = rd_kafka_version();
+	static char ret[128];
+	size_t of = 0, r;
 
-	if (!*ret) {
+	if (*ret)
+		return ret;
+
+#ifdef LIBRDKAFKA_GIT_VERSION
+	if (*LIBRDKAFKA_GIT_VERSION) {
+		of = rd_snprintf(ret, sizeof(ret), "%s",
+				 LIBRDKAFKA_GIT_VERSION);
+		if (of > sizeof(ret))
+			of = sizeof(ret);
+	}
+#endif
+	if (of == 0) {
+		int ver = rd_kafka_version();
 		int prel = (ver & 0xff);
 		rd_snprintf(ret, sizeof(ret), "%i.%i.%i",
 			    (ver >> 24) & 0xff,
@@ -2520,6 +2532,26 @@ const char *rd_kafka_version_str (void) {
 		}
 	}
 
+#if ENABLE_DEVEL
+	r = rd_snprintf(ret+of, sizeof(ret)-of, "-devel");
+	if (r > sizeof(ret)-of)
+		r = sizeof(ret)-of;
+	of += r;
+#endif
+
+#if ENABLE_SHAREDPTR_DEBUG
+	r = rd_snprintf(ret+of, sizeof(ret)-of, "-shptr");
+	if (r > sizeof(ret)-of)
+		r = sizeof(ret)-of;
+	of += r;
+#endif
+
+#if WITHOUT_OPTIMIZATION
+	r = rd_snprintf(ret+of, sizeof(ret)-of, "-O0");
+	if (r > sizeof(ret)-of)
+		r = sizeof(ret)-of;
+	of += r;
+#endif
 
 	return ret;
 }

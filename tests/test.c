@@ -2638,6 +2638,23 @@ void test_create_topic (const char *topicname, int partition_cnt,
 
 
 /**
+ * @brief Let the broker auto-create the topic for us.
+ */
+void test_auto_create_topic_rkt (rd_kafka_t *rk, rd_kafka_topic_t *rkt) {
+	const struct rd_kafka_metadata *metadata;
+	rd_kafka_resp_err_t err;
+	test_timing_t t;
+
+	TIMING_START(&t, "auto_create_topic");
+	err = rd_kafka_metadata(rk, 0, rkt, &metadata, tmout_multip(15000));
+	TIMING_STOP(&t);
+	TEST_ASSERT(!err, "metadata() failed: %s", rd_kafka_err2str(err));
+
+	rd_kafka_metadata_destroy(metadata);
+}
+
+
+/**
  * @brief Check if \p feature is builtin to librdkafka.
  * @returns returns 1 if feature is built in, else 0.
  */

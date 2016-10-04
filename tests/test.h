@@ -499,6 +499,7 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
 void test_kafka_topics (const char *fmt, ...);
 void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor);
+void test_auto_create_topic_rkt (rd_kafka_t *rk, rd_kafka_topic_t *rkt);
 int test_check_builtin (const char *feature);
 void test_timeout_set (int timeout);
 

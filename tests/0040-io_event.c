@@ -72,6 +72,7 @@ int main_0040_io_event (int argc, char **argv) {
 
 	rk_p = test_create_producer();
 	rkt_p = test_create_producer_topic(rk_p, topic, NULL);
+	test_auto_create_topic_rkt(rk_p, rkt_p);
 
 	test_conf_init(&conf, &tconf, 0);
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);

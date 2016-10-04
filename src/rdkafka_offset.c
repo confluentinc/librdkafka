@@ -347,11 +347,13 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 				   const rd_kafka_topic_partition_list_t *offsets) {
 	rd_kafka_op_t *rko;
 
-        if (!rk->rk_conf.offset_commit_cb)
+        if (!(rk->rk_conf.enabled_events & RD_KAFKA_EVENT_OFFSET_COMMIT))
 		return;
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
 	rko->rko_err = err;
+	rko->rko_u.offset_commit.cb = rk->rk_conf.offset_commit_cb;/*maybe NULL*/
+	rko->rko_u.offset_commit.opaque = rk->rk_conf.opaque;
 	if (offsets)
 		rko->rko_u.offset_commit.partitions =
 			rd_kafka_topic_partition_list_copy(offsets);
@@ -417,13 +419,13 @@ rd_kafka_commit (rd_kafka_t *rk,
 
         if (!async)
                 repq = rd_kafka_q_new(rk);
-	else if (rk->rk_conf.offset_commit_cb)
+	else if (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_OFFSET_COMMIT)
 		repq = rk->rk_rep;
 
         err = rd_kafka_commit0(rk, offsets, NULL,
 			       repq ? RD_KAFKA_REPLYQ(repq, 0) :
 			       RD_KAFKA_NO_REPLYQ,
-			       rk->rk_conf.offset_commit_cb,
+			       rk->rk_conf.offset_commit_cb /* maybe NULL */,
 			       rk->rk_conf.opaque);
 
         if (!async) {

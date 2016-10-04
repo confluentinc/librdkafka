@@ -287,3 +287,6 @@ int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko);
 extern rd_atomic32_t rd_kafka_op_cnt;
 
 void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko);
+
+void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko,
+			       const rd_kafka_message_t *rkmessage);

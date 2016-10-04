@@ -32,6 +32,7 @@
 #include "rdkafka_op.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
+#include "rdkafka_offset.h"
 
 /* Current number of rd_kafka_op_t */
 rd_atomic32_t rd_kafka_op_cnt;
@@ -499,4 +500,27 @@ int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 		return 0;
 
 	return 1;
+}
+
+
+/**
+ * @brief Store offset for fetched message.
+ */
+void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko,
+			       const rd_kafka_message_t *rkmessage) {
+	rd_kafka_toppar_t *rktp;
+
+	if (unlikely(rko->rko_type != RD_KAFKA_OP_FETCH || rko->rko_err))
+		return;
+
+	rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+
+	if (unlikely(!rk))
+		rk = rktp->rktp_rkt->rkt_rk;
+
+	rd_kafka_toppar_lock(rktp);
+	rktp->rktp_app_offset = rkmessage->offset+1;
+	if (rk->rk_conf.enable_auto_offset_store)
+		rd_kafka_offset_store0(rktp, rkmessage->offset+1, 0/*no lock*/);
+	rd_kafka_toppar_unlock(rktp);
 }

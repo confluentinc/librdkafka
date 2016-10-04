@@ -76,6 +76,7 @@ rd_kafka_event_message_next (rd_kafka_event_t *rkev) {
 	rd_kafka_op_t *rko = rkev;
 	rd_kafka_msg_t *rkm;
 	rd_kafka_msgq_t *rkmq, *rkmq2;
+	rd_kafka_message_t *rkmessage;
 
 	switch (rkev->rko_type)
 	{
@@ -89,7 +90,15 @@ rd_kafka_event_message_next (rd_kafka_event_t *rkev) {
 		if (rko->rko_u.fetch.evidx++ > 0)
 			return NULL;
 
-		return rd_kafka_message_get(rko);
+		rkmessage = rd_kafka_message_get(rko);
+		if (unlikely(!rkmessage))
+			return NULL;
+
+		/* Store offset */
+		rd_kafka_op_offset_store(NULL, rko, rkmessage);
+
+		return rkmessage;
+
 
 	default:
 		return NULL;

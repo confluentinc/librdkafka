@@ -1606,22 +1606,13 @@ static int rd_kafka_consume_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                                 int cb_type, void *opaque) {
 	struct consume_ctx *ctx = opaque;
 	rd_kafka_message_t *rkmessage;
-        rd_kafka_toppar_t *rktp;
-
-        rktp = rko->rko_rktp ? rd_kafka_toppar_s2i(rko->rko_rktp) : NULL;
 
         if (unlikely(rd_kafka_op_version_outdated(rko, 0)))
                 return 1;
 
 	rkmessage = rd_kafka_message_get(rko);
-	if (!rko->rko_err) {
-		rd_kafka_toppar_lock(rktp);
-		rktp->rktp_app_offset = rkmessage->offset+1;
-		if (rk->rk_conf.enable_auto_offset_store)
-			rd_kafka_offset_store0(rktp, rkmessage->offset+1,
-					       0/*no lock*/);
-		rd_kafka_toppar_unlock(rktp);
-	}
+
+	rd_kafka_op_offset_store(rk, rko, rkmessage);
 
 	ctx->consume_cb(rkmessage, ctx->opaque);
 
@@ -1740,16 +1731,7 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 	rkmessage = rd_kafka_message_get(rko);
 
 	/* Store offset */
-	if (!rko->rko_err) {
-                rd_kafka_toppar_t *rktp;
-                rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
-		rd_kafka_toppar_lock(rktp);
-		rktp->rktp_app_offset = rkmessage->offset+1;
-                if (rk->rk_conf.enable_auto_offset_store)
-                        rd_kafka_offset_store0(rktp, rkmessage->offset+1,
-                                               0/*no lock*/);
-		rd_kafka_toppar_unlock(rktp);
-        }
+	rd_kafka_op_offset_store(rk, rko, rkmessage);
 
 	rd_kafka_set_last_error(0, 0);
 

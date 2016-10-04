@@ -1256,10 +1256,10 @@ static void rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_op_t *rko;
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT);
-	if (rkcg->rkcg_rk->rk_conf.offset_commit_cb) {
+	if (rkcg->rkcg_rk->rk_conf.enabled_events & RD_KAFKA_EVENT_OFFSET_COMMIT) {
 		rd_kafka_op_set_replyq(rko, rkcg->rkcg_rk->rk_rep, 0);
 		rko->rko_u.offset_commit.cb =
-			rkcg->rkcg_rk->rk_conf.offset_commit_cb;
+			rkcg->rkcg_rk->rk_conf.offset_commit_cb; /*maybe NULL*/
 		rko->rko_u.offset_commit.opaque = rkcg->rkcg_rk->rk_conf.opaque;
 	}
         /* NULL partitions means current assignment */

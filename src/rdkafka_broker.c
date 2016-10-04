@@ -398,6 +398,14 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	 */
 	rd_kafka_bufq_connection_reset(rkb, &rkb->rkb_outbufs);
 
+	if (rd_kafka_terminating(rkb->rkb_rk))
+		rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_PROTOCOL, "BROKER",
+			   "instance is terminating: "
+			   "%"PRId32" buffers still in broker (refcnt %d) "
+			   "out queue",
+			   rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
+			   rd_refcnt_get(&rkb->rkb_refcnt));
+
 	/* Query for the topic leaders (async) */
 	if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY && statechange)
 		rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);

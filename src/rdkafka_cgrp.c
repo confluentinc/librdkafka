@@ -782,7 +782,7 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 	    rkcg->rkcg_ts_terminate +
 	    (rkcg->rkcg_rk->rk_conf.group_session_timeout_ms * 1000) <
 	    rd_clock()) {
-		rd_kafka_dbg(rkcg->rkcg_rk, CGRP,"CGRPTERM",
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
 			     "Group \"%s\": timing out %d op(s) in "
 			     "wait-for-coordinator queue",
 			     rkcg->rkcg_group_id->str,
@@ -802,6 +802,16 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_cgrp_terminated(rkcg);
                 return 1;
         } else {
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
+			     "Group \"%s\": "
+			     "waiting for %d toppar(s), %d unassignment(s), "
+			     "%d commit(s)%s before terminating",
+			     rkcg->rkcg_group_id->str,
+			     rd_list_cnt(&rkcg->rkcg_toppars),
+			     rkcg->rkcg_wait_unassign_cnt,
+			     rkcg->rkcg_wait_commit_cnt,
+			     (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)?
+			     ", wait-unassign flag," : "");
                 return 0;
         }
 }

@@ -30,23 +30,30 @@
 #include "rdkafka_event.h"
 #include "rd.h"
 
-
-static const char *rd_kafka_event_names[] = {
-	"(NONE)",
-	"DeliveryReport",
-	"Fetch",
-	"Log",
-	"Error",
-	"Rebalance",
-	"OffsetCommit"
-};
-
 rd_kafka_event_type_t rd_kafka_event_type (const rd_kafka_event_t *rkev) {
 	return rkev ? rkev->rko_evtype : RD_KAFKA_EVENT_NONE;
 }
 
 const char *rd_kafka_event_name (const rd_kafka_event_t *rkev) {
-	return rd_kafka_event_names[rkev?rkev->rko_evtype:RD_KAFKA_EVENT_NONE];
+	switch (rkev ? rkev->rko_evtype : RD_KAFKA_EVENT_NONE)
+	{
+	case RD_KAFKA_EVENT_NONE:
+		return "(NONE)";
+	case RD_KAFKA_EVENT_DR:
+		return "DeliveryReport";
+	case RD_KAFKA_EVENT_FETCH:
+		return "Fetch";
+	case RD_KAFKA_EVENT_LOG:
+		return "Log";
+	case RD_KAFKA_EVENT_ERROR:
+		return "Error";
+	case RD_KAFKA_EVENT_REBALANCE:
+		return "Rebalance";
+	case RD_KAFKA_EVENT_OFFSET_COMMIT:
+		return "OffsetCommit";
+	default:
+		return "?unknown?";
+	}
 }
 
 

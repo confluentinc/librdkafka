@@ -1152,6 +1152,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_DR;
 	if (rk->rk_conf.rebalance_cb)
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_REBALANCE;
+	if (rk->rk_conf.offset_commit_cb)
+		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OFFSET_COMMIT;
 
 	/* Convenience Kafka protocol null bytes */
 	rk->rk_null_bytes = rd_kafkap_bytes_new(NULL, 0);

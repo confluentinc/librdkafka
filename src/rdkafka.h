@@ -2672,22 +2672,19 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
 
 
 /**
- * @enum rd_kafka_event_type
- *
- * @brief rd_kafka_event_t type.
+ * @brief Event types
  */
-typedef enum rd_kafka_event_type_t {
-	RD_KAFKA_EVENT_NONE,
-	RD_KAFKA_EVENT_DR,            /**< Delivery report batch (producer) */
-	RD_KAFKA_EVENT_FETCH,         /**< Fetched message (consumer) */
-	RD_KAFKA_EVENT_LOG,           /**< Log message */
-	RD_KAFKA_EVENT_ERROR,         /**< Error */
-	RD_KAFKA_EVENT_REBALANCE,     /**< Group rebalance (consumer) */
-	RD_KAFKA_EVENT_OFFSET_COMMIT  /**< Offset commit result */
-} rd_kafka_event_type_t;
+typedef int rd_kafka_event_type_t;
+#define RD_KAFKA_EVENT_NONE          0x0
+#define RD_KAFKA_EVENT_DR            0x1  /**< Producer Delivery report batch */
+#define RD_KAFKA_EVENT_FETCH         0x2  /**< Fetched message (consumer) */
+#define RD_KAFKA_EVENT_LOG           0x4  /**< Log message */
+#define RD_KAFKA_EVENT_ERROR         0x8  /**< Error */
+#define RD_KAFKA_EVENT_REBALANCE     0x10 /**< Group rebalance (consumer) */
+#define RD_KAFKA_EVENT_OFFSET_COMMIT 0x20 /**< Offset commit result */
+
 
 typedef struct rd_kafka_op_s rd_kafka_event_t;
-
 
 
 /**

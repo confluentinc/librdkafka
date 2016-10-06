@@ -1234,7 +1234,7 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 		rkcg->rkcg_wait_commit_cnt++;
 
 
-	if (!offsets) {
+	if (!offsets || offsets->cnt == 0) {
 		err = RD_KAFKA_RESP_ERR__NO_OFFSET;
 		goto err;
 	}

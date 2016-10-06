@@ -1745,6 +1745,16 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
 	rkcg->rkcg_ts_terminate = rd_clock();
         rkcg->rkcg_reply_rko = rko;
 
+	/* If there's an oustanding rebalance_cb which has not yet been
+	 * served by the application it wont be served from now by any poll()
+	 * call since the application is calling close().
+	 * So we could either wait for close() to serve the queue or simply
+	 * perform an unassign call here directly to speed things up.
+	 * We choose the latter since the app has already decided to shut down
+	 * there is no point in lingering about. */
+	if (RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg))
+		rd_kafka_cgrp_assign(rkcg, NULL);
+
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION)
                 rd_kafka_cgrp_unsubscribe(rkcg, 1/*leave group*/);
         else if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN))

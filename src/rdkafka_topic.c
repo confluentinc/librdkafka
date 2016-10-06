@@ -851,7 +851,7 @@ static rd_list_t *rd_kafka_topic_get_all_partitions (rd_kafka_itopic_t *rkt) {
 
 	RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i)
 		rd_list_add(list, rd_kafka_toppar_keep(
-				    rd_kafka_toppar_s2i(rkt->rkt_p[i])));
+				    rd_kafka_toppar_s2i(s_rktp)));
 
 	if (rkt->rkt_ua)
 		rd_list_add(list, rd_kafka_toppar_keep(

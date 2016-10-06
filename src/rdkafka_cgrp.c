@@ -1064,6 +1064,7 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
 
 /**
  * Handler of OffsetCommit response (after parsing).
+ * @remark \p offsets may be NULL if \p err is set
  */
 static void
 rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
@@ -1130,7 +1131,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 	rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
         rd_kafka_op_t *rko_orig = opaque;
 	rd_kafka_topic_partition_list_t *offsets =
-		rko_orig->rko_u.offset_commit.partitions;
+		rko_orig->rko_u.offset_commit.partitions; /* maybe NULL */
 
 	RD_KAFKA_OP_TYPE_ASSERT(rko_orig, RD_KAFKA_OP_OFFSET_COMMIT);
 

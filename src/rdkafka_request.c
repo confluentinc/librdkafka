@@ -599,6 +599,9 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
 }
 
 
+/**
+ * @remark \p offsets may be NULL if \p err is set
+ */
 rd_kafka_resp_err_t
 rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
 			      rd_kafka_broker_t *rkb,

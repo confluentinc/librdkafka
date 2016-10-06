@@ -59,6 +59,16 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
 #define RD_KAFKA_CGRP_CAN_FETCH_START(rkcg) \
 	((rkcg)->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED)
 
+/**
+ * @returns true if cgrp is waiting for a rebalance_cb to be handled by
+ *          the application.
+ */
+#define RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg)			\
+	((rkcg)->rkcg_join_state ==				\
+	 RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB ||	\
+	 (rkcg)->rkcg_join_state ==				\
+	 RD_KAFKA_CGRP_JOIN_STATE_WAIT_REVOKE_REBALANCE_CB)
+
 
 const char *rd_kafka_cgrp_state_names[] = {
         "init",
@@ -76,7 +86,8 @@ const char *rd_kafka_cgrp_join_state_names[] = {
         "wait-metadata",
         "wait-sync",
         "wait-unassign",
-        "wait-rebalance_cb",
+        "wait-assign-rebalance_cb",
+	"wait-revoke-rebalance_cb",
         "assigned",
 	"started"
 };
@@ -558,8 +569,11 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 		     "revoke":"assign", assignment->cnt,
 		     rd_kafka_q_dest_name(rkcg->rkcg_q), reason);
 
-        rd_kafka_cgrp_set_join_state(
-                rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB);
+	rd_kafka_cgrp_set_join_state(
+		rkcg,
+		err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS ?
+		RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB :
+		RD_KAFKA_CGRP_JOIN_STATE_WAIT_REVOKE_REBALANCE_CB);
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_REBALANCE);
 	rko->rko_err = err;
@@ -1962,9 +1976,10 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg,
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA:
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC:
         case RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN:
+	case RD_KAFKA_CGRP_JOIN_STATE_WAIT_REVOKE_REBALANCE_CB:
 		break;
 
-        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB:
+        case RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB:
         case RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED:
 	case RD_KAFKA_CGRP_JOIN_STATE_STARTED:
                 if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION &&

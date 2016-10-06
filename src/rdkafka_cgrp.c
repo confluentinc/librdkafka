@@ -1513,6 +1513,13 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 		     rkcg->rkcg_assignment ? rkcg->rkcg_assignment->cnt : 0,
 		     rd_kafka_err2str(err));
 
+	if (rkcg->rkcg_join_state <= RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC) {
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
+			     "Heartbeat response: discarding outdated "
+			     "request (now in join-state %s)",
+			     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
+		return;
+	}
 
 	switch (err)
 	{
@@ -2148,6 +2155,8 @@ rd_kafka_cgrp_assignor_run (rd_kafka_cgrp_t *rkcg,
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGNOR",
                      "Group \"%s\": \"%s\" assignor run for %d member(s)",
                      rkcg->rkcg_group_id->str, protocol_name, member_cnt);
+
+	rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC);
 
         /* Respond to broker with assignment set or error */
         rd_kafka_SyncGroupRequest(rkcg->rkcg_rkb,

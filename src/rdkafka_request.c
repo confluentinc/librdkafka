@@ -951,6 +951,15 @@ void rd_kafka_handle_SyncGroup (rd_kafka_t *rk,
         rd_kafkap_bytes_t MemberState = RD_ZERO_INIT;
         int actions;
 
+	if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC) {
+		rd_kafka_dbg(rkb->rkb_rk, CGRP, "SYNCGROUP",
+			     "SyncGroup response: discarding outdated request "
+			     "(now in join-state %s)",
+			     rd_kafka_cgrp_join_state_names[rkcg->
+							    rkcg_join_state]);
+		return;
+	}
+
         if (err) {
                 ErrorCode = err;
                 goto err;
@@ -1130,6 +1139,15 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
         int32_t member_cnt;
         int actions;
         int i_am_leader = 0;
+
+	if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN) {
+		rd_kafka_dbg(rkb->rkb_rk, CGRP, "JOINGROUP",
+			     "JoinGroup response: discarding outdated request "
+			     "(now in join-state %s)",
+			     rd_kafka_cgrp_join_state_names[rkcg->
+							    rkcg_join_state]);
+		return;
+	}
 
         if (err) {
                 ErrorCode = err;

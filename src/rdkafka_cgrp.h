@@ -44,7 +44,7 @@
  */
 
 
-
+extern const char *rd_kafka_cgrp_join_state_names[];
 
 /**
  * Client group

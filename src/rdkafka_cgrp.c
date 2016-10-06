@@ -1566,9 +1566,10 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 		rd_interval_expedite(&rkcg->rkcg_coord_query_intvl, 0);
 		break;
 
+	case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
+		rd_kafka_cgrp_set_member_id(rkcg, "");
 	case RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS:
 	case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
-	case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
 	default:
                 rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
 

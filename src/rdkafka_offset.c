@@ -419,29 +419,13 @@ rd_kafka_commit (rd_kafka_t *rk,
 
         if (!async)
                 repq = rd_kafka_q_new(rk);
-	else if (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_OFFSET_COMMIT)
-		repq = rk->rk_rep;
 
         err = rd_kafka_commit0(rk, offsets, NULL,
-			       repq ? RD_KAFKA_REPLYQ(repq, 0) :
-			       RD_KAFKA_NO_REPLYQ,
-			       rk->rk_conf.offset_commit_cb /* maybe NULL */,
-			       rk->rk_conf.opaque);
+			       !async ? RD_KAFKA_REPLYQ(repq, 0) :
+			       RD_KAFKA_NO_REPLYQ, NULL, NULL);
 
         if (!async) {
-		rd_kafka_op_t *rko = rd_kafka_q_pop(repq, RD_POLL_INFINITE, 0);
-		if (!rko)
-			err = RD_KAFKA_RESP_ERR__TIMED_OUT;
-		else {
-			err = rko->rko_err;
-			if (rk->rk_conf.offset_commit_cb)
-				rk->rk_conf.offset_commit_cb(
-					rk, rko->rko_err,
-					rko->rko_u.offset_commit.partitions,
-					rko->rko_u.offset_commit.opaque);
-			rd_kafka_op_destroy(rko);
-		}
-
+		err = rd_kafka_q_wait_result(repq, RD_POLL_INFINITE);
                 rd_kafka_q_destroy(repq);
         } else {
                 err = RD_KAFKA_RESP_ERR_NO_ERROR;

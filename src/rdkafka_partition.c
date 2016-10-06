@@ -750,11 +750,11 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
         int internal_fallback = 0;
 
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-		     "====> %s [%"PRId32"]: %p delegate to %s (term %d, ref %d), for removal %d\n",
+		     "%s [%"PRId32"]: delegate to broker %s "
+		     "(rktp %p, term %d, ref %d, remove %d)",
 		     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-		     rktp,
-		     rkb ? rkb->rkb_name : "NULL",
-		     rd_kafka_terminating(rk),
+		     rkb ? rkb->rkb_name : "(none)",
+		     rktp, rd_kafka_terminating(rk),
 		     rd_refcnt_get(&rktp->rktp_refcnt),
 		     for_removal);
 
@@ -767,7 +767,7 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 
 	if (rktp->rktp_leader == rkb && !rktp->rktp_next_leader) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "Not updating broker for topic %.*s [%"PRId32"]: "
+			     "%.*s [%"PRId32"]: not updating broker: "
                              "already on correct broker %s",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
@@ -780,27 +780,27 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 
 	if (rktp->rktp_leader)
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "Broker %s no longer leader "
-			     "for topic %.*s [%"PRId32"]",
-			     rd_kafka_broker_name(rktp->rktp_leader),
+			     "%.*s [%"PRId32"]: broker %s no longer leader",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-			     rktp->rktp_partition);
+			     rktp->rktp_partition,
+			     rd_kafka_broker_name(rktp->rktp_leader));
+
 
 	if (rkb) {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "Broker %s is now leader for topic %.*s "
-			     "[%"PRId32"] with %i messages "
+			     "%.*s [%"PRId32"]: broker %s is now leader "
+			     "for partition with %i messages "
 			     "(%"PRIu64" bytes) queued",
-			     rd_kafka_broker_name(rkb),
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
+			     rd_kafka_broker_name(rkb),
 			     rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
 			     rd_atomic64_get(&rktp->rktp_msgq.rkmq_msg_bytes));
 
 
 	} else {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "No broker is leader for topic %.*s [%"PRId32"]",
+			     "%.*s [%"PRId32"]: no leader broker",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition);
 	}

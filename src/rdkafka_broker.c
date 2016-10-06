@@ -398,13 +398,27 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	 */
 	rd_kafka_bufq_connection_reset(rkb, &rkb->rkb_outbufs);
 
-	if (rd_kafka_terminating(rkb->rkb_rk))
-		rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_PROTOCOL, "BROKER",
-			   "instance is terminating: "
-			   "%"PRId32" buffers still in broker (refcnt %d) "
-			   "out queue",
+	/* Extra debugging for tracking termination-hang issues:
+	 * show what is keeping this broker from decommissioning. */
+	if (rd_kafka_terminating(rkb->rkb_rk) &&
+	    !rd_kafka_broker_terminating(rkb)) {
+		rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_PROTOCOL, "BRKTERM",
+			   "terminating: broker still has %d refcnt(s), "
+			   "%"PRId32" buffer(s), %d partition(s)",
+			   rd_refcnt_get(&rkb->rkb_refcnt),
 			   rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
-			   rd_refcnt_get(&rkb->rkb_refcnt));
+			   rkb->rkb_toppar_cnt);
+		rd_kafka_bufq_dump(rkb, "BRKOUTBUFS", &rkb->rkb_outbufs);
+#if ENABLE_SHAREDPTR_DEBUG
+		if (rd_refcnt_get(&rkb->rkb_refcnt) > 1) {
+			rd_rkb_dbg(rkb, BROKER, "BRKTERM",
+				   "Dumping shared pointers: "
+				   "this broker is %p", rkb);
+			rd_shared_ptrs_dump();
+		}
+#endif
+	}
+
 
 	/* Query for the topic leaders (async) */
 	if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY && statechange)
@@ -2961,11 +2975,6 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
                 rd_kafka_toppar_lock(rktp);
 
-		rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
-			   "Topic %s [%"PRId32"]: JOIN: %p",
-			   rktp->rktp_rkt->rkt_topic->str,
-			   rktp->rktp_partition, rktp);
-
                 /* Abort join if instance is terminating */
                 if (rd_kafka_terminating(rkb->rkb_rk) ||
 		    (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_REMOVE)) {
@@ -3010,9 +3019,9 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 }
 
                 rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
-                           "Topic %s [%"PRId32"]: joining broker",
+                           "Topic %s [%"PRId32"]: joining broker (rktp %p)",
                            rktp->rktp_rkt->rkt_topic->str,
-                           rktp->rktp_partition);
+                           rktp->rktp_partition, rktp);
 
                 rd_kafka_assert(NULL, rktp->rktp_s_for_rkb == NULL);
 		rktp->rktp_s_for_rkb = rd_kafka_toppar_keep(rktp);
@@ -3039,17 +3048,13 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
 		rd_kafka_toppar_lock(rktp);
 
-		rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
-			   "Topic %s [%"PRId32"]: LEAVE: %p",
-			   rktp->rktp_rkt->rkt_topic->str,
-			   rktp->rktp_partition, rktp);
-
 		/* Multiple PARTITION_LEAVEs are possible during partition
 		 * migration, make sure we're supposed to handle this one. */
 		if (unlikely(rktp->rktp_leader != rkb)) {
 			rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
 				   "Topic %s [%"PRId32"]: "
-				   "ignoring PARTITION_LEAVE: broker is not leader (%s)",
+				   "ignoring PARTITION_LEAVE: "
+				   "broker is not leader (%s)",
 				   rktp->rktp_rkt->rkt_topic->str,
 				   rktp->rktp_partition,
 				   rktp->rktp_leader ?
@@ -3067,12 +3072,12 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
 		rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
 			   "Topic %s [%"PRId32"]: leaving broker "
-			   "(%d messages in xmitq, next leader %s)",
+			   "(%d messages in xmitq, next leader %s, rktp %p)",
 			   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
 			   rd_kafka_msgq_len(&rktp->rktp_xmit_msgq),
 			   rktp->rktp_next_leader ?
 			   rd_kafka_broker_name(rktp->rktp_next_leader) :
-			   "(none)");
+			   "(none)", rktp);
 
 		/* Prepend xmitq(broker-local) messages to the msgq(global).
 		 * There is no msgq_prepend() so we append msgq to xmitq
@@ -3100,9 +3105,10 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                         rko = NULL;
                 } else {
 			rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
-				   "Topic %s [%"PRId32"]: HOPEFULLY REMOVING TOPPAR "
-				   "with %d msgs",
-				   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+				   "Topic %s [%"PRId32"]: no next leader, "
+				   "failing %d message(s) in partition queue",
+				   rktp->rktp_rkt->rkt_topic->str,
+				   rktp->rktp_partition,
 				   rd_kafka_msgq_len(&rktp->rktp_msgq));
 			rd_kafka_assert(NULL, rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) == 0);
 			rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,

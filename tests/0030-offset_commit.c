@@ -246,7 +246,19 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	TEST_SAY("%s: phase 1 complete, %d messages consumed, "
 		 "next expected offset is %"PRId64"\n",
 		 what, cnt, expected_offset);
-	
+
+        /* Issue #827: cause committed() to return prematurely by specifying
+         *             low timeout. The bug (use after free) will only
+         *             be catched by valgrind. */
+        do {
+                parts = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(parts, topic, partition);
+                err = rd_kafka_committed(rk, parts, 1);
+                rd_kafka_topic_partition_list_destroy(parts);
+                TEST_SAY("Issue #827: committed() returned %s\n",
+                         rd_kafka_err2str(err));
+        } while (err != RD_KAFKA_RESP_ERR__TIMED_OUT);
+
 	/* Query position */
 	parts = rd_kafka_topic_partition_list_new(1);
 	rd_kafka_topic_partition_list_add(parts, topic, partition);

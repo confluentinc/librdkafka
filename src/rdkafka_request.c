@@ -447,8 +447,7 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
                                      void *opaque) {
         rd_kafka_op_t *rko = opaque;
         rd_kafka_op_t *rko_reply;
-        rd_kafka_topic_partition_list_t *offsets =
-		rko->rko_u.offset_fetch.partitions;
+        rd_kafka_topic_partition_list_t *offsets;
 
 	RD_KAFKA_OP_TYPE_ASSERT(rko, RD_KAFKA_OP_OFFSET_FETCH);
 
@@ -458,17 +457,16 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
                 return;
         }
 
-        rd_kafka_assert(NULL, offsets != NULL);
+        offsets = rd_kafka_topic_partition_list_copy(
+                rko->rko_u.offset_fetch.partitions);
 
         rko_reply = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH|RD_KAFKA_OP_REPLY);
         rko_reply->rko_err = err;
+        rko_reply->rko_u.offset_fetch.partitions = offsets;
+        rko_reply->rko_u.offset_fetch.do_free = 1;
 	if (rko->rko_rktp)
 		rko_reply->rko_rktp = rd_kafka_toppar_keep(
 			rd_kafka_toppar_s2i(rko->rko_rktp));
-
-	/* Move offset & partitions to reply op. */
-	rko_reply->rko_u.offset_fetch = rko->rko_u.offset_fetch;
-	RD_MEMZERO(rko->rko_u.offset_fetch);
 
 	/* If all partitions already had usable offsets then there
 	 * was no request sent and thus no reply, the offsets list is

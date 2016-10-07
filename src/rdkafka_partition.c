@@ -2582,3 +2582,33 @@ rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
 			     rktpar->err ? rd_kafka_err2str(rktpar->err) : "");
 	}
 }
+
+
+/**
+ * @brief Update \p dst with info from \p src.
+ *
+ * Fields updated:
+ *  - offset
+ *  - err
+ *
+ * Will only partitions that are in both dst and src, other partitions will
+ * remain unchanged.
+ */
+void
+rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
+                                      const rd_kafka_topic_partition_list_t *src){
+        int i;
+
+        for (i = 0 ; i < dst->cnt ; i++) {
+                rd_kafka_topic_partition_t *d = &dst->elems[i];
+                rd_kafka_topic_partition_t *s;
+
+                if (!(s = rd_kafka_topic_partition_list_find(
+                              (rd_kafka_topic_partition_list_t *)src,
+                              d->topic, d->partition)))
+                        continue;
+
+                d->offset = s->offset;
+                d->err    = s->err;
+        }
+}

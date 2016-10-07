@@ -452,7 +452,9 @@ void
 rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
 				   const rd_kafka_topic_partition_list_t *rktparlist);
 
-
+void
+rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
+                                      const rd_kafka_topic_partition_list_t *src);
 
 /**
  * @brief Toppar + Op version tuple used for mapping Fetched partitions

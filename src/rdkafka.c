@@ -1852,12 +1852,15 @@ rd_kafka_committed (rd_kafka_t *rk,
         rd_kafka_cgrp_t *rkcg;
 	rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
 
+        if (!partitions)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
 	/* Set default offsets. */
 	rd_kafka_topic_partition_list_reset_offsets(partitions,
-						    RD_KAFKA_OFFSET_INVALID);
+                                                    RD_KAFKA_OFFSET_INVALID);
 
 	rkq = rd_kafka_q_new(rk);
 
@@ -1868,20 +1871,26 @@ rd_kafka_committed (rd_kafka_t *rk,
                 rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_FETCH);
 		rd_kafka_op_set_replyq(rko, rkq, NULL);
 
-		rko->rko_u.offset_fetch.partitions = partitions;
-		rko->rko_u.offset_fetch.do_free = 0;
+                /* Issue #827
+                 * Copy partition list to avoid use-after-free if we time out
+                 * here, the app frees the list, and then cgrp starts
+                 * processing the op. */
+		rko->rko_u.offset_fetch.partitions =
+                        rd_kafka_topic_partition_list_copy(partitions);
+		rko->rko_u.offset_fetch.do_free = 1;
 
-                rd_kafka_q_enq(rkcg->rkcg_ops, rko);
+                if (!rd_kafka_q_enq(rkcg->rkcg_ops, rko)) {
+                        err = RD_KAFKA_RESP_ERR__DESTROY;
+                        break;
+                }
 
                 rko = rd_kafka_q_pop(rkq, rd_timeout_remains(abs_timeout), 0);
                 if (rko) {
-                        rd_kafka_topic_partition_list_t *offsets =
-				rko->rko_u.offset_fetch.partitions;
-
-                        if (!(err = rko->rko_err)) {
-                                rd_kafka_assert(NULL, offsets == partitions);
-				rko->rko_u.offset_fetch.partitions = NULL;
-                        } else if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
+                        if (!(err = rko->rko_err))
+                                rd_kafka_topic_partition_list_update(
+                                        partitions,
+                                        rko->rko_u.offset_fetch.partitions);
+                        else if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
 				    err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
 				   !rd_kafka_brokers_wait_state_change(
 					   rk, state_version,

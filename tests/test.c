@@ -1324,12 +1324,22 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
  */
 void test_wait_delivery (rd_kafka_t *rk, int *msgcounterp) {
 	test_timing_t t_all;
+        int start_cnt = *msgcounterp;
 
         TIMING_START(&t_all, "PRODUCE.DELIVERY.WAIT");
 
 	/* Wait for messages to be delivered */
-	while (*msgcounterp > 0 && rd_kafka_outq_len(rk) > 0)
+	while (*msgcounterp > 0 && rd_kafka_outq_len(rk) > 0) {
 		rd_kafka_poll(rk, 10);
+                if (TIMING_EVERY(&t_all, 3*1000000)) {
+                        int delivered = start_cnt - *msgcounterp;
+                        TEST_SAY("wait_delivery: "
+                                 "%d/%d messages delivered: %d msgs/s\n",
+                                 delivered, start_cnt,
+                                 (int)(delivered /
+                                       (TIMING_DURATION(&t_all) / 1000000)));
+                }
+        }
 
 	TIMING_STOP(&t_all);
 

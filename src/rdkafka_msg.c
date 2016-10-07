@@ -48,7 +48,8 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 	}
 
 	if (likely(rkm->rkm_rkmessage.rkt != NULL))
-		rd_kafka_topic_destroy(rkm->rkm_rkmessage.rkt);
+		rd_kafka_topic_destroy0(
+                        rd_kafka_topic_a2s(rkm->rkm_rkmessage.rkt));
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
 		rd_free(rkm->rkm_payload);
@@ -458,11 +459,11 @@ int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
                 /* Partition not assigned, run partitioner. */
                 if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA) {
                         rd_kafka_topic_t *app_rkt;
-                        /* Provide a temporary app_rkt instance
-                         * if the application decided to destroy its
-                         * topic prior to delivery completion (issue #502) */
-                        if (unlikely(!(app_rkt = rkt->rkt_app_rkt)))
-                                app_rkt = rd_kafka_topic_keep_a(rkt);
+                        /* Provide a temporary app_rkt instance to protect
+                         * from the case where the application decided to
+                         * destroy its topic object prior to delivery completion
+                         * (issue #502). */
+                        app_rkt = rd_kafka_topic_keep_a(rkt);
                         partition = rkt->rkt_conf.
                                 partitioner(app_rkt,
                                             rkm->rkm_key,
@@ -470,10 +471,8 @@ int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
                                             rkt->rkt_partition_cnt,
                                             rkt->rkt_conf.opaque,
                                             rkm->rkm_opaque);
-
-                        if (unlikely(!rkt->rkt_app_rkt))
-                                rd_kafka_topic_destroy0(
-                                        rd_kafka_topic_a2s(app_rkt));
+                        rd_kafka_topic_destroy0(
+                                rd_kafka_topic_a2s(app_rkt));
                 } else
                         partition = rkm->rkm_partition;
 

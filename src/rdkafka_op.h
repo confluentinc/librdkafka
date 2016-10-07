@@ -211,7 +211,7 @@ struct rd_kafka_op_s {
 		} metadata;
 
 		struct {
-			rd_kafka_topic_t *rkt;
+			shptr_rd_kafka_itopic_t *s_rkt;
 			rd_kafka_msgq_t msgq;
 			rd_kafka_msgq_t msgq2;
 			int do_purge2;

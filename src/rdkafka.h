@@ -1431,6 +1431,7 @@ rd_kafka_topic_t *rd_kafka_topic_new(rd_kafka_t *rk, const char *topic,
 
 /**
  * @brief Destroy topic handle previously created with `rd_kafka_topic_new()`.
+ * @remark MUST NOT be used for internally created topics (topic_new0())
  */
 RD_EXPORT
 void rd_kafka_topic_destroy(rd_kafka_topic_t *rkt);

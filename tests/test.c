@@ -124,6 +124,7 @@ _TEST_DECL(0043_no_connection);
 _TEST_DECL(0044_partition_cnt);
 _TEST_DECL(0045_subscribe_update);
 _TEST_DECL(0045_subscribe_update_topic_remove);
+_TEST_DECL(0046_rkt_cache);
 
 /**
  * Define all tests here
@@ -171,6 +172,7 @@ struct test tests[] = {
 	_TEST(0044_partition_cnt, 0),
 	_TEST(0045_subscribe_update, 0),
 	_TEST(0045_subscribe_update_topic_remove, TEST_F_KNOWN_ISSUE),
+	_TEST(0046_rkt_cache, TEST_F_LOCAL),
         { NULL }
 };
 

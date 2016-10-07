@@ -123,8 +123,8 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 	case RD_KAFKA_OP_DR:
 		fprintf(fp, "%s %"PRId32" messages on %s\n", prefix,
 			rd_atomic32_get(&rko->rko_u.dr.msgq.rkmq_msg_cnt),
-			rko->rko_u.dr.rkt ?
-			rd_kafka_topic_a2i(rko->rko_u.dr.rkt)->
+			rko->rko_u.dr.s_rkt ?
+			rd_kafka_topic_s2i(rko->rko_u.dr.s_rkt)->
 			rkt_topic->str : "(n/a)");
 		break;
 	case RD_KAFKA_OP_OFFSET_COMMIT:
@@ -268,9 +268,8 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 		if (rko->rko_u.dr.do_purge2)
 			rd_kafka_msgq_purge(rko->rko_rk, &rko->rko_u.dr.msgq2);
 
-		if (rko->rko_u.dr.rkt)
-			rd_kafka_topic_destroy0(
-				rd_kafka_topic_a2s(rko->rko_u.dr.rkt));
+		if (rko->rko_u.dr.s_rkt)
+			rd_kafka_topic_destroy0(rko->rko_u.dr.s_rkt);
 		break;
 
 	case RD_KAFKA_OP_OFFSET_RESET:

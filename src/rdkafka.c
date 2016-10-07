@@ -2194,10 +2194,10 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 				rkm->rkm_rkmessage.err = rko->rko_err;
 				if (!rkm->rkm_rkmessage.rkt)
 					rkm->rkm_rkmessage.rkt =
-						rd_kafka_topic_keep_a(
-							rd_kafka_topic_a2i(
+                                                rd_kafka_topic_keep_a(
+							rd_kafka_topic_s2i(
 								rko->rko_u.dr.
-								rkt));
+								s_rkt));
                                 rk->rk_conf.dr_msg_cb(rk, &rkm->rkm_rkmessage,
                                                       rk->rk_conf.opaque);
 

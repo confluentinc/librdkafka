@@ -46,6 +46,56 @@ const char *rd_kafka_topic_state_names[] = {
 };
 
 
+
+/**
+ * @brief Increases the app's topic reference count and returns the app pointer.
+ *
+ * The app refcounts are implemented separately from the librdkafka refcounts
+ * and to play nicely with shptr we keep one single shptr for the application
+ * and increase/decrease a separate rkt_app_refcnt to keep track of its use.
+ *
+ * This only covers topic_new() & topic_destroy().
+ * The topic_t exposed in rd_kafka_message_t is NOT covered and is handled
+ * like a standard shptr -> app pointer conversion (keep_a()).
+ *
+ * @returns a (new) rkt app reference.
+ *
+ * @remark \p rkt and \p s_rkt are mutually exclusive.
+ */
+static rd_kafka_topic_t *rd_kafka_topic_keep_app (rd_kafka_itopic_t *rkt) {
+	rd_kafka_topic_t *app_rkt;
+
+        mtx_lock(&rkt->rkt_app_lock);
+	rkt->rkt_app_refcnt++;
+        if (!(app_rkt = rkt->rkt_app_rkt))
+                app_rkt = rkt->rkt_app_rkt = rd_kafka_topic_keep_a(rkt);
+        mtx_unlock(&rkt->rkt_app_lock);
+
+	return app_rkt;
+}
+
+/**
+ * @brief drop rkt app reference
+ */
+static void rd_kafka_topic_destroy_app (rd_kafka_topic_t *app_rkt) {
+	rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
+        shptr_rd_kafka_itopic_t *s_rkt = NULL;
+
+        mtx_lock(&rkt->rkt_app_lock);
+	rd_kafka_assert(NULL, rkt->rkt_app_refcnt > 0);
+	rkt->rkt_app_refcnt--;
+        if (unlikely(rkt->rkt_app_refcnt == 0)) {
+		rd_kafka_assert(NULL, rkt->rkt_app_rkt);
+		s_rkt = rd_kafka_topic_a2s(app_rkt);
+                rkt->rkt_app_rkt = NULL;
+	}
+        mtx_unlock(&rkt->rkt_app_lock);
+
+	if (s_rkt) /* final app reference lost, destroy the shared ptr. */
+		rd_kafka_topic_destroy0(s_rkt);
+}
+
+
 /**
  * Final destructor for topic. Refcnt must be 0.
  */
@@ -66,6 +116,7 @@ void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
 
 	rd_kafka_anyconf_destroy(_RK_TOPIC, &rkt->rkt_conf);
 
+        mtx_destroy(&rkt->rkt_app_lock);
 	rwlock_destroy(&rkt->rkt_lock);
         rd_refcnt_destroy(&rkt->rkt_refcnt);
 
@@ -76,15 +127,7 @@ void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
  * Application destroy
  */
 void rd_kafka_topic_destroy (rd_kafka_topic_t *app_rkt) {
-        rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
-        shptr_rd_kafka_itopic_t *s_rkt = rd_kafka_topic_a2s(app_rkt);
-
-        rd_kafka_topic_wrlock(rkt);
-        if (rkt->rkt_app_rkt == app_rkt)
-                rkt->rkt_app_rkt = NULL;
-        rd_kafka_topic_wrunlock(rkt);
-
-	rd_kafka_topic_destroy0(s_rkt);
+	rd_kafka_topic_destroy_app(app_rkt);
 }
 
 
@@ -212,6 +255,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
         s_rkt = rd_kafka_topic_keep(rkt);
 
 	rwlock_init(&rkt->rkt_lock);
+        mtx_init(&rkt->rkt_app_lock, mtx_plain);
 
 	/* Create unassigned partition */
 	rkt->rkt_ua = rd_kafka_toppar_new(rkt, RD_KAFKA_PARTITION_UA);
@@ -225,6 +269,8 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	return s_rkt;
 }
 
+
+
 /**
  * Create new app topic handle.
  *
@@ -234,6 +280,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
                                       rd_kafka_topic_conf_t *conf) {
         shptr_rd_kafka_itopic_t *s_rkt;
         rd_kafka_itopic_t *rkt;
+        rd_kafka_topic_t *app_rkt;
         int existing;
 
         s_rkt = rd_kafka_topic_new0(rk, topic, conf, &existing, 1/*lock*/);
@@ -243,16 +290,16 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
         rkt = rd_kafka_topic_s2i(s_rkt);
 
         /* Save a shared pointer to be used in callbacks. */
-        rd_kafka_topic_wrlock(rkt);
-        if (!rkt->rkt_app_rkt)
-                rkt->rkt_app_rkt = rd_kafka_topic_s2a(s_rkt);
-        rd_kafka_topic_wrunlock(rkt);
+	app_rkt = rd_kafka_topic_keep_app(rkt);
 
         /* Query for the topic leader (async) */
         if (!existing)
                 rd_kafka_topic_leader_query(rk, rkt);
 
-        return rkt->rkt_app_rkt;
+        /* Drop our reference since there is already/now a rkt_app_rkt */
+        rd_kafka_topic_destroy0(s_rkt);
+
+        return app_rkt;
 }
 
 

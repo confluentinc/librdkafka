@@ -1887,7 +1887,7 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 
 		rko = rd_kafka_op_new(RD_KAFKA_OP_DR);
 		rko->rko_err = err;
-		rko->rko_u.dr.rkt = rd_kafka_topic_keep_a(rkt);
+		rko->rko_u.dr.s_rkt = rd_kafka_topic_keep(rkt);
 		rd_kafka_msgq_init(&rko->rko_u.dr.msgq);
 
 		/* Move all messages to op's msgq */

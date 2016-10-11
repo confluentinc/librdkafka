@@ -21,7 +21,7 @@ class LibrdkafkaTestApp(App):
     def __init__(self, cluster, version, conf=None, tests=None):
         super(LibrdkafkaTestApp, self).__init__(cluster, conf=conf)
 
-        self.appid = UuidAllocator(self.cluster).next(trunc=8)
+        self.appid = UuidAllocator(self.cluster).next(self, trunc=8)
         self.autostart = False
         self.local_tests = True
         self.test_mode = ''  # Default mode (bare) to run-test.sh

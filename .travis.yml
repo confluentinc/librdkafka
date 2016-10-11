@@ -7,6 +7,11 @@ os:
   - linux
   - osx
 before_script: ccache -s || echo "CCache is not available."
+before_install:
+if [ "$TRAVIS_OS_NAME" == "osx" ]; then
+    brew update
+    brew install openssl
+fi
 script:
   ./configure && make -j2 all examples check && make -C tests run_local
 

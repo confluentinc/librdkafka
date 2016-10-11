@@ -432,6 +432,9 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 /**
  * Scan bufq for buffer timeouts, trigger buffer callback on timeout.
  *
+ * If \p partial_cntp is non-NULL any partially sent buffers will increase
+ * the provided counter by 1.
+ *
  * @returns the number of timed out buffers.
  *
  * @locality broker thread
@@ -439,6 +442,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 					      int is_waitresp_q,
 					      rd_kafka_bufq_t *rkbq,
+					      int *partial_cntp,
 					      rd_kafka_resp_err_t err,
 					      rd_ts_t now) {
 	rd_kafka_buf_t *rkbuf, *tmp;
@@ -448,6 +452,9 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 
 		if (likely(now && rkbuf->rkbuf_ts_timeout > now))
 			continue;
+
+		if (partial_cntp && rkbuf->rkbuf_of)
+			(*partial_cntp)++;
 
 		/* Convert rkbuf_ts_sent to elapsed time since request */
 		if (rkbuf->rkbuf_ts_sent)
@@ -481,15 +488,15 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
 
 	/* Outstanding requests waiting for response */
 	req_cnt = rd_kafka_broker_bufq_timeout_scan(
-		rkb, 1, &rkb->rkb_waitresps,
+		rkb, 1, &rkb->rkb_waitresps, NULL,
 		RD_KAFKA_RESP_ERR__TIMED_OUT, now);
 	/* Requests in retry queue */
 	retry_cnt = rd_kafka_broker_bufq_timeout_scan(
-		rkb, 0, &rkb->rkb_retrybufs,
+		rkb, 0, &rkb->rkb_retrybufs, NULL,
 		RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
 	/* Requests in local queue not sent yet. */
 	q_cnt = rd_kafka_broker_bufq_timeout_scan(
-		rkb, 0, &rkb->rkb_outbufs,
+		rkb, 0, &rkb->rkb_outbufs, &req_cnt,
 		RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
 
 	if (req_cnt + retry_cnt + q_cnt > 0) {
@@ -499,7 +506,7 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
 
                 /* Fail the broker if socket.max.fails is configured and
                  * now exceeded. */
-                rkb->rkb_req_timeouts   += req_cnt;
+                rkb->rkb_req_timeouts   += req_cnt + q_cnt;
                 rd_atomic64_add(&rkb->rkb_c.req_timeouts, req_cnt + q_cnt);
 
 		/* If this was an in-flight request that timed out, or
@@ -4552,10 +4559,10 @@ static int rd_kafka_broker_thread_main (void *arg) {
 				int r;
 
 				r = rd_kafka_broker_bufq_timeout_scan(
-					rkb, 0, &rkb->rkb_outbufs,
+					rkb, 0, &rkb->rkb_outbufs, NULL,
 					RD_KAFKA_RESP_ERR__DESTROY, 0);
 				r += rd_kafka_broker_bufq_timeout_scan(
-					rkb, 0, &rkb->rkb_retrybufs,
+					rkb, 0, &rkb->rkb_retrybufs, NULL,
 					RD_KAFKA_RESP_ERR__DESTROY, 0);
 				rd_rkb_dbg(rkb, BROKER, "TERMINATE",
 					   "Handle is terminating: "

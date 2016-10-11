@@ -82,10 +82,11 @@ int main_0047_partial_buf_tmout (int argc, char **argv) {
 	rkt = test_create_producer_topic(rk, topic,
 					 "message.timeout.ms", "300", NULL);
 
-	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0, 1000000,
-				 NULL, msg_size, &msgcounter);
-
-	rd_kafka_flush(rk, 5000);
+	while (got_timeout_err == 0) {
+		test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0,
+					 10000, NULL, msg_size, &msgcounter);
+		rd_kafka_flush(rk, 100);
+	}
 
 	TEST_ASSERT(got_timeout_err > 0);
 

@@ -9,12 +9,8 @@ os:
 
 before_script: ccache -s || echo "CCache is not available."
 
-before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update          ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install openssl ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew link --force openssl ; fi
-
 script:
-  ./configure && make -j2 all examples check && make -C tests run_local
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then CPPFLAGS="-I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib" ./configure ; else ; ./configure ; fi
+  - make -j2 all examples check && make -C tests run_local fi
 
 sudo: false

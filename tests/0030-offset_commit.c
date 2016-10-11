@@ -414,6 +414,75 @@ static void do_empty_commit (void) {
 }
 
 
+/**
+ * Commit non-existent topic (issue #704)
+ */
+static void nonexist_offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+				       rd_kafka_topic_partition_list_t *offsets,
+				       void *opaque) {
+	int i;
+	int failed_offsets = 0;
+
+	TEST_SAY("Offset commit callback for %d partitions: %s\n",
+		 offsets ? offsets->cnt : 0,
+		 rd_kafka_err2str(err));
+
+	TEST_ASSERT(offsets != NULL);
+
+	for (i = 0 ; i < offsets->cnt ; i++) {
+		TEST_SAY("committed: %s [%"PRId32"] offset %"PRId64
+			 ": %s\n",
+			 offsets->elems[i].topic,
+			 offsets->elems[i].partition,
+			 offsets->elems[i].offset,
+			 rd_kafka_err2str(offsets->elems[i].err));
+		failed_offsets += offsets->elems[i].err ? 1 : 0;
+	}
+
+	TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+		    "expected global success, not %s", rd_kafka_err2str(err));
+	TEST_ASSERT(offsets->cnt == 2, "expected %d offsets", offsets->cnt);
+	TEST_ASSERT(failed_offsets == offsets->cnt,
+		    "expected %d offsets to have failed, got %d",
+		    offsets->cnt, failed_offsets);
+}
+
+static void do_nonexist_commit (void) {
+	rd_kafka_t *rk;
+	char group_id[64];
+	rd_kafka_conf_t *conf;
+	rd_kafka_topic_conf_t *tconf;
+	rd_kafka_topic_partition_list_t *offsets;
+	const char *unk_topic = test_mk_topic_name(__FUNCTION__, 1);
+	rd_kafka_resp_err_t err;
+
+	test_conf_init(&conf, &tconf, 20);
+	test_str_id_generate(group_id, sizeof(group_id));
+
+	TEST_SAY(_C_MAG "[ do_nonexist_commit group.id %s ]\n", group_id);
+
+	rk = test_create_consumer(group_id, NULL, conf, tconf, NULL);
+
+	TEST_SAY("Try nonexist commit\n");
+	offsets = rd_kafka_topic_partition_list_new(2);
+	rd_kafka_topic_partition_list_add(offsets, unk_topic, 0)->offset = 123;
+	rd_kafka_topic_partition_list_add(offsets, unk_topic, 1)->offset = 456;
+
+	err = rd_kafka_commit_queue(rk, offsets, NULL,
+				    nonexist_offset_commit_cb, NULL);
+	TEST_SAY("nonexist commit returned %s\n", rd_kafka_err2str(err));
+	if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+		TEST_FAIL("commit() should succeed, not: %s",
+			  rd_kafka_err2str(err));
+
+	rd_kafka_topic_partition_list_destroy(offsets);
+
+	test_consumer_close(rk);
+
+	rd_kafka_destroy(rk);
+}
+
+
 int main_0030_offset_commit (int argc, char **argv) {
 
 	topic = test_mk_topic_name(__FUNCTION__, 1);
@@ -450,6 +519,8 @@ int main_0030_offset_commit (int argc, char **argv) {
 		       0 /* sync */);
 
 	do_empty_commit();
+
+	do_nonexist_commit();
 
         return 0;
 }

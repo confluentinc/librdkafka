@@ -2504,10 +2504,18 @@ const char *rd_kafka_version_str (void) {
 			of = sizeof(ret);
 	}
 #endif
+
+#define _my_sprintf(...) do {						\
+		r = rd_snprintf(ret+of, sizeof(ret)-of, __VA_ARGS__);	\
+		if (r > sizeof(ret)-of)					\
+			r = sizeof(ret)-of;				\
+		of += r;						\
+	} while(0)
+
 	if (of == 0) {
 		int ver = rd_kafka_version();
 		int prel = (ver & 0xff);
-		rd_snprintf(ret, sizeof(ret), "%i.%i.%i",
+		_my_sprintf("%i.%i.%i",
 			    (ver >> 24) & 0xff,
 			    (ver >> 16) & 0xff,
 			    (ver >> 8) & 0xff);
@@ -2515,35 +2523,22 @@ const char *rd_kafka_version_str (void) {
 			/* pre-builds below 200 are just running numbers,
 			 * abouve 200 are RC numbers. */
 			if (prel <= 200)
-				rd_snprintf(ret+strlen(ret),
-					    sizeof(ret)-strlen(ret),
-					    "-pre%d", prel);
+				_my_sprintf("-pre%d", prel);
 			else
-				rd_snprintf(ret+strlen(ret),
-					    sizeof(ret)-strlen(ret),
-					    "-RC%d", prel - 200);
+				_my_sprintf("-RC%d", prel - 200);
 		}
 	}
 
 #if ENABLE_DEVEL
-	r = rd_snprintf(ret+of, sizeof(ret)-of, "-devel");
-	if (r > sizeof(ret)-of)
-		r = sizeof(ret)-of;
-	of += r;
+	_my_sprintf("-devel");
 #endif
 
 #if ENABLE_SHAREDPTR_DEBUG
-	r = rd_snprintf(ret+of, sizeof(ret)-of, "-shptr");
-	if (r > sizeof(ret)-of)
-		r = sizeof(ret)-of;
-	of += r;
+	_my_sprintf("-shptr");
 #endif
 
 #if WITHOUT_OPTIMIZATION
-	r = rd_snprintf(ret+of, sizeof(ret)-of, "-O0");
-	if (r > sizeof(ret)-of)
-		r = sizeof(ret)-of;
-	of += r;
+	_my_sprintf("-O0");
 #endif
 
 	return ret;

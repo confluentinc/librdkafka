@@ -809,7 +809,8 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 		}
 	}
 
-	if (rd_list_empty(&rkcg->rkcg_toppars) &&
+	if (!RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) &&
+	    rd_list_empty(&rkcg->rkcg_toppars) &&
 	    rkcg->rkcg_wait_unassign_cnt == 0 &&
 	    rkcg->rkcg_wait_commit_cnt == 0 &&
             !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
@@ -819,13 +820,16 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
 			     "Group \"%s\": "
 			     "waiting for %d toppar(s), %d unassignment(s), "
-			     "%d commit(s)%s before terminating",
+			     "%d commit(s)%s (state %s, join-state %s) "
+			     "before terminating",
 			     rkcg->rkcg_group_id->str,
 			     rd_list_cnt(&rkcg->rkcg_toppars),
 			     rkcg->rkcg_wait_unassign_cnt,
 			     rkcg->rkcg_wait_commit_cnt,
 			     (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)?
-			     ", wait-unassign flag," : "");
+			     ", wait-unassign flag," : "",
+			     rd_kafka_cgrp_state_names[rkcg->rkcg_state],
+			     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
                 return 0;
         }
 }

@@ -11,6 +11,6 @@ before_script: ccache -s || echo "CCache is not available."
 
 script:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then CPPFLAGS="-I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib" ./configure ; else ./configure ; fi
-  - make -j2 all examples check && make -C tests run_local fi
+  - make -j2 all examples check && make -C tests run_local
 
 sudo: false

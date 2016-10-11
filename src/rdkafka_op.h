@@ -162,6 +162,8 @@ struct rd_kafka_op_s {
 				    rd_kafka_topic_partition_list_t *offsets,
 				    void *opaque);
 			void *opaque;
+			int silent_empty; /**< Fail silently if there are no
+					   *   offsets to commit. */
 		} offset_commit;
 
 		struct {
@@ -209,7 +211,7 @@ struct rd_kafka_op_s {
 		} metadata;
 
 		struct {
-			rd_kafka_topic_t *rkt;
+			shptr_rd_kafka_itopic_t *s_rkt;
 			rd_kafka_msgq_t msgq;
 			rd_kafka_msgq_t msgq2;
 			int do_purge2;
@@ -285,3 +287,6 @@ int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko);
 extern rd_atomic32_t rd_kafka_op_cnt;
 
 void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko);
+
+void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko,
+			       const rd_kafka_message_t *rkmessage);

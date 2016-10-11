@@ -119,9 +119,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SASL
 		{ 0x8, "sasl" },
 #endif
-#if HAVE_REGEX
 		{ 0x10, "regex" },
-#endif
 #if WITH_LZ4
 		{ 0x20, "lz4" },
 #endif
@@ -171,6 +169,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The metadata is automatically refreshed on error and connect. "
 	  "Use -1 to disable the intervalled refresh.",
 	  -1, 3600*1000, 5*60*1000 },
+	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_ALIAS,
+	  .sdef = "topic.metadata.refresh.interval.ms" },
 	{ _RK_GLOBAL, "topic.metadata.refresh.fast.cnt", _RK_C_INT,
 	  _RK(metadata_refresh_fast_cnt),
 	  "When a topic looses its leader this number of metadata requests "
@@ -192,19 +192,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "for matching topic names that should be ignored in "
           "broker metadata information as if the topics did not exist." },
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
-	  "A comma-separated list of debug contexts to enable.",
+	  "A comma-separated list of debug contexts to enable. "
+	  "Debugging the Producer: broker,topic,msg. Consumer: cgrp,topic,fetch",
 	  .s2i = {
                         { RD_KAFKA_DBG_GENERIC,  "generic" },
 			{ RD_KAFKA_DBG_BROKER,   "broker" },
 			{ RD_KAFKA_DBG_TOPIC,    "topic" },
 			{ RD_KAFKA_DBG_METADATA, "metadata" },
-			{ RD_KAFKA_DBG_PRODUCER, "producer" },
 			{ RD_KAFKA_DBG_QUEUE,    "queue" },
 			{ RD_KAFKA_DBG_MSG,      "msg" },
 			{ RD_KAFKA_DBG_PROTOCOL, "protocol" },
                         { RD_KAFKA_DBG_CGRP,     "cgrp" },
 			{ RD_KAFKA_DBG_SECURITY, "security" },
 			{ RD_KAFKA_DBG_FETCH,    "fetch" },
+			{ RD_KAFKA_DBG_FEATURE,  "feature" },
 			{ RD_KAFKA_DBG_ALL,      "all" },
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),

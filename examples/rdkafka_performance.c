@@ -62,6 +62,7 @@ static int msgcnt = -1;
 static int incremental_mode = 0;
 static int partition_cnt = 0;
 static int eof_cnt = 0;
+static int with_dr = 1;
 
 static void stop (int sig) {
         if (!run)
@@ -155,10 +156,13 @@ static void msg_delivered (rd_kafka_t *rk,
 	    (int)(now - last) >= dispintvl * 1000 ||
             verbosity >= 3) {
 		if (rkmessage->err && verbosity >= 2)
-			printf("%% Message delivery failed: %s (%li remain)\n",
+			printf("%% Message delivery failed: %s [%"PRId32"]: "
+			       "%s (%li remain)\n",
+			       rd_kafka_topic_name(rkmessage->rkt),
+			       rkmessage->partition,
 			       rd_kafka_err2str(rkmessage->err),
 			       msgs_wait_cnt);
-		else if (verbosity >= 2)
+		else if (verbosity > 2)
 			printf("%% Message delivered (offset %"PRId64"): "
                                "%li remain\n",
                                rkmessage->offset, msgs_wait_cnt);
@@ -208,7 +212,7 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
 
 		printf("%% Consume error for topic \"%s\" [%"PRId32"] "
 		       "offset %"PRId64": %s\n",
-		       rd_kafka_topic_name(rkmessage->rkt),
+		       rkmessage->rkt ? rd_kafka_topic_name(rkmessage->rkt):"",
 		       rkmessage->partition,
 		       rkmessage->offset,
 		       rd_kafka_message_errstr(rkmessage));
@@ -628,7 +632,6 @@ int main (int argc, char **argv) {
 	conf = rd_kafka_conf_new();
 	rd_kafka_conf_set_error_cb(conf, err_cb);
 	rd_kafka_conf_set_throttle_cb(conf, throttle_cb);
-	rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered);
 
 	/* Quick termination */
 	snprintf(tmp, sizeof(tmp), "%i", SIGIO);
@@ -661,7 +664,7 @@ int main (int argc, char **argv) {
 	while ((opt =
 		getopt(argc, argv,
 		       "PCG:t:p:b:s:k:c:fi:MDd:m:S:x:"
-                       "R:a:z:o:X:B:eT:Y:qvIur:lA:Ow")) != -1) {
+                       "R:a:z:o:X:B:eT:Y:qvIur:lA:OwN")) != -1) {
 		switch (opt) {
 		case 'G':
 			if (rd_kafka_conf_set(conf, "group.id", optarg,
@@ -868,6 +871,10 @@ int main (int argc, char **argv) {
 			incremental_mode = 1;
 			break;
 
+		case 'N':
+			with_dr = 0;
+			break;
+
 		default:
                         fprintf(stderr, "Unknown option: %c\n", opt);
 			goto usage;
@@ -931,6 +938,7 @@ int main (int argc, char **argv) {
 			"  -A <file>    Write per-message latency stats to "
 			"<file>. Requires -l\n"
                         "  -O           Report produced offset (producer)\n"
+			"  -N           No delivery reports (producer)\n"
 			"\n"
 			" In Consumer mode:\n"
 			"  consumes messages and prints thruput\n"
@@ -1046,6 +1054,9 @@ int main (int argc, char **argv) {
 		else
 			printf("%% Sending %i messages of size %i bytes\n",
 			       msgcnt, msgsize);
+
+		if (with_dr)
+			rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered);
 
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,

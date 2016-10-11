@@ -470,7 +470,7 @@ rd_kafka_message_setup (rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
 	rd_kafka_toppar_t *rktp = NULL;
 
 	if (rko->rko_type == RD_KAFKA_OP_DR) {
-		rkt = rd_kafka_topic_a2i(rko->rko_u.dr.rkt);
+		rkt = rd_kafka_topic_s2i(rko->rko_u.dr.s_rkt);
 	} else {
 		if (rko->rko_rktp) {
 			rktp = rd_kafka_toppar_s2i(rko->rko_rktp);

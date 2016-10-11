@@ -42,10 +42,6 @@ struct rd_kafka_itopic_s {
 	rwlock_t           rkt_lock;
 	rd_kafkap_str_t   *rkt_topic;
 
-        rd_kafka_topic_t *rkt_app_rkt;      /* A shared topic pointer
-                                             * to be used for callbacks
-                                             * to the application. */
-
 	shptr_rd_kafka_toppar_t  *rkt_ua;  /* unassigned partition */
 	shptr_rd_kafka_toppar_t **rkt_p;
 	int32_t            rkt_partition_cnt;
@@ -56,6 +52,14 @@ struct rd_kafka_itopic_s {
 
 	rd_ts_t            rkt_ts_metadata; /* Timestamp of last metadata
 					     * update for this topic. */
+
+        mtx_t              rkt_app_lock;    /* Protects rkt_app_* */
+        rd_kafka_topic_t *rkt_app_rkt;      /* A shared topic pointer
+                                             * to be used for callbacks
+                                             * to the application. */
+
+	int               rkt_app_refcnt;   /* Number of active rkt's new()ed
+					     * by application. */
 
 	enum {
 		RD_KAFKA_TOPIC_S_UNKNOWN,   /* No cluster information yet */
@@ -144,3 +148,17 @@ int rd_kafka_topic_metadata_update (rd_kafka_broker_t *rkb,
 
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
 
+
+typedef struct rd_kafka_topic_info_s {
+	const char *topic;          /**< Allocated along with struct */
+	int   partition_cnt;
+} rd_kafka_topic_info_t;
+
+
+int rd_kafka_topic_info_cmp (const void *_a, const void *_b);
+rd_kafka_topic_info_t *rd_kafka_topic_info_new (const char *topic,
+						int partition_cnt);
+void rd_kafka_topic_info_destroy (rd_kafka_topic_info_t *ti);
+
+int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
+			  const char *topic);

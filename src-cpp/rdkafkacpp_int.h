@@ -677,6 +677,8 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
   ErrorCode start (Topic *topic, int32_t partition, int64_t offset,
                    Queue *queue);
   ErrorCode stop (Topic *topic, int32_t partition);
+  ErrorCode seek (Topic *topic, int32_t partition, int64_t offset,
+		  int timeout_ms);
   Message *consume (Topic *topic, int32_t partition, int timeout_ms);
   Message *consume (Queue *queue, int timeout_ms);
   int consume_callback (Topic *topic, int32_t partition, int timeout_ms,

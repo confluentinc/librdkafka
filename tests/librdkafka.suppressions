@@ -150,6 +150,14 @@
    fun:OpenSSL_add_all_digests
 }
 {
+   ssl_noterm_leak3b
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   ...
+   fun:OpenSSL_add_all_digests
+}
+{
    ssl_noterm_leak4
    Memcheck:Leak
    match-leak-kinds: reachable
@@ -189,7 +197,22 @@
    ...
    fun:err_load_strings
 }
-
+{
+   ssl_noterm_leak8b
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:ERR_load_strings
+}
+{
+   ssl_noterm_leak8c
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   ...
+   fun:ERR_load_strings
+}
 {
    ssl_noterm_leak9
    Memcheck:Leak

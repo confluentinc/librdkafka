@@ -109,6 +109,17 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::stop (Topic *topic,
   return RdKafka::ERR_NO_ERROR;
 }
 
+RdKafka::ErrorCode RdKafka::ConsumerImpl::seek (Topic *topic,
+						int32_t partition,
+						int64_t offset,
+						int timeout_ms) {
+  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+
+  if (rd_kafka_seek(topicimpl->rkt_, partition, offset, timeout_ms) == -1)
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+
+  return RdKafka::ERR_NO_ERROR;
+}
 
 RdKafka::Message *RdKafka::ConsumerImpl::consume (Topic *topic,
                                                   int32_t partition,

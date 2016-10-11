@@ -49,7 +49,10 @@ struct expect {
 		_EXP_NONE,
 		_EXP_FAIL,
 		_EXP_OK,
+		_EXP_ASSIGN,
 		_EXP_REVOKE,
+		_EXP_ASSIGNED,
+		_EXP_REVOKED,
 	} result;
 };
 
@@ -62,11 +65,6 @@ static void expect_match (struct expect *exp,
 	int i;
 	int e = 0;
 	int fails = 0;
-
-	if (exp->result != _EXP_NONE) {
-		TEST_WARN("%s: already matched, multiple assignments?\n",
-			  exp->name);
-	}
 
 	memset(exp->stat, 0, sizeof(exp->stat));
 
@@ -128,13 +126,25 @@ static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 	{
 	case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
 		/* Check that provided partitions match our expectations */
+		if (exp->result != _EXP_ASSIGN) {
+			TEST_WARN("%s: rebalance called while expecting %d: "
+				  "too many or undesired assignment(s?\n",
+				  exp->name, exp->result);
+		}
 		expect_match(exp, parts);
 		test_consumer_assign("rebalance", rk, parts);
+		exp->result = _EXP_ASSIGNED;
 		break;
 
 	case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+		if (exp->result != _EXP_REVOKE) {
+			TEST_WARN("%s: rebalance called while expecting %d: "
+				  "too many or undesired assignment(s?\n",
+				  exp->name, exp->result);
+		}
+
 		test_consumer_unassign("rebalance", rk);
-		exp->result = _EXP_REVOKE;
+		exp->result = _EXP_REVOKED;
 		break;
 
 	default:
@@ -170,16 +180,26 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 	TIMING_STOP(&t_sub);
 	TEST_ASSERT(!err, "subscribe() failed: %s", rd_kafka_err2str(err));
 
-	/* Wait for assignment, actual messages are ignored. */
-	TIMING_START(&t_assign, "assignment");
-	exp->result = _EXP_NONE;
-	TEST_SAY("%s: waiting for assignment\n", exp->name);
-	while (exp->result == _EXP_NONE)
-		test_consumer_poll_once(rk, NULL, 1000);
-	TIMING_STOP(&t_assign);
 
-	TEST_ASSERT(exp->result != _EXP_REVOKE,
-		    "got revoke instead of assignment");
+	if (exp->exp[0]) {
+		/* Wait for assignment, actual messages are ignored. */
+		exp->result = _EXP_ASSIGN;
+		TEST_SAY("%s: waiting for assignment\n", exp->name);
+		TIMING_START(&t_assign, "assignment");
+		while (exp->result == _EXP_ASSIGN)
+			test_consumer_poll_once(rk, NULL, 1000);
+		TIMING_STOP(&t_assign);
+		TEST_ASSERT(exp->result == _EXP_ASSIGNED,
+			    "got %d instead of assignment", exp->result);
+
+	} else {
+		/* Not expecting any assignment */
+		int64_t ts_end = test_clock() + 5000;
+		exp->result = _EXP_NONE; /* Not expecting a rebalance */
+		while (exp->result == _EXP_NONE && test_clock() < ts_end)
+			test_consumer_poll_once(rk, NULL, 1000);
+		TEST_ASSERT(exp->result == _EXP_NONE);
+	}
 
 	/* Unsubscribe */
 	TIMING_START(&t_unsub, "unsubscribe");
@@ -189,12 +209,24 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 
 	rd_kafka_topic_partition_list_destroy(tlist);
 
-	/* Wait for revoke, actual messages are ignored. */
-	TIMING_START(&t_assign, "revoke");
-	TEST_SAY("%s: waiting for revoke\n", exp->name);
-	while (exp->result != _EXP_REVOKE)
-		test_consumer_poll_once(rk, NULL, 1000);
-	TIMING_STOP(&t_assign);
+	if (exp->exp[0]) {
+		/* Wait for revoke, actual messages are ignored. */
+		TEST_SAY("%s: waiting for revoke\n", exp->name);
+		exp->result = _EXP_REVOKE;
+		TIMING_START(&t_assign, "revoke");
+		while (exp->result != _EXP_REVOKED)
+			test_consumer_poll_once(rk, NULL, 1000);
+		TIMING_STOP(&t_assign);
+		TEST_ASSERT(exp->result == _EXP_REVOKED,
+			    "got %d instead of revoke", exp->result);
+	} else {
+		/* Not expecting any revoke */
+		int64_t ts_end = test_clock() + 5000;
+		exp->result = _EXP_NONE; /* Not expecting a rebalance */
+		while (exp->result == _EXP_NONE && test_clock() < ts_end)
+			test_consumer_poll_once(rk, NULL, 1000);
+		TEST_ASSERT(exp->result == _EXP_NONE);
+	}
 
 	TEST_SAY(_C_MAG "[ %s: done with %d failures ]\n", exp->name, exp->fails);
 
@@ -244,8 +276,10 @@ static int do_test (const char *assignor) {
 		test_produce_msgs_easy(topics[i], testid,
 				       RD_KAFKA_PARTITION_UA, msgcnt);
 
-	test_conf_init(&conf, NULL, 0);
+	test_conf_init(&conf, NULL, 20);
 	test_conf_set(conf, "partition.assignment.strategy", assignor);
+	/* Speed up propagation of new topics */
+	test_conf_set(conf, "metadata.max.age.ms", "5000");
 
 	/* Create a single consumer to handle all subscriptions.
 	 * Has the nice side affect of testing multiple subscriptions. */
@@ -334,7 +368,7 @@ static int do_test (const char *assignor) {
 
 	{
 		struct expect expect = {
-			.name = rd_strdup(tsprintf("%s: broken regex",
+			.name = rd_strdup(tsprintf("%s: broken regex (no matches)",
 						   assignor)),
 			.sub = { "^.*[0", NULL },
 			.exp = { NULL }

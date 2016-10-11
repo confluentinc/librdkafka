@@ -44,7 +44,7 @@
  */
 
 
-
+extern const char *rd_kafka_cgrp_join_state_names[];
 
 /**
  * Client group
@@ -96,8 +96,11 @@ typedef struct rd_kafka_cgrp_s {
                 /* all: waiting for previous assignment to decommission */
                 RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN,
 
-                /* all: waiting for application's rebalance_cb to operate */
-                RD_KAFKA_CGRP_JOIN_STATE_WAIT_REBALANCE_CB,
+                /* all: waiting for application's rebalance_cb to assign() */
+                RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB,
+
+		/* all: waiting for application's rebalance_cb to revoke */
+                RD_KAFKA_CGRP_JOIN_STATE_WAIT_REVOKE_REBALANCE_CB,
 
                 /* all: synchronized and assigned
                  *      may be an empty assignment. */
@@ -166,6 +169,9 @@ typedef struct rd_kafka_cgrp_s {
 
         /* Current subscription */
         rd_kafka_topic_partition_list_t *rkcg_subscription;
+	/* The actual topics subscribed (after metadata+wildcard matching) */
+	rd_list_t *rkcg_subscribed_topics; /**< (rd_kafka_topic_info_t *) */
+
         /* Current assignment */
         rd_kafka_topic_partition_list_t *rkcg_assignment;
 
@@ -250,5 +256,6 @@ int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg);
 
 void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 				const char *reason);
-
+void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
+					  const struct rd_kafka_metadata *md);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)

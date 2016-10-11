@@ -164,6 +164,9 @@ struct rd_kafka_s {
         rd_ts_t          rk_ts_metadata;    /* Timestamp of most recent
                                              * metadata. */
 
+	struct rd_kafka_metadata *rk_full_metadata; /* Last full metadata. */
+	rd_ts_t          rk_ts_full_metadata;       /* Timesstamp of .. */
+
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,
          *   0: No consumers running
@@ -235,6 +238,8 @@ rd_kafka_curr_msgs_add (rd_kafka_t *rk, unsigned int cnt, size_t size,
  */
 static RD_INLINE RD_UNUSED void
 rd_kafka_curr_msgs_sub (rd_kafka_t *rk, unsigned int cnt, size_t size) {
+        int broadcast = 0;
+
 	if (rk->rk_type != RD_KAFKA_PRODUCER)
 		return;
 
@@ -242,9 +247,21 @@ rd_kafka_curr_msgs_sub (rd_kafka_t *rk, unsigned int cnt, size_t size) {
 	rd_kafka_assert(NULL,
 			rk->rk_curr_msgs.cnt >= cnt &&
 			rk->rk_curr_msgs.size >= size);
+
+        /* If the subtraction would pass one of the thresholds
+         * broadcast a wake-up to any waiting listeners. */
+        if ((rk->rk_curr_msgs.cnt >= rk->rk_curr_msgs.max_cnt &&
+             rk->rk_curr_msgs.cnt - cnt < rk->rk_curr_msgs.max_cnt) ||
+            (rk->rk_curr_msgs.size >= rk->rk_curr_msgs.max_size &&
+             rk->rk_curr_msgs.size - size < rk->rk_curr_msgs.max_size))
+                broadcast = 1;
+
 	rk->rk_curr_msgs.cnt  -= cnt;
 	rk->rk_curr_msgs.size -= size;
-	cnd_broadcast(&rk->rk_curr_msgs.cnd);
+
+        if (unlikely(broadcast))
+                cnd_broadcast(&rk->rk_curr_msgs.cnd);
+
 	mtx_unlock(&rk->rk_curr_msgs.lock);
 }
 
@@ -312,7 +329,7 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 #define RD_KAFKA_DBG_BROKER     0x2
 #define RD_KAFKA_DBG_TOPIC      0x4
 #define RD_KAFKA_DBG_METADATA   0x8
-#define RD_KAFKA_DBG_PRODUCER   0x10
+#define RD_KAFKA_DBG_FEATURE    0x10
 #define RD_KAFKA_DBG_QUEUE      0x20
 #define RD_KAFKA_DBG_MSG        0x40
 #define RD_KAFKA_DBG_PROTOCOL   0x80

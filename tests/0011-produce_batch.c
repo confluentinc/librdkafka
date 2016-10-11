@@ -39,7 +39,6 @@
 
 
 static int msgid_next = 0;
-static int msg_remains = 0;
 static int fails = 0;
 
 /**
@@ -49,6 +48,7 @@ static int fails = 0;
 static void dr_single_partition_cb (rd_kafka_t *rk, void *payload, size_t len,
 		   rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
 	int msgid = *(int *)msg_opaque;
+        int *msgcounterp = (int *)opaque;
 
 	free(msg_opaque);
 
@@ -64,6 +64,7 @@ static void dr_single_partition_cb (rd_kafka_t *rk, void *payload, size_t len,
 	}
 
 	msgid_next = msgid+1;
+        (*msgcounterp)--;
 }
 
 /* Produce a batch of messages to a single partition. */
@@ -79,6 +80,7 @@ static void test_single_partition (void) {
 	int failcnt = 0;
 	int i;
         rd_kafka_message_t *rkmessages;
+        int msgcounter = 0;
 
         msgid_next = 0;
 
@@ -86,6 +88,7 @@ static void test_single_partition (void) {
 
 	/* Set delivery report callback */
 	rd_kafka_conf_set_dr_cb(conf, dr_single_partition_cb);
+        rd_kafka_conf_set_opaque(conf, &msgcounter);
 
 	/* Create kafka instance */
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
@@ -141,9 +144,10 @@ static void test_single_partition (void) {
 	TEST_SAY("Single partition: "
                  "Produced %i messages, waiting for deliveries\n", r);
 
+        msgcounter = msgcnt;
+
 	/* Wait for messages to be delivered */
-	while (rd_kafka_outq_len(rk) > 0)
-		rd_kafka_poll(rk, 50);
+        test_wait_delivery(rk, &msgcounter);
 
 	if (fails)
 		TEST_FAIL("%i failures, see previous errors", fails);
@@ -171,6 +175,7 @@ static void test_single_partition (void) {
 static void dr_partitioner_cb (rd_kafka_t *rk, void *payload, size_t len,
 		   rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
 	int msgid = *(int *)msg_opaque;
+        int *msgcounterp = (int *)opaque;
 
 	free(msg_opaque);
 
@@ -178,10 +183,10 @@ static void dr_partitioner_cb (rd_kafka_t *rk, void *payload, size_t len,
 		TEST_FAIL("Message delivery failed: %s\n",
 			  rd_kafka_err2str(err));
 
-        if (msg_remains <= 0)
+        if (*msgcounterp <= 0)
                 TEST_FAIL("Too many message dr_cb callback calls "
                           "(at msgid #%i)\n", msgid);
-        msg_remains--;
+        (*msgcounterp)--;
 }
 
 /* Produce a batch of messages using random (default) partitioner */
@@ -197,13 +202,13 @@ static void test_partitioner (void) {
         int failcnt = 0;
 	int i;
         rd_kafka_message_t *rkmessages;
+        int msgcounter;
 
-        msg_remains = 0;
-
-	test_conf_init(&conf, &topic_conf, 20);
+	test_conf_init(&conf, &topic_conf, 30);
 
 	/* Set delivery report callback */
 	rd_kafka_conf_set_dr_cb(conf, dr_partitioner_cb);
+        rd_kafka_conf_set_opaque(conf, &msgcounter);
 
 	/* Create kafka instance */
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
@@ -230,7 +235,6 @@ static void test_partitioner (void) {
                 rkmessages[i]._private = msgidp;
         }
 
-        msg_remains = msgcnt;
         r = rd_kafka_produce_batch(rkt, partition, RD_KAFKA_MSG_F_FREE,
                                    rkmessages, msgcnt);
 
@@ -260,16 +264,16 @@ static void test_partitioner (void) {
 	TEST_SAY("Partitioner: "
                  "Produced %i messages, waiting for deliveries\n", r);
 
+        msgcounter = msgcnt;
 	/* Wait for messages to be delivered */
-	while (rd_kafka_outq_len(rk) > 0)
-		rd_kafka_poll(rk, 50);
+        test_wait_delivery(rk, &msgcounter);
 
 	if (fails)
 		TEST_FAIL("%i failures, see previous errors", fails);
 
-        if (msg_remains != 0)
+        if (msgcounter != 0)
 		TEST_FAIL("Still waiting for %i/%i messages\n",
-                          msg_remains, msgcnt);
+                          msgcounter, msgcnt);
 
 	/* Destroy topic */
 	rd_kafka_topic_destroy(rkt);

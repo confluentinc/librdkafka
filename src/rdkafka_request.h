@@ -85,7 +85,7 @@ void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 
 void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
                                   int16_t api_version,
-                                  const rd_kafka_topic_partition_list_t *parts,
+                                  rd_kafka_topic_partition_list_t *parts,
                                   rd_kafka_replyq_t replyq,
                                   rd_kafka_resp_cb_t *resp_cb,
                                   void *opaque);
@@ -113,8 +113,7 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *group_id,
                                 const rd_kafkap_str_t *member_id,
                                 const rd_kafkap_str_t *protocol_type,
-                                const rd_kafka_topic_partition_list_t
-                                *subscription,
+				const rd_list_t *topics,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);

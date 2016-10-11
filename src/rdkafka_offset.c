@@ -347,11 +347,13 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 				   const rd_kafka_topic_partition_list_t *offsets) {
 	rd_kafka_op_t *rko;
 
-        if (!rk->rk_conf.offset_commit_cb)
+        if (!(rk->rk_conf.enabled_events & RD_KAFKA_EVENT_OFFSET_COMMIT))
 		return;
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
 	rko->rko_err = err;
+	rko->rko_u.offset_commit.cb = rk->rk_conf.offset_commit_cb;/*maybe NULL*/
+	rko->rko_u.offset_commit.opaque = rk->rk_conf.opaque;
 	if (offsets)
 		rko->rko_u.offset_commit.partitions =
 			rd_kafka_topic_partition_list_copy(offsets);
@@ -417,29 +419,13 @@ rd_kafka_commit (rd_kafka_t *rk,
 
         if (!async)
                 repq = rd_kafka_q_new(rk);
-	else if (rk->rk_conf.offset_commit_cb)
-		repq = rk->rk_rep;
 
         err = rd_kafka_commit0(rk, offsets, NULL,
-			       repq ? RD_KAFKA_REPLYQ(repq, 0) :
-			       RD_KAFKA_NO_REPLYQ,
-			       rk->rk_conf.offset_commit_cb,
-			       rk->rk_conf.opaque);
+			       !async ? RD_KAFKA_REPLYQ(repq, 0) :
+			       RD_KAFKA_NO_REPLYQ, NULL, NULL);
 
         if (!async) {
-		rd_kafka_op_t *rko = rd_kafka_q_pop(repq, RD_POLL_INFINITE, 0);
-		if (!rko)
-			err = RD_KAFKA_RESP_ERR__TIMED_OUT;
-		else {
-			err = rko->rko_err;
-			if (rk->rk_conf.offset_commit_cb)
-				rk->rk_conf.offset_commit_cb(
-					rk, rko->rko_err,
-					rko->rko_u.offset_commit.partitions,
-					rko->rko_u.offset_commit.opaque);
-			rd_kafka_op_destroy(rko);
-		}
-
+		err = rd_kafka_q_wait_result(repq, RD_POLL_INFINITE);
                 rd_kafka_q_destroy(repq);
         } else {
                 err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -483,12 +469,35 @@ rd_kafka_commit_queue (rd_kafka_t *rk,
 				   rd_kafka_topic_partition_list_t *offsets,
 				   void *opaque),
 		       void *opaque) {
+	rd_kafka_q_t *rkq;
+	rd_kafka_resp_err_t err;
+
         if (!rd_kafka_cgrp_get(rk))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
-        return rd_kafka_commit0(rk, offsets, NULL,
-				RD_KAFKA_REPLYQ(rkqu->rkqu_q, 0),
-				cb, opaque);
+	if (rkqu)
+		rkq = rkqu->rkqu_q;
+	else
+		rkq = rd_kafka_q_new(rk);
+
+	err = rd_kafka_commit0(rk, offsets, NULL,
+			       RD_KAFKA_REPLYQ(rkq, 0),
+			       cb, opaque);
+
+	if (!rkqu) {
+		rd_kafka_op_t *rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0);
+		if (!rko)
+			err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+		else {
+			err = rko->rko_err;
+			rd_kafka_op_handle_std(rk, rko);
+			rd_kafka_op_destroy(rko);
+		}
+
+                rd_kafka_q_destroy(rkq);
+	}
+
+	return err;
 }
 
 

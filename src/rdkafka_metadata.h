@@ -1,7 +1,7 @@
 /*
- * librd - Rapid Development C library
+ * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012, Magnus Edenhill
+ * Copyright (c) 2012-2015, Magnus Edenhill
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -29,17 +29,22 @@
 #pragma once
 
 
-/**
- * Returns a random (using rand(3)) number between 'low'..'high' (inclusive).
- */
-static RD_INLINE int rd_jitter (int low, int high) RD_UNUSED;
-static RD_INLINE int rd_jitter (int low, int high) {
-	return (low + (rand() % ((high-low)+1)));
-	
-}
+rd_kafka_resp_err_t rd_kafka_metadata0 (rd_kafka_t *rk,
+					int all_topics,
+					rd_kafka_itopic_t *only_rkt,
+					rd_kafka_replyq_t replyq,
+					const char *reason);
 
+struct rd_kafka_metadata *
+rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
+                         rd_kafka_itopic_t *rkt, rd_kafka_buf_t *rkbuf,
+			 int all_topics);
 
-/**
- * Shuffles (randomizes) an array using the modern Fisher-Yates algorithm.
- */
-void rd_array_shuffle (void *base, size_t nmemb, size_t entry_size);
+struct rd_kafka_metadata *
+rd_kafka_metadata_copy (const struct rd_kafka_metadata *md, size_t size);
+
+size_t
+rd_kafka_metadata_topic_match (rd_kafka_t *rk,
+			       rd_list_t *list,
+			       const struct rd_kafka_metadata *metadata,
+			       const rd_kafka_topic_partition_list_t *match);

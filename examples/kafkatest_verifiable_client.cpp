@@ -34,6 +34,7 @@
 #include <sstream>
 #include <map>
 #include <string>
+#include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <csignal>
@@ -61,6 +62,7 @@
 static bool run = true;
 static bool exit_eof = false;
 static int verbosity = 1;
+static std::string value_prefix;
 
 class Assignment {
 
@@ -162,12 +164,14 @@ static std::string now () {
 
 
 static time_t watchdog_last_kick;
-static const int watchdog_timeout = 10;
+static const int watchdog_timeout = 20; /* Must be > socket.timeout.ms */
 static void sigwatchdog (int sig) {
   time_t t = time(NULL);
   if (watchdog_last_kick + watchdog_timeout <= t) {
     std::cerr << now() << ": WATCHDOG TIMEOUT (" <<
       (int)(t - watchdog_last_kick) << "s): TERMINATING" << std::endl;
+    int *i = NULL;
+    *i = 100;
     abort();
   }
 }
@@ -234,13 +238,14 @@ static void offsetStatus (bool success,
     " \"error\": \"" << errstr << "\" " <<
     " } " <<
     "] }" << std::endl;
+
 }
 #endif
 
 
 static void sigterm (int sig) {
 
-  std::cerr << now() << ": Terminating" << std::endl;
+  std::cerr << now() << ": Terminating because of signal " << sig << std::endl;
 
   if (!run) {
     std::cerr << now() << ": Forced termination" << std::endl;
@@ -282,8 +287,6 @@ class ExampleEventCb : public RdKafka::EventCb {
       case RdKafka::Event::EVENT_ERROR:
         std::cerr << now() << ": ERROR (" << RdKafka::err2str(event.err()) << "): " <<
             event.str() << std::endl;
-        if (event.err() == RdKafka::ERR__ALL_BROKERS_DOWN)
-          run = false;
         break;
 
       case RdKafka::Event::EVENT_STATS:
@@ -334,14 +337,15 @@ static void report_records_consumed (int immediate) {
   std::map<std::string,Assignment> *assignments = &state.consumer.assignments;
 
   if (state.consumer.consumedMessages <=
-      state.consumer.consumedMessagesLastReported + (immediate ? 0 : 100))
+      state.consumer.consumedMessagesLastReported + (immediate ? 0 : 999))
     return;
 
   std::cout << "{ "
-      "\"name\": \"records_consumed\", " <<
-      "\"count\": " << (state.consumer.consumedMessages -
-                        state.consumer.consumedMessagesLastReported) << ", " <<
-      "\"partitions\": [ ";
+    "\"name\": \"records_consumed\", " <<
+    "\"_totcount\": " << state.consumer.consumedMessages << ", " <<
+    "\"count\": " << (state.consumer.consumedMessages -
+		      state.consumer.consumedMessagesLastReported) << ", " <<
+    "\"partitions\": [ ";
 
   for (std::map<std::string,Assignment>::iterator ii = assignments->begin() ;
        ii != assignments->end() ; ii++) {
@@ -365,8 +369,10 @@ static void report_records_consumed (int immediate) {
 
 /**
  * Commit every 1000 messages or whenever there is a consume timeout.
+ * @returns 1 if commit was triggered, else 0.
  */
-static void do_commit (RdKafka::KafkaConsumer *consumer, int immediate) {
+static int do_commit (RdKafka::KafkaConsumer *consumer,
+		      int immediate) {
   if (!state.consumer.useAutoCommit &&
       (state.consumer.consumedMessagesAtLastCommit + (immediate ? 0 : 1000)) <
        state.consumer.consumedMessages) {
@@ -386,9 +392,14 @@ static void do_commit (RdKafka::KafkaConsumer *consumer, int immediate) {
     else
       consumer->commitSync();
 
+    std::cerr << now() << ": commit done" << std::endl;
+
     state.consumer.consumedMessagesAtLastCommit =
       state.consumer.consumedMessages;
-  }
+
+    return 1;
+  } else
+    return 0;
 }
 
 
@@ -449,6 +460,7 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
     case RdKafka::ERR__PARTITION_EOF:
       /* Last message */
       if (exit_eof) {
+	std::cerr << now() << ": Termiate: exit on EOF" << std::endl;
         run = false;
       }
       break;
@@ -471,6 +483,7 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
 }
 
 
+static std::ostringstream deferred_reports;
 
 
 class ExampleConsumeCb : public RdKafka::ConsumeCb {
@@ -483,18 +496,23 @@ class ExampleConsumeCb : public RdKafka::ConsumeCb {
 
 class ExampleRebalanceCb : public RdKafka::RebalanceCb {
 private:
-  static void part_list_json (const std::vector<RdKafka::TopicPartition*> &partitions) {
+  static std::string part_list_json (const std::vector<RdKafka::TopicPartition*> &partitions) {
+    std::ostringstream out;
     for (unsigned int i = 0 ; i < partitions.size() ; i++)
-      std::cout << (i==0?"":", ") << "{ " <<
+      out << (i==0?"":", ") << "{ " <<
 	" \"topic\": \"" << partitions[i]->topic() << "\", " <<
 	" \"partition\": " << partitions[i]->partition() <<
 	" }";
+    return out.str();
   }
  public:
   void rebalance_cb (RdKafka::KafkaConsumer *consumer,
 		     RdKafka::ErrorCode err,
 		     std::vector<RdKafka::TopicPartition*> &partitions) {
+    int deferr = 0;
 
+    std::cerr << now() << ": rebalance_cb " << RdKafka::err2str(err) <<
+      " for " << partitions.size() << " partitions" << std::endl;
     /* Send message report prior to rebalancing event to make sure they
      * are accounted for on the "right side" of the rebalance. */
     report_records_consumed(1);
@@ -502,20 +520,25 @@ private:
     if (err == RdKafka::ERR__ASSIGN_PARTITIONS)
       consumer->assign(partitions);
     else {
-      do_commit(consumer, 1);
+      /* Deferr report to after async auto offset commit? */
+      deferr = !do_commit(consumer, 1);
       consumer->unassign();
     }
 
-    std::cout << "{ " <<
+    deferred_reports <<
+      "{ " <<
       "\"name\": \"partitions_" << (err == RdKafka::ERR__ASSIGN_PARTITIONS ?
 				    "assigned" : "revoked") << "\", " <<
-      "\"partitions\": [ ";
-    part_list_json(partitions);
-    std::cout << "] }" << std::endl;
+      "\"partitions\": [ " << part_list_json(partitions) << "] }" << std::endl;
 
-
+    if (!deferr) {
+      std::cerr << now() << ": Deferring until later: " << deferred_reports.str();
+      std::cout << deferred_reports.str();
+      deferred_reports.str("");
+    }
   }
 };
+
 
 
 
@@ -549,6 +572,11 @@ class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
           " }";
     }
     std::cout << " ] }" << std::endl;
+
+    /* Write any deferred reports that needs to be synchronized to
+     * be written after offsets_committed, such as partitions_revoked. */
+    std::cout << deferred_reports.str();
+    deferred_reports.str("");
   }
 };
 
@@ -591,8 +619,17 @@ int main (int argc, char **argv) {
     conf->set("client.id", std::string("rdkafka@") + hostname, errstr);
   }
 
+  conf->set("log.thread.name", "true", errstr);
+
   /* auto commit is explicitly enabled with --enable-autocommit */
   conf->set("enable.auto.commit", "false", errstr);
+
+  /* keep protocol request timeouts under the watchdog timeout
+   * to make sure things like commitSync() dont fall victim to the watchdog. */
+  conf->set("socket.timeout.ms", "10000", errstr);
+
+  conf->set("fetch.wait.max.ms", "500", errstr);
+  conf->set("fetch.min.bytes", "4096", errstr);
 
   for (int i = 1 ; i < argc ; i++) {
     const char *name = argv[i];
@@ -626,31 +663,31 @@ int main (int argc, char **argv) {
 	  exit(1);
 	}
       } else if (!strcmp(name, "--assignment-strategy")) {
-	/* The system tests pass the Java class name rather than
+	/* The system tests pass the Java class name(s) rather than
 	 * the configuration value. Fix it.
-	 * "org.apache.kafka.clients.consumer.RangeAssignor"
-	 *  -> "Range" -> "range"
+	 * "org.apache.kafka.clients.consumer.RangeAssignor,.." -> "range,.."
 	 */
-	char tmp[128];
-	if (!strncmp(val, "org.apache", strlen("org.apache"))) {
-	  const char *t = rindex(val, '.') + 1;
-	  const char *t2 = strstr(t, "Assignor");
-	  char *t3;
-	  if (!t2)
-	    t2 = t + strlen(t);
-	  strncpy(tmp, t, (int)(t2-t));
-	  tmp[(int)(t2-t)] = '\0';
-	  for (t3 = tmp ; *t3 ; t3++)
-	    *t3 = tolower(*t3);
-	  std::cerr << now() << ": converted " << name << " "
-		    << val << " to " << tmp << std::endl;
-	  val = tmp;
-	}
+	std::string s = val;
+	size_t pos;
 
-	if  (conf->set("partition.assignment.strategy", val, errstr)) {
+	while ((pos = s.find("org.apache.kafka.clients.consumer.")) !=
+	       std::string::npos)
+	  s.erase(pos, strlen("org.apache.kafka.clients.consumer."));
+
+	while ((pos = s.find("Assignor")) != std::string::npos)
+	  s.erase(pos, strlen("Assignor"));
+
+	std::transform(s.begin(), s.end(), s.begin(), tolower);
+
+	std::cerr << now() << ": converted " << name << " "
+		    << val << " to " << s << std::endl;
+
+	if  (conf->set("partition.assignment.strategy", s.c_str(), errstr)) {
 	  std::cerr << now() << ": " << errstr << std::endl;
 	  exit(1);
 	}
+      } else if (!strcmp(name, "--value-prefix")) {
+	value_prefix = std::string(val) + ".";
       } else if (!strcmp(name, "--debug")) {
 	conf->set("debug", val, errstr);
       } else {
@@ -764,7 +801,7 @@ int main (int argc, char **argv) {
        * Produce message
        */
       std::ostringstream msg;
-      msg << i;
+      msg << value_prefix << i;
       RdKafka::ErrorCode resp =
 	producer->produce(topic, partition,
 			  RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
@@ -852,6 +889,8 @@ int main (int argc, char **argv) {
       watchdog_kick();
     }
 
+    std::cerr << now() << ": Final commit on termination" << std::endl;
+
     /* Final commit */
     do_commit(consumer, 1);
 
@@ -863,6 +902,7 @@ int main (int argc, char **argv) {
     delete consumer;
   }
 
+  std::cout << "{ \"name\": \"shutdown_complete\" }" << std::endl;
 
   /*
    * Wait for RdKafka to decommission.

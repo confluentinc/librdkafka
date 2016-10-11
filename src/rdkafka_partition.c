@@ -31,12 +31,7 @@
 #include "rdkafka_request.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_partition.h"
-
-#if HAVE_REGEX
-#include <regex.h>
-#endif
-
-
+#include "rdregex.h"
 
 const char *rd_kafka_fetch_states[] = {
 	"none",
@@ -153,8 +148,9 @@ static void rd_kafka_toppar_consumer_lag_tmr_cb (rd_kafka_timers_t *rkts,
  * Locks: rd_kafka_topic_wrlock() must be held.
  * Locks: rd_kafka_wrlock() must be held.
  */
-shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
-                                              int32_t partition) {
+shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
+					       int32_t partition,
+					       const char *func, int line) {
 	rd_kafka_toppar_t *rktp;
 
 	rktp = rd_calloc(1, sizeof(*rktp));
@@ -204,32 +200,32 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
         rktp->rktp_s_rkt = rd_kafka_topic_keep(rkt);
 
 	rd_kafka_q_fwd_set(rktp->rktp_ops, rkt->rkt_rk->rk_ops);
+	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPPARNEW", "NEW %s [%"PRId32"] %p (at %s:%d)",
+		     rkt->rkt_topic->str, rktp->rktp_partition, rktp,
+		     func, line);
 
-	return rd_kafka_toppar_keep(rktp);
+	return rd_kafka_toppar_keep_src(func, line, rktp);
 }
 
 
 
 /**
  * Removes a toppar from its duties, global lists, etc.
- * Must only be called from ..partitions_remove() FIXME
  *
  * Locks: rd_kafka_toppar_lock() MUST be held
  */
-void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp) {
+static void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp) {
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPPARREMOVE",
-                     "Removing toppar %s [%"PRId32"]",
-                     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
-        rd_kafka_assert(NULL, rktp->rktp_removed==0);
+                     "Removing toppar %s [%"PRId32"] %p",
+                     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+		     rktp);
+
 	rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
 			    &rktp->rktp_offset_query_tmr, 1/*lock*/);
 	rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
 			    &rktp->rktp_consumer_lag_tmr, 1/*lock*/);
 
 	rd_kafka_q_fwd_set(rktp->rktp_ops, NULL);
-
-        rd_kafka_toppar_purge_queues(rktp);
-        rktp->rktp_removed = 1;
 }
 
 
@@ -239,10 +235,15 @@ void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp) {
 void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp) {
 
         rd_kafka_toppar_remove(rktp);
-        rd_kafka_assert(NULL, rktp->rktp_removed);
+
+	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "DESTROY",
+		     "%s [%"PRId32"]: %p DESTROY_FINAL",
+		     rktp->rktp_rkt->rkt_topic->str,
+                     rktp->rktp_partition, rktp);
+
 	/* Clear queues */
-	rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_xmit_msgq,
-			 RD_KAFKA_RESP_ERR__DESTROY);
+	rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
+			rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) == 0);
 	rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
 			 RD_KAFKA_RESP_ERR__DESTROY);
 	rd_kafka_q_destroy(rktp->rktp_fetchq);
@@ -556,20 +557,6 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp) {
 
 
 /**
- * Move all messages from toppar 'src' to 'dst'.
- * This is used when messages migrate between partitions.
- *
- * NOTE: Both dst and src must be locked.
- */
-void rd_kafka_toppar_move_msgs (rd_kafka_toppar_t *dst, rd_kafka_toppar_t *src){
-        shptr_rd_kafka_toppar_t *s_rktp;
-	s_rktp = rd_kafka_toppar_keep(src);
-	rd_kafka_msgq_concat(&dst->rktp_msgq, &src->rktp_msgq);
-	rd_kafka_toppar_destroy(s_rktp);
-}
-
-
-/**
  * Insert message at head of 'rktp' message queue.
  * This is typically for non-data flash messages.
  */
@@ -650,24 +637,11 @@ int rd_kafka_toppar_ua_move (rd_kafka_itopic_t *rkt, rd_kafka_msgq_t *rkmq) {
  * Locks: rd_kafka_toppar_lock() MUST be held
  */
 void rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp) {
-        rd_kafka_msgq_purge(rktp->rktp_rkt->rkt_rk, &rktp->rktp_msgq);
-
         rd_kafka_q_disable(rktp->rktp_fetchq);
         rd_kafka_q_purge(rktp->rktp_fetchq);
         rd_kafka_q_disable(rktp->rktp_ops);
         rd_kafka_q_purge(rktp->rktp_ops);
 }
-
-/**
- * Move all messages in partition's message queues to the provided queue.
- * Locks: rd_kafka_toppar_lock() MUST be held
- */
-void rd_kafka_toppar_move_queues (rd_kafka_toppar_t *rktp,
-				  rd_kafka_msgq_t *msgq) {
-	rd_kafka_msgq_concat(msgq, &rktp->rktp_msgq);
-	rd_kafka_msgq_concat(msgq, &rktp->rktp_xmit_msgq);
-}
-
 
 
 /**
@@ -711,11 +685,51 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
         rko->rko_rktp = rd_kafka_toppar_keep(rktp);
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKMIGR",
-                     "Migrating topic %.*s [%"PRId32"] from %s to %s",
+                     "Migrating topic %.*s [%"PRId32"] %p from %s to %s "
+		     "(sending %s to %s)",
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                     rktp->rktp_partition,
+                     rktp->rktp_partition, rktp,
                      old_rkb ? rd_kafka_broker_name(old_rkb) : "(none)",
-                     new_rkb ? rd_kafka_broker_name(new_rkb) : "(none)");
+                     new_rkb ? rd_kafka_broker_name(new_rkb) : "(none)",
+		     rd_kafka_op2str(rko->rko_type),
+		     rd_kafka_broker_name(dest_rkb));
+
+        rd_kafka_q_enq(dest_rkb->rkb_ops, rko);
+}
+
+
+/**
+ * Async toppar leave from broker.
+ * Only use this when partitions are to be removed.
+ *
+ * Locks: rd_kafka_toppar_lock() MUST be held
+ */
+void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp) {
+        rd_kafka_op_t *rko;
+        rd_kafka_broker_t *dest_rkb;
+
+
+	if (rktp->rktp_next_leader)
+		dest_rkb = rktp->rktp_next_leader;
+	else if (rktp->rktp_leader)
+		dest_rkb = rktp->rktp_leader;
+	else {
+		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "TOPPARDEL",
+			     "%.*s [%"PRId32"] %p not handled by any broker: "
+			     "not sending LEAVE for remove",
+			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+			     rktp->rktp_partition, rktp);
+		return;
+	}
+
+	rko = rd_kafka_op_new(RD_KAFKA_OP_PARTITION_LEAVE);
+        rko->rko_rktp = rd_kafka_toppar_keep(rktp);
+
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKMIGR",
+                     "%.*s [%"PRId32"] %p sending final LEAVE for removal by %s",
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition, rktp,
+                     rd_kafka_broker_name(dest_rkb));
 
         rd_kafka_q_enq(dest_rkb->rkb_ops, rko);
 }
@@ -730,20 +744,30 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
  *        AND rd_kafka_toppar_lock(rktp) held.
  */
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
-				      rd_kafka_broker_t *rkb) {
+				      rd_kafka_broker_t *rkb,
+				      int for_removal) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         int internal_fallback = 0;
 
+	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
+		     "%s [%"PRId32"]: delegate to broker %s "
+		     "(rktp %p, term %d, ref %d, remove %d)",
+		     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+		     rkb ? rkb->rkb_name : "(none)",
+		     rktp, rd_kafka_terminating(rk),
+		     rd_refcnt_get(&rktp->rktp_refcnt),
+		     for_removal);
+
         /* Delegate toppars with no leader to the
          * internal broker for bookkeeping. */
-        if (!rkb && !rd_kafka_terminating(rk)) {
+        if (!rkb && !for_removal && !rd_kafka_terminating(rk)) {
                 rkb = rd_kafka_broker_internal(rk);
                 internal_fallback = 1;
         }
 
-	if (rktp->rktp_leader == rkb) {
+	if (rktp->rktp_leader == rkb && !rktp->rktp_next_leader) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "Not updating broker for topic %.*s [%"PRId32"]: "
+			     "%.*s [%"PRId32"]: not updating broker: "
                              "already on correct broker %s",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
@@ -756,27 +780,27 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 
 	if (rktp->rktp_leader)
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "Broker %s no longer leader "
-			     "for topic %.*s [%"PRId32"]",
-			     rd_kafka_broker_name(rktp->rktp_leader),
+			     "%.*s [%"PRId32"]: broker %s no longer leader",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-			     rktp->rktp_partition);
+			     rktp->rktp_partition,
+			     rd_kafka_broker_name(rktp->rktp_leader));
+
 
 	if (rkb) {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "Broker %s is now leader for topic %.*s "
-			     "[%"PRId32"] with %i messages "
+			     "%.*s [%"PRId32"]: broker %s is now leader "
+			     "for partition with %i messages "
 			     "(%"PRIu64" bytes) queued",
-			     rd_kafka_broker_name(rkb),
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
+			     rd_kafka_broker_name(rkb),
 			     rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
 			     rd_atomic64_get(&rktp->rktp_msgq.rkmq_msg_bytes));
 
 
 	} else {
 		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
-			     "No broker is leader for topic %.*s [%"PRId32"]",
+			     "%.*s [%"PRId32"]: no leader broker",
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition);
 	}
@@ -1283,6 +1307,12 @@ void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
 
 	rktp->rktp_op_version = version;
 
+	/* Abort pending offset lookups. */
+	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY)
+		rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
+				    &rktp->rktp_offset_query_tmr,
+				    1/*lock*/);
+
         /* Clear out the forwarding queue. */
         rd_kafka_q_fwd_set(rktp->rktp_fetchq, NULL);
 
@@ -1549,6 +1579,12 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 	/* Forced removal from fetch list */
 	if (unlikely(force_remove)) {
 		reason = "forced removal";
+		should_fetch = 0;
+		goto done;
+	}
+
+	if (unlikely((rktp->rktp_flags & RD_KAFKA_TOPPAR_F_REMOVE) != 0)) {
+		reason = "partition removed";
 		should_fetch = 0;
 		goto done;
 	}
@@ -2362,40 +2398,22 @@ int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 	int ret = 0;
 
 	if (*rktpar->topic == '^') {
-#if HAVE_REGEX
-		regex_t re;
-		int re_err;
+		char errstr[128];
 
-		/* FIXME: cache compiled regex */
-		re_err = regcomp(&re, rktpar->topic, REG_EXTENDED|REG_NOSUB);
-		if (re_err) {
-			char re_errstr[128];
-			regerror(re_err, &re, re_errstr, sizeof(re_errstr));
+		ret = rd_regex_match(rktpar->topic, topic,
+				     errstr, sizeof(errstr));
+		if (ret == -1) {
 			rd_kafka_dbg(rk, CGRP,
 				     "SUBMATCH",
 				     "Invalid regex for member "
 				     "\"%.*s\" subscription \"%s\": %s",
 				     RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
-				     rktpar->topic, re_errstr);
+				     rktpar->topic, errstr);
 			return 0;
 		}
 
-		if (regexec(&re, topic, 0, NULL, 0) != REG_NOMATCH) {
-			if (matched_by_regex)
-				*matched_by_regex = 1;
-
-			ret = 1;
-		}
-		regfree(&re);
-#else
-		rd_kafka_dbg(rk, CGRP,
-			     "SUBMATCH",
-			     "Regex support not built in: can't match member "
-			     "\"%.*s\" subscription \"%s\"",
-			     RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
-			     rktpar->topic);
-		return 0;
-#endif
+		if (ret && matched_by_regex)
+			*matched_by_regex = 1;
 
 	} else if (!strcmp(rktpar->topic, topic)) {
 
@@ -2563,4 +2581,34 @@ rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
 			     rktpar->err ? ": error: " : "",
 			     rktpar->err ? rd_kafka_err2str(rktpar->err) : "");
 	}
+}
+
+
+/**
+ * @brief Update \p dst with info from \p src.
+ *
+ * Fields updated:
+ *  - offset
+ *  - err
+ *
+ * Will only partitions that are in both dst and src, other partitions will
+ * remain unchanged.
+ */
+void
+rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
+                                      const rd_kafka_topic_partition_list_t *src){
+        int i;
+
+        for (i = 0 ; i < dst->cnt ; i++) {
+                rd_kafka_topic_partition_t *d = &dst->elems[i];
+                rd_kafka_topic_partition_t *s;
+
+                if (!(s = rd_kafka_topic_partition_list_find(
+                              (rd_kafka_topic_partition_list_t *)src,
+                              d->topic, d->partition)))
+                        continue;
+
+                d->offset = s->offset;
+                d->err    = s->err;
+        }
 }

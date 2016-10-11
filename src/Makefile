@@ -4,10 +4,16 @@ LIBVER=		1
 
 -include ../Makefile.config
 
+CPPFLAGS += -DLIBRDKAFKA_GIT_VERSION="\"$(shell git describe --abbrev=6 --dirty --tags 2>/dev/null)\""
+
 SRCS_$(WITH_SASL) += rdkafka_sasl.c
 SRCS_$(WITH_SNAPPY) += snappy.c
 SRCS_$(WITH_ZLIB) += rdgz.c
 SRCS_$(WITH_LZ4) += xxhash.c
+
+ifeq ($(HAVE_REGEX), n)
+SRCS_y += regexp.c
+endif
 
 SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_conf.c rdkafka_timer.c rdkafka_offset.c \
@@ -17,7 +23,8 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
 		rdkafka_roundrobin_assignor.c rdkafka_feature.c \
 		rdcrc32.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
-		rdlog.c rdstring.c rdkafka_event.c \
+		rdlog.c rdstring.c rdkafka_event.c rdkafka_metadata.c \
+		rdregex.c \
 		$(SRCS_y)
 
 HDRS=		rdkafka.h

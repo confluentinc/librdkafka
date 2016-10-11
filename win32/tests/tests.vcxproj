@@ -199,6 +199,11 @@
     <ClCompile Include="..\..\tests\0041-fetch_max_bytes.c" />
     <ClCompile Include="..\..\tests\0042-many_topics.c" />
     <ClCompile Include="..\..\tests\0043-no_connection.c" />
+    <ClCompile Include="..\..\tests\0044-partition_cnt.c" />
+    <ClCompile Include="..\..\tests\0045-subscribe_update.c" />
+    <ClCompile Include="..\..\tests\0046-rkt_cache.c" />
+    <ClCompile Include="..\..\tests\0047-partial_buf_tmout.c" />
+    <ClCompile Include="..\..\tests\0048-partitioner.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

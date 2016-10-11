@@ -153,9 +153,15 @@ int main_0019_list_groups (int argc, char **argv) {
         test_timing_t t_grps;
 	int i;
         int groups_seen;
+	rd_kafka_topic_t *rkt;
 
         /* Handle for group listings */
         rk = test_create_producer();
+
+	/* Produce messages so that topic is auto created */
+	rkt = test_create_topic_object(rk, topic, NULL);
+	test_produce_msgs(rk, rkt, 0, 0, 0, 10, NULL, 64);
+	rd_kafka_topic_destroy(rkt);
 
         /* Query groups before creation, should not list our groups. */
         groups_seen = list_groups(rk, NULL, 0, "should be none");

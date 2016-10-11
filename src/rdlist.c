@@ -224,3 +224,21 @@ void *rd_list_find (const rd_list_t *rl, const void *match,
 
         return NULL;
 }
+
+
+int rd_list_cmp (const rd_list_t *a, rd_list_t *b,
+		 int (*cmp) (const void *, const void *)) {
+	int i;
+
+	i = a->rl_cnt - b->rl_cnt;
+	if (i)
+		return i;
+
+	for (i = 0 ; i < a->rl_cnt ; i++) {
+		int r = cmp(a->rl_elems[i], b->rl_elems[i]);
+		if (r)
+			return r;
+	}
+
+	return 0;
+}

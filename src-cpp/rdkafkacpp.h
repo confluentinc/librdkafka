@@ -87,7 +87,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x000901ff
+#define RD_KAFKA_VERSION  0x00090200
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -216,6 +216,9 @@ enum ErrorCode {
 	ERR__NO_OFFSET = -168,
 	/** Outdated */
 	ERR__OUTDATED = -167,
+	/** Timed out in queue */
+	ERR__TIMED_OUT_QUEUE = -166,
+
 	/** End internal error codes */
 	ERR__END = -100,
 
@@ -487,6 +490,10 @@ class RD_EXPORT Event {
 
   /**
    * @returns Log message string.
+   *
+   * \c EVENT_LOG: Log message string.
+   * \c EVENT_STATS: JSON object (as string).
+   *
    * @remark Applies to LOG event type.
    */
   virtual std::string str () const = 0;
@@ -1450,6 +1457,23 @@ class RD_EXPORT Consumer : public virtual Handle {
    * @returns an ErrorCode to indicate success or failure.
    */
   virtual ErrorCode stop (Topic *topic, int32_t partition) = 0;
+
+  /**
+   * @brief Seek consumer for topic+partition to \p offset which is either an
+   *        absolute or logical offset.
+   *
+   * If \p timeout_ms is not 0 the call will wait this long for the
+   * seek to be performed. If the timeout is reached the internal state
+   * will be unknown and this function returns `ERR__TIMED_OUT`.
+   * If \p timeout_ms is 0 it will initiate the seek but return
+   * immediately without any error reporting (e.g., async).
+   *
+   * This call triggers a fetch queue barrier flush.
+   *
+   * @returns an ErrorCode to indicate success or failure.
+   */
+  virtual ErrorCode seek (Topic *topic, int32_t partition, int64_t offset,
+			  int timeout_ms) = 0;
 
   /**
    * @brief Consume a single message from \p topic and \p partition.

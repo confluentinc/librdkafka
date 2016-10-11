@@ -246,7 +246,19 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	TEST_SAY("%s: phase 1 complete, %d messages consumed, "
 		 "next expected offset is %"PRId64"\n",
 		 what, cnt, expected_offset);
-	
+
+        /* Issue #827: cause committed() to return prematurely by specifying
+         *             low timeout. The bug (use after free) will only
+         *             be catched by valgrind. */
+        do {
+                parts = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(parts, topic, partition);
+                err = rd_kafka_committed(rk, parts, 1);
+                rd_kafka_topic_partition_list_destroy(parts);
+                TEST_SAY("Issue #827: committed() returned %s\n",
+                         rd_kafka_err2str(err));
+        } while (err != RD_KAFKA_RESP_ERR__TIMED_OUT);
+
 	/* Query position */
 	parts = rd_kafka_topic_partition_list_new(1);
 	rd_kafka_topic_partition_list_add(parts, topic, partition);
@@ -312,6 +324,165 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	TIMING_STOP(&t_all);
 }
 
+
+static void empty_offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+				    rd_kafka_topic_partition_list_t *offsets,
+				    void *opaque) {
+	rd_kafka_resp_err_t expected = *(rd_kafka_resp_err_t *)opaque;
+	int valid_offsets = 0;
+	int i;
+
+	TEST_SAY("Offset commit callback for %d partitions: %s (expecting %s)\n",
+		 offsets ? offsets->cnt : 0,
+		 rd_kafka_err2str(err),
+		 rd_kafka_err2str(expected));
+
+	if (expected != err)
+		TEST_FAIL("Offset commit cb: expected %s, got %s",
+			  rd_kafka_err2str(expected),
+			  rd_kafka_err2str(err));
+
+	for (i = 0 ; i < offsets->cnt ; i++) {
+		TEST_SAY("committed: %s [%"PRId32"] offset %"PRId64
+			 ": %s\n",
+			 offsets->elems[i].topic,
+			 offsets->elems[i].partition,
+			 offsets->elems[i].offset,
+			 rd_kafka_err2str(offsets->elems[i].err));
+
+		if (expected == RD_KAFKA_RESP_ERR_NO_ERROR)
+			TEST_ASSERT(offsets->elems[i].err == expected);
+		if (offsets->elems[i].offset > 0)
+			valid_offsets++;
+	}
+
+	if (expected == RD_KAFKA_RESP_ERR_NO_ERROR) {
+		/* If no error is expected we instead expect one proper offset
+		 * to have been committed. */
+		TEST_ASSERT(valid_offsets > 0);
+	}
+}
+
+
+/**
+ * Trigger an empty cgrp commit (issue #803)
+ */
+static void do_empty_commit (void) {
+	rd_kafka_t *rk;
+	char group_id[64];
+	rd_kafka_conf_t *conf;
+	rd_kafka_topic_conf_t *tconf;
+	rd_kafka_resp_err_t err, expect;
+
+	test_conf_init(&conf, &tconf, 20);
+	test_conf_set(conf, "enable.auto.commit", "false");
+	test_topic_conf_set(tconf, "auto.offset.reset", "earliest");
+	test_str_id_generate(group_id, sizeof(group_id));
+
+	TEST_SAY(_C_MAG "[ do_empty_commit group.id %s ]\n", group_id);
+
+	rk = test_create_consumer(group_id, NULL, conf, tconf, NULL);
+
+	test_consumer_subscribe(rk, topic);
+
+	test_consumer_poll("consume", rk, testid, -1, -1, 100, NULL);
+
+	TEST_SAY("First commit\n");
+	expect = RD_KAFKA_RESP_ERR_NO_ERROR;
+	err = rd_kafka_commit_queue(rk, NULL, NULL,
+				    empty_offset_commit_cb, &expect);
+	if (err != expect)
+		TEST_FAIL("commit failed: %s", rd_kafka_err2str(err));
+	else
+		TEST_SAY("First commit returned %s\n",
+			 rd_kafka_err2str(err));
+
+	TEST_SAY("Second commit, should be empty\n");
+	expect = RD_KAFKA_RESP_ERR__NO_OFFSET;
+	err = rd_kafka_commit_queue(rk, NULL, NULL,
+				    empty_offset_commit_cb, &expect);
+	if (err != RD_KAFKA_RESP_ERR__NO_OFFSET)
+		TEST_FAIL("unexpected commit result, wanted NO_OFFSET, got: %s",
+			  rd_kafka_err2str(err));
+	else
+		TEST_SAY("Second commit returned %s\n",
+			 rd_kafka_err2str(err));
+
+	test_consumer_close(rk);
+
+	rd_kafka_destroy(rk);
+}
+
+
+/**
+ * Commit non-existent topic (issue #704)
+ */
+static void nonexist_offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+				       rd_kafka_topic_partition_list_t *offsets,
+				       void *opaque) {
+	int i;
+	int failed_offsets = 0;
+
+	TEST_SAY("Offset commit callback for %d partitions: %s\n",
+		 offsets ? offsets->cnt : 0,
+		 rd_kafka_err2str(err));
+
+	TEST_ASSERT(offsets != NULL);
+
+	for (i = 0 ; i < offsets->cnt ; i++) {
+		TEST_SAY("committed: %s [%"PRId32"] offset %"PRId64
+			 ": %s\n",
+			 offsets->elems[i].topic,
+			 offsets->elems[i].partition,
+			 offsets->elems[i].offset,
+			 rd_kafka_err2str(offsets->elems[i].err));
+		failed_offsets += offsets->elems[i].err ? 1 : 0;
+	}
+
+	TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+		    "expected global success, not %s", rd_kafka_err2str(err));
+	TEST_ASSERT(offsets->cnt == 2, "expected %d offsets", offsets->cnt);
+	TEST_ASSERT(failed_offsets == offsets->cnt,
+		    "expected %d offsets to have failed, got %d",
+		    offsets->cnt, failed_offsets);
+}
+
+static void do_nonexist_commit (void) {
+	rd_kafka_t *rk;
+	char group_id[64];
+	rd_kafka_conf_t *conf;
+	rd_kafka_topic_conf_t *tconf;
+	rd_kafka_topic_partition_list_t *offsets;
+	const char *unk_topic = test_mk_topic_name(__FUNCTION__, 1);
+	rd_kafka_resp_err_t err;
+
+	test_conf_init(&conf, &tconf, 20);
+	test_str_id_generate(group_id, sizeof(group_id));
+
+	TEST_SAY(_C_MAG "[ do_nonexist_commit group.id %s ]\n", group_id);
+
+	rk = test_create_consumer(group_id, NULL, conf, tconf, NULL);
+
+	TEST_SAY("Try nonexist commit\n");
+	offsets = rd_kafka_topic_partition_list_new(2);
+	rd_kafka_topic_partition_list_add(offsets, unk_topic, 0)->offset = 123;
+	rd_kafka_topic_partition_list_add(offsets, unk_topic, 1)->offset = 456;
+
+	err = rd_kafka_commit_queue(rk, offsets, NULL,
+				    nonexist_offset_commit_cb, NULL);
+	TEST_SAY("nonexist commit returned %s\n", rd_kafka_err2str(err));
+	if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+		TEST_FAIL("commit() should succeed, not: %s",
+			  rd_kafka_err2str(err));
+
+	rd_kafka_topic_partition_list_destroy(offsets);
+
+	test_consumer_close(rk);
+
+	rd_kafka_destroy(rk);
+}
+
+
 int main_0030_offset_commit (int argc, char **argv) {
 
 	topic = test_mk_topic_name(__FUNCTION__, 1);
@@ -346,6 +517,10 @@ int main_0030_offset_commit (int argc, char **argv) {
 		       0 /* enable.auto.commit */,
 		       0 /* enable.auto.offset.store */,
 		       0 /* sync */);
+
+	do_empty_commit();
+
+	do_nonexist_commit();
 
         return 0;
 }

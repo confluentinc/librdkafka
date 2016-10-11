@@ -98,7 +98,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x000901ff
+#define RD_KAFKA_VERSION  0x00090200
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -173,7 +173,7 @@ const char *rd_kafka_get_debug_contexts(void);
  *             Use rd_kafka_get_debug_contexts() instead.
  */
 #define RD_KAFKA_DEBUG_CONTEXTS \
-	"all,generic,broker,topic,metadata,producer,queue,msg,protocol,cgrp,security,fetch"
+	"all,generic,broker,topic,metadata,queue,msg,protocol,cgrp,security,fetch,feature"
 
 
 /* @cond NO_DOC */
@@ -269,6 +269,9 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__NO_OFFSET = -168,
 	/** Outdated */
 	RD_KAFKA_RESP_ERR__OUTDATED = -167,
+	/** Timed out in queue */
+	RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE = -166,
+
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
 
@@ -1428,6 +1431,7 @@ rd_kafka_topic_t *rd_kafka_topic_new(rd_kafka_t *rk, const char *topic,
 
 /**
  * @brief Destroy topic handle previously created with `rd_kafka_topic_new()`.
+ * @remark MUST NOT be used for internally created topics (topic_new0())
  */
 RD_EXPORT
 void rd_kafka_topic_destroy(rd_kafka_topic_t *rkt);
@@ -2121,6 +2125,9 @@ rd_kafka_commit_message (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
  * will be returned as an RD_KAFKA_EVENT_COMMIT event. The \p opaque
  * value will be available with rd_kafka_event_opaque()
  *
+ * If \p rkqu is NULL a temporary queue will be created and the callback will
+ * be served by this call.
+ *
  * @sa rd_kafka_commit()
  * @sa rd_kafka_conf_set_offset_commit_cb()
  */
@@ -2666,22 +2673,19 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer (rd_kafka_t *rk);
 
 
 /**
- * @enum rd_kafka_event_type
- *
- * @brief rd_kafka_event_t type.
+ * @brief Event types
  */
-typedef enum rd_kafka_event_type_t {
-	RD_KAFKA_EVENT_NONE,
-	RD_KAFKA_EVENT_DR,            /**< Delivery report batch (producer) */
-	RD_KAFKA_EVENT_FETCH,         /**< Fetched message (consumer) */
-	RD_KAFKA_EVENT_LOG,           /**< Log message */
-	RD_KAFKA_EVENT_ERROR,         /**< Error */
-	RD_KAFKA_EVENT_REBALANCE,     /**< Group rebalance (consumer) */
-	RD_KAFKA_EVENT_OFFSET_COMMIT  /**< Offset commit result */
-} rd_kafka_event_type_t;
+typedef int rd_kafka_event_type_t;
+#define RD_KAFKA_EVENT_NONE          0x0
+#define RD_KAFKA_EVENT_DR            0x1  /**< Producer Delivery report batch */
+#define RD_KAFKA_EVENT_FETCH         0x2  /**< Fetched message (consumer) */
+#define RD_KAFKA_EVENT_LOG           0x4  /**< Log message */
+#define RD_KAFKA_EVENT_ERROR         0x8  /**< Error */
+#define RD_KAFKA_EVENT_REBALANCE     0x10 /**< Group rebalance (consumer) */
+#define RD_KAFKA_EVENT_OFFSET_COMMIT 0x20 /**< Offset commit result */
+
 
 typedef struct rd_kafka_op_s rd_kafka_event_t;
-
 
 
 /**

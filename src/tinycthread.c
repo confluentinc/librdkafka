@@ -969,6 +969,52 @@ void call_once(once_flag *flag, void (*func)(void))
 }
 #endif /* defined(_TTHREAD_WIN32_) */
 
+
+#if !defined(_TTHREAD_WIN32_)
+int rwlock_init (rwlock_t *rwl) {
+        int r = pthread_rwlock_init(rwl, NULL);
+        if (r) {
+                errno = r;
+                return thrd_error;
+        }
+        return thrd_success;
+}
+
+int rwlock_destroy (rwlock_t *rwl) {
+        int r = pthread_rwlock_destroy(rwl);
+        if (r) {
+                errno = r;
+                return thrd_error;
+        }
+        return thrd_success;
+}
+
+int rwlock_rdlock (rwlock_t *rwl) {
+        int r = pthread_rwlock_rdlock(rwl);
+        assert(r == 0);
+        return thrd_success;
+}
+
+int rwlock_wrlock (rwlock_t *rwl) {
+        int r = pthread_rwlock_wrlock(rwl);
+        assert(r == 0);
+        return thrd_success;
+}
+
+int rwlock_rdunlock (rwlock_t *rwl) {
+        int r = pthread_rwlock_unlock(rwl);
+        assert(r == 0);
+        return thrd_success;
+}
+
+int rwlock_wrunlock (rwlock_t *rwl) {
+        int r = pthread_rwlock_unlock(rwl);
+        assert(r == 0);
+        return thrd_success;
+}
+
+#endif /* !defined(_TTHREAD_WIN32_) */
+
 #ifdef __cplusplus
 }
 #endif

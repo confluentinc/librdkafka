@@ -58,7 +58,6 @@ static RD_UNUSED void rd_kafka_offset_stats_reset (struct offset_stats *offs) {
  * Topic + Partition combination
  */
 struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
-        int rktp_removed;
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rklink;  /* rd_kafka_t link */
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rkblink; /* rd_kafka_broker_t link*/
         CIRCLEQ_ENTRY(rd_kafka_toppar_s) rktp_fetchlink; /* rkb_fetch_toppars */
@@ -90,7 +89,7 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 	rd_kafka_q_t      *rktp_fetchq;          /* Queue of fetched messages
 						  * from broker.
                                                   * Broker thread -> App */
-        rd_kafka_q_t      *rktp_ops;             /* * -> Broker thread */
+        rd_kafka_q_t      *rktp_ops;             /* * -> Main thread */
 
 
 	/**
@@ -212,6 +211,7 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_OFFSET_STORE_STOPPING 0x8 /* Offset store stopping */
 #define RD_KAFKA_TOPPAR_F_APP_PAUSE  0x10   /* App pause()d consumption */
 #define RD_KAFKA_TOPPAR_F_LIB_PAUSE  0x20   /* librdkafka paused consumption */
+#define RD_KAFKA_TOPPAR_F_REMOVE     0x40   /* partition removed from cluster */
 
         shptr_rd_kafka_toppar_t *rktp_s_for_desp; /* Shared pointer for
                                                    * rkt_desp list */
@@ -263,6 +263,10 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 #define rd_kafka_toppar_keep(rktp)                                      \
         rd_shared_ptr_get(rktp, &(rktp)->rktp_refcnt, shptr_rd_kafka_toppar_t)
 
+#define rd_kafka_toppar_keep_src(func,line,rktp)			\
+        rd_shared_ptr_get_src(func, line, rktp,				\
+			      &(rktp)->rktp_refcnt, shptr_rd_kafka_toppar_t)
+
 
 /**
  * Frees a shared pointer previously returned by ..toppar_keep()
@@ -290,13 +294,13 @@ static const char *rd_kafka_toppar_name (const rd_kafka_toppar_t *rktp) {
 
 	return ret;
 }
-shptr_rd_kafka_toppar_t *rd_kafka_toppar_new (rd_kafka_itopic_t *rkt,
-                                              int32_t partition);
+shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
+					       int32_t partition,
+					       const char *func, int line);
+#define rd_kafka_toppar_new(rkt,partition) \
+	rd_kafka_toppar_new0(rkt, partition, __FUNCTION__, __LINE__)
 void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp);
-void rd_kafka_toppar_remove (rd_kafka_toppar_t *rktp);
 void rd_kafka_toppar_purge_queues (rd_kafka_toppar_t *rktp);
-void rd_kafka_toppar_move_queues (rd_kafka_toppar_t *rktp,
-				  rd_kafka_msgq_t *msgq);
 void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
                                       int fetch_state);
 void rd_kafka_toppar_insert_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
@@ -306,7 +310,6 @@ void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
 				  rd_kafka_msgq_t *rkmq);
 void rd_kafka_toppar_concat_msgq (rd_kafka_toppar_t *rktp,
 				  rd_kafka_msgq_t *rkmq);
-void rd_kafka_toppar_move_msgs (rd_kafka_toppar_t *dst, rd_kafka_toppar_t *src);
 void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
                                 rd_kafka_resp_err_t err);
 shptr_rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_itopic_t *rkt,
@@ -340,7 +343,8 @@ void rd_kafka_toppar_offset_commit (rd_kafka_toppar_t *rktp, int64_t offset,
 				    const char *metadata);
 
 void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
-				      rd_kafka_broker_t *rkb);
+				      rd_kafka_broker_t *rkb,
+				      int for_removal);
 
 
 rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start (rd_kafka_toppar_t *rktp,
@@ -448,7 +452,9 @@ void
 rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
 				   const rd_kafka_topic_partition_list_t *rktparlist);
 
-
+void
+rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
+                                      const rd_kafka_topic_partition_list_t *src);
 
 /**
  * @brief Toppar + Op version tuple used for mapping Fetched partitions
@@ -509,3 +515,5 @@ void
 rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
 				      rd_kafka_resp_err_t err,
 				      rd_kafka_topic_partition_list_t *offsets);
+
+void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp);

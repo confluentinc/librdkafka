@@ -290,7 +290,8 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
                                    rd_kafka_itopic_t *only_rkt,
                                    rd_kafka_replyq_t replyq,
                                    const char *reason);
-
+void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
+				      rd_kafka_op_t *rko);
 
 rd_kafka_broker_t *rd_kafka_broker_internal (rd_kafka_t *rk);
 

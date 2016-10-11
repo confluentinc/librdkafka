@@ -1,7 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2015 Magnus Edenhill
+ * Copyright (c) 2016 Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,21 +25,13 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
 #pragma once
 
+typedef struct rd_regex_s rd_regex_t;
 
+void rd_regex_destroy (rd_regex_t *re);
+rd_regex_t *rd_regex_comp (const char *pattern, char *errstr, size_t errstr_size);
+int rd_regex_exec (rd_regex_t *re, const char *str);
 
-int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
-			    char *errstr, int errstr_size);
-int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
-			      char *errstr, int errstr_size);
-
-void rd_kafka_broker_sasl_term (rd_kafka_broker_t *rkb);
-void rd_kafka_broker_sasl_init (rd_kafka_broker_t *rkb);
-
-void rd_kafka_sasl_global_term (void);
-int rd_kafka_sasl_global_init (void);
-
-int rd_kafka_sasl_conf_validate (rd_kafka_t *rk,
-				 char *errstr, size_t errstr_size);
+int rd_regex_match (const char *pattern, const char *str,
+		    char *errstr, size_t errstr_size);

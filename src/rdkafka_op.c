@@ -32,6 +32,7 @@
 #include "rdkafka_op.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
+#include "rdkafka_offset.h"
 
 /* Current number of rd_kafka_op_t */
 rd_atomic32_t rd_kafka_op_cnt;
@@ -122,8 +123,8 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 	case RD_KAFKA_OP_DR:
 		fprintf(fp, "%s %"PRId32" messages on %s\n", prefix,
 			rd_atomic32_get(&rko->rko_u.dr.msgq.rkmq_msg_cnt),
-			rko->rko_u.dr.rkt ?
-			rd_kafka_topic_a2i(rko->rko_u.dr.rkt)->
+			rko->rko_u.dr.s_rkt ?
+			rd_kafka_topic_s2i(rko->rko_u.dr.s_rkt)->
 			rkt_topic->str : "(n/a)");
 		break;
 	case RD_KAFKA_OP_OFFSET_COMMIT:
@@ -267,9 +268,8 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 		if (rko->rko_u.dr.do_purge2)
 			rd_kafka_msgq_purge(rko->rko_rk, &rko->rko_u.dr.msgq2);
 
-		if (rko->rko_u.dr.rkt)
-			rd_kafka_topic_destroy0(
-				rd_kafka_topic_a2s(rko->rko_u.dr.rkt));
+		if (rko->rko_u.dr.s_rkt)
+			rd_kafka_topic_destroy0(rko->rko_u.dr.s_rkt);
 		break;
 
 	case RD_KAFKA_OP_OFFSET_RESET:
@@ -499,4 +499,27 @@ int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 		return 0;
 
 	return 1;
+}
+
+
+/**
+ * @brief Store offset for fetched message.
+ */
+void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko,
+			       const rd_kafka_message_t *rkmessage) {
+	rd_kafka_toppar_t *rktp;
+
+	if (unlikely(rko->rko_type != RD_KAFKA_OP_FETCH || rko->rko_err))
+		return;
+
+	rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+
+	if (unlikely(!rk))
+		rk = rktp->rktp_rkt->rkt_rk;
+
+	rd_kafka_toppar_lock(rktp);
+	rktp->rktp_app_offset = rkmessage->offset+1;
+	if (rk->rk_conf.enable_auto_offset_store)
+		rd_kafka_offset_store0(rktp, rkmessage->offset+1, 0/*no lock*/);
+	rd_kafka_toppar_unlock(rktp);
 }

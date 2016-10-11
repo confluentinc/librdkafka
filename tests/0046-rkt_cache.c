@@ -1,7 +1,7 @@
 /*
- * librdkafka - The Apache Kafka C/C++ library
+ * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2015 Magnus Edenhill
+ * Copyright (c) 2012-2015, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,20 +26,40 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#include "test.h"
+#include "rdkafka.h"
+
+#include <stdarg.h>
+
+/**
+ * Issue #345, #821
+ * Test that topic_new() + topic_destroy() can be used as a topic-lookup cache,
+ * i.e., as long as the app topic refcount stays above 1 the app can call
+ * new() and destroy() any number of times (symetrically).
+ */
 
 
+int main_0046_rkt_cache (int argc, char **argv) {
+	rd_kafka_t *rk;
+	rd_kafka_topic_t *rkt;
+	const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+	int i;
 
-int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
-			    char *errstr, int errstr_size);
-int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
-			      char *errstr, int errstr_size);
+	rk = test_create_producer();
 
-void rd_kafka_broker_sasl_term (rd_kafka_broker_t *rkb);
-void rd_kafka_broker_sasl_init (rd_kafka_broker_t *rkb);
+	rkt = test_create_producer_topic(rk, topic, NULL);
 
-void rd_kafka_sasl_global_term (void);
-int rd_kafka_sasl_global_init (void);
+	for (i = 0 ; i < 100 ; i++) {
+		rd_kafka_topic_t *rkt2;
 
-int rd_kafka_sasl_conf_validate (rd_kafka_t *rk,
-				 char *errstr, size_t errstr_size);
+		rkt2 = rd_kafka_topic_new(rk, topic, NULL);
+		TEST_ASSERT(rkt2 != NULL);
+
+		rd_kafka_topic_destroy(rkt2);
+	}
+
+	rd_kafka_topic_destroy(rkt);
+	rd_kafka_destroy(rk);
+
+        return 0;
+}

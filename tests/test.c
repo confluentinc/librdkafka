@@ -126,6 +126,7 @@ _TEST_DECL(0045_subscribe_update);
 _TEST_DECL(0045_subscribe_update_topic_remove);
 _TEST_DECL(0046_rkt_cache);
 _TEST_DECL(0047_partial_buf_tmout);
+_TEST_DECL(0048_partitioner);
 
 /**
  * Define all tests here
@@ -175,6 +176,7 @@ struct test tests[] = {
 	_TEST(0045_subscribe_update_topic_remove, TEST_F_KNOWN_ISSUE),
 	_TEST(0046_rkt_cache, TEST_F_LOCAL),
 	_TEST(0047_partial_buf_tmout, 0),
+	_TEST(0048_partitioner, 0),
         { NULL }
 };
 

@@ -114,6 +114,20 @@ $C
 yes
 yes
 EOF
+	echo "########### Export certificate"
+	keytool -storepass "$PASS" -keystore ${PFX}client.keystore.jks -alias localhost -certreq -file ${PFX}cert-file
+
+	echo "########### Sign certificate"
+	openssl x509 -req -CA ${CA_CERT} -CAkey ${CA_CERT}.key -in ${PFX}cert-file -out ${PFX}cert-signed -days $VALIDITY -CAcreateserial -passin pass:$PASS	
+
+	echo "########### Import CA"
+	keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}client.keystore.jks -alias CARoot -import -file ${CA_CERT} <<EOF
+yes
+EOF
+
+	echo "########### Import signed CA"
+	keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}client.keystore.jks -alias localhost -import -file ${PFX}cert-signed
+
     else
 	# Standard OpenSSL keys
 	echo "############ Generating key"

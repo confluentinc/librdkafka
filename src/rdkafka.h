@@ -1346,8 +1346,8 @@ int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
  *
  * \p conf is an optional struct created with `rd_kafka_conf_new()` that will
  * be used instead of the default configuration.
- * The \p conf object is freed by this function and must not be used or
- * destroyed by the application sub-sequently.
+ * The \p conf object is freed by this function on success and must not be used
+ * or destroyed by the application sub-sequently.
  * See `rd_kafka_conf_set()` et.al for more information.
  *
  * \p errstr must be a pointer to memory of at least size \p errstr_size where

@@ -1097,28 +1097,30 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			  char *errstr, size_t errstr_size) {
 	rd_kafka_t *rk;
 	static rd_atomic32_t rkid;
+        rd_kafka_conf_t *use_conf;             
 #ifndef _MSC_VER
         sigset_t newset, oldset;
 #endif
 
 	call_once(&rd_kafka_global_init_once, rd_kafka_global_init);
 
-
-	if (!conf)
-		conf = rd_kafka_conf_new();
+        /* Use a copy of conf if supplied, otherwise generate a new one so we can always
+         * delete it upon return without additional conditionals
+         */
+        use_conf = (conf ? rd_kafka_conf_dup(conf) : rd_kafka_conf_new());
 
         /* Verify mandatory configuration */
         if (!conf->socket_cb) {
                 rd_snprintf(errstr, errstr_size,
                          "Mandatory config property 'socket_cb' not set");
-                rd_kafka_conf_destroy(conf);
+                rd_kafka_conf_destroy(use_conf);
                 return NULL;
         }
 
         if (!conf->open_cb) {
                 rd_snprintf(errstr, errstr_size,
                          "Mandatory config property 'open_cb' not set");
-                rd_kafka_conf_destroy(conf);
+                rd_kafka_conf_destroy(use_conf);
                 return NULL;
         }
 
@@ -1131,8 +1133,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	rk->rk_type = type;
 
-	rk->rk_conf = *conf;
-	rd_free(conf);
+	rk->rk_conf = *use_conf;
+	rd_free(use_conf);
 
 	rwlock_init(&rk->rk_lock);
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
@@ -1294,6 +1296,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
 
+        /* Destroy user supplied conf on success */
+        if (conf)
+                rd_kafka_conf_destroy(conf);
 	rd_kafka_set_last_error(0, 0);
 
 	return rk;

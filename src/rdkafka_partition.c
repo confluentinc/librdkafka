@@ -1684,11 +1684,12 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 
         if (rktp->rktp_fetch != should_fetch) {
                 rd_rkb_dbg(rkb, FETCH, "FETCH",
-                           "Topic %s [%"PRId32"] at offset %s "
+                           "Topic %s [%"PRId32"] in state %s at offset %s "
                            "(%d/%d msgs, %"PRId64"/%d kb queued, "
 			   "opv %"PRId32") is %sfetchable: %s",
                            rktp->rktp_rkt->rkt_topic->str,
                            rktp->rktp_partition,
+			   rd_kafka_fetch_states[rktp->rktp_fetch_state],
                            rd_kafka_offset2str(rktp->rktp_next_offset),
                            rd_kafka_q_len(rktp->rktp_fetchq),
                            rkb->rkb_rk->rk_conf.queued_min_msgs,

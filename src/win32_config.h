@@ -31,8 +31,17 @@
  */
 #pragma once
 
-#define WITH_SSL 1
-#define WITH_ZLIB 1
+#if !defined WITH_SSL
+#  define WITH_SSL 1
+#endif
+#if !defined WITH_ZLIB
+#  define WITH_ZLIB 1
+#endif
 #define WITH_SNAPPY 1
 
 #define ENABLE_DEVEL 0
+
+#if WITH_SSL
+#pragma comment(lib, "libeay32MT.lib")
+#pragma comment(lib, "ssleay32MT.lib")
+#endif

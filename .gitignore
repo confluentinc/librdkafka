@@ -25,3 +25,4 @@ gmon.out
 *.rpm
 staging-docs
 tmp
+win32/librdkafka.VC.db

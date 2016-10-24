@@ -1028,9 +1028,6 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
                         shptr_rd_kafka_toppar_t *s_rktp = rktpar->_private;
                         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
 
-			if (!RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset))
-				rd_kafka_offset_store0(rktp, rktpar->offset, 1);
-
 			if (!rktp->rktp_assigned) {
 				rktp->rktp_assigned = 1;
 				rkcg->rkcg_assigned_cnt++;

@@ -24,3 +24,11 @@ Artifacts:
   - remaining tools (rdkafka_performance, etc)
   - SASL support (no official Cyrus libsasl2 DLLs available)
   - LZ4 support
+
+Configuration:
+ - You can disable/enable SSL using the definition WITH_SSL=0
+   0: disable
+   1: enable (by default)
+ - You can disable/enable ZLIB using the definition WITH_ZLIB=0
+   0: disable
+   1: enable (by default)

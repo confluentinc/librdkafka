@@ -71,7 +71,7 @@ static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 
 
 	if (name)
-		fprintf(fp, "%s hexdump (%"PRIusz" bytes):\n", name, len);
+		fprintf(fp, "%s hexdump (%zd bytes):\n", name, len);
 
 	for (of = 0 ; of < len ; of += 16) {
 		char hexen[16*3+1];

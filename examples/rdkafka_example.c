@@ -68,7 +68,7 @@ static void hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 
 
 	if (name)
-		fprintf(fp, "%s hexdump (%"PRIusz" bytes):\n", name, len);
+		fprintf(fp, "%s hexdump (%zd bytes):\n", name, len);
 
 	for (of = 0 ; of < len ; of += 16) {
 		char hexen[16*3+1];
@@ -114,7 +114,7 @@ static void msg_delivered (rd_kafka_t *rk,
 		fprintf(stderr, "%% Message delivery failed: %s\n",
 			rd_kafka_err2str(error_code));
 	else if (!quiet)
-		fprintf(stderr, "%% Message delivered (%"PRIusz" bytes): %.*s\n", len,
+		fprintf(stderr, "%% Message delivered (%zd bytes): %.*s\n", len,
 			(int)len, (const char *)payload);
 }
 
@@ -608,7 +608,7 @@ int main (int argc, char **argv) {
 			}
 
 			if (!quiet)
-				fprintf(stderr, "%% Sent %"PRIusz" bytes to topic "
+				fprintf(stderr, "%% Sent %zd bytes to topic "
 					"%s partition %i\n",
 				len, rd_kafka_topic_name(rkt), partition);
 			sendcnt++;

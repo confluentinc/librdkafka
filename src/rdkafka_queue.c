@@ -766,6 +766,7 @@ void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
 		if (unlikely(rko->rko_type != RD_KAFKA_OP_FETCH))
 			continue;
 
+		rko->rko_u.fetch.rkm.rkm_offset += base_offset;
 		if (rko->rko_u.fetch.rkm.rkm_offset < min_offset &&
 		    rko->rko_err != RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED) {
 			adj_len++;
@@ -774,8 +775,6 @@ void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
 			rd_kafka_op_destroy(rko);
 			continue;
 		}
-
-		rko->rko_u.fetch.rkm.rkm_offset += base_offset;
 	}
 
 

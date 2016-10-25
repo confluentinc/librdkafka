@@ -98,11 +98,7 @@ struct msghdr {
 
 /* size_t and ssize_t format strings */
 #define PRIusz  "Iu"
-#if defined _MSC_VER
-#  define PRIdsz  "ll"
-#else
-#  define PRIdsz  "Id"
-#endif
+#define PRIdsz  "Id"
 
 #define RD_FORMAT(...)
 

@@ -1977,7 +1977,7 @@ static int test_mv_mvec_verify_dup (test_msgver_t *mv, int flags,
 		_P_MSGID
 	} pass;
 
-	for (pass = _P_OFFSET ; pass <= _P_MSGID ; pass++) {
+	for (pass = _P_OFFSET ; pass <= _P_MSGID ; ++pass) {
 
 		if (pass == _P_OFFSET) {
 			if (!(flags & TEST_MSGVER_BY_OFFSET))

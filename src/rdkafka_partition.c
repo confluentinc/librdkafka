@@ -1295,7 +1295,8 @@ void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
  */
 void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
 				 rd_kafka_op_t *rko_orig) {
-        int32_t version = rko_orig->rko_version;
+        int32_t version = -1;
+        if(rko_orig) version = rko_orig->rko_version;
 
 	rd_kafka_toppar_lock(rktp);
 

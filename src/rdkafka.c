@@ -229,7 +229,7 @@ void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 	rd_gettimeofday(&tv, NULL);
 	secs = (int)tv.tv_sec;
 	msecs = (int)(tv.tv_usec / 1000);
-	fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n",
+	fprintf(stderr, "%%%i|%d.%03d|%s|%s| %s\n",
 		level, secs, msecs,
 		fac, rk ? rk->rk_name : "", buf);
 }
@@ -1110,14 +1110,14 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         use_conf = (conf ? rd_kafka_conf_dup(conf) : rd_kafka_conf_new());
 
         /* Verify mandatory configuration */
-        if (!conf->socket_cb) {
+        if (!conf || !conf->socket_cb) {
                 rd_snprintf(errstr, errstr_size,
                          "Mandatory config property 'socket_cb' not set");
                 rd_kafka_conf_destroy(use_conf);
                 return NULL;
         }
 
-        if (!conf->open_cb) {
+        if (!conf || !conf->open_cb) {
                 rd_snprintf(errstr, errstr_size,
                          "Mandatory config property 'open_cb' not set");
                 rd_kafka_conf_destroy(use_conf);
@@ -2362,7 +2362,7 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
         fprintf(fp, "rd_kafka_op_cnt: %d\n", rd_atomic32_get(&rd_kafka_op_cnt));
 	fprintf(fp, "rd_kafka_t %p: %s\n", rk, rk->rk_name);
 
-	fprintf(fp, " producer.msg_cnt %u (%"PRIdsz" bytes)\n",
+	fprintf(fp, " producer.msg_cnt %u (%"PRIusz" bytes)\n",
 		tot_cnt, tot_size);
 	fprintf(fp, " rk_rep reply queue: %i ops\n",
 		rd_kafka_q_len(rk->rk_rep));

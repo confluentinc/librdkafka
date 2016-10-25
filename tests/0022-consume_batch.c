@@ -106,8 +106,8 @@ static int do_test_consume_batch (void) {
                 r = rd_kafka_consume_batch_queue(rkq, 1000, rkmessage, 1000);
                 TIMING_STOP(&t_batch);
 
-                TEST_SAY("Batch consume iteration #%d: Consumed %"PRIdsz
-                         "/1000 messages\n", batch_cnt, r);
+                TEST_SAY("Batch consume iteration #%d: Consumed %"PRIdsz""\
+                         "1000 messages\n", batch_cnt, r);
 
                 if (r == -1)
                         TEST_FAIL("Failed to consume messages: %s\n",

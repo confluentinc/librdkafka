@@ -535,11 +535,10 @@ public:
   topic_(topic), partition_(partition), offset_(RdKafka::Topic::OFFSET_INVALID),
       err_(ERR_NO_ERROR) {}
 
-  TopicPartitionImpl (const rd_kafka_topic_partition_t *c_part) {
-    topic_ = std::string(c_part->topic);
+  TopicPartitionImpl (const rd_kafka_topic_partition_t *c_part) : topic_(std::string(c_part->topic)),
+     err_(static_cast<ErrorCode>(c_part->err)) {
     partition_ = c_part->partition;
     offset_ = c_part->offset;
-    err_ = static_cast<ErrorCode>(c_part->err);
     // FIXME: metadata
   }
 

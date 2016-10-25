@@ -94,9 +94,9 @@ char *rd_string_render (const char *template,
 			 *               ^ */
 			te = strchr(t+2, '}');
 			if (!te) {
-				rd_snprintf(errstr, errstr_size,
+            rd_snprintf(errstr, errstr_size,
 					    "Missing close-brace } for "
-					    "%.*s at %"PRIdsz,
+					    "%.*s at %"PRIusz"",
 					    15, t, tof);
 				rd_free(buf);
 				return NULL;

@@ -77,8 +77,7 @@ public:
                 minOffset(-1), maxOffset(0) {
     printf("Created assignment\n");
   }
-  Assignment(const Assignment &a) {
-    topic = a.topic;
+  Assignment(const Assignment &a) : topic(a.topic){
     partition = a.partition;
     consumedMessages = a.consumedMessages;
     minOffset = a.minOffset;
@@ -348,7 +347,7 @@ static void report_records_consumed (int immediate) {
     "\"partitions\": [ ";
 
   for (std::map<std::string,Assignment>::iterator ii = assignments->begin() ;
-       ii != assignments->end() ; ii++) {
+       ii != assignments->end() ; ++ii) {
     Assignment *a = &(*ii).second;
     assert(!a->topic.empty());
     std::cout << (ii == assignments->begin() ? "": ", ") << " { " <<
@@ -746,9 +745,9 @@ int main (int argc, char **argv) {
       for (std::list<std::string>::iterator it = dump->begin();
            it != dump->end(); ) {
         std::cerr << *it << " = ";
-        it++;
+        ++it;
         std::cerr << *it << std::endl;
-        it++;
+        ++it;
       }
       std::cerr << std::endl;
     }

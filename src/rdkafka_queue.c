@@ -767,6 +767,7 @@ void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
 			continue;
 
 		rko->rko_u.fetch.rkm.rkm_offset += base_offset;
+
 		if (rko->rko_u.fetch.rkm.rkm_offset < min_offset &&
 		    rko->rko_err != RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED) {
 			adj_len++;

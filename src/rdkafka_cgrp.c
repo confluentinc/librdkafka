@@ -99,11 +99,13 @@ static void rd_kafka_cgrp_set_state (rd_kafka_cgrp_t *rkcg, int state) {
                 return;
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPSTATE",
-                     "Group \"%.*s\" changed state %s -> %s (v%d)",
+                     "Group \"%.*s\" changed state %s -> %s "
+                     "(v%d, join-state %s)",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                      rd_kafka_cgrp_state_names[state],
-		     rkcg->rkcg_version);
+		     rkcg->rkcg_version,
+                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
         rkcg->rkcg_state = state;
         rkcg->rkcg_ts_statechange = rd_clock();
 
@@ -116,11 +118,13 @@ void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state) {
                 return;
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPJOINSTATE",
-                     "Group \"%.*s\" changed join state %s -> %s (v%d)",
+                     "Group \"%.*s\" changed join state %s -> %s "
+                     "(v%d, state %s)",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                      rd_kafka_cgrp_join_state_names[join_state],
-		     rkcg->rkcg_version);
+		     rkcg->rkcg_version,
+                     rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
         rkcg->rkcg_join_state = join_state;
 }
 
@@ -1138,7 +1142,8 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
 /**
  * Handle OffsetCommitResponse
  * Takes the original 'rko' as opaque argument.
- * @remark \p rkb is NULL in a number of error cases (e.g., _NO_OFFSET)
+ * @remark \p rkb, rkbuf, and request may be NULL in a number of
+ *         error cases (e.g., _NO_OFFSET, _WAIT_COORD)
  */
 static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 						  rd_kafka_broker_t *rkb,
@@ -1892,13 +1897,13 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                 else if (!silent_op)
                         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPOP",
                                      "Group \"%.*s\" received op %s (v%d) in state %s "
-                                     "(join state %s, v%"PRId32")",
+                                     "(join state %s, v%"PRId32" vs %"PRId32")",
                                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                                      rd_kafka_op2str(rko->rko_type),
 				     rko->rko_version,
                                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
-				     rkcg->rkcg_version);
+				     rkcg->rkcg_version, rko->rko_version);
 
                 switch ((int)rko->rko_type)
                 {

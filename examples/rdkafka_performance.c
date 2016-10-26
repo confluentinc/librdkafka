@@ -129,6 +129,25 @@ static void throttle_cb (rd_kafka_t *rk, const char *broker_name,
 	       broker_name, broker_id);
 }
 
+static void offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                              rd_kafka_topic_partition_list_t *offsets,
+                              void *opaque) {
+        int i;
+
+        if (err || verbosity >= 2)
+                printf("%% Offset commit of %d partition(s): %s\n",
+                       offsets->cnt, rd_kafka_err2str(err));
+
+        for (i = 0 ; i < offsets->cnt ; i++) {
+                rd_kafka_topic_partition_t *rktpar = &offsets->elems[i];
+                if (rktpar->err || verbosity >= 2)
+                        printf("%%  %s [%"PRId32"] @ %"PRId64": %s\n",
+                               rktpar->topic, rktpar->partition,
+                               rktpar->offset, rd_kafka_err2str(err));
+        }
+}
+
+
 
 static void msg_delivered (rd_kafka_t *rk,
                            const rd_kafka_message_t *rkmessage, void *opaque) {
@@ -632,6 +651,7 @@ int main (int argc, char **argv) {
 	conf = rd_kafka_conf_new();
 	rd_kafka_conf_set_error_cb(conf, err_cb);
 	rd_kafka_conf_set_throttle_cb(conf, throttle_cb);
+        rd_kafka_conf_set_offset_commit_cb(conf, offset_commit_cb);
 
 	/* Quick termination */
 	snprintf(tmp, sizeof(tmp), "%i", SIGIO);

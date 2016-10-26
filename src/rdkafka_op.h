@@ -164,6 +164,7 @@ struct rd_kafka_op_s {
 			void *opaque;
 			int silent_empty; /**< Fail silently if there are no
 					   *   offsets to commit. */
+                        rd_ts_t ts_timeout;
 		} offset_commit;
 
 		struct {

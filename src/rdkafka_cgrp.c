@@ -183,6 +183,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
         rd_interval_init(&rkcg->rkcg_coord_query_intvl);
         rd_interval_init(&rkcg->rkcg_heartbeat_intvl);
         rd_interval_init(&rkcg->rkcg_join_intvl);
+        rd_interval_init(&rkcg->rkcg_timeout_scan_intvl);
 
         if (RD_KAFKAP_STR_IS_NULL(group_id)) {
                 /* No group configured: Operate in legacy/SimpleConsumer mode */
@@ -1250,7 +1251,8 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 	    rkcg->rkcg_rkb->rkb_source == RD_KAFKA_INTERNAL) {
 		/* wait_coord_q is disabled session.timeout.ms after
 		 * group close() has been initated. */
-		if (rd_kafka_q_ready(rkcg->rkcg_wait_coord_q)) {
+		if (rko->rko_u.offset_commit.ts_timeout == 0 &&
+                    rd_kafka_q_ready(rkcg->rkcg_wait_coord_q)) {
 			rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
 				     "Group \"%s\": "
 				     "unable to OffsetCommit in state %s: "
@@ -1262,6 +1264,9 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 				     rd_kafka_broker_name(rkcg->rkcg_rkb) :
 				     "none");
 			rko->rko_flags |= RD_KAFKA_OP_F_REPROCESS;
+                        rko->rko_u.offset_commit.ts_timeout = rd_clock() +
+                                (rkcg->rkcg_rk->rk_conf.group_session_timeout_ms
+                                 * 1000);
 			rd_kafka_q_enq(rkcg->rkcg_wait_coord_q, rko);
 			return;
 		}
@@ -1784,6 +1789,53 @@ void rd_kafka_cgrp_terminate (rd_kafka_cgrp_t *rkcg, rd_kafka_replyq_t replyq) {
 }
 
 
+struct _op_timeout_offset_commit {
+        rd_ts_t now;
+        rd_kafka_t *rk;
+};
+
+/**
+ * q_filter callback for expiring OFFSET_COMMIT timeouts.
+ */
+static int rd_kafka_op_offset_commit_timeout_check (rd_kafka_q_t *rkq,
+                                                    rd_kafka_op_t *rko,
+                                                    void *opaque) {
+        struct _op_timeout_offset_commit *state =
+                (struct _op_timeout_offset_commit*)opaque;
+
+        if (likely(rko->rko_type != RD_KAFKA_OP_OFFSET_COMMIT ||
+                   rko->rko_u.offset_commit.ts_timeout == 0 ||
+                   rko->rko_u.offset_commit.ts_timeout > state->now)) {
+                return 0;
+        }
+
+        rd_kafka_q_deq0(rkq, rko);
+        rd_kafka_cgrp_op_handle_OffsetCommit(state->rk, NULL,
+                                             RD_KAFKA_RESP_ERR__WAIT_COORD,
+                                             NULL, NULL, rko);
+        return 1;
+}
+
+
+/**
+ * Scan for various timeouts.
+ */
+static void rd_kafka_cgrp_timeout_scan (rd_kafka_cgrp_t *rkcg, rd_ts_t now) {
+        struct _op_timeout_offset_commit ofc_state;
+        int cnt = 0;
+
+        ofc_state.now = now;
+        ofc_state.rk = rkcg->rkcg_rk;
+        cnt += rd_kafka_q_apply(rkcg->rkcg_wait_coord_q,
+                                rd_kafka_op_offset_commit_timeout_check,
+                                &ofc_state);
+
+        if (cnt > 0)
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTIMEOUT",
+                             "Group \"%.*s\": timed out %d op(s), %d remain",
+                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), cnt,
+                             rd_kafka_q_len(rkcg->rkcg_wait_coord_q));
+}
 
 
 /**
@@ -2016,6 +2068,7 @@ static void rd_kafka_cgrp_join_state_serve (rd_kafka_cgrp_t *rkcg,
 void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 	rd_kafka_broker_t *rkb = rkcg->rkcg_rkb;
 	int rkb_state = RD_KAFKA_BROKER_STATE_INIT;
+        rd_ts_t now;
 
 	if (rkb) {
 		rd_kafka_broker_lock(rkb);
@@ -2031,6 +2084,8 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 	}
 
         rd_kafka_cgrp_op_serve(rkcg, rkb);
+
+        now = rd_clock();
 
 	/* Check for cgrp termination */
 	if (unlikely(rd_kafka_cgrp_try_terminate(rkcg)))
@@ -2052,7 +2107,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
         case RD_KAFKA_CGRP_STATE_QUERY_COORD:
                 /* Query for coordinator. */
                 if (rd_interval_immediate(&rkcg->rkcg_coord_query_intvl,
-					  500*1000, 0) > 0)
+					  500*1000, now) > 0)
                         rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in "
                                                   "state query-coord");
@@ -2069,7 +2124,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 
                 /* Coordinator query */
                 if (rd_interval(&rkcg->rkcg_coord_query_intvl,
-				1000*1000, 0) > 0)
+				1000*1000, now) > 0)
                         rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in "
                                                   "state wait-broker");
@@ -2083,7 +2138,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
 			    rkb, RD_KAFKA_FEATURE_BROKER_GROUP_COORD)) {
 			/* Coordinator query */
 			if (rd_interval(&rkcg->rkcg_coord_query_intvl,
-					1000*1000, 0) > 0)
+					1000*1000, now) > 0)
 				rd_kafka_cgrp_coord_query(
 					rkcg,
 					"intervaled in state "
@@ -2108,7 +2163,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
                 /* Relaxed coordinator queries. */
                 if (rd_interval(&rkcg->rkcg_coord_query_intvl,
                                 rkcg->rkcg_rk->rk_conf.
-                                coord_query_intvl_ms * 1000, 0) > 0)
+                                coord_query_intvl_ms * 1000, now) > 0)
                         rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in state up");
 
@@ -2119,6 +2174,11 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
                 break;
 
         }
+
+        if (unlikely(rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP &&
+                     rd_interval(&rkcg->rkcg_timeout_scan_intvl,
+                                 1000*1000, now) > 0))
+                rd_kafka_cgrp_timeout_scan(rkcg, now);
 }
 
 

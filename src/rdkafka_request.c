@@ -1397,6 +1397,9 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
         /* Push write-buffer onto iovec stack */
         rd_kafka_buf_autopush(rkbuf);
 
+        rkbuf->rkbuf_ts_timeout = rd_clock() +
+                (rkb->rkb_rk->rk_conf.group_session_timeout_ms * 1000);
+
         rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Heartbeat,
                                        rkbuf, replyq, resp_cb, opaque);
 }

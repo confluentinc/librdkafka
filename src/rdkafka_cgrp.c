@@ -761,7 +761,7 @@ static void rd_kafka_cgrp_terminated (rd_kafka_cgrp_t *rkcg) {
 	rd_kafka_assert(NULL, rkcg->rkcg_wait_unassign_cnt == 0);
 	rd_kafka_assert(NULL, rkcg->rkcg_wait_commit_cnt == 0);
 	rd_kafka_assert(NULL, !(rkcg->rkcg_flags&RD_KAFKA_CGRP_F_WAIT_UNASSIGN));
-        rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_TERM);
+        rd_kafka_assert(NULL, rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_TERM);
 
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_offset_commit_tmr, 1/*lock*/);
@@ -795,6 +795,9 @@ static void rd_kafka_cgrp_terminated (rd_kafka_cgrp_t *rkcg) {
  */
 static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 
+        if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_TERM)
+                return 1;
+
 	if (likely(!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)))
 		return 0;
 
@@ -821,7 +824,13 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 	    rkcg->rkcg_wait_unassign_cnt == 0 &&
 	    rkcg->rkcg_wait_commit_cnt == 0 &&
             !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
-                rd_kafka_cgrp_terminated(rkcg);
+                /* Since we might be deep down in a 'rko' handler
+                 * called from cgrp_op_serve() we cant call terminated()
+                 * directly since it will decommission the rkcg_ops queue
+                 * that might be locked by intermediate functions.
+                 * Instead set the TERM state and let the cgrp terminate
+                 * at its own discretion. */
+                rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_TERM);
                 return 1;
         } else {
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
@@ -2102,8 +2111,10 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
         now = rd_clock();
 
 	/* Check for cgrp termination */
-	if (unlikely(rd_kafka_cgrp_try_terminate(rkcg)))
-		return; /* cgrp terminated */
+	if (unlikely(rd_kafka_cgrp_try_terminate(rkcg))) {
+                rd_kafka_cgrp_terminated(rkcg);
+                return; /* cgrp terminated */
+        }
 
         /* Bail out if we're terminating. */
         if (unlikely(rd_kafka_terminating(rkcg->rkcg_rk)))

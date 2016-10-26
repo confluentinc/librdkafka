@@ -739,6 +739,11 @@ static int rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
 
 static void rd_kafka_cgrp_heartbeat (rd_kafka_cgrp_t *rkcg,
                                      rd_kafka_broker_t *rkb) {
+        /* Skip heartbeat if we have one in transit */
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT)
+                return;
+
+        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
         rd_kafka_HeartbeatRequest(rkb, rkcg->rkcg_group_id,
                                   rkcg->rkcg_generation_id,
                                   rkcg->rkcg_member_id,

@@ -1440,6 +1440,9 @@ err:
                 return;
         }
 
+        rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
+        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+
         if (ErrorCode != 0 && ErrorCode != RD_KAFKA_RESP_ERR__DESTROY)
 		rd_kafka_cgrp_handle_heartbeat_error(rkcg, ErrorCode);
 }

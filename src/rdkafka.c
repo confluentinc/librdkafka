@@ -1110,22 +1110,14 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         use_conf = (conf ? rd_kafka_conf_dup(conf) : rd_kafka_conf_new());
 
         /* Verify mandatory configuration */
-<<<<<<< HEAD
-        if (!conf || !conf->socket_cb) {
-=======
         if (!use_conf->socket_cb) {
->>>>>>> refs/remotes/edenhill/master
                 rd_snprintf(errstr, errstr_size,
                          "Mandatory config property 'socket_cb' not set");
                 rd_kafka_conf_destroy(use_conf);
                 return NULL;
         }
 
-<<<<<<< HEAD
-        if (!conf || !conf->open_cb) {
-=======
         if (!use_conf->open_cb) {
->>>>>>> refs/remotes/edenhill/master
                 rd_snprintf(errstr, errstr_size,
                          "Mandatory config property 'open_cb' not set");
                 rd_kafka_conf_destroy(use_conf);

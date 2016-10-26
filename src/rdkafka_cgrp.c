@@ -36,7 +36,8 @@
 #include "rdkafka_metadata.h"
 #include "rdkafka_cgrp.h"
 
-static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg);
+static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg,
+                                               const char *reason);
 static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg);
 static void rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
@@ -1118,7 +1119,8 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
                 return; /* terminated */
 
         if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN)
-		rd_kafka_cgrp_check_unassign_done(rkcg);
+		rd_kafka_cgrp_check_unassign_done(rkcg,
+                                                  "OffsetCommit done");
 }
 
 
@@ -1150,15 +1152,12 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 
 	rd_kafka_assert(NULL, rkcg->rkcg_wait_commit_cnt > 0);
 	rkcg->rkcg_wait_commit_cnt--;
-
-	if (rkcg->rkcg_wait_commit_cnt == 0 &&
-	    rkcg->rkcg_assignment &&
-	    RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
-		rd_kafka_cgrp_partitions_fetch_start(rkcg,
-						     rkcg->rkcg_assignment, 0);
+        /* check_unassign_done() is called from handle_OffsetCommit() below */
 
 	if (err == RD_KAFKA_RESP_ERR__DESTROY) {
 		rd_kafka_op_destroy(rko_orig);
+                rd_kafka_cgrp_check_unassign_done(rkcg,
+                                                  "OffsetCommit done (__DESTROY)");
 		return;
 	}
 
@@ -1284,15 +1283,12 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
  err:
 	/* No valid offsets */
 	if (silent_empty) {
+                if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS)) {
+                        rkcg->rkcg_wait_commit_cnt--;
+                        /* Must not call check_unassign_done() here
+                         * for silent empty offset commits. */
+                }
 		rd_kafka_op_destroy(rko);
-		rkcg->rkcg_wait_commit_cnt--;
-
-		if (rkcg->rkcg_wait_commit_cnt == 0 &&
-		    rkcg->rkcg_assignment &&
-		    RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
-			rd_kafka_cgrp_partitions_fetch_start(
-				rkcg, rkcg->rkcg_assignment, 0);
-
 		return;
 	}
 
@@ -1343,15 +1339,17 @@ static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
 /**
  * Call when all unassign operations are done to transition to the next state
  */
-static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg) {
+static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg,
+                                         const char *reason) {
 	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
 		     "Group \"%s\": unassign done in state %s (join state %s): "
-		     "%s",
+		     "%s: %s",
 		     rkcg->rkcg_group_id->str,
 		     rd_kafka_cgrp_state_names[rkcg->rkcg_state],
 		     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
 		     rkcg->rkcg_assignment ?
-		     "with new assignment" : "without new assignment");
+		     "with new assignment" : "without new assignment",
+                     reason);
 
 	if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN) {
 		rd_kafka_cgrp_leave(rkcg, 1/*ignore response*/);
@@ -1361,8 +1359,9 @@ static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg) {
         if (rkcg->rkcg_assignment) {
 		rd_kafka_cgrp_set_join_state(rkcg,
 					     RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED);
-                rd_kafka_cgrp_partitions_fetch_start(rkcg,
-                                                     rkcg->rkcg_assignment, 0);
+                if (RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
+                        rd_kafka_cgrp_partitions_fetch_start(
+                                rkcg, rkcg->rkcg_assignment, 0);
 	} else {
 		rd_kafka_cgrp_set_join_state(rkcg,
 					     RD_KAFKA_CGRP_JOIN_STATE_INIT);
@@ -1377,14 +1376,25 @@ static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg) {
  * calls .._done().
  * Else does nothing.
  */
-static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg) {
+static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg,
+                                               const char *reason) {
 	if (rkcg->rkcg_wait_unassign_cnt > 0 ||
 	    rkcg->rkcg_assigned_cnt > 0 ||
 	    rkcg->rkcg_wait_commit_cnt > 0 ||
-	    rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)
+	    rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN) {
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
+                             "Unassign not done yet "
+                             "(%d wait_unassign, %d assigned, %d wait commit"
+                             "%s)",
+                             rkcg->rkcg_wait_unassign_cnt,
+                             rkcg->rkcg_assigned_cnt,
+                             rkcg->rkcg_wait_commit_cnt,
+                             (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)?
+                             ", F_WAIT_UNASSIGN" : "");
 		return;
+        }
 
-	rd_kafka_cgrp_unassign_done(rkcg);
+	rd_kafka_cgrp_unassign_done(rkcg, reason);
 }
 
 
@@ -1399,7 +1409,7 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
 	rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
 
         if (!rkcg->rkcg_assignment) {
-		rd_kafka_cgrp_check_unassign_done(rkcg);
+		rd_kafka_cgrp_check_unassign_done(rkcg, "unassign");
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 	}
 
@@ -1449,8 +1459,7 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_assignment);
         rkcg->rkcg_assignment = NULL;
 
-	if (rkcg->rkcg_wait_unassign_cnt == 0)
-		rd_kafka_cgrp_check_unassign_done(rkcg);
+        rd_kafka_cgrp_check_unassign_done(rkcg, "unassign#2");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -1583,6 +1592,13 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 	case RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS:
 	case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
 	default:
+                /* Just revert to INIT state if join state is active. */
+                if (rkcg->rkcg_join_state <
+                    RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB ||
+                    rkcg->rkcg_join_state ==
+                    RD_KAFKA_CGRP_JOIN_STATE_WAIT_REVOKE_REBALANCE_CB)
+                        break;
+
                 rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
 
                 if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
@@ -1931,14 +1947,12 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
                         rktp->rktp_assigned = 0;
 			rkcg->rkcg_assigned_cnt--;
 
-                        if (rkcg->rkcg_wait_unassign_cnt > 0)
-                                break;
-
                         /* All unassigned toppars now stopped and commit done:
                          * transition to the next state. */
                         if (rkcg->rkcg_join_state ==
                             RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN)
-                                rd_kafka_cgrp_check_unassign_done(rkcg);
+                                rd_kafka_cgrp_check_unassign_done(rkcg,
+                                        "FETCH_STOP done");
                         break;
 
                 case RD_KAFKA_OP_OFFSET_COMMIT:

@@ -204,6 +204,8 @@
     <ClCompile Include="..\..\tests\0046-rkt_cache.c" />
     <ClCompile Include="..\..\tests\0047-partial_buf_tmout.c" />
     <ClCompile Include="..\..\tests\0048-partitioner.c" />
+    <ClCompile Include="..\..\tests\0050-subscribe_adds.c" />
+    <ClCompile Include="..\..\tests\0051-assign_adds.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
   </ItemGroup>

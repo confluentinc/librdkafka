@@ -1160,18 +1160,26 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 
 	err = rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf,
 					   request, offsets);
+        rd_kafka_dbg(rk, CGRP, "COMMIT",
+                     "OffsetCommit for %d partition(s) returned: %s",
+                     offsets ? offsets->cnt : -1,
+                     rd_kafka_err2str(err));
 
 	if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
 		return; /* Retrying */
 
 	rd_kafka_assert(NULL, rkcg->rkcg_wait_commit_cnt > 0);
 	rkcg->rkcg_wait_commit_cnt--;
-        /* check_unassign_done() is called from handle_OffsetCommit() below */
 
-	if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+	if (err == RD_KAFKA_RESP_ERR__DESTROY ||
+            (err == RD_KAFKA_RESP_ERR__NO_OFFSET &&
+             rko_orig->rko_u.offset_commit.silent_empty)) {
 		rd_kafka_op_destroy(rko_orig);
-                rd_kafka_cgrp_check_unassign_done(rkcg,
-                                                  "OffsetCommit done (__DESTROY)");
+                rd_kafka_cgrp_check_unassign_done(
+                        rkcg,
+                        err == RD_KAFKA_RESP_ERR__DESTROY ?
+                        "OffsetCommit done (__DESTROY)" :
+                        "OffsetCommit done (__NO_OFFSET)");
 		return;
 	}
 
@@ -1211,6 +1219,12 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 }
 
 
+static int rd_kafka_topic_partition_has_absolute_offset (
+        const rd_kafka_topic_partition_t *rktpar, void *opaque) {
+        return rktpar->offset >= 0 ? 1 : 0;
+}
+
+
 /**
  * Commit a list of offsets.
  * Reuse the orignating 'rko' for the async reply.
@@ -1218,46 +1232,51 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
  * a proper topic_partition_list_t with offsets to commit.
  * The offset list will be altered.
  *
- * \p silent_empty: if there are no offsets to commit bail out silently without
- *                  posting an op on the reply queue.
+ * \p rko...silent_empty: if there are no offsets to commit bail out
+ *                        silently without posting an op on the reply queue.
+ * \p set_offsets: set offsets in rko->rko_u.offset_commit.partitions
  *
  * Locality: cgrp thread
  */
 static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
-                                          rd_kafka_op_t *rko) {
+                                          rd_kafka_op_t *rko,
+                                          int set_offsets) {
 	rd_kafka_topic_partition_list_t *offsets;
 	rd_kafka_resp_err_t err;
-	int silent_empty = rko->rko_u.offset_commit.silent_empty;
+        int valid_offsets = 0;
 
 	/* If offsets is NULL we shall use the current assignment. */
-	if (!rko->rko_u.offset_commit.partitions && rkcg->rkcg_assignment) {
-		/* Copy assignment and fill in offsets */
+	if (!rko->rko_u.offset_commit.partitions && rkcg->rkcg_assignment)
 		rko->rko_u.offset_commit.partitions =
 			rd_kafka_topic_partition_list_copy(
 				rkcg->rkcg_assignment);
 
-		rd_kafka_topic_partition_list_set_offsets(
+	offsets = rko->rko_u.offset_commit.partitions;
+
+        if (offsets) {
+                /* Set offsets to commits */
+                if (set_offsets)
+                        rd_kafka_topic_partition_list_set_offsets(
 			rkcg->rkcg_rk, rko->rko_u.offset_commit.partitions, 1,
 			RD_KAFKA_OFFSET_INVALID/* def */,
 			1 /* is commit */);
 
-	}
+                /*  Check the number of valid offsets to commit. */
+                valid_offsets = rd_kafka_topic_partition_list_sum(
+                        offsets,
+                        rd_kafka_topic_partition_has_absolute_offset, NULL);
+        }
 
-	offsets = rko->rko_u.offset_commit.partitions;
+        if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS)) {
+                /* wait_commit_cnt has already been increased for
+                 * reprocessed ops. */
+                rkcg->rkcg_wait_commit_cnt++;
+        }
 
-	if (!offsets && silent_empty) {
-		rd_kafka_op_destroy(rko);
-		return;
-	}
-
-	/* Reprocessing ops will have increased wait_commit_cnt already. */
-	if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS))
-		rkcg->rkcg_wait_commit_cnt++;
-
-
-	if (!offsets || offsets->cnt == 0) {
-		err = RD_KAFKA_RESP_ERR__NO_OFFSET;
-		goto err;
+	if (!valid_offsets) {
+                /* No valid offsets */
+                err = RD_KAFKA_RESP_ERR__NO_OFFSET;
+                goto err;
 	}
 
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP || !rkcg->rkcg_rkb ||
@@ -1283,29 +1302,27 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 			rd_kafka_q_enq(rkcg->rkcg_wait_coord_q, rko);
 			return;
 		}
-
 		err = RD_KAFKA_RESP_ERR__WAIT_COORD;
 
-	} else if (rd_kafka_OffsetCommitRequest(
-			   rkcg->rkcg_rkb, rkcg, 1, offsets,
-			   RD_KAFKA_REPLYQ(rkcg->rkcg_ops, rkcg->rkcg_version),
-			   rd_kafka_cgrp_op_handle_OffsetCommit, rko) != 0)
-		return;
-	else
-		err = RD_KAFKA_RESP_ERR__NO_OFFSET;
+	} else {
+                int r;
+
+                /* Send OffsetCommit */
+                r = rd_kafka_OffsetCommitRequest(
+                            rkcg->rkcg_rkb, rkcg, 1, offsets,
+                            RD_KAFKA_REPLYQ(rkcg->rkcg_ops,
+                                            rkcg->rkcg_version),
+                            rd_kafka_cgrp_op_handle_OffsetCommit, rko);
+
+                /* Must have valid offsets to commit if we get here */
+                rd_kafka_assert(NULL, r != 0);
+
+                return;
+        }
+
+
 
  err:
-	/* No valid offsets */
-	if (silent_empty) {
-                if (!(rko->rko_flags & RD_KAFKA_OP_F_REPROCESS)) {
-                        rkcg->rkcg_wait_commit_cnt--;
-                        /* Must not call check_unassign_done() here
-                         * for silent empty offset commits. */
-                }
-		rd_kafka_op_destroy(rko);
-		return;
-	}
-
 	/* Propagate error to whoever wanted offset committed. */
 	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "COMMIT",
 		     "OffsetCommit internal error: %s", rd_kafka_err2str(err));
@@ -1317,7 +1334,10 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 /**
  * Commit offsets for all assigned partitions.
  */
-static void rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg) {
+static void
+rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg,
+                                       const rd_kafka_topic_partition_list_t
+                                       *offsets) {
         rd_kafka_op_t *rko;
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT);
@@ -1328,8 +1348,11 @@ static void rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg) {
 		rko->rko_u.offset_commit.opaque = rkcg->rkcg_rk->rk_conf.opaque;
 	}
         /* NULL partitions means current assignment */
+        if (offsets)
+                rko->rko_u.offset_commit.partitions =
+                        rd_kafka_topic_partition_list_copy(offsets);
 	rko->rko_u.offset_commit.silent_empty = 1;
-        rd_kafka_cgrp_offsets_commit(rkcg, rko);
+        rd_kafka_cgrp_offsets_commit(rkcg, rko, 1/* set offsets */);
 }
 
 
@@ -1344,7 +1367,7 @@ static void rd_kafka_cgrp_offset_commit_tmr_cb (rd_kafka_timers_t *rkts,
                                                 void *arg) {
         rd_kafka_cgrp_t *rkcg = arg;
 
-	rd_kafka_cgrp_assigned_offsets_commit(rkcg);
+	rd_kafka_cgrp_assigned_offsets_commit(rkcg, NULL);
 }
 
 
@@ -1369,6 +1392,11 @@ static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg,
 		rd_kafka_cgrp_leave(rkcg, 1/*ignore response*/);
 		rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN;
 	}
+
+        if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN) {
+                rd_kafka_cgrp_try_terminate(rkcg);
+                return;
+        }
 
         if (rkcg->rkcg_assignment) {
 		rd_kafka_cgrp_set_join_state(rkcg,
@@ -1399,12 +1427,12 @@ static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg,
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
                              "Unassign not done yet "
                              "(%d wait_unassign, %d assigned, %d wait commit"
-                             "%s)",
+                             "%s): %s",
                              rkcg->rkcg_wait_unassign_cnt,
                              rkcg->rkcg_assigned_cnt,
                              rkcg->rkcg_wait_commit_cnt,
                              (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)?
-                             ", F_WAIT_UNASSIGN" : "");
+                             ", F_WAIT_UNASSIGN" : "", reason);
 		return;
         }
 
@@ -1419,38 +1447,40 @@ static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg,
 static rd_kafka_resp_err_t
 rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
         int i;
+        rd_kafka_topic_partition_list_t *old_assignment;
+
+        rd_kafka_cgrp_set_join_state(rkcg,
+                                     RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN);
 
 	rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
-
-        if (!rkcg->rkcg_assignment) {
-		rd_kafka_cgrp_check_unassign_done(rkcg, "unassign");
+        old_assignment = rkcg->rkcg_assignment;
+        if (!old_assignment) {
+		rd_kafka_cgrp_check_unassign_done(
+                        rkcg, "unassign (no previous assignment)");
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 	}
+        rkcg->rkcg_assignment = NULL;
 
 	rd_kafka_cgrp_version_new_barrier(rkcg);
 
 	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
                      "Group \"%s\": unassigning %d partition(s) (v%"PRId32")",
-                     rkcg->rkcg_group_id->str, rkcg->rkcg_assignment->cnt,
+                     rkcg->rkcg_group_id->str, old_assignment->cnt,
 		     rkcg->rkcg_version);
-
-        rd_kafka_cgrp_set_join_state(rkcg,
-                                     RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN);
 
         if (rkcg->rkcg_rk->rk_conf.offset_store_method ==
             RD_KAFKA_OFFSET_METHOD_BROKER &&
 	    rkcg->rkcg_rk->rk_conf.enable_auto_commit) {
                 /* Commit all offsets for all assigned partitions to broker */
-                rd_kafka_cgrp_assigned_offsets_commit(rkcg);
+                rd_kafka_cgrp_assigned_offsets_commit(rkcg, old_assignment);
         }
 
-
-        for (i = 0 ; i < rkcg->rkcg_assignment->cnt ; i++) {
+        for (i = 0 ; i < old_assignment->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar;
                 shptr_rd_kafka_toppar_t *s_rktp;
                 rd_kafka_toppar_t *rktp;
 
-                rktpar = &rkcg->rkcg_assignment->elems[i];
+                rktpar = &old_assignment->elems[i];
                 s_rktp = rktpar->_private;
                 rktp = rd_kafka_toppar_s2i(s_rktp);
 
@@ -1468,12 +1498,11 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
 	/* Resume partition consumption. */
 	rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 0/*resume*/,
 				      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
-				      rkcg->rkcg_assignment);
+                                      old_assignment);
 
-        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_assignment);
-        rkcg->rkcg_assignment = NULL;
+        rd_kafka_topic_partition_list_destroy(old_assignment);
 
-        rd_kafka_cgrp_check_unassign_done(rkcg, "unassign#2");
+        rd_kafka_cgrp_check_unassign_done(rkcg, "unassign");
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -1488,9 +1517,15 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                       rd_kafka_topic_partition_list_t *assignment) {
         int i;
 
-        /* FIXME: Make a diff of what partitions are removed and added. */
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
+                     "Group \"%s\": new assignment of %d partition(s) "
+                     "in join state %s",
+                     rkcg->rkcg_group_id->str,
+                     assignment ? assignment->cnt : 0,
+                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
 
-        /* Get toppar object for each partition */
+        /* Get toppar object for each partition.
+         * This is to make sure the rktp stays alive during unassign(). */
         for (i = 0 ; assignment && i < assignment->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar;
                 shptr_rd_kafka_toppar_t *s_rktp;
@@ -1521,13 +1556,28 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
 
 
-	if (rkcg->rkcg_wait_unassign_cnt == 0)
-		rd_kafka_cgrp_set_join_state(
-			rkcg, RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED);
-
-	if (assignment)
+	if (assignment) {
 		rkcg->rkcg_assignment =
 			rd_kafka_topic_partition_list_copy(assignment);
+
+                /* Mark partition(s) as desired */
+                for (i = 0 ; i < rkcg->rkcg_assignment->cnt ; i++) {
+                        rd_kafka_topic_partition_t *rktpar =
+                                &rkcg->rkcg_assignment->elems[i];
+                        rd_kafka_toppar_t *rktp =
+                                rd_kafka_toppar_s2i(rktpar->_private);
+                        rd_kafka_toppar_lock(rktp);
+                        rd_kafka_toppar_desired_add0(rktp);
+                        rd_kafka_toppar_unlock(rktp);
+                }
+        }
+
+        if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN)
+                return;
+
+        rd_dassert(rkcg->rkcg_wait_unassign_cnt == 0);
+
+        rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED);
 
         if (RD_KAFKA_CGRP_CAN_FETCH_START(rkcg) && rkcg->rkcg_assignment) {
                 /* No existing assignment that needs to be decommissioned,
@@ -1986,7 +2036,12 @@ static void rd_kafka_cgrp_op_serve (rd_kafka_cgrp_t *rkcg,
 
                 case RD_KAFKA_OP_OFFSET_COMMIT:
                         /* Trigger offsets commit. */
-                        rd_kafka_cgrp_offsets_commit(rkcg, rko);
+                        rd_kafka_cgrp_offsets_commit(rkcg, rko,
+                                                     /* only set offsets
+                                                      * if no partitions were
+                                                      * specified. */
+                                                     rko->rko_u.offset_commit.
+                                                     partitions ? 0 : 1);
                         rko = NULL; /* rko now owned by request */
                         break;
 

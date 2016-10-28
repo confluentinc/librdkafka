@@ -1822,6 +1822,7 @@ void rd_kafka_cgrp_terminate (rd_kafka_cgrp_t *rkcg, rd_kafka_replyq_t replyq) {
 struct _op_timeout_offset_commit {
         rd_ts_t now;
         rd_kafka_t *rk;
+        rd_list_t expired;
 };
 
 /**
@@ -1840,9 +1841,10 @@ static int rd_kafka_op_offset_commit_timeout_check (rd_kafka_q_t *rkq,
         }
 
         rd_kafka_q_deq0(rkq, rko);
-        rd_kafka_cgrp_op_handle_OffsetCommit(state->rk, NULL,
-                                             RD_KAFKA_RESP_ERR__WAIT_COORD,
-                                             NULL, NULL, rko);
+
+        /* Add to temporary list to avoid recursive
+         * locking of rkcg_wait_coord_q. */
+        rd_list_add(&state->expired, rko);
         return 1;
 }
 
@@ -1852,19 +1854,32 @@ static int rd_kafka_op_offset_commit_timeout_check (rd_kafka_q_t *rkq,
  */
 static void rd_kafka_cgrp_timeout_scan (rd_kafka_cgrp_t *rkcg, rd_ts_t now) {
         struct _op_timeout_offset_commit ofc_state;
-        int cnt = 0;
+        int i, cnt = 0;
+        rd_kafka_op_t *rko;
 
         ofc_state.now = now;
         ofc_state.rk = rkcg->rkcg_rk;
+        rd_list_init(&ofc_state.expired, 0);
+
         cnt += rd_kafka_q_apply(rkcg->rkcg_wait_coord_q,
                                 rd_kafka_op_offset_commit_timeout_check,
                                 &ofc_state);
+
+        RD_LIST_FOREACH(rko, &ofc_state.expired, i)
+                rd_kafka_cgrp_op_handle_OffsetCommit(
+                        rkcg->rkcg_rk, NULL,
+                        RD_KAFKA_RESP_ERR__WAIT_COORD,
+                        NULL, NULL, rko);
+
+        rd_list_destroy(&ofc_state.expired, NULL);
 
         if (cnt > 0)
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTIMEOUT",
                              "Group \"%.*s\": timed out %d op(s), %d remain",
                              RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), cnt,
                              rd_kafka_q_len(rkcg->rkcg_wait_coord_q));
+
+
 }
 
 

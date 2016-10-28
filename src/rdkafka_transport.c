@@ -69,6 +69,21 @@ static int    rd_kafka_ssl_locks_cnt;
 
 
 
+/**
+ * Low-level socket close
+ */
+static void rd_kafka_transport_close0 (rd_kafka_t *rk, int s) {
+        if (rk->rk_conf.closesocket_cb)
+                rk->rk_conf.closesocket_cb(s, rk->rk_conf.opaque);
+        else {
+#ifndef _MSC_VER
+		close(s);
+#else
+		closesocket(s);
+#endif
+        }
+
+}
 
 /**
  * Close and destroy a transport handle
@@ -89,13 +104,9 @@ void rd_kafka_transport_close (rd_kafka_transport_t *rktrans) {
 	if (rktrans->rktrans_recv_buf)
 		rd_kafka_buf_destroy(rktrans->rktrans_recv_buf);
 
-	if (rktrans->rktrans_s != -1) {
-#ifndef _MSC_VER
-		close(rktrans->rktrans_s);
-#else
-		closesocket(rktrans->rktrans_s);
-#endif
-	}
+	if (rktrans->rktrans_s != -1)
+                rd_kafka_transport_close0(rktrans->rktrans_rkb->rkb_rk,
+                                          rktrans->rktrans_s);
 
 	rd_free(rktrans);
 }
@@ -1084,7 +1095,7 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 	rd_kafka_transport_t *rktrans;
 	int s = -1;
 	int on = 1;
-
+        int r;
 
         rkb->rkb_addr_last = sinx;
 
@@ -1151,23 +1162,34 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 		   rd_kafka_secproto_names[rkb->rkb_proto], s);
 
 	/* Connect to broker */
-	if (connect(s, (struct sockaddr *)sinx,
-		    RD_SOCKADDR_INX_LEN(sinx)) == SOCKET_ERROR &&
-	    (socket_errno != EINPROGRESS
+        if (rkb->rkb_rk->rk_conf.connect_cb) {
+                r = rkb->rkb_rk->rk_conf.connect_cb(
+                        s, (struct sockaddr *)sinx, RD_SOCKADDR_INX_LEN(sinx),
+                        rkb->rkb_name, rkb->rkb_rk->rk_conf.opaque);
+        } else {
+                if (connect(s, (struct sockaddr *)sinx,
+                            RD_SOCKADDR_INX_LEN(sinx)) == SOCKET_ERROR &&
+                    (socket_errno != EINPROGRESS
 #ifdef _MSC_VER
-		&& socket_errno != WSAEWOULDBLOCK
+                     && socket_errno != WSAEWOULDBLOCK
 #endif
-		)) {
+                            ))
+                        r = socket_errno;
+                else
+                        r = 0;
+        }
+
+        if (r != 0) {
 		rd_rkb_dbg(rkb, BROKER, "CONNECT",
 			   "couldn't connect to %s: %s (%i)",
 			   rd_sockaddr2str(sinx,
 					   RD_SOCKADDR2STR_F_PORT |
 					   RD_SOCKADDR2STR_F_FAMILY),
-			   socket_strerror(socket_errno), socket_errno);
+			   socket_strerror(r), r);
 		rd_snprintf(errstr, errstr_size,
 			    "Failed to connect to broker at %s: %s",
 			    rd_sockaddr2str(sinx, RD_SOCKADDR2STR_F_NICE),
-			    socket_strerror(socket_errno));
+			    socket_strerror(r));
 		goto err;
 	}
 
@@ -1183,13 +1205,9 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 	return rktrans;
 
  err:
-	if (s != -1) {
-#ifndef _MSC_VER
-		close(s);
-#else
-		closesocket(s);
-#endif
-	}
+	if (s != -1)
+                rd_kafka_transport_close0(rkb->rkb_rk, s);
+
 	return NULL;
 }
 

@@ -301,6 +301,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           rd_kafka_socket_cb_generic
 #endif
         },
+        { _RK_GLOBAL, "connect_cb", _RK_C_PTR,
+          _RK(connect_cb),
+          "Socket connect callback",
+        },
+        { _RK_GLOBAL, "closesocket_cb", _RK_C_PTR,
+          _RK(closesocket_cb),
+          "Socket close callback",
+        },
         { _RK_GLOBAL, "open_cb", _RK_C_PTR,
           _RK(open_cb),
           "File open callback to provide race-free CLOEXEC",
@@ -1461,6 +1469,24 @@ void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
                                                     void *opaque)) {
         conf->socket_cb = socket_cb;
 }
+
+void
+rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
+                              int (*connect_cb) (int sockfd,
+                                                 const struct sockaddr *addr,
+                                                 int addrlen,
+                                                 const char *id,
+                                                 void *opaque)) {
+        conf->connect_cb = connect_cb;
+}
+
+void
+rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
+                                  int (*closesocket_cb) (int sockfd,
+                                                         void *opaque)) {
+        conf->closesocket_cb = closesocket_cb;
+}
+
 
 
 #ifndef _MSC_VER

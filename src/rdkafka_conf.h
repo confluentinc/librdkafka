@@ -223,6 +223,16 @@ struct rd_kafka_conf_s {
         /* Socket creation callback */
         int (*socket_cb) (int domain, int type, int protocol, void *opaque);
 
+        /* Connect callback */
+        int (*connect_cb) (int sockfd,
+                           const struct sockaddr *addr,
+                           int addrlen,
+                           const char *id,
+                           void *opaque);
+
+        /* Close socket callback */
+        int (*closesocket_cb) (int sockfd, void *opaque);
+
 		/* File open callback */
         int (*open_cb) (const char *pathname, int flags, mode_t mode,
                         void *opaque);

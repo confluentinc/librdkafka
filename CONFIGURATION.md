@@ -38,6 +38,8 @@ log_level                                |  *  | 0 .. 7          |             6
 log.thread.name                          |  *  | true, false     |         false | Print internal thread name in log messages (useful for debugging librdkafka internals) <br>*Type: boolean*
 log.connection.close                     |  *  | true, false     |          true | Log broker disconnects. It might be useful to turn this off when interacting with 0.9 brokers with an aggressive `connection.max.idle.ms` value. <br>*Type: boolean*
 socket_cb                                |  *  |                 |               | Socket creation callback to provide race-free CLOEXEC <br>*Type: pointer*
+connect_cb                               |  *  |                 |               | Socket connect callback <br>*Type: pointer*
+closesocket_cb                           |  *  |                 |               | Socket close callback <br>*Type: pointer*
 open_cb                                  |  *  |                 |               | File open callback to provide race-free CLOEXEC <br>*Type: pointer*
 opaque                                   |  *  |                 |               | Application opaque (set with rd_kafka_conf_set_opaque()) <br>*Type: pointer*
 default_topic_conf                       |  *  |                 |               | Default topic configuration for automatically subscribed topics <br>*Type: pointer*

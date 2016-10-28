@@ -2631,3 +2631,23 @@ rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
                 d->err    = s->err;
         }
 }
+
+
+/**
+ * @returns the sum of \p cb called for each element.
+ */
+int
+rd_kafka_topic_partition_list_sum (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        int (*cb) (const rd_kafka_topic_partition_t *rktpar, void *opaque),
+        void *opaque) {
+        int i, sum = 0;
+
+        for (i = 0 ; i < rktparlist->cnt ; i++) {
+		const rd_kafka_topic_partition_t *rktpar =
+			&rktparlist->elems[i];
+                sum += cb(rktpar, opaque);
+        }
+        return sum;
+}
+

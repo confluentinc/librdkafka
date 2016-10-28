@@ -74,7 +74,7 @@ int main_0016_assign_partition (int argc, char **argv) {
 		TEST_FAIL("%s\n", errstr);
 
         rk_c = test_create_consumer(topic/*group_id*/, NULL,
-				    default_topic_conf, NULL);
+				    default_topic_conf);
 
 	/* Fill in partition set */
 	partitions = rd_kafka_topic_partition_list_new(partition_cnt);

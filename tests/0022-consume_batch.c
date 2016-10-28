@@ -66,7 +66,7 @@ static int do_test_consume_batch (void) {
 
 
         /* Create simple consumer */
-        rk = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
+        rk = test_create_consumer(NULL, NULL, NULL, NULL);
 
         /* Create generic consume queue */
         rkq = rd_kafka_queue_new(rk);

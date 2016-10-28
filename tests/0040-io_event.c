@@ -81,7 +81,7 @@ int main_0040_io_event (int argc, char **argv) {
 	/* Speed up propagation of new topics */
 	test_conf_set(conf, "metadata.max.age.ms", "5000");
 	test_topic_conf_set(tconf, "auto.offset.reset", "earliest");
-	rk_c = test_create_consumer(topic, NULL, conf, tconf, NULL);
+	rk_c = test_create_consumer(topic, NULL, conf, tconf);
 
 	queue = rd_kafka_queue_get_consumer(rk_c);
 

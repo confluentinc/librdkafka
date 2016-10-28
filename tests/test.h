@@ -14,7 +14,10 @@
 #include <time.h>
 
 #include "rdkafka.h"
-#include "../src/tinycthread.h"
+#include "tinycthread.h"
+#include "rdlist.h"
+
+#include "sockem.h"
 
 #ifdef _MSC_VER
 #define sscanf(...) sscanf_s(__VA_ARGS__)
@@ -94,6 +97,11 @@ struct test {
                 TEST_PASSED,
                 TEST_FAILED,
         } state;
+
+        rd_list_t sockets;
+        int (*connect_cb) (struct test *test, sockem_t *skm, const char *id);
+        int (*is_fatal_cb) (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                            const char *reason);
 };
 
 
@@ -439,8 +447,7 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 					  *partitions,
 					  void *opaque),
 				  rd_kafka_conf_t *conf,
-                                  rd_kafka_topic_conf_t *default_topic_conf,
-				  void *opaque);
+                                  rd_kafka_topic_conf_t *default_topic_conf);
 rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
                                               const char *topic);
 rd_kafka_topic_t *test_create_topic_object (rd_kafka_t *rk,
@@ -511,3 +518,6 @@ int test_can_create_topics (int skip);
 rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
 				   rd_kafka_event_type_t event_type,
 				   int timeout_ms);
+
+void test_socket_enable (rd_kafka_conf_t *conf);
+void test_socket_close_all (struct test *test, int reinit);

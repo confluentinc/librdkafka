@@ -92,7 +92,7 @@ int main_0017_compression(int argc, char **argv) {
 
 
 	/* Consume messages */
-	rk_c = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
+	rk_c = test_create_consumer(NULL, NULL, NULL, NULL);
 
 	for (i = 0; codecs[i] != NULL ; i++) {
 		rd_kafka_topic_t *rkt_c = rd_kafka_topic_new(rk_c,

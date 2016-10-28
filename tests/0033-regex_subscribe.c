@@ -283,7 +283,7 @@ static int do_test (const char *assignor) {
 
 	/* Create a single consumer to handle all subscriptions.
 	 * Has the nice side affect of testing multiple subscriptions. */
-	rk = test_create_consumer(groupid, rebalance_cb, conf, NULL, NULL);
+	rk = test_create_consumer(groupid, rebalance_cb, conf, NULL);
 
 	/*
 	 * Test cases

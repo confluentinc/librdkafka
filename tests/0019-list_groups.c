@@ -178,7 +178,7 @@ int main_0019_list_groups (int argc, char **argv) {
                 groups[i] = malloc(32);
                 test_str_id_generate(groups[i], 32);
 		rk_c[i] = test_create_consumer(groups[i],
-					       NULL, NULL, NULL, NULL);
+					       NULL, NULL, NULL);
 
 		err = rd_kafka_poll_set_consumer(rk_c[i]);
 		if (err)

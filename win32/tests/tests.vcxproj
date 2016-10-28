@@ -204,10 +204,13 @@
     <ClCompile Include="..\..\tests\0046-rkt_cache.c" />
     <ClCompile Include="..\..\tests\0047-partial_buf_tmout.c" />
     <ClCompile Include="..\..\tests\0048-partitioner.c" />
+    <ClCompile Include="..\..\tests\0049-consume_conn_close.c" />
     <ClCompile Include="..\..\tests\0050-subscribe_adds.c" />
     <ClCompile Include="..\..\tests\0051-assign_adds.c" />
     <ClCompile Include="..\..\tests\test.c" />
+    <ClCompile Include="..\..\tests\sockem.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
+    <ClCompile Include="..\..\src\rdlist.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\tests\test.h" />

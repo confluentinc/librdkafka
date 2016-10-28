@@ -38,6 +38,7 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
 
+#include "sockem.h"
 
 int test_level = 2;
 int test_seed = 0;
@@ -57,6 +58,7 @@ static char *test_broker_version_str = "0.9.0.0";
 int          test_flags = 0;
 int          test_neg_flags = TEST_F_KNOWN_ISSUE;
 static char *test_git_version = "HEAD";
+static char *test_sockem_conf = "";
 
 static int show_summary = 1;
 static int test_summary (int do_lock);
@@ -127,6 +129,7 @@ _TEST_DECL(0045_subscribe_update_topic_remove);
 _TEST_DECL(0046_rkt_cache);
 _TEST_DECL(0047_partial_buf_tmout);
 _TEST_DECL(0048_partitioner);
+_TEST_DECL(0049_consume_conn_close);
 _TEST_DECL(0050_subscribe_adds);
 _TEST_DECL(0051_assign_adds);
 
@@ -179,6 +182,7 @@ struct test tests[] = {
 	_TEST(0046_rkt_cache, TEST_F_LOCAL),
 	_TEST(0047_partial_buf_tmout, 0),
 	_TEST(0048_partitioner, 0),
+        _TEST(0049_consume_conn_close, 0),
         _TEST(0050_subscribe_adds, 0),
         _TEST(0051_assign_adds, 0),
         { NULL }
@@ -189,9 +193,90 @@ RD_TLS struct test *test_curr = &tests[0];
 
 
 
+/**
+ * Socket network emulation with sockem
+ */
+ 
+static void test_socket_add (struct test *test, sockem_t *skm) {
+        TEST_LOCK();
+        rd_list_add(&test->sockets, skm);
+        TEST_UNLOCK();
+}
+
+static void test_socket_del (struct test *test, sockem_t *skm, int do_lock) {
+        void *p;
+        if (do_lock)
+                TEST_LOCK();
+        p = rd_list_remove(&test->sockets, skm);
+        assert(p);
+        if (do_lock)
+                TEST_UNLOCK();
+}
+
+void test_socket_close_all (struct test *test, int reinit) {
+        TEST_LOCK();
+        rd_list_destroy(&test->sockets, (void *)sockem_close);
+        if (reinit)
+                rd_list_init(&test->sockets, 16);
+        TEST_UNLOCK();
+}
+
+       
+
+static int test_connect_cb (int s, const struct sockaddr *addr,
+                            int addrlen, const char *id, void *opaque) {
+        struct test *test = opaque;
+        sockem_t *skm;
+        int r;
+
+        TEST_SAY("connect_cb %s\n", id);
+        skm = sockem_connect(s, addr, addrlen, test_sockem_conf, 0, NULL);
+        if (!skm)
+                return errno;
+
+        if (test->connect_cb) {
+                r = test->connect_cb(test, skm, id);
+                if (r)
+                        return r;
+        }
+
+        test_socket_add(test, skm);
+
+        return 0;
+}
+
+static int test_closesocket_cb (int s, void *opaque) {
+        struct test *test = opaque;
+        sockem_t *skm;
+
+        TEST_LOCK();
+        skm = sockem_find(s);
+        if (skm) {
+                sockem_close(skm);
+                test_socket_del(test, skm, 0/*nolock*/);
+        } else
+                close(s);
+        TEST_UNLOCK();
+
+        return 0;
+}
+
+
+void test_socket_enable (rd_kafka_conf_t *conf) {
+        rd_kafka_conf_set_connect_cb(conf, test_connect_cb);
+        rd_kafka_conf_set_closesocket_cb(conf, test_closesocket_cb);
+	rd_kafka_conf_set_opaque(conf, test_curr);
+}
+
+
 static void test_error_cb (rd_kafka_t *rk, int err,
 			   const char *reason, void *opaque) {
-	TEST_FAIL("rdkafka error: %s: %s", rd_kafka_err2str(err), reason);
+        if (test_curr->is_fatal_cb && !test_curr->is_fatal_cb(rk, err, reason))
+                TEST_SAY(_C_YEL "rdkafka error (non-fatal): %s: %s\n",
+                         rd_kafka_err2str(err), reason);
+        else
+                TEST_FAIL("rdkafka error: %s: %s",
+                          rd_kafka_err2str(err), reason);
 }
 
 static int test_stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
@@ -233,10 +318,11 @@ static void test_init (void) {
 		test_level = atoi(tmp);
 	if ((tmp = getenv("TEST_MODE")))
 		strncpy(test_mode, tmp, sizeof(test_mode)-1);
+        if ((tmp = getenv("TEST_SOCKEM")))
+                test_sockem_conf = tmp;
 	if ((tmp = getenv("TEST_SEED")))
 		seed = atoi(tmp);
 	else
-
 		seed = test_clock() & 0xffffffff;
 #else
 	{
@@ -408,6 +494,9 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 #endif
         }
 
+        if (*test_sockem_conf && conf)
+                test_socket_enable(*conf);
+
 	if (topic_conf)
 		*topic_conf = rd_kafka_topic_conf_new();
 
@@ -549,6 +638,9 @@ static int run_test0 (struct run_args *run_args) {
                          stats_file, strerror(errno));
 
 	test_curr = test;
+
+        rd_list_init(&test->sockets, 16);
+
 	TEST_SAY("================= Running test %s =================\n",
 		 test->name);
         if (test->stats_fp)
@@ -579,6 +671,8 @@ static int run_test0 (struct run_args *run_args) {
                          run_args->test->name);
         }
         TEST_UNLOCK();
+
+        test_socket_close_all(test, 0);
 
         if (test->stats_fp) {
                 long pos = ftell(test->stats_fp);
@@ -1156,8 +1250,11 @@ rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf) {
 	rd_kafka_t *rk;
 	char errstr[512];
 
-	if (!conf)
+	if (!conf) {
 		conf = rd_kafka_conf_new();
+                if (*test_sockem_conf)
+                        test_socket_enable(conf);
+        }
 
 	test_conf_set(conf, "client.id", test_curr->name);
 
@@ -1404,8 +1501,7 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 					  *partitions,
 					  void *opaque),
 				  rd_kafka_conf_t *conf,
-                                  rd_kafka_topic_conf_t *default_topic_conf,
-				  void *opaque) {
+                                  rd_kafka_topic_conf_t *default_topic_conf) {
 	rd_kafka_t *rk;
 	char tmp[64];
 
@@ -1423,8 +1519,6 @@ rd_kafka_t *test_create_consumer (const char *group_id,
 	} else {
 		TEST_ASSERT(!rebalance_cb);
 	}
-
-	rd_kafka_conf_set_opaque(conf, opaque);
 
         if (default_topic_conf)
                 rd_kafka_conf_set_default_topic_conf(conf, default_topic_conf);
@@ -1627,7 +1721,7 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
 		group_id = test_str_id_generate(grpid0, sizeof(grpid0));
 
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
-        rk = test_create_consumer(group_id, NULL, NULL, tconf, NULL);
+        rk = test_create_consumer(group_id, NULL, NULL, tconf);
 
         rd_kafka_poll_set_consumer(rk);
 

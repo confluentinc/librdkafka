@@ -40,6 +40,7 @@
 
 static int msgid_next = 0;
 static int fails = 0;
+static int msgcounter = 0;
 
 /**
  * Delivery reported callback.
@@ -48,7 +49,6 @@ static int fails = 0;
 static void dr_single_partition_cb (rd_kafka_t *rk, void *payload, size_t len,
 		   rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
 	int msgid = *(int *)msg_opaque;
-        int *msgcounterp = (int *)opaque;
 
 	free(msg_opaque);
 
@@ -64,7 +64,7 @@ static void dr_single_partition_cb (rd_kafka_t *rk, void *payload, size_t len,
 	}
 
 	msgid_next = msgid+1;
-        (*msgcounterp)--;
+        msgcounter--;
 }
 
 /* Produce a batch of messages to a single partition. */
@@ -80,7 +80,6 @@ static void test_single_partition (void) {
 	int failcnt = 0;
 	int i;
         rd_kafka_message_t *rkmessages;
-        int msgcounter = 0;
 
         msgid_next = 0;
 
@@ -88,7 +87,6 @@ static void test_single_partition (void) {
 
 	/* Set delivery report callback */
 	rd_kafka_conf_set_dr_cb(conf, dr_single_partition_cb);
-        rd_kafka_conf_set_opaque(conf, &msgcounter);
 
 	/* Create kafka instance */
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
@@ -175,7 +173,6 @@ static void test_single_partition (void) {
 static void dr_partitioner_cb (rd_kafka_t *rk, void *payload, size_t len,
 		   rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
 	int msgid = *(int *)msg_opaque;
-        int *msgcounterp = (int *)opaque;
 
 	free(msg_opaque);
 
@@ -183,10 +180,10 @@ static void dr_partitioner_cb (rd_kafka_t *rk, void *payload, size_t len,
 		TEST_FAIL("Message delivery failed: %s\n",
 			  rd_kafka_err2str(err));
 
-        if (*msgcounterp <= 0)
+        if (msgcounter <= 0)
                 TEST_FAIL("Too many message dr_cb callback calls "
                           "(at msgid #%i)\n", msgid);
-        (*msgcounterp)--;
+        msgcounter--;
 }
 
 /* Produce a batch of messages using random (default) partitioner */
@@ -202,13 +199,11 @@ static void test_partitioner (void) {
         int failcnt = 0;
 	int i;
         rd_kafka_message_t *rkmessages;
-        int msgcounter;
 
 	test_conf_init(&conf, &topic_conf, 30);
 
 	/* Set delivery report callback */
 	rd_kafka_conf_set_dr_cb(conf, dr_partitioner_cb);
-        rd_kafka_conf_set_opaque(conf, &msgcounter);
 
 	/* Create kafka instance */
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);

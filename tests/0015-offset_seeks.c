@@ -61,7 +61,7 @@ int main_0015_offsets_seek (int argc, char **argv) {
 	rd_kafka_destroy(rk_p);
 
 
-	rk_c = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
+	rk_c = test_create_consumer(NULL, NULL, NULL, NULL);
 	rkt_c = test_create_consumer_topic(rk_c, topic);
 
 	/* Start consumer tests */

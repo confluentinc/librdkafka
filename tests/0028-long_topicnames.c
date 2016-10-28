@@ -62,7 +62,7 @@ int main_0028_long_topicnames (int argc, char **argv) {
 
 	/* First try a non-verifying consumer. The consumer has been known
 	 * to crash when the broker bug kicks in. */
-	rk_c = test_create_consumer(topic, NULL, NULL, NULL, NULL);
+	rk_c = test_create_consumer(topic, NULL, NULL, NULL);
 	test_consumer_subscribe(rk_c, topic);
 	test_consumer_poll_no_msgs("consume.nomsgs", rk_c, 0, 5000);
 	test_consumer_close(rk_c);

@@ -235,7 +235,7 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 
 		/* Wait for offset commits to catch up */
 		while (committed_offset < expected_offset) {
-			TEST_SAYL(3, "%s: Wait for committed offset %"PRId64
+			TEST_SAYL(2, "%s: Wait for committed offset %"PRId64
 				  " to reach expected offset %"PRId64"\n",
 				  what, committed_offset, expected_offset);
 			test_consumer_poll_no_msgs(what, rk, testid, 1000);
@@ -381,7 +381,7 @@ static void do_empty_commit (void) {
 
 	TEST_SAY(_C_MAG "[ do_empty_commit group.id %s ]\n", group_id);
 
-	rk = test_create_consumer(group_id, NULL, conf, tconf, NULL);
+	rk = test_create_consumer(group_id, NULL, conf, tconf);
 
 	test_consumer_subscribe(rk, topic);
 
@@ -461,7 +461,7 @@ static void do_nonexist_commit (void) {
 
 	TEST_SAY(_C_MAG "[ do_nonexist_commit group.id %s ]\n", group_id);
 
-	rk = test_create_consumer(group_id, NULL, conf, tconf, NULL);
+	rk = test_create_consumer(group_id, NULL, conf, tconf);
 
 	TEST_SAY("Try nonexist commit\n");
 	offsets = rd_kafka_topic_partition_list_new(2);

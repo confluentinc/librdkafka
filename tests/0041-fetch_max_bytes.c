@@ -73,7 +73,7 @@ int main_0041_fetch_max_bytes (int argc, char **argv) {
 
 	test_conf_set(conf, "fetch.message.max.bytes", tsprintf("%d", MAX_BYTES));
 	
-	rk = test_create_consumer(NULL, NULL, conf, NULL, NULL);
+	rk = test_create_consumer(NULL, NULL, conf, NULL);
 	rkt = rd_kafka_topic_new(rk, topic, NULL);
 
 	test_consumer_start("CONSUME", rkt, partition,

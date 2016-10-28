@@ -57,7 +57,7 @@ static void test_producer_partition_cnt_change (void) {
 	int produced = 0;
 
 	test_kafka_topics("--create --topic %s --replication-factor 1 "
-			  "--partitions %d --force",
+			  "--partitions %d",
 			  topic, partition_cnt/2);
 
 	test_conf_init(&conf, NULL, 20);
@@ -71,7 +71,7 @@ static void test_producer_partition_cnt_change (void) {
 	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt/2,
 				 NULL, 100, &produced);
 
-	test_kafka_topics("--alter --topic %s --partitions %d --force",
+	test_kafka_topics("--alter --topic %s --partitions %d",
 			  topic, partition_cnt);
 
 	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA,

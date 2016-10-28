@@ -172,8 +172,7 @@ int main_0018_cgrp_term (int argc, char **argv) {
 		rk_c[i] = test_create_consumer(topic/*group_id*/,
 					       rebalance_cb, NULL,
 					       rd_kafka_topic_conf_dup(
-						       default_topic_conf),
-					       NULL);
+						       default_topic_conf));
 
 		err = rd_kafka_poll_set_consumer(rk_c[i]);
 		if (err)

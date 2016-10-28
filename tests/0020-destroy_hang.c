@@ -76,7 +76,7 @@ static int nonexist_part (void) {
 		 * Now start a new consumer and query stored offsets (positions)
 		 */
 
-		rk = test_create_consumer(group_id, NULL, NULL, NULL, NULL);
+		rk = test_create_consumer(group_id, NULL, NULL, NULL);
 
 		/* Fill in partition set */
 		parts = rd_kafka_topic_partition_list_new(2);

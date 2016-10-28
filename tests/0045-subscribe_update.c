@@ -159,7 +159,7 @@ static void do_test_non_exist_and_partchange (void) {
 
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
 	rk = test_create_consumer(test_str_id_generate_tmp(),
-				  NULL, conf, NULL, NULL);
+				  NULL, conf, NULL);
 	queue = rd_kafka_queue_get_consumer(rk);
 
 	TEST_SAY("#1: Subscribing to %s\n", topic_a);
@@ -224,7 +224,7 @@ static void do_test_regex (void) {
 
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
 	rk = test_create_consumer(test_str_id_generate_tmp(),
-				  NULL, conf, NULL, NULL);
+				  NULL, conf, NULL);
 	queue = rd_kafka_queue_get_consumer(rk);
 
 	TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_b);
@@ -302,7 +302,7 @@ static void do_test_topic_remove (void) {
 
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
 	rk = test_create_consumer(test_str_id_generate_tmp(),
-				  NULL, conf, NULL, NULL);
+				  NULL, conf, NULL);
 	queue = rd_kafka_queue_get_consumer(rk);
 
 	TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);

@@ -202,7 +202,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
                 rd_kafka_timer_start(&rk->rk_timers,
                                      &rkcg->rkcg_offset_commit_tmr,
                                      rk->rk_conf.
-				     auto_commit_interval_ms * 1000,
+				     auto_commit_interval_ms * 1000ll,
                                      rd_kafka_cgrp_offset_commit_tmr_cb,
                                      rkcg);
 

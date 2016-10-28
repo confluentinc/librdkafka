@@ -119,7 +119,7 @@ void rd_kafka_timer_stop (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
  * Use rd_kafka_timer_stop() to stop a timer.
  */
 void rd_kafka_timer_start (rd_kafka_timers_t *rkts,
-			   rd_kafka_timer_t *rtmr, int interval,
+			   rd_kafka_timer_t *rtmr, rd_ts_t interval,
 			   void (*callback) (rd_kafka_timers_t *rkts, void *arg),
 			   void *arg) {
 	rd_kafka_timers_lock(rkts);

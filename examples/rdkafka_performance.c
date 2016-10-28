@@ -48,7 +48,7 @@
 
 static int run = 1;
 static int forever = 1;
-static int dispintvl = 1000;
+static rd_ts_t dispintvl = 1000;
 static int do_seq = 0;
 static int exit_after = 0;
 static int exit_eof = 0;
@@ -172,7 +172,7 @@ static void msg_delivered (rd_kafka_t *rk,
               !(cnt.msgs_dr_err % (dispintvl / 1000)))) ||
 	    !last || msgs_wait_cnt < 5 ||
 	    !(msgs_wait_cnt % dr_disp_div) || 
-	    (int)(now - last) >= dispintvl * 1000 ||
+	    (now - last) >= dispintvl * 1000 ||
             verbosity >= 3) {
 		if (rkmessage->err && verbosity >= 2)
 			printf("%% Message delivery failed: %s [%"PRId32"]: "
@@ -1000,7 +1000,7 @@ int main (int argc, char **argv) {
         if (!stats_intvlstr) {
                 /* if no user-desired stats, adjust stats interval
                  * to the display interval. */
-                snprintf(tmp, sizeof(tmp), "%i", dispintvl / 1000);
+                snprintf(tmp, sizeof(tmp), "%"PRId64, dispintvl / 1000);
         }
 
         if (rd_kafka_conf_set(conf, "statistics.interval.ms",

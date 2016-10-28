@@ -192,7 +192,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
                         intvl = 10 * 1000;
 		rd_kafka_timer_start(&rkt->rkt_rk->rk_timers,
 				     &rktp->rktp_consumer_lag_tmr,
-                                     intvl * 1000,
+                                     intvl * 1000ll,
 				     rd_kafka_toppar_consumer_lag_tmr_cb,
 				     rktp);
         }
@@ -1118,7 +1118,7 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
                         rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 		rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
 				     &rktp->rktp_offset_query_tmr,
-				     backoff_ms*1000,
+				     backoff_ms*1000ll,
 				     rd_kafka_offset_query_tmr_cb, rktp);
 		return;
         }

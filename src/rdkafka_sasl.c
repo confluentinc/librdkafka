@@ -613,7 +613,7 @@ void rd_kafka_broker_sasl_init (rd_kafka_broker_t *rkb) {
 		return; /* kinit not configured, no need to start timer */
 
 	rd_kafka_timer_start(&rk->rk_timers, &rkb->rkb_sasl_kinit_refresh_tmr,
-			     rk->rk_conf.sasl.relogin_min_time * 1000,
+			     rk->rk_conf.sasl.relogin_min_time * 1000ll,
 			     rd_kafka_sasl_kinit_refresh_tmr_cb, rkb);
 }
 

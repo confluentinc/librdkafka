@@ -1044,12 +1044,12 @@ static int rd_kafka_thread_main (void *arg) {
 	rd_kafka_timer_start(&rk->rk_timers, &tmr_topic_scan, 1000000,
 			     rd_kafka_topic_scan_tmr_cb, NULL);
 	rd_kafka_timer_start(&rk->rk_timers, &tmr_stats_emit,
-			     rk->rk_conf.stats_interval_ms * 1000,
+			     rk->rk_conf.stats_interval_ms * 1000ll,
 			     rd_kafka_stats_emit_tmr_cb, NULL);
         if (rk->rk_conf.metadata_refresh_interval_ms >= 0)
                 rd_kafka_timer_start(&rk->rk_timers, &tmr_metadata_refresh,
                                      rk->rk_conf.metadata_refresh_interval_ms *
-                                     1000,
+                                     1000ll,
                                      rd_kafka_metadata_refresh_cb, NULL);
 
 	if (rk->rk_cgrp)

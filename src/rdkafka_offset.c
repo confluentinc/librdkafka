@@ -875,7 +875,7 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 		rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
 				     &rktp->rktp_offset_sync_tmr,
 				     rktp->rktp_rkt->rkt_conf.
-				     offset_store_sync_interval_ms * 1000,
+				     offset_store_sync_interval_ms * 1000ll,
 				     rd_kafka_offset_sync_tmr_cb, rktp);
 
 	if (rd_kafka_offset_file_open(rktp) != -1) {
@@ -1062,7 +1062,7 @@ void rd_kafka_offset_store_init (rd_kafka_toppar_t *rktp) {
 		rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
 				     &rktp->rktp_offset_commit_tmr,
 				     rktp->rktp_rkt->rkt_conf.
-				     auto_commit_interval_ms * 1000,
+				     auto_commit_interval_ms * 1000ll,
 				     rd_kafka_offset_auto_commit_tmr_cb,
 				     rktp);
 

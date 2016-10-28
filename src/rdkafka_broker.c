@@ -3576,7 +3576,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			 *       of compressed messages and the base offset
 			 *       in the outer message is the offset of
 			 *       the *LAST* message in the MessageSet.
-			 *       This requires us to assign messages
+			 *       This requires us to assign offsets
 			 *       after all messages have been read from
 			 *       the messageset, and it also means
 			 *       we cant perform this offset check here

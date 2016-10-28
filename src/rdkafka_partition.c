@@ -486,6 +486,25 @@ void rd_kafka_toppar_desired_unlink (rd_kafka_toppar_t *rktp) {
 
 
 /**
+ * @brief If rktp is not already desired:
+ *  - mark as DESIRED|UNKNOWN
+ *  - add to desired list
+ *
+ * @remark toppar_lock() MUST be held
+ */
+void rd_kafka_toppar_desired_add0 (rd_kafka_toppar_t *rktp) {
+        if ((rktp->rktp_flags & RD_KAFKA_TOPPAR_F_DESIRED))
+                return;
+
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "DESIRED",
+                     "%s [%"PRId32"]: adding to DESIRED list",
+                     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+	rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_DESIRED;
+        rd_kafka_toppar_desired_link(rktp);
+}
+
+
+/**
  * Adds 'partition' as a desired partition to topic 'rkt', or updates
  * an existing partition to be desired.
  *
@@ -515,14 +534,14 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_add (rd_kafka_itopic_t *rkt,
 	s_rktp = rd_kafka_toppar_new(rkt, partition);
         rktp = rd_kafka_toppar_s2i(s_rktp);
 
-	rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_DESIRED |
-                RD_KAFKA_TOPPAR_F_UNKNOWN;
+        rd_kafka_toppar_lock(rktp);
+        rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
+        rd_kafka_toppar_desired_add0(rktp);
+        rd_kafka_toppar_unlock(rktp);
 
 	rd_kafka_dbg(rkt->rkt_rk, TOPIC, "DESP",
 		     "Adding desired topic %s [%"PRId32"]",
 		     rkt->rkt_topic->str, rktp->rktp_partition);
-
-        rd_kafka_toppar_desired_link(rktp);
 
 	return s_rktp; /* Callers refcount */
 }

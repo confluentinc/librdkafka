@@ -460,14 +460,11 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                         rktp = s_rktp ? rd_kafka_toppar_s2i(s_rktp) : NULL;
                         if (rktp) {
 				rd_kafka_toppar_lock(rktp);
-                                if (rktp->rktp_flags &
-                                    RD_KAFKA_TOPPAR_F_UNKNOWN) {
-                                        /* Remove from desp list since the 
-                                         * partition is now known. */
-                                        rktp->rktp_flags &=
-                                                ~RD_KAFKA_TOPPAR_F_UNKNOWN;
-                                        rd_kafka_toppar_desired_unlink(rktp);
-                                }
+                                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_UNKNOWN;
+
+                                /* Remove from desp list since the
+                                 * partition is now known. */
+                                rd_kafka_toppar_desired_unlink(rktp);
                                 rd_kafka_toppar_unlock(rktp);
 			} else
 				s_rktp = rd_kafka_toppar_new(rkt, i);

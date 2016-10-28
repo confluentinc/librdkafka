@@ -328,6 +328,7 @@ rd_kafka_toppar_get_avail (const rd_kafka_itopic_t *rkt,
 
 shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_get (rd_kafka_itopic_t *rkt,
                                                       int32_t partition);
+void rd_kafka_toppar_desired_add0 (rd_kafka_toppar_t *rktp);
 shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_add (rd_kafka_itopic_t *rkt,
                                                       int32_t partition);
 void rd_kafka_toppar_desired_link (rd_kafka_toppar_t *rktp);

@@ -180,7 +180,7 @@ struct test tests[] = {
 	_TEST(0045_subscribe_update, 0),
 	_TEST(0045_subscribe_update_topic_remove, TEST_F_KNOWN_ISSUE),
 	_TEST(0046_rkt_cache, TEST_F_LOCAL),
-	_TEST(0047_partial_buf_tmout, 0),
+	_TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
 	_TEST(0048_partitioner, 0),
         _TEST(0049_consume_conn_close, 0),
         _TEST(0050_subscribe_adds, 0),

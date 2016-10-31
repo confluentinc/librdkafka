@@ -126,7 +126,58 @@ static inline bool is_little_endian(void)
 	return false;
 }
 
-#ifndef _MSC_VER
+#if defined(__xlc__) // xlc compiler on AIX
+#define rd_clz(n)   __cntlz4(n)
+#define rd_ctz(n)   __cnttz4(n)
+#define rd_ctz64(n) __cnttz8(n)
+
+#elif defined(__SUNPRO_C) // Solaris Studio compiler on sun  
+/*
+ * Source for following definitions is Hacker’s Delight, Second Edition by Henry S. Warren
+ * http://www.hackersdelight.org/permissions.htm
+ */
+u32 rd_clz(u32 x) {
+   u32 n;
+
+   if (x == 0) return(32);
+   n = 1;
+   if ((x >> 16) == 0) {n = n +16; x = x <<16;}
+   if ((x >> 24) == 0) {n = n + 8; x = x << 8;}
+   if ((x >> 28) == 0) {n = n + 4; x = x << 4;}
+   if ((x >> 30) == 0) {n = n + 2; x = x << 2;}
+   n = n - (x >> 31);
+   return n;
+}
+
+u32 rd_ctz(u32 x) {
+   u32 y;
+   u32 n;
+
+   if (x == 0) return 32;
+   n = 31;
+   y = x <<16;  if (y != 0) {n = n -16; x = y;}
+   y = x << 8;  if (y != 0) {n = n - 8; x = y;}
+   y = x << 4;  if (y != 0) {n = n - 4; x = y;}
+   y = x << 2;  if (y != 0) {n = n - 2; x = y;}
+   y = x << 1;  if (y != 0) {n = n - 1;}
+   return n;
+}
+
+u64 rd_ctz64(u64 x) {
+   u64 y;
+   u64 n;
+
+   if (x == 0) return 64;
+   n = 63;
+   y = x <<32;  if (y != 0) {n = n -32; x = y;}
+   y = x <<16;  if (y != 0) {n = n -16; x = y;}
+   y = x << 8;  if (y != 0) {n = n - 8; x = y;}
+   y = x << 4;  if (y != 0) {n = n - 4; x = y;}
+   y = x << 2;  if (y != 0) {n = n - 2; x = y;}
+   y = x << 1;  if (y != 0) {n = n - 1;}
+   return n;
+}
+#elif !defined(_MSC_VER)
 #define rd_clz(n)   __builtin_clz(n)
 #define rd_ctz(n)   __builtin_ctz(n)
 #define rd_ctz64(n) __builtin_ctzll(n)

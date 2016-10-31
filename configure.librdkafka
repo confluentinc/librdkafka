@@ -37,28 +37,30 @@ mkl_toggle_option "Feature" ENABLE_SASL "--enable-sasl" "Enable SASL support" "y
 function checks {
 
     # required libs
-    mkl_lib_check "libpthread" "" fail CC "-lpthread"
+    mkl_lib_check "libpthread" "" fail CC "-lpthread" \
+                  "#include <pthread.h>"
 
     # optional libs
-    mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz"
+    mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz" \
+                  "#include <zlib.h>"
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
     mkl_lib_check "liblz4" "WITH_LZ4" disable CC "-llz4" \
-		  "
-#include <lz4frame.h>
-"
+                  "#include <lz4frame.h>"
 
     # Snappy support is built-in
     mkl_allvar_set WITH_SNAPPY WITH_SNAPPY y
 
     if [[ "$ENABLE_SSL" == "y" ]]; then
 	mkl_meta_set "libssl" "deb" "libssl-dev"
-	mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl"
+	mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl" \
+                      "#include <openssl/ssl.h>"
     fi
 
     if [[ "$ENABLE_SASL" == "y" ]]; then
         mkl_meta_set "libsasl2" "deb" "libsasl2-dev"
-        if ! mkl_lib_check "libsasl2" "WITH_SASL" disable CC "-lsasl2"; then
-	    mkl_lib_check "libsasl" "WITH_SASL" disable CC "-lsasl"
+        if ! mkl_lib_check "libsasl2" "WITH_SASL" disable CC "-lsasl2" "#include <sasl/sasl.h>" ; then
+	    mkl_lib_check "libsasl" "WITH_SASL" disable CC "-lsasl" \
+                          "#include <sasl/sasl.h>"
         fi
     fi
 

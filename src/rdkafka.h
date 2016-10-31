@@ -45,7 +45,6 @@
 
 #include <stdio.h>
 #include <inttypes.h>
-#include <sys/socket.h>
 #include <sys/types.h>
 
 #ifdef __cplusplus
@@ -57,6 +56,10 @@ extern "C" {
 
 #ifdef _MSC_VER
 #include <basetsd.h>
+#ifndef WIN32_MEAN_AND_LEAN
+#define WIN32_MEAN_AND_LEAN
+#endif
+#include <Winsock2.h>  /* for sockaddr, .. */
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED
 #define RD_INLINE __inline
@@ -69,6 +72,8 @@ typedef SSIZE_T ssize_t;
 #endif
 
 #else
+#include <sys/socket.h> /* for sockaddr, .. */
+
 #define RD_UNUSED __attribute__((unused))
 #define RD_INLINE inline
 #define RD_EXPORT

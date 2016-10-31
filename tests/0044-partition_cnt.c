@@ -64,7 +64,9 @@ static void test_producer_partition_cnt_change (void) {
 
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 	rkt = test_create_topic_object(rk, __FUNCTION__,
-				       "message.timeout.ms", "5000", NULL);
+				       "message.timeout.ms",
+                                       tsprintf("%d", tmout_multip(5000)),
+                                       NULL);
 
 	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt/2,
 				 NULL, 100, &produced);

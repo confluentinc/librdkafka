@@ -515,6 +515,11 @@ rd_kafka_message_t *rd_kafka_message_new (void);
 
 rd_kafka_resp_err_t rd_kafka_q_wait_result (rd_kafka_q_t *rkq, int timeout_ms);
 
+int rd_kafka_q_apply (rd_kafka_q_t *rkq,
+                      int (*callback) (rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
+                                       void *opaque),
+                      void *opaque);
+
 void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
 			     int64_t base_offset);
 

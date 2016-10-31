@@ -819,7 +819,7 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_version_set(rkbuf, api_version);
 
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-		   "OffsetCommitRequest(v%d, %d/%d partition(s)))",
+		   "Enqueue OffsetCommitRequest(v%d, %d/%d partition(s)))",
                    api_version, tot_PartCnt, offsets->cnt);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_OffsetCommit, rkbuf,
@@ -1397,6 +1397,9 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
         /* Push write-buffer onto iovec stack */
         rd_kafka_buf_autopush(rkbuf);
 
+        rkbuf->rkbuf_ts_timeout = rd_clock() +
+                (rkb->rkb_rk->rk_conf.group_session_timeout_ms * 1000);
+
         rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Heartbeat,
                                        rkbuf, replyq, resp_cb, opaque);
 }
@@ -1439,6 +1442,9 @@ err:
 		}
                 return;
         }
+
+        rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
+        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
 
         if (ErrorCode != 0 && ErrorCode != RD_KAFKA_RESP_ERR__DESTROY)
 		rd_kafka_cgrp_handle_heartbeat_error(rkcg, ErrorCode);
@@ -1764,7 +1770,7 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 	rd_kafka_buf_autopush(rkbuf);
 
 	/* Non-supporting brokers will tear down the conneciton when they
-	 * receive  an unknown API request, so dont retry request on failure. */
+	 * receive an unknown API request, so dont retry request on failure. */
 	rkbuf->rkbuf_retries = RD_KAFKA_BUF_NO_RETRIES;
 
 	/* 0.9.0.x brokers will not close the connection on unsupported

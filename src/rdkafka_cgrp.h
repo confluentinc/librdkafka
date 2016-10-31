@@ -137,10 +137,14 @@ typedef struct rd_kafka_cgrp_s {
                                                      *   subscription
                                                      * else:
                                                      *   static assignment */
+#define RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT  0x20  /* A Heartbeat request
+                                                     * is in transit, dont
+                                                     * send a new one. */
 
         rd_interval_t      rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t      rkcg_heartbeat_intvl;    /* Heartbeat intvl */
         rd_interval_t      rkcg_join_intvl;         /* JoinGroup interval */
+        rd_interval_t      rkcg_timeout_scan_intvl; /* Timeout scanner */
 
         TAILQ_HEAD(, rd_kafka_topic_s)  rkcg_topics;/* Topics subscribed to */
 

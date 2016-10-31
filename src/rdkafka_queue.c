@@ -743,6 +743,40 @@ rd_kafka_resp_err_t rd_kafka_q_wait_result (rd_kafka_q_t *rkq, int timeout_ms) {
 
 
 /**
+ * Apply \p callback on each op in queue.
+ * If the callback wishes to remove the rko it must do so using
+ * using rd_kafka_op_deq0().
+ *
+ * @returns the sum of \p callback() return values.
+ * @remark rkq will be locked, callers should take care not to
+ *         interact with \p rkq through other means from the callback to avoid
+ *         deadlocks.
+ */
+int rd_kafka_q_apply (rd_kafka_q_t *rkq,
+                      int (*callback) (rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
+                                       void *opaque),
+                      void *opaque) {
+	rd_kafka_op_t *rko, *next;
+        int cnt = 0;
+
+        mtx_lock(&rkq->rkq_lock);
+        if (rkq->rkq_fwdq) {
+		cnt = rd_kafka_q_apply(rkq->rkq_fwdq, callback, opaque);
+                mtx_unlock(&rkq->rkq_lock);
+		return cnt;
+	}
+
+	next = TAILQ_FIRST(&rkq->rkq_q);
+	while ((rko = next)) {
+		next = TAILQ_NEXT(next, rko_link);
+                cnt += callback(rkq, rko, opaque);
+	}
+        mtx_unlock(&rkq->rkq_lock);
+
+        return cnt;
+}
+
+/**
  * @brief Convert relative to absolute offsets and also purge any messages
  *        that are older than \p min_offset.
  * @remark Error ops with ERR__NOT_IMPLEMENTED will not be purged since

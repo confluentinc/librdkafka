@@ -46,7 +46,10 @@ static RD_INLINE RD_UNUSED rd_ts_t rd_interval0 (rd_interval_t *ri,
         if (!interval_us)
                 interval_us = ri->ri_fixed;
 
-        diff = now - (ri->ri_ts_last + interval_us + ri->ri_backoff);
+        if (ri->ri_ts_last || !immediate) {
+                diff = now - (ri->ri_ts_last + interval_us + ri->ri_backoff);
+        } else
+                diff = 1;
         if (unlikely(diff > 0)) {
                 ri->ri_ts_last = now;
                 ri->ri_backoff = 0;

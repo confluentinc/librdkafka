@@ -580,11 +580,11 @@ static inline u32 hash(const char *p, int shift)
  *
  * This last factor dominates the blowup, so the final estimate is:
  */
-size_t rdkafka_snappy_max_compressed_length(size_t source_len)
+size_t snappy_max_compressed_length(size_t source_len)
 {
 	return 32 + source_len + source_len / 6;
 }
-EXPORT_SYMBOL(rdkafka_snappy_max_compressed_length);
+EXPORT_SYMBOL(snappy_max_compressed_length);
 
 enum {
 	LITERAL = 0,
@@ -685,14 +685,14 @@ static inline char *emit_copy(char *op, int offset, int len)
 }
 
 /**
- * rdkafka_snappy_uncompressed_length - return length of uncompressed output.
+ * snappy_uncompressed_length - return length of uncompressed output.
  * @start: compressed buffer
  * @n: length of compressed buffer.
  * @result: Write the length of the uncompressed output here.
  *
  * Returns true when successfull, otherwise false.
  */
-bool rdkafka_snappy_uncompressed_length(const char *start, size_t n, size_t * result)
+bool snappy_uncompressed_length(const char *start, size_t n, size_t * result)
 {
 	u32 v = 0;
 	const char *limit = start + n;
@@ -703,7 +703,7 @@ bool rdkafka_snappy_uncompressed_length(const char *start, size_t n, size_t * re
 		return false;
 	}
 }
-EXPORT_SYMBOL(rdkafka_snappy_uncompressed_length);
+EXPORT_SYMBOL(snappy_uncompressed_length);
 
 /*
  * The size of a compression block. Note that many parts of the compression
@@ -1404,7 +1404,7 @@ static inline int sn_compress(struct snappy_env *env, struct source *reader,
 
 		/* Compress input_fragment and append to dest */
 		char *dest;
-		dest = sink_peek(writer, rdkafka_snappy_max_compressed_length(num_to_read));
+		dest = sink_peek(writer, snappy_max_compressed_length(num_to_read));
 		if (!dest) {
 			/*
 			 * Need a scratch buffer for the output,
@@ -1429,7 +1429,7 @@ out:
 
 #ifdef SG
 
-int rdkafka_snappy_compress_iov(struct snappy_env *env,
+int snappy_compress_iov(struct snappy_env *env,
 			struct iovec *iov_in,
 			int iov_in_len,
 			size_t input_length,
@@ -1454,10 +1454,10 @@ int rdkafka_snappy_compress_iov(struct snappy_env *env,
 	*compressed_length = writer.written;
 	return err;
 }
-EXPORT_SYMBOL(rdkafka_snappy_compress_iov);
+EXPORT_SYMBOL(snappy_compress_iov);
 
 /**
- * rdkafka_snappy_compress - Compress a buffer using the snappy compressor.
+ * snappy_compress - Compress a buffer using the snappy compressor.
  * @env: Preallocated environment
  * @input: Input buffer
  * @input_length: Length of input_buffer
@@ -1467,13 +1467,13 @@ EXPORT_SYMBOL(rdkafka_snappy_compress_iov);
  * Return 0 on success, otherwise an negative error code.
  *
  * The output buffer must be at least
- * rdkafka_snappy_max_compressed_length(input_length) bytes long.
+ * snappy_max_compressed_length(input_length) bytes long.
  *
- * Requires a preallocated environment from rdkafka_snappy_init_env.
+ * Requires a preallocated environment from snappy_init_env.
  * The environment does not keep state over individual calls
  * of this function, just preallocates the memory.
  */
-int rdkafka_snappy_compress(struct snappy_env *env,
+int snappy_compress(struct snappy_env *env,
 		    const char *input,
 		    size_t input_length,
 		    char *compressed, size_t *compressed_length)
@@ -1487,13 +1487,13 @@ int rdkafka_snappy_compress(struct snappy_env *env,
 		.iov_len = 0xffffffff,
 	};
 	int out = 1;
-	return rdkafka_snappy_compress_iov(env, 
+	return snappy_compress_iov(env, 
 				   &iov_in, 1, input_length, 
 				   &iov_out, &out, compressed_length);
 }
-EXPORT_SYMBOL(rdkafka_snappy_compress);
+EXPORT_SYMBOL(snappy_compress);
 
-int rdkafka_snappy_uncompress_iov(struct iovec *iov_in, int iov_in_len,
+int snappy_uncompress_iov(struct iovec *iov_in, int iov_in_len,
 			   size_t input_len, char *uncompressed)
 {
 	struct source reader = {
@@ -1507,32 +1507,32 @@ int rdkafka_snappy_uncompress_iov(struct iovec *iov_in, int iov_in_len,
 	};
 	return internal_uncompress(&reader, &output, 0xffffffff);
 }
-EXPORT_SYMBOL(rdkafka_snappy_uncompress_iov);
+EXPORT_SYMBOL(snappy_uncompress_iov);
 
 /**
- * rdkafka_snappy_uncompress - Uncompress a snappy compressed buffer
+ * snappy_uncompress - Uncompress a snappy compressed buffer
  * @compressed: Input buffer with compressed data
  * @n: length of compressed buffer
  * @uncompressed: buffer for uncompressed data
  *
  * The uncompressed data buffer must be at least
- * rdkafka_snappy_uncompressed_length(compressed) bytes long.
+ * snappy_uncompressed_length(compressed) bytes long.
  *
  * Return 0 on success, otherwise an negative error code.
  */
-int rdkafka_snappy_uncompress(const char *compressed, size_t n, char *uncompressed)
+int snappy_uncompress(const char *compressed, size_t n, char *uncompressed)
 {
 	struct iovec iov = {
 		.iov_base = (char *)compressed,
 		.iov_len = n
 	};
-	return rdkafka_snappy_uncompress_iov(&iov, 1, n, uncompressed);
+	return snappy_uncompress_iov(&iov, 1, n, uncompressed);
 }
-EXPORT_SYMBOL(rdkafka_snappy_uncompress);
+EXPORT_SYMBOL(snappy_uncompress);
 
 #else
 /**
- * rdkafka_snappy_compress - Compress a buffer using the snappy compressor.
+ * snappy_compress - Compress a buffer using the snappy compressor.
  * @env: Preallocated environment
  * @input: Input buffer
  * @input_length: Length of input_buffer
@@ -1542,13 +1542,13 @@ EXPORT_SYMBOL(rdkafka_snappy_uncompress);
  * Return 0 on success, otherwise an negative error code.
  *
  * The output buffer must be at least
- * rdkafka_snappy_max_compressed_length(input_length) bytes long.
+ * snappy_max_compressed_length(input_length) bytes long.
  *
- * Requires a preallocated environment from rdkafka_snappy_init_env.
+ * Requires a preallocated environment from snappy_init_env.
  * The environment does not keep state over individual calls
  * of this function, just preallocates the memory.
  */
-int rdkafka_snappy_compress(struct snappy_env *env,
+int snappy_compress(struct snappy_env *env,
 		    const char *input,
 		    size_t input_length,
 		    char *compressed, size_t *compressed_length)
@@ -1566,20 +1566,20 @@ int rdkafka_snappy_compress(struct snappy_env *env,
 	*compressed_length = (writer.dest - compressed);
 	return err;
 }
-EXPORT_SYMBOL(rdkafka_snappy_compress);
+EXPORT_SYMBOL(snappy_compress);
 
 /**
- * rdkafka_snappy_uncompress - Uncompress a snappy compressed buffer
+ * snappy_uncompress - Uncompress a snappy compressed buffer
  * @compressed: Input buffer with compressed data
  * @n: length of compressed buffer
  * @uncompressed: buffer for uncompressed data
  *
  * The uncompressed data buffer must be at least
- * rdkafka_snappy_uncompressed_length(compressed) bytes long.
+ * snappy_uncompressed_length(compressed) bytes long.
  *
  * Return 0 on success, otherwise an negative error code.
  */
-int rdkafka_snappy_uncompress(const char *compressed, size_t n, char *uncompressed)
+int snappy_uncompress(const char *compressed, size_t n, char *uncompressed)
 {
 	struct source reader = {
 		.ptr = compressed,
@@ -1591,7 +1591,7 @@ int rdkafka_snappy_uncompress(const char *compressed, size_t n, char *uncompress
 	};
 	return internal_uncompress(&reader, &output, 0xffffffff);
 }
-EXPORT_SYMBOL(rdkafka_snappy_uncompress);
+EXPORT_SYMBOL(snappy_uncompress);
 #endif
 
 static inline void clear_env(struct snappy_env *env)
@@ -1601,7 +1601,7 @@ static inline void clear_env(struct snappy_env *env)
 
 #ifdef SG
 /**
- * rdkafka_snappy_init_env_sg - Allocate snappy compression environment
+ * snappy_init_env_sg - Allocate snappy compression environment
  * @env: Environment to preallocate
  * @sg: Input environment ever does scather gather
  *
@@ -1610,9 +1610,9 @@ static inline void clear_env(struct snappy_env *env)
  * Returns 0 on success, otherwise negative errno.
  * Must run in process context.
  */
-int rdkafka_snappy_init_env_sg(struct snappy_env *env, bool sg)
+int snappy_init_env_sg(struct snappy_env *env, bool sg)
 {
-	if (rdkafka_snappy_init_env(env) < 0)
+	if (snappy_init_env(env) < 0)
 		goto error;
 
 	if (sg) {
@@ -1620,20 +1620,20 @@ int rdkafka_snappy_init_env_sg(struct snappy_env *env, bool sg)
 		if (!env->scratch)
 			goto error;
 		env->scratch_output =
-			vmalloc(rdkafka_snappy_max_compressed_length(kblock_size));
+			vmalloc(snappy_max_compressed_length(kblock_size));
 		if (!env->scratch_output)
 			goto error;
 	}
 	return 0;
 error:
-	rdkafka_snappy_free_env(env);
+	snappy_free_env(env);
 	return -ENOMEM;
 }
-EXPORT_SYMBOL(rdkafka_snappy_init_env_sg);
+EXPORT_SYMBOL(snappy_init_env_sg);
 #endif
 
 /**
- * rdkafka_snappy_init_env - Allocate snappy compression environment
+ * snappy_init_env - Allocate snappy compression environment
  * @env: Environment to preallocate
  *
  * Passing multiple entries in an iovec is not allowed
@@ -1641,7 +1641,7 @@ EXPORT_SYMBOL(rdkafka_snappy_init_env_sg);
  * Returns 0 on success, otherwise negative errno.
  * Must run in process context.
  */
-int rdkafka_snappy_init_env(struct snappy_env *env)
+int snappy_init_env(struct snappy_env *env)
 {
     clear_env(env);
 	env->hash_table = vmalloc(sizeof(u16) * kmax_hash_table_size);
@@ -1649,15 +1649,15 @@ int rdkafka_snappy_init_env(struct snappy_env *env)
 		return -ENOMEM;
 	return 0;
 }
-EXPORT_SYMBOL(rdkafka_snappy_init_env);
+EXPORT_SYMBOL(snappy_init_env);
 
 /**
- * rdkafka_snappy_free_env - Free an snappy compression environment
+ * snappy_free_env - Free an snappy compression environment
  * @env: Environment to free.
  *
  * Must run in process context.
  */
-void rdkafka_snappy_free_env(struct snappy_env *env)
+void snappy_free_env(struct snappy_env *env)
 {
 	vfree(env->hash_table);
 #ifdef SG
@@ -1666,4 +1666,4 @@ void rdkafka_snappy_free_env(struct snappy_env *env)
 #endif
 	clear_env(env);
 }
-EXPORT_SYMBOL(rdkafka_snappy_free_env);
+EXPORT_SYMBOL(snappy_free_env);

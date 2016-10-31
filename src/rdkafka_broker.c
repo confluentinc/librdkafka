@@ -2574,15 +2574,15 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 #if WITH_SNAPPY
 	case RD_KAFKA_COMPRESSION_SNAPPY:
 		/* Initialize snappy compression environment */
-		rdkafka_snappy_init_env_sg(&senv, 1/*iov enable*/);
+		snappy_init_env_sg(&senv, 1/*iov enable*/);
 
 		/* Calculate maximum compressed size and
 		 * allocate an output buffer accordingly. */
-		siov.iov_len = rdkafka_snappy_max_compressed_length(MessageSetSize);
+		siov.iov_len = snappy_max_compressed_length(MessageSetSize);
 		siov.iov_base = rd_malloc(siov.iov_len);
 
 		/* Compress each message */
-		if ((r = rdkafka_snappy_compress_iov(&senv,
+		if ((r = snappy_compress_iov(&senv,
 					     &rkbuf->
 					     rkbuf_iov[iov_firstmsg],
 					     rkbuf->rkbuf_msg.
@@ -2606,7 +2606,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 		}
 
 		/* rd_free snappy environment */
-		rdkafka_snappy_free_env(&senv);
+		snappy_free_env(&senv);
 		break;
 #endif
 
@@ -3395,7 +3395,7 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 			}
 
 			/* Acquire uncompressed length */
-			if (unlikely(!rdkafka_snappy_uncompressed_length(inbuf+of,
+			if (unlikely(!snappy_uncompressed_length(inbuf+of,
 								 clen, &ulen))) {
 				rd_rkb_dbg(rkb, MSG, "SNAPPY",
 					   "Failed to get length of "
@@ -3415,7 +3415,7 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 			}
 
 			/* pass 2: Uncompress to outbuf */
-			if (unlikely((r = rdkafka_snappy_uncompress(inbuf+of, clen,
+			if (unlikely((r = snappy_uncompress(inbuf+of, clen,
 							    outbuf+uof)))) {
 				rd_rkb_dbg(rkb, MSG, "SNAPPY",
 					   "Failed to decompress Snappy-java framed "
@@ -3692,7 +3692,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 				/* no framing */
 
 				/* Acquire uncompressed length */
-				if (unlikely(!rdkafka_snappy_uncompressed_length(inbuf,
+				if (unlikely(!snappy_uncompressed_length(inbuf,
 									 Value_len,
 									 &outlen))) {
 					rd_rkb_dbg(rkb, MSG, "SNAPPY",
@@ -3710,7 +3710,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 				outbuf = rd_malloc(outlen);
 
 				/* Uncompress to outbuf */
-				if (unlikely((r = rdkafka_snappy_uncompress(inbuf,
+				if (unlikely((r = snappy_uncompress(inbuf,
 								    Value_len,
 								    outbuf)))) {
 					rd_rkb_dbg(rkb, MSG, "SNAPPY",

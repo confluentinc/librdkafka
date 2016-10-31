@@ -55,7 +55,7 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
 /**
  * @returns true if cgrp can start partition fetchers, which is true if
  *          there is a subscription and the group is fully joined, or there
- *          is no subscription (in which case the join state is irrelevant) - 
+ *          is no subscription (in which case the join state is irrelevant)
  *          such as for an assign() without subscribe(). */
 #define RD_KAFKA_CGRP_CAN_FETCH_START(rkcg) \
 	((rkcg)->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_ASSIGNED)
@@ -459,19 +459,21 @@ err2:
 
         if (ErrorCode == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE)
                 rd_kafka_cgrp_coord_update(rkcg, -1);
-	else if (rkcg->rkcg_last_err != ErrorCode) {
-		rd_kafka_q_op_err(rkcg->rkcg_q, RD_KAFKA_OP_CONSUMER_ERR,
-				  ErrorCode, 0, NULL, 0,
-				  "GroupCoordinator response error: %s",
-				  rd_kafka_err2str(ErrorCode));
+	else {
+                if (rkcg->rkcg_last_err != ErrorCode) {
+                        rd_kafka_q_op_err(rkcg->rkcg_q,
+                                          RD_KAFKA_OP_CONSUMER_ERR,
+                                          ErrorCode, 0, NULL, 0,
+                                          "GroupCoordinator response error: %s",
+                                          rd_kafka_err2str(ErrorCode));
 
-		/* Suppress repeated errors */
-                rkcg->rkcg_last_err = ErrorCode;
+                        /* Suppress repeated errors */
+                        rkcg->rkcg_last_err = ErrorCode;
+                }
 
 		/* Continue querying */
 		rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_QUERY_COORD);
         }
-
 }
 
 

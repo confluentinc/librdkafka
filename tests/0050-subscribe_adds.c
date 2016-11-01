@@ -105,7 +105,7 @@ int main_0050_subscribe_adds (int argc, char **argv) {
         TEST_ASSERT(!err, "subscribe() failed: %s",
                     rd_kafka_err2str(err));
 
-        test_consumer_poll_no_msgs("consume", rk, testid, 6000*1.5);
+        test_consumer_poll_no_msgs("consume", rk, testid, (int)(6000*1.5));
 
 
         test_msgver_verify("consume", &mv, TEST_MSGVER_ORDER|TEST_MSGVER_DUP,

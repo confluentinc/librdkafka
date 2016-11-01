@@ -108,7 +108,7 @@ int main_0051_assign_adds (int argc, char **argv) {
                     rd_kafka_err2str(err));
 
         TEST_SAY("Should not see any messages for session.timeout.ms+some more\n");
-        test_consumer_poll_no_msgs("consume", rk, testid, 6000*1.5);
+        test_consumer_poll_no_msgs("consume", rk, testid, (int)(6000*1.5));
 
         test_msgver_verify("consume", &mv, TEST_MSGVER_ORDER|TEST_MSGVER_DUP,
                            0, msgcnt);

@@ -17,7 +17,9 @@
 #include "tinycthread.h"
 #include "rdlist.h"
 
+#if WITH_SOCKEM
 #include "sockem.h"
+#endif
 
 #ifdef _MSC_VER
 #define sscanf(...) sscanf_s(__VA_ARGS__)
@@ -99,7 +101,9 @@ struct test {
         } state;
 
         rd_list_t sockets;
+#if WITH_SOCKEM
         int (*connect_cb) (struct test *test, sockem_t *skm, const char *id);
+#endif
         int (*is_fatal_cb) (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                             const char *reason);
 };
@@ -518,6 +522,7 @@ int test_can_create_topics (int skip);
 rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
 				   rd_kafka_event_type_t event_type,
 				   int timeout_ms);
-
+#if WITH_SOCKEM
 void test_socket_enable (rd_kafka_conf_t *conf);
 void test_socket_close_all (struct test *test, int reinit);
+#endif

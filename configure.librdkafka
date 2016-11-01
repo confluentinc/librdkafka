@@ -50,6 +50,9 @@ function checks {
     # Snappy support is built-in
     mkl_allvar_set WITH_SNAPPY WITH_SNAPPY y
 
+    # Enable sockem (tests)
+    mkl_allvar_set WITH_SOCKEM WITH_SOCKEM y
+
     if [[ "$ENABLE_SSL" == "y" ]]; then
 	mkl_meta_set "libssl" "deb" "libssl-dev"
 	mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl" \

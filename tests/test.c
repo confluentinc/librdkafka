@@ -38,8 +38,6 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
 
-#include "sockem.h"
-
 int test_level = 2;
 int test_seed = 0;
 
@@ -182,7 +180,9 @@ struct test tests[] = {
 	_TEST(0046_rkt_cache, TEST_F_LOCAL),
 	_TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
 	_TEST(0048_partitioner, 0),
+#if WITH_SOCKEM
         _TEST(0049_consume_conn_close, 0),
+#endif
         _TEST(0050_subscribe_adds, 0),
         _TEST(0051_assign_adds, 0),
         { NULL }
@@ -193,6 +193,7 @@ RD_TLS struct test *test_curr = &tests[0];
 
 
 
+#if WITH_SOCKEM
 /**
  * Socket network emulation with sockem
  */
@@ -254,8 +255,13 @@ static int test_closesocket_cb (int s, void *opaque) {
         if (skm) {
                 sockem_close(skm);
                 test_socket_del(test, skm, 0/*nolock*/);
-        } else
+        } else {
+#ifdef _MSC_VER
+                closesocket(s);
+#else
                 close(s);
+#endif
+        }
         TEST_UNLOCK();
 
         return 0;
@@ -267,6 +273,7 @@ void test_socket_enable (rd_kafka_conf_t *conf) {
         rd_kafka_conf_set_closesocket_cb(conf, test_closesocket_cb);
 	rd_kafka_conf_set_opaque(conf, test_curr);
 }
+#endif /* WITH_SOCKEM */
 
 
 static void test_error_cb (rd_kafka_t *rk, int err,
@@ -494,8 +501,10 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 #endif
         }
 
+#if WITH_SOCKEM
         if (*test_sockem_conf && conf)
                 test_socket_enable(*conf);
+#endif
 
 	if (topic_conf)
 		*topic_conf = rd_kafka_topic_conf_new();
@@ -672,7 +681,9 @@ static int run_test0 (struct run_args *run_args) {
         }
         TEST_UNLOCK();
 
+#if WITH_SOCKEM
         test_socket_close_all(test, 0);
+#endif
 
         if (test->stats_fp) {
                 long pos = ftell(test->stats_fp);
@@ -1252,8 +1263,10 @@ rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf) {
 
 	if (!conf) {
 		conf = rd_kafka_conf_new();
+#if WITH_SOCKEM
                 if (*test_sockem_conf)
                         test_socket_enable(conf);
+#endif
         }
 
 	test_conf_set(conf, "client.id", test_curr->name);

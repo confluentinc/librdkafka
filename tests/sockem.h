@@ -1,7 +1,7 @@
 /*
  * sockem - socket-level network emulation
  *
- * Copyright (c) 2016, Magnus Edenhill
+ * Copyright (c) 2016, Magnus Edenhill, Andreas Smas
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without

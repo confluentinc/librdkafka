@@ -1,7 +1,7 @@
 /*
  * sockem - socket-level network emulation
  *
- * Copyright (c) 2016, Magnus Edenhill
+ * Copyright (c) 2016, Magnus Edenhill, Andreas Smas
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,16 @@
 #else
 #define socket_errno() errno
 #define SOCKET_ERROR -1
+#endif
+
+#ifndef strdupa
+#define strdupa(s)							\
+	({								\
+		const char *_s = (s);					\
+		size_t _len = strlen(_s)+1;				\
+		char *_d = (char *)alloca(_len);			\
+		(char *)memcpy(_d, _s, _len);				\
+	})
 #endif
 
 #include <pthread.h>
@@ -445,7 +455,7 @@ void sockem_close (sockem_t *skm) {
 
         mtx_lock(&skm->lock);
 
-        /* If thread is running let it close the sockets 
+        /* If thread is running let it close the sockets
          * to avoid race condition. */
         if (skm->run == SOCKEM_START ||
             skm->run == SOCKEM_RUN)

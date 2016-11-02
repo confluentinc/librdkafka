@@ -408,19 +408,25 @@ class ConfImpl : public Conf {
 			  name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
 			  return static_cast<Conf::ConfResult>(res);
 
-		  value.resize(size);
-		  if ((res = rd_kafka_conf_get(rk_conf_, name.c_str(),
-			  (char *)value.c_str(), &size)) != RD_KAFKA_CONF_OK)
-			  return static_cast<Conf::ConfResult>(res);
+		  char valueCharArray[size];
+		  res = rd_kafka_conf_get(rk_conf_, name.c_str(),
+				      (char *) valueCharArray, &size);
+		  value.assign(valueCharArray);
+		  if (res != RD_KAFKA_CONF_OK) {
+		      return static_cast<Conf::ConfResult>(res);
+		  }
+
 	  }
 	  else if (rkt_conf_) {
 		  if ((res = rd_kafka_topic_conf_get(rkt_conf_,
 			  name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
 			  return static_cast<Conf::ConfResult>(res);
 
-		  value.resize(size);
-		  if ((res = rd_kafka_topic_conf_get(rkt_conf_, name.c_str(),
-			  (char *)value.c_str(), &size)) != RD_KAFKA_CONF_OK)
+		  char valueCharArray[size];
+		  res = rd_kafka_topic_conf_get(rkt_conf_, name.c_str(),
+					    (char *)value.c_str(), &size);
+		  value.assign(valueCharArray);
+		  if (res != RD_KAFKA_CONF_OK)
 			  return static_cast<Conf::ConfResult>(res);
 	  }
 

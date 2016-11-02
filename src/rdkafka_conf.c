@@ -229,6 +229,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(socket_keepalive),
           "Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets",
           0, 1, 0 },
+	{ _RK_GLOBAL, "socket.nagle.disable", _RK_C_BOOL,
+	  _RK(socket_nagle_disable),
+          "Disable the Nagle algorithm (TCP_NODELAY).",
+          0, 1, 0 },
         { _RK_GLOBAL, "socket.max.fails", _RK_C_INT,
           _RK(socket_max_fails),
           "Disconnect from broker when this number of send failures "

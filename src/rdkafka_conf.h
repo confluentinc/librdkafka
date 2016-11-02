@@ -75,6 +75,7 @@ struct rd_kafka_conf_s {
 	int     socket_sndbuf_size;
 	int     socket_rcvbuf_size;
         int     socket_keepalive;
+	int     socket_nagle_disable;
         int     socket_max_fails;
 	char   *client_id_str;
         rd_kafkap_str_t *client_id;

@@ -408,7 +408,7 @@ class ConfImpl : public Conf {
 			  name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
 			  return static_cast<Conf::ConfResult>(res);
 
-		  char valueCharArray[size];
+		  char valueCharArray[size+1];
 		  res = rd_kafka_conf_get(rk_conf_, name.c_str(),
 				      (char *) valueCharArray, &size);
 		  value.assign(valueCharArray);
@@ -424,7 +424,7 @@ class ConfImpl : public Conf {
 
 		  char valueCharArray[size];
 		  res = rd_kafka_topic_conf_get(rkt_conf_, name.c_str(),
-					    (char *)value.c_str(), &size);
+					    (char *) valueCharArray, &size);
 		  value.assign(valueCharArray);
 		  if (res != RD_KAFKA_CONF_OK)
 			  return static_cast<Conf::ConfResult>(res);

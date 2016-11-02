@@ -401,9 +401,9 @@ int main (int argc, char **argv) {
       for (std::list<std::string>::iterator it = dump->begin();
            it != dump->end(); ) {
         std::cout << *it << " = ";
-        it++;
+        ++it;
         std::cout << *it << std::endl;
-        it++;
+        ++it;
       }
       std::cout << std::endl;
     }

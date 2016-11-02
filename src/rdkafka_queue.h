@@ -71,6 +71,7 @@ void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq);
 
 static RD_INLINE RD_UNUSED
 rd_kafka_q_t *rd_kafka_q_keep (rd_kafka_q_t *rkq) {
+   if (!rkq) return NULL;
         mtx_lock(&rkq->rkq_lock);
         rkq->rkq_refcnt++;
         mtx_unlock(&rkq->rkq_lock);

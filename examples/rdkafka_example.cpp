@@ -435,9 +435,9 @@ int main (int argc, char **argv) {
       for (std::list<std::string>::iterator it = dump->begin();
            it != dump->end(); ) {
         std::cout << *it << " = ";
-        it++;
+        ++it;
         std::cout << *it << std::endl;
-        it++;
+        ++it;
       }
       std::cout << std::endl;
     }
@@ -619,18 +619,22 @@ int main (int argc, char **argv) {
       if (err != RdKafka::ERR_NO_ERROR) {
         std::cerr << "%% Failed to acquire metadata: " 
                   << RdKafka::err2str(err) << std::endl;
-              run = 0;
+              run = false;
               break;
       }
 
       metadata_print(topic_str, metadata);
 
       delete metadata;
-      run = 0;
+      run = false;
     }
 
   }
 
+  if (conf) delete conf;
+  conf = NULL;
+  if (tconf) delete tconf;
+  tconf = NULL;
 
   /*
    * Wait for RdKafka to decommission.

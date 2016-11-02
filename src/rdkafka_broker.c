@@ -96,7 +96,7 @@ const char *rd_kafka_secproto_names[] = {
 static void iov_print (rd_kafka_t *rk,
 		       const char *what, int iov_idx, const struct iovec *iov,
 		       int hexdump) {
-	printf("%s:  iov #%i: %"PRIdsz"\n", what, iov_idx,
+	printf("%s:  iov #%i: %"PRIusz"\n", what, iov_idx,
 	       (size_t)iov->iov_len);
 	if (hexdump)
 		rd_hexdump(stdout, what, iov->iov_base, iov->iov_len);
@@ -109,13 +109,13 @@ void msghdr_print (rd_kafka_t *rk,
 	int i;
 	size_t len = 0;
 
-	printf("%s: iovlen %"PRIdsz"\n", what, (size_t)msg->msg_iovlen);
+	printf("%s: iovlen %"PRIusz"\n", what, (size_t)msg->msg_iovlen);
 
 	for (i = 0 ; i < (int)msg->msg_iovlen ; i++) {
 		iov_print(rk, what, i, &msg->msg_iov[i], hexdump);
 		len += msg->msg_iov[i].iov_len;
 	}
-	printf("%s: ^ message was %"PRIdsz" bytes in total\n", what, len);
+	printf("%s: ^ message was %"PRIusz" bytes in total\n", what, len);
 }
 
 

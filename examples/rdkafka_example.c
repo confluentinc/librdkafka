@@ -95,7 +95,7 @@ static void logger (const rd_kafka_t *rk, int level,
 		    const char *fac, const char *buf) {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	fprintf(stderr, "%u.%03u RDKAFKA-%i-%s: %s: %s\n",
+	fprintf(stderr, "%d.%03d RDKAFKA-%i-%s: %s: %s\n",
 		(int)tv.tv_sec, (int)(tv.tv_usec / 1000),
 		level, fac, rk ? rd_kafka_name(rk) : NULL, buf);
 }

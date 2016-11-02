@@ -229,7 +229,7 @@ void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 	rd_gettimeofday(&tv, NULL);
 	secs = (int)tv.tv_sec;
 	msecs = (int)(tv.tv_usec / 1000);
-	fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n",
+	fprintf(stderr, "%%%i|%d.%03d|%s|%s| %s\n",
 		level, secs, msecs,
 		fac, rk ? rk->rk_name : "", buf);
 }
@@ -2362,7 +2362,7 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
         fprintf(fp, "rd_kafka_op_cnt: %d\n", rd_atomic32_get(&rd_kafka_op_cnt));
 	fprintf(fp, "rd_kafka_t %p: %s\n", rk, rk->rk_name);
 
-	fprintf(fp, " producer.msg_cnt %u (%"PRIdsz" bytes)\n",
+	fprintf(fp, " producer.msg_cnt %u (%"PRIusz" bytes)\n",
 		tot_cnt, tot_size);
 	fprintf(fp, " rk_rep reply queue: %i ops\n",
 		rd_kafka_q_len(rk->rk_rep));

@@ -597,7 +597,7 @@ static void print_stats (rd_kafka_t *rk,
                                "%s\n",
                                i_msgs, i_bytes,
                                i_time / 1000,
-                               ((i_msgs * 1000000) / i_time),
+                               i_time!=0?((i_msgs * 1000000) / i_time):-1,
                                (float)((i_bytes) / (float)i_time),
                                extra);
 

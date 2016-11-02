@@ -389,6 +389,22 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_ILLEGAL_SASL_STATE = 34,
 	/** Unuspported version */
 	RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION = 35,
+	/** Topic already exists */
+	RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS = 36,
+	/** Invalid number of partitions */
+	RD_KAFKA_RESP_ERR_INVALID_PARTITIONS = 37,
+	/** Invalid replication factor */
+	RD_KAFKA_RESP_ERR_INVALID_REPLICATION_FACTOR = 38,
+	/** Invalid replica assignment */
+	RD_KAFKA_RESP_ERR_INVALID_REPLICA_ASSIGNMENT = 39,
+	/** Invalid config */
+	RD_KAFKA_RESP_ERR_INVALID_CONFIG = 40,
+	/** Not controller for cluster */
+	RD_KAFKA_RESP_ERR_NOT_CONTROLLER = 41,
+	/** Invalid request */
+	RD_KAFKA_RESP_ERR_INVALID_REQUEST = 42,
+	/** Message format on broker does not support request */
+	RD_KAFKA_RESP_UNSUPPORTED_FOR_MESSAGE_FORMAT = 43,
 
 	RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

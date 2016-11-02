@@ -419,6 +419,22 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Broker: Request not valid in current SASL state"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION,
 		  "Broker: API version not supported"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS,
+		  "Broker: Topic already exists"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_PARTITIONS,
+		  "Broker: Invalid number of partitions"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_REPLICATION_FACTOR,
+		  "Broker: Invalid replication factor"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_REPLICA_ASSIGNMENT,
+		  "Broker: Invalid replica assignment"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_CONFIG,
+		  "Broker: Configuration is invalid"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_NOT_CONTROLLER,
+		  "Broker: Not controller for cluster"),
+	_ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_REQUEST,
+		  "Broker: Invalid request"),
+	_ERR_DESC(RD_KAFKA_RESP_UNSUPPORTED_FOR_MESSAGE_FORMAT,
+		  "Broker: Message format on broker does not support request"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
 };

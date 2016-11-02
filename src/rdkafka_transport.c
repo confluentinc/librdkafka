@@ -911,7 +911,7 @@ static void rd_kafka_transport_connected (rd_kafka_transport_t *rktrans) {
 	if (rkb->rkb_rk->rk_conf.socket_nagle_disable) {
 		int one = 1;
 		if (setsockopt(rktrans->rktrans_s, IPPROTO_TCP, TCP_NODELAY,
-			       (void *)&one, size, sizeof(one)) == SOCKET_ERROR)
+			       (void *)&one, sizeof(one)) == SOCKET_ERROR)
 			rd_rkb_log(rkb, LOG_WARNING, "NAGLE",
 				   "Failed to disable Nagle (TCP_NODELAY) "
 				   "on socket %d: %s",

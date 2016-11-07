@@ -440,6 +440,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(sasl.principal),
 	  "This client's Kerberos principal name.",
 	  .sdef = "kafkaclient" },
+#ifndef _MSC_VER
 	{ _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
 	  _RK(sasl.kinit_cmd),
 	  "Full kerberos kinit command string, %{config.prop.name} is replaced "
@@ -457,6 +458,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(sasl.relogin_min_time),
 	  "Minimum time in milliseconds between key refresh attempts.",
 	  1, 86400*1000, 60*1000 },
+#endif
 	{ _RK_GLOBAL, "sasl.username", _RK_C_STR,
 	  _RK(sasl.username),
 	  "SASL username for use with the PLAIN mechanism" },

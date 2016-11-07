@@ -37,9 +37,9 @@
  * Send auth message with framing.
  * This is a blocking call.
  */
-static int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
-			       const void *payload, int len,
-			       char *errstr, int errstr_size) {
+int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
+                        const void *payload, int len,
+                        char *errstr, int errstr_size) {
 	struct msghdr msg = RD_ZERO_INIT;
 	struct iovec iov[1];
 	int32_t hdr;
@@ -96,58 +96,42 @@ static int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
 }
 
 
-
 /**
- * Handle received frame from broker.
+ * @brief Authentication succesful
+ *
+ * Transition to next connect state.
  */
-static int rd_kafka_sasl_handle_recv (rd_kafka_transport_t *rktrans,
-				      rd_kafka_buf_t *rkbuf,
-				      char *errstr, int errstr_size) {
-	int r;
-
-	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
-		   "Received SASL frame from broker (%"PRIdsz" bytes)",
-		   rkbuf ? rkbuf->rkbuf_len : 0);
-
-	if (rktrans->rktrans_sasl.complete && (!rkbuf || rkbuf->rkbuf_len == 0))
-		goto auth_successful;
-
-#ifndef _MSC_VER
-        r = rd_kafka_sasl_cyrus_handle_recv(rktrans, rkbuf,
-                                            errstr, errstr_size);
-#endif
-        if (r == -1)
-                return -1;
-        else if (r == 0)
-                return 0; /* Still authenticating */
-
+void rd_kafka_sasl_auth_done (rd_kafka_transport_t *rktrans) {
         /* Authenticated */
-
         rd_kafka_broker_connect_up(rktrans->rktrans_rkb);
-
-	return 0;
 }
 
 
 int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
 			    char *errstr, int errstr_size) {
+        rd_kafka_buf_t *rkbuf;
+        int r;
 
-	if (events & POLLIN) {
-		rd_kafka_buf_t *rkbuf;
-		int r;
+        if (!(events & POLLIN))
+                return 0;
 
-		r = rd_kafka_transport_framed_recvmsg(rktrans, &rkbuf,
-						      errstr, errstr_size);
-		if (r == -1)
-			return -1;
-		else if (r == 0)
-			return 0;
+        r = rd_kafka_transport_framed_recvmsg(rktrans, &rkbuf,
+                                              errstr, errstr_size);
+        if (r == -1)
+                return -1;
+        else if (r == 0) /* not fully received yet */
+                return 0;
 
-		return rd_kafka_sasl_handle_recv(rktrans, rkbuf,
-						 errstr, errstr_size);
-	}
+        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
+                   "Received SASL frame from broker (%"PRIdsz" bytes)",
+                   rkbuf ? rkbuf->rkbuf_len : 0);
 
-	return 0;
+        return rktrans->rktrans_sasl.recv(rktrans,
+                                          rkbuf ?
+                                          rkbuf->rkbuf_rbuf : NULL,
+                                          rkbuf ?
+                                          rkbuf->rkbuf_len : 0,
+                                          errstr, errstr_size);
 }
 
 
@@ -249,34 +233,10 @@ int rd_kafka_sasl_conf_validate (rd_kafka_t *rk,
 		return 0;
 
 #ifndef _MSC_VER
-	if (rk->rk_conf.sasl.kinit_cmd) {
-		rd_kafka_broker_t rkb;
-		char *cmd;
-		char tmperr[128];
-
-		memset(&rkb, 0, sizeof(rkb));
-		strcpy(rkb.rkb_nodename, "ATestBroker:9092");
-		rkb.rkb_rk = rk;
-		mtx_init(&rkb.rkb_lock, mtx_plain);
-
-		cmd = rd_string_render(rk->rk_conf.sasl.kinit_cmd,
-				       tmperr, sizeof(tmperr),
-				       render_callback, &rkb);
-
-		mtx_destroy(&rkb.rkb_lock);
-
-		if (!cmd) {
-			rd_snprintf(errstr, errstr_size,
-				    "Invalid sasl.kerberos.kinit.cmd value: %s",
-				    tmperr);
-			return -1;
-		}
-
-		rd_free(cmd);
-	}
+        return rd_kafka_sasl_cyrus_conf_validate(rk, errstr, errstr_size);
+#else
+        return 0;
 #endif
-
-	return 0;
 }
 
 
@@ -296,6 +256,8 @@ void rd_kafka_sasl_global_term (void) {
 int rd_kafka_sasl_global_init (void) {
 #ifndef _MSC_VER
         return rd_kafka_sasl_cyrus_global_init();
+#else
+        return 0;
 #endif
 }
 

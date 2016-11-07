@@ -37,84 +37,21 @@
 
 static mtx_t rd_kafka_sasl_kinit_lock;
 
-
-/**
- * Send auth message with framing.
- * This is a blocking call.
- */
-static int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
-			       const void *payload, int len,
-			       char *errstr, int errstr_size) {
-	struct msghdr msg = RD_ZERO_INIT;
-	struct iovec iov[1];
-	int32_t hdr;
-	char *frame;
-	int total_len = sizeof(hdr) + len;
-
-	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
-		   "Send SASL frame to broker (%d bytes)", len);
-
-	frame = rd_malloc(total_len);
-
-	hdr = htobe32(len);
-	memcpy(frame, &hdr, sizeof(hdr));
-	if (payload)
-		memcpy(frame+sizeof(hdr), payload, len);
-	
-	msg.msg_iov = iov;
-	msg.msg_iovlen = 1;
-	iov[0].iov_base = frame;
-	iov[0].iov_len  = total_len;
-
-	/* Simulate blocking behaviour on non-blocking socket..
-	 * FIXME: This isn't optimal but is highly unlikely to stall since
-	 *        the socket buffer will most likely not be exceeded. */
-	do {
-		int r;
-
-		r = rd_kafka_transport_sendmsg(rktrans, &msg,
-					       errstr, errstr_size);
-		if (r == -1) {
-			rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
-				   "SASL send of %d bytes failed: %s",
-				   total_len, errstr);
-			free(frame);
-			return -1;
-		}
-
-		if (r == total_len)
-			break;
-
-		/* Avoid busy-looping */
-		rd_usleep(10*1000, NULL);
-
-		/* Shave off written bytes */
-		total_len -= r;
-		iov[0].iov_base = ((char *)(iov[0].iov_base)) + r;
-		iov[0].iov_len  = total_len;
-
-	} while (total_len > 0);
-
-	free(frame);
-
-	return 0;
-}
+struct rd_kafka_sasl_state_s {
+        sasl_conn_t *conn;
+};
 
 
 
 /**
  * Handle received frame from broker.
  */
-static int rd_kafka_sasl_handle_recv (rd_kafka_transport_t *rktrans,
-				      rd_kafka_buf_t *rkbuf,
-				      char *errstr, int errstr_size) {
+static int rd_kafka_sasl_cyrus_recv (rd_kafka_transport_t *rktrans,
+                                     const void *buf, size_t size,
+				     char *errstr, int errstr_size) {
 	int r;
 
-	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
-		   "Received SASL frame from broker (%"PRIdsz" bytes)",
-		   rkbuf ? rkbuf->rkbuf_len : 0);
-
-	if (rktrans->rktrans_sasl.complete && (!rkbuf || rkbuf->rkbuf_len == 0))
+	if (rktrans->rktrans_sasl.complete && size == 0)
 		goto auth_successful;
 
 	do {
@@ -123,16 +60,9 @@ static int rd_kafka_sasl_handle_recv (rd_kafka_transport_t *rktrans,
 		unsigned int outlen;
 
 		r = sasl_client_step(rktrans->rktrans_sasl.conn,
-				     rkbuf && rkbuf->rkbuf_len > 0 ?
-				     rkbuf->rkbuf_rbuf : NULL,
-				     rkbuf ? rkbuf->rkbuf_len : 0,
+                                     size > 0 ? buf : NULL, size,
 				     &interact,
 				     &out, &outlen);
-
-		if (rkbuf) {
-			rd_kafka_buf_destroy(rkbuf);
-			rkbuf = NULL;
-		}
 
 		if (r >= 0) {
 			/* Note: outlen may be 0 here for an empty response */
@@ -184,7 +114,7 @@ auth_successful:
 			   user, mech, authsrc);
 	}
 
-	rd_kafka_broker_connect_up(rktrans->rktrans_rkb);
+        rd_kafka_sasl_auth_done(rktrans);
 
 	return 0;
 }
@@ -684,3 +614,8 @@ int rd_kafka_sasl_global_init (void) {
 	return 0;
 }
       
+static void rd_kafka_sasl_cyrus_close (rd_kafka_transport_t *rktrans) {
+        if (rktrans->rktrans_sasl.state->conn)
+                sasl_dispose(&rktrans->rktrans_sasl.state->conn);
+        rd_free(rktrans->rktrans_sasl.state);
+}

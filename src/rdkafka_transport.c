@@ -97,8 +97,8 @@ void rd_kafka_transport_close (rd_kafka_transport_t *rktrans) {
 #endif
 
 #if WITH_SASL
-	if (rktrans->rktrans_sasl.conn)
-		sasl_dispose(&rktrans->rktrans_sasl.conn);
+        if (rktrans->rktrans_sasl.close)
+                rktrans->rktrans_sasl.close(rktrans);
 #endif
 
 	if (rktrans->rktrans_recv_buf)
@@ -1022,8 +1022,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 
 	case RD_KAFKA_BROKER_STATE_AUTH:
 #if WITH_SASL
-		rd_kafka_assert(NULL, rktrans->rktrans_sasl.conn != NULL);
-
 		/* SASL handshake */
 		if (rd_kafka_sasl_io_event(rktrans, events,
 					   errstr, sizeof(errstr)) == -1) {

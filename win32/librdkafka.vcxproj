@@ -175,7 +175,10 @@
     <ClInclude Include="..\src\rdkafka_pattern.h" />
     <ClInclude Include="..\src\rdkafka_queue.h" />
     <ClInclude Include="..\src\rdkafka_request.h" />
+    <ClInclude Include="..\src\rdkafka_sasl.h" />
+    <ClInclude Include="..\src\rdkafka_sasl_int.h" />
     <ClInclude Include="..\src\rdkafka_subscription.h" />
+    <ClInclude Include="..\src\rdkafka_transport_int.h" />
     <ClInclude Include="..\src\rdlist.h" />
     <ClInclude Include="..\src\rdposix.h" />
     <ClInclude Include="..\src\rd.h" />

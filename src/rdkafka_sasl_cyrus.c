@@ -32,6 +32,8 @@
 #include "rdkafka_sasl.h"
 #include "rdkafka_sasl_int.h"
 
+#ifdef __FreeBSD__
+#include <sys/wait.h>  /* For WIF.. */
 #endif
 
 #include <sasl/sasl.h>

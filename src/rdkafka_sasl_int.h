@@ -28,10 +28,19 @@
 
 #pragma once
 
+void rd_kafka_sasl_auth_done (rd_kafka_transport_t *rktrans);
+int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
+                        const void *payload, int len,
+                        char *errstr, int errstr_size);
+
 #ifdef _MSC_VER
 /* rdkafka_sasl_win32.c */
-
+int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
+                                    const char *hostname,
+                                    char *errstr, size_t errstr_size);
 #else
 /* rdkafka_sasl_cyrus.c */
-
+int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
+                                    const char *hostname,
+                                    char *errstr, size_t errstr_size);
 #endif

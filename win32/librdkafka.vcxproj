@@ -157,6 +157,8 @@
     <ClCompile Include="..\src\rdkafka_range_assignor.c" />
     <ClCompile Include="..\src\rdkafka_roundrobin_assignor.c" />
     <ClCompile Include="..\src\rdkafka_request.c" />
+    <ClCompile Include="..\src\rdkafka_sasl.c" />
+    <ClCompile Include="..\src\rdkafka_sasl_win32.c" />
     <ClCompile Include="..\src\rdkafka_subscription.c" />
     <ClCompile Include="..\src\rdkafka_timer.c" />
     <ClCompile Include="..\src\rdkafka_topic.c" />

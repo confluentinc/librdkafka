@@ -9,7 +9,7 @@ ifneq ($(wildcard ../.git),)
 CPPFLAGS += -DLIBRDKAFKA_GIT_VERSION="\"$(shell git describe --abbrev=6 --dirty --tags 2>/dev/null)\""
 endif
 
-SRCS_$(WITH_SASL) += rdkafka_sasl.c
+SRCS_$(WITH_SASL) += rdkafka_sasl.c rdkafka_sasl_cyrus.c
 SRCS_$(WITH_SNAPPY) += snappy.c
 SRCS_$(WITH_ZLIB) += rdgz.c
 SRCS_$(WITH_LZ4) += xxhash.c

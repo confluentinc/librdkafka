@@ -220,7 +220,7 @@ void rd_kafka_broker_sasl_term (rd_kafka_broker_t *rkb) {
  */
 void rd_kafka_broker_sasl_init (rd_kafka_broker_t *rkb) {
 #ifndef _MSC_VER
-        rd_kafka_broker_sasl_cyrus_init();
+        rd_kafka_broker_sasl_cyrus_init(rkb);
 #endif
 }
 

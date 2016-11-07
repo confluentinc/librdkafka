@@ -43,4 +43,11 @@ int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
 int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
                                     const char *hostname,
                                     char *errstr, size_t errstr_size);
+void rd_kafka_broker_sasl_cyrus_term (rd_kafka_broker_t *rkb);
+void rd_kafka_broker_sasl_cyrus_init (rd_kafka_broker_t *rkb);
+
+int rd_kafka_sasl_cyrus_conf_validate (rd_kafka_t *rk,
+                                       char *errstr, size_t errstr_size);
+void rd_kafka_sasl_cyrus_global_term (void);
+int rd_kafka_sasl_cyrus_global_init (void);
 #endif

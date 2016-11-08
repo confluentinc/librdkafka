@@ -1566,8 +1566,9 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                 for (i = 0 ; i < rkcg->rkcg_assignment->cnt ; i++) {
                         rd_kafka_topic_partition_t *rktpar =
                                 &rkcg->rkcg_assignment->elems[i];
+                        shptr_rd_kafka_toppar_t *s_rktp = rktpar->_private;
                         rd_kafka_toppar_t *rktp =
-                                rd_kafka_toppar_s2i(rktpar->_private);
+                                rd_kafka_toppar_s2i(s_rktp);
                         rd_kafka_toppar_lock(rktp);
                         rd_kafka_toppar_desired_add0(rktp);
                         rd_kafka_toppar_unlock(rktp);

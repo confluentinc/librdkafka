@@ -467,7 +467,12 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_get (rd_kafka_itopic_t *rkt,
  * Locks: rd_kafka_topic_wrlock() and toppar_lock() must be held.
  */
 void rd_kafka_toppar_desired_link (rd_kafka_toppar_t *rktp) {
-        shptr_rd_kafka_toppar_t *s_rktp = rd_kafka_toppar_keep(rktp);
+        shptr_rd_kafka_toppar_t *s_rktp;
+
+        if (rktp->rktp_s_for_desp)
+                return; /* Already linked */
+
+        s_rktp = rd_kafka_toppar_keep(rktp);
         rd_list_add(&rktp->rktp_rkt->rkt_desp, s_rktp);
         rktp->rktp_s_for_desp = s_rktp; /* Desired list refcount */
 }
@@ -478,7 +483,9 @@ void rd_kafka_toppar_desired_link (rd_kafka_toppar_t *rktp) {
  * Locks: rd_kafka_topic_wrlock() and toppar_lock() must be held.
  */
 void rd_kafka_toppar_desired_unlink (rd_kafka_toppar_t *rktp) {
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_s_for_desp != NULL);
+        if (!rktp->rktp_s_for_desp)
+                return; /* Not linked */
+
         rd_list_remove(&rktp->rktp_rkt->rkt_desp, rktp->rktp_s_for_desp);
         rd_kafka_toppar_destroy(rktp->rktp_s_for_desp);
         rktp->rktp_s_for_desp = NULL;
@@ -560,12 +567,10 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp) {
 		return;
 
 	rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_DESIRED;
+        rd_kafka_toppar_desired_unlink(rktp);
 
-
-	if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_UNKNOWN) {
-		rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_UNKNOWN;
-                rd_kafka_toppar_desired_unlink(rktp);
-        }
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_UNKNOWN)
+                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_UNKNOWN;
 
 
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "DESP",

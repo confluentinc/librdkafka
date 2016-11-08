@@ -115,6 +115,8 @@ int main_0051_assign_adds (int argc, char **argv) {
 
         test_msgver_clear(&mv);
 
+        rd_kafka_topic_partition_list_destroy(tlist);
+
         test_consumer_close(rk);
         rd_kafka_destroy(rk);
 

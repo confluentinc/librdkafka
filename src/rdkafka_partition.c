@@ -694,6 +694,21 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
         if (had_next_leader)
                 return;
 
+	/* Revert from offset-wait state back to offset-query
+	 * prior to leaving the broker to avoid stalling
+	 * on the new broker waiting for a offset reply from
+	 * this old broker (that might not come and thus need
+	 * to time out..slowly) */
+	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT) {
+		rd_kafka_toppar_set_fetch_state(
+			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
+		rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
+				     &rktp->rktp_offset_query_tmr,
+				     500*1000,
+				     rd_kafka_offset_query_tmr_cb,
+				     rktp);
+	}
+
         if (old_rkb) {
                 /* If there is an existing broker for this toppar we let it
                  * first handle its own leave and then trigger the join for
@@ -745,6 +760,16 @@ void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp) {
 			     rktp->rktp_partition, rktp);
 		return;
 	}
+
+
+	/* Revert from offset-wait state back to offset-query
+	 * prior to leaving the broker to avoid stalling
+	 * on the new broker waiting for a offset reply from
+	 * this old broker (that might not come and thus need
+	 * to time out..slowly) */
+	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
+		rd_kafka_toppar_set_fetch_state(
+			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_PARTITION_LEAVE);
         rko->rko_rktp = rd_kafka_toppar_keep(rktp);
@@ -1018,6 +1043,12 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
         int64_t Offset;
 	size_t offset_cnt = 1;
+
+	rd_kafka_toppar_lock(rktp);
+	/* Drop reply from previous partition leader */
+	if (rktp->rktp_leader != rkb)
+		err = RD_KAFKA_RESP_ERR__OUTDATED;
+	rd_kafka_toppar_unlock(rktp);
 
         /* Parse and return Offset */
         err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
@@ -1677,11 +1708,12 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 
         if (rktp->rktp_fetch != should_fetch) {
                 rd_rkb_dbg(rkb, FETCH, "FETCH",
-                           "Topic %s [%"PRId32"] at offset %s "
+                           "Topic %s [%"PRId32"] in state %s at offset %s "
                            "(%d/%d msgs, %"PRId64"/%d kb queued, "
 			   "opv %"PRId32") is %sfetchable: %s",
                            rktp->rktp_rkt->rkt_topic->str,
                            rktp->rktp_partition,
+			   rd_kafka_fetch_states[rktp->rktp_fetch_state],
                            rd_kafka_offset2str(rktp->rktp_next_offset),
                            rd_kafka_q_len(rktp->rktp_fetchq),
                            rkb->rkb_rk->rk_conf.queued_min_msgs,

@@ -2504,7 +2504,9 @@ const char *rd_kafka_version_str (void) {
 #ifdef LIBRDKAFKA_GIT_VERSION
 	if (*LIBRDKAFKA_GIT_VERSION) {
 		of = rd_snprintf(ret, sizeof(ret), "%s",
-				 LIBRDKAFKA_GIT_VERSION);
+				 *LIBRDKAFKA_GIT_VERSION == 'v' ?
+                                 LIBRDKAFKA_GIT_VERSION+1 :
+                                 LIBRDKAFKA_GIT_VERSION);
 		if (of > sizeof(ret))
 			of = sizeof(ret);
 	}
@@ -2526,7 +2528,7 @@ const char *rd_kafka_version_str (void) {
 			    (ver >> 8) & 0xff);
 		if (prel != 0xff) {
 			/* pre-builds below 200 are just running numbers,
-			 * abouve 200 are RC numbers. */
+			 * above 200 are RC numbers. */
 			if (prel <= 200)
 				_my_sprintf("-pre%d", prel);
 			else

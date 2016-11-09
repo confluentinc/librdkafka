@@ -458,9 +458,8 @@ void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
 
 
 rd_kafka_message_t *rd_kafka_message_new (void) {
-        rd_kafka_message_t *rkmessage;
-        rkmessage = rd_calloc(1, sizeof(*rkmessage));
-        return rkmessage;
+        rd_kafka_msg_t *rkm = rd_calloc(1, sizeof(*rkm));
+        return (rd_kafka_message_t *)rkm;
 }
 
 

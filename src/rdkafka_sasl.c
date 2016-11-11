@@ -48,6 +48,7 @@ int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
 
 	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
 		   "Send SASL frame to broker (%d bytes)", len);
+        rd_hexdump(stderr, "SASL_SEND", payload, len);
 
 	frame = rd_malloc(total_len);
 
@@ -125,6 +126,9 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
                    "Received SASL frame from broker (%"PRIdsz" bytes)",
                    rkbuf ? rkbuf->rkbuf_len : 0);
+        if (rkbuf)
+                rd_hexdump(stderr, "SASL_RECV",
+                           rkbuf->rkbuf_rbuf, rkbuf->rkbuf_len);
 
         return rktrans->rktrans_sasl.recv(rktrans,
                                           rkbuf ?

@@ -287,9 +287,13 @@ int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
         if (!state->cred)
                 return -1;
 
+        if (rd_kafka_sasl_send(rktrans, NULL, 0, errstr, errstr_size) == -1)
+                return -1;
+
+#if 0
         if (rd_kafka_sasl_sspi_continue(rktrans, NULL, 0,
                                         errstr, errstr_size) == -1)
                 return -1;
-
+#endif
         return 0;
 }

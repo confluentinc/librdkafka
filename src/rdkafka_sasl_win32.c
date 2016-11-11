@@ -204,7 +204,7 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
                         return -1;
         }
 
-        if (!rktrans->rktrans_sasl.complete) {
+        if (!rktrans->rktrans_sasl.complete || outsecbuf.cbBuffer > 0) {
                 if (rd_kafka_sasl_send(rktrans,
                                        outsecbuf.pvBuffer, outsecbuf.cbBuffer,
                                        errstr, errstr_size) == -1)

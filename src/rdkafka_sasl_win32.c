@@ -181,6 +181,7 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
         {
                 case SEC_E_OK:
                         rktrans->rktrans_sasl.complete = 1;
+                        rd_kafka_sasl_auth_done(rktrans);
                         break;
                 case SEC_I_CONTINUE_NEEDED:
                         break;

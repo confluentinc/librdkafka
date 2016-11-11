@@ -443,12 +443,6 @@ int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
                 callbacks[endidx].id = SASL_CB_LIST_END;
         }
 
-        rd_rkb_dbg(rkb, SECURITY, "SASL",
-                   "Initializing SASL client: service name %s, "
-                   "hostname %s, mechanisms %s",
-                   rk->rk_conf.sasl.service_name, hostname,
-                   rk->rk_conf.sasl.mechanisms);
-
         /* Acquire or refresh ticket if kinit is configured */ 
         rd_kafka_sasl_cyrus_kinit_refresh(rkb);
 

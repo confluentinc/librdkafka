@@ -86,8 +86,10 @@ fix nits/flaws. This is very important. We will take lack of replies as a
 sign that you're not very anxious to get your patch accepted and we tend to
 simply drop such changes.
 
-When you adjust your pull requests after review, please squashthe
-commits so that we can review the full updated version more easily.
+When you adjust your pull requests after review, please squash the
+commits so that we can review the full updated version more easily
+and keep history cleaner.
+
 For example:
 
     # Interactive rebase to let you squash/fixup commits

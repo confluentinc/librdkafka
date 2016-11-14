@@ -24,3 +24,7 @@ Artifacts:
   - remaining tools (rdkafka_performance, etc)
   - SASL support (no official Cyrus libsasl2 DLLs available)
   - LZ4 support
+
+If you build librdkafka with an external tool (ie CMake) you can get rid of the 
+__declspec(dllexport) / __declspec(dllimport) decorations by adding a define
+-DLIBRDKAFKA_STATICLIB to your CFLAGS

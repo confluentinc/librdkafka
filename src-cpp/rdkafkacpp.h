@@ -54,10 +54,14 @@
 
 #ifdef _MSC_VER
 #undef RD_EXPORT
+#ifdef LIBKAFKARD_STATICLIB
+#define RD_EXPORT
+#else
 #ifdef LIBRDKAFKACPP_EXPORTS
 #define RD_EXPORT __declspec(dllexport)
 #else
 #define RD_EXPORT __declspec(dllimport)
+#endif
 #endif
 #else
 #define RD_EXPORT

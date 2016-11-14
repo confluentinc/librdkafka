@@ -65,10 +65,14 @@ typedef SSIZE_T ssize_t;
 #define RD_INLINE __inline
 #define RD_DEPRECATED
 #undef RD_EXPORT
+#ifdef LIBRDKAFKA_STATICLIB
+#define RD_EXPORT
+#else
 #ifdef LIBRDKAFKA_EXPORTS
 #define RD_EXPORT __declspec(dllexport)
 #else
 #define RD_EXPORT __declspec(dllimport)
+#endif
 #endif
 
 #else

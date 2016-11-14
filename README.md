@@ -68,6 +68,8 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Ruby: [Hermann](https://github.com/stancampbell3/Hermann)
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
   * C#/.NET: [rdkafka-dotnet](https://github.com/ah-/rdkafka-dotnet)
+  * D (C-like): [librdkafka](https://github.com/DlangApache/librdkafka/)
+  * D (C++-like): [librdkafkad](https://github.com/tamediadigital/librdkafka-d)
 
 #Users of librdkafka#
 

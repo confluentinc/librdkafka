@@ -32,6 +32,15 @@
 
 #include "rdkafkacpp_int.h"
 
+void RdKafka::consume_cb_trampoline(rd_kafka_message_t *msg, void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+  RdKafka::Topic* topic = static_cast<Topic *>(rd_kafka_topic_opaque(msg->rkt));
+
+  RdKafka::MessageImpl message(topic, msg, false /*don't free*/);
+
+  handle->consume_cb_->consume_cb(message, opaque);
+}
+
 void RdKafka::log_cb_trampoline (const rd_kafka_t *rk, int level,
                                  const char *fac, const char *buf) {
   if (!rk) {
@@ -227,6 +236,12 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
     rd_kafka_conf_set_offset_commit_cb(confimpl->rk_conf_,
                                    RdKafka::offset_commit_cb_trampoline);
     offset_commit_cb_ = confimpl->offset_commit_cb_;
+  }
+
+  if (confimpl->consume_cb_) {
+    rd_kafka_conf_set_consume_cb(confimpl->rk_conf_,
+                                 RdKafka::consume_cb_trampoline);
+    consume_cb_ = confimpl->consume_cb_;
   }
 
 }

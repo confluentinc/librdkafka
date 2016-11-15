@@ -500,6 +500,25 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 		{ SASL_CB_LIST_END }
 	};
 
+        /* Verify broker support:
+         * - RD_KAFKA_FEATURE_SASL_GSSAPI - GSSAPI supported
+         * - RD_KAFKA_FEATURE_SASL_HANDSHAKE - GSSAPI, PLAIN and possibly
+         *   other mechanisms supported. */
+        if (!strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI")) {
+                if (!(rkb->rkb_features & RD_KAFKA_FEATURE_SASL_GSSAPI)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "SASL GSSAPI authentication not supported "
+                                    "by broker");
+                        return -1;
+                }
+        } else if (!(rkb->rkb_features & RD_KAFKA_FEATURE_SASL_HANDSHAKE)) {
+                rd_snprintf(errstr, errstr_size,
+                            "SASL Handshake not supported by broker "
+                            "(required by mechanism %s)",
+                            rk->rk_conf.sasl.mechanisms);
+                return -1;
+        }
+
 	/* SASL_CB_USER is needed for PLAIN but breaks GSSAPI */
 	if (!strcmp(rk->rk_conf.sasl.mechanisms, "PLAIN")) {
 		int endidx;

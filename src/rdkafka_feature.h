@@ -46,8 +46,8 @@
 /* >= 0.9: Produce/Fetch ThrottleTime reporting */
 #define RD_KAFKA_FEATURE_THROTTLETIME 0x8
 
-/* >= 0.9: SASL (GSSAPI) support */
-#define RD_KAFKA_FEATURE_SASL       0x10
+/* >= 0.9: SASL GSSAPI support */
+#define RD_KAFKA_FEATURE_SASL_GSSAPI    0x10
 
 /* >= 0.10: SaslMechanismRequest (KIP-43) */
 #define RD_KAFKA_FEATURE_SASL_HANDSHAKE 0x20

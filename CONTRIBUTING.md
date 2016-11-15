@@ -158,7 +158,7 @@ declarations are allowed.
 
 ## Indenting
 
-Use 4 spaces indent, same as the Linux kernel.
+Use 8 spaces indent, same as the Linux kernel.
 In emacs, use `c-set-style "linux`.
 For C++, use Google's C++ style.
 

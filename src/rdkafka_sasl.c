@@ -457,16 +457,13 @@ static RD_UNUSED int rd_kafka_sasl_cb_canon (sasl_conn_t *conn,
 					     unsigned *out_len) {
 	rd_kafka_transport_t *rktrans = context;
 
-	if (strstr(rktrans->rktrans_rkb->rkb_rk->rk_conf.
-		   sasl.mechanisms, "GSSAPI")) {
-		*out_len = rd_snprintf(out, out_max, "%s",
-				       rktrans->rktrans_rkb->rkb_rk->
-				       rk_conf.sasl.principal);
-	} else if (!strcmp(rktrans->rktrans_rkb->rkb_rk->rk_conf.
-			   sasl.mechanisms, "PLAIN")) {
-		*out_len = rd_snprintf(out, out_max, "%.*s", inlen, in);
-	} else
-		out = NULL;
+        if (strstr(rktrans->rktrans_rkb->rkb_rk->rk_conf.
+                   sasl.mechanisms, "GSSAPI"))
+                *out_len = rd_snprintf(out, out_max, "%s",
+                                       rktrans->rktrans_rkb->rkb_rk->
+                                       rk_conf.sasl.principal);
+        else
+                *out_len = rd_snprintf(out, out_max, "%.*s", inlen, in);
 
 	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "LIBSASL",
 		   "CB_CANON: flags 0x%x, \"%.*s\" @ \"%s\": returning \"%.*s\"",
@@ -520,7 +517,7 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
         }
 
 	/* SASL_CB_USER is needed for PLAIN but breaks GSSAPI */
-	if (!strcmp(rk->rk_conf.sasl.mechanisms, "PLAIN")) {
+	if (strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI")) {
 		int endidx;
 		/* Find end of callbacks array */
 		for (endidx = 0 ;

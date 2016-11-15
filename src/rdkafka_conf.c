@@ -427,10 +427,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	 "Supported: GSSAPI, PLAIN. "
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
-	 .s2i = {
-			{ 0, "GSSAPI" },
-			{ 0, "PLAIN" }
-		},
 	 .validate = rd_kafka_conf_validate_single },
 	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
 	  _RK(sasl.service_name),

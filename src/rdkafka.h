@@ -73,6 +73,9 @@ typedef SSIZE_T ssize_t;
 #else
 #define RD_EXPORT __declspec(dllimport)
 #endif
+#ifndef LIBRDKAFKA_TYPECHECKS
+#define LIBRDKAFKA_TYPECHECKS 0
+#endif
 #endif
 
 #else
@@ -82,6 +85,10 @@ typedef SSIZE_T ssize_t;
 #define RD_INLINE inline
 #define RD_EXPORT
 #define RD_DEPRECATED __attribute__((deprecated))
+
+#ifndef LIBRDKAFKA_TYPECHECKS
+#define LIBRDKAFKA_TYPECHECKS 1
+#endif
 #endif
 
 
@@ -90,6 +97,7 @@ typedef SSIZE_T ssize_t;
  * Compile-time checking that \p ARG is of type \p TYPE.
  * @returns \p RET
  */
+#if LIBRDKAFKA_TYPECHECKS
 #define _LRK_TYPECHECK(RET,TYPE,ARG)                    \
         ({ if (0) { TYPE __t RD_UNUSED = (ARG); } RET; })
 
@@ -100,6 +108,10 @@ typedef SSIZE_T ssize_t;
                         TYPE2 __t2 RD_UNUSED = (ARG2);  \
                 }                                       \
                 RET; })
+#else
+#define _LRK_TYPECHECK(RET,TYPE,ARG)  (RET)
+#define _LRK_TYPECHECK2(RET,TYPE,ARG) (RET)
+#endif
 
 /* @endcond */
 

@@ -403,14 +403,15 @@ class ConfImpl : public Conf {
       }
       size_t size;
       rd_kafka_conf_res_t res = RD_KAFKA_CONF_OK;
+      char* tmpValue = NULL;
       if (rk_conf_) {
 	  if ((res = rd_kafka_conf_get(rk_conf_,
 				       name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
 	      return static_cast<Conf::ConfResult>(res);
 
-	  value.resize(size);
+	  tmpValue = new char[size];
 	  if ((res = rd_kafka_conf_get(rk_conf_, name.c_str(),
-				       (char *)value.c_str(), &size)) != RD_KAFKA_CONF_OK)
+				       tmpValue, &size)) != RD_KAFKA_CONF_OK)
 	      return static_cast<Conf::ConfResult>(res);
       }
       else if (rkt_conf_) {
@@ -418,13 +419,15 @@ class ConfImpl : public Conf {
 					     name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
 	      return static_cast<Conf::ConfResult>(res);
 
-	  value.resize(size);
+	  tmpValue = new char[size];
 	  if ((res = rd_kafka_topic_conf_get(rkt_conf_, name.c_str(),
-					     (char *)value.c_str(), &size)) != RD_KAFKA_CONF_OK)
+					     tmpValue, &size)) != RD_KAFKA_CONF_OK)
 	      return static_cast<Conf::ConfResult>(res);
       }
 
-      value.assign(value.c_str());
+      value.assign(tmpValue);
+      if (tmpValue != NULL)
+          delete tmpValue;
       return Conf::CONF_OK;
 
   }

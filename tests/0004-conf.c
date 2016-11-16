@@ -274,8 +274,6 @@ int main_0004_conf (int argc, char **argv) {
 			{ "sasl.mechanisms", "PLAIN", "PLAIN", 1  },
 			{ "sasl.mechanisms", "GSSAPI,PLAIN", NULL, 1  },
 			{ "sasl.mechanisms", "", NULL, 1  },
-			{ "sasl.mechanisms", "foobar", NULL, 1  },
-			{ "sasl.mechanisms", "plain", "PLAIN", 1  },
 #endif
 			{ NULL }
 		};

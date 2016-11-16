@@ -83,8 +83,25 @@ typedef SSIZE_T ssize_t;
 #define RD_EXPORT
 #define RD_DEPRECATED __attribute__((deprecated))
 #endif
-/* @endcond */
 
+
+/**
+ * @brief Type-checking macros
+ * Compile-time checking that \p ARG is of type \p TYPE.
+ * @returns \p RET
+ */
+#define _LRK_TYPECHECK(RET,TYPE,ARG)                    \
+        ({ if (0) { TYPE __t RD_UNUSED = (ARG); } RET; })
+
+#define _LRK_TYPECHECK2(RET,TYPE,ARG,TYPE2,ARG2)        \
+        ({                                              \
+                if (0) {                                \
+                        TYPE __t RD_UNUSED = (ARG);     \
+                        TYPE2 __t2 RD_UNUSED = (ARG2);  \
+                }                                       \
+                RET; })
+
+/* @endcond */
 
 
 /**
@@ -649,6 +666,89 @@ rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
 
 
 /**
+ * @name Var-arg tag types
+ * @{
+ *
+ */
+
+/**
+ * @enum rd_kafka_vtype_t
+ *
+ * @brief Var-arg tag types
+ *
+ * @sa rd_kafka_producev()
+ */
+typedef enum rd_kafka_vtype_t {
+        RD_KAFKA_VTYPE_END,       /**< va-arg sentinel */
+        RD_KAFKA_VTYPE_TOPIC,     /**< (const char *) Topic name */
+        RD_KAFKA_VTYPE_RKT,       /**< (rd_kafka_topic_t *) Topic handle */
+        RD_KAFKA_VTYPE_PARTITION, /**< (int32_t) Partition */
+        RD_KAFKA_VTYPE_VALUE,     /**< (void *, size_t) Message value (payload)*/
+        RD_KAFKA_VTYPE_KEY,       /**< (void *, size_t) Message key */
+        RD_KAFKA_VTYPE_OPAQUE,    /**< (void *) Application opaque */
+        RD_KAFKA_VTYPE_MSGFLAGS,  /**< (int) RD_KAFKA_MSG_F_.. flags */
+        RD_KAFKA_VTYPE_TIMESTAMP, /**< (int64_t) Milliseconds since epoch UTC */
+} rd_kafka_vtype_t;
+
+
+/**
+ * @brief Convenience macros for rd_kafka_vtype_t that takes the
+ *        correct arguments for each vtype.
+ */
+
+/*!
+ * va-arg end sentinel used to terminate the variable argument list
+ */
+#define RD_KAFKA_V_END RD_KAFKA_VTYPE_END
+
+/*!
+ * Topic name (const char *)
+ */
+#define RD_KAFKA_V_TOPIC(topic)                                         \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_TOPIC, const char *, topic), topic
+/*!
+ * Topic object (rd_kafka_topic_t *)
+ */
+#define RD_KAFKA_V_RKT(rkt)                                             \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_RKT, rd_kafka_topic_t *, rkt), rkt
+/*!
+ * Partition (int32_t)
+ */
+#define RD_KAFKA_V_PARTITION(partition)                                 \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_PARTITION, int32_t, partition), partition
+/*!
+ * Message value/payload pointer and length (void *, size_t)
+ */
+#define RD_KAFKA_V_VALUE(VALUE,LEN)                                     \
+        _LRK_TYPECHECK2(RD_KAFKA_VTYPE_VALUE, void *, VALUE, size_t, LEN), \
+                VALUE, LEN
+/*!
+ * Message key pointer and length (const void *, size_t)
+ */
+#define RD_KAFKA_V_KEY(KEY,LEN)                                         \
+        _LRK_TYPECHECK2(RD_KAFKA_VTYPE_KEY, const void *, KEY, size_t, LEN), \
+                KEY, LEN
+/*!
+ * Opaque pointer (void *)
+ */
+#define RD_KAFKA_V_OPAQUE(opaque)                                 \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, opaque), opaque
+/*!
+ * Message flags (int)
+ * @sa RD_KAFKA_MSG_F_COPY, et.al.
+ */
+#define RD_KAFKA_V_MSGFLAGS(msgflags)                                 \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_MSGFLAGS, int, msgflags), msgflags
+/*!
+ * Timestamp (int64_t)
+ */
+#define RD_KAFKA_V_TIMESTAMP(timestamp)                                 \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_TIMESTAMP, int64_t, timestamp), timestamp
+
+/**@}*/
+
+
+/**
  * @name Kafka messages
  * @{
  *
@@ -736,7 +836,7 @@ rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
  *
  * The timestamp is the number of milliseconds since the epoch (UTC).
  *
- * \p tstype is updated to indicate the type of timestamp.
+ * \p tstype (if not NULL) is updated to indicate the type of timestamp.
  *
  * @returns message timestamp, or -1 if not available.
  *
@@ -2327,6 +2427,19 @@ int rd_kafka_produce(rd_kafka_topic_t *rkt, int32_t partition,
 		      const void *key, size_t keylen,
 		      void *msg_opaque);
 
+
+/**
+ * @brief Produce and send a single message to broker.
+ *
+ * The message is defined by a va-arg list using \c rd_kafka_vtype_t
+ * tag tuples which must be terminated with a single \c RD_KAFKA_V_END.
+ *
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success, else an error code.
+ *
+ * @sa rd_kafka_produce, RD_KAFKA_V_END
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...);
 
 
 /**

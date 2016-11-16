@@ -130,6 +130,7 @@ _TEST_DECL(0048_partitioner);
 _TEST_DECL(0049_consume_conn_close);
 _TEST_DECL(0050_subscribe_adds);
 _TEST_DECL(0051_assign_adds);
+_TEST_DECL(0052_msg_timestamps);
 
 /**
  * Define all tests here
@@ -185,6 +186,7 @@ struct test tests[] = {
 #endif
         _TEST(0050_subscribe_adds, 0),
         _TEST(0051_assign_adds, 0),
+        _TEST(0052_msg_timestamps, TEST_BRKVER(0,10,0,0)),
         { NULL }
 };
 
@@ -583,14 +585,38 @@ const char *test_str_id_generate_tmp (void) {
 }
 
 /**
- * Format a message token
+ * Format a message token.
+ * Pad's to dest_size.
  */
 void test_msg_fmt (char *dest, size_t dest_size,
-		   uint64_t testid, int32_t partition, int msgid) {
+                   uint64_t testid, int32_t partition, int msgid) {
+        size_t of;
 
-	rd_snprintf(dest, dest_size,
-		    "testid=%"PRIu64", partition=%"PRId32", msg=%i",
-		    testid, partition, msgid);
+        of = rd_snprintf(dest, dest_size,
+                         "testid=%"PRIu64", partition=%"PRId32", msg=%i",
+                         testid, partition, msgid);
+        if (of < dest_size - 1) {
+                memset(dest+of, '!', dest_size-of);
+                dest[dest_size-1] = '\0';
+        }
+}
+
+/**
+ * @brief Prepare message value and key for test produce.
+ */
+void test_prepare_msg (uint64_t testid, int32_t partition, int msg_id,
+                       char *val, size_t val_size,
+                       char *key, size_t key_size) {
+        size_t of = 0;
+
+        test_msg_fmt(key, key_size, testid, partition, msg_id);
+
+        while (of < val_size) {
+                /* Copy-repeat key into val until val_size */
+                size_t len = RD_MIN(val_size-of, key_size);
+                memcpy(val+of, key, len);
+                of += len;
+        }
 }
 
 
@@ -1356,6 +1382,8 @@ rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
 
 }
 
+
+
 /**
  * Produces \p cnt messages and returns immediately.
  * Does not wait for delivery.
@@ -1395,18 +1423,14 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	TIMING_START(&t_all, "PRODUCE");
 
 	for (msg_id = msg_base ; msg_id < msg_base + cnt ; msg_id++) {
-		size_t len = size;
+                if (!payload)
+                        test_prepare_msg(testid, partition, msg_id,
+                                         buf, size, key, sizeof(key));
 
-		if (!payload) {
-			test_msg_fmt(key, sizeof(key), testid, partition,
-				     msg_id);
-			len = RD_MIN(size, strlen(key));
-			memcpy(buf, key, len);
-		}
 
 		if (rd_kafka_produce(rkt, partition,
 				     RD_KAFKA_MSG_F_COPY,
-				     buf, len,
+				     buf, size,
 				     !payload ? key : NULL,
 				     !payload ? strlen(key) : 0,
 				     msgcounterp) == -1)
@@ -1416,7 +1440,7 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
                 (*msgcounterp)++;
-		tot_bytes += len;
+		tot_bytes += size;
 
 		rd_kafka_poll(rk, 0);
 
@@ -1720,42 +1744,53 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
  * If \p group_id is NULL a new unique group is generated
  */
 void
-test_consume_msgs_easy (const char *group_id, const char *topic,
-                        uint64_t testid, int exp_eofcnt, int exp_msgcnt,
-			rd_kafka_topic_conf_t *tconf) {
+test_consume_msgs_easy_mv (const char *group_id, const char *topic,
+                           uint64_t testid, int exp_eofcnt, int exp_msgcnt,
+                           rd_kafka_topic_conf_t *tconf,
+                           test_msgver_t *mv) {
         rd_kafka_t *rk;
-	test_msgver_t mv;
-	char grpid0[64];
+        char grpid0[64];
 
-	if (!tconf)
-		test_conf_init(NULL, &tconf, 0);
+        if (!tconf)
+                test_conf_init(NULL, &tconf, 0);
 
-	if (!group_id)
-		group_id = test_str_id_generate(grpid0, sizeof(grpid0));
+        if (!group_id)
+                group_id = test_str_id_generate(grpid0, sizeof(grpid0));
 
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
         rk = test_create_consumer(group_id, NULL, NULL, tconf);
 
         rd_kafka_poll_set_consumer(rk);
 
-	TEST_SAY("Subscribing to topic %s in group %s "
-		 "(expecting %d msgs with testid %"PRIu64")\n",
+        TEST_SAY("Subscribing to topic %s in group %s "
+                 "(expecting %d msgs with testid %"PRIu64")\n",
                  topic, group_id, exp_msgcnt, testid);
 
-	test_consumer_subscribe(rk, topic);
-
-	test_msgver_init(&mv, testid);
+        test_consumer_subscribe(rk, topic);
 
         /* Consume messages */
         test_consumer_poll("consume.easy", rk, testid, exp_eofcnt,
-			   -1, exp_msgcnt, &mv);
-
-	test_msgver_clear(&mv);
+                           -1, exp_msgcnt, mv);
 
         test_consumer_close(rk);
 
         rd_kafka_destroy(rk);
 }
+
+void
+test_consume_msgs_easy (const char *group_id, const char *topic,
+                        uint64_t testid, int exp_eofcnt, int exp_msgcnt,
+                        rd_kafka_topic_conf_t *tconf) {
+        test_msgver_t mv;
+
+        test_msgver_init(&mv, testid);
+
+        test_consume_msgs_easy_mv(group_id, topic, testid, exp_eofcnt,
+                                  exp_msgcnt, tconf, &mv);
+
+        test_msgver_clear(&mv);
+}
+
 
 /**
  * @brief Start subscribing for 'topic'
@@ -1999,12 +2034,15 @@ int test_msgver_add_msg0 (const char *func, int line,
 
 	m->offset = rkmessage->offset;
 	m->msgid  = in_msgnum;
+        m->timestamp = rd_kafka_message_timestamp(rkmessage, NULL);
 	
 	if (test_level > 2) {
 		TEST_SAY("%s:%d: "
-			 "Recv msg %s [%"PRId32"] offset %"PRId64" msgid %d\n",
+			 "Recv msg %s [%"PRId32"] offset %"PRId64" msgid %d "
+                         "timestamp %"PRId64"\n",
 			 func, line,
-			 p->topic, p->partition, m->offset, m->msgid);
+			 p->topic, p->partition, m->offset, m->msgid,
+                         m->timestamp);
 	}
 
 	mv->msgcnt++;
@@ -2132,96 +2170,116 @@ static int test_mv_mvec_verify_dup (test_msgver_t *mv, int flags,
 
 
 /**
- * Verify that \p mvec contains the message range (by msgid)
- * \p vs->msgid_min .. \p vs->msgid_max
+ * Verify that \p mvec contains the expected range:
+ *  - TEST_MSGVER_BY_MSGID: msgid within \p vs->msgid_min .. \p vs->msgid_max
+ *  - TEST_MSGVER_BY_TIMESTAMP: timestamp with \p vs->timestamp_min .. _max
+ *
+ * * NOTE: TEST_MSGVER_BY_MSGID is required
  *
  * * NOTE: This sorts the message (.m) array by msgid
  *         and leaves the message array sorted (by msgid)
  */
 static int test_mv_mvec_verify_range (test_msgver_t *mv, int flags,
-				      struct test_mv_p *p,
-				      struct test_mv_mvec *mvec,
-				      struct test_mv_vs *vs) {
-	int mi;
-	int fails = 0;
-	int cnt = 0;
-	int exp_cnt = vs->msgid_max - vs->msgid_min + 1;
-	int skip_cnt = 0;
+                                      struct test_mv_p *p,
+                                      struct test_mv_mvec *mvec,
+                                      struct test_mv_vs *vs) {
+        int mi;
+        int fails = 0;
+        int cnt = 0;
+        int exp_cnt = vs->msgid_max - vs->msgid_min + 1;
+        int skip_cnt = 0;
 
-	if (!(flags & TEST_MSGVER_BY_MSGID))
-		return 0;
+        if (!(flags & TEST_MSGVER_BY_MSGID))
+                return 0;
 
-	test_mv_mvec_sort(mvec, test_mv_m_cmp_msgid);
+        test_mv_mvec_sort(mvec, test_mv_m_cmp_msgid);
 
-	//test_mv_mvec_dump(stdout, mvec);
+        //test_mv_mvec_dump(stdout, mvec);
 
-	for (mi = 0 ; mi < mvec->cnt ; mi++) {
-		struct test_mv_m *prev = mi ? test_mv_mvec_get(mvec, mi-1):NULL;
-		struct test_mv_m *this = test_mv_mvec_get(mvec, mi);
+        for (mi = 0 ; mi < mvec->cnt ; mi++) {
+                struct test_mv_m *prev = mi ? test_mv_mvec_get(mvec, mi-1):NULL;
+                struct test_mv_m *this = test_mv_mvec_get(mvec, mi);
 
-		if (this->msgid < vs->msgid_min) {
-			skip_cnt++;
-			continue;
-		} else if (this->msgid > vs->msgid_max)
-			break;
+                if (this->msgid < vs->msgid_min) {
+                        skip_cnt++;
+                        continue;
+                } else if (this->msgid > vs->msgid_max)
+                        break;
 
-		if (cnt++ == 0) {
-			if (this->msgid != vs->msgid_min) {
-				TEST_MV_WARN(mv,
-					     " %s [%"PRId32"] range check: "
-					     "first message #%d (at mi %d) "
-					     "is not first in "
-					     "expected range %d..%d\n",
-					     p ? p->topic : "*",
-					     p ? p->partition : -1,
-					     this->msgid, mi,
-					     vs->msgid_min, vs->msgid_max);
-				fails++;
-			}
-		} else if (cnt > exp_cnt) {
-			TEST_MV_WARN(mv,
-				     " %s [%"PRId32"] range check: "
-				     "too many messages received (%d/%d) at "
-				     "msgid %d for expected range %d..%d\n",
-				     p ? p->topic : "*",
-				     p ? p->partition : -1,
-				     cnt, exp_cnt, this->msgid,
-				     vs->msgid_min, vs->msgid_max);
-			fails++;
-		}
+                if (flags & TEST_MSGVER_BY_TIMESTAMP) {
+                        if (this->timestamp < vs->timestamp_min ||
+                            this->timestamp > vs->timestamp_max) {
+                                TEST_MV_WARN(
+                                        mv,
+                                        " %s [%"PRId32"] range check: "
+                                        "msgid #%d (at mi %d): "
+                                        "timestamp %"PRId64" outside "
+                                        "expected range %"PRId64"..%"PRId64"\n",
+                                        p ? p->topic : "*",
+                                        p ? p->partition : -1,
+                                        this->msgid, mi,
+                                        this->timestamp,
+                                        vs->timestamp_min, vs->timestamp_max);
+                                fails++;
+                        }
+                }
 
-		if (!prev) {
-			skip_cnt++;
-			continue;
-		}
+                if (cnt++ == 0) {
+                        if (this->msgid != vs->msgid_min) {
+                                TEST_MV_WARN(mv,
+                                             " %s [%"PRId32"] range check: "
+                                             "first message #%d (at mi %d) "
+                                             "is not first in "
+                                             "expected range %d..%d\n",
+                                             p ? p->topic : "*",
+                                             p ? p->partition : -1,
+                                             this->msgid, mi,
+                                             vs->msgid_min, vs->msgid_max);
+                                fails++;
+                        }
+                } else if (cnt > exp_cnt) {
+                        TEST_MV_WARN(mv,
+                                     " %s [%"PRId32"] range check: "
+                                     "too many messages received (%d/%d) at "
+                                     "msgid %d for expected range %d..%d\n",
+                                     p ? p->topic : "*",
+                                     p ? p->partition : -1,
+                                     cnt, exp_cnt, this->msgid,
+                                     vs->msgid_min, vs->msgid_max);
+                        fails++;
+                }
 
-		if (prev->msgid + 1 != this->msgid) {
-			TEST_MV_WARN(mv, " %s [%"PRId32"] range check: "
-				     " %d message(s) missing between "
-				     "msgid %d..%d in expected range %d..%d\n",
-				     p ? p->topic : "*",
-				     p ? p->partition : -1,
-				     this->msgid - prev->msgid - 1,
-				     prev->msgid+1, this->msgid-1,
-				     vs->msgid_min, vs->msgid_max);
-			fails++;
-		}
-		
-	}
+                if (!prev) {
+                        skip_cnt++;
+                        continue;
+                }
 
-	if (cnt != exp_cnt) {
-		TEST_MV_WARN(mv,
-			     " %s [%"PRId32"] range check: "
-			     " wrong number of messages seen, wanted %d got %d "
-			     "in expected range %d..%d (%d messages skipped)\n",
-			     p ? p->topic : "*",
-			     p ? p->partition : -1,
-			     exp_cnt, cnt, vs->msgid_min, vs->msgid_max,
-			     skip_cnt);
-		fails++;
-	}
+                if (prev->msgid + 1 != this->msgid) {
+                        TEST_MV_WARN(mv, " %s [%"PRId32"] range check: "
+                                     " %d message(s) missing between "
+                                     "msgid %d..%d in expected range %d..%d\n",
+                                     p ? p->topic : "*",
+                                     p ? p->partition : -1,
+                                     this->msgid - prev->msgid - 1,
+                                     prev->msgid+1, this->msgid-1,
+                                     vs->msgid_min, vs->msgid_max);
+                        fails++;
+                }
+        }
 
-	return fails;
+        if (cnt != exp_cnt) {
+                TEST_MV_WARN(mv,
+                             " %s [%"PRId32"] range check: "
+                             " wrong number of messages seen, wanted %d got %d "
+                             "in expected range %d..%d (%d messages skipped)\n",
+                             p ? p->topic : "*",
+                             p ? p->partition : -1,
+                             exp_cnt, cnt, vs->msgid_min, vs->msgid_max,
+                             skip_cnt);
+                fails++;
+        }
+
+        return fails;
 }
 
 
@@ -2294,9 +2352,9 @@ static int test_msgver_verify_range (test_msgver_t *mv, int flags,
 	/* Collect all msgs into vs mvec */
 	test_mv_collect_all_msgs(mv, vs);
 	
-	fails += test_mv_mvec_verify_range(mv, TEST_MSGVER_BY_MSGID,
+	fails += test_mv_mvec_verify_range(mv, TEST_MSGVER_BY_MSGID|flags,
 					   NULL, &vs->mvec, vs);
-	fails += test_mv_mvec_verify_dup(mv, TEST_MSGVER_BY_MSGID,
+	fails += test_mv_mvec_verify_dup(mv, TEST_MSGVER_BY_MSGID|flags,
 					 NULL, &vs->mvec, vs);
 
 	test_mv_mvec_clear(&vs->mvec);
@@ -2370,14 +2428,20 @@ int test_msgver_verify_part0 (const char *func, int line, const char *what,
  */
 int test_msgver_verify0 (const char *func, int line, const char *what,
 			 test_msgver_t *mv,
-			 int flags, int msg_base, int exp_cnt) {
+			 int flags, struct test_mv_vs vs) {
 	int fails = 0;
-	struct test_mv_vs vs = { .msg_base = msg_base, .exp_cnt = exp_cnt };
 
 	TEST_SAY("%s:%d: %s: Verifying %d received messages (flags 0x%x): "
 		 "expecting msgids %d..%d (%d)\n",
 		 func, line, what, mv->msgcnt, flags,
-		 msg_base, msg_base+exp_cnt, exp_cnt);
+		 vs.msg_base, vs.msg_base+vs.exp_cnt, vs.exp_cnt);
+        if (flags & TEST_MSGVER_BY_TIMESTAMP) {
+                assert((flags & TEST_MSGVER_BY_MSGID)); /* Required */
+                TEST_SAY("%s:%d: %s: "
+                         " and expecting timestamps %"PRId64"..%"PRId64"\n",
+                         func, line, what,
+                         vs.timestamp_min, vs.timestamp_max);
+        }
 
 	/* Per-partition checks */
 	if (flags & TEST_MSGVER_ORDER)
@@ -2388,9 +2452,9 @@ int test_msgver_verify0 (const char *func, int line, const char *what,
 					    test_mv_mvec_verify_dup, &vs);
 
 	/* Checks across all partitions */
-	if ((flags & TEST_MSGVER_RANGE) && exp_cnt > 0) {
-		vs.msgid_min = msg_base;
-		vs.msgid_max = vs.msgid_min + exp_cnt - 1;
+	if ((flags & TEST_MSGVER_RANGE) && vs.exp_cnt > 0) {
+		vs.msgid_min = vs.msg_base;
+		vs.msgid_max = vs.msgid_min + vs.exp_cnt - 1;
 		fails += test_msgver_verify_range(mv, flags, &vs);
 	}
 
@@ -2398,9 +2462,9 @@ int test_msgver_verify0 (const char *func, int line, const char *what,
 		TEST_WARN("%s:%d: %s: %d message warning logs suppressed\n",
 			  func, line, what, mv->log_suppr_cnt);
 
-	if (exp_cnt != mv->msgcnt) {
+	if (vs.exp_cnt != mv->msgcnt) {
 		TEST_WARN("%s:%d: %s: expected %d messages, got %d\n",
-			  func, line, what, exp_cnt, mv->msgcnt);
+			  func, line, what, vs.exp_cnt, mv->msgcnt);
 		fails++;
 	}
 
@@ -2409,13 +2473,15 @@ int test_msgver_verify0 (const char *func, int line, const char *what,
 			  "failed: "
 			  "expected msgids %d..%d (%d): see previous errors\n",
 			  func, line, what,
-			  mv->msgcnt, msg_base, msg_base+exp_cnt, exp_cnt);
+			  mv->msgcnt, vs.msg_base, vs.msg_base+vs.exp_cnt,
+                          vs.exp_cnt);
 	else
 		TEST_SAY("%s:%d: %s: Verification of %d received messages "
 			 "succeeded: "
 			 "expected msgids %d..%d (%d)\n",
 			 func, line, what,
-			 mv->msgcnt, msg_base, msg_base+exp_cnt, exp_cnt);
+			 mv->msgcnt, vs.msg_base, vs.msg_base+vs.exp_cnt,
+                         vs.exp_cnt);
 
 	return fails;
 }

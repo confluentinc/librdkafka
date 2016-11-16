@@ -336,8 +336,9 @@ typedef struct test_msgver_s {
 
 /* Message */
 struct test_mv_m {
-	int64_t offset;   /* Message offset */
-	int     msgid;    /* Message id */
+        int64_t offset;    /* Message offset */
+        int     msgid;     /* Message id */
+        int64_t timestamp; /* Message timestamp */
 };
 
 
@@ -364,6 +365,8 @@ struct test_mv_vs {
 	/* used by verify_range */
 	int msgid_min;
 	int msgid_max;
+        int64_t timestamp_min;
+        int64_t timestamp_max;
 
 	struct test_mv_mvec mvec;
 } vs;
@@ -387,6 +390,7 @@ int test_msgver_add_msg0 (const char *func, int line,
 
 #define TEST_MSGVER_BY_MSGID  0x10000 /* Verify by msgid (unique in testid) */
 #define TEST_MSGVER_BY_OFFSET 0x20000 /* Verify by offset (unique in partition)*/
+#define TEST_MSGVER_BY_TIMESTAMP 0x40000 /* Verify by timestamp range */
 
 /* Only test per partition, not across all messages received on all partitions.
  * This is useful when doing incremental verifications with multiple partitions
@@ -411,11 +415,12 @@ int test_msgver_verify_part0 (const char *func, int line, const char *what,
 				 what,mv,flags,topic,partition,msg_base,exp_cnt)
 
 int test_msgver_verify0 (const char *func, int line, const char *what,
-			 test_msgver_t *mv, int flags,
-			 int msg_base, int exp_cnt);
-#define test_msgver_verify(what,mv,flags,msg_base,exp_cnt)		\
+			 test_msgver_t *mv, int flags, struct test_mv_vs vs);
+#define test_msgver_verify(what,mv,flags,msgbase,expcnt)		\
 	test_msgver_verify0(__FUNCTION__,__LINE__,			\
-			    what,mv,flags,msg_base,exp_cnt)
+			    what,mv,flags,                              \
+                            (struct test_mv_vs){.msg_base = msgbase,   \
+                                            .exp_cnt = expcnt})
 
 
 rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf);
@@ -480,9 +485,14 @@ void test_verify_rkmessage0 (const char *func, int line,
 void test_consumer_subscribe (rd_kafka_t *rk, const char *topic);
 
 void
+test_consume_msgs_easy_mv (const char *group_id, const char *topic,
+                           uint64_t testid, int exp_eofcnt, int exp_msgcnt,
+                           rd_kafka_topic_conf_t *tconf,
+                           test_msgver_t *mv);
+void
 test_consume_msgs_easy (const char *group_id, const char *topic,
                         uint64_t testid, int exp_eofcnt, int exp_msgcnt,
-			rd_kafka_topic_conf_t *tconf);
+                        rd_kafka_topic_conf_t *tconf);
 
 void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 				 uint64_t testid, int timeout_ms);
@@ -522,6 +532,11 @@ int test_can_create_topics (int skip);
 rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
 				   rd_kafka_event_type_t event_type,
 				   int timeout_ms);
+
+void test_prepare_msg (uint64_t testid, int32_t partition, int msg_id,
+                       char *val, size_t val_size,
+                       char *key, size_t key_size);
+
 #if WITH_SOCKEM
 void test_socket_enable (rd_kafka_conf_t *conf);
 void test_socket_close_all (struct test *test, int reinit);

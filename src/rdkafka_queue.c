@@ -535,13 +535,15 @@ int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
 	rd_kafka_msg_t *rkm;
 
 	if (rkmessage->err) {
-		*tstype = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+                if (tstype)
+                        *tstype = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
 		return -1;
 	}
 
 	rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
 
-	*tstype = rkm->rkm_tstype;
+        if (tstype)
+                *tstype = rkm->rkm_tstype;
 
 	return rkm->rkm_timestamp;
 }

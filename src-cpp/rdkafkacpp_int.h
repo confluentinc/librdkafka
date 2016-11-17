@@ -403,7 +403,7 @@ class ConfImpl : public Conf {
       }
       size_t size;
       rd_kafka_conf_res_t res = RD_KAFKA_CONF_OK;
-      char* tmpValue = NULL;
+      char *tmpValue = NULL;
       if (rk_conf_) {
 	  if ((res = rd_kafka_conf_get(rk_conf_,
 				       name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
@@ -425,9 +425,12 @@ class ConfImpl : public Conf {
 	      return static_cast<Conf::ConfResult>(res);
       }
 
-      value.assign(tmpValue);
-      if (tmpValue != NULL)
-          delete tmpValue;
+      if (tmpValue != NULL) {
+	  value.assign(tmpValue);
+	  delete tmpValue;
+      }
+      else
+      	  value = "";
       return Conf::CONF_OK;
 
   }

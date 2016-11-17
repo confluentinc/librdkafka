@@ -409,31 +409,105 @@ class ConfImpl : public Conf {
   }
 
   Conf::ConfResult get(const std::string &name, std::string &value) const {
-	  size_t size;
-	  rd_kafka_conf_res_t res = RD_KAFKA_CONF_OK;
-	  if (rk_conf_) {
-		  if ((res = rd_kafka_conf_get(rk_conf_,
-			  name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
-			  return static_cast<Conf::ConfResult>(res);
+      if (name.compare("dr_cb") == 0 ||
+	  name.compare("event_cb") == 0 ||
+	  name.compare("partitioner_cb") == 0 ||
+	  name.compare("partitioner_key_pointer_cb") == 0 ||
+	  name.compare("socket_cb") == 0 ||
+	  name.compare("open_cb") == 0 ||
+	  name.compare("rebalance_cb") == 0 ||
+	  name.compare("offset_commit_cb") == 0 ) {
+	  return Conf::CONF_INVALID;
+      }
+      size_t size;
+      rd_kafka_conf_res_t res = RD_KAFKA_CONF_OK;
+      char *tmpValue = NULL;
+      if (rk_conf_) {
+	  if ((res = rd_kafka_conf_get(rk_conf_,
+				       name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
+	      return static_cast<Conf::ConfResult>(res);
 
-		  value.resize(size);
-		  if ((res = rd_kafka_conf_get(rk_conf_, name.c_str(),
-			  (char *)value.c_str(), &size)) != RD_KAFKA_CONF_OK)
-			  return static_cast<Conf::ConfResult>(res);
-	  }
-	  else if (rkt_conf_) {
-		  if ((res = rd_kafka_topic_conf_get(rkt_conf_,
-			  name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
-			  return static_cast<Conf::ConfResult>(res);
+	  tmpValue = new char[size];
+	  if ((res = rd_kafka_conf_get(rk_conf_, name.c_str(),
+				       tmpValue, &size)) != RD_KAFKA_CONF_OK)
+	      return static_cast<Conf::ConfResult>(res);
+      }
+      else if (rkt_conf_) {
+	  if ((res = rd_kafka_topic_conf_get(rkt_conf_,
+					     name.c_str(), NULL, &size)) != RD_KAFKA_CONF_OK)
+	      return static_cast<Conf::ConfResult>(res);
 
-		  value.resize(size);
-		  if ((res = rd_kafka_topic_conf_get(rkt_conf_, name.c_str(),
-			  (char *)value.c_str(), &size)) != RD_KAFKA_CONF_OK)
-			  return static_cast<Conf::ConfResult>(res);
-	  }
+	  tmpValue = new char[size];
+	  if ((res = rd_kafka_topic_conf_get(rkt_conf_, name.c_str(),
+					     tmpValue, &size)) != RD_KAFKA_CONF_OK)
+	      return static_cast<Conf::ConfResult>(res);
+      }
 
-	  return Conf::CONF_OK;
+      if (tmpValue != NULL) {
+	  value.assign(tmpValue);
+	  delete tmpValue;
+      }
+      else
+      	  value = "";
+      return Conf::CONF_OK;
+
   }
+
+  Conf::ConfResult get(DeliveryReportCb *&dr_cb) const {
+      if (!rk_conf_)
+	  return Conf::CONF_INVALID;
+      dr_cb = this->dr_cb_;
+      return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult get(EventCb *&event_cb) const {
+      if (!rk_conf_)
+	  return Conf::CONF_INVALID;
+      event_cb = this->event_cb_;
+      return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult get(PartitionerCb *&partitioner_cb) const {
+      if (!rkt_conf_)
+	  return Conf::CONF_INVALID;
+      partitioner_cb = this->partitioner_cb_;
+      return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult get(PartitionerKeyPointerCb *&partitioner_kp_cb) const {
+      if (!rkt_conf_)
+	  return Conf::CONF_INVALID;
+      partitioner_kp_cb = this->partitioner_kp_cb_;
+      return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult get(SocketCb *&socket_cb) const {
+      if (!rk_conf_)
+	  return Conf::CONF_INVALID;
+      socket_cb = this->socket_cb_;
+      return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult get(OpenCb *&open_cb) const {
+      if (!rk_conf_)
+	  return Conf::CONF_INVALID;
+      open_cb = this->open_cb_;
+      return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult get(RebalanceCb *&rebalance_cb) const {
+      if (!rk_conf_)
+	  return Conf::CONF_INVALID;
+      rebalance_cb = this->rebalance_cb_;
+      return Conf::CONF_OK;
+  }
+
+  Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const {
+      if (!rk_conf_)
+	  return Conf::CONF_INVALID;
+      offset_commit_cb = this->offset_commit_cb_;
+      return Conf::CONF_OK;
+    }
 
 
 

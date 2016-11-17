@@ -790,10 +790,54 @@ class RD_EXPORT Conf {
                                 std::string &errstr) = 0;
 
   /** @brief Query single configuration value
+   *
+   * Do not use this method to get callbacks registered by the configuration file.
+   * Instead use the specific get() methods with the specific callback parameter in the signature.
+   *
    *  @returns CONF_OK if the property was set previously set and
    *           returns the value in \p value. */
   virtual Conf::ConfResult get(const std::string &name,
 	  std::string &value) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p dr_cb. */
+  virtual Conf::ConfResult get(DeliveryReportCb *&dr_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p event_cb. */
+  virtual Conf::ConfResult get(EventCb *&event_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p partitioner_cb. */
+  virtual Conf::ConfResult get(PartitionerCb *&partitioner_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p partitioner_kp_cb. */
+  virtual Conf::ConfResult get(PartitionerKeyPointerCb *&partitioner_kp_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p socket_cb. */
+  virtual Conf::ConfResult get(SocketCb *&socket_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p open_cb. */
+  virtual Conf::ConfResult get(OpenCb *&open_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p rebalance_cb. */
+  virtual Conf::ConfResult get(RebalanceCb *&rebalance_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p offset_commit_cb. */
+  virtual Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const = 0;
 
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */

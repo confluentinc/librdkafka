@@ -131,6 +131,7 @@ _TEST_DECL(0049_consume_conn_close);
 _TEST_DECL(0050_subscribe_adds);
 _TEST_DECL(0051_assign_adds);
 _TEST_DECL(0052_msg_timestamps);
+_TEST_DECL(0053_stats_cb);
 
 /**
  * Define all tests here
@@ -187,6 +188,7 @@ struct test tests[] = {
         _TEST(0050_subscribe_adds, 0),
         _TEST(0051_assign_adds, 0),
         _TEST(0052_msg_timestamps, TEST_BRKVER(0,10,0,0)),
+        _TEST(0053_stats_cb, TEST_F_LOCAL),
         { NULL }
 };
 

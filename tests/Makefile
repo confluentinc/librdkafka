@@ -37,7 +37,7 @@ run_local: $(BIN)
 
 build: $(BIN)
 
-test.o: ../src/librdkafka.so ../src-cpp/librdkafka++.so
+test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a
 
 
 include ../mklove/Makefile.base

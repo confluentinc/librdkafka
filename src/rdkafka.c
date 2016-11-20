@@ -957,11 +957,22 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   "} "/*close topic*/);
 
 	}
+	_st_printf("} "/*close topics*/);
 
+        if (rk->rk_cgrp) {
+                rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
+                _st_printf(", \"cgrp\": { "
+                           "\"rebalance_age\": %"PRId64", "
+                           "\"rebalance_cnt\": %d, "
+                           "\"assignment_size\": %d }",
+                           rkcg->rkcg_c.ts_rebalance ?
+                           (rd_clock() - rkcg->rkcg_c.ts_rebalance)/1000 : 0,
+                           rkcg->rkcg_c.rebalance_cnt,
+                           rkcg->rkcg_c.assignment_size);
+        }
 	rd_kafka_rdunlock(rk);
 
-	_st_printf("} "/*close topics*/
-		   "}"/*close object*/);
+        _st_printf("}"/*close object*/);
 
 
 	/* Enqueue op for application */

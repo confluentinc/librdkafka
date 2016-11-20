@@ -553,6 +553,11 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 		       const char *reason) {
 	rd_kafka_op_t *rko;
 
+        rd_kafka_wrlock(rkcg->rkcg_rk);
+        rkcg->rkcg_c.ts_rebalance = rd_clock();
+        rkcg->rkcg_c.rebalance_cnt++;
+        rd_kafka_wrunlock(rkcg->rkcg_rk);
+
 	/* Pause current partition set consumers until new assign() is called */
 	if (rkcg->rkcg_assignment)
 		rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 1,
@@ -1546,7 +1551,12 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                         rktpar->_private = s_rktp;
         }
 
-	rd_kafka_cgrp_version_new_barrier(rkcg);
+        rd_kafka_cgrp_version_new_barrier(rkcg);
+
+        rd_kafka_wrlock(rkcg->rkcg_rk);
+        rkcg->rkcg_c.assignment_size = assignment ? assignment->cnt : 0;
+        rd_kafka_wrunlock(rkcg->rkcg_rk);
+
 
         /* Remove existing assignment (async operation) */
 	if (rkcg->rkcg_assignment)

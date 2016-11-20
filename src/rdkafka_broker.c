@@ -2897,18 +2897,16 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
                 rd_kafka_broker_lock(rkb);
 
-                if (rko->rko_u.node.nodename) {
-                        if (strcmp(rkb->rkb_nodename,
-				   rko->rko_u.node.nodename)) {
-                                rd_rkb_dbg(rkb, BROKER, "UPDATE",
-                                           "Nodename changed from %s to %s",
-                                           rkb->rkb_nodename,
-                                           rko->rko_u.node.nodename);
-                                strncpy(rkb->rkb_nodename,
-					rko->rko_u.node.nodename,
-                                        sizeof(rkb->rkb_nodename)-1);
-                                updated |= _UPD_NAME;
-                        }
+                if (strcmp(rkb->rkb_nodename,
+                           rko->rko_u.node.nodename)) {
+                        rd_rkb_dbg(rkb, BROKER, "UPDATE",
+                                   "Nodename changed from %s to %s",
+                                   rkb->rkb_nodename,
+                                   rko->rko_u.node.nodename);
+                        strncpy(rkb->rkb_nodename,
+                                rko->rko_u.node.nodename,
+                                sizeof(rkb->rkb_nodename)-1);
+                        updated |= _UPD_NAME;
                 }
 
                 if (rko->rko_u.node.nodeid != -1 &&

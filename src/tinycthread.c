@@ -22,6 +22,7 @@ freely, subject to the following restrictions:
     distribution.
 */
 
+#include "rd.h"
 #include "tinycthread.h"
 #include <stdlib.h>
 
@@ -37,7 +38,6 @@ freely, subject to the following restrictions:
   #include <sys/timeb.h>
 #endif
 
-#include "rd.h"
 
 /* Standard, good-to-have defines */
 #ifndef NULL

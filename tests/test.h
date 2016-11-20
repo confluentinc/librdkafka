@@ -66,6 +66,14 @@ int tmout_multip (int msecs) {
 #define _C_MAG "\033[35m"
 #define _C_CYA "\033[36m"
 
+typedef enum {
+        TEST_NOT_STARTED,
+        TEST_SKIPPED,
+        TEST_RUNNING,
+        TEST_PASSED,
+        TEST_FAILED,
+} test_state_t;
+
 struct test {
         /**
          * Setup
@@ -92,13 +100,7 @@ struct test {
         int64_t duration;
         FILE   *stats_fp;
 	int64_t timeout;
-        enum {
-                TEST_NOT_STARTED,
-                TEST_SKIPPED,
-                TEST_RUNNING,
-                TEST_PASSED,
-                TEST_FAILED,
-        } state;
+        test_state_t state;
 
         rd_list_t sockets;
 #if WITH_SOCKEM

@@ -901,11 +901,12 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   throttle.ra_v.cnt);
 
 		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
-			_st_printf("%s\"%.*s\": { "
+			_st_printf("%s\"%.*s-%"PRId32"\": { "
 				   "\"topic\":\"%.*s\", "
 				   "\"partition\":%"PRId32"} ",
 				   rktp==TAILQ_FIRST(&rkb->rkb_toppars)?"":", ",
 				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
 				   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 				   rktp->rktp_partition);
 		}

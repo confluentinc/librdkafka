@@ -205,6 +205,18 @@ typedef struct rd_kafka_cgrp_s {
 	rd_ts_t            rkcg_ts_terminate;       /* Timestamp of when
 						     * cgrp termination was
 						     * initiated. */
+
+        /* Protected by rd_kafka_*lock() */
+        struct {
+                rd_ts_t            ts_rebalance;       /* Timestamp of
+                                                        * last rebalance */
+                int                rebalance_cnt;      /* Number of
+                                                          rebalances */
+                int                assignment_size;    /* Partition count
+                                                        * of last rebalance
+                                                        * assignment */
+        } rkcg_c;
+
 } rd_kafka_cgrp_t;
 
 

@@ -37,6 +37,8 @@
 
 #include "rdsysqueue.h"
 
+#include <stdarg.h>
+
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_ACCOUNT) {

@@ -110,7 +110,7 @@ typedef SSIZE_T ssize_t;
                 RET; })
 #else
 #define _LRK_TYPECHECK(RET,TYPE,ARG)  (RET)
-#define _LRK_TYPECHECK2(RET,TYPE,ARG) (RET)
+#define _LRK_TYPECHECK2(RET,TYPE,ARG,TYPE2,ARG2) (RET)
 #endif
 
 /* @endcond */

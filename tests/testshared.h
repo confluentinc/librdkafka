@@ -30,6 +30,13 @@
 void test_FAIL (const char *file, int line, const char *str);
 void test_SAY (const char *file, int line, int level, const char *str);
 
+#ifndef _MSC_VER
+#include <sys/time.h>
+#else
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#endif
+
 /**
 * A microsecond monotonic clock
 */

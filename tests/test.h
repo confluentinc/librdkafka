@@ -34,7 +34,6 @@
 #include <stdlib.h>
 #ifndef _MSC_VER
 #include <unistd.h>
-#include <sys/time.h>
 #endif
 #include <errno.h>
 #include <assert.h>

@@ -2988,7 +2988,7 @@ rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
 
 
 void test_FAIL (const char *file, int line, const char *str) {
-	TEST_FAIL0(file, line, "%s", str);
+	TEST_FAIL0(file, line, 1, "%s", str);
 }
 
 void test_SAY (const char *file, int line, int level, const char *str) {

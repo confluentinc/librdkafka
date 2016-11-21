@@ -43,6 +43,9 @@ extern "C" {
 typedef int mode_t;
 #endif
 
+
+#pragma warning(disable : 4250)
+
 namespace RdKafka {
 
 

@@ -1,7 +1,6 @@
-
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.31101.0
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "librdkafka", "librdkafka.vcxproj", "{4BEBB59C-477B-4F7A-8AE8-4228D0861E54}"
 EndProject
@@ -21,10 +20,14 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rdkafka_example", "rdkafka_
 		{E9641737-EE62-4EC8-88C8-792D2E3CE32D} = {E9641737-EE62-4EC8-88C8-792D2E3CE32D}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rdkafka_consumer_example_cpp", "rdkafka_consumer_example_cpp\rdkafka_consumer_example_cpp.vcxproj", "{42009208-3AF5-481E-BE01-74DF7B0759D1}"
-	ProjectSection(ProjectDependencies) = postProject
-		{E9641737-EE62-4EC8-88C8-792D2E3CE32D} = {E9641737-EE62-4EC8-88C8-792D2E3CE32D}
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{AE17F6C0-6C4D-4E92-A04D-48214C70D1AC}"
+	ProjectSection(SolutionItems) = preProject
+		librdkafka.autopkg = librdkafka.autopkg
+		librdkafka.nuspec = librdkafka.nuspec
+		librdkafka.testing.targets = librdkafka.testing.targets
 	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rdkafka_consumer_example_cpp", "rdkafka_consumer_example_cpp\rdkafka_consumer_example_cpp.vcxproj", "{88B682AB-5082-49D5-A672-9904C5F43ABB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -94,20 +97,20 @@ Global
 		{84585784-5BDC-43BE-B714-23EA2E7AEA5B}.Release|Win32.Build.0 = Release|Win32
 		{84585784-5BDC-43BE-B714-23EA2E7AEA5B}.Release|x64.ActiveCfg = Release|x64
 		{84585784-5BDC-43BE-B714-23EA2E7AEA5B}.Release|x64.Build.0 = Release|x64
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Debug|Any CPU.ActiveCfg = Debug|Win32
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Debug|Mixed Platforms.Build.0 = Debug|Win32
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Debug|Win32.ActiveCfg = Debug|Win32
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Debug|Win32.Build.0 = Debug|Win32
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Debug|x64.ActiveCfg = Debug|x64
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Debug|x64.Build.0 = Debug|x64
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Release|Any CPU.ActiveCfg = Release|Win32
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Release|Mixed Platforms.ActiveCfg = Release|Win32
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Release|Mixed Platforms.Build.0 = Release|Win32
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Release|Win32.ActiveCfg = Release|Win32
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Release|Win32.Build.0 = Release|Win32
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Release|x64.ActiveCfg = Release|x64
-		{42009208-3AF5-481E-BE01-74DF7B0759D1}.Release|x64.Build.0 = Release|x64
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Debug|Win32.ActiveCfg = Debug|Win32
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Debug|Win32.Build.0 = Debug|Win32
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Debug|x64.ActiveCfg = Debug|x64
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Debug|x64.Build.0 = Debug|x64
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Release|Any CPU.ActiveCfg = Release|Win32
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Release|Win32.ActiveCfg = Release|Win32
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Release|Win32.Build.0 = Release|Win32
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Release|x64.ActiveCfg = Release|x64
+		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

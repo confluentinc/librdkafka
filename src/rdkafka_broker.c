@@ -2238,7 +2238,7 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
         if (fi.contentSize == 0 || fi.contentSize > inlen * 255)
                 estimated_uncompressed_size = inlen * 255;
         else
-                estimated_uncompressed_size = fi.contentSize;
+                estimated_uncompressed_size = (size_t)fi.contentSize;
 
         /* Allocate output buffer, we increase this later if needed,
 	 * but hopefully not. */

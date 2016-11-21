@@ -96,3 +96,10 @@ ClientBin/
 *.publishsettings
 node_modules/
 bower_components/
+
+*.filters
+*.tlog
+*.db
+*.opendb
+*.idb
+*.nupkg

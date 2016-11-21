@@ -40,6 +40,7 @@
 #include <fcntl.h>
 #ifdef _MSC_VER
 #include <io.h>
+#pragma comment(lib, "ws2_32.lib")
 #else
 #include <unistd.h>
 #include <poll.h>
@@ -141,7 +142,7 @@ int main_0040_io_event (int argc, char **argv) {
 #ifndef _MSC_VER
 			r = read(pfd.fd, &b, 1);
 #else
-                        r = _read(pfd.fd, &b, 1);
+			r = _read((int)pfd.fd, &b, 1);
 #endif
 			if (r == -1)
 				TEST_FAIL("read failed: %s\n", strerror(errno));

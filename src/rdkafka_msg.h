@@ -90,7 +90,7 @@ TAILQ_HEAD(rd_kafka_msg_head_s, rd_kafka_msg_s);
  */
 static RD_INLINE RD_UNUSED
 int32_t rd_kafka_msg_wire_size (const rd_kafka_msg_t *rkm) {
-	return RD_KAFKAP_MESSAGE_OVERHEAD + rkm->rkm_len + rkm->rkm_key_len;
+	return (int32_t)(RD_KAFKAP_MESSAGE_OVERHEAD + rkm->rkm_len + rkm->rkm_key_len);
 }
 
 

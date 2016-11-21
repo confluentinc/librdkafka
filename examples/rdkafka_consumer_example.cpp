@@ -146,7 +146,7 @@ public:
 
     if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
       consumer->assign(partitions);
-      partition_cnt = partitions.size();
+      partition_cnt = (int)partitions.size();
     } else {
       consumer->unassign();
       partition_cnt = 0;

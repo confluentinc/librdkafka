@@ -1333,7 +1333,7 @@ int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
                                 void *opaque) {
         int s;
         int on = 1;
-        s = socket(domain, type, protocol);
+        s = (int)socket(domain, type, protocol);
         if (s == -1)
                 return -1;
 #ifdef FD_CLOEXEC
@@ -2803,7 +2803,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 					   MsgVersion,
 					   RD_KAFKA_COMPRESSION_NONE,
 					   rkm->rkm_timestamp,
-					   rkm->rkm_key, rkm->rkm_key_len,
+					   rkm->rkm_key, (int32_t)rkm->rkm_key_len,
 					   rkm->rkm_payload,
 					   (int32_t)rkm->rkm_len,
 					   &outlen);
@@ -2825,7 +2825,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	/* Compress the message(s) */
 	if (rktp->rktp_rkt->rkt_conf.compression_codec)
 		rd_kafka_compress_MessageSet_buf(rkb, rktp, rkbuf,
-						 iov_firstmsg, of_firstmsg,
+						 (int)iov_firstmsg, (int)of_firstmsg,
 						 of_init_firstmsg,
 						 MsgVersion,
 						 timestamp_firstmsg,
@@ -3620,7 +3620,7 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			rkm->rkm_payload = RD_KAFKAP_BYTES_IS_NULL(&Value) ?
                                 NULL : (void *)Value.data;
 			rkm->rkm_len = Value_len;
-			rko->rko_len = rkm->rkm_len;
+			rko->rko_len = (int32_t)rkm->rkm_len;
 
 			rkm->rkm_offset    = hdr.Offset;
 			rkm->rkm_partition = rktp->rktp_partition;

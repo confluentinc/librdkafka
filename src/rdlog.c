@@ -52,7 +52,7 @@ void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len) {
 		int cof = 0;
 		unsigned int i;
 
-		for (i = of ; i < of + 16 && i < len ; i++) {
+		for (i = (unsigned int)of ; i < (unsigned int)of + 16 && i < len ; i++) {
 			hof += rd_snprintf(hexen+hof, sizeof(hexen)-hof,
 					   "%02x ",
 					   p[i] & 0xff);

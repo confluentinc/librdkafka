@@ -866,7 +866,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			if (!(*plist =
 			      rd_kafka_pattern_list_new(istr,
 							errstr,
-							errstr_size)))
+							(int)errstr_size)))
 				return RD_KAFKA_CONF_INVALID;
 		} else
 			*plist = NULL;

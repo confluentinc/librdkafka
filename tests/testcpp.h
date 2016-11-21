@@ -27,12 +27,42 @@
  */
 
 
-#include <iostream>
+#include <sstream>
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include "rdkafkacpp.h"
 
+#define RD_INLINE
 extern "C" {
-#include "test.h"
+#include "testshared.h"
 }
 
-#include "rdkafkacpp.h"
+// courtesy of http://stackoverview.blogspot.se/2011/04/create-string-on-fly-just-in-one-line.html
+struct tostr {
+	std::stringstream ss;
+	template<typename T>
+	tostr & operator << (const T &data)
+	{
+		ss << data;
+		return *this;
+	}
+	operator std::string() { return ss.str(); }
+};
+
+
+
+
+class Test {
+public:
+	static void Fail (std::string str) {
+		test_FAIL(__FILE__, __LINE__, str.c_str());
+	}
+	static void Say (int level, std::string str) {
+		test_SAY(__FILE__, __LINE__, level, str.c_str());
+	}
+	static void Say (std::string str) {
+		Test::Say(2, str);
+	}
+};
 
 

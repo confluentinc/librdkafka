@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <iostream>
 #include "testcpp.h"
 
 
@@ -36,9 +37,9 @@ class myEventCb : public RdKafka::EventCb {
     switch (event.type())
     {
       case RdKafka::Event::EVENT_STATS:
-        TEST_SAYL(3, "Stats: %s\n", event.str().c_str());
-        if (event.str().length() > 20)
-          stats_cnt += 1;
+		  Test::Say("Stats: " + event.str() + "\n");
+		  if (event.str().length() > 20)
+			  stats_cnt += 1;
         break;
       default:
         break;
@@ -52,31 +53,30 @@ void test_stats_cb () {
   std::string errstr;
 
   if (conf->set("statistics.interval.ms", "100", errstr) != RdKafka::Conf::CONF_OK)
-    TEST_FAIL("Failed to set statistics.interval.ms: %s", errstr.c_str());
+	  Test::Fail(errstr);
 
   if (conf->set("event_cb", &my_event, errstr) != RdKafka::Conf::CONF_OK)
-    TEST_FAIL("Failed to set event_cb: %s", errstr.c_str());
+	  Test::Fail(errstr);
 
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
   if (!p)
-    TEST_FAIL("Failed to create Producer: %s", errstr.c_str());
+	  Test::Fail("Failed to create Producer: " + errstr);
 
   int64_t t_start = test_clock();
 
   while (my_event.stats_cnt < 12)
     p->poll(1000);
 
-  int elapsed = ((test_clock() - t_start) / 1000);
+  int elapsed = (int)((test_clock() - t_start) / 1000);
   const int expected_time = 1200;
 
-  TEST_SAY("%d (expected 12) stats callbacks received in %dms (expected %dms)\n",
-           my_event.stats_cnt, elapsed, expected_time);
+  Test::Say(tostr() << my_event.stats_cnt << " (expected 12) stats callbacks received in " <<
+			elapsed << "ms (expected " << expected_time << "ms +-25%)\n");
 
   if (elapsed < expected_time * 0.75 ||
-      elapsed > expected_time * 1.25 )
-    TEST_FAIL("Elapsed time %dms outside +-25%% window (%dms), cnt %d",
-              elapsed, expected_time, my_event.stats_cnt);
-
+	  elapsed > expected_time * 1.25)
+	  Test::Fail(tostr() << "Elapsed time " << elapsed << "ms outside +-25% window (" <<
+				  expected_time << "ms), cnt " << my_event.stats_cnt);
   delete p;
 }
 

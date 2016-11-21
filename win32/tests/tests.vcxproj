@@ -207,7 +207,7 @@
     <ClCompile Include="..\..\tests\0050-subscribe_adds.c" />
     <ClCompile Include="..\..\tests\0051-assign_adds.c" />
     <ClCompile Include="..\..\tests\0052-msg_timestamps.c" />
-    <ClCompile Include="..\..\tests\0053_stats_cb.cpp" />
+    <ClCompile Include="..\..\tests\0053-stats_cb.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
     <ClCompile Include="..\..\src\rdlist.c" />
@@ -215,6 +215,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\tests\test.h" />
     <ClInclude Include="..\..\tests\testcpp.h" />
+    <ClInclude Include="..\..\tests\testshared.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

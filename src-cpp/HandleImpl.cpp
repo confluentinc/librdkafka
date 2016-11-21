@@ -289,7 +289,7 @@ rd_kafka_topic_partition_list_t *
 partitions_to_c_parts (const std::vector<RdKafka::TopicPartition*> &partitions){
   rd_kafka_topic_partition_list_t *c_parts;
 
-  c_parts = rd_kafka_topic_partition_list_new(partitions.size());
+  c_parts = rd_kafka_topic_partition_list_new((int)partitions.size());
 
   for (unsigned int i = 0 ; i < partitions.size() ; i++) {
     const RdKafka::TopicPartitionImpl *tpi =

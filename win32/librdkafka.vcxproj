@@ -202,7 +202,6 @@
     <ClInclude Include="..\src\tinycthread.h" />
     <ClInclude Include="..\src\rdwin32.h" />
     <ClInclude Include="..\src\win32_config.h" />
-    <ClInclude Include="..\src\xxhash.h" />
     <ClInclude Include="..\src\regexp.h" />
   </ItemGroup>
   <ItemGroup>
@@ -238,7 +237,6 @@
     <ClCompile Include="..\src\rdregex.c" />
     <ClCompile Include="..\src\snappy.c" />
     <ClCompile Include="..\src\tinycthread.c" />
-    <ClCompile Include="..\src\xxhash.c" />
     <ClCompile Include="..\src\regexp.c" />
   </ItemGroup>
   <ItemGroup>
@@ -252,6 +250,7 @@
   <ImportGroup Label="ExtensionTargets">
     <Import Project="packages\zlib.v120.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v120.windesktop.msvcstl.dyn.rt-dyn.targets" Condition="Exists('packages\zlib.v120.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v120.windesktop.msvcstl.dyn.rt-dyn.targets')" />
     <Import Project="packages\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.targets" Condition="Exists('packages\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.targets')" />
+    <Import Project="packages\lz4.1.3.1.2\build\native\lz4.targets" Condition="Exists('packages\lz4.1.3.1.2\build\native\lz4.targets')" />
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
@@ -259,5 +258,6 @@
     </PropertyGroup>
     <Error Condition="!Exists('packages\zlib.v120.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v120.windesktop.msvcstl.dyn.rt-dyn.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\zlib.v120.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v120.windesktop.msvcstl.dyn.rt-dyn.targets'))" />
     <Error Condition="!Exists('packages\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.1.2.8.8\build\native\zlib.v140.windesktop.msvcstl.dyn.rt-dyn.targets'))" />
+    <Error Condition="!Exists('packages\lz4.1.3.1.2\build\native\lz4.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\lz4.1.3.1.2\build\native\lz4.targets'))" />
   </Target>
-</Project>
+</Project>

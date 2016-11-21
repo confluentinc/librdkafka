@@ -10,6 +10,8 @@ Requirements:
    (This would be using NuGet too but the current
     OpenSSL packages are outdated and with broken
 	dependencies, so no luck)
+ * lz4 is installed automatically from NuGet.
+   xxhash.[ch] from lz4 are used instead of the ones provided by librdkafka.
 
 
 The Visual Studio solution file for librdkafka resides in win32/librdkafka.sln
@@ -23,7 +25,6 @@ Artifacts:
  Missing:
   - remaining tools (rdkafka_performance, etc)
   - SASL support (no official Cyrus libsasl2 DLLs available)
-  - LZ4 support
 
 If you build librdkafka with an external tool (ie CMake) you can get rid of the 
 __declspec(dllexport) / __declspec(dllimport) decorations by adding a define

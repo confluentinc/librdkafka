@@ -50,9 +50,9 @@ nuget {
 		bin: { x64\Debug\librdkafka.dll, x64\Debug\librdkafkacpp.dll, x64\Debug\zlib*.dll };
 	};
 	[x86,v140,debug] {
-		lib: { x86\Debug\librdkafka.lib, x86\Debug\librdkafkacpp.lib };
-		symbols: { x86\Debug\librdkafka.pdb, x86\Debug\librdkafkacpp.pdb };
-		bin: { x86\Debug\librdkafka.dll, x86\Debug\librdkafkacpp.dll, x86\Debug\zlib*.dll };
+		lib: { Win32\Debug\librdkafka.lib, Win32\Debug\librdkafkacpp.lib };
+		symbols: { Win32\Debug\librdkafka.pdb, Win32\Debug\librdkafkacpp.pdb };
+		bin: { Win32\Debug\librdkafka.dll, Win32\Debug\librdkafkacpp.dll, Win32\Debug\zlib*.dll };
 	};
  };
 

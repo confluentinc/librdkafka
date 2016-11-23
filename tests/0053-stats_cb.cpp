@@ -37,7 +37,8 @@ class myEventCb : public RdKafka::EventCb {
     switch (event.type())
     {
       case RdKafka::Event::EVENT_STATS:
-		  Test::Say("Stats: " + event.str() + "\n");
+		  Test::Say(tostr() << "Stats (#" << stats_cnt << "): " <<
+					event.str() << "\n");
 		  if (event.str().length() > 20)
 			  stats_cnt += 1;
         break;

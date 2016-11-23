@@ -32,6 +32,9 @@
 
 class myEventCb : public RdKafka::EventCb {
  public:
+	 myEventCb() {
+		 stats_cnt = 0;
+	 }
   int stats_cnt;
   void event_cb (RdKafka::Event &event) {
     switch (event.type())

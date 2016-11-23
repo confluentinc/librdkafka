@@ -12,9 +12,9 @@ configurations {
 
 nuget {
  nuspec {
-        id = librdkafka.testing;
-        version : 0.9.2;
-        title: "The Apache Kafka C/C++ client library";
+        id = librdkafka;
+        version : 0.9.3-pre-wip1;
+        title: "librdkafka";
         authors: {Magnus Edenhill};
         owners: {Magnus Edenhill};
         licenseUrl: "https://github.com/edenhill/librdkafka/blob/master/LICENSES.txt";

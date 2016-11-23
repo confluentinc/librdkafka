@@ -42,18 +42,16 @@ nuget {
 		#destination = ${d_include}librdkafka;
 		${TOPDIR}src\rdkafka.h, ${TOPDIR}src-cpp\rdkafkacpp.h
 	};
-	docs: { ${TOPDIR}README.md };
+	docs: { ${TOPDIR}README.md, ${TOPDIR}CONFIGURATION.md, ${TOPDIR}LICENSES.txt };
 
-	[x64,v140,debug] {
-		lib: { x64\Debug\librdkafka.lib, x64\Debug\librdkafkacpp.lib };
-		symbols: { x64\Debug\librdkafka.pdb, x64\Debug\librdkafkacpp.pdb };
-		bin: { x64\Debug\librdkafka.dll, x64\Debug\librdkafkacpp.dll, x64\Debug\zlib*.dll };
+        ("v120,v140", "Win32,x64", "Release,Debug") => {
+           [${0},${1},${2}] {
+		lib: { outdir\${0}\${1}\${2}\librdkafka*.lib };
+		symbols: { outdir\${0}\${1}\${2}\librdkafka*.pdb };
+		bin: { outdir\${0}\${1}\${2}\*.dll };
+           };
 	};
-	[x86,v140,debug] {
-		lib: { Win32\Debug\librdkafka.lib, Win32\Debug\librdkafkacpp.lib };
-		symbols: { Win32\Debug\librdkafka.pdb, Win32\Debug\librdkafkacpp.pdb };
-		bin: { Win32\Debug\librdkafka.dll, Win32\Debug\librdkafkacpp.dll, Win32\Debug\zlib*.dll };
-	};
+
  };
 
  targets {

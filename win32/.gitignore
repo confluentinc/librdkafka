@@ -103,3 +103,7 @@ bower_components/
 *.opendb
 *.idb
 *.nupkg
+intdir
+outdir
+interim
+

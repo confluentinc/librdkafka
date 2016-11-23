@@ -13,10 +13,12 @@ configurations {
 nuget {
  nuspec {
         id = librdkafka;
-        version : 0.9.3-pre-wip1;
+	    // "@version" is replaced by the current Appveyor build number in the
+        // pre-deployment script.
+        version : @version;
         title: "librdkafka";
-        authors: {Magnus Edenhill};
-        owners: {Magnus Edenhill};
+        authors: {Magnus Edenhill, edenhill};
+        owners: {Magnus Edenhill, edenhill};
         licenseUrl: "https://github.com/edenhill/librdkafka/blob/master/LICENSES.txt";
         projectUrl: "https://github.com/edenhill/librdkafka";
         requireLicenseAcceptance: false;

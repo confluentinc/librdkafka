@@ -1018,15 +1018,20 @@ function mkl_lib_check {
         shift
     fi
 
+    # pkg-config result (0=ok)
+    local pkg_conf_failed=1
     if [[ $WITH_PKGCONFIG == "y" ]]; then
-        if mkl_pkg_config_check $staticopt "$1" "$2" cont; then
-            return 0
-        fi
+        # Let pkg-config populate CFLAGS, et.al.
+        mkl_pkg_config_check $staticopt "${1}" "" cont
+        pkg_conf_failed=$?
     fi
 
-    local libs="$5"
-    if [[ $WITH_STATIC_LINKING == y && ! -z $staticopt ]]; then
-	libs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
+    local libs=""
+    if [[ $pkg_conf_failed ]]; then
+        libs="$5"
+        if [[ $WITH_STATIC_LINKING == y && ! -z $staticopt ]]; then
+            libs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
+        fi
     fi
 
     if ! mkl_compile_check "$1" "$2" "$3" "$4" "$libs" "$6"; then
@@ -1055,7 +1060,8 @@ function mkl_pkg_config_check {
         shift
     fi
 
-    mkl_check_begin "$1" "$2" "no-cache" "$1 (by pkg-config)" && return $?
+    local cname="${1}_PKGCONFIG"
+    mkl_check_begin "$cname" "$2" "no-cache" "$1 (by pkg-config)" && return $?
 
     local cflags=
     local cmd="${PKG_CONFIG} --short-errors --cflags $1"
@@ -1064,7 +1070,7 @@ function mkl_pkg_config_check {
     cflags=$($cmd 2>&1)
     if [[ $? != 0 ]]; then
         mkl_dbg "'$cmd' failed: $cflags"
-        mkl_check_failed "$1" "$2" "$3" "'$cmd' failed:
+        mkl_check_failed "$cname" "$2" "$3" "'$cmd' failed:
 $cflags"
         return 1
     fi
@@ -1073,7 +1079,7 @@ $cflags"
     libs=$(${PKG_CONFIG} --short-errors --libs $1 2>&1)
     if [[ $? != 0 ]]; then
         mkl_dbg "${PKG_CONFIG} --libs $1 failed: $libs"
-        mkl_check_failed "$1" "$2" "$3" "pkg-config --libs failed"
+        mkl_check_failed "$cname" "$2" "$3" "pkg-config --libs failed"
         return 1
     fi
 
@@ -1085,7 +1091,7 @@ $cflags"
 
     mkl_mkvar_append "$1" LIBS "$libs"
 
-    mkl_check_done "$1" "$2" "$3" "ok"
+    mkl_check_done "$cname" "$2" "$3" "ok"
 
     return 0
 }

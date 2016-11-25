@@ -158,6 +158,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Maximum number of in-flight requests the client will send. "
 	  "This setting applies per broker connection.",
 	  1, 1000000, 1000000 },
+        { _RK_GLOBAL, "max.in.flight", _RK_C_ALIAS,
+          .sdef = "max.in.flight.requests.per.connection" },
 	{ _RK_GLOBAL, "metadata.request.timeout.ms", _RK_C_INT,
 	  _RK(metadata_request_timeout_ms),
 	  "Non-topic request timeout in milliseconds. "

@@ -825,10 +825,11 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_avg_t rtt, throttle;
+		rd_avg_t rtt, throttle, int_latency;
 		rd_kafka_toppar_t *rktp;
 
 		rd_kafka_broker_lock(rkb);
+		rd_avg_rollover(&int_latency, &rkb->rkb_avg_int_latency);
 		rd_avg_rollover(&rtt, &rkb->rkb_avg_rtt);
 		rd_avg_rollover(&throttle, &rkb->rkb_avg_throttle);
 		_st_printf("%s\"%s\": { "/*open broker*/
@@ -852,6 +853,13 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                            "\"rxpartial\":%"PRIu64", "
                            "\"zbuf_grow\":%"PRIu64", "
                            "\"buf_grow\":%"PRIu64", "
+			   "\"int_latency\": {"
+			   " \"min\":%"PRId64","
+			   " \"max\":%"PRId64","
+			   " \"avg\":%"PRId64","
+			   " \"sum\":%"PRId64","
+			   " \"cnt\":%i "
+			   "}, "
 			   "\"rtt\": {"
 			   " \"min\":%"PRId64","
 			   " \"max\":%"PRId64","
@@ -889,6 +897,11 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rd_atomic64_get(&rkb->rkb_c.rx_partial),
                            rd_atomic64_get(&rkb->rkb_c.zbuf_grow),
                            rd_atomic64_get(&rkb->rkb_c.buf_grow),
+			   int_latency.ra_v.minv,
+			   int_latency.ra_v.maxv,
+			   int_latency.ra_v.avg,
+			   int_latency.ra_v.sum,
+			   int_latency.ra_v.cnt,
 			   rtt.ra_v.minv,
 			   rtt.ra_v.maxv,
 			   rtt.ra_v.avg,

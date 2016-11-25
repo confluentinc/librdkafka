@@ -147,6 +147,20 @@ static void offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
         }
 }
 
+/**
+ * @brief Add latency measurement
+ */
+static void latency_add (int64_t ts, const char *who) {
+        if (ts > cnt.latency_hi)
+                cnt.latency_hi = ts;
+        if (!cnt.latency_lo || ts < cnt.latency_lo)
+                cnt.latency_lo = ts;
+        cnt.latency_last = ts;
+        cnt.latency_cnt++;
+        cnt.latency_sum += ts;
+        if (latency_fp)
+                fprintf(latency_fp, "%"PRIu64"\n", ts);
+}
 
 
 static void msg_delivered (rd_kafka_t *rk,
@@ -164,6 +178,14 @@ static void msg_delivered (rd_kafka_t *rk,
         else {
                 cnt.msgs_dr_ok++;
                 cnt.bytes_dr_ok += rkmessage->len;
+        }
+
+        if (latency_mode) {
+                /* Extract latency */
+                int64_t source_ts;
+                if (sscanf(rkmessage->payload, "LATENCY:%"SCNd64,
+                           &source_ts) == 1)
+                        latency_add(wall_clock() - source_ts, "producer");
         }
 
 
@@ -269,15 +291,7 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
                            &remote_ts) == 1) {
                         ts = wall_clock() - remote_ts;
                         if (ts > 0 && ts < (1000000 * 60 * 5)) {
-                                if (ts > cnt.latency_hi)
-                                        cnt.latency_hi = ts;
-                                if (!cnt.latency_lo || ts < cnt.latency_lo)
-                                        cnt.latency_lo = ts;
-                                cnt.latency_last = ts;
-                                cnt.latency_cnt++;
-                                cnt.latency_sum += ts;
-				if (latency_fp)
-					fprintf(latency_fp, "%"PRIu64"\n", ts);
+                                latency_add(ts, "consumer");
                         } else {
                                 if (verbosity >= 1)
                                         printf("Received latency timestamp is too far off: %"PRId64"us (message offset %"PRId64"): ignored\n",
@@ -419,6 +433,7 @@ static void print_stats (rd_kafka_t *rk,
 	rd_ts_t t_total;
         static int rows_written = 0;
         int print_header;
+        float latency_avg = 0.0f;
         char extra[512];
         int extra_of = 0;
         *extra = '\0';
@@ -444,6 +459,10 @@ static void print_stats (rd_kafka_t *rk,
 		t_total = now - cnt.t_start;
 	else
 		t_total = 1;
+
+        if (latency_mode && cnt.latency_cnt)
+                latency_avg = (double)cnt.latency_sum /
+                        (float)cnt.latency_cnt;
 
         if (mode == 'P') {
 
@@ -472,6 +491,13 @@ static void print_stats (rd_kafka_t *rk,
                                 COL_HDR("outq");
                                 if (report_offset)
                                         COL_HDR("offset");
+                                if (latency_mode) {
+                                        COL_HDR("lat_curr");
+                                        COL_HDR("lat_avg");
+                                        COL_HDR("lat_lo");
+                                        COL_HDR("lat_hi");
+                                }
+
                                 ROW_END();
                         }
 
@@ -491,6 +517,12 @@ static void print_stats (rd_kafka_t *rk,
                                  rk ? (uint64_t)rd_kafka_outq_len(rk) : 0);
                         if (report_offset)
                                 COL_PR64("offset", (uint64_t)cnt.last_offset);
+                        if (latency_mode) {
+                                COL_PRF("lat_curr", cnt.latency_last / 1000.0f);
+                                COL_PRF("lat_avg", latency_avg / 1000.0f);
+                                COL_PRF("lat_lo", cnt.latency_lo / 1000.0f);
+                                COL_PRF("lat_hi", cnt.latency_hi / 1000.0f);
+                        }
                         ROW_END();
                 }
 
@@ -514,11 +546,6 @@ static void print_stats (rd_kafka_t *rk,
                 }
 
         } else {
-                float latency_avg = 0.0f;
-
-                if (latency_mode && cnt.latency_cnt)
-                        latency_avg = (double)cnt.latency_sum /
-                                (float)cnt.latency_cnt;
 
                 if (otype & _OTYPE_TAB) {
                         if (print_header) {
@@ -955,6 +982,7 @@ int main (int argc, char **argv) {
                         "               Needs two matching instances, one\n"
                         "               consumer and one producer, both\n"
                         "               running with the -l switch.\n"
+                        "  -l           Producer: per-message latency stats\n"
 			"  -A <file>    Write per-message latency stats to "
 			"<file>. Requires -l\n"
                         "  -O           Report produced offset (producer)\n"

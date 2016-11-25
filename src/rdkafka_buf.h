@@ -80,7 +80,7 @@ rd_tmpabuf_failed (rd_tmpabuf_t *tab) {
 }
 
 /**
- * @brief Allocate \p size bytes for writing returning an aligned pointer
+ * @brief Allocate \p size bytes for writing, returning an aligned pointer
  *        to the memory.
  * @returns the allocated pointer (within the tmpabuf) on success or
  *          NULL if the requested number of bytes + alignment is not available

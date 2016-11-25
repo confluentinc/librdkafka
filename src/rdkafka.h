@@ -933,7 +933,7 @@ rd_kafka_conf_t *rd_kafka_conf_dup(const rd_kafka_conf_t *conf);
 /**
  * @brief Sets a configuration property.
  *
- * \p must have been previously created with rd_kafka_conf_new().
+ * \p conf must have been previously created with rd_kafka_conf_new().
  *
  * Returns \c rd_kafka_conf_res_t to indicate success or failure.
  * In case of failure \p errstr is updated to contain a human readable

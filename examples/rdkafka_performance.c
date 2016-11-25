@@ -641,6 +641,76 @@ static void sig_usr1 (int sig) {
 	rd_kafka_dump(stdout, global_rk);
 }
 
+
+/**
+ * @brief Read config from file
+ * @returns -1 on error, else 0.
+ */
+static int read_conf_file (rd_kafka_conf_t *conf,
+                           rd_kafka_topic_conf_t *tconf, const char *path) {
+        FILE *fp;
+        char buf[512];
+        int line = 0;
+        char errstr[512];
+
+        if (!(fp = fopen(path, "r"))) {
+                fprintf(stderr, "%% Failed to open %s: %s\n",
+                        path, strerror(errno));
+                return -1;
+        }
+
+        while (fgets(buf, sizeof(buf), fp)) {
+                char *s = buf;
+                char *t;
+                rd_kafka_conf_res_t r = RD_KAFKA_CONF_UNKNOWN;
+
+                line++;
+
+                while (isspace((int)*s))
+                        s++;
+
+                if (!*s || *s == '#')
+                        continue;
+
+                if ((t = strchr(buf, '\n')))
+                        *t = '\0';
+
+                t = strchr(buf, '=');
+                if (!t || t == s || !*(t+1)) {
+                        fprintf(stderr, "%% %s:%d: expected key=value\n",
+                                path, line);
+                        fclose(fp);
+                        return -1;
+                }
+
+                *(t++) = '\0';
+
+                /* Try property on topic config first */
+                if (tconf)
+                        r = rd_kafka_topic_conf_set(tconf, s, t,
+                                                    errstr, sizeof(errstr));
+
+                /* Try global config */
+                if (r == RD_KAFKA_CONF_UNKNOWN)
+                        r = rd_kafka_conf_set(conf, s, t,
+                                              errstr, sizeof(errstr));
+
+                if (r == RD_KAFKA_CONF_OK)
+                        continue;
+
+                fprintf(stderr, "%% %s:%d: %s=%s: %s\n",
+                        path, line, s, t, errstr);
+                fclose(fp);
+                return -1;
+        }
+
+        fclose(fp);
+
+        return 0;
+}
+
+
+
 int main (int argc, char **argv) {
 	char *brokers = NULL;
 	char mode = 'C';
@@ -830,6 +900,12 @@ int main (int argc, char **argv) {
 			*val = '\0';
 			val++;
 
+                        if (!strcmp(name, "file")) {
+                                if (read_conf_file(conf, topic_conf, val) == -1)
+                                        exit(1);
+                                break;
+                        }
+
 			res = RD_KAFKA_CONF_UNKNOWN;
 			/* Try "topic." prefixed properties on topic
 			 * conf first, and then fall through to global if
@@ -970,6 +1046,7 @@ int main (int argc, char **argv) {
 			"will be set on topic object.\n"
 			"               Use '-X list' to see the full list\n"
 			"               of supported properties.\n"
+                        "  -X file=<path> Read config from file.\n"
 			"  -T <intvl>   Enable statistics from librdkafka at "
 			"specified interval (ms)\n"
                         "  -Y <command> Pipe statistics to <command>\n"

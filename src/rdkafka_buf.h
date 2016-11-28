@@ -372,6 +372,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	int     rkbuf_retries;            /* Retries so far. */
 #define RD_KAFKA_BUF_NO_RETRIES  1000000  /* Do not retry */
 
+        int     rkbuf_features;   /* Required feature(s) that must be
+                                   * supported by broker. */
+
 	rd_ts_t rkbuf_ts_enq;
 	rd_ts_t rkbuf_ts_sent;    /* Initially: Absolute time of transmission,
 				   * after response: RTT. */
@@ -448,8 +451,9 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
  * Set request API type version
  */
 static RD_INLINE void rd_kafka_buf_version_set (rd_kafka_buf_t *rkbuf,
-                                               int16_t version) {
+                                                int16_t version, int features) {
         rkbuf->rkbuf_reqhdr.ApiVersion = version;
+        rkbuf->rkbuf_features = features;
 }
 
 void rd_kafka_buf_grow (rd_kafka_buf_t *rkbuf, size_t needed_len);

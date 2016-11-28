@@ -114,11 +114,13 @@ struct rd_kafka_itopic_s {
 /**
  * Frees a shared pointer previously returned by ..topic_keep()
  */
-#define rd_kafka_topic_destroy0(s_rkt)                                  \
-        rd_shared_ptr_put(s_rkt,                                        \
-                          &rd_kafka_topic_s2i(s_rkt)->rkt_refcnt,       \
-                          rd_kafka_topic_destroy_final(                 \
-                                  rd_kafka_topic_s2i(s_rkt)))
+static RD_INLINE RD_UNUSED void
+rd_kafka_topic_destroy0 (shptr_rd_kafka_itopic_t *s_rkt) {
+        rd_shared_ptr_put(s_rkt,
+                          &rd_kafka_topic_s2i(s_rkt)->rkt_refcnt,
+                          rd_kafka_topic_destroy_final(
+                                  rd_kafka_topic_s2i(s_rkt)));
+}
 
 void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt);
 
@@ -138,6 +140,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_find0_fl (const char *func, int line,
         rd_kafka_topic_find_fl(__FUNCTION__,__LINE__,rk,topic,do_lock)
 #define rd_kafka_topic_find0(rk,topic)                                  \
         rd_kafka_topic_find0_fl(__FUNCTION__,__LINE__,rk,topic)
+int rd_kafka_topic_cmp_s_rkt (const void *_a, const void *_b);
 
 void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt);
 

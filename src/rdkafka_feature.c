@@ -152,7 +152,15 @@ static const struct rd_kafka_feature_map {
                         { -1 },
                 },
         },
-
+        {
+                /* @brief >=0.10.1.0: Offset v1 (KIP-79)
+                 * Time-based offset requests */
+                .feature = RD_KAFKA_FEATURE_OFFSET_TIME,
+                .depends = {
+                        { RD_KAFKAP_Offset, 1, 1 },
+                        { -1 },
+                }
+        },
         { .feature = 0 }, /* sentinel */
 };
 

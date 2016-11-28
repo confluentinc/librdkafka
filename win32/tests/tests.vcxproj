@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <ProjectGuid>{BE4E1264-5D13-423D-8191-71F7041459E7}</ProjectGuid>
@@ -137,6 +137,7 @@
     <ClCompile Include="..\..\tests\0051-assign_adds.c" />
     <ClCompile Include="..\..\tests\0052-msg_timestamps.c" />
     <ClCompile Include="..\..\tests\0053-stats_cb.cpp" />
+    <ClCompile Include="..\..\tests\0054-offset_time.cpp" />
     <ClCompile Include="..\..\tests\0055-producer_latency.c" />
     <ClCompile Include="..\..\tests\0056-balanced_group_mt.c" />
     <ClCompile Include="..\..\tests\test.c" />

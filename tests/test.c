@@ -132,6 +132,7 @@ _TEST_DECL(0050_subscribe_adds);
 _TEST_DECL(0051_assign_adds);
 _TEST_DECL(0052_msg_timestamps);
 _TEST_DECL(0053_stats_cb);
+_TEST_DECL(0054_offset_time);
 _TEST_DECL(0055_producer_latency);
 _TEST_DECL(0056_balanced_group_mt);
 
@@ -191,6 +192,7 @@ struct test tests[] = {
         _TEST(0051_assign_adds, 0),
         _TEST(0052_msg_timestamps, TEST_BRKVER(0,10,0,0)),
         _TEST(0053_stats_cb, TEST_F_LOCAL),
+        _TEST(0054_offset_time, TEST_BRKVER(0,10,0,0)),
         _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
         _TEST(0056_balanced_group_mt, 0, TEST_BRKVER(0,9,0,0)),
         { NULL }

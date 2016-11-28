@@ -447,8 +447,25 @@ int rd_kafka_topic_partition_list_count_abs_offsets (
 	const rd_kafka_topic_partition_list_t *rktparlist);
 
 shptr_rd_kafka_toppar_t *
+rd_kafka_topic_partition_get_toppar (rd_kafka_topic_partition_t *rktpar);
+
+shptr_rd_kafka_toppar_t *
 rd_kafka_topic_partition_list_get_toppar (
         rd_kafka_t *rk, rd_kafka_topic_partition_list_t *rktparlist, int idx);
+
+void
+rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
+                                              rd_kafka_topic_partition_list_t
+                                              *rktparlist);
+
+int
+rd_kafka_topic_partition_list_get_leaders (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        rd_list_t *rkblist);
+int
+rd_kafka_topic_partition_list_get_topics (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        rd_list_t *topics);
 
 void
 rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
@@ -458,6 +475,12 @@ void
 rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
                                       const rd_kafka_topic_partition_list_t *src);
 int
+
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_match (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        int (*match) (const rd_kafka_topic_partition_t *rktpar,
+                       void *opaque),
+        void *opaque);
 
 rd_kafka_topic_partition_list_sum (
         const rd_kafka_topic_partition_list_t *rktparlist,

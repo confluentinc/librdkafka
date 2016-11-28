@@ -177,7 +177,12 @@ void *rd_list_find (const rd_list_t *rl, const void *match,
  *            0 if a and b are equal.
  */
 int rd_list_cmp (const rd_list_t *a, rd_list_t *b,
-		 int (*cmp) (const void *, const void *));
+                 int (*cmp) (const void *, const void *));
+
+/**
+ * @brief Simple element pointer comparator
+ */
+int rd_list_cmp_ptr (const void *a, const void *b);
 
 
 /**

@@ -984,6 +984,30 @@ class RD_EXPORT Handle {
 					   int32_t partition,
 					   int64_t *low, int64_t *high) = 0;
 
+
+  /**
+   * @brief Look up the offsets for the given partitions by timestamp.
+   *
+   * The returned offset for each partition is the earliest offset whose
+   * timestamp is greater than or equal to the given timestamp in the
+   * corresponding partition.
+   *
+   * The timestamps to query are represented as \c offset in \p offsets
+   * on input, and \c offset() will return the closest earlier offset
+   * for the timestamp on output.
+   *
+   * The function will block for at most \p timeout_ms milliseconds.
+   *
+   * @remark Duplicate Topic+Partitions are not supported.
+   * @remark Errors are also returned per TopicPartition, see \c err()
+   *
+   * @returns an error code for general errors, else RdKafka::ERR_NO_ERROR
+   *          in which case per-partition errors might be set.
+   */
+  virtual ErrorCode offsetsForTimes (std::vector<TopicPartition*> &offsets,
+                                     int timeout_ms) = 0;
+
+
   /**
    * @brief Retrieve queue for a given partition.
    *

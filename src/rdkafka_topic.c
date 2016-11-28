@@ -181,6 +181,20 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_find0_fl (const char *func, int line,
 }
 
 
+/**
+ * Compare shptr_rd_kafka_itopic_t for underlying itopic_t
+ */
+int rd_kafka_topic_cmp_s_rkt (const void *_a, const void *_b) {
+        shptr_rd_kafka_itopic_t *a = _a, *b = _b;
+        rd_kafka_itopic_t *rkt_a = rd_kafka_topic_s2i(a);
+        rd_kafka_itopic_t *rkt_b = rd_kafka_topic_s2i(b);
+
+        if (rkt_a == rkt_b)
+                return 0;
+
+        return rd_kafkap_str_cmp(rkt_a->topic, rkt_b->topic);
+}
+
 
 /**
  * Create new topic handle. 
@@ -1119,6 +1133,23 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
 
 
 
+/**
+ * @brief Query leaders for \p topics and wait for any broker or topic
+ *        state to change.
+ */
+void rd_kafka_topics_leader_query_sync (rd_kafka_t *rk, rd_list_t *topics,
+                                        int timeout_ms) {
+        int state_version;
+
+        state_version = rd_kafka_brokers_get_state_version(rk);
+
+        rd_kafka_topics_leader_query(rk, &topics, 1/*lock*/);
+
+        if (!rd_kafka_brokers_wait_state_change(rk, state_version, timeout_ms);
+}
+
+
+
 int rd_kafka_topic_info_cmp (const void *_a, const void *_b) {
 	const rd_kafka_topic_info_t *a = _a, *b = _b;
 	int r;
@@ -1179,4 +1210,3 @@ int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 	} else
 		return !strcmp(pattern, topic);
 }
-

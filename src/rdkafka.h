@@ -310,6 +310,8 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__OUTDATED = -167,
 	/** Timed out in queue */
 	RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE = -166,
+        /** Feature not supported by broker */
+        RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE = -165,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -1746,6 +1748,30 @@ rd_kafka_get_watermark_offsets (rd_kafka_t *rk,
 				const char *topic, int32_t partition,
 				int64_t *low, int64_t *high);
 
+
+
+/**
+ * @brief Look up the offsets for the given partitions by timestamp.
+ *
+ * The returned offset for each partition is the earliest offset whose
+ * timestamp is greater than or equal to the given timestamp in the
+ * corresponding partition.
+ *
+ * The timestamps to query are represented as \c offset in \p offsets
+ * on input, and \c offset will contain the offset on output.
+ *
+ * The function will block for at most \p timeout_ms milliseconds.
+ *
+ * @remark Duplicate Topic+Partitions are not supported.
+ * @remark Errors are also returned per \c rd_kafka_topic_partition_t.err
+ *
+ * @returns an error code for general errors, else RD_KAFKA_RESP_ERR_NO_ERROR
+ *          in which case per-partition errors might be set.
+ */
+rd_kafka_resp_err_t
+rd_kafka_offsets_for_times (rd_kafka_t *rk,
+                            rd_kafka_topic_partition_list_t *offsets,
+                            int timeout_ms);
 
 
 /**

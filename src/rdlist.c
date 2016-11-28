@@ -242,3 +242,15 @@ int rd_list_cmp (const rd_list_t *a, rd_list_t *b,
 
 	return 0;
 }
+
+
+/**
+ * @brief Simple element pointer comparator
+ */
+int rd_list_cmp_ptr (const void *a, const void *b) {
+        if (a < b)
+                return -1;
+        else if (a > b)
+                return 1;
+        return 0;
+}

@@ -574,6 +574,16 @@ class HandleImpl : virtual public Handle {
 
   Queue *get_partition_queue (const TopicPartition *partition);
 
+  ErrorCode offsetsForTimes (std::vector<TopicPartition*> &offsets,
+                             int timeout_ms) {
+    rd_kafka_topic_partition_list_t *c_offsets = partitions_to_c_parts(offsets);
+    ErrorCode err = static_cast<ErrorCode>(
+        rd_kafka_offsets_for_times(rk_, c_offsets, timeout_ms));
+    update_partitions_from_c_parts(offsets, c_offsets);
+    rd_kafka_topic_partition_list_destroy(c_offsets);
+    return err;
+  }
+
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
    * the opaque provided to rdkafka must be a pointer to HandleImpl, since

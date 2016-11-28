@@ -342,6 +342,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Local: Outdated"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE,
 		  "Local: Timed out in queue"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                  "Local: Required feature not supported by broker"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -2096,11 +2098,11 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	state.ts_end = ts_end;
 	state.state_version = rd_kafka_brokers_get_state_version(rk);
 
-	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[0], 1,
+	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[0], 1, 0,
 			       RD_KAFKA_REPLYQ(rkq, 0),
 			       rd_kafka_query_wmark_offsets_resp_cb,
 			       &state);
-	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[1], 1,
+	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[1], 1, 0,
 			       RD_KAFKA_REPLYQ(rkq, 0),
 			       rd_kafka_query_wmark_offsets_resp_cb,
 			       &state);
@@ -2157,6 +2159,103 @@ rd_kafka_get_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	rd_kafka_toppar_destroy(s_rktp);
 
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+struct _get_offsets_for_times {
+        rd_kafka_topic_partition_list_t *results;
+        int wait_reply;
+        int state_version;
+        rd_ts_t ts_end;
+};
+
+
+static void rd_kafka_get_offsets_for_times_resp_cb (rd_kafka_t *rk,
+                                                  rd_kafka_broker_t *rkb,
+                                                  rd_kafka_resp_err_t err,
+                                                  rd_kafka_buf_t *rkbuf,
+                                                  rd_kafka_buf_t *request,
+                                                  void *opaque) {
+        struct _get_offsets_for_times *state = opaque;
+
+        err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request,
+                                     state->results);
+        if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                return; /* Retrying */
+
+        /* Retry if no broker connection is available yet. */
+        if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
+             err == RD_KAFKA_RESP_ERR__TRANSPORT) &&
+            rkb &&
+            rd_kafka_brokers_wait_state_change(
+                    rkb->rkb_rk, state->state_version,
+                    rd_timeout_remains(state->ts_end))) {
+                /* Retry */
+                state->state_version = rd_kafka_brokers_get_state_version(rk);
+                request->rkbuf_retries = 0;
+                if (rd_kafka_buf_retry(rkb, request))
+                        return; /* Retry in progress */
+                /* FALLTHRU */
+        }
+
+        state->wait_reply--;
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_offsets_for_times (rd_kafka_t *rk,
+                            rd_kafka_topic_partition_list_t *offsets,
+                            int timeout_ms) {
+        rd_kafka_q_t *rkq;
+        struct _get_offsets_for_times state;
+        rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+        rd_list_t leaders;
+        int i;
+        rd_kafka_resp_err_t err;
+        struct rd_kafka_partition_leader *leader;
+
+        if (offsets->cnt == 0)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        rd_list_init(&leaders, offsets->cnt);
+        rd_list_set_free_cb(&leaders, (void *)rd_kafka_partition_leader_destroy);
+
+        err = rd_kafka_topic_partition_list_query_leaders(rk, offsets, &leaders,
+                                                          timeout_ms);
+        if (err) {
+                rd_list_destroy(&leaders, NULL);
+                return err;
+        }
+
+
+        rkq = rd_kafka_q_new(rk);
+
+        state.wait_reply = 0;
+        state.results = rd_kafka_topic_partition_list_new(offsets->cnt);
+
+        /* For each leader send a request for its partitions */
+        RD_LIST_FOREACH(leader, &leaders, i) {
+                state.wait_reply++;
+                rd_kafka_OffsetRequest(leader->rkb, leader->partitions, 1,
+                                       RD_KAFKA_REPLYQ(rkq, 0),
+                                       rd_kafka_get_offsets_for_times_resp_cb,
+                                       &state);
+        }
+
+        rd_list_destroy(&leaders, NULL);
+
+        /* Wait for reply (or timeout) */
+        while (state.wait_reply > 0 && rd_timeout_remains(ts_end) > 0)
+                rd_kafka_q_serve(rkq, rd_timeout_remains(ts_end),
+                                 0, _Q_CB_GLOBAL, rd_kafka_poll_cb, NULL);
+
+        rd_kafka_q_destroy(rkq);
+
+        /* Then update the queried partitions. */
+        rd_kafka_topic_partition_list_update(offsets, state.results);
+
+        rd_kafka_topic_partition_list_destroy(state.results);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 

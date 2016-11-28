@@ -751,64 +751,54 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 
 
 
-
-
-
-
-void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
-				      rd_kafka_op_t *rko) {
-	rd_kafka_buf_t *rkbuf;
-	rd_kafka_itopic_t *rkt =
-		rko->rko_u.metadata.rkt ?
-		rd_kafka_topic_a2i(rko->rko_u.metadata.rkt) : NULL;
-
-	rd_rkb_dbg(rkb, METADATA, "METADATA",
-		   "Request metadata for %s: %s%s",
-		   rkt ? rkt->rkt_topic->str :
-		   (rko->rko_u.metadata.all_topics ?
-		    "all topics":"locally known topics"),
-                   rko->rko_u.metadata.reason,
-		   thrd_is_current(rkb->rkb_thread) ? "" :
-		   ": scheduled: not in broker thread");
-
-	/* If called from other thread than the broker's own then post an
-	 * op for the broker's thread instead since all transmissions must
-	 * be performed by the broker thread. */
-	if (!thrd_is_current(rkb->rkb_thread)) {
-                rd_kafka_q_enq(rkb->rkb_ops, rko);
-		return;
-	}
-
+#ifdef FIXME
         if (!rkt) {
                 /* Push the next intervalled metadata refresh forward since
                  * we are performing one now (which might be intervalled). */
                 if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0) {
-			if (rkb->rkb_metadata_fast_poll_cnt > 0) {
-				/* Fast poll after topic loosings its leader */
-				rkb->rkb_metadata_fast_poll_cnt--;
-				rkb->rkb_ts_metadata_poll = rd_clock() +
-					(rkb->rkb_rk->rk_conf.
-					 metadata_refresh_fast_interval_ms *
-					 1000);
-			} else {
-				/* According to configured poll interval */
-				rkb->rkb_ts_metadata_poll = rd_clock() +
-					(rkb->rkb_rk->rk_conf.
-					 metadata_refresh_interval_ms * 1000);
-			}
-		}
+                        if (rkb->rkb_metadata_fast_poll_cnt > 0) {
+                                /* Fast poll after topic loosings its leader */
+                                rkb->rkb_metadata_fast_poll_cnt--;
+                                rkb->rkb_ts_metadata_poll = rd_clock() +
+                                        (rkb->rkb_rk->rk_conf.
+                                         metadata_refresh_fast_interval_ms *
+                                         1000);
+                        } else {
+                                /* According to configured poll interval */
+                                rkb->rkb_ts_metadata_poll = rd_clock() +
+                                        (rkb->rkb_rk->rk_conf.
+                                         metadata_refresh_interval_ms * 1000);
+                        }
+                }
         }
 
-        rkbuf = rd_kafka_MetadataRequest0(rkb, rko->rko_u.metadata.all_topics,
-					  rkt,
+#endif
+
+
+
+void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
+                                      rd_kafka_op_t *rko) {
+        rd_kafka_buf_t *rkbuf;
+
+        /* If called from other thread than the broker's own then post an
+         * op for the broker's thread instead since all transmissions must
+         * be performed by the broker thread. */
+        if (!thrd_is_current(rkb->rkb_thread)) {
+                rd_kafka_q_enq(rkb->rkb_ops, rko);
+                return;
+        }
+
+        rkbuf = rd_kafka_MetadataRequest0(rkb, rko->rko_u.metadata.topics,
                                           rko->rko_u.metadata.reason);
 
-	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Metadata, rkbuf,
-				       /* Handle response thru rk_ops,
-					* but forward parsed result to
-					* rko's replyq when done. */
-				       RD_KAFKA_REPLYQ(rkb->rkb_rk->rk_ops, 0),
-				       rd_kafka_op_handle_Metadata, rko);
+        if (rkbuf)
+                rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Metadata, rkbuf,
+                                               /* Handle response thru rk_ops,
+                                                * but forward parsed result to
+                                                * rko's replyq when done. */
+                                               RD_KAFKA_REPLYQ(rkb->rkb_rk->
+                                                               rk_ops, 0),
+                                               rd_kafka_op_handle_Metadata, rko);
 }
 
 
@@ -1019,27 +1009,37 @@ rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id,
 }
 
 
-/**
- * Trigger broker metadata query for topic leader.
- * 'rkt' may be NULL to query for all topics.
- */
-void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
-				   int do_rk_lock) {
-	rd_kafka_broker_t *rkb;
 
-	if (do_rk_lock)
-		rd_kafka_rdlock(rk);
-	if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
+/**
+ * Trigger broker metadata query for \p topics (shptr_rd_kafka_itopic_t *)
+ * if \p topics is NULL all topics in cluster are queried.
+ */
+rd_kafka_resp_err_t
+rd_kafka_topics_leader_query (rd_kafka_t *rk, rd_list_t *topics,
+                              int do_rk_lock) {
+        rd_kafka_broker_t *rkb;
+
+        if (do_rk_lock)
+                rd_kafka_rdlock(rk);
+        if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
                                         rd_kafka_broker_filter_non_blocking,
                                         NULL))) {
-		if (do_rk_lock)
-			rd_kafka_rdunlock(rk);
-		return; /* No brokers are up */
-	}
-	if (do_rk_lock)
-		rd_kafka_rdunlock(rk);
+                if (do_rk_lock)
+                        rd_kafka_rdunlock(rk);
+                return RD_KAFKA_RESP_ERR__TRANSPORT; /* No brokers are up */
+        }
+        if (do_rk_lock)
+                rd_kafka_rdunlock(rk);
 
-        if (rkt) {
+        rd_kafka_MetadataRequest
+        if (topics) {
+                shptr_rd_kafka_itopic_t *s_rkt;
+                rd_kafka_itopic_t *rkt;
+                int i;
+
+                RD_LIST_FOREACH(s_rkt, i, topics) {
+                        rd_kafka_itopic_t *rkt = rd_kafka_topic_s2i(s_rkt);
+
                 rd_kafka_topic_wrlock(rkt);
                 /* Avoid multiple leader queries if there is already
                  * an outstanding one waiting for reply. */
@@ -1049,6 +1049,32 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
                         return;
                 }
                 rkt->rkt_flags |= RD_KAFKA_TOPIC_F_LEADER_QUERY;
+                rd_kafka_topic_wrunlock(rkt);
+        }
+
+        rd_kafka_broker_metadata_req(rkb, 0, topics, RD_KAFKA_NO_REPLYQ,
+                                     "leader query");
+
+        /* Release refcnt from rd_kafka_broker_any() */
+        rd_kafka_broker_destroy(rkb);
+}
+
+
+/**
+ * Trigger broker metadata query for topic leader.
+ * 'rkt' may be NULL to query for all topics.
+ */
+void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
+				   int do_rk_lock) {
+	rd_kafka_broker_t *rkb;
+        rd_list_t topics;
+
+        rd_list_init(&topics, 1);
+        rd_list_add(&topics, rd_kafka_topic_keep(rkt));
+
+        rd_kafka_topics_leader_query0(rk, topics, do_rk_lock);
+
+        rd_list_destroy(&topics, rd_kafka_topic_destroy0);
                 rd_kafka_topic_wrunlock(rkt);
         }
 
@@ -1719,6 +1745,17 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		struct msghdr msg2;
 		struct iovec iov[IOV_MAX];
 		size_t of = rkbuf->rkbuf_of;
+
+                /* Check for broker support */
+                if (unlikely((rkb->rkb_features & rkbuf->rkbuf_features) !=
+                             rkbuf->rkbuf_features)) {
+                        rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
+                        rd_kafka_buf_callback(
+                                rkb->rkb_rk, rkb,
+                                RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                                NULL, rkbuf);
+                        continue;
+                }
 
 		/* Set CorrId header field, unless this is the latter part
 		 * of a partial send in which case the corrid has already
@@ -2859,7 +2896,8 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->rkm_ts_timeout;
 
 	if (rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)
-		rd_kafka_buf_version_set(rkbuf, 1);
+                rd_kafka_buf_version_set(rkbuf, 1,
+                                         RD_KAFKA_FEATURE_THROTTLETIME);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Produce, rkbuf,
                                        RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
@@ -4394,10 +4432,12 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 		((rkb->rkb_rk->rk_conf.socket_timeout_ms +
 		  rkb->rkb_rk->rk_conf.fetch_wait_max_ms) * 1000);
 
-	if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1)
-		rd_kafka_buf_version_set(rkbuf, 2);
-	else if (rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)
-		rd_kafka_buf_version_set(rkbuf, 1);
+        if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1)
+                rd_kafka_buf_version_set(rkbuf, 2,
+                                         RD_KAFKA_FEATURE_MSGVER1);
+        else if (rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)
+                rd_kafka_buf_version_set(rkbuf, 1,
+                                         RD_KAFKA_FEATURE_THROTTLETIME);
 
         rd_kafka_buf_autopush(rkbuf);
 

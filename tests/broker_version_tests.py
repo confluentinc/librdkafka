@@ -10,7 +10,8 @@
 
 from cluster_testing import LibrdkafkaTestCluster, print_report_summary
 from LibrdkafkaTestApp import LibrdkafkaTestApp
-
+from trivup.apps.ZookeeperApp import ZookeeperApp
+from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 
 import subprocess
 import time
@@ -29,7 +30,9 @@ def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None,
     Then run librdkafka's regression tests.
     """
     
-    cluster = LibrdkafkaTestCluster(version, conf, debug=debug)
+    cluster = LibrdkafkaTestCluster(version, conf,
+                                    num_brokers=int(conf.get('broker_cnt', 3)),
+                                    debug=debug)
 
     # librdkafka's regression tests, as an App.
     _rdkconf = conf.copy() # Base rdkconf on cluster conf + rdkconf
@@ -42,17 +45,25 @@ def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None,
 
     cluster.start(timeout=30)
 
-    rdkafka.start()
-    print('# librdkafka regression tests started, logs in %s' % rdkafka.root_path())
-    rdkafka.wait_stopped(timeout=60*10)
+    if conf.get('test_mode', '') == 'bash':
+        cmd_env = 'export KAFKA_PATH="%s" RDKAFKA_TEST_CONF="%s" ZK_ADDRESS="%s" BROKERS="%s" TEST_KAFKA_VERSION="%s" TRIVUP_ROOT="%s"; ' % \
+                  (cluster.get_all('destdir', '', KafkaBrokerApp)[0], rdkafka.test_conf_file, cluster.get_all('address', '', ZookeeperApp)[0], cluster.bootstrap_servers(), version, cluster.instance_path())
+        cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
+        subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
+        report = None
 
-    report = rdkafka.report()
-    report['root_path'] = rdkafka.root_path()
+    else:
+        rdkafka.start()
+        print('# librdkafka regression tests started, logs in %s' % rdkafka.root_path())
+        rdkafka.wait_stopped(timeout=60*10)
 
-    if report.get('tests_failed', 0) > 0 and interact:
-        print('# Connect to cluster with bootstrap.servers %s' % cluster.bootstrap_servers())
-        print('# Exiting the shell will bring down the cluster. Good luck.')
-        subprocess.call('bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version), shell=True, executable='/bin/bash')
+        report = rdkafka.report()
+        report['root_path'] = rdkafka.root_path()
+
+        if report.get('tests_failed', 0) > 0 and interact:
+            print('# Connect to cluster with bootstrap.servers %s' % cluster.bootstrap_servers())
+            print('# Exiting the shell will bring down the cluster. Good luck.')
+            subprocess.call('bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version), shell=True, executable='/bin/bash')
 
     cluster.stop(force=True)
 
@@ -108,6 +119,16 @@ if __name__ == '__main__':
     parser.add_argument('versions', type=str, nargs='*',
                         default=['0.8.1.1', '0.8.2.2', '0.9.0.1', 'trunk'],
                         help='Broker versions to test')
+    parser.add_argument('--interactive', action='store_true', dest='interactive',
+                        default=False,
+                        help='Start a shell instead of running tests')
+    parser.add_argument('--root', type=str, default=os.environ.get('TRIVUP_ROOT', 'tmp'), help='Root working directory')
+    parser.add_argument('--port', default=None, help='Base TCP port to start allocating from')
+    parser.add_argument('--kafka-src', dest='kafka_path', type=str, default=None, help='Path to Kafka git repo checkout (used for version=trunk)')
+    parser.add_argument('--brokers', dest='broker_cnt', type=int, default=3, help='Number of Kafka brokers')
+    parser.add_argument('--ssl', dest='ssl', action='store_true', default=False,
+                        help='Enable SSL endpoints')
+    parser.add_argument('--sasl', dest='sasl', type=str, default=None, help='SASL mechanism (PLAIN, GSSAPI)')
 
     args = parser.parse_args()
 
@@ -115,7 +136,26 @@ if __name__ == '__main__':
     rdkconf = dict()
 
     if args.conf is not None:
-        conf.update(json.loads(args.conf))
+        args.conf = json.loads(args.conf)
+    else:
+        args.conf = {}
+
+    if args.port is not None:
+        args.conf['port_base'] = int(args.port)
+    if args.kafka_path is not None:
+        args.conf['kafka_path'] = args.kafka_path
+    if args.ssl:
+        args.conf['security.protocol'] = 'SSL'
+    if args.sasl:
+        if args.sasl == 'PLAIN' and 'sasl_users' not in args.conf:
+            args.conf['sasl_users'] = 'testuser=testpass'
+        args.conf['sasl_mechanisms'] = args.sasl
+        args.conf['sasl_servicename'] = 'kafka'
+    if args.interactive:
+        args.conf['test_mode'] = 'bash'
+    args.conf['broker_cnt'] = args.broker_cnt
+    
+    conf.update(args.conf)
     if args.rdkconf is not None:
         rdkconf.update(json.loads(args.rdkconf))
     if args.tests is not None:
@@ -143,6 +183,9 @@ if __name__ == '__main__':
             print('#### Version %s, suite %s: STARTING' % (version, suite['name']))
             report = test_it(version, tests=tests, conf=_conf, rdkconf=_rdkconf,
                              interact=args.interact, debug=args.debug)
+
+            if not report:
+                continue
 
             # Handle test report
             report['version'] = version

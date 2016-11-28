@@ -98,7 +98,7 @@ of messages to accumulate in the local queue before sending them off in
 one large message set or batch to the peer. This amortizes the messaging
 overhead and eliminates the adverse effect of the round trip time (rtt).
 
-The default settings, batch.num.messages=1000 and queue.buffering.max.ms=1000,
+The default settings, batch.num.messages=10000 and queue.buffering.max.ms=1000,
 are suitable for high throughput. This allows librdkafka to wait up to
 1000 ms for up to 1000 messages to accumulate in the local queue before
 sending the accumulate messages to the broker.

@@ -47,16 +47,16 @@ __attribute__((unused))
 ;
 static RD_INLINE int64_t test_clock (void) {
 #ifdef __APPLE__
-	/* No monotonic clock on Darwin */
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return ((int64_t)tv.tv_sec * 1000000LLU) + (int64_t)tv.tv_usec;
+        /* No monotonic clock on Darwin */
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        return ((int64_t)tv.tv_sec * 1000000LLU) + (int64_t)tv.tv_usec;
 #elif _MSC_VER
-	return (int64_t)GetTickCount64() * 1000LLU;
+        return (int64_t)GetTickCount64() * 1000LLU;
 #else
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ((int64_t)ts.tv_sec * 1000000LLU) +
-		((int64_t)ts.tv_nsec / 1000LLU);
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return ((int64_t)ts.tv_sec * 1000000LLU) +
+                ((int64_t)ts.tv_nsec / 1000LLU);
 #endif
 }

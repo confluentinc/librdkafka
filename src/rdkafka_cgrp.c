@@ -604,7 +604,7 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 
 
 static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
-	int metadata_age;
+        int metadata_age;
 
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP ||
             rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_INIT)
@@ -616,6 +616,10 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
                      rd_list_cnt(rkcg->rkcg_subscribed_topics),
 		     rkcg->rkcg_subscription->cnt);
 
+
+        /* FIXME: Wildcard subscription requires full topic metadata listing,
+         *        but non-wildcards dont (they on the other hand need
+         *        proper per-topic metadata age). */
 
 	/* We need up-to-date full metadata to continue.
 	 * The +1000 is since metadata.refresh.interval.ms can be set to 0. */
@@ -1761,7 +1765,8 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
 				      rkcg->rkcg_assignment, "unsubscribe");
         }
 
-        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_SUBSCRIPTION;
+        rkcg->rkcg_flags &= ~(RD_KAFKA_CGRP_F_SUBSCRIPTION |
+                              RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -1792,6 +1797,9 @@ rd_kafka_cgrp_subscribe (rd_kafka_cgrp_t *rkcg,
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_SUBSCRIPTION;
+
+        if (rd_kafka_topic_partition_list_regex_cnt(rktparlist) > 0)
+                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
 
         rkcg->rkcg_subscription = rktparlist;
 

@@ -140,6 +140,8 @@ typedef struct rd_kafka_cgrp_s {
 #define RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT  0x20  /* A Heartbeat request
                                                      * is in transit, dont
                                                      * send a new one. */
+#define RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION 0x40  /* Subscription contains
+                                                     * wildcards. */
 
         rd_interval_t      rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t      rkcg_heartbeat_intvl;    /* Heartbeat intvl */

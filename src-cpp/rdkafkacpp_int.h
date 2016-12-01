@@ -642,6 +642,10 @@ public:
   topic_(topic), partition_(partition), offset_(RdKafka::Topic::OFFSET_INVALID),
       err_(ERR_NO_ERROR) {}
 
+  TopicPartitionImpl (const std::string &topic, int partition, int64_t offset):
+  topic_(topic), partition_(partition), offset_(offset),
+          err_(ERR_NO_ERROR) {}
+
   TopicPartitionImpl (const rd_kafka_topic_partition_t *c_part) {
     topic_ = std::string(c_part->topic);
     partition_ = c_part->partition;

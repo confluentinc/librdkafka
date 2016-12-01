@@ -1041,11 +1041,14 @@ class RD_EXPORT Handle {
 class RD_EXPORT TopicPartition {
 public:
   /**
-   * Create topic+partition object for \p topic and \p partition.
+   * Create topic+partition object for \p topic and \p partition
+   * and optionally \p offset.
    *
    * Use \c delete to deconstruct.
    */
   static TopicPartition *create (const std::string &topic, int partition);
+  static TopicPartition *create (const std::string &topic, int partition,
+                                 int64_t offset);
 
   virtual ~TopicPartition() = 0;
 

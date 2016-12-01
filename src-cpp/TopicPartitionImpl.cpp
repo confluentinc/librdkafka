@@ -39,3 +39,9 @@ RdKafka::TopicPartition *
 RdKafka::TopicPartition::create (const std::string &topic, int partition) {
   return new TopicPartitionImpl(topic, partition);
 }
+
+RdKafka::TopicPartition *
+RdKafka::TopicPartition::create (const std::string &topic, int partition,
+                                 int64_t offset) {
+  return new TopicPartitionImpl(topic, partition, offset);
+}

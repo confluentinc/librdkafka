@@ -367,6 +367,42 @@ const char *test_mk_topic_name (const char *suffix, int randomized) {
         return ret;
 }
 
+
+/**
+ * @brief Set special test config property
+ * @returns 1 if property was known, else 0.
+ */
+int test_set_special_conf (const char *name, const char *val, int *timeoutp) {
+        if (!strcmp(name, "test.timeout.multiplier")) {
+                TEST_LOCK();
+                test_timeout_multiplier = strtod(val, NULL);
+                TEST_UNLOCK();
+                *timeoutp = tmout_multip((*timeoutp)*1000) / 1000;
+        } else if (!strcmp(name, "test.topic.prefix")) {
+                rd_snprintf(test_topic_prefix, sizeof(test_topic_prefix),
+                            "%s", val);
+        } else if (!strcmp(name, "test.topic.random")) {
+                if (!strcmp(val, "true") ||
+                    !strcmp(val, "1"))
+                        test_topic_random = 1;
+                else
+                        test_topic_random = 0;
+        } else if (!strcmp(name, "test.concurrent.max")) {
+                TEST_LOCK();
+                test_concurrent_max = (int)strtod(val, NULL);
+                TEST_UNLOCK();
+        } else if (!strcmp(name, "test.sql.command")) {
+                TEST_LOCK();
+                if (test_sql_cmd)
+                        rd_free(test_sql_cmd);
+                test_sql_cmd = rd_strdup(val);
+                TEST_UNLOCK();
+        } else
+                return 0;
+
+        return 1;
+}
+
 static void test_read_conf_file (const char *conf_path,
                                  rd_kafka_conf_t *conf,
                                  rd_kafka_topic_conf_t *topic_conf,
@@ -412,36 +448,10 @@ static void test_read_conf_file (const char *conf_path,
 		*t = '\0';
 		val = t+1;
 
-                if (!strcmp(name, "test.timeout.multiplier")) {
-                        TEST_LOCK();
-                        test_timeout_multiplier = strtod(val, NULL);
-                        TEST_UNLOCK();
-                        *timeoutp = tmout_multip((*timeoutp)*1000) / 1000;
-                        res = RD_KAFKA_CONF_OK;
-                } else if (!strcmp(name, "test.topic.prefix")) {
-					rd_snprintf(test_topic_prefix, sizeof(test_topic_prefix),
-						"%s", val);
-				    res = RD_KAFKA_CONF_OK;
-                } else if (!strcmp(name, "test.topic.random")) {
-                        if (!strcmp(val, "true") ||
-                            !strcmp(val, "1"))
-                                test_topic_random = 1;
-                        else
-                                test_topic_random = 0;
-                        res = RD_KAFKA_CONF_OK;
-                } else if (!strcmp(name, "test.concurrent.max")) {
-                        TEST_LOCK();
-                        test_concurrent_max = (int)strtod(val, NULL);
-                        TEST_UNLOCK();
-                        res = RD_KAFKA_CONF_OK;
-		} else if (!strcmp(name, "test.sql.command")) {
-			TEST_LOCK();
-			if (test_sql_cmd)
-				rd_free(test_sql_cmd);
-			test_sql_cmd = rd_strdup(val);
-			TEST_UNLOCK();
-			res = RD_KAFKA_CONF_OK;
-                } else if (!strncmp(name, "topic.", strlen("topic."))) {
+                if (test_set_special_conf(name, val, timeoutp))
+                        continue;
+
+                if (!strncmp(name, "topic.", strlen("topic."))) {
 			name += strlen("topic.");
                         if (topic_conf)
                                 res = rd_kafka_topic_conf_set(topic_conf,
@@ -470,6 +480,34 @@ static void test_read_conf_file (const char *conf_path,
 	fclose(fp);
 }
 
+/**
+ * @brief Get path to test config file
+ */
+const char *test_conf_get_path (void) {
+        return
+#ifndef _MSC_VER
+                getenv("RDKAFKA_TEST_CONF") ? getenv("RDKAFKA_TEST_CONF") : 
+#endif
+                "test.conf";
+}
+
+const char *test_getenv (const char *env, const char *def) {
+        const char *tmp;
+#ifndef _MSC_VER
+        tmp = getenv(env);
+        if (tmp && *tmp)
+                return tmp;
+#endif
+        return def;
+}
+
+void test_conf_common_init (rd_kafka_conf_t *conf, int timeout) {
+        if (conf) {
+        }
+
+        if (timeout)
+                test_timeout_set(timeout);
+}
 
 
 /**
@@ -477,26 +515,13 @@ static void test_read_conf_file (const char *conf_path,
  * Will read "test.conf" file if it exists.
  */
 void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
-		     int timeout) {
-	const char *test_conf =
-#ifndef _MSC_VER
-		getenv("RDKAFKA_TEST_CONF") ? getenv("RDKAFKA_TEST_CONF") : 
-#endif
-		"test.conf";
+                     int timeout) {
+        const char *test_conf = test_conf_get_path();
 
         if (conf) {
-#ifndef _MSC_VER
-                char *tmp;
-#endif
-
                 *conf = rd_kafka_conf_new();
                 rd_kafka_conf_set_error_cb(*conf, test_error_cb);
                 rd_kafka_conf_set_stats_cb(*conf, test_stats_cb);
-
-#ifndef _MSC_VER
-                if ((tmp = getenv("TEST_DEBUG")) && *tmp)
-                        test_conf_set(*conf, "debug", tmp);
-#endif
 
 #ifdef SIGIO
 		{
@@ -524,8 +549,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
                             conf ? *conf : NULL,
                             topic_conf ? *topic_conf : NULL, &timeout);
 
-        if (timeout)
-                test_timeout_set(timeout);
+        test_conf_common_init(conf ? *conf : NULL, timeout);
 }
 
 
@@ -3013,10 +3037,10 @@ rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
 }
 
 
-void test_FAIL (const char *file, int line, const char *str) {
-	TEST_FAIL0(file, line, 1, "%s", str);
+void test_FAIL (const char *file, int line, int fail_now, const char *str) {
+        TEST_FAIL0(file, line, fail_now, "%s", str);
 }
 
 void test_SAY (const char *file, int line, int level, const char *str) {
-	TEST_SAYL(level, "%s", str);
+        TEST_SAYL(level, "%s", str);
 }

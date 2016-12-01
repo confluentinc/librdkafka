@@ -25,7 +25,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
+#pragma once
 
 #include <sstream>
 
@@ -38,30 +38,71 @@ extern "C" {
 
 // courtesy of http://stackoverview.blogspot.se/2011/04/create-string-on-fly-just-in-one-line.html
 struct tostr {
-        std::stringstream ss;
-        template<typename T>
-        tostr & operator << (const T &data)
-        {
-                ss << data;
-                return *this;
-        }
-        operator std::string() { return ss.str(); }
+  std::stringstream ss;
+  template<typename T>
+  tostr & operator << (const T &data)
+  {
+    ss << data;
+    return *this;
+  }
+  operator std::string() { return ss.str(); }
 };
 
 
 
 
-class Test {
-public:
-        static void Fail (std::string str) {
-                test_FAIL(__FILE__, __LINE__, str.c_str());
-        }
-        static void Say (int level, std::string str) {
-                test_SAY(__FILE__, __LINE__, level, str.c_str());
-        }
-        static void Say (std::string str) {
-                Test::Say(2, str);
-        }
+namespace Test {
+
+  /**
+   * @brief Get test config object
+   */
+
+  static void Fail (std::string str) {
+    test_FAIL(__FILE__, __LINE__, 1, str.c_str());
+  }
+  static void FailLater (std::string str) {
+    test_FAIL(__FILE__, __LINE__, 0, str.c_str());
+  }
+  static void Say (int level, std::string str) {
+    test_SAY(__FILE__, __LINE__, level, str.c_str());
+  }
+  static void Say (std::string str) {
+    Test::Say(2, str);
+  }
+
+  /**
+   * @brief Generate test topic name
+   */
+  static RD_UNUSED std::string mk_topic_name (std::string suffix,
+                                              bool randomized) {
+    return test_mk_topic_name(suffix.c_str(),
+                              (int)randomized);
+  }
+
+  /**
+   * @brief Get new configuration objects
+   */
+  void conf_init (RdKafka::Conf **conf,
+                  RdKafka::Conf **topic_conf,
+                  int timeout);
+
+
+  static void conf_set (RdKafka::Conf *conf, std::string name, std::string val) {
+    std::string errstr;
+    if (conf->set(name, val, errstr) != RdKafka::Conf::CONF_OK)
+      Test::Fail("Conf failed: " + errstr);
+  }
+
+  static RD_UNUSED
+      void print_TopicPartitions (std::string header,
+                                  const std::vector<RdKafka::TopicPartition*>&partitions) {
+    Test::Say(tostr() << header << ": " << partitions.size() <<
+              " TopicPartition(s):\n");
+    for (unsigned int i = 0 ; i < partitions.size() ; i++)
+      Test::Say(tostr() << " " << partitions[i]->topic() <<
+                "[" << partitions[i]->partition() << "] " <<
+                "offset " << partitions[i]->offset() <<
+                ": " << RdKafka::err2str(partitions[i]->err())
+                << "\n");
+  }
 };
-
-

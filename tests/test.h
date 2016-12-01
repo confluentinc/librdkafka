@@ -237,7 +237,6 @@ extern int test_broker_version;
 		TEST_UNLOCK();			     \
 	} while (0)
 
-const char *test_mk_topic_name (const char *suffix, int randomized);
 
 void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		     int timeout);
@@ -539,7 +538,6 @@ void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor);
 void test_auto_create_topic_rkt (rd_kafka_t *rk, rd_kafka_topic_t *rkt);
 int test_check_builtin (const char *feature);
-void test_timeout_set (int timeout);
 
 char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 
@@ -558,3 +556,4 @@ void test_prepare_msg (uint64_t testid, int32_t partition, int msg_id,
 void test_socket_enable (rd_kafka_conf_t *conf);
 void test_socket_close_all (struct test *test, int reinit);
 #endif
+

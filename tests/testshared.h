@@ -27,15 +27,36 @@
 */
 #pragma once
 
-void test_FAIL (const char *file, int line, const char *str);
+/**
+ * C functions shared with C++ tests
+ */
+
+const char *test_mk_topic_name (const char *suffix, int randomized);
+
+void test_FAIL (const char *file, int line, int fail_now, const char *str);
 void test_SAY (const char *file, int line, int level, const char *str);
+
+void test_timeout_set (int timeout);
+int test_set_special_conf (const char *name, const char *val, int *timeoutp);
+const char *test_conf_get_path (void);
+const char *test_getenv (const char *env, const char *def);
 
 #ifndef _MSC_VER
 #include <sys/time.h>
+#ifndef RD_UNUSED
+#define RD_UNUSED __attribute__((unused))
+#endif
+
 #else
+
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #endif
+
+#ifndef RD_UNUSED
+#define RD_UNUSED
+#endif
+
 
 /**
 * A microsecond monotonic clock

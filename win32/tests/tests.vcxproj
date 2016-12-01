@@ -141,6 +141,7 @@
     <ClCompile Include="..\..\tests\0055-producer_latency.c" />
     <ClCompile Include="..\..\tests\0056-balanced_group_mt.c" />
     <ClCompile Include="..\..\tests\test.c" />
+    <ClCompile Include="..\..\tests\testcpp.cpp" />
     <ClCompile Include="..\..\src\tinycthread.c" />
     <ClCompile Include="..\..\src\rdlist.c" />
   </ItemGroup>

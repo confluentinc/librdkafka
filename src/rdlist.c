@@ -92,6 +92,11 @@ void rd_list_set_free_cb (rd_list_t *rl, void (*free_cb) (void *)) {
 	rl->rl_free_cb = free_cb;
 }
 
+void rd_list_free_cb (rd_list_t *rl, void *ptr) {
+        if (rl->rl_free_cb && ptr)
+                rl->rl_free_cb(ptr);
+}
+
 
 void *rd_list_add (rd_list_t *rl, void *elem) {
         if (rl->rl_cnt == rl->rl_size)
@@ -110,7 +115,6 @@ static void rd_list_remove0 (rd_list_t *rl, int idx) {
                         &rl->rl_elems[idx+1],
                         sizeof(*rl->rl_elems) * (rl->rl_cnt - (idx+1)));
         rl->rl_cnt--;
-	rl->rl_flags &= ~RD_LIST_F_SORTED;
 }
 
 void *rd_list_remove (rd_list_t *rl, void *match_elem) {
@@ -253,4 +257,55 @@ int rd_list_cmp_ptr (const void *a, const void *b) {
         else if (a > b)
                 return 1;
         return 0;
+}
+
+
+void rd_list_apply (rd_list_t *rl,
+                    int (*cb) (void *elem, void *opaque), void *opaque) {
+        void *elem;
+        int i;
+
+        RD_LIST_FOREACH(elem, rl, i) {
+                if (!cb(elem, opaque)) {
+                        rd_list_remove0(rl, i);
+                        i--;
+                }
+        }
+
+        return;
+}
+
+
+/**
+ * @brief Default element copier that simply assigns the original pointer.
+ */
+static void *rd_list_nocopy_ptr (const void *elem, void *opaque) {
+        return (void *)elem;
+}
+
+
+rd_list_t *rd_list_copy (const rd_list_t *src,
+                         void *(*copy_cb) (const void *elem, void *opaque),
+                         void *opaque) {
+        rd_list_t *dst;
+
+        dst = rd_list_new(src->rl_cnt);
+        rd_list_set_free_cb(dst, src->rl_free_cb);
+
+        rd_list_copy_to(dst, src, copy_cb, opaque);
+        return dst;
+}
+
+
+void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
+                      void *(*copy_cb) (const void *elem, void *opaque),
+                      void *opaque) {
+        void *elem;
+        int i;
+
+        if (!copy_cb)
+                copy_cb = rd_list_nocopy_ptr;
+
+        RD_LIST_FOREACH(elem, src, i)
+                rd_list_add(dst, copy_cb(elem, opaque));
 }

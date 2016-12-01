@@ -356,7 +356,7 @@ sockem_t *sockem_connect (int sockfd, const struct sockaddr *addr,
                           socklen_t addrlen, ...) {
         sockem_t *skm;
         int ls, ps;
-        struct sockaddr_in6 sin6 = { sin6_family: addr->sa_family };
+        struct sockaddr_in6 sin6 = { .sin6_family = addr->sa_family };
         socklen_t addrlen2 = addrlen;
         va_list ap;
 

@@ -38,7 +38,6 @@
 #include "rdtime.h"
 #include "rdregex.h"
 
-
 const char *rd_kafka_topic_state_names[] = {
         "unknown",
         "exists",
@@ -185,14 +184,14 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_find0_fl (const char *func, int line,
  * Compare shptr_rd_kafka_itopic_t for underlying itopic_t
  */
 int rd_kafka_topic_cmp_s_rkt (const void *_a, const void *_b) {
-        shptr_rd_kafka_itopic_t *a = _a, *b = _b;
+        shptr_rd_kafka_itopic_t *a = (void *)_a, *b = (void *)_b;
         rd_kafka_itopic_t *rkt_a = rd_kafka_topic_s2i(a);
         rd_kafka_itopic_t *rkt_b = rd_kafka_topic_s2i(b);
 
         if (rkt_a == rkt_b)
                 return 0;
 
-        return rd_kafkap_str_cmp(rkt_a->topic, rkt_b->topic);
+        return rd_kafkap_str_cmp(rkt_a->rkt_topic, rkt_b->rkt_topic);
 }
 
 
@@ -1131,25 +1130,6 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *app_rkt) {
         return rd_kafka_topic_a2i(app_rkt)->rkt_conf.opaque;
 }
 
-
-
-/**
- * @brief Query leaders for \p topics and wait for any broker or topic
- *        state to change.
- */
-void rd_kafka_topics_leader_query_sync (rd_kafka_t *rk, rd_list_t *topics,
-                                        int timeout_ms) {
-        int state_version;
-
-        state_version = rd_kafka_brokers_get_state_version(rk);
-
-        rd_kafka_topics_leader_query(rk, &topics, 1/*lock*/);
-
-        if (!rd_kafka_brokers_wait_state_change(rk, state_version, timeout_ms);
-}
-
-
-
 int rd_kafka_topic_info_cmp (const void *_a, const void *_b) {
 	const rd_kafka_topic_info_t *a = _a, *b = _b;
 	int r;
@@ -1209,4 +1189,110 @@ int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 		return r == 1;
 	} else
 		return !strcmp(pattern, topic);
+}
+
+
+/**
+ * Trigger broker metadata query for \p topics (shptr_rd_kafka_itopic_t *)
+ * if \p topics is NULL all topics in cluster are queried.
+ */
+rd_kafka_resp_err_t
+rd_kafka_topics_leader_query (rd_kafka_t *rk, int all_topics,
+                              const rd_list_t *topics,
+                              rd_kafka_replyq_t replyq, int do_rk_lock) {
+        rd_kafka_broker_t *rkb;
+
+        if (do_rk_lock)
+                rd_kafka_rdlock(rk);
+        if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
+                                        rd_kafka_broker_filter_non_blocking,
+                                        NULL))) {
+                if (do_rk_lock)
+                        rd_kafka_rdunlock(rk);
+
+                return RD_KAFKA_RESP_ERR__TRANSPORT; /* No brokers are up */
+        }
+        if (do_rk_lock)
+                rd_kafka_rdunlock(rk);
+
+        rd_dassert(!(all_topics && topics));
+
+        if (all_topics)
+                rd_kafka_broker_metadata_req(rkb, 1, NULL,
+                                             replyq, "leader query");
+        else
+                rd_kafka_broker_metadata_req0(rkb, topics,
+                                              replyq, "leader query");
+
+        /* Release refcnt from rd_kafka_broker_any() */
+        rd_kafka_broker_destroy(rkb);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+
+/**
+ * @brief Trigger leader query for \p topics and wait for result to propagate.
+ */
+rd_kafka_resp_err_t
+rd_kafka_topics_leader_query_sync (rd_kafka_t *rk, int all_topics,
+                                   const rd_list_t *topics,
+                                   int timeout_ms) {
+        rd_kafka_q_t *rkq;
+        rd_kafka_resp_err_t err;
+
+        rkq = rd_kafka_q_new(rk);
+
+        err = rd_kafka_topics_leader_query(rk, all_topics, topics,
+                                           RD_KAFKA_REPLYQ(rkq, 0), 1/*lock*/);
+
+        if (!err)
+                err = rd_kafka_q_wait_result(rkq, timeout_ms);
+
+        rd_kafka_q_destroy(rkq);
+
+        return err;
+}
+
+
+
+
+/**
+ * Trigger broker metadata query for topic leader.
+ * 'rkt' may be NULL to query for all topics.
+ */
+void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
+                                   int do_rk_lock) {
+        rd_list_t topics;
+
+        if (rkt) {
+                rd_list_init(&topics, 1);
+                rd_list_set_free_cb(&topics, rd_free);
+                rd_list_add(&topics, rd_strdup(rkt->rkt_topic->str));
+        }
+
+        rd_kafka_topics_leader_query(rk, 0, rkt ? &topics : NULL,
+                                     RD_KAFKA_NO_REPLYQ,
+                                     do_rk_lock);
+
+        if (rkt)
+                rd_list_destroy(&topics, NULL);
+}
+
+
+/**
+ * @brief Populate list \p topics with the topic names (strdupped char *) of
+ *        all locally known topics.
+ *
+ * @remark \p rk lock MUST NOT be held
+ */
+void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics) {
+        rd_kafka_itopic_t *rkt;
+
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link)
+                rd_list_add(topics, rd_strdup(rkt->rkt_topic->str));
+        rd_kafka_rdunlock(rk);
 }

@@ -799,8 +799,29 @@ void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
                                                RD_KAFKA_REPLYQ(rkb->rkb_rk->
                                                                rk_ops, 0),
                                                rd_kafka_op_handle_Metadata, rko);
+        else
+                rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__INVALID_ARG);
 }
 
+
+void rd_kafka_broker_metadata_req0 (rd_kafka_broker_t *rkb,
+                                    const rd_list_t *topics /* (const char *) */,
+                                    rd_kafka_replyq_t replyq,
+                                    const char *reason) {
+        rd_kafka_op_t *rko;
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_REQ);
+        if (topics)
+                rko->rko_u.metadata.topics = rd_list_copy(topics,
+                                                          rd_list_string_copy,
+                                                          NULL);
+        rko->rko_replyq = replyq;
+
+        strncpy(rko->rko_u.metadata.reason, reason,
+                sizeof(rko->rko_u.metadata.reason)-1);
+
+        rd_kafka_broker_metadata_req_op(rkb, rko);
+}
 
 /**
  * Initiate metadata request
@@ -817,19 +838,25 @@ void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
                                    rd_kafka_itopic_t *only_rkt,
                                    rd_kafka_replyq_t replyq,
                                    const char *reason) {
-        rd_kafka_op_t *rko;
+        rd_list_t topics;
 
-        rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_REQ);
-        rko->rko_u.metadata.all_topics = all_topics;
-        if (only_rkt)
-                rko->rko_u.metadata.rkt = rd_kafka_topic_keep_a(only_rkt);
+        if (!all_topics) {
+                rd_list_init(&topics, 1);
+                rd_list_set_free_cb(&topics, rd_free);
 
-	rko->rko_replyq = replyq;
+                if (only_rkt)
+                        rd_list_add(&topics,
+                                    rd_strdup(only_rkt->rkt_topic->str));
+                else
+                        rd_kafka_local_topics_to_list(rkb->rkb_rk, &topics);
+        }
 
-	strncpy(rko->rko_u.metadata.reason, reason,
-		sizeof(rko->rko_u.metadata.reason)-1);
+        rd_kafka_broker_metadata_req0(rkb,
+                                      all_topics ? NULL : &topics,
+                                      replyq, reason);
 
-        rd_kafka_broker_metadata_req_op(rkb, rko);
+        if (!all_topics)
+                rd_list_destroy(&topics, NULL);
 }
 
 
@@ -1010,80 +1037,6 @@ rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id,
 
 
 
-/**
- * Trigger broker metadata query for \p topics (shptr_rd_kafka_itopic_t *)
- * if \p topics is NULL all topics in cluster are queried.
- */
-rd_kafka_resp_err_t
-rd_kafka_topics_leader_query (rd_kafka_t *rk, rd_list_t *topics,
-                              int do_rk_lock) {
-        rd_kafka_broker_t *rkb;
-
-        if (do_rk_lock)
-                rd_kafka_rdlock(rk);
-        if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
-                                        rd_kafka_broker_filter_non_blocking,
-                                        NULL))) {
-                if (do_rk_lock)
-                        rd_kafka_rdunlock(rk);
-                return RD_KAFKA_RESP_ERR__TRANSPORT; /* No brokers are up */
-        }
-        if (do_rk_lock)
-                rd_kafka_rdunlock(rk);
-
-        rd_kafka_MetadataRequest
-        if (topics) {
-                shptr_rd_kafka_itopic_t *s_rkt;
-                rd_kafka_itopic_t *rkt;
-                int i;
-
-                RD_LIST_FOREACH(s_rkt, i, topics) {
-                        rd_kafka_itopic_t *rkt = rd_kafka_topic_s2i(s_rkt);
-
-                rd_kafka_topic_wrlock(rkt);
-                /* Avoid multiple leader queries if there is already
-                 * an outstanding one waiting for reply. */
-                if (rkt->rkt_flags & RD_KAFKA_TOPIC_F_LEADER_QUERY) {
-                        rd_kafka_topic_wrunlock(rkt);
-                        rd_kafka_broker_destroy(rkb);
-                        return;
-                }
-                rkt->rkt_flags |= RD_KAFKA_TOPIC_F_LEADER_QUERY;
-                rd_kafka_topic_wrunlock(rkt);
-        }
-
-        rd_kafka_broker_metadata_req(rkb, 0, topics, RD_KAFKA_NO_REPLYQ,
-                                     "leader query");
-
-        /* Release refcnt from rd_kafka_broker_any() */
-        rd_kafka_broker_destroy(rkb);
-}
-
-
-/**
- * Trigger broker metadata query for topic leader.
- * 'rkt' may be NULL to query for all topics.
- */
-void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
-				   int do_rk_lock) {
-	rd_kafka_broker_t *rkb;
-        rd_list_t topics;
-
-        rd_list_init(&topics, 1);
-        rd_list_add(&topics, rd_kafka_topic_keep(rkt));
-
-        rd_kafka_topics_leader_query0(rk, topics, do_rk_lock);
-
-        rd_list_destroy(&topics, rd_kafka_topic_destroy0);
-                rd_kafka_topic_wrunlock(rkt);
-        }
-
-	rd_kafka_broker_metadata_req(rkb, 0, rkt, RD_KAFKA_NO_REPLYQ,
-				     "leader query");
-
-	/* Release refcnt from rd_kafka_broker_any() */
-	rd_kafka_broker_destroy(rkb);
-}
 
 
 
@@ -3208,9 +3161,9 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 	if (unlikely(rkb->rkb_source != RD_KAFKA_INTERNAL &&
                      !rkb->rkb_rk->rk_conf.metadata_refresh_sparse &&
                      now >= rkb->rkb_ts_metadata_poll))
-		rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
-					     RD_KAFKA_NO_REPLYQ,
-					     "periodic refresh");
+                rd_kafka_broker_metadata_req0(rkb, /* all topics */NULL,
+                                              RD_KAFKA_NO_REPLYQ,
+                                              "periodic refresh");
 
 	/* Serve IO events */
         if (likely(rkb->rkb_transport != NULL))

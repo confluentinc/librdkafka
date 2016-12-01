@@ -204,12 +204,11 @@ struct rd_kafka_op_s {
 			rd_kafka_buf_t *rkbuf;
 		} xbuf; /* XMIT_BUF and RECV_BUF */
 
-		struct {
-			rd_kafka_topic_t *rkt;
-			int  all_topics;
-			char reason[128];
-			struct rd_kafka_metadata *metadata;
-		} metadata;
+                struct {
+                        rd_list_t *topics; /* (char *)name */
+                        char reason[128];
+                        struct rd_kafka_metadata *metadata;
+                } metadata;
 
 		struct {
 			shptr_rd_kafka_itopic_t *s_rkt;

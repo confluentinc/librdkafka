@@ -1284,11 +1284,12 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
 
                 /* The assignor will need metadata so fetch it asynchronously
                  * and run the assignor when we get a reply. */
-                rd_kafka_MetadataRequest(rkb, 1 /* all topics */, NULL,
+                rd_kafka_MetadataRequest(rkb, &topics,
                                          "partition assignor",
                                          RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                          rd_kafka_assignor_handle_Metadata,
                                          rkcg);
+                rd_list_destroy(&topics, NULL);
         } else {
                 rd_kafka_cgrp_set_join_state(
 			rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC);
@@ -1540,7 +1541,7 @@ void rd_kafka_DescribeGroupsRequest (rd_kafka_broker_t *rkb,
 /**
  * Construct MetadataRequest (does not send)
  *
- * \p topics is a list of shptr_rd_kafka_itopic_t*
+ * \p topics is a list of topic names (char *).
  *
  * !topics          - all topics in cluster are requested
  * topics           - only specified topics are requested
@@ -1554,11 +1555,6 @@ rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
                                            rd_list_t *topics,
                                            const char *reason) {
         rd_kafka_buf_t *rkbuf;
-        int32_t arrsize = 0;
-        size_t tnamelen = 0;
-        int i;
-        shptr_rd_kafka_itopic_t *s_rkt;
-        rd_kafka_itopic_t *rkt;
         size_t size_of;
 
         if (topics) {
@@ -1577,8 +1573,19 @@ rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
 
         size_of = rd_kafka_buf_write_i32(rkbuf, 0); /* Updated later */
 
-        if (topics) {
-                RD_LIST_FOREACH(s_rkt, i, topics) {
+        if (topics && rd_list_cnt(topics) > 0) {
+                int32_t arrsize = 0;
+                char *topic;
+                shptr_rd_kafka_itopic_t *s_rkt;
+                rd_kafka_itopic_t *rkt;
+                int i;
+
+                RD_LIST_FOREACH(topic, topics, i) {
+                        rd_kafka_buf_write_str(rkbuf, topic, -1);
+                        arrsize++;
+                        continue;
+
+                        /* FIXME */
                         rkt = rd_kafka_toppar_s2i(s_rkt);
                         /* Skip queries for topics that are already
                          * being queried. */
@@ -1589,12 +1596,6 @@ rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
                                 arrsize++;
                         }
                         rd_kafka_topic_wrunlock(rkt);
-                }
-
-                if (arrsize == 0) {
-                        /* No topics added, bail out. */
-                        rd_kafka_buf_destroy(rkbuf);
-                        return NULL;
                 }
 
                 rd_kafka_buf_update_i32(rkbuf, size_of, arrsize);
@@ -1639,7 +1640,7 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                                   void *opaque) {
         rd_kafka_op_t *rko = opaque;
         struct rd_kafka_metadata *md = NULL;
-	rd_kafka_itopic_t *rkt;
+        int all_topics = !rko->rko_u.metadata.topics;
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
@@ -1649,11 +1650,6 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
 	/* Avoid metadata updates when we're terminating. */
 	if (rd_kafka_terminating(rkb->rkb_rk))
                 err = RD_KAFKA_RESP_ERR__DESTROY;
-
-	if (rko->rko_u.metadata.rkt)
-		rkt = rd_kafka_topic_a2i(rko->rko_u.metadata.rkt);
-	else
-		rkt = NULL;
 
 	if (unlikely(err)) {
 		/* FIXME: handle error */
@@ -1667,23 +1663,25 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                            rd_kafka_err2str(err),
 			   (int)(request->rkbuf_ts_sent/1000));
 	} else {
-		md = rd_kafka_parse_Metadata(rkb, rkt, rkbuf,
-					     rko->rko_u.metadata.all_topics);
+                md = rd_kafka_parse_Metadata(rkb,
+                                             rko->rko_u.metadata.topics, rkbuf);
 		if (!md) {
 			if (rd_kafka_buf_retry(rkb, request))
 				return;
 			err = RD_KAFKA_RESP_ERR__BAD_MSG;
-		} else if (rkb->rkb_rk->rk_cgrp &&
-			 rko->rko_u.metadata.all_topics)
+                } else if (rkb->rkb_rk->rk_cgrp && all_topics)
 			rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
 							    md);
         }
 
+        /* FIXME: move this logic to caller */
+#if 0
         if (rkt) {
                 rd_kafka_topic_wrlock(rkt);
                 rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_QUERY;
                 rd_kafka_topic_wrunlock(rkt);
         }
+#endif
 
         if (rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
@@ -1712,7 +1710,7 @@ static void rd_kafka_assignor_handle_Metadata (rd_kafka_t *rk,
                 return; /* Terminating */
 
         if (!err) {
-                md = rd_kafka_parse_Metadata(rkb, NULL, rkbuf, 1/*all_topics*/);
+                md = rd_kafka_parse_Metadata(rkb, NULL, rkbuf);
 		if (!md) {
 			if (rd_kafka_buf_retry(rkb, request))
 				return;

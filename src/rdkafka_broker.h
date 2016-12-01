@@ -252,14 +252,12 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			   int level, rd_kafka_resp_err_t err,
 			   const char *fmt, ...);
 
-void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
-				   int do_rk_lock);
-#define rd_kafka_topic_leader_query(rk,rkt) \
-	rd_kafka_topic_leader_query0(rk,rkt,1)
 void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb);
-#define rd_kafka_broker_destroy(rkb)                                    \
-        rd_refcnt_destroywrapper(&(rkb)->rkb_refcnt,                    \
-                                 rd_kafka_broker_destroy_final(rkb))
+
+static RD_INLINE RD_UNUSED void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
+        rd_refcnt_destroywrapper(&rkb->rkb_refcnt,
+                                 rd_kafka_broker_destroy_final(rkb));
+}
 
 void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                              const struct rd_kafka_metadata_broker *mdb);
@@ -293,6 +291,10 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 
 void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf);
 
+void rd_kafka_broker_metadata_req0 (rd_kafka_broker_t *rkb,
+                                    const rd_list_t *topics /* (const char *) */,
+                                    rd_kafka_replyq_t replyq,
+                                    const char *reason);
 void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
                                    int all_topics,
                                    rd_kafka_itopic_t *only_rkt,

@@ -256,9 +256,8 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 		break;
 
 	case RD_KAFKA_OP_METADATA_REQ:
-		if (rko->rko_u.metadata.rkt)
-			rd_kafka_topic_destroy0(
-				rd_kafka_topic_a2s(rko->rko_u.metadata.rkt));
+                if (rko->rko_u.metadata.topics)
+                        rd_list_destroy(rko->rko_u.metadata.topics, NULL);
 		RD_IF_FREE(rko->rko_u.metadata.metadata,
 			   rd_kafka_metadata_destroy);
 		break;

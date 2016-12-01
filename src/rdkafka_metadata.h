@@ -37,8 +37,7 @@ rd_kafka_resp_err_t rd_kafka_metadata0 (rd_kafka_t *rk,
 
 struct rd_kafka_metadata *
 rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
-                         rd_kafka_itopic_t *rkt, rd_kafka_buf_t *rkbuf,
-			 int all_topics);
+                         const rd_list_t *topics, rd_kafka_buf_t *rkbuf);
 
 struct rd_kafka_metadata *
 rd_kafka_metadata_copy (const struct rd_kafka_metadata *md, size_t size);

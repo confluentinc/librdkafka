@@ -108,24 +108,13 @@ rd_kafka_resp_err_t rd_kafka_metadata0 (rd_kafka_t *rk,
 					rd_kafka_itopic_t *only_rkt,
 					rd_kafka_replyq_t replyq,
 					const char *reason) {
-        rd_kafka_op_t *rko;
 	rd_kafka_broker_t *rkb;
 
 	rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT);
 	if (!rkb)
 		return RD_KAFKA_RESP_ERR__TRANSPORT;
 
-        rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_REQ);
-        rko->rko_u.metadata.all_topics = all_topics;
-        if (only_rkt)
-                rko->rko_u.metadata.rkt = rd_kafka_topic_keep_a(only_rkt);
-
-	rko->rko_replyq = replyq;
-
-	strncpy(rko->rko_u.metadata.reason, reason,
-		sizeof(rko->rko_u.metadata.reason)-1);
-
-        rd_kafka_broker_metadata_req_op(rkb, rko);
+        rd_kafka_broker_metadata_req(rkb, all_topics, only_rkt, replyq, reason);
 
 	rd_kafka_broker_destroy(rkb);
 
@@ -226,8 +215,8 @@ rd_kafka_metadata_copy (const struct rd_kafka_metadata *src, size_t size) {
 
 /**
  * Handle a Metadata response message.
- * If 'rkt' is non-NULL the metadata originated from a topic-specific request.
- * \p all_topics indicate that the request asked for all topics in the cluster.
+ *
+ * @param topics are the requested topics (may be NULL)
  *
  * The metadata will be marshalled into 'struct rd_kafka_metadata*' structs.
  *
@@ -237,14 +226,18 @@ rd_kafka_metadata_copy (const struct rd_kafka_metadata *src, size_t size) {
  */
 struct rd_kafka_metadata *
 rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
-                         rd_kafka_itopic_t *rkt, rd_kafka_buf_t *rkbuf,
-			 int all_topics) {
+                         const rd_list_t *topics, rd_kafka_buf_t *rkbuf) {
+        int all_topics = !topics;
 	int i, j, k;
-	int req_rkt_seen = 0;
 	rd_tmpabuf_t tbuf;
         struct rd_kafka_metadata *md;
         size_t rkb_namelen;
         const int log_decode_errors = 1;
+        rd_list_t *missing_topics = NULL;
+
+        /* Remove topics from this list as they are seen in Metadata. */
+        if (topics)
+                missing_topics = rd_list_copy(topics, rd_list_string_copy, NULL);
 
         rd_kafka_broker_lock(rkb);
         rkb_namelen = strlen(rkb->rkb_name)+1;
@@ -421,6 +414,9 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 		rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
 				       &md->brokers[i]);
 	}
+        rd_rkb_dbg(rkb, METADATA, "METADATA",
+                   "  Topic cnt %i based on %d topics", md->topic_cnt,
+                   topics ? rd_list_cnt(topics) : -1);
 
 	/* Update partition count and leader for each topic we know about */
 	for (i = 0 ; i < md->topic_cnt ; i++) {
@@ -432,24 +428,32 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                            md->topics[i].err ?
                            rd_kafka_err2str(md->topics[i].err) : "");
 
-
-		if (rkt && !rd_kafkap_str_cmp_str(rkt->rkt_topic,
-                                                  md->topics[i].topic))
-			req_rkt_seen++;
+                if (missing_topics)
+                        rd_list_free_cb(missing_topics,
+                                        rd_list_remove_cmp(missing_topics,
+                                                           md->topics[i].topic,
+                                                           (void *)strcmp));
 
 		rd_kafka_topic_metadata_update(rkb, &md->topics[i]);
 	}
 
 
-	/* Requested topics not seen in metadata? Propogate to topic code. */
-	if (rkt) {
-		rd_rkb_dbg(rkb, TOPIC, "METADATA",
-			   "Requested topic %s %sseen in metadata",
-			   rkt->rkt_topic->str,
-                           req_rkt_seen ? "" : "not ");
-		if (!req_rkt_seen)
-			rd_kafka_topic_metadata_none(rkt);
-	}
+        /* Requested topics not seen in metadata? Propogate to topic code. */
+        if (missing_topics) {
+                char *topic;
+                rd_rkb_dbg(rkb, TOPIC, "METADATA",
+                           "%d/%d requested topic(s) seen in metadata",
+                           rd_list_cnt(topics) - rd_list_cnt(missing_topics),
+                           rd_list_cnt(topics));
+                RD_LIST_FOREACH(topic, missing_topics, i) {
+                        rd_kafka_itopic_t *rkt;
+                        rkt = rd_kafka_topic_find(rkb->rkb_rk, topic, 1/*lock*/);
+                        if (rkt) {
+                                rd_kafka_topic_metadata_none(rkt);
+                                rd_kafka_topic_destroy0(rkt);
+                        }
+                }
+        }
 
 
         rd_kafka_wrlock(rkb->rkb_rk);
@@ -466,6 +470,9 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
 
 done:
+        if (missing_topics)
+                rd_list_destroy(missing_topics, NULL);
+
         /* This metadata request was triggered by someone wanting
          * the metadata information back as a reply, so send that reply now.
          * In this case we must not rd_free the metadata memory here,
@@ -475,7 +482,10 @@ done:
         return md;
 
 err:
-	rd_tmpabuf_destroy(&tbuf);
+        if (missing_topics)
+                rd_list_destroy(missing_topics, NULL);
+
+        rd_tmpabuf_destroy(&tbuf);
         return NULL;
 }
 

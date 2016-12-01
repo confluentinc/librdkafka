@@ -111,6 +111,9 @@ struct rd_kafka_itopic_s {
         ((rd_kafka_topic_t *)rd_shared_ptr_get(rkt, &(rkt)->rkt_refcnt, \
                                                shptr_rd_kafka_itopic_t))
 
+void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt);
+
+
 /**
  * Frees a shared pointer previously returned by ..topic_keep()
  */
@@ -121,8 +124,6 @@ rd_kafka_topic_destroy0 (shptr_rd_kafka_itopic_t *s_rkt) {
                           rd_kafka_topic_destroy_final(
                                   rd_kafka_topic_s2i(s_rkt)));
 }
-
-void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt);
 
 
 shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk, const char *topic,
@@ -165,3 +166,19 @@ void rd_kafka_topic_info_destroy (rd_kafka_topic_info_t *ti);
 
 int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 			  const char *topic);
+
+
+rd_kafka_resp_err_t
+rd_kafka_topics_leader_query (rd_kafka_t *rk, int all_topics,
+                              const rd_list_t *topics,
+                              rd_kafka_replyq_t replyq, int do_rk_lock);
+rd_kafka_resp_err_t
+rd_kafka_topics_leader_query_sync (rd_kafka_t *rk, int all_topics,
+                                   const rd_list_t *topics, int timeout_ms);
+void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
+                                   int do_rk_lock);
+#define rd_kafka_topic_leader_query(rk,rkt) \
+        rd_kafka_topic_leader_query0(rk,rkt,1/*lock*/)
+
+
+void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics);

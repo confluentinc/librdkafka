@@ -2013,13 +2013,15 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
 						  rd_kafka_buf_t *request,
 						  void *opaque) {
 	struct _query_wmark_offsets_state *state = opaque;
-	size_t sz = 1;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_topic_partition_t *rktpar;
 
-	err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request,
-				     state->topic, state->partition,
-				     &state->offsets[state->offidx], &sz);
-	if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
-		return; /* Retrying */
+        offsets = rd_kafka_topic_partition_list_new(1);
+        err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request, offsets);
+        if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
+                rd_kafka_topic_partition_list_destroy(offsets);
+                return; /* Retrying */
+        }
 
 	/* Retry if no broker connection is available yet. */
 	if ((err == RD_KAFKA_RESP_ERR__WAIT_COORD ||
@@ -2031,18 +2033,29 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
 		/* Retry */
 		state->state_version = rd_kafka_brokers_get_state_version(rk);
 		request->rkbuf_retries = 0;
-		if (rd_kafka_buf_retry(rkb, request))
-			return; /* Retry in progress */
+		if (rd_kafka_buf_retry(rkb, request)) {
+                        rd_kafka_topic_partition_list_destroy(offsets);
+                        return; /* Retry in progress */
+                }
 		/* FALLTHRU */
 	}
 
-	if (sz == 0) /* Partition not seen in response. */
-		err = RD_KAFKA_RESP_ERR__BAD_MSG;
+        /* Partition not seen in response. */
+        if (!(rktpar = rd_kafka_topic_partition_list_find(offsets,
+                                                          state->topic,
+                                                          state->partition)))
+                err = RD_KAFKA_RESP_ERR__BAD_MSG;
+        else if (rktpar->err)
+                err = rktpar->err;
+        else
+                state->offsets[state->offidx] = rktpar->offset;
 
-	state->offidx++;
+        state->offidx++;
 
-	if (err || state->offidx == 2) /* Error or Done */
-		state->err = err;
+        if (err || state->offidx == 2) /* Error or Done */
+                state->err = err;
+
+        rd_kafka_topic_partition_list_destroy(offsets);
 }
 
 
@@ -2057,6 +2070,8 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	rd_kafka_toppar_t *rktp;
 	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
 	int queried = 0;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_topic_partition_t *rktpar;
 
 	/* Look up toppar so we know which broker to query. */
 	s_rktp = rd_kafka_toppar_get2(rk, topic, partition, 0, 1);
@@ -2098,15 +2113,22 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	state.ts_end = ts_end;
 	state.state_version = rd_kafka_brokers_get_state_version(rk);
 
-	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[0], 1, 0,
-			       RD_KAFKA_REPLYQ(rkq, 0),
-			       rd_kafka_query_wmark_offsets_resp_cb,
-			       &state);
-	rd_kafka_OffsetRequest(rkb, topic, partition, &state.offsets[1], 1, 0,
-			       RD_KAFKA_REPLYQ(rkq, 0),
-			       rd_kafka_query_wmark_offsets_resp_cb,
-			       &state);
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rktpar  = rd_kafka_topic_partition_list_add(offsets, topic, partition);
 
+        rktpar->offset =  RD_KAFKA_OFFSET_BEGINNING;
+        rd_kafka_OffsetRequest(rkb, offsets, 0,
+                               RD_KAFKA_REPLYQ(rkq, 0),
+                               rd_kafka_query_wmark_offsets_resp_cb,
+                               &state);
+
+        rktpar->offset =  RD_KAFKA_OFFSET_END;
+        rd_kafka_OffsetRequest(rkb, offsets, 0,
+                               RD_KAFKA_REPLYQ(rkq, 0),
+                               rd_kafka_query_wmark_offsets_resp_cb,
+                               &state);
+
+        rd_kafka_topic_partition_list_destroy(offsets);
         rd_kafka_broker_destroy(rkb);
 
         /* Wait for reply (or timeout) */

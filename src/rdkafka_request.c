@@ -1230,6 +1230,7 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                 rd_kafka_group_member_t *members;
                 int i;
                 int sub_cnt = 0;
+                rd_list_t topics;
 
                 rd_kafka_dbg(rkb->rkb_rk, CGRP, "JOINGROUP",
                              "Elected leader for group \"%s\" "
@@ -1240,6 +1241,9 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                         err = RD_KAFKA_RESP_ERR__BAD_MSG;
                         goto err;
                 }
+
+                rd_list_init(&topics, member_cnt);
+                rd_list_set_free_cb(&topics, rd_free);
 
                 members = rd_calloc(member_cnt, sizeof(*members));
 
@@ -1264,6 +1268,8 @@ void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                                 rkgm->rkgm_assignment =
                                         rd_kafka_topic_partition_list_new(
                                                 rkgm->rkgm_subscription->size);
+                                rd_kafka_topic_partition_list_get_topic_names(
+                                        rkgm->rkgm_subscription, &topics);
                         }
 
                 }

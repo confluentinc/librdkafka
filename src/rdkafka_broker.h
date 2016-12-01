@@ -200,6 +200,16 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 
 /**
+ * @brief Broker comparator
+ */
+static RD_UNUSED RD_INLINE int rd_kafka_broker_cmp (const void *_a,
+                                                    const void *_b) {
+        const rd_kafka_broker_t *a = _a, *b = _b;
+        return (int)(a - b);
+}
+
+
+/**
  * @returns true if broker supports \p features, else false.
  */
 static RD_UNUSED

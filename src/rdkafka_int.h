@@ -47,6 +47,7 @@ typedef int mode_t;
 #include "rdaddr.h"
 #include "rdinterval.h"
 #include "rdavg.h"
+#include "rdlist.h"
 
 #if WITH_SSL
 #include <openssl/ssl.h>

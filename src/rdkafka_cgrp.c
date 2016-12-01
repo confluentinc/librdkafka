@@ -1122,7 +1122,7 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
 				continue;
 
 			s_rktp = rd_kafka_topic_partition_list_get_toppar(
-				rkcg->rkcg_rk, offsets, i);
+				rkcg->rkcg_rk, rktpar);
 			if (!s_rktp)
 				continue;
 
@@ -1226,7 +1226,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 }
 
 
-static int rd_kafka_topic_partition_has_absolute_offset (
+static size_t rd_kafka_topic_partition_has_absolute_offset (
         const rd_kafka_topic_partition_t *rktpar, void *opaque) {
         return rktpar->offset >= 0 ? 1 : 0;
 }

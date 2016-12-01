@@ -409,7 +409,6 @@ rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol);
 rd_kafka_broker_t *rd_kafka_toppar_leader (rd_kafka_toppar_t *rktp,
                                            int proper_broker);
 
-
 rd_kafka_resp_err_t
 rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
 			       rd_kafka_topic_partition_list_t *partitions);
@@ -424,6 +423,11 @@ rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
                                     const char *topic, int32_t partition,
 				    shptr_rd_kafka_toppar_t *_private);
+
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_upsert (
+        rd_kafka_topic_partition_list_t *rktparlist,
+        const char *topic, int32_t partition);
 
 int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 				    const rd_kafka_group_member_t *rkgm,
@@ -447,11 +451,12 @@ int rd_kafka_topic_partition_list_count_abs_offsets (
 	const rd_kafka_topic_partition_list_t *rktparlist);
 
 shptr_rd_kafka_toppar_t *
-rd_kafka_topic_partition_get_toppar (rd_kafka_topic_partition_t *rktpar);
+rd_kafka_topic_partition_get_toppar (rd_kafka_t *rk,
+                                     rd_kafka_topic_partition_t *rktpar);
 
 shptr_rd_kafka_toppar_t *
 rd_kafka_topic_partition_list_get_toppar (
-        rd_kafka_t *rk, rd_kafka_topic_partition_list_t *rktparlist, int idx);
+        rd_kafka_t *rk, rd_kafka_topic_partition_t *rktpar);
 
 void
 rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
@@ -460,10 +465,24 @@ rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
 
 int
 rd_kafka_topic_partition_list_get_leaders (
-        const rd_kafka_topic_partition_list_t *rktparlist,
-        rd_list_t *rkblist);
+        rd_kafka_t *rk,
+        rd_kafka_topic_partition_list_t *rktparlist,
+        rd_list_t *leaders, rd_list_t *query_topics);
+
+rd_kafka_resp_err_t
+rd_kafka_topic_partition_list_query_leaders (
+        rd_kafka_t *rk,
+        rd_kafka_topic_partition_list_t *rktparlist,
+        rd_list_t *leaders, int timeout_ms);
+
 int
 rd_kafka_topic_partition_list_get_topics (
+        rd_kafka_t *rk,
+        rd_kafka_topic_partition_list_t *rktparlist,
+        rd_list_t *rkts);
+
+int
+rd_kafka_topic_partition_list_get_topic_names (
         const rd_kafka_topic_partition_list_t *rktparlist,
         rd_list_t *topics);
 
@@ -474,18 +493,26 @@ rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
 void
 rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
                                       const rd_kafka_topic_partition_list_t *src);
-int
+
+int rd_kafka_topic_partition_leader_cmp (const void *_a, const void *_b);
 
 rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_match (
         const rd_kafka_topic_partition_list_t *rktparlist,
-        int (*match) (const rd_kafka_topic_partition_t *rktpar,
-                       void *opaque),
+        int (*match) (const void *elem, const void *opaque),
         void *opaque);
 
+size_t
 rd_kafka_topic_partition_list_sum (
         const rd_kafka_topic_partition_list_t *rktparlist,
-        int (*cb) (const rd_kafka_topic_partition_t *rktpar, void *opaque),
+        size_t (*cb) (const rd_kafka_topic_partition_t *rktpar, void *opaque),
         void *opaque);
+
+void rd_kafka_topic_partition_list_set_err (
+        rd_kafka_topic_partition_list_t *rktparlist,
+        rd_kafka_resp_err_t err);
+
+int rd_kafka_topic_partition_list_regex_cnt (
+        const rd_kafka_topic_partition_list_t *rktparlist);
 
 /**
  * @brief Toppar + Op version tuple used for mapping Fetched partitions
@@ -548,3 +575,34 @@ rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
 				      rd_kafka_topic_partition_list_t *offsets);
 
 void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp);
+
+
+/**
+ * @brief Represents a leader and the partitions it is leader for.
+ */
+struct rd_kafka_partition_leader {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_topic_partition_list_t *partitions;
+};
+
+static RD_UNUSED void
+rd_kafka_partition_leader_destroy (struct rd_kafka_partition_leader *leader) {
+        rd_kafka_broker_destroy(leader->rkb);
+        rd_kafka_topic_partition_list_destroy(leader->partitions);
+        rd_free(leader);
+}
+
+static RD_UNUSED struct rd_kafka_partition_leader *
+rd_kafka_partition_leader_new (rd_kafka_broker_t *rkb) {
+        struct rd_kafka_partition_leader *leader = rd_malloc(sizeof(*leader));
+        leader->rkb = rkb;
+        rd_kafka_broker_keep(rkb);
+        leader->partitions = rd_kafka_topic_partition_list_new(0);
+        return leader;
+}
+
+static RD_UNUSED
+int rd_kafka_partition_leader_cmp (const void *_a, const void *_b) {
+        const struct rd_kafka_partition_leader *a = _a, *b = _b;
+        return rd_kafka_broker_cmp(a->rkb, b->rkb);
+}

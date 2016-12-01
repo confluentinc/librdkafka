@@ -42,7 +42,7 @@ static int read_config_file (std::string path,
                              RdKafka::Conf *conf,
                              RdKafka::Conf *topic_conf,
                              int *timeoutp) {
-  std::ifstream input(path);
+  std::ifstream input(path, std::ifstream::in);
 
   if (!input)
     return 0;

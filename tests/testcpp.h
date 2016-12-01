@@ -57,16 +57,16 @@ namespace Test {
    * @brief Get test config object
    */
 
-  static void Fail (std::string str) {
+  static RD_UNUSED void Fail (std::string str) {
     test_FAIL(__FILE__, __LINE__, 1, str.c_str());
   }
-  static void FailLater (std::string str) {
+  static RD_UNUSED void FailLater (std::string str) {
     test_FAIL(__FILE__, __LINE__, 0, str.c_str());
   }
-  static void Say (int level, std::string str) {
+  static RD_UNUSED void Say (int level, std::string str) {
     test_SAY(__FILE__, __LINE__, level, str.c_str());
   }
-  static void Say (std::string str) {
+  static RD_UNUSED void Say (std::string str) {
     Test::Say(2, str);
   }
 
@@ -87,7 +87,8 @@ namespace Test {
                   int timeout);
 
 
-  static void conf_set (RdKafka::Conf *conf, std::string name, std::string val) {
+  static RD_UNUSED
+      void conf_set (RdKafka::Conf *conf, std::string name, std::string val) {
     std::string errstr;
     if (conf->set(name, val, errstr) != RdKafka::Conf::CONF_OK)
       Test::Fail("Conf failed: " + errstr);

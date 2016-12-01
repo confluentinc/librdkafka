@@ -1768,7 +1768,7 @@ rd_kafka_get_watermark_offsets (rd_kafka_t *rk,
  * @returns an error code for general errors, else RD_KAFKA_RESP_ERR_NO_ERROR
  *          in which case per-partition errors might be set.
  */
-rd_kafka_resp_err_t
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_offsets_for_times (rd_kafka_t *rk,
                             rd_kafka_topic_partition_list_t *offsets,
                             int timeout_ms);

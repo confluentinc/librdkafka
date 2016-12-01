@@ -1818,6 +1818,19 @@ class RD_EXPORT Producer : public virtual Handle {
                              const void *key, size_t key_len,
                              void *msg_opaque) = 0;
 
+  /**
+   * @brief produce() variant that takes topic as a string (no need for
+   *        creating a Topic object), and also allows providing the
+   *        message timestamp (microseconds since beginning of epoch, UTC).
+   *        Otherwise identical to produce() above.
+   */
+  virtual ErrorCode produce (const std::string topic_name, int32_t partition,
+                             int msgflags,
+                             void *payload, size_t len,
+                             const void *key, size_t key_len,
+                             int64_t timestamp,
+                             void *msg_opaque) = 0;
+
 
   /**
    * @brief Variant produce() that accepts vectors for key and payload.

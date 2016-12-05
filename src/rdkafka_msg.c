@@ -256,7 +256,7 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         rd_kafka_vtype_t vtype;
         rd_kafka_itopic_t *rkt = NULL;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-	int destr_rkt = 0;
+        int destr_rkt = 0;
 
         va_start(ap, rk);
         while ((vtype = va_arg(ap, rd_kafka_vtype_t)) != RD_KAFKA_VTYPE_END) {
@@ -265,7 +265,7 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                 case RD_KAFKA_VTYPE_TOPIC:
                         rkt = rd_kafka_topic_new0(rk, va_arg(ap, const char *),
                                                   NULL, NULL, 1);
-			destr_rkt = 1;
+                        destr_rkt = 1;
                         break;
 
                 case RD_KAFKA_VTYPE_RKT:
@@ -319,8 +319,8 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                                         rkm->rkm_opaque,
                                         &err, NULL,
                                         rkm->rkm_timestamp, rd_clock());
-	if(unlikely(destr_rkt))
-	        rd_kafka_topic_destroy0(rkt);
+        if(unlikely(destr_rkt))
+                rd_kafka_topic_destroy0(rkt);
 
         if (unlikely(err))
                 return err;

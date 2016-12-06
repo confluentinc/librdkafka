@@ -1242,11 +1242,24 @@ rd_kafka_topics_leader_query_sync (rd_kafka_t *rk, int all_topics,
                                    int timeout_ms) {
         rd_kafka_q_t *rkq;
         rd_kafka_resp_err_t err;
+        rd_ts_t ts_end = rd_timeout_init(timeout_ms);
 
         rkq = rd_kafka_q_new(rk);
 
-        err = rd_kafka_topics_leader_query(rk, all_topics, topics,
-                                           RD_KAFKA_REPLYQ(rkq, 0), 1/*lock*/);
+        while (1) {
+                int state_version = rd_kafka_brokers_get_state_version(rk);
+                
+                err = rd_kafka_topics_leader_query(rk, all_topics, topics,
+                                                   RD_KAFKA_REPLYQ(rkq, 0),
+                                                   1/*lock*/);
+                printf("leader_query gave: %s\n", rd_kafka_err2str(err));
+                if (err != RD_KAFKA_RESP_ERR__TRANSPORT)
+                        break;
+
+                if (!rd_kafka_brokers_wait_state_change(
+			    rk, state_version, rd_timeout_remains(ts_end)))
+                        break;
+        }
 
         if (!err)
                 err = rd_kafka_q_wait_result(rkq, timeout_ms);

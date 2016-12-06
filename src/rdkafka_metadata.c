@@ -531,3 +531,83 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk,
 
 	return cnt;
 }
+
+struct rd_kafka_metadata_cache_entry {
+        TAILQ_ENTRY(rd_kafka_metadata_cache_entry) rkmce_link;
+        rd_ts_t rkmce_ts_expires;
+        rd_kafka_metadata_topic_t rkmce_topic;
+        rd_kafka_metadata_partition_t *rkmce_partitions;
+        /* rkmce_partitions memory points here. */
+};
+
+
+struct rd_kafka_metadata_cache {
+        TAILQ_HEAD(, rd_kafka_metadata_cache_entry) rkmc_expiry;
+        rd_timer_t rkmc_expiry_tmr;
+
+};
+
+
+/**
+ * @brief Update the metadata cache with the provided metadata.
+ *
+ * @remark rd_kafka_wrlock() MUST be held
+ */
+void rd_kafka_metadata_cache_update (rd_kafka_t *rk,
+                                     const rd_kafka_metadata_t *md) {
+
+}
+
+
+/**
+ * @brief Purge the metadata cache
+ *
+ * @remark rd_kafka_wrlock() MUST be held
+ */
+void rd_kafka_metadata_cache_purge (rd_kafka_t *rk) {
+
+}
+
+
+/**
+ * @brief Evict timed out entries from cache
+ *
+ * @remark rd_kafka_wrlock() MUST be held
+ */
+int rd_kafka_metadata_cache_evict (rd_kafka_t *rk) {
+
+}
+
+
+/**
+ * @returns the shared metadata for a topic, or NULL if not found in
+ *          cache.
+ *
+ * @remark rd_kafka_*lock() MUST be held
+ */
+const rd_kafka_metadata_topic_t *
+rd_kafka_metadata_cache_topic_get (rd_kafka_t *rk, const char *topic) {
+        struct rd_kafka_metadata_cache_entry *rkmce;
+        return &rkmce->rkmce_topic;
+}
+
+
+/**
+ * @returns the shared metadata for a partition, or NULL if not found in
+ *          cache.
+ *
+ * @remark rd_kafka_*lock() MUST be held
+ */
+const rd_kafka_metadata_partition_t *
+rd_kafka_metadata_cache:partition_get (rd_kafka_t *rk,
+                                       const char *topic, int32_t partition) {
+        rd_kafka_metadata_topic_t *mtopic;
+
+        if (!(mtopic = rd_kafka_metadata_topic_get(rk, topic)))
+                return NULL;
+
+        if (partition < 0 || partition >= mtopic->partition_cnt)
+                return NULL;
+
+        return &mtopic->partitions[partition];
+}

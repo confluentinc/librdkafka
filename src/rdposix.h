@@ -115,6 +115,13 @@ void rd_usleep (int usec, rd_atomic32_t *terminate) {
 }
 
 
+#if !HAVE_QSORT_R
+void qsort_r (void *base, size_t nmemb, size_t size,
+              int (*compar)(const void *, const void *, void *),
+              void *arg);
+#endif
+
+
 #define rd_gettimeofday(tv,tz)  gettimeofday(tv,tz)
 
 

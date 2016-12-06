@@ -98,6 +98,17 @@ int foo (void) {
    return strndup(\"hi\", 2) ? 0 : 1;
 }"
 
+    # Check for qsort_r (missing on Solaris)
+    mkl_compile_check "qsort_r" HAVE_QSORT_R disable CC "" \
+                      "
+#include <stdlib.h>
+static int cmp (const void *a, const void *b, void *c) {
+  return 0;
+}
+void foo (void) {
+  qsort_r(NULL, 0, 0, cmp, NULL);
+}"
+
     # Figure out what tool to use for dumping public symbols.
     # We rely on configure.cc setting up $NM if it exists.
     if mkl_env_check "nm" "" cont "NM" ; then

@@ -170,6 +170,7 @@
     <ClCompile Include="..\src\snappy.c" />
     <ClCompile Include="..\src\tinycthread.c" />
     <ClCompile Include="..\src\regexp.c" />
+    <ClCompile Include="..\src\rdports.c" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\LICENSE..txt" />

@@ -691,6 +691,21 @@ rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
 				    const char *topic, int32_t partition);
 
+
+/**
+ * @brief Sort list using comparator \p cmp.
+ *
+ * If \p cmp is NULL the default comparator will be used that
+ * sorts by ascending topic name and partition.
+ *
+ */
+RD_EXPORT void
+rd_kafka_topic_partition_list_sort (rd_kafka_topic_partition_list_t *rktparlist,
+                                    int (*cmp) (const void *a, const void *b,
+                                                void *opaque),
+                                    void *opaque);
+
+
 /**@}*/
 
 

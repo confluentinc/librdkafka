@@ -2453,7 +2453,8 @@ rd_kafka_topic_partition_get_toppar (rd_kafka_t *rk,
 }
 
 
-static int rd_kafka_topic_partition_cmp (const void *_a, const void *_b) {
+static int rd_kafka_topic_partition_cmp (const void *_a, const void *_b,
+                                         void *opaque) {
         const rd_kafka_topic_partition_t *a = _a;
         const rd_kafka_topic_partition_t *b = _b;
         int r = strcmp(a->topic, b->topic);
@@ -2479,8 +2480,9 @@ rd_kafka_topic_partition_list_find0 (rd_kafka_topic_partition_list_t *rktparlist
 
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 if (!rd_kafka_topic_partition_cmp(&skel,
-                                                  &rktparlist->elems[i]))
-			return i;
+                                                  &rktparlist->elems[i],
+                                                  NULL))
+                        return i;
         }
 
         return -1;
@@ -2567,11 +2569,20 @@ int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 
 
 
+void rd_kafka_topic_partition_list_sort (
+        rd_kafka_topic_partition_list_t *rktparlist,
+        int (*cmp) (const void *, const void *, void *),
+        void *opaque) {
+
+        qsort_r(rktparlist->elems, rktparlist->cnt, sizeof(*rktparlist->elems),
+                cmp, opaque);
+}
+
+
 void rd_kafka_topic_partition_list_sort_by_topic (
         rd_kafka_topic_partition_list_t *rktparlist) {
-
-        qsort(rktparlist->elems, rktparlist->cnt, sizeof(*rktparlist->elems),
-              rd_kafka_topic_partition_cmp);
+        rd_kafka_topic_partition_list_sort(rktparlist,
+                                           rd_kafka_topic_partition_cmp, NULL);
 }
 
 rd_kafka_resp_err_t rd_kafka_topic_partition_list_set_offset (

@@ -319,7 +319,7 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                                         rkm->rkm_opaque,
                                         &err, NULL,
                                         rkm->rkm_timestamp, rd_clock());
-        if(unlikely(destr_rkt))
+        if (unlikely(destr_rkt))
                 rd_kafka_topic_destroy0(rkt);
 
         if (unlikely(err))

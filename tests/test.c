@@ -52,11 +52,11 @@ double test_timeout_multiplier  = 1.0;
 static char *test_sql_cmd = NULL;
 int  test_session_timeout_ms = 6000;
 int          test_broker_version;
-static char *test_broker_version_str = "0.9.0.0";
+static const char *test_broker_version_str = "0.9.0.0";
 int          test_flags = 0;
 int          test_neg_flags = TEST_F_KNOWN_ISSUE;
-static char *test_git_version = "HEAD";
-static char *test_sockem_conf = "";
+static const char *test_git_version = "HEAD";
+static const char *test_sockem_conf = "";
 
 static int show_summary = 1;
 static int test_summary (int do_lock);
@@ -322,26 +322,24 @@ void test_timeout_set (int timeout) {
 
 
 static void test_init (void) {
-	int seed;
-#ifndef _MSC_VER
-	char *tmp;
-#endif
+        int seed;
+        const char *tmp;
 
-	if (test_seed)
-		return;
 
-#ifndef _MSC_VER
-	if ((tmp = getenv("TEST_LEVEL")))
-		test_level = atoi(tmp);
-	if ((tmp = getenv("TEST_MODE")))
-		strncpy(test_mode, tmp, sizeof(test_mode)-1);
-        if ((tmp = getenv("TEST_SOCKEM")))
+        if (test_seed)
+                return;
+
+        if ((tmp = test_getenv("TEST_LEVEL", NULL)))
+                test_level = atoi(tmp);
+        if ((tmp = test_getenv("TEST_MODE", NULL)))
+                strncpy(test_mode, tmp, sizeof(test_mode)-1);
+        if ((tmp = test_getenv("TEST_SOCKEM", NULL)))
                 test_sockem_conf = tmp;
-	if ((tmp = getenv("TEST_SEED")))
-		seed = atoi(tmp);
-	else
-		seed = test_clock() & 0xffffffff;
-#else
+        if ((tmp = test_getenv("TEST_SEED", NULL)))
+                seed = atoi(tmp);
+        else
+                seed = test_clock() & 0xffffffff;
+#ifdef _MSC_VER
 	{
 		LARGE_INTEGER cycl;
 		QueryPerformanceCounter(&cycl);
@@ -484,11 +482,7 @@ static void test_read_conf_file (const char *conf_path,
  * @brief Get path to test config file
  */
 const char *test_conf_get_path (void) {
-        return
-#ifndef _MSC_VER
-                getenv("RDKAFKA_TEST_CONF") ? getenv("RDKAFKA_TEST_CONF") : 
-#endif
-                "test.conf";
+        return test_getenv("RDKAFKA_TEST_CONF", "test.conf");
 }
 
 const char *test_getenv (const char *env, const char *def) {
@@ -503,6 +497,9 @@ const char *test_getenv (const char *env, const char *def) {
 
 void test_conf_common_init (rd_kafka_conf_t *conf, int timeout) {
         if (conf) {
+                const char *tmp = test_getenv("TEST_DEBUG", NULL);
+                if (tmp)
+                        test_conf_set(conf, "debug", tmp);
         }
 
         if (timeout)
@@ -890,21 +887,17 @@ static int test_summary (int do_lock) {
 	int tests_failed_known = 0;
         int tests_passed = 0;
 	FILE *sql_fp = NULL;
-#ifndef _MSC_VER
-	char *tmp;
-#endif
+        const char *tmp;
 
         t = time(NULL);
         tm = localtime(&t);
         strftime(datestr, sizeof(datestr), "%Y%m%d%H%M%S", tm);
 
-#ifndef _MSC_VER
-	if ((tmp = getenv("TEST_REPORT")) && *tmp)
-		rd_snprintf(report_path, sizeof(report_path), "%s", tmp);
-	else
-#endif
-		rd_snprintf(report_path, sizeof(report_path), "test_report_%s.json",
-			    datestr);
+        if ((tmp = test_getenv("TEST_REPORT", NULL)))
+                rd_snprintf(report_path, sizeof(report_path), "%s", tmp);
+        else
+                rd_snprintf(report_path, sizeof(report_path),
+                            "test_report_%s.json", datestr);
 
         report_fp = fopen(report_path, "w+");
         if (!report_fp)
@@ -1120,13 +1113,12 @@ int main(int argc, char **argv) {
         test_init();
 
 #ifndef _MSC_VER
-	signal(SIGINT, test_sig_term);
-        tests_to_run = getenv("TESTS");
-	if (getenv("TEST_KAFKA_VERSION"))
-		test_broker_version_str = getenv("TEST_KAFKA_VERSION");
-	if (!(test_git_version = getenv("RDKAFKA_GITVER")))
-		test_git_version = "HEAD";
+        signal(SIGINT, test_sig_term);
 #endif
+        tests_to_run = test_getenv("TESTS", NULL);
+        test_broker_version_str = test_getenv("TEST_KAFKA_VERSION",
+                                              test_broker_version_str);
+        test_git_version = test_getenv("RDKAFKA_GITVER", "HEAD");
 
 	test_conf_init(NULL, NULL, 10);
 
@@ -2839,10 +2831,10 @@ void test_kafka_topics (const char *fmt, ...) {
 	test_timing_t t_cmd;
 	const char *kpath, *zk;
 
-	kpath = getenv("KAFKA_PATH");
-	zk = getenv("ZK_ADDRESS");
+	kpath = test_getenv("KAFKA_PATH", NULL);
+	zk = test_getenv("ZK_ADDRESS", NULL);
 
-	if (!kpath || !*kpath || !zk || !*zk)
+	if (!kpath || !zk)
 		TEST_FAIL("%s: KAFKA_PATH and ZK_ADDRESS must be set",
 			  __FUNCTION__);
 
@@ -2980,10 +2972,9 @@ int test_can_create_topics (int skip) {
 		TEST_SKIP("Cannot create topics on Win32");
 	return 0;
 #else
-	const char *s;
 
-	if (!(s = getenv("KAFKA_PATH")) || !*s ||
-	    !(s = getenv("ZK_ADDRESS")) || !*s) {
+	if (!test_getenv("KAFKA_PATH", NULL) ||
+	    !test_getenv("ZK_ADDRESS", NULL)) {
 		if (skip)
 			TEST_SKIP("Cannot create topics "
 				  "(set KAFKA_PATH and ZK_ADDRESS)\n");

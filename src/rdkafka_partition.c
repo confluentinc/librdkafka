@@ -2748,91 +2748,11 @@ rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
  *
  * @returns the number of leaders added.
  * @sa rd_kafka_topic_partition_list_get_leaders_by_metadata
+ *
+ * @locks rd_kafka_*lock() MUST NOT be held
  */
 int
 rd_kafka_topic_partition_list_get_leaders (
-        rd_kafka_t *rk,
-        rd_kafka_topic_partition_list_t *rktparlist,
-        rd_list_t *leaders,
-        rd_list_t *query_topics) {
-        int cnt = 0;
-        int i;
-
-        for (i = 0 ; i < rktparlist->cnt ; i++) {
-                rd_kafka_topic_partition_t *rktpar = &rktparlist->elems[i];
-                shptr_rd_kafka_toppar_t *s_rktp;
-                rd_kafka_broker_t *rkb = NULL;
-                struct rd_kafka_partition_leader leader_skel;
-                struct rd_kafka_partition_leader *leader;
-
-                s_rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar);
-                if (s_rktp) {
-                        rkb = rd_kafka_toppar_leader(
-                                rd_kafka_toppar_s2i(s_rktp), 1);
-                        rd_kafka_toppar_destroy(s_rktp);
-                }
-
-                if (!rkb) {
-                        if (!s_rktp)
-                                rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
-                        else
-                                rktpar->err = RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
-                        printf("no current leader for %s %d\n",
-                               rktpar->topic, (int)rktpar->partition);
-                        if (query_topics &&
-                            !rd_list_find(query_topics, rktpar->topic,
-                                          (void *)strcmp))
-                                rd_list_add(query_topics,
-                                            rd_strdup(rktpar->topic));
-                        continue;
-                }
-                printf("current leader for %s %d is %s\n",
-                       rktpar->topic, (int)rktpar->partition,
-                       rkb->rkb_logname);
-
-                rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
-
-                memset(&leader_skel, 0, sizeof(leader_skel));
-                leader_skel.rkb = rkb;
-
-                leader = rd_list_find(leaders, &leader_skel,
-                                      rd_kafka_partition_leader_cmp);
-
-                if (!leader) {
-                        leader = rd_kafka_partition_leader_new(rkb);
-                        rd_list_add(leaders, leader);
-                        cnt++;
-                }
-
-                rd_kafka_topic_partition_copy(leader->partitions, rktpar);
-
-                rd_kafka_broker_destroy(rkb);    /* loose refcount */
-        }
-
-        return cnt;
-
-}
-
-
-/**
- * @brief Populate \p leaders with the leaders+partitions for the partitions in
- *        \p rktparlist using latest cached metadata.
- *        Duplicates are suppressed.
- *
- *        If no leader is found for a partition that element's \c .err will
- *        be set to RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE.
- *
- * @param leaders rd_list_t of allocated (struct rd_kafka_partition_leader *)
- * @param query_topics (optional) rd_list of strdupped (char *)
- *
- * @param leaders rd_list_t of type (struct rd_kafka_partition_leader *)
- *
- * @returns the number of leaders added.
- *
- * @sa rd_kafka_topic_partition_list_query_leaders()
- */
-int
-rd_kafka_topic_partition_list_get_leaders_by_metadata (
         rd_kafka_t *rk,
         rd_kafka_topic_partition_list_t *rktparlist,
         rd_list_t *leaders,
@@ -2898,6 +2818,8 @@ rd_kafka_topic_partition_list_get_leaders_by_metadata (
 }
 
 
+
+
 /**
  * @brief Get leaders for all partitions in \p rktparlist, querying metadata
  *        if needed.
@@ -2907,6 +2829,8 @@ rd_kafka_topic_partition_list_get_leaders_by_metadata (
  *        (struct rd_kafka_partition_leader *)
  *
  * @returns an error code on error.
+ *
+ * @locks rd_kafka_*lock() MUST NOT be held
  */
 rd_kafka_resp_err_t
 rd_kafka_topic_partition_list_query_leaders (
@@ -2914,12 +2838,17 @@ rd_kafka_topic_partition_list_query_leaders (
         rd_kafka_topic_partition_list_t *rktparlist,
         rd_list_t *leaders, int timeout_ms) {
         int i;
+        rd_ts_t ts_end = rd_timeout_init(timeout_ms);
 
-        /* Get all the partition leaders, try two times:
+        /* Get all the partition leaders, try multiple times:
          * if there are no leaders after the first run fire off a leader
          * query and wait for broker state update before trying again. */
-        for (i = 0 ; i < 2 ;  i++) {
+        for (i = 0 ; i < 20 ;  i++) {
                 rd_list_t query_topics;
+                int state_version;
+
+                if (i > 0)
+                        state_version = rd_kafka_brokers_get_state_version(rk);
 
                 rd_list_init(&query_topics, 0);
                 rd_list_set_free_cb(&query_topics, rd_free);
@@ -2927,11 +2856,8 @@ rd_kafka_topic_partition_list_query_leaders (
                 rd_kafka_topic_partition_list_get_leaders(
                         rk, rktparlist, leaders, &query_topics);
 
-                printf("q: %d parts: leaders %d, qt %d\n",
-                       rktparlist->cnt, rd_list_cnt(leaders),
-                       rd_list_cnt(&query_topics));
                 if (rd_list_empty(&query_topics)) {
-                        /* No remaining topics to query: leader-list complete. */
+                        /* No remaining topics to query: leader-list complete.*/
                         rd_list_destroy(&query_topics, NULL);
                         break;
                 }
@@ -2944,8 +2870,18 @@ rd_kafka_topic_partition_list_query_leaders (
                         /* First spin: query metadata for missing leaders */
                         rd_kafka_topics_leader_query_sync(rk, 0, &query_topics,
                                                           timeout_ms);
-
-                } else { /* Second spin: bail out */
+                } else if (rd_list_cnt(leaders) == 0) {
+                        /* None of the partitions existed
+                         * (no leaders to wait for). */
+                        rd_list_destroy(&query_topics, NULL);
+                        return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                } else if (i < 10) {
+                        /* Wait for broker ids to be updated by
+                         * metadata in spin 0. */
+                        rd_kafka_brokers_wait_state_change(
+                                rk, state_version, rd_timeout_remains(ts_end));
+                } else {
+                        /* Give up */
                         rd_list_destroy(&query_topics, NULL);
                         return RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
                 }

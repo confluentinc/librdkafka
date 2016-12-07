@@ -1193,7 +1193,7 @@ int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 
 
 /**
- * Trigger broker metadata query for \p topics (shptr_rd_kafka_itopic_t *)
+ * Trigger broker metadata query for \p topics (char *)
  * if \p topics is NULL all topics in cluster are queried.
  */
 rd_kafka_resp_err_t
@@ -1210,6 +1210,7 @@ rd_kafka_topics_leader_query (rd_kafka_t *rk, int all_topics,
                 if (do_rk_lock)
                         rd_kafka_rdunlock(rk);
 
+                rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__TRANSPORT; /* No brokers are up */
         }
         if (do_rk_lock)
@@ -1248,16 +1249,15 @@ rd_kafka_topics_leader_query_sync (rd_kafka_t *rk, int all_topics,
 
         while (1) {
                 int state_version = rd_kafka_brokers_get_state_version(rk);
-                
+
                 err = rd_kafka_topics_leader_query(rk, all_topics, topics,
                                                    RD_KAFKA_REPLYQ(rkq, 0),
                                                    1/*lock*/);
-                printf("leader_query gave: %s\n", rd_kafka_err2str(err));
                 if (err != RD_KAFKA_RESP_ERR__TRANSPORT)
                         break;
 
                 if (!rd_kafka_brokers_wait_state_change(
-			    rk, state_version, rd_timeout_remains(ts_end)))
+                            rk, state_version, rd_timeout_remains(ts_end)))
                         break;
         }
 

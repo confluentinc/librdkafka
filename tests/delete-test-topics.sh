@@ -14,6 +14,16 @@ ZK=$1
 KATOPS=$2
 RE=$3
 
+if [[ -z "$ZK" ]]; then
+    ZK="$ZK_ADDRESS"
+fi
+
+if [[ -z "$KATOPS" ]]; then
+    if [[ -d "$KAFKA_PATH" ]]; then
+        KATOPS="$KAFKA_PATH/bin/kafka-topics.sh"
+    fi
+fi
+
 if [[ -z "$RE" ]]; then
     RE="^rdkafkatest_"
 fi

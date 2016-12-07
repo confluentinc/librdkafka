@@ -40,11 +40,15 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 #Language bindings#
 
+  * C#/.NET: [rdkafka-dotnet](https://github.com/ah-/rdkafka-dotnet)
+  * D (C-like): [librdkafka](https://github.com/DlangApache/librdkafka/)
+  * D (C++-like): [librdkafkad](https://github.com/tamediadigital/librdkafka-d)
+  * Go: [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go)
   * Haskell: [haskakafka](https://github.com/cosbynator/haskakafka)
   * Haskell: [haskell-kafka](https://github.com/yanatan16/haskell-kafka)
+  * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
   * Node.js: [node-kafka](https://github.com/sutoiku/node-kafka)
   * Node.js: [kafka-native](https://github.com/jut-io/node-kafka-native)
-  * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
   * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)
   * PHP: [php-rdkafka](https://github.com/arnaud-lb/php-rdkafka)
@@ -53,9 +57,6 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Ruby: [Hermann](https://github.com/stancampbell3/Hermann)
   * Rust: [rust-rdkafka](https://github.com/fede1024/rust-rdkafka)
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
-  * C#/.NET: [rdkafka-dotnet](https://github.com/ah-/rdkafka-dotnet)
-  * D (C-like): [librdkafka](https://github.com/DlangApache/librdkafka/)
-  * D (C++-like): [librdkafkad](https://github.com/tamediadigital/librdkafka-d)
 
 #Users of librdkafka#
 

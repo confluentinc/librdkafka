@@ -1778,7 +1778,7 @@ rd_kafka_get_watermark_offsets (rd_kafka_t *rk,
  * The function will block for at most \p timeout_ms milliseconds.
  *
  * @remark Duplicate Topic+Partitions are not supported.
- * @remark Errors are also returned per \c rd_kafka_topic_partition_t.err
+ * @remark Per-partition errors may be returned in \c rd_kafka_topic_partition_t.err
  *
  * @returns an error code for general errors, else RD_KAFKA_RESP_ERR_NO_ERROR
  *          in which case per-partition errors might be set.

@@ -2189,6 +2189,7 @@ rd_kafka_get_watermark_offsets (rd_kafka_t *rk, const char *topic,
 
 struct _get_offsets_for_times {
         rd_kafka_topic_partition_list_t *results;
+        rd_kafka_resp_err_t err;
         int wait_reply;
         int state_version;
         rd_ts_t ts_end;
@@ -2223,6 +2224,9 @@ static void rd_kafka_get_offsets_for_times_resp_cb (rd_kafka_t *rk,
                 /* FALLTHRU */
         }
 
+        if (err && !state->err)
+                state->err = err;
+
         state->wait_reply--;
 }
 
@@ -2232,7 +2236,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
                             rd_kafka_topic_partition_list_t *offsets,
                             int timeout_ms) {
         rd_kafka_q_t *rkq;
-        struct _get_offsets_for_times state;
+        struct _get_offsets_for_times state = RD_ZERO_INIT;
         rd_ts_t ts_end = rd_timeout_init(timeout_ms);
         rd_list_t leaders;
         int i;
@@ -2243,7 +2247,8 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         rd_list_init(&leaders, offsets->cnt);
-        rd_list_set_free_cb(&leaders, (void *)rd_kafka_partition_leader_destroy);
+        rd_list_set_free_cb(&leaders,
+                            (void *)rd_kafka_partition_leader_destroy);
 
         err = rd_kafka_topic_partition_list_query_leaders(rk, offsets, &leaders,
                                                           timeout_ms);
@@ -2277,11 +2282,12 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
         rd_kafka_q_destroy(rkq);
 
         /* Then update the queried partitions. */
-        rd_kafka_topic_partition_list_update(offsets, state.results);
+        if (!state.err)
+                rd_kafka_topic_partition_list_update(offsets, state.results);
 
         rd_kafka_topic_partition_list_destroy(state.results);
 
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        return state.err;
 }
 
 

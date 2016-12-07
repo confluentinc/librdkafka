@@ -185,7 +185,7 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
                 while (PartArrayCnt-- > 0) {
                         int32_t kpartition;
                         int32_t OffsetArrayCnt;
-                        int64_t Offset;
+                        int64_t Offset = -1;
                         rd_kafka_topic_partition_t *rktpar;
 
                         rd_kafka_buf_read_i32(rkbuf, &kpartition);
@@ -197,7 +197,6 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
                                 rd_kafka_buf_read_i64(rkbuf, &Offset);
                         } else if (api_version == 0) {
                                 rd_kafka_buf_read_i32(rkbuf, &OffsetArrayCnt);
-                                Offset = -1;
                                 /* We only request one offset so just grab
                                  * the first one. */
                                 while (OffsetArrayCnt-- > 0)

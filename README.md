@@ -1,9 +1,11 @@
-librdkafka - Apache Kafka C/C++ client library
-==============================================
+librdkafka - the Apache Kafka C/C++ client library
+==================================================
 
 Copyright (c) 2012-2016, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
+
+[![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
 
 **librdkafka** is a C library implementation of the
 [Apache Kafka](http://kafka.apache.org/) protocol, containing both
@@ -20,37 +22,20 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 **NOTE**: The `master` branch is actively developed, use latest release for production use.
 
-[![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
 
-**Apache Kafka 0.8 & 0.9 & 0.10 support:**
-
-  * Branch: master
-  * Producer: supported
-  * High-level balanced KafkaConsumer: supported (requires broker >= 0.9)
-  * Simple Consumer: supported
+#Overview#
+  * High-level producer
+  * High-level balanced KafkaConsumer (requires broker >= 0.9)
+  * Simple (legacy) consumer
   * Compression: snappy, gzip, lz4
-  * Broker version support: >=0.8
+  * [SSL](https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka) support
+  * [SASL](https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka) (GSSAPI/Kerberos, PLAIN) support
+  * Broker version support: >=0.8 (see [Broker version compatibility](https://github.com/edenhill/librdkafka/wiki/Broker-version-compatibility))
+  * Stable API and ABI safe stable C & C++ APIs
+  * [Statistics](https://github.com/edenhill/librdkafka/wiki/Statistics) metrics
   * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
-  * ZooKeeper: not supported
-  * C API: Stable, ABI safe
-  * C++ API: Stable
-  * Tests: Regression tests in `tests/` directory.
-  * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
-  * Status: Testing
-
-
-**Apache Kafka 0.7 support:**
-
-  * Branch: 0.7
-  * Producer: supported
-  * High-level Consumer: not supported
-  * Simple Consumer: supported
-  * Compression: not supported
-  * Broker version support: 0.7.x
-  * ZooKeeper: not supported
-  * Status: Stable, Deprecated, Unsupported
-
-
+  * RPM package: librdkafka and librdkafka-devel
+  * Portable: runs on Linux, OSX, Win32, Solaris, FreeBSD, ...
 
 
 #Language bindings#

@@ -1052,6 +1052,12 @@ public:
 
   virtual ~TopicPartition() = 0;
 
+  /**
+   * @brief Destroy/delete the TopicPartitions in \p partitions
+   *        and clear the vector.
+   */
+  static void destroy (std::vector<TopicPartition*> &partitions);
+
   /** @returns topic name */
   virtual const std::string &topic () const = 0;
 

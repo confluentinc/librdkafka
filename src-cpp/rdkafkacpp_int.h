@@ -654,6 +654,8 @@ public:
     // FIXME: metadata
   }
 
+  static void destroy (std::vector<TopicPartition*> &partitions);
+
   int partition () const { return partition_; }
   const std::string &topic () const { return topic_ ; }
 

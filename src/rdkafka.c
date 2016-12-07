@@ -528,6 +528,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
         rd_kafka_assignors_term(rk);
 
+        rd_kafka_metadata_cache_destroy(rk);
+
         rd_kafka_timers_destroy(&rk->rk_timers);
 
         /* Destroy cgrp */
@@ -831,6 +833,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                    "\"msg_max\":%u, "
 		   "\"msg_size_max\":%"PRIdsz", "
                    "\"simple_cnt\":%i, "
+                   "\"metadata_cache_cnt\":%i, "
 		   "\"brokers\":{ "/*open brokers*/,
                    rk->rk_name,
                    rd_kafka_type2str(rk->rk_type),
@@ -839,7 +842,8 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		   rd_kafka_q_len(rk->rk_rep),
 		   tot_cnt, tot_size,
 		   rk->rk_curr_msgs.max_cnt, rk->rk_curr_msgs.max_size,
-                   rd_atomic32_get(&rk->rk_simple_cnt));
+                   rd_atomic32_get(&rk->rk_simple_cnt),
+                   rk->rk_metadata_cache.rkmc_cnt);
 
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -1195,7 +1199,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
         rd_kafka_timers_init(&rk->rk_timers, rk);
-
+        rd_kafka_metadata_cache_init(rk);
 
 	if (rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb)
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_DR;

@@ -2839,33 +2839,29 @@ rd_kafka_topic_partition_list_get_leaders_by_metadata (
         rd_list_t *query_topics) {
         int cnt = 0;
         int i;
-        const struct metadata *md = NULL;
 
         rd_kafka_rdlock(rk);
-        md = rk->rk_full_metadata;
 
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &rktparlist->elems[i];
-                shptr_rd_kafka_toppar_t *s_rktp;
                 rd_kafka_broker_t *rkb = NULL;
                 struct rd_kafka_partition_leader leader_skel;
                 struct rd_kafka_partition_leader *leader;
+                const rd_kafka_metadata_partition_t *mpartition;
 
-                if (md) {
-                        const rd_kafka_metadata_partition_t *mdpart;
+                mpartition = rd_kafka_metadata_cache_partition_get(
+                        rk, rktpar->topic, rktpar->partition);
 
-                        mdpart = rd_kafka_metadata_partition_find(
-                                md, rktpar->topic, rktpar->partition);
-                        rkb = rd_kafka_broker_find_by_nodeid0(rk, 
-
+                if (!mpartition)
+                        rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                else if (mpartition->leader == -1 ||
+                         !(rkb = rd_kafka_broker_find_by_nodeid0(
+                                   rk, mpartition->leader, -1/*any state*/)))
+                        rktpar->err = RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
 
                 if (!rkb) {
-                        if (!s_rktp)
-                                rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
-                        else
-                                rktpar->err = RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
-                        printf("no current leader for %s %d\n",
-                               rktpar->topic, (int)rktpar->partition);
+                        /* No current leader for partition, add topic
+                         * to query list. */
                         if (query_topics &&
                             !rd_list_find(query_topics, rktpar->topic,
                                           (void *)strcmp))
@@ -2873,9 +2869,8 @@ rd_kafka_topic_partition_list_get_leaders_by_metadata (
                                             rd_strdup(rktpar->topic));
                         continue;
                 }
-                printf("current leader for %s %d is %s\n",
-                       rktpar->topic, (int)rktpar->partition,
-                       rkb->rkb_logname);
+
+                /* Leader exists, add to leader list. */
 
                 rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
 

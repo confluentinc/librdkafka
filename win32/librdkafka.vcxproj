@@ -135,6 +135,7 @@
     <ClInclude Include="..\src\rdwin32.h" />
     <ClInclude Include="..\src\win32_config.h" />
     <ClInclude Include="..\src\regexp.h" />
+    <ClInclude Include="..\src\rdavl.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\rdaddr.c" />
@@ -162,6 +163,7 @@
     <ClCompile Include="..\src\rdkafka_buf.c" />
     <ClCompile Include="..\src\rdkafka_feature.c" />
     <ClCompile Include="..\src\rdkafka_metadata.c" />
+    <ClCompile Include="..\src\rdkafka_metadata_cache.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdstring.c" />
@@ -171,6 +173,7 @@
     <ClCompile Include="..\src\tinycthread.c" />
     <ClCompile Include="..\src\regexp.c" />
     <ClCompile Include="..\src\rdports.c" />
+    <ClCompile Include="..\src\rdavl.c" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\LICENSE..txt" />

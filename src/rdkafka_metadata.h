@@ -28,6 +28,8 @@
 
 #pragma once
 
+#include "rdavl.h"
+
 
 rd_kafka_resp_err_t rd_kafka_metadata0 (rd_kafka_t *rk,
 					int all_topics,
@@ -47,3 +49,47 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk,
 			       rd_list_t *list,
 			       const struct rd_kafka_metadata *metadata,
 			       const rd_kafka_topic_partition_list_t *match);
+
+void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
+                            const struct rd_kafka_metadata *md);
+
+
+
+/**
+ * @{
+ *
+ * @brief Metadata cache
+ */
+
+struct rd_kafka_metadata_cache_entry {
+        rd_avl_node_t rkmce_avlnode;
+        TAILQ_ENTRY(rd_kafka_metadata_cache_entry) rkmce_link;
+        rd_ts_t rkmce_ts_expires;
+        rd_kafka_metadata_topic_t rkmce_mtopic;
+        /* rkmce_partitions memory points here. */
+};
+
+
+struct rd_kafka_metadata_cache {
+        rd_avl_t rkmc_avl;
+        TAILQ_HEAD(, rd_kafka_metadata_cache_entry) rkmc_expiry;
+        rd_kafka_timer_t rkmc_expiry_tmr;
+        int rkmc_cnt;
+};
+
+
+
+void rd_kafka_metadata_cache_update (rd_kafka_t *rk,
+                                     const rd_kafka_metadata_t *md,
+                                     int abs_update);
+const rd_kafka_metadata_topic_t *
+rd_kafka_metadata_cache_topic_get (rd_kafka_t *rk, const char *topic);
+const rd_kafka_metadata_partition_t *
+rd_kafka_metadata_cache_partition_get (rd_kafka_t *rk,
+                                       const char *topic, int32_t partition);
+
+void rd_kafka_metadata_cache_init (rd_kafka_t *rk);
+void rd_kafka_metadata_cache_destroy (rd_kafka_t *rk);
+
+
+/**@}*/

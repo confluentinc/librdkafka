@@ -459,6 +459,8 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         rd_kafka_wrlock(rkb->rkb_rk);
         rkb->rkb_rk->rk_ts_metadata = rd_clock();
 
+        rd_kafka_metadata_cache_update(rkb->rkb_rk, md, all_topics);
+
 	if (all_topics) {
 		if (rkb->rkb_rk->rk_full_metadata)
 			rd_kafka_metadata_destroy(rkb->rkb_rk->rk_full_metadata);
@@ -532,82 +534,33 @@ rd_kafka_metadata_topic_match (rd_kafka_t *rk,
 	return cnt;
 }
 
-struct rd_kafka_metadata_cache_entry {
-        TAILQ_ENTRY(rd_kafka_metadata_cache_entry) rkmce_link;
-        rd_ts_t rkmce_ts_expires;
-        rd_kafka_metadata_topic_t rkmce_topic;
-        rd_kafka_metadata_partition_t *rkmce_partitions;
-        /* rkmce_partitions memory points here. */
-};
+void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
+                            const struct rd_kafka_metadata *md) {
+        int i;
 
+        rd_kafka_dbg(rk, METADATA, fac,
+                     "Metadata with %d broker(s) and %d topic(s):",
+                     md->broker_cnt, md->topic_cnt);
 
-struct rd_kafka_metadata_cache {
-        TAILQ_HEAD(, rd_kafka_metadata_cache_entry) rkmc_expiry;
-        rd_timer_t rkmc_expiry_tmr;
+        for (i = 0 ; i < md->broker_cnt ; i++) {
+                rd_kafka_dbg(rk, METADATA, fac,
+                             "  Broker #%i/%i: %s:%i NodeId %"PRId32,
+                             i, md->broker_cnt,
+                             md->brokers[i].host,
+                             md->brokers[i].port,
+                             md->brokers[i].id);
+        }
 
-};
-
-
-/**
- * @brief Update the metadata cache with the provided metadata.
- *
- * @remark rd_kafka_wrlock() MUST be held
- */
-void rd_kafka_metadata_cache_update (rd_kafka_t *rk,
-                                     const rd_kafka_metadata_t *md) {
-
+        for (i = 0 ; i < md->topic_cnt ; i++) {
+                rd_kafka_dbg(rk, METADATA, fac,
+                             "  Topic #%i/%i: %s with %i partitions%s%s",
+                             i, md->topic_cnt, md->topics[i].topic,
+                             md->topics[i].partition_cnt,
+                             md->topics[i].err ? ": " : "",
+                             md->topics[i].err ?
+                             rd_kafka_err2str(md->topics[i].err) : "");
+        }
 }
 
 
-/**
- * @brief Purge the metadata cache
- *
- * @remark rd_kafka_wrlock() MUST be held
- */
-void rd_kafka_metadata_cache_purge (rd_kafka_t *rk) {
 
-}
-
-
-/**
- * @brief Evict timed out entries from cache
- *
- * @remark rd_kafka_wrlock() MUST be held
- */
-int rd_kafka_metadata_cache_evict (rd_kafka_t *rk) {
-
-}
-
-
-/**
- * @returns the shared metadata for a topic, or NULL if not found in
- *          cache.
- *
- * @remark rd_kafka_*lock() MUST be held
- */
-const rd_kafka_metadata_topic_t *
-rd_kafka_metadata_cache_topic_get (rd_kafka_t *rk, const char *topic) {
-        struct rd_kafka_metadata_cache_entry *rkmce;
-        return &rkmce->rkmce_topic;
-}
-
-
-/**
- * @returns the shared metadata for a partition, or NULL if not found in
- *          cache.
- *
- * @remark rd_kafka_*lock() MUST be held
- */
-const rd_kafka_metadata_partition_t *
-rd_kafka_metadata_cache:partition_get (rd_kafka_t *rk,
-                                       const char *topic, int32_t partition) {
-        rd_kafka_metadata_topic_t *mtopic;
-
-        if (!(mtopic = rd_kafka_metadata_topic_get(rk, topic)))
-                return NULL;
-
-        if (partition < 0 || partition >= mtopic->partition_cnt)
-                return NULL;
-
-        return &mtopic->partitions[partition];
-}

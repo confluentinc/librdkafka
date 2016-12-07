@@ -104,6 +104,8 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 #include "rdkafka_transport.h"
 #include "rdkafka_timer.h"
 #include "rdkafka_assignor.h"
+#include "rdkafka_metadata.h"
+
 
 /**
  * Protocol level sanity
@@ -167,6 +169,7 @@ struct rd_kafka_s {
 
 	struct rd_kafka_metadata *rk_full_metadata; /* Last full metadata. */
 	rd_ts_t          rk_ts_full_metadata;       /* Timesstamp of .. */
+        struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,

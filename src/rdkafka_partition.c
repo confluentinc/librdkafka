@@ -2574,6 +2574,9 @@ void rd_kafka_topic_partition_list_sort (
         int (*cmp) (const void *, const void *, void *),
         void *opaque) {
 
+        if (!cmp)
+                cmp = rd_kafka_topic_partition_cmp;
+
         qsort_r(rktparlist->elems, rktparlist->cnt, sizeof(*rktparlist->elems),
                 cmp, opaque);
 }

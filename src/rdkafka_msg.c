@@ -254,6 +254,7 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         va_list ap;
         rd_kafka_msg_t s_rkm = RD_ZERO_INIT, *rkm = &s_rkm;
         rd_kafka_vtype_t vtype;
+        rd_kafka_topic_t *app_rkt;
         rd_kafka_itopic_t *rkt = NULL;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int destr_rkt = 0;
@@ -269,9 +270,8 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                         break;
 
                 case RD_KAFKA_VTYPE_RKT:
-                        rkt = rd_kafka_topic_keep(
-                                rd_kafka_topic_a2i(
-                                        va_arg(ap, rd_kafka_topic_t *)));
+                        app_rkt = va_arg(ap, rd_kafka_topic_t *);
+                        rkt = rd_kafka_topic_keep(rd_kafka_topic_a2i(app_rkt));
                         break;
 
                 case RD_KAFKA_VTYPE_PARTITION:

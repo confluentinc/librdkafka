@@ -79,19 +79,20 @@ static void test_offset_time (void) {
   if (!p)
     Test::Fail("Failed to create Producer: " + errstr);
 
-  query_parts.push_back(RdKafka::TopicPartition::create(topic, 0, timestamps[0]));
-  query_parts.push_back(RdKafka::TopicPartition::create(topic, 1, timestamps[0]));
+  query_parts.push_back(RdKafka::TopicPartition::create(topic, 97, timestamps[0]));
+  query_parts.push_back(RdKafka::TopicPartition::create(topic, 98, timestamps[0]));
   query_parts.push_back(RdKafka::TopicPartition::create(topic, 99, timestamps[0]));
 
   /* First query timestamps before topic exists, should fail. */
   Test::Say("Attempting first offsetsForTimes() query (should fail)\n");
   RdKafka::ErrorCode err = p->offsetsForTimes(query_parts, 10000);
-  Test::Say(tostr() << "offsetsForTimes #1 with non-existing topic returned " <<
-            RdKafka::err2str(err) << "\n");
+  Test::Say("offsetsForTimes #1 with non-existing partitions returned " +
+            RdKafka::err2str(err) + "\n");
   Test::print_TopicPartitions("offsetsForTimes #1", query_parts);
 
-  if (err == RdKafka::ERR_NO_ERROR)
-    Test::Fail("offsetsForTimes #1 should have failed");
+  if (err != RdKafka::ERR__UNKNOWN_PARTITION)
+    Test::Fail("offsetsForTimes #1 should have failed with UNKNOWN_PARTITION, "
+               "not " + RdKafka::err2str(err));
 
   Test::Say("Producing to " + topic + "\n");
   for (int partition = 0 ; partition < 2 ; partition++) {
@@ -109,7 +110,7 @@ static void test_offset_time (void) {
 
 
   for (int ti = 0 ; ti < timestamp_cnt*2 ; ti += 2) {
-    query_parts.clear();
+    RdKafka::TopicPartition::destroy(query_parts);
     query_parts.push_back(RdKafka::TopicPartition::create(topic, 0, timestamps[ti]));
     query_parts.push_back(RdKafka::TopicPartition::create(topic, 1, timestamps[ti]));
 
@@ -125,6 +126,8 @@ static void test_offset_time (void) {
 
   if (fails > 0)
     Test::Fail(tostr() << "See " << fails << " previous error(s)");
+
+  RdKafka::TopicPartition::destroy(query_parts);
 
   delete p;
   delete conf;

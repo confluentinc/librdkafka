@@ -2683,7 +2683,7 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                (exp_cnt == -1 || cnt < exp_cnt)) {
                 rd_kafka_message_t *rkmessage;
 
-                rkmessage = rd_kafka_consumer_poll(rk, 10*1000);
+                rkmessage = rd_kafka_consumer_poll(rk, tmout_multip(10*1000));
                 if (!rkmessage) /* Shouldn't take this long to get a msg */
                         TEST_FAIL("%s: consumer_poll() timeout "
 				  "(%d/%d eof, %d/%d msgs)\n", what,

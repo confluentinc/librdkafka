@@ -275,5 +275,6 @@ int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg);
 void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 				const char *reason);
 void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
-					  const struct rd_kafka_metadata *md);
+					  const struct rd_kafka_metadata *md,
+                                          int metadata_age, int do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)

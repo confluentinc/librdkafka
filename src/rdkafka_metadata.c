@@ -226,8 +226,8 @@ rd_kafka_metadata_copy (const struct rd_kafka_metadata *src, size_t size) {
  */
 struct rd_kafka_metadata *
 rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
-                         const rd_list_t *topics, rd_kafka_buf_t *rkbuf) {
-        int all_topics = !topics;
+                         int all_topics, const rd_list_t *topics,
+                         const char *reason, rd_kafka_buf_t *rkbuf) {
 	int i, j, k;
 	rd_tmpabuf_t tbuf;
         struct rd_kafka_metadata *md;
@@ -414,9 +414,6 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 		rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto,
 				       &md->brokers[i]);
 	}
-        rd_rkb_dbg(rkb, METADATA, "METADATA",
-                   "  Topic cnt %i based on %d topics", md->topic_cnt,
-                   topics ? rd_list_cnt(topics) : -1);
 
 	/* Update partition count and leader for each topic we know about */
 	for (i = 0 ; i < md->topic_cnt ; i++) {
@@ -467,6 +464,10 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 		rkb->rkb_rk->rk_full_metadata =
 			rd_kafka_metadata_copy(md, tbuf.of);
 		rkb->rkb_rk->rk_ts_full_metadata = rkb->rkb_rk->rk_ts_metadata;
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "Caching full metadata with "
+                           "%d broker(s) and %d topic(s): %s",
+                           md->broker_cnt, md->topic_cnt, reason);
 	}
         rd_kafka_wrunlock(rkb->rkb_rk);
 

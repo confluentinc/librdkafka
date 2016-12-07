@@ -644,6 +644,11 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
 		return;
 	}
 
+        if (rd_list_empty(rkcg->rkcg_subscribed_topics))
+                rd_kafka_cgrp_metadata_update_check(
+                        rkcg, rkcg->rkcg_rk->rk_full_metadata,
+                        metadata_age, 0/*dont join*/);
+
 	if (rd_list_empty(rkcg->rkcg_subscribed_topics)) {
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
 			     "Group \"%.*s\": "
@@ -701,7 +706,8 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
  * @remark Takes ownership of \p topics
  */
 static int rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
-						   rd_list_t *topics) {
+						   rd_list_t *topics,
+                                                   int metadata_age) {
 	rd_kafka_topic_info_t *tinfo;
 	int i;
 
@@ -731,15 +737,16 @@ static int rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
 		return 0;
 	}
 
-	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
+	rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_METADATA, "SUBSCRIPTION",
 		     "Group \"%.*s\": effective subscription list changed "
-		     "from %d to %d topic(s):",
+		     "from %d to %d topic(s) using %dms old metadata:",
 		     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
 		     rd_list_cnt(rkcg->rkcg_subscribed_topics),
-		     rd_list_cnt(topics));
+		     rd_list_cnt(topics), metadata_age);
 
 	RD_LIST_FOREACH(tinfo, topics, i)
-		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
+		rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_METADATA,
+                             "SUBSCRIPTION",
 			     " Topic %s with %d partition(s)",
 			     tinfo->topic, tinfo->partition_cnt);
 
@@ -1743,7 +1750,7 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
                 rkcg->rkcg_subscription = NULL;
         }
 
-	rd_kafka_cgrp_update_subscribed_topics(rkcg, NULL);
+	rd_kafka_cgrp_update_subscribed_topics(rkcg, NULL, 0);
 
         /*
          * Clean-up group leader duties, if any.
@@ -2433,7 +2440,8 @@ void rd_kafka_cgrp_handle_Metadata (rd_kafka_cgrp_t *rkcg,
  * - matched topic's partition count change
  */
 void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
-					  const struct rd_kafka_metadata *md) {
+					  const struct rd_kafka_metadata *md,
+                                          int metadata_age, int do_join) {
 	rd_list_t *topics;
 
 	rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
@@ -2453,7 +2461,8 @@ void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
 	/*
 	 * Update
 	 */
-	if (rd_kafka_cgrp_update_subscribed_topics(rkcg, topics)) {
+	if (rd_kafka_cgrp_update_subscribed_topics(rkcg, topics, metadata_age)
+            && do_join) {
 		/* List of subscribed topics changed, trigger rejoin. */
 		rd_kafka_cgrp_rejoin(rkcg);
 	}

@@ -1648,10 +1648,8 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
         struct rd_kafka_metadata *md = NULL;
         int all_topics = !rko->rko_u.metadata.topics;
 
-        rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
-
-	rd_rkb_dbg(rkb, METADATA, "METADATA",
-		   "===== Received metadata =====");
+        rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
+                        thrd_is_current(rk->rk_thread));
 
 	/* Avoid metadata updates when we're terminating. */
 	if (rd_kafka_terminating(rkb->rkb_rk))
@@ -1669,15 +1667,30 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                            rd_kafka_err2str(err),
 			   (int)(request->rkbuf_ts_sent/1000));
 	} else {
+
+                if (all_topics)
+                        rd_rkb_dbg(rkb, METADATA, "METADATA",
+                                   "===== Received metadata "
+                                   "(for all topics) =====");
+                else
+                        rd_rkb_dbg(rkb, METADATA, "METADATA",
+                                   "===== Received metadata "
+                                   "(for %d requested topics) =====",
+                                   rd_list_cnt(rko->rko_u.metadata.topics));
+
+
                 md = rd_kafka_parse_Metadata(rkb,
-                                             rko->rko_u.metadata.topics, rkbuf);
+                                             all_topics,
+                                             rko->rko_u.metadata.topics,
+                                             rko->rko_u.metadata.reason,
+                                             rkbuf);
 		if (!md) {
 			if (rd_kafka_buf_retry(rkb, request))
 				return;
 			err = RD_KAFKA_RESP_ERR__BAD_MSG;
                 } else if (rkb->rkb_rk->rk_cgrp && all_topics)
-			rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
-							    md);
+                        rd_kafka_cgrp_metadata_update_check(
+                                rkb->rkb_rk->rk_cgrp, md, 0, 1/*do join*/);
         }
 
         /* FIXME: move this logic to caller */
@@ -1716,7 +1729,8 @@ static void rd_kafka_assignor_handle_Metadata (rd_kafka_t *rk,
                 return; /* Terminating */
 
         if (!err) {
-                md = rd_kafka_parse_Metadata(rkb, NULL, rkbuf);
+                md = rd_kafka_parse_Metadata(rkb, 0, NULL,
+                                             "assignor metadata query", rkbuf);
 		if (!md) {
 			if (rd_kafka_buf_retry(rkb, request))
 				return;

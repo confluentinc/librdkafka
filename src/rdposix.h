@@ -32,6 +32,11 @@
  */
 #pragma once
 
+#if HAVE_QSORT_R
+#define _GNU_SOURCE
+#include <stdlib.h>
+#endif
+
 #include <unistd.h>
 #include <sys/time.h>
 #include <inttypes.h>

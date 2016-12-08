@@ -1,0 +1,31 @@
+{
+  "targets": {
+    "xenial-amd64": {
+
+      "buildenv": "xenial-amd64",
+      "builddeps": [
+        "build-essential",
+        "python",
+      ],
+      "buildcmd": [
+        "./configure",
+          "make -j ${PARALLEL}",
+          "make -C tests run_local"
+      ]
+    },
+
+    "xenial-i386": {
+
+      "buildenv": "xenial-i386",
+      "builddeps": [
+        "build-essential",
+        "python",
+      ],
+      "buildcmd": [
+        "./configure",
+        "make -j ${PARALLEL}",
+        "make -C tests run_local"
+      ]
+    }
+  }
+}

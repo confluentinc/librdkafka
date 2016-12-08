@@ -4,7 +4,10 @@ LIBVER=		1
 
 -include ../Makefile.config
 
+ifneq ($(wildcard ../.git),)
+# Add librdkafka version string from git tag if this is a git checkout
 CPPFLAGS += -DLIBRDKAFKA_GIT_VERSION="\"$(shell git describe --abbrev=6 --dirty --tags 2>/dev/null)\""
+endif
 
 SRCS_$(WITH_SASL) += rdkafka_sasl.c
 SRCS_$(WITH_SNAPPY) += snappy.c

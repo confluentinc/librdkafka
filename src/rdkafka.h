@@ -717,45 +717,51 @@ typedef enum rd_kafka_vtype_t {
  * Topic name (const char *)
  */
 #define RD_KAFKA_V_TOPIC(topic)                                         \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_TOPIC, const char *, topic), topic
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_TOPIC, const char *, topic),      \
+        (const char *)topic
 /*!
  * Topic object (rd_kafka_topic_t *)
  */
 #define RD_KAFKA_V_RKT(rkt)                                             \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_RKT, rd_kafka_topic_t *, rkt), rkt
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_RKT, rd_kafka_topic_t *, rkt),    \
+        (rd_kafka_topic_t *)rkt
 /*!
  * Partition (int32_t)
  */
 #define RD_KAFKA_V_PARTITION(partition)                                 \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_PARTITION, int32_t, partition), partition
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_PARTITION, int32_t, partition),   \
+        (int32_t)partition
 /*!
  * Message value/payload pointer and length (void *, size_t)
  */
 #define RD_KAFKA_V_VALUE(VALUE,LEN)                                     \
         _LRK_TYPECHECK2(RD_KAFKA_VTYPE_VALUE, void *, VALUE, size_t, LEN), \
-                VALUE, LEN
+        (void *)VALUE, (size_t)LEN
 /*!
  * Message key pointer and length (const void *, size_t)
  */
 #define RD_KAFKA_V_KEY(KEY,LEN)                                         \
         _LRK_TYPECHECK2(RD_KAFKA_VTYPE_KEY, const void *, KEY, size_t, LEN), \
-                KEY, LEN
+        (void *)KEY, (size_t)LEN
 /*!
  * Opaque pointer (void *)
  */
 #define RD_KAFKA_V_OPAQUE(opaque)                                 \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, opaque), opaque
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, opaque),    \
+        (void *)opaque
 /*!
  * Message flags (int)
  * @sa RD_KAFKA_MSG_F_COPY, et.al.
  */
 #define RD_KAFKA_V_MSGFLAGS(msgflags)                                 \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_MSGFLAGS, int, msgflags), msgflags
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_MSGFLAGS, int, msgflags),       \
+        (int)msgflags
 /*!
  * Timestamp (int64_t)
  */
 #define RD_KAFKA_V_TIMESTAMP(timestamp)                                 \
-        _LRK_TYPECHECK(RD_KAFKA_VTYPE_TIMESTAMP, int64_t, timestamp), timestamp
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_TIMESTAMP, int64_t, timestamp),   \
+        (int64_t)timestamp
 
 /**@}*/
 

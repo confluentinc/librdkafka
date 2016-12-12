@@ -1048,7 +1048,7 @@ static int match(Reinst *pc, const char *sp, const char *bol, int flags, Resub *
 				}
 				break;
 			case I_REF:
-				i = sub.sub[pc->n].ep - sub.sub[pc->n].sp;
+				i = (int)(sub.sub[pc->n].ep - sub.sub[pc->n].sp);
 				if (flags & REG_ICASE) {
 					if (strncmpcanon(sp, sub.sub[pc->n].sp, i))
 						goto dead;

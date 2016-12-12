@@ -3043,7 +3043,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 		rkb->rkb_toppar_cnt++;
                 rd_kafka_broker_unlock(rkb);
 		rktp->rktp_leader = rkb;
-                rktp->rktp_msgq_wakeup_fd = rkb->rkb_wakeup_fd[1];
+                rktp->rktp_msgq_wakeup_fd = rkb->rkb_toppar_wakeup_fd;
                 rd_kafka_broker_keep(rkb);
 
                 rd_kafka_broker_destroy(rktp->rktp_next_leader);
@@ -4767,19 +4767,44 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
 
-        if (source == RD_KAFKA_INTERNAL ||
-            (r = rd_pipe_nonblocking(rkb->rkb_wakeup_fd)) == -1) {
-                if (source != RD_KAFKA_INTERNAL)
-                        rd_rkb_log(rkb, LOG_ERR, "WAKEUPFD",
-                                   "Failed to setup broker queue wake-up fds: "
-                                   "%s: disabling low-latency mode",
-                                   rd_strerror(r));
-            rkb->rkb_wakeup_fd[0] = -1;
-            rkb->rkb_wakeup_fd[1] = -1;
+        /*
+         * Fd-based queue wake-ups using a non-blocking pipe.
+         * Writes are best effort, if the socket queue is full
+         * the write fails (silently) but this has no effect on latency
+         * since the POLLIN flag will already have been raised for fd.
+         */
+        rkb->rkb_wakeup_fd[0]     = -1;
+        rkb->rkb_wakeup_fd[1]     = -1;
+        rkb->rkb_toppar_wakeup_fd = -1;
+
+        if ((r = rd_pipe_nonblocking(rkb->rkb_wakeup_fd)) == -1) {
+                rd_rkb_log(rkb, LOG_ERR, "WAKEUPFD",
+                           "Failed to setup broker queue wake-up fds: "
+                           "%s: disabling low-latency mode",
+                           rd_strerror(r));
+
+        } else if (source == RD_KAFKA_INTERNAL) {
+                /* nop: internal broker has no IO transport. */
+
         } else {
                 char onebyte = 1;
+
+                /* Since there is a small syscall penalty,
+                 * only enable partition message queue wake-ups
+                 * if latency contract demands it.
+                 * rkb_ops is queue wakeups are always enabled though,
+                 * since they are much more infrequent. */
+                if (rk->rk_conf.buffering_max_ms <
+                    rk->rk_conf.socket_blocking_max_ms) {
+                        rd_rkb_dbg(rkb, QUEUE, "WAKEUPFD",
+                                   "Enabled low-latency partition "
+                                   "queue wake-ups");
+                        rkb->rkb_toppar_wakeup_fd = rkb->rkb_wakeup_fd[1];
+                }
+
+
                 rd_rkb_dbg(rkb, QUEUE, "WAKEUPFD",
-                           "Enabled low-latency queue wake-ups");
+                           "Enabled low-latency ops queue wake-ups");
                 rd_kafka_q_io_event_enable(rkb->rkb_ops, rkb->rkb_wakeup_fd[1],
                                            &onebyte, sizeof(onebyte));
         }

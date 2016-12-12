@@ -40,6 +40,7 @@
 #define WIN32_MEAN_AND_LEAN
 #include <Winsock2.h>  /* for struct timeval */
 #include <io.h>
+#include <fcntl.h>
 
 
 /**
@@ -213,19 +214,34 @@ static RD_UNUSED int rd_fd_set_nonblocking (int fd) {
  */
 static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         HANDLE h[2];
+        int i;
 
         if (!CreatePipe(&h[0], &h[1], NULL, 0))
                 return (int)GetLastError();
-        fds[0] = _open_osfhandle((intptr_t)h[0], 0);
-        fds[1] = _open_osfhandle((intptr_t)h[1], 0);
-        if (fds[0] == -1 || fds[1] == -1) {
-                CloseHandle(h[0]);
-                CloseHandle(h[1]);
-                return (int)GetLastError();
+        for (i = 0 ; i < 2 ; i++) {
+                DWORD mode = PIPE_NOWAIT;
+                /* Set non-blocking */
+                if (!SetNamedPipeHandleState(h[i], &mode, NULL, NULL)) {
+                        CloseHandle(h[0]);
+                        CloseHandle(h[1]);
+                        return (int)GetLastError();
+                }
+
+                /* Open file descriptor for handle */
+                fds[i] = _open_osfhandle((intptr_t)h[i],
+                                         i == 0 ?
+                                         O_RDONLY | O_BINARY :
+                                         O_WRONLY | O_BINARY);
+
+                if (fds[i] == -1) {
+                        CloseHandle(h[0]);
+                        CloseHandle(h[1]);
+                        return (int)GetLastError();
+                }
         }
         return 0;
 }
 
 #define rd_read(fd,buf,sz) _read(fd,buf,sz)
 #define rd_write(fd,buf,sz) _write(fd,buf,sz)
-#define rd_close(fd) _close(fd)
+#define rd_close(fd) closesocket(fd)

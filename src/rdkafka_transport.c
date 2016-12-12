@@ -1260,17 +1260,13 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 #endif
         rd_atomic64_add(&rktrans->rktrans_rkb->rkb_c.wakeups, 1);
 
-        if (rktrans->rktrans_pfd[1].revents) {
-                int sz;
+        if (rktrans->rktrans_pfd[1].revents & POLLIN) {
                 /* Read wake-up fd data and throw away, just used for wake-ups*/
                 char buf[512];
-                sz = rd_read((int)rktrans->rktrans_pfd[1].fd, buf, sizeof(buf));
-                if (0)
-                        rd_rkb_dbg(rktrans->rktrans_rkb, QUEUE, "POLL",
-                                   "Read %d bytes on %d: %s",
-                                   sz, (int)rktrans->rktrans_pfd[1].fd,
-                                   sz == -1 ? rd_strerror(errno) : "ok");
-
+                if (rd_read((int)rktrans->rktrans_pfd[1].fd,
+                            buf, sizeof(buf)) == -1) {
+                        /* Ignore warning */
+                }
         }
 
         return rktrans->rktrans_pfd[0].revents;

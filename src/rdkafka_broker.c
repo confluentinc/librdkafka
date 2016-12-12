@@ -4701,9 +4701,9 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					const char *name, uint16_t port,
 					int32_t nodeid) {
 	rd_kafka_broker_t *rkb;
-        int r;
 #ifndef _MSC_VER
-	sigset_t newset, oldset;
+        int r;
+        sigset_t newset, oldset;
 #endif
 
 	rkb = rd_calloc(1, sizeof(*rkb));
@@ -4777,6 +4777,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rkb->rkb_wakeup_fd[1]     = -1;
         rkb->rkb_toppar_wakeup_fd = -1;
 
+#ifndef _MSC_VER /* pipes cant be mixed with WSAPoll on Win32 */
         if ((r = rd_pipe_nonblocking(rkb->rkb_wakeup_fd)) == -1) {
                 rd_rkb_log(rkb, LOG_ERR, "WAKEUPFD",
                            "Failed to setup broker queue wake-up fds: "
@@ -4808,6 +4809,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
                 rd_kafka_q_io_event_enable(rkb->rkb_ops, rkb->rkb_wakeup_fd[1],
                                            &onebyte, sizeof(onebyte));
         }
+#endif
 
         /* Lock broker's lock here to synchronise state, i.e., hold off
 	 * the broker thread until we've finalized the rkb. */

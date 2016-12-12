@@ -588,11 +588,7 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 
 	rd_kafka_toppar_lock(rktp);
 	rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
-        if (0)
-        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, QUEUE, "ENQ",
-                     "Enq for [%"PRId32"]: fd %d, msgq_len now %d",
-                     rktp->rktp_partition, rktp->rktp_msgq_wakeup_fd,
-                     rd_kafka_msgq_len(&rktp->rktp_msgq));
+#ifndef _MSC_VER
         if (rktp->rktp_msgq_wakeup_fd != -1 &&
             rd_kafka_msgq_len(&rktp->rktp_msgq) == 1) {
                 char one = 1;
@@ -607,6 +603,7 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
                                      rktp->rktp_msgq_wakeup_fd,
                                      rd_strerror(errno));
         }
+#endif
         rd_kafka_toppar_unlock(rktp);
 }
 

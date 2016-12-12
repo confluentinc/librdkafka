@@ -137,6 +137,7 @@
     <ClCompile Include="..\..\tests\0051-assign_adds.c" />
     <ClCompile Include="..\..\tests\0052-msg_timestamps.c" />
     <ClCompile Include="..\..\tests\0053-stats_cb.cpp" />
+    <ClCompile Include="..\..\tests\0055-producer_latency.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
     <ClCompile Include="..\..\src\rdlist.c" />

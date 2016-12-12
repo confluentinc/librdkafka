@@ -1143,28 +1143,13 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 #endif
 	}
 
-
-	/* Set the socket to non-blocking */
-#ifdef _MSC_VER
-	if (ioctlsocket(s, FIONBIO, &on) == SOCKET_ERROR) {
-		rd_snprintf(errstr, errstr_size,
-			    "Failed to set socket non-blocking: %s",
-			    socket_strerror(socket_errno));
-		goto err;
-	}
-#else
-	{
-		int fl = fcntl(s, F_GETFL, 0);
-		if (fl == -1 ||
-		    fcntl(s, F_SETFL, fl | O_NONBLOCK) == -1) {
-			rd_snprintf(errstr, errstr_size,
-				    "Failed to set socket non-blocking: %s",
-				    socket_strerror(socket_errno));
-			goto err;
-		}
-	}
-#endif
-
+        /* Set the socket to non-blocking */
+        if ((r = rd_fd_set_nonblocking(s))) {
+                rd_snprintf(errstr, errstr_size,
+                            "Failed to set socket non-blocking: %s",
+                            socket_strerror(r));
+                goto err;
+        }
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECT", "Connecting to %s (%s) "
 		   "with socket %i",
@@ -1208,7 +1193,12 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 	rktrans = rd_calloc(1, sizeof(*rktrans));
 	rktrans->rktrans_rkb = rkb;
 	rktrans->rktrans_s = s;
-	rktrans->rktrans_pfd.fd = s;
+	rktrans->rktrans_pfd[rktrans->rktrans_pfd_cnt++].fd = s;
+        if (rkb->rkb_wakeup_fd[0] != -1) {
+                rktrans->rktrans_pfd[rktrans->rktrans_pfd_cnt].events = POLLIN;
+                rktrans->rktrans_pfd[rktrans->rktrans_pfd_cnt++].fd = rkb->rkb_wakeup_fd[0];
+        }
+
 
 	/* Poll writability to trigger on connection success/failure. */
 	rd_kafka_transport_poll_set(rktrans, POLLOUT);
@@ -1225,26 +1215,22 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 
 
 void rd_kafka_transport_poll_set(rd_kafka_transport_t *rktrans, int event) {
-	rktrans->rktrans_pfd.events |= event;
+	rktrans->rktrans_pfd[0].events |= event;
 }
 
 void rd_kafka_transport_poll_clear(rd_kafka_transport_t *rktrans, int event) {
-	rktrans->rktrans_pfd.events &= ~event;
+	rktrans->rktrans_pfd[0].events &= ~event;
 }
 
 
 int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
+        int r;
 #ifndef _MSC_VER
-	int r;
-
-	r = poll(&rktrans->rktrans_pfd, 1, tmout);
+	r = poll(rktrans->rktrans_pfd, rktrans->rktrans_pfd_cnt, tmout);
 	if (r <= 0)
 		return r;
-	return rktrans->rktrans_pfd.revents;
 #else
-	int r;
-
-	r = WSAPoll(&rktrans->rktrans_pfd, 1, tmout);
+	r = WSAPoll(rktrans->rktrans_pfd, rktrans->rktrans_pfd_cnt, tmout);
 	if (r == 0) {
 		/* Workaround for broken WSAPoll() while connecting:
 		 * failed connection attempts are not indicated at all by WSAPoll()
@@ -1271,8 +1257,23 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 			return 0;
 	} else if (r == SOCKET_ERROR)
 		return -1;
-	return rktrans->rktrans_pfd.revents;
 #endif
+        rd_atomic64_add(&rktrans->rktrans_rkb->rkb_c.wakeups, 1);
+
+        if (rktrans->rktrans_pfd[1].revents) {
+                int sz;
+                /* Read wake-up fd data and throw away, just used for wake-ups*/
+                char buf[512];
+                sz = rd_read((int)rktrans->rktrans_pfd[1].fd, buf, sizeof(buf));
+                if (0)
+                        rd_rkb_dbg(rktrans->rktrans_rkb, QUEUE, "POLL",
+                                   "Read %d bytes on %d: %s",
+                                   sz, (int)rktrans->rktrans_pfd[1].fd,
+                                   sz == -1 ? rd_strerror(errno) : "ok");
+
+        }
+
+        return rktrans->rktrans_pfd[0].revents;
 }
 
 

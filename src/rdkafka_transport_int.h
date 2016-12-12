@@ -68,11 +68,16 @@ struct rd_kafka_transport_s {
 #endif
 
 	rd_kafka_buf_t *rktrans_recv_buf;  /* Used with framed_recvmsg */
-	
+
+        /* Two pollable fds:
+         * - TCP socket
+         * - wake-up fd
+         */
 #ifndef _MSC_VER
-	struct pollfd rktrans_pfd;
+        struct pollfd rktrans_pfd[2];
 #else
-	WSAPOLLFD rktrans_pfd;
+        WSAPOLLFD rktrans_pfd[2];
 #endif
+        int rktrans_pfd_cnt;
 };
 

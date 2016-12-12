@@ -132,6 +132,7 @@ _TEST_DECL(0050_subscribe_adds);
 _TEST_DECL(0051_assign_adds);
 _TEST_DECL(0052_msg_timestamps);
 _TEST_DECL(0053_stats_cb);
+_TEST_DECL(0055_producer_latency);
 
 /**
  * Define all tests here
@@ -189,6 +190,7 @@ struct test tests[] = {
         _TEST(0051_assign_adds, 0),
         _TEST(0052_msg_timestamps, TEST_BRKVER(0,10,0,0)),
         _TEST(0053_stats_cb, TEST_F_LOCAL),
+        _TEST(0055_producer_latency, 0),
         { NULL }
 };
 
@@ -2761,6 +2763,26 @@ void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
                           name, val, errstr);
 }
 
+/**
+ * @brief First attempt to set topic level property, then global.
+ */
+void test_any_conf_set (rd_kafka_conf_t *conf,
+                        rd_kafka_topic_conf_t *tconf,
+                        const char *name, const char *val) {
+        rd_kafka_conf_res_t res = RD_KAFKA_CONF_UNKNOWN;
+        char errstr[512] = {"Missing conf_t"};
+
+        if (tconf)
+                res = rd_kafka_topic_conf_set(tconf, name, val,
+                                              errstr, sizeof(errstr));
+        if (res == RD_KAFKA_CONF_UNKNOWN && conf)
+                res = rd_kafka_conf_set(conf, name, val,
+                                        errstr, sizeof(errstr));
+
+        if (res != RD_KAFKA_CONF_OK)
+                TEST_FAIL("Failed to set any config \"%s\"=\"%s\": %s\n",
+                          name, val, errstr);
+}
 
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions) {

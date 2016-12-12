@@ -77,6 +77,7 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
         //LOCK: toppar_lock. Should move the lock inside the msgq instead
         //LOCK: toppar_lock. toppar_insert_msg(), concat_msgq()
         //LOCK: toppar_lock. toppar_enq_msg(), deq_msg(), insert_msgq()
+        int                rktp_msgq_wakeup_fd; /* Wake-up fd */
 	rd_kafka_msgq_t    rktp_msgq;      /* application->rdkafka queue.
 					    * protected by rktp_lock */
 	rd_kafka_msgq_t    rktp_xmit_msgq; /* internal broker xmit queue */

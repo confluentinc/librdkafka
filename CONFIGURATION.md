@@ -21,7 +21,7 @@ topic.metadata.refresh.sparse            |  *  | true, false     |          true
 topic.blacklist                          |  *  |                 |               | Topic blacklist, a comma-separated list of regular expressions for matching topic names that should be ignored in broker metadata information as if the topics did not exist. <br>*Type: pattern list*
 debug                                    |  *  | generic, broker, topic, metadata, queue, msg, protocol, cgrp, security, fetch, feature, all |               | A comma-separated list of debug contexts to enable. Debugging the Producer: broker,topic,msg. Consumer: cgrp,topic,fetch <br>*Type: CSV flags*
 socket.timeout.ms                        |  *  | 10 .. 300000    |         60000 | Timeout for network requests. <br>*Type: integer*
-socket.blocking.max.ms                   |  *  | 1 .. 60000      |           100 | Maximum time a broker socket operation may block. A lower value improves responsiveness at the expense of slightly higher CPU usage. <br>*Type: integer*
+socket.blocking.max.ms                   |  *  | 1 .. 60000      |          1000 | Maximum time a broker socket operation may block. A lower value improves responsiveness at the expense of slightly higher CPU usage. **Deprecated** <br>*Type: integer*
 socket.send.buffer.bytes                 |  *  | 0 .. 100000000  |             0 | Broker socket send buffer size. System default is used if 0. <br>*Type: integer*
 socket.receive.buffer.bytes              |  *  | 0 .. 100000000  |             0 | Broker socket receive buffer size. System default is used if 0. <br>*Type: integer*
 socket.keepalive.enable                  |  *  | true, false     |         false | Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets <br>*Type: boolean*
@@ -87,7 +87,7 @@ offset_commit_cb                         |  C  |                 |              
 enable.partition.eof                     |  C  | true, false     |          true | Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the consumer reaches the end of a partition. <br>*Type: boolean*
 queue.buffering.max.messages             |  P  | 1 .. 10000000   |        100000 | Maximum number of messages allowed on the producer queue. <br>*Type: integer*
 queue.buffering.max.kbytes               |  P  | 1 .. 2147483647 |       4000000 | Maximum total message size sum allowed on the producer queue. <br>*Type: integer*
-queue.buffering.max.ms                   |  P  | 1 .. 900000     |          1000 | Maximum time, in milliseconds, for buffering data on the producer queue. <br>*Type: integer*
+queue.buffering.max.ms                   |  P  | 0 .. 900000     |          1000 | Maximum time, in milliseconds, for buffering data on the producer queue. <br>*Type: integer*
 message.send.max.retries                 |  P  | 0 .. 10000000   |             2 | How many times to retry sending a failing MessageSet. **Note:** retrying may cause reordering. <br>*Type: integer*
 retries                                  |  P  |                 |               | Alias for `message.send.max.retries`
 retry.backoff.ms                         |  P  | 1 .. 300000     |           100 | The backoff time in milliseconds before retrying a message send. <br>*Type: integer*

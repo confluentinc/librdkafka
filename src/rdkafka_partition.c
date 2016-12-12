@@ -169,6 +169,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
         rktp->rktp_stored_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_committed_offset = RD_KAFKA_OFFSET_INVALID;
 	rd_kafka_msgq_init(&rktp->rktp_msgq);
+        rktp->rktp_msgq_wakeup_fd = -1;
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);
 	mtx_init(&rktp->rktp_lock, mtx_plain);
 
@@ -581,23 +582,32 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp) {
 
 
 /**
- * Insert message at head of 'rktp' message queue.
- * This is typically for non-data flash messages.
- */
-void rd_kafka_toppar_insert_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
-	rd_kafka_toppar_lock(rktp);
-	rd_kafka_msgq_insert(&rktp->rktp_msgq, rkm);
-	rd_kafka_toppar_unlock(rktp);
-}
-
-/**
  * Append message at tail of 'rktp' message queue.
  */
 void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 
 	rd_kafka_toppar_lock(rktp);
 	rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
-	rd_kafka_toppar_unlock(rktp);
+        if (0)
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, QUEUE, "ENQ",
+                     "Enq for [%"PRId32"]: fd %d, msgq_len now %d",
+                     rktp->rktp_partition, rktp->rktp_msgq_wakeup_fd,
+                     rd_kafka_msgq_len(&rktp->rktp_msgq));
+        if (rktp->rktp_msgq_wakeup_fd != -1 &&
+            rd_kafka_msgq_len(&rktp->rktp_msgq) == 1) {
+                char one = 1;
+                int r;
+                r = rd_write(rktp->rktp_msgq_wakeup_fd, &one, sizeof(one));
+                if (r == -1)
+                        rd_kafka_log(rktp->rktp_rkt->rkt_rk, LOG_ERR, "PARTENQ",
+                                     "%s [%"PRId32"]: write to "
+                                     "wake-up fd %d failed: %s",
+                                     rktp->rktp_rkt->rkt_topic->str,
+                                     rktp->rktp_partition,
+                                     rktp->rktp_msgq_wakeup_fd,
+                                     rd_strerror(errno));
+        }
+        rd_kafka_toppar_unlock(rktp);
 }
 
 

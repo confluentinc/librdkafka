@@ -520,6 +520,9 @@ void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val);
 char *test_conf_get (rd_kafka_conf_t *conf, const char *name);
 void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
                           const char *name, const char *val);
+void test_any_conf_set (rd_kafka_conf_t *conf,
+                        rd_kafka_topic_conf_t *tconf,
+                        const char *name, const char *val);
 
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions);

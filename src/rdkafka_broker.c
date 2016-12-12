@@ -3043,6 +3043,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 		rkb->rkb_toppar_cnt++;
                 rd_kafka_broker_unlock(rkb);
 		rktp->rktp_leader = rkb;
+                rktp->rktp_msgq_wakeup_fd = rkb->rkb_wakeup_fd[1];
                 rd_kafka_broker_keep(rkb);
 
                 rd_kafka_broker_destroy(rktp->rktp_next_leader);
@@ -3104,6 +3105,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 		rkb->rkb_toppar_cnt--;
                 rd_kafka_broker_unlock(rkb);
                 rd_kafka_broker_destroy(rktp->rktp_leader);
+                rktp->rktp_msgq_wakeup_fd = -1;
 		rktp->rktp_leader = NULL;
 
                 /* Need to hold on to a refcount past q_enq() and
@@ -4634,6 +4636,11 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 		rd_kafka_broker_sasl_term(rkb);
 #endif
 
+        if (rkb->rkb_wakeup_fd[0] != -1)
+                rd_close(rkb->rkb_wakeup_fd[0]);
+        if (rkb->rkb_wakeup_fd[1] != -1)
+                rd_close(rkb->rkb_wakeup_fd[1]);
+
 	if (rkb->rkb_recv_buf)
 		rd_kafka_buf_destroy(rkb->rkb_recv_buf);
 
@@ -4694,6 +4701,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					const char *name, uint16_t port,
 					int32_t nodeid) {
 	rd_kafka_broker_t *rkb;
+        int r;
 #ifndef _MSC_VER
 	sigset_t newset, oldset;
 #endif
@@ -4759,7 +4767,24 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
 
-	/* Lock broker's lock here to synchronise state, i.e., hold off
+        if (source == RD_KAFKA_INTERNAL ||
+            (r = rd_pipe_nonblocking(rkb->rkb_wakeup_fd)) == -1) {
+                if (source != RD_KAFKA_INTERNAL)
+                        rd_rkb_log(rkb, LOG_ERR, "WAKEUPFD",
+                                   "Failed to setup broker queue wake-up fds: "
+                                   "%s: disabling low-latency mode",
+                                   rd_strerror(r));
+            rkb->rkb_wakeup_fd[0] = -1;
+            rkb->rkb_wakeup_fd[1] = -1;
+        } else {
+                char onebyte = 1;
+                rd_rkb_dbg(rkb, QUEUE, "WAKEUPFD",
+                           "Enabled low-latency queue wake-ups");
+                rd_kafka_q_io_event_enable(rkb->rkb_ops, rkb->rkb_wakeup_fd[1],
+                                           &onebyte, sizeof(onebyte));
+        }
+
+        /* Lock broker's lock here to synchronise state, i.e., hold off
 	 * the broker thread until we've finalized the rkb. */
 	rd_kafka_broker_lock(rkb);
         rd_kafka_broker_keep(rkb); /* broker thread's refcnt */

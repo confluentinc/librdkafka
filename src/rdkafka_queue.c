@@ -696,30 +696,38 @@ size_t rd_kafka_queue_length (rd_kafka_queue_t *rkqu) {
 	return (size_t)rd_kafka_q_len(rkqu->rkqu_q);
 }
 
+/**
+ * @brief Enable or disable(fd==-1) fd-based wake-ups for queue
+ */
+void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
+                                 const void *payload, size_t size) {
+        struct rd_kafka_q_io *qio;
+
+        if (fd != -1) {
+                qio = rd_malloc(sizeof(*qio) + size);
+                qio->fd = fd;
+                qio->size = size;
+                qio->payload = (void *)(qio+1);
+                memcpy(qio->payload, payload, size);
+        }
+
+        mtx_lock(&rkq->rkq_lock);
+        if (rkq->rkq_qio) {
+                rd_free(rkq->rkq_qio);
+                rkq->rkq_qio = NULL;
+        }
+
+        if (fd != -1) {
+                rkq->rkq_qio = qio;
+        }
+
+        mtx_unlock(&rkq->rkq_lock);
+
+}
+
 void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
-				     const void *payload, size_t size) {
-	rd_kafka_q_t *rkq = rkqu->rkqu_q;
-	struct rd_kafka_q_io *qio;
-
-	if (fd != -1) {
-		qio = rd_malloc(sizeof(*qio) + size);
-		qio->fd = fd;
-		qio->size = size;
-		qio->payload = (void *)(qio+1);
-		memcpy(qio->payload, payload, size);
-	}
-
-	mtx_lock(&rkq->rkq_lock);
-	if (rkq->rkq_qio) {
-		rd_free(rkq->rkq_qio);
-		rkq->rkq_qio = NULL;
-	}
-
-	if (fd != -1) {
-		rkq->rkq_qio = qio;
-	}
-
-	mtx_unlock(&rkq->rkq_lock);
+                                     const void *payload, size_t size) {
+        rd_kafka_q_io_event_enable(rkqu->rkqu_q, fd, payload, size);
 }
 
 

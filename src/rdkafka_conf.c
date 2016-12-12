@@ -217,8 +217,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(socket_blocking_max_ms),
 	  "Maximum time a broker socket operation may block. "
           "A lower value improves responsiveness at the expense of "
-          "slightly higher CPU usage.",
-	  1, 60*1000, 100 },
+          "slightly higher CPU usage. **Deprecated**",
+	  1, 60*1000, 1000 },
 	{ _RK_GLOBAL, "socket.send.buffer.bytes", _RK_C_INT,
 	  _RK(socket_sndbuf_size),
 	  "Broker socket send buffer size. System default is used if 0.",
@@ -588,7 +588,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(buffering_max_ms),
 	  "Maximum time, in milliseconds, for buffering data "
 	  "on the producer queue.",
-	  1, 900*1000, 1000 },
+	  0, 900*1000, 1000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "message.send.max.retries", _RK_C_INT,
 	  _RK(max_retries),
 	  "How many times to retry sending a failing MessageSet. "

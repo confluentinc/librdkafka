@@ -545,6 +545,9 @@ rd_kafka_op_t *rd_kafka_q_last (rd_kafka_q_t *rkq, rd_kafka_op_type_t op_type,
 	return NULL;
 }
 
+void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
+                                 const void *payload, size_t size);
+
 /* Public interface */
 struct rd_kafka_queue_s {
 	rd_kafka_q_t *rkqu_q;

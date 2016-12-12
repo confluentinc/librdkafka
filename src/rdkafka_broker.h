@@ -132,6 +132,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                               * and dropped. */
                 rd_atomic64_t zbuf_grow;     /* Compression/decompression buffer grows needed */
                 rd_atomic64_t buf_grow;      /* rkbuf grows needed */
+                rd_atomic64_t wakeups;       /* Poll wakeups */
 	} rkb_c;
 
         int                 rkb_req_timeouts;  /* Current value */
@@ -171,6 +172,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         char               *rkb_logname;
         mtx_t               rkb_logname_lock;
 
+        int                 rkb_wakeup_fd[2];     /* Wake-up fds (r/w) to wake
+                                                   * up from IO-wait when
+                                                   * queues have content. */
         rd_ts_t             rkb_ts_connect;       /* Last connection attempt */
 
 	rd_kafka_secproto_t rkb_proto;

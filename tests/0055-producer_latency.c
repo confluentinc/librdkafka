@@ -77,7 +77,7 @@ static void dr_msg_cb (rd_kafka_t *rk,
 static int verify_latency (struct latconf *latconf) {
         float avg;
         int fails = 0;
-        float ext_overhead = latconf->rtt +
+        double ext_overhead = latconf->rtt +
                 5.0 /* broker ProduceRequest handling time, maybe */;
 
         ext_overhead *= test_timeout_multiplier;
@@ -104,7 +104,7 @@ static void measure_rtt (struct latconf *latconf, rd_kafka_t *rk) {
         const struct rd_kafka_metadata *md;
         int64_t ts = test_clock();
 
-        err = rd_kafka_metadata(rk, 0, NULL, &md, 1000);
+        err = rd_kafka_metadata(rk, 0, NULL, &md, 5000);
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
         latconf->rtt = (float)(test_clock() - ts) / 1000.0f;
 
@@ -143,7 +143,7 @@ static int test_producer_latency (const char *topic,
                                 RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
                                 RD_KAFKA_V_END);
         if (err)
-                TEST_FAIL("%s: priming producevfailed: %s",
+                TEST_FAIL("%s: priming producev failed: %s",
                           latconf->name, rd_kafka_err2str(err));
 
         /* Await delivery */

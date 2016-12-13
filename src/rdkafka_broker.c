@@ -970,6 +970,8 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
  *        broker.
  *
  * @returns A probably usable broker with increased refcount, or NULL on timeout
+ * @locks none
+ * @locality any
  */
 rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms) {
 	const rd_ts_t ts_end = rd_timeout_init(timeout_ms);
@@ -979,12 +981,16 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms) {
 		int remains;
 		int version = rd_kafka_brokers_get_state_version(rk);
 
-		rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
-					  rd_kafka_broker_filter_non_blocking,
-					  NULL);
+                /* Try non-blocking (e.g., non-fetching) brokers first. */
+                rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
+                                          rd_kafka_broker_filter_non_blocking,
+                                          NULL);
+                if (!rkb)
+                        rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
+                                                  NULL, NULL);
 
-		if (rkb)
-			return rkb;
+                if (rkb)
+                        return rkb;
 
 		remains = rd_timeout_remains(ts_end);
 		if (rd_timeout_expired(remains))

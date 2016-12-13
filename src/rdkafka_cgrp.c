@@ -1774,7 +1774,7 @@ static rd_kafka_resp_err_t
 rd_kafka_cgrp_subscribe (rd_kafka_cgrp_t *rkcg,
                          rd_kafka_topic_partition_list_t *rktparlist) {
 
-	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNSUBSCRIBE",
+	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIBE",
 		     "Group \"%.*s\": subscribe to new %ssubscription "
 		     "of %d topics (join state %s)",
 		     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),

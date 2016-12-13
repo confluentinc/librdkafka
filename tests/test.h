@@ -138,6 +138,13 @@ struct test {
 };
 
 
+#ifdef _MSC_VER
+#define TEST_F_KNOWN_ISSUE_WIN32  TEST_F_KNOWN_ISSUE
+#else
+#define TEST_F_KNOWN_ISSUE_WIN32 0
+#endif
+
+
 /** @brief Broker version to int */
 #define TEST_BRKVER(A,B,C,D) \
 	(((A) << 24) | ((B) << 16) | ((C) << 8) | (D))

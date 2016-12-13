@@ -190,7 +190,7 @@ struct test tests[] = {
         _TEST(0051_assign_adds, 0),
         _TEST(0052_msg_timestamps, TEST_BRKVER(0,10,0,0)),
         _TEST(0053_stats_cb, TEST_F_LOCAL),
-        _TEST(0055_producer_latency, 0),
+        _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
         { NULL }
 };
 

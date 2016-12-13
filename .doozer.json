@@ -6,6 +6,10 @@
       "builddeps": [
         "build-essential",
         "python",
+        "zlib1g-dev",
+        "libssl-dev",
+        "libsasl2-dev",
+        "liblz4-dev"
       ],
       "buildcmd": [
         "./configure",
@@ -20,6 +24,10 @@
       "builddeps": [
         "build-essential",
         "python",
+        "zlib1g-dev",
+        "libssl-dev",
+        "libsasl2-dev",
+        "liblz4-dev"
       ],
       "buildcmd": [
         "./configure",

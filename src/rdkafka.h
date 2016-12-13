@@ -1479,8 +1479,12 @@ rd_kafka_topic_t *rd_kafka_topic_new(rd_kafka_t *rk, const char *topic,
 
 
 /**
- * @brief Destroy topic handle previously created with `rd_kafka_topic_new()`.
- * @remark MUST NOT be used for internally created topics (topic_new0())
+ * @brief Loose application's topic handle refcount as previously created
+ *        with `rd_kafka_topic_new()`.
+ *
+ * @remark Since topic objects are refcounted (both internally and for the app)
+ *         the topic object might not actually be destroyed by this call,
+ *         but the application must consider the object destroyed.
  */
 RD_EXPORT
 void rd_kafka_topic_destroy(rd_kafka_topic_t *rkt);

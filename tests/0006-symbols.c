@@ -119,6 +119,7 @@ int main_0006_symbols (int argc, char **argv) {
                 rd_kafka_wait_destroyed(0);
                 rd_kafka_metadata(NULL, 0, NULL, NULL, 0);
                 rd_kafka_metadata_destroy(NULL);
+                rd_kafka_queue_get_partition(NULL, NULL, 0);
                 rd_kafka_queue_destroy(NULL);
                 rd_kafka_consume_start_queue(NULL, 0, 0, NULL);
                 rd_kafka_consume_queue(NULL, 0);

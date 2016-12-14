@@ -1959,8 +1959,12 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start (rd_kafka_toppar_t *rktp,
                                                     rd_kafka_replyq_t replyq) {
 	int32_t version;
 
-        if (fwdq)
-                rd_kafka_q_fwd_set(rktp->rktp_fetchq, fwdq);
+        rd_kafka_q_lock(rktp->rktp_fetchq);
+        if (fwdq && !(rktp->rktp_fetchq->rkq_flags & RD_KAFKA_Q_F_FWD_APP))
+                rd_kafka_q_fwd_set0(rktp->rktp_fetchq, fwdq,
+                                    0, /* no do_lock */
+                                    0 /* no fwd_app */);
+        rd_kafka_q_unlock(rktp->rktp_fetchq);
 
 	/* Bump version barrier. */
 	version = rd_kafka_toppar_version_new_barrier(rktp);

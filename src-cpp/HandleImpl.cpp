@@ -282,6 +282,22 @@ RdKafka::HandleImpl::resume (std::vector<RdKafka::TopicPartition*> &partitions) 
   return static_cast<RdKafka::ErrorCode>(err);
 }
 
+RdKafka::Queue *
+RdKafka::HandleImpl::get_partition_queue (const TopicPartition *part) {
+  rd_kafka_queue_t *rkqu;
+  rkqu = rd_kafka_queue_get_partition(rk_,
+                                      part->topic().c_str(),
+                                      part->partition());
+
+  if (rkqu == NULL)
+    return NULL;
+
+  RdKafka::QueueImpl *queueimpl = new RdKafka::QueueImpl;
+  queueimpl->queue_ = rkqu;
+
+  return queueimpl;
+}
+
 
 namespace RdKafka {
 

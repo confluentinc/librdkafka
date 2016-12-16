@@ -5,7 +5,8 @@ Copyright (c) 2012-2016, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
-[![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
+[![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka) [![Build status](https://doozer.io/badge/edenhill/librdkafka/buildstatus/master)](https://doozer.io/user/edenhill/librdkafka)
+
 
 **librdkafka** is a C library implementation of the
 [Apache Kafka](http://kafka.apache.org/) protocol, containing both

@@ -494,6 +494,8 @@ int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 	else if (rko->rko_type & RD_KAFKA_OP_REPLY &&
 		 rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
 		return 1; /* dest queue was probably disabled. */
+        else if (rko->rko_type == RD_KAFKA_OP_TERMINATE)
+                return 1; /* silently ignore if not handled by caller */
 	else
 		return 0;
 

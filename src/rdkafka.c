@@ -587,6 +587,10 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
         rd_kafka_timers_interrupt(&rk->rk_timers);
         rd_kafka_wrunlock(rk);
 
+        /* Send op to trigger queue/io wake-up.
+         * The op itself is (likely) ignored by the receiver. */
+        rd_kafka_q_enq(rk->rk_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
+
 	rd_kafka_brokers_broadcast_state_change(rk);
 
 #ifndef _MSC_VER
@@ -648,6 +652,11 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 *thrd = rkb->rkb_thread;
                 rd_list_add(&wait_thrds, thrd);
                 rd_kafka_wrunlock(rk);
+
+                /* Send op to trigger queue/io wake-up.
+                 * The op itself is (likely) ignored by the broker thread. */
+                rd_kafka_q_enq(rkb->rkb_ops,
+                               rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
 
 #ifndef _MSC_VER
                 /* Interrupt IO threads to speed up termination. */

@@ -289,7 +289,8 @@ int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
                 rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
                            srcq->rkq_qlen > 0);
 		if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
-			mtx_unlock(&rkq->rkq_lock);
+                        if (do_lock)
+                                mtx_unlock(&rkq->rkq_lock);
 			return -1;
 		}
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);

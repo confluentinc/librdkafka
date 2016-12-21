@@ -1000,13 +1000,13 @@ class RD_EXPORT Topic {
    * The unassigned partition is used by the producer API for messages
    * that should be partitioned using the configured or default partitioner.
    */
-  static const int32_t PARTITION_UA = -1;
+  static const int32_t PARTITION_UA;
 
   /** @brief Special offsets */
-  static const int64_t OFFSET_BEGINNING = -2; /**< Consume from beginning */
-  static const int64_t OFFSET_END       = -1; /**< Consume from end */
-  static const int64_t OFFSET_STORED    = -1000; /**< Use offset storage */
-  static const int64_t OFFSET_INVALID   = -1001; /**< Invalid offset */
+  static const int64_t OFFSET_BEGINNING; /**< Consume from beginning */
+  static const int64_t OFFSET_END; /**< Consume from end */
+  static const int64_t OFFSET_STORED; /**< Use offset storage */
+  static const int64_t OFFSET_INVALID; /**< Invalid offset */
 
 
   /**
@@ -1607,35 +1607,40 @@ class RD_EXPORT Producer : public virtual Handle {
    *
    * These flags are optional and mutually exclusive.
    */
-  static const int RK_MSG_FREE = 0x1; /**< rdkafka will free(3) \p payload
-                                        * when it is done with it. */
-  static const int RK_MSG_COPY = 0x2; /**< the \p payload data will be copied
-                                       * and the \p payload pointer will not
-                                       * be used by rdkafka after the
-                                       * call returns. */
-  static const int RK_MSG_BLOCK = 0x4; /**< Block produce*() on message queue
-					*   full.
-					*   WARNING:
-					*   If a delivery report callback
-					*   is used the application MUST
-					*   call rd_kafka_poll() (or equiv.)
-					*   to make sure delivered messages
-					*   are drained from the internal
-					*   delivery report queue.
-					*   Failure to do so will result
-					*   in indefinately blocking on
-					*   the produce() call when the
-					*   message queue is full.
-					*/
+  enum {
+    RK_MSG_FREE = 0x1, /**< rdkafka will free(3) \p payload
+                         * when it is done with it. */
+    RK_MSG_COPY = 0x2, /**< the \p payload data will be copied
+                        * and the \p payload pointer will not
+                        * be used by rdkafka after the
+                        * call returns. */
+    RK_MSG_BLOCK = 0x4  /**< Block produce*() on message queue
+                         *   full.
+                         *   WARNING:
+                         *   If a delivery report callback
+                         *   is used the application MUST
+                         *   call rd_kafka_poll() (or equiv.)
+                         *   to make sure delivered messages
+                         *   are drained from the internal
+                         *   delivery report queue.
+                         *   Failure to do so will result
+                         *   in indefinately blocking on
+                         *   the produce() call when the
+                         *   message queue is full.
+                         */
 
 
   /**@cond NO_DOC*/
   /* For backwards compatibility: */
 #ifndef MSG_COPY /* defined in sys/msg.h */
-  static const int MSG_FREE = RK_MSG_FREE;
-  static const int MSG_COPY = RK_MSG_COPY;
+    , /** this comma must exist betwen
+       *  RK_MSG_BLOCK and MSG_FREE
+       */
+    MSG_FREE = RK_MSG_FREE,
+    MSG_COPY = RK_MSG_COPY
 #endif
   /**@endcond*/
+  };
 
   /**
    * @brief Produce and send a single message to broker.

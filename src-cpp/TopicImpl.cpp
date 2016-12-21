@@ -33,6 +33,15 @@
 
 #include "rdkafkacpp_int.h"
 
+const int32_t RdKafka::Topic::PARTITION_UA = RD_KAFKA_PARTITION_UA;
+
+const int64_t RdKafka::Topic::OFFSET_BEGINNING = RD_KAFKA_OFFSET_BEGINNING;
+
+const int64_t RdKafka::Topic::OFFSET_END = RD_KAFKA_OFFSET_END;
+
+const int64_t RdKafka::Topic::OFFSET_STORED = RD_KAFKA_OFFSET_STORED;
+
+const int64_t RdKafka::Topic::OFFSET_INVALID = RD_KAFKA_OFFSET_INVALID;
 
 RdKafka::Topic::~Topic () {
 

@@ -414,11 +414,12 @@ void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
 #define rd_kafka_buf_push(rkbuf,buf,len) \
 	rd_kafka_buf_push0(rkbuf,buf,len,1/*allow_crc*/, 1)
 void rd_kafka_buf_autopush (rd_kafka_buf_t *rkbuf);
-rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk,
+rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk, int16_t ApiKey,
                                            int iovcnt, size_t init_size);
-rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
+rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk, int16_t ApiKey,
                                    int iovcnt, size_t size, int flags);
-#define rd_kafka_buf_new(rk,iovcnt,size) rd_kafka_buf_new0(rk,iovcnt,size,0)
+#define rd_kafka_buf_new(rk,ApiKey,iovcnt,size) \
+        rd_kafka_buf_new0(rk,ApiKey,iovcnt,size,0)
 rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size);
 void rd_kafka_bufq_enq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf);
 void rd_kafka_bufq_deq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf);

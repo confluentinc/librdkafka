@@ -639,14 +639,11 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 /**
  * Finalize a stuffed rkbuf for sending to broker.
  */
-static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
-				   int16_t ApiKey) {
+static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf) {
 	size_t of_Size;
 
 	/* Autopush final buffer work space if not already done. */
 	rd_kafka_buf_autopush(rkbuf);
-
-	rkbuf->rkbuf_reqhdr.ApiKey = ApiKey;
 
 	/* Write header */
 	rd_kafka_buf_write_seek(rkbuf, 0);
@@ -670,7 +667,6 @@ static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
 
 
 void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
-                               int16_t ApiKey,
                                rd_kafka_buf_t *rkbuf,
                                rd_kafka_resp_cb_t *resp_cb,
                                void *opaque) {
@@ -679,7 +675,7 @@ void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
         rkbuf->rkbuf_cb     = resp_cb;
 	rkbuf->rkbuf_opaque = opaque;
 
-        rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf, ApiKey);
+        rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf);
 
 	rd_kafka_broker_buf_enq0(rkb, rkbuf,
 				 (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLASH)?
@@ -719,7 +715,6 @@ static int rd_kafka_broker_buf_enq2 (rd_kafka_broker_t *rkb,
  * Locality: any thread
  */
 void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
-                                     int16_t ApiKey,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_replyq_t replyq,
                                      rd_kafka_resp_cb_t *resp_cb,
@@ -736,7 +731,7 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 		rd_dassert(!replyq.q);
 	}
 
-        rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf, ApiKey);
+        rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf);
 
 
 	if (thrd_is_current(rkb->rkb_thread)) {
@@ -1195,7 +1190,7 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 	if (!(rkbuf = rkb->rkb_recv_buf)) {
 		/* No receive in progress: new message. */
 
-		rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 0, 0);
+		rkbuf = rd_kafka_buf_new(rkb->rkb_rk, RD_KAFKAP_None, 0, 0);
 
 		/* The iov[0] buffer is already allocated by buf_new(),
 		 * shrink it to only allow for the response header. */
@@ -2738,7 +2733,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		buffer_space += msgcntmax * RD_KAFKAP_MESSAGE_OVERHEAD;
 
 
-	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, iovcnt,
+	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, RD_KAFKAP_Produce, iovcnt,
 				 RD_MIN((size_t)rkb->rkb_rk->rk_conf.
 					max_msg_size,
 					buffer_space));
@@ -2858,7 +2853,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_version_set(rkbuf, 1,
                                          RD_KAFKA_FEATURE_THROTTLETIME);
 
-	rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Produce, rkbuf,
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
                                        RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
                                        rd_kafka_produce_msgset_reply,
                                        /* refcount for msgset_reply() */
@@ -4285,7 +4280,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
                 return 0;
 
 	rkbuf = rd_kafka_buf_new_growable(
-                rkb->rkb_rk, 1,
+                rkb->rkb_rk, RD_KAFKAP_Fetch, 1,
                 /* ReplicaId+MaxWaitTime+MinBytes+TopicCnt */
                 4+4+4+4+
                 /* N x PartCnt+Partition+FetchOffset+MaxBytes+?TopicNameLen?*/
@@ -4403,8 +4398,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 	rd_list_sort(rkbuf->rkbuf_rktp_vers, rd_kafka_toppar_ver_cmp);
 
 	rkb->rkb_fetching = 1;
-	rd_kafka_broker_buf_enq1(rkb, RD_KAFKAP_Fetch, rkbuf,
-				 rd_kafka_broker_fetch_reply, NULL);
+        rd_kafka_broker_buf_enq1(rkb, rkbuf, rd_kafka_broker_fetch_reply, NULL);
 
 	return cnt;
 }

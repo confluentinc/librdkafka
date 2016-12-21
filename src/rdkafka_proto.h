@@ -48,6 +48,7 @@
 struct rd_kafkap_reqhdr {
 	int32_t  Size;
 	int16_t  ApiKey;
+#define RD_KAFKAP_None         -1
 #define RD_KAFKAP_Produce       0
 #define RD_KAFKAP_Fetch         1
 #define RD_KAFKAP_Offset        2

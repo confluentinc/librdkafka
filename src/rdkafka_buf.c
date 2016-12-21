@@ -166,9 +166,11 @@ void rd_kafka_buf_grow (rd_kafka_buf_t *rkbuf, size_t needed_len) {
 }
 
 rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk,
+                                           int16_t ApiKey,
                                            int iovcnt, size_t init_size) {
         rd_kafka_assert(NULL, iovcnt == 1);/* growables only support one iovec */
-        return rd_kafka_buf_new0(rk, iovcnt, init_size, RD_KAFKA_OP_F_FREE);
+        return rd_kafka_buf_new0(rk, ApiKey,
+                                 iovcnt, init_size, RD_KAFKA_OP_F_FREE);
 }
 
 
@@ -178,7 +180,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk,
  * Additional space for the Kafka protocol headers is inserted automatically.
  *
  */
-rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
+rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk, int16_t ApiKey,
                                    int iovcnt, size_t size, int flags) {
 	rd_kafka_buf_t *rkbuf;
 	size_t iovsize;
@@ -210,6 +212,7 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
 	rkbuf = rd_malloc(fullsize);
 	memset(rkbuf, 0, sizeof(*rkbuf));
 
+        rkbuf->rkbuf_reqhdr.ApiKey = ApiKey;
         rkbuf->rkbuf_flags = flags;
 	rkbuf->rkbuf_iov = (struct iovec *)(rkbuf+1);
 	rkbuf->rkbuf_iovcnt = iovcnt;
@@ -246,6 +249,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size) {
 
 	rkbuf = rd_calloc(1, sizeof(*rkbuf));
 
+        rkbuf->rkbuf_reqhdr.ApiKey = RD_KAFKAP_None;
 	rkbuf->rkbuf_buf2 = (void *)ptr;
 	rkbuf->rkbuf_rbuf = rkbuf->rkbuf_buf2;
 	rkbuf->rkbuf_len  = size;
@@ -481,7 +485,7 @@ int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
 
 /**
- * Handle RD_KAFKA_OP_RECV_BUF.
+ * @brief Handle RD_KAFKA_OP_RECV_BUF.
  */
 void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         rd_kafka_buf_t *request, *response;

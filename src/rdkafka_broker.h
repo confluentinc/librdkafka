@@ -287,13 +287,11 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);
 
 void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
-                               int16_t ApiKey,
                                rd_kafka_buf_t *rkbuf,
                                rd_kafka_resp_cb_t *resp_cb,
                                void *opaque);
 
 void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
-                                     int16_t ApiKey,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_replyq_t replyq,
                                      rd_kafka_resp_cb_t *resp_cb,

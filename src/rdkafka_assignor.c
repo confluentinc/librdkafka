@@ -110,7 +110,7 @@ rd_kafka_consumer_protocol_member_metadata_new (
          *     UserData     => Bytes
          */
 
-        rkbuf = rd_kafka_buf_new_growable(NULL, 1,
+        rkbuf = rd_kafka_buf_new_growable(NULL, RD_KAFKAP_None, 1,
                                           100 +
 					  (topic_cnt * 100) +
                                           userdata_size);

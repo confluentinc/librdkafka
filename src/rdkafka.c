@@ -631,7 +631,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 	/* Brokers pick up on rk_terminate automatically. */
 
         /* List of (broker) threads to join to synchronize termination */
-        rd_list_init(&wait_thrds, rd_atomic32_get(&rk->rk_broker_cnt));
+        rd_list_init(&wait_thrds, rd_atomic32_get(&rk->rk_broker_cnt), NULL);
 
 	rd_kafka_wrlock(rk);
 
@@ -696,7 +696,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 free(thrd);
         }
 
-        rd_list_destroy(&wait_thrds, NULL);
+        rd_list_destroy(&wait_thrds);
 
 }
 
@@ -2255,14 +2255,13 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
         if (offsets->cnt == 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        rd_list_init(&leaders, offsets->cnt);
-        rd_list_set_free_cb(&leaders,
+        rd_list_init(&leaders, offsets->cnt,
                             (void *)rd_kafka_partition_leader_destroy);
 
         err = rd_kafka_topic_partition_list_query_leaders(rk, offsets, &leaders,
                                                           timeout_ms);
         if (err) {
-                rd_list_destroy(&leaders, NULL);
+                rd_list_destroy(&leaders);
                 return err;
         }
 
@@ -2281,7 +2280,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
                                        &state);
         }
 
-        rd_list_destroy(&leaders, NULL);
+        rd_list_destroy(&leaders);
 
         /* Wait for reply (or timeout) */
         while (state.wait_reply > 0 && rd_timeout_remains(ts_end) > 0)

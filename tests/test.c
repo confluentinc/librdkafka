@@ -226,9 +226,9 @@ static void test_socket_del (struct test *test, sockem_t *skm, int do_lock) {
 
 void test_socket_close_all (struct test *test, int reinit) {
         TEST_LOCK();
-        rd_list_destroy(&test->sockets, (void *)sockem_close);
+        rd_list_destroy(&test->sockets);
         if (reinit)
-                rd_list_init(&test->sockets, 16);
+                rd_list_init(&test->sockets, 16, (void *)sockem_close);
         TEST_UNLOCK();
 }
 
@@ -703,7 +703,7 @@ static int run_test0 (struct run_args *run_args) {
 
 	test_curr = test;
 
-        rd_list_init(&test->sockets, 16);
+        rd_list_init(&test->sockets, 16, (void *)sockem_close);
 
 	TEST_SAY("================= Running test %s =================\n",
 		 test->name);

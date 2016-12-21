@@ -39,23 +39,27 @@ void rd_list_dump (const char *what, const rd_list_t *rl) {
                        rl->rl_elems[i], &rl->rl_elems[i]);
 }
 
-static void rd_list_grow (rd_list_t *rl, int add_size) {
-	rd_assert(!(rl->rl_flags & RD_LIST_F_FIXED_SIZE));
-        rl->rl_size += add_size;
+void rd_list_grow (rd_list_t *rl, size_t size) {
+        rd_assert(!(rl->rl_flags & RD_LIST_F_FIXED_SIZE));
+        rl->rl_size += size;
+        if (unlikely(rl->rl_size == 0))
+                return; /* avoid zero allocations */
         rl->rl_elems = rd_realloc(rl->rl_elems,
                                   sizeof(*rl->rl_elems) * rl->rl_size);
 }
 
-void rd_list_init (rd_list_t *rl, int initial_size) {
+void rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *)) {
         memset(rl, 0, sizeof(*rl));
 
 	if (initial_size > 0)
 		rd_list_grow(rl, initial_size);
+
+        rl->rl_free_cb = free_cb;
 }
 
-rd_list_t *rd_list_new (int initial_size) {
+rd_list_t *rd_list_new (int initial_size, void (*free_cb) (void *)) {
 	rd_list_t *rl = malloc(sizeof(*rl));
-	rd_list_init(rl, initial_size);
+	rd_list_init(rl, initial_size, free_cb);
 	rl->rl_flags |= RD_LIST_F_ALLOCATED;
 	return rl;
 }
@@ -87,10 +91,6 @@ void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size) {
 	rl->rl_flags |= RD_LIST_F_FIXED_SIZE;
 }
 
-
-void rd_list_set_free_cb (rd_list_t *rl, void (*free_cb) (void *)) {
-	rl->rl_free_cb = free_cb;
-}
 
 void rd_list_free_cb (rd_list_t *rl, void *ptr) {
         if (rl->rl_free_cb && ptr)
@@ -180,17 +180,14 @@ void rd_list_clear (rd_list_t *rl) {
 }
 
 
-void rd_list_destroy (rd_list_t *rl, void (*free_cb) (void *)) {
-
-	if (!free_cb)
-		free_cb = rl->rl_free_cb;
+void rd_list_destroy (rd_list_t *rl) {
 
         if (rl->rl_elems) {
                 int i;
-                if (free_cb) {
+                if (rl->rl_free_cb) {
                         for (i = 0 ; i < rl->rl_cnt ; i++)
                                 if (rl->rl_elems[i])
-                                        free_cb(rl->rl_elems[i]);
+                                        rl->rl_free_cb(rl->rl_elems[i]);
                 }
 
 		rd_free(rl->rl_elems);
@@ -289,8 +286,7 @@ rd_list_t *rd_list_copy (const rd_list_t *src,
                          void *opaque) {
         rd_list_t *dst;
 
-        dst = rd_list_new(src->rl_cnt);
-        rd_list_set_free_cb(dst, src->rl_free_cb);
+        dst = rd_list_new(src->rl_cnt, src->rl_free_cb);
 
         rd_list_copy_to(dst, src, copy_cb, opaque);
         return dst;

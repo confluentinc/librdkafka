@@ -106,7 +106,7 @@ void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
 		rd_kafkap_str_destroy(rkt->rkt_topic);
 
         rd_kafka_assert(rkt->rkt_rk, rd_list_empty(&rkt->rkt_desp));
-        rd_list_destroy(&rkt->rkt_desp, NULL);
+        rd_list_destroy(&rkt->rkt_desp);
 
 	rd_kafka_wrlock(rkt->rkt_rk);
 	TAILQ_REMOVE(&rkt->rkt_rk->rk_topics, rkt, rkt_link);
@@ -262,7 +262,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));
 
-        rd_list_init(&rkt->rkt_desp, 16);
+        rd_list_init(&rkt->rkt_desp, 16, NULL);
         rd_refcnt_init(&rkt->rkt_refcnt, 0);
 
         s_rkt = rd_kafka_topic_keep(rkt);
@@ -905,8 +905,8 @@ static rd_list_t *rd_kafka_topic_get_all_partitions (rd_kafka_itopic_t *rkt) {
 	shptr_rd_kafka_toppar_t *s_rktp;
 	int i;
 
-	list = rd_list_new(rkt->rkt_partition_cnt +
-			   rd_list_cnt(&rkt->rkt_desp) + 1/*ua*/);
+        list = rd_list_new(rkt->rkt_partition_cnt +
+                           rd_list_cnt(&rkt->rkt_desp) + 1/*ua*/, NULL);
 
 	for (i = 0 ; i < rkt->rkt_partition_cnt ; i++)
 		rd_list_add(list, rd_kafka_toppar_keep(
@@ -955,7 +955,7 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
 
 		rd_kafka_toppar_destroy(s_rktp);
 	}
-	rd_list_destroy(partitions, NULL);
+	rd_list_destroy(partitions);
 
 	s_rkt = rd_kafka_topic_keep(rkt);
 	rd_kafka_topic_wrlock(rkt);
@@ -1281,8 +1281,7 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
         rd_list_t topics;
 
         if (rkt) {
-                rd_list_init(&topics, 1);
-                rd_list_set_free_cb(&topics, rd_free);
+                rd_list_init(&topics, 1, rd_free);
                 rd_list_add(&topics, rd_strdup(rkt->rkt_topic->str));
         }
 
@@ -1291,7 +1290,7 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
                                      do_rk_lock);
 
         if (rkt)
-                rd_list_destroy(&topics, NULL);
+                rd_list_destroy(&topics);
 }
 
 
@@ -1305,6 +1304,7 @@ void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics) {
         rd_kafka_itopic_t *rkt;
 
         rd_kafka_rdlock(rk);
+        rd_list_grow(topics, rk->rk_topic_cnt);
         TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link)
                 rd_list_add(topics, rd_strdup(rkt->rkt_topic->str));
         rd_kafka_rdunlock(rk);

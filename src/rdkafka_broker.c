@@ -4302,15 +4302,14 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 	/* Write zero TopicArrayCnt but store pointer for later update */
 	of_TopicArrayCnt = rd_kafka_buf_write_i32(rkbuf, 0);
 
-	/* Prepare map for storing the fetch version for each partition,
-	 * this will later be checked in Fetch response to purge outdated
-	 * responses (e.g., after a seek). */
-	rkbuf->rkbuf_rktp_vers = rd_list_new(0);
-	rd_list_prealloc_elems(rkbuf->rkbuf_rktp_vers,
-			       sizeof(struct rd_kafka_toppar_ver),
-			       rkb->rkb_fetch_toppar_cnt);
-	rd_list_set_free_cb(rkbuf->rkbuf_rktp_vers,
-			    (void *)rd_kafka_toppar_ver_destroy);
+        /* Prepare map for storing the fetch version for each partition,
+         * this will later be checked in Fetch response to purge outdated
+         * responses (e.g., after a seek). */
+        rkbuf->rkbuf_rktp_vers = rd_list_new(
+                0, (void *)rd_kafka_toppar_ver_destroy);
+        rd_list_prealloc_elems(rkbuf->rkbuf_rktp_vers,
+                               sizeof(struct rd_kafka_toppar_ver),
+                               rkb->rkb_fetch_toppar_cnt);
 
 	/* Round-robin start of the list. */
         rktp = rkb->rkb_fetch_toppar_next;

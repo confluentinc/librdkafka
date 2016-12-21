@@ -2853,15 +2853,14 @@ rd_kafka_topic_partition_list_query_leaders (
                 if (i > 0)
                         state_version = rd_kafka_brokers_get_state_version(rk);
 
-                rd_list_init(&query_topics, 0);
-                rd_list_set_free_cb(&query_topics, rd_free);
+                rd_list_init(&query_topics, rktparlist->cnt, rd_free);
 
                 rd_kafka_topic_partition_list_get_leaders(
                         rk, rktparlist, leaders, &query_topics);
 
                 if (rd_list_empty(&query_topics)) {
                         /* No remaining topics to query: leader-list complete.*/
-                        rd_list_destroy(&query_topics, NULL);
+                        rd_list_destroy(&query_topics);
                         break;
                 }
 
@@ -2876,7 +2875,7 @@ rd_kafka_topic_partition_list_query_leaders (
                 } else if (rd_list_cnt(leaders) == 0) {
                         /* None of the partitions existed
                          * (no leaders to wait for). */
-                        rd_list_destroy(&query_topics, NULL);
+                        rd_list_destroy(&query_topics);
                         return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
                 } else if (i < 10) {
                         /* Wait for broker ids to be updated by
@@ -2885,11 +2884,11 @@ rd_kafka_topic_partition_list_query_leaders (
                                 rk, state_version, rd_timeout_remains(ts_end));
                 } else {
                         /* Give up */
-                        rd_list_destroy(&query_topics, NULL);
+                        rd_list_destroy(&query_topics);
                         return RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
                 }
 
-                rd_list_destroy(&query_topics, NULL);
+                rd_list_destroy(&query_topics);
         }
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;

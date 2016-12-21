@@ -40,8 +40,8 @@ void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
         if (rkbuf->rkbuf_buf2)
                 rd_free(rkbuf->rkbuf_buf2);
 
-	if (rkbuf->rkbuf_rktp_vers)
-		rd_list_destroy(rkbuf->rkbuf_rktp_vers, NULL);
+        if (rkbuf->rkbuf_rktp_vers)
+                rd_list_destroy(rkbuf->rkbuf_rktp_vers);
 
         if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FREE && rkbuf->rkbuf_buf)
                 rd_free(rkbuf->rkbuf_buf);

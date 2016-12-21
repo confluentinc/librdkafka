@@ -154,9 +154,8 @@ void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg) {
 	rd_kafka_q_destroy(rkcg->rkcg_wait_coord_q);
         rd_kafka_assert(rkcg->rkcg_rk, TAILQ_EMPTY(&rkcg->rkcg_topics));
         rd_kafka_assert(rkcg->rkcg_rk, rd_list_empty(&rkcg->rkcg_toppars));
-        rd_list_destroy(&rkcg->rkcg_toppars, NULL);
-	rd_list_destroy(rkcg->rkcg_subscribed_topics,
-			(void *)rd_kafka_topic_info_destroy);
+        rd_list_destroy(&rkcg->rkcg_toppars);
+        rd_list_destroy(rkcg->rkcg_subscribed_topics);
         rd_free(rkcg);
 }
 
@@ -182,9 +181,10 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
         rkcg->rkcg_q = rd_kafka_q_new(rk);
 	rkcg->rkcg_wait_coord_q = rd_kafka_q_new(rk);
         TAILQ_INIT(&rkcg->rkcg_topics);
-        rd_list_init(&rkcg->rkcg_toppars, 32);
+        rd_list_init(&rkcg->rkcg_toppars, 32, NULL);
         rd_kafka_cgrp_set_member_id(rkcg, "");
-	rkcg->rkcg_subscribed_topics = rd_list_new(0);
+        rkcg->rkcg_subscribed_topics =
+                rd_list_new(0, (void *)rd_kafka_topic_info_destroy);
         rd_interval_init(&rkcg->rkcg_coord_query_intvl);
         rd_interval_init(&rkcg->rkcg_heartbeat_intvl);
         rd_interval_init(&rkcg->rkcg_join_intvl);
@@ -726,16 +726,16 @@ static int rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
 			     "no topics in metadata matched subscription",
 			     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
 
-	/* Sort for comparison */
-	rd_list_sort(topics, rd_kafka_topic_info_cmp);
+        /* Sort for comparison */
+        rd_list_sort(tinfos, rd_kafka_topic_info_cmp);
 
-	/* Compare to existing to see if anything changed. */
-	if (!rd_list_cmp(rkcg->rkcg_subscribed_topics, topics,
-			 rd_kafka_topic_info_cmp)) {
-		/* No change */
-		rd_list_destroy(topics, (void *)rd_kafka_topic_info_destroy);
-		return 0;
-	}
+        /* Compare to existing to see if anything changed. */
+        if (!rd_list_cmp(rkcg->rkcg_subscribed_topics, tinfos,
+                         rd_kafka_topic_info_cmp)) {
+                /* No change */
+                rd_list_destroy(tinfos);
+                return 0;
+        }
 
 	rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_METADATA, "SUBSCRIPTION",
 		     "Group \"%.*s\": effective subscription list changed "
@@ -750,12 +750,11 @@ static int rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
 			     " Topic %s with %d partition(s)",
 			     tinfo->topic, tinfo->partition_cnt);
 
-	rd_list_destroy(rkcg->rkcg_subscribed_topics,
-			(void *)rd_kafka_topic_info_destroy);
+        rd_list_destroy(rkcg->rkcg_subscribed_topics);
 
-	rkcg->rkcg_subscribed_topics = topics;
+        rkcg->rkcg_subscribed_topics = tinfos;
 
-	return 1;
+        return 1;
 }
 
 
@@ -1937,7 +1936,7 @@ static void rd_kafka_cgrp_timeout_scan (rd_kafka_cgrp_t *rkcg, rd_ts_t now) {
 
         ofc_state.now = now;
         ofc_state.rk = rkcg->rkcg_rk;
-        rd_list_init(&ofc_state.expired, 0);
+        rd_list_init(&ofc_state.expired, 0, NULL);
 
         cnt += rd_kafka_q_apply(rkcg->rkcg_wait_coord_q,
                                 rd_kafka_op_offset_commit_timeout_check,
@@ -1949,7 +1948,7 @@ static void rd_kafka_cgrp_timeout_scan (rd_kafka_cgrp_t *rkcg, rd_ts_t now) {
                         RD_KAFKA_RESP_ERR__WAIT_COORD,
                         NULL, NULL, rko);
 
-        rd_list_destroy(&ofc_state.expired, NULL);
+        rd_list_destroy(&ofc_state.expired);
 
         if (cnt > 0)
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTIMEOUT",

@@ -1384,7 +1384,6 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_CONNECT);
 	rd_kafka_broker_unlock(rkb);
-	rkb->rkb_err.err = 0;
 
 	return 0;
 }
@@ -1399,6 +1398,7 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
 
 	rkb->rkb_max_inflight = rkb->rkb_rk->rk_conf.max_inflight;
+        rkb->rkb_err.err = 0;
 
 	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
@@ -1648,14 +1648,11 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 
 	if (errstr) {
 		/* Connect failed */
-		if (errno != 0 && rkb->rkb_err.err == errno)
-			rd_kafka_broker_fail(rkb, LOG_DEBUG,
-                                             RD_KAFKA_RESP_ERR__FAIL,
-					     NULL);
-		else
-			rd_kafka_broker_fail(rkb, LOG_ERR,
-					     RD_KAFKA_RESP_ERR__TRANSPORT,
-					     "%s", errstr);
+                rd_kafka_broker_fail(rkb,
+                                     errno != 0 && rkb->rkb_err.err == errno ?
+                                     LOG_DEBUG : LOG_ERR,
+                                     RD_KAFKA_RESP_ERR__TRANSPORT,
+                                     "%s", errstr);
 		return;
 	}
 

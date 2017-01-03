@@ -4617,9 +4617,11 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 	rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_toppars));
 
 #if WITH_SASL
-	if (rkb->rkb_rk->rk_conf.security_protocol ==
-	    RD_KAFKA_PROTO_SASL_PLAINTEXT ||
-	    rkb->rkb_rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL)
+	if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
+            (rkb->rkb_rk->rk_conf.security_protocol ==
+             RD_KAFKA_PROTO_SASL_PLAINTEXT ||
+             rkb->rkb_rk->rk_conf.security_protocol ==
+             RD_KAFKA_PROTO_SASL_SSL))
 		rd_kafka_broker_sasl_term(rkb);
 #endif
 
@@ -4774,13 +4776,14 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 		return NULL;
 	}
 
+	if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
 #if WITH_SASL
-	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT ||
-	    rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL)
-		rd_kafka_broker_sasl_init(rkb);
+                if (rk->rk_conf.security_protocol ==
+                    RD_KAFKA_PROTO_SASL_PLAINTEXT ||
+                    rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL)
+                        rd_kafka_broker_sasl_init(rkb);
 #endif
 
-	if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
 		TAILQ_INSERT_TAIL(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
 		(void)rd_atomic32_add(&rkb->rkb_rk->rk_broker_cnt, 1);
 		rd_rkb_dbg(rkb, BROKER, "BROKER",

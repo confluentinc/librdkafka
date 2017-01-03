@@ -42,6 +42,10 @@
 
 #include <sys/queue.h>
 
+#ifdef __APPLE__
+#include <sys/time.h> /* for gettimeofday() */
+#endif
+
 #ifdef _MSC_VER
 #define socket_errno() WSAGetLastError()
 #else

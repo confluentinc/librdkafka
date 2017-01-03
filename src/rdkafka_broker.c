@@ -1719,6 +1719,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 	       (rkbuf = TAILQ_FIRST(&rkb->rkb_outbufs.rkbq_bufs))) {
 		ssize_t r;
 		struct msghdr *msg;
+		struct msghdr msg2;
 		struct iovec iov[IOV_MAX];
 		size_t of = rkbuf->rkbuf_of;
 
@@ -1744,7 +1745,6 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 
 		if (rkbuf->rkbuf_of > 0 ||
 		    rkbuf->rkbuf_iovcnt > IOV_MAX) {
-			struct msghdr msg2;
 
 			/* If message has been partially sent or contains
 			 * too many iovecs for sendmsg() we need to construct

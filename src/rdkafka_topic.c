@@ -630,7 +630,8 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
  *
  * Locks: rd_kafka_topic_*lock() must be held.
  */
-static void rd_kafka_topic_propagate_notexists (rd_kafka_itopic_t *rkt) {
+static void rd_kafka_topic_propagate_notexists (rd_kafka_itopic_t *rkt,
+                                                rd_kafka_resp_err_t err) {
         shptr_rd_kafka_toppar_t *s_rktp;
         int i;
 
@@ -640,8 +641,7 @@ static void rd_kafka_topic_propagate_notexists (rd_kafka_itopic_t *rkt) {
 
         /* Notify consumers that the topic doesn't exist. */
         RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i)
-                rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp),
-                                          RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
+                rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp), err);
 }
 
 
@@ -649,7 +649,8 @@ static void rd_kafka_topic_propagate_notexists (rd_kafka_itopic_t *rkt) {
  * Assign messages on the UA partition to available partitions.
  * Locks: rd_kafka_topic_*lock() must be held.
  */
-static void rd_kafka_topic_assign_uas (rd_kafka_itopic_t *rkt) {
+static void rd_kafka_topic_assign_uas (rd_kafka_itopic_t *rkt,
+                                       rd_kafka_resp_err_t err) {
 	rd_kafka_t *rk = rkt->rkt_rk;
 	shptr_rd_kafka_toppar_t *s_rktp_ua;
         rd_kafka_toppar_t *rktp_ua;
@@ -713,7 +714,7 @@ static void rd_kafka_topic_assign_uas (rd_kafka_itopic_t *rkt) {
 			     rkt->rkt_topic->str);
 		rd_kafka_dr_msgq(rkt, &failed,
 				 rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS ?
-				 RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC :
+				 err :
 				 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
 	}
 
@@ -742,11 +743,12 @@ void rd_kafka_topic_metadata_none (rd_kafka_itopic_t *rkt) {
 	/* Update number of partitions */
 	rd_kafka_topic_partition_cnt_update(rkt, 0);
 
-	/* Purge messages with forced partition */
-	rd_kafka_topic_assign_uas(rkt);
+        /* Purge messages with forced partition */
+        rd_kafka_topic_assign_uas(rkt, RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
 
         /* Propagate nonexistent topic info */
-        rd_kafka_topic_propagate_notexists(rkt);
+        rd_kafka_topic_propagate_notexists(rkt,
+                                           RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
 
 	rd_kafka_topic_wrunlock(rkt);
 }
@@ -877,12 +879,16 @@ rd_kafka_topic_metadata_update (rd_kafka_itopic_t *rkt,
 
 	/* Try to assign unassigned messages to new partitions, or fail them */
 	if (upd > 0 || rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
-		rd_kafka_topic_assign_uas(rkt);
+		rd_kafka_topic_assign_uas(rkt, mdt->err ?
+                                          mdt->err :
+                                          RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
 
         /* Trigger notexists propagation */
         if (old_state != (int)rkt->rkt_state &&
             rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS)
-                rd_kafka_topic_propagate_notexists(rkt);
+                rd_kafka_topic_propagate_notexists(
+                        rkt,
+                        mdt->err ? mdt->err : RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
 
 	rd_kafka_topic_wrunlock(rkt);
 

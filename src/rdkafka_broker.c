@@ -2863,6 +2863,50 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	return cnt;
 }
 
+
+/**
+ * @brief Map and assign existing partitions to this broker using
+ *        the leader-id.
+ *
+ * @locks none
+ * @locality any
+ */
+static void rd_kafka_broker_map_partitions (rd_kafka_broker_t *rkb) {
+        rd_kafka_t *rk = rkb->rkb_rk;
+        rd_kafka_itopic_t *rkt;
+        int cnt = 0;
+
+        if (rkb->rkb_nodeid == -1)
+                return;
+
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+                int i;
+
+                rd_kafka_topic_wrlock(rkt);
+                for (i = 0 ; i < rkt->rkt_partition_cnt ; i++) {
+                        shptr_rd_kafka_toppar_t *s_rktp = rkt->rkt_p[i];
+                        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
+
+                        /* Only map unassigned partitions matching this broker*/
+                        rd_kafka_toppar_lock(rktp);
+                        if (rktp->rktp_leader_id == rkb->rkb_nodeid &&
+                            !(rktp->rktp_leader && rktp->rktp_next_leader)) {
+                                rd_kafka_toppar_leader_update(
+                                        rktp, rktp->rktp_leader_id, rkb);
+                                cnt++;
+                        }
+                        rd_kafka_toppar_unlock(rktp);
+                }
+                rd_kafka_topic_wrunlock(rkt);
+        }
+        rd_kafka_rdunlock(rk);
+
+        rd_rkb_dbg(rkb, TOPIC|RD_KAFKA_DBG_BROKER, "LEADER",
+                   "Mapped %d partition(s) to broker", cnt);
+}
+
+
 /**
  * Serve a broker op (an op posted by another thread to be handled by
  * this broker's thread).
@@ -2935,14 +2979,13 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                                              RD_KAFKA_RESP_ERR__NODE_UPDATE,
                                              "Broker hostname updated");
                 else if (updated & _UPD_ID) {
-                        /* Query for topic leaders.
-                         * This is done automatically from broker_fail()
-                         * so we dont need this if the nodename changed too. */
-                        rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
-                        rd_kafka_broker_lock(rkb);
+                        /* Map existing partitions to this broker. */
+                        rd_kafka_broker_map_partitions(rkb);
+
 			/* If broker is currently in state up we need
 			 * to trigger a state change so it exits its
 			 * state&type based .._serve() loop. */
+                        rd_kafka_broker_lock(rkb);
 			if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP)
 				rd_kafka_broker_set_state(
 					rkb, RD_KAFKA_BROKER_STATE_UPDATE);

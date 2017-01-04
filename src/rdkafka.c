@@ -1118,8 +1118,8 @@ static int rd_kafka_thread_main (void *arg) {
 		rd_ts_t sleeptime = rd_kafka_timers_next(
 			&rk->rk_timers,
 			rk->rk_conf.socket_blocking_max_ms * 1000, 1/*lock*/);
-		rd_kafka_toppars_q_serve(rk->rk_ops,
-					 (int)(sleeptime / 1000));
+                rd_kafka_q_serve(rk->rk_ops, (int)(sleeptime / 1000), 0,
+                                 _Q_CB_CALLBACK, NULL, NULL);
 		if (rk->rk_cgrp)
 			rd_kafka_cgrp_serve(rk->rk_cgrp);
 		rd_kafka_timers_run(&rk->rk_timers, RD_POLL_NOWAIT);
@@ -1204,6 +1204,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	rk->rk_rep = rd_kafka_q_new(rk);
 	rk->rk_ops = rd_kafka_q_new(rk);
+        rk->rk_ops->rkq_serve = rd_kafka_poll_cb;
+        rk->rk_ops->rkq_opaque = rk;
 
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
@@ -1672,14 +1674,18 @@ static int rd_kafka_consume_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 	struct consume_ctx *ctx = opaque;
 	rd_kafka_message_t *rkmessage;
 
-        if (unlikely(rd_kafka_op_version_outdated(rko, 0)))
+        if (unlikely(rd_kafka_op_version_outdated(rko, 0))) {
+                rd_kafka_op_destroy(rko);
                 return 1;
+        }
 
 	rkmessage = rd_kafka_message_get(rko);
 
 	rd_kafka_op_offset_store(rk, rko, rkmessage);
 
 	ctx->consume_cb(rkmessage, ctx->opaque);
+
+        rd_kafka_op_destroy(rko);
 
         return 1;
 }
@@ -1695,7 +1701,7 @@ static int rd_kafka_consume_callback0 (rd_kafka_q_t *rkq,
 				       void *opaque) {
 	struct consume_ctx ctx = { .consume_cb = consume_cb, .opaque = opaque };
 	return rd_kafka_q_serve(rkq, timeout_ms, max_cnt,
-                                _Q_CB_CONSUMER, rd_kafka_consume_cb, &ctx);
+                                _Q_CB_RETURN, rd_kafka_consume_cb, &ctx);
 
 }
 
@@ -1765,9 +1771,8 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 
 	rd_kafka_yield_thread = 0;
         while ((rko = rd_kafka_q_pop(rkq, rd_timeout_remains(abs_timeout), 0))) {
-                if (rd_kafka_poll_cb(rk, rko, _Q_CB_CONSUMER, NULL)) {
+                if (rd_kafka_poll_cb(rk, rko, _Q_CB_RETURN, NULL)) {
                         /* Message was handled by callback. */
-                        rd_kafka_op_destroy(rko);
 
 			if (unlikely(rd_kafka_yield_thread)) {
 				/* Callback called rd_kafka_yield(), we must
@@ -1895,8 +1900,8 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
                         rd_kafka_op_destroy(rko);
                         break;
                 }
-                rd_kafka_poll_cb(rk, rko, _Q_CB_CONSUMER, NULL);
-                rd_kafka_op_destroy(rko);
+                if (!rd_kafka_poll_cb(rk, rko, _Q_CB_RETURN, NULL))
+                        rd_kafka_op_destroy(rko);
         }
 
         rd_kafka_q_destroy(rkq);
@@ -2146,7 +2151,7 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
 
         /* Wait for reply (or timeout) */
 	while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
-		rd_kafka_q_serve(rkq, 100, 0, _Q_CB_GLOBAL,
+		rd_kafka_q_serve(rkq, 100, 0, _Q_CB_CALLBACK,
 				 rd_kafka_poll_cb, NULL);
 
         rd_kafka_q_destroy(rkq);
@@ -2285,7 +2290,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
         /* Wait for reply (or timeout) */
         while (state.wait_reply > 0 && rd_timeout_remains(ts_end) > 0)
                 rd_kafka_q_serve(rkq, rd_timeout_remains(ts_end),
-                                 0, _Q_CB_GLOBAL, rd_kafka_poll_cb, NULL);
+                                 0, _Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
 
         rd_kafka_q_destroy(rkq);
 
@@ -2318,19 +2323,19 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 	if (cb_type == _Q_CB_EVENT && rd_kafka_event_setup(rk, rko))
 		return 0; /* Return as event */
 
-	switch ((int)rko->rko_type)
-	{
-	case RD_KAFKA_OP_FETCH:
-		if (!rk->rk_conf.consume_cb)
-			return 0; /* Dont handle here */
-		{
-			struct consume_ctx ctx = {
-				.consume_cb = rk->rk_conf.consume_cb,
-				.opaque = rk->rk_conf.opaque };
+        switch ((int)rko->rko_type)
+        {
+        case RD_KAFKA_OP_FETCH:
+                if (!rk->rk_conf.consume_cb || cb_type == _Q_CB_RETURN)
+                        return 0; /* Dont handle here */
+                else {
+                        struct consume_ctx ctx = {
+                                .consume_cb = rk->rk_conf.consume_cb,
+                                .opaque = rk->rk_conf.opaque };
 
-			rd_kafka_consume_cb(rk, rko, _Q_CB_CONSUMER, &ctx);
-		}
-		break;
+                        return rd_kafka_consume_cb(rk, rko, cb_type, &ctx);
+                }
+                break;
 
         case RD_KAFKA_OP_REBALANCE:
 		/* If EVENT_REBALANCE is enabled but rebalance_cb isnt
@@ -2362,7 +2367,7 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                  * rd_kafka_poll() (_Q_CB_GLOBAL):
                  *   convert to ERR op (fallthru)
                  */
-                if (cb_type == _Q_CB_CONSUMER)
+                if (cb_type == _Q_CB_RETURN)
                         return 0; /* return as message_t to application */
 		/* FALLTHRU */
 
@@ -2437,26 +2442,23 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			rko->rko_u.stats.json = NULL; /* Application wanted json ptr */
 		break;
 
-        case RD_KAFKA_OP_RECV_BUF:
-                /* Handle response */
-                rd_kafka_buf_handle_op(rko, rko->rko_err);
+        case RD_KAFKA_OP_TERMINATE:
+                /* nop: just a wake-up */
                 break;
 
-	default:
-		if (!rd_kafka_op_handle_std(rk, rko)) {
-			rd_kafka_dbg(rk, ALL, "POLLCB",
-				     "cant handle op %i here", rko->rko_type);
-			rd_kafka_assert(rk, !*"cant handle op type");
-		}
-		break;
-	}
+        default:
+                rd_kafka_assert(rk, !*"cant handle op type");
+                break;
+        }
+
+        rd_kafka_op_destroy(rko);
 
         return 1; /* op was handled */
 }
 
 int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
 	return rd_kafka_q_serve(rk->rk_rep, timeout_ms, 0,
-				_Q_CB_GLOBAL, rd_kafka_poll_cb, NULL);
+				_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
 }
 
 
@@ -3001,7 +3003,7 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
 
         } else {
                 while (state.wait_cnt > 0)
-                        rd_kafka_q_serve(state.q, 100, 0, _Q_CB_GLOBAL,
+                        rd_kafka_q_serve(state.q, 100, 0, _Q_CB_CALLBACK,
                                          rd_kafka_poll_cb, NULL);
         }
 

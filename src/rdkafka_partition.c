@@ -43,6 +43,8 @@ const char *rd_kafka_fetch_states[] = {
 };
 
 
+static int rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                                     int cb_type, void *opaque);
 static RD_INLINE void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
                                                        rd_kafka_toppar_t *rktp);
 
@@ -188,6 +190,8 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
         rd_refcnt_init(&rktp->rktp_refcnt, 0);
 	rktp->rktp_fetchq = rd_kafka_q_new(rkt->rkt_rk);
         rktp->rktp_ops    = rd_kafka_q_new(rkt->rkt_rk);
+        rktp->rktp_ops->rkq_serve = rd_kafka_toppar_op_serve;
+        rktp->rktp_ops->rkq_opaque = rktp;
         rd_atomic32_init(&rktp->rktp_version, 1);
 	rktp->rktp_op_version = rd_atomic32_get(&rktp->rktp_version);
 
@@ -1791,7 +1795,8 @@ void rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
  *
  * @locality toppar handler thread
  */
-void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
+static int rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                                     int cb_type, void *opaque) {
 	rd_kafka_toppar_t *rktp = NULL;
 	int outdated = 0;
 
@@ -1817,7 +1822,8 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 #if ENABLE_DEVEL
 			rd_kafka_op_print(stdout, "PART_OUTDATED", rko);
 #endif
-			return;
+                        rd_kafka_op_destroy(rko);
+			return 1;
 		}
 	}
 
@@ -1924,11 +1930,13 @@ void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko) {
         }
         break;
 
-	default:
-		if (!rd_kafka_op_handle_std(rk, rko))
-			rd_kafka_assert(NULL, !*"unknown type");
-		break;
-	}
+        default:
+                rd_kafka_assert(NULL, !*"unknown type");
+                break;
+        }
+
+        rd_kafka_op_destroy(rko);
+        return 1;
 }
 
 

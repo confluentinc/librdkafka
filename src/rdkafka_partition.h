@@ -390,7 +390,6 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 
 
 
-void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko);
 void rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
 					    rd_kafka_toppar_t *rktp);
 

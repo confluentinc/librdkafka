@@ -489,9 +489,8 @@ rd_kafka_commit_queue (rd_kafka_t *rk,
 		if (!rko)
 			err = RD_KAFKA_RESP_ERR__TIMED_OUT;
 		else {
-			err = rko->rko_err;
-			rd_kafka_op_handle_std(rk, rko);
-			rd_kafka_op_destroy(rko);
+                        err = rko->rko_err;
+                        rd_kafka_op_destroy(rko);
 		}
 
                 rd_kafka_q_destroy(rkq);

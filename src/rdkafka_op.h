@@ -138,6 +138,14 @@ struct rd_kafka_op_s {
 	 * .q is refcounted. */
 	rd_kafka_replyq_t rko_replyq;
 
+        /* Original queue's op serve callback and opaque, if any.
+         * Mainly used for forwarded queues to use the original queue's
+         * serve function from the forwarded position.
+         * Shall return 1 if op was handled and destroyed, else 0. */
+        int (*rko_serve) (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                          int cb_type, void *opaque);
+        void *rko_serve_opaque;
+
 	rd_kafka_t     *rko_rk;
 
         /* RD_KAFKA_OP_CB */
@@ -282,7 +290,11 @@ void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
 				rd_kafka_q_t *rkq,
 				int throttle_time);
 
-int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko);
+int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko, int cb_type);
+int rd_kafka_op_handle (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                        int cb_type, void *opaque,
+                        int (*callback) (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                                         int cb_type, void *opaque));
 
 extern rd_atomic32_t rd_kafka_op_cnt;
 

@@ -2879,11 +2879,6 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
 	switch (rko->rko_type)
 	{
-	case RD_KAFKA_OP_METADATA_REQ:
-                rd_kafka_broker_metadata_req_op(rkb, rko);
-                rko = NULL; /* metadata_req assumes rko ownership */
-		break;
-
         case RD_KAFKA_OP_NODE_UPDATE:
         {
                 enum {
@@ -3128,11 +3123,14 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 		rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
                 break;
 
+        case RD_KAFKA_OP_TERMINATE:
+                /* nop: just a wake-up. */
+                break;
 
-	default:
-		if (!rd_kafka_op_handle_std(rkb->rkb_rk, rko))
-			rd_kafka_assert(rkb->rkb_rk, !*"unhandled op type");
-	}
+        default:
+                rd_kafka_assert(rkb->rkb_rk, !*"unhandled op type");
+                break;
+        }
 
         if (rko)
                 rd_kafka_op_destroy(rko);
@@ -3792,8 +3790,14 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			 * to share the same payload buffer. */
 			rkbufz = rd_kafka_buf_new_shadow(outbuf, outlen);
 
-			if (relative_offsets)
+			if (relative_offsets) {
 				rd_kafka_q_init(&relq, rkb->rkb_rk);
+                                /* Make sure enqueued ops get the
+                                 * correct serve/opaque reflecting the
+                                 * original queue. */
+                                relq.rkq_serve = rkq->rkq_serve;
+                                relq.rkq_opaque = rkq->rkq_opaque;
+                        }
 
 			/* Now parse the contained Messages */
 			rd_kafka_messageset_handle(rkb, rktp,
@@ -4086,6 +4090,11 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			 * queue first and then moved in one go to the
 			 * real op queue. */
 			rd_kafka_q_init(&tmp_opq, rkb->rkb_rk);
+                        /* Make sure enqueued ops get the
+                         * correct serve/opaque reflecting the
+                         * original queue. */
+                        tmp_opq.rkq_serve = rktp->rktp_fetchq->rkq_serve;
+                        tmp_opq.rkq_opaque = rktp->rktp_fetchq->rkq_opaque;
 
 			/* Parse and handle the message set */
 			err2 = rd_kafka_messageset_handle(

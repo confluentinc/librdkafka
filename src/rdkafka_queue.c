@@ -43,6 +43,8 @@ void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk) {
         rkq->rkq_flags  = RD_KAFKA_Q_F_READY;
         rkq->rkq_rk     = rk;
 	rkq->rkq_qio    = NULL;
+        rkq->rkq_serve  = NULL;
+        rkq->rkq_opaque = NULL;
 	mtx_init(&rkq->rkq_lock, mtx_plain);
 	cnd_init(&rkq->rkq_cond);
 }
@@ -282,6 +284,8 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
 				     void *opaque) {
 	rd_kafka_op_t *rko;
 
+        rd_dassert(cb_type);
+
 	if (timeout_ms == RD_POLL_INFINITE)
 		timeout_ms = INT_MAX;
 
@@ -295,26 +299,18 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
                                 ;
 
                         if (rko) {
-				int handled;
-
                                 /* Proper versioned op */
                                 rd_kafka_q_deq0(rkq, rko);
 
-				/* Ops with callbacks are considered handled
-				 * and we move on to the next op, if any.
-				 * Ops w/o callbacks are returned immediately */
-				if (callback) {
-					handled = callback(rkq->rkq_rk, rko,
-							   cb_type, opaque);
-					if (handled) {
-						rd_kafka_op_destroy(rko);
-						rko = NULL;
-					}
-				} else
-					handled = 0;
-
-				if (!handled)
-					break;
+                                /* Ops with callbacks are considered handled
+                                 * and we move on to the next op, if any.
+                                 * Ops w/o callbacks are returned immediately */
+                                if (rd_kafka_op_handle(rkq->rkq_rk, rko,
+                                                       cb_type, opaque,
+                                                       callback))
+                                        rko = NULL;
+                                else
+                                        break; /* Proper op, handle below. */
                         }
 
                         /* No op, wait for one */
@@ -352,7 +348,8 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                                int32_t version) {
-	return rd_kafka_q_pop_serve(rkq, timeout_ms, version, 0, NULL, NULL);
+	return rd_kafka_q_pop_serve(rkq, timeout_ms, version, _Q_CB_RETURN,
+                                    NULL, NULL);
 }
 
 
@@ -374,7 +371,8 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	rd_kafka_op_t *rko;
 	rd_kafka_q_t localq;
         int cnt = 0;
-        int handled = 0;
+
+        rd_dassert(cb_type);
 
 	mtx_lock(&rkq->rkq_lock);
 
@@ -421,9 +419,9 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 	/* Call callback for each op */
         while ((rko = TAILQ_FIRST(&localq.rkq_q))) {
-		handled += callback(rk, rko, cb_type, opaque);
-		rd_kafka_q_deq0(&localq, rko);
-		rd_kafka_op_destroy(rko);
+                rd_kafka_q_deq0(&localq, rko);
+                if (!rd_kafka_op_handle(rk, rko, cb_type, opaque, callback))
+                        rd_kafka_assert(rk, !*"op not handled");
                 cnt++;
 
                 if (unlikely(rd_kafka_yield_thread)) {
@@ -435,10 +433,6 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
                         break;
                 }
 	}
-
-        /* Make sure no op was left unhandled. i.e.,
-         * a consumer op ended up on the global queue. */
-        rd_kafka_assert(NULL, handled == cnt);
 
 	rd_kafka_q_destroy(&localq);
 
@@ -607,10 +601,9 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                         continue;
                 }
 
-                /* Serve callbacks */
-                if (rd_kafka_poll_cb(rk, rko, _Q_CB_CONSUMER, NULL)) {
-                        /* Callback served, rko is done, put on discard queue */
-                        TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
+                /* Serve non-FETCH callbacks */
+                if (rd_kafka_poll_cb(rk, rko, _Q_CB_RETURN, NULL)) {
+                        /* Callback served, rko is destroyed. */
                         continue;
                 }
 

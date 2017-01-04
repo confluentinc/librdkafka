@@ -480,26 +480,55 @@ void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,
  * @brief Handle standard op types.
  * @returns 1 if handled, else 0.
  */
-int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko) {
-	if (rko->rko_type & RD_KAFKA_OP_CB)
-		rko->rko_op_cb(rk, rko);
-	else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
-		rd_kafka_buf_handle_op(rko, rko->rko_err);
-	else if ((int)rko->rko_type ==
-		 (RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY)
-		 && rko->rko_u.offset_commit.cb)
-		rko->rko_u.offset_commit.cb(rk, rko->rko_err,
-					    rko->rko_u.offset_commit.partitions,
-					    rko->rko_u.offset_commit.opaque);
-	else if (rko->rko_type & RD_KAFKA_OP_REPLY &&
-		 rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
-		return 1; /* dest queue was probably disabled. */
-        else if (rko->rko_type == RD_KAFKA_OP_TERMINATE)
-                return 1; /* silently ignore if not handled by caller */
-	else
-		return 0;
+int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko, int cb_type) {
+        if (rko->rko_type & RD_KAFKA_OP_CB)
+                rd_kafka_op_call(rk, rko);
+        else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
+                rd_kafka_buf_handle_op(rko, rko->rko_err);
+        else if ((int)rko->rko_type ==
+                 (RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY)
+                 && rko->rko_u.offset_commit.cb)
+                rko->rko_u.offset_commit.cb(rk, rko->rko_err,
+                                            rko->rko_u.offset_commit.partitions,
+                                            rko->rko_u.offset_commit.opaque);
+        else if (cb_type != _Q_CB_RETURN &&
+                 rko->rko_type & RD_KAFKA_OP_REPLY &&
+                 rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
+                return 1; /* dest queue was probably disabled. */
+        else
+                return 0;
 
-	return 1;
+        return 1;
+}
+
+
+/**
+ * @brief Attempt to handle op using its queue's serve callback,
+ *        or the passed callback, or op_handle_std(), else do nothing.
+ *
+ * @returns 1 if op was handled (and destroyed), else 0.
+ */
+int rd_kafka_op_handle (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                        int cb_type, void *opaque,
+                        int (*callback) (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                                         int cb_type, void *opaque)) {
+
+        if (rd_kafka_op_handle_std(rk, rko, cb_type)) {
+                rd_kafka_op_destroy(rko);
+                return 1;
+        }
+
+        if (rko->rko_serve) {
+                callback = rko->rko_serve;
+                opaque   = rko->rko_serve_opaque;
+                rko->rko_serve        = NULL;
+                rko->rko_serve_opaque = NULL;
+        }
+
+        if (callback)
+                return callback(rk, rko, cb_type, opaque);
+
+        return 0;
 }
 
 

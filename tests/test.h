@@ -123,6 +123,7 @@ struct test {
         /**
          * Runtime
          */
+        thrd_t  thrd;
         int64_t start;
         int64_t duration;
         FILE   *stats_fp;
@@ -155,7 +156,7 @@ struct test {
 extern int test_broker_version;
 
 
-#define TEST_FAIL0(file,line,fail_now,...) do {					\
+#define TEST_FAIL0(file,line,do_lock,fail_now,...) do {                 \
                 int is_thrd = 0;                                        \
 		TEST_SAYL(0, "TEST FAILURE\n");				\
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
@@ -165,13 +166,15 @@ extern int test_broker_version;
 		fprintf(stderr, "\n");					\
                 fprintf(stderr, "### Test random seed was %i ###\033[0m\n",    \
                         test_seed);                                     \
-                TEST_LOCK();                                            \
+                if (do_lock)                                            \
+                        TEST_LOCK();                                    \
                 test_curr->state = TEST_FAILED;                         \
                 if (test_curr->mainfunc) {                              \
                         tests_running_cnt--;                            \
                         is_thrd = 1;                                    \
                 }                                                       \
-                TEST_UNLOCK();                                          \
+                if (do_lock)                                            \
+                        TEST_UNLOCK();                                  \
 		if (!fail_now) break;					\
                 if (test_assert_on_fail || !is_thrd)                    \
                         assert(0);                                      \
@@ -180,10 +183,10 @@ extern int test_broker_version;
 	} while (0)
 
 /* Whine and abort test */
-#define TEST_FAIL(...) TEST_FAIL0(__FILE__,__LINE__,1, __VA_ARGS__)
+#define TEST_FAIL(...) TEST_FAIL0(__FILE__,__LINE__,1,1,__VA_ARGS__)
 
 /* Whine right away, mark the test as failed, but continue the test. */
-#define TEST_FAIL_LATER(...) TEST_FAIL0(__FILE__,__LINE__,0, __VA_ARGS__)
+#define TEST_FAIL_LATER(...) TEST_FAIL0(__FILE__,__LINE__,1,0,__VA_ARGS__)
 
 
 #define TEST_PERROR(call) do {						\

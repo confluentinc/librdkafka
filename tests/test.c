@@ -779,7 +779,6 @@ static int run_test_from_thread (void *arg) {
 
 
 static int run_test (struct test *test, int argc, char **argv) {
-        thrd_t thr;
         struct run_args *run_args = calloc(1, sizeof(*run_args));
         int wait_cnt = 0;
 
@@ -803,7 +802,8 @@ static int run_test (struct test *test, int argc, char **argv) {
         test->state = TEST_RUNNING;
         TEST_UNLOCK();
 
-        if (thrd_create(&thr, run_test_from_thread, run_args) != thrd_success) {
+        if (thrd_create(&test->thrd, run_test_from_thread, run_args) !=
+            thrd_success) {
                 TEST_LOCK();
                 tests_running_cnt--;
                 test->state = TEST_FAILED;
@@ -1235,17 +1235,25 @@ int main(int argc, char **argv) {
 
 			/* Timeout check */
 			if (now > test->timeout) {
+                                struct test *save_test = test_curr;
+                                test_curr = test;
 				test->state = TEST_FAILED;
 				test_summary(0/*no-locks*/);
-				TEST_UNLOCK();
-				TEST_FAIL("Test %s timed out "
-					  "(timeout set to %d seconds)\n",
-					  test->name,
-					  (int)(test->timeout-test->start)/
-					  1000000);
-				assert(!*"test timeout");
-				TEST_LOCK();
-			}
+                                TEST_FAIL0(__FILE__,__LINE__,0/*nolock*/,
+                                           0/*fail-later*/,
+                                           "Test %s timed out "
+                                           "(timeout set to %d seconds)\n",
+                                           test->name,
+                                           (int)(test->timeout-
+                                                 test->start)/
+                                           1000000);
+                                test_curr = save_test;
+#ifdef _MSC_VER
+                                TerminateThread(test->thrd, -1);
+#else
+                                pthread_kill(test->thrd, SIGKILL);
+#endif
+                        }
 		}
 		if (test_level >= 2)
 			TEST_SAY0("\n");
@@ -3029,7 +3037,7 @@ rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
 
 
 void test_FAIL (const char *file, int line, int fail_now, const char *str) {
-        TEST_FAIL0(file, line, fail_now, "%s", str);
+        TEST_FAIL0(file, line, 1/*lock*/, fail_now, "%s", str);
 }
 
 void test_SAY (const char *file, int line, int level, const char *str) {

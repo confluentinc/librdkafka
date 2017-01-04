@@ -1110,8 +1110,10 @@ static int rd_kafka_thread_main (void *arg) {
                                      1000ll,
                                      rd_kafka_metadata_refresh_cb, NULL);
 
-	if (rk->rk_cgrp)
-		rd_kafka_cgrp_reassign_broker(rk->rk_cgrp);
+        if (rk->rk_cgrp) {
+                rd_kafka_cgrp_reassign_broker(rk->rk_cgrp);
+                rd_kafka_q_fwd_set(rk->rk_cgrp->rkcg_ops, rk->rk_ops);
+        }
 
 	while (likely(!rd_kafka_terminating(rk) ||
 		      rd_kafka_q_len(rk->rk_ops))) {

@@ -482,16 +482,20 @@ rd_kafka_commit_queue (rd_kafka_t *rk,
 
 	err = rd_kafka_commit0(rk, offsets, NULL,
 			       RD_KAFKA_REPLYQ(rkq, 0),
-			       cb, opaque);
+			       rkqu ? cb : NULL, opaque);
 
 	if (!rkqu) {
 		rd_kafka_op_t *rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0);
 		if (!rko)
 			err = RD_KAFKA_RESP_ERR__TIMED_OUT;
 		else {
+                        if (cb)
+                                cb(rk, rko->rko_err,
+                                   rko->rko_u.offset_commit.partitions,
+                                   opaque);
                         err = rko->rko_err;
                         rd_kafka_op_destroy(rko);
-		}
+                }
 
                 rd_kafka_q_destroy(rkq);
 	}

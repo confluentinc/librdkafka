@@ -2337,9 +2337,8 @@ rd_kafka_assignment (rd_kafka_t *rk,
  * is done, returning the resulting success or error code.
  *
  * If a rd_kafka_conf_set_offset_commit_cb() offset commit callback has been
- * configured:
- *  * if async: callback will be enqueued for a future call to rd_kafka_poll().
- *  * if !async: callback will be called from rd_kafka_commit()
+ * configured the callback will be enqueued for a future call to
+ * rd_kafka_poll(), rd_kafka_consumer_poll() or similar.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,

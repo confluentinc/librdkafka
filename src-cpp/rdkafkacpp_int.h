@@ -572,6 +572,7 @@ class HandleImpl : virtual public Handle {
             low, high));
   }
 
+  Queue *get_partition_queue (const TopicPartition *partition);
 
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
@@ -639,7 +640,7 @@ public:
     // FIXME: metadata
   }
 
-  int partition () { return partition_; }
+  int partition () const { return partition_; }
   const std::string &topic () const { return topic_ ; }
 
   int64_t offset () { return offset_; }
@@ -756,6 +757,8 @@ class QueueImpl : public Queue {
   ~QueueImpl () {
     rd_kafka_queue_destroy(queue_);
   }
+  ErrorCode forward (Queue *queue);
+  Message *consume (int timeout_ms);
   rd_kafka_queue_t *queue_;
 };
 

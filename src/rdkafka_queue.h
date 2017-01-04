@@ -25,6 +25,8 @@ struct rd_kafka_q_s {
 #define RD_KAFKA_Q_F_ALLOCATED  0x1  /* Allocated: rd_free on destroy */
 #define RD_KAFKA_Q_F_READY      0x2  /* Queue is ready to be used.
                                       * Flag is cleared on destroy */
+#define RD_KAFKA_Q_F_FWD_APP    0x4  /* Queue is being forwarded by a call
+                                      * to rd_kafka_queue_forward. */
 
         rd_kafka_t   *rkq_rk;
 	struct rd_kafka_q_io *rkq_qio;   /* FD-based application signalling */
@@ -68,6 +70,8 @@ rd_kafka_q_t *rd_kafka_q_new0 (rd_kafka_t *rk, const char *func, int line);
 #define rd_kafka_q_new(rk) rd_kafka_q_new0(rk,__FUNCTION__,__LINE__)
 void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq);
 
+#define rd_kafka_q_lock(rkqu) mtx_lock(&(rkqu)->rkq_lock)
+#define rd_kafka_q_unlock(rkqu) mtx_unlock(&(rkqu)->rkq_lock)
 
 static RD_INLINE RD_UNUSED
 rd_kafka_q_t *rd_kafka_q_keep (rd_kafka_q_t *rkq) {
@@ -154,8 +158,10 @@ void rd_kafka_q_disable0 (rd_kafka_q_t *rkq, int do_lock) {
 /**
  * Forward 'srcq' to 'destq'
  */
-void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq, int do_lock);
-#define rd_kafka_q_fwd_set(S,D) rd_kafka_q_fwd_set0(S,D,1/*lock*/)
+void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
+                          int do_lock, int fwd_app);
+#define rd_kafka_q_fwd_set(S,D) rd_kafka_q_fwd_set0(S,D,1/*lock*/,\
+                                                    0/*no fwd_app*/)
 
 
 /**

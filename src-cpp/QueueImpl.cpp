@@ -35,3 +35,24 @@ RdKafka::Queue *RdKafka::Queue::create (Handle *base) {
   queueimpl->queue_ = rd_kafka_queue_new(dynamic_cast<HandleImpl*>(base)->rk_);
   return queueimpl;
 }
+
+RdKafka::ErrorCode
+RdKafka::QueueImpl::forward (Queue *queue) {
+  if (!queue) {
+    rd_kafka_queue_forward(queue_, NULL);
+  } else {
+    QueueImpl *queueimpl = dynamic_cast<QueueImpl *>(queue);
+    rd_kafka_queue_forward(queue_, queueimpl->queue_);
+  }
+  return RdKafka::ERR_NO_ERROR;
+}
+
+RdKafka::Message *RdKafka::QueueImpl::consume (int timeout_ms) {
+  rd_kafka_message_t *rkmessage;
+  rkmessage = rd_kafka_consume_queue(queue_, timeout_ms);
+
+  if (!rkmessage)
+    return new RdKafka::MessageImpl(NULL, RdKafka::ERR__TIMED_OUT);
+
+  return new RdKafka::MessageImpl(rkmessage);
+}

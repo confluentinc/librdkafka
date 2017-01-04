@@ -1804,12 +1804,30 @@ rd_kafka_queue_t *rd_kafka_queue_get_main (rd_kafka_t *rk);
 RD_EXPORT
 rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk);
 
+/**
+ * @returns a reference to the partition's queue, or NULL if
+ *          partition is invalid.
+ *
+ * Use rd_kafka_queue_destroy() to loose the reference.
+ *
+ * @remark rd_kafka_queue_destroy() MUST be called on this queue
+ * 
+ * @remark This function only works on consumers.
+ */
+RD_EXPORT
+rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
+                                                const char *topic,
+                                                int32_t partition);
 
 /**
  * @brief Forward/re-route queue \p src to \p dst.
  * If \p dst is \c NULL the forwarding is removed.
  *
  * The internal refcounts for both queues are increased.
+ * 
+ * @remark Regardless of whether \p dst is NULL or not, after calling this
+ *         function, \p src will not forward it's fetch queue to the consumer
+ *         queue.
  */
 RD_EXPORT
 void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst);

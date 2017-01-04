@@ -19,7 +19,7 @@ void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
 		rd_free(rkq->rkq_qio);
 		rkq->rkq_qio = NULL;
 	}
-        rd_kafka_q_fwd_set0(rkq, NULL, 0/*no-lock*/);
+        rd_kafka_q_fwd_set0(rkq, NULL, 0/*no-lock*/, 0 /*no-fwd-app*/);
         rd_kafka_q_disable0(rkq, 0/*no-lock*/);
         rd_kafka_q_purge0(rkq, 0/*no-lock*/);
 	assert(!rkq->rkq_fwdq);
@@ -72,10 +72,12 @@ rd_kafka_q_t *rd_kafka_q_new0 (rd_kafka_t *rk, const char *func, int line) {
  * All access to rkq_fwdq are protected by rkq_lock.
  */
 void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
-                          int do_lock) {
+                          int do_lock, int fwd_app) {
 
         if (do_lock)
                 mtx_lock(&srcq->rkq_lock);
+        if (fwd_app)
+                srcq->rkq_flags |= RD_KAFKA_Q_F_FWD_APP;
 	if (srcq->rkq_fwdq) {
 		rd_kafka_q_destroy(srcq->rkq_fwdq);
 		srcq->rkq_fwdq = NULL;
@@ -687,8 +689,35 @@ rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk) {
 	return rd_kafka_queue_new0(rk, rk->rk_cgrp->rkcg_q);
 }
 
+rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
+                                                const char *topic,
+                                                int32_t partition) {
+        shptr_rd_kafka_toppar_t *s_rktp;
+        rd_kafka_toppar_t *rktp;
+        rd_kafka_queue_t *result;
+
+        if (rk->rk_type == RD_KAFKA_PRODUCER)
+                return NULL;
+
+        s_rktp = rd_kafka_toppar_get2(rk, topic,
+                                      partition,
+                                      0, /* no ua_on_miss */
+                                      1 /* create_on_miss */);
+
+        if (!s_rktp)
+                return NULL;
+
+        rktp = rd_kafka_toppar_s2i(s_rktp);
+        result = rd_kafka_queue_new0(rk, rktp->rktp_fetchq);
+        rd_kafka_toppar_destroy(s_rktp);
+
+        return result;
+}
+
 void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst) {
-	rd_kafka_q_fwd_set(src->rkqu_q, dst ? dst->rkqu_q : NULL);
+        rd_kafka_q_fwd_set0(src->rkqu_q, dst ? dst->rkqu_q : NULL,
+                            1, /* do_lock */
+                            1 /* fwd_app */);
 }
 
 

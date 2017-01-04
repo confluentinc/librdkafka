@@ -84,6 +84,10 @@ for mode in $MODES; do
 	    $TEST $ARGS
 	    RET=$?
 	    ;;
+    lldb)
+        lldb -- $TEST $ARGS
+        RET=$?
+        ;;
 	*)
 	    echo -e "${RED}### Unknown mode $mode for $TEST ###${CCLR}"
 	    RET=1

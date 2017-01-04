@@ -311,6 +311,7 @@ std::string  err2str(RdKafka::ErrorCode err);
 /* Forward declarations */
 class Producer;
 class Message;
+class Queue;
 class Event;
 class Topic;
 class TopicPartition;
@@ -982,6 +983,16 @@ class RD_EXPORT Handle {
   virtual ErrorCode get_watermark_offsets (const std::string &topic,
 					   int32_t partition,
 					   int64_t *low, int64_t *high) = 0;
+
+  /**
+   * @brief Retrieve queue for a given partition.
+   *
+   * @returns The fetch queue for the given partition if successful. Else,
+   *          NULL is returned.
+   *          
+   * @remark This function only works on consumers.
+   */
+  virtual Queue *get_partition_queue (const TopicPartition *partition) = 0;
 };
 
 
@@ -1018,7 +1029,7 @@ public:
   virtual const std::string &topic () const = 0;
 
   /** @returns partition id */
-  virtual int partition () = 0;
+  virtual int partition () const = 0;
 
   /** @returns offset (if applicable) */
   virtual int64_t offset () = 0;
@@ -1221,6 +1232,33 @@ class Queue {
    * @brief Create Queue object
    */
   static Queue *create (Handle *handle);
+
+  /**
+   * @brief Forward/re-route queue to \p dst.
+   * If \p dst is \c NULL, the forwarding is removed.
+   *
+   * The internal refcounts for both queues are increased.
+   * 
+   * @remark Regardless of whether \p dst is NULL or not, after calling this
+   *         function, \p src will not forward it's fetch queue to the consumer
+   *         queue.
+   */
+  virtual ErrorCode forward (Queue *dst) = 0;
+
+
+  /**
+   * @brief Consume message or get error event from the queue.
+   *
+   * @remark Use \c delete to free the message.
+   *
+   * @returns One of:
+   *  - proper message (RdKafka::Message::err() is ERR_NO_ERROR)
+   *  - error event (RdKafka::Message::err() is != ERR_NO_ERROR)
+   *  - timeout due to no message or event in \p timeout_ms
+   *    (RdKafka::Message::err() is ERR__TIMED_OUT)
+   */
+
+  virtual Message *consume (int timeout_ms) = 0;
 
   virtual ~Queue () { }
 };

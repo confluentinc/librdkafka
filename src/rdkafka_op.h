@@ -148,6 +148,10 @@ struct rd_kafka_op_s {
 
 	rd_kafka_t     *rko_rk;
 
+#if ENABLE_DEVEL
+        const char *rko_source;  /**< Where op was created */
+#endif
+
         /* RD_KAFKA_OP_CB */
         void          (*rko_op_cb) (rd_kafka_t *rk, struct rd_kafka_op_s *rko);
 

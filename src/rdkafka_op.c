@@ -180,6 +180,10 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
 	rko = rd_calloc(1, sizeof(*rko)-sizeof(rko->rko_u)+tsize);
 	rko->rko_type = type;
 
+#if ENABLE_DEVEL
+        rko->rko_source = source;
+#endif
+
         rd_atomic32_add(&rd_kafka_op_cnt, 1);
 	return rko;
 }

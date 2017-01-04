@@ -46,7 +46,7 @@ static int  test_exit = 0;
 static char test_topic_prefix[128] = "rdkafkatest";
 static int  test_topic_random = 0;
        int  tests_running_cnt = 0;
-static int  test_concurrent_max = 20;
+static int  test_concurrent_max = 5;
 int         test_assert_on_fail = 0;
 double test_timeout_multiplier  = 1.0;
 static char *test_sql_cmd = NULL;
@@ -713,7 +713,7 @@ static int run_test0 (struct run_args *run_args) {
 		 test->name);
         if (test->stats_fp)
                 TEST_SAY("==== Stats written to file %s ====\n", stats_file);
-	TIMING_START(&t_run, test->name);
+	TIMING_START(&t_run, "%s", test->name);
         test->start = t_run.ts_start;
 	r = test->mainfunc(run_args->argc, run_args->argv);
 	TIMING_STOP(&t_run);
@@ -1209,6 +1209,8 @@ int main(int argc, char **argv) {
 		test_timeout_multiplier *= 3;
 		TEST_UNLOCK();
 	}
+
+        test_timeout_multiplier *= (double)test_concurrent_max/3.0;
 
 	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 	TEST_SAY("Test mode   : %s\n", test_mode);

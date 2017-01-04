@@ -261,8 +261,11 @@ typedef struct test_timing_s {
 	int64_t ts_every; /* Last every */
 } test_timing_t;
 
-#define TIMING_START(TIMING,NAME) do {					\
-	rd_snprintf((TIMING)->name, sizeof((TIMING)->name), "%s", (NAME)); \
+/**
+ * @brief Start timing, Va-Argument is textual name (printf format)
+ */
+#define TIMING_START(TIMING,...) do {                                   \
+        rd_snprintf((TIMING)->name, sizeof((TIMING)->name), __VA_ARGS__); \
 	(TIMING)->ts_start = test_clock();				\
 	(TIMING)->duration = 0;						\
 	(TIMING)->ts_every = (TIMING)->ts_start;			\

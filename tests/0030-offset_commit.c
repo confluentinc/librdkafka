@@ -121,7 +121,7 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	TEST_SAY(_C_MAG "[ do_offset_test: %s with group.id %s ]\n",
 		 what, groupid);
 
-	TIMING_START(&t_all, what);
+	TIMING_START(&t_all, "%s", what);
 
 	expected_offset  = 0;
 	committed_offset = -1;
@@ -174,9 +174,13 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 			}
 			expected_offset = rkm->offset+1;
 			if (!auto_commit) {
-				test_timing_t t_commit;
-				TIMING_START(&t_commit,
-					     async?"commit.async":"commit.sync");
+                                test_timing_t t_commit;
+                                TIMING_START(&t_commit,
+                                             "%s @ %"PRId64,
+                                             async?
+                                             "commit.async":
+                                             "commit.sync",
+                                             rkm->offset+1);
 				err = rd_kafka_commit_message(rk, rkm, async);
 				TIMING_STOP(&t_commit);
 				if (err)

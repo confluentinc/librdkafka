@@ -73,24 +73,19 @@ typedef pthread_t thrd_t;
   pthread_join(THRD, NULL)
 
 
-#ifdef LIBSOCKEM_PRELOAD
 static mtx_t sockem_lock;
-#endif
-
 static LIST_HEAD(, sockem_s) sockems;
 
+static pthread_once_t sockem_once = PTHREAD_ONCE_INIT;
+static char *sockem_conf_str = "";
 
 typedef int64_t sockem_ts_t;
 
+
 #ifdef LIBSOCKEM_PRELOAD
-static pthread_once_t sockem_once = PTHREAD_ONCE_INIT;
 static int (*sockem_orig_connect) (int, const struct sockaddr *, socklen_t);
 static int (*sockem_orig_close) (int);
-static char *sockem_conf_str = "";
-#endif
 
-
-#ifdef LIBSOCKEM_PRELOAD
 #define sockem_close0(S)        (sockem_orig_close(S))
 #define sockem_connect0(S,A,AL) (sockem_orig_connect(S,A,AL))
 #else
@@ -163,6 +158,20 @@ static __attribute__((unused)) __inline int64_t sockem_clock (void) {
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return ((int64_t)ts.tv_sec * 1000000LLU) +
 		((int64_t)ts.tv_nsec / 1000LLU);
+/**
+ * @brief Initialize libsockem once.
+ */
+static void sockem_init (void) {
+        mtx_init(&sockem_lock);
+        sockem_conf_str = getenv("SOCKEM_CONF");
+        if (!sockem_conf_str)
+                sockem_conf_str = "";
+        if (strstr(sockem_conf_str, "debug"))
+                fprintf(stderr, "%% libsockem pre-loaded (%s)\n",
+                        sockem_conf_str);
+#ifdef LIBSOCKEM_PRELOAD
+        sockem_orig_connect = dlsym(RTLD_NEXT, "connect");
+        sockem_orig_close = dlsym(RTLD_NEXT, "close");
 #endif
 }
 
@@ -360,6 +369,8 @@ sockem_t *sockem_connect (int sockfd, const struct sockaddr *addr,
         socklen_t addrlen2 = addrlen;
         va_list ap;
 
+        pthread_once(&sockem_once, sockem_init);
+
         /* Create internal app listener socket */
         ls = socket(addr->sa_family, SOCK_STREAM, IPPROTO_TCP);
         if (ls == -1)
@@ -436,24 +447,24 @@ sockem_t *sockem_connect (int sockfd, const struct sockaddr *addr,
                 return NULL;
         }
 
+        mtx_lock(&sockem_lock);
+        LIST_INSERT_HEAD(&sockems, skm, link);
         mtx_lock(&skm->lock);
         skm->linked = 1;
         mtx_unlock(&skm->lock);
-
-#ifdef LIBSOCKEM_PRELOAD
-        mtx_lock(&sockem_lock);
-        LIST_INSERT_HEAD(&sockems, skm, link);
         mtx_unlock(&sockem_lock);
-#else
-        LIST_INSERT_HEAD(&sockems, skm, link);
-#endif
 
         return skm;
 }
 
 void sockem_close (sockem_t *skm) {
 
+
+        mtx_lock(&sockem_lock);
         mtx_lock(&skm->lock);
+        if (skm->linked)
+                LIST_REMOVE(skm, link);
+        mtx_unlock(&sockem_lock);
 
         /* If thread is running let it close the sockets
          * to avoid race condition. */
@@ -462,10 +473,6 @@ void sockem_close (sockem_t *skm) {
                 skm->run = SOCKEM_TERM;
         else
                 sockem_close_all(skm);
-
-        /* LIBSOCKEM_PRELOAD: caller must hold sockem_lock. */
-        if (skm->linked)
-                LIST_REMOVE(skm, link);
 
         mtx_unlock(&skm->lock);
 
@@ -559,11 +566,15 @@ int sockem_set (sockem_t *skm, ...) {
 sockem_t *sockem_find (int sockfd) {
         sockem_t *skm;
 
+        pthread_once(&sockem_once, sockem_init);
+
+        mtx_lock(&sockem_lock);
         LIST_FOREACH(skm, &sockems, link)
                 if (skm->as == sockfd)
-                        return skm;
+                        break;
+        mtx_unlock(&sockem_lock);
 
-        return NULL;
+        return skm;
 }
 
 
@@ -573,20 +584,6 @@ sockem_t *sockem_find (int sockfd) {
  *
  */
 
-/**
- * @brief Initialize preloadable libsockem once.
- */
-static void sockem_init (void) {
-        mtx_init(&sockem_lock);
-        sockem_conf_str = getenv("SOCKEM_CONF");
-        if (!sockem_conf_str)
-                sockem_conf_str = "";
-        if (strstr(sockem_conf_str, "debug"))
-                fprintf(stderr, "%% libsockem pre-loaded (%s)\n",
-                        sockem_conf_str);
-        sockem_orig_connect = dlsym(RTLD_NEXT, "connect");
-        sockem_orig_close = dlsym(RTLD_NEXT, "close");
-}
 
 
 /**

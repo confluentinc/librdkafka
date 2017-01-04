@@ -1034,10 +1034,9 @@ static int test_summary (int do_lock) {
 		if (sql_fp)
 			fprintf(sql_fp,
 				"INSERT INTO tests VALUES("
-				"'%s_%s', '%s', '%s', %d, '%s', %f);\n",
-				datestr, test_mode, test->name,
-				test_states[test->state],
-				!!(test->flags & TEST_F_KNOWN_ISSUE),
+				"'%s_%s', '%s', '%s', '%s', '%s', %f);\n",
+				datestr, test_mode, test_mode,
+                                test->name, test_states[test->state],
 				test->extra ? test->extra : "",
 				(double)duration/1000000.0);
         }

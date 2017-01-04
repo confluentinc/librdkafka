@@ -539,7 +539,11 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
 void test_kafka_topics (const char *fmt, ...);
 void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor);
-void test_auto_create_topic_rkt (rd_kafka_t *rk, rd_kafka_topic_t *rkt);
+rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
+                                                rd_kafka_topic_t *rkt);
+rd_kafka_resp_err_t test_auto_create_topic (rd_kafka_t *rk, const char *name);
+int test_check_auto_create_topic (void);
+
 int test_check_builtin (const char *feature);
 
 char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);

@@ -2885,7 +2885,8 @@ void test_create_topic (const char *topicname, int partition_cnt,
 /**
  * @brief Let the broker auto-create the topic for us.
  */
-void test_auto_create_topic_rkt (rd_kafka_t *rk, rd_kafka_topic_t *rkt) {
+rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
+                                                rd_kafka_topic_t *rkt) {
 	const struct rd_kafka_metadata *metadata;
 	rd_kafka_resp_err_t err;
 	test_timing_t t;
@@ -2893,11 +2894,47 @@ void test_auto_create_topic_rkt (rd_kafka_t *rk, rd_kafka_topic_t *rkt) {
 	TIMING_START(&t, "auto_create_topic");
 	err = rd_kafka_metadata(rk, 0, rkt, &metadata, tmout_multip(15000));
 	TIMING_STOP(&t);
-	TEST_ASSERT(!err, "metadata() failed: %s", rd_kafka_err2str(err));
+	if (err)
+                TEST_WARN("metadata() for %s failed: %s",
+                          rkt ? rd_kafka_topic_name(rkt) : "(all-local)",
+                          rd_kafka_err2str(err));
 
 	rd_kafka_metadata_destroy(metadata);
+
+        return err;
 }
 
+rd_kafka_resp_err_t test_auto_create_topic (rd_kafka_t *rk, const char *name) {
+        rd_kafka_topic_t *rkt = rd_kafka_topic_new(rk, name, NULL);
+        rd_kafka_resp_err_t err;
+        if (!rkt)
+                return rd_kafka_last_error();
+        err = test_auto_create_topic_rkt(rk, rkt);
+        rd_kafka_topic_destroy(rkt);
+        return err;
+}
+
+
+/**
+ * @brief Check if topic auto creation works.
+ * @returns 1 if it does, else 0.
+ */
+int test_check_auto_create_topic (void) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_resp_err_t err;
+        const char *topic = test_mk_topic_name("autocreatetest", 1);
+
+        test_conf_init(&conf, NULL, 0);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        err = test_auto_create_topic(rk, topic);
+        if (err)
+                TEST_SAY("Auto topic creation of \"%s\" failed: %s\n",
+                         topic, rd_kafka_err2str(err));
+        rd_kafka_destroy(rk);
+
+        return err ? 0 : 1;
+}
 
 /**
  * @brief Check if \p feature is builtin to librdkafka.

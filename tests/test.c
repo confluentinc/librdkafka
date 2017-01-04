@@ -236,7 +236,6 @@ void test_socket_close_all (struct test *test, int reinit) {
         TEST_UNLOCK();
 }
 
-       
 
 static int test_connect_cb (int s, const struct sockaddr *addr,
                             int addrlen, const char *id, void *opaque) {
@@ -244,7 +243,6 @@ static int test_connect_cb (int s, const struct sockaddr *addr,
         sockem_t *skm;
         int r;
 
-        TEST_SAY("connect_cb %s\n", id);
         skm = sockem_connect(s, addr, addrlen, test_sockem_conf, 0, NULL);
         if (!skm)
                 return errno;

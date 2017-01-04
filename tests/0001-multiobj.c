@@ -52,13 +52,14 @@ int main_0001_multiobj (int argc, char **argv) {
 		rd_kafka_conf_t *conf;
 		rd_kafka_topic_conf_t *topic_conf;
 		char msg[128];
-                test_timing_t t_destroy;
+                test_timing_t t_full, t_destroy;
 
 		test_conf_init(&conf, &topic_conf, 30);
 
                 if (!topic)
                         topic = test_mk_topic_name("0001", 0);
 
+                TIMING_START(&t_full, "full create-produce-destroy cycle");
 		rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
@@ -84,6 +85,8 @@ int main_0001_multiobj (int argc, char **argv) {
                 TIMING_START(&t_destroy, "rd_kafka_destroy()");
 		rd_kafka_destroy(rk);
                 TIMING_STOP(&t_destroy);
+
+                TIMING_STOP(&t_full);
 	}
 
 	return 0;

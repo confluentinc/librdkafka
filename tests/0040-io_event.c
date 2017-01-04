@@ -62,6 +62,7 @@ int main_0040_io_event (int argc, char **argv) {
 	int wait_multiplier = 1;
 	struct pollfd pfd;
         int r;
+        rd_kafka_resp_err_t err;
 	enum {
 		_NOPE,
 		_YEP,
@@ -73,7 +74,9 @@ int main_0040_io_event (int argc, char **argv) {
 
 	rk_p = test_create_producer();
 	rkt_p = test_create_producer_topic(rk_p, topic, NULL);
-	test_auto_create_topic_rkt(rk_p, rkt_p);
+	err = test_auto_create_topic_rkt(rk_p, rkt_p);
+        TEST_ASSERT(!err, "Topic auto creation failed: %s",
+                    rd_kafka_err2str(err));
 
 	test_conf_init(&conf, &tconf, 0);
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);

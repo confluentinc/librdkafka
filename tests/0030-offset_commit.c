@@ -191,8 +191,9 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 		cnt++;
 	}
 
-	TEST_SAY("%s: done consuming after %d messages, at offset %"PRId64"\n",
-		 what, cnt, expected_offset);
+	TEST_SAY("%s: done consuming after %d messages, at offset %"PRId64
+                 ", next_offset %"PRId64"\n",
+		 what, cnt, expected_offset, next_offset);
 
 	if ((err = rd_kafka_assignment(rk, &parts)))
 		TEST_FAIL("%s: failed to get assignment(): %s\n",

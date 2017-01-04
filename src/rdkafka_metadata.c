@@ -776,7 +776,7 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
  * @param rk: used to look up usable broker if \p rkb is NULL.
  * @param rkb: use this broker, unless NULL then any usable broker from \p rk
  *
- * @returns an error code
+ * @returns an error code (__UNKNOWN_TOPIC if there are no local topics)
  *
  * @locality any
  * @locks none
@@ -793,11 +793,37 @@ rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         rd_list_init(&topics, 8, rd_free);
         rd_kafka_local_topics_to_list(rk, &topics);
 
-        err = rd_kafka_metadata_refresh_topics(rk, rkb, &topics, reason);
+        if (rd_list_cnt(&topics) == 0)
+                err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+        else
+                err = rd_kafka_metadata_refresh_topics(rk, rkb,
+                                                       &topics, reason);
 
         rd_list_destroy(&topics);
 
         return err;
+}
+
+
+/**
+ * @brief Refresh broker list by metadata.
+ *
+ * Attempts to use sparse metadata request if possible, else falls back
+ * on a full metadata request. (NOTE: sparse not implemented, KIP-4)
+ *
+ * @param rk: used to look up usable broker if \p rkb is NULL.
+ * @param rkb: use this broker, unless NULL then any usable broker from \p rk
+ *
+ * @returns an error code
+ *
+ * @locality any
+ * @locks none
+ */
+rd_kafka_resp_err_t
+rd_kafka_metadata_refresh_brokers (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
+                                   const char *reason) {
+        /* FIXME: need KIP-4 to make sparse (no topics) metadata requests */
+        return rd_kafka_metadata_refresh_all(rk, rkb, reason);
 }
 
 

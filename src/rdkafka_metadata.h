@@ -56,6 +56,9 @@ rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                         const char *reason);
 rd_kafka_resp_err_t
+rd_kafka_metadata_refresh_brokers (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
+                                   const char *reason);
+rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                const char *reason);
 

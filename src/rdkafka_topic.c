@@ -740,6 +740,8 @@ void rd_kafka_topic_metadata_none (rd_kafka_itopic_t *rkt) {
 
         rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_NOTEXISTS);
 
+        rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
+
 	/* Update number of partitions */
 	rd_kafka_topic_partition_cnt_update(rkt, 0);
 

@@ -1280,8 +1280,12 @@ void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
 	rd_kafka_broker_unlock(rkb);
 
-        /* Request metadata (async) */
-        rd_kafka_metadata_refresh_known_topics(NULL, rkb, "connected");
+        /* Request metadata (async):
+         * try locally known topics first and if there are none try
+         * getting just the broker list. */
+        if (rd_kafka_metadata_refresh_known_topics(NULL, rkb, "connected") ==
+            RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
+                rd_kafka_metadata_refresh_brokers(NULL, rkb, "connected");
 }
 
 

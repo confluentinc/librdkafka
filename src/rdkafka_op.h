@@ -66,7 +66,7 @@ typedef struct rd_kafka_replyq_s {
 
 
 typedef enum {
-        RD_KAFKA_OP_NONE,
+        RD_KAFKA_OP_NONE,     /* No specific type, use OP_CB */
 	RD_KAFKA_OP_FETCH,    /* Kafka thread -> Application */
 	RD_KAFKA_OP_ERR,      /* Kafka thread -> Application */
         RD_KAFKA_OP_CONSUMER_ERR, /* Kafka thread -> Application */
@@ -74,7 +74,6 @@ typedef enum {
 			       * Produce message delivery report */
 	RD_KAFKA_OP_STATS,    /* Kafka thread -> Application */
 
-	RD_KAFKA_OP_METADATA_REQ,  /* any -> Broker thread: request metadata */
         RD_KAFKA_OP_OFFSET_COMMIT, /* any -> toppar's Broker thread */
         RD_KAFKA_OP_NODE_UPDATE,   /* any -> Broker thread: node update */
 
@@ -105,6 +104,7 @@ typedef enum {
 	RD_KAFKA_OP_THROTTLE,        /* Throttle info */
 	RD_KAFKA_OP_NAME,            /* Request name */
 	RD_KAFKA_OP_OFFSET_RESET,    /* Offset reset */
+        RD_KAFKA_OP_METADATA,        /* Metadata response */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -212,11 +212,8 @@ struct rd_kafka_op_s {
 			rd_kafka_buf_t *rkbuf;
 		} xbuf; /* XMIT_BUF and RECV_BUF */
 
-                struct {
-                        rd_list_t *topics; /* (char *)name */
-                        char reason[128];
-                        struct rd_kafka_metadata *metadata;
-                } metadata;
+                /* RD_KAFKA_OP_METADATA */
+                rd_kafka_metadata_t *metadata;
 
 		struct {
 			shptr_rd_kafka_itopic_t *s_rkt;

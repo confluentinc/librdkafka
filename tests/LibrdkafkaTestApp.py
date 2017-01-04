@@ -33,6 +33,7 @@ class LibrdkafkaTestApp(App):
         security_protocol='PLAINTEXT'
 
         f, self.test_conf_file = self.open_file('test.conf', 'perm')
+        os.write(fd, ('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
         f.write(('\n'.join(conf_blob)).encode('ascii'))
 
         if version == 'trunk' or version.startswith('0.10.'):

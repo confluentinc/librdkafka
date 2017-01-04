@@ -168,21 +168,9 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);
 
-rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
-                                           rd_list_t *topics,
-                                           const char *reason);
 void rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
-                               rd_list_t *topics,
-                               const char *reason,
-                               rd_kafka_replyq_t replyq,
-                               rd_kafka_resp_cb_t *resp_cb,
-                               void *opaque);
-void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
-				  rd_kafka_broker_t *rkb,
-                                  rd_kafka_resp_err_t err,
-                                  rd_kafka_buf_t *rkbuf,
-                                  rd_kafka_buf_t *request,
-                                  void *opaque);
+                               const rd_list_t *topics, const char *reason,
+                               rd_kafka_op_t *rko);
 
 rd_kafka_resp_err_t
 rd_kafka_handle_ApiVersion (rd_kafka_t *rk,

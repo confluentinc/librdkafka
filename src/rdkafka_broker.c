@@ -420,9 +420,10 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	}
 
 
-	/* Query for the topic leaders (async) */
-	if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY && statechange)
-		rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
+        /* Query for topic leaders to quickly pick up on failover. */
+        if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY && statechange)
+                rd_kafka_metadata_refresh_known_topics(rkb->rkb_rk, NULL,
+                                                       "broker down");
 }
 
 
@@ -746,118 +747,6 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 
 
 
-#ifdef FIXME
-        if (!rkt) {
-                /* Push the next intervalled metadata refresh forward since
-                 * we are performing one now (which might be intervalled). */
-                if (rkb->rkb_rk->rk_conf.metadata_refresh_interval_ms >= 0) {
-                        if (rkb->rkb_metadata_fast_poll_cnt > 0) {
-                                /* Fast poll after topic loosings its leader */
-                                rkb->rkb_metadata_fast_poll_cnt--;
-                                rkb->rkb_ts_metadata_poll = rd_clock() +
-                                        (rkb->rkb_rk->rk_conf.
-                                         metadata_refresh_fast_interval_ms *
-                                         1000);
-                        } else {
-                                /* According to configured poll interval */
-                                rkb->rkb_ts_metadata_poll = rd_clock() +
-                                        (rkb->rkb_rk->rk_conf.
-                                         metadata_refresh_interval_ms * 1000);
-                        }
-                }
-        }
-
-#endif
-
-
-
-void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
-                                      rd_kafka_op_t *rko) {
-        rd_kafka_buf_t *rkbuf;
-
-        /* If called from other thread than the broker's own then post an
-         * op for the broker's thread instead since all transmissions must
-         * be performed by the broker thread. */
-        if (!thrd_is_current(rkb->rkb_thread)) {
-                rd_kafka_q_enq(rkb->rkb_ops, rko);
-                return;
-        }
-
-        rkbuf = rd_kafka_MetadataRequest0(rkb, rko->rko_u.metadata.topics,
-                                          rko->rko_u.metadata.reason);
-
-        if (rkbuf)
-                rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Metadata, rkbuf,
-                                               /* Handle response thru rk_ops,
-                                                * but forward parsed result to
-                                                * rko's replyq when done. */
-                                               RD_KAFKA_REPLYQ(rkb->rkb_rk->
-                                                               rk_ops, 0),
-                                               rd_kafka_op_handle_Metadata, rko);
-        else
-                rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__INVALID_ARG);
-}
-
-
-void rd_kafka_broker_metadata_req0 (rd_kafka_broker_t *rkb,
-                                    const rd_list_t *topics /* (const char *) */,
-                                    rd_kafka_replyq_t replyq,
-                                    const char *reason) {
-        rd_kafka_op_t *rko;
-
-        rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA_REQ);
-        if (topics)
-                rko->rko_u.metadata.topics = rd_list_copy(topics,
-                                                          rd_list_string_copy,
-                                                          NULL);
-        rko->rko_replyq = replyq;
-
-        strncpy(rko->rko_u.metadata.reason, reason,
-                sizeof(rko->rko_u.metadata.reason)-1);
-
-        rd_kafka_broker_metadata_req_op(rkb, rko);
-}
-
-/**
- * Initiate metadata request
- *
- * all_topics - if true, all topics in cluster will be requested, else only
- *              the ones known locally.
- * only_rkt   - only request this specific topic (optional)
- * replyq     - enqueue reply op on this queue (optional)
- * reason     - metadata request reason
- *
- */
-void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
-                                   int all_topics,
-                                   rd_kafka_itopic_t *only_rkt,
-                                   rd_kafka_replyq_t replyq,
-                                   const char *reason) {
-        rd_list_t topics;
-
-        if (!all_topics) {
-                rd_list_init(&topics, 1);
-                rd_list_set_free_cb(&topics, rd_free);
-
-                if (only_rkt)
-                        rd_list_add(&topics,
-                                    rd_strdup(only_rkt->rkt_topic->str));
-                else
-                        rd_kafka_local_topics_to_list(rkb->rkb_rk, &topics);
-        }
-
-        rd_kafka_broker_metadata_req0(rkb,
-                                      all_topics ? NULL : &topics,
-                                      replyq, reason);
-
-        if (!all_topics)
-                rd_list_destroy(&topics, NULL);
-}
-
-
-
-
-
 
 /**
  * @returns the current broker state change version.
@@ -965,10 +854,12 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
  *        broker.
  *
  * @returns A probably usable broker with increased refcount, or NULL on timeout
- * @locks none
+ * @locks rd_kafka_*lock() if !do_lock
  * @locality any
  */
-rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms) {
+rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk,
+                                                int timeout_ms,
+                                                int do_lock) {
 	const rd_ts_t ts_end = rd_timeout_init(timeout_ms);
 
 	while (1) {
@@ -977,12 +868,16 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms) {
 		int version = rd_kafka_brokers_get_state_version(rk);
 
                 /* Try non-blocking (e.g., non-fetching) brokers first. */
+                if (do_lock)
+                        rd_kafka_rdlock(rk);
                 rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
                                           rd_kafka_broker_filter_non_blocking,
                                           NULL);
                 if (!rkb)
                         rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
                                                   NULL, NULL);
+                if (do_lock)
+                        rd_kafka_rdunlock(rk);
 
                 if (rkb)
                         return rkb;
@@ -996,6 +891,7 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms) {
 
 	return NULL;
 }
+
 
 
 /**
@@ -1384,12 +1280,8 @@ void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
 	rd_kafka_broker_unlock(rkb);
 
-	/* Request metadata (async) */
-	rd_kafka_broker_metadata_req(rkb,
-				     rkb->rkb_rk->rk_conf.
-				     metadata_refresh_sparse ?
-				     0 /* known topics */ : 1 /* all topics */,
-                                     NULL, RD_KAFKA_NO_REPLYQ, "connected");
+        /* Request metadata (async) */
+        rd_kafka_metadata_refresh_known_topics(NULL, rkb, "connected");
 }
 
 
@@ -1996,12 +1888,10 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_t *rk,
 			   rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
 			   rd_kafka_err2str(err), actions);
 
-		if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
-			/* Request metadata information update */
-			rkb->rkb_metadata_fast_poll_cnt =
-				rkb->rkb_rk->rk_conf.metadata_refresh_fast_cnt;
-			rd_kafka_topic_leader_query(rkb->rkb_rk,
-						    rktp->rktp_rkt);
+                if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                        /* Request metadata information update */
+                        rd_kafka_toppar_leader_unavailable(rktp,
+                                                           "produce", err);
 
 			/* Move messages (in the rkbuf) back to the partition's
 			 * queue head. They will be resent when a new leader
@@ -2013,8 +1903,9 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_t *rk,
 		    rd_kafka_buf_retry(rkb, request))
                         return; /* Scheduled for retry */
 
-		if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
-			goto done;
+                /* Refresh implies a later retry through other means */
+                if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
+                        goto done;
 
 
 		/* Fatal errors: no message transmission retries */
@@ -3197,16 +3088,6 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
         while ((rko = rd_kafka_q_pop(rkb->rkb_ops, timeout_ms, 0)))
                 rd_kafka_broker_op_serve(rkb, rko);
 
-        now = rd_clock();
-
-	/* Periodic metadata poll */
-	if (unlikely(rkb->rkb_source != RD_KAFKA_INTERNAL &&
-                     !rkb->rkb_rk->rk_conf.metadata_refresh_sparse &&
-                     now >= rkb->rkb_ts_metadata_poll))
-                rd_kafka_broker_metadata_req0(rkb, /* all topics */NULL,
-                                              RD_KAFKA_NO_REPLYQ,
-                                              "periodic refresh");
-
 	/* Serve IO events */
         if (likely(rkb->rkb_transport != NULL))
                 rd_kafka_transport_io_serve(rkb->rkb_transport,
@@ -3215,6 +3096,7 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
                                             socket_blocking_max_ms : 1);
 
         /* Scan wait-response queue for timeouts. */
+        now = rd_clock();
         if (rd_interval(&rkb->rkb_timeout_scan_intvl, 1000000, now) > 0)
                 rd_kafka_broker_timeout_scan(rkb, now);
 }
@@ -4077,11 +3959,10 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 				case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
 				case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
 				case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
-					/* Request metadata information update*/
-					rd_kafka_topic_leader_query(rkb->rkb_rk,
-								    rktp->
-								    rktp_rkt);
-					break;
+                                        /* Request metadata information update*/
+                                        rd_kafka_toppar_leader_unavailable(
+                                                rktp, "fetch", hdr.ErrorCode);
+                                        break;
 
 					/* Application errors */
 				case RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE:
@@ -4273,9 +4154,12 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_t *rk,
 		case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
 		case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
 		case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
-			/* Request metadata information update */
-			rd_kafka_topic_leader_query(rkb->rkb_rk, NULL);
-			/* FALLTHRU */
+                        /* Request metadata information update */
+                        rd_kafka_metadata_refresh_known_topics(
+                                rkb->rkb_rk, NULL,
+                                rd_rsprintf("FetchRequest failed: %s",
+                                            rd_kafka_err2str(err)));
+                        /* FALLTHRU */
 
 		case RD_KAFKA_RESP_ERR__TRANSPORT:
 		case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:

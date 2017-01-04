@@ -251,7 +251,8 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
                                                        void *opaque),
                                         void *opaque);
 
-rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms);
+rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms,
+                                               int do_lock);
 
 rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state);
 
@@ -299,17 +300,6 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 
 void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf);
 
-void rd_kafka_broker_metadata_req0 (rd_kafka_broker_t *rkb,
-                                    const rd_list_t *topics /* (const char *) */,
-                                    rd_kafka_replyq_t replyq,
-                                    const char *reason);
-void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
-                                   int all_topics,
-                                   rd_kafka_itopic_t *only_rkt,
-                                   rd_kafka_replyq_t replyq,
-                                   const char *reason);
-void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
-				      rd_kafka_op_t *rko);
 
 rd_kafka_broker_t *rd_kafka_broker_internal (rd_kafka_t *rk);
 

@@ -171,6 +171,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
 
 	rktp->rktp_partition = partition;
 	rktp->rktp_rkt = rkt;
+        rktp->rktp_leader_id = -1;
 	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
         rktp->rktp_fetch_msg_max_bytes
             = rkt->rkt_rk->rk_conf.fetch_msg_max_bytes;
@@ -2211,6 +2212,32 @@ rd_kafka_broker_t *rd_kafka_toppar_leader (rd_kafka_toppar_t *rktp,
 }
 
 
+/**
+ * @brief Take action when partition leader becomes unavailable.
+ *        This should be called when leader-specific requests fail with
+ *        NOT_LEADER_FOR.. or similar error codes, e.g. ProduceRequest.
+ *
+ * @locks none
+ * @locality any
+ */
+void rd_kafka_toppar_leader_unavailable (rd_kafka_toppar_t *rktp,
+                                         const char *reason,
+                                         rd_kafka_resp_err_t err) {
+        rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
+
+        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "LEADERUA",
+                     "%s [%"PRId32"]: leader unavailable: %s: %s",
+                     rkt->rkt_topic->str, rktp->rktp_partition, reason,
+                     rd_kafka_err2str(err));
+
+        rd_kafka_topic_wrlock(rkt);
+        rkt->rkt_flags |= RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
+        rd_kafka_topic_wrunlock(rkt);
+
+        rd_kafka_topic_fast_leader_query(rkt->rkt_rk);
+}
+
+
 const char *
 rd_kafka_topic_partition_topic (const rd_kafka_topic_partition_t *rktpar) {
         const rd_kafka_toppar_t *rktp = (const rd_kafka_toppar_t *)rktpar;
@@ -2781,7 +2808,7 @@ rd_kafka_topic_partition_list_get_leaders (
                 const rd_kafka_metadata_partition_t *mpartition;
 
                 mpartition = rd_kafka_metadata_cache_partition_get(
-                        rk, rktpar->topic, rktpar->partition);
+                        rk, rktpar->topic, rktpar->partition, 1/*valid*/);
 
                 if (!mpartition)
                         rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
@@ -2947,17 +2974,22 @@ rd_kafka_topic_partition_list_get_topics (
  * @brief Populate \p topics with the strdupped topic names in \p rktparlist.
  *        Duplicates are suppressed.
  *
+ * @param include_regex: include regex topics
+ *
  * @returns the number of topics added.
  */
 int
 rd_kafka_topic_partition_list_get_topic_names (
         const rd_kafka_topic_partition_list_t *rktparlist,
-        rd_list_t *topics) {
+        rd_list_t *topics, int include_regex) {
         int cnt = 0;
         int i;
 
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 const rd_kafka_topic_partition_t *rktpar = &rktparlist->elems[i];
+
+                if (!include_regex && *rktpar->topic == '^')
+                        continue;
 
                 if (!rd_list_find(topics, rktpar->topic, (void *)strcmp)) {
                         rd_list_add(topics, rd_strdup(rktpar->topic));

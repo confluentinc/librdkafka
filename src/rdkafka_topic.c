@@ -33,6 +33,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_broker.h"
 #include "rdkafka_cgrp.h"
+#include "rdkafka_metadata.h"
 #include "rdlog.h"
 #include "rdsysqueue.h"
 #include "rdtime.h"
@@ -1009,7 +1010,9 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
         shptr_rd_kafka_toppar_t *s_rktp;
 	int totcnt = 0;
 	int wrlocked = 0;
+        rd_list_t query_topics;
 
+        rd_list_init(&query_topics, 0, rd_free);
 
 	rd_kafka_rdlock(rk);
 	TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
@@ -1022,38 +1025,44 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 		rd_kafka_topic_wrlock(rkt);
 		wrlocked = 1;
 
-                /* Check if metadata information has timed out:
-                 * older than 3 times the metadata.refresh.interval.ms */
+                /* Check if metadata information has timed out. */
                 if (rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN &&
-		    rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms >= 0 &&
-                    rd_clock() > rkt->rkt_ts_metadata +
-                    (rkt->rkt_rk->rk_conf.metadata_refresh_interval_ms *
-                     1000 * 3)) {
+                    !rd_kafka_metadata_cache_topic_get(
+                            rk, rkt->rkt_topic->str, 1/*only valid*/)) {
                         rd_kafka_dbg(rk, TOPIC, "NOINFO",
                                      "Topic %s metadata information timed out "
                                      "(%"PRId64"ms old)",
                                      rkt->rkt_topic->str,
                                      (rd_clock() - rkt->rkt_ts_metadata)/1000);
                         rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
+
+                        if (!rd_list_find(&query_topics, rkt->rkt_topic->str,
+                                          (void *)strcmp))
+                                rd_list_add(&query_topics,
+                                            rd_strdup(rkt->rkt_topic->str));
                 }
 
                 /* Just need a read-lock from here on. */
                 rd_kafka_topic_wrunlock(rkt);
                 rd_kafka_topic_rdlock(rkt);
-				wrlocked = 0;
+                wrlocked = 0;
 
-		if (rkt->rkt_partition_cnt == 0) {
-			/* If this partition is unknown by brokers try
-			 * to create it by sending a topic-specific
-			 * metadata request.
-			 * This requires "auto.create.topics.enable=true"
-			 * on the brokers. */
+                if (rkt->rkt_partition_cnt == 0) {
+                        /* If this partition is unknown by brokers try
+                         * to create it by sending a topic-specific
+                         * metadata request.
+                         * This requires "auto.create.topics.enable=true"
+                         * on the brokers. */
+                        rd_kafka_dbg(rk, TOPIC, "NOINFO",
+                                     "Topic %s partition count is zero: "
+                                     "should refresh metadata",
+                                     rkt->rkt_topic->str);
 
-			/* Need to unlock topic lock first.. */
-			rd_kafka_topic_rdunlock(rkt);
-			rd_kafka_topic_leader_query0(rk, rkt, 0/*no_rk_lock*/);
-			rd_kafka_topic_rdlock(rkt);
-		}
+                        if (!rd_list_find(&query_topics, rkt->rkt_topic->str,
+                                          (void *)strcmp))
+                                rd_list_add(&query_topics,
+                                            rd_strdup(rkt->rkt_topic->str));
+                }
 
 		for (p = RD_KAFKA_PARTITION_UA ;
 		     p < rkt->rkt_partition_cnt ; p++) {
@@ -1094,10 +1103,15 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                         rd_kafka_dr_msgq(rkt, &timedout,
                                          RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
                 }
-	}
-	rd_kafka_rdunlock(rk);
+        }
+        rd_kafka_rdunlock(rk);
 
-	return totcnt;
+        if (!rd_list_empty(&query_topics))
+                rd_kafka_metadata_refresh_topics(rk, NULL, &query_topics,
+                                                 "refresh unavailable topics");
+        rd_list_destroy(&query_topics);
+
+        return totcnt;
 }
 
 
@@ -1192,45 +1206,6 @@ int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 }
 
 
-/**
- * Trigger broker metadata query for \p topics (char *)
- * if \p topics is NULL all topics in cluster are queried.
- */
-rd_kafka_resp_err_t
-rd_kafka_topics_leader_query (rd_kafka_t *rk, int all_topics,
-                              const rd_list_t *topics,
-                              rd_kafka_replyq_t replyq, int do_rk_lock) {
-        rd_kafka_broker_t *rkb;
-
-        if (do_rk_lock)
-                rd_kafka_rdlock(rk);
-        if (!(rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
-                                        rd_kafka_broker_filter_non_blocking,
-                                        NULL))) {
-                if (do_rk_lock)
-                        rd_kafka_rdunlock(rk);
-
-                rd_kafka_replyq_destroy(&replyq);
-                return RD_KAFKA_RESP_ERR__TRANSPORT; /* No brokers are up */
-        }
-        if (do_rk_lock)
-                rd_kafka_rdunlock(rk);
-
-        rd_dassert(!(all_topics && topics));
-
-        if (all_topics)
-                rd_kafka_broker_metadata_req(rkb, 1, NULL,
-                                             replyq, "leader query");
-        else
-                rd_kafka_broker_metadata_req0(rkb, topics,
-                                              replyq, "leader query");
-
-        /* Release refcnt from rd_kafka_broker_any() */
-        rd_kafka_broker_destroy(rkb);
-
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
-}
-
 
 
 
@@ -1250,12 +1225,12 @@ rd_kafka_topics_leader_query_sync (rd_kafka_t *rk, int all_topics,
         while (1) {
                 int state_version = rd_kafka_brokers_get_state_version(rk);
 
-                err = rd_kafka_topics_leader_query(rk, all_topics, topics,
-                                                   RD_KAFKA_REPLYQ(rkq, 0),
-                                                   1/*lock*/);
+                err = rd_kafka_metadata_refresh_topics(rk, NULL, topics,
+                                                       "leader query");
                 if (err != RD_KAFKA_RESP_ERR__TRANSPORT)
                         break;
 
+                /* FIXME: Dull weapon: FIXME */
                 if (!rd_kafka_brokers_wait_state_change(
                             rk, state_version, rd_timeout_remains(ts_end)))
                         break;
@@ -1285,13 +1260,13 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
                 rd_list_add(&topics, rd_strdup(rkt->rkt_topic->str));
         }
 
-        rd_kafka_topics_leader_query(rk, 0, rkt ? &topics : NULL,
-                                     RD_KAFKA_NO_REPLYQ,
-                                     do_rk_lock);
+        rd_kafka_metadata_refresh_topics(rk, NULL, rkt ? &topics : NULL,
+                                         "leader query");
 
         if (rkt)
                 rd_list_destroy(&topics);
 }
+
 
 
 /**

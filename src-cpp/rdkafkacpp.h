@@ -222,7 +222,10 @@ enum ErrorCode {
 	ERR__OUTDATED = -167,
 	/** Timed out in queue */
 	ERR__TIMED_OUT_QUEUE = -166,
-
+        /** Feature not supported by broker */
+        ERR__UNSUPPORTED_FEATURE = -165,
+        /** Awaiting cache update */
+        ERR__WAIT_CACHE = -164,
 	/** End internal error codes */
 	ERR__END = -100,
 

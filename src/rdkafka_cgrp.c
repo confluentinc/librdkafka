@@ -946,6 +946,125 @@ err:
         }
 }
 
+
+/**
+ * @brief Check subscription against requested Metadata.
+ */
+static void rd_kafka_cgrp_handle_Metadata_op (rd_kafka_t *rk,
+                                              rd_kafka_op_t *rko) {
+        rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
+
+        if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
+                return; /* Terminating */
+
+        rd_kafka_cgrp_metadata_update_check(rkcg, 0/*dont rejoin*/);
+}
+
+
+/**
+ * @brief (Async) Refresh metadata (for cgrp's needs)
+ *
+ * @returns 1 if metadata refresh was requested, or 0 if metadata is
+ *          up to date, or -1 if no broker is available for metadata requests.
+ *
+ * @locks none
+ * @locality rdkafka main thread
+ */
+static int rd_kafka_cgrp_metadata_refresh (rd_kafka_cgrp_t *rkcg,
+                                            int *metadata_agep,
+                                            const char *reason) {
+        rd_kafka_t *rk = rkcg->rkcg_rk;
+        rd_kafka_op_t *rko;
+        rd_list_t topics;
+        rd_kafka_resp_err_t err;
+
+        rd_list_init(&topics, 8, rd_free);
+
+        /* Insert all non-wildcard topics in cache. */
+        rd_kafka_metadata_cache_hint_rktparlist(rkcg->rkcg_rk,
+                                                rkcg->rkcg_subscription,
+                                                NULL, 0/*dont replace*/);
+
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION) {
+                /* For wildcard subscriptions make sure the
+                 * cached full metadata isn't too old. */
+                int metadata_age = -1;
+
+                if (rk->rk_ts_full_metadata)
+                        metadata_age = (int)(rd_clock() -
+                                             rk->rk_ts_full_metadata)/1000;
+
+                *metadata_agep = metadata_age;
+
+                if (metadata_age != -1 &&
+                    metadata_age <=
+                    /* The +1000 is since metadata.refresh.interval.ms
+                     * can be set to 0. */
+                    rk->rk_conf.metadata_refresh_interval_ms + 1000) {
+                        rd_kafka_dbg(rk, CGRP|RD_KAFKA_DBG_METADATA,
+                                     "CGRPMETADATA",
+                                     "%s: metadata for wildcard subscription "
+                                     "is up to date (%dms old)",
+                                     reason, *metadata_agep);
+                        rd_list_destroy(&topics);
+                        return 0; /* Up-to-date */
+                }
+
+        } else {
+                /* Check that all subscribed topics are in the cache. */
+                int r;
+
+                rd_kafka_topic_partition_list_get_topic_names(
+                        rkcg->rkcg_subscription, &topics, 0/*no regexps*/);
+
+                rd_kafka_rdlock(rk);
+                r = rd_kafka_metadata_cache_topics_count_exists(rk, &topics,
+                                                                metadata_agep);
+                rd_kafka_rdunlock(rk);
+
+                if (r == rd_list_cnt(&topics)) {
+                        rd_kafka_dbg(rk, CGRP|RD_KAFKA_DBG_METADATA,
+                                     "CGRPMETADATA",
+                                     "%s: metadata for subscription "
+                                     "is up to date (%dms old)", reason,
+                                     *metadata_agep);
+                        rd_list_destroy(&topics);
+                        return 0; /* Up-to-date and all topics exist. */
+                }
+
+                rd_kafka_dbg(rk, CGRP|RD_KAFKA_DBG_METADATA,
+                             "CGRPMETADATA",
+                             "%s: metadata for subscription "
+                             "only available for %d/%d topics (%dms old)",
+                             reason, r, rd_list_cnt(&topics), *metadata_agep);
+
+        }
+
+        /* Async request, result will be triggered from
+         * rd_kafka_parse_metadata(). */
+        rko = rd_kafka_op_new_cb(rkcg->rkcg_rk, RD_KAFKA_OP_METADATA,
+                                 rd_kafka_cgrp_handle_Metadata_op);
+        rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, 0);
+
+        err = rd_kafka_metadata_request(rkcg->rkcg_rk,
+                                        rd_list_cnt(&topics) ? &topics : NULL,
+                                        reason, rko);
+        if (err) {
+                rd_kafka_dbg(rk, CGRP|RD_KAFKA_DBG_METADATA,
+                             "CGRPMETADATA",
+                             "%s: need to refresh metadata (%dms old) "
+                             "but no usable brokers available: %s",
+                             reason, *metadata_agep, rd_kafka_err2str(err));
+                rd_kafka_op_destroy(rko);
+        }
+
+        rd_list_destroy(&topics);
+
+        return err ? -1 : 1;
+}
+
+
+
 static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
         int metadata_age;
 
@@ -953,56 +1072,50 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
             rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_INIT)
                 return;
 
-	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
                      "Group \"%.*s\": join with %d (%d) subscribed topic(s)",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_list_cnt(rkcg->rkcg_subscribed_topics),
-		     rkcg->rkcg_subscription->cnt);
+                     rkcg->rkcg_subscription->cnt);
 
 
-        /* FIXME: Wildcard subscription requires full topic metadata listing,
-         *        but non-wildcards dont (they on the other hand need
-         *        proper per-topic metadata age). */
-
-	/* We need up-to-date full metadata to continue.
-	 * The +1000 is since metadata.refresh.interval.ms can be set to 0. */
-	metadata_age = rkcg->rkcg_rk->rk_ts_full_metadata ?
-		(int)(rd_clock() - rkcg->rkcg_rk->rk_ts_full_metadata)/1000 :-1;
-	if (metadata_age == -1 ||
-	    metadata_age >
-	    rkcg->rkcg_rk->rk_conf.metadata_refresh_interval_ms + 1000) {
-		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
-			     "Group \"%.*s\": "
-			     "postponing join until full metadata is available"
-			     " (current metadata age %dms > "
-			     "metadata.max.age.ms %dms)",
-			     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-			     metadata_age,
-			     rkcg->rkcg_rk->rk_conf.
-			     metadata_refresh_interval_ms);
-
-		/* Trigger metadata request */
-		rd_kafka_metadata0(rkcg->rkcg_rk, 1 /* all topics */, NULL,
-				   RD_KAFKA_NO_REPLYQ, "consumer join");
-		return;
-	}
+        /* See if we need to query metadata to continue:
+         * - if subscription contains wildcards:
+         *   * query all topics in cluster
+         *
+         * - if subscription does not contain wildcards but
+         *   some topics are missing from the local metadata cache:
+         *   * query subscribed topics (all cached ones)
+         *
+         * - otherwise:
+         *   * rely on topic metadata cache
+         */
+        /* We need up-to-date full metadata to continue,
+         * refresh metadata if necessary. */
+        if (rd_kafka_cgrp_metadata_refresh(rkcg, &metadata_age,
+                                           "consumer join") == 1) {
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
+                             "Group \"%.*s\": "
+                             "postponing join until up-to-date "
+                             "metadata is available",
+                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
+                return; /* ^ async call */
+        }
 
         if (rd_list_empty(rkcg->rkcg_subscribed_topics))
-                rd_kafka_cgrp_metadata_update_check(
-                        rkcg, rkcg->rkcg_rk->rk_full_metadata,
-                        metadata_age, 0/*dont join*/);
+                rd_kafka_cgrp_metadata_update_check(rkcg, 0/*dont join*/);
 
-	if (rd_list_empty(rkcg->rkcg_subscribed_topics)) {
-		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
-			     "Group \"%.*s\": "
-			     "no matching topics based on %dms old metadata: "
-			     "next metadata refresh in %dms",
-			     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-			     metadata_age,
-			     rkcg->rkcg_rk->rk_conf.
-			     metadata_refresh_interval_ms - metadata_age);
-		return;
-	}
+        if (rd_list_empty(rkcg->rkcg_subscribed_topics)) {
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
+                             "Group \"%.*s\": "
+                             "no matching topics based on %dms old metadata: "
+                             "next metadata refresh in %dms",
+                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                             metadata_age,
+                             rkcg->rkcg_rk->rk_conf.
+                             metadata_refresh_interval_ms - metadata_age);
+                return;
+        }
 
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN);
         rd_kafka_JoinGroupRequest(rkcg->rkcg_rkb, rkcg->rkcg_group_id,
@@ -1042,32 +1155,37 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
  * Update the effective list of subscribed topics and trigger a rejoin
  * if it changed.
  *
- * Set \p topics to NULL for clearing the list.
+ * Set \p tinfos to NULL for clearing the list.
+ *
+ * @param tinfos rd_list_t(rd_kafka_topic_info_t *): new effective topic list
  *
  * @returns 1 on change, else 0.
  *
- * @remark Takes ownership of \p topics
+ * @remark Takes ownership of \p tinfos
  */
-static int rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
-						   rd_list_t *topics,
-                                                   int metadata_age) {
-	rd_kafka_topic_info_t *tinfo;
-	int i;
+static int
+rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
+                                        rd_list_t *tinfos) {
+        rd_kafka_topic_info_t *tinfo;
+        int i;
 
-	if (!topics) {
-		if (!rd_list_empty(rkcg->rkcg_subscribed_topics))
-			rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
-				     "Group \"%.*s\": "
-				     "clearing subscribed topics list (%d)",
-				     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-				     rd_list_cnt(rkcg->rkcg_subscribed_topics));
-		topics = rd_list_new(0);
+        if (!tinfos) {
+                if (!rd_list_empty(rkcg->rkcg_subscribed_topics))
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
+                                     "Group \"%.*s\": "
+                                     "clearing subscribed topics list (%d)",
+                                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                                     rd_list_cnt(rkcg->rkcg_subscribed_topics));
+                tinfos = rd_list_new(0, (void *)rd_kafka_topic_info_destroy);
 
-	} else if (rd_list_cnt(topics) == 0)
-		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
-			     "Group \"%.*s\": "
-			     "no topics in metadata matched subscription",
-			     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
+        } else {
+                if (rd_list_cnt(tinfos) == 0)
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIPTION",
+                                     "Group \"%.*s\": "
+                                     "no topics in metadata matched "
+                                     "subscription",
+                                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
+        }
 
         /* Sort for comparison */
         rd_list_sort(tinfos, rd_kafka_topic_info_cmp);
@@ -1080,18 +1198,18 @@ static int rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
                 return 0;
         }
 
-	rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_METADATA, "SUBSCRIPTION",
-		     "Group \"%.*s\": effective subscription list changed "
-		     "from %d to %d topic(s) using %dms old metadata:",
-		     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
-		     rd_list_cnt(rkcg->rkcg_subscribed_topics),
-		     rd_list_cnt(topics), metadata_age);
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_METADATA, "SUBSCRIPTION",
+                     "Group \"%.*s\": effective subscription list changed "
+                     "from %d to %d topic(s):",
+                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                     rd_list_cnt(rkcg->rkcg_subscribed_topics),
+                     rd_list_cnt(tinfos));
 
-	RD_LIST_FOREACH(tinfo, topics, i)
-		rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_METADATA,
+        RD_LIST_FOREACH(tinfo, tinfos, i)
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_METADATA,
                              "SUBSCRIPTION",
-			     " Topic %s with %d partition(s)",
-			     tinfo->topic, tinfo->partition_cnt);
+                             " Topic %s with %d partition(s)",
+                             tinfo->topic, tinfo->partition_cnt);
 
         rd_list_destroy(rkcg->rkcg_subscribed_topics);
 
@@ -2140,7 +2258,7 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
                 rkcg->rkcg_subscription = NULL;
         }
 
-	rd_kafka_cgrp_update_subscribed_topics(rkcg, NULL, 0);
+	rd_kafka_cgrp_update_subscribed_topics(rkcg, NULL);
 
         /*
          * Clean-up group leader duties, if any.
@@ -2760,38 +2878,44 @@ void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id){
 
 
 /**
- * Check if the latest metadata affects the current subscription:
+ * @brief Check if the latest metadata affects the current subscription:
  * - matched topic added
  * - matched topic removed
  * - matched topic's partition count change
+ *
+ * @locks none
+ * @locality rdkafka main thread
  */
-void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
-					  const struct rd_kafka_metadata *md,
-                                          int metadata_age, int do_join) {
-	rd_list_t *topics;
+void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join) {
+        rd_list_t *tinfos;
 
-	rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
+        rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
 
-	if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
-		return;
+        if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
+                return;
 
-	/*
-	 * Create a list of the topics in metadata that matches our subscription
-	 */
-	topics = rd_list_new(rkcg->rkcg_subscription->cnt);
+        /*
+         * Create a list of the topics in metadata that matches our subscription
+         */
+        tinfos = rd_list_new(rkcg->rkcg_subscription->cnt,
+                             (void *)rd_kafka_topic_info_destroy);
 
-	rd_kafka_metadata_topic_match(rkcg->rkcg_rk,
-				      topics, md, rkcg->rkcg_subscription);
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
+                rd_kafka_metadata_topic_match(rkcg->rkcg_rk,
+                                              tinfos, rkcg->rkcg_subscription);
+        else
+                rd_kafka_metadata_topic_filter(rkcg->rkcg_rk,
+                                               tinfos,
+                                               rkcg->rkcg_subscription);
 
 
-	/*
-	 * Update
-	 */
-	if (rd_kafka_cgrp_update_subscribed_topics(rkcg, topics, metadata_age)
-            && do_join) {
-		/* List of subscribed topics changed, trigger rejoin. */
-		rd_kafka_cgrp_rejoin(rkcg);
-	}
+        /*
+         * Update (takes ownership of \c tinfos)
+         */
+        if (rd_kafka_cgrp_update_subscribed_topics(rkcg, tinfos) && do_join) {
+                /* List of subscribed topics changed, trigger rejoin. */
+                rd_kafka_cgrp_rejoin(rkcg);
+        }
 }
 
 

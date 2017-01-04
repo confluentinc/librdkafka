@@ -67,9 +67,10 @@ struct rd_kafka_itopic_s {
 		RD_KAFKA_TOPIC_S_NOTEXISTS, /* Topic is not known in cluster */
 	} rkt_state;
 
-        int                rkt_flags;
-#define RD_KAFKA_TOPIC_F_LEADER_QUERY  0x1 /* There is an outstanding
-                                            * leader query for this topic */
+        int               rkt_flags;
+#define RD_KAFKA_TOPIC_F_LEADER_UNAVAIL   0x1 /* Leader lost/unavailable
+                                               * for at least one partition. */
+
 	rd_kafka_t       *rkt_rk;
 
         shptr_rd_kafka_itopic_t *rkt_shptr_app; /* Application's topic_new() */
@@ -167,11 +168,9 @@ void rd_kafka_topic_info_destroy (rd_kafka_topic_info_t *ti);
 int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 			  const char *topic);
 
+int rd_kafka_toppar_leader_update (rd_kafka_toppar_t *rktp,
+                                   int32_t leader_id, rd_kafka_broker_t *rkb);
 
-rd_kafka_resp_err_t
-rd_kafka_topics_leader_query (rd_kafka_t *rk, int all_topics,
-                              const rd_list_t *topics,
-                              rd_kafka_replyq_t replyq, int do_rk_lock);
 rd_kafka_resp_err_t
 rd_kafka_topics_leader_query_sync (rd_kafka_t *rk, int all_topics,
                                    const rd_list_t *topics, int timeout_ms);
@@ -180,5 +179,7 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
 #define rd_kafka_topic_leader_query(rk,rkt) \
         rd_kafka_topic_leader_query0(rk,rkt,1/*lock*/)
 
+#define rd_kafka_topic_fast_leader_query(rk) \
+        rd_kafka_metadata_fast_leader_query(rk)
 
 void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics);

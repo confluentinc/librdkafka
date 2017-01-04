@@ -312,6 +312,8 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE = -166,
         /** Feature not supported by broker */
         RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE = -165,
+        /** Awaiting cache update */
+        RD_KAFKA_RESP_ERR__WAIT_CACHE = -164,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,

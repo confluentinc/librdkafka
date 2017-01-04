@@ -219,14 +219,11 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for leader */
-
-                /* FIXME: query for original topics. */
-                //if ((s_rkt = rd_kafka_topic_find(rk, topic, 1/*lock*/))) {
-                //        rd_kafka_topic_leader_query(rk,
-                //                                    rd_kafka_topic_s2i(s_rkt));
-                //        rd_kafka_topic_destroy0(s_rkt);
-                //}
+                rd_kafka_metadata_refresh_known_topics(
+                        rk, NULL, rd_rsprintf("OffsetRequest failed: %s",
+                                              rd_kafka_err2str(ErrorCode)));
         }
+
         if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
                 if (rd_kafka_buf_retry(rkb, request))
                         return RD_KAFKA_RESP_ERR__IN_PROGRESS;
@@ -1226,114 +1223,26 @@ void rd_kafka_DescribeGroupsRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_autopush(rkbuf);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
-
-
-
-
-
-/**
- * Construct MetadataRequest (does not send)
- *
- * \p topics is a list of topic names (char *).
- *
- * !topics          - all topics in cluster are requested
- * topics           - only specified topics are requested
- *
- * reason           - metadata request reason
- *
- * @returns a new buffer to transmit, or NULL if no topics were to be requested.
- *
- */
-rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
-                                           rd_list_t *topics,
-                                           const char *reason) {
-        rd_kafka_buf_t *rkbuf;
-        size_t size_of;
-
-        if (topics) {
-                rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "Request metadata for %d topic(s): %s",
-                           rd_list_cnt(topics), reason ? reason : "");
-        } else
-                rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "Request metadata for all topics: %s",
-                           reason ? reason : "");
-
-        rkbuf = rd_kafka_buf_new_growable(rkb->rkb_rk, 1,
-                                          4 +
-                                          (50 *
-                                           (topics ? rd_list_cnt(topics) : 0)));
-
-        size_of = rd_kafka_buf_write_i32(rkbuf, 0); /* Updated later */
-
-        if (topics && rd_list_cnt(topics) > 0) {
-                int32_t arrsize = 0;
-                char *topic;
-                shptr_rd_kafka_itopic_t *s_rkt;
-                rd_kafka_itopic_t *rkt;
-                int i;
-
-                RD_LIST_FOREACH(topic, topics, i) {
-                        rd_kafka_buf_write_str(rkbuf, topic, -1);
-                        arrsize++;
-                        continue;
-
-                        /* FIXME */
-                        rkt = rd_kafka_toppar_s2i(s_rkt);
-                        /* Skip queries for topics that are already
-                         * being queried. */
-                        rd_kafka_topic_wrlock(rkt);
-                        if (rkt->rkt_flags & RD_KAFKA_TOPIC_F_LEADER_QUERY) {
-                                rkt->rkt_flags |= RD_KAFKA_TOPIC_F_LEADER_QUERY;
-                                rd_kafka_buf_write_kstr(rkbuf, rkt->rkt_topic);
-                                arrsize++;
-                        }
-                        rd_kafka_topic_wrunlock(rkt);
-                }
-
-                rd_kafka_buf_update_i32(rkbuf, size_of, arrsize);
-        }
-
-        rd_kafka_buf_autopush(rkbuf);
-
-        /* Metadata requests are part of the important control plane
-         * and should go before other requests (Produce, Fetch, etc). */
-        rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_FLASH;
-
-        return rkbuf;
-}
-
-
-void rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
-                               rd_list_t *topics,
-                               const char *reason,
-                               rd_kafka_replyq_t replyq,
-                               rd_kafka_resp_cb_t *resp_cb,
-                               void *opaque) {
-        rd_kafka_buf_t *rkbuf = rd_kafka_MetadataRequest0(rkb, topics, reason);
-        if (rkbuf)
-                rd_kafka_broker_buf_enq_replyq(rkb, RD_KAFKAP_Metadata,
-                                               rkbuf, replyq, resp_cb, opaque);
 }
 
 
 
 
-
 /**
- * Generic op-based handler for Metadata responses
+ * @brief Generic handler for Metadata responses
  *
- * Locality: rdkafka main thread
+ * @locality rdkafka main thread
  */
-void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
-				  rd_kafka_broker_t *rkb,
-                                  rd_kafka_resp_err_t err,
-                                  rd_kafka_buf_t *rkbuf,
-                                  rd_kafka_buf_t *request,
-                                  void *opaque) {
-        rd_kafka_op_t *rko = opaque;
+static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
+                                      rd_kafka_broker_t *rkb,
+                                      rd_kafka_resp_err_t err,
+                                      rd_kafka_buf_t *rkbuf,
+                                      rd_kafka_buf_t *request,
+                                      void *opaque) {
+        rd_kafka_op_t *rko = opaque; /* Possibly NULL */
         struct rd_kafka_metadata *md = NULL;
-        int all_topics = !rko->rko_u.metadata.topics;
+        const rd_list_t *topics = request->rkbuf_u.Metadata.topics;
+        int all_topics = !topics;
 
         rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
                         thrd_is_current(rk->rk_thread));
@@ -1343,12 +1252,12 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                 err = RD_KAFKA_RESP_ERR__DESTROY;
 
 	if (unlikely(err)) {
-		/* FIXME: handle error */
                 if (err == RD_KAFKA_RESP_ERR__DESTROY) {
-                        rd_kafka_op_destroy(rko);
-                        return; /* Terminating */
+                        /* Terminating */
+                        goto done;
                 }
 
+                /* FIXME: handle errors */
                 rd_rkb_log(rkb, LOG_WARNING, "METADATA",
                            "Metadata request failed: %s (%dms)",
                            rd_kafka_err2str(err),
@@ -1363,73 +1272,117 @@ void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
                         rd_rkb_dbg(rkb, METADATA, "METADATA",
                                    "===== Received metadata "
                                    "(for %d requested topics) =====",
-                                   rd_list_cnt(rko->rko_u.metadata.topics));
+                                   rd_list_cnt(topics));
 
 
-                md = rd_kafka_parse_Metadata(rkb,
-                                             all_topics,
-                                             rko->rko_u.metadata.topics,
-                                             rko->rko_u.metadata.reason,
-                                             rkbuf);
+                md = rd_kafka_parse_Metadata(rkb, request, rkbuf);
 		if (!md) {
 			if (rd_kafka_buf_retry(rkb, request))
 				return;
 			err = RD_KAFKA_RESP_ERR__BAD_MSG;
-                } else if (rkb->rkb_rk->rk_cgrp && all_topics)
-                        rd_kafka_cgrp_metadata_update_check(
-                                rkb->rkb_rk->rk_cgrp, md, 0, 1/*do join*/);
+                }
         }
 
-        /* FIXME: move this logic to caller */
-#if 0
-        if (rkt) {
-                rd_kafka_topic_wrlock(rkt);
-                rkt->rkt_flags &= ~RD_KAFKA_TOPIC_F_LEADER_QUERY;
-                rd_kafka_topic_wrunlock(rkt);
-        }
-#endif
-
-        if (rko->rko_replyq.q) {
+        if (rko && rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */
                 rko->rko_err = err;
-                rko->rko_u.metadata.metadata = md;
+                rko->rko_u.metadata = md;
 
                 rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
+                rko = NULL;
         } else {
                 if (md)
                         rd_free(md);
+        }
+
+ done:
+        if (all_topics) {
+                /* Decrease metadata cache's full_sent state. */
+                rd_kafka_assert(NULL,
+                                rd_atomic32_get(&rk->rk_metadata_cache.
+                                                rkmc_full_sent) > 0);
+                rd_atomic32_sub(&rk->rk_metadata_cache.rkmc_full_sent, 1);
+        }
+
+        if (rko)
                 rd_kafka_op_destroy(rko);
-        }
 }
 
-static void rd_kafka_assignor_handle_Metadata (rd_kafka_t *rk,
-					       rd_kafka_broker_t *rkb,
-                                               rd_kafka_resp_err_t err,
-                                               rd_kafka_buf_t *rkbuf,
-                                               rd_kafka_buf_t *request,
-                                               void *opaque) {
-        rd_kafka_cgrp_t *rkcg = opaque;
-        struct rd_kafka_metadata *md = NULL;
 
-        if (err == RD_KAFKA_RESP_ERR__DESTROY)
-                return; /* Terminating */
 
-        if (!err) {
-                md = rd_kafka_parse_Metadata(rkb, 0, NULL,
-                                             "assignor metadata query", rkbuf);
-		if (!md) {
-			if (rd_kafka_buf_retry(rkb, request))
-				return;
-                        err = RD_KAFKA_RESP_ERR__BAD_MSG;
-		}
+/**
+ * @brief Construct MetadataRequest (does not send)
+ *
+ * \p topics is a list of topic names (char *) to request.
+ *
+ * !topics          - all topics in cluster are requested
+ *  topics          - only specified topics are requested
+ *
+ * @param reason    - metadata request reason
+ * @param rko       - (optional) rko with replyq for handling response
+ *
+ */
+void rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
+                               const rd_list_t *topics, const char *reason,
+                               rd_kafka_op_t *rko) {
+        rd_kafka_buf_t *rkbuf;
+
+        rkbuf = rd_kafka_buf_new_growable(rkb->rkb_rk, RD_KAFKAP_Metadata, 1,
+                                          4 +
+                                          (50 *
+                                           (topics ? rd_list_cnt(topics) : 0)));
+        if (reason)
+                rkbuf->rkbuf_u.Metadata.reason = rd_strdup(reason);
+
+        rd_kafka_buf_write_i32(rkbuf, topics ? rd_list_cnt(topics) : 0);
+
+        if (topics && rd_list_cnt(topics) > 0) {
+                char *topic;
+                int i;
+
+                /* Maintain a copy of the topics list so we can purge
+                 * hints from the metadata cache on error. */
+                rkbuf->rkbuf_u.Metadata.topics =
+                        rd_list_copy(topics, rd_list_string_copy, NULL);
+
+                RD_LIST_FOREACH(topic, topics, i)
+                        rd_kafka_buf_write_str(rkbuf, topic, -1);
+
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "Request metadata for %d topic(s): %s",
+                           rd_list_cnt(topics), reason ? reason : "");
+
+        } else {
+                /* Full metadata request:
+                 * Increase metadata cache's state counter */
+                rd_atomic32_add(&rkb->rkb_rk->rk_metadata_cache.rkmc_full_sent,
+                                1);
+
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "Request metadata for all topics: %s",
+                           reason ? reason : "");
         }
 
-        rd_kafka_cgrp_handle_Metadata(rkcg, err, md);
+        rd_kafka_buf_autopush(rkbuf);
 
-        if (md)
-                rd_free(md);
+        /* Metadata requests are part of the important control plane
+         * and should go before other requests (Produce, Fetch, etc). */
+        rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_FLASH;
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
+                                       /* Handle response thru rk_ops,
+                                        * but forward parsed result to
+                                        * rko's replyq when done. */
+                                       RD_KAFKA_REPLYQ(rkb->rkb_rk->
+                                                       rk_ops, 0),
+                                       rd_kafka_handle_Metadata, rko);
 }
+
+
+
+
+
 
 
 

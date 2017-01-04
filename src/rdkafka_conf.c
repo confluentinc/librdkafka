@@ -171,19 +171,22 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The metadata is automatically refreshed on error and connect. "
 	  "Use -1 to disable the intervalled refresh.",
 	  -1, 3600*1000, 5*60*1000 },
-	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_ALIAS,
-	  .sdef = "topic.metadata.refresh.interval.ms" },
-	{ _RK_GLOBAL, "topic.metadata.refresh.fast.cnt", _RK_C_INT,
-	  _RK(metadata_refresh_fast_cnt),
-	  "When a topic looses its leader this number of metadata requests "
-	  "are sent with `topic.metadata.refresh.fast.interval.ms` interval "
-	  "disregarding the `topic.metadata.refresh.interval.ms` value. "
-	  "This is used to recover quickly from transitioning leader brokers.",
-	  0, 1000, 10 },
-	{ _RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
-	  _RK(metadata_refresh_fast_interval_ms),
-	  "See `topic.metadata.refresh.fast.cnt` description",
-	  1, 60*1000, 250 },
+	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_INT,
+          _RK(metadata_max_age_ms),
+          "Metadata cache max age. "
+          "Defaults to metadata.refresh.interval.ms * 3",
+          1, 24*3600*1000, -1 },
+        { _RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
+          _RK(metadata_refresh_fast_interval_ms),
+          "When a topic looses its leader a new metadata request will be "
+          "enqueued with this initial interval, exponentially increasing "
+          "until the topic metadata has been refreshed. "
+          "This is used to recover quickly from transitioning leader brokers.",
+          1, 60*1000, 250 },
+        { _RK_GLOBAL, "topic.metadata.refresh.fast.cnt", _RK_C_INT,
+          _RK(metadata_refresh_fast_cnt),
+          "*Deprecated: No longer used.*",
+          0, 1000, 10 },
         { _RK_GLOBAL, "topic.metadata.refresh.sparse", _RK_C_BOOL,
           _RK(metadata_refresh_sparse),
           "Sparse metadata requests (consumes less network bandwidth)",

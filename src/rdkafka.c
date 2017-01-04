@@ -344,6 +344,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Local: Timed out in queue"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
                   "Local: Required feature not supported by broker"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__WAIT_CACHE,
+                  "Local: Awaiting cache update"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -1040,47 +1042,31 @@ static void rd_kafka_stats_emit_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
 	rd_kafka_stats_emit_all(rk);
 }
 
+
+/**
+ * @brief Periodic metadata refresh callback
+ *
+ * @locality rdkafka main thread
+ */
 static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
-        rd_kafka_broker_t *rkb;
+        int sparse = 1;
 
-        rd_kafka_rdlock(rk);
-        rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
-                                  rd_kafka_broker_filter_non_blocking, NULL);
-        rd_kafka_rdunlock(rk);
+        /* Dont do sparse requests if there is a consumer group with an
+         * active subscription since subscriptions need to be able to match
+         * on all topics. */
+        if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&
+            rk->rk_cgrp->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
+                sparse = 0;
 
-        if (!rkb)
-                return;
-
-	/* Dont do sparse requests if there is a consumer group with an
-	 * active subscription since subscriptions need to be able to match
-	 * on all topics. */
-        if (rk->rk_conf.metadata_refresh_sparse &&
-	    (!rk->rk_cgrp || !rk->rk_cgrp->rkcg_subscription))
-                rd_kafka_broker_metadata_req(rkb, 0 /* known topics */, NULL,
-					     RD_KAFKA_NO_REPLYQ,
-                                             "sparse periodic refresh");
+        if (sparse)
+                rd_kafka_metadata_refresh_known_topics(rk, NULL,
+                                                       "periodic refresh");
         else
-                rd_kafka_broker_metadata_req(rkb, 1 /* all topics */, NULL,
-                                             RD_KAFKA_NO_REPLYQ,
-					     "periodic refresh");
-
-        rd_kafka_broker_destroy(rkb);
+                rd_kafka_metadata_refresh_all(rk, NULL, "periodic refresh");
 }
 
 
-
-static int rd_kafka_toppar_q_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
-				 int cb_type, void *opaque) {
-	rd_kafka_toppar_op_serve(rk, rko);
-	return 1; /* op handled */
-}
-
-
-static void rd_kafka_toppars_q_serve (rd_kafka_q_t *rkq, int timeout_ms) {
-	rd_kafka_q_serve(rkq, timeout_ms, 0,
-			 _Q_CB_GLOBAL, rd_kafka_toppar_q_cb, NULL);
-}
 /**
  * Main loop for Kafka handler thread.
  */
@@ -1104,7 +1090,7 @@ static int rd_kafka_thread_main (void *arg) {
 	rd_kafka_timer_start(&rk->rk_timers, &tmr_stats_emit,
 			     rk->rk_conf.stats_interval_ms * 1000ll,
 			     rd_kafka_stats_emit_tmr_cb, NULL);
-        if (rk->rk_conf.metadata_refresh_interval_ms >= 0)
+        if (rk->rk_conf.metadata_refresh_interval_ms > 0)
                 rd_kafka_timer_start(&rk->rk_timers, &tmr_metadata_refresh,
                                      rk->rk_conf.metadata_refresh_interval_ms *
                                      1000ll,
@@ -1132,8 +1118,7 @@ static int rd_kafka_thread_main (void *arg) {
 
         rd_kafka_timer_stop(&rk->rk_timers, &tmr_topic_scan, 1);
         rd_kafka_timer_stop(&rk->rk_timers, &tmr_stats_emit, 1);
-        if (rk->rk_conf.metadata_refresh_interval_ms >= 0)
-                rd_kafka_timer_stop(&rk->rk_timers, &tmr_metadata_refresh, 1);
+        rd_kafka_timer_stop(&rk->rk_timers, &tmr_metadata_refresh, 1);
 
         /* Synchronise state */
         rd_kafka_wrlock(rk);
@@ -1157,7 +1142,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 			  char *errstr, size_t errstr_size) {
 	rd_kafka_t *rk;
 	static rd_atomic32_t rkid;
-        rd_kafka_conf_t *use_conf;             
+        rd_kafka_conf_t *use_conf;
 #ifndef _MSC_VER
         sigset_t newset, oldset;
 #endif
@@ -1185,6 +1170,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 				rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
                 return NULL;
         }
+
+        if (use_conf->metadata_max_age_ms == -1)
+                use_conf->metadata_max_age_ms =
+                        use_conf->metadata_refresh_interval_ms * 3;
 
 	rd_kafka_global_cnt_incr();
 
@@ -2609,6 +2598,10 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
                         fprintf(fp, "\n");
                 }
 	}
+
+        fprintf(fp, "\n");
+        rd_kafka_metadata_cache_dump(fp, rk);
+
         if (locks)
                 rd_kafka_rdunlock(rk);
 }

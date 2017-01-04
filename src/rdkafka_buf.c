@@ -32,6 +32,19 @@
 
 void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
 
+        switch (rkbuf->rkbuf_reqhdr.ApiKey)
+        {
+        case RD_KAFKAP_Metadata:
+                if (rkbuf->rkbuf_u.Metadata.topics)
+                        rd_list_destroy(rkbuf->rkbuf_u.Metadata.topics);
+                if (rkbuf->rkbuf_u.Metadata.reason)
+                        rd_free(rkbuf->rkbuf_u.Metadata.reason);
+                if (rkbuf->rkbuf_u.Metadata.rko)
+                        rd_kafka_op_reply(rkbuf->rkbuf_u.Metadata.rko,
+                                          RD_KAFKA_RESP_ERR__DESTROY);
+                break;
+        }
+
         if (rkbuf->rkbuf_response)
                 rd_kafka_buf_destroy(rkbuf->rkbuf_response);
 

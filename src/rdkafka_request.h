@@ -116,12 +116,6 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);
-void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
-				     rd_kafka_broker_t *rkb,
-                                     rd_kafka_resp_err_t err,
-                                     rd_kafka_buf_t *rkbuf,
-                                     rd_kafka_buf_t *request,
-                                     void *opaque);
 
 
 void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
@@ -173,12 +167,6 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);
-void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
-				     rd_kafka_broker_t *rkb,
-                                     rd_kafka_resp_err_t err,
-                                     rd_kafka_buf_t *rkbuf,
-                                     rd_kafka_buf_t *request,
-                                     void *opaque);
 
 rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
                                            rd_list_t *topics,

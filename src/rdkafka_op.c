@@ -276,6 +276,12 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 		break;
 	}
 
+        if (rko->rko_type & RD_KAFKA_OP_CB && rko->rko_op_cb) {
+                /* Let callback clean up */
+                rko->rko_err = RD_KAFKA_RESP_ERR__DESTROY;
+                rko->rko_op_cb(rko->rko_rk, rko);
+        }
+
 	RD_IF_FREE(rko->rko_rktp, rd_kafka_toppar_destroy);
 
 	rd_kafka_replyq_destroy(&rko->rko_replyq);
@@ -346,6 +352,21 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
 		rko->rko_rktp = rd_kafka_toppar_keep(
 			rd_kafka_toppar_s2i(rko_orig->rko_rktp));
 
+        return rko;
+}
+
+
+/**
+ * @brief Create new callback op for type \p type
+ */
+rd_kafka_op_t *rd_kafka_op_new_cb (rd_kafka_t *rk,
+                                   rd_kafka_op_type_t type,
+                                   void (*cb) (rd_kafka_t *rk,
+                                               rd_kafka_op_t *rko)) {
+        rd_kafka_op_t *rko;
+        rko = rd_kafka_op_new(type | RD_KAFKA_OP_CB);
+        rko->rko_op_cb = cb;
+        rko->rko_rk = rk;
         return rko;
 }
 
@@ -442,6 +463,7 @@ rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko) {
  */
 void rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_op_t *rko) {
         rko->rko_op_cb(rk, rko);
+        rko->rko_op_cb = NULL;
 }
 
 

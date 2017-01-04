@@ -251,12 +251,21 @@ TAILQ_HEAD(rd_kafka_op_head_s, rd_kafka_op_s);
 
 const char *rd_kafka_op2str (rd_kafka_op_type_t type);
 void rd_kafka_op_destroy (rd_kafka_op_t *rko);
-rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type);
+rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type);
+#if ENABLE_DEVEL
+#define _STRINGIFYX(A) #A
+#define _STRINGIFY(A) _STRINGIFYX(A)
+#define rd_kafka_op_new(type)                                   \
+        rd_kafka_op_new0(__FILE__ ":" _STRINGIFY(__LINE__), type)
+#else
+#define rd_kafka_op_new(type) rd_kafka_op_new0(NULL, type)
+#endif
 rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
-				      rd_kafka_resp_err_t err);
-
-
-
+                                      rd_kafka_resp_err_t err);
+rd_kafka_op_t *rd_kafka_op_new_cb (rd_kafka_t *rk,
+                                   rd_kafka_op_type_t type,
+                                   void (*cb) (rd_kafka_t *rk,
+                                               rd_kafka_op_t *rko));
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 
 

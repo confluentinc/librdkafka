@@ -930,7 +930,7 @@ static int test_summary (int do_lock) {
 			"date datetime, cnt int, passed int, failed int, "
 			"duration numeric);\n"
 			"CREATE TABLE IF NOT EXISTS "
-			"tests(runid text, name text, state text, "
+			"tests(runid text, mode text, name text, state text, "
 			"extra text, duration numeric);\n");
 	}
 

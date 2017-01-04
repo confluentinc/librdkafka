@@ -293,7 +293,10 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 	if (!rkq->rkq_fwdq) {
                 do {
+                        rd_ts_t pre;
+
                         /* Filter out outdated ops */
+                retry:
                         while ((rko = TAILQ_FIRST(&rkq->rkq_q)) &&
                                !(rko = rd_kafka_op_filter(rkq, rko, version)))
                                 ;
@@ -308,13 +311,13 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
                                 if (rd_kafka_op_handle(rkq->rkq_rk, rko,
                                                        cb_type, opaque,
                                                        callback))
-                                        rko = NULL;
+                                        goto retry;
                                 else
                                         break; /* Proper op, handle below. */
                         }
 
                         /* No op, wait for one */
-			rd_ts_t pre = rd_clock();
+                        pre = rd_clock();
 			if (cnd_timedwait_ms(&rkq->rkq_cond,
 					     &rkq->rkq_lock,
 					     timeout_ms) ==

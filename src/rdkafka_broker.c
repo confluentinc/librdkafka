@@ -2666,7 +2666,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		if (of_firstmsg + MessageSetSize + rd_kafka_msg_wire_size(rkm) >
 		    (size_t)rkb->rkb_rk->rk_conf.max_msg_size) {
 			rd_rkb_dbg(rkb, MSG, "PRODUCE",
-				   "No more space in current message "
+				   "No more space in current MessageSet "
 				   "(%i messages)",
 				   rd_atomic32_get(&rkbuf->rkbuf_msgq.
 						   rkmq_msg_cnt));

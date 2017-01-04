@@ -55,7 +55,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * PHP: [php-rdkafka](https://github.com/arnaud-lb/php-rdkafka)
   * Python: [confluent-kafka-python](https://github.com/confluentinc/confluent-kafka-python)
   * Python: [PyKafka](https://github.com/Parsely/pykafka)
-  * Ruby: [Hermann](https://github.com/stancampbell3/Hermann)
+  * Ruby: [Hermann](https://github.com/reiseburo/hermann)
   * Rust: [rust-rdkafka](https://github.com/fede1024/rust-rdkafka)
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
 

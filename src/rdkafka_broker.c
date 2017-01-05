@@ -26,7 +26,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 #define __need_IOV_MAX
 
 #ifndef _MSC_VER
@@ -4725,7 +4724,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
                 /* Since there is a small syscall penalty,
                  * only enable partition message queue wake-ups
                  * if latency contract demands it.
-                 * rkb_ops is queue wakeups are always enabled though,
+                 * rkb_ops queue wakeups are always enabled though,
                  * since they are much more infrequent. */
                 if (rk->rk_conf.buffering_max_ms <
                     rk->rk_conf.socket_blocking_max_ms) {

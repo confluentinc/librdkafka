@@ -2181,6 +2181,10 @@ rd_kafka_get_watermark_offsets (rd_kafka_t *rk, const char *topic,
 	return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
+/**
+ * @brief get_offsets_for_times() state
+ */
 struct _get_offsets_for_times {
         rd_kafka_topic_partition_list_t *results;
         rd_kafka_resp_err_t err;
@@ -2189,7 +2193,9 @@ struct _get_offsets_for_times {
         rd_ts_t ts_end;
 };
 
-
+/**
+ * @brief Handle OffsetRequest responses
+ */
 static void rd_kafka_get_offsets_for_times_resp_cb (rd_kafka_t *rk,
                                                   rd_kafka_broker_t *rkb,
                                                   rd_kafka_resp_err_t err,
@@ -2241,7 +2247,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         rd_list_init(&leaders, offsets->cnt,
-                            (void *)rd_kafka_partition_leader_destroy);
+                     (void *)rd_kafka_partition_leader_destroy);
 
         err = rd_kafka_topic_partition_list_query_leaders(rk, offsets, &leaders,
                                                           timeout_ms);

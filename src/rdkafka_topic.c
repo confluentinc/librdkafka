@@ -1251,40 +1251,6 @@ int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 
 
 
-/**
- * @brief Trigger leader query for \p topics and wait for result to propagate.
- */
-rd_kafka_resp_err_t
-rd_kafka_topics_leader_query_sync (rd_kafka_t *rk, int all_topics,
-                                   const rd_list_t *topics,
-                                   int timeout_ms) {
-        rd_kafka_q_t *rkq;
-        rd_kafka_resp_err_t err;
-        rd_ts_t ts_end = rd_timeout_init(timeout_ms);
-
-        rkq = rd_kafka_q_new(rk);
-
-        while (1) {
-                int state_version = rd_kafka_brokers_get_state_version(rk);
-
-                err = rd_kafka_metadata_refresh_topics(rk, NULL, topics,
-                                                       "leader query");
-                if (err != RD_KAFKA_RESP_ERR__TRANSPORT)
-                        break;
-
-                /* FIXME: Dull weapon: FIXME */
-                if (!rd_kafka_brokers_wait_state_change(
-                            rk, state_version, rd_timeout_remains(ts_end)))
-                        break;
-        }
-
-        if (!err)
-                err = rd_kafka_q_wait_result(rkq, timeout_ms);
-
-        rd_kafka_q_destroy(rkq);
-
-        return err;
-}
 
 
 

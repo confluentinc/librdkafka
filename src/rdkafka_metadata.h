@@ -94,6 +94,8 @@ struct rd_kafka_metadata_cache {
                                           * has been sent, awaiting response. */
         rd_kafka_timer_t rkmc_query_tmr; /* Query timer for topic's without
                                           * leaders. */
+        cnd_t            rkmc_cnd;       /* cache_wait_change() cond. */
+        mtx_t            rkmc_cnd_lock;  /* lock for rkmc_cnd */
 };
 
 
@@ -121,10 +123,11 @@ int rd_kafka_metadata_cache_hint_rktparlist (
 const rd_kafka_metadata_topic_t *
 rd_kafka_metadata_cache_topic_get (rd_kafka_t *rk, const char *topic,
                                    int valid);
-const rd_kafka_metadata_partition_t *
-rd_kafka_metadata_cache_partition_get (rd_kafka_t *rk,
-                                       const char *topic, int32_t partition,
-                                       int valid);
+int rd_kafka_metadata_cache_topic_partition_get (
+        rd_kafka_t *rk,
+        const rd_kafka_metadata_topic_t **mtopicp,
+        const rd_kafka_metadata_partition_t **mpartp,
+        const char *topic, int32_t partition, int valid);
 
 int rd_kafka_metadata_cache_topics_count_exists (rd_kafka_t *rk,
                                                  const rd_list_t *topics,
@@ -137,6 +140,7 @@ void rd_kafka_metadata_fast_leader_query (rd_kafka_t *rk);
 
 void rd_kafka_metadata_cache_init (rd_kafka_t *rk);
 void rd_kafka_metadata_cache_destroy (rd_kafka_t *rk);
+int  rd_kafka_metadata_cache_wait_change (rd_kafka_t *rk, int timeout_ms);
 void rd_kafka_metadata_cache_dump (FILE *fp, rd_kafka_t *rk);
 
 /**@}*/

@@ -70,6 +70,9 @@ rd_kafka_metadata (rd_kafka_t *rk, int all_topics,
         /* Async: request metadata */
         rko = rd_kafka_op_new(RD_KAFKA_OP_METADATA);
         rd_kafka_op_set_replyq(rko, rkq, 0);
+        if (unlikely(rd_list_cnt(&topics) == 0))
+                rd_atomic32_add(&rk->rk_metadata_cache.
+                                rkmc_full_sent, 1);
         rd_kafka_MetadataRequest(rkb, &topics, "application requested", rko);
 
         rd_list_destroy(&topics);
@@ -715,19 +718,15 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         if (!rk)
                 rk = rkb->rkb_rk;
 
-        if (rd_atomic32_get(&rk->rk_metadata_cache.rkmc_full_sent) > 0) {
-                rd_kafka_dbg(rk, METADATA, "METADATA",
-                             "Skipping metadata refresh of %d topic(s): "
-                             "full request already in transit",
-                             rd_list_cnt(topics));
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
-        }
-
         rd_kafka_wrlock(rk);
 
         if (!rkb) {
                 if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT, 0))){
                         rd_kafka_wrunlock(rk);
+                        rd_kafka_dbg(rk, METADATA, "METADATA",
+                                     "Skipping metadata refresh of %d topic(s):"
+                                     " no usable brokers",
+                                     rd_list_cnt(topics));
                         return RD_KAFKA_RESP_ERR__TRANSPORT;
                 }
                 destroy_rkb = 1;
@@ -747,6 +746,17 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                              "Skipping metadata refresh of %d topic(s): %s: "
                              "already being requested",
                              rd_list_cnt(topics), reason);
+                rd_list_destroy(&q_topics);
+                if (destroy_rkb)
+                        rd_kafka_broker_destroy(rkb);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        if (rd_atomic32_get(&rk->rk_metadata_cache.rkmc_full_sent) > 0) {
+                rd_kafka_dbg(rk, METADATA, "METADATA",
+                             "Skipping metadata refresh of %d topic(s): "
+                             "full request already in transit",
+                             rd_list_cnt(topics));
                 rd_list_destroy(&q_topics);
                 if (destroy_rkb)
                         rd_kafka_broker_destroy(rkb);
@@ -844,18 +854,21 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         if (!rk)
                 rk = rkb->rkb_rk;
 
-        if (rd_atomic32_get(&rk->rk_metadata_cache.rkmc_full_sent) > 0) {
-                /* A full request is already in transit */
-                rd_kafka_dbg(rk, METADATA, "METADATA",
-                             "Skipping full metadata refresh: "
-                             "full request already in transit");
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
-        }
-
         if (!rkb) {
                 if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT, 1)))
                         return RD_KAFKA_RESP_ERR__TRANSPORT;
                 destroy_rkb = 1;
+        }
+
+        if (rd_atomic32_add(&rk->rk_metadata_cache.rkmc_full_sent, 1) > 1) {
+                /* A full request is already in transit */
+                rd_kafka_dbg(rk, METADATA, "METADATA",
+                             "Skipping full metadata refresh: "
+                             "full request already in transit");
+                rd_atomic32_sub(&rk->rk_metadata_cache.rkmc_full_sent, 1);
+                if (destroy_rkb)
+                        rd_kafka_broker_destroy(rkb);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
         rd_kafka_MetadataRequest(rkb, NULL, reason, NULL);
@@ -883,6 +896,9 @@ rd_kafka_metadata_request (rd_kafka_t *rk, const rd_list_t *topics,
         if (!(rkb = rd_kafka_broker_any_usable(rk, RD_POLL_NOWAIT, 1)))
                 return RD_KAFKA_RESP_ERR__TRANSPORT;
         rd_kafka_rdunlock(rk);
+
+        if (!topics || !rd_list_cnt(topics))
+                rd_atomic32_add(&rk->rk_metadata_cache.rkmc_full_sent, 1);
 
         rd_kafka_MetadataRequest(rkb, topics, reason, rko);
 

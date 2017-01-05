@@ -62,6 +62,8 @@
  *
  */
 
+static void rd_kafka_metadata_cache_propagate_changes (rd_kafka_t *rk);
+
 
 /**
  * @brief Remove and free cache entry.
@@ -132,6 +134,9 @@ static int rd_kafka_metadata_cache_evict (rd_kafka_t *rk) {
                      "Expired %d entries from metadata cache "
                      "(%d entries remain)",
                      cnt, rk->rk_metadata_cache.rkmc_cnt);
+
+        if (cnt)
+                rd_kafka_metadata_cache_propagate_changes(rk);
 
         return cnt;
 }
@@ -227,8 +232,6 @@ rd_kafka_metadata_cache_insert (rd_kafka_t *rk,
         if (old)
                 rd_kafka_metadata_cache_delete(rk, old, 0);
 
-
-
         return rkmce;
 }
 
@@ -240,12 +243,16 @@ rd_kafka_metadata_cache_insert (rd_kafka_t *rk,
  */
 static void rd_kafka_metadata_cache_purge (rd_kafka_t *rk) {
         struct rd_kafka_metadata_cache_entry *rkmce;
+        int was_empty = TAILQ_EMPTY(&rk->rk_metadata_cache.rkmc_expiry);
 
         while ((rkmce = TAILQ_FIRST(&rk->rk_metadata_cache.rkmc_expiry)))
                 rd_kafka_metadata_cache_delete(rk, rkmce, 1);
 
         rd_kafka_timer_stop(&rk->rk_timers,
                             &rk->rk_metadata_cache.rkmc_expiry_tmr, 1);
+
+        if (!was_empty)
+                rd_kafka_metadata_cache_propagate_changes(rk);
 }
 
 
@@ -282,6 +289,8 @@ rd_kafka_metadata_cache_topic_update (rd_kafka_t *rk,
         rd_ts_t ts_expires = now + (rk->rk_conf.metadata_max_age_ms * 1000);
 
         rd_kafka_metadata_cache_insert(rk, mdt, now, ts_expires);
+
+        rd_kafka_metadata_cache_propagate_changes(rk);
 }
 
 
@@ -301,7 +310,8 @@ void rd_kafka_metadata_cache_update (rd_kafka_t *rk,
         int i;
 
         rd_kafka_dbg(rk, METADATA, "METADATA",
-                     "Updating metadata cache with %d topic(s)",
+                     "%s of metadata cache with %d topic(s)",
+                     abs_update ? "Absolute update" : "Update",
                      md->topic_cnt);
 
         if (abs_update)
@@ -319,6 +329,9 @@ void rd_kafka_metadata_cache_update (rd_kafka_t *rk,
                                      rkmce->rkmce_ts_expires - now,
                                      rd_kafka_metadata_cache_evict_tmr_cb,
                                      rk);
+
+        if (md->topic_cnt > 0)
+                rd_kafka_metadata_cache_propagate_changes(rk);
 }
 
 
@@ -348,10 +361,12 @@ void rd_kafka_metadata_cache_purge_hints (rd_kafka_t *rk,
                 cnt++;
         }
 
-        if (cnt > 0)
+        if (cnt > 0) {
                 rd_kafka_dbg(rk, METADATA, "METADATA",
                              "Purged %d/%d cached topic hint(s)",
                              cnt, rd_list_cnt(topics));
+                rd_kafka_metadata_cache_propagate_changes(rk);
+        }
 }
 
 
@@ -464,6 +479,9 @@ void rd_kafka_metadata_cache_init (rd_kafka_t *rk) {
                     rd_kafka_metadata_cache_entry_cmp, 0);
         TAILQ_INIT(&rk->rk_metadata_cache.rkmc_expiry);
         rd_atomic32_init(&rk->rk_metadata_cache.rkmc_full_sent, 0);
+        mtx_init(&rk->rk_metadata_cache.rkmc_cnd_lock, mtx_plain);
+        cnd_init(&rk->rk_metadata_cache.rkmc_cnd);
+
 }
 
 /**
@@ -475,9 +493,50 @@ void rd_kafka_metadata_cache_destroy (rd_kafka_t *rk) {
         rd_kafka_timer_stop(&rk->rk_timers,
                             &rk->rk_metadata_cache.rkmc_query_tmr, 1/*lock*/);
         rd_kafka_metadata_cache_purge(rk);
+        mtx_destroy(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        cnd_destroy(&rk->rk_metadata_cache.rkmc_cnd);
         rd_avl_destroy(&rk->rk_metadata_cache.rkmc_avl);
 }
 
+
+/**
+ * @brief Wait for cache update, or timeout.
+ *
+ * @returns 1 on cache update or 0 on timeout.
+ * @locks none
+ * @locality any
+ */
+int rd_kafka_metadata_cache_wait_change (rd_kafka_t *rk, int timeout_ms) {
+        int r;
+#if ENABLE_DEVEL
+        rd_ts_t ts_start = rd_clock();
+#endif
+        mtx_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        r = cnd_timedwait_ms(&rk->rk_metadata_cache.rkmc_cnd,
+                             &rk->rk_metadata_cache.rkmc_cnd_lock,
+                             timeout_ms);
+        mtx_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+
+#if ENABLE_DEVEL
+        rd_kafka_dbg(rk, METADATA, "CACHEWAIT",
+                     "%s wait took %dms: %s",
+                     __FUNCTION__, (int)((rd_clock() - ts_start)/1000),
+                     r == thrd_success ? "succeeded" : "timed out");
+#endif
+        return r == thrd_success;
+}
+
+/**
+ * @brief Propagate that the cache changed (but not what changed) to
+ *        any cnd listeners.
+ * @locks none
+ * @locality any
+ */
+static void rd_kafka_metadata_cache_propagate_changes (rd_kafka_t *rk) {
+        mtx_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        cnd_broadcast(&rk->rk_metadata_cache.rkmc_cnd);
+        mtx_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+}
 
 /**
  * @returns the shared metadata for a topic, or NULL if not found in
@@ -498,27 +557,49 @@ rd_kafka_metadata_cache_topic_get (rd_kafka_t *rk, const char *topic,
 
 
 
+
 /**
- * @returns the shared metadata for a partition, or NULL if not found in
- *          cache.
+ * @brief Looks up the shared metadata for a partition along with its topic.
+ *
+ * @param mtopicp: pointer to topic metadata
+ * @param mpartp: pointer to partition metadata
+ * @param valid: only return valid entries (no hints)
+ *
+ * @returns -1 if topic was not found in cache, 0 if topic was found
+ *          but not the partition, 1 if both topic and partition was found.
  *
  * @locks rd_kafka_*lock()
  */
-const rd_kafka_metadata_partition_t *
-rd_kafka_metadata_cache_partition_get (rd_kafka_t *rk,
-                                       const char *topic, int32_t partition,
-                                       int valid) {
+int rd_kafka_metadata_cache_topic_partition_get (
+        rd_kafka_t *rk,
+        const rd_kafka_metadata_topic_t **mtopicp,
+        const rd_kafka_metadata_partition_t **mpartp,
+        const char *topic, int32_t partition, int valid) {
+
         const rd_kafka_metadata_topic_t *mtopic;
+        const rd_kafka_metadata_partition_t *mpart;
         rd_kafka_metadata_partition_t skel = { .id = partition };
 
+        *mtopicp = NULL;
+        *mpartp = NULL;
+
         if (!(mtopic = rd_kafka_metadata_cache_topic_get(rk, topic, valid)))
-                return NULL;
+                return -1;
+
+        *mtopicp = mtopic;
 
         /* Partitions array may be sparse so use bsearch lookup. */
-        return bsearch(&skel, mtopic->partitions,
-                       mtopic->partition_cnt,
-                       sizeof(*mtopic->partitions),
-                       rd_kafka_metadata_partition_id_cmp);
+        mpart = bsearch(&skel, mtopic->partitions,
+                        mtopic->partition_cnt,
+                        sizeof(*mtopic->partitions),
+                        rd_kafka_metadata_partition_id_cmp);
+
+        if (!mpart)
+                return 0;
+
+        *mpartp = mpart;
+
+        return 1;
 }
 
 

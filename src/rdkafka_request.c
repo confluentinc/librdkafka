@@ -1267,13 +1267,14 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
                 if (all_topics)
                         rd_rkb_dbg(rkb, METADATA, "METADATA",
                                    "===== Received metadata "
-                                   "(for all topics) =====");
+                                   "(for all topics): %s =====",
+                                   request->rkbuf_u.Metadata.reason);
                 else
                         rd_rkb_dbg(rkb, METADATA, "METADATA",
                                    "===== Received metadata "
-                                   "(for %d requested topics) =====",
-                                   rd_list_cnt(topics));
-
+                                   "(for %d requested topics): %s =====",
+                                   rd_list_cnt(topics),
+                                   request->rkbuf_u.Metadata.reason);
 
                 md = rd_kafka_parse_Metadata(rkb, request, rkbuf);
 		if (!md) {
@@ -1332,8 +1333,11 @@ void rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                                           4 +
                                           (50 *
                                            (topics ? rd_list_cnt(topics) : 0)));
-        if (reason)
-                rkbuf->rkbuf_u.Metadata.reason = rd_strdup(reason);
+
+        if (!reason)
+                reason = "";
+
+        rkbuf->rkbuf_u.Metadata.reason = rd_strdup(reason);
 
         rd_kafka_buf_write_i32(rkbuf, topics ? rd_list_cnt(topics) : 0);
 
@@ -1351,17 +1355,12 @@ void rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
 
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
                            "Request metadata for %d topic(s): %s",
-                           rd_list_cnt(topics), reason ? reason : "");
+                           rd_list_cnt(topics), reason);
 
         } else {
-                /* Full metadata request:
-                 * Increase metadata cache's state counter */
-                rd_atomic32_add(&rkb->rkb_rk->rk_metadata_cache.rkmc_full_sent,
-                                1);
-
+                /* Full metadata request */
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "Request metadata for all topics: %s",
-                           reason ? reason : "");
+                           "Request metadata for all topics: %s", reason);
         }
 
         rd_kafka_buf_autopush(rkbuf);

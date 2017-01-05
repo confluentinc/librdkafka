@@ -2073,103 +2073,89 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
 
 rd_kafka_resp_err_t
 rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
-				  int32_t partition,
-				  int64_t *low, int64_t *high, int timeout_ms) {
-	rd_kafka_broker_t *rkb;
-	rd_kafka_q_t *rkq;
-	struct _query_wmark_offsets_state state;
-	shptr_rd_kafka_toppar_t *s_rktp;
-	rd_kafka_toppar_t *rktp;
-	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
-	int queried = 0;
-        rd_kafka_topic_partition_list_t *offsets;
+                                  int32_t partition,
+                                  int64_t *low, int64_t *high, int timeout_ms) {
+        rd_kafka_q_t *rkq;
+        struct _query_wmark_offsets_state state;
+        rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+        rd_kafka_topic_partition_list_t *partitions;
         rd_kafka_topic_partition_t *rktpar;
+        struct rd_kafka_partition_leader *leader;
+        rd_list_t leaders;
+        rd_kafka_resp_err_t err;
 
-	/* Look up toppar so we know which broker to query. */
-	s_rktp = rd_kafka_toppar_get2(rk, topic, partition, 0, 1);
-	if (!s_rktp)
-		return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
-	rktp = rd_kafka_toppar_s2i(s_rktp);
+        partitions = rd_kafka_topic_partition_list_new(1);
+        rktpar = rd_kafka_topic_partition_list_add(partitions,
+                                                   topic, partition);
 
-	/* Get toppar's leader broker. */
-	while (1) {
-		int state_version = rd_kafka_brokers_get_state_version(rk);
+        rd_list_init(&leaders, partitions->cnt,
+                     (void *)rd_kafka_partition_leader_destroy);
 
-		if ((rkb = rd_kafka_toppar_leader(rktp, 1)))
-			break;
+        err = rd_kafka_topic_partition_list_query_leaders(rk, partitions,
+                                                          &leaders, timeout_ms);
+        if (err) {
+                         rd_list_destroy(&leaders);
+                         rd_kafka_topic_partition_list_destroy(partitions);
+                         return err;
+        }
 
-		/* Trigger a leader query once (async) */
-		if (queried++ == 0)
-			rd_kafka_topic_leader_query(rk, rktp->rktp_rkt);
+        leader = rd_list_elem(&leaders, 0);
 
-		if (!rd_kafka_brokers_wait_state_change(
-			    rk, state_version, rd_timeout_remains(ts_end)))
-			break;
-	}
+        rkq = rd_kafka_q_new(rk);
 
-	if (!rkb) {
-		rd_kafka_toppar_destroy(s_rktp);
-		return RD_KAFKA_RESP_ERR__WAIT_COORD;
-	}
+        /* Due to KAFKA-1588 we need to send a request for each wanted offset,
+         * in this case one for the low watermark and one for the high. */
+        state.topic = topic;
+        state.partition = partition;
+        state.offsets[0] = RD_KAFKA_OFFSET_BEGINNING;
+        state.offsets[1] = RD_KAFKA_OFFSET_END;
+        state.offidx = 0;
+        state.err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
+        state.ts_end = ts_end;
+        state.state_version = rd_kafka_brokers_get_state_version(rk);
 
-	rkq = rd_kafka_q_new(rk);
-
-	/* Due to KAFKA-1588 we need to send a request for each wanted offset,
-	 * in this case one for the low watermark and one for the high. */
-	state.topic = topic;
-	state.partition = partition;
-	state.offsets[0] = RD_KAFKA_OFFSET_BEGINNING;
-	state.offsets[1] = RD_KAFKA_OFFSET_END;
-	state.offidx = 0;
-	state.err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
-	state.ts_end = ts_end;
-	state.state_version = rd_kafka_brokers_get_state_version(rk);
-
-        offsets = rd_kafka_topic_partition_list_new(1);
-        rktpar  = rd_kafka_topic_partition_list_add(offsets, topic, partition);
 
         rktpar->offset =  RD_KAFKA_OFFSET_BEGINNING;
-        rd_kafka_OffsetRequest(rkb, offsets, 0,
+        rd_kafka_OffsetRequest(leader->rkb, partitions, 0,
                                RD_KAFKA_REPLYQ(rkq, 0),
                                rd_kafka_query_wmark_offsets_resp_cb,
                                &state);
 
         rktpar->offset =  RD_KAFKA_OFFSET_END;
-        rd_kafka_OffsetRequest(rkb, offsets, 0,
+        rd_kafka_OffsetRequest(leader->rkb, partitions, 0,
                                RD_KAFKA_REPLYQ(rkq, 0),
                                rd_kafka_query_wmark_offsets_resp_cb,
                                &state);
 
-        rd_kafka_topic_partition_list_destroy(offsets);
-        rd_kafka_broker_destroy(rkb);
+        rd_kafka_topic_partition_list_destroy(partitions);
+        rd_list_destroy(&leaders);
 
         /* Wait for reply (or timeout) */
-	while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
-		rd_kafka_q_serve(rkq, 100, 0, _Q_CB_CALLBACK,
-				 rd_kafka_poll_cb, NULL);
+        while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                rd_kafka_q_serve(rkq, 100, 0, _Q_CB_CALLBACK,
+                                 rd_kafka_poll_cb, NULL);
 
         rd_kafka_q_destroy(rkq);
-	rd_kafka_toppar_destroy(s_rktp);
 
-	if (state.err)
-		return state.err;
-	else if (state.offidx != 2)
-		return RD_KAFKA_RESP_ERR__FAIL;
+        if (state.err)
+                return state.err;
+        else if (state.offidx != 2)
+                return RD_KAFKA_RESP_ERR__FAIL;
 
-	/* We are not certain about the returned order. */
-	if (state.offsets[0] < state.offsets[1]) {
-		*low = state.offsets[0];
-		*high  = state.offsets[1];
-	} else {
-		*low = state.offsets[1];
-		*high = state.offsets[0];
-	}
+        /* We are not certain about the returned order. */
+        if (state.offsets[0] < state.offsets[1]) {
+                *low = state.offsets[0];
+                *high  = state.offsets[1];
+        } else {
+                *low = state.offsets[1];
+                *high = state.offsets[0];
+        }
 
-	/* If partition is empty only one offset (the last) will be returned. */
-	if (*low < 0 && *high >= 0)
-		*low = *high;
+        /* If partition is empty only one offset (the last) will be returned. */
+        if (*low < 0 && *high >= 0)
+                *low = *high;
 
-	return RD_KAFKA_RESP_ERR_NO_ERROR;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 

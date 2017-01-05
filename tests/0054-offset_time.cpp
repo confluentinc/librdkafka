@@ -73,6 +73,9 @@ static void test_offset_time (void) {
 
   Test::conf_init(&conf, &tconf, 0);
 
+  /* Need acks=all to make sure OffsetRequest correctly reads fully
+   * written Produce record. */
+  Test::conf_set(tconf, "acks", "all");
   Test::conf_set(tconf, "produce.offset.report", "true");
   Test::conf_set(conf, "api.version.request", "true");
   conf->set("dr_cb", &Test::DrCb, errstr);

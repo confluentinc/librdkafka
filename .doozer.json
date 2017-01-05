@@ -34,6 +34,24 @@
         "make -j ${PARALLEL}",
         "make -C tests run_local"
       ]
+    },
+
+    "xenial-armhf": {
+
+      "buildenv": "xenial-armhf",
+      "builddeps": [
+        "build-essential",
+        "python",
+        "zlib1g-dev",
+        "libssl-dev",
+        "libsasl2-dev",
+        "liblz4-dev"
+      ],
+      "buildcmd": [
+        "./configure",
+        "make -j ${PARALLEL}",
+        "make -C tests run_local"
+      ]
     }
   }
 }

@@ -61,7 +61,7 @@ static int verify_offset (const RdKafka::TopicPartition *tp,
 static void test_offset_time (void) {
   std::vector<RdKafka::TopicPartition*> query_parts;
   std::string topic = Test::mk_topic_name("0054-offset_time", 1);
-  RdKafka::Conf *conf;
+  RdKafka::Conf *conf, *tconf;
   int64_t timestamps[] = {
     /* timestamp, expected offset */
     1234, 0,
@@ -69,12 +69,15 @@ static void test_offset_time (void) {
   };
   const int timestamp_cnt = 2;
   int fails = 0;
-
-  Test::conf_init(&conf, NULL, 0);
-
-  Test::conf_set(conf, "api.version.request", "true");
-
   std::string errstr;
+
+  Test::conf_init(&conf, &tconf, 0);
+
+  Test::conf_set(tconf, "produce.offset.report", "true");
+  Test::conf_set(conf, "api.version.request", "true");
+  conf->set("dr_cb", &Test::DrCb, errstr);
+  conf->set("default_topic_conf", tconf, errstr);
+
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
   if (!p)
     Test::Fail("Failed to create Producer: " + errstr);
@@ -131,6 +134,7 @@ static void test_offset_time (void) {
 
   delete p;
   delete conf;
+  delete tconf;
 }
 
 extern "C" {

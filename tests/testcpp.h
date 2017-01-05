@@ -106,4 +106,14 @@ namespace Test {
                 ": " << RdKafka::err2str(partitions[i]->err())
                 << "\n");
   }
+
+  /**
+   * @brief Delivery report class
+   */
+  class DeliveryReportCb : public RdKafka::DeliveryReportCb {
+ public:
+    void dr_cb (RdKafka::Message &msg);
+  };
+
+  static DeliveryReportCb DrCb;
 };

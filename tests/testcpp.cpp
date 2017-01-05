@@ -111,4 +111,17 @@ void conf_init (RdKafka::Conf **conf,
 }
 
 
+  void DeliveryReportCb::dr_cb (RdKafka::Message &msg) {
+    if (msg.err() != RdKafka::ERR_NO_ERROR)
+      Test::Fail(tostr() << "Delivery failed to " <<
+                 msg.topic_name() << " [" << msg.partition() << "]: " <<
+                 msg.errstr());
+    else
+      Test::Say(3, tostr() << "Delivered to " <<
+                msg.topic_name() << " [" << msg.partition() << "] @ " <<
+                msg.offset() << " (timestamp " << msg.timestamp().timestamp <<
+                ")\n");
+
+
+  }
 };

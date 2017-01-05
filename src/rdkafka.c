@@ -1107,12 +1107,11 @@ static int rd_kafka_thread_main (void *arg) {
 
 	while (likely(!rd_kafka_terminating(rk) ||
 		      rd_kafka_q_len(rk->rk_ops))) {
-		rd_ts_t sleeptime = rd_kafka_timers_next(
-			&rk->rk_timers,
-			rk->rk_conf.socket_blocking_max_ms * 1000, 1/*lock*/);
+                rd_ts_t sleeptime = rd_kafka_timers_next(
+                        &rk->rk_timers, 1000*1000/*1s*/, 1/*lock*/);
                 rd_kafka_q_serve(rk->rk_ops, (int)(sleeptime / 1000), 0,
                                  _Q_CB_CALLBACK, NULL, NULL);
-		if (rk->rk_cgrp)
+		if (rk->rk_cgrp) /* FIXME: move to timer-triggered */
 			rd_kafka_cgrp_serve(rk->rk_cgrp);
 		rd_kafka_timers_run(&rk->rk_timers, RD_POLL_NOWAIT);
 	}

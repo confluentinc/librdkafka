@@ -681,6 +681,10 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 	/* Loose our special reference to the internal broker. */
         mtx_lock(&rk->rk_internal_rkb_lock);
 	if ((rkb = rk->rk_internal_rkb)) {
+                /* Send op to trigger queue wake-up. */
+                rd_kafka_q_enq(rkb->rkb_ops,
+                               rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
+
                 rk->rk_internal_rkb = NULL;
                 thrd = malloc(sizeof(*thrd));
                 *thrd = rkb->rkb_thread;

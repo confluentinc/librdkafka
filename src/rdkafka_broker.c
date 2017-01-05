@@ -3063,6 +3063,8 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
         case RD_KAFKA_OP_TERMINATE:
                 /* nop: just a wake-up. */
+                if (rkb->rkb_blocking_max_ms > 1)
+                        rkb->rkb_blocking_max_ms = 1; /* Speed up termination*/
                 break;
 
         default:
@@ -3095,9 +3097,7 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 	/* Serve IO events */
         if (likely(rkb->rkb_transport != NULL))
                 rd_kafka_transport_io_serve(rkb->rkb_transport,
-                                            !rd_kafka_terminating(rkb->rkb_rk) ?
-                                            rkb->rkb_rk->rk_conf.
-                                            socket_blocking_max_ms : 1);
+                                            rkb->rkb_blocking_max_ms);
 
         /* Scan wait-response queue for timeouts. */
         now = rd_clock();
@@ -3777,8 +3777,11 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
  * Backoff the next Fetch request (due to error).
  */
 static void rd_kafka_broker_fetch_backoff (rd_kafka_broker_t *rkb) {
-	rkb->rkb_ts_fetch_backoff = rd_clock() +
-		(rkb->rkb_rk->rk_conf.fetch_error_backoff_ms*1000);
+        int backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
+        rkb->rkb_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
+
+        if (rkb->rkb_blocking_max_ms > backoff_ms)
+                rkb->rkb_blocking_max_ms = backoff_ms;
 }
 
 
@@ -4369,6 +4372,9 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
 		if (!rkb->rkb_fetching) {
                         if (rkb->rkb_ts_fetch_backoff < now) {
                                 rd_kafka_broker_fetch_toppars(rkb);
+                                rkb->rkb_blocking_max_ms =
+                                        rkb->rkb_rk->
+                                        rk_conf.socket_blocking_max_ms;
                         } else
                                 rd_rkb_dbg(rkb, QUEUE, "FETCH",
                                            "Fetch backoff for %"PRId64"ms",
@@ -4658,6 +4664,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE);
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */
+
+        rkb->rkb_blocking_max_ms = rk->rk_conf.socket_blocking_max_ms;
 
 	/* ApiVersion fallback interval */
 	if (rkb->rkb_rk->rk_conf.api_version_request) {

@@ -4147,10 +4147,9 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_t *rk,
 	if (!err && reply)
 		err = rd_kafka_fetch_reply_handle(rkb, reply, request);
 
-	rd_rkb_dbg(rkb, MSG, "FETCH", "Fetch reply: %s",
-		   rd_kafka_err2str(err));
-
 	if (unlikely(err)) {
+                rd_rkb_dbg(rkb, MSG, "FETCH", "Fetch reply: %s",
+                           rd_kafka_err2str(err));
 		switch (err)
 		{
 		case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
@@ -4368,19 +4367,13 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
 
 		/* Send Fetch request message for all underflowed toppars */
 		if (!rkb->rkb_fetching) {
-                        int cnt = 0;
-
-                        if (rkb->rkb_ts_fetch_backoff < now)
-                                cnt = rd_kafka_broker_fetch_toppars(rkb);
-
-                        if (cnt > 0)
+                        if (rkb->rkb_ts_fetch_backoff < now) {
+                                rd_kafka_broker_fetch_toppars(rkb);
+                        } else
                                 rd_rkb_dbg(rkb, QUEUE, "FETCH",
-                                           "Fetch for %i toppars, fetching=%i, "
-                                           "backoff=%"PRId64"ms",
-                                           cnt, rkb->rkb_fetching,
-                                           rkb->rkb_ts_fetch_backoff ?
-                                           (rkb->rkb_ts_fetch_backoff-now)/1000:
-                                           0);
+                                           "Fetch backoff for %"PRId64"ms",
+                                           (rkb->rkb_ts_fetch_backoff-now)/
+                                           1000);
                 }
 
 		/* Check and move retry buffers */

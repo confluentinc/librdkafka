@@ -180,7 +180,13 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_find0_fl (const char *func, int line,
 	return s_rkt;
 }
 
-
+/**
+ * topic name can only contain ASCII alphanumerics, '.', '_' and '-'
+ * returns 1 on valid, else on non-valid or error
+ */
+int rd_kafka_topic_name_check_valid(const char *topic) {
+	return rd_regex_match("^[a-zA-Z0-9._-]+$", topic, NULL, 0);
+}
 
 /**
  * Create new topic handle. 
@@ -199,7 +205,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	 * Maximum topic name size + headers must never exceed message.max.bytes
 	 * which is min-capped to 1000.
 	 * See rd_kafka_broker_produce_toppar() and rdkafka_conf.c */
-	if (!topic || strlen(topic) > 512) {
+	if (!topic || strlen(topic) > 255) {
 		if (conf)
 			rd_kafka_topic_conf_destroy(conf);
 		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
@@ -218,7 +224,17 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                         *existing = 1;
 		return s_rkt;
         }
-
+	
+	if (!rd_kafka_topic_name_check_valid(topic)) {
+		if (do_lock)
+			rd_kafka_wrunlock(rk);
+		if (conf)
+			rd_kafka_topic_conf_destroy(conf);
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION,
+					EINVAL);
+		return NULL;
+	}
+	
         if (existing)
                 *existing = 0;
 

@@ -460,8 +460,9 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
 /**
  * Set request API type version
  */
-static RD_INLINE void rd_kafka_buf_version_set (rd_kafka_buf_t *rkbuf,
-                                                int16_t version, int features) {
+static RD_UNUSED RD_INLINE void
+rd_kafka_buf_ApiVersion_set (rd_kafka_buf_t *rkbuf,
+                             int16_t version, int features) {
         rkbuf->rkbuf_reqhdr.ApiVersion = version;
         rkbuf->rkbuf_features = features;
 }

@@ -309,9 +309,9 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_autopush(rkbuf);
 
-        rd_kafka_buf_version_set(rkbuf, api_version,
-                                 api_version == 1 ?
-                                 RD_KAFKA_FEATURE_OFFSET_TIME : 0);
+        rd_kafka_buf_ApiVersion_set(rkbuf, api_version,
+                                    api_version == 1 ?
+                                    RD_KAFKA_FEATURE_OFFSET_TIME : 0);
 
         rd_rkb_dbg(rkb, TOPIC, "OFFSET",
                    "OffsetRequest (v%hd, opv %d) "
@@ -601,7 +601,7 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
         /* Push write-buffer onto iovec stack */
         rd_kafka_buf_autopush(rkbuf);
 
-        rd_kafka_buf_version_set(rkbuf, api_version, 0);
+        rd_kafka_buf_ApiVersion_set(rkbuf, api_version, 0);
 
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
 		   "OffsetFetchRequest(v%d) for %d/%d partition(s)",
@@ -844,7 +844,7 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
         /* Push write-buffer onto iovec stack */
         rd_kafka_buf_autopush(rkbuf);
 
-        rd_kafka_buf_version_set(rkbuf, api_version, 0);
+        rd_kafka_buf_ApiVersion_set(rkbuf, api_version, 0);
 
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
 		   "Enqueue OffsetCommitRequest(v%d, %d/%d partition(s)))",

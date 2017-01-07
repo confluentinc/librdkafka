@@ -2744,8 +2744,8 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->rkm_ts_timeout;
 
 	if (rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)
-                rd_kafka_buf_version_set(rkbuf, 1,
-                                         RD_KAFKA_FEATURE_THROTTLETIME);
+                rd_kafka_buf_ApiVersion_set(rkbuf, 1,
+                                            RD_KAFKA_FEATURE_THROTTLETIME);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
                                        RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
@@ -4327,11 +4327,11 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb) {
 		  rkb->rkb_rk->rk_conf.fetch_wait_max_ms) * 1000);
 
         if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1)
-                rd_kafka_buf_version_set(rkbuf, 2,
-                                         RD_KAFKA_FEATURE_MSGVER1);
+                rd_kafka_buf_ApiVersion_set(rkbuf, 2,
+                                            RD_KAFKA_FEATURE_MSGVER1);
         else if (rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)
-                rd_kafka_buf_version_set(rkbuf, 1,
-                                         RD_KAFKA_FEATURE_THROTTLETIME);
+                rd_kafka_buf_ApiVersion_set(rkbuf, 1,
+                                            RD_KAFKA_FEATURE_THROTTLETIME);
 
         rd_kafka_buf_autopush(rkbuf);
 

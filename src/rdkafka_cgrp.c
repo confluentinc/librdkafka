@@ -1798,7 +1798,7 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 			1 /* is commit */);
 
                 /*  Check the number of valid offsets to commit. */
-                valid_offsets = rd_kafka_topic_partition_list_sum(
+                valid_offsets = (int)rd_kafka_topic_partition_list_sum(
                         offsets,
                         rd_kafka_topic_partition_has_absolute_offset, NULL);
         }

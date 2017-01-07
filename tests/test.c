@@ -488,8 +488,8 @@ const char *test_conf_get_path (void) {
 }
 
 const char *test_getenv (const char *env, const char *def) {
-        const char *tmp;
 #ifndef _MSC_VER
+        const char *tmp;
         tmp = getenv(env);
         if (tmp && *tmp)
                 return tmp;

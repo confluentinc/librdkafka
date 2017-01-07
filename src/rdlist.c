@@ -41,7 +41,7 @@ void rd_list_dump (const char *what, const rd_list_t *rl) {
 
 void rd_list_grow (rd_list_t *rl, size_t size) {
         rd_assert(!(rl->rl_flags & RD_LIST_F_FIXED_SIZE));
-        rl->rl_size += size;
+        rl->rl_size += (int)size;
         if (unlikely(rl->rl_size == 0))
                 return; /* avoid zero allocations */
         rl->rl_elems = rd_realloc(rl->rl_elems,

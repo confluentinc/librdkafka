@@ -26,8 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if WITH_SOCKEM
 #include "test.h"
+
+#if WITH_SOCKEM
 #include "rdkafka.h"
 
 #include <stdarg.h>

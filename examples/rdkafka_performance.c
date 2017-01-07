@@ -703,7 +703,8 @@ int main (int argc, char **argv) {
 							  RD_KAFKA_PARTITION_UA);
 			break;
 		case 'p':
-			partitions = realloc(partitions, ++partition_cnt);
+                        partition_cnt++;
+			partitions = realloc(partitions, sizeof(*partitions) * partition_cnt);
 			partitions[partition_cnt-1] = atoi(optarg);
 			break;
 
@@ -1438,6 +1439,9 @@ int main (int argc, char **argv) {
                 pclose(stats_fp);
                 stats_fp = NULL;
         }
+
+        if (partitions)
+                free(partitions);
 
 	rd_kafka_topic_partition_list_destroy(topics);
 

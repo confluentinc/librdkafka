@@ -131,11 +131,6 @@ char *rd_string_render (const char *templ,
 			void *opaque);
 
 
-#define rd_rsprintf(fmt, ...)                                   \
-        ({ char *__d = alloca(256);                             \
-                rd_snprintf(__d, 256, fmt, __VA_ARGS__);        \
-                __d; })
-
 
 /*
  * Portability

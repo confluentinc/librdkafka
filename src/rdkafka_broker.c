@@ -4150,6 +4150,8 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_t *rk,
 		err = rd_kafka_fetch_reply_handle(rkb, reply, request);
 
 	if (unlikely(err)) {
+                char tmp[128];
+
                 rd_rkb_dbg(rkb, MSG, "FETCH", "Fetch reply: %s",
                            rd_kafka_err2str(err));
 		switch (err)
@@ -4160,10 +4162,11 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_t *rk,
 		case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
 		case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
                         /* Request metadata information update */
-                        rd_kafka_metadata_refresh_known_topics(
-                                rkb->rkb_rk, NULL,
-                                rd_rsprintf("FetchRequest failed: %s",
-                                            rd_kafka_err2str(err)));
+                        rd_snprintf(tmp, sizeof(tmp),
+                                    "FetchRequest failed: %s",
+                                    rd_kafka_err2str(err));
+                        rd_kafka_metadata_refresh_known_topics(rkb->rkb_rk,
+                                                               NULL, tmp);
                         /* FALLTHRU */
 
 		case RD_KAFKA_RESP_ERR__TRANSPORT:

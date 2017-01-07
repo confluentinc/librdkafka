@@ -77,7 +77,11 @@ for mode in $MODES; do
 	    RET=$?
 	    ;;
         gdb)
-            gdb $ARGS $TEST
+            if [[ -f gdb.run ]]; then
+                gdb -x gdb.run $ARGS $TEST
+            else
+                gdb $ARGS $TEST
+            fi
             RET=$?
             ;;
 	bare)

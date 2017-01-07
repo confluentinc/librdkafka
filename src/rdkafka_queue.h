@@ -31,6 +31,14 @@ struct rd_kafka_q_s {
         rd_kafka_t   *rkq_rk;
 	struct rd_kafka_q_io *rkq_qio;   /* FD-based application signalling */
 
+        /* Op serve callback (optional).
+         * Mainly used for forwarded queues to use the original queue's
+         * serve function from the forwarded position.
+         * Shall return 1 if op was handled, else 0. */
+        int (*rkq_serve) (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                          int cb_type, void *opaque);
+        void *rkq_opaque;
+
 #if ENABLE_DEVEL
 	char rkq_name[64];       /* Debugging: queue name (FUNC:LINE) */
 #else
@@ -59,9 +67,10 @@ int rd_kafka_q_ready (rd_kafka_q_t *rkq) {
 
 
 enum {
-        _Q_CB_GLOBAL,   /* rd_kafka_poll() */
-        _Q_CB_CONSUMER, /* rd_kafka_consumer_poll() */
-	_Q_CB_EVENT     /* return event */
+        _Q_CB_INVALID, /* dont use */
+        _Q_CB_CALLBACK,/* trigger callback based on op */
+        _Q_CB_RETURN,  /* return op rather than trigger callback (if possible)*/
+        _Q_CB_EVENT    /* like _Q_CB_RETURN but return event_t:ed op */
 };
 
 
@@ -235,6 +244,14 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 
                 return rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
         }
+
+        if (!rko->rko_serve && rkq->rkq_serve) {
+                /* Store original queue's serve callback and opaque
+                 * prior to forwarding. */
+                rko->rko_serve = rkq->rkq_serve;
+                rko->rko_serve_opaque = rkq->rkq_opaque;
+        }
+
 	if (!(fwdq = rkq->rkq_fwdq)) {
 		TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
                 rkq->rkq_qlen++;
@@ -289,7 +306,8 @@ int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
                 rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
                            srcq->rkq_qlen > 0);
 		if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
-			mtx_unlock(&rkq->rkq_lock);
+                        if (do_lock)
+                                mtx_unlock(&rkq->rkq_lock);
 			return -1;
 		}
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);

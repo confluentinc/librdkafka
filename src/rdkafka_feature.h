@@ -58,7 +58,8 @@
 /* >= 0.8.2.0: LZ4 compression (with bad and proper HC checksums) */
 #define RD_KAFKA_FEATURE_LZ4 0x80
 
-
+/* >= 0.10.1.0: Time-based Offset fetch (KIP-79) */
+#define RD_KAFKA_FEATURE_OFFSET_TIME 0x100
 
 
 

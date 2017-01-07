@@ -161,6 +161,10 @@ static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
 #define rd_usleep(usec,terminate)  Sleep((usec) / 1000)
 
 
+/**
+ * qsort_r -> qsort_s
+ */
+#define qsort_r(a,b,c) qsort_s(a,b,c)
 
 
 

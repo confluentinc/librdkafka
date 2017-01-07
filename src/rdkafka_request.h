@@ -56,13 +56,12 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
 					    rd_kafka_resp_err_t err,
 					    rd_kafka_buf_t *rkbuf,
 					    rd_kafka_buf_t *request,
-					    const char *topic, int32_t partition,
-					    int64_t *offsets,
-					    size_t *offset_cntp);
+                                            rd_kafka_topic_partition_list_t
+                                            *offsets);
 
 void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
-                             const char *topic, int32_t partition,
-                             const int64_t *query_offsets, size_t offset_cnt,
+                             rd_kafka_topic_partition_list_t *offsets,
+                             int16_t api_version,
                              rd_kafka_replyq_t replyq,
                              rd_kafka_resp_cb_t *resp_cb,
                              void *opaque);
@@ -117,12 +116,6 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);
-void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
-				     rd_kafka_broker_t *rkb,
-                                     rd_kafka_resp_err_t err,
-                                     rd_kafka_buf_t *rkbuf,
-                                     rd_kafka_buf_t *request,
-                                     void *opaque);
 
 
 void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
@@ -174,30 +167,10 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);
-void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
-				     rd_kafka_broker_t *rkb,
-                                     rd_kafka_resp_err_t err,
-                                     rd_kafka_buf_t *rkbuf,
-                                     rd_kafka_buf_t *request,
-                                     void *opaque);
 
-rd_kafka_buf_t *rd_kafka_MetadataRequest0 (rd_kafka_broker_t *rkb,
-                                           int all_topics,
-                                           rd_kafka_itopic_t *only_rkt,
-                                           const char *reason);
 void rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
-                               int all_topics,
-                               rd_kafka_itopic_t *only_rkt,
-                               const char *reason,
-                               rd_kafka_replyq_t replyq,
-                               rd_kafka_resp_cb_t *resp_cb,
-                               void *opaque);
-void rd_kafka_op_handle_Metadata (rd_kafka_t *rk,
-				  rd_kafka_broker_t *rkb,
-                                  rd_kafka_resp_err_t err,
-                                  rd_kafka_buf_t *rkbuf,
-                                  rd_kafka_buf_t *request,
-                                  void *opaque);
+                               const rd_list_t *topics, const char *reason,
+                               rd_kafka_op_t *rko);
 
 rd_kafka_resp_err_t
 rd_kafka_handle_ApiVersion (rd_kafka_t *rk,

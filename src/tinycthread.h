@@ -314,6 +314,9 @@ int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts);
  */
 int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms);
 
+/** Same as cnd_timedwait_ms() but updates the remaining time. */
+int cnd_timedwait_msp (cnd_t *cnd, mtx_t *mtx, int *timeout_msp);
+
 /* Thread */
 #if defined(_TTHREAD_WIN32_)
 typedef HANDLE thrd_t;

@@ -190,6 +190,7 @@ int main_0018_cgrp_term (int argc, char **argv) {
 
 
 	/* Wait for both consumers to get an assignment */
+        TEST_SAY("Awaiting assignments for %d consumer(s)\n", _CONS_CNT);
 	TIMING_START(&t_assign, "WAIT.ASSIGN");
 	while (assign_cnt < _CONS_CNT)
 		consume_all(rk_c, _CONS_CNT, msg_cnt,

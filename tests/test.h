@@ -123,6 +123,7 @@ struct test {
         /**
          * Runtime
          */
+        thrd_t  thrd;
         int64_t start;
         int64_t duration;
         FILE   *stats_fp;
@@ -155,7 +156,7 @@ struct test {
 extern int test_broker_version;
 
 
-#define TEST_FAIL0(file,line,fail_now,...) do {					\
+#define TEST_FAIL0(file,line,do_lock,fail_now,...) do {                 \
                 int is_thrd = 0;                                        \
 		TEST_SAYL(0, "TEST FAILURE\n");				\
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
@@ -165,13 +166,15 @@ extern int test_broker_version;
 		fprintf(stderr, "\n");					\
                 fprintf(stderr, "### Test random seed was %i ###\033[0m\n",    \
                         test_seed);                                     \
-                TEST_LOCK();                                            \
+                if (do_lock)                                            \
+                        TEST_LOCK();                                    \
                 test_curr->state = TEST_FAILED;                         \
                 if (test_curr->mainfunc) {                              \
                         tests_running_cnt--;                            \
                         is_thrd = 1;                                    \
                 }                                                       \
-                TEST_UNLOCK();                                          \
+                if (do_lock)                                            \
+                        TEST_UNLOCK();                                  \
 		if (!fail_now) break;					\
                 if (test_assert_on_fail || !is_thrd)                    \
                         assert(0);                                      \
@@ -180,10 +183,10 @@ extern int test_broker_version;
 	} while (0)
 
 /* Whine and abort test */
-#define TEST_FAIL(...) TEST_FAIL0(__FILE__,__LINE__,1, __VA_ARGS__)
+#define TEST_FAIL(...) TEST_FAIL0(__FILE__,__LINE__,1,1,__VA_ARGS__)
 
 /* Whine right away, mark the test as failed, but continue the test. */
-#define TEST_FAIL_LATER(...) TEST_FAIL0(__FILE__,__LINE__,0, __VA_ARGS__)
+#define TEST_FAIL_LATER(...) TEST_FAIL0(__FILE__,__LINE__,1,0,__VA_ARGS__)
 
 
 #define TEST_PERROR(call) do {						\
@@ -237,7 +240,6 @@ extern int test_broker_version;
 		TEST_UNLOCK();			     \
 	} while (0)
 
-const char *test_mk_topic_name (const char *suffix, int randomized);
 
 void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		     int timeout);
@@ -259,8 +261,11 @@ typedef struct test_timing_s {
 	int64_t ts_every; /* Last every */
 } test_timing_t;
 
-#define TIMING_START(TIMING,NAME) do {					\
-	rd_snprintf((TIMING)->name, sizeof((TIMING)->name), "%s", (NAME)); \
+/**
+ * @brief Start timing, Va-Argument is textual name (printf format)
+ */
+#define TIMING_START(TIMING,...) do {                                   \
+        rd_snprintf((TIMING)->name, sizeof((TIMING)->name), __VA_ARGS__); \
 	(TIMING)->ts_start = test_clock();				\
 	(TIMING)->duration = 0;						\
 	(TIMING)->ts_every = (TIMING)->ts_start;			\
@@ -537,9 +542,12 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
 void test_kafka_topics (const char *fmt, ...);
 void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor);
-void test_auto_create_topic_rkt (rd_kafka_t *rk, rd_kafka_topic_t *rkt);
+rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
+                                                rd_kafka_topic_t *rkt);
+rd_kafka_resp_err_t test_auto_create_topic (rd_kafka_t *rk, const char *name);
+int test_check_auto_create_topic (void);
+
 int test_check_builtin (const char *feature);
-void test_timeout_set (int timeout);
 
 char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 
@@ -558,3 +566,4 @@ void test_prepare_msg (uint64_t testid, int32_t partition, int msg_id,
 void test_socket_enable (rd_kafka_conf_t *conf);
 void test_socket_close_all (struct test *test, int reinit);
 #endif
+

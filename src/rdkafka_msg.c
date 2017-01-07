@@ -255,23 +255,24 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         rd_kafka_msg_t s_rkm = RD_ZERO_INIT, *rkm = &s_rkm;
         rd_kafka_vtype_t vtype;
         rd_kafka_topic_t *app_rkt;
-        rd_kafka_itopic_t *rkt = NULL;
+        shptr_rd_kafka_itopic_t *s_rkt = NULL;
+        rd_kafka_itopic_t *rkt;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-        int destr_rkt = 0;
 
         va_start(ap, rk);
         while ((vtype = va_arg(ap, rd_kafka_vtype_t)) != RD_KAFKA_VTYPE_END) {
                 switch (vtype)
                 {
                 case RD_KAFKA_VTYPE_TOPIC:
-                        rkt = rd_kafka_topic_new0(rk, va_arg(ap, const char *),
-                                                  NULL, NULL, 1);
-                        destr_rkt = 1;
+                        s_rkt = rd_kafka_topic_new0(rk,
+                                                    va_arg(ap, const char *),
+                                                    NULL, NULL, 1);
                         break;
 
                 case RD_KAFKA_VTYPE_RKT:
                         app_rkt = va_arg(ap, rd_kafka_topic_t *);
-                        rkt = rd_kafka_topic_keep(rd_kafka_topic_a2i(app_rkt));
+                        s_rkt = rd_kafka_topic_keep(
+                                rd_kafka_topic_a2i(app_rkt));
                         break;
 
                 case RD_KAFKA_VTYPE_PARTITION:
@@ -308,19 +309,20 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
 
         va_end(ap);
 
-        if (unlikely(!rkt))
+        if (unlikely(!s_rkt))
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
+        rkt = rd_kafka_topic_s2i(s_rkt);
+
         if (likely(!err))
-                rkm = rd_kafka_msg_new0(rkt, rkm->rkm_partition,
+                rkm = rd_kafka_msg_new0(rkt,
+                                        rkm->rkm_partition,
                                         rkm->rkm_flags,
                                         rkm->rkm_payload, rkm->rkm_len,
                                         rkm->rkm_key, rkm->rkm_key_len,
                                         rkm->rkm_opaque,
                                         &err, NULL,
                                         rkm->rkm_timestamp, rd_clock());
-        if (unlikely(destr_rkt))
-                rd_kafka_topic_destroy0(rkt);
 
         if (unlikely(err))
                 return err;
@@ -335,8 +337,10 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                  * flag since our contract says we don't free the payload on
                  * failure. */
                 rkm->rkm_flags &= ~RD_KAFKA_MSG_F_FREE;
-                rd_kafka_msg_destroy(rkt->rkt_rk, rkm);
+                rd_kafka_msg_destroy(rk, rkm);
         }
+
+        rd_kafka_topic_destroy0(s_rkt);
 
         return err;
 }

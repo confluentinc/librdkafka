@@ -55,6 +55,11 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 	rd_kafka_q_t       *rkb_ops;
 
+        mtx_t               rkb_lock;
+
+        int                 rkb_blocking_max_ms; /* Maximum IO poll blocking
+                                                  * time. */
+
         /* Toppars handled by this broker */
 	TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;
 	int                 rkb_toppar_cnt;
@@ -140,7 +145,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_ts_t             rkb_ts_metadata_poll; /* Next metadata poll time */
 	int                 rkb_metadata_fast_poll_cnt; /* Perform fast
 							 * metadata polls. */
-	mtx_t               rkb_lock;
 	thrd_t              rkb_thread;
 
 	rd_refcnt_t         rkb_refcnt;
@@ -200,6 +204,16 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 
 /**
+ * @brief Broker comparator
+ */
+static RD_UNUSED RD_INLINE int rd_kafka_broker_cmp (const void *_a,
+                                                    const void *_b) {
+        const rd_kafka_broker_t *a = _a, *b = _b;
+        return (int)(a - b);
+}
+
+
+/**
  * @returns true if broker supports \p features, else false.
  */
 static RD_UNUSED
@@ -241,7 +255,8 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
                                                        void *opaque),
                                         void *opaque);
 
-rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms);
+rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms,
+                                               int do_lock);
 
 rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state);
 
@@ -252,14 +267,12 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			   int level, rd_kafka_resp_err_t err,
 			   const char *fmt, ...);
 
-void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
-				   int do_rk_lock);
-#define rd_kafka_topic_leader_query(rk,rkt) \
-	rd_kafka_topic_leader_query0(rk,rkt,1)
 void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb);
-#define rd_kafka_broker_destroy(rkb)                                    \
-        rd_refcnt_destroywrapper(&(rkb)->rkb_refcnt,                    \
-                                 rd_kafka_broker_destroy_final(rkb))
+
+static RD_INLINE RD_UNUSED void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
+        rd_refcnt_destroywrapper(&rkb->rkb_refcnt,
+                                 rd_kafka_broker_destroy_final(rkb));
+}
 
 void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                              const struct rd_kafka_metadata_broker *mdb);
@@ -279,13 +292,11 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);
 
 void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
-                               int16_t ApiKey,
                                rd_kafka_buf_t *rkbuf,
                                rd_kafka_resp_cb_t *resp_cb,
                                void *opaque);
 
 void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
-                                     int16_t ApiKey,
                                      rd_kafka_buf_t *rkbuf,
                                      rd_kafka_replyq_t replyq,
                                      rd_kafka_resp_cb_t *resp_cb,
@@ -293,13 +304,6 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 
 void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf);
 
-void rd_kafka_broker_metadata_req (rd_kafka_broker_t *rkb,
-                                   int all_topics,
-                                   rd_kafka_itopic_t *only_rkt,
-                                   rd_kafka_replyq_t replyq,
-                                   const char *reason);
-void rd_kafka_broker_metadata_req_op (rd_kafka_broker_t *rkb,
-				      rd_kafka_op_t *rko);
 
 rd_kafka_broker_t *rd_kafka_broker_internal (rd_kafka_t *rk);
 

@@ -574,6 +574,16 @@ class HandleImpl : virtual public Handle {
 
   Queue *get_partition_queue (const TopicPartition *partition);
 
+  ErrorCode offsetsForTimes (std::vector<TopicPartition*> &offsets,
+                             int timeout_ms) {
+    rd_kafka_topic_partition_list_t *c_offsets = partitions_to_c_parts(offsets);
+    ErrorCode err = static_cast<ErrorCode>(
+        rd_kafka_offsets_for_times(rk_, c_offsets, timeout_ms));
+    update_partitions_from_c_parts(offsets, c_offsets);
+    rd_kafka_topic_partition_list_destroy(c_offsets);
+    return err;
+  }
+
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
    * the opaque provided to rdkafka must be a pointer to HandleImpl, since
@@ -632,6 +642,10 @@ public:
   topic_(topic), partition_(partition), offset_(RdKafka::Topic::OFFSET_INVALID),
       err_(ERR_NO_ERROR) {}
 
+  TopicPartitionImpl (const std::string &topic, int partition, int64_t offset):
+  topic_(topic), partition_(partition), offset_(offset),
+          err_(ERR_NO_ERROR) {}
+
   TopicPartitionImpl (const rd_kafka_topic_partition_t *c_part) {
     topic_ = std::string(c_part->topic);
     partition_ = c_part->partition;
@@ -640,12 +654,14 @@ public:
     // FIXME: metadata
   }
 
+  static void destroy (std::vector<TopicPartition*> &partitions);
+
   int partition () const { return partition_; }
   const std::string &topic () const { return topic_ ; }
 
-  int64_t offset () { return offset_; }
+  int64_t offset () const { return offset_; }
 
-  ErrorCode err () { return err_; }
+  ErrorCode err () const { return err_; }
 
   void set_offset (int64_t offset) { offset_ = offset; }
 
@@ -808,6 +824,13 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
   ErrorCode produce (Topic *topic, int32_t partition,
                      const std::vector<char> *payload,
                      const std::vector<char> *key,
+                     void *msg_opaque);
+
+  ErrorCode produce (const std::string topic_name, int32_t partition,
+                     int msgflags,
+                     void *payload, size_t len,
+                     const void *key, size_t key_len,
+                     int64_t timestamp,
                      void *msg_opaque);
 
   ErrorCode flush (int timeout_ms) {

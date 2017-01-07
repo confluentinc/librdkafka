@@ -65,6 +65,7 @@ void test_stats_cb () {
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
   if (!p)
 	  Test::Fail("Failed to create Producer: " + errstr);
+  delete conf;
 
   int64_t t_start = test_clock();
 

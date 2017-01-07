@@ -1,7 +1,7 @@
 /*
 * librdkafka - Apache Kafka C library
 *
-* Copyright (c) 2012-2015, Magnus Edenhill
+* Copyright (c) 2016 Magnus Edenhill
 * All rights reserved.
 *
 * Redistribution and use in source and binary forms, with or without
@@ -25,59 +25,37 @@
 * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 * POSSIBILITY OF SUCH DAMAGE.
 */
-#pragma once
 
 /**
- * C functions shared with C++ tests
+ * System portability
  */
 
-const char *test_mk_topic_name (const char *suffix, int randomized);
+#include "rd.h"
 
-void test_FAIL (const char *file, int line, int fail_now, const char *str);
-void test_SAY (const char *file, int line, int level, const char *str);
 
-void test_timeout_set (int timeout);
-int test_set_special_conf (const char *name, const char *val, int *timeoutp);
-const char *test_conf_get_path (void);
-const char *test_getenv (const char *env, const char *def);
-
-#ifndef _MSC_VER
-#include <sys/time.h>
-#ifndef RD_UNUSED
-#define RD_UNUSED __attribute__((unused))
-#endif
-
-#else
-
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#endif
-
-#ifndef RD_UNUSED
-#define RD_UNUSED
-#endif
-
+#if !HAVE_QSORT_R
+#include <stdlib.h>
 
 /**
-* A microsecond monotonic clock
-*/
-static RD_INLINE int64_t test_clock (void)
-#ifndef _MSC_VER
-__attribute__((unused))
-#endif
-;
-static RD_INLINE int64_t test_clock (void) {
-#ifdef __APPLE__
-        /* No monotonic clock on Darwin */
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        return ((int64_t)tv.tv_sec * 1000000LLU) + (int64_t)tv.tv_usec;
-#elif _MSC_VER
-        return (int64_t)GetTickCount64() * 1000LLU;
-#else
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        return ((int64_t)ts.tv_sec * 1000000LLU) +
-                ((int64_t)ts.tv_nsec / 1000LLU);
-#endif
+ * qsort_r substitute
+ */
+static RD_TLS int (*rd_qsort_r_cmp) (const void *, const void *, void *);
+static RD_TLS void *rd_qsort_r_arg;
+
+static RD_UNUSED
+int rd_qsort_r_trampoline (const void *a, const void *b) {
+        return rd_qsort_r_cmp(a, b, rd_qsort_r_arg);
 }
+
+void qsort_r (void *base, size_t nmemb, size_t size,
+              int (*compar)(const void *, const void *, void *),
+              void *arg) {
+        rd_qsort_r_cmp = compar;
+        rd_qsort_r_arg = arg;
+        qsort(base, nmemb, size, rd_qsort_r_trampoline);
+        rd_qsort_r_cmp = NULL;
+        rd_qsort_r_arg = NULL;
+}
+
+
+#endif

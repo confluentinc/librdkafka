@@ -140,6 +140,8 @@ typedef struct rd_kafka_cgrp_s {
 #define RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT  0x20  /* A Heartbeat request
                                                      * is in transit, dont
                                                      * send a new one. */
+#define RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION 0x40  /* Subscription contains
+                                                     * wildcards. */
 
         rd_interval_t      rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t      rkcg_heartbeat_intvl;    /* Heartbeat intvl */
@@ -259,9 +261,6 @@ void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg);
 void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 					   rd_kafka_resp_err_t err);
 
-void rd_kafka_cgrp_handle_Metadata (rd_kafka_cgrp_t *rkcg,
-                                    rd_kafka_resp_err_t err,
-                                    rd_kafka_metadata_t *md);
 void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
 				     rd_kafka_broker_t *rkb,
                                      rd_kafka_resp_err_t err,
@@ -272,6 +271,5 @@ int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg);
 
 void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 				const char *reason);
-void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
-					  const struct rd_kafka_metadata *md);
+void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)

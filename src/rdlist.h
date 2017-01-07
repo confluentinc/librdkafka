@@ -51,9 +51,10 @@ typedef struct rd_list_s {
 
 
 /**
- * Initialize a list, preallocate space for 'initial_size' elements (optional)
+ * Initialize a list, preallocate space for 'initial_size' elements (optional).
+ * List elements will optionally be freed by \p free_cb.
  */
-void rd_list_init (rd_list_t *rl, int initial_size);
+void rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *));
 
 
 /**
@@ -61,8 +62,14 @@ void rd_list_init (rd_list_t *rl, int initial_size);
  *
  * Use rd_list_destroy() to free.
  */
-rd_list_t *rd_list_new (int initial_size);
+rd_list_t *rd_list_new (int initial_size, void (*free_cb) (void *));
 
+
+/**
+ * @brief Prepare list to for an additional \p size elements.
+ *        This is an optimization to avoid incremental grows.
+ */
+void rd_list_grow (rd_list_t *rl, size_t size);
 
 /**
  * @brief Preallocate elements to avoid having to pass an allocated pointer to
@@ -78,9 +85,13 @@ void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size);
 
 
 /**
- * Set element free callback
+ * @brief Free a pointer using the list's free_cb
+ *
+ * @remark If no free_cb is set, or \p ptr is NULL, dont do anything
+ *
+ * Typical use is rd_list_free_cb(rd_list_remove_cmp(....));
  */
-void rd_list_set_free_cb (rd_list_t *rl, void (*free_cb) (void *));
+void rd_list_free_cb (rd_list_t *rl, void *ptr);
 
 
 /**
@@ -117,13 +128,14 @@ void rd_list_sort (rd_list_t *rl, int (*cmp) (const void *, const void *));
  */
 void rd_list_clear (rd_list_t *rl);
 
+
 /**
  * Empties the list, frees the element array, and optionally frees
- * each element using 'free_cb' or 'rl->rl_free_cb'.
+ * each element using the registered \c rl->rl_free_cb.
  *
  * If the list was previously allocated with rd_list_new() it will be freed.
  */
-void rd_list_destroy (rd_list_t *rl, void (*free_cb) (void *));
+void rd_list_destroy (rd_list_t *rl);
 
 
 /**
@@ -177,7 +189,46 @@ void *rd_list_find (const rd_list_t *rl, const void *match,
  *            0 if a and b are equal.
  */
 int rd_list_cmp (const rd_list_t *a, rd_list_t *b,
-		 int (*cmp) (const void *, const void *));
+                 int (*cmp) (const void *, const void *));
+
+/**
+ * @brief Simple element pointer comparator
+ */
+int rd_list_cmp_ptr (const void *a, const void *b);
+
+
+/**
+ * @brief Apply \p cb to each element in list, if \p cb returns 0
+ *        the element will be removed (but not freed).
+ */
+void rd_list_apply (rd_list_t *rl,
+                    int (*cb) (void *elem, void *opaque), void *opaque);
+
+
+
+/**
+ * @brief Copy list \p src, returning a new list,
+ *        using optional \p copy_cb (per elem)
+ */
+rd_list_t *rd_list_copy (const rd_list_t *src,
+                         void *(*copy_cb) (const void *elem, void *opaque),
+                         void *opaque);
+
+
+/**
+ * @brief Copy list \p src to \p dst using optional \p copy_cb (per elem)
+ */
+void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
+                      void *(*copy_cb) (const void *elem, void *opaque),
+                      void *opaque);
+
+/**
+ * @brief String copier for rd_list_copy()
+ */
+static RD_UNUSED
+void *rd_list_string_copy (const void *elem, void *opaque) {
+        return rd_strdup((const char *)elem);
+}
 
 
 /**

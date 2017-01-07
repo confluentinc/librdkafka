@@ -310,6 +310,10 @@ typedef enum {
 	RD_KAFKA_RESP_ERR__OUTDATED = -167,
 	/** Timed out in queue */
 	RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE = -166,
+        /** Feature not supported by broker */
+        RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE = -165,
+        /** Awaiting cache update */
+        RD_KAFKA_RESP_ERR__WAIT_CACHE = -164,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -389,6 +393,22 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_ILLEGAL_SASL_STATE = 34,
 	/** Unuspported version */
 	RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION = 35,
+	/** Topic already exists */
+	RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS = 36,
+	/** Invalid number of partitions */
+	RD_KAFKA_RESP_ERR_INVALID_PARTITIONS = 37,
+	/** Invalid replication factor */
+	RD_KAFKA_RESP_ERR_INVALID_REPLICATION_FACTOR = 38,
+	/** Invalid replica assignment */
+	RD_KAFKA_RESP_ERR_INVALID_REPLICA_ASSIGNMENT = 39,
+	/** Invalid config */
+	RD_KAFKA_RESP_ERR_INVALID_CONFIG = 40,
+	/** Not controller for cluster */
+	RD_KAFKA_RESP_ERR_NOT_CONTROLLER = 41,
+	/** Invalid request */
+	RD_KAFKA_RESP_ERR_INVALID_REQUEST = 42,
+	/** Message format on broker does not support request */
+	RD_KAFKA_RESP_UNSUPPORTED_FOR_MESSAGE_FORMAT = 43,
 
 	RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
@@ -672,6 +692,21 @@ RD_EXPORT
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
 				    const char *topic, int32_t partition);
+
+
+/**
+ * @brief Sort list using comparator \p cmp.
+ *
+ * If \p cmp is NULL the default comparator will be used that
+ * sorts by ascending topic name and partition.
+ *
+ */
+RD_EXPORT void
+rd_kafka_topic_partition_list_sort (rd_kafka_topic_partition_list_t *rktparlist,
+                                    int (*cmp) (const void *a, const void *b,
+                                                void *opaque),
+                                    void *opaque);
+
 
 /**@}*/
 
@@ -1597,8 +1632,12 @@ rd_kafka_topic_t *rd_kafka_topic_new(rd_kafka_t *rk, const char *topic,
 
 
 /**
- * @brief Destroy topic handle previously created with `rd_kafka_topic_new()`.
- * @remark MUST NOT be used for internally created topics (topic_new0())
+ * @brief Loose application's topic handle refcount as previously created
+ *        with `rd_kafka_topic_new()`.
+ *
+ * @remark Since topic objects are refcounted (both internally and for the app)
+ *         the topic object might not actually be destroyed by this call,
+ *         but the application must consider the object destroyed.
  */
 RD_EXPORT
 void rd_kafka_topic_destroy(rd_kafka_topic_t *rkt);
@@ -1730,6 +1769,30 @@ rd_kafka_get_watermark_offsets (rd_kafka_t *rk,
 				const char *topic, int32_t partition,
 				int64_t *low, int64_t *high);
 
+
+
+/**
+ * @brief Look up the offsets for the given partitions by timestamp.
+ *
+ * The returned offset for each partition is the earliest offset whose
+ * timestamp is greater than or equal to the given timestamp in the
+ * corresponding partition.
+ *
+ * The timestamps to query are represented as \c offset in \p offsets
+ * on input, and \c offset will contain the offset on output.
+ *
+ * The function will block for at most \p timeout_ms milliseconds.
+ *
+ * @remark Duplicate Topic+Partitions are not supported.
+ * @remark Per-partition errors may be returned in \c rd_kafka_topic_partition_t.err
+ *
+ * @returns an error code for general errors, else RD_KAFKA_RESP_ERR_NO_ERROR
+ *          in which case per-partition errors might be set.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_offsets_for_times (rd_kafka_t *rk,
+                            rd_kafka_topic_partition_list_t *offsets,
+                            int timeout_ms);
 
 
 /**
@@ -2276,9 +2339,8 @@ rd_kafka_assignment (rd_kafka_t *rk,
  * is done, returning the resulting success or error code.
  *
  * If a rd_kafka_conf_set_offset_commit_cb() offset commit callback has been
- * configured:
- *  * if async: callback will be enqueued for a future call to rd_kafka_poll().
- *  * if !async: callback will be called from rd_kafka_commit()
+ * configured the callback will be enqueued for a future call to
+ * rd_kafka_poll(), rd_kafka_consumer_poll() or similar.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_commit (rd_kafka_t *rk, const rd_kafka_topic_partition_list_t *offsets,

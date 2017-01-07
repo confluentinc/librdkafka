@@ -266,9 +266,12 @@ static int do_test (const char *assignor) {
 		    test_mk_topic_name("regex_subscribe_TOOTHPIC_0003_3", 0),
 		    groupid);
 
+        /* To avoid auto topic creation to kick in we use
+         * an invalid topic name. */
 	rd_snprintf(nonexist_topic, sizeof(nonexist_topic),
 		    "%s_%s",
-		    test_mk_topic_name("regex_subscribe_NONEXISTENT_0004_IV",0),
+		    test_mk_topic_name("regex_subscribe_NONEXISTENT_0004_IV#!",
+                                       0),
 		    groupid);
 
 	/* Produce messages to topics to ensure creation. */
@@ -279,7 +282,7 @@ static int do_test (const char *assignor) {
 	test_conf_init(&conf, NULL, 20);
 	test_conf_set(conf, "partition.assignment.strategy", assignor);
 	/* Speed up propagation of new topics */
-	test_conf_set(conf, "metadata.max.age.ms", "5000");
+	test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
 
 	/* Create a single consumer to handle all subscriptions.
 	 * Has the nice side affect of testing multiple subscriptions. */

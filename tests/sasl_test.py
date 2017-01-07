@@ -49,7 +49,8 @@ def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None, debug=False)
         print('# Aborted by user')
 
     report = rdkafka.report()
-    report['root_path'] = rdkafka.root_path()
+    if report is not None:
+        report['root_path'] = rdkafka.root_path()
 
     cluster.stop(force=True)
 

@@ -222,7 +222,10 @@ enum ErrorCode {
 	ERR__OUTDATED = -167,
 	/** Timed out in queue */
 	ERR__TIMED_OUT_QUEUE = -166,
-
+        /** Feature not supported by broker */
+        ERR__UNSUPPORTED_FEATURE = -165,
+        /** Awaiting cache update */
+        ERR__WAIT_CACHE = -164,
 	/** End internal error codes */
 	ERR__END = -100,
 
@@ -613,8 +616,7 @@ public:
    * @brief Set offset commit callback for use with consumer groups
    *
    * The results of automatic or manual offset commits will be scheduled
-   * for this callback and is served by RdKafka::KafkaConsumer::consume()
-   * or RdKafka::KafkaConsumer::commitSync()
+   * for this callback and is served by RdKafka::KafkaConsumer::consume().
    *
    * If no partitions had valid offsets to commit this callback will be called
    * with \p err == ERR__NO_OFFSET which is not to be considered an error.
@@ -984,6 +986,30 @@ class RD_EXPORT Handle {
 					   int32_t partition,
 					   int64_t *low, int64_t *high) = 0;
 
+
+  /**
+   * @brief Look up the offsets for the given partitions by timestamp.
+   *
+   * The returned offset for each partition is the earliest offset whose
+   * timestamp is greater than or equal to the given timestamp in the
+   * corresponding partition.
+   *
+   * The timestamps to query are represented as \c offset in \p offsets
+   * on input, and \c offset() will return the closest earlier offset
+   * for the timestamp on output.
+   *
+   * The function will block for at most \p timeout_ms milliseconds.
+   *
+   * @remark Duplicate Topic+Partitions are not supported.
+   * @remark Errors are also returned per TopicPartition, see \c err()
+   *
+   * @returns an error code for general errors, else RdKafka::ERR_NO_ERROR
+   *          in which case per-partition errors might be set.
+   */
+  virtual ErrorCode offsetsForTimes (std::vector<TopicPartition*> &offsets,
+                                     int timeout_ms) = 0;
+
+
   /**
    * @brief Retrieve queue for a given partition.
    *
@@ -1017,13 +1043,22 @@ class RD_EXPORT Handle {
 class RD_EXPORT TopicPartition {
 public:
   /**
-   * Create topic+partition object for \p topic and \p partition.
+   * Create topic+partition object for \p topic and \p partition
+   * and optionally \p offset.
    *
    * Use \c delete to deconstruct.
    */
   static TopicPartition *create (const std::string &topic, int partition);
+  static TopicPartition *create (const std::string &topic, int partition,
+                                 int64_t offset);
 
   virtual ~TopicPartition() = 0;
+
+  /**
+   * @brief Destroy/delete the TopicPartitions in \p partitions
+   *        and clear the vector.
+   */
+  static void destroy (std::vector<TopicPartition*> &partitions);
 
   /** @returns topic name */
   virtual const std::string &topic () const = 0;
@@ -1032,13 +1067,13 @@ public:
   virtual int partition () const = 0;
 
   /** @returns offset (if applicable) */
-  virtual int64_t offset () = 0;
+  virtual int64_t offset () const = 0;
 
   /** @brief Set offset */
   virtual void set_offset (int64_t offset) = 0;
 
   /** @returns error code (if applicable) */
-  virtual ErrorCode err () = 0;
+  virtual ErrorCode err () const = 0;
 };
 
 
@@ -1792,6 +1827,19 @@ class RD_EXPORT Producer : public virtual Handle {
                              int msgflags,
                              void *payload, size_t len,
                              const void *key, size_t key_len,
+                             void *msg_opaque) = 0;
+
+  /**
+   * @brief produce() variant that takes topic as a string (no need for
+   *        creating a Topic object), and also allows providing the
+   *        message timestamp (microseconds since beginning of epoch, UTC).
+   *        Otherwise identical to produce() above.
+   */
+  virtual ErrorCode produce (const std::string topic_name, int32_t partition,
+                             int msgflags,
+                             void *payload, size_t len,
+                             const void *key, size_t key_len,
+                             int64_t timestamp,
                              void *msg_opaque) = 0;
 
 

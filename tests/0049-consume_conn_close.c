@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if WITH_SOCKEM
 #include "test.h"
 #include "rdkafka.h"
 
@@ -130,3 +131,6 @@ int main_0049_consume_conn_close (int argc, char **argv) {
 
         return 0;
 }
+
+
+#endif

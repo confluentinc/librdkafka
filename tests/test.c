@@ -705,7 +705,9 @@ static int run_test0 (struct run_args *run_args) {
 
 	test_curr = test;
 
+#if WITH_SOCKEM
         rd_list_init(&test->sockets, 16, (void *)sockem_close);
+#endif
 
 	TEST_SAY("================= Running test %s =================\n",
 		 test->name);

@@ -130,8 +130,8 @@ struct test {
 	int64_t timeout;
         test_state_t state;
 
-        rd_list_t sockets;
 #if WITH_SOCKEM
+        rd_list_t sockets;
         int (*connect_cb) (struct test *test, sockem_t *skm, const char *id);
 #endif
         int (*is_fatal_cb) (rd_kafka_t *rk, rd_kafka_resp_err_t err,

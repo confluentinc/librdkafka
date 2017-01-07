@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <ProjectGuid>{4BEBB59C-477B-4F7A-8AE8-4228D0861E54}</ProjectGuid>
@@ -136,6 +136,7 @@
     <ClInclude Include="..\src\win32_config.h" />
     <ClInclude Include="..\src\regexp.h" />
     <ClInclude Include="..\src\rdavl.h" />
+    <ClInclude Include="..\src\rdports.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\rdaddr.c" />

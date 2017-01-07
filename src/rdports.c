@@ -33,11 +33,13 @@
 #include "rd.h"
 
 
-#if !HAVE_QSORT_R
 #include <stdlib.h>
 
 /**
  * qsort_r substitute
+ * This nicely explains why we wont bother with the native implementation
+ * on Win32 (qsort_s), OSX/FreeBSD (qsort_r with diff args):
+ * http://forum.theorex.tech/t/different-declarations-of-qsort-r-on-mac-and-linux/93/2
  */
 static RD_TLS int (*rd_qsort_r_cmp) (const void *, const void *, void *);
 static RD_TLS void *rd_qsort_r_arg;
@@ -47,15 +49,12 @@ int rd_qsort_r_trampoline (const void *a, const void *b) {
         return rd_qsort_r_cmp(a, b, rd_qsort_r_arg);
 }
 
-void qsort_r (void *base, size_t nmemb, size_t size,
-              int (*compar)(const void *, const void *, void *),
-              void *arg) {
+void rd_qsort_r (void *base, size_t nmemb, size_t size,
+                 int (*compar)(const void *, const void *, void *),
+                 void *arg) {
         rd_qsort_r_cmp = compar;
         rd_qsort_r_arg = arg;
         qsort(base, nmemb, size, rd_qsort_r_trampoline);
         rd_qsort_r_cmp = NULL;
         rd_qsort_r_arg = NULL;
 }
-
-
-#endif

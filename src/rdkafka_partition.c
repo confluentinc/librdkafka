@@ -32,6 +32,7 @@
 #include "rdkafka_offset.h"
 #include "rdkafka_partition.h"
 #include "rdregex.h"
+#include "rdports.h"  /* rd_qsort_r() */
 
 const char *rd_kafka_fetch_states[] = {
 	"none",
@@ -2614,8 +2615,9 @@ void rd_kafka_topic_partition_list_sort (
         if (!cmp)
                 cmp = rd_kafka_topic_partition_cmp;
 
-        qsort_r(rktparlist->elems, rktparlist->cnt, sizeof(*rktparlist->elems),
-                cmp, opaque);
+        rd_qsort_r(rktparlist->elems, rktparlist->cnt,
+                   sizeof(*rktparlist->elems),
+                   cmp, opaque);
 }
 
 

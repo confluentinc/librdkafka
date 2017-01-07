@@ -1841,6 +1841,14 @@ static int rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko,
 		rd_kafka_toppar_pause_resume(rktp, rko);
 		break;
 
+        case RD_KAFKA_OP_OFFSET_COMMIT | RD_KAFKA_OP_REPLY:
+                rd_kafka_assert(NULL, rko->rko_u.offset_commit.cb);
+                rko->rko_u.offset_commit.cb(
+                        rk, rko->rko_err,
+                        rko->rko_u.offset_commit.partitions,
+                        rko->rko_u.offset_commit.opaque);
+                break;
+
 	case RD_KAFKA_OP_OFFSET_FETCH | RD_KAFKA_OP_REPLY:
         {
                 /* OffsetFetch reply */

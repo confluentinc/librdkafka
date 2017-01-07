@@ -749,3 +749,16 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_from_buf (const rd_kafka_buf_t *rkbuf);
 
 void rd_kafka_buf_hexdump (const char *what, const rd_kafka_buf_t *rkbuf,
 			   int read_buffer);
+
+
+/**
+ * @brief Check if buffer's replyq.version is outdated.
+ * @param rkbuf: may be NULL, for convenience.
+ *
+ * @returns 1 if this is an outdated buffer, else 0.
+ */
+static RD_UNUSED RD_INLINE int
+rd_kafka_buf_version_outdated (const rd_kafka_buf_t *rkbuf, int version) {
+        return rkbuf && rkbuf->rkbuf_replyq.version &&
+                rkbuf->rkbuf_replyq.version < version;
+}

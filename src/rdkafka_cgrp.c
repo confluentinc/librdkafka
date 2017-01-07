@@ -1439,7 +1439,12 @@ static void rd_kafka_cgrp_offsets_fetch_response (
                 return;
         }
 
-	rkcg = rd_kafka_cgrp_get(rk);
+        rkcg = rd_kafka_cgrp_get(rk);
+
+        if (rd_kafka_buf_version_outdated(request, rkcg->rkcg_version)) {
+                rd_kafka_topic_partition_list_destroy(offsets);
+                return;
+        }
 
 	rd_kafka_topic_partition_list_log(rk, "OFFSETFETCH", offsets);
 	/* If all partitions already had usable offsets then there
@@ -1685,6 +1690,9 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 		rko_orig->rko_u.offset_commit.partitions; /* maybe NULL */
 
 	RD_KAFKA_OP_TYPE_ASSERT(rko_orig, RD_KAFKA_OP_OFFSET_COMMIT);
+
+        if (rd_kafka_buf_version_outdated(request, rkcg->rkcg_version))
+                err = RD_KAFKA_RESP_ERR__DESTROY;
 
 	err = rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf,
 					   request, offsets);

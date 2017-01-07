@@ -1090,8 +1090,7 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 
 	rd_dassert(request->rkbuf_replyq.version > 0);
 	if (err != RD_KAFKA_RESP_ERR__DESTROY &&
-	    request->rkbuf_replyq.version > 0 &&
-	    request->rkbuf_replyq.version < rktp->rktp_op_version) {
+            rd_kafka_buf_version_outdated(request, rktp->rktp_op_version)) {
 		/* Outdated request response, ignore. */
 		    err = RD_KAFKA_RESP_ERR__OUTDATED;
 	}
@@ -1114,18 +1113,13 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 
                 rd_kafka_topic_partition_list_destroy(offsets);
 
-                if (err == RD_KAFKA_RESP_ERR__DESTROY) {
-                        /* Termination, quick cleanup. */
+                if (err == RD_KAFKA_RESP_ERR__DESTROY ||
+                    err == RD_KAFKA_RESP_ERR__OUTDATED) {
+                        /* Termination or outdated, quick cleanup. */
 
                         /* from request.opaque */
                         rd_kafka_toppar_destroy(s_rktp);
-
                         return;
-
-		} else if (err == RD_KAFKA_RESP_ERR__OUTDATED) {
-			/* Outdated: ignore */
-			rd_kafka_toppar_destroy(s_rktp);
-			return;
 
 		} else if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
 			return; /* Retry in progress */

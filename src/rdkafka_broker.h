@@ -225,6 +225,11 @@ int rd_kafka_broker_supports (rd_kafka_broker_t *rkb, int features) {
 	return r;
 }
 
+int16_t rd_kafka_broker_ApiVersion_supported (rd_kafka_broker_t *rkb,
+                                              int16_t ApiKey,
+                                              int16_t minver, int16_t maxver,
+                                              int *featuresp);
+
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 						   int32_t nodeid);
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,

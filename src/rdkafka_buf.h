@@ -393,6 +393,16 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         char *reason;       /* Textual reason */
                         rd_kafka_op_t *rko; /* Originating rko with replyq
                                              * (if any) */
+                        int all_topics;     /* Full/All topics requested */
+
+                        int *decr;          /* Decrement this integer by one
+                                             * when request is complete:
+                                             * typically points to metadata
+                                             * cache's full_.._sent.
+                                             * Will be performed with
+                                             * decr_lock held. */
+                        mtx_t *decr_lock;
+
                 } Metadata;
         } rkbuf_u;
 };

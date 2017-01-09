@@ -398,14 +398,6 @@ int rd_kafka_metadata_cache_hint (rd_kafka_t *rk,
         int i;
         int cnt = 0;
 
-        if (rd_atomic32_get(&rk->rk_metadata_cache.rkmc_full_sent) > 0) {
-                rd_kafka_dbg(rk, METADATA, "METADATA",
-                             "Ignoring cache hint of %d topic(s): "
-                             "full metadata request in-transit",
-                             rd_list_cnt(topics));
-                return 0;
-        }
-
         RD_LIST_FOREACH(topic, topics, i) {
                 rd_kafka_metadata_topic_t mtopic = {
                         .topic = (char *)topic,
@@ -478,7 +470,7 @@ void rd_kafka_metadata_cache_init (rd_kafka_t *rk) {
         rd_avl_init(&rk->rk_metadata_cache.rkmc_avl,
                     rd_kafka_metadata_cache_entry_cmp, 0);
         TAILQ_INIT(&rk->rk_metadata_cache.rkmc_expiry);
-        rd_atomic32_init(&rk->rk_metadata_cache.rkmc_full_sent, 0);
+        mtx_init(&rk->rk_metadata_cache.rkmc_full_lock, mtx_plain);
         mtx_init(&rk->rk_metadata_cache.rkmc_cnd_lock, mtx_plain);
         cnd_init(&rk->rk_metadata_cache.rkmc_cnd);
 
@@ -493,6 +485,7 @@ void rd_kafka_metadata_cache_destroy (rd_kafka_t *rk) {
         rd_kafka_timer_stop(&rk->rk_timers,
                             &rk->rk_metadata_cache.rkmc_query_tmr, 1/*lock*/);
         rd_kafka_metadata_cache_purge(rk);
+        mtx_destroy(&rk->rk_metadata_cache.rkmc_full_lock);
         mtx_destroy(&rk->rk_metadata_cache.rkmc_cnd_lock);
         cnd_destroy(&rk->rk_metadata_cache.rkmc_cnd);
         rd_avl_destroy(&rk->rk_metadata_cache.rkmc_avl);

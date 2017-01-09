@@ -131,6 +131,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 	(RD_KAFKAP_MESSAGESET_HDR_SIZE + RD_KAFKAP_MESSAGE_HDR_SIZE)
 
 
+
 /**
  * @brief ApiKey version support tuple.
  */

@@ -63,7 +63,8 @@ rd_kafka_metadata_refresh_all (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                const char *reason);
 
 rd_kafka_resp_err_t
-rd_kafka_metadata_request (rd_kafka_t *rk, const rd_list_t *topics,
+rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
+                           const rd_list_t *topics,
                            const char *reason, rd_kafka_op_t *rko);
 
 
@@ -90,8 +91,17 @@ struct rd_kafka_metadata_cache {
         TAILQ_HEAD(, rd_kafka_metadata_cache_entry) rkmc_expiry;
         rd_kafka_timer_t rkmc_expiry_tmr;
         int              rkmc_cnt;
-        rd_atomic32_t    rkmc_full_sent; /* Full MetadataRequest for all topics
-                                          * has been sent, awaiting response. */
+
+        /* Protected by full_lock: */
+        mtx_t            rkmc_full_lock;
+        int              rkmc_full_topics_sent; /* Full MetadataRequest for
+                                                 * all topics has been sent,
+                                                 * awaiting response. */
+        int              rkmc_full_brokers_sent; /* Full MetadataRequest for
+                                                  * all brokers (but not topics)
+                                                  * has been sent,
+                                                  * awaiting response. */
+
         rd_kafka_timer_t rkmc_query_tmr; /* Query timer for topic's without
                                           * leaders. */
         cnd_t            rkmc_cnd;       /* cache_wait_change() cond. */

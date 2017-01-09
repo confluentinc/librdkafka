@@ -42,13 +42,22 @@ void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
                 if (rkbuf->rkbuf_u.Metadata.rko)
                         rd_kafka_op_reply(rkbuf->rkbuf_u.Metadata.rko,
                                           RD_KAFKA_RESP_ERR__DESTROY);
+                if (rkbuf->rkbuf_u.Metadata.decr) {
+                        /* Decrease metadata cache's full_.._sent state. */
+                        mtx_lock(rkbuf->rkbuf_u.Metadata.decr_lock);
+                        rd_kafka_assert(NULL,
+                                        (*rkbuf->rkbuf_u.Metadata.decr) > 0);
+                        (*rkbuf->rkbuf_u.Metadata.decr)--;
+                        mtx_unlock(rkbuf->rkbuf_u.Metadata.decr_lock);
+                }
                 break;
         }
 
         if (rkbuf->rkbuf_response)
                 rd_kafka_buf_destroy(rkbuf->rkbuf_response);
 
-	rd_kafka_replyq_destroy(&rkbuf->rkbuf_replyq);
+        rd_kafka_replyq_destroy(&rkbuf->rkbuf_replyq);
+        rd_kafka_replyq_destroy(&rkbuf->rkbuf_orig_replyq);
 
         if (rkbuf->rkbuf_buf2)
                 rd_free(rkbuf->rkbuf_buf2);
@@ -476,7 +485,7 @@ size_t rd_kafka_buf_write_Message (rd_kafka_broker_t *rkb,
 
 /**
  * Retry failed request, depending on the error.
- * @remark \p rkbuf may be NULL
+ * @remark \p rkb may be NULL
  * Returns 1 if the request was scheduled for retry, else 0.
  */
 int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
@@ -506,12 +515,16 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         request = rko->rko_u.xbuf.rkbuf;
         rko->rko_u.xbuf.rkbuf = NULL;
 
-	/* NULL on op_destroy() */
+        /* NULL on op_destroy() */
 	if (request->rkbuf_replyq.q) {
 		int32_t version = request->rkbuf_replyq.version;
-		rd_kafka_replyq_destroy(&request->rkbuf_replyq);
+                /* Current queue usage is done, but retain original replyq for
+                 * future retries, stealing
+                 * the current reference. */
+                request->rkbuf_orig_replyq = request->rkbuf_replyq;
+                rd_kafka_replyq_clear(&request->rkbuf_replyq);
 		/* Callback might need to version check so we retain the
-		 * version across the destroy call which clears it. */
+		 * version across the clear() call which clears it. */
 		request->rkbuf_replyq.version = version;
 	}
 
@@ -570,6 +583,11 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
                 rko->rko_u.xbuf.rkbuf = request;
 
                 rko->rko_err = err;
+
+                /* Copy original replyq for future retries, with its own
+                 * queue reference. */
+                rd_kafka_replyq_copy(&request->rkbuf_orig_replyq,
+                                     &request->rkbuf_replyq);
 
 	        rd_kafka_replyq_enq(&request->rkbuf_replyq, rko, 0);
 

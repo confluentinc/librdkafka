@@ -215,6 +215,7 @@ static void rd_kafka_broker_feature_disable (rd_kafka_broker_t *rkb,
  * @remark This replaces the previous feature set.
  *
  * @locality broker thread
+ * @locks rd_kafka_broker_lock()
  */
 static void rd_kafka_broker_features_set (rd_kafka_broker_t *rkb, int features) {
 	if (rkb->rkb_features == features)
@@ -224,6 +225,47 @@ static void rd_kafka_broker_features_set (rd_kafka_broker_t *rkb, int features) 
 	rd_rkb_dbg(rkb, BROKER, "FEATURE",
 		   "Updated enabled protocol features to %s",
 		   rd_kafka_features2str(rkb->rkb_features));
+}
+
+
+/**
+ * @brief Check and return supported ApiVersion for \p ApiKey.
+ *
+ * @returns the highest supported ApiVersion in the specified range (inclusive)
+ *          or -1 if the ApiKey is not supported or no matching ApiVersion.
+ *          The current feature set is also returned in \p featuresp
+ * @locks none
+ * @locality any
+ */
+int16_t rd_kafka_broker_ApiVersion_supported (rd_kafka_broker_t *rkb,
+                                              int16_t ApiKey,
+                                              int16_t minver, int16_t maxver,
+                                              int *featuresp) {
+        struct rd_kafka_ApiVersion skel = { .ApiKey = ApiKey };
+        struct rd_kafka_ApiVersion ret, *retp;
+
+        rd_kafka_broker_lock(rkb);
+        retp = bsearch(&skel, rkb->rkb_ApiVersions, rkb->rkb_ApiVersions_cnt,
+                       sizeof(*rkb->rkb_ApiVersions),
+                       rd_kafka_ApiVersion_key_cmp);
+        if (retp)
+                ret = *retp;
+        if (featuresp)
+                *featuresp = rkb->rkb_features;
+        rd_kafka_broker_unlock(rkb);
+
+        if (!retp)
+                return -1;
+
+        if (ret.MaxVer < maxver) {
+                if (ret.MaxVer < minver)
+                        return -1;
+                else
+                        return ret.MaxVer;
+        } else if (ret.MinVer > maxver)
+                return -1;
+        else
+                return maxver;
 }
 
 
@@ -1447,10 +1489,14 @@ static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb) {
  * @remark \p rkb takes ownership of \p apis.
  *
  * @locality Broker thread
+ * @locks none
  */
 static void rd_kafka_broker_set_api_versions (rd_kafka_broker_t *rkb,
 					      struct rd_kafka_ApiVersion *apis,
 					      size_t api_cnt) {
+
+        rd_kafka_broker_lock(rkb);
+
 	if (rkb->rkb_ApiVersions)
 		rd_free(rkb->rkb_ApiVersions);
 
@@ -1477,6 +1523,8 @@ static void rd_kafka_broker_set_api_versions (rd_kafka_broker_t *rkb,
 	/* Update feature set based on supported broker APIs. */
 	rd_kafka_broker_features_set(rkb,
 				     rd_kafka_features_check(rkb, apis, api_cnt));
+
+        rd_kafka_broker_unlock(rkb);
 }
 
 
@@ -1714,6 +1762,14 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
  * Add 'rkbuf' to broker 'rkb's retry queue.
  */
 void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
+
+        /* Restore original replyq since replyq.q will have been NULLed
+         * by buf_callback()/replyq_enq(). */
+        if (!rkbuf->rkbuf_replyq.q && rkbuf->rkbuf_orig_replyq.q) {
+                rkbuf->rkbuf_replyq = rkbuf->rkbuf_orig_replyq;
+                rd_kafka_replyq_clear(&rkbuf->rkbuf_orig_replyq);
+        }
+
         /* If called from another thread than rkb's broker thread
          * enqueue the buffer on the broker's op queue. */
         if (!thrd_is_current(rkb->rkb_thread)) {

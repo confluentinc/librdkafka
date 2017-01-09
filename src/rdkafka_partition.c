@@ -2925,7 +2925,13 @@ rd_kafka_topic_partition_list_query_leaders (
                 if (rd_list_empty(&query_topics)) {
                         /* No remaining topics to query: leader-list complete.*/
                         rd_list_destroy(&query_topics);
-                        break;
+
+                        /* No leader(s) for partitions means all partitions
+                         * are unknown. */
+                        if (rd_list_empty(leaders))
+                                return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
 
                 now = rd_clock();
@@ -2943,22 +2949,13 @@ rd_kafka_topic_partition_list_query_leaders (
                                 rk, NULL, &query_topics,
                                 "query partition leaders");
                         ts_query = now;
-                } else if (i > 2 && rd_list_cnt(leaders) == 0) {
-                        /* None of the partitions existed
-                         * (no leaders to wait for). */
-                        rd_list_destroy(&query_topics);
-                        return RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
-                } else if (i < 10) {
+                } else {
                         /* Wait for broker ids to be updated from
                          * metadata refresh above. */
                         int wait_ms = rd_timeout_remains(ts_end);
                         if (query_intvl < wait_ms)
                                 wait_ms = query_intvl;
                         rd_kafka_metadata_cache_wait_change(rk, query_intvl);
-                } else {
-                        /* Give up */
-                        rd_list_destroy(&query_topics);
-                        return RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
                 }
 
                 rd_list_destroy(&query_topics);
@@ -2968,7 +2965,7 @@ rd_kafka_topic_partition_list_query_leaders (
                                  * since wait_change() will block.
                                  * This gives us one more chance to spin thru*/
 
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        return RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
 }
 
 

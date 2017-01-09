@@ -360,6 +360,11 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	int32_t rkbuf_expected_size;  /* expected size of message */
 
         rd_kafka_replyq_t   rkbuf_replyq;       /* Enqueue response on replyq */
+        rd_kafka_replyq_t   rkbuf_orig_replyq;  /* Original replyq to be used
+                                                 * for retries from inside
+                                                 * the rkbuf_cb() callback
+                                                 * since rkbuf_replyq will
+                                                 * have been reset. */
         rd_kafka_resp_cb_t *rkbuf_cb;           /* Response callback */
         struct rd_kafka_buf_s *rkbuf_response;  /* Response buffer */
 
@@ -393,6 +398,16 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         char *reason;       /* Textual reason */
                         rd_kafka_op_t *rko; /* Originating rko with replyq
                                              * (if any) */
+                        int all_topics;     /* Full/All topics requested */
+
+                        int *decr;          /* Decrement this integer by one
+                                             * when request is complete:
+                                             * typically points to metadata
+                                             * cache's full_.._sent.
+                                             * Will be performed with
+                                             * decr_lock held. */
+                        mtx_t *decr_lock;
+
                 } Metadata;
         } rkbuf_u;
 };

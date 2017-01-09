@@ -898,9 +898,6 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                         rd_kafka_cgrp_assignor_handle_Metadata_op);
                 rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, NULL);
 
-                if (unlikely(rd_list_cnt(&topics) == 0))
-                        rd_atomic32_add(&rk->rk_metadata_cache.
-                                        rkmc_full_sent, 1);
                 rd_kafka_MetadataRequest(rkb, &topics,
                                          "partition assignor", rko);
                 rd_list_destroy(&topics);
@@ -1049,7 +1046,7 @@ static int rd_kafka_cgrp_metadata_refresh (rd_kafka_cgrp_t *rkcg,
                                  rd_kafka_cgrp_handle_Metadata_op);
         rd_kafka_op_set_replyq(rko, rkcg->rkcg_ops, 0);
 
-        err = rd_kafka_metadata_request(rkcg->rkcg_rk, &topics,
+        err = rd_kafka_metadata_request(rkcg->rkcg_rk, NULL, &topics,
                                         reason, rko);
         if (err) {
                 rd_kafka_dbg(rk, CGRP|RD_KAFKA_DBG_METADATA,

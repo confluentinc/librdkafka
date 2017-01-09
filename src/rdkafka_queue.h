@@ -447,6 +447,23 @@ rd_kafka_replyq_clear (rd_kafka_replyq_t *replyq) {
 	memset(replyq, 0, sizeof(*replyq));
 }
 
+/**
+ * @brief Make a copy of \p src in \p dst, with its own queue reference
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_replyq_copy (rd_kafka_replyq_t *dst, rd_kafka_replyq_t *src) {
+        dst->version = src->version;
+        dst->q = src->q;
+        if (dst->q)
+                rd_kafka_q_keep(dst->q);
+#if ENABLE_DEVEL
+        if (src->_id)
+                dst->_id = rd_strdup(src->_id);
+        else
+                dst->_id = NULL;
+#endif
+}
+
 
 /**
  * Clear replyq holder and destroy any .q references.

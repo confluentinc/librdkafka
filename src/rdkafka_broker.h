@@ -113,7 +113,8 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 					      * See RD_KAFKA_FEATURE_* in
 					      * rdkafka_proto.h */
 
-	struct rd_kafka_ApiVersion *rkb_ApiVersions;     /* Broker's supported APIs.*/
+        struct rd_kafka_ApiVersion *rkb_ApiVersions; /* Broker's supported APIs
+                                                      * (MUST be sorted) */
 	size_t                      rkb_ApiVersions_cnt;
 	rd_interval_t               rkb_ApiVersion_fail_intvl; /* Controls how long
 								* the fallback proto

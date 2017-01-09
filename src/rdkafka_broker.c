@@ -1762,6 +1762,14 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
  * Add 'rkbuf' to broker 'rkb's retry queue.
  */
 void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
+
+        /* Restore original replyq since replyq.q will have been NULLed
+         * by buf_callback()/replyq_enq(). */
+        if (!rkbuf->rkbuf_replyq.q && rkbuf->rkbuf_orig_replyq.q) {
+                rkbuf->rkbuf_replyq = rkbuf->rkbuf_orig_replyq;
+                rd_kafka_replyq_clear(&rkbuf->rkbuf_orig_replyq);
+        }
+
         /* If called from another thread than rkb's broker thread
          * enqueue the buffer on the broker's op queue. */
         if (!thrd_is_current(rkb->rkb_thread)) {

@@ -464,6 +464,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
         /* Query for topic leaders to quickly pick up on failover. */
         if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY && statechange)
                 rd_kafka_metadata_refresh_known_topics(rkb->rkb_rk, NULL,
+                                                       1/*force*/,
                                                        "broker down");
 }
 
@@ -1324,7 +1325,8 @@ void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
         /* Request metadata (async):
          * try locally known topics first and if there are none try
          * getting just the broker list. */
-        if (rd_kafka_metadata_refresh_known_topics(NULL, rkb, "connected") ==
+        if (rd_kafka_metadata_refresh_known_topics(NULL, rkb, 0/*dont force*/,
+                                                   "connected") ==
             RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
                 rd_kafka_metadata_refresh_brokers(NULL, rkb, "connected");
 }
@@ -4222,7 +4224,8 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_t *rk,
                                     "FetchRequest failed: %s",
                                     rd_kafka_err2str(err));
                         rd_kafka_metadata_refresh_known_topics(rkb->rkb_rk,
-                                                               NULL, tmp);
+                                                               NULL, 1/*force*/,
+                                                               tmp);
                         /* FALLTHRU */
 
 		case RD_KAFKA_RESP_ERR__TRANSPORT:

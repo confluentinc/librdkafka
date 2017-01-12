@@ -719,6 +719,7 @@ void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
  *
  * @param rk: used to look up usable broker if \p rkb is NULL.
  * @param rkb: use this broker, unless NULL then any usable broker from \p rk
+ * @param force: force refresh even if topics are up-to-date in cache
  *
  * @returns an error code
  *
@@ -727,7 +728,8 @@ void rd_kafka_metadata_log (rd_kafka_t *rk, const char *fac,
  */
 rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                  const rd_list_t *topics, const char *reason) {
+                                  const rd_list_t *topics, int force,
+                                  const char *reason) {
         rd_list_t q_topics;
         int destroy_rkb = 0;
 
@@ -788,6 +790,7 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
  *
  * @param rk: used to look up usable broker if \p rkb is NULL.
  * @param rkb: use this broker, unless NULL then any usable broker from \p rk
+ * @param force: refresh even if cache is up-to-date
  *
  * @returns an error code (__UNKNOWN_TOPIC if there are no local topics)
  *
@@ -796,7 +799,7 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
  */
 rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
-                                        const char *reason) {
+                                        int force, const char *reason) {
         rd_list_t topics;
         rd_kafka_resp_err_t err;
 
@@ -810,7 +813,7 @@ rd_kafka_metadata_refresh_known_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
         else
                 err = rd_kafka_metadata_refresh_topics(rk, rkb,
-                                                       &topics, reason);
+                                                       &topics, force, reason);
 
         rd_list_destroy(&topics);
 
@@ -951,7 +954,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                 /* No leader-less topics+partitions, stop the timer. */
                 rd_kafka_timer_stop(rkts, rtmr, 1/*lock*/);
         } else {
-                rd_kafka_metadata_refresh_topics(rk, NULL, &topics,
+                rd_kafka_metadata_refresh_topics(rk, NULL, &topics, 1/*force*/,
                                                  "partition leader query");
                 /* Back off next query exponentially until we reach
                  * the standard query interval - then stop the timer

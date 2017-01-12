@@ -1064,7 +1064,7 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
                 sparse = 0;
 
         if (sparse)
-                rd_kafka_metadata_refresh_known_topics(rk, NULL,
+                rd_kafka_metadata_refresh_known_topics(rk, NULL, 1/*force*/,
                                                        "periodic refresh");
         else
                 rd_kafka_metadata_refresh_all(rk, NULL, "periodic refresh");

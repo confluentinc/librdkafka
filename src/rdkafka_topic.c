@@ -1142,6 +1142,7 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 
         if (!rd_list_empty(&query_topics))
                 rd_kafka_metadata_refresh_topics(rk, NULL, &query_topics,
+                                                 0/*dont force*/,
                                                  "refresh unavailable topics");
         rd_list_destroy(&query_topics);
 

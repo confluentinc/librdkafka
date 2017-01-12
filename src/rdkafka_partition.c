@@ -2946,7 +2946,7 @@ rd_kafka_topic_partition_list_query_leaders (
                         /* Query metadata for missing leaders,
                          * possibly creating the topic. */
                         rd_kafka_metadata_refresh_topics(
-                                rk, NULL, &query_topics,
+                                rk, NULL, &query_topics, 1/*force*/,
                                 "query partition leaders");
                         ts_query = now;
                 } else {

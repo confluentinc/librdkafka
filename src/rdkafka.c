@@ -2484,7 +2484,7 @@ int rd_kafka_outq_len (rd_kafka_t *rk) {
 
 
 rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
-	unsigned int msg_cnt;
+        unsigned int msg_cnt = 0;
 	int qlen;
 	rd_ts_t ts_end = rd_timeout_init(timeout_ms);
         int tmout;

@@ -189,10 +189,10 @@ struct test tests[] = {
 	_TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
 	_TEST(0048_partitioner, 0),
 #if WITH_SOCKEM
-        _TEST(0049_consume_conn_close, 0),
+        _TEST(0049_consume_conn_close, 0, TEST_BRKVER(0,9,0,0)),
 #endif
-        _TEST(0050_subscribe_adds, 0),
-        _TEST(0051_assign_adds, 0),
+        _TEST(0050_subscribe_adds, TEST_BRKVER(0,9,0,0)),
+        _TEST(0051_assign_adds, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0052_msg_timestamps, TEST_BRKVER(0,10,0,0)),
         _TEST(0053_stats_cb, TEST_F_LOCAL),
         _TEST(0054_offset_time, TEST_BRKVER(0,10,0,0)),

@@ -55,6 +55,11 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 	rd_kafka_q_t       *rkb_ops;
 
+        mtx_t               rkb_lock;
+
+        int                 rkb_blocking_max_ms; /* Maximum IO poll blocking
+                                                  * time. */
+
         /* Toppars handled by this broker */
 	TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;
 	int                 rkb_toppar_cnt;
@@ -139,7 +144,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_ts_t             rkb_ts_metadata_poll; /* Next metadata poll time */
 	int                 rkb_metadata_fast_poll_cnt; /* Perform fast
 							 * metadata polls. */
-	mtx_t               rkb_lock;
 	thrd_t              rkb_thread;
 
 	rd_refcnt_t         rkb_refcnt;

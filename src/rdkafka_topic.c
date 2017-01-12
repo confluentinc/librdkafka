@@ -774,7 +774,6 @@ rd_kafka_topic_metadata_update (rd_kafka_itopic_t *rkt,
 	int upd = 0;
 	int j;
         rd_kafka_broker_t **partbrokers;
-        int query_leader = 0;
         int leader_cnt = 0;
         int old_state;
 
@@ -846,9 +845,6 @@ rd_kafka_topic_metadata_update (rd_kafka_itopic_t *rkt,
                                                    mdt->partitions[j].leader,
 						   leader);
 
-                if (r == -1)
-                        query_leader = 1;
-
                 upd += (r != 0 ? 1 : 0);
 
                 if (leader) {
@@ -893,10 +889,6 @@ rd_kafka_topic_metadata_update (rd_kafka_itopic_t *rkt,
                         mdt->err ? mdt->err : RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC);
 
 	rd_kafka_topic_wrunlock(rkt);
-
-        /* Query for the topic leader (async) */
-        if (query_leader)
-                rd_kafka_topic_leader_query(rkt->rkt_rk, rkt);
 
 	/* Loose broker references */
 	for (j = 0 ; j < mdt->partition_cnt ; j++)
@@ -1258,18 +1250,18 @@ int rd_kafka_topic_match (rd_kafka_t *rk, const char *pattern,
 /**
  * Trigger broker metadata query for topic leader.
  * 'rkt' may be NULL to query for all topics.
+ *
+ * @locks none
  */
 void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
                                    int do_rk_lock) {
         rd_list_t topics;
 
-        if (rkt) {
-                rd_list_init(&topics, 1, rd_free);
-                rd_list_add(&topics, rd_strdup(rkt->rkt_topic->str));
-        }
+        rd_list_init(&topics, 1, rd_free);
+        rd_list_add(&topics, rd_strdup(rkt->rkt_topic->str));
 
-        rd_kafka_metadata_refresh_topics(rk, NULL, rkt ? &topics : NULL,
-                                         "leader query");
+        rd_kafka_metadata_refresh_topics(rk, NULL, &topics,
+                                         0/*dont force*/, "leader query");
 
         if (rkt)
                 rd_list_destroy(&topics);

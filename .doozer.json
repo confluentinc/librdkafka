@@ -50,7 +50,8 @@
       "buildcmd": [
         "./configure",
         "make -j ${PARALLEL}",
-        "make -C tests run_local"
+        "echo PARALLEL is ${PARALLEL}",
+        "./run-test.sh -p1 -l ./$(BIN)"
       ]
     }
   }

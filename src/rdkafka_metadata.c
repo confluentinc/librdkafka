@@ -752,22 +752,31 @@ rd_kafka_metadata_refresh_topics (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
         rd_list_init(&q_topics, rd_list_cnt(topics), rd_free);
 
-        /* Hint cache of upcoming MetadataRequest and filter
-         * out any topics that are already being requested.
-         * q_topics will contain remaining topics to query. */
-        rd_kafka_metadata_cache_hint(rk, topics, &q_topics, 0/*dont replace*/);
-        rd_kafka_wrunlock(rk);
+        if (!force) {
 
-        if (rd_list_cnt(&q_topics) == 0) {
-                /* No topics need new query. */
-                rd_kafka_dbg(rk, METADATA, "METADATA",
-                             "Skipping metadata refresh of %d topic(s): %s: "
-                             "already being requested",
-                             rd_list_cnt(topics), reason);
-                rd_list_destroy(&q_topics);
-                if (destroy_rkb)
-                        rd_kafka_broker_destroy(rkb);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                /* Hint cache of upcoming MetadataRequest and filter
+                 * out any topics that are already being requested.
+                 * q_topics will contain remaining topics to query. */
+                rd_kafka_metadata_cache_hint(rk, topics, &q_topics,
+                                             0/*dont replace*/);
+                rd_kafka_wrunlock(rk);
+
+                if (rd_list_cnt(&q_topics) == 0) {
+                        /* No topics need new query. */
+                        rd_kafka_dbg(rk, METADATA, "METADATA",
+                                     "Skipping metadata refresh of "
+                                     "%d topic(s): %s: "
+                                     "already being requested",
+                                     rd_list_cnt(topics), reason);
+                        rd_list_destroy(&q_topics);
+                        if (destroy_rkb)
+                                rd_kafka_broker_destroy(rkb);
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+
+        } else {
+                rd_kafka_wrunlock(rk);
+                rd_list_copy_to(&q_topics, topics, rd_list_string_copy, NULL);
         }
 
         rd_kafka_dbg(rk, METADATA, "METADATA",

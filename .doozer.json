@@ -51,7 +51,9 @@
         "./configure",
         "make -j ${PARALLEL}",
         "make -j ${PARALLEL} -C tests build",
-        "(cd tests && ./run-test.sh -p1 -l ./merged)"
+        "cd tests",
+        "./run-test.sh -p1 -l ./merged",
+        "cd .."
       ]
     }
   }

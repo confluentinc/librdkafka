@@ -152,6 +152,7 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 	int r;
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	rd_kafka_t *rk = rkb->rkb_rk;
+        char *hostname, *t;
 
         /* Verify broker support:
          * - RD_KAFKA_FEATURE_SASL_GSSAPI - GSSAPI supported
@@ -173,11 +174,6 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
                             ": try api.version.request=true");
                 return -1;
         }
-
-        int r;
-        rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
-        rd_kafka_t *rk = rkb->rkb_rk;
-        char *hostname, *t;
 
         rd_strdupa(&hostname, rktrans->rktrans_rkb->rkb_nodename);
         if ((t = strchr(hostname, ':')))

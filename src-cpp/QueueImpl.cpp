@@ -30,6 +30,10 @@
 
 #include "rdkafkacpp_int.h"
 
+RdKafka::Queue::~Queue () {
+
+}
+
 RdKafka::Queue *RdKafka::Queue::create (Handle *base) {
   RdKafka::QueueImpl *queueimpl = new RdKafka::QueueImpl;
   queueimpl->queue_ = rd_kafka_queue_new(dynamic_cast<HandleImpl*>(base)->rk_);
@@ -55,4 +59,8 @@ RdKafka::Message *RdKafka::QueueImpl::consume (int timeout_ms) {
     return new RdKafka::MessageImpl(NULL, RdKafka::ERR__TIMED_OUT);
 
   return new RdKafka::MessageImpl(rkmessage);
+}
+
+int RdKafka::QueueImpl::poll (int timeout_ms) {
+        return rd_kafka_queue_poll_callback(queue_, timeout_ms);
 }

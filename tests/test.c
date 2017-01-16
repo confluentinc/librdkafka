@@ -137,6 +137,7 @@ _TEST_DECL(0054_offset_time);
 _TEST_DECL(0055_producer_latency);
 _TEST_DECL(0056_balanced_group_mt);
 _TEST_DECL(0057_invalid_topic);
+_TEST_DECL(0058_log);
 
 /**
  * Define all tests here
@@ -199,6 +200,7 @@ struct test tests[] = {
         _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
         _TEST(0056_balanced_group_mt, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0057_invalid_topic, 0),
+        _TEST(0058_log, TEST_F_LOCAL),
         { NULL }
 };
 

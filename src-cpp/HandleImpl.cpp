@@ -298,6 +298,16 @@ RdKafka::HandleImpl::get_partition_queue (const TopicPartition *part) {
   return queueimpl;
 }
 
+RdKafka::ErrorCode
+RdKafka::HandleImpl::set_log_queue (RdKafka::Queue *queue) {
+        rd_kafka_queue_t *rkqu = NULL;
+        if (queue) {
+                QueueImpl *queueimpl = dynamic_cast<QueueImpl *>(queue);
+                rkqu = queueimpl->queue_;
+        }
+        return static_cast<RdKafka::ErrorCode>(
+                rd_kafka_set_log_queue(rk_, rkqu));
+}
 
 namespace RdKafka {
 

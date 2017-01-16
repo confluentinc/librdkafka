@@ -710,6 +710,17 @@ rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
         return result;
 }
 
+rd_kafka_resp_err_t rd_kafka_set_log_queue (rd_kafka_t *rk,
+                                            rd_kafka_queue_t *rkqu) {
+        rd_kafka_q_t *rkq;
+        if (!rkqu)
+                rkq = rk->rk_rep;
+        else
+                rkq = rkqu->rkqu_q;
+        rd_kafka_q_fwd_set(rk->rk_logq, rkq);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst) {
         rd_kafka_q_fwd_set0(src->rkqu_q, dst ? dst->rkqu_q : NULL,
                             1, /* do_lock */

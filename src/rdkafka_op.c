@@ -70,6 +70,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_NAME] = "REPLY:NAME",
                 [RD_KAFKA_OP_OFFSET_RESET] = "REPLY:OFFSET_RESET",
                 [RD_KAFKA_OP_METADATA] = "REPLY:METADATA",
+                [RD_KAFKA_OP_LOG] = "REPLY:LOG",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -137,6 +138,13 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 			rko->rko_u.offset_commit.partitions->cnt : 0);
 		break;
 
+        case RD_KAFKA_OP_LOG:
+                fprintf(fp, "%s Log: %%%d %s: %s\n",
+                        prefix, rko->rko_u.log.level,
+                        rko->rko_u.log.fac,
+                        rko->rko_u.log.str);
+                break;
+
 	default:
 		break;
 	}
@@ -145,35 +153,36 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 
 rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
 	rd_kafka_op_t *rko;
-	static const size_t op2size[RD_KAFKA_OP__END] = {
-		[RD_KAFKA_OP_FETCH] = sizeof(rko->rko_u.fetch),
-		[RD_KAFKA_OP_ERR] = sizeof(rko->rko_u.err),
-		[RD_KAFKA_OP_CONSUMER_ERR] = sizeof(rko->rko_u.err),
-		[RD_KAFKA_OP_DR] = sizeof(rko->rko_u.dr),
-		[RD_KAFKA_OP_STATS] = sizeof(rko->rko_u.stats),
-		[RD_KAFKA_OP_OFFSET_COMMIT] = sizeof(rko->rko_u.offset_commit),
-		[RD_KAFKA_OP_NODE_UPDATE] = sizeof(rko->rko_u.node),
-		[RD_KAFKA_OP_XMIT_BUF] = sizeof(rko->rko_u.xbuf),
-		[RD_KAFKA_OP_RECV_BUF] = sizeof(rko->rko_u.xbuf),
-		[RD_KAFKA_OP_XMIT_RETRY] = sizeof(rko->rko_u.xbuf),
-		[RD_KAFKA_OP_FETCH_START] = sizeof(rko->rko_u.fetch_start),
-		[RD_KAFKA_OP_FETCH_STOP] = 0,
-		[RD_KAFKA_OP_SEEK] = sizeof(rko->rko_u.fetch_start),
-		[RD_KAFKA_OP_PAUSE] = sizeof(rko->rko_u.pause),
-		[RD_KAFKA_OP_OFFSET_FETCH] = sizeof(rko->rko_u.offset_fetch),
-		[RD_KAFKA_OP_PARTITION_JOIN] = 0,
-		[RD_KAFKA_OP_PARTITION_LEAVE] = 0,
-		[RD_KAFKA_OP_REBALANCE] = sizeof(rko->rko_u.rebalance),
-		[RD_KAFKA_OP_TERMINATE] = 0,
-		[RD_KAFKA_OP_COORD_QUERY] = 0,
-		[RD_KAFKA_OP_SUBSCRIBE] = sizeof(rko->rko_u.subscribe),
-		[RD_KAFKA_OP_ASSIGN] = sizeof(rko->rko_u.assign),
-		[RD_KAFKA_OP_GET_SUBSCRIPTION] = sizeof(rko->rko_u.subscribe),
-		[RD_KAFKA_OP_GET_ASSIGNMENT] = sizeof(rko->rko_u.assign),
-		[RD_KAFKA_OP_THROTTLE] = sizeof(rko->rko_u.throttle),
-		[RD_KAFKA_OP_NAME] = sizeof(rko->rko_u.name),
-		[RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
+        static const size_t op2size[RD_KAFKA_OP__END] = {
+                [RD_KAFKA_OP_FETCH] = sizeof(rko->rko_u.fetch),
+                [RD_KAFKA_OP_ERR] = sizeof(rko->rko_u.err),
+                [RD_KAFKA_OP_CONSUMER_ERR] = sizeof(rko->rko_u.err),
+                [RD_KAFKA_OP_DR] = sizeof(rko->rko_u.dr),
+                [RD_KAFKA_OP_STATS] = sizeof(rko->rko_u.stats),
+                [RD_KAFKA_OP_OFFSET_COMMIT] = sizeof(rko->rko_u.offset_commit),
+                [RD_KAFKA_OP_NODE_UPDATE] = sizeof(rko->rko_u.node),
+                [RD_KAFKA_OP_XMIT_BUF] = sizeof(rko->rko_u.xbuf),
+                [RD_KAFKA_OP_RECV_BUF] = sizeof(rko->rko_u.xbuf),
+                [RD_KAFKA_OP_XMIT_RETRY] = sizeof(rko->rko_u.xbuf),
+                [RD_KAFKA_OP_FETCH_START] = sizeof(rko->rko_u.fetch_start),
+                [RD_KAFKA_OP_FETCH_STOP] = 0,
+                [RD_KAFKA_OP_SEEK] = sizeof(rko->rko_u.fetch_start),
+                [RD_KAFKA_OP_PAUSE] = sizeof(rko->rko_u.pause),
+                [RD_KAFKA_OP_OFFSET_FETCH] = sizeof(rko->rko_u.offset_fetch),
+                [RD_KAFKA_OP_PARTITION_JOIN] = 0,
+                [RD_KAFKA_OP_PARTITION_LEAVE] = 0,
+                [RD_KAFKA_OP_REBALANCE] = sizeof(rko->rko_u.rebalance),
+                [RD_KAFKA_OP_TERMINATE] = 0,
+                [RD_KAFKA_OP_COORD_QUERY] = 0,
+                [RD_KAFKA_OP_SUBSCRIBE] = sizeof(rko->rko_u.subscribe),
+                [RD_KAFKA_OP_ASSIGN] = sizeof(rko->rko_u.assign),
+                [RD_KAFKA_OP_GET_SUBSCRIPTION] = sizeof(rko->rko_u.subscribe),
+                [RD_KAFKA_OP_GET_ASSIGNMENT] = sizeof(rko->rko_u.assign),
+                [RD_KAFKA_OP_THROTTLE] = sizeof(rko->rko_u.throttle),
+                [RD_KAFKA_OP_NAME] = sizeof(rko->rko_u.name),
+                [RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
                 [RD_KAFKA_OP_METADATA] = sizeof(rko->rko_u.metadata),
+                [RD_KAFKA_OP_LOG] = sizeof(rko->rko_u.log)
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -274,6 +283,10 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
         case RD_KAFKA_OP_METADATA:
                 RD_IF_FREE(rko->rko_u.metadata, rd_kafka_metadata_destroy);
+                break;
+
+        case RD_KAFKA_OP_LOG:
+                rd_free(rko->rko_u.log.str);
                 break;
 
 	default:

@@ -200,7 +200,15 @@ struct rd_kafka_conf_s {
         /* Consume callback */
         void (*consume_cb) (rd_kafka_message_t *rkmessage, void *opaque);
 
-	/* Error callback */
+        /* Log callback */
+        void (*log_cb) (const rd_kafka_t *rk, int level,
+                        const char *fac, const char *buf);
+        int    log_level;
+        int    log_queue;
+        int    log_thread_name;
+        int    log_connection_close;
+
+        /* Error callback */
 	void (*error_cb) (rd_kafka_t *rk, int err,
 			  const char *reason, void *opaque);
 
@@ -214,13 +222,6 @@ struct rd_kafka_conf_s {
 			 char *json,
 			 size_t json_len,
 			 void *opaque);
-
-        /* Log callback */
-        void (*log_cb) (const rd_kafka_t *rk, int level,
-                        const char *fac, const char *buf);
-        int    log_level;
-	int    log_thread_name;
-        int    log_connection_close;
 
         /* Socket creation callback */
         int (*socket_cb) (int domain, int type, int protocol, void *opaque);

@@ -1177,6 +1177,12 @@ void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
  * Or pass \p func as NULL to disable logging.
  *
  * This is the configuration alternative to the deprecated rd_kafka_set_logger()
+ *
+ * @remark The log_cb will be called spontaneously from librdkafka's internal
+ *         threads unless logs have been forwarded to a poll queue through
+ *         \c rd_kafka_set_log_queue().
+ *         An application MUST NOT call any librdkafka APIs or do any prolonged
+ *         work in a non-forwarded \c log_cb.
  */
 RD_EXPORT
 void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
@@ -1894,6 +1900,26 @@ rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
  */
 RD_EXPORT
 void rd_kafka_queue_forward (rd_kafka_queue_t *src, rd_kafka_queue_t *dst);
+
+/**
+ * @brief Forward librdkafka logs (and debug) to the specified queue
+ *        for serving with one of the ..poll() calls.
+ *
+ *        This allows an application to serve log callbacks (\c log_cb)
+ *        in its thread of choice.
+ *
+ * @param rkqu Queue to forward logs to. If the value is NULL the logs
+ *        are forwarded to the main queue.
+ *
+ * @remark The configuration property \c log.queue MUST also be set to true.
+ *
+ * @remark librdkafka maintains its own reference to the provided queue.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_set_log_queue (rd_kafka_t *rk,
+                                            rd_kafka_queue_t *rkqu);
 
 
 /**
@@ -3104,6 +3130,17 @@ rd_kafka_event_topic_partition (rd_kafka_event_t *rkev);
  */
 RD_EXPORT
 rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms);
+
+/**
+* @brief Poll a queue for events served through callbacks for max \p timeout_ms.
+*
+* @returns the number of events served.
+*
+* @remark This API must only be used for queues with callbacks registered
+*         for all expected event types. E.g., not a message queue.
+*/
+RD_EXPORT
+int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms);
 
 
 /**@}*/

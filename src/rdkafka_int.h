@@ -151,9 +151,10 @@ struct rd_kafka_s {
 
         struct rd_kafka_cgrp_s *rk_cgrp;
 
-	char             rk_name[128];
+        rd_kafka_conf_t  rk_conf;
+        rd_kafka_q_t    *rk_logq;          /* Log queue if `log.queue` set */
+        char             rk_name[128];
 	rd_kafkap_str_t *rk_clientid;
-	rd_kafka_conf_t  rk_conf;
 	int              rk_flags;
 	rd_atomic32_t    rk_terminate;
 	rwlock_t         rk_lock;

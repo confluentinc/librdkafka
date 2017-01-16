@@ -1019,6 +1019,24 @@ class RD_EXPORT Handle {
    * @remark This function only works on consumers.
    */
   virtual Queue *get_partition_queue (const TopicPartition *partition) = 0;
+
+  /**
+   * @brief Forward librdkafka logs (and debug) to the specified queue
+   *        for serving with one of the ..poll() calls.
+   *
+   *        This allows an application to serve log callbacks (\c log_cb)
+   *        in its thread of choice.
+   *
+   * @param queue Queue to forward logs to. If the value is NULL the logs
+   *        are forwarded to the main queue.
+   *
+   * @remark The configuration property \c log.queue MUST also be set to true.
+   *
+   * @remark librdkafka maintains its own reference to the provided queue.
+   *
+   * @returns ERR_NO_ERROR on success or an error code on error.
+   */
+  virtual ErrorCode set_log_queue (Queue *queue) = 0;
 };
 
 
@@ -1261,7 +1279,7 @@ class RD_EXPORT Message {
  * RdKafka::Consumer::consume_callback() methods that take a queue as the first
  * parameter for more information.
  */
-class Queue {
+class RD_EXPORT Queue {
  public:
   /**
    * @brief Create Queue object
@@ -1292,10 +1310,18 @@ class Queue {
    *  - timeout due to no message or event in \p timeout_ms
    *    (RdKafka::Message::err() is ERR__TIMED_OUT)
    */
-
   virtual Message *consume (int timeout_ms) = 0;
 
-  virtual ~Queue () { }
+  /**
+   * @brief Poll queue, serving any enqueued callbacks.
+   *
+   * @remark Must NOT be used for queues containing messages.
+   *
+   * @returns the number of events served or 0 on timeout.
+   */
+  virtual int poll (int timeout_ms) = 0;
+
+  virtual ~Queue () = 0;
 };
 
 /**@}*/

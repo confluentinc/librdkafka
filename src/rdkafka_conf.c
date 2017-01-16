@@ -289,6 +289,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(log_level),
           "Logging level (syslog(3) levels)",
           0, 7, 6 },
+        { _RK_GLOBAL, "log.queue", _RK_C_BOOL, _RK(log_queue),
+          "Disable spontaneous log_cb from internal librdkafka "
+          "threads, instead enqueue log messages on queue set with "
+          "`rd_kafka_set_log_queue()` and serve log callbacks or "
+          "events through the standard poll APIs. "
+          "**NOTE**: Log messages will linger in a temporary queue "
+          "until the log queue has been set.",
+          0, 1, 0 },
 	{ _RK_GLOBAL, "log.thread.name", _RK_C_BOOL,
 	  _RK(log_thread_name),
 	  "Print internal thread name in log messages "

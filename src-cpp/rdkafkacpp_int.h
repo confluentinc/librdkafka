@@ -584,6 +584,8 @@ class HandleImpl : virtual public Handle {
     return err;
   }
 
+  ErrorCode set_log_queue (Queue *queue);
+
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
    * the opaque provided to rdkafka must be a pointer to HandleImpl, since
@@ -767,14 +769,16 @@ private:
 };
 
 
-class QueueImpl : public Queue {
+class QueueImpl : virtual public Queue {
  public:
-  QueueImpl () { }
   ~QueueImpl () {
     rd_kafka_queue_destroy(queue_);
   }
+  static Queue *create (Handle *base);
   ErrorCode forward (Queue *queue);
   Message *consume (int timeout_ms);
+  int poll (int timeout_ms);
+
   rd_kafka_queue_t *queue_;
 };
 

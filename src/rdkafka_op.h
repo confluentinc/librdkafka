@@ -105,6 +105,7 @@ typedef enum {
 	RD_KAFKA_OP_NAME,            /* Request name */
 	RD_KAFKA_OP_OFFSET_RESET,    /* Offset reset */
         RD_KAFKA_OP_METADATA,        /* Metadata response */
+        RD_KAFKA_OP_LOG,             /* Log */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -245,6 +246,12 @@ struct rd_kafka_op_s {
 			int pause;
 			int flag;
 		} pause;
+
+                struct {
+                        char fac[64];
+                        int  level;
+                        char *str;
+                } log;
 	} rko_u;
 };
 

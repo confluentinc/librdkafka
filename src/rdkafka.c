@@ -177,15 +177,20 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
 	return 0;
 }
 
-
-
-void rd_kafka_log_buf (const rd_kafka_t *rk, int level,
-		       const char *fac, const char *buf) {
-
-	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level)
-		return;
-
-	rk->rk_conf.log_cb(rk, level, fac, buf);
+void rd_kafka_log_buf (const rd_kafka_t *rk, int level, const char *fac,
+                       const char *buf) {
+        if (level > rk->rk_conf.log_level)
+                return;
+        else if (rk->rk_conf.log_queue) {
+                rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_LOG);
+                rko->rko_u.log.level = level;
+                strncpy(rko->rko_u.log.fac, fac,
+                        sizeof(rko->rko_u.log.fac) - 1);
+                rko->rko_u.log.str = rd_strdup(buf);
+                rd_kafka_q_enq(rk->rk_logq, rko);
+        } else if (rk->rk_conf.log_cb) {
+                rk->rk_conf.log_cb(rk, level, fac, buf);
+        }
 }
 
 void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
@@ -195,7 +200,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	unsigned int elen = 0;
         unsigned int of = 0;
 
-	if (!rk->rk_conf.log_cb || level > rk->rk_conf.log_level)
+	if (level > rk->rk_conf.log_level)
 		return;
 
 	if (rk->rk_conf.log_thread_name) {
@@ -217,7 +222,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	rd_vsnprintf(buf+of, sizeof(buf)-of, fmt, ap);
 	va_end(ap);
 
-	rk->rk_conf.log_cb(rk, level, fac, buf);
+        rd_kafka_log_buf(rk, level, fac, buf);
 }
 
 
@@ -544,6 +549,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 	/* Purge op-queues */
 	rd_kafka_q_destroy(rk->rk_rep);
 	rd_kafka_q_destroy(rk->rk_ops);
+
+        if (rk->rk_logq)
+                rd_kafka_q_destroy(rk->rk_logq);
 
 #if WITH_SSL
 	if (rk->rk_conf.ssl.ctx)
@@ -1200,6 +1208,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	rk->rk_ops = rd_kafka_q_new(rk);
         rk->rk_ops->rkq_serve = rd_kafka_poll_cb;
         rk->rk_ops->rkq_opaque = rk;
+
+        if (rk->rk_conf.log_queue) {
+                rk->rk_logq = rd_kafka_q_new(rk);
+                rk->rk_logq->rkq_serve = rd_kafka_poll_cb;
+                rk->rk_logq->rkq_opaque = rk;
+        }
 
 	TAILQ_INIT(&rk->rk_brokers);
 	TAILQ_INIT(&rk->rk_topics);
@@ -2428,6 +2442,15 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			rko->rko_u.stats.json = NULL; /* Application wanted json ptr */
 		break;
 
+        case RD_KAFKA_OP_LOG:
+                if (likely(rk->rk_conf.log_cb &&
+                           rk->rk_conf.log_level >= rko->rko_u.log.level))
+                        rk->rk_conf.log_cb(rk,
+                                           rko->rko_u.log.level,
+                                           rko->rko_u.log.fac,
+                                           rko->rko_u.log.str);
+                break;
+
         case RD_KAFKA_OP_TERMINATE:
                 /* nop: just a wake-up */
                 break;
@@ -2456,6 +2479,11 @@ rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms) {
 		return NULL;
 
 	return rko;
+}
+
+int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms) {
+        return rd_kafka_q_serve(rkqu->rkqu_q, timeout_ms, 0,
+                                _Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
 }
 
 

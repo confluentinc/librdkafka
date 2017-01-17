@@ -76,12 +76,15 @@ static void offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 			  " > expected offset %"PRId64,
 			  rktpar->offset, expected_offset);
 
-	if (rktpar->offset <= committed_offset)
-		TEST_FAIL("Old offset %"PRId64" (re)committed: "
-			  "should be above committed_offset %"PRId64,
-			  rktpar->offset, committed_offset);
-
-	committed_offset = rktpar->offset;
+        if (rktpar->offset < committed_offset)
+                TEST_FAIL("Old offset %"PRId64" (re)committed: "
+                          "should be above committed_offset %"PRId64,
+                          rktpar->offset, committed_offset);
+        else if (rktpar->offset == committed_offset)
+                TEST_SAYL(1, "Current offset re-commited: %"PRId64"\n",
+                          rktpar->offset);
+        else
+                committed_offset = rktpar->offset;
 
 	if (rktpar->offset < expected_offset) {
 		TEST_SAYL(3, "Offset committed %"PRId64

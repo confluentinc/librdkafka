@@ -218,8 +218,8 @@ rd_kafka_curr_msgs_add (rd_kafka_t *rk, unsigned int cnt, size_t size,
 	mtx_lock(&rk->rk_curr_msgs.lock);
 	while (unlikely(rk->rk_curr_msgs.cnt + cnt >
 			rk->rk_curr_msgs.max_cnt ||
-			rk->rk_curr_msgs.size + size >
-			rk->rk_curr_msgs.max_size)) {
+			(long long)(rk->rk_curr_msgs.size + size) >
+			(long long)rk->rk_curr_msgs.max_size)) {
 		if (!block) {
 			mtx_unlock(&rk->rk_curr_msgs.lock);
 			return RD_KAFKA_RESP_ERR__QUEUE_FULL;

@@ -1257,8 +1257,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		cnd_init(&rk->rk_curr_msgs.cnd);
 		rk->rk_curr_msgs.max_cnt =
 			rk->rk_conf.queue_buffering_max_msgs;
-		rk->rk_curr_msgs.max_size =
-			(size_t)rk->rk_conf.queue_buffering_max_kbytes * 1024;
+                if ((long long)rk->rk_conf.queue_buffering_max_kbytes * 1024 >
+                    SIZE_MAX)
+                        rk->rk_curr_msgs.max_size = SIZE_MAX;
+                else
+                        rk->rk_curr_msgs.max_size =
+                        (size_t)rk->rk_conf.queue_buffering_max_kbytes * 1024;
 	}
 
         if (rd_kafka_assignors_init(rk, errstr, errstr_size) == -1) {

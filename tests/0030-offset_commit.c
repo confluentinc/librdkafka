@@ -111,7 +111,8 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	rd_kafka_topic_partition_t *rktpar;
 	int64_t next_offset = -1;
 
-	test_conf_init(&conf, &tconf, 20);
+	test_conf_init(&conf, &tconf, 30);
+        test_conf_set(conf, "session.timeout.ms", "6000");
 	test_conf_set(conf, "enable.auto.commit", auto_commit ? "true":"false");
 	test_conf_set(conf, "enable.auto.offset.store", auto_store ?"true":"false");
 	test_conf_set(conf, "auto.commit.interval.ms", "500");

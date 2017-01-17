@@ -69,6 +69,10 @@ int main_0040_io_event (int argc, char **argv) {
 		_REBALANCE
 	} expecting_io = _REBALANCE;
 
+#ifdef _MSC_VER
+        TEST_SKIP("WSAPoll and pipes are not reliable on Win32 (FIXME)\n");
+        return 0;
+#endif
 	testid = test_id_generate();
 	topic = test_mk_topic_name(__FUNCTION__, 1);
 

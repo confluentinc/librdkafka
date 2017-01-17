@@ -746,7 +746,7 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
                                    rd_kafka_topic_partition_list_t *offsets,
                                    rd_kafka_replyq_t replyq,
                                    rd_kafka_resp_cb_t *resp_cb,
-                                   void *opaque) {
+                                   void *opaque, const char *reason) {
 	rd_kafka_buf_t *rkbuf;
         ssize_t of_TopicCnt = -1;
         int TopicCnt = 0;
@@ -849,9 +849,9 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_ApiVersion_set(rkbuf, api_version, 0);
 
-	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
-		   "Enqueue OffsetCommitRequest(v%d, %d/%d partition(s)))",
-                   api_version, tot_PartCnt, offsets->cnt);
+        rd_rkb_dbg(rkb, TOPIC, "OFFSET",
+                   "Enqueue OffsetCommitRequest(v%d, %d/%d partition(s))): %s",
+                   api_version, tot_PartCnt, offsets->cnt, reason);
 
 	rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 

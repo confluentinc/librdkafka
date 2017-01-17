@@ -220,6 +220,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 	case RD_KAFKA_OP_OFFSET_COMMIT:
 		RD_IF_FREE(rko->rko_u.offset_commit.partitions,
 			   rd_kafka_topic_partition_list_destroy);
+                RD_IF_FREE(rko->rko_u.offset_commit.reason, rd_free);
 		break;
 
 	case RD_KAFKA_OP_SUBSCRIBE:

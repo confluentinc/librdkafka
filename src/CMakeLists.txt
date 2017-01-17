@@ -1,0 +1,69 @@
+set(
+    sources
+    rdaddr.c
+    rdavl.c
+    rdcrc32.c
+    rdkafka.c
+    rdkafka_assignor.c
+    rdkafka_broker.c
+    rdkafka_buf.c
+    rdkafka_cgrp.c
+    rdkafka_conf.c
+    rdkafka_event.c
+    rdkafka_feature.c
+    rdkafka_metadata.c
+    rdkafka_metadata_cache.c
+    rdkafka_msg.c
+    rdkafka_offset.c
+    rdkafka_op.c
+    rdkafka_partition.c
+    rdkafka_pattern.c
+    rdkafka_queue.c
+    rdkafka_range_assignor.c
+    rdkafka_request.c
+    rdkafka_roundrobin_assignor.c
+    rdkafka_subscription.c
+    rdkafka_timer.c
+    rdkafka_topic.c
+    rdkafka_transport.c
+    rdlist.c
+    rdlog.c
+    rdports.c
+    rdrand.c
+    rdregex.c
+    rdstring.c
+    snappy.c
+    tinycthread.c
+)
+
+if(WITH_ZLIB)
+  list(APPEND sources rdgz.c)
+endif()
+
+if(NOT HAVE_REGEX)
+  list(APPEND sources regexp.c)
+endif()
+
+add_library(rdkafka ${sources})
+
+# Support '#include <rdkafka.h>'
+target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
+
+# We need 'dummy' directory to support `#include "../config.h"` path
+set(dummy "${GENERATED_DIR}/dummy")
+file(MAKE_DIRECTORY "${dummy}")
+target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${dummy}>")
+
+if(WITH_ZLIB)
+  find_package(ZLIB REQUIRED)
+  target_link_libraries(rdkafka PUBLIC ZLIB::ZLIB)
+endif()
+
+if(WITH_SSL)
+  find_package(OpenSSL REQUIRED)
+  target_link_libraries(rdkafka PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+if(LINK_ATOMIC)
+  target_link_libraries(rdkafka PUBLIC "-latomic")
+endif()

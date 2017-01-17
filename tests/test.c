@@ -1211,7 +1211,8 @@ int main(int argc, char **argv) {
 		TEST_UNLOCK();
 	}
 
-        test_timeout_multiplier *= (double)test_concurrent_max/3.0;
+        if (test_concurrent_max >= 3)
+                test_timeout_multiplier *= (double)test_concurrent_max / 3.0;
 
 	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 	TEST_SAY("Test mode   : %s\n", test_mode);

@@ -270,8 +270,8 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 			rd_kafka_buf_parse_fail(			\
 				rkbuf,					\
 				"Not enough room in tmpabuf: "		\
-				"%"PRIdsz"+%"PRIdsz			\
-				" > %"PRIdsz,				\
+				"%"PRIusz"+%"PRIusz			\
+				" > %"PRIusz,				\
 				(tmpabuf)->of, _slen+1, (tmpabuf)->size); \
 		_dst[_slen] = '\0';					\
 		dst = (void *)_dst;					\

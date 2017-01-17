@@ -95,7 +95,7 @@ const char *rd_kafka_secproto_names[] = {
 static void iov_print (rd_kafka_t *rk,
 		       const char *what, int iov_idx, const struct iovec *iov,
 		       int hexdump) {
-	printf("%s:  iov #%i: %"PRIdsz"\n", what, iov_idx,
+	printf("%s:  iov #%i: %"PRIusz"\n", what, iov_idx,
 	       (size_t)iov->iov_len);
 	if (hexdump)
 		rd_hexdump(stdout, what, iov->iov_base, iov->iov_len);
@@ -108,13 +108,13 @@ void msghdr_print (rd_kafka_t *rk,
 	int i;
 	size_t len = 0;
 
-	printf("%s: iovlen %"PRIdsz"\n", what, (size_t)msg->msg_iovlen);
+	printf("%s: iovlen %"PRIusz"\n", what, (size_t)msg->msg_iovlen);
 
 	for (i = 0 ; i < (int)msg->msg_iovlen ; i++) {
 		iov_print(rk, what, i, &msg->msg_iov[i], hexdump);
 		len += msg->msg_iov[i].iov_len;
 	}
-	printf("%s: ^ message was %"PRIdsz" bytes in total\n", what, len);
+	printf("%s: ^ message was %"PRIusz" bytes in total\n", what, len);
 }
 
 
@@ -1034,7 +1034,7 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 	}
 
 	rd_rkb_dbg(rkb, PROTOCOL, "RECV",
-		   "Received %sResponse (v%hd, %"PRIdsz" bytes, CorrId %"PRId32
+		   "Received %sResponse (v%hd, %"PRIusz" bytes, CorrId %"PRId32
 		   ", rtt %.2fms)",
 		   rd_kafka_ApiKey2str(req->rkbuf_reqhdr.ApiKey),
                    req->rkbuf_reqhdr.ApiVersion,
@@ -1188,7 +1188,7 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
 		    rkbuf->rkbuf_len >
 		    (size_t)rkb->rkb_rk->rk_conf.recv_max_msg_size) {
 			rd_snprintf(errstr, sizeof(errstr),
-				 "Invalid message size %"PRIdsz" (0..%i): "
+				 "Invalid message size %"PRIusz" (0..%i): "
 				 "increase receive.message.max.bytes",
 				 rkbuf->rkbuf_len-4,
 				 rkb->rkb_rk->rk_conf.recv_max_msg_size);
@@ -1698,7 +1698,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		if (0) {
 			rd_rkb_dbg(rkb, PROTOCOL, "SEND",
 				   "Send %s corrid %"PRId32" at "
-				   "offset %"PRIdsz"/%"PRIdsz,
+				   "offset %"PRIusz"/%"PRIusz,
 				   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.
 						       ApiKey),
 				   rkbuf->rkbuf_corrid,
@@ -1718,7 +1718,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 			rd_rkb_dbg(rkb, PROTOCOL, "SEND",
 				   "Sent partial %sRequest "
 				   "(v%hd, "
-				   "%"PRIdsz"+%"PRIdsz"/%"PRIdsz" bytes, "
+				   "%"PRIusz"+%"PRIdsz"/%"PRIusz" bytes, "
 				   "CorrId %"PRId32")",
 				   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.
 						       ApiKey),
@@ -1729,7 +1729,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		}
 
 		rd_rkb_dbg(rkb, PROTOCOL, "SEND",
-			   "Sent %sRequest (v%hd, %"PRIdsz" bytes @ %"PRIdsz", "
+			   "Sent %sRequest (v%hd, %"PRIusz" bytes @ %"PRIusz", "
 			   "CorrId %"PRId32")",
 			   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
                            rkbuf->rkbuf_reqhdr.ApiVersion,
@@ -1782,7 +1782,7 @@ void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
         }
 
         rd_rkb_dbg(rkb, PROTOCOL, "RETRY",
-                   "Retrying %sRequest (v%hd, %"PRIdsz" bytes, retry %d/%d)",
+                   "Retrying %sRequest (v%hd, %"PRIusz" bytes, retry %d/%d)",
                    rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
                    rkbuf->rkbuf_reqhdr.ApiVersion, rkbuf->rkbuf_len,
                    rkbuf->rkbuf_retries, rkb->rkb_rk->rk_conf.max_retries);
@@ -2028,7 +2028,7 @@ rd_kafka_lz4_decompress_fixup_bad_framing (rd_kafka_broker_t *rkb,
         if (inlen < 4+3 || memcmp(inbuf, magic, 4)) {
                 rd_rkb_dbg(rkb, BROKER,  "LZ4FIXUP",
                            "Unable to fix-up legacy LZ4 framing "
-			   "(%"PRIdsz" bytes): invalid length or magic value",
+			   "(%"PRIusz" bytes): invalid length or magic value",
                            inlen);
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         }
@@ -2042,8 +2042,8 @@ rd_kafka_lz4_decompress_fixup_bad_framing (rd_kafka_broker_t *rkb,
 
         if (of >= inlen) {
                 rd_rkb_dbg(rkb, BROKER,  "LZ4FIXUP",
-                           "Unable to fix-up legacy LZ4 framing (%"PRIdsz" bytes): "
-                           "requires %"PRIdsz" bytes",
+                           "Unable to fix-up legacy LZ4 framing (%"PRIusz" bytes): "
+                           "requires %"PRIusz" bytes",
                            inlen, of);
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         }
@@ -2087,7 +2087,7 @@ rd_kafka_lz4_compress_break_framing (rd_kafka_broker_t *rkb,
         if (outlen < 4+3 || memcmp(outbuf, magic, 4)) {
                 rd_rkb_dbg(rkb, BROKER,  "LZ4FIXDOWN",
                            "Unable to break legacy LZ4 framing "
-			   "(%"PRIdsz" bytes): invalid length or magic value",
+			   "(%"PRIusz" bytes): invalid length or magic value",
                            outlen);
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         }
@@ -2102,7 +2102,7 @@ rd_kafka_lz4_compress_break_framing (rd_kafka_broker_t *rkb,
         if (of >= outlen) {
                 rd_rkb_dbg(rkb, BROKER,  "LZ4FIXUP",
                            "Unable to break legacy LZ4 framing "
-			   "(%"PRIdsz" bytes): requires %"PRIdsz" bytes",
+			   "(%"PRIusz" bytes): requires %"PRIusz" bytes",
                            outlen, of);
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         }
@@ -2206,7 +2206,7 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
                         rd_rkb_dbg(rkb, MSG, "LZ4DEC",
                                    "Failed to LZ4 (%s HC) decompress message "
 				   "(offset %"PRId64") at "
-                                   "payload offset %"PRIdsz"/%"PRIdsz": %s",
+                                   "payload offset %"PRIusz"/%"PRIusz": %s",
 				   proper_hc ? "proper":"legacy",
                                    Offset, in_of, inlen,  LZ4F_getErrorName(r));
                         err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
@@ -2245,7 +2245,7 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
                 rd_rkb_dbg(rkb, MSG, "LZ4DEC",
                            "Failed to LZ4 (%s HC) decompress message "
 			   "(offset %"PRId64"): "
-			   "%"PRIdsz" (out of %"PRIdsz") bytes remaining",
+			   "%"PRIusz" (out of %"PRIusz") bytes remaining",
 			   proper_hc ? "proper":"legacy",
                            Offset, inlen-in_of, inlen);
                 err = RD_KAFKA_RESP_ERR__BAD_MSG;
@@ -2308,7 +2308,7 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc,
         out = rd_malloc(out_sz);
         if (!out) {
                 rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
-                           "Unable to allocate output buffer (%"PRIdsz" bytes): "
+                           "Unable to allocate output buffer (%"PRIusz" bytes): "
 			   "%s",
                            out_sz, rd_strerror(errno));
                 return RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
@@ -2326,7 +2326,7 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc,
         if (LZ4F_isError(r)) {
                 rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
                            "Unable to begin LZ4 compression "
-			   "(out buffer is %"PRIdsz" bytes): %s",
+			   "(out buffer is %"PRIusz" bytes): %s",
                            out_sz, LZ4F_getErrorName(r));
                 err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                 goto done;
@@ -2341,8 +2341,8 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc,
                 if (unlikely(LZ4F_isError(r))) {
                         rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
                                    "LZ4 compression failed (at iov %d/%d "
-                                   "of %"PRIdsz" bytes, with "
-                                   "%"PRIdsz" bytes remaining in out buffer): "
+                                   "of %"PRIusz" bytes, with "
+                                   "%"PRIusz" bytes remaining in out buffer): "
 				   "%s",
                                    i, iov_len,
                                    (size_t)iov[i].iov_len, out_sz - out_of,
@@ -2467,7 +2467,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 			if ((r = deflate(&strm, Z_NO_FLUSH) != Z_OK)) {
 				rd_rkb_log(rkb, LOG_ERR, "GZIP",
 					   "Failed to gzip-compress "
-					   "%"PRIdsz" bytes for "
+					   "%"PRIusz" bytes for "
 					   "topic %.*s [%"PRId32"]: "
 					   "%s (%i): "
 					   "sending uncompressed",
@@ -3370,7 +3370,7 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 				rd_rkb_dbg(rkb, MSG, "SNAPPY",
 					   "Invalid snappy-java chunk length for "
 					   "message at offset %"PRId64" "
-					   "(%"PRIu32">%"PRIdsz": ignoring message",
+					   "(%"PRIu32">%"PRIusz": ignoring message",
 					   Offset, clen, inlen - of);
 				return NULL;
 			}
@@ -3414,7 +3414,7 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 
 		if (unlikely(of != (ssize_t)inlen)) {
 			rd_rkb_dbg(rkb, MSG, "SNAPPY",
-				   "%"PRIdsz" trailing bytes in Snappy-java framed compressed "
+				   "%"PRIusz" trailing bytes in Snappy-java framed compressed "
 				   "data at offset %"PRId64": ignoring message",
 				   inlen - of, Offset);
 			return NULL;
@@ -3424,7 +3424,7 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 			if (uof <= 0) {
 				rd_rkb_dbg(rkb, MSG, "SNAPPY",
 					   "Empty Snappy-java framed data "
-					   "at offset %"PRId64" (%"PRIdsz" bytes): "
+					   "at offset %"PRId64" (%"PRIusz" bytes): "
 					   "ignoring message",
 					   Offset, uof);
 				return NULL;
@@ -3436,7 +3436,7 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 				rd_rkb_dbg(rkb, MSG, "SNAPPY",
 					   "Failed to allocate memory for uncompressed "
 					   "Snappy data at offset %"PRId64
-					   " (%"PRIdsz" bytes): %s",
+					   " (%"PRIusz" bytes): %s",
 					   Offset, uof, rd_strerror(errno));
 				return NULL;
 			}

@@ -852,9 +852,9 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		   "\"time\":%lli, "
 		   "\"replyq\":%i, "
                    "\"msg_cnt\":%u, "
-		   "\"msg_size\":%"PRIdsz", "
+		   "\"msg_size\":%"PRIusz", "
                    "\"msg_max\":%u, "
-		   "\"msg_size_max\":%"PRIdsz", "
+		   "\"msg_size_max\":%"PRIusz", "
                    "\"simple_cnt\":%i, "
                    "\"metadata_cache_cnt\":%i, "
 		   "\"brokers\":{ "/*open brokers*/,
@@ -2562,7 +2562,7 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
         fprintf(fp, "rd_kafka_op_cnt: %d\n", rd_atomic32_get(&rd_kafka_op_cnt));
 	fprintf(fp, "rd_kafka_t %p: %s\n", rk, rk->rk_name);
 
-	fprintf(fp, " producer.msg_cnt %u (%"PRIdsz" bytes)\n",
+	fprintf(fp, " producer.msg_cnt %u (%"PRIusz" bytes)\n",
 		tot_cnt, tot_size);
 	fprintf(fp, " rk_rep reply queue: %i ops\n",
 		rd_kafka_q_len(rk->rk_rep));

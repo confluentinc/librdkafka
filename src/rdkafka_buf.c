@@ -391,7 +391,7 @@ void rd_kafka_bufq_dump (rd_kafka_broker_t *rkb, const char *fac,
 
 	TAILQ_FOREACH(rkbuf, &rkbq->rkbq_bufs, rkbuf_link) {
 		rd_rkb_dbg(rkb, BROKER, fac,
-			   " Buffer %s (%"PRIdsz" bytes, corrid %"PRId32", "
+			   " Buffer %s (%"PRIusz" bytes, corrid %"PRId32", "
 			   "connid %d, retry %d in %lldms, timeout in %lldms",
 			   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
 			   rkbuf->rkbuf_len, rkbuf->rkbuf_corrid,

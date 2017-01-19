@@ -18,6 +18,7 @@ option(WITH_SSL "With SSL" ON)
 # }
 
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
+option(RDKAFKA_BUILD_TESTS "Build tests" ON)
 
 try_compile(
     HAVE_REGEX
@@ -104,4 +105,9 @@ add_subdirectory(src-cpp)
 
 if(RDKAFKA_BUILD_EXAMPLES)
   add_subdirectory(examples)
+endif()
+
+if(RDKAFKA_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
 endif()

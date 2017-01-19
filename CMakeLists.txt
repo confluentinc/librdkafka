@@ -20,84 +20,35 @@ option(WITH_SSL "With SSL" ON)
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
 
-try_compile(
-    HAVE_REGEX
-    "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-    "${CMAKE_CURRENT_LIST_DIR}/try_compile/regex_test.cpp"
-)
+set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/try_compile")
 
-try_compile(
-    HAVE_STRNDUP
-    "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-    "${CMAKE_CURRENT_LIST_DIR}/try_compile/strndup_test.cpp"
-)
-
-# Atomic 32 tests {
-set(LINK_ATOMIC NO)
-set(HAVE_ATOMICS_32 NO)
-set(HAVE_ATOMICS_32_SYNC NO)
-
-try_compile(
-    _atomics_32
-    "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-    "${CMAKE_CURRENT_LIST_DIR}/try_compile/atomic_32_test.cpp"
-)
-
-if(_atomics_32)
-  set(HAVE_ATOMICS_32 YES)
-else()
-  try_compile(
-      _atomics_32_lib
-      "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-      "${CMAKE_CURRENT_LIST_DIR}/try_compile/atomic_32_test.cpp"
-      LINK_LIBRARIES "-latomic"
-  )
-  if(_atomics_32_lib)
-    set(HAVE_ATOMICS_32 YES)
-    set(LINK_ATOMIC YES)
-  else()
-    try_compile(
-        HAVE_ATOMICS_32_SYNC
-        "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-        "${CMAKE_CURRENT_LIST_DIR}/try_compile/sync_32_test.cpp"
-    )
-  endif()
-endif()
-# }
-
-# Atomic 64 tests {
-set(HAVE_ATOMICS_64 NO)
-set(HAVE_ATOMICS_64_SYNC NO)
-
-try_compile(
-    _atomics_64
-    "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-    "${CMAKE_CURRENT_LIST_DIR}/try_compile/atomic_64_test.cpp"
-)
-
-if(_atomics_64)
-  set(HAVE_ATOMICS_64 YES)
-else()
-  try_compile(
-      _atomics_64_lib
-      "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-      "${CMAKE_CURRENT_LIST_DIR}/try_compile/atomic_64_test.cpp"
-      LINK_LIBRARIES "-latomic"
-  )
-  if(_atomics_64_lib)
-    set(HAVE_ATOMICS_64 YES)
-    set(LINK_ATOMIC YES)
-  else()
-    try_compile(
-        HAVE_ATOMICS_64_SYNC
-        "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-        "${CMAKE_CURRENT_LIST_DIR}/try_compile/sync_64_test.cpp"
-    )
-  endif()
-endif()
-# }
+# In:
+# * TRYCOMPILE_SRC_DIR
+# Out:
+# * HAVE_ATOMICS_32
+# * HAVE_ATOMICS_32_SYNC
+# * HAVE_ATOMICS_64
+# * HAVE_ATOMICS_64_SYNC
+# * HAVE_REGEX
+# * HAVE_STRNDUP
+# * LINK_ATOMIC
+include("try_compile/cmake/rdkafka_setup.cmake")
 
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
+# In:
+# * WITHOUT_OPTIMIZATION
+# * ENABLE_DEVEL
+# * ENABLE_REFCNT_DEBUG
+# * ENABLE_SHAREDPTR_DEBUG
+# * HAVE_ATOMICS_32
+# * HAVE_ATOMICS_32_SYNC
+# * HAVE_ATOMICS_64
+# * HAVE_ATOMICS_64_SYNC
+# * WITH_ZLIB
+# * WITH_SSL
+# * HAVE_REGEX
+# * HAVE_STRNDUP
 configure_file(config.h.in "${GENERATED_DIR}/config.h" @ONLY)
 
 add_subdirectory(src)

@@ -76,3 +76,6 @@ endif()
 if(LINK_ATOMIC)
   target_link_libraries(rdkafka PUBLIC "-latomic")
 endif()
+
+find_package(Threads REQUIRED)
+target_link_libraries(rdkafka PUBLIC Threads::Threads)

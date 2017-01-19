@@ -17,6 +17,8 @@ option(WITH_SSL "With SSL" ON)
 
 # }
 
+option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
+
 try_compile(
     HAVE_REGEX
     "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
@@ -99,3 +101,7 @@ configure_file(config.h.in "${GENERATED_DIR}/config.h" @ONLY)
 
 add_subdirectory(src)
 add_subdirectory(src-cpp)
+
+if(RDKAFKA_BUILD_EXAMPLES)
+  add_subdirectory(examples)
+endif()

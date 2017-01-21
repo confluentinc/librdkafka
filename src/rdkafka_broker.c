@@ -2634,6 +2634,12 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	size_t buffer_space;
 	rd_ts_t int_latency_base;
 
+        queued_cnt = rd_kafka_msgq_len(&rktp->rktp_xmit_msgq);
+        if (queued_cnt == 0)
+                return 0;
+
+        queued_bytes = rd_kafka_msgq_size(&rktp->rktp_xmit_msgq);
+
 	/* Internal latency calculation base.
 	 * Uses rkm_ts_timeout which is enqueue time + timeout */
 	int_latency_base = rd_clock() + (rkt->rkt_conf.message_timeout_ms * 1000);
@@ -2653,14 +2659,6 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	 *
 	 * We are bound by configuration.
 	 */
-
-	if (rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) > 0)
-		rd_kafka_assert(rkb->rkb_rk,
-                                TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs));
-
-	queued_cnt = rd_kafka_msgq_len(&rktp->rktp_xmit_msgq);
-	queued_bytes = rd_kafka_msgq_size(&rktp->rktp_xmit_msgq);
-
 	msgcntmax = RD_MIN(queued_cnt, rkb->rkb_rk->rk_conf.batch_num_messages);
 	rd_kafka_assert(rkb->rkb_rk, msgcntmax > 0);
 	iovcnt = 1 + (3 * msgcntmax);
@@ -3204,15 +3202,21 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb, int timeout_ms) {
 
 
 /**
- * Serve a toppar for producing.
+ * @brief Serve a toppar for producing.
+ *
+ * @param next_wakeup will be updated to when the next wake-up/attempt is
+ *                    desired, only lower (sooner) values will be set.
  *
  * Locks: toppar_lock(rktp) MUST be held. 
  * Returns the number of messages produced.
  */
 static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                            rd_kafka_toppar_t *rktp,
-                                           int do_timeout_scan, rd_ts_t now) {
+                                           int do_timeout_scan,
+                                           rd_ts_t now,
+                                           rd_ts_t *next_wakeup) {
         int cnt = 0;
+        int r;
 
         rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
                    "%.*s [%"PRId32"] %i+%i msgs",
@@ -3238,25 +3242,37 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                 }
         }
 
-        if (rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) == 0)
+        r = rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt);
+        if (r == 0)
                 return 0;
 
         /* Attempt to fill the batch size, but limit
          * our waiting to queue.buffering.max.ms
          * and batch.num.messages. */
-        if (rktp->rktp_ts_last_xmit +
-            (rkb->rkb_rk->rk_conf.buffering_max_ms * 1000) > now &&
-            rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) <
-            rkb->rkb_rk->rk_conf.batch_num_messages) {
-                /* Wait for more messages */
-                return 0;
+        if (r < rkb->rkb_rk->rk_conf.batch_num_messages) {
+                rd_kafka_msg_t *rkm_oldest;
+                rd_ts_t wait_max;
+
+                rkm_oldest = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs);
+                if (unlikely(!rkm_oldest))
+                        return 0;
+
+                /* Calculate maximum wait-time to
+                 * honour queue.buffering.max.ms contract. */
+                wait_max = rd_kafka_msg_enq_time(rktp->rktp_rkt, rkm_oldest) +
+                        (rkb->rkb_rk->rk_conf.buffering_max_ms * 1000);
+                if (wait_max > now) {
+                        if (wait_max < *next_wakeup)
+                                *next_wakeup = wait_max;
+                        /* Wait for more messages or queue.buffering.max.ms
+                         * to expire. */
+                        return 0;
+                }
         }
 
-        rktp->rktp_ts_last_xmit = now;
-
         /* Send Produce requests for this toppar */
-        while (rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt) > 0) {
-                int r = rd_kafka_broker_produce_toppar(rkb, rktp);
+        while (1) {
+                r = rd_kafka_broker_produce_toppar(rkb, rktp);
                 if (likely(r > 0))
                         cnt += r;
                 else
@@ -3284,11 +3300,14 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 		rd_kafka_toppar_t *rktp;
 		int cnt;
 		rd_ts_t now;
+                rd_ts_t next_wakeup;
                 int do_timeout_scan = 0;
 
 		rd_kafka_broker_unlock(rkb);
 
 		now = rd_clock();
+                next_wakeup = now + (rkb->rkb_rk->rk_conf.
+                                     socket_blocking_max_ms * 1000);
 
                 if (rd_interval(&timeout_scan, 1000*1000, now) >= 0)
                         do_timeout_scan = 1;
@@ -3313,7 +3332,8 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 				}
                                 /* Try producing toppar */
                                 cnt += rd_kafka_toppar_producer_serve(
-                                        rkb, rktp, do_timeout_scan, now);
+                                        rkb, rktp, do_timeout_scan, now,
+                                        &next_wakeup);
 
                                 rd_kafka_toppar_unlock(rktp);
 			}
@@ -3324,6 +3344,8 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 		if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
 			rd_kafka_broker_retry_bufs_move(rkb);
 
+                rkb->rkb_blocking_max_ms =
+                        (next_wakeup > now ? (next_wakeup - now) / 1000 : 0);
 		rd_kafka_broker_serve(rkb, RD_POLL_NOWAIT);
 
 		rd_kafka_broker_lock(rkb);

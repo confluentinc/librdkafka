@@ -82,6 +82,9 @@ typedef struct rd_kafka_msg_s {
 TAILQ_HEAD(rd_kafka_msg_head_s, rd_kafka_msg_s);
 
 
+/** @returns the absolute time a message was enqueued (producer) */
+#define rd_kafka_msg_enq_time(rkt,rkm)                                  \
+        ((rkm)->rkm_ts_timeout - ((rkt)->rkt_conf.message_timeout_ms * 1000))
 
 /**
  * @returns the message's total maximum on-wire size.

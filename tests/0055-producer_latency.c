@@ -126,9 +126,13 @@ static int test_producer_latency (const char *topic,
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
         rd_kafka_conf_set_opaque(conf, latconf);
 
-        for (i = 0 ; latconf->conf[i] ; i += 2)
+        TEST_SAY("%s: begin\n", latconf->name);
+        for (i = 0 ; latconf->conf[i] ; i += 2) {
+                TEST_SAY("%s:  set conf %s = %s\n",
+                         latconf->name, latconf->conf[i], latconf->conf[i+1]);
                 test_any_conf_set(conf, topic_conf,
                                   latconf->conf[i], latconf->conf[i+1]);
+        }
         rd_kafka_conf_set_default_topic_conf(conf, topic_conf);
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
@@ -188,6 +192,9 @@ int main_0055_producer_latency (int argc, char **argv) {
                   {"queue.buffering.max.ms", "0", NULL}, 0, 0 },
                 { "high queue.buffering.max.ms",
                   {"queue.buffering.max.ms", "3000", NULL}, 3000, 3100},
+                { "queue.buffering.max.ms < socket.blocking.max.ms",
+                  {"queue.buffering.max.ms", "500",
+                   "socket.blocking.max.ms", "3000", NULL}, 500, 600 },
                 { "no acks",
                   {"queue.buffering.max.ms", "0",
                    "acks", "0", NULL}, 0, 0 },

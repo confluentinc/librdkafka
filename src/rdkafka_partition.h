@@ -90,8 +90,6 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 					    * protected by rktp_lock */
 	rd_kafka_msgq_t    rktp_xmit_msgq; /* internal broker xmit queue */
 
-	rd_ts_t            rktp_ts_last_xmit;
-
         int                rktp_fetch;     /* On rkb_fetch_toppars list */
 
 	/* Consumer */

@@ -84,6 +84,21 @@ rd_kafka_metadata_cache_delete (rd_kafka_t *rk,
         rd_free(rkmce);
 }
 
+/**
+ * @brief Delete cache entry by topic name
+ * @locks rd_kafka_wrlock()
+ * @returns 1 if entry was found and removed, else 0.
+ */
+static int rd_kafka_metadata_cache_delete_by_name (rd_kafka_t *rk,
+                                                    const char *topic) {
+        struct rd_kafka_metadata_cache_entry *rkmce;
+
+        rkmce = rd_kafka_metadata_cache_find(rk, topic, 1);
+        if (rkmce)
+                rd_kafka_metadata_cache_delete(rk, rkmce, 1);
+        return rkmce ? 1 : 0;
+}
+
 static int rd_kafka_metadata_cache_evict (rd_kafka_t *rk);
 
 /**
@@ -276,6 +291,10 @@ void rd_kafka_metadata_cache_expiry_start (rd_kafka_t *rk) {
 /**
  * @brief Update the metadata cache for a single topic
  *        with the provided metadata.
+ *        If the topic has an error the existing entry is removed
+ *        and no new entry is added, which avoids the topic to be
+ *        suppressed in upcoming metadata requests because being in the cache.
+ *        In other words: we want to re-query errored topics.
  *
  * @remark The cache expiry timer will not be updated/started,
  *         call rd_kafka_metadata_cache_expiry_start() instead.
@@ -287,10 +306,16 @@ rd_kafka_metadata_cache_topic_update (rd_kafka_t *rk,
                                       const rd_kafka_metadata_topic_t *mdt) {
         rd_ts_t now = rd_clock();
         rd_ts_t ts_expires = now + (rk->rk_conf.metadata_max_age_ms * 1000);
+        int changed = 1;
 
-        rd_kafka_metadata_cache_insert(rk, mdt, now, ts_expires);
+        if (!mdt->err)
+                rd_kafka_metadata_cache_insert(rk, mdt, now, ts_expires);
+        else
+                changed = rd_kafka_metadata_cache_delete_by_name(rk,
+                                                                 mdt->topic);
 
-        rd_kafka_metadata_cache_propagate_changes(rk);
+        if (changed)
+                rd_kafka_metadata_cache_propagate_changes(rk);
 }
 
 
@@ -683,12 +708,15 @@ void rd_kafka_metadata_cache_dump (FILE *fp, rd_kafka_t *rk) {
         TAILQ_FOREACH(rkmce, &rkmc->rkmc_expiry, rkmce_link) {
                 fprintf(fp,
                         "  %s (inserted %dms ago, expires in %dms, "
-                        "%d partition(s), %s)\n",
+                        "%d partition(s), %s)%s%s\n",
                         rkmce->rkmce_mtopic.topic,
                         (int)((now - rkmce->rkmce_ts_insert)/1000),
                         (int)((rkmce->rkmce_ts_expires - now)/1000),
                         rkmce->rkmce_mtopic.partition_cnt,
-                        RD_KAFKA_METADATA_CACHE_VALID(rkmce) ? "valid":"hint");
+                        RD_KAFKA_METADATA_CACHE_VALID(rkmce) ? "valid":"hint",
+                        rkmce->rkmce_mtopic.err ? " error: " : "",
+                        rkmce->rkmce_mtopic.err ?
+                        rd_kafka_err2str(rkmce->rkmce_mtopic.err) : "");
         }
 }
 

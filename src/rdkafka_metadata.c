@@ -214,7 +214,6 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         size_t rkb_namelen;
         const int log_decode_errors = 1;
         rd_list_t *missing_topics = NULL;
-        rd_list_t *hinted_topics = NULL;
         const rd_list_t *requested_topics = request->rkbuf_u.Metadata.topics;
         int all_topics = request->rkbuf_u.Metadata.all_topics;
         const char *reason = request->rkbuf_u.Metadata.reason ?
@@ -225,13 +224,10 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
-        /* Remove topics from this list as they are seen in Metadata. */
-        if (requested_topics) {
+        /* Remove topics from missing_topics as they are seen in Metadata. */
+        if (requested_topics)
                 missing_topics = rd_list_copy(requested_topics,
                                               rd_list_string_copy, NULL);
-                hinted_topics = rd_list_copy(requested_topics,
-                                             rd_list_string_copy, NULL);
-        }
 
         rd_kafka_broker_lock(rkb);
         rkb_namelen = strlen(rkb->rkb_name)+1;
@@ -464,8 +460,6 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                         rd_list_remove_cmp(missing_topics,
                                                            mdt->topic,
                                                            (void *)strcmp));
-                        if (hinted_topics)
-                                rd_list_add(hinted_topics, rd_strdup(mdt->topic));
                         continue;
                 }
 
@@ -484,10 +478,6 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                 rd_kafka_wrunlock(rk);
                         }
                 }
-
-
-                if (hinted_topics)
-                        rd_list_add(hinted_topics, rd_strdup(mdt->topic));
         }
 
 
@@ -535,11 +525,9 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                 rd_kafka_metadata_cache_expiry_start(rk);
         }
 
-        /* Remove cache hints for the originally requested topics, minus
-         * any temporary erroring ones (for which we want the cache hint
-         * to remain until the error is sorted out). */
-        if (hinted_topics)
-                rd_kafka_metadata_cache_purge_hints(rk, hinted_topics);
+        /* Remove cache hints for the originally requested topics. */
+        if (requested_topics)
+                rd_kafka_metadata_cache_purge_hints(rk, requested_topics);
 
         rd_kafka_wrunlock(rkb->rkb_rk);
 
@@ -554,8 +542,6 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
 done:
         if (missing_topics)
                 rd_list_destroy(missing_topics);
-        if (hinted_topics)
-                rd_list_destroy(hinted_topics);
 
         /* This metadata request was triggered by someone wanting
          * the metadata information back as a reply, so send that reply now.
@@ -576,8 +562,6 @@ err:
 
         if (missing_topics)
                 rd_list_destroy(missing_topics);
-        if (hinted_topics)
-                rd_list_destroy(hinted_topics);
 
         rd_tmpabuf_destroy(&tbuf);
         return NULL;

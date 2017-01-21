@@ -37,6 +37,7 @@ throttle_cb                              |  *  |                 |              
 stats_cb                                 |  *  |                 |               | Statistics callback (set with rd_kafka_conf_set_stats_cb()) <br>*Type: pointer*
 log_cb                                   |  *  |                 |               | Log callback (set with rd_kafka_conf_set_log_cb()) <br>*Type: pointer*
 log_level                                |  *  | 0 .. 7          |             6 | Logging level (syslog(3) levels) <br>*Type: integer*
+log.queue                                |  *  | true, false     |         false | Disable spontaneous log_cb from internal librdkafka threads, instead enqueue log messages on queue set with `rd_kafka_set_log_queue()` and serve log callbacks or events through the standard poll APIs. **NOTE**: Log messages will linger in a temporary queue until the log queue has been set. <br>*Type: boolean*
 log.thread.name                          |  *  | true, false     |         false | Print internal thread name in log messages (useful for debugging librdkafka internals) <br>*Type: boolean*
 log.connection.close                     |  *  | true, false     |          true | Log broker disconnects. It might be useful to turn this off when interacting with 0.9 brokers with an aggressive `connection.max.idle.ms` value. <br>*Type: boolean*
 socket_cb                                |  *  |                 |               | Socket creation callback to provide race-free CLOEXEC <br>*Type: pointer*
@@ -86,7 +87,7 @@ rebalance_cb                             |  C  |                 |              
 offset_commit_cb                         |  C  |                 |               | Offset commit result propagation callback. (set with rd_kafka_conf_set_offset_commit_cb()) <br>*Type: pointer*
 enable.partition.eof                     |  C  | true, false     |          true | Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the consumer reaches the end of a partition. <br>*Type: boolean*
 queue.buffering.max.messages             |  P  | 1 .. 10000000   |        100000 | Maximum number of messages allowed on the producer queue. <br>*Type: integer*
-queue.buffering.max.kbytes               |  P  | 1 .. 2147483647 |       4000000 | Maximum total message size sum allowed on the producer queue. <br>*Type: integer*
+queue.buffering.max.kbytes               |  P  | 1 .. 2097151    |       4000000 | Maximum total message size sum allowed on the producer queue. <br>*Type: integer*
 queue.buffering.max.ms                   |  P  | 0 .. 900000     |          1000 | Maximum time, in milliseconds, for buffering data on the producer queue. <br>*Type: integer*
 message.send.max.retries                 |  P  | 0 .. 10000000   |             2 | How many times to retry sending a failing MessageSet. **Note:** retrying may cause reordering. <br>*Type: integer*
 retries                                  |  P  |                 |               | Alias for `message.send.max.retries`

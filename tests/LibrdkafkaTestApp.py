@@ -22,7 +22,7 @@ class LibrdkafkaTestApp(App):
     def __init__(self, cluster, version, conf=None, tests=None):
         super(LibrdkafkaTestApp, self).__init__(cluster, conf=conf)
 
-        self.appid = UuidAllocator(self.cluster).next(trunc=8)
+        self.appid = UuidAllocator(self.cluster).next(self, trunc=8)
         self.autostart = False
         self.local_tests = True
         self.test_mode = conf.get('test_mode', 'bare')
@@ -33,7 +33,7 @@ class LibrdkafkaTestApp(App):
         security_protocol='PLAINTEXT'
 
         f, self.test_conf_file = self.open_file('test.conf', 'perm')
-        os.write(fd, ('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
+        f.write(('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
         f.write(('\n'.join(conf_blob)).encode('ascii'))
 
         if version == 'trunk' or version.startswith('0.10.'):
@@ -90,7 +90,7 @@ class LibrdkafkaTestApp(App):
 
         # Define bootstrap brokers based on selected security protocol
         self.dbg('Using client security.protocol=%s' % security_protocol)
-        all_listeners = (','.join(cluster.get_all('advertised_listeners', '', KafkaBrokerApp))).split(',')
+        all_listeners = (','.join(cluster.get_all('advertised.listeners', '', KafkaBrokerApp))).split(',')
         bootstrap_servers = ','.join([x for x in all_listeners if x.startswith(security_protocol)])
         if len(bootstrap_servers) == 0:
             bootstrap_servers = all_listeners[0]

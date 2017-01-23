@@ -68,8 +68,8 @@ int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
 	do {
 		int r;
 
-		r = rd_kafka_transport_sendmsg(rktrans, &msg,
-					       errstr, errstr_size);
+		r = (int)rd_kafka_transport_sendmsg(rktrans, &msg,
+                                                    errstr, errstr_size);
 		if (r == -1) {
 			rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
 				   "SASL send of %d bytes failed: %s",

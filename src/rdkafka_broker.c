@@ -3344,7 +3344,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 		if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
 			rd_kafka_broker_retry_bufs_move(rkb);
 
-                rkb->rkb_blocking_max_ms =
+                rkb->rkb_blocking_max_ms = (int)
                         (next_wakeup > now ? (next_wakeup - now) / 1000 : 0);
 		rd_kafka_broker_serve(rkb, RD_POLL_NOWAIT);
 

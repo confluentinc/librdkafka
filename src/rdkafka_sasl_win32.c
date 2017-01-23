@@ -53,7 +53,7 @@
 
 
  /* Default maximum kerberos token size for newer versions of Windows */
-#define MAX_TOKEN_SIZE 48000 
+#define RD_KAFKA_SSPI_MAX_TOKEN_SIZE 48000
 
 
 /**
@@ -141,7 +141,7 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
         rd_kafka_sasl_state_t *state = rktrans->rktrans_sasl.state;
         SecBufferDesc outbufdesc, inbufdesc;
         SecBuffer outsecbuf, insecbuf;
-        BYTE outbuf[MAX_TOKEN_SIZE];
+        BYTE outbuf[RD_KAFKA_SSPI_MAX_TOKEN_SIZE];
         TimeStamp lifespan = { 0, 0 };
         ULONG ret_ctxattrs;
         CtxtHandle *ctx;
@@ -150,14 +150,14 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
         if (inbuf) {
                 if (insize > ULONG_MAX) {
                         rd_snprintf(errstr, errstr_size,
-                                    "Input buffer length too large "
-                                    "and would cause overflow");
+                                    "Input buffer length too large (%"PRIusz") "
+                                    "and would overflow", insize);
                         return -1;
                 }
 
                 inbufdesc.ulVersion = SECBUFFER_VERSION;
                 inbufdesc.cBuffers = 1;
-                inbufdesc.pBuffers  = &insecbuf;                
+                inbufdesc.pBuffers  = &insecbuf;
 
                 insecbuf.cbBuffer   = (unsigned long)insize;
                 insecbuf.BufferType = SECBUFFER_TOKEN;
@@ -193,7 +193,7 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
         {
                 case SEC_E_OK:
                         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASLAUTH",
-                                   "Initialized security");
+                                   "Initialized security context");
 
                         rktrans->rktrans_sasl.complete = 1;
                         break;
@@ -231,7 +231,7 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
 * @brief Sends the token response to the broker
 */
 static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
-                                              char *errstr, 
+                                              char *errstr,
                                               size_t errstr_size) {
         rd_kafka_sasl_state_t *state = rktrans->rktrans_sasl.state;
         SECURITY_STATUS sr;
@@ -243,7 +243,7 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
         SecPkgCredentials_NamesA names;
         int send_response;
         size_t namelen;
-        
+
         sr = QueryContextAttributes(state->ctx, SECPKG_ATTR_SIZES, &sizes);
         if (sr != SEC_E_OK) {
                 rd_snprintf(errstr, errstr_size,
@@ -253,9 +253,9 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
         }
 
         RD_MEMZERO(names);
-        sr = QueryCredentialsAttributesA(state->cred, SECPKG_CRED_ATTR_NAMES, 
+        sr = QueryCredentialsAttributesA(state->cred, SECPKG_CRED_ATTR_NAMES,
                                          &names);
-        
+
         if (sr != SEC_E_OK) {
                 rd_snprintf(errstr, errstr_size,
                             "Query credentials failed: %s (0x%x)",
@@ -269,18 +269,18 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
         namelen = strlen(names.sUserName) + 1;
         if (namelen > ULONG_MAX) {
                 rd_snprintf(errstr, errstr_size,
-                            "User name length too large "
-                            "and would cause overflow");
+                            "User name length too large (%"PRIusz") "
+                            "and would overflow");
                 return -1;
         }
 
         in_buffer.pvBuffer = (char *)names.sUserName;
         in_buffer.cbBuffer = (unsigned long)namelen;
-       
+
         buffer_desc.cBuffers = 3;
         buffer_desc.pBuffers = buffers;
         buffer_desc.ulVersion = SECBUFFER_VERSION;
-        
+
         buffers[0].cbBuffer = sizes.cbSecurityTrailer;
         buffers[0].BufferType = SECBUFFER_TOKEN;
         buffers[0].pvBuffer = rd_calloc(1, sizes.cbSecurityTrailer);
@@ -303,12 +303,12 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
                 FreeContextBuffer(in_buffer.pvBuffer);
                 rd_free(buffers[0].pvBuffer);
                 rd_free(buffers[1].pvBuffer);
-                rd_free(buffers[2].pvBuffer);                
+                rd_free(buffers[2].pvBuffer);
                 return -1;
         }
 
-        out_buffer.cbBuffer = buffers[0].cbBuffer + 
-                              buffers[1].cbBuffer + 
+        out_buffer.cbBuffer = buffers[0].cbBuffer +
+                              buffers[1].cbBuffer +
                               buffers[2].cbBuffer;
 
         out_buffer.pvBuffer = rd_calloc(1, buffers[0].cbBuffer +
@@ -316,16 +316,16 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
                                         buffers[2].cbBuffer);
 
         memcpy(out_buffer.pvBuffer, buffers[0].pvBuffer, buffers[0].cbBuffer);
-        
+
         memcpy((unsigned char *)out_buffer.pvBuffer + (int)buffers[0].cbBuffer,
                buffers[1].pvBuffer, buffers[1].cbBuffer);
 
-        memcpy((unsigned char *)out_buffer.pvBuffer + 
+        memcpy((unsigned char *)out_buffer.pvBuffer +
                 buffers[0].cbBuffer + buffers[1].cbBuffer,
                 buffers[2].pvBuffer, buffers[2].cbBuffer);
-                
+
         send_response = rd_kafka_sasl_send(rktrans,
-                                           out_buffer.pvBuffer, 
+                                           out_buffer.pvBuffer,
                                            out_buffer.cbBuffer,
                                            errstr, (int)errstr_size);
 
@@ -343,9 +343,9 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
 * @brief Unwrap and validate token response from broker.
 */
 static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
-                                               const void *inbuf, 
+                                               const void *inbuf,
                                                size_t insize,
-                                               char *errstr, 
+                                               char *errstr,
                                                size_t errstr_size) {
         rd_kafka_sasl_state_t *state = rktrans->rktrans_sasl.state;
         SecBuffer buffers[2];
@@ -355,19 +355,19 @@ static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
 
         if (insize > ULONG_MAX) {
                 rd_snprintf(errstr, errstr_size,
-                            "Input buffer length too large "
-                            "and would cause overflow");
+                            "Input buffer length too large (%"PRIusz") "
+                            "and would overflow");
                 return -1;
         }
 
         buffer_desc.cBuffers = 2;
         buffer_desc.pBuffers = buffers;
         buffer_desc.ulVersion = SECBUFFER_VERSION;
-        
+
         buffers[0].cbBuffer = (unsigned long)insize;
         buffers[0].BufferType = SECBUFFER_STREAM;
         buffers[0].pvBuffer = (void *)inbuf;
-        
+
         buffers[1].cbBuffer = 0;
         buffers[1].BufferType = SECBUFFER_DATA;
         buffers[1].pvBuffer = NULL;
@@ -388,7 +388,7 @@ static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
         }
 
         supported = ((char *)buffers[1].pvBuffer)[0];
-        if (!supported & 1) {
+        if (!(supported & 1)) {
                 rd_snprintf(errstr, errstr_size,
                             "Validate token: "
                             "server does not support layer");
@@ -398,7 +398,7 @@ static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASLAUTH",
                    "Validated server token");
 
-        return rd_kafka_sasl_win32_send_response(rktrans, errstr, 
+        return rd_kafka_sasl_win32_send_response(rktrans, errstr,
                                                  errstr_size);
 }
 
@@ -417,7 +417,7 @@ static int rd_kafka_sasl_win32_recv (struct rd_kafka_transport_s *rktrans,
                         rktrans->rktrans_sasl.complete = 0;
                         return -1;
                 }
-       
+
                 /* Final ack from broker. */
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASLAUTH",
                            "Authenticated");
@@ -470,7 +470,7 @@ int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
                    rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.principal,
                    hostname);
 
-        state->cred = rd_kafka_sasl_sspi_cred_new(rktrans, errstr, 
+        state->cred = rd_kafka_sasl_sspi_cred_new(rktrans, errstr,
                                                   errstr_size);
         if (!state->cred)
                 return -1;

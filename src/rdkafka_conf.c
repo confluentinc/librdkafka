@@ -301,7 +301,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(log_thread_name),
 	  "Print internal thread name in log messages "
 	  "(useful for debugging librdkafka internals)",
-	  0, 1, ENABLE_DEVEL },
+	  0, 1, 1 },
 	{ _RK_GLOBAL, "log.connection.close", _RK_C_BOOL,
 	  _RK(log_connection_close),
 	  "Log broker disconnects. "

@@ -20,7 +20,7 @@ option(WITH_SSL "With SSL" ON)
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
 
-set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/try_compile")
+set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/packaging/cmake/try_compile")
 
 # In:
 # * TRYCOMPILE_SRC_DIR
@@ -32,7 +32,7 @@ set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/try_compile")
 # * HAVE_REGEX
 # * HAVE_STRNDUP
 # * LINK_ATOMIC
-include("try_compile/cmake/rdkafka_setup.cmake")
+include("packaging/cmake/try_compile/cmake/rdkafka_setup.cmake")
 
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 

@@ -269,7 +269,7 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
 	/* Topic */
 	rd_kafka_buf_write_str(rkbuf, topic, -1);
 	/* PartitionArrayCnt */
-	rd_kafka_buf_write_i32(rkbuf, offset_cnt);
+	rd_kafka_buf_write_i32(rkbuf, (int32_t)offset_cnt);
 
 	for (i = 0 ; i < offset_cnt ; i++) {
 		/* Partition */
@@ -279,7 +279,7 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
 		rd_kafka_buf_write_i64(rkbuf, query_offsets[i]);
 
 		/* MaxNumberOfOffsets */
-		rd_kafka_buf_write_i32(rkbuf, offset_cnt);
+		rd_kafka_buf_write_i32(rkbuf, (int32_t)offset_cnt);
 	}
 
 	rd_kafka_buf_autopush(rkbuf);
@@ -1797,7 +1797,7 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    rd_kafka_resp_cb_t *resp_cb,
 				    void *opaque, int flash_msg) {
         rd_kafka_buf_t *rkbuf;
-	int mechlen = strlen(mechanism);
+	int mechlen = (int)strlen(mechanism);
 
         rkbuf = rd_kafka_buf_new(rkb->rkb_rk, 1, RD_KAFKAP_STR_SIZE0(mechlen));
 	rkbuf->rkbuf_flags |= (flash_msg ? RD_KAFKA_OP_F_FLASH : 0);

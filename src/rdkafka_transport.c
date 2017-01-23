@@ -293,7 +293,7 @@ static void rd_kafka_transport_ssl_lock_cb (int mode, int i,
 }
 
 static unsigned long rd_kafka_transport_ssl_threadid_cb (void) {
-	return (unsigned long)thrd_current();
+	return (unsigned long)(intptr_t)thrd_current();
 }
 
 

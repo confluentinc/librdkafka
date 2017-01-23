@@ -82,7 +82,7 @@ void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size) {
 	for (i = 0 ; i < size ; i++, p += elemsize)
 		rl->rl_elems[i] = p;
 
-	rl->rl_size = size;
+	rl->rl_size = (int)size;
 	rl->rl_cnt = 0;
 	rl->rl_flags |= RD_LIST_F_FIXED_SIZE;
 }

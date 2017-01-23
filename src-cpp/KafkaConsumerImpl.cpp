@@ -86,7 +86,7 @@ RdKafka::KafkaConsumerImpl::subscribe (const std::vector<std::string> &topics) {
   rd_kafka_topic_partition_list_t *c_topics;
   rd_kafka_resp_err_t err;
 
-  c_topics = rd_kafka_topic_partition_list_new(topics.size());
+  c_topics = rd_kafka_topic_partition_list_new((int)topics.size());
 
   for (unsigned int i = 0 ; i < topics.size() ; i++)
     rd_kafka_topic_partition_list_add(c_topics, topics[i].c_str(),

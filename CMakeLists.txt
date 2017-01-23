@@ -14,6 +14,7 @@ option(ENABLE_SHAREDPTR_DEBUG "Enable sharedptr debugging" OFF)
 
 option(WITH_ZLIB "With ZLIB" ON)
 option(WITH_SSL "With SSL" ON)
+option(WITH_SASL "With Sasl" OFF)
 
 # }
 
@@ -47,6 +48,7 @@ set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 # * HAVE_ATOMICS_64_SYNC
 # * WITH_ZLIB
 # * WITH_SSL
+# * WITH_SASL
 # * HAVE_REGEX
 # * HAVE_STRNDUP
 configure_file(config.h.in "${GENERATED_DIR}/config.h" @ONLY)

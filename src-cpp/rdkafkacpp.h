@@ -1389,6 +1389,8 @@ public:
    *
    * Regex pattern matching automatically performed for topics prefixed
    * with \c \"^\" (e.g. \c \"^myPfx[0-9]_.*\"
+   *
+   * @returns an error if the provided list of topics is invalid.
    */
   virtual ErrorCode subscribe (const std::vector<std::string> &topics) = 0;
 

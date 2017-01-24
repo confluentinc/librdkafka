@@ -12,8 +12,30 @@ option(ENABLE_DEVEL "Enable development asserts, checks, etc" OFF)
 option(ENABLE_REFCNT_DEBUG "Enable refcnt debugging" OFF)
 option(ENABLE_SHAREDPTR_DEBUG "Enable sharedptr debugging" OFF)
 
-option(WITH_ZLIB "With ZLIB" ON)
-option(WITH_SSL "With SSL" ON)
+# ZLIB {
+find_package(ZLIB QUIET)
+if(ZLIB_FOUND)
+  set(with_zlib_default ON)
+else()
+  set(with_zlib_default OFF)
+endif()
+option(WITH_ZLIB "With ZLIB" ${with_zlib_default})
+# }
+
+# OpenSSL {
+if(WITH_BUNDLED_SSL) # option from 'h2o' parent project
+  set(with_ssl_default ON)
+else()
+  find_package(OpenSSL QUIET)
+  if(OpenSSL_FOUND)
+    set(with_ssl_default ON)
+  else()
+    set(with_ssl_default OFF)
+  endif()
+endif()
+option(WITH_SSL "With SSL" ${with_ssl_default})
+# }
+
 option(WITH_SASL "With Sasl" OFF)
 
 # }

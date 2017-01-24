@@ -42,11 +42,12 @@ if(WITH_SASL)
       sources
       rdkafka_sasl.c
       rdkafka_sasl.h
-      rdkafka_sasl_cyrus.c
       rdkafka_sasl_int.h
   )
   if(WIN32)
     list(APPEND sources rdkafka_sasl_win32.c)
+  else()
+    list(APPEND sources rdkafka_sasl_cyrus.c)
   endif()
 endif()
 

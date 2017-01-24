@@ -36,7 +36,7 @@ endif()
 option(WITH_SSL "With SSL" ${with_ssl_default})
 # }
 
-option(WITH_SASL "With Sasl" OFF)
+option(WITH_SASL "With SASL" OFF)
 
 # }
 

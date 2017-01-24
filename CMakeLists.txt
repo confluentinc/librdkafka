@@ -36,7 +36,16 @@ endif()
 option(WITH_SSL "With SSL" ${with_ssl_default})
 # }
 
-option(WITH_SASL "With SASL" OFF)
+# SASL {
+include(FindPkgConfig)
+pkg_check_modules(SASL QUIET libsasl2)
+if(SASL_FOUND)
+  set(with_sasl_default ON)
+else()
+  set(with_sasl_default OFF)
+endif()
+option(WITH_SASL "With SASL" ${with_sasl_default})
+# }
 
 # }
 

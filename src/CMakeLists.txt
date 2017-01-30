@@ -99,3 +99,17 @@ if(WITH_SASL)
   pkg_check_modules(SASL REQUIRED libsasl2)
   target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})
 endif()
+
+install(
+    TARGETS rdkafka
+    EXPORT "${targets_export_name}"
+    LIBRARY DESTINATION "lib"
+    ARCHIVE DESTINATION "lib"
+    RUNTIME DESTINATION "bin"
+    INCLUDES DESTINATION "${include_install_dir}"
+)
+
+install(
+    FILES "rdkafka.h"
+    DESTINATION "${include_install_dir}/librdkafka"
+)

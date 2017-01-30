@@ -119,7 +119,7 @@ install(
 )
 
 install(
-    FILES LICENSE
+    FILES LICENSES.txt
     DESTINATION "share/licenses/librdkafka"
 )
 

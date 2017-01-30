@@ -117,6 +117,11 @@ install(
     DESTINATION "${config_install_dir}"
 )
 
+install(
+    FILES LICENSE
+    DESTINATION "share/licenses/librdkafka"
+)
+
 # }
 
 add_subdirectory(src)

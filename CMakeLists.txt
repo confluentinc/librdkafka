@@ -86,8 +86,9 @@ configure_file(config.h.in "${GENERATED_DIR}/config.h" @ONLY)
 
 # Installation (https://github.com/forexample/package-example) {
 
+include(GNUInstallDirs)
+
 set(config_install_dir "lib/cmake/${PROJECT_NAME}")
-set(include_install_dir "include")
 
 set(generated_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 

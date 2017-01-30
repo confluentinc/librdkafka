@@ -21,13 +21,13 @@ target_include_directories(rdkafka++ PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_L
 install(
     TARGETS rdkafka++
     EXPORT "${targets_export_name}"
-    LIBRARY DESTINATION "lib"
-    ARCHIVE DESTINATION "lib"
-    RUNTIME DESTINATION "bin"
-    INCLUDES DESTINATION "${include_install_dir}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
 )
 
 install(
     FILES "rdkafkacpp.h"
-    DESTINATION "${include_install_dir}/librdkafka"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka"
 )

@@ -452,6 +452,7 @@ static void rd_kafka_cgrp_handle_GroupCoordinator (rd_kafka_t *rk,
         rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto, &mdb);
 
         rd_kafka_cgrp_coord_update(rkcg, CoordId);
+        rd_kafka_cgrp_serve(rkcg); /* Serve updated state, if possible */
         return;
 
 err: /* Parse error */
@@ -481,6 +482,8 @@ err2:
 		/* Continue querying */
 		rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_QUERY_COORD);
         }
+
+        rd_kafka_cgrp_serve(rkcg); /* Serve updated state, if possible */
 }
 
 
@@ -2755,6 +2758,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
         if (unlikely(rd_kafka_terminating(rkcg->rkcg_rk)))
                 return;
 
+ retry:
         switch (rkcg->rkcg_state)
         {
         case RD_KAFKA_CGRP_STATE_TERM:
@@ -2780,7 +2784,8 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
         case RD_KAFKA_CGRP_STATE_WAIT_BROKER:
                 /* See if the group should be reassigned to another broker. */
                 if (rd_kafka_cgrp_reassign_broker(rkcg))
-                        break;
+                        goto retry; /* broker reassigned, retry state-machine
+                                     * to speed up next transition. */
 
                 /* Coordinator query */
                 if (rd_interval(&rkcg->rkcg_coord_query_intvl,
@@ -2807,6 +2812,9 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
                 } else {
                         rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_UP);
 
+                        /* Serve join state to trigger (re)join */
+                        rd_kafka_cgrp_join_state_serve(rkcg, rkb);
+
                         /* Start fetching if we have an assignment. */
                         if (rkcg->rkcg_assignment &&
 			    RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
@@ -2827,10 +2835,7 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
                         rd_kafka_cgrp_coord_query(rkcg,
                                                   "intervaled in state up");
 
-		if (rkb &&
-		    rd_kafka_broker_supports(
-			    rkb, RD_KAFKA_FEATURE_BROKER_BALANCED_CONSUMER))
-			rd_kafka_cgrp_join_state_serve(rkcg, rkb);
+                rd_kafka_cgrp_join_state_serve(rkcg, rkb);
                 break;
 
         }

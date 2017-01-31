@@ -2320,7 +2320,6 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
 int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                       int cb_type, void *opaque) {
 	rd_kafka_msg_t *rkm;
-	static int dcnt = 0;
 
 	/* Return-as-event requested, see if op can be converted to event,
 	 * otherwise fall through and trigger callbacks. */
@@ -2395,8 +2394,6 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			TAILQ_REMOVE(&rko->rko_u.dr.msgq.rkmq_msgs,
 				     rkm, rkm_link);
 
-			dcnt++;
-
                         if (rk->rk_conf.dr_msg_cb) {
 				rkm->rkm_rkmessage.err = rko->rko_err;
 				if (!rkm->rkm_rkmessage.rkt)
@@ -2423,9 +2420,6 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 
 		rd_kafka_msgq_init(&rko->rko_u.dr.msgq);
 
-		if (!(dcnt % 1000))
-			rd_kafka_dbg(rk, MSG, "POLL",
-				     "Now %i messages delivered to app", dcnt);
 		break;
 
 	case RD_KAFKA_OP_THROTTLE:

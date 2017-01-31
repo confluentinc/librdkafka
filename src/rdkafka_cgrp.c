@@ -465,6 +465,9 @@ err2:
                    RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                    rd_kafka_err2str(ErrorCode));
 
+        if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY)
+                return;
+
         if (ErrorCode == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE)
                 rd_kafka_cgrp_coord_update(rkcg, -1);
 	else {

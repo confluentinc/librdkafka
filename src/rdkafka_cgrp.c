@@ -1250,20 +1250,21 @@ err:
         actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request,
                                       RD_KAFKA_ERR_ACTION_END);
 
+        rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
+        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
                 rd_kafka_cgrp_op(rkcg, NULL, RD_KAFKA_NO_REPLYQ,
                                  RD_KAFKA_OP_COORD_QUERY, ErrorCode);
                 /* Schedule a retry */
                 if (ErrorCode != RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP) {
+                        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
                         rd_kafka_buf_keep(request);
                         rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
                 }
                 return;
         }
-
-        rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
-        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
 
         if (ErrorCode != 0 && ErrorCode != RD_KAFKA_RESP_ERR__DESTROY)
                 rd_kafka_cgrp_handle_heartbeat_error(rkcg, ErrorCode);

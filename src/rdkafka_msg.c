@@ -176,10 +176,11 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 				 msgflags|RD_KAFKA_MSG_F_ACCOUNT /* curr_msgs_add() */,
 				 payload, len, key, keylen, msg_opaque);
 
-        if (timestamp) {
+        if (timestamp)
                 rkm->rkm_timestamp  = timestamp;
-                rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_CREATE_TIME;
-        }
+        else
+                rkm->rkm_timestamp = rd_uclock()/1000;
+        rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_CREATE_TIME;
 
 	if (rkt->rkt_conf.message_timeout_ms == 0) {
 		rkm->rkm_ts_timeout = INT64_MAX;
@@ -214,7 +215,7 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
         /* Create message */
         rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
                                 payload, len, key, keylen, msg_opaque,
-				&err, &errnox, rd_uclock()/1000,  rd_clock());
+                                &err, &errnox, 0, rd_clock());
         if (unlikely(!rkm)) {
                 /* errno is already set by msg_new() */
 		rd_kafka_set_last_error(err, errnox);

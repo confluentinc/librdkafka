@@ -471,6 +471,7 @@ int main_0033_regex_subscribe_local (int argc, char **argv) {
 
         rd_kafka_topic_partition_list_destroy(valids);
         rd_kafka_topic_partition_list_destroy(invalids);
+        rd_kafka_topic_partition_list_destroy(none);
         rd_kafka_topic_partition_list_destroy(empty);
         rd_kafka_topic_partition_list_destroy(alot);
 

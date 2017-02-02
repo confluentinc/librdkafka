@@ -338,7 +338,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	va_list ap;
 	int errno_save = errno;
 	rd_kafka_bufq_t tmpq_waitresp, tmpq;
-        int statechange;
+        int old_state;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
@@ -408,7 +408,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rd_kafka_broker_feature_disable(rkb, RD_KAFKA_FEATURE_APIVERSION);
 
 	/* Set broker state */
-        statechange = rkb->rkb_state != RD_KAFKA_BROKER_STATE_DOWN;
+        old_state = rkb->rkb_state;
 	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
 
 	/* Unlock broker since a requeue will try to lock it. */
@@ -462,7 +462,8 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 
         /* Query for topic leaders to quickly pick up on failover. */
-        if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY && statechange)
+        if (fmt && err != RD_KAFKA_RESP_ERR__DESTROY &&
+            old_state >= RD_KAFKA_BROKER_STATE_UP)
                 rd_kafka_metadata_refresh_known_topics(rkb->rkb_rk, NULL,
                                                        1/*force*/,
                                                        "broker down");

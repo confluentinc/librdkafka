@@ -1195,9 +1195,6 @@ int main (int argc, char **argv) {
 
                 global_rk = rk;
 
-		if (debug)
-			rd_kafka_set_log_level(rk, 7);
-
 		/* Add broker(s) */
 		if (brokers && rd_kafka_brokers_add(rk, brokers) < 1) {
 			fprintf(stderr, "%% No valid brokers specified\n");
@@ -1360,9 +1357,6 @@ int main (int argc, char **argv) {
 
                 global_rk = rk;
 
-		if (debug)
-			rd_kafka_set_log_level(rk, 7);
-
 		/* Add broker(s) */
 		if (brokers && rd_kafka_brokers_add(rk, brokers) < 1) {
 			fprintf(stderr, "%% No valid brokers specified\n");
@@ -1483,9 +1477,6 @@ int main (int argc, char **argv) {
 		rd_kafka_poll_set_consumer(rk);
 
                 global_rk = rk;
-
-		if (debug)
-			rd_kafka_set_log_level(rk, 7);
 
 		/* Add broker(s) */
 		if (brokers && rd_kafka_brokers_add(rk, brokers) < 1) {

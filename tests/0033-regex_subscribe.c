@@ -43,6 +43,7 @@ struct expect {
 	char *name;           /* sub-test name */
 	const char *sub[4];  /* subscriptions */
 	const char *exp[4];  /* expected topics */
+        int         exp_err; /* expected error from subscribe() */
 	int         stat[4]; /* per exp status */
 	int         fails;
 	enum {
@@ -178,8 +179,9 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 	TIMING_START(&t_sub, "subscribe");
 	err = rd_kafka_subscribe(rk, tlist);
 	TIMING_STOP(&t_sub);
-	TEST_ASSERT(!err, "subscribe() failed: %s", rd_kafka_err2str(err));
-
+	TEST_ASSERT(err == exp->exp_err,
+                    "subscribe() failed: %s (expected %s)",
+                    rd_kafka_err2str(err), rd_kafka_err2str(exp->exp_err));
 
 	if (exp->exp[0]) {
 		/* Wait for assignment, actual messages are ignored. */
@@ -374,7 +376,8 @@ static int do_test (const char *assignor) {
 			.name = rd_strdup(tsprintf("%s: broken regex (no matches)",
 						   assignor)),
 			.sub = { "^.*[0", NULL },
-			.exp = { NULL }
+			.exp = { NULL },
+                        .exp_err = RD_KAFKA_RESP_ERR__INVALID_ARG
 		};
 
 		fails += test_subscribe(rk, &expect);

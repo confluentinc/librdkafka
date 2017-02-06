@@ -63,6 +63,8 @@ static int nonexist_part (void) {
 	for (it = 0 ; it < iterations ; it++) {
 		char group_id[32];
 
+                test_conf_init(NULL, NULL, 15);
+
 		test_str_id_generate(group_id, sizeof(group_id));
 
 		TEST_SAY("Iteration %d/%d, using group.id %s\n", it, iterations,

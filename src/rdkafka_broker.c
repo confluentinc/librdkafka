@@ -2805,7 +2805,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
                                             RD_KAFKA_FEATURE_THROTTLETIME);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
-                                       RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
+                                       RD_KAFKA_NO_REPLYQ,
                                        rd_kafka_produce_msgset_reply,
                                        /* refcount for msgset_reply() */
                                        rd_kafka_toppar_keep(rktp));

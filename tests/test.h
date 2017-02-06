@@ -146,16 +146,6 @@ struct test {
 #endif
 
 
-/** @brief Broker version to int */
-#define TEST_BRKVER(A,B,C,D) \
-	(((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
-/** @brief return single version component from int */
-#define TEST_BRKVER_X(V,I) \
-	(((V) >> (24-((I)*8))) & 0xff)
-
-extern int test_broker_version;
-
-
 #define TEST_FAIL0(file,line,do_lock,fail_now,...) do {                 \
                 int is_thrd = 0;                                        \
 		TEST_SAYL(0, "TEST FAILURE\n");				\

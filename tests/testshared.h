@@ -28,8 +28,18 @@
 #pragma once
 
 /**
- * C functions shared with C++ tests
+ * C variables and functions shared with C++ tests
  */
+
+/** @brief Broker version to int */
+#define TEST_BRKVER(A,B,C,D) \
+        (((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
+/** @brief return single version component from int */
+#define TEST_BRKVER_X(V,I) \
+        (((V) >> (24-((I)*8))) & 0xff)
+
+extern int test_broker_version;
+
 
 const char *test_mk_topic_name (const char *suffix, int randomized);
 

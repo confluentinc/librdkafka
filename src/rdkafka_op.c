@@ -411,7 +411,9 @@ int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
 
 
 /**
- * Send request to queue, wait for response.
+ * @brief Send request to queue, wait for response.
+ *
+ * @returns response on success or NULL if destq is disabled.
  */
 rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
                                  rd_kafka_q_t *recvq,
@@ -420,10 +422,11 @@ rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
         rd_kafka_op_t *reply;
 
         /* Indicate to destination where to send reply. */
-	rd_kafka_op_set_replyq(rko, recvq, NULL);
+        rd_kafka_op_set_replyq(rko, recvq, NULL);
 
         /* Enqueue op */
-        rd_kafka_q_enq(destq, rko);
+        if (!rd_kafka_q_enq(destq, rko))
+                return NULL;
 
         /* Wait for reply */
         reply = rd_kafka_q_pop(recvq, timeout_ms, 0);

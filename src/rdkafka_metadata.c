@@ -940,6 +940,8 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
 
                 if (no_leader || rkt->rkt_partition_cnt == 0)
                         rd_list_add(&topics, rd_strdup(rkt->rkt_topic->str));
+
+                rd_kafka_topic_rdunlock(rkt);
         }
 
 

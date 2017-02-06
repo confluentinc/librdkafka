@@ -41,7 +41,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 #Language bindings#
 
-  * C#/.NET: [rdkafka-dotnet](https://github.com/ah-/rdkafka-dotnet)
+  * C#/.NET: [rdkafka-dotnet](https://github.com/confluentinc/confluent-kafka-dotnet)
   * D (C-like): [librdkafka](https://github.com/DlangApache/librdkafka/)
   * D (C++-like): [librdkafkad](https://github.com/tamediadigital/librdkafka-d)
   * Go: [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go)

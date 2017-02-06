@@ -172,6 +172,25 @@ void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
 #define rd_kafka_q_fwd_set(S,D) rd_kafka_q_fwd_set0(S,D,1/*lock*/,\
                                                     0/*no fwd_app*/)
 
+/**
+ * @returns the forward queue (if any) with its refcount increased.
+ * @locks rd_kafka_q_lock(rkq) == !do_lock
+ */
+static RD_INLINE RD_UNUSED
+rd_kafka_q_t *rd_kafka_q_fwd_get (rd_kafka_q_t *rkq, int do_lock) {
+        rd_kafka_q_t *fwdq;
+        if (do_lock)
+                mtx_lock(&rkq->rkq_lock);
+
+        if ((fwdq = rkq->rkq_fwdq))
+                rd_kafka_q_keep(fwdq);
+
+        if (do_lock)
+                mtx_unlock(&rkq->rkq_lock);
+
+        return fwdq;
+}
+
 
 /**
  * @returns true if queue is forwarded, else false.
@@ -252,7 +271,7 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
                 rko->rko_serve_opaque = rkq->rkq_opaque;
         }
 
-	if (!(fwdq = rkq->rkq_fwdq)) {
+	if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
 		TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
                 rkq->rkq_qlen++;
                 rkq->rkq_qsize += rko->rko_len;
@@ -261,7 +280,6 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 			rd_kafka_q_io_event(rkq);
 		mtx_unlock(&rkq->rkq_lock);
 	} else {
-		rd_kafka_q_keep(fwdq);
 		mtx_unlock(&rkq->rkq_lock);
 		rd_kafka_q_enq(fwdq, rko);
 		rd_kafka_q_destroy(fwdq);
@@ -368,27 +386,35 @@ void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 /* Returns the number of elements in the queue */
 static RD_INLINE RD_UNUSED
 int rd_kafka_q_len (rd_kafka_q_t *rkq) {
-	int qlen;
-	mtx_lock(&rkq->rkq_lock);
-	if (!rkq->rkq_fwdq)
-		qlen = rkq->rkq_qlen;
-	else
-		qlen = rd_kafka_q_len(rkq->rkq_fwdq);
-	mtx_unlock(&rkq->rkq_lock);
-	return qlen;
+        int qlen;
+        rd_kafka_q_t *fwdq;
+        mtx_lock(&rkq->rkq_lock);
+        if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
+                qlen = rkq->rkq_qlen;
+                mtx_unlock(&rkq->rkq_lock);
+        } else {
+                mtx_unlock(&rkq->rkq_lock);
+                qlen = rd_kafka_q_len(fwdq);
+                rd_kafka_q_destroy(fwdq);
+        }
+        return qlen;
 }
 
 /* Returns the total size of elements in the queue */
 static RD_INLINE RD_UNUSED
 uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
-	uint64_t sz;
-	mtx_lock(&rkq->rkq_lock);
-	if (!rkq->rkq_fwdq)
-		sz = rkq->rkq_qsize;
-	else
-		sz = rd_kafka_q_size(rkq->rkq_fwdq);
-	mtx_unlock(&rkq->rkq_lock);
-	return sz;
+        uint64_t sz;
+        rd_kafka_q_t *fwdq;
+        mtx_lock(&rkq->rkq_lock);
+        if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
+                sz = rkq->rkq_qsize;
+                mtx_unlock(&rkq->rkq_lock);
+        } else {
+                mtx_unlock(&rkq->rkq_lock);
+                sz = rd_kafka_q_size(fwdq);
+                rd_kafka_q_destroy(fwdq);
+        }
+        return sz;
 }
 
 

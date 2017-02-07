@@ -1931,15 +1931,16 @@ static void rd_kafka_produce_msgset_reply (rd_kafka_t *rk,
         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
         int64_t offset = RD_KAFKA_OFFSET_INVALID;
 
+	/* Parse Produce reply (unless the request errored) */
+	if (!err && reply)
+		err = rd_kafka_produce_reply_handle(rkb, reply,
+						    request, &offset);
+
 	rd_rkb_dbg(rkb, MSG, "MSGSET",
 		   "MessageSet with %i message(s) %sdelivered",
 		   rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
 		   err ? "not ": "");
 
-	/* Parse Produce reply (unless the request errored) */
-	if (!err && reply)
-		err = rd_kafka_produce_reply_handle(rkb, reply,
-						    request, &offset);
 
 
 	if (err) {

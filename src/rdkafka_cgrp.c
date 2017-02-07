@@ -1280,6 +1280,7 @@ err:
                 if (ErrorCode != RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP) {
                         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
                         rd_kafka_buf_keep(request);
+                        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
                         rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
                 }
                 return;

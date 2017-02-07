@@ -710,7 +710,7 @@ int main (int argc, char **argv) {
       } else if (!strcmp(name, "--debug")) {
 	conf->set("debug", val, errstr);
       } else if (!strcmp(name, "-X")) {
-	char *s = strdupa(val);
+        char *s = strdup(val);
 	char *t = strchr(s, '=');
 	if (!t)
 	  t = (char *)"";
@@ -722,6 +722,7 @@ int main (int argc, char **argv) {
 	  std::cerr << now() << ": " << errstr << std::endl;
 	  exit(1);
 	}
+        free(s);
       } else {
 	std::cerr << now() << ": Unknown option " << name << std::endl;
 	exit(1);

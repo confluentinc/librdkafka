@@ -484,7 +484,7 @@ rd_kafka_commit_queue (rd_kafka_t *rk,
 
 	err = rd_kafka_commit0(rk, offsets, NULL,
 			       RD_KAFKA_REPLYQ(rkq, 0),
-			       rkqu ? cb : NULL, opaque, "manual");
+			       cb, opaque, "manual");
 
 	if (!rkqu) {
 		rd_kafka_op_t *rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0);

@@ -231,6 +231,8 @@ int16_t rd_kafka_broker_ApiVersion_supported (rd_kafka_broker_t *rkb,
                                               int16_t minver, int16_t maxver,
                                               int *featuresp);
 
+int rd_kafka_broker_get_state (rd_kafka_broker_t *rkb);
+
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid (rd_kafka_t *rk,
 						   int32_t nodeid);
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,

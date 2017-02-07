@@ -317,8 +317,19 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 }
 
 
-
-
+/**
+ * @brief Locks broker, acquires the states, unlocks, and returns
+ *        the state.
+ * @locks !broker_lock
+ * @locality any
+ */
+int rd_kafka_broker_get_state (rd_kafka_broker_t *rkb) {
+        int state;
+        rd_kafka_broker_lock(rkb);
+        state = rkb->rkb_state;
+        rd_kafka_broker_unlock(rkb);
+        return state;
+}
 
 
 /**

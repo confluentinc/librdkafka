@@ -1043,7 +1043,6 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	rd_kafka_toppar_t *rktp;
         shptr_rd_kafka_toppar_t *s_rktp;
 	int totcnt = 0;
-	int wrlocked = 0;
         rd_list_t query_topics;
 
         rd_list_init(&query_topics, 0, rd_free);
@@ -1053,11 +1052,11 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 		int p;
                 int cnt = 0, tpcnt = 0;
                 rd_kafka_msgq_t timedout;
+                int query_this = 0;
 
                 rd_kafka_msgq_init(&timedout);
 
 		rd_kafka_topic_wrlock(rkt);
-		wrlocked = 1;
 
                 /* Check if metadata information has timed out. */
                 if (rkt->rkt_state != RD_KAFKA_TOPIC_S_UNKNOWN &&
@@ -1070,16 +1069,12 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                      (rd_clock() - rkt->rkt_ts_metadata)/1000);
                         rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
 
-                        if (!rd_list_find(&query_topics, rkt->rkt_topic->str,
-                                          (void *)strcmp))
-                                rd_list_add(&query_topics,
-                                            rd_strdup(rkt->rkt_topic->str));
+                        query_this = 1;
                 }
 
                 /* Just need a read-lock from here on. */
                 rd_kafka_topic_wrunlock(rkt);
                 rd_kafka_topic_rdlock(rkt);
-                wrlocked = 0;
 
                 if (rkt->rkt_partition_cnt == 0) {
                         /* If this partition is unknown by brokers try
@@ -1092,10 +1087,7 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                      "should refresh metadata",
                                      rkt->rkt_topic->str);
 
-                        if (!rd_list_find(&query_topics, rkt->rkt_topic->str,
-                                          (void *)strcmp))
-                                rd_list_add(&query_topics,
-                                            rd_strdup(rkt->rkt_topic->str));
+                        query_this = 1;
                 }
 
 		for (p = RD_KAFKA_PARTITION_UA ;
@@ -1107,6 +1099,22 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 
                         rktp = rd_kafka_toppar_s2i(s_rktp);
 			rd_kafka_toppar_lock(rktp);
+
+                        /* Check that partition has a leader that is up,
+                         * else add topic to query list. */
+                        if (p != RD_KAFKA_PARTITION_UA &&
+                            (!rktp->rktp_leader ||
+                             rd_kafka_broker_get_state(rktp->rktp_leader) <
+                             RD_KAFKA_BROKER_STATE_UP)) {
+                                rd_kafka_dbg(rk, TOPIC, "QRYLEADER",
+                                             "Topic %s [%"PRId32"]: "
+                                             "leader is %s: re-query",
+                                             rkt->rkt_topic->str,
+                                             rktp->rktp_partition,
+                                             rktp->rktp_leader ?
+                                             "unavailable": "down");
+                                query_this = 1;
+                        }
 
 			/* Scan toppar's message queues for timeouts */
 			if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq,
@@ -1123,10 +1131,7 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 			rd_kafka_toppar_destroy(s_rktp);
 		}
 
-		if (wrlocked)
-			rd_kafka_topic_wrunlock(rkt);
-		else
-			rd_kafka_topic_rdunlock(rkt);
+                rd_kafka_topic_rdunlock(rkt);
 
                 if ((cnt = rd_atomic32_get(&timedout.rkmq_msg_cnt)) > 0) {
                         totcnt += cnt;
@@ -1137,12 +1142,21 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                         rd_kafka_dr_msgq(rkt, &timedout,
                                          RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
                 }
+
+                /* Need to re-query this topic's leader. */
+                if (query_this &&
+                    !rd_list_find(&query_topics, rkt->rkt_topic->str,
+                                  (void *)strcmp))
+                        rd_list_add(&query_topics,
+                                    rd_strdup(rkt->rkt_topic->str));
+
         }
         rd_kafka_rdunlock(rk);
 
         if (!rd_list_empty(&query_topics))
                 rd_kafka_metadata_refresh_topics(rk, NULL, &query_topics,
-                                                 0/*dont force*/,
+                                                 1/*force even if cached
+                                                    * info exists*/,
                                                  "refresh unavailable topics");
         rd_list_destroy(&query_topics);
 

@@ -1490,6 +1490,33 @@ public:
    */
   virtual ErrorCode commitAsync (const std::vector<TopicPartition*> &offsets) = 0;
 
+  /**
+   * @brief Commit offsets for the current assignment.
+   *
+   * @remark This is the synchronous variant that blocks until offsets
+   *         are committed or the commit fails (see return value).
+   *
+   * @remark The provided callback will be called from this function.
+   *
+   * @returns ERR_NO_ERROR or error code.
+   */
+  virtual ErrorCode commitSync (OffsetCommitCb *offset_commit_cb) = 0;
+
+  /**
+   * @brief Commit offsets for the provided list of partitions.
+   *
+   * @remark This is the synchronous variant that blocks until offsets
+   *         are committed or the commit fails (see return value).
+   *
+   * @remark The provided callback will be called from this function.
+   *
+   * @returns ERR_NO_ERROR or error code.
+   */
+  virtual ErrorCode commitSync (std::vector<TopicPartition*> &offsets,
+                                OffsetCommitCb *offset_commit_cb) = 0;
+
+
+
 
   /**
    * @brief Retrieve committed offsets for topics+partitions.

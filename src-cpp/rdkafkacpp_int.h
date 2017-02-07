@@ -65,10 +65,10 @@ void rebalance_cb_trampoline (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
                               rd_kafka_topic_partition_list_t *c_partitions,
                               void *opaque);
-void offset_commit_cb_trampoline (rd_kafka_t *rk,
-                                  rd_kafka_resp_err_t err,
-                                  rd_kafka_topic_partition_list_t *c_offsets,
-                                  void *opaque);
+void offset_commit_cb_trampoline0 (
+        rd_kafka_t *rk,
+        rd_kafka_resp_err_t err,
+        rd_kafka_topic_partition_list_t *c_offsets, void *opaque);
 
 rd_kafka_topic_partition_list_t *
     partitions_to_c_parts (const std::vector<TopicPartition*> &partitions);
@@ -732,6 +732,24 @@ public:
 	  return static_cast<ErrorCode>(err);
   }
 
+  ErrorCode commitSync (OffsetCommitCb *offset_commit_cb) {
+          return static_cast<ErrorCode>(
+                  rd_kafka_commit_queue(rk_, NULL, NULL,
+                                        RdKafka::offset_commit_cb_trampoline0,
+                                        offset_commit_cb));
+  }
+
+  ErrorCode commitSync (std::vector<TopicPartition*> &offsets,
+                        OffsetCommitCb *offset_commit_cb) {
+          rd_kafka_topic_partition_list_t *c_parts =
+                  partitions_to_c_parts(offsets);
+          rd_kafka_resp_err_t err =
+                  rd_kafka_commit_queue(rk_, c_parts, NULL,
+                                        RdKafka::offset_commit_cb_trampoline0,
+                                        offset_commit_cb);
+          rd_kafka_topic_partition_list_destroy(c_parts);
+          return static_cast<ErrorCode>(err);
+  }
 
   ErrorCode committed (std::vector<TopicPartition*> &partitions, int timeout_ms);
   ErrorCode position (std::vector<TopicPartition*> &partitions);

@@ -1104,6 +1104,8 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                          * else add topic to query list. */
                         if (p != RD_KAFKA_PARTITION_UA &&
                             (!rktp->rktp_leader ||
+                             rktp->rktp_leader->rkb_source ==
+                             RD_KAFKA_INTERNAL ||
                              rd_kafka_broker_get_state(rktp->rktp_leader) <
                              RD_KAFKA_BROKER_STATE_UP)) {
                                 rd_kafka_dbg(rk, TOPIC, "QRYLEADER",
@@ -1111,8 +1113,11 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                              "leader is %s: re-query",
                                              rkt->rkt_topic->str,
                                              rktp->rktp_partition,
-                                             rktp->rktp_leader ?
-                                             "unavailable": "down");
+                                             !rktp->rktp_leader ?
+                                             "unavailable" :
+                                             (rktp->rktp_leader->rkb_source ==
+                                              RD_KAFKA_INTERNAL ? "internal":
+                                              "down"));
                                 query_this = 1;
                         }
 

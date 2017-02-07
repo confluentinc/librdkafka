@@ -2357,7 +2357,8 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
 
         /* Remove assignment (async), if any. If there is already an
          * unassign in progress we dont need to bother. */
-        if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
+        if (!RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) &&
+            !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
 
                 rd_kafka_rebalance_op(rkcg,
@@ -2459,14 +2460,14 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
 	rkcg->rkcg_ts_terminate = rd_clock();
         rkcg->rkcg_reply_rko = rko;
 
-        /* If there's an oustanding rebalance_cb which has not yet been
-         * served by the application it will be served from consumer_close(). */
-        if (RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg))
-                ;/* wait for app calling assign() */
-        else  if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION)
-                rd_kafka_cgrp_unsubscribe(rkcg, 1/*leave group*/);
-        else if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN))
-                rd_kafka_cgrp_unassign(rkcg);
+         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION)
+                 rd_kafka_cgrp_unsubscribe(rkcg, 1/*leave group*/);
+
+         /* If there's an oustanding rebalance_cb which has not yet been
+          * served by the application it will be served from consumer_close(). */
+         if (!RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) &&
+             !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN))
+                 rd_kafka_cgrp_unassign(rkcg);
 
         /* Try to terminate right away if all preconditions are met. */
         rd_kafka_cgrp_try_terminate(rkcg);
@@ -2690,14 +2691,16 @@ static int rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko,
         case RD_KAFKA_OP_ASSIGN:
                 /* New atomic assignment (payload != NULL),
                  * or unassignment (payload == NULL) */
-                if (rko->rko_u.assign.partitions &&
-                    rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
-                        /* Dont allow new assignments when terminating */
-                        err = RD_KAFKA_RESP_ERR__DESTROY;
+                err = 0;
+                if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
+                        /* Treat all assignments as unassign
+                         * when terminating. */
+                        rd_kafka_cgrp_unassign(rkcg);
+                        if (rko->rko_u.assign.partitions)
+                                err = RD_KAFKA_RESP_ERR__DESTROY;
                 } else {
                         rd_kafka_cgrp_assign(
                                 rkcg, rko->rko_u.assign.partitions);
-                        err = 0;
                 }
                 rd_kafka_op_reply(rko, err);
                 rko = NULL;

@@ -2344,7 +2344,7 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                 /* If EVENT_REBALANCE is enabled but rebalance_cb isnt
                  * we need to perform a dummy assign for the application.
                  * This might happen during termination with consumer_close() */
-                if (cb_type == _Q_CB_CALLBACK && rk->rk_conf.rebalance_cb)
+                if (rk->rk_conf.rebalance_cb)
                         rk->rk_conf.rebalance_cb(
                                 rk, rko->rko_err,
                                 rko->rko_u.rebalance.partitions,

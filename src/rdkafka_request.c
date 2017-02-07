@@ -96,6 +96,8 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                 /* Request metadata information update */
                 actions |= RD_KAFKA_ERR_ACTION_REFRESH;
                 break;
+        case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                /* Broker-side request handling timeout */
 	case RD_KAFKA_RESP_ERR__TRANSPORT:
 		/* Broker connection down */
 		actions |= RD_KAFKA_ERR_ACTION_RETRY;

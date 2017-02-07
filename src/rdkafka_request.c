@@ -640,7 +640,8 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
 			      rd_kafka_topic_partition_list_t *offsets) {
         const int log_decode_errors = 1;
         int32_t TopicArrayCnt;
-        int16_t ErrorCode = 0;
+        int16_t ErrorCode = 0, last_ErrorCode = 0;
+	int errcnt = 0;
         int i;
 	int actions;
 
@@ -676,8 +677,17 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
                         }
 
                         rktpar->err = ErrorCode;
+			if (ErrorCode) {
+				last_ErrorCode = ErrorCode;
+				errcnt++;
+			}
                 }
         }
+
+	/* If all partitions failed use error code
+	 * from last partition to as the global error. */
+	if (offsets && errcnt == offsets->cnt)
+		err = last_ErrorCode;
 	goto done;
 
 err:
@@ -690,10 +700,10 @@ err:
 		RD_KAFKA_ERR_ACTION_RETRY,
 		RD_KAFKA_RESP_ERR_GROUP_LOAD_IN_PROGRESS,
 
-		RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+		RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
 		RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
 
-		RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+		RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_SPECIAL,
 		RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP,
 
 		RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
@@ -717,9 +727,14 @@ err:
 		RD_KAFKA_ERR_ACTION_END);
 
 	if (actions & RD_KAFKA_ERR_ACTION_REFRESH && rk->rk_cgrp) {
-		/* Re-query for coordinator */
-		rd_kafka_cgrp_coord_query(rk->rk_cgrp,
-					  "OffsetCommitRequest failed");
+		/* Mark coordinator dead or re-query for coordinator.
+		 * ..dead() will trigger a re-query. */
+		if (actions & RD_KAFKA_ERR_ACTION_SPECIAL)
+			rd_kafka_cgrp_coord_dead(rk->rk_cgrp, err,
+						 "OffsetCommitRequest failed");
+		else
+			rd_kafka_cgrp_coord_query(rk->rk_cgrp,
+						  "OffsetCommitRequest failed");
 	}
 	if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
 		if (rd_kafka_buf_retry(rkb, request))

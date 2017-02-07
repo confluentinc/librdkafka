@@ -29,6 +29,7 @@
  * for use with the official Kafka client tests.
  */
 
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -152,10 +153,11 @@ static std::string now () {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   time_t t = tv.tv_sec;
-  struct tm *tm = localtime(&t);
+  struct tm tm;
   char buf[64];
 
-  strftime(buf, sizeof(buf), "%H:%M:%S", tm);
+  localtime_r(&t, &tm);
+  strftime(buf, sizeof(buf), "%H:%M:%S", &tm);
   snprintf(buf+strlen(buf), sizeof(buf)-strlen(buf), ".%03d",
 	   (int)(tv.tv_usec / 1000));
 
@@ -366,10 +368,53 @@ static void report_records_consumed (int immediate) {
 }
 
 
+static std::ostringstream deferred_reports;
+
+class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
+ public:
+  void offset_commit_cb (RdKafka::ErrorCode err,
+                         std::vector<RdKafka::TopicPartition*> &offsets) {
+    std::cerr << now() << ": Propagate offset for " << offsets.size() << " partitions, error: " << RdKafka::err2str(err) << std::endl;
+
+    /* No offsets to commit, dont report anything. */
+    if (err == RdKafka::ERR__NO_OFFSET)
+      return;
+
+    /* Send up-to-date records_consumed report to make sure consumed > committed */
+    report_records_consumed(1);
+
+    std::cout << "{ " <<
+        "\"name\": \"offsets_committed\", " <<
+        "\"success\": " << (err ? "false" : "true") << ", " <<
+        "\"error\": \"" << (err ? RdKafka::err2str(err) : "") << "\", " <<
+        "\"_autocommit\": " << (state.consumer.useAutoCommit ? "true":"false") << ", " <<
+        "\"offsets\": [ ";
+    assert(offsets.size() > 0);
+    for (unsigned int i = 0 ; i < offsets.size() ; i++) {
+      std::cout << (i == 0 ? "" : ", ") << "{ " <<
+          " \"topic\": \"" << offsets[i]->topic() << "\", " <<
+          " \"partition\": " << offsets[i]->partition() << ", " <<
+          " \"offset\": " << (int)offsets[i]->offset() << ", " <<
+          " \"error\": \"" <<
+          (offsets[i]->err() ? RdKafka::err2str(offsets[i]->err()) : "") <<
+          "\" " <<
+          " }";
+    }
+    std::cout << " ] }" << std::endl;
+
+    /* Write any deferred reports that needs to be synchronized to
+     * be written after offsets_committed, such as partitions_revoked. */
+    std::cout << deferred_reports.str();
+    deferred_reports.str("");
+  }
+};
+
+static ExampleOffsetCommitCb ex_offset_commit_cb;
+
 
 /**
  * Commit every 1000 messages or whenever there is a consume timeout.
- * @returns 1 if commit was triggered, else 0.
+ * @returns 1 if async commit was triggered, else 0.
  */
 static int do_commit (RdKafka::KafkaConsumer *consumer,
 		      int immediate) {
@@ -387,17 +432,21 @@ static int do_commit (RdKafka::KafkaConsumer *consumer,
       (state.consumer.consumedMessages -
        state.consumer.consumedMessagesAtLastCommit) << " messages (" <<
       (state.consumer.useAsyncCommit ? "async":"sync") << ")" << std::endl;
-    if (state.consumer.useAsyncCommit)
-      consumer->commitAsync();
-    else
-      consumer->commitSync();
 
-    std::cerr << now() << ": commit done" << std::endl;
+    RdKafka::ErrorCode err;
+    if (state.consumer.useAsyncCommit)
+      err = consumer->commitAsync();
+    else
+      err = consumer->commitSync(&ex_offset_commit_cb);
+
+    std::cerr << now() << ": " <<
+      (state.consumer.useAsyncCommit ? "async":"sync") <<
+      " commit returned " << RdKafka::err2str(err) << std::endl;
 
     state.consumer.consumedMessagesAtLastCommit =
       state.consumer.consumedMessages;
 
-    return 1;
+    return !err && state.consumer.useAsyncCommit;
   } else
     return 0;
 }
@@ -460,7 +509,7 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
     case RdKafka::ERR__PARTITION_EOF:
       /* Last message */
       if (exit_eof) {
-	std::cerr << now() << ": Termiate: exit on EOF" << std::endl;
+	std::cerr << now() << ": Terminate: exit on EOF" << std::endl;
         run = false;
       }
       break;
@@ -483,7 +532,6 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
 }
 
 
-static std::ostringstream deferred_reports;
 
 
 class ExampleConsumeCb : public RdKafka::ConsumeCb {
@@ -520,8 +568,9 @@ private:
     if (err == RdKafka::ERR__ASSIGN_PARTITIONS)
       consumer->assign(partitions);
     else {
-      /* Deferr report to after async auto offset commit? */
-      deferr = !do_commit(consumer, 1);
+      /* Deferr report to after we've seen offset_commit_cb which
+       * is not triggered from commit() when async but from poll. */
+      deferr = do_commit(consumer, 1);
       consumer->unassign();
     }
 
@@ -532,53 +581,14 @@ private:
       "\"partitions\": [ " << part_list_json(partitions) << "] }" << std::endl;
 
     if (!deferr) {
-      std::cerr << now() << ": Deferring until later: " << deferred_reports.str();
       std::cout << deferred_reports.str();
       deferred_reports.str("");
+    } else {
+      std::cerr << now() << ": Deferring until later: " << deferred_reports.str();
     }
   }
 };
 
-
-
-
-class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
- public:
-  void offset_commit_cb (RdKafka::ErrorCode err,
-                         std::vector<RdKafka::TopicPartition*> &offsets) {
-    std::cerr << now() << ": Propagate offset for " << offsets.size() << " partitions, error: " << RdKafka::err2str(err) << std::endl;
-
-    /* No offsets to commit, dont report anything. */
-    if (err == RdKafka::ERR__NO_OFFSET)
-      return;
-
-    /* Send up-to-date records_consumed report to make sure consumed > committed */
-    report_records_consumed(1);
-
-    std::cout << "{ " <<
-        "\"name\": \"offsets_committed\", " <<
-        "\"success\": " << (err ? "false" : "true") << ", " <<
-        "\"error\": \"" << (err ? RdKafka::err2str(err) : "") << "\", " <<
-        "\"offsets\": [ ";
-    assert(offsets.size() > 0);
-    for (unsigned int i = 0 ; i < offsets.size() ; i++) {
-      std::cout << (i == 0 ? "" : ", ") << "{ " <<
-          " \"topic\": \"" << offsets[i]->topic() << "\", " <<
-          " \"partition\": " << offsets[i]->partition() << ", " <<
-          " \"offset\": " << (int)offsets[i]->offset() << ", " <<
-          " \"error\": \"" <<
-          (offsets[i]->err() ? RdKafka::err2str(offsets[i]->err()) : "") <<
-          "\" " <<
-          " }";
-    }
-    std::cout << " ] }" << std::endl;
-
-    /* Write any deferred reports that needs to be synchronized to
-     * be written after offsets_committed, such as partitions_revoked. */
-    std::cout << deferred_reports.str();
-    deferred_reports.str("");
-  }
-};
 
 
 
@@ -613,6 +623,12 @@ int main (int argc, char **argv) {
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
   RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
 
+  /* Avoid slow shutdown on error */
+  if (tconf->set("message.timeout.ms", "60000", errstr)) {
+    std::cerr << now() << errstr << std::endl;
+    exit(1);
+  }
+
   {
     char hostname[128];
     gethostname(hostname, sizeof(hostname)-1);
@@ -620,6 +636,9 @@ int main (int argc, char **argv) {
   }
 
   conf->set("log.thread.name", "true", errstr);
+
+  /* correct producer offsets */
+  tconf->set("produce.offset.report", "true", errstr);
 
   /* auto commit is explicitly enabled with --enable-autocommit */
   conf->set("enable.auto.commit", "false", errstr);
@@ -690,6 +709,19 @@ int main (int argc, char **argv) {
 	value_prefix = std::string(val) + ".";
       } else if (!strcmp(name, "--debug")) {
 	conf->set("debug", val, errstr);
+      } else if (!strcmp(name, "-X")) {
+	char *s = strdupa(val);
+	char *t = strchr(s, '=');
+	if (!t)
+	  t = (char *)"";
+	else {
+	  *t = '\0';
+	  t++;
+	}
+	if (conf->set(s, t, errstr)) {
+	  std::cerr << now() << ": " << errstr << std::endl;
+	  exit(1);
+	}
       } else {
 	std::cerr << now() << ": Unknown option " << name << std::endl;
 	exit(1);
@@ -791,7 +823,7 @@ int main (int argc, char **argv) {
       exit(1);
     }
 
-    static const int delay_us = throughput ? 1000000/throughput : 0;
+    static const int delay_us = throughput ? 1000000/throughput : 10;
 
     if (state.maxMessages == -1)
       state.maxMessages = 1000000; /* Avoid infinite produce */
@@ -802,29 +834,34 @@ int main (int argc, char **argv) {
        */
       std::ostringstream msg;
       msg << value_prefix << i;
-      RdKafka::ErrorCode resp =
-	producer->produce(topic, partition,
-			  RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
-			  const_cast<char *>(msg.str().c_str()),
-			  msg.str().size(), NULL, NULL);
-      if (resp != RdKafka::ERR_NO_ERROR) {
-	errorString("producer_send_error",
-		    RdKafka::err2str(resp), topic->name(), NULL, msg.str());
-	state.producer.numErr++;
-      } else {
-	std::cerr << now() << ": % Produced message (" <<
-	  msg.str().size() << " bytes)" << std::endl;
-	state.producer.numSent++;
+      while (true) {
+	RdKafka::ErrorCode resp =
+	  producer->produce(topic, partition,
+			    RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
+			    const_cast<char *>(msg.str().c_str()),
+			    msg.str().size(), NULL, NULL);
+	if (resp == RdKafka::ERR__QUEUE_FULL) {
+	  producer->poll(100);
+	  continue;
+	} else if (resp != RdKafka::ERR_NO_ERROR) {
+	  errorString("producer_send_error",
+		      RdKafka::err2str(resp), topic->name(), NULL, msg.str());
+	  state.producer.numErr++;
+	} else {
+	  state.producer.numSent++;
+	}
+	break;
       }
 
       producer->poll(delay_us / 1000);
+      usleep(1000);
       watchdog_kick();
     }
     run = true;
 
     while (run && producer->outq_len() > 0) {
       std::cerr << now() << ": Waiting for " << producer->outq_len() << std::endl;
-      producer->poll(50);
+      producer->poll(1000);
       watchdog_kick();
     }
 
@@ -850,7 +887,6 @@ int main (int argc, char **argv) {
     ExampleRebalanceCb ex_rebalance_cb;
     conf->set("rebalance_cb", &ex_rebalance_cb, errstr);
 
-    ExampleOffsetCommitCb ex_offset_commit_cb;
     conf->set("offset_commit_cb", &ex_offset_commit_cb, errstr);
 
 

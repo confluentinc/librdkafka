@@ -1371,10 +1371,12 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
         } else {
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
 			     "Group \"%s\": "
-			     "waiting for %d toppar(s), %d unassignment(s), "
+			     "waiting for %s%d toppar(s), %d unassignment(s), "
 			     "%d commit(s)%s (state %s, join-state %s) "
 			     "before terminating",
 			     rkcg->rkcg_group_id->str,
+                             RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) ?
+                             "rebalance_cb, ": "",
 			     rd_list_cnt(&rkcg->rkcg_toppars),
 			     rkcg->rkcg_wait_unassign_cnt,
 			     rkcg->rkcg_wait_commit_cnt,
@@ -2398,17 +2400,11 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
 	rkcg->rkcg_ts_terminate = rd_clock();
         rkcg->rkcg_reply_rko = rko;
 
-	/* If there's an oustanding rebalance_cb which has not yet been
-	 * served by the application it wont be served from now by any poll()
-	 * call since the application is calling close().
-	 * So we could either wait for close() to serve the queue or simply
-	 * perform an unassign call here directly to speed things up.
-	 * We choose the latter since the app has already decided to shut down
-	 * there is no point in lingering about. */
-	if (RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg))
-		rd_kafka_cgrp_assign(rkcg, NULL);
-
-        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION)
+        /* If there's an oustanding rebalance_cb which has not yet been
+         * served by the application it will be served from consumer_close(). */
+        if (RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg))
+                ;/* wait for app calling assign() */
+        else  if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION)
                 rd_kafka_cgrp_unsubscribe(rkcg, 1/*leave group*/);
         else if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN))
                 rd_kafka_cgrp_unassign(rkcg);

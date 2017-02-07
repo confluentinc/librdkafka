@@ -2341,17 +2341,22 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                 break;
 
         case RD_KAFKA_OP_REBALANCE:
-		/* If EVENT_REBALANCE is enabled but rebalance_cb isnt
-		 * we need to perform a dummy assign for the application.
-		 * This might happen during termination with consumer_close() */
-		if (rk->rk_conf.rebalance_cb)
-			rk->rk_conf.rebalance_cb(
-				rk, rko->rko_err,
-				rko->rko_u.rebalance.partitions,
-				rk->rk_conf.opaque);
-		else
-			rd_kafka_assign(rk, NULL);
-		break;
+                /* If EVENT_REBALANCE is enabled but rebalance_cb isnt
+                 * we need to perform a dummy assign for the application.
+                 * This might happen during termination with consumer_close() */
+                if (cb_type == _Q_CB_CALLBACK && rk->rk_conf.rebalance_cb)
+                        rk->rk_conf.rebalance_cb(
+                                rk, rko->rko_err,
+                                rko->rko_u.rebalance.partitions,
+                                rk->rk_conf.opaque);
+                else {
+                        rd_kafka_dbg(rk, CGRP, "UNASSIGN",
+                                     "Forcing unassign of %d partition(s)",
+                                     rko->rko_u.rebalance.partitions ?
+                                     rko->rko_u.rebalance.partitions->cnt : 0);
+                        rd_kafka_assign(rk, NULL);
+                }
+                break;
 
         case RD_KAFKA_OP_OFFSET_COMMIT | RD_KAFKA_OP_REPLY:
 		if (!rko->rko_u.offset_commit.cb)

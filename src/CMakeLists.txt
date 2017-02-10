@@ -99,3 +99,17 @@ if(WITH_SASL)
   pkg_check_modules(SASL REQUIRED libsasl2)
   target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})
 endif()
+
+install(
+    TARGETS rdkafka
+    EXPORT "${targets_export_name}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+)
+
+install(
+    FILES "rdkafka.h"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/librdkafka"
+)

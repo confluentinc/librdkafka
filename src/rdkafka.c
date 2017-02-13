@@ -523,7 +523,9 @@ rd_kafka_resp_err_t rd_kafka_errno2err (int errnox) {
 
 
 /**
- * Final destructor for rd_kafka_t, must only be called with refcnt 0.
+ * @brief Final destructor for rd_kafka_t, must only be called with refcnt 0.
+ *
+ * @locality application thread
  */
 void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
@@ -539,8 +541,12 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
         rd_kafka_timers_destroy(&rk->rk_timers);
 
+        rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Destroying op queues");
+
         /* Destroy cgrp */
         if (rk->rk_cgrp) {
+                rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                             "Destroying cgrp");
                 /* Reset queue forwarding (rep -> cgrp) */
                 rd_kafka_q_fwd_set(rk->rk_rep, NULL);
                 rd_kafka_cgrp_destroy_final(rk->rk_cgrp);
@@ -554,11 +560,17 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
                 rd_kafka_q_destroy(rk->rk_logq);
 
 #if WITH_SSL
-	if (rk->rk_conf.ssl.ctx)
-		rd_kafka_transport_ssl_ctx_term(rk);
+	if (rk->rk_conf.ssl.ctx) {
+                rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Destroying SSL CTX");
+                rd_kafka_transport_ssl_ctx_term(rk);
+        }
 #endif
 
-	if (rk->rk_type == RD_KAFKA_PRODUCER) {
+        /* It is not safe to log after this point. */
+        rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                     "Termination done: freeing resources");
+
+        if (rk->rk_type == RD_KAFKA_PRODUCER) {
 		cnd_destroy(&rk->rk_curr_msgs.cnd);
 		mtx_destroy(&rk->rk_curr_msgs.lock);
 	}
@@ -587,16 +599,22 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 #endif
         rd_kafka_dbg(rk, ALL, "DESTROY", "Terminating instance");
 
-	/* The legacy/simple consumer lacks an API to close down the consumer*/
-	if (rk->rk_cgrp)
-		rd_kafka_consumer_close(rk);
+        /* The legacy/simple consumer lacks an API to close down the consumer*/
+        if (rk->rk_cgrp) {
+                rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                             "Closing consumer group");
+                rd_kafka_consumer_close(rk);
+        }
 
+        rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Interrupting timers");
         rd_kafka_wrlock(rk);
         thrd = rk->rk_thread;
 	rd_atomic32_add(&rk->rk_terminate, 1);
         rd_kafka_timers_interrupt(&rk->rk_timers);
         rd_kafka_wrunlock(rk);
 
+        rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                     "Sending TERMINATE to main background thread");
         /* Send op to trigger queue/io wake-up.
          * The op itself is (likely) ignored by the receiver. */
         rd_kafka_q_enq(rk->rk_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
@@ -605,15 +623,23 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 
 #ifndef _MSC_VER
         /* Interrupt main kafka thread to speed up termination. */
-	if (term_sig)
+	if (term_sig) {
+                rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                             "Sending thread kill signal %d", term_sig);
                 pthread_kill(thrd, term_sig);
+        }
 #endif
 
         if (!blocking)
                 return; /* FIXME: thread resource leak */
 
+        rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                     "Joining main background thread");
+
         if (thrd_join(thrd, NULL) != thrd_success)
                 rd_kafka_assert(NULL, !*"failed to join main thread");
+
+        rd_kafka_destroy_final(rk);
 }
 
 
@@ -645,7 +671,7 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
 	rd_kafka_wrlock(rk);
 
-        rd_kafka_dbg(rk, ALL, "DESTROY", "Remove all topics");
+        rd_kafka_dbg(rk, ALL, "DESTROY", "Removing all topics");
 	/* Decommission all topics */
 	TAILQ_FOREACH_SAFE(rkt, &rk->rk_topics, rkt_link, rkt_tmp) {
 		rd_kafka_wrunlock(rk);
@@ -682,6 +708,9 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
         rd_kafka_wrunlock(rk);
 
+        rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                     "Purging reply queue");
+
 	/* Purge op-queue */
         rd_kafka_q_disable(rk->rk_rep);
 	rd_kafka_q_purge(rk->rk_rep);
@@ -689,6 +718,9 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 	/* Loose our special reference to the internal broker. */
         mtx_lock(&rk->rk_internal_rkb_lock);
 	if ((rkb = rk->rk_internal_rkb)) {
+                rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                             "Decommissioning internal broker");
+
                 /* Send op to trigger queue wake-up. */
                 rd_kafka_q_enq(rkb->rkb_ops,
                                rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
@@ -703,6 +735,9 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 		rd_kafka_broker_destroy(rkb);
 
 
+        rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                     "Join %d broker thread(s)", rd_list_cnt(&wait_thrds));
+
         /* Join broker threads */
         RD_LIST_FOREACH(thrd, &wait_thrds, i) {
                 if (thrd_join(*thrd, NULL) != thrd_success)
@@ -711,7 +746,6 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         }
 
         rd_list_destroy(&wait_thrds);
-
 }
 
 
@@ -1136,7 +1170,9 @@ static int rd_kafka_thread_main (void *arg) {
         rd_kafka_wrunlock(rk);
 
         rd_kafka_destroy_internal(rk);
-        rd_kafka_destroy_final(rk);
+
+        rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                     "Main background thread exiting");
 
 	rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
 

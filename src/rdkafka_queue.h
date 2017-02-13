@@ -70,6 +70,7 @@ enum {
         _Q_CB_INVALID, /* dont use */
         _Q_CB_CALLBACK,/* trigger callback based on op */
         _Q_CB_RETURN,  /* return op rather than trigger callback (if possible)*/
+        _Q_CB_FORCE_RETURN, /* return op, regardless of callback. */
         _Q_CB_EVENT    /* like _Q_CB_RETURN but return event_t:ed op */
 };
 

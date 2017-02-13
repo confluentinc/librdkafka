@@ -448,8 +448,8 @@ static void nonexist_offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 		failed_offsets += offsets->elems[i].err ? 1 : 0;
 	}
 
-	TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
-		    "expected global success, not %s", rd_kafka_err2str(err));
+	TEST_ASSERT(err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+		    "expected unknown Topic or partition, not %s", rd_kafka_err2str(err));
 	TEST_ASSERT(offsets->cnt == 2, "expected %d offsets", offsets->cnt);
 	TEST_ASSERT(failed_offsets == offsets->cnt,
 		    "expected %d offsets to have failed, got %d",
@@ -480,7 +480,7 @@ static void do_nonexist_commit (void) {
 	err = rd_kafka_commit_queue(rk, offsets, NULL,
 				    nonexist_offset_commit_cb, NULL);
 	TEST_SAY("nonexist commit returned %s\n", rd_kafka_err2str(err));
-	if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+	if (err != RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
 		TEST_FAIL("commit() should succeed, not: %s",
 			  rd_kafka_err2str(err));
 

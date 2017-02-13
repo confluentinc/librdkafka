@@ -2365,7 +2365,9 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
         switch ((int)rko->rko_type)
         {
         case RD_KAFKA_OP_FETCH:
-                if (!rk->rk_conf.consume_cb || cb_type == _Q_CB_RETURN)
+                if (!rk->rk_conf.consume_cb ||
+                    cb_type == _Q_CB_RETURN ||
+                    cb_type == _Q_CB_FORCE_RETURN)
                         return 0; /* Dont handle here */
                 else {
                         struct consume_ctx ctx = {
@@ -2411,7 +2413,7 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
                  * rd_kafka_poll() (_Q_CB_GLOBAL):
                  *   convert to ERR op (fallthru)
                  */
-                if (cb_type == _Q_CB_RETURN)
+                if (cb_type == _Q_CB_RETURN || cb_type == _Q_CB_FORCE_RETURN)
                         return 0; /* return as message_t to application */
 		/* FALLTHRU */
 

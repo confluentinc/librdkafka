@@ -521,7 +521,9 @@ void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,
  * @returns 1 if handled, else 0.
  */
 int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko, int cb_type) {
-        if (rko->rko_type & RD_KAFKA_OP_CB)
+        if (cb_type == _Q_CB_FORCE_RETURN)
+                return 0;
+        else if (cb_type != _Q_CB_EVENT && rko->rko_type & RD_KAFKA_OP_CB)
                 rd_kafka_op_call(rk, rko);
         else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
                 rd_kafka_buf_handle_op(rko, rko->rko_err);

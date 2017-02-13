@@ -739,10 +739,6 @@ class RD_EXPORT Conf {
                                 const std::string &value,
                                 std::string &errstr) = 0;
 
-  /** @brief Use with \p name = \c \"consume_cb\" */
-  virtual Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
-                                std::string &errstr) = 0;
-
   /** @brief Use with \p name = \c \"dr_cb\" */
   virtual Conf::ConfResult set (const std::string &name,
                                 DeliveryReportCb *dr_cb,
@@ -845,6 +841,10 @@ class RD_EXPORT Conf {
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */
   virtual std::list<std::string> *dump () = 0;
+
+  /** @brief Use with \p name = \c \"consume_cb\" */
+  virtual Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
+				std::string &errstr) = 0;
 };
 
 /**@}*/

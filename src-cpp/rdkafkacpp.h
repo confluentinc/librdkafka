@@ -1563,6 +1563,26 @@ public:
    * @remark The consumer object must later be freed with \c delete
    */
   virtual ErrorCode close () = 0;
+
+
+  /**
+   * @brief Seek consumer for topic+partition to offset which is either an
+   *        absolute or logical offset.
+   *
+   * If \p timeout_ms is not 0 the call will wait this long for the
+   * seek to be performed. If the timeout is reached the internal state
+   * will be unknown and this function returns `ERR__TIMED_OUT`.
+   * If \p timeout_ms is 0 it will initiate the seek but return
+   * immediately without any error reporting (e.g., async).
+   *
+   * This call triggers a fetch queue barrier flush.
+   *
+   * @remark Consumtion for the given partition must have started for the
+   *         seek to work. Use assign() to set the starting offset.
+   *
+   * @returns an ErrorCode to indicate success or failure.
+   */
+  virtual ErrorCode seek (const TopicPartition &partition, int timeout_ms) = 0;
 };
 
 

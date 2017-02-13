@@ -754,6 +754,8 @@ public:
   ErrorCode committed (std::vector<TopicPartition*> &partitions, int timeout_ms);
   ErrorCode position (std::vector<TopicPartition*> &partitions);
 
+  ErrorCode seek (const TopicPartition &partition, int timeout_ms);
+
   ErrorCode close ();
 };
 

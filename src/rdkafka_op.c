@@ -71,6 +71,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_OFFSET_RESET] = "REPLY:OFFSET_RESET",
                 [RD_KAFKA_OP_METADATA] = "REPLY:METADATA",
                 [RD_KAFKA_OP_LOG] = "REPLY:LOG",
+                [RD_KAFKA_OP_WAKEUP] = "REPLY:WAKEUP",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -182,7 +183,8 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_NAME] = sizeof(rko->rko_u.name),
                 [RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
                 [RD_KAFKA_OP_METADATA] = sizeof(rko->rko_u.metadata),
-                [RD_KAFKA_OP_LOG] = sizeof(rko->rko_u.log)
+                [RD_KAFKA_OP_LOG] = sizeof(rko->rko_u.log),
+                [RD_KAFKA_OP_WAKEUP] = 0,
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -527,6 +529,8 @@ int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko, int cb_type) {
                 rd_kafka_op_call(rk, rko);
         else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
                 rd_kafka_buf_handle_op(rko, rko->rko_err);
+        else if (rko->rko_type == RD_KAFKA_OP_WAKEUP)
+                ;/* do nothing, wake up is a fact anyway */
         else if (cb_type != _Q_CB_RETURN &&
                  rko->rko_type & RD_KAFKA_OP_REPLY &&
                  rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)

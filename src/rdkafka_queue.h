@@ -25,9 +25,19 @@ struct rd_kafka_q_s {
 #define RD_KAFKA_Q_F_ALLOCATED  0x1  /* Allocated: rd_free on destroy */
 #define RD_KAFKA_Q_F_READY      0x2  /* Queue is ready to be used.
                                       * Flag is cleared on destroy */
+#define RD_KAFKA_Q_F_FWD_APP    0x4  /* Queue is being forwarded by a call
+                                      * to rd_kafka_queue_forward. */
 
         rd_kafka_t   *rkq_rk;
 	struct rd_kafka_q_io *rkq_qio;   /* FD-based application signalling */
+
+        /* Op serve callback (optional).
+         * Mainly used for forwarded queues to use the original queue's
+         * serve function from the forwarded position.
+         * Shall return 1 if op was handled, else 0. */
+        int (*rkq_serve) (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                          int cb_type, void *opaque);
+        void *rkq_opaque;
 
 #if ENABLE_DEVEL
 	char rkq_name[64];       /* Debugging: queue name (FUNC:LINE) */
@@ -57,9 +67,11 @@ int rd_kafka_q_ready (rd_kafka_q_t *rkq) {
 
 
 enum {
-        _Q_CB_GLOBAL,   /* rd_kafka_poll() */
-        _Q_CB_CONSUMER, /* rd_kafka_consumer_poll() */
-	_Q_CB_EVENT     /* return event */
+        _Q_CB_INVALID, /* dont use */
+        _Q_CB_CALLBACK,/* trigger callback based on op */
+        _Q_CB_RETURN,  /* return op rather than trigger callback (if possible)*/
+        _Q_CB_FORCE_RETURN, /* return op, regardless of callback. */
+        _Q_CB_EVENT    /* like _Q_CB_RETURN but return event_t:ed op */
 };
 
 
@@ -68,6 +80,8 @@ rd_kafka_q_t *rd_kafka_q_new0 (rd_kafka_t *rk, const char *func, int line);
 #define rd_kafka_q_new(rk) rd_kafka_q_new0(rk,__FUNCTION__,__LINE__)
 void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq);
 
+#define rd_kafka_q_lock(rkqu) mtx_lock(&(rkqu)->rkq_lock)
+#define rd_kafka_q_unlock(rkqu) mtx_unlock(&(rkqu)->rkq_lock)
 
 static RD_INLINE RD_UNUSED
 rd_kafka_q_t *rd_kafka_q_keep (rd_kafka_q_t *rkq) {
@@ -154,8 +168,29 @@ void rd_kafka_q_disable0 (rd_kafka_q_t *rkq, int do_lock) {
 /**
  * Forward 'srcq' to 'destq'
  */
-void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq, int do_lock);
-#define rd_kafka_q_fwd_set(S,D) rd_kafka_q_fwd_set0(S,D,1/*lock*/)
+void rd_kafka_q_fwd_set0 (rd_kafka_q_t *srcq, rd_kafka_q_t *destq,
+                          int do_lock, int fwd_app);
+#define rd_kafka_q_fwd_set(S,D) rd_kafka_q_fwd_set0(S,D,1/*lock*/,\
+                                                    0/*no fwd_app*/)
+
+/**
+ * @returns the forward queue (if any) with its refcount increased.
+ * @locks rd_kafka_q_lock(rkq) == !do_lock
+ */
+static RD_INLINE RD_UNUSED
+rd_kafka_q_t *rd_kafka_q_fwd_get (rd_kafka_q_t *rkq, int do_lock) {
+        rd_kafka_q_t *fwdq;
+        if (do_lock)
+                mtx_lock(&rkq->rkq_lock);
+
+        if ((fwdq = rkq->rkq_fwdq))
+                rd_kafka_q_keep(fwdq);
+
+        if (do_lock)
+                mtx_unlock(&rkq->rkq_lock);
+
+        return fwdq;
+}
 
 
 /**
@@ -186,7 +221,7 @@ void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
 		return;
 
 #ifdef _MSC_VER
-	r = _write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, rkq->rkq_qio->size);
+	r = _write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, (int)rkq->rkq_qio->size);
 #else
         r = write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, rkq->rkq_qio->size);
 #endif
@@ -229,7 +264,15 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 
                 return rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
         }
-	if (!(fwdq = rkq->rkq_fwdq)) {
+
+        if (!rko->rko_serve && rkq->rkq_serve) {
+                /* Store original queue's serve callback and opaque
+                 * prior to forwarding. */
+                rko->rko_serve = rkq->rkq_serve;
+                rko->rko_serve_opaque = rkq->rkq_opaque;
+        }
+
+	if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
 		TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
                 rkq->rkq_qlen++;
                 rkq->rkq_qsize += rko->rko_len;
@@ -238,7 +281,6 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 			rd_kafka_q_io_event(rkq);
 		mtx_unlock(&rkq->rkq_lock);
 	} else {
-		rd_kafka_q_keep(fwdq);
 		mtx_unlock(&rkq->rkq_lock);
 		rd_kafka_q_enq(fwdq, rko);
 		rd_kafka_q_destroy(fwdq);
@@ -283,7 +325,8 @@ int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
                 rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
                            srcq->rkq_qlen > 0);
 		if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
-			mtx_unlock(&rkq->rkq_lock);
+                        if (do_lock)
+                                mtx_unlock(&rkq->rkq_lock);
 			return -1;
 		}
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
@@ -344,27 +387,35 @@ void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 /* Returns the number of elements in the queue */
 static RD_INLINE RD_UNUSED
 int rd_kafka_q_len (rd_kafka_q_t *rkq) {
-	int qlen;
-	mtx_lock(&rkq->rkq_lock);
-	if (!rkq->rkq_fwdq)
-		qlen = rkq->rkq_qlen;
-	else
-		qlen = rd_kafka_q_len(rkq->rkq_fwdq);
-	mtx_unlock(&rkq->rkq_lock);
-	return qlen;
+        int qlen;
+        rd_kafka_q_t *fwdq;
+        mtx_lock(&rkq->rkq_lock);
+        if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
+                qlen = rkq->rkq_qlen;
+                mtx_unlock(&rkq->rkq_lock);
+        } else {
+                mtx_unlock(&rkq->rkq_lock);
+                qlen = rd_kafka_q_len(fwdq);
+                rd_kafka_q_destroy(fwdq);
+        }
+        return qlen;
 }
 
 /* Returns the total size of elements in the queue */
 static RD_INLINE RD_UNUSED
 uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
-	uint64_t sz;
-	mtx_lock(&rkq->rkq_lock);
-	if (!rkq->rkq_fwdq)
-		sz = rkq->rkq_qsize;
-	else
-		sz = rd_kafka_q_size(rkq->rkq_fwdq);
-	mtx_unlock(&rkq->rkq_lock);
-	return sz;
+        uint64_t sz;
+        rd_kafka_q_t *fwdq;
+        mtx_lock(&rkq->rkq_lock);
+        if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
+                sz = rkq->rkq_qsize;
+                mtx_unlock(&rkq->rkq_lock);
+        } else {
+                mtx_unlock(&rkq->rkq_lock);
+                sz = rd_kafka_q_size(fwdq);
+                rd_kafka_q_destroy(fwdq);
+        }
+        return sz;
 }
 
 
@@ -381,7 +432,7 @@ uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
 
 /* Construct temporary on-stack replyq for indicating no replyq. */
 #if ENABLE_DEVEL
-#define RD_KAFKA_NO_REPLYQ (rd_kafka_replyq_t){NULL, 0, rd_strdup(__FUNCTION__)}
+#define RD_KAFKA_NO_REPLYQ (rd_kafka_replyq_t){NULL, 0, NULL}
 #else
 #define RD_KAFKA_NO_REPLYQ (rd_kafka_replyq_t){NULL, 0}
 #endif
@@ -421,6 +472,23 @@ rd_kafka_op_set_replyq (rd_kafka_op_t *rko, rd_kafka_q_t *rkq,
 static RD_INLINE RD_UNUSED void
 rd_kafka_replyq_clear (rd_kafka_replyq_t *replyq) {
 	memset(replyq, 0, sizeof(*replyq));
+}
+
+/**
+ * @brief Make a copy of \p src in \p dst, with its own queue reference
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_replyq_copy (rd_kafka_replyq_t *dst, rd_kafka_replyq_t *src) {
+        dst->version = src->version;
+        dst->q = src->q;
+        if (dst->q)
+                rd_kafka_q_keep(dst->q);
+#if ENABLE_DEVEL
+        if (src->_id)
+                dst->_id = rd_strdup(src->_id);
+        else
+                dst->_id = NULL;
+#endif
 }
 
 
@@ -544,6 +612,9 @@ rd_kafka_op_t *rd_kafka_q_last (rd_kafka_q_t *rkq, rd_kafka_op_type_t op_type,
 
 	return NULL;
 }
+
+void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
+                                 const void *payload, size_t size);
 
 /* Public interface */
 struct rd_kafka_queue_s {

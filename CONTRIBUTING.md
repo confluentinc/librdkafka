@@ -86,8 +86,24 @@ fix nits/flaws. This is very important. We will take lack of replies as a
 sign that you're not very anxious to get your patch accepted and we tend to
 simply drop such changes.
 
-When you adjust your pull requests after review, please squashing the
-commits so that we can review the full updated version more easily.
+When you adjust your pull requests after review, please squash the
+commits so that we can review the full updated version more easily
+and keep history cleaner.
+
+For example:
+
+    # Interactive rebase to let you squash/fixup commits
+    $ git rebase -i master
+
+    # Mark fixes-on-fixes commits as 'fixup' (or just 'f') in the
+    # first column. These will be silently integrated into the
+    # previous commit, so make sure to move the fixup-commit to
+    # the line beneath the parent commit.
+
+    # Since this probably rewrote the history of previously pushed
+    # commits you will need to make a force push, which is usually
+    # a bad idea but works good for pull requests.
+    $ git push --force origin your_feature_branch
 
 
 ### Write good commit messages
@@ -101,6 +117,14 @@ A short guide to how to write commit messages in the curl project.
     possible as to why this change is made, and possibly what things
     it fixes and everything else that is related]
     ---- stop ----
+
+Example:
+
+    cgrp: restart query timer on all heartbeat failures (#10023)
+    
+    If unhandled errors were received in HeartbeatResponse
+    the cgrp could get stuck in a state where it would not
+    refresh its coordinator.
 
 
 
@@ -134,7 +158,7 @@ declarations are allowed.
 
 ## Indenting
 
-Use 4 spaces indent, same as the Linux kernel.
+Use 8 spaces indent, same as the Linux kernel.
 In emacs, use `c-set-style "linux`.
 For C++, use Google's C++ style.
 

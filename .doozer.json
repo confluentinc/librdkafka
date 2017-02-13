@@ -1,0 +1,80 @@
+{
+  "targets": {
+    "xenial-amd64": {
+
+      "buildenv": "xenial-amd64",
+      "builddeps": [
+        "build-essential",
+        "python",
+        "zlib1g-dev",
+        "libssl-dev",
+        "libsasl2-dev",
+        "liblz4-dev"
+      ],
+      "buildcmd": [
+        "./configure",
+          "make -j ${PARALLEL}",
+          "make -C tests run_local"
+      ]
+    },
+
+    "xenial-i386": {
+
+      "buildenv": "xenial-i386",
+      "builddeps": [
+        "build-essential",
+        "python",
+        "zlib1g-dev",
+        "libssl-dev",
+        "libsasl2-dev",
+        "liblz4-dev"
+      ],
+      "buildcmd": [
+        "./configure",
+        "make -j ${PARALLEL}",
+        "make -C tests run_local"
+      ]
+    },
+
+    "xenial-armhf": {
+
+      "buildenv": "xenial-armhf",
+      "builddeps": [
+        "build-essential",
+        "python",
+        "zlib1g-dev",
+        "libssl-dev",
+        "libsasl2-dev",
+        "liblz4-dev"
+      ],
+      "buildcmd": [
+        "./configure",
+        "make -j ${PARALLEL}",
+        "make -j ${PARALLEL} -C tests build",
+        "cd tests",
+        "./run-test.sh -p1 -l ./merged",
+        "cd .."
+      ]
+    },
+
+    "cmake-xenial-amd64": {
+
+      "buildenv": "xenial-amd64",
+      "builddeps": [
+        "build-essential",
+        "python",
+        "zlib1g-dev",
+        "libssl-dev",
+        "libsasl2-dev",
+        "liblz4-dev",
+        "cmake"
+      ],
+      "buildcmd": [
+        "cmake -H. -B_builds -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_BUILD_TYPE=Debug",
+        "cmake --build _builds",
+        "cd _builds",
+        "ctest -VV -R RdKafkaTestBrokerLess"
+      ]
+    }
+  }
+}

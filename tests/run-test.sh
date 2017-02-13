@@ -9,7 +9,7 @@ CCLR='\033[0m'
 if [ -z "$1" ]; then
     echo "Usage: $0 [-..] <execfile> [modes..]"
     echo ""
-    echo "  Modes: bare valgrind helgrind drd gdb"
+    echo "  Modes: bare valgrind helgrind drd gdb bash"
     echo "  Options:"
     echo "   -..    - Command arguments (pass thru)"
     exit 1
@@ -77,11 +77,23 @@ for mode in $MODES; do
 	    RET=$?
 	    ;;
         gdb)
-            gdb $ARGS $TEST
+            if [[ -f gdb.run ]]; then
+                gdb -x gdb.run $ARGS $TEST
+            else
+                gdb $ARGS $TEST
+            fi
             RET=$?
             ;;
 	bare)
 	    $TEST $ARGS
+	    RET=$?
+	    ;;
+        lldb)
+            lldb -- $TEST $ARGS
+            RET=$?
+            ;;
+	bash)
+	    PS1="[run-test.sh] $PS1" bash
 	    RET=$?
 	    ;;
 	*)

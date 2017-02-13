@@ -1,3 +1,30 @@
+/*
+* librdkafka - Apache Kafka C library
+*
+* Copyright (c) 2012-2015, Magnus Edenhill
+* All rights reserved.
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*
+* 1. Redistributions of source code must retain the above copyright notice,
+*    this list of conditions and the following disclaimer.
+* 2. Redistributions in binary form must reproduce the above copyright notice,
+*    this list of conditions and the following disclaimer in the documentation
+*    and/or other materials provided with the distribution.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+* ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+* LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+* CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+* SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+* INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+* CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+* ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+* POSSIBILITY OF SUCH DAMAGE.
+*/
 #pragma once
 
 #include "../src/rd.h"
@@ -7,7 +34,6 @@
 #include <stdlib.h>
 #ifndef _MSC_VER
 #include <unistd.h>
-#include <sys/time.h>
 #endif
 #include <errno.h>
 #include <assert.h>
@@ -21,6 +47,7 @@
 #include "sockem.h"
 #endif
 
+#include "testshared.h"
 #ifdef _MSC_VER
 #define sscanf(...) sscanf_s(__VA_ARGS__)
 #endif
@@ -66,6 +93,14 @@ int tmout_multip (int msecs) {
 #define _C_MAG "\033[35m"
 #define _C_CYA "\033[36m"
 
+typedef enum {
+        TEST_NOT_STARTED,
+        TEST_SKIPPED,
+        TEST_RUNNING,
+        TEST_PASSED,
+        TEST_FAILED,
+} test_state_t;
+
 struct test {
         /**
          * Setup
@@ -88,20 +123,15 @@ struct test {
         /**
          * Runtime
          */
+        thrd_t  thrd;
         int64_t start;
         int64_t duration;
         FILE   *stats_fp;
 	int64_t timeout;
-        enum {
-                TEST_NOT_STARTED,
-                TEST_SKIPPED,
-                TEST_RUNNING,
-                TEST_PASSED,
-                TEST_FAILED,
-        } state;
+        test_state_t state;
 
-        rd_list_t sockets;
 #if WITH_SOCKEM
+        rd_list_t sockets;
         int (*connect_cb) (struct test *test, sockem_t *skm, const char *id);
 #endif
         int (*is_fatal_cb) (rd_kafka_t *rk, rd_kafka_resp_err_t err,
@@ -109,33 +139,32 @@ struct test {
 };
 
 
-/** @brief Broker version to int */
-#define TEST_BRKVER(A,B,C,D) \
-	(((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
-/** @brief return single version component from int */
-#define TEST_BRKVER_X(V,I) \
-	(((V) >> (24-((I)*8))) & 0xff)
-
-extern int test_broker_version;
+#ifdef _MSC_VER
+#define TEST_F_KNOWN_ISSUE_WIN32  TEST_F_KNOWN_ISSUE
+#else
+#define TEST_F_KNOWN_ISSUE_WIN32 0
+#endif
 
 
-#define TEST_FAIL0(fail_now,...) do {					\
+#define TEST_FAIL0(file,line,do_lock,fail_now,...) do {                 \
                 int is_thrd = 0;                                        \
 		TEST_SAYL(0, "TEST FAILURE\n");				\
 		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
 			test_curr->name,                                \
-                        __FILE__,__LINE__,__FUNCTION__);                \
+                        file, line,__FUNCTION__);                \
 		fprintf(stderr, __VA_ARGS__);				\
 		fprintf(stderr, "\n");					\
                 fprintf(stderr, "### Test random seed was %i ###\033[0m\n",    \
                         test_seed);                                     \
-                TEST_LOCK();                                            \
+                if (do_lock)                                            \
+                        TEST_LOCK();                                    \
                 test_curr->state = TEST_FAILED;                         \
                 if (test_curr->mainfunc) {                              \
                         tests_running_cnt--;                            \
                         is_thrd = 1;                                    \
                 }                                                       \
-                TEST_UNLOCK();                                          \
+                if (do_lock)                                            \
+                        TEST_UNLOCK();                                  \
 		if (!fail_now) break;					\
                 if (test_assert_on_fail || !is_thrd)                    \
                         assert(0);                                      \
@@ -144,10 +173,10 @@ extern int test_broker_version;
 	} while (0)
 
 /* Whine and abort test */
-#define TEST_FAIL(...) TEST_FAIL0(1, __VA_ARGS__)
+#define TEST_FAIL(...) TEST_FAIL0(__FILE__,__LINE__,1,1,__VA_ARGS__)
 
 /* Whine right away, mark the test as failed, but continue the test. */
-#define TEST_FAIL_LATER(...) TEST_FAIL0(0, __VA_ARGS__)
+#define TEST_FAIL_LATER(...) TEST_FAIL0(__FILE__,__LINE__,1,0,__VA_ARGS__)
 
 
 #define TEST_PERROR(call) do {						\
@@ -201,7 +230,6 @@ extern int test_broker_version;
 		TEST_UNLOCK();			     \
 	} while (0)
 
-const char *test_mk_topic_name (const char *suffix, int randomized);
 
 void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		     int timeout);
@@ -214,29 +242,7 @@ char *test_str_id_generate (char *dest, size_t dest_size);
 const char *test_str_id_generate_tmp (void);
 
 
-/**
- * A microsecond monotonic clock
- */
-static RD_INLINE int64_t test_clock (void)
-#ifndef _MSC_VER
-__attribute__((unused))
-#endif
-;
-static RD_INLINE int64_t test_clock (void) {
-#ifdef __APPLE__
-	/* No monotonic clock on Darwin */
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return ((int64_t)tv.tv_sec * 1000000LLU) + (int64_t)tv.tv_usec;
-#elif _MSC_VER
-	return (int64_t)GetTickCount64() * 1000LLU;
-#else
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ((int64_t)ts.tv_sec * 1000000LLU) +
-		((int64_t)ts.tv_nsec / 1000LLU);
-#endif
-}
+
 
 typedef struct test_timing_s {
 	char name[64];
@@ -245,8 +251,11 @@ typedef struct test_timing_s {
 	int64_t ts_every; /* Last every */
 } test_timing_t;
 
-#define TIMING_START(TIMING,NAME) do {					\
-	rd_snprintf((TIMING)->name, sizeof((TIMING)->name), "%s", (NAME)); \
+/**
+ * @brief Start timing, Va-Argument is textual name (printf format)
+ */
+#define TIMING_START(TIMING,...) do {                                   \
+        rd_snprintf((TIMING)->name, sizeof((TIMING)->name), __VA_ARGS__); \
 	(TIMING)->ts_start = test_clock();				\
 	(TIMING)->duration = 0;						\
 	(TIMING)->ts_every = (TIMING)->ts_start;			\
@@ -336,8 +345,9 @@ typedef struct test_msgver_s {
 
 /* Message */
 struct test_mv_m {
-	int64_t offset;   /* Message offset */
-	int     msgid;    /* Message id */
+        int64_t offset;    /* Message offset */
+        int     msgid;     /* Message id */
+        int64_t timestamp; /* Message timestamp */
 };
 
 
@@ -364,6 +374,8 @@ struct test_mv_vs {
 	/* used by verify_range */
 	int msgid_min;
 	int msgid_max;
+        int64_t timestamp_min;
+        int64_t timestamp_max;
 
 	struct test_mv_mvec mvec;
 } vs;
@@ -387,6 +399,7 @@ int test_msgver_add_msg0 (const char *func, int line,
 
 #define TEST_MSGVER_BY_MSGID  0x10000 /* Verify by msgid (unique in testid) */
 #define TEST_MSGVER_BY_OFFSET 0x20000 /* Verify by offset (unique in partition)*/
+#define TEST_MSGVER_BY_TIMESTAMP 0x40000 /* Verify by timestamp range */
 
 /* Only test per partition, not across all messages received on all partitions.
  * This is useful when doing incremental verifications with multiple partitions
@@ -411,11 +424,12 @@ int test_msgver_verify_part0 (const char *func, int line, const char *what,
 				 what,mv,flags,topic,partition,msg_base,exp_cnt)
 
 int test_msgver_verify0 (const char *func, int line, const char *what,
-			 test_msgver_t *mv, int flags,
-			 int msg_base, int exp_cnt);
-#define test_msgver_verify(what,mv,flags,msg_base,exp_cnt)		\
+			 test_msgver_t *mv, int flags, struct test_mv_vs vs);
+#define test_msgver_verify(what,mv,flags,msgbase,expcnt)		\
 	test_msgver_verify0(__FUNCTION__,__LINE__,			\
-			    what,mv,flags,msg_base,exp_cnt)
+			    what,mv,flags,                              \
+                            (struct test_mv_vs){.msg_base = msgbase,   \
+                                            .exp_cnt = expcnt})
 
 
 rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf);
@@ -480,9 +494,14 @@ void test_verify_rkmessage0 (const char *func, int line,
 void test_consumer_subscribe (rd_kafka_t *rk, const char *topic);
 
 void
+test_consume_msgs_easy_mv (const char *group_id, const char *topic,
+                           uint64_t testid, int exp_eofcnt, int exp_msgcnt,
+                           rd_kafka_topic_conf_t *tconf,
+                           test_msgver_t *mv);
+void
 test_consume_msgs_easy (const char *group_id, const char *topic,
                         uint64_t testid, int exp_eofcnt, int exp_msgcnt,
-			rd_kafka_topic_conf_t *tconf);
+                        rd_kafka_topic_conf_t *tconf);
 
 void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 				 uint64_t testid, int timeout_ms);
@@ -503,6 +522,9 @@ void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val);
 char *test_conf_get (rd_kafka_conf_t *conf, const char *name);
 void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
                           const char *name, const char *val);
+void test_any_conf_set (rd_kafka_conf_t *conf,
+                        rd_kafka_topic_conf_t *tconf,
+                        const char *name, const char *val);
 
 void test_print_partition_list (const rd_kafka_topic_partition_list_t
 				*partitions);
@@ -510,9 +532,12 @@ void test_print_partition_list (const rd_kafka_topic_partition_list_t
 void test_kafka_topics (const char *fmt, ...);
 void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor);
-void test_auto_create_topic_rkt (rd_kafka_t *rk, rd_kafka_topic_t *rkt);
+rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
+                                                rd_kafka_topic_t *rkt);
+rd_kafka_resp_err_t test_auto_create_topic (rd_kafka_t *rk, const char *name);
+int test_check_auto_create_topic (void);
+
 int test_check_builtin (const char *feature);
-void test_timeout_set (int timeout);
 
 char *tsprintf (const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 
@@ -522,7 +547,13 @@ int test_can_create_topics (int skip);
 rd_kafka_event_t *test_wait_event (rd_kafka_queue_t *eventq,
 				   rd_kafka_event_type_t event_type,
 				   int timeout_ms);
+
+void test_prepare_msg (uint64_t testid, int32_t partition, int msg_id,
+                       char *val, size_t val_size,
+                       char *key, size_t key_size);
+
 #if WITH_SOCKEM
 void test_socket_enable (rd_kafka_conf_t *conf);
 void test_socket_close_all (struct test *test, int reinit);
 #endif
+

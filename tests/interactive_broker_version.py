@@ -57,6 +57,8 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     # Generate test config file
     security_protocol='PLAINTEXT'
     fd, test_conf_file = tempfile.mkstemp(prefix='test_conf', text=True)
+    os.write(fd, ('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
+    os.write(fd, 'broker.address.family=v4\n'.encode('ascii'))
     if version != 'trunk':
         os.write(fd, ('broker.version.fallback=%s\n' % version).encode('ascii'))
     else:

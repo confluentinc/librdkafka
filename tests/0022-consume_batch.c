@@ -113,7 +113,7 @@ static int do_test_consume_batch (void) {
                         TEST_FAIL("Failed to consume messages: %s\n",
                                   rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
-                remains -= r;
+                remains -= (int)r;
 
                 for (i = 0 ; i < r ; i++)
                         rd_kafka_message_destroy(rkmessage[i]);

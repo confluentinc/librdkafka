@@ -364,3 +364,12 @@
    fun:_dl_runtime_resolve_avx
    ...
 }
+{
+   cpp_glibc_globals
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:pool
+   fun:__static_initialization_and_destruction_0
+   fun:_GLOBAL__sub_I_eh_alloc.cc
+}

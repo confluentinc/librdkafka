@@ -32,16 +32,38 @@
 
 void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
 
+        switch (rkbuf->rkbuf_reqhdr.ApiKey)
+        {
+        case RD_KAFKAP_Metadata:
+                if (rkbuf->rkbuf_u.Metadata.topics)
+                        rd_list_destroy(rkbuf->rkbuf_u.Metadata.topics);
+                if (rkbuf->rkbuf_u.Metadata.reason)
+                        rd_free(rkbuf->rkbuf_u.Metadata.reason);
+                if (rkbuf->rkbuf_u.Metadata.rko)
+                        rd_kafka_op_reply(rkbuf->rkbuf_u.Metadata.rko,
+                                          RD_KAFKA_RESP_ERR__DESTROY);
+                if (rkbuf->rkbuf_u.Metadata.decr) {
+                        /* Decrease metadata cache's full_.._sent state. */
+                        mtx_lock(rkbuf->rkbuf_u.Metadata.decr_lock);
+                        rd_kafka_assert(NULL,
+                                        (*rkbuf->rkbuf_u.Metadata.decr) > 0);
+                        (*rkbuf->rkbuf_u.Metadata.decr)--;
+                        mtx_unlock(rkbuf->rkbuf_u.Metadata.decr_lock);
+                }
+                break;
+        }
+
         if (rkbuf->rkbuf_response)
                 rd_kafka_buf_destroy(rkbuf->rkbuf_response);
 
-	rd_kafka_replyq_destroy(&rkbuf->rkbuf_replyq);
+        rd_kafka_replyq_destroy(&rkbuf->rkbuf_replyq);
+        rd_kafka_replyq_destroy(&rkbuf->rkbuf_orig_replyq);
 
         if (rkbuf->rkbuf_buf2)
                 rd_free(rkbuf->rkbuf_buf2);
 
-	if (rkbuf->rkbuf_rktp_vers)
-		rd_list_destroy(rkbuf->rkbuf_rktp_vers, NULL);
+        if (rkbuf->rkbuf_rktp_vers)
+                rd_list_destroy(rkbuf->rkbuf_rktp_vers);
 
         if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FREE && rkbuf->rkbuf_buf)
                 rd_free(rkbuf->rkbuf_buf);
@@ -166,9 +188,11 @@ void rd_kafka_buf_grow (rd_kafka_buf_t *rkbuf, size_t needed_len) {
 }
 
 rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk,
+                                           int16_t ApiKey,
                                            int iovcnt, size_t init_size) {
         rd_kafka_assert(NULL, iovcnt == 1);/* growables only support one iovec */
-        return rd_kafka_buf_new0(rk, iovcnt, init_size, RD_KAFKA_OP_F_FREE);
+        return rd_kafka_buf_new0(rk, ApiKey,
+                                 iovcnt, init_size, RD_KAFKA_OP_F_FREE);
 }
 
 
@@ -178,7 +202,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk,
  * Additional space for the Kafka protocol headers is inserted automatically.
  *
  */
-rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
+rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk, int16_t ApiKey,
                                    int iovcnt, size_t size, int flags) {
 	rd_kafka_buf_t *rkbuf;
 	size_t iovsize;
@@ -210,6 +234,7 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
 	rkbuf = rd_malloc(fullsize);
 	memset(rkbuf, 0, sizeof(*rkbuf));
 
+        rkbuf->rkbuf_reqhdr.ApiKey = ApiKey;
         rkbuf->rkbuf_flags = flags;
 	rkbuf->rkbuf_iov = (struct iovec *)(rkbuf+1);
 	rkbuf->rkbuf_iovcnt = iovcnt;
@@ -246,6 +271,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size) {
 
 	rkbuf = rd_calloc(1, sizeof(*rkbuf));
 
+        rkbuf->rkbuf_reqhdr.ApiKey = RD_KAFKAP_None;
 	rkbuf->rkbuf_buf2 = (void *)ptr;
 	rkbuf->rkbuf_rbuf = rkbuf->rkbuf_buf2;
 	rkbuf->rkbuf_len  = size;
@@ -365,7 +391,7 @@ void rd_kafka_bufq_dump (rd_kafka_broker_t *rkb, const char *fac,
 
 	TAILQ_FOREACH(rkbuf, &rkbq->rkbq_bufs, rkbuf_link) {
 		rd_rkb_dbg(rkb, BROKER, fac,
-			   " Buffer %s (%"PRIdsz" bytes, corrid %"PRId32", "
+			   " Buffer %s (%"PRIusz" bytes, corrid %"PRId32", "
 			   "connid %d, retry %d in %lldms, timeout in %lldms",
 			   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
 			   rkbuf->rkbuf_len, rkbuf->rkbuf_corrid,
@@ -459,7 +485,7 @@ size_t rd_kafka_buf_write_Message (rd_kafka_broker_t *rkb,
 
 /**
  * Retry failed request, depending on the error.
- * @remark \p rkbuf may be NULL
+ * @remark \p rkb may be NULL
  * Returns 1 if the request was scheduled for retry, else 0.
  */
 int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
@@ -481,7 +507,7 @@ int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
 
 /**
- * Handle RD_KAFKA_OP_RECV_BUF.
+ * @brief Handle RD_KAFKA_OP_RECV_BUF.
  */
 void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         rd_kafka_buf_t *request, *response;
@@ -489,12 +515,16 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
         request = rko->rko_u.xbuf.rkbuf;
         rko->rko_u.xbuf.rkbuf = NULL;
 
-	/* NULL on op_destroy() */
+        /* NULL on op_destroy() */
 	if (request->rkbuf_replyq.q) {
 		int32_t version = request->rkbuf_replyq.version;
-		rd_kafka_replyq_destroy(&request->rkbuf_replyq);
+                /* Current queue usage is done, but retain original replyq for
+                 * future retries, stealing
+                 * the current reference. */
+                request->rkbuf_orig_replyq = request->rkbuf_replyq;
+                rd_kafka_replyq_clear(&request->rkbuf_replyq);
 		/* Callback might need to version check so we retain the
-		 * version across the destroy call which clears it. */
+		 * version across the clear() call which clears it. */
 		request->rkbuf_replyq.version = version;
 	}
 
@@ -553,6 +583,11 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
                 rko->rko_u.xbuf.rkbuf = request;
 
                 rko->rko_err = err;
+
+                /* Copy original replyq for future retries, with its own
+                 * queue reference. */
+                rd_kafka_replyq_copy(&request->rkbuf_orig_replyq,
+                                     &request->rkbuf_replyq);
 
 	        rd_kafka_replyq_enq(&request->rkbuf_replyq, rko, 0);
 

@@ -32,8 +32,9 @@ ifeq ($(shell uname -o 2>/dev/null),Cygwin)
 	FWD_LINKING_REQ=y
 endif
 
-LIBS := -L../src -lrdkafka $(LIBS) 
-LIBS += -lstdc++
+# Ignore previously defined library dependencies for the C library,
+# we'll get those dependencies through the C library linkage.
+LIBS := -L../src -lrdkafka -lstdc++
 
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 

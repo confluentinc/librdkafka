@@ -11,16 +11,17 @@ message.max.bytes                        |  *  | 1000 .. 1000000000 |       1000
 message.copy.max.bytes                   |  *  | 0 .. 1000000000 |         65535 | Maximum size for message to be copied to buffer. Messages larger than this will be passed by reference (zero-copy) at the expense of larger iovecs. <br>*Type: integer*
 receive.message.max.bytes                |  *  | 1000 .. 1000000000 |     100000000 | Maximum receive message size. This is a safety precaution to avoid memory exhaustion in case of protocol hickups. The value should be at least fetch.message.max.bytes * number of partitions consumed from + messaging overhead (e.g. 200000 bytes). <br>*Type: integer*
 max.in.flight.requests.per.connection    |  *  | 1 .. 1000000    |       1000000 | Maximum number of in-flight requests the client will send. This setting applies per broker connection. <br>*Type: integer*
+max.in.flight                            |  *  |                 |               | Alias for `max.in.flight.requests.per.connection`
 metadata.request.timeout.ms              |  *  | 10 .. 900000    |         60000 | Non-topic request timeout in milliseconds. This is for metadata requests, etc. <br>*Type: integer*
 topic.metadata.refresh.interval.ms       |  *  | -1 .. 3600000   |        300000 | Topic metadata refresh interval in milliseconds. The metadata is automatically refreshed on error and connect. Use -1 to disable the intervalled refresh. <br>*Type: integer*
-metadata.max.age.ms                      |  *  |                 |               | Alias for `topic.metadata.refresh.interval.ms`
-topic.metadata.refresh.fast.cnt          |  *  | 0 .. 1000       |            10 | When a topic looses its leader this number of metadata requests are sent with `topic.metadata.refresh.fast.interval.ms` interval disregarding the `topic.metadata.refresh.interval.ms` value. This is used to recover quickly from transitioning leader brokers. <br>*Type: integer*
-topic.metadata.refresh.fast.interval.ms  |  *  | 1 .. 60000      |           250 | See `topic.metadata.refresh.fast.cnt` description <br>*Type: integer*
+metadata.max.age.ms                      |  *  | 1 .. 86400000   |            -1 | Metadata cache max age. Defaults to metadata.refresh.interval.ms * 3 <br>*Type: integer*
+topic.metadata.refresh.fast.interval.ms  |  *  | 1 .. 60000      |           250 | When a topic looses its leader a new metadata request will be enqueued with this initial interval, exponentially increasing until the topic metadata has been refreshed. This is used to recover quickly from transitioning leader brokers. <br>*Type: integer*
+topic.metadata.refresh.fast.cnt          |  *  | 0 .. 1000       |            10 | *Deprecated: No longer used.* <br>*Type: integer*
 topic.metadata.refresh.sparse            |  *  | true, false     |          true | Sparse metadata requests (consumes less network bandwidth) <br>*Type: boolean*
 topic.blacklist                          |  *  |                 |               | Topic blacklist, a comma-separated list of regular expressions for matching topic names that should be ignored in broker metadata information as if the topics did not exist. <br>*Type: pattern list*
 debug                                    |  *  | generic, broker, topic, metadata, queue, msg, protocol, cgrp, security, fetch, feature, all |               | A comma-separated list of debug contexts to enable. Debugging the Producer: broker,topic,msg. Consumer: cgrp,topic,fetch <br>*Type: CSV flags*
 socket.timeout.ms                        |  *  | 10 .. 300000    |         60000 | Timeout for network requests. <br>*Type: integer*
-socket.blocking.max.ms                   |  *  | 1 .. 60000      |           100 | Maximum time a broker socket operation may block. A lower value improves responsiveness at the expense of slightly higher CPU usage. <br>*Type: integer*
+socket.blocking.max.ms                   |  *  | 1 .. 60000      |          1000 | Maximum time a broker socket operation may block. A lower value improves responsiveness at the expense of slightly higher CPU usage. **Deprecated** <br>*Type: integer*
 socket.send.buffer.bytes                 |  *  | 0 .. 100000000  |             0 | Broker socket send buffer size. System default is used if 0. <br>*Type: integer*
 socket.receive.buffer.bytes              |  *  | 0 .. 100000000  |             0 | Broker socket receive buffer size. System default is used if 0. <br>*Type: integer*
 socket.keepalive.enable                  |  *  | true, false     |         false | Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets <br>*Type: boolean*
@@ -36,7 +37,8 @@ throttle_cb                              |  *  |                 |              
 stats_cb                                 |  *  |                 |               | Statistics callback (set with rd_kafka_conf_set_stats_cb()) <br>*Type: pointer*
 log_cb                                   |  *  |                 |               | Log callback (set with rd_kafka_conf_set_log_cb()) <br>*Type: pointer*
 log_level                                |  *  | 0 .. 7          |             6 | Logging level (syslog(3) levels) <br>*Type: integer*
-log.thread.name                          |  *  | true, false     |         false | Print internal thread name in log messages (useful for debugging librdkafka internals) <br>*Type: boolean*
+log.queue                                |  *  | true, false     |         false | Disable spontaneous log_cb from internal librdkafka threads, instead enqueue log messages on queue set with `rd_kafka_set_log_queue()` and serve log callbacks or events through the standard poll APIs. **NOTE**: Log messages will linger in a temporary queue until the log queue has been set. <br>*Type: boolean*
+log.thread.name                          |  *  | true, false     |          true | Print internal thread name in log messages (useful for debugging librdkafka internals) <br>*Type: boolean*
 log.connection.close                     |  *  | true, false     |          true | Log broker disconnects. It might be useful to turn this off when interacting with 0.9 brokers with an aggressive `connection.max.idle.ms` value. <br>*Type: boolean*
 socket_cb                                |  *  |                 |               | Socket creation callback to provide race-free CLOEXEC <br>*Type: pointer*
 connect_cb                               |  *  |                 |               | Socket connect callback <br>*Type: pointer*
@@ -55,7 +57,7 @@ ssl.key.password                         |  *  |                 |              
 ssl.certificate.location                 |  *  |                 |               | Path to client's public key (PEM) used for authentication. <br>*Type: string*
 ssl.ca.location                          |  *  |                 |               | File or directory path to CA certificate(s) for verifying the broker's key. <br>*Type: string*
 ssl.crl.location                         |  *  |                 |               | Path to CRL for verifying broker's certificate validity. <br>*Type: string*
-sasl.mechanisms                          |  *  | GSSAPI, PLAIN   |        GSSAPI | SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN. **NOTE**: Despite the name only one mechanism must be configured. <br>*Type: string*
+sasl.mechanisms                          |  *  |                 |        GSSAPI | SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN. **NOTE**: Despite the name only one mechanism must be configured. <br>*Type: string*
 sasl.kerberos.service.name               |  *  |                 |         kafka | Kerberos principal name that Kafka runs as. <br>*Type: string*
 sasl.kerberos.principal                  |  *  |                 |   kafkaclient | This client's Kerberos principal name. <br>*Type: string*
 sasl.kerberos.kinit.cmd                  |  *  |                 | kinit -S "%{sasl.kerberos.service.name}/%{broker.name}" -k -t "%{sasl.kerberos.keytab}" %{sasl.kerberos.principal} | Full kerberos kinit command string, %{config.prop.name} is replaced by corresponding config object value, %{broker.name} returns the broker's hostname. <br>*Type: string*
@@ -85,8 +87,8 @@ rebalance_cb                             |  C  |                 |              
 offset_commit_cb                         |  C  |                 |               | Offset commit result propagation callback. (set with rd_kafka_conf_set_offset_commit_cb()) <br>*Type: pointer*
 enable.partition.eof                     |  C  | true, false     |          true | Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the consumer reaches the end of a partition. <br>*Type: boolean*
 queue.buffering.max.messages             |  P  | 1 .. 10000000   |        100000 | Maximum number of messages allowed on the producer queue. <br>*Type: integer*
-queue.buffering.max.kbytes               |  P  | 1 .. 2147483647 |       4000000 | Maximum total message size sum allowed on the producer queue. <br>*Type: integer*
-queue.buffering.max.ms                   |  P  | 1 .. 900000     |          1000 | Maximum time, in milliseconds, for buffering data on the producer queue. <br>*Type: integer*
+queue.buffering.max.kbytes               |  P  | 1 .. 2097151    |       4000000 | Maximum total message size sum allowed on the producer queue. <br>*Type: integer*
+queue.buffering.max.ms                   |  P  | 0 .. 900000     |          1000 | Maximum time, in milliseconds, for buffering data on the producer queue. <br>*Type: integer*
 message.send.max.retries                 |  P  | 0 .. 10000000   |             2 | How many times to retry sending a failing MessageSet. **Note:** retrying may cause reordering. <br>*Type: integer*
 retries                                  |  P  |                 |               | Alias for `message.send.max.retries`
 retry.backoff.ms                         |  P  | 1 .. 300000     |           100 | The backoff time in milliseconds before retrying a message send. <br>*Type: integer*

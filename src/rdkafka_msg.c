@@ -37,6 +37,8 @@
 
 #include "rdsysqueue.h"
 
+#include <stdarg.h>
+
 void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_ACCOUNT) {
@@ -142,8 +144,8 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
                                           const void *key, size_t keylen,
                                           void *msg_opaque,
                                           rd_kafka_resp_err_t *errp,
-					  int *errnop,
-					  rd_ts_t utc_now,
+                                          int *errnop,
+                                          int64_t timestamp,
                                           rd_ts_t now) {
 	rd_kafka_msg_t *rkm;
 
@@ -174,8 +176,11 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 				 msgflags|RD_KAFKA_MSG_F_ACCOUNT /* curr_msgs_add() */,
 				 payload, len, key, keylen, msg_opaque);
 
-	rkm->rkm_timestamp  = utc_now / 1000;
-	rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_CREATE_TIME;
+        if (timestamp)
+                rkm->rkm_timestamp  = timestamp;
+        else
+                rkm->rkm_timestamp = rd_uclock()/1000;
+        rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_CREATE_TIME;
 
 	if (rkt->rkt_conf.message_timeout_ms == 0) {
 		rkm->rkm_ts_timeout = INT64_MAX;
@@ -210,7 +215,7 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
         /* Create message */
         rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
                                 payload, len, key, keylen, msg_opaque,
-				&err, &errnox, rd_uclock(), rd_clock());
+                                &err, &errnox, 0, rd_clock());
         if (unlikely(!rkm)) {
                 /* errno is already set by msg_new() */
 		rd_kafka_set_last_error(err, errnox);
@@ -246,7 +251,100 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 }
 
 
+rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
+        va_list ap;
+        rd_kafka_msg_t s_rkm = RD_ZERO_INIT, *rkm = &s_rkm;
+        rd_kafka_vtype_t vtype;
+        rd_kafka_topic_t *app_rkt;
+        shptr_rd_kafka_itopic_t *s_rkt = NULL;
+        rd_kafka_itopic_t *rkt;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
+        va_start(ap, rk);
+        while ((vtype = va_arg(ap, rd_kafka_vtype_t)) != RD_KAFKA_VTYPE_END) {
+                switch (vtype)
+                {
+                case RD_KAFKA_VTYPE_TOPIC:
+                        s_rkt = rd_kafka_topic_new0(rk,
+                                                    va_arg(ap, const char *),
+                                                    NULL, NULL, 1);
+                        break;
+
+                case RD_KAFKA_VTYPE_RKT:
+                        app_rkt = va_arg(ap, rd_kafka_topic_t *);
+                        s_rkt = rd_kafka_topic_keep(
+                                rd_kafka_topic_a2i(app_rkt));
+                        break;
+
+                case RD_KAFKA_VTYPE_PARTITION:
+                        rkm->rkm_partition = va_arg(ap, int32_t);
+                        break;
+
+                case RD_KAFKA_VTYPE_VALUE:
+                        rkm->rkm_payload = va_arg(ap, void *);
+                        rkm->rkm_len = va_arg(ap, size_t);
+                        break;
+
+                case RD_KAFKA_VTYPE_KEY:
+                        rkm->rkm_key = va_arg(ap, void *);
+                        rkm->rkm_key_len = va_arg(ap, size_t);
+                        break;
+
+                case RD_KAFKA_VTYPE_OPAQUE:
+                        rkm->rkm_opaque = va_arg(ap, void *);
+                        break;
+
+                case RD_KAFKA_VTYPE_MSGFLAGS:
+                        rkm->rkm_flags = va_arg(ap, int);
+                        break;
+
+                case RD_KAFKA_VTYPE_TIMESTAMP:
+                        rkm->rkm_timestamp = va_arg(ap, int64_t);
+                        break;
+
+                default:
+                        err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                        break;
+                }
+        }
+
+        va_end(ap);
+
+        if (unlikely(!s_rkt))
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        rkt = rd_kafka_topic_s2i(s_rkt);
+
+        if (likely(!err))
+                rkm = rd_kafka_msg_new0(rkt,
+                                        rkm->rkm_partition,
+                                        rkm->rkm_flags,
+                                        rkm->rkm_payload, rkm->rkm_len,
+                                        rkm->rkm_key, rkm->rkm_key_len,
+                                        rkm->rkm_opaque,
+                                        &err, NULL,
+                                        rkm->rkm_timestamp, rd_clock());
+
+        if (unlikely(err))
+                return err;
+
+        /* Partition the message */
+        err = rd_kafka_msg_partitioner(rkt, rkm, 1);
+        if (unlikely(err)) {
+                /* Handle partitioner failures: it only fails when
+                 * the application
+                 * attempts to force a destination partition that does not exist
+                 * in the cluster.  Note we must clear the RD_KAFKA_MSG_F_FREE
+                 * flag since our contract says we don't free the payload on
+                 * failure. */
+                rkm->rkm_flags &= ~RD_KAFKA_MSG_F_FREE;
+                rd_kafka_msg_destroy(rk, rkm);
+        }
+
+        rd_kafka_topic_destroy0(s_rkt);
+
+        return err;
+}
 
 /**
  * Produce a batch of messages.
@@ -258,7 +356,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                             rd_kafka_message_t *rkmessages, int message_cnt) {
         rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
         int i;
-	rd_ts_t utc_now = rd_uclock();
+	int64_t utc_now = rd_uclock() / 1000;
         rd_ts_t now = rd_clock();
         int good = 0;
         rd_kafka_resp_err_t all_err = 0;

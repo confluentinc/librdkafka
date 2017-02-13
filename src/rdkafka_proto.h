@@ -46,8 +46,9 @@
  * Request types
  */
 struct rd_kafkap_reqhdr {
-	int32_t  Size;
-	int16_t  ApiKey;
+        int32_t  Size;
+        int16_t  ApiKey;
+#define RD_KAFKAP_None         -1
 #define RD_KAFKAP_Produce       0
 #define RD_KAFKAP_Fetch         1
 #define RD_KAFKAP_Offset        2
@@ -65,10 +66,12 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_ListGroups    16
 #define RD_KAFKAP_SaslHandshake 17
 #define RD_KAFKAP_ApiVersion    18
-#define RD_KAFKAP__NUM          19
-	int16_t  ApiVersion;
-	int32_t  CorrId;
-	/* ClientId follows */
+#define RD_KAFKAP_CreateTopics  19
+#define RD_KAFKAP_DeleteTopics  20
+#define RD_KAFKAP__NUM          21
+        int16_t  ApiVersion;
+        int32_t  CorrId;
+        /* ClientId follows */
 };
 
 #define RD_KAFKAP_REQHDR_SIZE (4+2+2+4)
@@ -86,34 +89,35 @@ struct rd_kafkap_reshdr {
 
 static RD_UNUSED
 const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
-	static const char *names[] = {
-		[RD_KAFKAP_Produce] = "Produce",
-		[RD_KAFKAP_Fetch] = "Fetch",
-		[RD_KAFKAP_Offset] = "Offset",
-		[RD_KAFKAP_Metadata] = "Metadata",
-		[RD_KAFKAP_LeaderAndIsr] = "LeaderAndIsr",
-		[RD_KAFKAP_StopReplica] = "StopReplica",
-		[RD_KAFKAP_OffsetCommit] = "OffsetCommit",
-		[RD_KAFKAP_OffsetFetch] = "OffsetFetch",
-		[RD_KAFKAP_GroupCoordinator] = "GroupCoordinator",
+        static const char *names[] = {
+                [RD_KAFKAP_Produce] = "Produce",
+                [RD_KAFKAP_Fetch] = "Fetch",
+                [RD_KAFKAP_Offset] = "Offset",
+                [RD_KAFKAP_Metadata] = "Metadata",
+                [RD_KAFKAP_LeaderAndIsr] = "LeaderAndIsr",
+                [RD_KAFKAP_StopReplica] = "StopReplica",
+                [RD_KAFKAP_OffsetCommit] = "OffsetCommit",
+                [RD_KAFKAP_OffsetFetch] = "OffsetFetch",
+                [RD_KAFKAP_GroupCoordinator] = "GroupCoordinator",
                 [RD_KAFKAP_JoinGroup] = "JoinGroup",
                 [RD_KAFKAP_Heartbeat] = "Heartbeat",
                 [RD_KAFKAP_LeaveGroup] = "LeaveGroup",
                 [RD_KAFKAP_SyncGroup] = "SyncGroup",
-		[RD_KAFKAP_DescribeGroups] = "DescribeGroups",
-		[RD_KAFKAP_ListGroups] = "ListGroups",
-		[RD_KAFKAP_SaslHandshake] = "SaslHandshake",
-		[RD_KAFKAP_ApiVersion] = "ApiVersion"
+                [RD_KAFKAP_DescribeGroups] = "DescribeGroups",
+                [RD_KAFKAP_ListGroups] = "ListGroups",
+                [RD_KAFKAP_SaslHandshake] = "SaslHandshake",
+                [RD_KAFKAP_ApiVersion] = "ApiVersion",
+                [RD_KAFKAP_CreateTopics] = "CreateTopics",
+                [RD_KAFKAP_DeleteTopics] = "DeleteTopics"
+        };
+        static RD_TLS char ret[32];
 
-	};
-	static RD_TLS char ret[32];
+        if (ApiKey < 0 || ApiKey >= (int)RD_ARRAYSIZE(names)) {
+                rd_snprintf(ret, sizeof(ret), "Unknown-%hd?", ApiKey);
+                return ret;
+        }
 
-	if (ApiKey < 0 || ApiKey >= (int)RD_ARRAYSIZE(names)) {
-		rd_snprintf(ret, sizeof(ret), "Unknown-%hd?", ApiKey);
-		return ret;
-	}
-
-	return names[ApiKey];
+        return names[ApiKey];
 }
 
 
@@ -128,6 +132,7 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 /* Maximum per-message overhead. */
 #define RD_KAFKAP_MESSAGE_OVERHEAD  \
 	(RD_KAFKAP_MESSAGESET_HDR_SIZE + RD_KAFKAP_MESSAGE_HDR_SIZE)
+
 
 
 /**

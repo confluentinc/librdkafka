@@ -158,6 +158,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Maximum number of in-flight requests the client will send. "
 	  "This setting applies per broker connection.",
 	  1, 1000000, 1000000 },
+        { _RK_GLOBAL, "max.in.flight", _RK_C_ALIAS,
+          .sdef = "max.in.flight.requests.per.connection" },
 	{ _RK_GLOBAL, "metadata.request.timeout.ms", _RK_C_INT,
 	  _RK(metadata_request_timeout_ms),
 	  "Non-topic request timeout in milliseconds. "
@@ -169,19 +171,22 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The metadata is automatically refreshed on error and connect. "
 	  "Use -1 to disable the intervalled refresh.",
 	  -1, 3600*1000, 5*60*1000 },
-	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_ALIAS,
-	  .sdef = "topic.metadata.refresh.interval.ms" },
-	{ _RK_GLOBAL, "topic.metadata.refresh.fast.cnt", _RK_C_INT,
-	  _RK(metadata_refresh_fast_cnt),
-	  "When a topic looses its leader this number of metadata requests "
-	  "are sent with `topic.metadata.refresh.fast.interval.ms` interval "
-	  "disregarding the `topic.metadata.refresh.interval.ms` value. "
-	  "This is used to recover quickly from transitioning leader brokers.",
-	  0, 1000, 10 },
-	{ _RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
-	  _RK(metadata_refresh_fast_interval_ms),
-	  "See `topic.metadata.refresh.fast.cnt` description",
-	  1, 60*1000, 250 },
+	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_INT,
+          _RK(metadata_max_age_ms),
+          "Metadata cache max age. "
+          "Defaults to metadata.refresh.interval.ms * 3",
+          1, 24*3600*1000, -1 },
+        { _RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
+          _RK(metadata_refresh_fast_interval_ms),
+          "When a topic looses its leader a new metadata request will be "
+          "enqueued with this initial interval, exponentially increasing "
+          "until the topic metadata has been refreshed. "
+          "This is used to recover quickly from transitioning leader brokers.",
+          1, 60*1000, 250 },
+        { _RK_GLOBAL, "topic.metadata.refresh.fast.cnt", _RK_C_INT,
+          _RK(metadata_refresh_fast_cnt),
+          "*Deprecated: No longer used.*",
+          0, 1000, 10 },
         { _RK_GLOBAL, "topic.metadata.refresh.sparse", _RK_C_BOOL,
           _RK(metadata_refresh_sparse),
           "Sparse metadata requests (consumes less network bandwidth)",
@@ -215,8 +220,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(socket_blocking_max_ms),
 	  "Maximum time a broker socket operation may block. "
           "A lower value improves responsiveness at the expense of "
-          "slightly higher CPU usage.",
-	  1, 60*1000, 100 },
+          "slightly higher CPU usage. **Deprecated**",
+	  1, 60*1000, 1000 },
 	{ _RK_GLOBAL, "socket.send.buffer.bytes", _RK_C_INT,
 	  _RK(socket_sndbuf_size),
 	  "Broker socket send buffer size. System default is used if 0.",
@@ -284,11 +289,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(log_level),
           "Logging level (syslog(3) levels)",
           0, 7, 6 },
+        { _RK_GLOBAL, "log.queue", _RK_C_BOOL, _RK(log_queue),
+          "Disable spontaneous log_cb from internal librdkafka "
+          "threads, instead enqueue log messages on queue set with "
+          "`rd_kafka_set_log_queue()` and serve log callbacks or "
+          "events through the standard poll APIs. "
+          "**NOTE**: Log messages will linger in a temporary queue "
+          "until the log queue has been set.",
+          0, 1, 0 },
 	{ _RK_GLOBAL, "log.thread.name", _RK_C_BOOL,
 	  _RK(log_thread_name),
 	  "Print internal thread name in log messages "
 	  "(useful for debugging librdkafka internals)",
-	  0, 1, ENABLE_DEVEL },
+	  0, 1, 1 },
 	{ _RK_GLOBAL, "log.connection.close", _RK_C_BOOL,
 	  _RK(log_connection_close),
 	  "Log broker disconnects. "
@@ -427,10 +440,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	 "Supported: GSSAPI, PLAIN. "
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
-	 .s2i = {
-			{ 0, "GSSAPI" },
-			{ 0, "PLAIN" }
-		},
 	 .validate = rd_kafka_conf_validate_single },
 	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
 	  _RK(sasl.service_name),
@@ -440,6 +449,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(sasl.principal),
 	  "This client's Kerberos principal name.",
 	  .sdef = "kafkaclient" },
+#ifndef _MSC_VER
 	{ _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,
 	  _RK(sasl.kinit_cmd),
 	  "Full kerberos kinit command string, %{config.prop.name} is replaced "
@@ -457,6 +467,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(sasl.relogin_min_time),
 	  "Minimum time in milliseconds between key refresh attempts.",
 	  1, 86400*1000, 60*1000 },
+#endif
 	{ _RK_GLOBAL, "sasl.username", _RK_C_STR,
 	  _RK(sasl.username),
 	  "SASL username for use with the PLAIN mechanism" },
@@ -585,12 +596,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.kbytes", _RK_C_INT,
 	  _RK(queue_buffering_max_kbytes),
 	  "Maximum total message size sum allowed on the producer queue.",
-	  1, INT_MAX, 4000000 },
+	  1, INT_MAX/1024, 4000000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.ms", _RK_C_INT,
 	  _RK(buffering_max_ms),
 	  "Maximum time, in milliseconds, for buffering data "
 	  "on the producer queue.",
-	  1, 900*1000, 1000 },
+	  0, 900*1000, 1000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "message.send.max.retries", _RK_C_INT,
 	  _RK(max_retries),
 	  "How many times to retry sending a failing MessageSet. "
@@ -768,8 +779,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "'file' - local file store (offset.store.path, et.al), "
           "'broker' - broker commit store "
           "(requires \"group.id\" to be configured and "
-	  "Apache Kafka 0.8.2 or later on the broker.).",
-          .vdef = RD_KAFKA_OFFSET_METHOD_BROKER, /* FIXME: warn about default change */
+          "Apache Kafka 0.8.2 or later on the broker.).",
+          .vdef = RD_KAFKA_OFFSET_METHOD_BROKER,
           .s2i = {
                         { RD_KAFKA_OFFSET_METHOD_FILE, "file" },
                         { RD_KAFKA_OFFSET_METHOD_BROKER, "broker" }
@@ -870,7 +881,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			if (!(*plist =
 			      rd_kafka_pattern_list_new(istr,
 							errstr,
-							errstr_size)))
+							(int)errstr_size)))
 				return RD_KAFKA_CONF_INVALID;
 		} else
 			*plist = NULL;

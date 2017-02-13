@@ -47,6 +47,7 @@ typedef int mode_t;
 #include "rdaddr.h"
 #include "rdinterval.h"
 #include "rdavg.h"
+#include "rdlist.h"
 
 #if WITH_SSL
 #include <openssl/ssl.h>
@@ -103,12 +104,14 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 #include "rdkafka_transport.h"
 #include "rdkafka_timer.h"
 #include "rdkafka_assignor.h"
+#include "rdkafka_metadata.h"
+
 
 /**
  * Protocol level sanity
  */
 #define RD_KAFKAP_BROKERS_MAX     1000
-#define RD_KAFKAP_TOPICS_MAX      10000
+#define RD_KAFKAP_TOPICS_MAX      1000000
 #define RD_KAFKAP_PARTITIONS_MAX  10000
 
 
@@ -148,9 +151,10 @@ struct rd_kafka_s {
 
         struct rd_kafka_cgrp_s *rk_cgrp;
 
-	char             rk_name[128];
+        rd_kafka_conf_t  rk_conf;
+        rd_kafka_q_t    *rk_logq;          /* Log queue if `log.queue` set */
+        char             rk_name[128];
 	rd_kafkap_str_t *rk_clientid;
-	rd_kafka_conf_t  rk_conf;
 	int              rk_flags;
 	rd_atomic32_t    rk_terminate;
 	rwlock_t         rk_lock;
@@ -166,6 +170,7 @@ struct rd_kafka_s {
 
 	struct rd_kafka_metadata *rk_full_metadata; /* Last full metadata. */
 	rd_ts_t          rk_ts_full_metadata;       /* Timesstamp of .. */
+        struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,
@@ -213,8 +218,8 @@ rd_kafka_curr_msgs_add (rd_kafka_t *rk, unsigned int cnt, size_t size,
 	mtx_lock(&rk->rk_curr_msgs.lock);
 	while (unlikely(rk->rk_curr_msgs.cnt + cnt >
 			rk->rk_curr_msgs.max_cnt ||
-			rk->rk_curr_msgs.size + size >
-			rk->rk_curr_msgs.max_size)) {
+			(unsigned long long)(rk->rk_curr_msgs.size + size) >
+			(unsigned long long)rk->rk_curr_msgs.max_size)) {
 		if (!block) {
 			mtx_unlock(&rk->rk_curr_msgs.lock);
 			return RD_KAFKA_RESP_ERR__QUEUE_FULL;

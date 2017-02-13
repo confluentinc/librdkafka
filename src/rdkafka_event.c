@@ -175,13 +175,12 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev, const char **fac,
 	if (unlikely(rkev->rko_evtype != RD_KAFKA_EVENT_LOG))
 		return -1;
 
-	// FIXME
 	if (likely(fac != NULL))
-		;//*fac = rkev->rkev_u.log.fac;
+                *fac = rkev->rko_u.log.fac;
 	if (likely(str != NULL))
-		;//*str = rkev->rkev_u.log.str;
+		*str = rkev->rko_u.log.str;
 	if (likely(level != NULL))
-		;//*level = rkev->rkev_u.log.level;
+		*level = rkev->rko_u.log.level;
 
 	return 0;
 }

@@ -34,5 +34,6 @@
 #define WITH_SSL 1
 #define WITH_ZLIB 1
 #define WITH_SNAPPY 1
-
+#define WITH_LZ4 1
+#define WITH_SASL 1
 #define ENABLE_DEVEL 0

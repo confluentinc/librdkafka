@@ -61,3 +61,7 @@ archive:
 
 rpm: distclean
 	$(MAKE) -C packaging/rpm
+
+LICENCES.txt: .PHONY
+	(for i in LICENSE LICENSE.* ; do (echo "$i" ; echo "--------------------------------------------------------------" ; cat $i ; echo "" ; echo "") ; done) > $@
+

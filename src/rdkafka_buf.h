@@ -80,7 +80,7 @@ rd_tmpabuf_failed (rd_tmpabuf_t *tab) {
 }
 
 /**
- * @brief Allocate \p size bytes for writing returning an aligned pointer
+ * @brief Allocate \p size bytes for writing, returning an aligned pointer
  *        to the memory.
  * @returns the allocated pointer (within the tmpabuf) on success or
  *          NULL if the requested number of bytes + alignment is not available
@@ -270,8 +270,8 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 			rd_kafka_buf_parse_fail(			\
 				rkbuf,					\
 				"Not enough room in tmpabuf: "		\
-				"%"PRIdsz"+%"PRIdsz			\
-				" > %"PRIdsz,				\
+				"%"PRIusz"+%"PRIusz			\
+				" > %"PRIusz,				\
 				(tmpabuf)->of, _slen+1, (tmpabuf)->size); \
 		_dst[_slen] = '\0';					\
 		dst = (void *)_dst;					\
@@ -360,6 +360,11 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	int32_t rkbuf_expected_size;  /* expected size of message */
 
         rd_kafka_replyq_t   rkbuf_replyq;       /* Enqueue response on replyq */
+        rd_kafka_replyq_t   rkbuf_orig_replyq;  /* Original replyq to be used
+                                                 * for retries from inside
+                                                 * the rkbuf_cb() callback
+                                                 * since rkbuf_replyq will
+                                                 * have been reset. */
         rd_kafka_resp_cb_t *rkbuf_cb;           /* Response callback */
         struct rd_kafka_buf_s *rkbuf_response;  /* Response buffer */
 
@@ -372,6 +377,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	int     rkbuf_retries;            /* Retries so far. */
 #define RD_KAFKA_BUF_NO_RETRIES  1000000  /* Do not retry */
 
+        int     rkbuf_features;   /* Required feature(s) that must be
+                                   * supported by broker. */
+
 	rd_ts_t rkbuf_ts_enq;
 	rd_ts_t rkbuf_ts_sent;    /* Initially: Absolute time of transmission,
 				   * after response: RTT. */
@@ -383,6 +391,25 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 					* Used by FetchRequest. */
 
 	rd_kafka_msgq_t rkbuf_msgq;
+
+        union {
+                struct {
+                        rd_list_t *topics;  /* Requested topics (char *) */
+                        char *reason;       /* Textual reason */
+                        rd_kafka_op_t *rko; /* Originating rko with replyq
+                                             * (if any) */
+                        int all_topics;     /* Full/All topics requested */
+
+                        int *decr;          /* Decrement this integer by one
+                                             * when request is complete:
+                                             * typically points to metadata
+                                             * cache's full_.._sent.
+                                             * Will be performed with
+                                             * decr_lock held. */
+                        mtx_t *decr_lock;
+
+                } Metadata;
+        } rkbuf_u;
 };
 
 
@@ -411,11 +438,12 @@ void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
 #define rd_kafka_buf_push(rkbuf,buf,len) \
 	rd_kafka_buf_push0(rkbuf,buf,len,1/*allow_crc*/, 1)
 void rd_kafka_buf_autopush (rd_kafka_buf_t *rkbuf);
-rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk,
+rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk, int16_t ApiKey,
                                            int iovcnt, size_t init_size);
-rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk,
+rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk, int16_t ApiKey,
                                    int iovcnt, size_t size, int flags);
-#define rd_kafka_buf_new(rk,iovcnt,size) rd_kafka_buf_new0(rk,iovcnt,size,0)
+#define rd_kafka_buf_new(rk,ApiKey,iovcnt,size) \
+        rd_kafka_buf_new0(rk,ApiKey,iovcnt,size,0)
 rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size);
 void rd_kafka_bufq_enq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf);
 void rd_kafka_bufq_deq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf);
@@ -447,9 +475,11 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
 /**
  * Set request API type version
  */
-static RD_INLINE void rd_kafka_buf_version_set (rd_kafka_buf_t *rkbuf,
-                                               int16_t version) {
+static RD_UNUSED RD_INLINE void
+rd_kafka_buf_ApiVersion_set (rd_kafka_buf_t *rkbuf,
+                             int16_t version, int features) {
         rkbuf->rkbuf_reqhdr.ApiVersion = version;
+        rkbuf->rkbuf_features = features;
 }
 
 void rd_kafka_buf_grow (rd_kafka_buf_t *rkbuf, size_t needed_len);
@@ -734,3 +764,16 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_from_buf (const rd_kafka_buf_t *rkbuf);
 
 void rd_kafka_buf_hexdump (const char *what, const rd_kafka_buf_t *rkbuf,
 			   int read_buffer);
+
+
+/**
+ * @brief Check if buffer's replyq.version is outdated.
+ * @param rkbuf: may be NULL, for convenience.
+ *
+ * @returns 1 if this is an outdated buffer, else 0.
+ */
+static RD_UNUSED RD_INLINE int
+rd_kafka_buf_version_outdated (const rd_kafka_buf_t *rkbuf, int version) {
+        return rkbuf && rkbuf->rkbuf_replyq.version &&
+                rkbuf->rkbuf_replyq.version < version;
+}

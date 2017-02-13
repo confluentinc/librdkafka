@@ -27,6 +27,8 @@
  */
 
 #include "test.h"
+
+#if WITH_SOCKEM
 #include "rdkafka.h"
 
 #include <stdarg.h>
@@ -130,3 +132,6 @@ int main_0049_consume_conn_close (int argc, char **argv) {
 
         return 0;
 }
+
+
+#endif

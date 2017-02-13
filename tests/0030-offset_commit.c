@@ -76,12 +76,15 @@ static void offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 			  " > expected offset %"PRId64,
 			  rktpar->offset, expected_offset);
 
-	if (rktpar->offset <= committed_offset)
-		TEST_FAIL("Old offset %"PRId64" (re)committed: "
-			  "should be above committed_offset %"PRId64,
-			  rktpar->offset, committed_offset);
-
-	committed_offset = rktpar->offset;
+        if (rktpar->offset < committed_offset)
+                TEST_FAIL("Old offset %"PRId64" (re)committed: "
+                          "should be above committed_offset %"PRId64,
+                          rktpar->offset, committed_offset);
+        else if (rktpar->offset == committed_offset)
+                TEST_SAYL(1, "Current offset re-commited: %"PRId64"\n",
+                          rktpar->offset);
+        else
+                committed_offset = rktpar->offset;
 
 	if (rktpar->offset < expected_offset) {
 		TEST_SAYL(3, "Offset committed %"PRId64
@@ -108,7 +111,8 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	rd_kafka_topic_partition_t *rktpar;
 	int64_t next_offset = -1;
 
-	test_conf_init(&conf, &tconf, 20);
+	test_conf_init(&conf, &tconf, 30);
+        test_conf_set(conf, "session.timeout.ms", "6000");
 	test_conf_set(conf, "enable.auto.commit", auto_commit ? "true":"false");
 	test_conf_set(conf, "enable.auto.offset.store", auto_store ?"true":"false");
 	test_conf_set(conf, "auto.commit.interval.ms", "500");
@@ -121,7 +125,7 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 	TEST_SAY(_C_MAG "[ do_offset_test: %s with group.id %s ]\n",
 		 what, groupid);
 
-	TIMING_START(&t_all, what);
+	TIMING_START(&t_all, "%s", what);
 
 	expected_offset  = 0;
 	committed_offset = -1;
@@ -174,9 +178,13 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 			}
 			expected_offset = rkm->offset+1;
 			if (!auto_commit) {
-				test_timing_t t_commit;
-				TIMING_START(&t_commit,
-					     async?"commit.async":"commit.sync");
+                                test_timing_t t_commit;
+                                TIMING_START(&t_commit,
+                                             "%s @ %"PRId64,
+                                             async?
+                                             "commit.async":
+                                             "commit.sync",
+                                             rkm->offset+1);
 				err = rd_kafka_commit_message(rk, rkm, async);
 				TIMING_STOP(&t_commit);
 				if (err)
@@ -191,8 +199,9 @@ static void do_offset_test (const char *what, int auto_commit, int auto_store,
 		cnt++;
 	}
 
-	TEST_SAY("%s: done consuming after %d messages, at offset %"PRId64"\n",
-		 what, cnt, expected_offset);
+	TEST_SAY("%s: done consuming after %d messages, at offset %"PRId64
+                 ", next_offset %"PRId64"\n",
+		 what, cnt, expected_offset, next_offset);
 
 	if ((err = rd_kafka_assignment(rk, &parts)))
 		TEST_FAIL("%s: failed to get assignment(): %s\n",
@@ -439,8 +448,8 @@ static void nonexist_offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 		failed_offsets += offsets->elems[i].err ? 1 : 0;
 	}
 
-	TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
-		    "expected global success, not %s", rd_kafka_err2str(err));
+	TEST_ASSERT(err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+		    "expected unknown Topic or partition, not %s", rd_kafka_err2str(err));
 	TEST_ASSERT(offsets->cnt == 2, "expected %d offsets", offsets->cnt);
 	TEST_ASSERT(failed_offsets == offsets->cnt,
 		    "expected %d offsets to have failed, got %d",
@@ -471,7 +480,7 @@ static void do_nonexist_commit (void) {
 	err = rd_kafka_commit_queue(rk, offsets, NULL,
 				    nonexist_offset_commit_cb, NULL);
 	TEST_SAY("nonexist commit returned %s\n", rd_kafka_err2str(err));
-	if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+	if (err != RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
 		TEST_FAIL("commit() should succeed, not: %s",
 			  rd_kafka_err2str(err));
 

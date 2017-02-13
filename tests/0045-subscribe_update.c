@@ -155,7 +155,7 @@ static void do_test_non_exist_and_partchange (void) {
 	test_conf_init(&conf, NULL, 60);
 
 	/* Decrease metadata interval to speed up topic change discovery. */
-	test_conf_set(conf, "metadata.max.age.ms", "5000");
+	test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
 
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
 	rk = test_create_consumer(test_str_id_generate_tmp(),
@@ -220,7 +220,7 @@ static void do_test_regex (void) {
 	test_conf_init(&conf, NULL, 60);
 
 	/* Decrease metadata interval to speed up topic change discovery. */
-	test_conf_set(conf, "metadata.max.age.ms", "5000");
+	test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
 
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
 	rk = test_create_consumer(test_str_id_generate_tmp(),
@@ -298,7 +298,7 @@ static void do_test_topic_remove (void) {
 	test_conf_init(&conf, NULL, 60);
 
 	/* Decrease metadata interval to speed up topic change discovery. */
-	test_conf_set(conf, "metadata.max.age.ms", "5000");
+	test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
 
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
 	rk = test_create_consumer(test_str_id_generate_tmp(),
@@ -354,15 +354,25 @@ static void do_test_topic_remove (void) {
 
 int main_0045_subscribe_update (int argc, char **argv) {
 
-	if (!test_can_create_topics(1))
-		return 0;
-	
-	do_test_non_exist_and_partchange();
-	do_test_regex();
+        if (!test_can_create_topics(1))
+                return 0;
+
+        do_test_regex();
 
         return 0;
 }
 
+int main_0045_subscribe_update_non_exist_and_partchange (int argc, char **argv){
+        if (test_check_auto_create_topic()) {
+                TEST_SKIP("do_test_non_exist_and_partchange(): "
+                          "topic auto-creation is enabled\n");
+                return 0;
+        }
+
+        do_test_non_exist_and_partchange();
+
+        return 0;
+}
 
 int main_0045_subscribe_update_topic_remove (int argc, char **argv) {
 

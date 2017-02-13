@@ -43,6 +43,7 @@ struct expect {
 	char *name;           /* sub-test name */
 	const char *sub[4];  /* subscriptions */
 	const char *exp[4];  /* expected topics */
+        int         exp_err; /* expected error from subscribe() */
 	int         stat[4]; /* per exp status */
 	int         fails;
 	enum {
@@ -178,8 +179,9 @@ static int test_subscribe (rd_kafka_t *rk, struct expect *exp) {
 	TIMING_START(&t_sub, "subscribe");
 	err = rd_kafka_subscribe(rk, tlist);
 	TIMING_STOP(&t_sub);
-	TEST_ASSERT(!err, "subscribe() failed: %s", rd_kafka_err2str(err));
-
+	TEST_ASSERT(err == exp->exp_err,
+                    "subscribe() failed: %s (expected %s)",
+                    rd_kafka_err2str(err), rd_kafka_err2str(exp->exp_err));
 
 	if (exp->exp[0]) {
 		/* Wait for assignment, actual messages are ignored. */
@@ -266,9 +268,12 @@ static int do_test (const char *assignor) {
 		    test_mk_topic_name("regex_subscribe_TOOTHPIC_0003_3", 0),
 		    groupid);
 
+        /* To avoid auto topic creation to kick in we use
+         * an invalid topic name. */
 	rd_snprintf(nonexist_topic, sizeof(nonexist_topic),
 		    "%s_%s",
-		    test_mk_topic_name("regex_subscribe_NONEXISTENT_0004_IV",0),
+		    test_mk_topic_name("regex_subscribe_NONEXISTENT_0004_IV#!",
+                                       0),
 		    groupid);
 
 	/* Produce messages to topics to ensure creation. */
@@ -279,7 +284,7 @@ static int do_test (const char *assignor) {
 	test_conf_init(&conf, NULL, 20);
 	test_conf_set(conf, "partition.assignment.strategy", assignor);
 	/* Speed up propagation of new topics */
-	test_conf_set(conf, "metadata.max.age.ms", "5000");
+	test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
 
 	/* Create a single consumer to handle all subscriptions.
 	 * Has the nice side affect of testing multiple subscriptions. */
@@ -371,7 +376,8 @@ static int do_test (const char *assignor) {
 			.name = rd_strdup(tsprintf("%s: broken regex (no matches)",
 						   assignor)),
 			.sub = { "^.*[0", NULL },
-			.exp = { NULL }
+			.exp = { NULL },
+                        .exp_err = RD_KAFKA_RESP_ERR__INVALID_ARG
 		};
 
 		fails += test_subscribe(rk, &expect);
@@ -394,4 +400,80 @@ int main_0033_regex_subscribe (int argc, char **argv) {
 	do_test("range");
 	do_test("roundrobin");
 	return 0;
+}
+
+
+/**
+ * @brief Subscription API tests that dont require a broker
+ */
+int main_0033_regex_subscribe_local (int argc, char **argv) {
+        rd_kafka_topic_partition_list_t *valids, *invalids, *none,
+                *empty, *alot;
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_resp_err_t err;
+        char errstr[256];
+        int i;
+
+        valids = rd_kafka_topic_partition_list_new(0);
+        invalids = rd_kafka_topic_partition_list_new(100);
+        none = rd_kafka_topic_partition_list_new(1000);
+        empty = rd_kafka_topic_partition_list_new(5);
+        alot = rd_kafka_topic_partition_list_new(1);
+
+        rd_kafka_topic_partition_list_add(valids, "not_a_regex", 0);
+        rd_kafka_topic_partition_list_add(valids, "^My[vV]alid..regex+", 0);
+        rd_kafka_topic_partition_list_add(valids, "^another_one$", 55);
+
+        rd_kafka_topic_partition_list_add(invalids, "not_a_regex", 0);
+        rd_kafka_topic_partition_list_add(invalids, "^My[vV]alid..regex+", 0);
+        rd_kafka_topic_partition_list_add(invalids, "^??++", 99);
+
+        rd_kafka_topic_partition_list_add(empty, "not_a_regex", 0);
+        rd_kafka_topic_partition_list_add(empty, "", 0);
+        rd_kafka_topic_partition_list_add(empty, "^ok", 0);
+
+        for (i = 0 ; i < 10000 ; i++) {
+                char topic[32];
+                rd_snprintf(topic, sizeof(topic), "^Va[lLid]_regex_%d$", i);
+                rd_kafka_topic_partition_list_add(alot, topic, i);
+        }
+
+        conf = rd_kafka_conf_new();
+        test_conf_set(conf, "group.id", "group");
+
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        if (!rk)
+                TEST_FAIL("Failed to create consumer: %s", errstr);
+
+        err = rd_kafka_subscribe(rk, valids);
+        TEST_ASSERT(!err, "valids failed: %s", rd_kafka_err2str(err));
+
+        err = rd_kafka_subscribe(rk, invalids);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "invalids failed with wrong return: %s",
+                    rd_kafka_err2str(err));
+
+        err = rd_kafka_subscribe(rk, none);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "none failed with wrong return: %s", rd_kafka_err2str(err));
+
+        err = rd_kafka_subscribe(rk, empty);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "empty failed with wrong return: %s",
+                    rd_kafka_err2str(err));
+
+        err = rd_kafka_subscribe(rk, alot);
+        TEST_ASSERT(!err, "alot failed: %s", rd_kafka_err2str(err));
+
+        rd_kafka_consumer_close(rk);
+        rd_kafka_destroy(rk);
+
+        rd_kafka_topic_partition_list_destroy(valids);
+        rd_kafka_topic_partition_list_destroy(invalids);
+        rd_kafka_topic_partition_list_destroy(none);
+        rd_kafka_topic_partition_list_destroy(empty);
+        rd_kafka_topic_partition_list_destroy(alot);
+
+        return 0;
 }

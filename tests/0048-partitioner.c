@@ -62,7 +62,8 @@ static void do_test_failed_partitioning (void) {
 
 	rk = test_create_producer();
 	rd_kafka_topic_conf_set_partitioner_cb(tconf, my_invalid_partitioner);
-	test_topic_conf_set(tconf, "message.timeout.ms", "5000");
+	test_topic_conf_set(tconf, "message.timeout.ms",
+                            tsprintf("%d", tmout_multip(10000)));
 	rkt = rd_kafka_topic_new(rk, topic, tconf);
 	TEST_ASSERT(rkt != NULL, "%s", rd_kafka_err2str(rd_kafka_last_error()));
 

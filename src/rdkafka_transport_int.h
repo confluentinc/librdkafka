@@ -31,7 +31,6 @@
  * rd_kafka_transport_t struct internals. */
 
 #if WITH_SASL
-#include <sasl/sasl.h>
 #include "rdkafka_sasl.h"
 #endif
 
@@ -39,6 +38,8 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #endif
+
+typedef struct rd_kafka_sasl_state_s rd_kafka_sasl_state_t;
 
 struct rd_kafka_transport_s {	
 	int rktrans_s;
@@ -51,12 +52,20 @@ struct rd_kafka_transport_s {
 
 #if WITH_SASL
 	struct {
-		sasl_conn_t *conn;
+                rd_kafka_sasl_state_t *state; /* SASL implementation
+                                               * state handle */
 
-		int           complete;    /* Auth was completed early
+                int (*recv) (struct rd_kafka_transport_s *s,
+                             const void *buf, size_t size,
+                             char *errstr, size_t errstr_size);
+                void (*close) (struct rd_kafka_transport_s *);
+
+                int           complete;    /* Auth was completed early
 					    * from the client's perspective
-					    * but we must still wait for
-					    * reply from server. */
+					    * (but we might still have to
+                                            *  wait for server reply). */
+
+                /* SASL framing buffers */
 		struct msghdr msg;
 		struct iovec  iov[2];
 
@@ -68,11 +77,16 @@ struct rd_kafka_transport_s {
 #endif
 
 	rd_kafka_buf_t *rktrans_recv_buf;  /* Used with framed_recvmsg */
-	
+
+        /* Two pollable fds:
+         * - TCP socket
+         * - wake-up fd
+         */
 #ifndef _MSC_VER
-	struct pollfd rktrans_pfd;
+        struct pollfd rktrans_pfd[2];
 #else
-	WSAPOLLFD rktrans_pfd;
+        WSAPOLLFD rktrans_pfd[2];
 #endif
+        int rktrans_pfd_cnt;
 };
 

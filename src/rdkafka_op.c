@@ -41,35 +41,36 @@ rd_atomic32_t rd_kafka_op_cnt;
 const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
         int skiplen = 6;
         static const char *names[] = {
-                "REPLY:NONE",
-                "REPLY:FETCH",
-                "REPLY:ERR",
-                "REPLY:CONSUMER_ERR",
-                "REPLY:DR",
-                "REPLY:STATS",
-                "REPLY:METADATA_REQ",
-                "REPLY:OFFSET_COMMIT",
-		"REPLY:NODE_UPDATE",
-                "REPLY:XMIT_BUF",
-                "REPLY:RECV_BUF",
-                "REPLY:XMIT_RETRY",
-                "REPLY:FETCH_START",
-                "REPLY:FETCH_STOP",
-                "REPLY:SEEK",
-		"REPLY:PAUSE",
-                "REPLY:OFFSET_FETCH",
-                "REPLY:PARTITION_JOIN",
-                "REPLY:PARTITION_LEAVE",
-                "REPLY:REBALANCE",
-                "REPLY:TERMINATE",
-                "REPLY:COORD_QUERY",
-                "REPLY:SUBSCRIBE",
-                "REPLY:ASSIGN",
-                "REPLY:GET_SUBSCRIPTION",
-                "REPLY:GET_ASSIGNMENT",
-		"REPLY:THROTTLE",
-                "REPLY:CALLBACK",
-		"REPLY:NAME"
+                [RD_KAFKA_OP_NONE] = "REPLY:NONE",
+                [RD_KAFKA_OP_FETCH] = "REPLY:FETCH",
+                [RD_KAFKA_OP_ERR] = "REPLY:ERR",
+                [RD_KAFKA_OP_CONSUMER_ERR] = "REPLY:CONSUMER_ERR",
+                [RD_KAFKA_OP_DR] = "REPLY:DR",
+                [RD_KAFKA_OP_STATS] = "REPLY:STATS",
+                [RD_KAFKA_OP_OFFSET_COMMIT] = "REPLY:OFFSET_COMMIT",
+                [RD_KAFKA_OP_NODE_UPDATE] = "REPLY:NODE_UPDATE",
+                [RD_KAFKA_OP_XMIT_BUF] = "REPLY:XMIT_BUF",
+                [RD_KAFKA_OP_RECV_BUF] = "REPLY:RECV_BUF",
+                [RD_KAFKA_OP_XMIT_RETRY] = "REPLY:XMIT_RETRY",
+                [RD_KAFKA_OP_FETCH_START] = "REPLY:FETCH_START",
+                [RD_KAFKA_OP_FETCH_STOP] = "REPLY:FETCH_STOP",
+                [RD_KAFKA_OP_SEEK] = "REPLY:SEEK",
+                [RD_KAFKA_OP_PAUSE] = "REPLY:PAUSE",
+                [RD_KAFKA_OP_OFFSET_FETCH] = "REPLY:OFFSET_FETCH",
+                [RD_KAFKA_OP_PARTITION_JOIN] = "REPLY:PARTITION_JOIN",
+                [RD_KAFKA_OP_PARTITION_LEAVE] = "REPLY:PARTITION_LEAVE",
+                [RD_KAFKA_OP_REBALANCE] = "REPLY:REBALANCE",
+                [RD_KAFKA_OP_TERMINATE] = "REPLY:TERMINATE",
+                [RD_KAFKA_OP_COORD_QUERY] = "REPLY:COORD_QUERY",
+                [RD_KAFKA_OP_SUBSCRIBE] = "REPLY:SUBSCRIBE",
+                [RD_KAFKA_OP_ASSIGN] = "REPLY:ASSIGN",
+                [RD_KAFKA_OP_GET_SUBSCRIPTION] = "REPLY:GET_SUBSCRIPTION",
+                [RD_KAFKA_OP_GET_ASSIGNMENT] = "REPLY:GET_ASSIGNMENT",
+                [RD_KAFKA_OP_THROTTLE] = "REPLY:THROTTLE",
+                [RD_KAFKA_OP_NAME] = "REPLY:NAME",
+                [RD_KAFKA_OP_OFFSET_RESET] = "REPLY:OFFSET_RESET",
+                [RD_KAFKA_OP_METADATA] = "REPLY:METADATA",
+                [RD_KAFKA_OP_LOG] = "REPLY:LOG",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -137,48 +138,60 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 			rko->rko_u.offset_commit.partitions->cnt : 0);
 		break;
 
+        case RD_KAFKA_OP_LOG:
+                fprintf(fp, "%s Log: %%%d %s: %s\n",
+                        prefix, rko->rko_u.log.level,
+                        rko->rko_u.log.fac,
+                        rko->rko_u.log.str);
+                break;
+
 	default:
 		break;
 	}
 }
 
 
-rd_kafka_op_t *rd_kafka_op_new (rd_kafka_op_type_t type) {
+rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
 	rd_kafka_op_t *rko;
-	static const size_t op2size[RD_KAFKA_OP__END] = {
-		[RD_KAFKA_OP_FETCH] = sizeof(rko->rko_u.fetch),
-		[RD_KAFKA_OP_ERR] = sizeof(rko->rko_u.err),
-		[RD_KAFKA_OP_CONSUMER_ERR] = sizeof(rko->rko_u.err),
-		[RD_KAFKA_OP_DR] = sizeof(rko->rko_u.dr),
-		[RD_KAFKA_OP_STATS] = sizeof(rko->rko_u.stats),
-		[RD_KAFKA_OP_METADATA_REQ] = sizeof(rko->rko_u.metadata),
-		[RD_KAFKA_OP_OFFSET_COMMIT] = sizeof(rko->rko_u.offset_commit),
-		[RD_KAFKA_OP_NODE_UPDATE] = sizeof(rko->rko_u.node),
-		[RD_KAFKA_OP_XMIT_BUF] = sizeof(rko->rko_u.xbuf),
-		[RD_KAFKA_OP_RECV_BUF] = sizeof(rko->rko_u.xbuf),
-		[RD_KAFKA_OP_XMIT_RETRY] = sizeof(rko->rko_u.xbuf),
-		[RD_KAFKA_OP_FETCH_START] = sizeof(rko->rko_u.fetch_start),
-		[RD_KAFKA_OP_FETCH_STOP] = 0,
-		[RD_KAFKA_OP_SEEK] = sizeof(rko->rko_u.fetch_start),
-		[RD_KAFKA_OP_PAUSE] = sizeof(rko->rko_u.pause),
-		[RD_KAFKA_OP_OFFSET_FETCH] = sizeof(rko->rko_u.offset_fetch),
-		[RD_KAFKA_OP_PARTITION_JOIN] = 0,
-		[RD_KAFKA_OP_PARTITION_LEAVE] = 0,
-		[RD_KAFKA_OP_REBALANCE] = sizeof(rko->rko_u.rebalance),
-		[RD_KAFKA_OP_TERMINATE] = 0,
-		[RD_KAFKA_OP_COORD_QUERY] = 0,
-		[RD_KAFKA_OP_SUBSCRIBE] = sizeof(rko->rko_u.subscribe),
-		[RD_KAFKA_OP_ASSIGN] = sizeof(rko->rko_u.assign),
-		[RD_KAFKA_OP_GET_SUBSCRIPTION] = sizeof(rko->rko_u.subscribe),
-		[RD_KAFKA_OP_GET_ASSIGNMENT] = sizeof(rko->rko_u.assign),
-		[RD_KAFKA_OP_THROTTLE] = sizeof(rko->rko_u.throttle),
-		[RD_KAFKA_OP_NAME] = sizeof(rko->rko_u.name),
-		[RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
+        static const size_t op2size[RD_KAFKA_OP__END] = {
+                [RD_KAFKA_OP_FETCH] = sizeof(rko->rko_u.fetch),
+                [RD_KAFKA_OP_ERR] = sizeof(rko->rko_u.err),
+                [RD_KAFKA_OP_CONSUMER_ERR] = sizeof(rko->rko_u.err),
+                [RD_KAFKA_OP_DR] = sizeof(rko->rko_u.dr),
+                [RD_KAFKA_OP_STATS] = sizeof(rko->rko_u.stats),
+                [RD_KAFKA_OP_OFFSET_COMMIT] = sizeof(rko->rko_u.offset_commit),
+                [RD_KAFKA_OP_NODE_UPDATE] = sizeof(rko->rko_u.node),
+                [RD_KAFKA_OP_XMIT_BUF] = sizeof(rko->rko_u.xbuf),
+                [RD_KAFKA_OP_RECV_BUF] = sizeof(rko->rko_u.xbuf),
+                [RD_KAFKA_OP_XMIT_RETRY] = sizeof(rko->rko_u.xbuf),
+                [RD_KAFKA_OP_FETCH_START] = sizeof(rko->rko_u.fetch_start),
+                [RD_KAFKA_OP_FETCH_STOP] = 0,
+                [RD_KAFKA_OP_SEEK] = sizeof(rko->rko_u.fetch_start),
+                [RD_KAFKA_OP_PAUSE] = sizeof(rko->rko_u.pause),
+                [RD_KAFKA_OP_OFFSET_FETCH] = sizeof(rko->rko_u.offset_fetch),
+                [RD_KAFKA_OP_PARTITION_JOIN] = 0,
+                [RD_KAFKA_OP_PARTITION_LEAVE] = 0,
+                [RD_KAFKA_OP_REBALANCE] = sizeof(rko->rko_u.rebalance),
+                [RD_KAFKA_OP_TERMINATE] = 0,
+                [RD_KAFKA_OP_COORD_QUERY] = 0,
+                [RD_KAFKA_OP_SUBSCRIBE] = sizeof(rko->rko_u.subscribe),
+                [RD_KAFKA_OP_ASSIGN] = sizeof(rko->rko_u.assign),
+                [RD_KAFKA_OP_GET_SUBSCRIPTION] = sizeof(rko->rko_u.subscribe),
+                [RD_KAFKA_OP_GET_ASSIGNMENT] = sizeof(rko->rko_u.assign),
+                [RD_KAFKA_OP_THROTTLE] = sizeof(rko->rko_u.throttle),
+                [RD_KAFKA_OP_NAME] = sizeof(rko->rko_u.name),
+                [RD_KAFKA_OP_OFFSET_RESET] = sizeof(rko->rko_u.offset_reset),
+                [RD_KAFKA_OP_METADATA] = sizeof(rko->rko_u.metadata),
+                [RD_KAFKA_OP_LOG] = sizeof(rko->rko_u.log)
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
 	rko = rd_calloc(1, sizeof(*rko)-sizeof(rko->rko_u)+tsize);
 	rko->rko_type = type;
+
+#if ENABLE_DEVEL
+        rko->rko_source = source;
+#endif
 
         rd_atomic32_add(&rd_kafka_op_cnt, 1);
 	return rko;
@@ -207,6 +220,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 	case RD_KAFKA_OP_OFFSET_COMMIT:
 		RD_IF_FREE(rko->rko_u.offset_commit.partitions,
 			   rd_kafka_topic_partition_list_destroy);
+                RD_IF_FREE(rko->rko_u.offset_commit.reason, rd_free);
 		break;
 
 	case RD_KAFKA_OP_SUBSCRIBE:
@@ -255,14 +269,6 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 		RD_IF_FREE(rko->rko_u.xbuf.rkbuf, rd_kafka_buf_destroy);
 		break;
 
-	case RD_KAFKA_OP_METADATA_REQ:
-		if (rko->rko_u.metadata.rkt)
-			rd_kafka_topic_destroy0(
-				rd_kafka_topic_a2s(rko->rko_u.metadata.rkt));
-		RD_IF_FREE(rko->rko_u.metadata.metadata,
-			   rd_kafka_metadata_destroy);
-		break;
-
 	case RD_KAFKA_OP_DR:
 		rd_kafka_msgq_purge(rko->rko_rk, &rko->rko_u.dr.msgq);
 		if (rko->rko_u.dr.do_purge2)
@@ -276,9 +282,23 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 		RD_IF_FREE(rko->rko_u.offset_reset.reason, rd_free);
 		break;
 
+        case RD_KAFKA_OP_METADATA:
+                RD_IF_FREE(rko->rko_u.metadata, rd_kafka_metadata_destroy);
+                break;
+
+        case RD_KAFKA_OP_LOG:
+                rd_free(rko->rko_u.log.str);
+                break;
+
 	default:
 		break;
 	}
+
+        if (rko->rko_type & RD_KAFKA_OP_CB && rko->rko_op_cb) {
+                /* Let callback clean up */
+                rko->rko_err = RD_KAFKA_RESP_ERR__DESTROY;
+                rko->rko_op_cb(rko->rko_rk, rko);
+        }
 
 	RD_IF_FREE(rko->rko_rktp, rd_kafka_toppar_destroy);
 
@@ -354,6 +374,21 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
 }
 
 
+/**
+ * @brief Create new callback op for type \p type
+ */
+rd_kafka_op_t *rd_kafka_op_new_cb (rd_kafka_t *rk,
+                                   rd_kafka_op_type_t type,
+                                   void (*cb) (rd_kafka_t *rk,
+                                               rd_kafka_op_t *rko)) {
+        rd_kafka_op_t *rko;
+        rko = rd_kafka_op_new(type | RD_KAFKA_OP_CB);
+        rko->rko_op_cb = cb;
+        rko->rko_rk = rk;
+        return rko;
+}
+
+
 
 /**
  * @brief Reply to 'rko' re-using the same rko.
@@ -376,7 +411,9 @@ int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
 
 
 /**
- * Send request to queue, wait for response.
+ * @brief Send request to queue, wait for response.
+ *
+ * @returns response on success or NULL if destq is disabled.
  */
 rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
                                  rd_kafka_q_t *recvq,
@@ -385,10 +422,11 @@ rd_kafka_op_t *rd_kafka_op_req0 (rd_kafka_q_t *destq,
         rd_kafka_op_t *reply;
 
         /* Indicate to destination where to send reply. */
-	rd_kafka_op_set_replyq(rko, recvq, NULL);
+        rd_kafka_op_set_replyq(rko, recvq, NULL);
 
         /* Enqueue op */
-        rd_kafka_q_enq(destq, rko);
+        if (!rd_kafka_q_enq(destq, rko))
+                return NULL;
 
         /* Wait for reply */
         reply = rd_kafka_q_pop(recvq, timeout_ms, 0);
@@ -446,6 +484,7 @@ rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko) {
  */
 void rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_op_t *rko) {
         rko->rko_op_cb(rk, rko);
+        rko->rko_op_cb = NULL;
 }
 
 
@@ -481,24 +520,51 @@ void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,
  * @brief Handle standard op types.
  * @returns 1 if handled, else 0.
  */
-int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko) {
-	if (rko->rko_type & RD_KAFKA_OP_CB)
-		rko->rko_op_cb(rk, rko);
-	else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
-		rd_kafka_buf_handle_op(rko, rko->rko_err);
-	else if ((int)rko->rko_type ==
-		 (RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY)
-		 && rko->rko_u.offset_commit.cb)
-		rko->rko_u.offset_commit.cb(rk, rko->rko_err,
-					    rko->rko_u.offset_commit.partitions,
-					    rko->rko_u.offset_commit.opaque);
-	else if (rko->rko_type & RD_KAFKA_OP_REPLY &&
-		 rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
-		return 1; /* dest queue was probably disabled. */
-	else
-		return 0;
+int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko, int cb_type) {
+        if (cb_type == _Q_CB_FORCE_RETURN)
+                return 0;
+        else if (cb_type != _Q_CB_EVENT && rko->rko_type & RD_KAFKA_OP_CB)
+                rd_kafka_op_call(rk, rko);
+        else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
+                rd_kafka_buf_handle_op(rko, rko->rko_err);
+        else if (cb_type != _Q_CB_RETURN &&
+                 rko->rko_type & RD_KAFKA_OP_REPLY &&
+                 rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
+                return 1; /* dest queue was probably disabled. */
+        else
+                return 0;
 
-	return 1;
+        return 1;
+}
+
+
+/**
+ * @brief Attempt to handle op using its queue's serve callback,
+ *        or the passed callback, or op_handle_std(), else do nothing.
+ *
+ * @returns 1 if op was handled (and destroyed), else 0.
+ */
+int rd_kafka_op_handle (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                        int cb_type, void *opaque,
+                        int (*callback) (rd_kafka_t *rk, rd_kafka_op_t *rko,
+                                         int cb_type, void *opaque)) {
+
+        if (rd_kafka_op_handle_std(rk, rko, cb_type)) {
+                rd_kafka_op_destroy(rko);
+                return 1;
+        }
+
+        if (rko->rko_serve) {
+                callback = rko->rko_serve;
+                opaque   = rko->rko_serve_opaque;
+                rko->rko_serve        = NULL;
+                rko->rko_serve_opaque = NULL;
+        }
+
+        if (callback)
+                return callback(rk, rko, cb_type, opaque);
+
+        return 0;
 }
 
 

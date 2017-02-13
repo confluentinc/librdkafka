@@ -35,6 +35,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <inttypes.h>
+#include <fcntl.h>
 
 /**
 * Types
@@ -114,6 +115,8 @@ void rd_usleep (int usec, rd_atomic32_t *terminate) {
 }
 
 
+
+
 #define rd_gettimeofday(tv,tz)  gettimeofday(tv,tz)
 
 
@@ -123,3 +126,35 @@ void rd_usleep (int usec, rd_atomic32_t *terminate) {
  * Empty struct initializer
  */
 #define RD_ZERO_INIT  {}
+
+/**
+ * Sockets, IO
+ */
+
+/**
+ * @brief Set socket to non-blocking
+ * @returns 0 on success or errno on failure.
+ */
+static RD_UNUSED int rd_fd_set_nonblocking (int fd) {
+        int fl = fcntl(fd, F_GETFL, 0);
+        if (fl == -1 ||
+            fcntl(fd, F_SETFL, fl | O_NONBLOCK) == -1)
+                return errno;
+        return 0;
+}
+
+/**
+ * @brief Create non-blocking pipe
+ * @returns 0 on success or errno on failure
+ */
+static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
+        if (pipe(fds) == -1 ||
+            rd_fd_set_nonblocking(fds[0]) == -1 ||
+            rd_fd_set_nonblocking(fds[1]))
+                return errno;
+        return 0;
+}
+#define rd_pipe(fds) pipe(fds)
+#define rd_read(fd,buf,sz) read(fd,buf,sz)
+#define rd_write(fd,buf,sz) write(fd,buf,sz)
+#define rd_close(fd) close(fd)

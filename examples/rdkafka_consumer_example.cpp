@@ -146,7 +146,7 @@ public:
 
     if (err == RdKafka::ERR__ASSIGN_PARTITIONS) {
       consumer->assign(partitions);
-      partition_cnt = partitions.size();
+      partition_cnt = (int)partitions.size();
     } else {
       consumer->unassign();
       partition_cnt = 0;
@@ -379,6 +379,12 @@ int main (int argc, char **argv) {
     }
   }
 
+  ExampleConsumeCb ex_consume_cb;
+
+  if(use_ccb) {
+    conf->set("consume_cb", &ex_consume_cb, errstr);
+  }
+
   ExampleEventCb ex_event_cb;
   conf->set("event_cb", &ex_event_cb, errstr);
 
@@ -442,17 +448,14 @@ int main (int argc, char **argv) {
     exit(1);
   }
 
-
   /*
    * Consume messages
    */
   while (run) {
-    if (use_ccb) {
-      std::cerr << "Use callback: Not implemented" << std::endl;
-      break;
-    }
     RdKafka::Message *msg = consumer->consume(1000);
-    msg_consume(msg, NULL);
+    if (!use_ccb) {
+      msg_consume(msg, NULL);
+    }
     delete msg;
   }
 

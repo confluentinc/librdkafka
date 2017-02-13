@@ -1,9 +1,12 @@
-librdkafka - Apache Kafka C/C++ client library
-==============================================
+librdkafka - the Apache Kafka C/C++ client library
+==================================================
 
 Copyright (c) 2012-2016, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
+
+[![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka) [![Build status](https://doozer.io/badge/edenhill/librdkafka/buildstatus/master)](https://doozer.io/user/edenhill/librdkafka)
+
 
 **librdkafka** is a C library implementation of the
 [Apache Kafka](http://kafka.apache.org/) protocol, containing both
@@ -20,54 +23,42 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 **NOTE**: The `master` branch is actively developed, use latest release for production use.
 
-[![Gitter chat](https://badges.gitter.im/edenhill/librdkafka.png)](https://gitter.im/edenhill/librdkafka)
 
-**Apache Kafka 0.8 & 0.9 & 0.10 support:**
-
-  * Branch: master
-  * Producer: supported
-  * High-level balanced KafkaConsumer: supported (requires broker >= 0.9)
-  * Simple Consumer: supported
+#Overview#
+  * High-level producer
+  * High-level balanced KafkaConsumer (requires broker >= 0.9)
+  * Simple (legacy) consumer
   * Compression: snappy, gzip, lz4
-  * Broker version support: >=0.8
+  * [SSL](https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka) support
+  * [SASL](https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka) (GSSAPI/Kerberos, PLAIN) support
+  * Broker version support: >=0.8 (see [Broker version compatibility](https://github.com/edenhill/librdkafka/wiki/Broker-version-compatibility))
+  * Stable API and ABI safe stable C & C++ APIs
+  * [Statistics](https://github.com/edenhill/librdkafka/wiki/Statistics) metrics
   * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
-  * ZooKeeper: not supported
-  * C API: Stable, ABI safe
-  * C++ API: Stable
-  * Tests: Regression tests in `tests/` directory.
-  * Statistics: JSON formatted, see `rd_kafka_conf_set_stats_cb` in `rdkafka.h`.
-  * Status: Testing
-
-
-**Apache Kafka 0.7 support:**
-
-  * Branch: 0.7
-  * Producer: supported
-  * High-level Consumer: not supported
-  * Simple Consumer: supported
-  * Compression: not supported
-  * Broker version support: 0.7.x
-  * ZooKeeper: not supported
-  * Status: Stable, Deprecated, Unsupported
-
-
+  * RPM package: librdkafka and librdkafka-devel
+  * Portable: runs on Linux, OSX, Win32, Solaris, FreeBSD, ...
 
 
 #Language bindings#
 
+  * C#/.NET: [confluent-kafka-dotnet](https://github.com/confluentinc/confluent-kafka-dotnet) (based on [rdkafka-dotnet](https://github.com/ah-/rdkafka-dotnet))
+  * D (C-like): [librdkafka](https://github.com/DlangApache/librdkafka/)
+  * D (C++-like): [librdkafkad](https://github.com/tamediadigital/librdkafka-d)
+  * Go: [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go)
   * Haskell: [haskakafka](https://github.com/cosbynator/haskakafka)
   * Haskell: [haskell-kafka](https://github.com/yanatan16/haskell-kafka)
+  * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
+  * Node.js: [node-rdkafka](https://github.com/Blizzard/node-rdkafka)
   * Node.js: [node-kafka](https://github.com/sutoiku/node-kafka)
   * Node.js: [kafka-native](https://github.com/jut-io/node-kafka-native)
-  * Lua: [luardkafka](https://github.com/mistsv/luardkafka)
   * OCaml: [ocaml-kafka](https://github.com/didier-wenzek/ocaml-kafka)
   * PHP: [phpkafka](https://github.com/EVODelavega/phpkafka)
   * PHP: [php-rdkafka](https://github.com/arnaud-lb/php-rdkafka)
   * Python: [confluent-kafka-python](https://github.com/confluentinc/confluent-kafka-python)
   * Python: [PyKafka](https://github.com/Parsely/pykafka)
-  * Ruby: [Hermann](https://github.com/stancampbell3/Hermann)
+  * Ruby: [Hermann](https://github.com/reiseburo/hermann)
+  * Rust: [rust-rdkafka](https://github.com/fede1024/rust-rdkafka)
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
-  * C#/.NET: [rdkafka-dotnet](https://github.com/ah-/rdkafka-dotnet)
 
 #Users of librdkafka#
 

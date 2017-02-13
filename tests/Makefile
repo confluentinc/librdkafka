@@ -3,8 +3,8 @@ TESTSRCS_CXX= $(wildcard 0*-*.cpp)
 OBJS	  = $(TESTSRCS_C:%.c=%.o) $(TESTSRCS_CXX:%.cpp=%.o)
 
 BIN	  = merged
-LIBS	 += -lrdkafka
-OBJS	 += test.o tinycthread.o rdlist.o sockem.o
+LIBS	 += -lrdkafka++ -lrdkafka -lstdc++
+OBJS	 += test.o testcpp.o tinycthread.o rdlist.o sockem.o
 CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -L../src -L../src-cpp
@@ -37,7 +37,7 @@ run_local: $(BIN)
 
 build: $(BIN)
 
-test.o: ../src/librdkafka.a
+test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a
 
 
 include ../mklove/Makefile.base

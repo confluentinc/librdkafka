@@ -150,6 +150,31 @@ void rd_kafka_timer_backoff (rd_kafka_timers_t *rkts,
 
 
 /**
+ * @returns the delta time to the next time (>=0) this timer fires, or -1
+ *          if timer is stopped.
+ */
+rd_ts_t rd_kafka_timer_next (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
+                             int do_lock) {
+        rd_ts_t now = rd_clock();
+        rd_ts_t delta = -1;
+
+        if (do_lock)
+                rd_kafka_timers_lock(rkts);
+
+        if (rd_kafka_timer_scheduled(rtmr)) {
+                delta = rtmr->rtmr_next - now;
+                if (delta < 0)
+                        delta = 0;
+        }
+
+        if (do_lock)
+                rd_kafka_timers_unlock(rkts);
+
+        return delta;
+}
+
+
+/**
  * Interrupt rd_kafka_timers_run().
  * Used for termination.
  */

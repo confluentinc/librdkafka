@@ -565,8 +565,6 @@ int main (int argc, char **argv) {
 			exit(1);
 		}
 
-		rd_kafka_set_log_level(rk, LOG_DEBUG);
-
 		/* Add brokers */
 		if (rd_kafka_brokers_add(rk, brokers) == 0) {
 			fprintf(stderr, "%% No valid brokers specified\n");
@@ -642,8 +640,6 @@ int main (int argc, char **argv) {
 				errstr);
 			exit(1);
 		}
-
-		rd_kafka_set_log_level(rk, LOG_DEBUG);
 
 		/* Add brokers */
 		if (rd_kafka_brokers_add(rk, brokers) == 0) {
@@ -746,8 +742,6 @@ int main (int argc, char **argv) {
 				errstr);
 			exit(1);
 		}
-
-		rd_kafka_set_log_level(rk, LOG_DEBUG);
 
 		/* Add brokers */
 		if (rd_kafka_brokers_add(rk, brokers) == 0) {

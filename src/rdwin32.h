@@ -39,6 +39,8 @@
 #include <assert.h>
 #define WIN32_MEAN_AND_LEAN
 #include <Winsock2.h>  /* for struct timeval */
+#include <io.h>
+#include <fcntl.h>
 
 
 /**
@@ -159,9 +161,6 @@ static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
 #define rd_usleep(usec,terminate)  Sleep((usec) / 1000)
 
 
-
-
-
 /**
  * @brief gettimeofday() for win32
  */
@@ -189,3 +188,57 @@ int rd_gettimeofday (struct timeval *tv, struct timezone *tz) {
  * Empty struct initializer
  */
 #define RD_ZERO_INIT  {0}
+
+
+/**
+ * Sockets, IO
+ */
+
+/**
+ * @brief Set socket to non-blocking
+ * @returns 0 on success or -1 on failure (see rd_kafka_socket_errno)
+ */
+static RD_UNUSED int rd_fd_set_nonblocking (int fd) {
+        int on = 1;
+        if (ioctlsocket(fd, FIONBIO, &on) == SOCKET_ERROR)
+                return (int)WSAGetLastError();
+        return 0;
+}
+
+/**
+ * @brief Create non-blocking pipe
+ * @returns 0 on success or errno on failure
+ */
+static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
+        HANDLE h[2];
+        int i;
+
+        if (!CreatePipe(&h[0], &h[1], NULL, 0))
+                return (int)GetLastError();
+        for (i = 0 ; i < 2 ; i++) {
+                DWORD mode = PIPE_NOWAIT;
+                /* Set non-blocking */
+                if (!SetNamedPipeHandleState(h[i], &mode, NULL, NULL)) {
+                        CloseHandle(h[0]);
+                        CloseHandle(h[1]);
+                        return (int)GetLastError();
+                }
+
+                /* Open file descriptor for handle */
+                fds[i] = _open_osfhandle((intptr_t)h[i],
+                                         i == 0 ?
+                                         O_RDONLY | O_BINARY :
+                                         O_WRONLY | O_BINARY);
+
+                if (fds[i] == -1) {
+                        CloseHandle(h[0]);
+                        CloseHandle(h[1]);
+                        return (int)GetLastError();
+                }
+        }
+        return 0;
+}
+
+#define rd_read(fd,buf,sz) _read(fd,buf,sz)
+#define rd_write(fd,buf,sz) _write(fd,buf,sz)
+#define rd_close(fd) closesocket(fd)

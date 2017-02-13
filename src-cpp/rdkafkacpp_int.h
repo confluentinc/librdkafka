@@ -41,11 +41,14 @@ extern "C" {
 
 #ifdef _MSC_VER
 typedef int mode_t;
+#pragma warning(disable : 4250)
 #endif
+
 
 namespace RdKafka {
 
 
+void consume_cb_trampoline(rd_kafka_message_t *msg, void *opaque);
 void log_cb_trampoline (const rd_kafka_t *rk, int level,
                         const char *fac, const char *buf);
 void error_cb_trampoline (rd_kafka_t *rk, int err, const char *reason,
@@ -62,10 +65,10 @@ void rebalance_cb_trampoline (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
                               rd_kafka_topic_partition_list_t *c_partitions,
                               void *opaque);
-void offset_commit_cb_trampoline (rd_kafka_t *rk,
-                                  rd_kafka_resp_err_t err,
-                                  rd_kafka_topic_partition_list_t *c_offsets,
-                                  void *opaque);
+void offset_commit_cb_trampoline0 (
+        rd_kafka_t *rk,
+        rd_kafka_resp_err_t err,
+        rd_kafka_topic_partition_list_t *c_offsets, void *opaque);
 
 rd_kafka_topic_partition_list_t *
     partitions_to_c_parts (const std::vector<TopicPartition*> &partitions);
@@ -215,7 +218,8 @@ private:
 class ConfImpl : public Conf {
  public:
   ConfImpl()
-      :dr_cb_(NULL),
+      :consume_cb_(NULL),
+      dr_cb_(NULL),
       event_cb_(NULL),
       socket_cb_(NULL),
       open_cb_(NULL),
@@ -235,6 +239,22 @@ class ConfImpl : public Conf {
   Conf::ConfResult set(const std::string &name,
                        const std::string &value,
                        std::string &errstr);
+
+  Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
+                        std::string &errstr) {
+    if (name != "consume_cb") {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    consume_cb_ = consume_cb;
+    return Conf::CONF_OK;
+  }
 
   Conf::ConfResult set (const std::string &name, DeliveryReportCb *dr_cb,
                         std::string &errstr) {
@@ -495,6 +515,7 @@ class ConfImpl : public Conf {
 
   std::list<std::string> *dump ();
 
+  ConsumeCb *consume_cb_;
   DeliveryReportCb *dr_cb_;
   EventCb *event_cb_;
   SocketCb *socket_cb_;
@@ -551,12 +572,26 @@ class HandleImpl : virtual public Handle {
             low, high));
   }
 
+  Queue *get_partition_queue (const TopicPartition *partition);
+
+  ErrorCode offsetsForTimes (std::vector<TopicPartition*> &offsets,
+                             int timeout_ms) {
+    rd_kafka_topic_partition_list_t *c_offsets = partitions_to_c_parts(offsets);
+    ErrorCode err = static_cast<ErrorCode>(
+        rd_kafka_offsets_for_times(rk_, c_offsets, timeout_ms));
+    update_partitions_from_c_parts(offsets, c_offsets);
+    rd_kafka_topic_partition_list_destroy(c_offsets);
+    return err;
+  }
+
+  ErrorCode set_log_queue (Queue *queue);
 
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
    * the opaque provided to rdkafka must be a pointer to HandleImpl, since
    * ProducerImpl and ConsumerImpl classes cannot be safely directly cast to
    * HandleImpl due to the skewed diamond inheritance. */
+  ConsumeCb *consume_cb_;
   EventCb *event_cb_;
   SocketCb *socket_cb_;
   OpenCb *open_cb_;
@@ -609,6 +644,10 @@ public:
   topic_(topic), partition_(partition), offset_(RdKafka::Topic::OFFSET_INVALID),
       err_(ERR_NO_ERROR) {}
 
+  TopicPartitionImpl (const std::string &topic, int partition, int64_t offset):
+  topic_(topic), partition_(partition), offset_(offset),
+          err_(ERR_NO_ERROR) {}
+
   TopicPartitionImpl (const rd_kafka_topic_partition_t *c_part) {
     topic_ = std::string(c_part->topic);
     partition_ = c_part->partition;
@@ -617,12 +656,14 @@ public:
     // FIXME: metadata
   }
 
-  int partition () { return partition_; }
+  static void destroy (std::vector<TopicPartition*> &partitions);
+
+  int partition () const { return partition_; }
   const std::string &topic () const { return topic_ ; }
 
-  int64_t offset () { return offset_; }
+  int64_t offset () const { return offset_; }
 
-  ErrorCode err () { return err_; }
+  ErrorCode err () const { return err_; }
 
   void set_offset (int64_t offset) { offset_ = offset; }
 
@@ -691,6 +732,24 @@ public:
 	  return static_cast<ErrorCode>(err);
   }
 
+  ErrorCode commitSync (OffsetCommitCb *offset_commit_cb) {
+          return static_cast<ErrorCode>(
+                  rd_kafka_commit_queue(rk_, NULL, NULL,
+                                        RdKafka::offset_commit_cb_trampoline0,
+                                        offset_commit_cb));
+  }
+
+  ErrorCode commitSync (std::vector<TopicPartition*> &offsets,
+                        OffsetCommitCb *offset_commit_cb) {
+          rd_kafka_topic_partition_list_t *c_parts =
+                  partitions_to_c_parts(offsets);
+          rd_kafka_resp_err_t err =
+                  rd_kafka_commit_queue(rk_, c_parts, NULL,
+                                        RdKafka::offset_commit_cb_trampoline0,
+                                        offset_commit_cb);
+          rd_kafka_topic_partition_list_destroy(c_parts);
+          return static_cast<ErrorCode>(err);
+  }
 
   ErrorCode committed (std::vector<TopicPartition*> &partitions, int timeout_ms);
   ErrorCode position (std::vector<TopicPartition*> &partitions);
@@ -728,12 +787,16 @@ private:
 };
 
 
-class QueueImpl : public Queue {
+class QueueImpl : virtual public Queue {
  public:
-  QueueImpl () { }
   ~QueueImpl () {
     rd_kafka_queue_destroy(queue_);
   }
+  static Queue *create (Handle *base);
+  ErrorCode forward (Queue *queue);
+  Message *consume (int timeout_ms);
+  int poll (int timeout_ms);
+
   rd_kafka_queue_t *queue_;
 };
 
@@ -783,6 +846,13 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
   ErrorCode produce (Topic *topic, int32_t partition,
                      const std::vector<char> *payload,
                      const std::vector<char> *key,
+                     void *msg_opaque);
+
+  ErrorCode produce (const std::string topic_name, int32_t partition,
+                     int msgflags,
+                     void *payload, size_t len,
+                     const void *key, size_t key_len,
+                     int64_t timestamp,
                      void *msg_opaque);
 
   ErrorCode flush (int timeout_ms) {

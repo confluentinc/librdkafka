@@ -1859,12 +1859,15 @@ static size_t rd_kafka_topic_partition_has_absolute_offset (
  *                        silently without posting an op on the reply queue.
  * \p set_offsets: set offsets in rko->rko_u.offset_commit.partitions
  *
+ * \p op_version: cgrp's op version to use (or 0)
+ *
  * Locality: cgrp thread
  */
 static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
                                           rd_kafka_op_t *rko,
                                           int set_offsets,
-                                          const char *reason) {
+                                          const char *reason,
+                                          int op_version) {
 	rd_kafka_topic_partition_list_t *offsets;
 	rd_kafka_resp_err_t err;
         int valid_offsets = 0;
@@ -1917,8 +1920,7 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
                 /* Send OffsetCommit */
                 r = rd_kafka_OffsetCommitRequest(
                             rkcg->rkcg_rkb, rkcg, 1, offsets,
-                            RD_KAFKA_REPLYQ(rkcg->rkcg_ops,
-                                            rkcg->rkcg_version),
+                            RD_KAFKA_REPLYQ(rkcg->rkcg_ops, op_version),
                             rd_kafka_cgrp_op_handle_OffsetCommit, rko,
                         reason);
 
@@ -1961,7 +1963,8 @@ rd_kafka_cgrp_assigned_offsets_commit (rd_kafka_cgrp_t *rkcg,
                 rko->rko_u.offset_commit.partitions =
                         rd_kafka_topic_partition_list_copy(offsets);
 	rko->rko_u.offset_commit.silent_empty = 1;
-        rd_kafka_cgrp_offsets_commit(rkcg, rko, 1/* set offsets */, reason);
+        rd_kafka_cgrp_offsets_commit(rkcg, rko, 1/* set offsets */, reason,
+                                     rkcg->rkcg_version);
 }
 
 
@@ -2666,7 +2669,8 @@ static int rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko,
                                               * specified. */
                                              rko->rko_u.offset_commit.
                                              partitions ? 0 : 1,
-                                             rko->rko_u.offset_commit.reason);
+                                             rko->rko_u.offset_commit.reason,
+                                             0);
                 rko = NULL; /* rko now owned by request */
                 break;
 

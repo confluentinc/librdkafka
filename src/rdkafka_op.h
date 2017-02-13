@@ -106,6 +106,7 @@ typedef enum {
 	RD_KAFKA_OP_OFFSET_RESET,    /* Offset reset */
         RD_KAFKA_OP_METADATA,        /* Metadata response */
         RD_KAFKA_OP_LOG,             /* Log */
+        RD_KAFKA_OP_WAKEUP,          /* Wake-up signaling */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

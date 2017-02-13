@@ -320,6 +320,7 @@ void msghdr_print (rd_kafka_t *rk,
 		   int hexdump);
 
 const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb);
+void rd_kafka_broker_wakeup (rd_kafka_broker_t *rkb);
 
 int rd_kafka_brokers_get_state_version (rd_kafka_t *rk);
 int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int stored_version,

@@ -69,6 +69,7 @@ int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 	case RD_KAFKA_EVENT_REBALANCE:
 	case RD_KAFKA_EVENT_ERROR:
         case RD_KAFKA_EVENT_LOG:
+        case RD_KAFKA_EVENT_OFFSET_COMMIT:
 		return 1;
 
 	default:

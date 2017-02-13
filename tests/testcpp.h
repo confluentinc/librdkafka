@@ -31,8 +31,8 @@
 
 #include "rdkafkacpp.h"
 
-#define RD_INLINE
 extern "C" {
+#include "../src/rd.h"
 #include "testshared.h"
 }
 

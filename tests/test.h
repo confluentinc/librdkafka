@@ -159,7 +159,7 @@ struct test {
                 if (do_lock)                                            \
                         TEST_LOCK();                                    \
                 test_curr->state = TEST_FAILED;                         \
-                if (test_curr->mainfunc) {                              \
+                if (fail_now && test_curr->mainfunc) {                  \
                         tests_running_cnt--;                            \
                         is_thrd = 1;                                    \
                 }                                                       \

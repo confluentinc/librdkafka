@@ -1729,6 +1729,9 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 		rktp->rktp_last_next_offset = rktp->rktp_next_offset;
 
                 rktp->rktp_fetch_version = version;
+
+                rd_kafka_q_purge_toppar_version(rktp->rktp_fetchq, rktp,
+                                                version);
         }
 
 

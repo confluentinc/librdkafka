@@ -40,7 +40,7 @@
 int main_0001_multiobj (int argc, char **argv) {
 	int partition = RD_KAFKA_PARTITION_UA; /* random */
 	int i;
-	const int NUM_ITER = 10;
+	const int NUM_ITER = 1;
         const char *topic = NULL;
 
 	TEST_SAY("Creating and destroying %i kafka instances\n", NUM_ITER);
@@ -58,6 +58,9 @@ int main_0001_multiobj (int argc, char **argv) {
 
                 if (!topic)
                         topic = test_mk_topic_name("0001", 0);
+
+                /* Speed up produce to cut down on cycle time */
+                test_conf_set(conf, "queue.buffering.max.ms", "10");
 
                 TIMING_START(&t_full, "full create-produce-destroy cycle");
 		rk = test_create_handle(RD_KAFKA_PRODUCER, conf);

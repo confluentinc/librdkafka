@@ -33,6 +33,7 @@ class LibrdkafkaTestApp(App):
         security_protocol='PLAINTEXT'
 
         f, self.test_conf_file = self.open_file('test.conf', 'perm')
+        f.write('broker.address.family=v4\n'.encode('ascii'))
         f.write(('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
         f.write(('\n'.join(conf_blob)).encode('ascii'))
 

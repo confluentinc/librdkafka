@@ -5,6 +5,7 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_brokers_add@Base 0.8.0
  rd_kafka_commit@Base 0.9.0
  rd_kafka_commit_message@Base 0.9.0
+ rd_kafka_commit_queue@Base 0.9.2
  rd_kafka_committed@Base 0.9.1
  rd_kafka_conf_destroy@Base 0.8.0
  rd_kafka_conf_dump@Base 0.8.3
@@ -14,11 +15,14 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_conf_new@Base 0.8.0
  rd_kafka_conf_properties_show@Base 0.8.0
  rd_kafka_conf_set@Base 0.8.0
+ rd_kafka_conf_set_closesocket_cb@Base 0.9.3
+ rd_kafka_conf_set_connect_cb@Base 0.9.3
  rd_kafka_conf_set_consume_cb@Base 0.9.0
  rd_kafka_conf_set_default_topic_conf@Base 0.9.0
  rd_kafka_conf_set_dr_cb@Base 0.8.0
  rd_kafka_conf_set_dr_msg_cb@Base 0.8.4
  rd_kafka_conf_set_error_cb@Base 0.8.0
+ rd_kafka_conf_set_events@Base 0.9.2
  rd_kafka_conf_set_log_cb@Base 0.8.4
  rd_kafka_conf_set_offset_commit_cb@Base 0.9.0
  rd_kafka_conf_set_opaque@Base 0.8.0
@@ -44,6 +48,19 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_err2str@Base 0.8.0
  rd_kafka_errno2err@Base 0.8.3
  rd_kafka_errno@Base 0.9.1
+ rd_kafka_event_destroy@Base 0.9.2
+ rd_kafka_event_error@Base 0.9.2
+ rd_kafka_event_error_string@Base 0.9.2
+ rd_kafka_event_log@Base 0.9.2
+ rd_kafka_event_message_array@Base 0.9.2
+ rd_kafka_event_message_count@Base 0.9.2
+ rd_kafka_event_message_next@Base 0.9.2
+ rd_kafka_event_name@Base 0.9.2
+ rd_kafka_event_opaque@Base 0.9.2
+ rd_kafka_event_topic_partition@Base 0.9.2
+ rd_kafka_event_topic_partition_list@Base 0.9.2
+ rd_kafka_event_type@Base 0.9.2
+ rd_kafka_flush@Base 0.9.2
  rd_kafka_get_debug_contexts@Base 0.9.0
  rd_kafka_get_err_descs@Base 0.9.1
  rd_kafka_get_watermark_offsets@Base 0.9.1
@@ -74,7 +91,13 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_produce_batch@Base 0.8.4
  rd_kafka_query_watermark_offsets@Base 0.9.1
  rd_kafka_queue_destroy@Base 0.8.4
+ rd_kafka_queue_forward@Base 0.9.2
+ rd_kafka_queue_get_consumer@Base 0.9.2
+ rd_kafka_queue_get_main@Base 0.9.2
+ rd_kafka_queue_io_event_enable@Base 0.9.2
+ rd_kafka_queue_length@Base 0.9.2
  rd_kafka_queue_new@Base 0.8.4
+ rd_kafka_queue_poll@Base 0.9.2
  rd_kafka_resume_partitions@Base 0.9.1
  rd_kafka_seek@Base 0.9.0
  rd_kafka_set_log_level@Base 0.8.0
@@ -95,6 +118,7 @@ librdkafka.so.1 librdkafka1 #MINVER#
  rd_kafka_topic_new@Base 0.8.0
  rd_kafka_topic_opaque@Base 0.9.0
  rd_kafka_topic_partition_available@Base 0.8.0
+ rd_kafka_topic_partition_destroy@Base 0.9.2
  rd_kafka_topic_partition_list_add@Base 0.9.0
  rd_kafka_topic_partition_list_add_range@Base 0.9.0
  rd_kafka_topic_partition_list_copy@Base 0.9.0

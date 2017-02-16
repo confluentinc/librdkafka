@@ -40,7 +40,6 @@ extern "C" {
 #include "../src/rdposix.h"
 #endif
 #include "testshared.h"
-#include <errno.h>
 }
 
 // courtesy of http://stackoverview.blogspot.se/2011/04/create-string-on-fly-just-in-one-line.html

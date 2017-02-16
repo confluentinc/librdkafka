@@ -36,6 +36,7 @@
 #include <sys/time.h>
 #include <inttypes.h>
 #include <fcntl.h>
+#include <errno.h>
 
 /**
 * Types

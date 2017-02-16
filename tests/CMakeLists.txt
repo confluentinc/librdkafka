@@ -51,6 +51,7 @@ set(
     0056-balanced_group_mt.c
     0057-invalid_topic.cpp
     0058-log.cpp
+    0059-bsearch.cpp
 
     test.c
     testcpp.cpp

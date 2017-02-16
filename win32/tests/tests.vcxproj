@@ -142,6 +142,7 @@
     <ClCompile Include="..\..\tests\0056-balanced_group_mt.c" />
     <ClCompile Include="..\..\tests\0057-invalid_topic.cpp" />
     <ClCompile Include="..\..\tests\0058-log.cpp" />
+    <ClCompile Include="..\..\tests\0059-bsearch.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />
     <ClCompile Include="..\..\src\tinycthread.c" />

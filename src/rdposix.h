@@ -33,6 +33,7 @@
 #pragma once
 
 #include <unistd.h>
+#include <stdio.h>
 #include <sys/time.h>
 #include <inttypes.h>
 #include <fcntl.h>

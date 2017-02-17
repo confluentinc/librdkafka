@@ -442,7 +442,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Broker: Not controller for cluster"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_REQUEST,
 		  "Broker: Invalid request"),
-	_ERR_DESC(RD_KAFKA_RESP_UNSUPPORTED_FOR_MESSAGE_FORMAT,
+	_ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT,
 		  "Broker: Message format on broker does not support request"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)

@@ -408,7 +408,7 @@ typedef enum {
 	/** Invalid request */
 	RD_KAFKA_RESP_ERR_INVALID_REQUEST = 42,
 	/** Message format on broker does not support request */
-	RD_KAFKA_RESP_UNSUPPORTED_FOR_MESSAGE_FORMAT = 43,
+	RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT = 43,
 
 	RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

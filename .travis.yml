@@ -38,7 +38,8 @@ deploy:
   upload-dir: travis-${TRAVIS_OS_NAME}-${ARCH}-tag_${TRAVIS_TAG}-${TRAVIS_COMMIT}-${TRAVIS_BUILD_ID}
   on:
     condition: $CC = gcc
-    condition: $TRAVIS_PULL_REQUEST = false
+    #condition: $TRAVIS_PULL_REQUEST = false
     repo: edenhill/librdkafka
+    all_branches: true
     #tags: true  ## for tag builds only
 ##

@@ -983,12 +983,16 @@ function mkl_lib_check_static {
     local libs=$2
     local arfile_var=STATIC_LIB_${libname#-l}
 
+    mkl_dbg "Check $libname for static library (libs $libs, arfile variable $arfile_var=${!arfile_var})"
+
     # If STATIC_LIB_<libname_without_-l> specifies an existing .a file we
     # use that instead.
     if [[ -f ${!arfile_var} ]]; then
 	libs=$(echo $libs | sed -e "s|$libname|${!arfile_var}|g")
-    else
+    elif [[ $HAS_LDFLAGS_STATIC == y ]]; then
         libs=$(echo $libs | sed -e "s|$libname|${LDFLAGS_STATIC} $libname ${LDFLAGS_DYNAMIC}|g")
+    else
+        mkl_dbg "$libname: Neither $arfile_var specified or static linker flags supported: static linking probably won't work"
     fi
 
     echo $libs

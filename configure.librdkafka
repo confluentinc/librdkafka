@@ -48,7 +48,7 @@ function checks {
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
 
     if [[ "$ENABLE_LZ4" == "y" ]]; then
-        mkl_lib_check "liblz4" "WITH_LZ4" disable CC "-llz4" \
+        mkl_lib_check --static=-llz4 "liblz4" "WITH_LZ4" disable CC "-llz4" \
                       "#include <lz4frame.h>"
     fi
 

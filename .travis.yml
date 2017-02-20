@@ -8,6 +8,8 @@ compiler:
 os:
 - linux
 - osx
+dist: trusty
+sudo: false
 addons:
   apt:
     packages:
@@ -23,7 +25,6 @@ script:
 - make -j2 all examples check && make -C tests run_local
 - make install
 - (cd dest && tar cvzf ../artifacts/librdkafka-X.tar.gz .)
-sudo: false
 deploy:
   provider: s3
   access_key_id:

@@ -240,22 +240,6 @@ class ConfImpl : public Conf {
                        const std::string &value,
                        std::string &errstr);
 
-  Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
-                        std::string &errstr) {
-    if (name != "consume_cb") {
-      errstr = "Invalid value type";
-      return Conf::CONF_INVALID;
-    }
-
-    if (!rk_conf_) {
-      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
-      return Conf::CONF_INVALID;
-    }
-
-    consume_cb_ = consume_cb;
-    return Conf::CONF_OK;
-  }
-
   Conf::ConfResult set (const std::string &name, DeliveryReportCb *dr_cb,
                         std::string &errstr) {
     if (name != "dr_cb") {
@@ -514,6 +498,24 @@ class ConfImpl : public Conf {
 
 
   std::list<std::string> *dump ();
+
+
+  Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
+                        std::string &errstr) {
+    if (name != "consume_cb") {
+      errstr = "Invalid value type, expected RdKafka::ConsumeCb";
+      return Conf::CONF_INVALID;
+    }
+
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    consume_cb_ = consume_cb;
+    return Conf::CONF_OK;
+  }
+
 
   ConsumeCb *consume_cb_;
   DeliveryReportCb *dr_cb_;

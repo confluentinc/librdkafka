@@ -243,7 +243,7 @@ class ConfImpl : public Conf {
   Conf::ConfResult set (const std::string &name, DeliveryReportCb *dr_cb,
                         std::string &errstr) {
     if (name != "dr_cb") {
-      errstr = "Invalid value type";
+      errstr = "Invalid value type, expected RdKafka::DeliveryReportCb";
       return Conf::CONF_INVALID;
     }
 
@@ -259,7 +259,7 @@ class ConfImpl : public Conf {
   Conf::ConfResult set (const std::string &name, EventCb *event_cb,
                         std::string &errstr) {
     if (name != "event_cb") {
-      errstr = "Invalid value type";
+      errstr = "Invalid value type, expected RdKafka::EventCb";
       return Conf::CONF_INVALID;
     }
 
@@ -277,7 +277,7 @@ class ConfImpl : public Conf {
     const ConfImpl *tconf_impl =
         dynamic_cast<const RdKafka::ConfImpl *>(topic_conf);
     if (name != "default_topic_conf" || !tconf_impl->rkt_conf_) {
-      errstr = "Invalid value type";
+      errstr = "Invalid value type, expected RdKafka::Conf";
       return Conf::CONF_INVALID;
     }
 
@@ -296,7 +296,7 @@ class ConfImpl : public Conf {
   Conf::ConfResult set (const std::string &name, PartitionerCb *partitioner_cb,
                         std::string &errstr) {
     if (name != "partitioner_cb") {
-      errstr = "Invalid value type";
+      errstr = "Invalid value type, expected RdKafka::PartitionerCb";
       return Conf::CONF_INVALID;
     }
 
@@ -313,7 +313,7 @@ class ConfImpl : public Conf {
                         PartitionerKeyPointerCb *partitioner_kp_cb,
                         std::string &errstr) {
     if (name != "partitioner_key_pointer_cb") {
-      errstr = "Invalid value type";
+      errstr = "Invalid value type, expected RdKafka::PartitionerKeyPointerCb";
       return Conf::CONF_INVALID;
     }
 
@@ -329,7 +329,7 @@ class ConfImpl : public Conf {
   Conf::ConfResult set (const std::string &name, SocketCb *socket_cb,
                         std::string &errstr) {
     if (name != "socket_cb") {
-      errstr = "Invalid value type";
+      errstr = "Invalid value type, expected RdKafka::SocketCb";
       return Conf::CONF_INVALID;
     }
 
@@ -346,7 +346,7 @@ class ConfImpl : public Conf {
   Conf::ConfResult set (const std::string &name, OpenCb *open_cb,
                         std::string &errstr) {
     if (name != "open_cb") {
-      errstr = "Invalid value type";
+      errstr = "Invalid value type, expected RdKafka::OpenCb";
       return Conf::CONF_INVALID;
     }
 
@@ -360,10 +360,12 @@ class ConfImpl : public Conf {
   }
 
 
+
+
   Conf::ConfResult set (const std::string &name, RebalanceCb *rebalance_cb,
                         std::string &errstr) {
     if (name != "rebalance_cb") {
-      errstr = "Invalid value type";
+      errstr = "Invalid value type, expected RdKafka::RebalanceCb";
       return Conf::CONF_INVALID;
     }
 
@@ -381,7 +383,7 @@ class ConfImpl : public Conf {
                         OffsetCommitCb *offset_commit_cb,
                         std::string &errstr) {
     if (name != "offset_commit_cb") {
-      errstr = "Invalid value type";
+      errstr = "Invalid value type, expected RdKafka::OffsetCommitCb";
       return Conf::CONF_INVALID;
     }
 

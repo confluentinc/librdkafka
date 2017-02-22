@@ -2222,15 +2222,34 @@ int rd_kafka_consume_callback_queue(rd_kafka_queue_t *rkqu,
  * @brief Store offset \p offset for topic \p rkt partition \p partition.
  *
  * The offset will be committed (written) to the offset store according
- * to \c `auto.commit.interval.ms`.
+ * to \c `auto.commit.interval.ms` or manual offset-less commit()
  *
- * @remark \c `auto.commit.enable` must be set to "false" when using this API.
+ * @remark \c `enable.auto.offset.store` must be set to "false" when using this API.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *rkt,
 					   int32_t partition, int64_t offset);
+
+
+/**
+ * @brief Store offsets for one or more partitions.
+ *
+ * The offset will be committed (written) to the offset store according
+ * to \c `auto.commit.interval.ms` or manual offset-less commit().
+ *
+ * Per-partition success/error status propagated through each partition's
+ * \c .err field.
+ *
+ * @remark \c `enable.auto.offset.store` must be set to "false" when using this API.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code if
+ *          none of the offsets could be stored.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_offsets_store(rd_kafka_t *rk,
+                       rd_kafka_topic_partition_list_t *offsets);
 /**@}*/
 
 

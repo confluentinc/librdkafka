@@ -690,6 +690,36 @@ rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *app_rkt,
 }
 
 
+rd_kafka_resp_err_t
+rd_kafka_offsets_store (rd_kafka_t *rk,
+                        rd_kafka_topic_partition_list_t *offsets) {
+        int i;
+        int ok_cnt = 0;
+
+        for (i = 0 ; i < offsets->cnt ; i++) {
+                rd_kafka_topic_partition_t *rktpar = &offsets->elems[i];
+                shptr_rd_kafka_toppar_t *s_rktp;
+
+                s_rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar);
+                if (!s_rktp) {
+                        rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                        continue;
+                }
+
+                rd_kafka_offset_store0(rd_kafka_toppar_s2i(s_rktp),
+                                       rktpar->offset, 1/*lock*/);
+                rd_kafka_toppar_destroy(s_rktp);
+
+                rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                ok_cnt++;
+        }
+
+        return offsets->cnt > 0 && ok_cnt < offsets->cnt ?
+                RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION :
+                RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 
 
 

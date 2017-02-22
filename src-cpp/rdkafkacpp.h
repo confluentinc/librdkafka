@@ -796,7 +796,11 @@ class RD_EXPORT Conf {
    *  @returns CONF_OK if the property was set previously set and
    *           returns the value in \p value. */
   virtual Conf::ConfResult get(const std::string &name,
-	  std::string &value) const = 0;
+                               std::string &value) const = 0;
+
+  /** @brief Dump configuration names and values to list containing
+   *         name,value tuples */
+  virtual std::list<std::string> *dump () = 0;
 
   /** @brief Query single configuration value
    *  @returns CONF_OK if the property was set previously set and
@@ -838,13 +842,9 @@ class RD_EXPORT Conf {
    *           returns the value in \p offset_commit_cb. */
   virtual Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const = 0;
 
-  /** @brief Dump configuration names and values to list containing
-   *         name,value tuples */
-  virtual std::list<std::string> *dump () = 0;
-
   /** @brief Use with \p name = \c \"consume_cb\" */
   virtual Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
-				std::string &errstr) = 0;
+                                std::string &errstr) = 0;
 };
 
 /**@}*/
@@ -1286,6 +1286,8 @@ class RD_EXPORT Queue {
    */
   static Queue *create (Handle *handle);
 
+  virtual ~Queue () = 0;
+
   /**
    * @brief Forward/re-route queue to \p dst.
    * If \p dst is \c NULL, the forwarding is removed.
@@ -1321,7 +1323,6 @@ class RD_EXPORT Queue {
    */
   virtual int poll (int timeout_ms) = 0;
 
-  virtual ~Queue () = 0;
 };
 
 /**@}*/
@@ -1490,33 +1491,6 @@ public:
    */
   virtual ErrorCode commitAsync (const std::vector<TopicPartition*> &offsets) = 0;
 
-  /**
-   * @brief Commit offsets for the current assignment.
-   *
-   * @remark This is the synchronous variant that blocks until offsets
-   *         are committed or the commit fails (see return value).
-   *
-   * @remark The provided callback will be called from this function.
-   *
-   * @returns ERR_NO_ERROR or error code.
-   */
-  virtual ErrorCode commitSync (OffsetCommitCb *offset_commit_cb) = 0;
-
-  /**
-   * @brief Commit offsets for the provided list of partitions.
-   *
-   * @remark This is the synchronous variant that blocks until offsets
-   *         are committed or the commit fails (see return value).
-   *
-   * @remark The provided callback will be called from this function.
-   *
-   * @returns ERR_NO_ERROR or error code.
-   */
-  virtual ErrorCode commitSync (std::vector<TopicPartition*> &offsets,
-                                OffsetCommitCb *offset_commit_cb) = 0;
-
-
-
 
   /**
    * @brief Retrieve committed offsets for topics+partitions.
@@ -1563,6 +1537,34 @@ public:
    * @remark The consumer object must later be freed with \c delete
    */
   virtual ErrorCode close () = 0;
+
+
+  /**
+   * @brief Commit offsets for the current assignment.
+   *
+   * @remark This is the synchronous variant that blocks until offsets
+   *         are committed or the commit fails (see return value).
+   *
+   * @remark The provided callback will be called from this function.
+   *
+   * @returns ERR_NO_ERROR or error code.
+   */
+  virtual ErrorCode commitSync (OffsetCommitCb *offset_commit_cb) = 0;
+
+  /**
+   * @brief Commit offsets for the provided list of partitions.
+   *
+   * @remark This is the synchronous variant that blocks until offsets
+   *         are committed or the commit fails (see return value).
+   *
+   * @remark The provided callback will be called from this function.
+   *
+   * @returns ERR_NO_ERROR or error code.
+   */
+  virtual ErrorCode commitSync (std::vector<TopicPartition*> &offsets,
+                                OffsetCommitCb *offset_commit_cb) = 0;
+
+
 
 
   /**
@@ -1659,23 +1661,6 @@ class RD_EXPORT Consumer : public virtual Handle {
   virtual ErrorCode stop (Topic *topic, int32_t partition) = 0;
 
   /**
-   * @brief Seek consumer for topic+partition to \p offset which is either an
-   *        absolute or logical offset.
-   *
-   * If \p timeout_ms is not 0 the call will wait this long for the
-   * seek to be performed. If the timeout is reached the internal state
-   * will be unknown and this function returns `ERR__TIMED_OUT`.
-   * If \p timeout_ms is 0 it will initiate the seek but return
-   * immediately without any error reporting (e.g., async).
-   *
-   * This call triggers a fetch queue barrier flush.
-   *
-   * @returns an ErrorCode to indicate success or failure.
-   */
-  virtual ErrorCode seek (Topic *topic, int32_t partition, int64_t offset,
-			  int timeout_ms) = 0;
-
-  /**
    * @brief Consume a single message from \p topic and \p partition.
    *
    * \p timeout_ms is maximum amount of time to wait for a message to be
@@ -1762,6 +1747,25 @@ class RD_EXPORT Consumer : public virtual Handle {
    * @remark The returned logical offset is specific to librdkafka.
    */
   static int64_t OffsetTail(int64_t offset);
+
+  /**
+   * @brief Seek consumer for topic+partition to \p offset which is either an
+   *        absolute or logical offset.
+   *
+   * If \p timeout_ms is not 0 the call will wait this long for the
+   * seek to be performed. If the timeout is reached the internal state
+   * will be unknown and this function returns `ERR__TIMED_OUT`.
+   * If \p timeout_ms is 0 it will initiate the seek but return
+   * immediately without any error reporting (e.g., async).
+   *
+   * This call triggers a fetch queue barrier flush.
+   *
+   * @returns an ErrorCode to indicate success or failure.
+   */
+  virtual ErrorCode seek (Topic *topic, int32_t partition, int64_t offset,
+                          int timeout_ms) = 0;
+
+
 };
 
 /**@}*/
@@ -1905,20 +1909,6 @@ class RD_EXPORT Producer : public virtual Handle {
                              void *msg_opaque) = 0;
 
   /**
-   * @brief produce() variant that takes topic as a string (no need for
-   *        creating a Topic object), and also allows providing the
-   *        message timestamp (microseconds since beginning of epoch, UTC).
-   *        Otherwise identical to produce() above.
-   */
-  virtual ErrorCode produce (const std::string topic_name, int32_t partition,
-                             int msgflags,
-                             void *payload, size_t len,
-                             const void *key, size_t key_len,
-                             int64_t timestamp,
-                             void *msg_opaque) = 0;
-
-
-  /**
    * @brief Variant produce() that accepts vectors for key and payload.
    *        The vector data will be copied.
    */
@@ -1940,6 +1930,20 @@ class RD_EXPORT Producer : public virtual Handle {
    *          outstanding requests were completed, else ERR_NO_ERROR
    */
   virtual ErrorCode flush (int timeout_ms) = 0;
+
+
+  /**
+   * @brief produce() variant that takes topic as a string (no need for
+   *        creating a Topic object), and also allows providing the
+   *        message timestamp (microseconds since beginning of epoch, UTC).
+   *        Otherwise identical to produce() above.
+   */
+  virtual ErrorCode produce (const std::string topic_name, int32_t partition,
+                             int msgflags,
+                             void *payload, size_t len,
+                             const void *key, size_t key_len,
+                             int64_t timestamp,
+                             void *msg_opaque) = 0;
 };
 
 /**@}*/

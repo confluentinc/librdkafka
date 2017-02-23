@@ -138,7 +138,6 @@ static struct {
     int consumedMessagesLastReported;
     int consumedMessagesAtLastCommit;
     bool useAutoCommit;
-    bool useAsyncCommit;
     std::map<std::string, Assignment> assignments;
   } consumer;
 } state = {
@@ -368,8 +367,6 @@ static void report_records_consumed (int immediate) {
 }
 
 
-static std::ostringstream deferred_reports;
-
 class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
  public:
   void offset_commit_cb (RdKafka::ErrorCode err,
@@ -402,10 +399,6 @@ class ExampleOffsetCommitCb : public RdKafka::OffsetCommitCb {
     }
     std::cout << " ] }" << std::endl;
 
-    /* Write any deferred reports that needs to be synchronized to
-     * be written after offsets_committed, such as partitions_revoked. */
-    std::cout << deferred_reports.str();
-    deferred_reports.str("");
   }
 };
 
@@ -414,41 +407,33 @@ static ExampleOffsetCommitCb ex_offset_commit_cb;
 
 /**
  * Commit every 1000 messages or whenever there is a consume timeout.
- * @returns 1 if async commit was triggered, else 0.
  */
-static int do_commit (RdKafka::KafkaConsumer *consumer,
+static void do_commit (RdKafka::KafkaConsumer *consumer,
                       int immediate) {
-  if (!state.consumer.useAutoCommit &&
-      (state.consumer.consumedMessagesAtLastCommit + (immediate ? 0 : 1000)) <
-      state.consumer.consumedMessages) {
+  if (!immediate &&
+      (state.consumer.useAutoCommit ||
+       state.consumer.consumedMessagesAtLastCommit + 1000 >
+       state.consumer.consumedMessages))
+    return;
 
-    /* Make sure we report consumption before commit,
-     * otherwise tests may fail because of commit > consumed. */
-    if (state.consumer.consumedMessagesLastReported <
-        state.consumer.consumedMessages)
-      report_records_consumed(1);
+  /* Make sure we report consumption before commit,
+   * otherwise tests may fail because of commit > consumed. */
+  if (state.consumer.consumedMessagesLastReported <
+      state.consumer.consumedMessages)
+    report_records_consumed(1);
 
-    std::cerr << now() << ": committing " <<
-        (state.consumer.consumedMessages -
-         state.consumer.consumedMessagesAtLastCommit) << " messages (" <<
-        (state.consumer.useAsyncCommit ? "async":"sync") << ")" << std::endl;
+  std::cerr << now() << ": committing " <<
+    (state.consumer.consumedMessages -
+     state.consumer.consumedMessagesAtLastCommit) << " messages" << std::endl;
 
-    RdKafka::ErrorCode err;
-    if (state.consumer.useAsyncCommit)
-      err = consumer->commitAsync();
-    else
-      err = consumer->commitSync(&ex_offset_commit_cb);
+  RdKafka::ErrorCode err;
+  err = consumer->commitSync(&ex_offset_commit_cb);
 
-    std::cerr << now() << ": " <<
-        (state.consumer.useAsyncCommit ? "async":"sync") <<
-        " commit returned " << RdKafka::err2str(err) << std::endl;
+  std::cerr << now() << ": " <<
+    "sync commit returned " << RdKafka::err2str(err) << std::endl;
 
-    state.consumer.consumedMessagesAtLastCommit =
-        state.consumer.consumedMessages;
-
-    return !err && state.consumer.useAsyncCommit;
-  } else
-    return 0;
+  state.consumer.consumedMessagesAtLastCommit =
+    state.consumer.consumedMessages;
 }
 
 
@@ -557,7 +542,6 @@ class ExampleRebalanceCb : public RdKafka::RebalanceCb {
   void rebalance_cb (RdKafka::KafkaConsumer *consumer,
                      RdKafka::ErrorCode err,
                      std::vector<RdKafka::TopicPartition*> &partitions) {
-    int deferr = 0;
 
     std::cerr << now() << ": rebalance_cb " << RdKafka::err2str(err) <<
         " for " << partitions.size() << " partitions" << std::endl;
@@ -568,24 +552,16 @@ class ExampleRebalanceCb : public RdKafka::RebalanceCb {
     if (err == RdKafka::ERR__ASSIGN_PARTITIONS)
       consumer->assign(partitions);
     else {
-      /* Deferr report to after we've seen offset_commit_cb which
-       * is not triggered from commit() when async but from poll. */
-      deferr = do_commit(consumer, 1);
+      do_commit(consumer, 1);
       consumer->unassign();
     }
 
-    deferred_reports <<
-        "{ " <<
-        "\"name\": \"partitions_" << (err == RdKafka::ERR__ASSIGN_PARTITIONS ?
-                                      "assigned" : "revoked") << "\", " <<
-        "\"partitions\": [ " << part_list_json(partitions) << "] }" << std::endl;
+    std::cout <<
+      "{ " <<
+      "\"name\": \"partitions_" << (err == RdKafka::ERR__ASSIGN_PARTITIONS ?
+                                    "assigned" : "revoked") << "\", " <<
+      "\"partitions\": [ " << part_list_json(partitions) << "] }" << std::endl;
 
-    if (!deferr) {
-      std::cout << deferred_reports.str();
-      deferred_reports.str("");
-    } else {
-      std::cerr << now() << ": Deferring until later: " << deferred_reports.str();
-    }
   }
 };
 

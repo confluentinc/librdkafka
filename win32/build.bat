@@ -1,8 +1,19 @@
-msbuild librdkafka.sln /p:Configuration="Debug" /p:Platform="Win32"
+@echo off
 
-msbuild librdkafka.sln /p:Configuration="Release" /p:Platform="Win32"
+SET TOOLCHAIN=v140
 
-msbuild librdkafka.sln /p:Configuration="Debug" /p:Platform="x64"
+FOR %%C IN (Debug,Release) DO (
+  FOR %%P IN (Win32,x64) DO (
+     @echo Building %%C %%P
+     msbuild librdkafka.sln /p:Configuration=%%C /p:Platform=%%P /target:Clean
+     msbuild librdkafka.sln /p:Configuration=%%C /p:Platform=%%P || goto :error
 
-msbuild librdkafka.sln /p:Configuration="Release" /p:Platform="x64"
 
+  )
+)
+
+exit /b 0
+
+:error
+echo "Build failed"
+exit /b 1

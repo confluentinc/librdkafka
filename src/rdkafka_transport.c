@@ -371,6 +371,10 @@ rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
 				    rd_strerror(errno));
 		return -1;
 
+        case SSL_ERROR_ZERO_RETURN:
+                rd_snprintf(errstr, errstr_size, "Disconnected");
+                return -1;
+
 	default:
 		rd_kafka_ssl_error(NULL, rktrans->rktrans_rkb,
 				   errstr, errstr_size);

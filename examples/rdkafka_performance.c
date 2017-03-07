@@ -532,7 +532,7 @@ static void print_stats (rd_kafka_t *rk,
                                "%"PRIu64" delivered "
                                "(offset %"PRId64", %"PRIu64" failed) "
                                "in %"PRIu64"ms: %"PRIu64" msgs/s and "
-                               "%.02f Mb/s, "
+                               "%.02f MB/s, "
                                "%"PRIu64" produce failures, %i in queue, "
                                "%s compression\n",
                                cnt.msgs, cnt.bytes,
@@ -603,7 +603,7 @@ static void print_stats (rd_kafka_t *rk,
 ;
                         printf("%% %"PRIu64" messages (%"PRIu64" bytes) "
                                "consumed in %"PRIu64"ms: %"PRIu64" msgs/s "
-                               "(%.02f Mb/s)"
+                               "(%.02f MB/s)"
                                "%s\n",
                                cnt.msgs, cnt.bytes,
                                t_total / 1000,
@@ -620,7 +620,7 @@ static void print_stats (rd_kafka_t *rk,
                         printf("%% INTERVAL: %"PRIu64" messages "
                                "(%"PRIu64" bytes) "
                                "consumed in %"PRIu64"ms: %"PRIu64" msgs/s "
-                               "(%.02f Mb/s)"
+                               "(%.02f MB/s)"
                                "%s\n",
                                i_msgs, i_bytes,
                                i_time / 1000,

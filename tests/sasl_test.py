@@ -95,6 +95,13 @@ if __name__ == '__main__':
                         help='trivup JSON config object (not file) for LibrdkafkaTestApp')
     parser.add_argument('--tests', type=str, dest='tests', default=None,
                         help='Test to run (e.g., "0002")')
+    parser.add_argument('--no-ssl', action='store_false', dest='ssl', default=True,
+                        help='Don\'t run SSL tests')
+    parser.add_argument('--no-sasl', action='store_false', dest='sasl', default=True,
+                        help='Don\'t run SASL tests')
+    parser.add_argument('--no-plaintext', action='store_false', dest='plaintext', default=True,
+                        help='Don\'t run PLAINTEXT tests')
+
     parser.add_argument('--report', type=str, dest='report', default=None,
                         help='Write test suites report to this filename')
     parser.add_argument('--debug', action='store_true', dest='debug', default=False,
@@ -132,20 +139,26 @@ if __name__ == '__main__':
     sasl_kerberos_conf = {'sasl_mechanisms': 'GSSAPI',
                           'sasl_servicename': 'kafka'}
     suites = [{'name': 'SASL PLAIN',
+               'run': (args.sasl and args.plaintext),
                'conf': sasl_plain_conf,
                'expect_fail': ['0.9.0.1', '0.8.2.2']},
-              {'name': 'PLAINTEXT (no SASL)'},
+              {'name': 'PLAINTEXT (no SASL)',
+               'run': args.plaintext},
               {'name': 'SSL (no SASL)',
+               'run': args.ssl,
                'conf': {'security.protocol': 'SSL'},
                'expect_fail': ['0.8.2.2']},
               {'name': 'SASL_SSL PLAIN',
+               'run': (args.sasl and args.ssl and args.plaintext),
                'conf': ssl_sasl_plain_conf,
                'expect_fail': ['0.9.0.1', '0.8.2.2']},
               {'name': 'SASL PLAIN with wrong username',
+               'run': (args.sasl and args.plaintext),
                'conf': sasl_plain_conf,
                'rdkconf': {'sasl_users': 'wrongjoe=mypassword'},
                'expect_fail': ['all']},
               {'name': 'SASL Kerberos',
+               'run': args.sasl,
                'conf': sasl_kerberos_conf,
                'expect_fail': ['0.8.2.2']}]
 
@@ -158,6 +171,9 @@ if __name__ == '__main__':
             continue
 
         for suite in suites:
+            if not suite.get('run', True):
+                continue
+
             _conf = conf.copy()
             _conf.update(suite.get('conf', {}))
             _rdkconf = _conf.copy()

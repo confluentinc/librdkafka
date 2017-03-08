@@ -194,14 +194,16 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 
 
 /**
- * Produce: creates a new message, runs the partitioner and enqueues
- *          into on the selected partition.
+ * @brief Produce: creates a new message, runs the partitioner and enqueues
+ *        into on the selected partition.
  *
- * Returns 0 on success or -1 on error.
+ * @returns 0 on success or -1 on error.
  *
  * If the function returns -1 and RD_KAFKA_MSG_F_FREE was specified, then
  * the memory associated with the payload is still the caller's
  * responsibility.
+ *
+ * @locks none
  */
 int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      int msgflags,

@@ -155,3 +155,9 @@ static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
 #else
 #define rd_sleep(S) Sleep((S)*1000)
 #endif
+
+/**
+ * @returns the current test's name (thread-local)
+ */
+extern const char *test_curr_name (void);
+

@@ -532,6 +532,7 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 
         if (conf) {
                 *conf = rd_kafka_conf_new();
+                rd_kafka_conf_set(*conf, "client.id", test_curr->name, NULL, 0);
                 rd_kafka_conf_set_error_cb(*conf, test_error_cb);
                 rd_kafka_conf_set_stats_cb(*conf, test_stats_cb);
 
@@ -1339,17 +1340,19 @@ rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf) {
 	rd_kafka_t *rk;
 	char errstr[512];
 
-	if (!conf) {
-		conf = rd_kafka_conf_new();
+        if (!conf) {
+                test_conf_init(&conf, NULL, 0);
 #if WITH_SOCKEM
                 if (*test_sockem_conf)
                         test_socket_enable(conf);
 #endif
+        } else {
+                test_conf_set(conf, "client.id", test_curr->name);
         }
 
-	test_conf_set(conf, "client.id", test_curr->name);
 
-	/* Create kafka instance */
+
+	/* Creat kafka instance */
 	rk = rd_kafka_new(mode, conf, errstr, sizeof(errstr));
 	if (!rk)
 		TEST_FAIL("Failed to create rdkafka instance: %s\n", errstr);
@@ -3099,4 +3102,9 @@ void test_FAIL (const char *file, int line, int fail_now, const char *str) {
 
 void test_SAY (const char *file, int line, int level, const char *str) {
         TEST_SAYL(level, "%s", str);
+}
+
+
+const char *test_curr_name (void) {
+        return test_curr->name;
 }

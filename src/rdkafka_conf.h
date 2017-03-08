@@ -122,6 +122,7 @@ struct rd_kafka_conf_s {
 	/*
 	 * Consumer configuration
 	 */
+        int    check_crcs;
 	int    queued_min_msgs;
         int    queued_max_msg_kbytes;
         int64_t queued_max_msg_bytes;

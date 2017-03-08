@@ -3557,6 +3557,39 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		rd_kafka_buf_read_i64(rkbuf, &hdr.Offset);
 		rd_kafka_buf_read_i32(rkbuf, &hdr.MessageSize);
 		rd_kafka_buf_read_i32(rkbuf, &hdr.Crc);
+
+                if (rkb->rkb_rk->rk_conf.check_crcs &&
+                    !(hdr.Attributes & RD_KAFKA_MSG_ATTR_COMPRESSION_MASK)) {
+                        /* Verify CRC if desired.
+                         * Since compression algorithms have their own
+                         * checksums we dont bother checking CRCs of compressed
+                         * messagesets. */
+                        uint32_t calc_crc;
+
+                        if (hdr.MessageSize - 4 > rd_kafka_buf_remain(rkbuf))
+                                goto err; /* Ignore partial messages */
+
+                        calc_crc = rd_crc32(rkbuf->rkbuf_rbuf+rkbuf->rkbuf_of,
+                                            hdr.MessageSize-4);
+
+                        if (unlikely(hdr.Crc != calc_crc)) {
+                                rd_kafka_q_op_err(rkq, RD_KAFKA_OP_CONSUMER_ERR,
+                                                  RD_KAFKA_RESP_ERR__BAD_MSG,
+                                                  tver->version,
+                                                  rktp,
+                                                  hdr.Offset,
+                                                  "Message at offset %"PRId64
+                                                  " of %"PRId32" bytes "
+                                                  "failed CRC check "
+                                                  "(original 0x%"PRIx32" != "
+                                                  "calculated 0x%"PRIx32")",
+                                                  hdr.Offset, hdr.MessageSize,
+                                                  hdr.Crc, calc_crc);
+                                rd_kafka_buf_skip(rkbuf, hdr.MessageSize-4);
+                                continue;
+                        }
+                }
+
 		rd_kafka_buf_read_i8(rkbuf, &hdr.MagicByte);
 		rd_kafka_buf_read_i8(rkbuf, &hdr.Attributes);
 
@@ -3579,7 +3612,6 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			 */
                         goto err;
                 }
-		/* Ignore CRC (for now) */
 
 		/* Extract key */
 		rd_kafka_buf_read_bytes(rkbuf, &Key);

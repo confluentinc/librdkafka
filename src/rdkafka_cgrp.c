@@ -1680,15 +1680,17 @@ static int rd_kafka_cgrp_defer_offset_commit (rd_kafka_cgrp_t *rkcg,
 
 
 /**
- * Handler of OffsetCommit response (after parsing).
+ * @brief Handler of OffsetCommit response (after parsing).
  * @remark \p offsets may be NULL if \p err is set
+ * @returns the number of partitions with errors encountered
  */
-static void
+static int
 rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
                                    rd_kafka_resp_err_t err,
                                    rd_kafka_topic_partition_list_t
                                    *offsets) {
 	int i;
+        int errcnt = 0;
 
 	if (!err) {
 		/* Update toppars' committed offset */
@@ -1706,6 +1708,7 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
 					     rktpar->topic, rktpar->partition,
 					     rktpar->offset,
 					     rd_kafka_err2str(rktpar->err));
+                                errcnt++;
 				continue;
 			} else if (unlikely(rktpar->offset < 0))
 				continue;
@@ -1725,11 +1728,13 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
 	}
 
         if (rd_kafka_cgrp_try_terminate(rkcg))
-                return; /* terminated */
+                return errcnt; /* terminated */
 
         if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN)
 		rd_kafka_cgrp_check_unassign_done(rkcg,
                                                   "OffsetCommit done");
+
+        return errcnt;
 }
 
 
@@ -1751,6 +1756,8 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
         rd_kafka_op_t *rko_orig = opaque;
 	rd_kafka_topic_partition_list_t *offsets =
 		rko_orig->rko_u.offset_commit.partitions; /* maybe NULL */
+        int errcnt;
+        int offset_commit_cb_served = 0;
 
 	RD_KAFKA_OP_TYPE_ASSERT(rko_orig, RD_KAFKA_OP_OFFSET_COMMIT);
 
@@ -1817,6 +1824,7 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 		rko_reply->rko_u.offset_commit.opaque = rk->rk_conf.opaque;
 
                 rd_kafka_q_enq(rk->rk_rep, rko_reply);
+                offset_commit_cb_served++;
 	}
 
 
@@ -1834,9 +1842,34 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
                         rd_strdup(rko_reply->rko_u.offset_commit.reason);
 
                 rd_kafka_replyq_enq(&rko_orig->rko_replyq, rko_reply, 0);
+                offset_commit_cb_served++;
         }
 
-	rd_kafka_cgrp_handle_OffsetCommit(rkcg, err, offsets);
+        errcnt = rd_kafka_cgrp_handle_OffsetCommit(rkcg, err, offsets);
+
+        if (!offset_commit_cb_served &&
+            err != RD_KAFKA_RESP_ERR_NO_ERROR &&
+            err != RD_KAFKA_RESP_ERR__NO_OFFSET) {
+                /* If there is no callback or handler for this (auto)
+                 * commit then raise an error to the application (#1043) */
+                char tmp[512];
+
+                rd_kafka_topic_partition_list_str(
+                        offsets, tmp, sizeof(tmp),
+                        /*no partition-errs if a global error*/
+                        RD_KAFKA_FMT_F_OFFSET |
+                        (err ? 0 : RD_KAFKA_FMT_F_ONLY_ERR));
+
+                rd_kafka_log(rkcg->rkcg_rk, LOG_WARNING, "COMMITFAIL",
+                             "Offset commit (%s) failed "
+                             "for %d/%d partition(s): "
+                             "%s%s%s",
+                             rko_orig->rko_u.offset_commit.reason,
+                             err ? offsets->cnt : errcnt, offsets->cnt,
+                             err ? rd_kafka_err2str(err) : "",
+                             err ? ": " : "",
+                             tmp);
+        }
 
         rd_kafka_op_destroy(rko_orig);
 }

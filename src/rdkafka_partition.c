@@ -3088,6 +3088,65 @@ rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
 	}
 }
 
+/**
+ * @returns a comma-separated list of partitions.
+ */
+const char *
+rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktparlist,
+                                   char *dest, size_t dest_size,
+                                   int fmt_flags) {
+        int i;
+        size_t of = 0;
+        int trunc = 0;
+
+        for (i = 0 ; i < rktparlist->cnt ; i++) {
+                const rd_kafka_topic_partition_t *rktpar =
+                        &rktparlist->elems[i];
+                char errstr[128];
+                char offsetstr[32];
+                int r;
+
+                if (trunc) {
+                        if (dest_size > 3)
+                                rd_snprintf(&dest[dest_size-3], 3, "...");
+                        break;
+                }
+
+                if (!rktpar->err && (fmt_flags & RD_KAFKA_FMT_F_ONLY_ERR))
+                        continue;
+
+                if (rktpar->err && !(fmt_flags & RD_KAFKA_FMT_F_NO_ERR))
+                        rd_snprintf(errstr, sizeof(errstr),
+                                    "(%s)", rd_kafka_err2str(rktpar->err));
+                else
+                        errstr[0] = '\0';
+
+                if (rktpar->offset != RD_KAFKA_OFFSET_INVALID)
+                        rd_snprintf(offsetstr, sizeof(offsetstr),
+                                    "@%"PRId64, rktpar->offset);
+                else
+                        offsetstr[0] = '\0';
+
+                r = rd_snprintf(&dest[of], dest_size-of,
+                                "%s"
+                                "%s[%"PRId32"]"
+                                "%s"
+                                "%s",
+                                of == 0 ? "" : ", ",
+                                rktpar->topic, rktpar->partition,
+                                offsetstr,
+                                errstr);
+
+                if ((size_t)r >= dest_size-of)
+                        trunc++;
+                else
+                        of += r;
+        }
+
+        return dest;
+}
+
+
 
 /**
  * @brief Update \p dst with info from \p src.

@@ -502,6 +502,14 @@ void
 rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
 				   const rd_kafka_topic_partition_list_t *rktparlist);
 
+#define RD_KAFKA_FMT_F_OFFSET    0x1  /* Print offset */
+#define RD_KAFKA_FMT_F_ONLY_ERR  0x2  /* Only include errored entries */
+#define RD_KAFKA_FMT_F_NO_ERR    0x4  /* Dont print error string */
+const char *
+rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktparlist,
+                                   char *dest, size_t dest_size,
+                                   int fmt_flags);
+
 void
 rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
                                       const rd_kafka_topic_partition_list_t *src);

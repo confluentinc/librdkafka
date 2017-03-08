@@ -52,7 +52,7 @@ public:
         void event_cb (RdKafka::Event &event) {
                 switch (event.type())
                 {
-                        case RdKafka::Event::EVENT_LOG:
+                  case RdKafka::Event::EVENT_LOG:
                                 cnt_++;
                                 Test::Say(tostr() << "Log: " <<
                                           "level " << event.severity() <<
@@ -73,7 +73,8 @@ static void test_log (std::string what, bool main_queue) {
         myLogCb my_log;
         std::string errstr;
 
-        Test::conf_set(conf, "bootstrap.servers", "127.0.0.1:1");
+        Test::conf_set(conf, "client.id", test_curr_name());
+        Test::conf_set(conf, "debug", "generic"); // generate some logs
         Test::conf_set(conf, "log.queue", "true");
 
         if (conf->set("event_cb", &my_log, errstr) != RdKafka::Conf::CONF_OK)

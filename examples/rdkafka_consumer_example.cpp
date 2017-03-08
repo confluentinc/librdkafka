@@ -388,9 +388,6 @@ int main (int argc, char **argv) {
   ExampleEventCb ex_event_cb;
   conf->set("event_cb", &ex_event_cb, errstr);
 
-  conf->set("default_topic_conf", tconf, errstr);
-  delete tconf;
-
   if (do_conf_dump) {
     int pass;
 
@@ -415,6 +412,9 @@ int main (int argc, char **argv) {
     }
     exit(0);
   }
+
+  conf->set("default_topic_conf", tconf, errstr);
+  delete tconf;
 
   signal(SIGINT, sigterm);
   signal(SIGTERM, sigterm);

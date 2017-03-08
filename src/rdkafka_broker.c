@@ -2873,6 +2873,16 @@ static void rd_kafka_broker_map_partitions (rd_kafka_broker_t *rkb) {
 
 
 /**
+ * @brief Broker id comparator
+ */
+static int rd_kafka_broker_cmp_by_id (const void *_a, const void *_b) {
+        const rd_kafka_broker_t *a = _a, *b = _b;
+        return a->rkb_nodeid - b->rkb_nodeid;
+}
+
+
+
+/**
  * Serve a broker op (an op posted by another thread to be handled by
  * this broker's thread).
  *
@@ -2896,6 +2906,8 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 } updated = 0;
                 char brokername[RD_KAFKA_NODENAME_SIZE];
 
+                /* Need kafka_wrlock for updating rk_broker_by_id */
+                rd_kafka_wrlock(rkb->rkb_rk);
                 rd_kafka_broker_lock(rkb);
 
                 if (strcmp(rkb->rkb_nodename,
@@ -2912,11 +2924,20 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
                 if (rko->rko_u.node.nodeid != -1 &&
                     rko->rko_u.node.nodeid != rkb->rkb_nodeid) {
+                        int32_t old_nodeid = rkb->rkb_nodeid;
                         rd_rkb_dbg(rkb, BROKER, "UPDATE",
                                    "NodeId changed from %"PRId32" to %"PRId32,
                                    rkb->rkb_nodeid,
-				   rko->rko_u.node.nodeid);
+                                   rko->rko_u.node.nodeid);
+
                         rkb->rkb_nodeid = rko->rko_u.node.nodeid;
+
+                        /* Update broker_by_id sorted list */
+                        if (old_nodeid == -1)
+                                rd_list_add(&rkb->rkb_rk->rk_broker_by_id, rkb);
+                        rd_list_sort(&rkb->rkb_rk->rk_broker_by_id,
+                                     rd_kafka_broker_cmp_by_id);
+
                         updated |= _UPD_ID;
                 }
 
@@ -2938,6 +2959,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                                 sizeof(rkb->rkb_name)-1);
                 }
                 rd_kafka_broker_unlock(rkb);
+                rd_kafka_wrunlock(rkb->rkb_rk);
 
                 if (updated & _UPD_NAME)
                         rd_kafka_broker_fail(rkb, LOG_NOTICE,
@@ -4681,6 +4703,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
 	if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
 		rd_kafka_wrlock(rkb->rkb_rk);
 		TAILQ_REMOVE(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
+                if (rkb->rkb_nodeid != -1)
+                        rd_list_remove(&rkb->rkb_rk->rk_broker_by_id, rkb);
 		(void)rd_atomic32_sub(&rkb->rkb_rk->rk_broker_cnt, 1);
 		rd_kafka_wrunlock(rkb->rkb_rk);
 	}
@@ -4927,6 +4951,13 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 		TAILQ_INSERT_TAIL(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
 		(void)rd_atomic32_add(&rkb->rkb_rk->rk_broker_cnt, 1);
+
+                if (rkb->rkb_nodeid != -1) {
+                        rd_list_add(&rkb->rkb_rk->rk_broker_by_id, rkb);
+                        rd_list_sort(&rkb->rkb_rk->rk_broker_by_id,
+                                     rd_kafka_broker_cmp_by_id);
+                }
+
 		rd_rkb_dbg(rkb, BROKER, "BROKER",
 			   "Added new broker with NodeId %"PRId32,
 			   rkb->rkb_nodeid);
@@ -4943,31 +4974,39 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 }
 
 /**
- * Locks: rd_kafka_rdlock()
- * NOTE: caller must release rkb reference by rd_kafka_broker_destroy()
+ * @brief Find broker by nodeid (not -1) and
+ *        possibly filtered by state (unless -1).
+ *
+ * @locks: rd_kafka_*lock() MUST be held
+ * @remark caller must release rkb reference by rd_kafka_broker_destroy()
  */
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,
                                                     int32_t nodeid,
                                                     int state) {
-	rd_kafka_broker_t *rkb;
+        rd_kafka_broker_t *rkb;
+        rd_kafka_broker_t skel = { .rkb_nodeid = nodeid };
 
-	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-		rd_kafka_broker_lock(rkb);
-		if (!rd_atomic32_get(&rk->rk_terminate) &&
-		    rkb->rkb_nodeid == nodeid) {
-                        if (state != -1 && (int)rkb->rkb_state != state) {
-                                rd_kafka_broker_unlock(rkb);
-                                break;
-                        }
-			rd_kafka_broker_keep(rkb);
-			rd_kafka_broker_unlock(rkb);
-			return rkb;
-		}
-		rd_kafka_broker_unlock(rkb);
-	}
+        if (rd_kafka_terminating(rk))
+                return NULL;
 
-	return NULL;
+        rkb = rd_list_find(&rk->rk_broker_by_id, &skel,
+                           rd_kafka_broker_cmp_by_id);
 
+        if (!rkb)
+                return NULL;
+
+        if (state != -1) {
+                int broker_state;
+                rd_kafka_broker_lock(rkb);
+                broker_state = (int)rkb->rkb_state;
+                rd_kafka_broker_unlock(rkb);
+
+                if (broker_state != state)
+                        return NULL;
+        }
+
+        rd_kafka_broker_keep(rkb);
+        return rkb;
 }
 
 /**

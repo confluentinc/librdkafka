@@ -134,6 +134,7 @@ struct rd_kafka_s {
 	rd_kafka_q_t *rk_ops;   /* any -> rdkafka main thread ops */
 
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
+        rd_list_t                  rk_broker_by_id; /* Fast id lookups. */
 	rd_atomic32_t              rk_broker_cnt;
 	rd_atomic32_t              rk_broker_down_cnt;
         mtx_t                      rk_internal_rkb_lock;

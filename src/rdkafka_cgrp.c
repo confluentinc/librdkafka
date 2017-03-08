@@ -425,7 +425,7 @@ static void rd_kafka_cgrp_handle_GroupCoordinator (rd_kafka_t *rk,
         const int log_decode_errors = 1;
         int16_t ErrorCode = 0;
         int32_t CoordId;
-        rd_kafkap_str_t CoordHost;
+        rd_kafkap_str_t CoordHost = RD_ZERO_INIT;
         int32_t CoordPort;
         rd_kafka_cgrp_t *rkcg = opaque;
         struct rd_kafka_metadata_broker mdb = RD_ZERO_INIT;

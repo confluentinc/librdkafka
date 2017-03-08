@@ -242,7 +242,7 @@ int16_t rd_kafka_broker_ApiVersion_supported (rd_kafka_broker_t *rkb,
                                               int16_t minver, int16_t maxver,
                                               int *featuresp) {
         struct rd_kafka_ApiVersion skel = { .ApiKey = ApiKey };
-        struct rd_kafka_ApiVersion ret, *retp;
+        struct rd_kafka_ApiVersion ret = RD_ZERO_INIT, *retp;
 
         rd_kafka_broker_lock(rkb);
         retp = bsearch(&skel, rkb->rkb_ApiVersions, rkb->rkb_ApiVersions_cnt,

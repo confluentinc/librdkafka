@@ -738,7 +738,7 @@ size_t rd_kafka_queue_length (rd_kafka_queue_t *rkqu) {
  */
 void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
                                  const void *payload, size_t size) {
-        struct rd_kafka_q_io *qio;
+        struct rd_kafka_q_io *qio = NULL;
 
         if (fd != -1) {
                 qio = rd_malloc(sizeof(*qio) + size);

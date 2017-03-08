@@ -441,6 +441,7 @@ int main_0033_regex_subscribe_local (int argc, char **argv) {
 
         conf = rd_kafka_conf_new();
         test_conf_set(conf, "group.id", "group");
+        test_conf_set(conf, "client.id", test_curr->name);
 
         rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
         if (!rk)

@@ -139,3 +139,9 @@ static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
         }
         return 0;
 }
+
+
+/**
+ * @returns the current test's name (thread-local)
+ */
+extern const char *test_curr_name (void);

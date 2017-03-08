@@ -101,11 +101,16 @@ void conf_init (RdKafka::Conf **conf,
                    conf ? *conf : NULL,
                    topic_conf ? *topic_conf : NULL, &timeout);
 
+  std::string errstr;
+  if ((*conf)->set("client.id", test_curr_name(), errstr) !=
+      RdKafka::Conf::CONF_OK)
+    Test::Fail("set client.id failed: " + errstr);
+
   if (*conf && (tmp = test_getenv("TEST_DEBUG", NULL))) {
-    std::string errstr;
     if ((*conf)->set("debug", tmp, errstr) != RdKafka::Conf::CONF_OK)
       Test::Fail("TEST_DEBUG failed: " + errstr);
   }
+
 
   if (timeout)
     test_timeout_set(timeout);

@@ -80,6 +80,8 @@ int main_0049_consume_conn_close (int argc, char **argv) {
         test_msgver_t mv;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *tconf;
+        rd_kafka_topic_partition_list_t *assignment;
+        rd_kafka_resp_err_t err;
 
         test_conf_init(&conf, &tconf, 60);
         /* Want an even number so it is divisable by two without surprises */
@@ -103,6 +105,10 @@ int main_0049_consume_conn_close (int argc, char **argv) {
 
         test_consumer_poll("consume.up", rk, testid, -1, 0, msgcnt/2, &mv);
 
+        err = rd_kafka_assignment(rk, &assignment);
+        TEST_ASSERT(!err, "assignment() failed: %s", rd_kafka_err2str(err));
+        TEST_ASSERT(assignment->cnt > 0, "empty assignment");
+
         TEST_SAY("Bringing down the network\n");
 
         TEST_LOCK();
@@ -111,6 +117,15 @@ int main_0049_consume_conn_close (int argc, char **argv) {
         test_socket_close_all(test_curr, 1/*reinit*/);
 
         TEST_SAY("Waiting for session timeout to expire (6s), and then some\n");
+
+        /* Commit an offset, which should fail, to trigger the offset commit
+         * callback fallback (CONSUMER_ERR) */
+        assignment->elems[0].offset = 123456789;
+        TEST_SAY("Committing offsets while down, should fail eventually\n");
+        err = rd_kafka_commit(rk, assignment, 1/*async*/);
+        TEST_ASSERT(!err, "async commit failed: %s", rd_kafka_err2str(err));
+        rd_kafka_topic_partition_list_destroy(assignment);
+
         rd_sleep(10);
 
         TEST_SAY("Bringing network back up\n");

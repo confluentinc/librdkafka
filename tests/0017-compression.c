@@ -91,6 +91,9 @@ int main_0017_compression(int argc, char **argv) {
 	rd_kafka_destroy(rk_p);
 
 
+        /* restart timeout (mainly for helgrind use since it is very slow) */
+        test_timeout_set(30);
+
 	/* Consume messages */
 	rk_c = test_create_consumer(NULL, NULL, NULL, NULL);
 

@@ -59,6 +59,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Ruby: [Hermann](https://github.com/reiseburo/hermann)
   * Rust: [rust-rdkafka](https://github.com/fede1024/rust-rdkafka)
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
+  * Swift: [Perfect-Kafka](https://github.com/PerfectlySoft/Perfect-Kafka)
 
 #Users of librdkafka#
 

@@ -1258,6 +1258,7 @@ int main(int argc, char **argv) {
                                                  test->start)/
                                            1000000);
                                 test_curr = save_test;
+                                tests_running_cnt--; /* fail-later misses this*/
 #ifdef _MSC_VER
                                 TerminateThread(test->thrd, -1);
 #else

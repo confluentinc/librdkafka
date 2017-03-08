@@ -3538,11 +3538,18 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		void *outbuf = NULL; /* Uncompressed output buffer. */
 		size_t hdrsize = 6; /* Header size following MessageSize */
 		int relative_offsets;
+                int crc_start_of;
+                int32_t crc_start_remain;
                 rd_kafka_resp_err_t err RD_UNUSED = RD_KAFKA_RESP_ERR_NO_ERROR;
 
 		rd_kafka_buf_read_i64(rkbuf, &hdr.Offset);
 		rd_kafka_buf_read_i32(rkbuf, &hdr.MessageSize);
 		rd_kafka_buf_read_i32(rkbuf, &hdr.Crc);
+                crc_start_of = rkbuf->rkbuf_of;
+                crc_start_remain = rd_kafka_buf_remain(rkbuf);
+		rd_kafka_buf_read_i8(rkbuf, &hdr.MagicByte);
+		rd_kafka_buf_read_i8(rkbuf, &hdr.Attributes);
+
 
                 if (rkb->rkb_rk->rk_conf.check_crcs &&
                     !(hdr.Attributes & RD_KAFKA_MSG_ATTR_COMPRESSION_MASK)) {
@@ -3552,10 +3559,10 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
                          * messagesets. */
                         uint32_t calc_crc;
 
-                        if (hdr.MessageSize - 4 > rd_kafka_buf_remain(rkbuf))
+                        if (hdr.MessageSize - 4 > crc_start_remain)
                                 goto err; /* Ignore partial messages */
 
-                        calc_crc = rd_crc32(rkbuf->rkbuf_rbuf+rkbuf->rkbuf_of,
+                        calc_crc = rd_crc32(rkbuf->rkbuf_rbuf+crc_start_of,
                                             hdr.MessageSize-4);
 
                         if (unlikely(hdr.Crc != calc_crc)) {
@@ -3576,8 +3583,6 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
                         }
                 }
 
-		rd_kafka_buf_read_i8(rkbuf, &hdr.MagicByte);
-		rd_kafka_buf_read_i8(rkbuf, &hdr.Attributes);
 
 		if (hdr.MagicByte == 1) { /* MsgVersion */
 			rd_kafka_buf_read_i64(rkbuf, &hdr.Timestamp);

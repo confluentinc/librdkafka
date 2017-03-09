@@ -964,6 +964,8 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
         }
 
         rd_kafka_wrunlock(rk);
+
+        rd_list_destroy(&topics);
 }
 
 

@@ -64,9 +64,12 @@ static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
 static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                         const char *reason) {
         /* Ignore connectivity errors since we'll be bringing down
-         * .. connectivity. */
+         * .. connectivity.
+         * SASL auther will think a connection-down even in the auth
+         * state means the broker doesn't support SASL PLAIN. */
         if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
-            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN)
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN ||
+            err == RD_KAFKA_RESP_ERR__AUTHENTICATION)
                 return 0;
         return 1;
 }

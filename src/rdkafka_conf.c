@@ -1221,11 +1221,26 @@ static int rd_kafka_anyconf_set (int scope, void *conf,
 
 
 rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
-				       const char *name,
-				       const char *value,
-				       char *errstr, size_t errstr_size) {
-	return rd_kafka_anyconf_set(_RK_GLOBAL, conf, name, value,
-				    errstr, errstr_size);
+                                       const char *name,
+                                       const char *value,
+                                       char *errstr, size_t errstr_size) {
+        rd_kafka_conf_res_t res;
+        res = rd_kafka_anyconf_set(_RK_GLOBAL, conf, name, value,
+                                   errstr, errstr_size);
+        if (res != RD_KAFKA_CONF_UNKNOWN)
+                return res;
+
+        /* Fallthru:
+         * If the global property was unknown, try setting it on the
+         * default topic config. */
+        if (!conf->topic_conf) {
+                /* Create topic config, might be over-written by application
+                 * later. */
+                conf->topic_conf = rd_kafka_topic_conf_new();
+        }
+
+        return rd_kafka_topic_conf_set(conf->topic_conf, name, value,
+                                       errstr, errstr_size);
 }
 
 
@@ -1741,7 +1756,15 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_get (const rd_kafka_topic_conf_t *conf,
 rd_kafka_conf_res_t rd_kafka_conf_get (const rd_kafka_conf_t *conf,
                                        const char *name,
                                        char *dest, size_t *dest_size) {
-        return rd_kafka_anyconf_get(_RK_GLOBAL, conf, name, dest, dest_size);
+        rd_kafka_conf_res_t res;
+        res = rd_kafka_anyconf_get(_RK_GLOBAL, conf, name, dest, dest_size);
+        if (res != RD_KAFKA_CONF_UNKNOWN || !conf->topic_conf)
+                return res;
+
+        /* Fallthru:
+         * If the global property was unknown, try getting it from the
+         * default topic config, if any. */
+        return rd_kafka_topic_conf_get(conf->topic_conf, name, dest, dest_size);
 }
 
 

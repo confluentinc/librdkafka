@@ -97,9 +97,15 @@ static void conf_cmp (const char *desc,
 		if (strcmp(a[i], b[i]))
 			TEST_FAIL("%s conf mismatch: %s != %s",
 				  desc, a[i], b[i]);
-		else if (strcmp(a[i+1], b[i+1]))
-			TEST_FAIL("%s conf value mismatch for %s: %s != %s",
-				  desc, a[i], a[i+1], b[i+1]);
+		else if (strcmp(a[i+1], b[i+1])) {
+                        /* The default_topic_conf will be auto-created
+                         * when global->topic fallthru is used, so its
+                         * value will not match here. */
+                        if (!strcmp(a[i], "default_topic_conf"))
+                                continue;
+                        TEST_FAIL("%s conf value mismatch for %s: %s != %s",
+                                  desc, a[i], a[i+1], b[i+1]);
+                }
 	}
 }
 
@@ -119,6 +125,7 @@ int main_0004_conf (int argc, char **argv) {
 		"client.id", "my id", /* string property */
 		"debug", "topic,metadata", /* S2F property */
 		"topic.blacklist", "__.*", /* #778 */
+                "auto.offset.reset", "earliest", /* Global->Topic fallthru */
 #if WITH_ZLIB
 		"compression.codec", "gzip", /* S2I property */
 #endif
@@ -268,6 +275,7 @@ int main_0004_conf (int argc, char **argv) {
 			{ "request.required.acks", "393", "393" },
 			{ "request.required.acks", "bad", NULL },
 			{ "request.required.acks", "all", "-1" },
+                        { "request.required.acks", "all", "-1", 1/*fallthru*/ },
 			{ "acks", "0", "0" }, /* alias test */
 #if WITH_SASL
 			{ "sasl.mechanisms", "GSSAPI", "GSSAPI", 1 },
@@ -287,8 +295,9 @@ int main_0004_conf (int argc, char **argv) {
 			size_t destsz;
 			rd_kafka_conf_res_t res;
 
-			TEST_SAY("  Set: %s=%s expect %s\n",
-				 props[i].prop, props[i].val, props[i].exp);
+			TEST_SAY("  Set: %s=%s expect %s (%s)\n",
+				 props[i].prop, props[i].val, props[i].exp,
+                                 props[i].is_global ? "global":"topic");
 
 
 			/* Set value */
@@ -325,7 +334,8 @@ int main_0004_conf (int argc, char **argv) {
 							      props[i].prop,
 							      dest, &destsz);
 			TEST_ASSERT(res == RD_KAFKA_CONF_OK,
-				    ".._conf_get() returned %d", res);
+				    ".._conf_get(%s) returned %d",
+                                    props[i].prop, res);
 
 			TEST_ASSERT(!strcmp(props[i].exp, dest),
 				    "Expected \"%s\", got \"%s\"",

@@ -140,6 +140,7 @@ _TEST_DECL(0056_balanced_group_mt);
 _TEST_DECL(0057_invalid_topic);
 _TEST_DECL(0058_log);
 _TEST_DECL(0059_bsearch);
+_TEST_DECL(0060_op_prio);
 
 /**
  * Define all tests here
@@ -205,6 +206,7 @@ struct test tests[] = {
         _TEST(0057_invalid_topic, 0),
         _TEST(0058_log, TEST_F_LOCAL),
         _TEST(0059_bsearch, TEST_BRKVER(0,10,0,0)),
+        _TEST(0060_op_prio, 0),
         { NULL }
 };
 

@@ -43,6 +43,10 @@ extern int test_broker_version;
 
 const char *test_mk_topic_name (const char *suffix, int randomized);
 
+uint64_t
+test_produce_msgs_easy (const char *topic, uint64_t testid,
+                        int32_t partition, int msgcnt);
+
 void test_FAIL (const char *file, int line, int fail_now, const char *str);
 void test_SAY (const char *file, int line, int level, const char *str);
 
@@ -50,6 +54,11 @@ void test_timeout_set (int timeout);
 int test_set_special_conf (const char *name, const char *val, int *timeoutp);
 const char *test_conf_get_path (void);
 const char *test_getenv (const char *env, const char *def);
+
+/**
+ * @returns the current test's name (thread-local)
+ */
+extern const char *test_curr_name (void);
 
 #ifndef _MSC_VER
 #include <sys/time.h>
@@ -141,7 +150,8 @@ static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
 }
 
 
-/**
- * @returns the current test's name (thread-local)
- */
-extern const char *test_curr_name (void);
+#ifndef _MSC_VER
+#define rd_sleep(S) sleep(S)
+#else
+#define rd_sleep(S) Sleep((S)*1000)
+#endif

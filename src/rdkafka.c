@@ -182,12 +182,18 @@ void rd_kafka_log_buf (const rd_kafka_t *rk, int level, const char *fac,
         if (level > rk->rk_conf.log_level)
                 return;
         else if (rk->rk_conf.log_queue) {
-                rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_LOG);
+                rd_kafka_op_t *rko;
+
+                if (!rk->rk_logq)
+                        return; /* Terminating */
+
+                rko = rd_kafka_op_new(RD_KAFKA_OP_LOG);
                 rko->rko_u.log.level = level;
                 strncpy(rko->rko_u.log.fac, fac,
                         sizeof(rko->rko_u.log.fac) - 1);
                 rko->rko_u.log.str = rd_strdup(buf);
                 rd_kafka_q_enq(rk->rk_logq, rko);
+
         } else if (rk->rk_conf.log_cb) {
                 rk->rk_conf.log_cb(rk, level, fac, buf);
         }
@@ -556,9 +562,6 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 	rd_kafka_q_destroy(rk->rk_rep);
 	rd_kafka_q_destroy(rk->rk_ops);
 
-        if (rk->rk_logq)
-                rd_kafka_q_destroy(rk->rk_logq);
-
 #if WITH_SSL
 	if (rk->rk_conf.ssl.ctx) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Destroying SSL CTX");
@@ -569,6 +572,11 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         /* It is not safe to log after this point. */
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                      "Termination done: freeing resources");
+
+        if (rk->rk_logq) {
+                rd_kafka_q_destroy(rk->rk_logq);
+                rk->rk_logq = NULL;
+        }
 
         if (rk->rk_type == RD_KAFKA_PRODUCER) {
 		cnd_destroy(&rk->rk_curr_msgs.cnd);

@@ -280,15 +280,6 @@ static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
 	return 0;
 }
 
-#ifndef _MSC_VER
-#define rd_sleep(S) sleep(S)
-#else
-#define rd_sleep(S) Sleep((S)*1000)
-#endif
-
-
-
-
 void test_msg_fmt (char *dest, size_t dest_size,
 		   uint64_t testid, int32_t partition, int msgid);
 void test_msg_parse0 (const char *func, int line,
@@ -454,9 +445,7 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                         uint64_t testid, int32_t partition,
                         int msg_base, int cnt,
 			const char *payload, size_t size);
-uint64_t
-test_produce_msgs_easy (const char *topic, uint64_t testid,
-                        int32_t partition, int msgcnt);
+
 rd_kafka_t *test_create_consumer (const char *group_id,
 				  void (*rebalance_cb) (
 					  rd_kafka_t *rk,

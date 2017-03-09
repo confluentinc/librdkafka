@@ -1815,6 +1815,8 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 	if (!rko_orig->rko_u.offset_commit.cb && rk->rk_conf.offset_commit_cb) {
                 rd_kafka_op_t *rko_reply = rd_kafka_op_new_reply(rko_orig, err);
 
+                rd_kafka_op_set_prio(rko_reply, 1);
+
 		if (offsets)
 			rko_reply->rko_u.offset_commit.partitions =
 				rd_kafka_topic_partition_list_copy(offsets);
@@ -1831,6 +1833,8 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 	/* Enqueue reply to requester's queue, if any. */
 	if (rko_orig->rko_replyq.q) {
                 rd_kafka_op_t *rko_reply = rd_kafka_op_new_reply(rko_orig, err);
+
+                rd_kafka_op_set_prio(rko_reply, 1);
 
 		/* Copy offset & partitions & callbacks to reply op */
 		rko_reply->rko_u.offset_commit = rko_orig->rko_u.offset_commit;

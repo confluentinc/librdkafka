@@ -189,7 +189,7 @@
         } else {						\
            struct headname *_tmp;					\
            LIST_FOREACH(_tmp,head,field) {			\
-              if(cmpfunc(elm,_tmp) <= 0) {			\
+              if(cmpfunc(elm,_tmp) < 0) {			\
                 LIST_INSERT_BEFORE(_tmp,elm,field);		\
                 break;						\
               }							\
@@ -208,7 +208,7 @@
         } else {						\
            struct headname *_tmp;					\
            TAILQ_FOREACH(_tmp,head,field) {			\
-              if(cmpfunc(elm,_tmp) <= 0) {			\
+              if(cmpfunc(elm,_tmp) < 0) {			\
                 TAILQ_INSERT_BEFORE(_tmp,elm,field);		\
                 break;						\
               }							\

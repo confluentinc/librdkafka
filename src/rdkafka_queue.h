@@ -240,6 +240,17 @@ void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
 
 
 /**
+ * @brief rko->rko_prio comparator
+ * @remark: descending order: higher priority takes preceedence.
+ */
+static RD_INLINE RD_UNUSED
+int rd_kafka_op_cmp_prio (const void *_a, const void *_b) {
+        const rd_kafka_op_t *a = _a, *b = _b;
+
+        return b->rko_prio - a->rko_prio;
+}
+
+/**
  * @brief Enqueue the 'rko' op at the tail of the queue 'rkq'.
  *
  * The provided 'rko' is either enqueued or destroyed.
@@ -273,7 +284,11 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         }
 
 	if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
-		TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
+                if (likely(!rko->rko_prio))
+                        TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
+                else
+                        TAILQ_INSERT_SORTED(&rkq->rkq_q, rko, rd_kafka_op_t *,
+                                            rko_link, rd_kafka_op_cmp_prio);
                 rkq->rkq_qlen++;
                 rkq->rkq_qsize += rko->rko_len;
 		cnd_signal(&rkq->rkq_cond);
@@ -322,6 +337,8 @@ int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
 	if (do_lock)
 		mtx_lock(&rkq->rkq_lock);
 	if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
+                rd_kafka_op_t *rko;
+
                 rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
                            srcq->rkq_qlen > 0);
 		if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
@@ -329,6 +346,15 @@ int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
                                 mtx_unlock(&rkq->rkq_lock);
 			return -1;
 		}
+                /* First insert any prioritized ops from srcq
+                 * in the right position in rkq. */
+                while ((rko = TAILQ_FIRST(&srcq->rkq_q)) && rko->rko_prio > 0) {
+                        TAILQ_REMOVE(&srcq->rkq_q, rko, rko_link);
+                        TAILQ_INSERT_SORTED(&rkq->rkq_q, rko,
+                                            rd_kafka_op_t *, rko_link,
+                                            rd_kafka_op_cmp_prio);
+                }
+
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
 		if (rkq->rkq_qlen == 0 && srcq->rkq_qlen > 0)
 			rd_kafka_q_io_event(rkq);
@@ -351,11 +377,14 @@ int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
 
 
 /**
- * Prepend all elements of 'srcq' onto head of 'rkq'.
+ * @brief Prepend all elements of 'srcq' onto head of 'rkq'.
  * 'rkq' will be be locked (if 'do_lock'==1), but 'srcq' will not.
  * 'srcq' will be reset.
  *
- * Locality: any thread.
+ * @remark Will not respect priority of ops, srcq will be prepended in its
+ *         original form to rkq.
+ *
+ * @locality any thread.
  */
 static RD_INLINE RD_UNUSED
 void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
@@ -363,6 +392,7 @@ void rd_kafka_q_prepend0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq,
 	if (do_lock)
 		mtx_lock(&rkq->rkq_lock);
 	if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
+                /* FIXME: prio-aware */
                 /* Concat rkq on srcq */
                 TAILQ_CONCAT(&srcq->rkq_q, &rkq->rkq_q, rko_link);
                 /* Move srcq to rkq */

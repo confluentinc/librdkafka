@@ -976,7 +976,14 @@ rd_kafka_conf_t *rd_kafka_conf_dup(const rd_kafka_conf_t *conf);
  *
  * \p conf must have been previously created with rd_kafka_conf_new().
  *
- * Returns \c rd_kafka_conf_res_t to indicate success or failure.
+ * Fallthrough:
+ * Topic-level configuration properties may be set using this interface
+ * in which case they are applied on the \c default_topic_conf.
+ * If no \c default_topic_conf has been set one will be created.
+ * Any sub-sequent rd_kafka_conf_set_default_topic_conf() calls will
+ * replace the current default topic configuration.
+ *
+ * @returns \c rd_kafka_conf_res_t to indicate success or failure.
  * In case of failure \p errstr is updated to contain a human readable
  * error string.
  */
@@ -1330,7 +1337,11 @@ void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
  *
  * If \p dest is NULL only the full length of the value is returned.
  *
- * Returns \p RD_KAFKA_CONF_OK if the property name matched, else
+ * Fallthrough:
+ * Topic-level configuration properties from the \c default_topic_conf
+ * may be retrieved using this interface.
+ *
+ * @returns \p RD_KAFKA_CONF_OK if the property name matched, else
  * \p RD_KAFKA_CONF_UNKNOWN.
  */
 RD_EXPORT

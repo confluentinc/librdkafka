@@ -129,6 +129,8 @@ struct rd_kafka_op_s {
 	rd_kafka_resp_err_t   rko_err;
 	int32_t               rko_len;    /* Depends on type, typically the
 					   * message length. */
+        int                   rko_prio;   /* In-queue priority.
+                                           * Higher value means higher prio. */
 
 	shptr_rd_kafka_toppar_t *rko_rktp;
 
@@ -282,6 +284,7 @@ rd_kafka_op_t *rd_kafka_op_new_cb (rd_kafka_t *rk,
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 
 
+#define rd_kafka_op_set_prio(rko,prio) ((rko)->rko_prio = prio)
 
 
 #define rd_kafka_op_err(rk,err,...) do {				\

@@ -211,18 +211,21 @@ int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 		 * items of 'srcq' we can move the entire queue. */
 		if (cnt == -1 ||
                     cnt >= (int)srcq->rkq_qlen) {
-                        rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
-                                   srcq->rkq_qlen > 0);
-			TAILQ_CONCAT(&dstq->rkq_q, &srcq->rkq_q, rko_link);
-			mcnt = srcq->rkq_qlen;
-                        dstq->rkq_qlen += srcq->rkq_qlen;
-                        dstq->rkq_qsize += srcq->rkq_qsize;
-			rd_kafka_q_reset(srcq);
+                        mcnt = srcq->rkq_qlen;
+                        rd_kafka_q_concat0(dstq, srcq, 0/*no-lock*/);
 		} else {
 			while (mcnt < cnt &&
 			       (rko = TAILQ_FIRST(&srcq->rkq_q))) {
 				TAILQ_REMOVE(&srcq->rkq_q, rko, rko_link);
-				TAILQ_INSERT_TAIL(&dstq->rkq_q, rko, rko_link);
+                                if (likely(!rko->rko_prio))
+                                        TAILQ_INSERT_TAIL(&dstq->rkq_q, rko,
+                                                          rko_link);
+                                else
+                                        TAILQ_INSERT_SORTED(
+                                                &dstq->rkq_q, rko,
+                                                rd_kafka_op_t *, rko_link,
+                                                rd_kafka_op_cmp_prio);
+
                                 srcq->rkq_qlen--;
                                 dstq->rkq_qlen++;
                                 srcq->rkq_qsize -= rko->rko_len;

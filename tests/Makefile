@@ -9,6 +9,7 @@ CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -L../src -L../src-cpp
 
+KAFKA_VERSION?=0.10.2.0
 
 -include ../Makefile.config
 
@@ -20,8 +21,8 @@ trunk: build
 
 # Run the full test suite(s)
 full: build
-	./broker_version_tests.py
-	./sasl_test.py
+	./broker_version_tests.py $(KAFKA_VERSION)
+	./sasl_test.py $(KAFKA_VERSION)
 
 run_par: $(BIN)
 	@echo "Running tests in parallel"

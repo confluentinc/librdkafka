@@ -2914,8 +2914,8 @@ rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
                 TEST_WARN("metadata() for %s failed: %s",
                           rkt ? rd_kafka_topic_name(rkt) : "(all-local)",
                           rd_kafka_err2str(err));
-
-	rd_kafka_metadata_destroy(metadata);
+        else
+                rd_kafka_metadata_destroy(metadata);
 
         return err;
 }

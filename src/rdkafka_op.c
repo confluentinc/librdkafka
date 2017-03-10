@@ -511,6 +511,7 @@ void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,
 	rd_atomic32_set(&rkb->rkb_rk->rk_last_throttle, throttle_time);
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_THROTTLE);
+        rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_HIGH);
 	rko->rko_u.throttle.nodename = rd_strdup(rkb->rkb_nodename);
 	rko->rko_u.throttle.nodeid   = rkb->rkb_nodeid;
 	rko->rko_u.throttle.throttle_time = throttle_time;

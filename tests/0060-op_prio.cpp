@@ -34,28 +34,45 @@
  * MO:
  *
  *  - Seed topic with 1000 messages
- *  - Start consumer with auto offset commit disabled, but a commit callback
+ *  - Start consumer with auto offset commit disabled,
+ *    but with commit and stats callbacks registered,
  *  - Consume one message
  *  - Commit that message manually
  *  - Consume one message per second
  *  - The commit callback should be fired within reasonable time, long before
+ *  - The stats callback should behave the same.
  *    all messages are consumed.
  */
 
 
 
-class MyCommitCb : public RdKafka::OffsetCommitCb {
+class MyCbs : public RdKafka::OffsetCommitCb, public RdKafka::EventCb {
  public:
-  int seen;
+  int seen_commit;
+  int seen_stats;
+
   void offset_commit_cb (RdKafka::ErrorCode err,
                          std::vector<RdKafka::TopicPartition*>&offsets) {
     if (err)
       Test::Fail("Offset commit failed: " + RdKafka::err2str(err));
 
-    seen++;
+    seen_commit++;
     Test::Say("Got commit callback!\n");
   }
+
+  void event_cb (RdKafka::Event &event) {
+    switch (event.type())
+      {
+      case RdKafka::Event::EVENT_STATS:
+        Test::Say("Got stats callback!\n");
+        seen_stats++;
+        break;
+      default:
+        break;
+    }
+  }
 };
+
 
 
 static void do_test_commit_cb (void) {
@@ -78,12 +95,17 @@ static void do_test_commit_cb (void) {
   Test::conf_set(conf, "enable.auto.commit", "false");
   Test::conf_set(conf, "enable.partition.eof", "false");
   Test::conf_set(conf, "auto.offset.reset", "earliest");
+  Test::conf_set(conf, "statistics.interval.ms", "1000");
 
-  MyCommitCb commit_cb;
-  commit_cb.seen = 0;
-  if (conf->set("offset_commit_cb", &commit_cb, errstr) !=
+  MyCbs cbs;
+  cbs.seen_commit = 0;
+  cbs.seen_stats  = 0;
+  if (conf->set("offset_commit_cb", (RdKafka::OffsetCommitCb *)&cbs, errstr) !=
       RdKafka::Conf::CONF_OK)
     Test::Fail("Failed to set commit callback: " + errstr);
+  if (conf->set("event_cb", (RdKafka::EventCb *)&cbs, errstr) !=
+      RdKafka::Conf::CONF_OK)
+    Test::Fail("Failed to set event callback: " + errstr);
 
   RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
   if (!c)
@@ -99,13 +121,15 @@ static void do_test_commit_cb (void) {
   /* Wait for messages and commit callback. */
   Test::Say("Consuming topic " + topic + "\n");
   int cnt = 0;
-  while (!commit_cb.seen) {
+  while (!cbs.seen_commit || !cbs.seen_stats) {
     RdKafka::Message *msg = c->consume(1000);
     if (!msg->err()) {
       cnt++;
       Test::Say(tostr() << "Received message #" << cnt << "\n");
       if (cnt > 10)
-        Test::Fail("Should've seen the offset commit callback by now");
+        Test::Fail(tostr() << "Should've seen the "
+                   "offset commit (" << cbs.seen_commit << ") and "
+                   "stats callbacks (" << cbs.seen_stats << ") by now");
 
       /* Commit the first message to trigger the offset commit_cb */
       if (cnt == 1) {

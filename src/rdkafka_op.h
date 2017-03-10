@@ -115,6 +115,22 @@ typedef enum {
 #define RD_KAFKA_OP_FLAGMASK  (RD_KAFKA_OP_CB | RD_KAFKA_OP_REPLY)
 
 
+/**
+ * @brief Op/queue priority levels.
+ * @remark Since priority levels alter the FIFO order, pay extra attention
+ *         to preserve ordering as deemed necessary.
+ * @remark Priority should only be set on ops destined for application
+ *         facing queues (rk_rep, rkcg_q, etc).
+ */
+typedef enum {
+        RD_KAFKA_PRIO_NORMAL = 0,   /* Normal bulk, messages, DRs, etc. */
+        RD_KAFKA_PRIO_MEDIUM,       /* Prioritize in front of bulk,
+                                     * still at some scale. e.g. logs, .. */
+        RD_KAFKA_PRIO_HIGH,         /* Small scale high priority */
+        RD_KAFKA_PRIO_FLASH         /* Micro scale, immediate delivery. */
+} rd_kafka_op_prio_t;
+
+
 #define RD_KAFKA_OP_TYPE_ASSERT(rko,type) \
 	rd_kafka_assert(NULL, (rko)->rko_type == (type) && # type)
 
@@ -128,7 +144,7 @@ struct rd_kafka_op_s {
 	rd_kafka_resp_err_t   rko_err;
 	int32_t               rko_len;    /* Depends on type, typically the
 					   * message length. */
-        int                   rko_prio;   /* In-queue priority.
+        rd_kafka_op_prio_t    rko_prio;   /* In-queue priority.
                                            * Higher value means higher prio. */
 
 	shptr_rd_kafka_toppar_t *rko_rktp;
@@ -281,7 +297,6 @@ rd_kafka_op_t *rd_kafka_op_new_cb (rd_kafka_t *rk,
                                    void (*cb) (rd_kafka_t *rk,
                                                rd_kafka_op_t *rko));
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
-
 
 #define rd_kafka_op_set_prio(rko,prio) ((rko)->rko_prio = prio)
 

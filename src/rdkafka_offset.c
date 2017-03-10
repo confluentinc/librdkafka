@@ -351,6 +351,7 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 		return;
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
+        rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_HIGH);
 	rko->rko_err = err;
 	rko->rko_u.offset_commit.cb = rk->rk_conf.offset_commit_cb;/*maybe NULL*/
 	rko->rko_u.offset_commit.opaque = rk->rk_conf.opaque;

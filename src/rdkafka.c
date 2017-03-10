@@ -188,6 +188,7 @@ void rd_kafka_log_buf (const rd_kafka_t *rk, int level, const char *fac,
                         return; /* Terminating */
 
                 rko = rd_kafka_op_new(RD_KAFKA_OP_LOG);
+                rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_MEDIUM);
                 rko->rko_u.log.level = level;
                 strncpy(rko->rko_u.log.fac, fac,
                         sizeof(rko->rko_u.log.fac) - 1);
@@ -1079,6 +1080,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
 	/* Enqueue op for application */
 	rko = rd_kafka_op_new(RD_KAFKA_OP_STATS);
+        rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_HIGH);
 	rko->rko_u.stats.json = buf;
 	rko->rko_u.stats.json_len = of;
 	rd_kafka_q_enq(rk->rk_rep, rko);

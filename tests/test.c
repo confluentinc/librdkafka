@@ -188,9 +188,11 @@ struct test tests[] = {
 	_TEST(0042_many_topics, 0),
 	_TEST(0043_no_connection, TEST_F_LOCAL),
 	_TEST(0044_partition_cnt, 0),
-	_TEST(0045_subscribe_update, 0),
-	_TEST(0045_subscribe_update_topic_remove, TEST_F_KNOWN_ISSUE),
-        _TEST(0045_subscribe_update_non_exist_and_partchange, 0),
+	_TEST(0045_subscribe_update, 0, TEST_BRKVER(0,9,0,0)),
+	_TEST(0045_subscribe_update_topic_remove, TEST_F_KNOWN_ISSUE,
+              TEST_BRKVER(0,9,0,0)),
+        _TEST(0045_subscribe_update_non_exist_and_partchange, 0,
+              TEST_BRKVER(0,9,0,0)),
 	_TEST(0046_rkt_cache, TEST_F_LOCAL),
 	_TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
 	_TEST(0048_partitioner, 0),
@@ -204,10 +206,10 @@ struct test tests[] = {
         _TEST(0054_offset_time, 0, TEST_BRKVER(0,10,0,0)),
         _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
         _TEST(0056_balanced_group_mt, 0, TEST_BRKVER(0,9,0,0)),
-        _TEST(0057_invalid_topic, 0),
+        _TEST(0057_invalid_topic, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0058_log, TEST_F_LOCAL),
-        _TEST(0059_bsearch, TEST_BRKVER(0,10,0,0)),
-        _TEST(0060_op_prio, 0),
+        _TEST(0059_bsearch, 0, TEST_BRKVER(0,10,0,0)),
+        _TEST(0060_op_prio, 0, TEST_BRKVER(0,9,0,0)),
         { NULL }
 };
 

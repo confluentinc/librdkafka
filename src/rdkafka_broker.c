@@ -4639,24 +4639,6 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 rd_kafka_broker_lock(rkb);
 				rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
                                 rd_kafka_broker_unlock(rkb);
-                        } else if (rd_kafka_terminating(rkb->rkb_rk)) {
-				/* Connection torn down and handle is
-				 * terminating: fail the send+retry queue
-				 * to speed up termination, otherwise we'll
-				 * need to wait for request timeouts. */
-				int r;
-
-				r = rd_kafka_broker_bufq_timeout_scan(
-					rkb, 0, &rkb->rkb_outbufs, NULL,
-					RD_KAFKA_RESP_ERR__DESTROY, 0);
-				r += rd_kafka_broker_bufq_timeout_scan(
-					rkb, 0, &rkb->rkb_retrybufs, NULL,
-					RD_KAFKA_RESP_ERR__DESTROY, 0);
-				rd_rkb_dbg(rkb, BROKER, "TERMINATE",
-					   "Handle is terminating: "
-					   "failed %d request(s) in "
-					   "retry+outbuf", r);
-
 			} else {
 				/* Connection torn down, sleep a short while to
 				 * avoid busy-looping on protocol errors */
@@ -4665,6 +4647,23 @@ static int rd_kafka_broker_thread_main (void *arg) {
 			break;
 		}
 
+                if (rd_kafka_terminating(rkb->rkb_rk)) {
+                        /* Handle is terminating: fail the send+retry queue
+                         * to speed up termination, otherwise we'll
+                         * need to wait for request timeouts. */
+                        int r;
+
+                        r = rd_kafka_broker_bufq_timeout_scan(
+                                rkb, 0, &rkb->rkb_outbufs, NULL,
+                                RD_KAFKA_RESP_ERR__DESTROY, 0);
+                        r += rd_kafka_broker_bufq_timeout_scan(
+                                rkb, 0, &rkb->rkb_retrybufs, NULL,
+                                RD_KAFKA_RESP_ERR__DESTROY, 0);
+                        rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+                                   "Handle is terminating: "
+                                   "failed %d request(s) in "
+                                   "retry+outbuf", r);
+                }
 	}
 
 	if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
@@ -4689,7 +4688,9 @@ static int rd_kafka_broker_thread_main (void *arg) {
 void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
-	rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_outbufs.rkbq_bufs));
+        rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_outbufs.rkbq_bufs));
+        rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_waitresps.rkbq_bufs));
+        rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_retrybufs.rkbq_bufs));
 	rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_toppars));
 
 #if WITH_SASL

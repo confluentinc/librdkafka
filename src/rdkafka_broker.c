@@ -1639,6 +1639,44 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 }
 
 
+
+/**
+ * @brief Checks if the given API request+version is supported by the broker.
+ * @returns 1 if supported, else 0.
+ * @locality broker thread
+ * @locks none
+ */
+static RD_INLINE int
+rd_kafka_broker_request_supported (rd_kafka_broker_t *rkb,
+                                   rd_kafka_buf_t *rkbuf) {
+        struct rd_kafka_ApiVersion skel = {
+                .ApiKey = rkbuf->rkbuf_reqhdr.ApiKey
+        };
+        struct rd_kafka_ApiVersion *ret;
+
+        if (unlikely(rkbuf->rkbuf_reqhdr.ApiKey == RD_KAFKAP_ApiVersion))
+                return 1; /* ApiVersion requests are used to detect
+                           * the supported API versions, so should always
+                           * be allowed through. */
+
+        /* First try feature flags, if any, which may cover a larger
+         * set of APIs. */
+        if (rkbuf->rkbuf_features)
+                return (rkb->rkb_features & rkbuf->rkbuf_features) ==
+                        rkbuf->rkbuf_features;
+
+        /* Then try the ApiVersion map. */
+        ret = bsearch(&skel, rkb->rkb_ApiVersions, rkb->rkb_ApiVersions_cnt,
+                      sizeof(*rkb->rkb_ApiVersions),
+                      rd_kafka_ApiVersion_key_cmp);
+        if (!ret)
+                return 0;
+
+        return ret->MinVer <= rkbuf->rkbuf_reqhdr.ApiVersion &&
+                rkbuf->rkbuf_reqhdr.ApiVersion <= ret->MaxVer;
+}
+
+
 /**
  * Send queued messages to broker
  *
@@ -1660,9 +1698,19 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		size_t of = rkbuf->rkbuf_of;
 
                 /* Check for broker support */
-                if (unlikely((rkb->rkb_features & rkbuf->rkbuf_features) !=
-                             rkbuf->rkbuf_features)) {
+                if (unlikely(!rd_kafka_broker_request_supported(rkb, rkbuf))) {
                         rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
+                        rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_PROTOCOL,
+                                   "UNSUPPORTED",
+                                   "Failing %sResponse "
+                                   "(v%hd, %"PRIusz" bytes, CorrId %"PRId32"): "
+                                   "request not supported by broker "
+                                   "(incorrect broker.version.fallback?)",
+                                   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.
+                                                       ApiKey),
+                                   rkbuf->rkbuf_reqhdr.ApiVersion,
+                                   rkbuf->rkbuf_len,
+                                   rkbuf->rkbuf_reshdr.CorrId);
                         rd_kafka_buf_callback(
                                 rkb->rkb_rk, rkb,
                                 RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,

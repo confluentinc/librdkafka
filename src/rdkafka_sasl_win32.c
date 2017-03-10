@@ -232,12 +232,13 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
 */
 static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
                                               char *errstr,
-                                              size_t errstr_size) {
+                                              size_t errstr_size,
+                                              SecBuffer *server_token) {
         rd_kafka_sasl_state_t *state = rktrans->rktrans_sasl.state;
         SECURITY_STATUS sr;
         SecBuffer in_buffer;
         SecBuffer out_buffer;
-        SecBuffer buffers[3];
+        SecBuffer buffers[4];
         SecBufferDesc buffer_desc;        
         SecPkgContext_Sizes sizes;
         SecPkgCredentials_NamesA names;
@@ -277,22 +278,31 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
         in_buffer.pvBuffer = (char *)names.sUserName;
         in_buffer.cbBuffer = (unsigned long)namelen;
 
-        buffer_desc.cBuffers = 3;
+        buffer_desc.cBuffers = 4;
         buffer_desc.pBuffers = buffers;
         buffer_desc.ulVersion = SECBUFFER_VERSION;
 
+        /* security trailer */
         buffers[0].cbBuffer = sizes.cbSecurityTrailer;
         buffers[0].BufferType = SECBUFFER_TOKEN;
         buffers[0].pvBuffer = rd_calloc(1, sizes.cbSecurityTrailer);
 
-        buffers[1].cbBuffer = in_buffer.cbBuffer;
+        /* protection level and buffer size received from the server */
+        buffers[1].cbBuffer = server_token->cbBuffer;
         buffers[1].BufferType = SECBUFFER_DATA;
-        buffers[1].pvBuffer = rd_calloc(1, buffers[1].cbBuffer);
-        memcpy(buffers[1].pvBuffer, in_buffer.pvBuffer, in_buffer.cbBuffer);
+        buffers[1].pvBuffer = rd_calloc(1, server_token->cbBuffer);
+        memcpy(buffers[1].pvBuffer, server_token->pvBuffer, server_token->cbBuffer);
 
-        buffers[2].cbBuffer = sizes.cbBlockSize;
-        buffers[2].BufferType = SECBUFFER_PADDING;
+        /* user principal */
+        buffers[2].cbBuffer = in_buffer.cbBuffer;
+        buffers[2].BufferType = SECBUFFER_DATA;
         buffers[2].pvBuffer = rd_calloc(1, buffers[2].cbBuffer);
+        memcpy(buffers[2].pvBuffer, in_buffer.pvBuffer, in_buffer.cbBuffer);
+
+        /* padding */
+        buffers[3].cbBuffer = sizes.cbBlockSize;
+        buffers[3].BufferType = SECBUFFER_PADDING;
+        buffers[3].pvBuffer = rd_calloc(1, buffers[2].cbBuffer);
 
         sr = EncryptMessage(state->ctx, KERB_WRAP_NO_ENCRYPT, &buffer_desc, 0);
         if (sr != SEC_E_OK) {
@@ -304,16 +314,19 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
                 rd_free(buffers[0].pvBuffer);
                 rd_free(buffers[1].pvBuffer);
                 rd_free(buffers[2].pvBuffer);
+                rd_free(buffers[3].pvBuffer);
                 return -1;
         }
 
         out_buffer.cbBuffer = buffers[0].cbBuffer +
                               buffers[1].cbBuffer +
-                              buffers[2].cbBuffer;
+                              buffers[2].cbBuffer +
+                              buffers[3].cbBuffer;
 
         out_buffer.pvBuffer = rd_calloc(1, buffers[0].cbBuffer +
                                         buffers[1].cbBuffer +
-                                        buffers[2].cbBuffer);
+                                        buffers[2].cbBuffer +
+                                        buffers[3].cbBuffer);
 
         memcpy(out_buffer.pvBuffer, buffers[0].pvBuffer, buffers[0].cbBuffer);
 
@@ -323,6 +336,10 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
         memcpy((unsigned char *)out_buffer.pvBuffer +
                 buffers[0].cbBuffer + buffers[1].cbBuffer,
                 buffers[2].pvBuffer, buffers[2].cbBuffer);
+
+        memcpy((unsigned char *)out_buffer.pvBuffer +
+                buffers[0].cbBuffer + buffers[1].cbBuffer + buffers[2].cbBuffer,
+                buffers[3].pvBuffer, buffers[3].cbBuffer);
 
         send_response = rd_kafka_sasl_send(rktrans,
                                            out_buffer.pvBuffer,
@@ -334,6 +351,7 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
         rd_free(buffers[0].pvBuffer);
         rd_free(buffers[1].pvBuffer);
         rd_free(buffers[2].pvBuffer);
+        rd_free(buffers[3].pvBuffer);
 
         return send_response;
 }
@@ -380,7 +398,7 @@ static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
                 return -1;
         }
 
-        if (buffers[0].cbBuffer < 4) {
+        if (buffers[1].cbBuffer < 4) {
                 rd_snprintf(errstr, errstr_size,
                             "Validate token: "
                             "invalid message");
@@ -399,7 +417,7 @@ static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
                    "Validated server token");
 
         return rd_kafka_sasl_win32_send_response(rktrans, errstr,
-                                                 errstr_size);
+                                                 errstr_size, &buffers[1]);
 }
 
 

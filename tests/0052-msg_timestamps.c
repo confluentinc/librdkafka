@@ -31,7 +31,12 @@
 
 /**
  * Verify message timestamp behaviour on supporting brokers (>=0.10.0.0).
- * Issue #858 
+ * Issue #858
+ *
+ * FIXME: Intermittent failures:
+ *  "consume.easy: consumer_poll() timeout (1/-1 eof, 0/20 msgs)"
+ * are due to the really old timestamps being used (my_timestamp, 1234)
+ * causing the offset retention cleaner on the broker to kick in.
  */
 struct timestamp_range {
         int64_t min;

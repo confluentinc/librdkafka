@@ -57,7 +57,7 @@ class MyDrCb : public RdKafka::DeliveryReportCb {
     if (val == "good")
       check_err(msg.err(), RdKafka::ERR_NO_ERROR);
     else if (val == "bad") {
-      if (test_broker_version >= TEST_BRKVER(0,9,0,0))
+      if (test_broker_version >= TEST_BRKVER(0,8,2,2))
         check_err(msg.err(), RdKafka::ERR_TOPIC_EXCEPTION);
       else
         check_err(msg.err(), RdKafka::ERR_UNKNOWN);

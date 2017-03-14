@@ -514,7 +514,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_GLOBAL|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RK(auto_commit_interval_ms),
 	  "The frequency in milliseconds that the consumer offsets "
-	  "are committed (written) to offset storage. (0 = disable)",
+	  "are committed (written) to offset storage. (0 = disable). "
+          "This setting is used by the high-level consumer.",
           0, 86400*1000, 5*1000 },
         { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.offset.store", _RK_C_BOOL,
           _RK(enable_auto_offset_store),
@@ -743,7 +744,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RKT(auto_commit_interval_ms),
 	  "The frequency in milliseconds that the consumer offsets "
-	  "are committed (written) to offset storage.",
+	  "are committed (written) to offset storage. "
+          "This setting is used by the low-level legacy consumer.",
 	  10, 86400*1000, 60*1000 },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.offset.reset", _RK_C_S2I,
 	  _RKT(auto_offset_reset),

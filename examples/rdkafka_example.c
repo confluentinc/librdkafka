@@ -802,5 +802,7 @@ int main (int argc, char **argv) {
 	if (run <= 0)
 		rd_kafka_dump(stdout, rk);
 
+	rd_kafka_conf_destroy(conf);
+	
 	return 0;
 }

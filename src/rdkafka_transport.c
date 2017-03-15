@@ -632,8 +632,11 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	SSL_CTX *ctx;
 
 	ctx = SSL_CTX_new(SSLv23_client_method());
-	if (!ctx)
+	if (!ctx) {
+		rd_snprintf(errstr, errstr_size,
+			"SSL_CTX_new failed to create new ctx object");
 		goto fail;
+	}
 
 #ifdef SSL_OP_NO_SSLv3
 	/* Disable SSLv3 (unsafe) */
@@ -675,8 +678,11 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 						  rk->rk_conf.ssl.
 						  ca_location : NULL);
 
-		if (r != 1)
+		if (r != 1) {
+			rd_snprintf(errstr, errstr_size,
+				    "SSL_CTX_load_verify_locations failed -- is your CA cert valid?");
 			goto fail;
+		}
 	}
 
 	if (rk->rk_conf.ssl.crl_location) {
@@ -688,9 +694,11 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 						  rk->rk_conf.ssl.crl_location,
 						  NULL);
 
-		if (r != 1)
+		if (r != 1) {
+			rd_snprintf(errstr, errstr_size,
+				    "SSL_CTX_load_verify_locations failed -- is your crl valid?");
 			goto fail;
-
+		}
 
 		rd_kafka_dbg(rk, SECURITY, "SSL",
 			     "Enabling CRL checks");
@@ -707,8 +715,11 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		r = SSL_CTX_use_certificate_chain_file(ctx,
 						       rk->rk_conf.ssl.cert_location);
 
-		if (r != 1)
+		if (r != 1) {
+			rd_snprintf(errstr, errstr_size,
+				    "SSL_CTX_use_certificate_chain_file -- error processing certificate file");
 			goto fail;
+		}
 	}
 
 	if (rk->rk_conf.ssl.key_location) {
@@ -719,8 +730,11 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		r = SSL_CTX_use_PrivateKey_file(ctx,
 						rk->rk_conf.ssl.key_location,
 						SSL_FILETYPE_PEM);
-		if (r != 1)
+		if (r != 1) {
+			rd_snprintf(errstr, errstr_size,
+				    "SSL_CTX_use_PrivateKey_file -- error processing key file");
 			goto fail;
+		}
 	}
 
 

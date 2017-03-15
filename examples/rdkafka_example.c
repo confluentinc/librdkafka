@@ -270,6 +270,13 @@ static void sig_usr1 (int sig) {
 	rd_kafka_dump(stdout, rk);
 }
 
+void cleanup(rd_kafka_conf_t *conf, int status) {
+	rd_kafka_conf_destroy(conf);
+
+        exit(status);
+}
+
+
 int main (int argc, char **argv) {
 	rd_kafka_topic_t *rkt;
 	char *brokers = "localhost:9092";
@@ -323,7 +330,7 @@ int main (int argc, char **argv) {
 					      errstr, sizeof(errstr)) !=
 			    RD_KAFKA_CONF_OK) {
 				fprintf(stderr, "%% %s\n", errstr);
-				exit(1);
+                                cleanup(conf, 1);
 			}
 			break;
 		case 'o':
@@ -361,7 +368,7 @@ int main (int argc, char **argv) {
 					"%% Debug configuration failed: "
 					"%s: %s\n",
 					errstr, optarg);
-				exit(1);
+                                cleanup(conf, 1);
 			}
 			break;
 		case 'q':
@@ -378,7 +385,7 @@ int main (int argc, char **argv) {
 			if (!strcmp(optarg, "list") ||
 			    !strcmp(optarg, "help")) {
 				rd_kafka_conf_properties_show(stdout);
-				exit(0);
+                                cleanup(conf, 0);
 			}
 
 			if (!strcmp(optarg, "dump")) {
@@ -404,13 +411,13 @@ int main (int argc, char **argv) {
 
 				if (res == RD_KAFKA_CONF_OK) {
 					printf("%s = %s\n", name, dest);
-					exit(0);
+					cleanup(conf, 0);
 				} else {
 					fprintf(stderr,
 						"%% %s property\n",
 						res == RD_KAFKA_CONF_UNKNOWN ?
 						"Unknown" : "Invalid");
-					exit(1);
+                                        cleanup(conf, 1);
 				}
 			}
 
@@ -435,7 +442,7 @@ int main (int argc, char **argv) {
 
 			if (res != RD_KAFKA_CONF_OK) {
 				fprintf(stderr, "%% %s\n", errstr);
-				exit(1);
+                                cleanup(conf, 1);
 			}
 		}
 		break;
@@ -472,7 +479,7 @@ int main (int argc, char **argv) {
 			rd_kafka_conf_dump_free(arr, cnt);
 		}
 
-		exit(0);
+                cleanup(conf, 0);
 	}
 
 
@@ -524,7 +531,7 @@ int main (int argc, char **argv) {
 			argv[0],
 			rd_kafka_version_str(), rd_kafka_version(),
 			RD_KAFKA_DEBUG_CONTEXTS);
-		exit(1);
+                        cleanup(conf, 1);
 	}
 
 	if ((mode == 'C' && !isatty(STDIN_FILENO)) ||
@@ -562,13 +569,13 @@ int main (int argc, char **argv) {
 			fprintf(stderr,
 				"%% Failed to create new producer: %s\n",
 				errstr);
-			exit(1);
+                        cleanup(conf, 1);
 		}
 
 		/* Add brokers */
 		if (rd_kafka_brokers_add(rk, brokers) == 0) {
 			fprintf(stderr, "%% No valid brokers specified\n");
-			exit(1);
+                        cleanup(conf, 1);
 		}
 
 		/* Create topic */
@@ -638,13 +645,13 @@ int main (int argc, char **argv) {
 			fprintf(stderr,
 				"%% Failed to create new consumer: %s\n",
 				errstr);
-			exit(1);
+                        cleanup(conf, 1);
 		}
 
 		/* Add brokers */
 		if (rd_kafka_brokers_add(rk, brokers) == 0) {
 			fprintf(stderr, "%% No valid brokers specified\n");
-			exit(1);
+                        cleanup(conf, 1);
 		}
 
 		if (get_wmarks) {
@@ -658,7 +665,7 @@ int main (int argc, char **argv) {
 				fprintf(stderr, "%% query_watermark_offsets() "
 					"failed: %s\n",
 					rd_kafka_err2str(err));
-				exit(1);
+                                cleanup(conf, 1);
 			}
 
 			printf("%s [%d]: low - high offsets: "
@@ -666,7 +673,7 @@ int main (int argc, char **argv) {
 			       topic, partition, lo, hi);
 
 			rd_kafka_destroy(rk);
-			exit(0);
+                        cleanup(conf, 0);
 		}
 
 
@@ -684,7 +691,7 @@ int main (int argc, char **argv) {
                                         "%% Broker based offset storage "
                                         "requires a group.id, "
                                         "add: -X group.id=yourGroup\n");
-			exit(1);
+                        cleanup(conf, 1);
 		}
 
 		while (run) {
@@ -740,13 +747,13 @@ int main (int argc, char **argv) {
 			fprintf(stderr,
 				"%% Failed to create new producer: %s\n",
 				errstr);
-			exit(1);
+                        cleanup(conf, 1);
 		}
 
 		/* Add brokers */
 		if (rd_kafka_brokers_add(rk, brokers) == 0) {
 			fprintf(stderr, "%% No valid brokers specified\n");
-			exit(1);
+                        cleanup(conf, 1);
 		}
 
                 /* Create topic */
@@ -787,9 +794,7 @@ int main (int argc, char **argv) {
                         rd_kafka_topic_conf_destroy(topic_conf);
 
 
-                /* Exit right away, dont wait for background cleanup, we haven't
-                 * done anything important anyway. */
-                exit(err ? 2 : 0);
+                cleanup(conf, err ? 2 : 0);
         }
 
         if (topic_conf)
@@ -802,7 +807,5 @@ int main (int argc, char **argv) {
 	if (run <= 0)
 		rd_kafka_dump(stdout, rk);
 
-	rd_kafka_conf_destroy(conf);
-	
-	return 0;
+	cleanup(conf, 0);
 }

@@ -27,6 +27,8 @@
  */
 
 #include <iostream>
+#include <cstring>
+#include <cstdlib>
 #include "testcpp.h"
 
 /**
@@ -124,21 +126,20 @@ static void do_test_consumer_lag (void) {
   parts.push_back(RdKafka::TopicPartition::create(topic, 0));
   if ((err = c->assign(parts)))
     Test::Fail("assign failed: " + RdKafka::err2str(err));
+  RdKafka::TopicPartition::destroy(parts);
 
   /* Start consuming */
   Test::Say("Consuming topic " + topic + "\n");
   int cnt = 0;
-  bool run = true;
   while (cnt < msgcnt) {
     RdKafka::Message *msg = c->consume(1000);
     switch (msg->err())
       {
       case RdKafka::ERR__TIMED_OUT:
-        continue;
+        break;
       case RdKafka::ERR__PARTITION_EOF:
         Test::Fail(tostr() << "Consume error after " << cnt << "/" << msgcnt << " messages: " << msg->errstr());
-        run = false;
-        continue;
+        break;
 
       case RdKafka::ERR_NO_ERROR:
         /* Proper message. Updated calculated lag for later
@@ -157,6 +158,8 @@ static void do_test_consumer_lag (void) {
         Test::Fail("Consume error: " + msg->errstr());
         break;
       }
+
+    delete msg;
   }
   Test::Say("Done\n");
 

@@ -1010,7 +1010,7 @@ static int test_summary (int do_lock) {
                         break;
                 }
 
-		if (show_summary)
+		if (show_summary && test->state != TEST_SKIPPED)
 			printf("|%s %-40s | %10s | %7.3fs %s|%s\n",
 			       color,
 			       test->name, test_states[test->state],

@@ -32,6 +32,29 @@ static RD_UNUSED void rd_avg_add (rd_avg_t *ra, int64_t v) {
         mtx_unlock(&ra->ra_lock);
 }
 
+
+/**
+ * @brief Calculate the average
+ */
+static RD_UNUSED void rd_avg_calc (rd_avg_t *ra, rd_ts_t now) {
+        if (ra->ra_type == RD_AVG_GAUGE) {
+                if (ra->ra_v.cnt)
+                        ra->ra_v.avg = ra->ra_v.sum / ra->ra_v.cnt;
+                else
+                        ra->ra_v.avg = 0;
+        } else {
+                rd_ts_t elapsed = now - ra->ra_v.start;
+
+                if (elapsed)
+                        ra->ra_v.avg = (ra->ra_v.sum * 1000000llu) / elapsed;
+                else
+                        ra->ra_v.avg = 0;
+
+                ra->ra_v.start = elapsed;
+        }
+}
+
+
 /**
  * Rolls over statistics in 'src' and stores the average in 'dst'.
  * 'src' is cleared and ready to be reused.
@@ -47,21 +70,7 @@ static RD_UNUSED void rd_avg_rollover (rd_avg_t *dst,
         src->ra_v.start = now;
         mtx_unlock(&src->ra_lock);
 
-        if (dst->ra_type == RD_AVG_GAUGE) {
-                if (dst->ra_v.cnt)
-                        dst->ra_v.avg = dst->ra_v.sum / dst->ra_v.cnt;
-                else
-                        dst->ra_v.avg = 0;
-        } else {
-                rd_ts_t elapsed = now - dst->ra_v.start;
-
-                if (elapsed)
-                        dst->ra_v.avg = (dst->ra_v.sum * 1000000llu) / elapsed;
-                else
-                        dst->ra_v.avg = 0;
-
-                dst->ra_v.start = elapsed;
-        }
+        rd_avg_calc(dst, now);
 }
 
 

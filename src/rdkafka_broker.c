@@ -574,12 +574,22 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
 		      rkb->rkb_req_timeouts >=
 		      rkb->rkb_rk->rk_conf.socket_max_fails)) &&
                     rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP) {
+                        char rttinfo[32];
+                        /* Print average RTT (if avail) to help diagnose. */
+                        rd_avg_calc(&rkb->rkb_avg_rtt, now);
+                        if (rkb->rkb_avg_rtt.ra_v.avg)
+                                rd_snprintf(rttinfo, sizeof(rttinfo),
+                                            " (average rtt %.3fms)",
+                                            (float)(rkb->rkb_avg_rtt.ra_v.avg/
+                                                    1000.0f));
+                        else
+                                rttinfo[0] = 0;
                         errno = ETIMEDOUT;
                         rd_kafka_broker_fail(rkb, LOG_ERR,
                                              RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
                                              "%i request(s) timed out: "
-                                             "disconnect",
-                                             rkb->rkb_req_timeouts);
+                                             "disconnect%s",
+                                             rkb->rkb_req_timeouts, rttinfo);
                 }
         }
 }

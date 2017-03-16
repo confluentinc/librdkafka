@@ -89,7 +89,7 @@ for mode in $MODES; do
 	    RET=$?
 	    ;;
         lldb)
-            lldb -b -o run -- $TEST $ARGS
+            lldb -b -o "process launch --environment DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH" -- $TEST $ARGS
             RET=$?
             ;;
 	bash)

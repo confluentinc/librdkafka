@@ -5,7 +5,7 @@ Property                                 | C/P | Range           |       Default
 -----------------------------------------|-----|-----------------|--------------:|--------------------------
 builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4 | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
 client.id                                |  *  |                 |       rdkafka | Client identifier. <br>*Type: string*
-metadata.broker.list                     |  *  |                 |               | Initial list of brokers. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime. <br>*Type: string*
+metadata.broker.list                     |  *  |                 |               | Initial list of brokers as a CSV list of broker host or host:port. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime. <br>*Type: string*
 bootstrap.servers                        |  *  |                 |               | Alias for `metadata.broker.list`
 message.max.bytes                        |  *  | 1000 .. 1000000000 |       1000000 | Maximum transmit message size. <br>*Type: integer*
 message.copy.max.bytes                   |  *  | 0 .. 1000000000 |         65535 | Maximum size for message to be copied to buffer. Messages larger than this will be passed by reference (zero-copy) at the expense of larger iovecs. <br>*Type: integer*

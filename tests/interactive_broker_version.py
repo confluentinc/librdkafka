@@ -128,7 +128,10 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     for i in range(0, exec_cnt):
         subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
 
-    os.remove(test_conf_file)
+    try:
+        os.remove(test_conf_file)
+    except:
+        pass
 
     cluster.stop(force=True)
 

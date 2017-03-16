@@ -52,7 +52,8 @@ set(
     0057-invalid_topic.cpp
     0058-log.cpp
     0059-bsearch.cpp
-
+    0060-op_prio.cpp
+    0061-consumer_lag.cpp
     test.c
     testcpp.cpp
     sockem.c

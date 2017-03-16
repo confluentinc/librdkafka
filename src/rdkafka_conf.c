@@ -130,7 +130,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Client identifier.",
 	  .sdef =  "rdkafka" },
 	{ _RK_GLOBAL, "metadata.broker.list", _RK_C_STR, _RK(brokerlist),
-	  "Initial list of brokers. "
+	  "Initial list of brokers as a CSV list of broker host or host:port. "
 	  "The application may also use `rd_kafka_brokers_add()` to add "
 	  "brokers during runtime." },
 	{ _RK_GLOBAL, "bootstrap.servers", _RK_C_ALIAS, 0,

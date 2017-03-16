@@ -183,7 +183,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         int                 rkb_toppar_wakeup_fd; /* Toppar msgq wakeup fd,
                                                    * this is rkb_wakeup_fd[1]
                                                    * if enabled. */
-        rd_ts_t             rkb_ts_connect;       /* Last connection attempt */
+        rd_interval_t       rkb_connect_intvl;    /* Reconnect throttling */
 
 	rd_kafka_secproto_t rkb_proto;
 

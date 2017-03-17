@@ -109,16 +109,16 @@ void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
 
 	rd_kafka_assert(rkt->rkt_rk, rd_refcnt_get(&rkt->rkt_refcnt) == 0);
 
-	if (rkt->rkt_topic)
-		rd_kafkap_str_destroy(rkt->rkt_topic);
+        rd_kafka_wrlock(rkt->rkt_rk);
+        TAILQ_REMOVE(&rkt->rkt_rk->rk_topics, rkt, rkt_link);
+        rkt->rkt_rk->rk_topic_cnt--;
+        rd_kafka_wrunlock(rkt->rkt_rk);
 
         rd_kafka_assert(rkt->rkt_rk, rd_list_empty(&rkt->rkt_desp));
         rd_list_destroy(&rkt->rkt_desp);
 
-	rd_kafka_wrlock(rkt->rkt_rk);
-	TAILQ_REMOVE(&rkt->rkt_rk->rk_topics, rkt, rkt_link);
-	rkt->rkt_rk->rk_topic_cnt--;
-	rd_kafka_wrunlock(rkt->rkt_rk);
+	if (rkt->rkt_topic)
+		rd_kafkap_str_destroy(rkt->rkt_topic);
 
 	rd_kafka_anyconf_destroy(_RK_TOPIC, &rkt->rkt_conf);
 

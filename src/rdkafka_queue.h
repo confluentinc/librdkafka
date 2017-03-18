@@ -333,44 +333,53 @@ void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
  */
 static RD_INLINE RD_UNUSED
 int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
-	int r = 0;
-	if (do_lock)
-		mtx_lock(&rkq->rkq_lock);
-	if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
+        rd_kafka_q_t *tstq = srcq;
+        while (tstq->rkq_fwdq)
+                tstq = tstq->rkq_fwdq;
+
+        if (tstq->rkq_qlen == 0)
+                return 0;
+
+        int r = 0;
+        if (do_lock)
+                mtx_lock(&rkq->rkq_lock);
+        if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
                 rd_kafka_op_t *rko;
 
                 rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
-                           srcq->rkq_qlen > 0);
-		if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
+                                        srcq->rkq_qlen > 0);
+                if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
                         if (do_lock)
                                 mtx_unlock(&rkq->rkq_lock);
-			return -1;
-		}
+                        return -1;
+                }
+
                 /* First insert any prioritized ops from srcq
                  * in the right position in rkq. */
                 while ((rko = TAILQ_FIRST(&srcq->rkq_q)) && rko->rko_prio > 0) {
                         TAILQ_REMOVE(&srcq->rkq_q, rko, rko_link);
                         TAILQ_INSERT_SORTED(&rkq->rkq_q, rko,
-                                            rd_kafka_op_t *, rko_link,
-                                            rd_kafka_op_cmp_prio);
+                                                rd_kafka_op_t *, rko_link,
+                                                rd_kafka_op_cmp_prio);
                 }
 
-		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
-		if (rkq->rkq_qlen == 0 && srcq->rkq_qlen > 0)
-			rd_kafka_q_io_event(rkq);
+                TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
+                if (rkq->rkq_qlen == 0 && srcq->rkq_qlen > 0)
+                        rd_kafka_q_io_event(rkq);
                 rkq->rkq_qlen += srcq->rkq_qlen;
                 rkq->rkq_qsize += srcq->rkq_qsize;
-		cnd_signal(&rkq->rkq_cond);
+                cnd_signal(&rkq->rkq_cond);
 
                 rd_kafka_q_reset(srcq);
-	} else
-		r = rd_kafka_q_concat0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
-				       srcq->rkq_fwdq ? srcq->rkq_fwdq : srcq,
-				       rkq->rkq_fwdq ? do_lock : 0);
-	if (do_lock)
-		mtx_unlock(&rkq->rkq_lock);
+        }
+        else
+                r = rd_kafka_q_concat0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
+                                        srcq->rkq_fwdq ? srcq->rkq_fwdq : srcq,
+                                        rkq->rkq_fwdq ? do_lock : 0);
+        if (do_lock)
+                mtx_unlock(&rkq->rkq_lock);
 
-	return r;
+        return r;
 }
 
 #define rd_kafka_q_concat(dstq,srcq) rd_kafka_q_concat0(dstq,srcq,1/*lock*/)

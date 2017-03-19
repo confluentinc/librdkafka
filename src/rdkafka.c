@@ -293,7 +293,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 	_ERR_DESC(RD_KAFKA_RESP_ERR__DESTROY,
 		  "Local: Broker handle destroyed"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__FAIL,
-		  "Local: Communication failure with broker"),
+		  "Local: Communication failure with broker"), //FIXME: too specific
 	_ERR_DESC(RD_KAFKA_RESP_ERR__TRANSPORT,
 		  "Local: Broker transport failure"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,

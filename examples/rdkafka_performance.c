@@ -1265,20 +1265,19 @@ int main (int argc, char **argv) {
 			       rd_kafka_produce(rkt, partition,
 						sendflags, pbuf, msgsize,
 						key, keylen, NULL) == -1) {
-				if (errno == ESRCH)
+				rd_kafka_resp_err_t err = rd_kafka_last_error();
+				if (err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
 					printf("%% No such partition: "
-                                               "%"PRId32"\n", partition);
-				else if ((errno != ENOBUFS && verbosity >= 1) ||
-                                         verbosity >= 3)
+						   "%"PRId32"\n", partition);
+				else if (verbosity >= 3 ||
+					(err != RD_KAFKA_RESP_ERR__QUEUE_FULL && verbosity >= 1))
 					printf("%% produce error: %s%s\n",
-					       rd_kafka_err2str(
-						       rd_kafka_errno2err(
-							       errno)),
-					       errno == ENOBUFS ?
-					       " (backpressure)":"");
+						   rd_kafka_err2str(err),
+						   err == RD_KAFKA_RESP_ERR__QUEUE_FULL ?
+						   " (backpressure)" : "");
 
 				cnt.tx_err++;
-				if (errno != ENOBUFS) {
+				if (err != RD_KAFKA_RESP_ERR__QUEUE_FULL) {
 					run = 0;
 					break;
 				}

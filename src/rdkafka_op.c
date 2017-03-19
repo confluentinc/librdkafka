@@ -191,9 +191,8 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
 
 #if ENABLE_DEVEL
         rko->rko_source = source;
-#endif
-
         rd_atomic32_add(&rd_kafka_op_cnt, 1);
+#endif
 	return rko;
 }
 
@@ -304,8 +303,10 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
 	rd_kafka_replyq_destroy(&rko->rko_replyq);
 
+#if ENABLE_DEVEL
         if (rd_atomic32_sub(&rd_kafka_op_cnt, 1) < 0)
                 rd_kafka_assert(NULL, !*"rd_kafka_op_cnt < 0");
+#endif
 
 	rd_free(rko);
 }

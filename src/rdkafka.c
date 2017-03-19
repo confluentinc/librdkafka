@@ -2611,8 +2611,9 @@ static void rd_kafka_dump0 (FILE *fp, rd_kafka_t *rk, int locks) {
 
 	if (locks)
                 rd_kafka_rdlock(rk);
-
+#if ENABLE_DEVEL
         fprintf(fp, "rd_kafka_op_cnt: %d\n", rd_atomic32_get(&rd_kafka_op_cnt));
+#endif
 	fprintf(fp, "rd_kafka_t %p: %s\n", rk, rk->rk_name);
 
 	fprintf(fp, " producer.msg_cnt %u (%"PRIusz" bytes)\n",

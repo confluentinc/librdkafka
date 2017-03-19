@@ -334,9 +334,15 @@ void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 static RD_INLINE RD_UNUSED
 int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
 	int r = 0;
+
+	while (srcq->rkq_fwdq) /* Resolve source queue */
+		srcq = srcq->rkq_fwdq;
+	if (unlikely(srcq->rkq_qlen == 0))
+		return 0; /* Don't do anything if source queue is empty */
+
 	if (do_lock)
 		mtx_lock(&rkq->rkq_lock);
-	if (!rkq->rkq_fwdq && !srcq->rkq_fwdq) {
+	if (!rkq->rkq_fwdq) {
                 rd_kafka_op_t *rko;
 
                 rd_dassert(TAILQ_EMPTY(&srcq->rkq_q) ||
@@ -356,7 +362,7 @@ int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
                 }
 
 		TAILQ_CONCAT(&rkq->rkq_q, &srcq->rkq_q, rko_link);
-		if (rkq->rkq_qlen == 0 && srcq->rkq_qlen > 0)
+		if (rkq->rkq_qlen == 0)
 			rd_kafka_q_io_event(rkq);
                 rkq->rkq_qlen += srcq->rkq_qlen;
                 rkq->rkq_qsize += srcq->rkq_qsize;
@@ -365,7 +371,7 @@ int rd_kafka_q_concat0 (rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
                 rd_kafka_q_reset(srcq);
 	} else
 		r = rd_kafka_q_concat0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
-				       srcq->rkq_fwdq ? srcq->rkq_fwdq : srcq,
+				       srcq,
 				       rkq->rkq_fwdq ? do_lock : 0);
 	if (do_lock)
 		mtx_unlock(&rkq->rkq_lock);

@@ -127,7 +127,7 @@ static void msg_delivered2 (rd_kafka_t *rk,
 	       rd_kafka_err2str(rkmessage->err), rkmessage->offset);
         if (rkmessage->err)
 		fprintf(stderr, "%% Message delivery failed: %s\n",
-                        rd_kafka_message_errstr(rkmessage));
+                        rd_kafka_err2str(rkmessage->err));
 	else if (!quiet)
 		fprintf(stderr,
                         "%% Message delivered (%zd bytes, offset %"PRId64", "

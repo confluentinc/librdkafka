@@ -250,6 +250,24 @@ int rd_kafka_op_cmp_prio (const void *_a, const void *_b) {
         return b->rko_prio - a->rko_prio;
 }
 
+
+/**
+ * @brief Low-level unprotected enqueue that only performs
+ *        the actual queue enqueue and counter updates.
+ * @remark Will not perform locking, signaling, fwdq, READY checking, etc.
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_q_enq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
+    if (likely(!rko->rko_prio))
+        TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
+    else
+        TAILQ_INSERT_SORTED(&rkq->rkq_q, rko, rd_kafka_op_t *,
+                            rko_link, rd_kafka_op_cmp_prio);
+    rkq->rkq_qlen++;
+    rkq->rkq_qsize += rko->rko_len;
+}
+
+
 /**
  * @brief Enqueue the 'rko' op at the tail of the queue 'rkq'.
  *
@@ -284,13 +302,7 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         }
 
 	if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
-                if (likely(!rko->rko_prio))
-                        TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
-                else
-                        TAILQ_INSERT_SORTED(&rkq->rkq_q, rko, rd_kafka_op_t *,
-                                            rko_link, rd_kafka_op_cmp_prio);
-                rkq->rkq_qlen++;
-                rkq->rkq_qsize += rko->rko_len;
+		rd_kafka_q_enq0(rkq, rko);
 		cnd_signal(&rkq->rkq_cond);
 		if (rkq->rkq_qlen == 1)
 			rd_kafka_q_io_event(rkq);

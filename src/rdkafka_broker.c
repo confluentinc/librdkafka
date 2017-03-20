@@ -3549,6 +3549,8 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 /**
  * Parses a MessageSet and enqueues internal ops on the local
  * application queue for each Message.
+ * @remark rkq must be a temporary unforwarded queue
+ *         that requires no locking.
  */
 static rd_kafka_resp_err_t
 rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,

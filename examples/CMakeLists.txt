@@ -1,6 +1,9 @@
 add_executable(rdkafka_example rdkafka_example.c)
 target_link_libraries(rdkafka_example PUBLIC rdkafka)
 
+add_executable(rdkafka_simple_producer rdkafka_simple_producer.c)
+target_link_libraries(rdkafka_simple_producer PUBLIC rdkafka)
+
 add_executable(rdkafka_consumer_example rdkafka_consumer_example.c)
 target_link_libraries(rdkafka_consumer_example PUBLIC rdkafka)
 

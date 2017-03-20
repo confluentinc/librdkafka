@@ -213,7 +213,10 @@ static RD_INLINE RD_UNUSED void *rd_memdup (const void *src, size_t size) {
 /**
  * Generic refcnt interface
  */
+#ifndef _MSC_VER
+/* Mutexes (critical sections) are slow, even when uncontended, on Windows */
 #define RD_REFCNT_USE_LOCKS 1
+#endif
 
 #ifdef RD_REFCNT_USE_LOCKS
 typedef struct rd_refcnt_t {

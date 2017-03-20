@@ -631,9 +631,15 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	int r;
 	SSL_CTX *ctx;
 
+        if (errstr_size > 0)
+                errstr[0] = '\0';
+
 	ctx = SSL_CTX_new(SSLv23_client_method());
-	if (!ctx)
-		goto fail;
+        if (!ctx) {
+                rd_snprintf(errstr, errstr_size,
+                            "SSLv23_client_method() failed: ");
+                goto fail;
+        }
 
 #ifdef SSL_OP_NO_SSLv3
 	/* Disable SSLv3 (unsafe) */
@@ -651,9 +657,12 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 			     rk->rk_conf.ssl.cipher_suites);
 		if (!SSL_CTX_set_cipher_list(ctx,
 					     rk->rk_conf.ssl.cipher_suites)) {
-			rd_snprintf(errstr, errstr_size,
-				    "No recognized ciphers");
-			goto fail;
+                        /* Set a string that will prefix the
+                         * the OpenSSL error message (which is lousy)
+                         * to make it more meaningful. */
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.cipher.suites failed: ");
+                        goto fail;
 		}
 	}
 
@@ -675,8 +684,11 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 						  rk->rk_conf.ssl.
 						  ca_location : NULL);
 
-		if (r != 1)
-			goto fail;
+                if (r != 1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.ca.location failed: ");
+                        goto fail;
+                }
 	}
 
 	if (rk->rk_conf.ssl.crl_location) {
@@ -688,8 +700,11 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 						  rk->rk_conf.ssl.crl_location,
 						  NULL);
 
-		if (r != 1)
-			goto fail;
+                if (r != 1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.crl.location failed: ");
+                        goto fail;
+                }
 
 
 		rd_kafka_dbg(rk, SECURITY, "SSL",
@@ -707,8 +722,11 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		r = SSL_CTX_use_certificate_chain_file(ctx,
 						       rk->rk_conf.ssl.cert_location);
 
-		if (r != 1)
-			goto fail;
+                if (r != 1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.certificate.location failed: ");
+                        goto fail;
+                }
 	}
 
 	if (rk->rk_conf.ssl.key_location) {
@@ -719,8 +737,11 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		r = SSL_CTX_use_PrivateKey_file(ctx,
 						rk->rk_conf.ssl.key_location,
 						SSL_FILETYPE_PEM);
-		if (r != 1)
-			goto fail;
+                if (r != 1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.key.location failed: ");
+                        goto fail;
+                }
 	}
 
 
@@ -730,7 +751,9 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	return 0;
 
  fail:
-	rd_kafka_ssl_error(rk, NULL, errstr, errstr_size);
+        r = (int)strlen(errstr);
+        rd_kafka_ssl_error(rk, NULL, errstr+r,
+                           (int)errstr_size > r ? (int)errstr_size - r : 0);
 	SSL_CTX_free(ctx);
 
 	return -1;

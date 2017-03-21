@@ -40,32 +40,48 @@ static std::string topic;
 class StatsCb : public RdKafka::EventCb {
  public:
   int64_t calc_lag; //calculated lag
+  int lag_valid;  // number of times lag has been valid
 
   StatsCb() {
     calc_lag = -1;
+    lag_valid = 0;
   }
 
+  /**
+   * @brief Event callback
+   */
   void event_cb (RdKafka::Event &event) {
     if (event.type() == RdKafka::Event::EVENT_LOG) {
       Test::Say(tostr() << "LOG-" << event.severity() << "-" << event.fac() <<
                 ": " << event.str() << "\n");
       return;
-    } else if (event.type() != RdKafka::Event::EVENT_STATS)
+    } else if (event.type() != RdKafka::Event::EVENT_STATS) {
+      Test::Say(tostr() << "Dropping event " << event.type() << "\n");
       return;
+    }
 
     int64_t consumer_lag = parse_json(event.str().c_str());
 
     Test::Say(3, tostr() << "Stats: consumer_lag is " << consumer_lag << "\n");
-    if (consumer_lag != calc_lag)
+    if (consumer_lag == -1) {
+      Test::Say(2, "Skipping old stats with invalid consumer_lag\n");
+      return; /* Old stats generated before first message consumed */
+    } else if (consumer_lag != calc_lag)
       Test::Fail(tostr() << "Stats consumer_lag " << consumer_lag << ", expected " << calc_lag << "\n");
+    else
+      lag_valid++;
   }
 
-  /* Naiive JSON parsing, find the consumer_lag for partition 0
-   * and return it. */
+
+  /**
+   * @brief Naiive JSON parsing, find the consumer_lag for partition 0
+   * and return it.
+   */
   static int64_t parse_json (const char *json_doc) {
     const std::string match_topic(std::string("\"") + topic + "\":");
-    const char *search[] = { "\"topic\":",
+    const char *search[] = { "\"topics\":",
                              match_topic.c_str(),
+                             "\"partitions\":",
                              "\"0\":",
                              "\"consumer_lag\":",
                              NULL };
@@ -75,7 +91,8 @@ class StatsCb : public RdKafka::EventCb {
       const char *t = strstr(remain, *sp);
       if (!t)
         Test::Fail(tostr() << "Couldnt find " << *sp <<
-                   " in remaining stats output:\n" << remain);
+                   " in remaining stats output:\n" << remain <<
+                   "\n====================\n" << json_doc << "\n");
       remain = t + strlen(*sp);
     }
 
@@ -85,7 +102,11 @@ class StatsCb : public RdKafka::EventCb {
     if (!*remain)
       Test::Fail("Nothing following consumer_lag");
 
-    return strtoull(remain, NULL, 0);
+    int64_t lag = strtoull(remain, NULL, 0);
+    if (lag == -1)
+      Test::Say(tostr() << "Consumer lag " << lag << " is invalid, stats:\n" <<
+                json_doc << "\n");
+    return lag;
   }
 };
 
@@ -161,7 +182,10 @@ static void do_test_consumer_lag (void) {
 
     delete msg;
   }
-  Test::Say("Done\n");
+  Test::Say(tostr() << "Done, lag was valid " <<
+            stats.lag_valid << " times\n");
+  if (stats.lag_valid == 0)
+    Test::Fail("No valid consumer_lag in statistics seen");
 
   c->close();
   delete c;

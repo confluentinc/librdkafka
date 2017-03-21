@@ -867,3 +867,49 @@ void rd_kafka_q_fix_offsets (rd_kafka_q_t *rkq, int64_t min_offset,
 	rkq->rkq_qlen  -= adj_len;
 	rkq->rkq_qsize -= adj_size;
 }
+
+
+/**
+ * @brief Print information and contents of queue
+ */
+void rd_kafka_q_dump (FILE *fp, rd_kafka_q_t *rkq) {
+        mtx_lock(&rkq->rkq_lock);
+        fprintf(fp, "Queue %p \"%s\" (refcnt %d, flags 0x%x, %d ops, "
+                "%"PRId64" bytes)\n",
+                rkq, rkq->rkq_name, rkq->rkq_refcnt, rkq->rkq_flags,
+                rkq->rkq_qlen, rkq->rkq_qsize);
+
+        if (rkq->rkq_qio)
+                fprintf(fp, " QIO fd %d\n", rkq->rkq_qio->fd);
+        if (rkq->rkq_serve)
+                fprintf(fp, " Serve callback %p, opaque %p\n",
+                        rkq->rkq_serve, rkq->rkq_opaque);
+
+        if (rkq->rkq_fwdq) {
+                fprintf(fp, " Forwarded ->\n");
+                rd_kafka_q_dump(fp, rkq->rkq_fwdq);
+        } else {
+                rd_kafka_op_t *rko;
+
+                if (!TAILQ_EMPTY(&rkq->rkq_q))
+                        fprintf(fp, " Queued ops:\n");
+                TAILQ_FOREACH(rko, &rkq->rkq_q, rko_link) {
+                        fprintf(fp, "  %p %s (v%"PRId32", flags 0x%x, "
+                                "prio %d, len %"PRId32", source %s, "
+                                "replyq %p)\n",
+                                rko, rd_kafka_op2str(rko->rko_type),
+                                rko->rko_version, rko->rko_flags,
+                                rko->rko_prio, rko->rko_len,
+                                #if ENABLE_DEVEL
+                                rko->rko_source
+                                #else
+                                "-"
+                                #endif
+                                ,
+                                rko->rko_replyq.q
+                                );
+                }
+        }
+
+        mtx_unlock(&rkq->rkq_lock);
+}

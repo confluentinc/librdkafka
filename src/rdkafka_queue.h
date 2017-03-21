@@ -671,5 +671,6 @@ struct rd_kafka_queue_s {
 };
 
 
+void rd_kafka_q_dump (FILE *fp, rd_kafka_q_t *rkq);
 
 extern int RD_TLS rd_kafka_yield_thread;

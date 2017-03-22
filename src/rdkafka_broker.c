@@ -2939,16 +2939,18 @@ static int rd_kafka_broker_cmp_by_id (const void *_a, const void *_b) {
 
 
 /**
- * Serve a broker op (an op posted by another thread to be handled by
- * this broker's thread).
+ * @brief Serve a broker op (an op posted by another thread to be handled by
+ *        this broker's thread).
  *
- * Locality: broker thread
- * Locks: none
+ * @returns 0 if calling op loop should break out, else 1 to continue.
+ * @locality broker thread
+ * @locks none
  */
-static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
+static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 				      rd_kafka_op_t *rko) {
         shptr_rd_kafka_toppar_t *s_rktp;
         rd_kafka_toppar_t *rktp;
+        int ret = 1;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
@@ -3213,6 +3215,7 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 /* nop: just a wake-up. */
                 if (rkb->rkb_blocking_max_ms > 1)
                         rkb->rkb_blocking_max_ms = 1; /* Speed up termination*/
+                ret = 0;
                 break;
 
         default:
@@ -3222,25 +3225,33 @@ static void rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
         if (rko)
                 rd_kafka_op_destroy(rko);
+
+        return ret;
 }
 
 
 /**
- * Serve broker ops and IOs.
+ * @brief Serve broker ops and IOs.
  *
- * Locality: broker thread
- * Locks: none
+ * @param abs_timeout Maximum block time (absolute time).
+ *
+ * @locality broker thread
+ * @locks none
  */
-static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
+static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb,
+                                   rd_ts_t abs_timeout) {
         rd_kafka_op_t *rko;
         rd_ts_t now;
         int initial_state = rkb->rkb_state;
+        int remains_ms = rd_timeout_remains(abs_timeout);
 
         /* Serve broker ops */
         while ((rko = rd_kafka_q_pop(rkb->rkb_ops,
-                                     !rkb->rkb_transport ? timeout_ms :
-                                     RD_POLL_NOWAIT, 0)))
-                rd_kafka_broker_op_serve(rkb, rko);
+                                     !rkb->rkb_transport ?
+                                     remains_ms : RD_POLL_NOWAIT,
+                                     0))
+               && rd_kafka_broker_op_serve(rkb, rko))
+                remains_ms = RD_POLL_NOWAIT;
 
         /* If the broker state changed in op_serve() we minimize
          * the IO timeout since our caller might want to exit out of
@@ -3250,9 +3261,13 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 
                 if ((int)rkb->rkb_state != initial_state)
                         blocking_max_ms = 0;
-                else
-                        blocking_max_ms = RD_MIN(rkb->rkb_blocking_max_ms,
-                                                 timeout_ms);
+                else {
+                        int remains_ms = rd_timeout_remains(abs_timeout);
+                        if (remains_ms == RD_POLL_INFINITE ||
+                            remains_ms > rkb->rkb_blocking_max_ms)
+                                remains_ms = rkb->rkb_blocking_max_ms;
+                        blocking_max_ms = remains_ms;
+                }
 
                 /* Serve IO events */
                 rd_kafka_transport_io_serve(rkb->rkb_transport,
@@ -3288,8 +3303,14 @@ static void rd_kafka_broker_toppars_serve (rd_kafka_broker_t *rkb) {
  */
 static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb, int timeout_ms) {
         int initial_state = rkb->rkb_state;
-        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
-        int remains_ms;
+        rd_ts_t abs_timeout;
+
+        if (rd_kafka_terminating(rkb->rkb_rk))
+                timeout_ms = 1;
+        else if (timeout_ms == RD_POLL_INFINITE)
+                timeout_ms = rkb->rkb_blocking_max_ms;
+
+        abs_timeout = rd_timeout_init(timeout_ms);
 
         /* Since ua_idle is used during connection setup
          * in state ..BROKER_STATE_CONNECT we only run this loop
@@ -3298,14 +3319,10 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb, int timeout_ms) {
          * should be used instead. */
         while (!rd_kafka_broker_terminating(rkb) &&
                (int)rkb->rkb_state == initial_state &&
-               !rd_timeout_expired((remains_ms =
-                                    rd_timeout_remains(abs_timeout)))) {
+               !rd_timeout_expired(rd_timeout_remains(abs_timeout))) {
 
                 rd_kafka_broker_toppars_serve(rkb);
-
-                rd_kafka_broker_serve(rkb,
-                                      remains_ms == RD_POLL_INFINITE ? 1000 :
-                                      RD_MIN(1000, remains_ms));
+                rd_kafka_broker_serve(rkb, abs_timeout);
         }
 }
 
@@ -3455,7 +3472,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 
                 rkb->rkb_blocking_max_ms = (int)
                         (next_wakeup > now ? (next_wakeup - now) / 1000 : 0);
-		rd_kafka_broker_serve(rkb, rkb->rkb_blocking_max_ms);
+		rd_kafka_broker_serve(rkb, next_wakeup);
 
 		rd_kafka_broker_lock(rkb);
 	}
@@ -4617,7 +4634,8 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
 		if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
 			rd_kafka_broker_retry_bufs_move(rkb);
 
-		rd_kafka_broker_serve(rkb, rkb->rkb_blocking_max_ms);
+		rd_kafka_broker_serve(rkb,
+                                      now + (rkb->rkb_blocking_max_ms * 1000));
 
 		rd_kafka_broker_lock(rkb);
 	}

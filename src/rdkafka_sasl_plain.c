@@ -104,10 +104,25 @@ int rd_kafka_sasl_plain_client_new (rd_kafka_transport_t *rktrans,
 }
 
 
+/**
+ * @brief Validate PLAIN config
+ */
+static int rd_kafka_sasl_plain_conf_validate (rd_kafka_t *rk,
+                                              char *errstr,
+                                              size_t errstr_size) {
+        if (!rk->rk_conf.sasl.username || !rk->rk_conf.sasl.password) {
+                rd_snprintf(errstr, errstr_size,
+                            "sasl.username and sasl.password must be set");
+                return -1;
+        }
+
+        return 0;
+}
 
 
 const struct rd_kafka_sasl_provider rd_kafka_sasl_plain_provider = {
         .name          = "PLAIN (builtin)",
         .client_new    = rd_kafka_sasl_plain_client_new,
         .recv          = rd_kafka_sasl_plain_recv,
+        .conf_validate = rd_kafka_sasl_plain_conf_validate
 };

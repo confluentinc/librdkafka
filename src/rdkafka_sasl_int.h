@@ -61,6 +61,10 @@ int rd_kafka_sasl_cyrus_global_init (void);
 extern const struct rd_kafka_sasl_provider rd_kafka_sasl_plain_provider;
 #endif
 
+#if WITH_SASL_SCRAM
+extern const struct rd_kafka_sasl_provider rd_kafka_sasl_scram_provider;
+#endif
+
 void rd_kafka_sasl_auth_done (rd_kafka_transport_t *rktrans);
 int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
                         const void *payload, int len,

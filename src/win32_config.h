@@ -36,4 +36,5 @@
 #define WITH_SNAPPY 1
 #define WITH_LZ4 1
 #define WITH_SASL_BUILTIN 1
+#define WITH_SASL_SCRAM 1
 #define ENABLE_DEVEL 0

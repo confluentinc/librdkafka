@@ -67,8 +67,8 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     mech = defconf.get('sasl_mechanisms', '').split(',')[0]
     if mech != '':
         os.write(fd, ('sasl.mechanisms=%s\n' % mech).encode('ascii'))
-        if mech == 'PLAIN':
-            print('# Writing SASL PLAIN client config to %s' % test_conf_file)
+        if mech == 'PLAIN' or mech.find('SCRAM') != -1:
+            print('# Writing SASL %s client config to %s' % (mech, test_conf_file))
             security_protocol='SASL_PLAINTEXT'
             # Use first user as SASL user/pass
             for up in defconf.get('sasl_users', '').split(','):
@@ -160,7 +160,7 @@ if __name__ == '__main__':
     parser.add_argument('--brokers', dest='broker_cnt', type=int, default=3, help='Number of Kafka brokers')
     parser.add_argument('--ssl', dest='ssl', action='store_true', default=False,
                         help='Enable SSL endpoints')
-    parser.add_argument('--sasl', dest='sasl', type=str, default=None, help='SASL mechanism (PLAIN, GSSAPI)')
+    parser.add_argument('--sasl', dest='sasl', type=str, default=None, help='SASL mechanism (PLAIN, SCRAM-SHA-nnn, GSSAPI)')
 
     args = parser.parse_args()
     if args.conf is not None:
@@ -175,7 +175,7 @@ if __name__ == '__main__':
     if args.ssl:
         args.conf['security.protocol'] = 'SSL'
     if args.sasl:
-        if args.sasl == 'PLAIN' and 'sasl_users' not in args.conf:
+        if (args.sasl == 'PLAIN' or args.sasl.find('SCRAM') != -1) and 'sasl_users' not in args.conf:
             args.conf['sasl_users'] = 'testuser=testpass'
         args.conf['sasl_mechanisms'] = args.sasl
 

@@ -40,9 +40,9 @@
 
 static mtx_t rd_kafka_sasl_cyrus_kinit_lock;
 
-struct rd_kafka_sasl_state_s {
+typedef struct rd_kafka_sasl_cyrus_state_s {
         sasl_conn_t *conn;
-};
+} rd_kafka_sasl_cyrus_state_t;
 
 
 
@@ -52,7 +52,7 @@ struct rd_kafka_sasl_state_s {
 static int rd_kafka_sasl_cyrus_recv (struct rd_kafka_transport_s *rktrans,
                                      const void *buf, size_t size,
                                      char *errstr, size_t errstr_size) {
-        rd_kafka_sasl_state_t *state = rktrans->rktrans_sasl.state;
+        rd_kafka_sasl_cyrus_state_t *state = rktrans->rktrans_sasl.state;
         int r;
 
         if (rktrans->rktrans_sasl.complete && size == 0)
@@ -392,9 +392,14 @@ rd_kafka_sasl_cyrus_cb_canon (sasl_conn_t *conn,
 
 
 static void rd_kafka_sasl_cyrus_close (struct rd_kafka_transport_s *rktrans) {
-        if (rktrans->rktrans_sasl.state->conn)
-                sasl_dispose(&rktrans->rktrans_sasl.state->conn);
-        rd_free(rktrans->rktrans_sasl.state);
+        rd_kafka_sasl_cyrus_state_t *state = rktrans->rktrans_sasl.state;
+
+        if (!state)
+                return;
+
+        if (state->conn)
+                sasl_dispose(&state->conn);
+        rd_free(state);
 }
 
 
@@ -409,7 +414,7 @@ static int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
                                            const char *hostname,
                                            char *errstr, size_t errstr_size) {
         int r;
-        rd_kafka_sasl_state_t *state;
+        rd_kafka_sasl_cyrus_state_t *state;
         rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
         rd_kafka_t *rk = rkb->rkb_rk;
         sasl_callback_t callbacks[16] = {

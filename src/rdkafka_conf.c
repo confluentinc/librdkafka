@@ -127,6 +127,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SASL_CYRUS || WITH_SASL_BUILTIN
                 { 0x80, "sasl_plain" },
 #endif
+                { 0x100, "sasl_scram" },
 		{ 0, NULL }
 		}
 	},
@@ -438,7 +439,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{_RK_GLOBAL,"sasl.mechanisms", _RK_C_STR,
 	 _RK(sasl.mechanisms),
 	 "SASL mechanism to use for authentication. "
-	 "Supported: GSSAPI, PLAIN. "
+	 "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512. "
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
 	 .validate = rd_kafka_conf_validate_single },
@@ -471,10 +472,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
 	{ _RK_GLOBAL, "sasl.username", _RK_C_STR,
 	  _RK(sasl.username),
-	  "SASL username for use with the PLAIN mechanism" },
+	  "SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms" },
 	{ _RK_GLOBAL, "sasl.password", _RK_C_STR,
 	  _RK(sasl.password),
-	  "SASL password for use with the PLAIN mechanism" },
+	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
 
         /* Global client group properties */
         { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,

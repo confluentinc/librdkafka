@@ -117,9 +117,15 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
 
         r = rd_kafka_transport_framed_recvmsg(rktrans, &rkbuf,
                                               errstr, errstr_size);
-        if (r == -1)
+        if (r == -1) {
+                if (!strcmp(errstr, "Disconnected"))
+                        rd_snprintf(errstr, errstr_size,
+                                    "Disconnected: check client %s credentials "
+                                    "and broker logs",
+                                    rktrans->rktrans_rkb->rkb_rk->rk_conf.
+                                    sasl.mechanisms);
                 return -1;
-        else if (r == 0) /* not fully received yet */
+        } else if (r == 0) /* not fully received yet */
                 return 0;
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
@@ -258,9 +264,16 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
                 /* SASL PLAIN */
 #if WITH_SASL_CYRUS
                 provider = &rd_kafka_sasl_cyrus_provider;
-#else
+#elif WITH_SASL_BUILTIN
                 provider = &rd_kafka_sasl_plain_provider;
 #endif
+        } else if (!strncmp(rk->rk_conf.sasl.mechanisms, "SCRAM-SHA-",
+                            strlen("SCRAM-SHA-"))) {
+                /* SASL SCRAM */
+#if WITH_SASL_SCRAM
+                provider = &rd_kafka_sasl_scram_provider;
+#endif
+
         } else {
                 /* Unsupported mechanism */
                 rd_snprintf(errstr, errstr_size,
@@ -274,7 +287,17 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
                             "No provider for SASL mechanism %s"
 #ifndef _MSC_VER
                             ": recompile librdkafka with "
-                            "libsasl2/cyrus support"
+                            "libsasl2 or openssl support. "
+                            "Current build options:"
+#if WITH_SASL_CYRUS
+                            " SASL_CYRUS"
+#endif
+#if WITH_SASL_BUILTIN
+                            " SASL_BUILTIN(PLAIN)"
+#endif
+#if WITH_SASL_SCRAM
+                            " SASL_SCRAM"
+#endif
 #endif
                             ,
                             rk->rk_conf.sasl.mechanisms);

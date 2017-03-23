@@ -37,8 +37,6 @@
 #include <openssl/err.h>
 #endif
 
-typedef struct rd_kafka_sasl_state_s rd_kafka_sasl_state_t;
-
 struct rd_kafka_transport_s {	
 	int rktrans_s;
 	
@@ -49,8 +47,8 @@ struct rd_kafka_transport_s {
 #endif
 
 	struct {
-                rd_kafka_sasl_state_t *state; /* SASL implementation
-                                               * state handle */
+                void *state;               /* SASL implementation
+                                            * state handle */
 
                 int           complete;    /* Auth was completed early
 					    * from the client's perspective

@@ -1419,8 +1419,9 @@ rd_kafka_broker_handle_SaslHandshake (rd_kafka_t *rk,
  err:
 	rd_kafka_broker_fail(rkb, LOG_ERR,
 			     RD_KAFKA_RESP_ERR__AUTHENTICATION,
-			     "SASL mechanism handshake failed: %s: "
+			     "SASL %s mechanism handshake failed: %s: "
 			     "broker's supported mechanisms: %s",
+                             rkb->rkb_rk->rk_conf.sasl.mechanisms,
 			     rd_kafka_err2str(err), mechs);
 }
 

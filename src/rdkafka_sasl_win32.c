@@ -138,7 +138,7 @@ rd_kafka_sasl_sspi_cred_new (rd_kafka_transport_t *rktrans,
 static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
                                         const void *inbuf, size_t insize,
                                         char *errstr, size_t errstr_size) {
-        rd_kafka_sasl_state_t *state = rktrans->rktrans_sasl.state;
+        rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
         SecBufferDesc outbufdesc, inbufdesc;
         SecBuffer outsecbuf, insecbuf;
         BYTE outbuf[RD_KAFKA_SSPI_MAX_TOKEN_SIZE];
@@ -234,7 +234,7 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
                                               char *errstr,
                                               size_t errstr_size,
                                               SecBuffer *server_token) {
-        rd_kafka_sasl_state_t *state = rktrans->rktrans_sasl.state;
+        rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
         SECURITY_STATUS sr;
         SecBuffer in_buffer;
         SecBuffer out_buffer;
@@ -365,7 +365,7 @@ static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
                                                size_t insize,
                                                char *errstr,
                                                size_t errstr_size) {
-        rd_kafka_sasl_state_t *state = rktrans->rktrans_sasl.state;
+        rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
         SecBuffer buffers[2];
         SecBufferDesc buffer_desc;
         SECURITY_STATUS sr;
@@ -427,7 +427,7 @@ static int rd_kafka_sasl_win32_validate_token (rd_kafka_transport_t *rktrans,
 static int rd_kafka_sasl_win32_recv (struct rd_kafka_transport_s *rktrans,
                                      const void *buf, size_t size,
                                      char *errstr, size_t errstr_size) {
-        rd_kafka_sasl_state_t *state = rktrans->rktrans_sasl.state;
+        rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
 
         if (rktrans->rktrans_sasl.complete) {
                 if (rd_kafka_sasl_win32_validate_token(
@@ -452,7 +452,11 @@ static int rd_kafka_sasl_win32_recv (struct rd_kafka_transport_s *rktrans,
 * @brief Decommission SSPI state
 */
 static void rd_kafka_sasl_win32_close (rd_kafka_transport_t *rktrans) {
-        rd_kafka_sasl_state_t *state = rktrans->rktrans_sasl.state;
+        rd_kafka_sasl_win32_state_t *state = rktrans->rktrans_sasl.state;
+
+        if (!state)
+                return;
+
         if (state->ctx) {
                 DeleteSecurityContext(state->ctx);
                 rd_free(state->ctx);
@@ -469,7 +473,7 @@ static int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
                                            const char *hostname,
                                            char *errstr, size_t errstr_size) {
         rd_kafka_t *rk = rktrans->rktrans_rkb->rkb_rk;
-        rd_kafka_sasl_state_t *state;
+        rd_kafka_sasl_win32_state_t *state;
 
         if (strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI")) {
                 rd_snprintf(errstr, errstr_size,

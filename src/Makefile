@@ -11,6 +11,7 @@ endif
 
 SRCS_$(WITH_SASL_CYRUS) += rdkafka_sasl_cyrus.c
 SRCS_$(WITH_SASL_BUILTIN) += rdkafka_sasl_plain.c
+SRCS_$(WITH_SASL_SCRAM) += rdkafka_sasl_scram.c
 SRCS_$(WITH_SNAPPY) += snappy.c
 SRCS_$(WITH_ZLIB) += rdgz.c
 SRCS_$(WITH_LZ4) += xxhash.c

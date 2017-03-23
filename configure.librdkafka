@@ -70,9 +70,12 @@ function checks {
 
     if [[ "$ENABLE_SASL" == "y" ]]; then
         mkl_meta_set "libsasl2" "deb" "libsasl2-dev"
-        if ! mkl_lib_check "libsasl2" "WITH_SASL" disable CC "-lsasl2" "#include <sasl/sasl.h>" ; then
-	    mkl_lib_check "libsasl" "WITH_SASL" disable CC "-lsasl" \
+        if ! mkl_lib_check "libsasl2" "WITH_SASL_CYRUS" disable CC "-lsasl2" "#include <sasl/sasl.h>" ; then
+	    mkl_lib_check "libsasl" "WITH_SASL_CYRUS" disable CC "-lsasl" \
                           "#include <sasl/sasl.h>"
+        fi
+        if [[ "$WITH_SASL_CYRUS" != "y" ]]; then
+            mkl_allvar_set WITH_SASL_BUILTIN WITH_SASL_BUILTIN y
         fi
     fi
 

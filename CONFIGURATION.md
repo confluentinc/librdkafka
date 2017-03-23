@@ -3,7 +3,7 @@
 
 Property                                 | C/P | Range           |       Default | Description              
 -----------------------------------------|-----|-----------------|--------------:|--------------------------
-builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4 | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
+builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4, sasl_gssapi, sasl_plain | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
 client.id                                |  *  |                 |       rdkafka | Client identifier. <br>*Type: string*
 metadata.broker.list                     |  *  |                 |               | Initial list of brokers as a CSV list of broker host or host:port. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime. <br>*Type: string*
 bootstrap.servers                        |  *  |                 |               | Alias for `metadata.broker.list`

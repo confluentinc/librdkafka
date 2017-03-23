@@ -59,11 +59,11 @@
 /**
  * @brief Per-connection SASL state
  */
-struct rd_kafka_sasl_state_s {
+typedef struct rd_kafka_sasl_win32_state_s {
         CredHandle *cred;
         CtxtHandle *ctx;
         wchar_t principal[512];
-};
+} rd_kafka_sasl_win32_state_t;
 
 
 /**
@@ -111,7 +111,7 @@ rd_kafka_sasl_sspi_cred_new (rd_kafka_transport_t *rktrans,
         TimeStamp expiry = { 0, 0 };
         SECURITY_STATUS sr;
         CredHandle *cred = rd_calloc(1, sizeof(*cred));
-        
+
         sr = AcquireCredentialsHandle(
                 NULL, __TEXT("Kerberos"), SECPKG_CRED_OUTBOUND,
                 NULL, NULL, NULL, NULL, cred, &expiry);
@@ -239,7 +239,7 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
         SecBuffer in_buffer;
         SecBuffer out_buffer;
         SecBuffer buffers[4];
-        SecBufferDesc buffer_desc;        
+        SecBufferDesc buffer_desc;
         SecPkgContext_Sizes sizes;
         SecPkgCredentials_NamesA names;
         int send_response;
@@ -465,9 +465,9 @@ static void rd_kafka_sasl_win32_close (rd_kafka_transport_t *rktrans) {
 }
 
 
-int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
-                                    const char *hostname,
-                                    char *errstr, size_t errstr_size) {
+static int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
+                                           const char *hostname,
+                                           char *errstr, size_t errstr_size) {
         rd_kafka_t *rk = rktrans->rktrans_rkb->rkb_rk;
         rd_kafka_sasl_state_t *state;
 
@@ -480,8 +480,6 @@ int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
 
         state = rd_calloc(1, sizeof(*state));
         rktrans->rktrans_sasl.state = state;
-        rktrans->rktrans_sasl.recv = rd_kafka_sasl_win32_recv;
-        rktrans->rktrans_sasl.close = rd_kafka_sasl_win32_close;
 
         _snwprintf(state->principal, RD_ARRAYSIZE(state->principal),
                    L"%hs/%hs",
@@ -499,3 +497,11 @@ int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
 
         return 0;
 }
+
+
+struct rd_kafka_sasl_provider rd_kafka_sasl_win32_provider = {
+        .name          = "Win32 SSPI",
+        .client_new    = rd_kafka_sasl_win32_client_new,
+        .recv          = rd_kafka_sasl_win32_recv,
+        .close         = rd_kafka_sasl_win32_close,
+};

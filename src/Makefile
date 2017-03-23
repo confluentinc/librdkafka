@@ -9,7 +9,8 @@ ifneq ($(wildcard ../.git),)
 CPPFLAGS += -DLIBRDKAFKA_GIT_VERSION="\"$(shell git describe --abbrev=6 --dirty --tags 2>/dev/null)\""
 endif
 
-SRCS_$(WITH_SASL) += rdkafka_sasl.c rdkafka_sasl_cyrus.c
+SRCS_$(WITH_SASL_CYRUS) += rdkafka_sasl_cyrus.c
+SRCS_$(WITH_SASL_BUILTIN) += rdkafka_sasl_plain.c
 SRCS_$(WITH_SNAPPY) += snappy.c
 SRCS_$(WITH_ZLIB) += rdgz.c
 SRCS_$(WITH_LZ4) += xxhash.c
@@ -28,6 +29,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdcrc32.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
 		rdlog.c rdstring.c rdkafka_event.c rdkafka_metadata.c \
 		rdregex.c rdports.c rdkafka_metadata_cache.c rdavl.c \
+		rdkafka_sasl.c \
 		$(SRCS_y)
 
 HDRS=		rdkafka.h

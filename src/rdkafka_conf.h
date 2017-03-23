@@ -101,18 +101,17 @@ struct rd_kafka_conf_s {
 	} ssl;
 #endif
 
-#if WITH_SASL
-	struct {
-		char *principal;
-		char *mechanisms;
-		char *service_name;
-		char *kinit_cmd;
-		char *keytab;
-		int   relogin_min_time;
-		char *username;
-		char *password;
-	} sasl;
-#endif
+        struct {
+                struct rd_kafka_sasl_provider *provider;
+                char *principal;
+                char *mechanisms;
+                char *service_name;
+                char *kinit_cmd;
+                char *keytab;
+                int   relogin_min_time;
+                char *username;
+                char *password;
+        } sasl;
 
 
         /* Client group configuration */

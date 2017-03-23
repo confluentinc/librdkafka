@@ -96,10 +96,7 @@ void rd_kafka_transport_close (rd_kafka_transport_t *rktrans) {
 	}
 #endif
 
-#if WITH_SASL
-        if (rktrans->rktrans_sasl.close)
-                rktrans->rktrans_sasl.close(rktrans);
-#endif
+        rd_kafka_sasl_close(rktrans);
 
 	if (rktrans->rktrans_recv_buf)
 		rd_kafka_buf_destroy(rktrans->rktrans_recv_buf);
@@ -1062,7 +1059,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		break;
 
 	case RD_KAFKA_BROKER_STATE_AUTH:
-#if WITH_SASL
 		/* SASL handshake */
 		if (rd_kafka_sasl_io_event(rktrans, events,
 					   errstr, sizeof(errstr)) == -1) {
@@ -1073,7 +1069,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 					     errstr);
 			return;
 		}
-#endif
 		break;
 
 	case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:

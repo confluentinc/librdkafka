@@ -116,12 +116,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SSL
 		{ 0x4, "ssl" },
 #endif
-#if WITH_SASL
-		{ 0x8, "sasl" },
-#endif
+                { 0x8, "sasl" },
 		{ 0x10, "regex" },
 #if WITH_LZ4
 		{ 0x20, "lz4" },
+#endif
+#if defined(_MSC_VER) || WITH_SASL_CYRUS
+                { 0x40, "sasl_gssapi" },
+#endif
+#if WITH_SASL_CYRUS || WITH_SASL_BUILTIN
+                { 0x80, "sasl_plain" },
 #endif
 		{ 0, NULL }
 		}
@@ -392,11 +396,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SSL
 			{ RD_KAFKA_PROTO_SSL, "ssl" },
 #endif
-#if WITH_SASL
 			{ RD_KAFKA_PROTO_SASL_PLAINTEXT, "sasl_plaintext" },
 #if WITH_SSL
 			{ RD_KAFKA_PROTO_SASL_SSL, "sasl_ssl" },
-#endif
 #endif
 			{ 0, NULL }
 		} },
@@ -433,7 +435,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	},
 #endif /* WITH_SSL */
 
-#if WITH_SASL
 	{_RK_GLOBAL,"sasl.mechanisms", _RK_C_STR,
 	 _RK(sasl.mechanisms),
 	 "SASL mechanism to use for authentication. "
@@ -474,7 +475,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "sasl.password", _RK_C_STR,
 	  _RK(sasl.password),
 	  "SASL password for use with the PLAIN mechanism" },
-#endif
 
         /* Global client group properties */
         { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,

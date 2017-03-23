@@ -405,9 +405,9 @@ static void rd_kafka_sasl_cyrus_close (struct rd_kafka_transport_s *rktrans) {
  *
  * Locality: broker thread
  */
-int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
-                                    const char *hostname,
-                                    char *errstr, size_t errstr_size) {
+static int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
+                                           const char *hostname,
+                                           char *errstr, size_t errstr_size) {
         int r;
         rd_kafka_sasl_state_t *state;
         rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
@@ -425,8 +425,6 @@ int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
 
         state = rd_calloc(1, sizeof(*state));
         rktrans->rktrans_sasl.state = state;
-        rktrans->rktrans_sasl.recv = rd_kafka_sasl_cyrus_recv;
-        rktrans->rktrans_sasl.close = rd_kafka_sasl_cyrus_close;
 
         /* SASL_CB_USER is needed for PLAIN but breaks GSSAPI */
         if (!strcmp(rk->rk_conf.sasl.mechanisms, "PLAIN")) {
@@ -506,7 +504,7 @@ int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
  *
  * Locality: broker thread
  */
-void rd_kafka_broker_sasl_cyrus_term (rd_kafka_broker_t *rkb) {
+static void rd_kafka_sasl_cyrus_broker_term (rd_kafka_broker_t *rkb) {
         rd_kafka_t *rk = rkb->rkb_rk;
 
         if (!rk->rk_conf.sasl.kinit_cmd)
@@ -520,7 +518,7 @@ void rd_kafka_broker_sasl_cyrus_term (rd_kafka_broker_t *rkb) {
  *
  * Locality: broker thread
  */
-void rd_kafka_broker_sasl_cyrus_init (rd_kafka_broker_t *rkb) {
+static void rd_kafka_sasl_cyrus_broker_init (rd_kafka_broker_t *rkb) {
         rd_kafka_t *rk = rkb->rkb_rk;
 
         if (!rk->rk_conf.sasl.kinit_cmd ||
@@ -534,7 +532,7 @@ void rd_kafka_broker_sasl_cyrus_init (rd_kafka_broker_t *rkb) {
 
 
 
-int rd_kafka_sasl_cyrus_conf_validate (rd_kafka_t *rk,
+static int rd_kafka_sasl_cyrus_conf_validate (rd_kafka_t *rk,
                                        char *errstr, size_t errstr_size) {
 
         if (strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
@@ -598,3 +596,13 @@ int rd_kafka_sasl_cyrus_global_init (void) {
         return 0;
 }
 
+
+struct rd_kafka_sasl_provider rd_kafka_sasl_cyrus_provider = {
+        .name          = "Cyrus",
+        .client_new    = rd_kafka_sasl_cyrus_client_new,
+        .recv          = rd_kafka_sasl_cyrus_recv,
+        .close         = rd_kafka_sasl_cyrus_close,
+        .broker_init   = rd_kafka_sasl_cyrus_broker_init,
+        .broker_term   = rd_kafka_sasl_cyrus_broker_term,
+        .conf_validate = rd_kafka_sasl_cyrus_conf_validate
+};

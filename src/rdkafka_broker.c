@@ -1358,7 +1358,6 @@ void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb) {
 static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb);
 
 
-#if WITH_SASL
 /**
  * @brief Parses and handles SaslMechanism response, transitions
  *        the broker state.
@@ -1424,7 +1423,6 @@ rd_kafka_broker_handle_SaslHandshake (rd_kafka_t *rk,
 			     "broker's supported mechanisms: %s",
 			     rd_kafka_err2str(err), mechs);
 }
-#endif
 
 
 /**
@@ -1436,7 +1434,6 @@ rd_kafka_broker_handle_SaslHandshake (rd_kafka_t *rk,
  */
 static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb) {
 
-#if WITH_SASL
 	if ((rkb->rkb_proto == RD_KAFKA_PROTO_SASL_PLAINTEXT ||
 	     rkb->rkb_proto == RD_KAFKA_PROTO_SASL_SSL)) {
 
@@ -1495,7 +1492,6 @@ static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb) {
 
 		return;
 	}
-#endif
 
 	/* No authentication required. */
 	rd_kafka_broker_connect_up(rkb);
@@ -4808,16 +4804,14 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
         rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_outbufs.rkbq_bufs));
         rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_waitresps.rkbq_bufs));
         rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_retrybufs.rkbq_bufs));
-	rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_toppars));
+        rd_kafka_assert(rkb->rkb_rk, TAILQ_EMPTY(&rkb->rkb_toppars));
 
-#if WITH_SASL
-	if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
+        if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
             (rkb->rkb_rk->rk_conf.security_protocol ==
              RD_KAFKA_PROTO_SASL_PLAINTEXT ||
              rkb->rkb_rk->rk_conf.security_protocol ==
              RD_KAFKA_PROTO_SASL_SSL))
-		rd_kafka_broker_sasl_term(rkb);
-#endif
+                rd_kafka_sasl_broker_term(rkb);
 
         if (rkb->rkb_wakeup_fd[0] != -1)
                 rd_close(rkb->rkb_wakeup_fd[0]);
@@ -5025,13 +5019,11 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 		return NULL;
 	}
 
-	if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
-#if WITH_SASL
+        if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
                 if (rk->rk_conf.security_protocol ==
                     RD_KAFKA_PROTO_SASL_PLAINTEXT ||
                     rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL)
-                        rd_kafka_broker_sasl_init(rkb);
-#endif
+                        rd_kafka_sasl_broker_init(rkb);
 
 		TAILQ_INSERT_TAIL(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
 		(void)rd_atomic32_add(&rkb->rkb_rk->rk_broker_cnt, 1);

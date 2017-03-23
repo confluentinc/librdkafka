@@ -485,7 +485,7 @@ static int rd_kafka_transport_ssl_passwd_cb (char *buf, int size, int rwflag,
  */
 static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 					   rd_kafka_transport_t *rktrans,
-					   char *errstr, int errstr_size) {
+					   char *errstr, size_t errstr_size) {
 	int r;
 	char name[RD_KAFKA_NODENAME_SIZE];
 	char *t;
@@ -1136,7 +1136,7 @@ void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
 rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 						  const rd_sockaddr_inx_t *sinx,
 						  char *errstr,
-						  int errstr_size) {
+						  size_t errstr_size) {
 	rd_kafka_transport_t *rktrans;
 	int s = -1;
 	int on = 1;

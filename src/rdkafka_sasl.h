@@ -31,10 +31,10 @@
 
 
 int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
-			    char *errstr, int errstr_size);
+			    char *errstr, size_t errstr_size);
 void rd_kafka_sasl_close (rd_kafka_transport_t *rktrans);
 int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
-			      char *errstr, int errstr_size);
+			      char *errstr, size_t errstr_size);
 
 void rd_kafka_sasl_broker_term (rd_kafka_broker_t *rkb);
 void rd_kafka_sasl_broker_init (rd_kafka_broker_t *rkb);

@@ -39,7 +39,7 @@
  */
 int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
                         const void *payload, int len,
-                        char *errstr, int errstr_size) {
+                        char *errstr, size_t errstr_size) {
 	struct msghdr msg = RD_ZERO_INIT;
 	struct iovec iov[1];
 	int32_t hdr;
@@ -108,7 +108,7 @@ void rd_kafka_sasl_auth_done (rd_kafka_transport_t *rktrans) {
 
 
 int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
-                            char *errstr, int errstr_size) {
+                            char *errstr, size_t errstr_size) {
         rd_kafka_buf_t *rkbuf;
         int r;
 
@@ -141,7 +141,7 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
  * @remark May be called on non-SASL transports (no-op)
  */
 void rd_kafka_sasl_close (rd_kafka_transport_t *rktrans) {
-        struct rd_kafka_sasl_provider *provider =
+        const struct rd_kafka_sasl_provider *provider =
                 rktrans->rktrans_rkb->rkb_rk->rk_conf.
                 sasl.provider;
 
@@ -159,12 +159,13 @@ void rd_kafka_sasl_close (rd_kafka_transport_t *rktrans) {
  * Locality: broker thread
  */
 int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
-			      char *errstr, int errstr_size) {
+			      char *errstr, size_t errstr_size) {
 	int r;
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	rd_kafka_t *rk = rkb->rkb_rk;
         char *hostname, *t;
-        struct rd_kafka_sasl_provider *provider = rk->rk_conf.sasl.provider;
+        const struct rd_kafka_sasl_provider *provider =
+                rk->rk_conf.sasl.provider;
 
         /* Verify broker support:
          * - RD_KAFKA_FEATURE_SASL_GSSAPI - GSSAPI supported
@@ -193,9 +194,10 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 
         rd_rkb_dbg(rkb, SECURITY, "SASL",
                    "Initializing SASL client: service name %s, "
-                   "hostname %s, mechanisms %s",
+                   "hostname %s, mechanisms %s, provider %s",
                    rk->rk_conf.sasl.service_name, hostname,
-                   rk->rk_conf.sasl.mechanisms);
+                   rk->rk_conf.sasl.mechanisms,
+                   provider->name);
 
         r = provider->client_new(rktrans, hostname, errstr, errstr_size);
         if (r != -1)
@@ -216,7 +218,7 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
  * Locality: broker thread
  */
 void rd_kafka_sasl_broker_term (rd_kafka_broker_t *rkb) {
-        struct rd_kafka_sasl_provider *provider =
+        const struct rd_kafka_sasl_provider *provider =
                 rkb->rkb_rk->rk_conf.sasl.provider;
         if (provider->broker_term)
                 provider->broker_term(rkb);
@@ -228,7 +230,7 @@ void rd_kafka_sasl_broker_term (rd_kafka_broker_t *rkb) {
  * Locality: broker thread
  */
 void rd_kafka_sasl_broker_init (rd_kafka_broker_t *rkb) {
-        struct rd_kafka_sasl_provider *provider =
+        const struct rd_kafka_sasl_provider *provider =
                 rkb->rkb_rk->rk_conf.sasl.provider;
         if (provider->broker_init)
                 provider->broker_init(rkb);
@@ -242,8 +244,10 @@ void rd_kafka_sasl_broker_init (rd_kafka_broker_t *rkb) {
  */
 int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
                                    char *errstr, size_t errstr_size) {
-        struct rd_kafka_sasl_provider *provider = NULL;
+        const struct rd_kafka_sasl_provider *provider = NULL;
+
         if (!strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI")) {
+                /* GSSAPI / Kerberos */
 #ifdef _MSC_VER
                 provider = &rd_kafka_sasl_win32_provider;
 #elif WITH_SASL_CYRUS
@@ -251,12 +255,14 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
 #endif
 
         } else if (!strcmp(rk->rk_conf.sasl.mechanisms, "PLAIN")) {
+                /* SASL PLAIN */
 #if WITH_SASL_CYRUS
                 provider = &rd_kafka_sasl_cyrus_provider;
 #else
                 provider = &rd_kafka_sasl_plain_provider;
 #endif
         } else {
+                /* Unsupported mechanism */
                 rd_snprintf(errstr, errstr_size,
                             "Unsupported SASL mechanism: %s",
                             rk->rk_conf.sasl.mechanisms);

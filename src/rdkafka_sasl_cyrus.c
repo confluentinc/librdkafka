@@ -597,7 +597,7 @@ int rd_kafka_sasl_cyrus_global_init (void) {
 }
 
 
-struct rd_kafka_sasl_provider rd_kafka_sasl_cyrus_provider = {
+const struct rd_kafka_sasl_provider rd_kafka_sasl_cyrus_provider = {
         .name          = "Cyrus",
         .client_new    = rd_kafka_sasl_cyrus_client_new,
         .recv          = rd_kafka_sasl_cyrus_recv,

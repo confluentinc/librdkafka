@@ -220,7 +220,7 @@ static int rd_kafka_sasl_sspi_continue (rd_kafka_transport_t *rktrans,
 
         if (rd_kafka_sasl_send(rktrans,
                                 outsecbuf.pvBuffer, outsecbuf.cbBuffer,
-                                errstr, (int)errstr_size) == -1)
+                                errstr, errstr_size) == -1)
                 return -1;
 
         return 0;
@@ -344,7 +344,7 @@ static int rd_kafka_sasl_win32_send_response (rd_kafka_transport_t *rktrans,
         send_response = rd_kafka_sasl_send(rktrans,
                                            out_buffer.pvBuffer,
                                            out_buffer.cbBuffer,
-                                           errstr, (int)errstr_size);
+                                           errstr, errstr_size);
 
         FreeContextBuffer(in_buffer.pvBuffer);
         rd_free(out_buffer.pvBuffer);
@@ -499,7 +499,7 @@ static int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
 }
 
 
-struct rd_kafka_sasl_provider rd_kafka_sasl_win32_provider = {
+const struct rd_kafka_sasl_provider rd_kafka_sasl_win32_provider = {
         .name          = "Win32 SSPI",
         .client_new    = rd_kafka_sasl_win32_client_new,
         .recv          = rd_kafka_sasl_win32_recv,

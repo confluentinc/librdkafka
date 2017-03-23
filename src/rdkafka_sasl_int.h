@@ -48,21 +48,21 @@ struct rd_kafka_sasl_provider {
 };
 
 #ifdef _MSC_VER
-extern struct rd_kafka_sasl_provider rd_kafka_sasl_win32_provider;
+extern const struct rd_kafka_sasl_provider rd_kafka_sasl_win32_provider;
 #endif
 
 #if WITH_SASL_CYRUS
-extern struct rd_kafka_sasl_provider rd_kafka_sasl_cyrus_provider;
+extern const struct rd_kafka_sasl_provider rd_kafka_sasl_cyrus_provider;
 void rd_kafka_sasl_cyrus_global_term (void);
 int rd_kafka_sasl_cyrus_global_init (void);
 #endif
 
 #if WITH_SASL_BUILTIN
-struct rd_kafka_sasl_provider rd_kafka_sasl_plain_provider;
+extern const struct rd_kafka_sasl_provider rd_kafka_sasl_plain_provider;
 #endif
 
 void rd_kafka_sasl_auth_done (rd_kafka_transport_t *rktrans);
 int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
                         const void *payload, int len,
-                        char *errstr, int errstr_size);
+                        char *errstr, size_t errstr_size);
 

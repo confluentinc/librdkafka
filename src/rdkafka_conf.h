@@ -102,7 +102,7 @@ struct rd_kafka_conf_s {
 #endif
 
         struct {
-                struct rd_kafka_sasl_provider *provider;
+                const struct rd_kafka_sasl_provider *provider;
                 char *principal;
                 char *mechanisms;
                 char *service_name;

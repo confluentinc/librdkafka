@@ -33,7 +33,7 @@ mkl_toggle_option "Development" ENABLE_SHAREDPTR_DEBUG "--enable-sharedptr-debug
 mkl_toggle_option "Feature" ENABLE_LZ4 "--enable-lz4" "Enable LZ4 support" "y"
 
 mkl_toggle_option "Feature" ENABLE_SSL "--enable-ssl" "Enable SSL support" "y"
-mkl_toggle_option "Feature" ENABLE_SASL "--enable-sasl" "Enable SASL support" "y"
+mkl_toggle_option "Feature" ENABLE_SASL "--enable-sasl" "Enable SASL support with Cyrus libsasl2" "y"
 
 
 function checks {
@@ -74,10 +74,11 @@ function checks {
 	    mkl_lib_check "libsasl" "WITH_SASL_CYRUS" disable CC "-lsasl" \
                           "#include <sasl/sasl.h>"
         fi
-        if [[ "$WITH_SASL_CYRUS" != "y" ]]; then
-            mkl_allvar_set WITH_SASL_BUILTIN WITH_SASL_BUILTIN y
-        fi
     fi
+    if [[ "$WITH_SASL_CYRUS" != "y" ]]; then
+        mkl_allvar_set WITH_SASL_BUILTIN WITH_SASL_BUILTIN y
+    fi
+
 
     # Check for libc regex
     mkl_compile_check "regex" "HAVE_REGEX" disable CC "" \

@@ -1230,9 +1230,13 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                 return NULL;
         }
 
-        if (use_conf->metadata_max_age_ms == -1)
-                use_conf->metadata_max_age_ms =
-                        use_conf->metadata_refresh_interval_ms * 3;
+        if (use_conf->metadata_max_age_ms == -1) {
+                if (use_conf->metadata_refresh_interval_ms > 0)
+                        use_conf->metadata_max_age_ms =
+                                use_conf->metadata_refresh_interval_ms * 3;
+                else /* use default value of refresh * 3 */
+                        use_conf->metadata_max_age_ms = 5*60*1000 * 3;
+        }
 
 	rd_kafka_global_cnt_incr();
 

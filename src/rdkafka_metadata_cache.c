@@ -197,12 +197,16 @@ rd_kafka_metadata_cache_insert (rd_kafka_t *rk,
                                 const rd_kafka_metadata_topic_t *mtopic,
                                 rd_ts_t now, rd_ts_t ts_expires) {
         struct rd_kafka_metadata_cache_entry *rkmce, *old;
-        size_t topic_len, needed_size;
+        size_t topic_len, before_part_size, pad, needed_size;
         char *ptr;
         int i;
 
         topic_len = strlen(mtopic->topic) + 1;
-        needed_size = sizeof(*rkmce) + sizeof(*mtopic) + topic_len +
+        before_part_size = sizeof(*rkmce) + sizeof(*mtopic) + topic_len;
+        // The partitions array needs to be 64-bit aligned on some
+        // platforms, so compute the required padding (if any).
+        pad = (8 - before_part_size % 8) & 7;
+        needed_size = before_part_size + pad +
                 (mtopic->partition_cnt * sizeof(*mtopic->partitions));
 
         rkmce = rd_malloc(needed_size);
@@ -217,6 +221,10 @@ rd_kafka_metadata_cache_insert (rd_kafka_t *rk,
         rkmce->rkmce_mtopic.topic = ptr;
         memcpy(rkmce->rkmce_mtopic.topic, mtopic->topic, topic_len);
         ptr += topic_len;
+        // Pad with zeros to align to 64-bits.
+        for (i = 0; i < (int)pad; i++) {
+            *ptr++ = 0;
+        }
 
         /* Partition array */
         rkmce->rkmce_mtopic.partitions = (rd_kafka_metadata_partition_t *)ptr;

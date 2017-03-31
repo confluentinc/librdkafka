@@ -3452,11 +3452,13 @@ static char *rd_kafka_snappy_java_decompress (rd_kafka_broker_t *rkb,
 
 		while (of + 4 <= (ssize_t)inlen) {
 			/* compressed length */
-			uint32_t clen = be32toh(*(uint32_t *)(inbuf+of));
+			uint32_t clen;
 			/* uncompressed length */
 			size_t ulen;
 			int r;
 
+                        memcpy(&clen, inbuf+of, 4);
+                        clen = be32toh(clen);
 			of += 4;
 
 			if (unlikely(clen > inlen - of)) {

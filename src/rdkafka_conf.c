@@ -816,7 +816,7 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			    const char *istr, int ival, prop_set_mode_t set_mode,
                             char *errstr, size_t errstr_size) {
 
-#define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(((char *)(BASE))+(OFFSET))
+#define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(void *)(((char *)(BASE))+(OFFSET))
 	switch (prop->type)
 	{
 	case _RK_C_STR:
@@ -1361,7 +1361,8 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 
                         if (!strcmp(prop->name, "default_topic_conf") && val)
                                 val = (void *)rd_kafka_topic_conf_dup(
-                                        (const rd_kafka_topic_conf_t *)val);
+                                        (const rd_kafka_topic_conf_t *)
+                                        (void *)val);
 			break;
                 case _RK_C_KSTR:
                 {

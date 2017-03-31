@@ -490,6 +490,8 @@ static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 					   rd_kafka_transport_t *rktrans,
 					   char *errstr, int errstr_size) {
 	int r;
+	char name[RD_KAFKA_NODENAME_SIZE];
+	char *t;
 
 	rktrans->rktrans_ssl = SSL_new(rkb->rkb_rk->rk_conf.ssl.ctx);
 	if (!rktrans->rktrans_ssl)
@@ -497,6 +499,18 @@ static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 
 	if (!SSL_set_fd(rktrans->rktrans_ssl, rktrans->rktrans_s))
 		goto fail;
+
+#if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
+	/* If non-numerical hostname, send it for SNI */
+	rd_snprintf(name, sizeof(name), "%s", rkb->rkb_nodename);
+	if ((t = strrchr(name, ':')))
+		*t = '\0';
+	if (!(/*ipv6*/(strchr(name, ':') &&
+		       strspn(name, "0123456789abcdefABCDEF:.[]%") == strlen(name)) ||
+	      /*ipv4*/strspn(name, "0123456789.") == strlen(name)) &&
+	    !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
+		goto fail;
+#endif
 
 	r = SSL_connect(rktrans->rktrans_ssl);
 	if (r == 1) {

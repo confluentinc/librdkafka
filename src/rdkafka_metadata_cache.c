@@ -197,32 +197,39 @@ rd_kafka_metadata_cache_insert (rd_kafka_t *rk,
                                 const rd_kafka_metadata_topic_t *mtopic,
                                 rd_ts_t now, rd_ts_t ts_expires) {
         struct rd_kafka_metadata_cache_entry *rkmce, *old;
-        size_t topic_len, needed_size;
-        char *ptr;
+        size_t topic_len;
+        rd_tmpabuf_t tbuf;
         int i;
 
+        /* Metadata is stored in one contigious buffer where structs and
+         * and pointed-to fields are layed out in a memory aligned fashion.
+         * rd_tmpabuf_t provides the infrastructure to do this.
+         * Because of this we copy all the structs verbatim but
+         * any pointer fields needs to be copied explicitly to update
+         * the pointer address. */
         topic_len = strlen(mtopic->topic) + 1;
-        needed_size = sizeof(*rkmce) + sizeof(*mtopic) + topic_len +
-                (mtopic->partition_cnt * sizeof(*mtopic->partitions));
+        rd_tmpabuf_new(&tbuf,
+                       _ALIGN(sizeof(*rkmce), 8) +
+                       _ALIGN(topic_len, 8) +
+                       (mtopic->partition_cnt *
+                        _ALIGN(sizeof(*mtopic->partitions), 8)),
+                       1/*assert on fail*/);
 
-        rkmce = rd_malloc(needed_size);
-
+        rkmce = rd_tmpabuf_alloc(&tbuf, sizeof(*rkmce));
 
         rkmce->rkmce_mtopic = *mtopic;
-        /* Memory for topic name and partitions is allocated directly
-         * following the entry struct */
-        ptr = (char *)(rkmce+1);
 
-        /* Topic name */
-        rkmce->rkmce_mtopic.topic = ptr;
-        memcpy(rkmce->rkmce_mtopic.topic, mtopic->topic, topic_len);
-        ptr += topic_len;
+        /* Copy topic name and update pointer */
+        rkmce->rkmce_mtopic.topic = rd_tmpabuf_write_str(&tbuf, mtopic->topic);
 
-        /* Partition array */
-        rkmce->rkmce_mtopic.partitions = (rd_kafka_metadata_partition_t *)ptr;
+        /* Copy partition array and update pointer */
+        rkmce->rkmce_mtopic.partitions =
+                rd_tmpabuf_write(&tbuf, mtopic->partitions,
+                                 mtopic->partition_cnt *
+                                 sizeof(*mtopic->partitions));
+
+        /* Clear uncached fields. */
         for (i = 0 ; i < mtopic->partition_cnt ; i++) {
-                rkmce->rkmce_mtopic.partitions[i] = mtopic->partitions[i];
-                /* Clear uncached fields. */
                 rkmce->rkmce_mtopic.partitions[i].replicas = NULL;
                 rkmce->rkmce_mtopic.partitions[i].replica_cnt = 0;
                 rkmce->rkmce_mtopic.partitions[i].isrs = NULL;
@@ -247,6 +254,8 @@ rd_kafka_metadata_cache_insert (rd_kafka_t *rk,
         if (old)
                 rd_kafka_metadata_cache_delete(rk, old, 0);
 
+        /* Explicitly not freeing the tmpabuf since rkmce points to its
+         * memory. */
         return rkmce;
 }
 

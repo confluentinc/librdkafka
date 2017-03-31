@@ -36,6 +36,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+
 #ifndef SG
 #define SG /* Scatter-Gather / iovec support in Snappy */
 #endif
@@ -1718,3 +1721,5 @@ void rd_kafka_snappy_free_env(struct snappy_env *env)
 	clear_env(env);
 }
 EXPORT_SYMBOL(rd_kafka_snappy_free_env);
+
+#pragma GCC diagnostic pop /* -Wcast-align ignore */

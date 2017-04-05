@@ -135,6 +135,15 @@ static void test_timestamps (const char *broker_tstype,
         const int msgcnt = 20;
         uint64_t testid = test_id_generate();
 
+        if ((!strncmp(broker_version, "0.9", 3) ||
+             !strncmp(broker_version, "0.8", 3)) &&
+            !test_conf_match(NULL, "sasl.mechanisms", "GSSAPI")) {
+                TEST_SAY(_C_YEL "Skipping %s, %s test: "
+                         "SaslHandshake not supported by broker v%s" _C_CLR "\n",
+                         broker_tstype, codec, broker_version);
+                return;
+        }
+
         TEST_SAY(_C_MAG "Timestamp test using %s\n", topic);
         test_timeout_set(30);
 

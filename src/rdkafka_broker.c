@@ -66,6 +66,9 @@
 #include <lz4frame.h>
 #include "xxhash.h"
 #endif
+#if WITH_SSL
+#include <openssl/err.h>
+#endif
 #include "rdendian.h"
 
 
@@ -4789,6 +4792,11 @@ static int rd_kafka_broker_thread_main (void *arg) {
 
 	rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__DESTROY, NULL);
 	rd_kafka_broker_destroy(rkb);
+
+#if WITH_SSL
+        /* Remove OpenSSL per-thread error state to avoid memory leaks */
+        ERR_remove_thread_state(NULL);
+#endif
 
 	rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
 

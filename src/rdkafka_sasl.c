@@ -132,13 +132,16 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
                    "Received SASL frame from broker (%"PRIusz" bytes)",
                    rkbuf ? rkbuf->rkbuf_len : 0);
 
-        return rktrans->rktrans_rkb->rkb_rk->
+        r = rktrans->rktrans_rkb->rkb_rk->
                 rk_conf.sasl.provider->recv(rktrans,
                                             rkbuf ?
                                             rkbuf->rkbuf_rbuf : NULL,
                                             rkbuf ?
                                             rkbuf->rkbuf_len : 0,
                                             errstr, errstr_size);
+        rd_kafka_buf_destroy(rkbuf);
+
+        return r;
 }
 
 

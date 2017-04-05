@@ -2793,7 +2793,7 @@ void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val) {
 }
 
 char *test_conf_get (rd_kafka_conf_t *conf, const char *name) {
-	static char ret[256];
+	static RD_TLS char ret[256];
 	size_t ret_sz = sizeof(ret);
 	if (rd_kafka_conf_get(conf, name, ret, &ret_sz) != RD_KAFKA_CONF_OK)
 		TEST_FAIL("Failed to get config \"%s\": %s\n", name,

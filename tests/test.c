@@ -2802,6 +2802,27 @@ char *test_conf_get (rd_kafka_conf_t *conf, const char *name) {
 }
 
 
+/**
+ * @brief Check if property \name matches \p val in \p conf.
+ *        If \p conf is NULL the test config will be used. */
+int test_conf_match (rd_kafka_conf_t *conf, const char *name, const char *val) {
+        char *real;
+        int free_conf = 0;
+
+        if (!conf) {
+                test_conf_init(&conf, NULL, 0);
+                free_conf = 1;
+        }
+
+        real = test_conf_get(conf, name);
+
+        if (free_conf)
+                rd_kafka_conf_destroy(conf);
+
+        return !strcmp(real, val);
+}
+
+
 void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
                           const char *name, const char *val) {
         char errstr[512];

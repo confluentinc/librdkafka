@@ -502,10 +502,25 @@ static int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
         return 0;
 }
 
+/**
+ * @brief Validate config
+ */
+static int rd_kafka_sasl_win32_conf_validate (rd_kafka_t *rk,
+                                              char *errstr,
+                                              size_t errstr_size) {
+        if (!rk->rk_conf.sasl.principal) {
+                rd_snprintf(errstr, errstr_size,
+                            "sasl.kerberos.principal must be set");
+                return -1;
+        }
+
+        return 0;
+}
 
 const struct rd_kafka_sasl_provider rd_kafka_sasl_win32_provider = {
         .name          = "Win32 SSPI",
         .client_new    = rd_kafka_sasl_win32_client_new,
         .recv          = rd_kafka_sasl_win32_recv,
         .close         = rd_kafka_sasl_win32_close,
+        .conf_validate = rd_kafka_sasl_win32_conf_validate
 };

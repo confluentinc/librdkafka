@@ -86,6 +86,12 @@ int main_0049_consume_conn_close (int argc, char **argv) {
         rd_kafka_topic_partition_list_t *assignment;
         rd_kafka_resp_err_t err;
 
+        if (!test_conf_match(NULL, "sasl.mechanisms", "GSSAPI")) {
+                TEST_SKIP("KNOWN ISSUE: ApiVersionRequest+SaslHandshake "
+                          "will not play well with sudden disconnects\n");
+                return 0;
+        }
+
         test_conf_init(&conf, &tconf, 60);
         /* Want an even number so it is divisable by two without surprises */
         msgcnt = (msgcnt / (int)test_timeout_multiplier) & ~1;

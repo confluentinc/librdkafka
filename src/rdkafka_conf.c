@@ -116,12 +116,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SSL
 		{ 0x4, "ssl" },
 #endif
-#if WITH_SASL
-		{ 0x8, "sasl" },
-#endif
+                { 0x8, "sasl" },
 		{ 0x10, "regex" },
 #if WITH_LZ4
 		{ 0x20, "lz4" },
+#endif
+#if defined(_MSC_VER) || WITH_SASL_CYRUS
+                { 0x40, "sasl_gssapi" },
+#endif
+                { 0x80, "sasl_plain" },
+#if WITH_SASL_SCRAM
+                { 0x100, "sasl_scram" },
 #endif
 		{ 0, NULL }
 		}
@@ -392,11 +397,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SSL
 			{ RD_KAFKA_PROTO_SSL, "ssl" },
 #endif
-#if WITH_SASL
 			{ RD_KAFKA_PROTO_SASL_PLAINTEXT, "sasl_plaintext" },
 #if WITH_SSL
 			{ RD_KAFKA_PROTO_SASL_SSL, "sasl_ssl" },
-#endif
 #endif
 			{ 0, NULL }
 		} },
@@ -433,11 +436,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	},
 #endif /* WITH_SSL */
 
-#if WITH_SASL
 	{_RK_GLOBAL,"sasl.mechanisms", _RK_C_STR,
 	 _RK(sasl.mechanisms),
 	 "SASL mechanism to use for authentication. "
-	 "Supported: GSSAPI, PLAIN. "
+	 "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512. "
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
 	 .validate = rd_kafka_conf_validate_single },
@@ -470,11 +472,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
 	{ _RK_GLOBAL, "sasl.username", _RK_C_STR,
 	  _RK(sasl.username),
-	  "SASL username for use with the PLAIN mechanism" },
+	  "SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms" },
 	{ _RK_GLOBAL, "sasl.password", _RK_C_STR,
 	  _RK(sasl.password),
-	  "SASL password for use with the PLAIN mechanism" },
-#endif
+	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
 
         /* Global client group properties */
         { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,

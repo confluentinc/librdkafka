@@ -3,7 +3,7 @@
 
 Property                                 | C/P | Range           |       Default | Description              
 -----------------------------------------|-----|-----------------|--------------:|--------------------------
-builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4 | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
+builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4, sasl_gssapi, sasl_plain | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
 client.id                                |  *  |                 |       rdkafka | Client identifier. <br>*Type: string*
 metadata.broker.list                     |  *  |                 |               | Initial list of brokers as a CSV list of broker host or host:port. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime. <br>*Type: string*
 bootstrap.servers                        |  *  |                 |               | Alias for `metadata.broker.list`
@@ -57,14 +57,14 @@ ssl.key.password                         |  *  |                 |              
 ssl.certificate.location                 |  *  |                 |               | Path to client's public key (PEM) used for authentication. <br>*Type: string*
 ssl.ca.location                          |  *  |                 |               | File or directory path to CA certificate(s) for verifying the broker's key. <br>*Type: string*
 ssl.crl.location                         |  *  |                 |               | Path to CRL for verifying broker's certificate validity. <br>*Type: string*
-sasl.mechanisms                          |  *  |                 |        GSSAPI | SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN. **NOTE**: Despite the name only one mechanism must be configured. <br>*Type: string*
+sasl.mechanisms                          |  *  |                 |        GSSAPI | SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512. **NOTE**: Despite the name only one mechanism must be configured. <br>*Type: string*
 sasl.kerberos.service.name               |  *  |                 |         kafka | Kerberos principal name that Kafka runs as. <br>*Type: string*
 sasl.kerberos.principal                  |  *  |                 |   kafkaclient | This client's Kerberos principal name. <br>*Type: string*
 sasl.kerberos.kinit.cmd                  |  *  |                 | kinit -S "%{sasl.kerberos.service.name}/%{broker.name}" -k -t "%{sasl.kerberos.keytab}" %{sasl.kerberos.principal} | Full kerberos kinit command string, %{config.prop.name} is replaced by corresponding config object value, %{broker.name} returns the broker's hostname. <br>*Type: string*
 sasl.kerberos.keytab                     |  *  |                 |               | Path to Kerberos keytab file. Uses system default if not set.**NOTE**: This is not automatically used but must be added to the template in sasl.kerberos.kinit.cmd as ` ... -t %{sasl.kerberos.keytab}`. <br>*Type: string*
 sasl.kerberos.min.time.before.relogin    |  *  | 1 .. 86400000   |         60000 | Minimum time in milliseconds between key refresh attempts. <br>*Type: integer*
-sasl.username                            |  *  |                 |               | SASL username for use with the PLAIN mechanism <br>*Type: string*
-sasl.password                            |  *  |                 |               | SASL password for use with the PLAIN mechanism <br>*Type: string*
+sasl.username                            |  *  |                 |               | SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms <br>*Type: string*
+sasl.password                            |  *  |                 |               | SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism <br>*Type: string*
 group.id                                 |  *  |                 |               | Client group id string. All clients sharing the same group.id belong to the same group. <br>*Type: string*
 partition.assignment.strategy            |  *  |                 | range,roundrobin | Name of partition assignment strategy to use when elected group leader assigns partitions to group members. <br>*Type: string*
 session.timeout.ms                       |  *  | 1 .. 3600000    |         30000 | Client group session and failure detection timeout. <br>*Type: integer*

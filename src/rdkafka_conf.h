@@ -2,6 +2,13 @@
 
 #include "rdlist.h"
 
+
+/**
+ * Forward declarations
+ */
+struct rd_kafka_transport_s;
+
+
 /**
  * MessageSet compression codecs
  */
@@ -101,18 +108,27 @@ struct rd_kafka_conf_s {
 	} ssl;
 #endif
 
-#if WITH_SASL
-	struct {
-		char *principal;
-		char *mechanisms;
-		char *service_name;
-		char *kinit_cmd;
-		char *keytab;
-		int   relogin_min_time;
-		char *username;
-		char *password;
-	} sasl;
+        struct {
+                const struct rd_kafka_sasl_provider *provider;
+                char *principal;
+                char *mechanisms;
+                char *service_name;
+                char *kinit_cmd;
+                char *keytab;
+                int   relogin_min_time;
+                char *username;
+                char *password;
+#if WITH_SASL_SCRAM
+                /* SCRAM EVP-wrapped hash function
+                 * (return value from EVP_shaX()) */
+                const void/*EVP_MD*/ *scram_evp;
+                /* SCRAM direct hash function (e.g., SHA256()) */
+                unsigned char *(*scram_H) (const unsigned char *d, size_t n,
+                                           unsigned char *md);
+                /* Hash size */
+                size_t         scram_H_size;
 #endif
+        } sasl;
 
 
         /* Client group configuration */

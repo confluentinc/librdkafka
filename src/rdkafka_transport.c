@@ -96,10 +96,7 @@ void rd_kafka_transport_close (rd_kafka_transport_t *rktrans) {
 	}
 #endif
 
-#if WITH_SASL
-        if (rktrans->rktrans_sasl.close)
-                rktrans->rktrans_sasl.close(rktrans);
-#endif
+        rd_kafka_sasl_close(rktrans);
 
 	if (rktrans->rktrans_recv_buf)
 		rd_kafka_buf_destroy(rktrans->rktrans_recv_buf);
@@ -305,6 +302,7 @@ void rd_kafka_transport_ssl_term (void) {
 
 	CRYPTO_set_id_callback(NULL);
 	CRYPTO_set_locking_callback(NULL);
+        CRYPTO_cleanup_all_ex_data();
 
 	for (i = 0 ; i < rd_kafka_ssl_locks_cnt ; i++)
 		mtx_destroy(&rd_kafka_ssl_locks[i]);
@@ -488,7 +486,7 @@ static int rd_kafka_transport_ssl_passwd_cb (char *buf, int size, int rwflag,
  */
 static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 					   rd_kafka_transport_t *rktrans,
-					   char *errstr, int errstr_size) {
+					   char *errstr, size_t errstr_size) {
 	int r;
 	char name[RD_KAFKA_NODENAME_SIZE];
 	char *t;
@@ -1062,7 +1060,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 		break;
 
 	case RD_KAFKA_BROKER_STATE_AUTH:
-#if WITH_SASL
 		/* SASL handshake */
 		if (rd_kafka_sasl_io_event(rktrans, events,
 					   errstr, sizeof(errstr)) == -1) {
@@ -1073,7 +1070,6 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 					     errstr);
 			return;
 		}
-#endif
 		break;
 
 	case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
@@ -1141,7 +1137,7 @@ void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
 rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 						  const rd_sockaddr_inx_t *sinx,
 						  char *errstr,
-						  int errstr_size) {
+						  size_t errstr_size) {
 	rd_kafka_transport_t *rktrans;
 	int s = -1;
 	int on = 1;

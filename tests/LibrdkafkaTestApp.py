@@ -46,7 +46,7 @@ class LibrdkafkaTestApp(App):
         mech = self.conf.get('sasl_mechanisms', '').split(',')[0]
         if mech != '':
             conf_blob.append('sasl.mechanisms=%s' % mech)
-            if mech == 'PLAIN':
+            if mech == 'PLAIN' or mech.find('SCRAM-') != -1:
                 security_protocol='SASL_PLAINTEXT'
                 # Use first user as SASL user/pass
                 for up in self.conf.get('sasl_users', '').split(','):

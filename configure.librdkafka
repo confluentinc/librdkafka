@@ -76,9 +76,6 @@ function checks {
         fi
     fi
 
-    if [[ "$WITH_SASL_CYRUS" != "y" ]]; then
-        mkl_allvar_set WITH_SASL_BUILTIN WITH_SASL_BUILTIN y
-    fi
     if [[ "$WITH_SSL" == "y" ]]; then
         # SASL SCRAM requires base64 encoding from OpenSSL
         mkl_allvar_set WITH_SASL_SCRAM WITH_SASL_SCRAM y

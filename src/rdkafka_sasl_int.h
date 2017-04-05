@@ -57,9 +57,7 @@ void rd_kafka_sasl_cyrus_global_term (void);
 int rd_kafka_sasl_cyrus_global_init (void);
 #endif
 
-#if WITH_SASL_BUILTIN
 extern const struct rd_kafka_sasl_provider rd_kafka_sasl_plain_provider;
-#endif
 
 #if WITH_SASL_SCRAM
 extern const struct rd_kafka_sasl_provider rd_kafka_sasl_scram_provider;

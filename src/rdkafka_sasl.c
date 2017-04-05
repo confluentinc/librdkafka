@@ -265,11 +265,8 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
 
         } else if (!strcmp(rk->rk_conf.sasl.mechanisms, "PLAIN")) {
                 /* SASL PLAIN */
-#if WITH_SASL_CYRUS
-                provider = &rd_kafka_sasl_cyrus_provider;
-#elif WITH_SASL_BUILTIN
                 provider = &rd_kafka_sasl_plain_provider;
-#endif
+
         } else if (!strncmp(rk->rk_conf.sasl.mechanisms, "SCRAM-SHA-",
                             strlen("SCRAM-SHA-"))) {
                 /* SASL SCRAM */
@@ -288,19 +285,21 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
         if (!provider) {
                 rd_snprintf(errstr, errstr_size,
                             "No provider for SASL mechanism %s"
-#ifndef _MSC_VER
                             ": recompile librdkafka with "
-                            "libsasl2 or openssl support. "
+#ifndef _MSC_VER
+                            "libsasl2 or "
+#endif
+                            "openssl support. "
                             "Current build options:"
+                            " PLAIN"
+#ifdef _MSC_VER
+                            " WindowsSSPI(GSSAPI)"
+#endif
 #if WITH_SASL_CYRUS
                             " SASL_CYRUS"
 #endif
-#if WITH_SASL_BUILTIN
-                            " SASL_BUILTIN(PLAIN)"
-#endif
 #if WITH_SASL_SCRAM
                             " SASL_SCRAM"
-#endif
 #endif
                             ,
                             rk->rk_conf.sasl.mechanisms);

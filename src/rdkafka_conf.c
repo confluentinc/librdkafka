@@ -124,10 +124,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if defined(_MSC_VER) || WITH_SASL_CYRUS
                 { 0x40, "sasl_gssapi" },
 #endif
-#if WITH_SASL_CYRUS || WITH_SASL_BUILTIN
                 { 0x80, "sasl_plain" },
-#endif
+#if WITH_SASL_SCRAM
                 { 0x100, "sasl_scram" },
+#endif
 		{ 0, NULL }
 		}
 	},

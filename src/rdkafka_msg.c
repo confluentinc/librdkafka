@@ -253,7 +253,12 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 
 rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         va_list ap;
-        rd_kafka_msg_t s_rkm = RD_ZERO_INIT, *rkm = &s_rkm;
+        rd_kafka_msg_t s_rkm = {
+                /* Message defaults */
+                .rkm_partition = RD_KAFKA_PARTITION_UA,
+                .rkm_timestamp = 0, /* current time */
+        };
+        rd_kafka_msg_t *rkm = &s_rkm;
         rd_kafka_vtype_t vtype;
         rd_kafka_topic_t *app_rkt;
         shptr_rd_kafka_itopic_t *s_rkt = NULL;

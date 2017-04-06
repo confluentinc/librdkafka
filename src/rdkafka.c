@@ -3047,6 +3047,8 @@ rd_kafka_describe_group_json (rd_kafka_t *rk, const char *group,
                 for (j = 0 ; j < gi->member_cnt ; j++) {
                         const struct rd_kafka_group_member_info *mi;
                         mi = &gi->members[j];
+                        if (j!=0)
+                            _st_printf(",");
                         _st_printf("\"%s\": { "
                                  "\"id\": \"%s\","
                                  "\"client_id\": \"%s\","

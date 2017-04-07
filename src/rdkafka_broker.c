@@ -5291,20 +5291,6 @@ const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb) {
 }
 
 
-/**
- * @brief Send dummy OP to broker thread to wake it up from IO sleep.
- *
- * @locality any
- * @locks none
- */
-void rd_kafka_broker_wakeup (rd_kafka_broker_t *rkb) {
-        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_WAKEUP);
-        rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
-        rd_kafka_q_enq(rkb->rkb_ops, rko);
-        rd_rkb_dbg(rkb, QUEUE, "WAKEUP", "Wake-up");
-}
-
-
 void rd_kafka_brokers_init (void) {
 }
 

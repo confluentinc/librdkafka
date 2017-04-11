@@ -34,6 +34,10 @@ set(
     rdstring.c
     snappy.c
     tinycthread.c
+    xxhash.c
+    lz4.c
+    lz4frame.c
+    lz4hc.c
 )
 
 if(WITH_SASL)

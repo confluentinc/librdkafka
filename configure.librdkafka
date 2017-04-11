@@ -30,7 +30,7 @@ mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Ena
 
 mkl_toggle_option "Development" ENABLE_SHAREDPTR_DEBUG "--enable-sharedptr-debug" "Enable sharedptr debugging" "n"
 
-mkl_toggle_option "Feature" ENABLE_LZ4 "--enable-lz4" "Enable LZ4 support" "y"
+mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Enable external LZ4 library support" "y"
 
 mkl_toggle_option "Feature" ENABLE_SSL "--enable-ssl" "Enable SSL support" "y"
 mkl_toggle_option "Feature" ENABLE_SASL "--enable-sasl" "Enable SASL support with Cyrus libsasl2" "y"
@@ -47,8 +47,8 @@ function checks {
                   "#include <zlib.h>"
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
 
-    if [[ "$ENABLE_LZ4" == "y" ]]; then
-        mkl_lib_check --static=-llz4 "liblz4" "WITH_LZ4" disable CC "-llz4" \
+    if [[ "$ENABLE_LZ4_EXT" == "y" ]]; then
+        mkl_lib_check --static=-llz4 "liblz4" "WITH_LZ4_EXT" disable CC "-llz4" \
                       "#include <lz4frame.h>"
     fi
 

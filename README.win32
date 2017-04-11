@@ -9,10 +9,7 @@ Requirements:
    https://slproweb.com/products/Win32OpenSSL.html
    (This would be using NuGet too but the current
     OpenSSL packages are outdated and with broken
-	dependencies, so no luck)
- * lz4 is installed automatically from NuGet.
-   xxhash.[ch] from lz4 are used instead of the ones provided by librdkafka.
-
+    dependencies, so no luck)
 
 The Visual Studio solution file for librdkafka resides in win32/librdkafka.sln
 

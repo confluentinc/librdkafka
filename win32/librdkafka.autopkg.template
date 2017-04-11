@@ -29,13 +29,6 @@ nuget {
         tags: { native, kafka, librdkafka, C, C++ };
  };
 
- 
- dependencies {
-	packages: {
-		lz4/1.3.1.2
-	};
- };
-
  files {
 	#defines {
 	  TOPDIR = ..\;

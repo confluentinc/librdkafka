@@ -67,10 +67,12 @@
 #if WITH_SNAPPY
 #include "snappy.h"
 #endif
-#if WITH_LZ4
+#if WITH_LZ4_EXT
 #include <lz4frame.h>
-#include "xxhash.h"
+#else
+#include "lz4frame.h"
 #endif
+#include "xxhash.h"
 #if WITH_SSL
 #include <openssl/err.h>
 #endif
@@ -2077,7 +2079,6 @@ done:
 
 
 
-#if WITH_LZ4
 /**
  * Fix-up bad LZ4 framing caused by buggy Kafka client / broker.
  * The LZ4F framing format is described in detail here:
@@ -2462,7 +2463,6 @@ done:
         return err;
 
 }
-#endif
 
 
 /**
@@ -2481,9 +2481,7 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 	size_t coutlen = 0;
 	int    outlen;
 	int r;
-#if WITH_LZ4
 	rd_kafka_resp_err_t err;
-#endif
 #if WITH_SNAPPY
 	int    siovlen = 1;
 	struct snappy_env senv;
@@ -2626,7 +2624,6 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
 		break;
 #endif
 
-#if WITH_LZ4
         case RD_KAFKA_COMPRESSION_LZ4:
 		/* Skip LZ4 compression if broker doesn't support it. */
 		if (!(rkb->rkb_features & RD_KAFKA_FEATURE_LZ4))
@@ -2643,7 +2640,6 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
                 if (err)
                         return -1;
                 break;
-#endif
 
 
 	default:
@@ -3911,7 +3907,6 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		break;
 #endif
 
-#if WITH_LZ4
                 case RD_KAFKA_COMPRESSION_LZ4:
 		{
                         err = rd_kafka_lz4_decompress(rkb,
@@ -3925,7 +3920,6 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
                                 goto per_msg_err;
                 }
                 break;
-#endif
 
 
 		default:

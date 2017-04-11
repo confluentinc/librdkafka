@@ -27,7 +27,7 @@ CONFIGURATION.md: src/rdkafka.h examples
 		mv CONFIGURATION.md.tmp CONFIGURATION.md; \
 		rm -f CONFIGURATION.md.tmp)
 
-file-check: CONFIGURATION.md examples
+file-check: CONFIGURATION.md LICENSES.txt examples
 check: file-check
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d $@ || exit $?; done)
 
@@ -62,6 +62,7 @@ archive:
 rpm: distclean
 	$(MAKE) -C packaging/rpm
 
-LICENCES.txt: .PHONY
-	(for i in LICENSE LICENSE.* ; do (echo "$i" ; echo "--------------------------------------------------------------" ; cat $i ; echo "" ; echo "") ; done) > $@
+LICENSES.txt: .PHONY
+	@(for i in LICENSE LICENSE.* ; do (echo "$$i" ; echo "--------------------------------------------------------------" ; cat $$i ; echo "" ; echo "") ; done) > $@.tmp
+	@cmp $@ $@.tmp || mv $@.tmp $@ ; rm -f $@.tmp
 

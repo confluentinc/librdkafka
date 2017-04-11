@@ -8,8 +8,7 @@
         "python",
         "zlib1g-dev",
         "libssl-dev",
-        "libsasl2-dev",
-        "liblz4-dev"
+        "libsasl2-dev"
       ],
       "buildcmd": [
         "./configure",
@@ -22,7 +21,7 @@
     },
 
     "xenial-i386": {
-
+      "_comment": "including liblz4-dev here to verify that WITH_LZ4_EXT works",
       "buildenv": "xenial-i386",
       "builddeps": [
         "build-essential",
@@ -50,8 +49,7 @@
         "python",
         "zlib1g-dev",
         "libssl-dev",
-        "libsasl2-dev",
-        "liblz4-dev"
+        "libsasl2-dev"
       ],
       "buildcmd": [
         "./configure",
@@ -74,7 +72,6 @@
         "zlib1g-dev",
         "libssl-dev",
         "libsasl2-dev",
-        "liblz4-dev",
         "cmake"
       ],
       "buildcmd": [

@@ -118,9 +118,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
                 { 0x8, "sasl" },
 		{ 0x10, "regex" },
-#if WITH_LZ4
 		{ 0x20, "lz4" },
-#endif
 #if defined(_MSC_VER) || WITH_SASL_CYRUS
                 { 0x40, "sasl_gssapi" },
 #endif
@@ -634,9 +632,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SNAPPY
 			{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
 #endif
-#if WITH_LZ4
                         { RD_KAFKA_COMPRESSION_LZ4, "lz4" },
-#endif
 			{ 0 }
 		} },
 	{ _RK_GLOBAL|_RK_PRODUCER, "batch.num.messages", _RK_C_INT,
@@ -716,10 +712,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SNAPPY
 		  { RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
 #endif
-#if WITH_LZ4
 		  { RD_KAFKA_COMPRESSION_LZ4, "lz4" },
-#endif
-
 		  { RD_KAFKA_COMPRESSION_INHERIT, "inherit" },
 		  { 0 }
 		} },

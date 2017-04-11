@@ -10,18 +10,13 @@ os:
 - osx
 dist: trusty
 sudo: false
-addons:
-  apt:
-    packages:
-    - liblz4-dev
 before_script:
  - ccache -s || echo "CCache is not available."
- - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update ; brew install lz4 ; fi
 script:
 - rm -rf artifacts dest
 - mkdir dest artifacts
 - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then CPPFLAGS="-I/usr/local/opt/openssl/include
-  -L/usr/local/opt/openssl/lib" STATIC_LIB_lz4=/usr/local/lib/liblz4.a ./configure --enable-static --prefix="$PWD/dest" ; else ./configure --enable-static --prefix="$PWD/dest" ; fi
+  -L/usr/local/opt/openssl/lib" ./configure --enable-static --prefix="$PWD/dest" ; else ./configure --enable-static --prefix="$PWD/dest" ; fi
 - make -j2 all examples check && make -C tests run_local
 - make install
 - (cd dest && tar cvzf ../artifacts/librdkafka-X.tar.gz .)

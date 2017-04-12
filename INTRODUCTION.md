@@ -100,7 +100,7 @@ overhead and eliminates the adverse effect of the round trip time (rtt).
 
 The default settings, batch.num.messages=10000 and queue.buffering.max.ms=1000,
 are suitable for high throughput. This allows librdkafka to wait up to
-1000 ms for up to 1000 messages to accumulate in the local queue before
+1000 ms for up to 10000 messages to accumulate in the local queue before
 sending the accumulate messages to the broker.
 
 These setting are set globally (`rd_kafka_conf_t`) but applies on a
@@ -112,8 +112,7 @@ per topic+partition basis.
 When low latency messaging is required the "queue.buffering.max.ms" should be
 tuned to the maximum permitted producer-side latency.
 Setting queue.buffering.max.ms to 1 will make sure messages are sent as
-soon as possible. You could check out [How to decrease message latency]
-(https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency)
+soon as possible. You could check out [How to decrease message latency](https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency)
 to find more details.
 
 
@@ -192,7 +191,7 @@ It is created by calling `rd_kafka_topic_new()`.
 Both `rd_kafka_t` and `rd_kafka_topic_t` comes with a configuration API which
 is optional.
 Not using the API will cause librdkafka to use its default values which are
-documented *`CONFIGURATION.md`*.
+documented in [`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 
 **Note**: An application may create multiple `rd_kafka_t` objects and
 	they share no state.
@@ -211,7 +210,7 @@ properties as found in the official clients of Apache Kafka.
 Configuration is applied prior to object creation using the
 `rd_kafka_conf_set()` and `rd_kafka_topic_conf_set()` APIs.
 
-**Note**: The `rd_kafka.._conf_t` objects are not reusable after have been
+**Note**: The `rd_kafka.._conf_t` objects are not reusable after they have been
 	passed to `rd_kafka.._new()`.
 	The application does not need to free any config resources after a
 	`rd_kafka.._new()` call.

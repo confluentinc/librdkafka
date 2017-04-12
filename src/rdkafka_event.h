@@ -40,7 +40,8 @@ rd_kafka_event_type_t rd_kafka_op2event (rd_kafka_op_type_t optype) {
 		[RD_KAFKA_OP_CONSUMER_ERR] = RD_KAFKA_EVENT_ERROR,
 		[RD_KAFKA_OP_REBALANCE] = RD_KAFKA_EVENT_REBALANCE,
 		[RD_KAFKA_OP_OFFSET_COMMIT] = RD_KAFKA_EVENT_OFFSET_COMMIT,
-                [RD_KAFKA_OP_LOG] = RD_KAFKA_EVENT_LOG
+                [RD_KAFKA_OP_LOG] = RD_KAFKA_EVENT_LOG,
+		[RD_KAFKA_OP_STATS] = RD_KAFKA_EVENT_STATS
 	};
 
 	return map[(int)optype & ~RD_KAFKA_OP_FLAGMASK];
@@ -70,6 +71,7 @@ int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 	case RD_KAFKA_EVENT_ERROR:
         case RD_KAFKA_EVENT_LOG:
         case RD_KAFKA_EVENT_OFFSET_COMMIT:
+        case RD_KAFKA_EVENT_STATS:
 		return 1;
 
 	default:

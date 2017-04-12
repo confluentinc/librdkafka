@@ -54,6 +54,7 @@ set(
     0059-bsearch.cpp
     0060-op_prio.cpp
     0061-consumer_lag.cpp
+    0062-stats_event.c
     test.c
     testcpp.cpp
     sockem.c

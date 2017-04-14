@@ -436,3 +436,13 @@ void rd_shared_ptrs_dump (void);
 
 
 #define RD_IF_FREE(PTR,FUNC) do { if ((PTR)) FUNC(PTR); } while (0)
+
+
+/**
+ * @brief Utility types to hold memory,size tuple.
+ */
+
+typedef struct rd_chariov_s {
+        char  *ptr;
+        size_t size;
+} rd_chariov_t;

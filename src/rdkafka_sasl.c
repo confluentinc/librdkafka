@@ -39,7 +39,7 @@
  */
 int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
                         const void *payload, int len,
-                        char *errstr, int errstr_size) {
+                        char *errstr, size_t errstr_size) {
 	struct msghdr msg = RD_ZERO_INIT;
 	struct iovec iov[1];
 	int32_t hdr;
@@ -108,7 +108,7 @@ void rd_kafka_sasl_auth_done (rd_kafka_transport_t *rktrans) {
 
 
 int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
-			    char *errstr, int errstr_size) {
+                            char *errstr, size_t errstr_size) {
         rd_kafka_buf_t *rkbuf;
         int r;
 
@@ -117,21 +117,45 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
 
         r = rd_kafka_transport_framed_recvmsg(rktrans, &rkbuf,
                                               errstr, errstr_size);
-        if (r == -1)
+        if (r == -1) {
+                if (!strcmp(errstr, "Disconnected"))
+                        rd_snprintf(errstr, errstr_size,
+                                    "Disconnected: check client %s credentials "
+                                    "and broker logs",
+                                    rktrans->rktrans_rkb->rkb_rk->rk_conf.
+                                    sasl.mechanisms);
                 return -1;
-        else if (r == 0) /* not fully received yet */
+        } else if (r == 0) /* not fully received yet */
                 return 0;
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
                    "Received SASL frame from broker (%"PRIusz" bytes)",
                    rkbuf ? rkbuf->rkbuf_len : 0);
 
-        return rktrans->rktrans_sasl.recv(rktrans,
-                                          rkbuf ?
-                                          rkbuf->rkbuf_rbuf : NULL,
-                                          rkbuf ?
-                                          rkbuf->rkbuf_len : 0,
-                                          errstr, errstr_size);
+        r = rktrans->rktrans_rkb->rkb_rk->
+                rk_conf.sasl.provider->recv(rktrans,
+                                            rkbuf ?
+                                            rkbuf->rkbuf_rbuf : NULL,
+                                            rkbuf ?
+                                            rkbuf->rkbuf_len : 0,
+                                            errstr, errstr_size);
+        rd_kafka_buf_destroy(rkbuf);
+
+        return r;
+}
+
+
+/**
+ * @brief Close SASL session (from transport code)
+ * @remark May be called on non-SASL transports (no-op)
+ */
+void rd_kafka_sasl_close (rd_kafka_transport_t *rktrans) {
+        const struct rd_kafka_sasl_provider *provider =
+                rktrans->rktrans_rkb->rkb_rk->rk_conf.
+                sasl.provider;
+
+        if (provider && provider->close)
+                provider->close(rktrans);
 }
 
 
@@ -144,11 +168,13 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
  * Locality: broker thread
  */
 int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
-			      char *errstr, int errstr_size) {
+			      char *errstr, size_t errstr_size) {
 	int r;
 	rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
 	rd_kafka_t *rk = rkb->rkb_rk;
         char *hostname, *t;
+        const struct rd_kafka_sasl_provider *provider =
+                rk->rk_conf.sasl.provider;
 
         /* Verify broker support:
          * - RD_KAFKA_FEATURE_SASL_GSSAPI - GSSAPI supported
@@ -177,18 +203,12 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
 
         rd_rkb_dbg(rkb, SECURITY, "SASL",
                    "Initializing SASL client: service name %s, "
-                   "hostname %s, mechanisms %s",
+                   "hostname %s, mechanisms %s, provider %s",
                    rk->rk_conf.sasl.service_name, hostname,
-                   rk->rk_conf.sasl.mechanisms);
+                   rk->rk_conf.sasl.mechanisms,
+                   provider->name);
 
-#ifndef _MSC_VER
-        r = rd_kafka_sasl_cyrus_client_new(rktrans, hostname,
-                                           errstr, errstr_size);
-#else
-        r = rd_kafka_sasl_win32_client_new(rktrans, hostname,
-                                           errstr, errstr_size);
-#endif
-
+        r = provider->client_new(rktrans, hostname, errstr, errstr_size);
         if (r != -1)
                 rd_kafka_transport_poll_set(rktrans, POLLIN);
 
@@ -206,10 +226,11 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
  *
  * Locality: broker thread
  */
-void rd_kafka_broker_sasl_term (rd_kafka_broker_t *rkb) {
-#ifndef _MSC_VER
-        rd_kafka_broker_sasl_cyrus_term(rkb);
-#endif
+void rd_kafka_sasl_broker_term (rd_kafka_broker_t *rkb) {
+        const struct rd_kafka_sasl_provider *provider =
+                rkb->rkb_rk->rk_conf.sasl.provider;
+        if (provider->broker_term)
+                provider->broker_term(rkb);
 }
 
 /**
@@ -217,33 +238,95 @@ void rd_kafka_broker_sasl_term (rd_kafka_broker_t *rkb) {
  *
  * Locality: broker thread
  */
-void rd_kafka_broker_sasl_init (rd_kafka_broker_t *rkb) {
-#ifndef _MSC_VER
-        rd_kafka_broker_sasl_cyrus_init(rkb);
-#endif
+void rd_kafka_sasl_broker_init (rd_kafka_broker_t *rkb) {
+        const struct rd_kafka_sasl_provider *provider =
+                rkb->rkb_rk->rk_conf.sasl.provider;
+        if (provider->broker_init)
+                provider->broker_init(rkb);
 }
 
 
 
-int rd_kafka_sasl_conf_validate (rd_kafka_t *rk,
-				 char *errstr, size_t errstr_size) {
+/**
+ * @brief Select SASL provider for configured mechanism (singularis)
+ * @returns 0 on success or -1 on failure.
+ */
+int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
+                                   char *errstr, size_t errstr_size) {
+        const struct rd_kafka_sasl_provider *provider = NULL;
 
-	if (strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI"))
-		return 0;
+        if (!strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI")) {
+                /* GSSAPI / Kerberos */
+#ifdef _MSC_VER
+                provider = &rd_kafka_sasl_win32_provider;
+#elif WITH_SASL_CYRUS
+                provider = &rd_kafka_sasl_cyrus_provider;
+#endif
 
+        } else if (!strcmp(rk->rk_conf.sasl.mechanisms, "PLAIN")) {
+                /* SASL PLAIN */
+                provider = &rd_kafka_sasl_plain_provider;
+
+        } else if (!strncmp(rk->rk_conf.sasl.mechanisms, "SCRAM-SHA-",
+                            strlen("SCRAM-SHA-"))) {
+                /* SASL SCRAM */
+#if WITH_SASL_SCRAM
+                provider = &rd_kafka_sasl_scram_provider;
+#endif
+
+        } else {
+                /* Unsupported mechanism */
+                rd_snprintf(errstr, errstr_size,
+                            "Unsupported SASL mechanism: %s",
+                            rk->rk_conf.sasl.mechanisms);
+                return -1;
+        }
+
+        if (!provider) {
+                rd_snprintf(errstr, errstr_size,
+                            "No provider for SASL mechanism %s"
+                            ": recompile librdkafka with "
 #ifndef _MSC_VER
-        return rd_kafka_sasl_cyrus_conf_validate(rk, errstr, errstr_size);
-#else
+                            "libsasl2 or "
+#endif
+                            "openssl support. "
+                            "Current build options:"
+                            " PLAIN"
+#ifdef _MSC_VER
+                            " WindowsSSPI(GSSAPI)"
+#endif
+#if WITH_SASL_CYRUS
+                            " SASL_CYRUS"
+#endif
+#if WITH_SASL_SCRAM
+                            " SASL_SCRAM"
+#endif
+                            ,
+                            rk->rk_conf.sasl.mechanisms);
+                return -1;
+        }
+
+        rd_kafka_dbg(rk, SECURITY, "SASL",
+                     "Selected provider %s for SASL mechanism %s",
+                     provider->name, rk->rk_conf.sasl.mechanisms);
+
+        /* Validate SASL config */
+        if (provider->conf_validate &&
+            provider->conf_validate(rk, errstr, errstr_size) == -1)
+                return -1;
+
+        rk->rk_conf.sasl.provider = provider;
+
         return 0;
-#endif
 }
+
 
 
 /**
  * Global SASL termination.
  */
 void rd_kafka_sasl_global_term (void) {
-#ifndef _MSC_VER
+#if WITH_SASL_CYRUS
         rd_kafka_sasl_cyrus_global_term();
 #endif
 }
@@ -253,7 +336,7 @@ void rd_kafka_sasl_global_term (void) {
  * Global SASL init, called once per runtime.
  */
 int rd_kafka_sasl_global_init (void) {
-#ifndef _MSC_VER
+#if WITH_SASL_CYRUS
         return rd_kafka_sasl_cyrus_global_init();
 #else
         return 0;

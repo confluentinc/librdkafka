@@ -46,10 +46,7 @@
 #include "rdkafka_assignor.h"
 #include "rdkafka_request.h"
 #include "rdkafka_event.h"
-
-#if WITH_SASL
 #include "rdkafka_sasl.h"
-#endif
 
 #include "rdtime.h"
 #ifdef _MSC_VER
@@ -126,9 +123,7 @@ static void rd_kafka_global_cnt_incr (void) {
 #if WITH_SSL
 		rd_kafka_transport_ssl_init();
 #endif
-#if WITH_SASL
-		rd_kafka_sasl_global_init();
-#endif
+                rd_kafka_sasl_global_init();
 	}
 	mtx_unlock(&rd_kafka_global_lock);
 }
@@ -142,9 +137,7 @@ static void rd_kafka_global_cnt_decr (void) {
 	rd_kafka_assert(NULL, rd_kafka_global_cnt > 0);
 	rd_kafka_global_cnt--;
 	if (rd_kafka_global_cnt == 0) {
-#if WITH_SASL
-		rd_kafka_sasl_global_term();
-#endif
+                rd_kafka_sasl_global_term();
 #if WITH_SSL
 		rd_kafka_transport_ssl_term();
 #endif
@@ -1231,9 +1224,13 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                 return NULL;
         }
 
-        if (use_conf->metadata_max_age_ms == -1)
-                use_conf->metadata_max_age_ms =
-                        use_conf->metadata_refresh_interval_ms * 3;
+        if (use_conf->metadata_max_age_ms == -1) {
+                if (use_conf->metadata_refresh_interval_ms > 0)
+                        use_conf->metadata_max_age_ms =
+                                use_conf->metadata_refresh_interval_ms * 3;
+                else /* use default value of refresh * 3 */
+                        use_conf->metadata_max_age_ms = 5*60*1000 * 3;
+        }
 
 	rd_kafka_global_cnt_incr();
 
@@ -1320,19 +1317,17 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		return NULL;
 	}
 
-#if WITH_SASL
-	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
-	    rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) {
-		/* Validate SASL config */
-		if (rd_kafka_sasl_conf_validate(rk, errstr, errstr_size) == -1) {
+        if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
+            rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) {
+                if (rd_kafka_sasl_select_provider(rk,
+                                                  errstr, errstr_size) == -1) {
                         rd_kafka_destroy_internal(rk);
-			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
-						EINVAL);
-			rd_kafka_global_cnt_decr();
-			return NULL;
-		}
-	}
-#endif
+                        rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                                EINVAL);
+                        rd_kafka_global_cnt_decr();
+                        return NULL;
+                }
+        }
 
 #if WITH_SSL
 	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL ||

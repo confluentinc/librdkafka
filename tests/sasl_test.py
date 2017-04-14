@@ -126,12 +126,14 @@ if __name__ == '__main__':
     versions = list()
     if len(args.versions):
         for v in args.versions:
-            versions.append((v, ['PLAIN','GSSAPI']))
+            versions.append((v, ['SCRAM-SHA-512','PLAIN','GSSAPI']))
     else:
-        versions = [('trunk', ['PLAIN','GSSAPI']),
+        versions = [('0.10.2.0', ['SCRAM-SHA-512','PLAIN','GSSAPI']),
                     ('0.9.0.1', ['GSSAPI']),
                     ('0.8.2.2', [])]
     sasl_plain_conf = {'sasl_mechanisms': 'PLAIN',
+                       'sasl_users': 'myuser=mypassword'}
+    sasl_scram_conf = {'sasl_mechanisms': 'SCRAM-SHA-512',
                        'sasl_users': 'myuser=mypassword'}
     ssl_sasl_plain_conf = {'sasl_mechanisms': 'PLAIN',
                            'sasl_users': 'myuser=mypassword',
@@ -141,6 +143,10 @@ if __name__ == '__main__':
     suites = [{'name': 'SASL PLAIN',
                'run': (args.sasl and args.plaintext),
                'conf': sasl_plain_conf,
+               'expect_fail': ['0.9.0.1', '0.8.2.2']},
+              {'name': 'SASL SCRAM',
+               'run': (args.sasl and args.plaintext),
+               'conf': sasl_scram_conf,
                'expect_fail': ['0.9.0.1', '0.8.2.2']},
               {'name': 'PLAINTEXT (no SASL)',
                'run': args.plaintext},

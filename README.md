@@ -30,7 +30,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Simple (legacy) consumer
   * Compression: snappy, gzip, lz4
   * [SSL](https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka) support
-  * [SASL](https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka) (GSSAPI/Kerberos, PLAIN) support
+  * [SASL](https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka) (GSSAPI/Kerberos/SSPI, PLAIN, SCRAM) support
   * Broker version support: >=0.8 (see [Broker version compatibility](https://github.com/edenhill/librdkafka/wiki/Broker-version-compatibility))
   * Stable C & C++ APIs (ABI safety guaranteed for C)
   * [Statistics](https://github.com/edenhill/librdkafka/wiki/Statistics) metrics
@@ -78,6 +78,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
   * [otto.de](http://otto.de)'s [trackdrd](https://github.com/otto-de/trackrdrd) - Varnish log reader
   * [Microwish](https://github.com/microwish) has a range of Kafka utilites for log aggregation, HDFS integration, etc.
+  * [aidp](https://github.com/weiboad/aidp) - kafka consumer embedded Lua scripting language in data process framework 
   * large unnamed financial institution
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
@@ -90,8 +91,8 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 	GNU make
    	pthreads
 	zlib (optional, for gzip compression support)
-	libssl-dev (optional, for SSL support)
-	libsasl2-dev (optional, for SASL support)
+	libssl-dev (optional, for SSL and SASL SCRAM support)
+	libsasl2-dev (optional, for SASL GSSAPI support)
 	liblz4-dev (optional, for LZ4 compression support)
 
 ## Instructions

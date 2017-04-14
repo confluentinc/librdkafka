@@ -2793,12 +2793,33 @@ void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val) {
 }
 
 char *test_conf_get (rd_kafka_conf_t *conf, const char *name) {
-	static char ret[256];
+	static RD_TLS char ret[256];
 	size_t ret_sz = sizeof(ret);
 	if (rd_kafka_conf_get(conf, name, ret, &ret_sz) != RD_KAFKA_CONF_OK)
 		TEST_FAIL("Failed to get config \"%s\": %s\n", name,
 			  "unknown property");
 	return ret;
+}
+
+
+/**
+ * @brief Check if property \name matches \p val in \p conf.
+ *        If \p conf is NULL the test config will be used. */
+int test_conf_match (rd_kafka_conf_t *conf, const char *name, const char *val) {
+        char *real;
+        int free_conf = 0;
+
+        if (!conf) {
+                test_conf_init(&conf, NULL, 0);
+                free_conf = 1;
+        }
+
+        real = test_conf_get(conf, name);
+
+        if (free_conf)
+                rd_kafka_conf_destroy(conf);
+
+        return !strcmp(real, val);
 }
 
 

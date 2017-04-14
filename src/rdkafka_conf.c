@@ -178,7 +178,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           1, 24*3600*1000, -1 },
         { _RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
           _RK(metadata_refresh_fast_interval_ms),
-          "When a topic looses its leader a new metadata request will be "
+          "When a topic loses its leader a new metadata request will be "
           "enqueued with this initial interval, exponentially increasing "
           "until the topic metadata has been refreshed. "
           "This is used to recover quickly from transitioning leader brokers.",

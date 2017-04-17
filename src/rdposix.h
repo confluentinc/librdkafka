@@ -48,24 +48,43 @@
  * Annotations, attributes, optimizers
  */
 #ifndef likely
+#ifdef __370__ /* z/OS */
+#define likely(x) (x)
+#else
 #define likely(x)   __builtin_expect((x),1)
 #endif
+#endif
 #ifndef unlikely
+#ifdef __370__ /* z/OS */
+#define unlikely(x) (x)
+#else
 #define unlikely(x) __builtin_expect((x),0)
 #endif
+#endif
+
+#define RD_INLINE   inline
+#define RD_IS_CONSTANT(p)  __builtin_constant_p((p))
+
+#ifdef __370__ /* z/OS */
+
+#define RD_UNUSED
+#define RD_WARN_UNUSED_RESULT
+#define RD_NORETURN
+
+#else
 
 #define RD_UNUSED   __attribute__((unused))
-#define RD_INLINE   inline
+#define RD_TLS      __thread
 #define RD_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #define RD_NORETURN __attribute__((noreturn))
-#define RD_IS_CONSTANT(p)  __builtin_constant_p((p))
-#define RD_TLS      __thread
+
+#endif
 
 /**
 * Allocation
 */
-#if !defined(__FreeBSD__)
-/* alloca(3) is in stdlib on FreeBSD */
+#if !defined(__FreeBSD__) && !defined(__370__)
+/* alloca(3) is in stdlib on FreeBSD and in z/OS */
 #include <alloca.h>
 #endif
 
@@ -80,7 +99,11 @@
 #define PRIusz  "zu"
 #define PRIdsz  "zd"
 
+#ifdef __370__ /* z/OS */
+#define RD_FORMAT(...)
+#else
 #define RD_FORMAT(...) __attribute__((format (__VA_ARGS__)))
+#endif
 #define rd_snprintf(...)  snprintf(__VA_ARGS__)
 #define rd_vsnprintf(...) vsnprintf(__VA_ARGS__)
 
@@ -108,12 +131,42 @@
  */
 static RD_INLINE RD_UNUSED
 void rd_usleep (int usec, rd_atomic32_t *terminate) {
+#ifdef __370__
+    int left = usec / 1000000;
+
+    while(usec > 0) {
+        unsigned long long stck_start;
+        unsigned long long stck_end;
+
+        __stckf(&stck_start);
+	/* if sleep return non 0 it was interupted
+	 * the return is the number of seconds it had
+	 * _not_ slept
+	 */
+	if(left)
+	    left = sleep(left);
+	else
+	    usleep(usec);
+
+	if(terminate && rd_atomic32_get(terminate))
+	    break;
+
+	__stckf(&stck_end);
+	stck_end -= stck_start;
+	/* a storeclock shifted right by 12 is a number of
+	 * microsecond since 1/1/1900
+	 */
+	stck_end >>= 12;
+	usec -= stck_end;
+    }
+#else
         struct timespec req = {usec / 1000000, (long)(usec % 1000000) * 1000};
 
         /* Retry until complete (issue #272), unless terminating. */
         while (nanosleep(&req, &req) == -1 &&
                (errno == EINTR && (!terminate || !rd_atomic32_get(terminate))))
                 ;
+#endif
 }
 
 

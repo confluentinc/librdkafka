@@ -82,10 +82,17 @@ typedef SSIZE_T ssize_t;
 #else
 #include <sys/socket.h> /* for sockaddr, .. */
 
+#ifndef __370__
 #define RD_UNUSED __attribute__((unused))
 #define RD_INLINE inline
 #define RD_EXPORT
 #define RD_DEPRECATED __attribute__((deprecated))
+#else
+#define RD_UNUSED
+#define RD_INLINE inline
+#define RD_EXPORT
+#define RD_DEPRECATED
+#endif
 
 #ifndef LIBRDKAFKA_TYPECHECKS
 #define LIBRDKAFKA_TYPECHECKS 1

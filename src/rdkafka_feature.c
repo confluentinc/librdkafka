@@ -74,7 +74,7 @@ static const struct rd_kafka_feature_map {
 		},
 	},
 	{
-		
+
 		/* @brief >=0.10.0: ApiVersionQuery support.
 		 * @remark This is a bit of chicken-and-egg problem but needs to be
 		 *         set by feature_check() to avoid the feature being cleared
@@ -302,7 +302,7 @@ int rd_kafka_ApiVersion_is_queryable (const char *broker_version) {
 
 
 
-	
+
 /**
  * @brief Check if match's versions overlaps with \p apis.
  *
@@ -351,7 +351,7 @@ int rd_kafka_features_check (rd_kafka_broker_t *rkb,
 		for (match = &rd_kafka_feature_map[i].depends[0] ;
 		     match->ApiKey != -1 ; match++) {
 			int r;
-			
+
 			r = rd_kafka_ApiVersion_check(broker_apis, broker_api_cnt,
 						      match);
 

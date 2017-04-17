@@ -38,9 +38,9 @@
 #include <openssl/err.h>
 #endif
 
-struct rd_kafka_transport_s {	
+struct rd_kafka_transport_s {
 	int rktrans_s;
-	
+
 	rd_kafka_broker_t *rktrans_rkb;
 
 #if WITH_SSL

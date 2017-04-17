@@ -207,7 +207,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_purge (rd_kafka_t *rk,
 /**
  * Remove message from message queue
  */
-static RD_INLINE RD_UNUSED 
+static RD_INLINE RD_UNUSED
 rd_kafka_msg_t *rd_kafka_msgq_deq (rd_kafka_msgq_t *rkmq,
 				   rd_kafka_msg_t *rkm,
 				   int do_count) {

@@ -133,7 +133,7 @@ typedef struct rd_avl_s {
 
 /**
  * Changes the element pointer for an existing AVL node in the tree.
- * The new element must be identical (according to the comparator) 
+ * The new element must be identical (according to the comparator)
  * to the previous element.
  *
  * NOTE: rd_avl_wrlock() must be held.
@@ -142,7 +142,7 @@ typedef struct rd_avl_s {
 
 /**
  * Returns the current element pointer for an existing AVL node in the tree
- * 
+ *
  * NOTE: rd_avl_*lock() must be held.
  */
 #define RD_AVL_ELM_GET_NL(ran)      ((ran)->ran_elm)

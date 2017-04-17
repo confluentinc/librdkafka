@@ -203,7 +203,7 @@ int rd_kafka_topic_cmp_s_rkt (const void *_a, const void *_b) {
 
 
 /**
- * Create new topic handle. 
+ * Create new topic handle.
  *
  * Locality: any
  */

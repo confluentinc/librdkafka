@@ -879,7 +879,7 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
  *        there was no error.
  */
 static RD_INLINE const char *
-RD_UNUSED 
+RD_UNUSED
 rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
 	if (!rkmessage->err)
 		return NULL;
@@ -947,7 +947,7 @@ typedef enum {
  *                           errstr, sizeof(errstr));
  *   if (res != RD_KAFKA_CONF_OK)
  *      die("%s\n", errstr);
- *   
+ *
  *   rk = rd_kafka_new(..., myconf);
  * @endcode
  *
@@ -1027,7 +1027,7 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  * The delivery report callback will be called once for each message
  * accepted by rd_kafka_produce() (et.al) with \p err set to indicate
  * the result of the produce request.
- * 
+ *
  * The callback is called when a message is succesfully produced or
  * if librdkafka encountered a permanent failure, or the retry counter for
  * temporary errors has been exhausted.
@@ -1081,7 +1081,7 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  * @remark The \p partitions list is destroyed by librdkafka on return
  *         return from the rebalance_cb and must not be freed or
  *         saved by the application.
- * 
+ *
  * The following example shows the application's responsibilities:
  * @code
  *    static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
@@ -1616,7 +1616,7 @@ const char *rd_kafka_name(const rd_kafka_t *rk);
 
 
 /**
- * @brief Returns this client's broker-assigned group member id 
+ * @brief Returns this client's broker-assigned group member id
  *
  * @remark This currently requires the high-level KafkaConsumer
  *
@@ -1899,7 +1899,7 @@ rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk);
  * Use rd_kafka_queue_destroy() to loose the reference.
  *
  * @remark rd_kafka_queue_destroy() MUST be called on this queue
- * 
+ *
  * @remark This function only works on consumers.
  */
 RD_EXPORT
@@ -1912,7 +1912,7 @@ rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
  * If \p dst is \c NULL the forwarding is removed.
  *
  * The internal refcounts for both queues are increased.
- * 
+ *
  * @remark Regardless of whether \p dst is NULL or not, after calling this
  *         function, \p src will not forward it's fetch queue to the consumer
  *         queue.
@@ -2545,14 +2545,14 @@ rd_kafka_position (rd_kafka_t *rk,
  *                           Messages are considered in-queue from the point they
  *                           are accepted by produce() until their corresponding
  *                           delivery report callback/event returns.
- *                           It is thus a requirement to call 
+ *                           It is thus a requirement to call
  *                           rd_kafka_poll() (or equiv.) from a separate
  *                           thread when F_BLOCK is used.
  *                           See WARNING on \c RD_KAFKA_MSG_F_BLOCK above.
  *
  *    RD_KAFKA_MSG_F_FREE - rdkafka will free(3) \p payload when it is done
  *                          with it.
- *    RD_KAFKA_MSG_F_COPY - the \p payload data will be copied and the 
+ *    RD_KAFKA_MSG_F_COPY - the \p payload data will be copied and the
  *                          \p payload pointer will not be used by rdkafka
  *                          after the call returns.
  *
@@ -2959,7 +2959,7 @@ int rd_kafka_thread_cnt(void);
  *
  * Returns 0 if all kafka objects are now destroyed, or -1 if the
  * timeout was reached.
- * Since `rd_kafka_destroy()` is an asynch operation the 
+ * Since `rd_kafka_destroy()` is an asynch operation the
  * `rd_kafka_wait_destroyed()` function can be used for applications where
  * a clean shutdown is required.
  */

@@ -36,7 +36,7 @@
 static RD_INLINE int rd_jitter (int low, int high) RD_UNUSED;
 static RD_INLINE int rd_jitter (int low, int high) {
 	return (low + (rand() % ((high-low)+1)));
-	
+
 }
 
 

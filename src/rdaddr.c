@@ -70,7 +70,7 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 				niflags))
 			break;
 
-		
+
 		if (flags & RD_SOCKADDR2STR_F_PORT) {
 			size_t len = strlen(ret[reti]);
 			rd_snprintf(ret[reti]+len, sizeof(ret[reti])-len,
@@ -78,10 +78,10 @@ const char *rd_sockaddr2str (const void *addr, int flags) {
 				 a->sinx_family == AF_INET6 ? "]" : "",
 				 portstr);
 		}
-	
+
 		return ret[reti];
 	}
-	
+
 
 	/* Error-case */
 	rd_snprintf(ret[reti], sizeof(ret[reti]), "<unsupported:%s>",
@@ -115,7 +115,7 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 		nodelen = 0;
 		svct = nodesvc;
 	}
-		
+
 	if ((svct = strrchr(svct ? svct : nodesvc, ':')) && (*(svct-1) != ':') &&
 	    *(++svct)) {
 		/* Optional ":service" definition. */
@@ -164,7 +164,7 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 
 	if (*svc)
 		defsvc = svc;
-		
+
 	if ((r = getaddrinfo(node, defsvc, &hints, &ais))) {
 #ifdef EAI_SYSTEM
 		if (r == EAI_SYSTEM)
@@ -182,7 +182,7 @@ rd_sockaddr_list_t *rd_getaddrinfo (const char *nodesvc, const char *defsvc,
 		}
 		return NULL;
 	}
-	
+
 	/* Count number of addresses */
 	for (ai = ais ; ai != NULL ; ai = ai->ai_next)
 		cnt++;

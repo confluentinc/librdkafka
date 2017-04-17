@@ -121,9 +121,9 @@ typedef struct rd_sockaddr_list_s {
  *       }
  *       ...
  *   }
- * 
+ *
  */
- 
+
 static RD_INLINE rd_sockaddr_inx_t *
 rd_sockaddr_list_next (rd_sockaddr_list_t *rsal) RD_UNUSED;
 static RD_INLINE rd_sockaddr_inx_t *

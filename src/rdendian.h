@@ -103,7 +103,10 @@
 #define be64toh(x) (x)
 #define be32toh(x) (x)
 #define be16toh(x) (x)
-
+#elif defined __370__ /* z/os is always big endian */
+#define be64toh(x) (x)
+#define be32toh(x) (x)
+#define be16toh(x) (x)
 #else
  #include <endian.h>
 #endif

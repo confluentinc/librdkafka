@@ -2867,7 +2867,7 @@ rd_kafka_topic_partition_list_get_leaders (
                          * add topic to query list. */
                         if (query_topics &&
                             !rd_list_find(query_topics, rktpar->topic,
-                                          (void *)strcmp))
+					  (int(*)(const void*,const void*))&strcmp))
                                 rd_list_add(query_topics,
                                             rd_strdup(rktpar->topic));
                         continue;
@@ -3047,7 +3047,9 @@ rd_kafka_topic_partition_list_get_topic_names (
                 if (!include_regex && *rktpar->topic == '^')
                         continue;
 
-                if (!rd_list_find(topics, rktpar->topic, (void *)strcmp)) {
+                if (!rd_list_find(topics, rktpar->topic,
+				  (int(*)(const void*,const void*))&strcmp))
+                {
                         rd_list_add(topics, rd_strdup(rktpar->topic));
                         cnt++;
                 }

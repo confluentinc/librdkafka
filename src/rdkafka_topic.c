@@ -1151,7 +1151,7 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                 /* Need to re-query this topic's leader. */
                 if (query_this &&
                     !rd_list_find(&query_topics, rkt->rkt_topic->str,
-                                  (void *)strcmp))
+				  (int(*)(const void*,const void*))&strcmp))
                         rd_list_add(&query_topics,
                                     rd_strdup(rkt->rkt_topic->str));
 

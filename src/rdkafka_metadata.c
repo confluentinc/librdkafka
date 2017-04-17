@@ -459,7 +459,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                         rd_list_free_cb(missing_topics,
                                         rd_list_remove_cmp(missing_topics,
                                                            mdt->topic,
-                                                           (void *)strcmp));
+							   (int(*)(void*,void*))&strcmp));
                         continue;
                 }
 
@@ -471,7 +471,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                         rd_list_free_cb(missing_topics,
                                         rd_list_remove_cmp(missing_topics,
                                                            mdt->topic,
-                                                           (void*)strcmp));
+							   (int(*)(void*,void*))&strcmp));
                         if (!all_topics) {
                                 rd_kafka_wrlock(rk);
                                 rd_kafka_metadata_cache_topic_update(rk, mdt);

@@ -26,6 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFAK_SUBSTRICPTION_H
+#define _RDKAFAK_SUBSTRICPTION_H
 
+#endif
 

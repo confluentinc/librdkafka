@@ -41,7 +41,8 @@
 
 
 /* @cond NO_DOC */
-#pragma once
+#ifndef _RDKAFKA_H
+#define _RDKAFKA_H
 
 #include <stdio.h>
 #include <inttypes.h>
@@ -3181,4 +3182,6 @@ int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

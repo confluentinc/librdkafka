@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_INT_H
+#define _RDKAFKA_INT_H
 
 
 #ifndef _MSC_VER
@@ -406,3 +407,4 @@ int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
 
+#endif

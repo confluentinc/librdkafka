@@ -29,7 +29,8 @@
 /**
  * Win32 (Visual Studio) support
  */
-#pragma once
+#ifndef _RDWIN32_H
+#define _RDWIN32_H
 
 
 #include <stdlib.h>
@@ -246,3 +247,4 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
 #define rd_close(fd) closesocket(fd)
 
 #endif /* !__cplusplus*/
+#endif

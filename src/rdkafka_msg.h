@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_MSG_H
+#define _RDKAFKA_MSG_H
 
 #include "rdsysqueue.h"
 
@@ -267,3 +268,5 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 
 int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 			      int do_lock);
+
+#endif

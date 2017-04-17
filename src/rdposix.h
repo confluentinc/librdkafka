@@ -48,23 +48,37 @@
  * Annotations, attributes, optimizers
  */
 #ifndef likely
+#ifdef __370__
+#define likely(x) (x)
+#else
 #define likely(x)   __builtin_expect((x),1)
 #endif
+#endif
 #ifndef unlikely
+#ifdef __370__
+#define unlikely(x) (x)
+#else
 #define unlikely(x) __builtin_expect((x),0)
 #endif
+#endif
 
-#define RD_UNUSED   __attribute__((unused))
 #define RD_INLINE   inline
+#define RD_IS_CONSTANT(p)  __builtin_constant_p((p))
+#ifndef __370__
+#define RD_UNUSED   __attribute__((unused))
+#define RD_TLS      __thread
 #define RD_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #define RD_NORETURN __attribute__((noreturn))
-#define RD_IS_CONSTANT(p)  __builtin_constant_p((p))
-#define RD_TLS      __thread
+#else
+#define RD_UNUSED
+#define RD_WARN_UNUSED_RESULT
+#define RD_NORETURN
+#endif
 
 /**
 * Allocation
 */
-#if !defined(__FreeBSD__)
+#if !defined(__FreeBSD__) && !defined(__370__)
 /* alloca(3) is in stdlib on FreeBSD */
 #include <alloca.h>
 #endif
@@ -80,7 +94,11 @@
 #define PRIusz  "zu"
 #define PRIdsz  "zd"
 
+#ifndef __370__
 #define RD_FORMAT(...) __attribute__((format (__VA_ARGS__)))
+#else
+#define RD_FORMAT(...)
+#endif
 #define rd_snprintf(...)  snprintf(__VA_ARGS__)
 #define rd_vsnprintf(...) vsnprintf(__VA_ARGS__)
 
@@ -108,12 +126,22 @@
  */
 static RD_INLINE RD_UNUSED
 void rd_usleep (int usec, rd_atomic32_t *terminate) {
+#ifdef __370__
+    if(usec > 1000000)
+    {
+        sleep(usec / 1000000);
+        usec %= 1000000;
+    }
+
+    usleep(usec);
+#else
         struct timespec req = {usec / 1000000, (long)(usec % 1000000) * 1000};
 
         /* Retry until complete (issue #272), unless terminating. */
         while (nanosleep(&req, &req) == -1 &&
                (errno == EINTR && (!terminate || !rd_atomic32_get(terminate))))
                 ;
+#endif
 }
 
 

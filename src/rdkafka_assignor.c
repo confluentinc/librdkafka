@@ -217,8 +217,8 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
         int ti;
         rd_kafka_assignor_topic_t *eligible_topic = NULL;
 
-        rd_list_init(eligible_topics, RD_MIN(metadata->topic_cnt, 10),
-                     (void *)rd_kafka_assignor_topic_destroy);
+	rd_list_init(eligible_topics, RD_MIN(metadata->topic_cnt, 10),
+		     (void (*)(void*)) &rd_kafka_assignor_topic_destroy);
 
         /* For each topic in the cluster, scan through the member list
          * to find matching subscriptions. */
@@ -487,8 +487,8 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 	char *wanted;
 	char *s;
 
-        rd_list_init(&rk->rk_conf.partition_assignors, 2,
-                     (void *)rd_kafka_assignor_destroy);
+	rd_list_init(&rk->rk_conf.partition_assignors, 2,
+		     (void (*)(void*)) &rd_kafka_assignor_destroy);
 
 	rd_strdupa(&wanted, rk->rk_conf.partition_assignment_strategy);
 

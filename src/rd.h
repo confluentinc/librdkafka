@@ -27,8 +27,9 @@
  */
 
 
+#ifndef _RD_H
+#define _RD_H
 
-#pragma once
 
 #ifndef _MSC_VER
 #ifndef _GNU_SOURCE
@@ -446,3 +447,5 @@ typedef struct rd_chariov_s {
         char  *ptr;
         size_t size;
 } rd_chariov_t;
+
+#endif /* _RD_H */

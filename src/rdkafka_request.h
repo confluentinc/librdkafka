@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_REQUEST_H
+#define _RDKAFKA_REQUEST_H
 
 #include "rdkafka_cgrp.h"
 #include "rdkafka_feature.h"
@@ -192,3 +193,5 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    rd_kafka_replyq_t replyq,
 				    rd_kafka_resp_cb_t *resp_cb,
 				    void *opaque, int flash_msg);
+
+#endif /* _RDKAFKA_REQUEST_H */

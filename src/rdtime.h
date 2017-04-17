@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDTIME_H
+#define _RDTIME_H
 
 
 #ifndef TIMEVAL_TO_TIMESPEC
@@ -173,3 +174,5 @@ rd_timeout_remains_limit (rd_ts_t abs_timeout, int limit_ms) {
 static RD_INLINE int rd_timeout_expired (int timeout_ms) {
 	return timeout_ms == RD_POLL_NOWAIT;
 }
+
+#endif /* _RDTIME_H */

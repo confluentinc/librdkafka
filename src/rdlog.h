@@ -26,6 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDLOG_H
+#define _RDLOG_H
 
 void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len);
+
+#endif /* _RDLOG_H */

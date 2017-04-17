@@ -25,7 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+
+#ifndef _RDKAFKA_PARTITION_H
+#define _RDKAFKA_PARTITION_H
 
 #include "rdkafka_topic.h"
 #include "rdkafka_cgrp.h"
@@ -626,3 +628,5 @@ int rd_kafka_partition_leader_cmp (const void *_a, const void *_b) {
         const struct rd_kafka_partition_leader *a = _a, *b = _b;
         return rd_kafka_broker_cmp(a->rkb, b->rkb);
 }
+
+#endif /* _RDKAFKA_PARTITION_H */

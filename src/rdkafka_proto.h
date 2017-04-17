@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_PROTO_H
+#define _RDKAFKA_PROTO_H
 
 
 #include "rdendian.h"
@@ -397,6 +398,6 @@ int rd_kafkap_bytes_cmp_data (const rd_kafkap_bytes_t *a,
 
 typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 
-
 #define RD_KAFKA_NODENAME_SIZE  128
 
+#endif /* _RDKAFKA_PROTO_H */

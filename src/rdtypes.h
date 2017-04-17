@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDTYPES_H
+#define _RDTYPES_H
 
 #include <inttypes.h>
 
@@ -38,3 +39,6 @@
 
 /* Timestamp (microseconds) */
 typedef int64_t rd_ts_t;
+
+
+#endif /* _RDTYPES_H */

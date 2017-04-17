@@ -1,5 +1,5 @@
-#pragma once
-
+#ifndef _RDINTRVAL_H
+#define _RDINTRVAL_H
 
 
 #include "rd.h"
@@ -114,3 +114,5 @@ static RD_INLINE RD_UNUSED void rd_interval_disable (rd_interval_t *ri) {
 static RD_INLINE RD_UNUSED int rd_interval_disabled (const rd_interval_t *ri) {
         return ri->ri_ts_last == 6000000000000000000LL;
 }
+
+#endif /* _RDINTRVAL_H */

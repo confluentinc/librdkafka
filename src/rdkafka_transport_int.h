@@ -25,7 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#ifndef _RDKAFKA_TRANSPORT_INT_H
+#define _RDKAFKA_TRANSPORT_INT_H
 
 /* This header file is to be used by .c files needing access to the
  * rd_kafka_transport_t struct internals. */
@@ -79,3 +80,4 @@ struct rd_kafka_transport_s {
         int rktrans_pfd_cnt;
 };
 
+#endif /* _RDKAFKA_TRANSPORT_INT_H */

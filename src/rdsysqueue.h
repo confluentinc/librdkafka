@@ -53,7 +53,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDSYSQUEUE_H
+#define _RDSYSQUEUE_H
 
 #include "queue.h"
 
@@ -324,7 +325,6 @@ if (((elm)->field.sqe_next = (listelm)->field.sqe_next) == NULL)        \
 #define	SIMPLEQ_EMPTY(head)	    (SIMPLEQ_FIRST(head) == SIMPLEQ_END(head))
 #endif
 
-
-
+#endif /* _RDSYSQUEUE_H */
 
 

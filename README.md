@@ -24,7 +24,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 **NOTE**: The `master` branch is actively developed, use latest release for production use.
 
 
-#Overview#
+# Overview #
   * High-level producer
   * High-level balanced KafkaConsumer (requires broker >= 0.9)
   * Simple (legacy) consumer
@@ -39,7 +39,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Portable: runs on Linux, OSX, Win32, Solaris, FreeBSD, ...
 
 
-#Language bindings#
+# Language bindings #
 
   * C#/.NET: [confluent-kafka-dotnet](https://github.com/confluentinc/confluent-kafka-dotnet) (based on [rdkafka-dotnet](https://github.com/ah-/rdkafka-dotnet))
   * D (C-like): [librdkafka](https://github.com/DlangApache/librdkafka/)
@@ -61,7 +61,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
   * Swift: [Perfect-Kafka](https://github.com/PerfectlySoft/Perfect-Kafka)
 
-#Users of librdkafka#
+# Users of librdkafka #
 
   * [kafkacat](https://github.com/edenhill/kafkacat) - Apache Kafka swiss army knife
   * [Wikimedia's varnishkafka](https://github.com/wikimedia/varnishkafka) - Varnish cache web log producer

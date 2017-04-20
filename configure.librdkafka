@@ -105,6 +105,9 @@ void foo (void) {
     # Required on SunOS
     if [[ $MKL_DISTRO == "SunOS" ]]; then
 	mkl_mkvar_append CPPFLAGS CPPFLAGS "-D_POSIX_PTHREAD_SEMANTICS -D_REENTRANT -D__EXTENSIONS__"
+	# Source defines _POSIX_C_SOURCE to 200809L for Solaris, and this is
+	# incompatible on that platform with compilers < c99.
+	mkl_mkvar_append CFLAGS CFLAGS "-std=c99"
     fi
 
     # Check if strndup() is available (isn't on Solaris 10)

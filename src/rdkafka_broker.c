@@ -30,7 +30,12 @@
 
 #ifndef _MSC_VER
 #define _GNU_SOURCE
-#ifndef _AIX    /* AIX defines this and the value needs to be set correctly */
+/*
+ * AIX defines this and the value needs to be set correctly. For Solaris,
+ * src/rd.h defines _POSIX_SOURCE to be 200809L, which corresponds to XPG7,
+ * which itself is not compatible with _XOPEN_SOURCE on that platform.
+ */
+#if !defined(_AIX) && !defined(__sun)
 #define _XOPEN_SOURCE
 #endif
 #include <signal.h>

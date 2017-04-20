@@ -2690,192 +2690,36 @@ static int rd_kafka_compress_MessageSet_buf (rd_kafka_broker_t *rkb,
  * Produce messages from 'rktp's queue.
  */
 static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
-					   rd_kafka_toppar_t *rktp) {
-	int cnt;
-	rd_kafka_msg_t *rkm;
-	int msgcnt = 0, msgcntmax;
-	rd_kafka_buf_t *rkbuf;
-	rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
-	int iovcnt;
-	size_t iov_firstmsg;
-	size_t of_firstmsg;
-	size_t of_init_firstmsg;
-	size_t of_MessageSetSize;
-	int32_t MessageSetSize = 0;
-	int outlen;
-	int MsgVersion = 0;
-	int use_relative_offsets = 0;
-	int64_t timestamp_firstmsg = 0;
-	int queued_cnt;
-	size_t queued_bytes;
-	size_t buffer_space;
-        rd_ts_t now;
+                                           rd_kafka_toppar_t *rktp) {
+        rd_kafka_buf_t *rkbuf;
+        rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
+        size_t MessageSetSize = 0;
+        rd_kafka_msgset_writer_t msetw;
 
-        queued_cnt = rd_kafka_msgq_len(&rktp->rktp_xmit_msgq);
-        if (queued_cnt == 0)
-                return 0;
+        /**
+         * Create ProduceRequest with as many messages from the toppar
+         * transmit queue as possible.
+         */
+        rkbuf = rd_kafka_msgset_create_ProduceRequest(rkb, rktp,
+                                                      &MessageSetSize);
 
-        queued_bytes = rd_kafka_msgq_size(&rktp->rktp_xmit_msgq);
+        cnt = rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt);
 
-        now = rd_clock();
+        rd_atomic64_add(&rktp->rktp_c.tx_msgs, cnt);
+        rd_atomic64_add(&rktp->rktp_c.tx_bytes, MessageSetSize);
 
-	if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1) {
-		MsgVersion = 1;
-		if (rktp->rktp_rkt->rkt_conf.compression_codec)
-			use_relative_offsets = 1;
-	}
+        rd_rkb_dbg(rkb, MSG, "PRODUCE",
+                   "produce messageset with %i messages "
+                   "(%"PRId32" bytes)",
+                   rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt),
+                   MessageSetSize);
 
-	/* iovs:
-	 *  1 * (RequiredAcks + Timeout + Topic + Partition + MessageSetSize)
-	 *  msgcntmax * messagehdr
-	 *  msgcntmax * Value_len
-	 *  msgcntmax * messagepayload (ext memory)
-	 * = 1 + (4 * msgcntmax)
-	 *
-	 * We are bound by configuration.
-	 */
-	msgcntmax = RD_MIN(queued_cnt, rkb->rkb_rk->rk_conf.batch_num_messages);
-	rd_kafka_assert(rkb->rkb_rk, msgcntmax > 0);
-	iovcnt = 1 + (3 * msgcntmax);
+        if (!rkt->rkt_conf.required_acks)
+                rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_NO_RESPONSE;
 
-	/* Allocate iovecs to hold all headers and messages,
-	 * and allocate enough to allow copies of small messages.
-	 * The allocated size is the minimum of message.max.bytes
-	 * or queued_bytes + queued_cnt * per_msg_overhead */
-
-	buffer_space =
-		/* RequiredAcks + Timeout + TopicCnt */
-		2 + 4 + 4 +
-		/* Topic */
-		RD_KAFKAP_STR_SIZE(rkt->rkt_topic) +
-		/* PartitionCnt + Partition + MessageSetSize */
-		4 + 4 + 4;
-
-	if (rkb->rkb_rk->rk_conf.msg_copy_max_size > 0)
-		buffer_space += queued_bytes +
-			msgcntmax * RD_KAFKAP_MESSAGE_OVERHEAD;
-	else
-		buffer_space += msgcntmax * RD_KAFKAP_MESSAGE_OVERHEAD;
-
-
-	rkbuf = rd_kafka_buf_new(rkb->rkb_rk, RD_KAFKAP_Produce, iovcnt,
-				 RD_MIN((size_t)rkb->rkb_rk->rk_conf.
-					max_msg_size,
-					buffer_space));
-
-	/*
-	 * Insert first part of Produce header
-	 */
-	/* RequiredAcks */
-	rd_kafka_buf_write_i16(rkbuf, rkt->rkt_conf.required_acks);
-	/* Timeout */
-	rd_kafka_buf_write_i32(rkbuf, rkt->rkt_conf.request_timeout_ms);
-	/* TopicArrayCnt */
-	rd_kafka_buf_write_i32(rkbuf, 1);
-
-	/* Insert topic */
-	rd_kafka_buf_write_kstr(rkbuf, rkt->rkt_topic);
-
-	/*
-	 * Insert second part of Produce header
-	 */
-	/* PartitionArrayCnt */
-	rd_kafka_buf_write_i32(rkbuf, 1);
-	/* Partition */
-	rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
-	/* MessageSetSize: Will be finalized later*/
-	of_MessageSetSize = rd_kafka_buf_write_i32(rkbuf, 0);
-
-	/* Push write-buffer onto iovec stack to create a clean iovec boundary
-	 * for the compression codecs. */
-	rd_kafka_buf_autopush(rkbuf);
-
-	iov_firstmsg = rkbuf->rkbuf_msg.msg_iovlen;
-	of_firstmsg = rkbuf->rkbuf_wof;
-	of_init_firstmsg = rkbuf->rkbuf_wof_init;
-
-	while (msgcnt < msgcntmax &&
-	       (rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs))) {
-
-		if (of_firstmsg + MessageSetSize + rd_kafka_msg_wire_size(rkm) >
-		    (size_t)rkb->rkb_rk->rk_conf.max_msg_size) {
-			rd_rkb_dbg(rkb, MSG, "PRODUCE",
-				   "No more space in current MessageSet "
-				   "(%i messages)",
-				   rd_atomic32_get(&rkbuf->rkbuf_msgq.
-						   rkmq_msg_cnt));
-			/* Not enough remaining size. */
-			break;
-		}
-
-		rd_kafka_msgq_deq(&rktp->rktp_xmit_msgq, rkm, 1);
-		rd_kafka_msgq_enq(&rkbuf->rkbuf_msgq, rkm);
-
-                rd_avg_add(&rkb->rkb_avg_int_latency, now - rkm->rkm_ts_enq);
-
-		if (unlikely(msgcnt == 0 && MsgVersion == 1))
-			timestamp_firstmsg = rkm->rkm_timestamp;
-
-		/* Write message to buffer */
-		rd_kafka_assert(rkb->rkb_rk, rkm->rkm_len < INT32_MAX);
-		rd_kafka_buf_write_Message(rkb, rkbuf,
-					   use_relative_offsets ? msgcnt : 0,
-					   MsgVersion,
-					   RD_KAFKA_COMPRESSION_NONE,
-					   rkm->rkm_timestamp,
-					   rkm->rkm_key, (int32_t)rkm->rkm_key_len,
-					   rkm->rkm_payload,
-					   (int32_t)rkm->rkm_len,
-					   &outlen);
-
-		msgcnt++;
-		MessageSetSize += outlen;
-		rd_dassert(outlen <= rd_kafka_msg_wire_size(rkm));
-	}
-
-	/* No messages added, bail out early. */
-	if (unlikely(rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt) == 0)) {
-		rd_kafka_buf_destroy(rkbuf);
-		return -1;
-	}
-
-	/* Push final (copied) message, if any. */
-	rd_kafka_buf_autopush(rkbuf);
-
-	/* Compress the message(s) */
-	if (rktp->rktp_rkt->rkt_conf.compression_codec)
-		rd_kafka_compress_MessageSet_buf(rkb, rktp, rkbuf,
-						 (int)iov_firstmsg, (int)of_firstmsg,
-						 of_init_firstmsg,
-						 MsgVersion,
-						 timestamp_firstmsg,
-						 &MessageSetSize);
-
-	/* Update MessageSetSize */
-	rd_kafka_buf_update_i32(rkbuf, of_MessageSetSize, MessageSetSize);
-	
-	rd_atomic64_add(&rktp->rktp_c.tx_msgs,
-			rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
-	rd_atomic64_add(&rktp->rktp_c.tx_bytes, MessageSetSize);
-
-	rd_rkb_dbg(rkb, MSG, "PRODUCE",
-		   "produce messageset with %i messages "
-		   "(%"PRId32" bytes)",
-		   rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt),
-		   MessageSetSize);
-
-	cnt = rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt);
-
-	if (!rkt->rkt_conf.required_acks)
-		rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_NO_RESPONSE;
-
-	/* Use timeout from first message. */
-	rkbuf->rkbuf_ts_timeout =
-		TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->rkm_ts_timeout;
-
-	if (rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)
-                rd_kafka_buf_ApiVersion_set(rkbuf, 1,
-                                            RD_KAFKA_FEATURE_THROTTLETIME);
+        /* Use timeout from first message. */
+        rkbuf->rkbuf_ts_timeout =
+                TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->rkm_ts_timeout;
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
                                        RD_KAFKA_NO_REPLYQ,
@@ -2884,7 +2728,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
                                        rd_kafka_toppar_keep(rktp));
 
 
-	return cnt;
+        return cnt;
 }
 
 

@@ -39,6 +39,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdlog.c rdstring.c rdkafka_event.c rdkafka_metadata.c \
 		rdregex.c rdports.c rdkafka_metadata_cache.c rdavl.c \
 		rdkafka_sasl.c rdkafka_sasl_plain.c rdkafka_interceptor.c \
+		rdkafka_msgfmt.c rdvarint.c \
 		$(SRCS_y)
 
 HDRS=		rdkafka.h

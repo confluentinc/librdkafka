@@ -183,6 +183,15 @@ struct rd_kafka_s {
          *  <0: Running in High level consumer mode */
         rd_atomic32_t    rk_simple_cnt;
 
+        /**
+         * Exactly Once Semantics
+         */
+        struct {
+                rd_kafkap_str_t *rk_TransactionalId;
+                int64_t          rk_PID;
+                int16_t          rk_ProducerEpoch;
+        } rk_eos;
+
 	const rd_kafkap_bytes_t *rk_null_bytes;
 
 	struct {

@@ -413,6 +413,18 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 };
 
 
+/**
+ * @brief rkbuf buffer position
+ *        Points to a position state of the buffer, can be used for rewinding
+ *        or seeking.
+ */
+typedef struct rd_kafka_bufpos_s {
+        rd_kafka_buf_t *rkbufp_rkbuf; /* refcounted back-pointer */
+        int    rkbufp_iov_idx;        /* iov index */
+        size_t rkbufp_of;             /* rkbuf_wof or rkbuf_of */
+        size_t rkbufp_wof_init;       /* rkbuf_wof_init */
+} rd_kafka_bufpos_t;
+
 typedef struct rd_kafka_bufq_s {
 	TAILQ_HEAD(, rd_kafka_buf_s) rkbq_bufs;
 	rd_atomic32_t  rkbq_cnt;

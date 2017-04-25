@@ -35,6 +35,9 @@
 
 #include "rdkafka_int.h"
 #include "rdkafka_feature.h"
+#if WITH_PLUGINS
+#include "rdkafka_plugin.h"
+#endif
 
 struct rd_kafka_property {
 	rd_kafka_conf_scope_t scope;
@@ -67,6 +70,19 @@ struct rd_kafka_property {
 	/* Value validator (STR) */
 	int (*validate) (const struct rd_kafka_property *prop,
 			 const char *val, int ival);
+
+        /* Configuration object constructors and destructor for use when
+         * the property value itself is not used, or needs extra care. */
+        void (*ctor) (int scope, void *pconf);
+        void (*dtor) (int scope, void *pconf);
+        void (*copy) (int scope, void *pdst, const void *psrc,
+                      void *dstptr, const void *srcptr);
+
+        rd_kafka_conf_res_t (*set) (int scope, void *pconf,
+                                    const char *name, const char *value,
+                                    void *dstptr,
+                                    rd_kafka_conf_set_mode_t set_mode,
+                                    char *errstr, size_t errstr_size);
 };
 
 
@@ -105,7 +121,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	"Indicates the builtin features for this build of librdkafka. "
 	"An application can either query this value or attempt to set it "
 	"with its list of required features to check for library support.",
-	0, 0x7fffffff, 0xff,
+	0, 0x7fffffff, 0xffff,
 	.s2i = {
 #if WITH_ZLIB
 		{ 0x1, "gzip" },
@@ -125,6 +141,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                 { 0x80, "sasl_plain" },
 #if WITH_SASL_SCRAM
                 { 0x100, "sasl_scram" },
+#endif
+#if WITH_PLUGINS
+                { 0x200, "plugins" },
 #endif
 		{ 0, NULL }
 		}
@@ -214,6 +233,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ RD_KAFKA_DBG_SECURITY, "security" },
 			{ RD_KAFKA_DBG_FETCH,    "fetch" },
 			{ RD_KAFKA_DBG_FEATURE,  "feature" },
+                        { RD_KAFKA_DBG_PLUGIN,   "plugin" },
 			{ RD_KAFKA_DBG_ALL,      "all" },
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
@@ -474,6 +494,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "sasl.password", _RK_C_STR,
 	  _RK(sasl.password),
 	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
+
+#if WITH_PLUGINS
+        /* Plugins */
+        { _RK_GLOBAL, "plugin.library.paths", _RK_C_STR,
+          _RK(plugin_paths),
+          "List of plugin libaries to load (; separated)",
+          .set = rd_kafka_plugins_conf_set },
+#endif
 
         /* Global client group properties */
         { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,

@@ -3197,6 +3197,60 @@ int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms);
 
 /**@}*/
 
+
+/** @name Plugin interface
+ *
+ * @brief A plugin interface that allows external runtime-loaded libraries
+ *        to integrate with a client instance without modifications to
+ *        the application code.
+ *
+ *        Plugins are loaded when referenced through the `plugin.library.paths`
+ *        configuration property and operates on the \c rd_kafka_conf_t
+ *        object prior \c rd_kafka_t instance creation.
+ *
+ * @warning Plugins require the application to link librdkafka dynamically
+ *          and not statically. Failure to do so will lead to missing symbols
+ *          or finding symbols in another librdkafka library than the
+ *          application was linked with.
+ */
+
+
+/**
+ * @brief Plugin's configuratin initializer method called each time the
+ *        library is referenced from configuration (even if previously loaded by
+ *        another client instance).
+ *
+ * @remark This method MUST be implemented by plugin and have the symbol name
+ *         \c conf_init .
+ *
+ * @param conf Configuration set up to this point.
+ * @param plug_opaquep Plugin can set this pointer to a per-configuration
+ *                     opaque pointer.
+ * @param errstr String buffer of size \p errstr_size where plugin must write
+ *               a human readable error string in the case the initializer
+ *               fails (returns non-zero).
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code on error.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_plugin_f_conf_init_t) (rd_kafka_conf_t *conf,
+                                 void **plug_opaquep,
+                                 char *errstr, size_t errstr_size);
+
+
+/**
+ * @brief Configuration object plugin destructor method.
+ *        Called when the plugin configuration is removed to allow the
+ *        the plugin to clean up internal resources.
+ *
+ * @remark This method is optional.
+ * @remark The symbol name must be \p conf_destroy .
+ *
+ * @param plug_opaque The opaque pointer set in conf_init.
+ */
+typedef void
+(rd_kafka_plugin_f_conf_destroy_t) (void *plug_opaque);
+
+/**@}*/
 #ifdef __cplusplus
 }
 #endif

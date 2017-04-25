@@ -117,6 +117,21 @@ int foo (void) {
    return strndup(\"hi\", 2) ? 0 : 1;
 }"
 
+    # Check if dlopen() is available
+    mkl_lib_check "libdl" "WITH_LIBDL" disable CC "-ldl" \
+"
+#include <stdlib.h>
+#include <dlfcn.h>
+void foo (void) {
+   (void)dlopen(\"__bad_lib\", 0);
+   (void)dlsym(NULL, \"sym\");
+   (void)dlclose(NULL);
+}"
+
+    if [[ $WITH_LIBDL == "y" ]]; then
+        mkl_allvar_set WITH_PLUGINS WITH_PLUGINS y
+    fi
+
     # Figure out what tool to use for dumping public symbols.
     # We rely on configure.cc setting up $NM if it exists.
     if mkl_env_check "nm" "" cont "NM" ; then

@@ -130,6 +130,10 @@ struct rd_kafka_conf_s {
 #endif
         } sasl;
 
+#if WITH_PLUGINS
+        char *plugin_paths;
+        rd_list_t plugins;
+#endif
 
         /* Client group configuration */
         int    coord_query_intvl_ms;

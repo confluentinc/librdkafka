@@ -21,6 +21,9 @@ SRCS_LZ4 += lz4.c lz4frame.c lz4hc.c
 endif
 SRCS_y += $(SRCS_LZ4)
 
+SRCS_$(WITH_LIBDL) += rddl.c
+SRCS_$(WITH_PLUGINS) += rdkafka_plugin.c
+
 ifeq ($(HAVE_REGEX), n)
 SRCS_y += regexp.c
 endif

@@ -331,30 +331,41 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 /**
  * Debug contexts
  */
-#define RD_KAFKA_DBG_GENERIC    0x1
-#define RD_KAFKA_DBG_BROKER     0x2
-#define RD_KAFKA_DBG_TOPIC      0x4
-#define RD_KAFKA_DBG_METADATA   0x8
-#define RD_KAFKA_DBG_FEATURE    0x10
-#define RD_KAFKA_DBG_QUEUE      0x20
-#define RD_KAFKA_DBG_MSG        0x40
-#define RD_KAFKA_DBG_PROTOCOL   0x80
-#define RD_KAFKA_DBG_CGRP       0x100
-#define RD_KAFKA_DBG_SECURITY   0x200
-#define RD_KAFKA_DBG_FETCH      0x400
-#define RD_KAFKA_DBG_ALL        0xfff
+#define RD_KAFKA_DBG_GENERIC        0x1
+#define RD_KAFKA_DBG_BROKER         0x2
+#define RD_KAFKA_DBG_TOPIC          0x4
+#define RD_KAFKA_DBG_METADATA       0x8
+#define RD_KAFKA_DBG_FEATURE        0x10
+#define RD_KAFKA_DBG_QUEUE          0x20
+#define RD_KAFKA_DBG_MSG            0x40
+#define RD_KAFKA_DBG_PROTOCOL       0x80
+#define RD_KAFKA_DBG_CGRP           0x100
+#define RD_KAFKA_DBG_SECURITY       0x200
+#define RD_KAFKA_DBG_FETCH          0x400
+#define RD_KAFKA_DBG_INTERCEPTOR    0x800
+#define RD_KAFKA_DBG_PLUGIN         0x1000
+#define RD_KAFKA_DBG_ALL            0xffff
 
 
-void rd_kafka_log_buf (const rd_kafka_t *rk, int level,
-		       const char *fac, const char *buf);
-void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
-	const char *fac, const char *fmt, ...)	RD_FORMAT(printf, 5, 6);
+void rd_kafka_log0(const rd_kafka_conf_t *conf,
+                   const rd_kafka_t *rk, const char *extra, int level,
+                   const char *fac, const char *fmt, ...) RD_FORMAT(printf,
+                                                                    6, 7);
 
-#define rd_kafka_log(rk,level,fac,...) rd_kafka_log0(rk,NULL,level,fac,__VA_ARGS__)
-#define rd_kafka_dbg(rk,ctx,fac,...) do {				  \
-		if (unlikely((rk)->rk_conf.debug & (RD_KAFKA_DBG_ ## ctx))) \
-			rd_kafka_log0(rk,NULL,LOG_DEBUG,fac,__VA_ARGS__); \
-	} while (0)
+#define rd_kafka_log(rk,level,fac,...) \
+        rd_kafka_log0(&rk->rk_conf, rk, NULL, level, fac, __VA_ARGS__)
+#define rd_kafka_dbg(rk,ctx,fac,...) do {                               \
+                if (unlikely((rk)->rk_conf.debug & (RD_KAFKA_DBG_ ## ctx))) \
+                        rd_kafka_log0(&rk->rk_conf,rk,NULL,             \
+                                      LOG_DEBUG,fac,__VA_ARGS__);       \
+        } while (0)
+
+/* dbg() not requiring an rk, just the conf object, for early logging */
+#define rd_kafka_dbg0(conf,ctx,fac,...) do {                            \
+                if (unlikely((conf)->debug & (RD_KAFKA_DBG_ ## ctx)))   \
+                        rd_kafka_log0(conf,NULL,NULL,                   \
+                                      LOG_DEBUG,fac,__VA_ARGS__);       \
+        } while (0)
 
 /* NOTE: The local copy of _logname is needed due rkb_logname_lock lock-ordering
  *       when logging another broker's name in the message. */
@@ -364,7 +375,8 @@ void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
 		strncpy(_logname, rkb->rkb_logname, sizeof(_logname)-1); \
 		_logname[RD_KAFKA_NODENAME_SIZE-1] = '\0';		\
                 mtx_unlock(&(rkb)->rkb_logname_lock);                   \
-		rd_kafka_log0((rkb)->rkb_rk, _logname,			\
+		rd_kafka_log0(&(rkb)->rkb_rk->rk_conf, \
+                              (rkb)->rkb_rk, _logname,                  \
                               level, fac, __VA_ARGS__);                 \
         } while (0)
 

@@ -84,6 +84,8 @@ mklove-check:
 
 lib: $(LIBFILENAME) $(LIBNAME).a $(LIBFILENAMELINK) lib-gen-pkg-config
 
+$(LIBNAME).lds: #overridable
+
 $(LIBFILENAME): $(OBJS) $(LIBNAME).lds
 	@printf "$(MKL_YELLOW)Creating shared library $@$(MKL_CLR_RESET)\n"
 	$(CC) $(LDFLAGS) $(LIB_LDFLAGS) $(OBJS) -o $@ $(LIBS)
@@ -114,7 +116,7 @@ endef
 
 export _PKG_CONFIG_DEF
 
-$(LIBNAME0).pc: ../Makefile.config
+$(LIBNAME0).pc: $(TOPDIR)/Makefile.config
 	@printf "$(MKL_YELLOW)Generating pkg-config file $@$(MKL_CLR_RESET)\n"
 	@echo "$$_PKG_CONFIG_DEF" > $@
 

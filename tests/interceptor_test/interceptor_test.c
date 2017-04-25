@@ -43,6 +43,11 @@
 /* typical include path outside tests is <librdkafka/rdkafka.h> */
 #include "rdkafka.h"
 
+#ifdef _MSC_VER
+#define DLL_EXPORT __declspec(dllexport)
+#else
+#define DLL_EXPORT
+#endif
 
 
 static char *my_interceptor_plug_opaque = "my_interceptor_plug_opaque";
@@ -94,10 +99,13 @@ rd_kafka_resp_err_t on_commit (rd_kafka_t *rk,
 /**
  * @brief Plugin conf initializer called when plugin.library.paths is set.
  */
+DLL_EXPORT
 rd_kafka_resp_err_t conf_init (rd_kafka_conf_t *conf,
                                void **plug_opaquep,
                                char *errstr, size_t errstr_size) {
         *plug_opaquep = (void *)my_interceptor_plug_opaque;
+
+        printf("conf_init called (setting opaque to %p)\n", *plug_opaquep);
 
         /* Add interceptor methods */
         rd_kafka_conf_interceptor_add_on_send(conf, __FILE__, on_send,
@@ -113,7 +121,7 @@ rd_kafka_resp_err_t conf_init (rd_kafka_conf_t *conf,
 }
 
 
-
+DLL_EXPORT
 void conf_destroy (void *plug_opaque) {
         printf("conf_destroy called (opaque %p vs %p)\n",
                plug_opaque, my_interceptor_plug_opaque);

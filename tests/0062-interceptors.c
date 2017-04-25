@@ -51,7 +51,7 @@
  */
 
 
-static const int msgcnt = 100;
+#define msgcnt 100
 static const int producer_ic_cnt = 5;
 static const int consumer_ic_cnt = 10;
 

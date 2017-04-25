@@ -112,8 +112,7 @@ void rd_kafka_transport_close (rd_kafka_transport_t *rktrans) {
 static const char *socket_strerror(int err) {
 #ifdef _MSC_VER
 	static RD_TLS char buf[256];
-	FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
-		       err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)buf, sizeof(buf)-1, NULL);
+        rd_strerror_w32(err, buf, sizeof(buf));
 	return buf;
 #else
 	return rd_strerror(err);

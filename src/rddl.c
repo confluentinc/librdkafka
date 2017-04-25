@@ -33,9 +33,9 @@
 #include <dlfcn.h>
 
 #elif defined( _MSC_VER)
-#error "FIXME LoadLibary()"
+
 #else
-#error "dlopen() not supported"
+#error "Dynamic library loading not supported on this platform"
 #endif
 
 
@@ -45,8 +45,8 @@
  * @returns a newly allocated string that must be freed
  */
 static char *rd_dl_error (void) {
-        char *errstr;
 #if WITH_LIBDL
+        char *errstr;
         char *s;
         errstr = dlerror();
         if (!errstr)
@@ -58,8 +58,11 @@ static char *rd_dl_error (void) {
                 *s = '.';
 
         return errstr;
-#else
-        return "not implemented";
+
+#elif defined(_MSC_VER)
+        char buf[1024];
+        rd_strerror_w32(GetLastError(), buf, sizeof(buf));
+        return rd_strdup(buf);
 #endif
 }
 
@@ -70,17 +73,21 @@ static char *rd_dl_error (void) {
  */
 void *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
         void *handle;
+        const char *loadfunc;
 #if WITH_LIBDL
-        if (!(handle = dlopen(path, RTLD_NOW | RTLD_LOCAL))) {
+        loadfunc = "dlopen()";
+        handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+#elif defined(_MSC_VER)
+        loadfunc = "LoadLibrary()";
+        handle = (void *)LoadLibraryA(path);
+#endif
+        if (!handle) {
                 char *dlerrstr = rd_dl_error();
-                rd_snprintf(errstr, errstr_size, "x: %s", dlerrstr);
+                rd_snprintf(errstr, errstr_size, "%s failed: %s",
+                            loadfunc, dlerrstr);
                 rd_free(dlerrstr);
         }
         return handle;
-#else
-        rd_snprintf(errstr, errstr_size, "dlopen() not supported on platform");
-        return NULL;
-#endif
 }
 
 
@@ -91,6 +98,8 @@ void *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
 void rd_dl_close (void *handle) {
 #if WITH_LIBDL
         dlclose(handle);
+#elif defined(_MSC_VER)
+        FreeLibrary((HMODULE)handle);
 #endif
 }
 
@@ -100,10 +109,13 @@ void rd_dl_close (void *handle) {
  */
 void *
 rd_dl_sym (void *handle, const char *symbol, char *errstr, size_t errstr_size) {
-#if WITH_LIBDL
         void *func;
-
-        if (!(func = dlsym(handle, symbol))) {
+#if WITH_LIBDL
+        func = dlsym(handle, symbol);
+#elif defined(_MSC_VER)
+        func = GetProcAddress((HMODULE)handle, symbol);
+#endif
+        if (!func) {
                 char *dlerrstr = rd_dl_error();
                 rd_snprintf(errstr, errstr_size,
                             "Failed to load symbol \"%s\": %s",
@@ -111,9 +123,5 @@ rd_dl_sym (void *handle, const char *symbol, char *errstr, size_t errstr_size) {
                 rd_free(dlerrstr);
         }
         return func;
-#else
-        rd_snprintf(errstr, errstr_size, "dlsym() not supported on platform");
-        return NULL;
-#endif
 }
 

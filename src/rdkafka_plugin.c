@@ -133,7 +133,6 @@ rd_kafka_plugin_new (rd_kafka_conf_t *conf, const char *path,
  * @locality application thread
  */
 static void rd_kafka_plugin_destroy (rd_kafka_plugin_t *rkplug) {
-        printf("Unloading plugin \"%s\"\n", rkplug->rkplug_path);
         if (rkplug->rkplug_conf_destroy)
                 rkplug->rkplug_conf_destroy(rkplug->rkplug_opaque);
         rd_dl_close(rkplug->rkplug_handle);
@@ -161,6 +160,10 @@ rd_kafka_plugins_conf_set0 (rd_kafka_conf_t *conf, const char *paths,
 
         /* Split paths by ; */
         rd_strdupa(&s, paths);
+
+        rd_kafka_dbg0(conf, PLUGIN, "PLUGLOAD",
+                      "Loading plugins from conf object %p: \"%s\"",
+                      conf, paths);
 
         while (s && *s) {
                 char *path = s;

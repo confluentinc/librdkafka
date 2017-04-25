@@ -658,7 +658,7 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 /**
  * Main destructor for rd_kafka_t
  *
- * Locality: rdkafka main thread
+ * Locality: rdkafka main thread or application thread during rd_kafka_new()
  */
 static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 	rd_kafka_itopic_t *rkt, *rkt_tmp;
@@ -2465,27 +2465,25 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 		/* Delivery report:
 		 * call application DR callback for each message. */
 		while ((rkm = TAILQ_FIRST(&rko->rko_u.dr.msgq.rkmq_msgs))) {
-                        rd_kafka_msgq_deq(&rko->rko_u.dr.msgq, rkm, 1/*count*/);
+                        rd_kafka_message_t *rkmessage;
+
+			TAILQ_REMOVE(&rko->rko_u.dr.msgq.rkmq_msgs,
+				     rkm, rkm_link);
+
+                        rkmessage = rd_kafka_message_get_from_rkm(rko, rkm);
 
                         if (rk->rk_conf.dr_msg_cb) {
-				rkm->rkm_rkmessage.err = rko->rko_err;
-				if (!rkm->rkm_rkmessage.rkt)
-					rkm->rkm_rkmessage.rkt =
-                                                rd_kafka_topic_keep_a(
-							rd_kafka_topic_s2i(
-								rko->rko_u.dr.
-								s_rkt));
-                                rk->rk_conf.dr_msg_cb(rk, &rkm->rkm_rkmessage,
+                                rk->rk_conf.dr_msg_cb(rk, rkmessage,
                                                       rk->rk_conf.opaque);
 
                         } else {
 
                                 rk->rk_conf.dr_cb(rk,
-                                                  rkm->rkm_payload,
-                                                  rkm->rkm_len,
-                                                  rko->rko_err,
+                                                  rkmessage->payload,
+                                                  rkmessage->len,
+                                                  rkmessage->err,
                                                   rk->rk_conf.opaque,
-                                                  rkm->rkm_opaque);
+                                                  rkmessage->_private);
                         }
 
                         rd_kafka_msg_destroy(rk, rkm);

@@ -45,6 +45,14 @@ typedef	enum {
 } rd_kafka_conf_scope_t;
 
 typedef enum {
+	_RK_CONF_PROP_SET_REPLACE,  /* Replace current value (default) */
+	_RK_CONF_PROP_SET_ADD,      /* Add value (S2F) */
+	_RK_CONF_PROP_SET_DEL      /* Remove value (S2F) */
+} rd_kafka_conf_set_mode_t;
+
+
+
+typedef enum {
         RD_KAFKA_OFFSET_METHOD_NONE,
         RD_KAFKA_OFFSET_METHOD_FILE,
         RD_KAFKA_OFFSET_METHOD_BROKER
@@ -134,6 +142,14 @@ struct rd_kafka_conf_s {
         char *plugin_paths;
         rd_list_t plugins;
 #endif
+
+        /* Interceptors */
+        struct {
+                rd_list_t on_send;            /* on_send interceptors */
+                rd_list_t on_acknowledgement; /* .. */
+                rd_list_t on_consume;         /* .. */
+                rd_list_t on_commit;          /* .. */
+        } interceptors;
 
         /* Client group configuration */
         int    coord_query_intvl_ms;

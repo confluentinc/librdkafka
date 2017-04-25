@@ -144,13 +144,6 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      char *payload, size_t len,
 		      const void *keydata, size_t keylen,
 		      void *msg_opaque);
-rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
-				    int32_t partition,
-				    int msgflags,
-				    char *payload, size_t len,
-				    const void *key, size_t keylen,
-				    void *msg_opaque);
-
 
 static RD_INLINE RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
 	TAILQ_INIT(&rkmq->rkmq_msgs);

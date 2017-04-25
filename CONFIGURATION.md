@@ -3,7 +3,7 @@
 
 Property                                 | C/P | Range           |       Default | Description              
 -----------------------------------------|-----|-----------------|--------------:|--------------------------
-builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4, sasl_gssapi, sasl_plain | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
+builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4, sasl_gssapi, sasl_plain, sasl_scram, plugins | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
 client.id                                |  *  |                 |       rdkafka | Client identifier. <br>*Type: string*
 metadata.broker.list                     |  *  |                 |               | Initial list of brokers as a CSV list of broker host or host:port. The application may also use `rd_kafka_brokers_add()` to add brokers during runtime. <br>*Type: string*
 bootstrap.servers                        |  *  |                 |               | Alias for `metadata.broker.list`
@@ -19,7 +19,7 @@ topic.metadata.refresh.fast.interval.ms  |  *  | 1 .. 60000      |           250
 topic.metadata.refresh.fast.cnt          |  *  | 0 .. 1000       |            10 | *Deprecated: No longer used.* <br>*Type: integer*
 topic.metadata.refresh.sparse            |  *  | true, false     |          true | Sparse metadata requests (consumes less network bandwidth) <br>*Type: boolean*
 topic.blacklist                          |  *  |                 |               | Topic blacklist, a comma-separated list of regular expressions for matching topic names that should be ignored in broker metadata information as if the topics did not exist. <br>*Type: pattern list*
-debug                                    |  *  | generic, broker, topic, metadata, queue, msg, protocol, cgrp, security, fetch, feature, all |               | A comma-separated list of debug contexts to enable. Debugging the Producer: broker,topic,msg. Consumer: cgrp,topic,fetch <br>*Type: CSV flags*
+debug                                    |  *  | generic, broker, topic, metadata, queue, msg, protocol, cgrp, security, fetch, feature, interceptor, plugin, all |               | A comma-separated list of debug contexts to enable. Debugging the Producer: broker,topic,msg. Consumer: cgrp,topic,fetch <br>*Type: CSV flags*
 socket.timeout.ms                        |  *  | 10 .. 300000    |         60000 | Timeout for network requests. <br>*Type: integer*
 socket.blocking.max.ms                   |  *  | 1 .. 60000      |          1000 | Maximum time a broker socket operation may block. A lower value improves responsiveness at the expense of slightly higher CPU usage. **Deprecated** <br>*Type: integer*
 socket.send.buffer.bytes                 |  *  | 0 .. 100000000  |             0 | Broker socket send buffer size. System default is used if 0. <br>*Type: integer*
@@ -66,6 +66,7 @@ sasl.kerberos.min.time.before.relogin    |  *  | 1 .. 86400000   |         60000
 sasl.username                            |  *  |                 |               | SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms <br>*Type: string*
 sasl.password                            |  *  |                 |               | SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism <br>*Type: string*
 plugin.library.paths                     |  *  |                 |               | List of plugin libaries to load (; separated) <br>*Type: string*
+interceptors                             |  *  |                 |               | Interceptors added through rd_kafka_conf_interceptor_add_..() <br>*Type: *
 group.id                                 |  *  |                 |               | Client group id string. All clients sharing the same group.id belong to the same group. <br>*Type: string*
 partition.assignment.strategy            |  *  |                 | range,roundrobin | Name of partition assignment strategy to use when elected group leader assigns partitions to group members. <br>*Type: string*
 session.timeout.ms                       |  *  | 1 .. 3600000    |         30000 | Client group session and failure detection timeout. <br>*Type: integer*

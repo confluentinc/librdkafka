@@ -35,6 +35,7 @@
 
 #include "rdkafka_int.h"
 #include "rdkafka_feature.h"
+#include "rdkafka_interceptor.h"
 #if WITH_PLUGINS
 #include "rdkafka_plugin.h"
 #endif
@@ -53,7 +54,8 @@ struct rd_kafka_property {
 		_RK_C_PTR,  /* Only settable through special set functions */
                 _RK_C_PATLIST, /* Pattern list */
                 _RK_C_KSTR, /* Kafka string */
-		_RK_C_ALIAS /* Alias: points to other property through .sdef */
+                _RK_C_ALIAS, /* Alias: points to other property through .sdef */
+                _RK_C_INTERNAL, /* Internal, don't expose to application */
 	} type;
 	int   offset;
 	const char *desc;
@@ -233,6 +235,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ RD_KAFKA_DBG_SECURITY, "security" },
 			{ RD_KAFKA_DBG_FETCH,    "fetch" },
 			{ RD_KAFKA_DBG_FEATURE,  "feature" },
+                        { RD_KAFKA_DBG_INTERCEPTOR, "interceptor" },
                         { RD_KAFKA_DBG_PLUGIN,   "plugin" },
 			{ RD_KAFKA_DBG_ALL,      "all" },
 		} },
@@ -502,6 +505,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "List of plugin libaries to load (; separated)",
           .set = rd_kafka_plugins_conf_set },
 #endif
+
+        /* Interceptors are added through specific API and not exposed
+         * as configuration properties. */
+        { _RK_GLOBAL, "interceptors", _RK_C_INTERNAL,
+          _RK(interceptors),
+          "Interceptors added through rd_kafka_conf_interceptor_add_..()",
+          .ctor = rd_kafka_conf_interceptor_ctor,
+          .dtor = rd_kafka_conf_interceptor_dtor,
+          .copy = rd_kafka_conf_interceptor_copy },
 
         /* Global client group properties */
         { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,
@@ -826,19 +838,28 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 };
 
 
-typedef enum {
-	_PROP_SET_REPLACE,  /* Replace current value (default) */
-	_PROP_SET_ADD,      /* Add value (S2F) */
-	_PROP_SET_DEL      /* Remove value (S2F) */
-} prop_set_mode_t;
-
 static rd_kafka_conf_res_t
 rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 			    const struct rd_kafka_property *prop,
-			    const char *istr, int ival, prop_set_mode_t set_mode,
+			    const char *istr, int ival, rd_kafka_conf_set_mode_t set_mode,
                             char *errstr, size_t errstr_size) {
 
 #define _RK_PTR(TYPE,BASE,OFFSET)  (TYPE)(void *)(((char *)(BASE))+(OFFSET))
+
+        if (prop->set) {
+                /* Custom setter */
+                rd_kafka_conf_res_t res;
+
+                res = prop->set(scope, conf, prop->name, istr,
+                                _RK_PTR(void *, conf, prop->offset),
+                                set_mode, errstr, errstr_size);
+
+                if (res != RD_KAFKA_CONF_OK)
+                        return res;
+
+                /* FALLTHRU so that property value is set. */
+        }
+
 	switch (prop->type)
 	{
 	case _RK_C_STR:
@@ -878,13 +899,13 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 		if (prop->type == _RK_C_S2F) {
 			switch (set_mode)
 			{
-			case _PROP_SET_REPLACE:
+			case _RK_CONF_PROP_SET_REPLACE:
 				*val = ival;
 				break;
-			case _PROP_SET_ADD:
+			case _RK_CONF_PROP_SET_ADD:
 				*val |= ival;
 				break;
-			case _PROP_SET_DEL:
+			case _RK_CONF_PROP_SET_DEL:
 				*val &= ~ival;
 				break;
 			}
@@ -917,6 +938,10 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 
                 return RD_KAFKA_CONF_OK;
         }
+
+        case _RK_C_INTERNAL:
+                /* Probably handled by setter */
+                return RD_KAFKA_CONF_OK;
 
 	default:
 		rd_kafka_assert(NULL, !*"unknown conf type");
@@ -984,7 +1009,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		}
 
 		return rd_kafka_anyconf_set_prop0(scope, conf, prop, value, 0,
-						  _PROP_SET_REPLACE,
+						  _RK_CONF_PROP_SET_REPLACE,
                                                   errstr, errstr_size);
 
 	case _RK_C_PTR:
@@ -1018,7 +1043,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		}
 
 		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival,
-					   _PROP_SET_REPLACE,
+					   _RK_CONF_PROP_SET_REPLACE,
                                            errstr, errstr_size);
 		return RD_KAFKA_CONF_OK;
 
@@ -1062,7 +1087,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		}
 
 		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival,
-					   _PROP_SET_REPLACE,
+					   _RK_CONF_PROP_SET_REPLACE,
                                            errstr, errstr_size);
 		return RD_KAFKA_CONF_OK;
 	}
@@ -1084,7 +1109,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		next = value;
 		while (next && *next) {
 			const char *s, *t;
-			prop_set_mode_t set_mode = _PROP_SET_ADD; /* S2F */
+			rd_kafka_conf_set_mode_t set_mode = _RK_CONF_PROP_SET_ADD; /* S2F */
 
 			s = next;
 
@@ -1110,10 +1135,10 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			/* S2F: +/- prefix */
 			if (prop->type == _RK_C_S2F) {
 				if (*s == '+') {
-					set_mode = _PROP_SET_ADD;
+					set_mode = _RK_CONF_PROP_SET_ADD;
 					s++;
 				} else if (*s == '-') {
-					set_mode = _PROP_SET_DEL;
+					set_mode = _RK_CONF_PROP_SET_DEL;
 					s++;
 				}
 			}
@@ -1183,11 +1208,15 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
 		if (prop->type == _RK_C_ALIAS)
 			continue;
 
+                if (prop->ctor)
+                        prop->ctor(scope, conf);
+
 		if (prop->sdef || prop->vdef || prop->pdef)
 			rd_kafka_anyconf_set_prop0(scope, conf, prop,
 						   prop->sdef ?
                                                    prop->sdef : prop->pdef,
-                                                   prop->vdef, _PROP_SET_REPLACE,
+                                                   prop->vdef,
+                                                   _RK_CONF_PROP_SET_REPLACE,
                                                    NULL, 0);
 	}
 }
@@ -1280,15 +1309,20 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
 }
 
 
-static void rd_kafka_anyconf_clear (void *conf,
+static void rd_kafka_anyconf_clear (int scope, void *conf,
 				    const struct rd_kafka_property *prop) {
 	switch (prop->type)
 	{
 	case _RK_C_STR:
 	{
 		char **str = _RK_PTR(char **, conf, prop->offset);
+
 		if (*str) {
-			rd_free(*str);
+                        if (prop->set)
+                                prop->set(scope, conf, prop->name, NULL, *str,
+                                          _RK_CONF_PROP_SET_DEL, NULL, 0);
+                        else
+                                rd_free(*str);
 			*str = NULL;
 		}
 	}
@@ -1335,6 +1369,9 @@ static void rd_kafka_anyconf_clear (void *conf,
 		break;
 	}
 
+        if (prop->dtor)
+                prop->dtor(scope, conf);
+
 }
 
 void rd_kafka_anyconf_destroy (int scope, void *conf) {
@@ -1344,7 +1381,7 @@ void rd_kafka_anyconf_destroy (int scope, void *conf) {
 		if (!(prop->scope & scope))
 			continue;
 
-		rd_kafka_anyconf_clear(conf, prop);
+		rd_kafka_anyconf_clear(scope, conf, prop);
 	}
 }
 
@@ -1410,12 +1447,19 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 				val = (*plist)->rkpl_orig;
                         break;
                 }
+                case _RK_C_INTERNAL:
+                        break;
 		default:
 			continue;
 		}
 
-		rd_kafka_anyconf_set_prop0(scope, dst, prop, val, ival,
-                                           _PROP_SET_REPLACE, NULL, 0);
+                if (prop->copy)
+                        prop->copy(scope, dst, src,
+                                   _RK_PTR(void *, dst, prop->offset),
+                                   _RK_PTR(const void *, src, prop->offset));
+
+                rd_kafka_anyconf_set_prop0(scope, dst, prop, val, ival,
+                                           _RK_CONF_PROP_SET_REPLACE, NULL, 0);
 	}
 }
 

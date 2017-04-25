@@ -31,6 +31,7 @@
 #include "rdkafka_msg.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
+#include "rdkafka_interceptor.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
 #include "rdtime.h"
@@ -68,6 +69,7 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
  *
  * @returns the new message
  */
+static
 rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
 				    int32_t partition,
 				    int msgflags,
@@ -189,6 +191,9 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 			rkt->rkt_conf.message_timeout_ms * 1000;
 	}
 
+        /* Call interceptor chain for on_send */
+        rd_kafka_interceptors_on_send(rkt->rkt_rk, &rkm->rkm_rkmessage);
+
         return rkm;
 }
 
@@ -231,6 +236,11 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		rd_kafka_set_last_error(0, 0);
 		return 0;
 	}
+
+        /* Interceptor: unroll failing messages by triggering on_ack.. */
+        rkm->rkm_err = err;
+        rd_kafka_interceptors_on_acknowledgement(rkt->rkt_rk,
+                                                 &rkm->rkm_rkmessage);
 
 	/* Handle partitioner failures: it only fails when the application
 	 * attempts to force a destination partition that does not exist
@@ -339,12 +349,19 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         err = rd_kafka_msg_partitioner(rkt, rkm, 1);
         if (unlikely(err)) {
                 /* Handle partitioner failures: it only fails when
-                 * the application
-                 * attempts to force a destination partition that does not exist
-                 * in the cluster.  Note we must clear the RD_KAFKA_MSG_F_FREE
+                 * the application attempts to force a destination
+                 * partition that does not exist in the cluster. */
+
+                /* Interceptors: Unroll on_send by on_ack.. */
+                rkm->rkm_err = err;
+                rd_kafka_interceptors_on_acknowledgement(rk,
+                                                         &rkm->rkm_rkmessage);
+
+                /* Note we must clear the RD_KAFKA_MSG_F_FREE
                  * flag since our contract says we don't free the payload on
                  * failure. */
                 rkm->rkm_flags &= ~RD_KAFKA_MSG_F_FREE;
+
                 rd_kafka_msg_destroy(rk, rkm);
         }
 
@@ -409,6 +426,10 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                                          0/*already locked*/);
 
                         if (unlikely(rkmessages[i].err)) {
+                                /* Interceptors: Unroll on_send by on_ack.. */
+                                rd_kafka_interceptors_on_acknowledgement(
+                                        rkt->rkt_rk, &rkmessages[i]);
+
                                 rd_kafka_msg_destroy(rkt->rkt_rk, rkm);
                                 continue;
                         }

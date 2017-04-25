@@ -26,6 +26,7 @@ set(
     rdkafka_timer.c
     rdkafka_topic.c
     rdkafka_transport.c
+    rdkafka_interceptor.c
     rdkafka_plugin.c
     rdlist.c
     rdlog.c

@@ -110,12 +110,26 @@ static void conf_cmp (const char *desc,
 }
 
 
+/**
+ * @brief Not called, just used for config
+ */
+static int on_send_call_cnt;
+static rd_kafka_resp_err_t my_on_send (rd_kafka_t *rk, rd_kafka_message_t *rkm,
+                                       void *ic_opaque) {
+        TEST_SAY("%s: on_send() called for message %.*s\n",
+                 rd_kafka_name(rk), (int)rkm->len, rkm->payload);
+        on_send_call_cnt++;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 int main_0004_conf (int argc, char **argv) {
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *ignore_conf, *conf, *conf2;
 	rd_kafka_topic_conf_t *ignore_topic_conf, *tconf, *tconf2;
 	char errstr[512];
+        rd_kafka_resp_err_t err;
 	const char **arr_orig, **arr_dup;
 	size_t cnt_orig, cnt_dup;
 	int i;
@@ -123,7 +137,7 @@ int main_0004_conf (int argc, char **argv) {
 	static const char *gconfs[] = {
 		"message.max.bytes", "12345", /* int property */
 		"client.id", "my id", /* string property */
-		"debug", "topic,metadata", /* S2F property */
+		"debug", "topic,metadata,interceptor", /* S2F property */
 		"topic.blacklist", "__.*", /* #778 */
                 "auto.offset.reset", "earliest", /* Global->Topic fallthru */
 #if WITH_ZLIB
@@ -148,15 +162,20 @@ int main_0004_conf (int argc, char **argv) {
 	/* Set up a global config object */
 	conf = rd_kafka_conf_new();
 
+        for (i = 0 ; gconfs[i] ; i += 2) {
+                if (rd_kafka_conf_set(conf, gconfs[i], gconfs[i+1],
+                                      errstr, sizeof(errstr)) !=
+                    RD_KAFKA_CONF_OK)
+                        TEST_FAIL("%s\n", errstr);
+        }
+
 	rd_kafka_conf_set_dr_cb(conf, dr_cb);
 	rd_kafka_conf_set_error_cb(conf, error_cb);
-
-	for (i = 0 ; gconfs[i] ; i += 2) {
-		if (rd_kafka_conf_set(conf, gconfs[i], gconfs[i+1],
-				      errstr, sizeof(errstr)) !=
-		    RD_KAFKA_CONF_OK)
-			TEST_FAIL("%s\n", errstr);
-	}
+        /* interceptor configs are not exposed as strings or in dumps
+         * so the dump verification step will not cover them, but valgrind
+         * will help track down memory leaks/use-after-free etc. */
+        rd_kafka_conf_interceptor_add_on_send(conf, "testic", my_on_send, NULL);
+        rd_kafka_conf_interceptor_add_on_send(conf, "testic2", my_on_send,NULL);
 
 	/* Set up a topic config object */
 	tconf = rd_kafka_topic_conf_new();
@@ -202,6 +221,7 @@ int main_0004_conf (int argc, char **argv) {
 	 */
 
 	/* original */
+        on_send_call_cnt = 0;
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
 	rkt = rd_kafka_topic_new(rk, topic, tconf);
@@ -209,16 +229,31 @@ int main_0004_conf (int argc, char **argv) {
 		TEST_FAIL("Failed to create topic: %s\n",
 			  rd_strerror(errno));
 
+        err = rd_kafka_produce(rkt, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
+                               "hi", 2, "key", 3, NULL);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "produce failed: %s", rd_kafka_err2str(err));
+        TEST_ASSERT(on_send_call_cnt == 2, "expected 2 on_send calls, not %d",
+                on_send_call_cnt);
+
 	rd_kafka_topic_destroy(rkt);
 	rd_kafka_destroy(rk);
 
 	/* copied */
+        on_send_call_cnt = 0;
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf2);
 
 	rkt = rd_kafka_topic_new(rk, topic, tconf2);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
 			  rd_strerror(errno));
+
+        rd_kafka_produce(rkt, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY,
+                         "hi", 2, "key", 3, NULL);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "produce failed: %s", rd_kafka_err2str(err));
+        TEST_ASSERT(on_send_call_cnt == 2, "expected 2 on_send calls, not %d",
+                on_send_call_cnt);
 
 	rd_kafka_topic_destroy(rkt);
 	rd_kafka_destroy(rk);

@@ -58,6 +58,7 @@
 #include "rdkafka_buf.h"
 #include "rdkafka_request.h"
 #include "rdkafka_sasl.h"
+#include "rdkafka_interceptor.h"
 #include "rdtime.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
@@ -1921,9 +1922,13 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 		rd_kafka_q_enq(rk->rk_rep, rko);
 
 	} else {
-		/* No delivery report callback, destroy the messages
-		 * right away. */
-		rd_kafka_msgq_purge(rk, rkmq);
+		/* No delivery report callback. */
+
+                /* Call on_acknowledgement() interceptors */
+                rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq);
+
+                /* Destroy the messages right away. */
+                rd_kafka_msgq_purge(rk, rkmq);
 	}
 }
 

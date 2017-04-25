@@ -1703,6 +1703,7 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  *   - error callbacks (rd_kafka_conf_set_error_cb()) [all]
  *   - stats callbacks (rd_kafka_conf_set_stats_cb()) [all]
  *   - throttle callbacks (rd_kafka_conf_set_throttle_cb()) [all]
+ *   - on_acknowledgement() interceptors
  *
  * @returns the number of events served.
  */
@@ -2091,7 +2092,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *rkt,
  * \p timeout_ms is maximum amount of time to wait for a message to be received.
  * Consumer must have been previously started with `rd_kafka_consume_start()`.
  *
- * Returns a message object on success or \c NULL on error.
+ * @returns a message object on success or \c NULL on error.
  * The message object must be destroyed with `rd_kafka_message_destroy()`
  * when the application is done with it.
  *
@@ -2105,6 +2106,9 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *rkt,
  *       end of the partition has been reached, which should typically not be
  *       considered an error. The application should handle this case
  *       (e.g., ignore).
+ *
+ * @remark on_consume() interceptors may be called from this function prior to
+ *         passing message to application.
  */
 RD_EXPORT
 rd_kafka_message_t *rd_kafka_consume(rd_kafka_topic_t *rkt, int32_t partition,
@@ -2133,6 +2137,9 @@ rd_kafka_message_t *rd_kafka_consume(rd_kafka_topic_t *rkt, int32_t partition,
  * or -1 on error (same error codes as for `rd_kafka_consume()`.
  *
  * @sa rd_kafka_consume()
+ *
+ * @remark on_consume() interceptors may be called from this function prior to
+ *         passing message to application.
  */
 RD_EXPORT
 ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
@@ -2161,6 +2168,9 @@ ssize_t rd_kafka_consume_batch(rd_kafka_topic_t *rkt, int32_t partition,
  * @returns the number of messages processed or -1 on error.
  *
  * @sa rd_kafka_consume()
+ *
+ * @remark on_consume() interceptors may be called from this function prior to
+ *         passing message to application.
  */
 RD_EXPORT
 int rd_kafka_consume_callback(rd_kafka_topic_t *rkt, int32_t partition,
@@ -2331,6 +2341,9 @@ rd_kafka_subscription (rd_kafka_t *rk,
  * @returns A message object which is a proper message if \p ->err is
  *          RD_KAFKA_RESP_ERR_NO_ERROR, or an event or error for any other
  *          value.
+ *
+ * @remark on_consume() interceptors may be called from this function prior to
+ *         passing message to application.
  *
  * @sa rd_kafka_message_t
  */
@@ -2566,7 +2579,11 @@ rd_kafka_position (rd_kafka_t *rk,
  * pointer that will provided in the delivery report callback (`dr_cb`) for
  * referencing this message.
  *
- * Returns 0 on success or -1 on error in which case errno is set accordingly:
+ * @remark on_send() and on_acknowledgement() interceptors may be called
+ *         from this function. on_acknowledgement() will only be called if the
+ *         message fails partitioning.
+ *
+ * @returns 0 on success or -1 on error in which case errno is set accordingly:
  *  - ENOBUFS  - maximum number of outstanding messages has been reached:
  *               "queue.buffering.max.messages"
  *               (RD_KAFKA_RESP_ERR__QUEUE_FULL)
@@ -3054,6 +3071,9 @@ void rd_kafka_event_destroy (rd_kafka_event_t *rkev);
  *
  * @remark The returned message(s) MUST NOT be
  *         freed with rd_kafka_message_destroy().
+ *
+ * @remark on_consume() and on_acknowledgement() interceptors may be called
+ *         from this function prior to passing message to application.
  */
 RD_EXPORT
 const rd_kafka_message_t *rd_kafka_event_message_next (rd_kafka_event_t *rkev);
@@ -3068,6 +3088,9 @@ const rd_kafka_message_t *rd_kafka_event_message_next (rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_DR     (>=1 message(s))
  *
  * @returns the number of messages extracted.
+ *
+ * @remark on_consume() and on_acknowledgement() interceptors may be called
+ *         from this function prior to passing message to application.
  */
 RD_EXPORT
 size_t rd_kafka_event_message_array (rd_kafka_event_t *rkev,
@@ -3251,6 +3274,213 @@ typedef void
 (rd_kafka_plugin_f_conf_destroy_t) (void *plug_opaque);
 
 /**@}*/
+
+
+
+/**
+ * @name Interceptors
+ *
+ * @{
+ *
+ * @brief A callback interface that allows message interception for both
+ *        producer and consumer data pipelines.
+ *
+ * Interceptors are added to the configuration object which is later
+ * passed to rd_kafka_new() where the interceptors are applied to the
+ * newly created client instance.
+ *
+ * Each interceptor reference consists of a display name (ic_name),
+ * a callback function, and an application-specified opaque value that is
+ * passed as-is to the callback.
+ *
+ * Any number of interceptors can be added and they are called in the order
+ * they were added, unless otherwise noted.
+ * The list of registered interceptor methods are referred to as
+ * interceptor chains.
+ *
+ * @remark Contrary to the Java client the librdkafka interceptor interface
+ *         does not support message modification. Message mutability is
+ *         discouraged in the Java client and the combination of
+ *         serializers and headers cover most use-cases.
+ *
+ * @remark Since interceptors are added to the configuration object they may
+ *         be copied by rd_kafka_conf_dup(), rd_kafka_new(), etc.
+ *         An interceptor implementation must thus be able to handle
+ *         the same interceptor,ic_opaque tuple to be used by multiple
+ *         client instances.
+ */
+
+
+
+/**
+ * @brief on_send() is called from rd_kafka_produce*() (et.al) prior to
+ *        the partitioner being called.
+ *
+ * @param rk The client instance.
+ * @param rkmessage The message being produced. Immutable.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @remark This interceptor is only used by producer instances.
+ *
+ * @remark The \p rkmessage object is NOT mutable and MUST NOT be modified
+ *         by the interceptor.
+ *
+ * @remark If the partitioner fails or an unknown partition was specified,
+ *         the on_acknowledgement() interceptor chain will be called from
+ *         within the rd_kafka_produce*() call to maintain send-acknowledgement
+ *         symmetry.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_send_t) (rd_kafka_t *rk,
+                                    rd_kafka_message_t *rkmessage,
+                                    void *ic_opaque);
+
+/**
+ * @brief on_acknowledgement() is called to inform interceptors that a message
+ *        was succesfully delivered or permanently failed delivery.
+ *        The interceptor chain is called from rd_kafka_poll(), the event
+ *        interface, internal librdkafka threads (if no dr_cb/dr_msg_cb or
+ *        RD_KAFKA_EVENT_DR has been registered), or rd_kafka_produce*() if
+ *        the partitioner failed.
+ *
+ * @param rk The client instance.
+ * @param rkmessage The message being produced. Immutable.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @remark This interceptor is only used by producer instances.
+ *
+ * @remark The \p rkmessage object is NOT mutable and MUST NOT be modified
+ *         by the interceptor.
+ *
+ * @warning If no delivery report callback or event has been configured
+ *         the on_acknowledgement() method may be called from internal
+ *         librdkafka threads. An on_acknowledgement() interceptor MUST NOT
+ *         call any librdkafka API's associated with the \p rk, or perform
+ *         any blocking or prolonged work.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_acknowledgement_t) (rd_kafka_t *rk,
+                                               rd_kafka_message_t *rkmessage,
+                                               void *ic_opaque);
+
+
+/**
+ * @brief on_consume() is called just prior to passing the message to the
+ *        application in rd_kafka_consumer_poll(), rd_kafka_consume*(),
+ *        the event interface, etc.
+ *
+ * @param rk The client instance.
+ * @param rkmessage The message being consumed. Immutable.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @remark This interceptor is only used by consumer instances.
+ *
+ * @remark The \p rkmessage object is NOT mutable and MUST NOT be modified
+ *         by the interceptor.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_consume_t) (rd_kafka_t *rk,
+                                       rd_kafka_message_t *rkmessage,
+                                       void *ic_opaque);
+
+/**
+ * @brief on_commit() is called on completed or failed offset commit.
+ *        It is called from internal librdkafka threads.
+ *
+ * @param rk The client instance.
+ * @param offsets List of topic+partition+offset+error that were committed.
+ *                The error message of each partition should be checked for
+ *                error.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @remark This interceptor is only used by consumer instances.
+ *
+ * @warning The on_commit() interceptor is called from internal
+ *          librdkafka threads. An on_commit() interceptor MUST NOT
+ *          call any librdkafka API's associated with the \p rk, or perform
+ *          any blocking or prolonged work.
+ *
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_commit_t) (
+        rd_kafka_t *rk,
+        const rd_kafka_topic_partition_list_t *offsets,
+        rd_kafka_resp_err_t err, void *ic_opaque);
+
+
+
+/**
+ * @brief Append an on_send() interceptor.
+ *
+ * @param conf Configuration object.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_send Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ */
+RD_EXPORT void
+rd_kafka_conf_interceptor_add_on_send (
+        rd_kafka_conf_t *conf, const char *ic_name,
+        rd_kafka_interceptor_f_on_send_t *on_send,
+        void *ic_opaque);
+
+/**
+ * @brief Append an on_acknowledgement() interceptor.
+ *
+ * @param conf Configuration object.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_acknowledgement Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ */
+RD_EXPORT void
+rd_kafka_conf_interceptor_add_on_acknowledgement (
+        rd_kafka_conf_t *conf, const char *ic_name,
+        rd_kafka_interceptor_f_on_acknowledgement_t *on_acknowledgement,
+        void *ic_opaque);
+
+
+/**
+ * @brief Append an on_consume() interceptor.
+ *
+ * @param conf Configuration object.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_consume Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ */
+RD_EXPORT void
+rd_kafka_conf_interceptor_add_on_consume (
+        rd_kafka_conf_t *conf, const char *ic_name,
+        rd_kafka_interceptor_f_on_consume_t *on_consume,
+        void *ic_opaque);
+
+
+/**
+ * @brief Append an on_commit() interceptor.
+ *
+ * @param conf Configuration object.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_commit() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ */
+RD_EXPORT void
+rd_kafka_conf_interceptor_add_on_commit (
+        rd_kafka_conf_t *conf, const char *ic_name,
+        rd_kafka_interceptor_f_on_commit_t *on_commit,
+        void *ic_opaque);
+
+
+
+
+/**@}*/
+
+
 #ifdef __cplusplus
 }
 #endif

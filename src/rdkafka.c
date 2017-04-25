@@ -170,11 +170,12 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
 	return 0;
 }
 
-void rd_kafka_log_buf (const rd_kafka_t *rk, int level, const char *fac,
-                       const char *buf) {
-        if (level > rk->rk_conf.log_level)
+static void rd_kafka_log_buf (const rd_kafka_conf_t *conf,
+                              const rd_kafka_t *rk, int level, const char *fac,
+                              const char *buf) {
+        if (level > conf->log_level)
                 return;
-        else if (rk->rk_conf.log_queue) {
+        else if (rk && conf->log_queue) {
                 rd_kafka_op_t *rko;
 
                 if (!rk->rk_logq)
@@ -188,22 +189,29 @@ void rd_kafka_log_buf (const rd_kafka_t *rk, int level, const char *fac,
                 rko->rko_u.log.str = rd_strdup(buf);
                 rd_kafka_q_enq(rk->rk_logq, rko);
 
-        } else if (rk->rk_conf.log_cb) {
-                rk->rk_conf.log_cb(rk, level, fac, buf);
+        } else if (conf->log_cb) {
+                conf->log_cb(rk, level, fac, buf);
         }
 }
 
-void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
-		   const char *fac, const char *fmt, ...) {
+/**
+ * @brief Logger
+ *
+ * @remark conf must be set, but rk may be NULL
+ */
+void rd_kafka_log0 (const rd_kafka_conf_t *conf,
+                    const rd_kafka_t *rk,
+                    const char *extra, int level,
+                    const char *fac, const char *fmt, ...) {
 	char buf[2048];
 	va_list ap;
 	unsigned int elen = 0;
         unsigned int of = 0;
 
-	if (level > rk->rk_conf.log_level)
+	if (level > conf->log_level)
 		return;
 
-	if (rk->rk_conf.log_thread_name) {
+	if (conf->log_thread_name) {
 		elen = rd_snprintf(buf, sizeof(buf), "[thrd:%s]: ",
 				   rd_kafka_thread_name);
 		if (unlikely(elen >= sizeof(buf)))
@@ -222,7 +230,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	rd_vsnprintf(buf+of, sizeof(buf)-of, fmt, ap);
 	va_end(ap);
 
-        rd_kafka_log_buf(rk, level, fac, buf);
+        rd_kafka_log_buf(conf, rk, level, fac, buf);
 }
 
 

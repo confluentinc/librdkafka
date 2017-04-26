@@ -123,9 +123,11 @@ int foo (void) {
 #include <stdlib.h>
 #include <dlfcn.h>
 void foo (void) {
-   (void)dlopen(\"__bad_lib\", 0);
-   (void)dlsym(NULL, \"sym\");
-   (void)dlclose(NULL);
+   void *h = dlopen(\"__bad_lib\", 0);
+   void *p = dlsym(h, \"sym\");
+   if (p)
+     p = NULL;
+   dlclose(h);
 }"
 
     if [[ $WITH_LIBDL == "y" ]]; then

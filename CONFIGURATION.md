@@ -108,7 +108,7 @@ request.required.acks                    |  P  | -1 .. 1000      |             1
 acks                                     |  P  |                 |               | Alias for `request.required.acks`
 request.timeout.ms                       |  P  | 1 .. 900000     |          5000 | The ack timeout of the producer request in milliseconds. This value is only enforced by the broker and relies on `request.required.acks` being != 0. <br>*Type: integer*
 message.timeout.ms                       |  P  | 0 .. 900000     |        300000 | Local message timeout. This value is only enforced locally and limits the time a produced message waits for successful delivery. A time of 0 is infinite. <br>*Type: integer*
-produce.offset.report                    |  P  | true, false     |         false | Report offset of produced message back to application. The application must be use the `dr_msg_cb` to retrieve the offset from `rd_kafka_message_t.offset`. <br>*Type: boolean*
+produce.offset.report                    |  P  | true, false     |         false | Report offset of produced message back to application. The application must use `dr_cb` or `dr_msg_cb` to retrieve the offset from `rd_kafka_message_t.offset`. <br>*Type: boolean*
 partitioner_cb                           |  P  |                 |               | Partitioner callback (set with rd_kafka_topic_conf_set_partitioner_cb()) <br>*Type: pointer*
 opaque                                   |  *  |                 |               | Application opaque (set with rd_kafka_topic_conf_set_opaque()) <br>*Type: pointer*
 compression.codec                        |  P  | none, gzip, snappy, lz4, inherit |       inherit | Compression codec to use for compressing message sets.  <br>*Type: enum value*

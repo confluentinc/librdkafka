@@ -1215,22 +1215,24 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         /* Use a copy of conf if supplied, otherwise generate a new one so we can always
          * delete it upon return without additional conditionals
          */
-        use_conf = (conf ? rd_kafka_conf_dup(conf) : rd_kafka_conf_new());
+        use_conf = (conf ? conf : rd_kafka_conf_new());
 
         /* Verify mandatory configuration */
         if (!use_conf->socket_cb) {
                 rd_snprintf(errstr, errstr_size,
-                         "Mandatory config property 'socket_cb' not set");
-                rd_kafka_conf_destroy(use_conf);
-				rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                            "Mandatory config property 'socket_cb' not set");
+                if (!conf)
+                        rd_kafka_conf_destroy(use_conf);
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
                 return NULL;
         }
 
         if (!use_conf->open_cb) {
                 rd_snprintf(errstr, errstr_size,
-                         "Mandatory config property 'open_cb' not set");
-                rd_kafka_conf_destroy(use_conf);
-				rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                            "Mandatory config property 'open_cb' not set");
+                if (!conf)
+                        rd_kafka_conf_destroy(use_conf);
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
                 return NULL;
         }
 
@@ -1334,6 +1336,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                         rd_kafka_destroy_internal(rk);
                         rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
                                                 EINVAL);
+                        if (!conf)
+                                rd_kafka_conf_destroy(use_conf);
                         rd_kafka_global_cnt_decr();
                         return NULL;
                 }
@@ -1349,6 +1353,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                         rd_kafka_destroy_internal(rk);
 			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
 						EINVAL);
+                        if (!conf)
+                                rd_kafka_conf_destroy(use_conf);
 			rd_kafka_global_cnt_decr();
 			return NULL;
 		}
@@ -1400,6 +1406,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 #endif
 		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
 					errno);
+                if (!conf)
+                        rd_kafka_conf_destroy(use_conf);
 		rd_kafka_global_cnt_decr();
 		return NULL;
 	}
@@ -1424,9 +1432,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
 
-        /* Destroy user supplied conf on success */
+        /* Free user supplied conf's base pointer on success,
+         * but not the actual allocated fields since the struct
+         * will have been copied in its entirety above. */
         if (conf)
-                rd_kafka_conf_destroy(conf);
+                rd_free(conf);
 	rd_kafka_set_last_error(0, 0);
 
 	return rk;

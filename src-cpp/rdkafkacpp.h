@@ -1051,6 +1051,20 @@ class RD_EXPORT Handle {
    * @returns ERR_NO_ERROR on success or an error code on error.
    */
   virtual ErrorCode set_log_queue (Queue *queue) = 0;
+
+
+  /**
+   * @brief Cancels the current callback dispatcher (Producer::poll(),
+   *        Consumer::poll(), KafkaConsumer::consume(), etc).
+   *
+   * A callback may use this to force an immediate return to the calling
+   * code (caller of e.g. ..::poll()) without processing any further
+   * events.
+   *
+   * @remark This function MUST ONLY be called from within a
+   *         librdkafka callback.
+   */
+  virtual void yield () = 0;
 };
 
 

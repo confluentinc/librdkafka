@@ -45,7 +45,7 @@
                  RdKafka::err2str(ERR));                                \
   } while (0)
 
-class MyDrCb : public RdKafka::DeliveryReportCb {
+class DrCb0057 : public RdKafka::DeliveryReportCb {
  public:
   void dr_cb (RdKafka::Message &msg) {
     std::string val((const char *)msg.payload());
@@ -73,7 +73,7 @@ static void test_invalid_topic (void) {
 
   Test::conf_init(&conf, NULL, 0);
 
-  MyDrCb MyDr;
+  DrCb0057 MyDr;
   conf->set("dr_cb", &MyDr, errstr);
 
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);

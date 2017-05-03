@@ -585,6 +585,10 @@ class HandleImpl : virtual public Handle {
 
   ErrorCode set_log_queue (Queue *queue);
 
+  void yield () {
+    rd_kafka_yield(rk_);
+  }
+
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
    * the opaque provided to rdkafka must be a pointer to HandleImpl, since

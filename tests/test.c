@@ -143,6 +143,7 @@ _TEST_DECL(0059_bsearch);
 _TEST_DECL(0060_op_prio);
 _TEST_DECL(0061_consumer_lag);
 _TEST_DECL(0062_stats_event);
+_TEST_DECL(0065_yield);
 
 /**
  * Define all tests here
@@ -213,6 +214,7 @@ struct test tests[] = {
         _TEST(0060_op_prio, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0061_consumer_lag, 0),
         _TEST(0062_stats_event, TEST_F_LOCAL),
+        _TEST(0065_yield, 0),
         { NULL }
 };
 

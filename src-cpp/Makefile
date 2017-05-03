@@ -10,6 +10,7 @@ CXXSRCS=	RdKafka.cpp ConfImpl.cpp HandleImpl.cpp \
 HDRS=		rdkafkacpp.h
 
 OBJS=		$(CXXSRCS:%.cpp=%.o)
+OBJS+=          ../src/*.o
 
 
 

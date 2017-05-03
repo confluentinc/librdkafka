@@ -35,8 +35,7 @@ struct rd_kafka_q_s {
          * Mainly used for forwarded queues to use the original queue's
          * serve function from the forwarded position.
          * Shall return 1 if op was handled, else 0. */
-        int (*rkq_serve) (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                          int cb_type, void *opaque);
+        rd_kafka_q_serve_cb_t *rkq_serve;
         void *rkq_opaque;
 
 #if ENABLE_DEVEL
@@ -66,13 +65,6 @@ int rd_kafka_q_ready (rd_kafka_q_t *rkq) {
 }
 
 
-enum {
-        _Q_CB_INVALID, /* dont use */
-        _Q_CB_CALLBACK,/* trigger callback based on op */
-        _Q_CB_RETURN,  /* return op rather than trigger callback (if possible)*/
-        _Q_CB_FORCE_RETURN, /* return op, regardless of callback. */
-        _Q_CB_EVENT    /* like _Q_CB_RETURN but return event_t:ed op */
-};
 
 
 void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk);
@@ -257,9 +249,11 @@ int rd_kafka_op_cmp_prio (const void *_a, const void *_b) {
  * @remark Will not perform locking, signaling, fwdq, READY checking, etc.
  */
 static RD_INLINE RD_UNUSED void
-rd_kafka_q_enq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
+rd_kafka_q_enq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko, int at_head) {
     if (likely(!rko->rko_prio))
         TAILQ_INSERT_TAIL(&rkq->rkq_q, rko, rko_link);
+    else if (at_head)
+            TAILQ_INSERT_HEAD(&rkq->rkq_q, rko, rko_link);
     else
         TAILQ_INSERT_SORTED(&rkq->rkq_q, rko, rd_kafka_op_t *,
                             rko_link, rd_kafka_op_cmp_prio);
@@ -302,7 +296,7 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         }
 
 	if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
-		rd_kafka_q_enq0(rkq, rko);
+		rd_kafka_q_enq0(rkq, rko, 0);
 		cnd_signal(&rkq->rkq_cond);
 		if (rkq->rkq_qlen == 1)
 			rd_kafka_q_io_event(rkq);
@@ -312,6 +306,48 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
 		rd_kafka_q_enq(fwdq, rko);
 		rd_kafka_q_destroy(fwdq);
 	}
+
+        return 1;
+}
+
+
+/**
+ * @brief Re-enqueue rko at head of rkq.
+ *
+ * The provided 'rko' is either enqueued or destroyed.
+ *
+ * @returns 1 if op was enqueued or 0 if queue is disabled and
+ * there was no replyq to enqueue on in which case the rko is destroyed.
+ *
+ * @locks rkq MUST BE LOCKED
+ *
+ * Locality: any thread.
+ */
+static RD_INLINE RD_UNUSED
+int rd_kafka_q_reenq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
+        rd_kafka_q_t *fwdq;
+
+        rd_dassert(rkq->rkq_refcnt > 0);
+
+        if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY)))
+                return rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
+
+        if (!rko->rko_serve && rkq->rkq_serve) {
+                /* Store original queue's serve callback and opaque
+                 * prior to forwarding. */
+                rko->rko_serve = rkq->rkq_serve;
+                rko->rko_serve_opaque = rkq->rkq_opaque;
+        }
+
+        if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
+                rd_kafka_q_enq0(rkq, rko, 1/*at_head*/);
+                cnd_signal(&rkq->rkq_cond);
+                if (rkq->rkq_qlen == 1)
+                        rd_kafka_q_io_event(rkq);
+        } else {
+                rd_kafka_q_enq(fwdq, rko);
+                rd_kafka_q_destroy(fwdq);
+        }
 
         return 1;
 }
@@ -601,19 +637,15 @@ rd_kafka_replyq_enq (rd_kafka_replyq_t *replyq, rd_kafka_op_t *rko,
 
 
 rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
-				     int32_t version, int cb_type,
-				     int (*callback) (rd_kafka_t *rk,
-						      rd_kafka_op_t *rko,
-						      int cb_type,
-						      void *opaque),
+				     int32_t version,
+                                     rd_kafka_q_cb_type_t cb_type,
+                                     rd_kafka_q_serve_cb_t *callback,
 				     void *opaque);
 rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                                int32_t version);
-int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
-                      int max_cnt, int cb_type,
-                      int (*callback) (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                                       int cb_type,
-                                              void *opaque),
+int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms, int max_cnt,
+                      rd_kafka_q_cb_type_t cb_type,
+                      rd_kafka_q_serve_cb_t *callback,
                       void *opaque);
 
 int  rd_kafka_q_purge0 (rd_kafka_q_t *rkq, int do_lock);

@@ -283,12 +283,10 @@ static RD_INLINE rd_kafka_op_t *rd_kafka_op_filter (rd_kafka_q_t *rkq,
  * Locality: any thread
  */
 rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
-				     int32_t version, int cb_type,
-				     int (*callback) (rd_kafka_t *rk,
-						      rd_kafka_op_t *rko,
-						      int cb_type,
-						      void *opaque),
-				     void *opaque) {
+                                     int32_t version,
+                                     rd_kafka_q_cb_type_t cb_type,
+                                     rd_kafka_q_serve_cb_t *callback,
+                                     void *opaque) {
 	rd_kafka_op_t *rko;
         rd_kafka_q_t *fwdq;
 
@@ -299,8 +297,10 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 	mtx_lock(&rkq->rkq_lock);
 
+        rd_kafka_yield_thread = 0;
         if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
                 do {
+                        rd_kafka_op_res_t res;
                         rd_ts_t pre;
 
                         /* Filter out outdated ops */
@@ -316,11 +316,17 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
                                 /* Ops with callbacks are considered handled
                                  * and we move on to the next op, if any.
                                  * Ops w/o callbacks are returned immediately */
-                                if (rd_kafka_op_handle(rkq->rkq_rk, rko,
-                                                       cb_type, opaque,
-                                                       callback))
-                                        goto retry;
-                                else
+                                res = rd_kafka_op_handle(rkq->rkq_rk, rkq, rko,
+                                                         cb_type, opaque,
+                                                         callback);
+                                if (res == RD_KAFKA_OP_RES_HANDLED)
+                                        goto retry; /* Next op */
+                                else if (unlikely(res ==
+                                                  RD_KAFKA_OP_RES_YIELD)) {
+                                        /* Callback yielded, unroll */
+                                        mtx_unlock(&rkq->rkq_lock);
+                                        return NULL;
+                                } else
                                         break; /* Proper op, handle below. */
                         }
 
@@ -357,7 +363,8 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
                                int32_t version) {
-	return rd_kafka_q_pop_serve(rkq, timeout_ms, version, _Q_CB_RETURN,
+	return rd_kafka_q_pop_serve(rkq, timeout_ms, version,
+                                    RD_KAFKA_Q_CB_RETURN,
                                     NULL, NULL);
 }
 
@@ -372,10 +379,8 @@ rd_kafka_op_t *rd_kafka_q_pop (rd_kafka_q_t *rkq, int timeout_ms,
  * Locality: any thread.
  */
 int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
-                      int max_cnt, int cb_type,
-                      int (*callback) (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                                       int cb_type, void *opaque),
-                      void *opaque) {
+                      int max_cnt, rd_kafka_q_cb_type_t cb_type,
+                      rd_kafka_q_serve_cb_t *callback, void *opaque) {
         rd_kafka_t *rk = rkq->rkq_rk;
 	rd_kafka_op_t *rko;
 	rd_kafka_q_t localq;
@@ -427,12 +432,17 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
 	/* Call callback for each op */
         while ((rko = TAILQ_FIRST(&localq.rkq_q))) {
+                rd_kafka_op_res_t res;
+
                 rd_kafka_q_deq0(&localq, rko);
-                if (!rd_kafka_op_handle(rk, rko, cb_type, opaque, callback))
-                        rd_kafka_assert(rk, !*"op not handled");
+                res = rd_kafka_op_handle(rk, &localq, rko, cb_type,
+                                         opaque, callback);
+                /* op must have been handled */
+                rd_kafka_assert(NULL, res != RD_KAFKA_OP_RES_PASS);
                 cnt++;
 
-                if (unlikely(rd_kafka_yield_thread)) {
+                if (unlikely(res == RD_KAFKA_OP_RES_YIELD ||
+                             rd_kafka_yield_thread)) {
                         /* Callback called rd_kafka_yield(), we must
                          * stop our callback dispatching and put the
                          * ops in localq back on the original queue head. */
@@ -583,7 +593,9 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 	}
         mtx_unlock(&rkq->rkq_lock);
 
+        rd_kafka_yield_thread = 0;
 	while (cnt < rkmessages_size) {
+                rd_kafka_op_res_t res;
 
                 mtx_lock(&rkq->rkq_lock);
 
@@ -609,10 +621,17 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                 }
 
                 /* Serve non-FETCH callbacks */
-                if (rd_kafka_poll_cb(rk, rko, _Q_CB_RETURN, NULL)) {
+                res = rd_kafka_poll_cb(rk, rkq, rko,
+                                       RD_KAFKA_Q_CB_RETURN, NULL);
+                if (res == RD_KAFKA_OP_RES_HANDLED) {
                         /* Callback served, rko is destroyed. */
                         continue;
+                } else if (unlikely(res == RD_KAFKA_OP_RES_YIELD ||
+                                    rd_kafka_yield_thread)) {
+                        /* Yield. */
+                        break;
                 }
+                rd_dassert(res == RD_KAFKA_OP_PASS);
 
 		/* Auto-commit offset, if enabled. */
 		if (!rko->rko_err && rko->rko_type == RD_KAFKA_OP_FETCH) {

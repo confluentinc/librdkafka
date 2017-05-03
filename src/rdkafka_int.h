@@ -401,8 +401,9 @@ extern char RD_TLS rd_kafka_thread_name[64];
 
 int rd_kafka_path_is_dir (const char *path);
 
-int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                      int cb_type, void *opaque);
+rd_kafka_op_res_t
+rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
+                  rd_kafka_q_cb_type_t cb_type, void *opaque);
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
 

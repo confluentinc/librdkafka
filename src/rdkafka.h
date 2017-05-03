@@ -314,6 +314,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE = -165,
         /** Awaiting cache update */
         RD_KAFKA_RESP_ERR__WAIT_CACHE = -164,
+        /** Operation interrupted (e.g., due to yield)) */
+        RD_KAFKA_RESP_ERR__INTR = -163,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,

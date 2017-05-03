@@ -51,8 +51,10 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
 #define rd_kafka_cgrp_partitions_fetch_start(rkcg,assignment,usable_offsets) \
 	rd_kafka_cgrp_partitions_fetch_start0(rkcg,assignment,usable_offsets,\
 					      __LINE__)
-static int rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                                   int cb_type, void *opaque);
+static rd_kafka_op_res_t
+rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
+                        rd_kafka_op_t *rko, rd_kafka_q_cb_type_t cb_type,
+                        void *opaque);
 
 /**
  * @returns true if cgrp can start partition fetchers, which is true if
@@ -698,21 +700,25 @@ err:
 /**
  * @brief Op callback from handle_JoinGroup
  */
-static void rd_kafka_cgrp_assignor_handle_Metadata_op (rd_kafka_t *rk,
-                                                       rd_kafka_op_t *rko) {
+static rd_kafka_op_res_t
+rd_kafka_cgrp_assignor_handle_Metadata_op (rd_kafka_t *rk,
+                                           rd_kafka_q_t *rkq,
+                                           rd_kafka_op_t *rko) {
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
-                return; /* Terminating */
+                return RD_KAFKA_OP_RES_HANDLED; /* Terminating */
 
         if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA)
-                return;
+                return RD_KAFKA_OP_RES_HANDLED;
 
         rd_kafka_cgrp_assignor_run(rkcg,
                                    rkcg->rkcg_group_leader.protocol,
                                    rko->rko_err, rko->rko_u.metadata,
                                    rkcg->rkcg_group_leader.members,
                                    rkcg->rkcg_group_leader.member_cnt);
+
+        return RD_KAFKA_OP_RES_HANDLED;
 }
 
 
@@ -981,14 +987,17 @@ err:
 /**
  * @brief Check subscription against requested Metadata.
  */
-static void rd_kafka_cgrp_handle_Metadata_op (rd_kafka_t *rk,
-                                              rd_kafka_op_t *rko) {
+static rd_kafka_op_res_t
+rd_kafka_cgrp_handle_Metadata_op (rd_kafka_t *rk, rd_kafka_q_t *rkq,
+                                  rd_kafka_op_t *rko) {
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
 
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
-                return; /* Terminating */
+                return RD_KAFKA_OP_RES_HANDLED; /* Terminating */
 
         rd_kafka_cgrp_metadata_update_check(rkcg, 0/*dont rejoin*/);
+
+        return RD_KAFKA_OP_RES_HANDLED;
 }
 
 
@@ -2600,8 +2609,10 @@ static void rd_kafka_cgrp_timeout_scan (rd_kafka_cgrp_t *rkcg, rd_ts_t now) {
  * @locality rdkafka main thread
  * @locks none
  */
-static int rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                                    int cb_type, void *opaque) {
+static rd_kafka_op_res_t
+rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
+                        rd_kafka_op_t *rko, rd_kafka_q_cb_type_t cb_type,
+                        void *opaque) {
         rd_kafka_cgrp_t *rkcg = opaque;
         rd_kafka_broker_t *rkb = rkcg->rkcg_rkb;
         rd_kafka_toppar_t *rktp;
@@ -2610,7 +2621,7 @@ static int rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko,
 
         if (rko->rko_version && rkcg->rkcg_version > rko->rko_version) {
                 rd_kafka_op_destroy(rko); /* outdated */
-                return 1;
+                return RD_KAFKA_OP_RES_HANDLED;
         }
 
         rktp = rko->rko_rktp ? rd_kafka_toppar_s2i(rko->rko_rktp) : NULL;
@@ -2785,7 +2796,7 @@ static int rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko,
         if (rko)
                 rd_kafka_op_destroy(rko);
 
-        return 1;
+        return RD_KAFKA_OP_RES_HANDLED;
 }
 
 

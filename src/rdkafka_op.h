@@ -132,6 +132,52 @@ typedef enum {
 } rd_kafka_op_prio_t;
 
 
+/**
+ * @brief Op handler result
+ *
+ * @remark When returning YIELD from a handler the handler will
+ *         need to have made sure to either re-enqueue the op or destroy it
+ *         since the caller will not touch the op anymore.
+ */
+typedef enum {
+        RD_KAFKA_OP_RES_PASS,    /* Not handled, pass to caller */
+        RD_KAFKA_OP_RES_HANDLED, /* Op was handled (through callbacks) */
+        RD_KAFKA_OP_RES_YIELD    /* Callback called yield */
+} rd_kafka_op_res_t;
+
+
+/**
+ * @brief Queue serve callback call type
+ */
+typedef enum {
+        RD_KAFKA_Q_CB_INVALID, /* dont use */
+        RD_KAFKA_Q_CB_CALLBACK,/* trigger callback based on op */
+        RD_KAFKA_Q_CB_RETURN,  /* return op rather than trigger callback
+                                * (if possible)*/
+        RD_KAFKA_Q_CB_FORCE_RETURN, /* return op, regardless of callback. */
+        RD_KAFKA_Q_CB_EVENT    /* like _Q_CB_RETURN but return event_t:ed op */
+} rd_kafka_q_cb_type_t;
+
+/**
+ * @brief Queue serve callback
+ * @remark See rd_kafka_op_res_t docs for return semantics.
+ */
+typedef rd_kafka_op_res_t
+(rd_kafka_q_serve_cb_t) (rd_kafka_t *rk,
+                         struct rd_kafka_q_s *rkq,
+                         struct rd_kafka_op_s *rko,
+                         rd_kafka_q_cb_type_t cb_type, void *opaque)
+        RD_WARN_UNUSED_RESULT;
+
+/**
+ * @brief Op callback type
+ */
+typedef rd_kafka_op_res_t (rd_kafka_op_cb_t) (rd_kafka_t *rk,
+                                              rd_kafka_q_t *rkq,
+                                              struct rd_kafka_op_s *rko)
+                RD_WARN_UNUSED_RESULT;
+
+
 #define RD_KAFKA_OP_TYPE_ASSERT(rko,type) \
 	rd_kafka_assert(NULL, (rko)->rko_type == (type) && # type)
 
@@ -160,10 +206,8 @@ struct rd_kafka_op_s {
 
         /* Original queue's op serve callback and opaque, if any.
          * Mainly used for forwarded queues to use the original queue's
-         * serve function from the forwarded position.
-         * Shall return 1 if op was handled and destroyed, else 0. */
-        int (*rko_serve) (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                          int cb_type, void *opaque);
+         * serve function from the forwarded position. */
+        rd_kafka_q_serve_cb_t *rko_serve;
         void *rko_serve_opaque;
 
 	rd_kafka_t     *rko_rk;
@@ -173,7 +217,7 @@ struct rd_kafka_op_s {
 #endif
 
         /* RD_KAFKA_OP_CB */
-        void          (*rko_op_cb) (rd_kafka_t *rk, struct rd_kafka_op_s *rko);
+        rd_kafka_op_cb_t *rko_op_cb;
 
 	union {
 		struct {
@@ -295,8 +339,7 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
                                       rd_kafka_resp_err_t err);
 rd_kafka_op_t *rd_kafka_op_new_cb (rd_kafka_t *rk,
                                    rd_kafka_op_type_t type,
-                                   void (*cb) (rd_kafka_t *rk,
-                                               rd_kafka_op_t *rko));
+                                   rd_kafka_op_cb_t *cb);
 int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 
 #define rd_kafka_op_set_prio(rko,prio) ((rko)->rko_prio = prio)
@@ -321,17 +364,20 @@ rd_kafka_op_t *rd_kafka_op_req (rd_kafka_q_t *destq,
 rd_kafka_op_t *rd_kafka_op_req2 (rd_kafka_q_t *destq, rd_kafka_op_type_t type);
 rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko);
 
-void rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_op_t *rko);
+rd_kafka_op_res_t rd_kafka_op_call (rd_kafka_t *rk,
+                                    rd_kafka_q_t *rkq, rd_kafka_op_t *rko)
+        RD_WARN_UNUSED_RESULT;
 
 void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
 				rd_kafka_q_t *rkq,
 				int throttle_time);
 
-int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko, int cb_type);
-int rd_kafka_op_handle (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                        int cb_type, void *opaque,
-                        int (*callback) (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                                         int cb_type, void *opaque));
+
+rd_kafka_op_res_t
+rd_kafka_op_handle (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
+                    rd_kafka_q_cb_type_t cb_type, void *opaque,
+                    rd_kafka_q_serve_cb_t *callback) RD_WARN_UNUSED_RESULT;
+
 
 extern rd_atomic32_t rd_kafka_op_cnt;
 

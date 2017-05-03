@@ -226,6 +226,8 @@ enum ErrorCode {
         ERR__UNSUPPORTED_FEATURE = -165,
         /** Awaiting cache update */
         ERR__WAIT_CACHE = -164,
+        /** Operation interrupted */
+        ERR__INTR = -163,
 	/** End internal error codes */
 	ERR__END = -100,
 

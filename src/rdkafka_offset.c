@@ -490,7 +490,7 @@ rd_kafka_commit_queue (rd_kafka_t *rk,
 	if (!rkqu) {
                 rd_kafka_op_t *rko =
                         rd_kafka_q_pop_serve(rkq, RD_POLL_INFINITE,
-                                             0, _Q_CB_FORCE_RETURN,
+                                             0, RD_KAFKA_Q_CB_FORCE_RETURN,
                                              NULL, NULL);
 		if (!rko)
 			err = RD_KAFKA_RESP_ERR__TIMED_OUT;
@@ -748,7 +748,9 @@ static rd_kafka_resp_err_t rd_kafka_offset_file_term (rd_kafka_toppar_t *rktp) {
         return err;
 }
 
-static void rd_kafka_offset_reset_op_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
+static rd_kafka_op_res_t
+rd_kafka_offset_reset_op_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq,
+                             rd_kafka_op_t *rko) {
 	rd_kafka_toppar_t *rktp =
 		rd_kafka_toppar_s2i(rko->rko_rktp);
 	rd_kafka_toppar_lock(rktp);
@@ -756,6 +758,7 @@ static void rd_kafka_offset_reset_op_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
                               rko->rko_u.offset_reset.offset,
                               rko->rko_err, rko->rko_u.offset_reset.reason);
 	rd_kafka_toppar_unlock(rktp);
+        return RD_KAFKA_OP_RES_HANDLED;
 }
 
 /**

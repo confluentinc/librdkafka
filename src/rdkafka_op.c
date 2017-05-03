@@ -296,9 +296,11 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 	}
 
         if (rko->rko_type & RD_KAFKA_OP_CB && rko->rko_op_cb) {
+                rd_kafka_op_res_t res;
                 /* Let callback clean up */
                 rko->rko_err = RD_KAFKA_RESP_ERR__DESTROY;
-                rko->rko_op_cb(rko->rko_rk, rko);
+                res = rko->rko_op_cb(rko->rko_rk, NULL, rko);
+                assert(res != RD_KAFKA_OP_RES_YIELD);
         }
 
 	RD_IF_FREE(rko->rko_rktp, rd_kafka_toppar_destroy);
@@ -382,8 +384,7 @@ rd_kafka_op_t *rd_kafka_op_new_reply (rd_kafka_op_t *rko_orig,
  */
 rd_kafka_op_t *rd_kafka_op_new_cb (rd_kafka_t *rk,
                                    rd_kafka_op_type_t type,
-                                   void (*cb) (rd_kafka_t *rk,
-                                               rd_kafka_op_t *rko)) {
+                                   rd_kafka_op_cb_t *cb) {
         rd_kafka_op_t *rko;
         rko = rd_kafka_op_new(type | RD_KAFKA_OP_CB);
         rko->rko_op_cb = cb;
@@ -485,9 +486,14 @@ rd_kafka_resp_err_t rd_kafka_op_err_destroy (rd_kafka_op_t *rko) {
 /**
  * Call op callback
  */
-void rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_op_t *rko) {
-        rko->rko_op_cb(rk, rko);
+rd_kafka_op_res_t rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_q_t *rkq,
+                                    rd_kafka_op_t *rko) {
+        rd_kafka_op_res_t res;
+        res = rko->rko_op_cb(rk, rkq, rko);
+        if (unlikely(res == RD_KAFKA_OP_RES_YIELD || rd_kafka_yield_thread))
+                return RD_KAFKA_OP_RES_YIELD;
         rko->rko_op_cb = NULL;
+        return res;
 }
 
 
@@ -522,25 +528,28 @@ void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,
 
 /**
  * @brief Handle standard op types.
- * @returns 1 if handled, else 0.
  */
-int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko, int cb_type) {
-        if (cb_type == _Q_CB_FORCE_RETURN)
-                return 0;
-        else if (cb_type != _Q_CB_EVENT && rko->rko_type & RD_KAFKA_OP_CB)
-                rd_kafka_op_call(rk, rko);
+rd_kafka_op_res_t
+rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_q_t *rkq,
+                        rd_kafka_op_t *rko, int cb_type) {
+        if (cb_type == RD_KAFKA_Q_CB_FORCE_RETURN)
+                return RD_KAFKA_OP_RES_PASS;
+        else if (cb_type != RD_KAFKA_Q_CB_EVENT &&
+                 rko->rko_type & RD_KAFKA_OP_CB)
+                return rd_kafka_op_call(rk, rkq, rko);
         else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
                 rd_kafka_buf_handle_op(rko, rko->rko_err);
         else if (rko->rko_type == RD_KAFKA_OP_WAKEUP)
                 ;/* do nothing, wake up is a fact anyway */
-        else if (cb_type != _Q_CB_RETURN &&
+        else if (cb_type != RD_KAFKA_Q_CB_RETURN &&
                  rko->rko_type & RD_KAFKA_OP_REPLY &&
                  rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
-                return 1; /* dest queue was probably disabled. */
+                return RD_KAFKA_OP_RES_HANDLED; /* dest queue was
+                                                 * probably disabled. */
         else
-                return 0;
+                return RD_KAFKA_OP_RES_PASS;
 
-        return 1;
+        return RD_KAFKA_OP_RES_HANDLED;
 }
 
 
@@ -548,17 +557,26 @@ int rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_op_t *rko, int cb_type) {
  * @brief Attempt to handle op using its queue's serve callback,
  *        or the passed callback, or op_handle_std(), else do nothing.
  *
- * @returns 1 if op was handled (and destroyed), else 0.
+ * @param rkq is \p rko's queue (which it was unlinked from) with rkq_lock
+ *            being held. Callback may re-enqueue the op on this queue
+ *            and return YIELD.
+ *
+ * @returns HANDLED if op was handled (and destroyed), PASS if not,
+ *          or YIELD if op was handled (maybe destroyed or re-enqueued)
+ *          and caller must propagate yield upwards (cancel and return).
  */
-int rd_kafka_op_handle (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                        int cb_type, void *opaque,
-                        int (*callback) (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                                         int cb_type, void *opaque)) {
+rd_kafka_op_res_t
+rd_kafka_op_handle (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
+                    rd_kafka_q_cb_type_t cb_type, void *opaque,
+                    rd_kafka_q_serve_cb_t *callback) {
+        rd_kafka_op_res_t res;
 
-        if (rd_kafka_op_handle_std(rk, rko, cb_type)) {
+        res = rd_kafka_op_handle_std(rk, rkq, rko, cb_type);
+        if (res == RD_KAFKA_OP_RES_HANDLED) {
                 rd_kafka_op_destroy(rko);
-                return 1;
-        }
+                return res;
+        } else if (unlikely(res == RD_KAFKA_OP_RES_YIELD))
+                return res;
 
         if (rko->rko_serve) {
                 callback = rko->rko_serve;
@@ -568,9 +586,9 @@ int rd_kafka_op_handle (rd_kafka_t *rk, rd_kafka_op_t *rko,
         }
 
         if (callback)
-                return callback(rk, rko, cb_type, opaque);
+                res = callback(rk, rkq, rko, cb_type, opaque);
 
-        return 0;
+        return res;
 }
 
 

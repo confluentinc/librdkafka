@@ -289,6 +289,8 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_str(rkbuf, rktpar->topic, -1);
                         topic_cnt++;
                         last_topic = rktpar->topic;
+                        /* New topic so reset partition count */
+                        part_cnt = 0;
 
                         /* PartitionArrayCnt: updated later */
                         of_PartArrayCnt = rd_kafka_buf_write_i32(rkbuf, 0);

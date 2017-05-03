@@ -1,7 +1,7 @@
 //@file
 ## Global configuration properties
 
-Property                                 | C/P | Range           |       Default | Description              
+Property                                 | C/P | Range           |       Default | Description
 -----------------------------------------|-----|-----------------|--------------:|--------------------------
 builtin.features                         |  *  |                 | gzip, snappy, ssl, sasl, regex, lz4, sasl_gssapi, sasl_plain | Indicates the builtin features for this build of librdkafka. An application can either query this value or attempt to set it with its list of required features to check for library support. <br>*Type: CSV flags*
 client.id                                |  *  |                 |       rdkafka | Client identifier. <br>*Type: string*
@@ -102,7 +102,7 @@ dr_msg_cb                                |  P  |                 |              
 
 ## Topic configuration properties
 
-Property                                 | C/P | Range           |       Default | Description              
+Property                                 | C/P | Range           |       Default | Description
 -----------------------------------------|-----|-----------------|--------------:|--------------------------
 request.required.acks                    |  P  | -1 .. 1000      |             1 | This field indicates how many acknowledgements the leader broker must receive from ISR brokers before responding to the request: *0*=Broker does not send any response/ack to client, *1*=Only the leader broker will need to ack the message, *-1* or *all*=broker will block until message is committed by all in sync replicas (ISRs) or broker's `in.sync.replicas` setting before sending response.  <br>*Type: integer*
 acks                                     |  P  |                 |               | Alias for `request.required.acks`

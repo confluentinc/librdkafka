@@ -36,6 +36,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * [Statistics](https://github.com/edenhill/librdkafka/wiki/Statistics) metrics
   * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
   * RPM package: librdkafka and librdkafka-devel
+  * Gentoo package: dev-libs/librdkafka
   * Portable: runs on Linux, OSX, Win32, Solaris, FreeBSD, ...
 
 

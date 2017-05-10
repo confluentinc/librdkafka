@@ -903,6 +903,16 @@ int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
 
 
 
+/**
+ * @brief Returns the latency for a produced message measured from
+ *        the produce() call.
+ *
+ * @returns the latency in microseconds, or -1 if not available.
+ */
+RD_EXPORT
+int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage);
+
+
 /**@}*/
 
 

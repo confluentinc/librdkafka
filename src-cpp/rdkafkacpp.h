@@ -1297,6 +1297,10 @@ class RD_EXPORT Message {
   virtual void               *msg_opaque () const = 0;
 
   virtual ~Message () = 0;
+
+  /** @returns the latency in microseconds for a produced message measured
+   *           from the produce() call, or -1 if latency is not available. */
+  virtual int64_t             latency () const = 0;
 };
 
 /**@}*/

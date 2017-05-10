@@ -200,6 +200,10 @@ class MessageImpl : public Message {
 
   void               *msg_opaque () const { return rkmessage_->_private; };
 
+  int64_t             latency () const {
+          return rd_kafka_message_latency(rkmessage_);
+  }
+
   RdKafka::Topic *topic_;
   const rd_kafka_message_t *rkmessage_;
   bool free_rkmessage_;

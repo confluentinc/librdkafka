@@ -2709,7 +2709,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 	int queued_cnt;
 	size_t queued_bytes;
 	size_t buffer_space;
-	rd_ts_t int_latency_base;
+        rd_ts_t now;
 
         queued_cnt = rd_kafka_msgq_len(&rktp->rktp_xmit_msgq);
         if (queued_cnt == 0)
@@ -2717,9 +2717,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 
         queued_bytes = rd_kafka_msgq_size(&rktp->rktp_xmit_msgq);
 
-	/* Internal latency calculation base.
-	 * Uses rkm_ts_timeout which is enqueue time + timeout */
-	int_latency_base = rd_clock() + (rkt->rkt_conf.message_timeout_ms * 1000);
+        now = rd_clock();
 
 	if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1) {
 		MsgVersion = 1;
@@ -2813,8 +2811,7 @@ static int rd_kafka_broker_produce_toppar (rd_kafka_broker_t *rkb,
 		rd_kafka_msgq_deq(&rktp->rktp_xmit_msgq, rkm, 1);
 		rd_kafka_msgq_enq(&rkbuf->rkbuf_msgq, rkm);
 
-		rd_avg_add(&rkb->rkb_avg_int_latency,
-				   int_latency_base - rkm->rkm_ts_timeout);
+                rd_avg_add(&rkb->rkb_avg_int_latency, now - rkm->rkm_ts_enq);
 
 		if (unlikely(msgcnt == 0 && MsgVersion == 1))
 			timestamp_firstmsg = rkm->rkm_timestamp;
@@ -3391,7 +3388,7 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
 
                 /* Calculate maximum wait-time to
                  * honour queue.buffering.max.ms contract. */
-                wait_max = rd_kafka_msg_enq_time(rktp->rktp_rkt, rkm_oldest) +
+                wait_max = rd_kafka_msg_enq_time(rkm_oldest) +
                         (rkb->rkb_rk->rk_conf.buffering_max_ms * 1000);
                 if (wait_max > now) {
                         if (wait_max < *next_wakeup)

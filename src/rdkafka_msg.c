@@ -184,6 +184,8 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
                 rkm->rkm_timestamp = rd_uclock()/1000;
         rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_CREATE_TIME;
 
+        rkm->rkm_ts_enq = now;
+
 	if (rkt->rkt_conf.message_timeout_ms == 0) {
 		rkm->rkm_ts_timeout = INT64_MAX;
 	} else {
@@ -696,5 +698,17 @@ rd_kafka_message_setup (rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
         }
 
         return rkmessage;
+}
+
+
+int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage) {
+        rd_kafka_msg_t *rkm;
+
+        rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+
+        if (unlikely(!rkm->rkm_ts_enq))
+                return -1;
+
+        return rd_clock() - rkm->rkm_ts_enq;
 }
 

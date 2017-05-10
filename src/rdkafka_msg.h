@@ -71,20 +71,21 @@ typedef struct rd_kafka_msg_s {
 				    * Unit is milliseconds since epoch (UTC).*/
 	rd_kafka_timestamp_type_t rkm_tstype; /* rkm_timestamp type */
 
-	union {
-		struct {
-			rd_ts_t ts_timeout;
-		} producer;
+        union {
+                struct {
+                        rd_ts_t ts_timeout; /* Message timeout */
+                        rd_ts_t ts_enq;     /* Enqueue/Produce time */
+                } producer;
 #define rkm_ts_timeout rkm_u.producer.ts_timeout
-	} rkm_u;
+#define rkm_ts_enq     rkm_u.producer.ts_enq
+        } rkm_u;
 } rd_kafka_msg_t;
 
 TAILQ_HEAD(rd_kafka_msg_head_s, rd_kafka_msg_s);
 
 
 /** @returns the absolute time a message was enqueued (producer) */
-#define rd_kafka_msg_enq_time(rkt,rkm)                                  \
-        ((rkm)->rkm_ts_timeout - ((rkt)->rkt_conf.message_timeout_ms * 1000))
+#define rd_kafka_msg_enq_time(rkm) ((rkm)->rkm_ts_enq)
 
 /**
  * @returns the message's total maximum on-wire size.

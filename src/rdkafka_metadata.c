@@ -508,6 +508,20 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         rd_kafka_wrlock(rkb->rkb_rk);
         rkb->rkb_rk->rk_ts_metadata = rd_clock();
 
+        /* Update cached cluster id. */
+        if (RD_KAFKAP_STR_LEN(&cluster_id) > 0 &&
+            (!rkb->rkb_rk->rk_clusterid ||
+             rd_kafkap_str_cmp_str(&cluster_id, rkb->rkb_rk->rk_clusterid))) {
+                rd_rkb_dbg(rkb, BROKER|RD_KAFKA_DBG_GENERIC, "CLUSTERID",
+                           "ClusterId update \"%s\" -> \"%.*s\"",
+                           rkb->rkb_rk->rk_clusterid ?
+                           rkb->rkb_rk->rk_clusterid : "",
+                           RD_KAFKAP_STR_PR(&cluster_id));
+                if (rkb->rkb_rk->rk_clusterid)
+                        rd_free(rkb->rkb_rk->rk_clusterid);
+                rkb->rkb_rk->rk_clusterid = RD_KAFKAP_STR_DUP(&cluster_id);
+        }
+
         if (all_topics) {
                 rd_kafka_metadata_cache_update(rkb->rkb_rk,
                                                md, 1/*abs update*/);

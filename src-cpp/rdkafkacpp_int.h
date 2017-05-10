@@ -589,6 +589,14 @@ class HandleImpl : virtual public Handle {
     rd_kafka_yield(rk_);
   }
 
+  const std::string clusterid (int timeout_ms) {
+          char *str = rd_kafka_clusterid(rk_, timeout_ms);
+          std::string clusterid = str ? str : "";
+          if (str)
+                  rd_kafka_mem_free(rk_, str);
+          return clusterid;
+  }
+
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
    * the opaque provided to rdkafka must be a pointer to HandleImpl, since

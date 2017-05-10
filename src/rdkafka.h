@@ -1610,6 +1610,13 @@ const char *rd_kafka_name(const rd_kafka_t *rk);
 
 
 /**
+ * @brief Returns Kafka handle type.
+ */
+RD_EXPORT
+rd_kafka_type_t rd_kafka_type(const rd_kafka_t *rk);
+
+
+/**
  * @brief Returns this client's broker-assigned group member id 
  *
  * @remark This currently requires the high-level KafkaConsumer
@@ -1621,6 +1628,28 @@ const char *rd_kafka_name(const rd_kafka_t *rk);
  */
 RD_EXPORT
 char *rd_kafka_memberid (const rd_kafka_t *rk);
+
+
+
+/**
+ * @brief Returns the ClusterId as reported in broker metadata.
+ *
+ * @param timeout_ms If there is no cached value from metadata retrieval
+ *                   the this specified the maximum amount of time
+ *                   (in milliseconds) the call will block waiting
+ *                   for metadata to be retrieved.
+ *                   Use 0 non-blocking calls.
+
+ * @remark Requires broker version >=0.10.0 and api.version.request=true.
+ *
+ * @remark The application must free the returned pointer
+ *         using rd_kafka_mem_free().
+ *
+ * @returns a newly allocated string containing the ClusterId, or NULL
+ *          if no ClusterId could be retrieved in the allotted timespan.
+ */
+RD_EXPORT
+char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms);
 
 
 /**

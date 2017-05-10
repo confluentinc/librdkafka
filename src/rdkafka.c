@@ -722,6 +722,10 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 rd_kafka_wrlock(rk);
         }
 
+        if (rk->rk_clusterid) {
+                rd_free(rk->rk_clusterid);
+                rk->rk_clusterid = NULL;
+        }
 
         rd_kafka_wrunlock(rk);
 
@@ -2753,6 +2757,10 @@ const char *rd_kafka_name (const rd_kafka_t *rk) {
 	return rk->rk_name;
 }
 
+rd_kafka_type_t rd_kafka_type(const rd_kafka_t *rk) {
+        return rk->rk_type;
+}
+
 
 char *rd_kafka_memberid (const rd_kafka_t *rk) {
 	rd_kafka_op_t *rko;
@@ -2770,6 +2778,49 @@ char *rd_kafka_memberid (const rd_kafka_t *rk) {
 	rd_kafka_op_destroy(rko);
 
 	return memberid;
+}
+
+
+char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms) {
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
+
+        /* ClusterId is returned in Metadata >=V2 responses and
+         * cached on the rk. If no cached value is available
+         * it means no metadata has been received yet, or we're
+         * using a lower protocol version
+         * (e.g., lack of api.version.request=true). */
+
+        while (1) {
+                int remains_ms;
+
+                rd_kafka_rdlock(rk);
+
+                if (rk->rk_clusterid) {
+                        /* Cached clusterid available. */
+                        char *ret = rd_strdup(rk->rk_clusterid);
+                        rd_kafka_rdunlock(rk);
+                        return ret;
+                } else if (rk->rk_ts_metadata > 0) {
+                        /* Metadata received but no clusterid,
+                         * this probably means the broker is too old
+                         * or api.version.request=false. */
+                        rd_kafka_rdunlock(rk);
+                        return NULL;
+                }
+
+                rd_kafka_rdunlock(rk);
+
+                /* Wait for up to timeout_ms for a metadata refresh,
+                 * if permitted by application. */
+                remains_ms = rd_timeout_remains(abs_timeout);
+                if (remains_ms <= 0)
+                        return NULL;
+
+                rd_kafka_metadata_cache_wait_change(
+                        rk, rd_timeout_remains(abs_timeout));
+        }
+
+        return NULL;
 }
 
 

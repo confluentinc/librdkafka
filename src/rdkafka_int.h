@@ -173,6 +173,8 @@ struct rd_kafka_s {
 	rd_ts_t          rk_ts_full_metadata;       /* Timesstamp of .. */
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
+        char            *rk_clusterid;      /* ClusterId from metadata */
+
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,
          *   0: No consumers running

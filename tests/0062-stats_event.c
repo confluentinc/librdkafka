@@ -79,7 +79,7 @@ int main_0062_stats_event (int argc, char **argv) {
 
     eventq = rd_kafka_queue_get_main(rk);
 
-    rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0005", 0), NULL);
+    rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0062", 0), NULL);
     if (!rkt)
         TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 

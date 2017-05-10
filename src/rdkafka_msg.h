@@ -260,4 +260,11 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 
 
 int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
-			      int do_lock);
+                              int do_lock);
+
+
+rd_kafka_message_t *rd_kafka_message_get (struct rd_kafka_op_s *rko);
+rd_kafka_message_t *rd_kafka_message_get_from_rkm (struct rd_kafka_op_s *rko,
+                                                   rd_kafka_msg_t *rkm);
+rd_kafka_message_t *rd_kafka_message_new (void);
+

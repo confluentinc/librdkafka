@@ -648,6 +648,31 @@ int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 	rd_kafka_toppar_destroy(s_rktp_new); /* from _get() */
 	return 0;
 }
+
+
+
+
+/**
+ * @name Public message type (rd_kafka_message_t)
+ */
+void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
+        rd_kafka_op_t *rko;
+
+        if (likely((rko = (rd_kafka_op_t *)rkmessage->_private) != NULL))
+                rd_kafka_op_destroy(rko);
+        else {
+                rd_kafka_msg_t *rkm = rd_kafka_message2msg(rkmessage);
+                rd_kafka_msg_destroy(NULL, rkm);
+        }
+}
+
+
+rd_kafka_message_t *rd_kafka_message_new (void) {
+        rd_kafka_msg_t *rkm = rd_calloc(1, sizeof(*rkm));
+        return (rd_kafka_message_t *)rkm;
+}
+
+
 /**
  * @brief Set up a rkmessage from an rko for passing to the application.
  * @remark Will trigger on_consume() or on_acknowledgement() interceptors,
@@ -698,6 +723,73 @@ rd_kafka_message_setup (rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
         }
 
         return rkmessage;
+}
+
+
+
+/**
+ * @brief Get rkmessage from rkm (for EVENT_DR)
+ * @remark Must only be called just prior to passing a dr to the application.
+ * @remark Will trigger on_acknowledgement() interceptors, if any.
+ */
+rd_kafka_message_t *rd_kafka_message_get_from_rkm (rd_kafka_op_t *rko,
+                                                   rd_kafka_msg_t *rkm) {
+        return rd_kafka_message_setup(rko, &rkm->rkm_rkmessage);
+}
+
+/**
+ * @brief Convert rko to rkmessage
+ * @remark Must only be called just prior to passing a consumed message
+ *         or event to the application.
+ * @remark Will trigger on_consume() interceptors, if any.
+ * @returns a rkmessage (bound to the rko).
+ */
+rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
+        rd_kafka_message_t *rkmessage;
+
+        if (!rko)
+                return rd_kafka_message_new(); /* empty */
+
+        switch (rko->rko_type)
+        {
+        case RD_KAFKA_OP_FETCH:
+                /* Use embedded rkmessage */
+                rkmessage = &rko->rko_u.fetch.rkm.rkm_rkmessage;
+                break;
+
+        case RD_KAFKA_OP_ERR:
+        case RD_KAFKA_OP_CONSUMER_ERR:
+                rkmessage = &rko->rko_u.err.rkm.rkm_rkmessage;
+                rkmessage->payload = rko->rko_u.err.errstr;
+                rkmessage->offset  = rko->rko_u.err.offset;
+                break;
+
+        default:
+                rd_kafka_assert(NULL, !*"unhandled optype");
+                RD_NOTREACHED();
+                return NULL;
+        }
+
+        return rd_kafka_message_setup(rko, rkmessage);
+}
+
+
+int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
+                                    rd_kafka_timestamp_type_t *tstype) {
+        rd_kafka_msg_t *rkm;
+
+        if (rkmessage->err) {
+                if (tstype)
+                        *tstype = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+                return -1;
+        }
+
+        rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+
+        if (tstype)
+                *tstype = rkm->rkm_tstype;
+
+        return rkm->rkm_timestamp;
 }
 
 

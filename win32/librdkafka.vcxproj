@@ -131,6 +131,7 @@
     <ClInclude Include="..\src\rdkafka_interceptor.h" />
     <ClInclude Include="..\src\rdkafka_plugin.h" />
     <ClInclude Include="..\src\rdlog.h" />
+    <ClInclude Include="..\src\rdstring.h" />
     <ClInclude Include="..\src\rdrand.h" />
     <ClInclude Include="..\src\rdsysqueue.h" />
     <ClInclude Include="..\src\rdtime.h" />

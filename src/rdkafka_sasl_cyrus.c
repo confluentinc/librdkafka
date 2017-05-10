@@ -31,6 +31,7 @@
 #include "rdkafka_transport_int.h"
 #include "rdkafka_sasl.h"
 #include "rdkafka_sasl_int.h"
+#include "rdstring.h"
 
 #ifdef __FreeBSD__
 #include <sys/wait.h>  /* For WIF.. */

@@ -218,7 +218,7 @@ function mkl_mkvar_append {
 #  config name
 #  variable name
 #  value
-function mkl_mkvar_append {
+function mkl_mkvar_prepend {
     if [[ ! -z $2 ]]; then
         mkl_env_prepend "$2" "$3"
         mkl_in_list "$MKL_MKVARS" "$2"|| mkl_env_append MKL_MKVARS $2
@@ -953,7 +953,7 @@ function mkl_compile_check {
 int main () { return 0; }
 " >> $srcfile
 
-    local cmd="${!4} $cflags $(mkl_mkvar_get CPPFLAGS) -Wall -Werror $srcfile -o ${srcfile}.o $ldf $5 $(mkl_mkvar_get LDFLAGS)";
+    local cmd="${!4} $cflags $(mkl_mkvar_get CPPFLAGS) -Wall -Werror $srcfile -o ${srcfile}.o $ldf $(mkl_mkvar_get LDFLAGS) $5";
     mkl_dbg "Compile check $1 ($2): $cmd"
 
     local output
@@ -1051,7 +1051,7 @@ function mkl_lib_check_static {
 # Arguments:
 #  [--static=<lib>]  (allows static linking (--enable-static) for the
 #                     library provided, e.g.: --static=-lrdkafka "librdkafka"..)
-#  [--libname=<lib>] (library name if differens from config name, such as
+#  [--libname=<lib>] (library name if different from config name, such as
 #                     when the libname includes a dash)
 #  config name (library name (for pkg-config))
 #  define name
@@ -1114,7 +1114,7 @@ function mkl_lib_check {
 # Arguments:
 #  [--static=<lib>]  (allows static linking (--enable-static) for the
 #                     library provided, e.g.: --static=-lrdkafka "librdkafka"..)
-#  [--libname=<lib>] (library name if differens from config name, such as
+#  [--libname=<lib>] (library name if different from config name, such as
 #                     when the libname includes a dash)
 #  config name
 #  define name

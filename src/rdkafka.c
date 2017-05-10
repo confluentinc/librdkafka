@@ -47,6 +47,7 @@
 #include "rdkafka_request.h"
 #include "rdkafka_event.h"
 #include "rdkafka_sasl.h"
+#include "rdkafka_interceptor.h"
 
 #include "rdtime.h"
 #ifdef _MSC_VER
@@ -677,6 +678,9 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
         rd_kafka_dbg(rk, ALL, "DESTROY", "Destroy internal");
 
+        /* Call on_destroy() interceptors */
+        rd_kafka_interceptors_on_destroy(rk);
+
 	/* Brokers pick up on rk_terminate automatically. */
 
         /* List of (broker) threads to join to synchronize termination */
@@ -1254,7 +1258,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	rk->rk_type = type;
 
 	rk->rk_conf = *use_conf;
-	rd_free(use_conf);
+
+        /* Call on_new() interceptors */
+        rd_kafka_interceptors_on_new(rk);
 
 	rwlock_init(&rk->rk_lock);
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
@@ -1438,6 +1444,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
         if (conf)
                 rd_free(conf);
 	rd_kafka_set_last_error(0, 0);
+
+        rk->rk_initialized = 1;
 
 	return rk;
 }

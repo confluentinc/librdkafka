@@ -29,6 +29,19 @@
 #ifndef _RDKAFKA_INTERCEPTOR_H
 #define _RDKAFKA_INTERCEPTOR_H
 
+rd_kafka_conf_res_t
+rd_kafka_interceptors_on_conf_set (rd_kafka_conf_t *conf,
+                                   const char *name, const char *val,
+                                   char *errstr, size_t errstr_size);
+void
+rd_kafka_interceptors_on_conf_dup (rd_kafka_conf_t *new_conf,
+                                   const rd_kafka_conf_t *old_conf);
+void
+rd_kafka_interceptors_on_conf_destroy (rd_kafka_conf_t *conf) ;
+void
+rd_kafka_interceptors_on_new (rd_kafka_t *rk);
+void
+rd_kafka_interceptors_on_destroy (rd_kafka_t *rk);
 void
 rd_kafka_interceptors_on_send (rd_kafka_t *rk, rd_kafka_message_t *rkmessage);
 void

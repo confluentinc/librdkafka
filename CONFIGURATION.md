@@ -66,7 +66,7 @@ sasl.kerberos.min.time.before.relogin    |  *  | 1 .. 86400000   |         60000
 sasl.username                            |  *  |                 |               | SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms <br>*Type: string*
 sasl.password                            |  *  |                 |               | SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism <br>*Type: string*
 plugin.library.paths                     |  *  |                 |               | List of plugin libaries to load (; separated) <br>*Type: string*
-interceptors                             |  *  |                 |               | Interceptors added through rd_kafka_conf_interceptor_add_..() <br>*Type: *
+interceptors                             |  *  |                 |               | Interceptors added through rd_kafka_conf_interceptor_add_..() and any configuration handled by interceptors. <br>*Type: *
 group.id                                 |  *  |                 |               | Client group id string. All clients sharing the same group.id belong to the same group. <br>*Type: string*
 partition.assignment.strategy            |  *  |                 | range,roundrobin | Name of partition assignment strategy to use when elected group leader assigns partitions to group members. <br>*Type: string*
 session.timeout.ms                       |  *  | 1 .. 3600000    |         30000 | Client group session and failure detection timeout. <br>*Type: integer*

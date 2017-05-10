@@ -37,11 +37,6 @@ typedef struct rd_kafka_plugin_s {
         void *rkplug_handle;       /* dlopen (or similar) handle */
         void *rkplug_opaque;       /* Plugin's opaque */
 
-        /*
-         * Common methods
-         */
-        rd_kafka_plugin_f_conf_destroy_t *rkplug_conf_destroy;
-
 } rd_kafka_plugin_t;
 
 
@@ -60,6 +55,10 @@ static int rd_kafka_plugin_cmp (const void *_a, const void *_b) {
  *
  * @returns an error code on error.
  * @remark duplicate plugins are silently ignored.
+ *
+ * @remark Libraries are refcounted and thus not unloaded until all
+ *         plugins referencing the library have been destroyed.
+ *         (dlopen() and LoadLibrary() does this for us)
  */
 static rd_kafka_resp_err_t
 rd_kafka_plugin_new (rd_kafka_conf_t *conf, const char *path,
@@ -110,14 +109,6 @@ rd_kafka_plugin_new (rd_kafka_conf_t *conf, const char *path,
         rkplug->rkplug_handle      = handle;
         rkplug->rkplug_opaque = plug_opaque;
 
-        /*
-         * Load known methods.
-         */
-
-        /* Common methods */
-        rkplug->rkplug_conf_destroy = rd_dl_sym(handle, "conf_destroy",
-                                                NULL, 0);
-
         rd_list_add(&conf->plugins, rkplug);
 
         rd_kafka_dbg0(conf, PLUGIN, "PLUGLOAD",
@@ -128,13 +119,15 @@ rd_kafka_plugin_new (rd_kafka_conf_t *conf, const char *path,
 
 
 /**
- * @brief Call plugin destructor and then free the plugin.
+ * @brief Free the plugin, any conf_destroy() interceptors will have been
+ *        called prior to this call.
  * @remark plugin is not removed from any list (caller's responsibility)
+ * @remark this relies on the actual library loader to refcount libraries,
+ *         especially in the config copy case.
+ *         This is true for POSIX dlopen() and Win32 LoadLibrary().
  * @locality application thread
  */
 static void rd_kafka_plugin_destroy (rd_kafka_plugin_t *rkplug) {
-        if (rkplug->rkplug_conf_destroy)
-                rkplug->rkplug_conf_destroy(rkplug->rkplug_opaque);
         rd_dl_close(rkplug->rkplug_handle);
         rd_free(rkplug->rkplug_path);
         rd_free(rkplug);
@@ -144,6 +137,9 @@ static void rd_kafka_plugin_destroy (rd_kafka_plugin_t *rkplug) {
 
 /**
  * @brief Initialize all configured plugins.
+ *
+ * @remark Any previously loaded plugins will be unloaded.
+ *
  * @returns the error code of the first failing plugin.
  * @locality application thread calling rd_kafka_new().
  */

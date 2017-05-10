@@ -145,10 +145,21 @@ struct rd_kafka_conf_s {
 
         /* Interceptors */
         struct {
-                rd_list_t on_send;            /* on_send interceptors */
-                rd_list_t on_acknowledgement; /* .. */
-                rd_list_t on_consume;         /* .. */
-                rd_list_t on_commit;          /* .. */
+                /* rd_kafka_interceptor_method_t lists */
+                rd_list_t on_conf_set;        /* on_conf_set interceptors
+                                               * (not copied on conf_dup()) */
+                rd_list_t on_conf_dup;        /* .. (not copied) */
+                rd_list_t on_conf_destroy;    /* .. (not copied) */
+                rd_list_t on_new;             /* .. (copied) */
+                rd_list_t on_destroy;         /* .. (copied) */
+                rd_list_t on_send;            /* .. (copied) */
+                rd_list_t on_acknowledgement; /* .. (copied) */
+                rd_list_t on_consume;         /* .. (copied) */
+                rd_list_t on_commit;          /* .. (copied) */
+
+                /* rd_strtup_t list */
+                rd_list_t config;             /* Configuration name=val's
+                                               * handled by interceptors. */
         } interceptors;
 
         /* Client group configuration */

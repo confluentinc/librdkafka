@@ -249,6 +249,35 @@ static void do_test_produce (rd_kafka_t *rk, const char *topic,
 }
 
 
+
+static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk, void *ic_opaque,
+                                            char *errstr, size_t errstr_size) {
+        int i;
+
+        for (i = 0 ; i < producer_ic_cnt ; i++) {
+                rd_kafka_interceptor_add_on_send(
+                        rk, tsprintf("on_send:%d",i),
+                        on_send, (void *)(intptr_t)(on_send_base | i));
+
+                rd_kafka_interceptor_add_on_acknowledgement(
+                        rk, tsprintf("on_acknowledgement:%d",i),
+                        on_ack, (void *)(intptr_t)(on_ack_base | i));
+
+                /* Add consumer interceptors as well to make sure
+                 * they are not called. */
+                rd_kafka_interceptor_add_on_consume(
+                        rk, tsprintf("on_consume:%d",i),
+                        on_consume, NULL);
+
+                rd_kafka_interceptor_add_on_commit(
+                        rk, tsprintf("on_commit:%d",i),
+                        on_commit, NULL);
+
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 static void do_test_producer (const char *topic) {
         rd_kafka_conf_t *conf, *conf2;
         int i;
@@ -256,26 +285,8 @@ static void do_test_producer (const char *topic) {
 
         test_conf_init(&conf, NULL, 0);
 
-        for (i = 0 ; i < producer_ic_cnt ; i++) {
-                rd_kafka_conf_interceptor_add_on_send(
-                        conf, tsprintf("on_send:%d",i),
-                        on_send, (void *)(intptr_t)(on_send_base | i));
-
-                rd_kafka_conf_interceptor_add_on_acknowledgement(
-                        conf, tsprintf("on_acknowledgement:%d",i),
-                        on_ack, (void *)(intptr_t)(on_ack_base | i));
-
-                /* Add consumer interceptors as well to make sure
-                 * they are not called. */
-                rd_kafka_conf_interceptor_add_on_consume(
-                        conf, tsprintf("on_consume:%d",i),
-                        on_consume, NULL);
-
-                rd_kafka_conf_interceptor_add_on_commit(
-                        conf, tsprintf("on_commit:%d",i),
-                        on_commit, NULL);
-
-        }
+        rd_kafka_conf_interceptor_add_on_new(conf, "on_new_prodcer",
+                                             on_new_producer, NULL);
 
         /* Now copy the configuration to verify that the interceptor
          * copy constructor works */
@@ -307,6 +318,36 @@ static void do_test_producer (const char *topic) {
         rd_kafka_destroy(rk);
 }
 
+
+static rd_kafka_resp_err_t on_new_consumer (rd_kafka_t *rk, void *ic_opaque,
+                                            char *errstr, size_t errstr_size) {
+        int i;
+
+        for (i = 0 ; i < consumer_ic_cnt ; i++) {
+                rd_kafka_interceptor_add_on_consume(
+                        rk, tsprintf("on_consume:%d",i),
+                        on_consume, (void *)(intptr_t)(on_consume_base | i));
+
+                rd_kafka_interceptor_add_on_commit(
+                        rk, tsprintf("on_commit:%d",i),
+                        on_commit, (void *)(intptr_t)(on_commit_base | i));
+
+                /* Add producer interceptors as well to make sure they
+                 * are not called. */
+                rd_kafka_interceptor_add_on_send(
+                        rk, tsprintf("on_send:%d",i),
+                        on_send, NULL);
+
+                rd_kafka_interceptor_add_on_acknowledgement(
+                        rk, tsprintf("on_acknowledgement:%d",i),
+                        on_ack, NULL);
+        }
+
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 static void do_test_consumer (const char *topic) {
 
         rd_kafka_conf_t *conf, *conf2;
@@ -315,25 +356,8 @@ static void do_test_consumer (const char *topic) {
 
         test_conf_init(&conf, NULL, 0);
 
-        for (i = 0 ; i < consumer_ic_cnt ; i++) {
-                rd_kafka_conf_interceptor_add_on_consume(
-                        conf, tsprintf("on_consume:%d",i),
-                        on_consume, (void *)(intptr_t)(on_consume_base | i));
-
-                rd_kafka_conf_interceptor_add_on_commit(
-                        conf, tsprintf("on_commit:%d",i),
-                        on_commit, (void *)(intptr_t)(on_commit_base | i));
-
-                /* Add producer interceptors as well to make sure they
-                 * are not called. */
-                rd_kafka_conf_interceptor_add_on_send(
-                        conf, tsprintf("on_send:%d",i),
-                        on_send, NULL);
-
-                rd_kafka_conf_interceptor_add_on_acknowledgement(
-                        conf, tsprintf("on_acknowledgement:%d",i),
-                        on_ack, NULL);
-        }
+        rd_kafka_conf_interceptor_add_on_new(conf, "on_new_consumer",
+                                             on_new_consumer, NULL);
 
         /* Now copy the configuration to verify that the interceptor
          * copy constructor works */
@@ -371,7 +395,7 @@ static void do_test_consumer (const char *topic) {
         rd_kafka_destroy(rk);
 }
 
-int main_0062_interceptors (int argc, char **argv) {
+int main_0064_interceptors (int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
         do_test_producer(topic);
@@ -380,3 +404,4 @@ int main_0062_interceptors (int argc, char **argv) {
 
         return 0;
 }
+

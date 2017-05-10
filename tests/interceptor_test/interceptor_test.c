@@ -38,6 +38,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 
 /* typical include path outside tests is <librdkafka/rdkafka.h> */
@@ -94,7 +95,82 @@ rd_kafka_resp_err_t on_commit (rd_kafka_t *rk,
 
 
 
+/**
+ * @brief Called from rd_kafka_new(). We use it to set up interceptors.
+ */
+static rd_kafka_resp_err_t on_new (rd_kafka_t *rk, void *ic_opaque,
+                                   char *errstr, size_t errstr_size) {
+        rd_kafka_interceptor_add_on_send(rk, __FILE__, on_send,
+                                         my_ic_opaque);
+        rd_kafka_interceptor_add_on_acknowledgement(rk, __FILE__,
+                                                    on_acknowledgement,
+                                                    my_ic_opaque);
+        rd_kafka_interceptor_add_on_consume(rk, __FILE__, on_consume,
+                                            my_ic_opaque);
+        rd_kafka_interceptor_add_on_commit(rk, __FILE__, on_commit,
+                                           my_ic_opaque);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
+
+/**
+ * @brief Configuration set handler
+ */
+static rd_kafka_conf_res_t on_conf_set (rd_kafka_conf_t *conf,
+                                        const char *name, const char *val,
+                                        char *errstr, size_t errstr_size,
+                                        void *ic_opaque) {
+        if (!strcmp(name, "interceptor_test.good"))
+                return RD_KAFKA_CONF_OK;
+        else if (!strcmp(name, "interceptor_test.bad")) {
+                snprintf(errstr, errstr_size,
+                         "on_conf_set failed deliberately for %s=%s",
+                         name, val);
+                return RD_KAFKA_CONF_INVALID;
+        }
+
+        return RD_KAFKA_CONF_UNKNOWN;
+}
+
+static void conf_init0 (rd_kafka_conf_t *conf);
+
+
+/**
+ * @brief Set up new configuration on copy.
+ */
+static rd_kafka_resp_err_t on_conf_dup (rd_kafka_conf_t *new_conf,
+                                        const rd_kafka_conf_t *old_conf,
+                                        void *ic_opaque) {
+        conf_init0(new_conf);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+static rd_kafka_resp_err_t on_conf_destroy (void *ic_opaque) {
+        printf("conf_destroy called (opaque %p vs %p)\n",
+               ic_opaque, my_interceptor_plug_opaque);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+/**
+ * @brief Configuration init is intercepted both from plugin.library.paths
+ *        as well as rd_kafka_conf_dup().
+ *        This internal method serves both cases.
+ */
+static void conf_init0 (rd_kafka_conf_t *conf) {
+        /* Add interceptor methods */
+        rd_kafka_conf_interceptor_add_on_new(conf, __FILE__, on_new,
+                                             my_ic_opaque);
+        rd_kafka_conf_interceptor_add_on_conf_set(conf, __FILE__, on_conf_set,
+                                                  NULL);
+        rd_kafka_conf_interceptor_add_on_conf_dup(conf, __FILE__, on_conf_dup,
+                                                  NULL);
+        rd_kafka_conf_interceptor_add_on_conf_destroy(conf, __FILE__,
+                                                      on_conf_destroy,
+                                                      NULL);
+}
 
 /**
  * @brief Plugin conf initializer called when plugin.library.paths is set.
@@ -107,23 +183,9 @@ rd_kafka_resp_err_t conf_init (rd_kafka_conf_t *conf,
 
         printf("conf_init called (setting opaque to %p)\n", *plug_opaquep);
 
-        /* Add interceptor methods */
-        rd_kafka_conf_interceptor_add_on_send(conf, __FILE__, on_send,
-                                              my_ic_opaque);
-        rd_kafka_conf_interceptor_add_on_acknowledgement(conf, __FILE__,
-                                                         on_acknowledgement,
-                                                         my_ic_opaque);
-        rd_kafka_conf_interceptor_add_on_consume(conf, __FILE__, on_consume,
-                                                 my_ic_opaque);
-        rd_kafka_conf_interceptor_add_on_commit(conf, __FILE__, on_commit,
-                                                my_ic_opaque);
+        conf_init0(conf);
+
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 
-DLL_EXPORT
-void conf_destroy (void *plug_opaque) {
-        printf("conf_destroy called (opaque %p vs %p)\n",
-               plug_opaque, my_interceptor_plug_opaque);
-        assert(plug_opaque == my_interceptor_plug_opaque);
-}

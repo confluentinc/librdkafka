@@ -646,3 +646,55 @@ int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 	rd_kafka_toppar_destroy(s_rktp_new); /* from _get() */
 	return 0;
 }
+/**
+ * @brief Set up a rkmessage from an rko for passing to the application.
+ * @remark Will trigger on_consume() or on_acknowledgement() interceptors,
+ *         if any.
+ */
+static rd_kafka_message_t *
+rd_kafka_message_setup (rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
+        rd_kafka_itopic_t *rkt;
+        rd_kafka_toppar_t *rktp = NULL;
+
+        if (rko->rko_type == RD_KAFKA_OP_DR) {
+                rkt = rd_kafka_topic_s2i(rko->rko_u.dr.s_rkt);
+        } else {
+                if (rko->rko_rktp) {
+                        rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
+                        rkt = rktp->rktp_rkt;
+                } else
+                        rkt = NULL;
+
+                rkmessage->_private = rko;
+        }
+
+
+        if (!rkmessage->rkt && rkt)
+                rkmessage->rkt = rd_kafka_topic_keep_a(rkt);
+
+        if (rktp)
+                rkmessage->partition = rktp->rktp_partition;
+
+        if (!rkmessage->err)
+                rkmessage->err = rko->rko_err;
+
+        /* Call on_acknowledgement and on_consume interceptors */
+        switch (rko->rko_type)
+        {
+        case RD_KAFKA_OP_DR:
+                rd_kafka_interceptors_on_acknowledgement(rkt->rkt_rk,
+                                                         rkmessage);
+                break;
+        case RD_KAFKA_OP_FETCH:
+                if (!rkmessage->err && rkt)
+                        rd_kafka_interceptors_on_consume(rkt->rkt_rk,
+                                                         rkmessage);
+                break;
+
+        default:
+                break;
+        }
+
+        return rkmessage;
+}
+

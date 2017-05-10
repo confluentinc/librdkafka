@@ -28,13 +28,18 @@
 
 #include "rdkafka_int.h"
 #include "rdkafka_interceptor.h"
-
+#include "rdstring.h"
 
 /**
  * @brief Interceptor methodtion/method reference
  */
 typedef struct rd_kafka_interceptor_method_s {
         union {
+                rd_kafka_interceptor_f_on_conf_set_t *on_conf_set;
+                rd_kafka_interceptor_f_on_conf_dup_t *on_conf_dup;
+                rd_kafka_interceptor_f_on_conf_destroy_t *on_conf_destroy;
+                rd_kafka_interceptor_f_on_new_t     *on_new;
+                rd_kafka_interceptor_f_on_destroy_t *on_destroy;
                 rd_kafka_interceptor_f_on_send_t    *on_send;
                 rd_kafka_interceptor_f_on_acknowledgement_t *on_acknowledgement;
                 rd_kafka_interceptor_f_on_consume_t *on_consume;
@@ -67,49 +72,32 @@ static RD_INLINE void
 rd_kafka_interceptor_failed (rd_kafka_t *rk,
                              const rd_kafka_interceptor_method_t *method,
                              const char *method_name, rd_kafka_resp_err_t err,
-                             const rd_kafka_message_t *rkmessage) {
+                             const rd_kafka_message_t *rkmessage,
+                             const char *errstr) {
 
         /* FIXME: Suppress log messages, eventually */
         if (rkmessage)
                 rd_kafka_log(rk, LOG_WARNING, "ICFAIL",
                              "Interceptor %s failed %s for "
                              "message on %s [%"PRId32"] @ %"PRId64
-                             ": %s",
+                             ": %s%s%s",
                              method->ic_name, method_name,
                              rd_kafka_topic_a2i(rkmessage->rkt)->rkt_topic->str,
                              rkmessage->partition,
                              rkmessage->offset,
-                             rd_kafka_err2str(err));
+                             rd_kafka_err2str(err),
+                             errstr ? ": " : "",
+                             errstr ? errstr : "");
         else
                 rd_kafka_log(rk, LOG_WARNING, "ICFAIL",
-                             "Interceptor %s failed %s: %s",
+                             "Interceptor %s failed %s: %s%s%s",
                              method->ic_name, method_name,
-                             rd_kafka_err2str(err));
+                             rd_kafka_err2str(err),
+                             errstr ? ": " : "",
+                             errstr ? errstr : "");
+
 }
 
-
-/**
- * @brief Call interceptor on_commit methods.
- * @locality application thread calling poll(), consume() or similar,
- *           or rdkafka main thread if no commit_cb or handler registered.
- */
-void
-rd_kafka_interceptors_on_commit (rd_kafka_t *rk,
-                                 const rd_kafka_topic_partition_list_t *offsets,
-                                 rd_kafka_resp_err_t err) {
-        rd_kafka_interceptor_method_t *method;
-        int i;
-
-        RD_LIST_FOREACH(method, &rk->rk_conf.interceptors.on_commit, i) {
-                rd_kafka_resp_err_t ic_err;
-
-                ic_err = method->u.on_commit(rk, offsets, err,
-                                             method->ic_opaque);
-                if (unlikely(ic_err))
-                        rd_kafka_interceptor_failed(rk, method,
-                                                    "on_commit", ic_err, NULL);
-        }
-}
 
 
 /**
@@ -120,10 +108,10 @@ rd_kafka_interceptor_method_new (const char *ic_name,
                                  void *func, void *ic_opaque) {
         rd_kafka_interceptor_method_t *method;
 
-        method            = rd_calloc(1, sizeof(*method));
-        method->ic_name   = rd_strdup(ic_name);
-        method->ic_opaque = ic_opaque;
-        method->u.generic = func;
+        method             = rd_calloc(1, sizeof(*method));
+        method->ic_name    = rd_strdup(ic_name);
+        method->ic_opaque  = ic_opaque;
+        method->u.generic  = func;
 
         return method;
 }
@@ -158,10 +146,18 @@ static void *rd_kafka_interceptor_method_copy (const void *psrc, void *opaque) {
  *           rd_kafka_destroy()
  */
 static void rd_kafka_interceptors_destroy (rd_kafka_conf_t *conf) {
+        rd_list_destroy(&conf->interceptors.on_conf_set);
+        rd_list_destroy(&conf->interceptors.on_conf_dup);
+        rd_list_destroy(&conf->interceptors.on_conf_destroy);
+        rd_list_destroy(&conf->interceptors.on_new);
+        rd_list_destroy(&conf->interceptors.on_destroy);
         rd_list_destroy(&conf->interceptors.on_send);
         rd_list_destroy(&conf->interceptors.on_acknowledgement);
         rd_list_destroy(&conf->interceptors.on_consume);
         rd_list_destroy(&conf->interceptors.on_commit);
+
+        /* Interceptor config */
+        rd_list_destroy(&conf->interceptors.config);
 }
 
 
@@ -171,6 +167,16 @@ static void rd_kafka_interceptors_destroy (rd_kafka_conf_t *conf) {
  */
 static void
 rd_kafka_interceptors_init (rd_kafka_conf_t *conf) {
+        rd_list_init(&conf->interceptors.on_conf_set, 0,
+                     rd_kafka_interceptor_method_destroy);
+        rd_list_init(&conf->interceptors.on_conf_dup, 0,
+                     rd_kafka_interceptor_method_destroy);
+        rd_list_init(&conf->interceptors.on_conf_destroy, 0,
+                     rd_kafka_interceptor_method_destroy);
+        rd_list_init(&conf->interceptors.on_new, 0,
+                     rd_kafka_interceptor_method_destroy);
+        rd_list_init(&conf->interceptors.on_destroy, 0,
+                     rd_kafka_interceptor_method_destroy);
         rd_list_init(&conf->interceptors.on_send, 0,
                      rd_kafka_interceptor_method_destroy);
         rd_list_init(&conf->interceptors.on_acknowledgement, 0,
@@ -179,7 +185,14 @@ rd_kafka_interceptors_init (rd_kafka_conf_t *conf) {
                      rd_kafka_interceptor_method_destroy);
         rd_list_init(&conf->interceptors.on_commit, 0,
                      rd_kafka_interceptor_method_destroy);
+
+        /* Interceptor config */
+        rd_list_init(&conf->interceptors.config, 0,
+                     (void (*)(void *))rd_strtup_destroy);
 }
+
+
+
 
 /**
  * @name Configuration backend
@@ -207,33 +220,146 @@ void rd_kafka_conf_interceptor_dtor (int scope, void *pconf) {
 /**
  * @brief Copy-constructor called when configuration object \p psrcp is
  *        duplicated to \p dstp.
+ *
  */
 void rd_kafka_conf_interceptor_copy (int scope, void *pdst, const void *psrc,
                                      void *dstptr, const void *srcptr) {
         rd_kafka_conf_t *dconf = pdst;
         const rd_kafka_conf_t *sconf = psrc;
+        int i;
+        const rd_strtup_t *confval;
+
         assert(scope == _RK_GLOBAL);
 
-        rd_kafka_dbg0(sconf, INTERCEPTOR, "XX", "copy %p <- %p",
-                      dconf, sconf);
-        rd_list_copy_to(&dconf->interceptors.on_send,
-                        &sconf->interceptors.on_send,
+        /**
+         * @warning Only on_new() can be added to configuration so it is the
+         *          only chain we need to copy. */
+        rd_list_copy_to(&dconf->interceptors.on_new,
+                        &sconf->interceptors.on_new,
                         rd_kafka_interceptor_method_copy, NULL);
 
-        rd_list_copy_to(&dconf->interceptors.on_acknowledgement,
-                        &sconf->interceptors.on_acknowledgement,
-                        rd_kafka_interceptor_method_copy, NULL);
-
-        rd_list_copy_to(&dconf->interceptors.on_consume,
-                        &sconf->interceptors.on_consume,
-                        rd_kafka_interceptor_method_copy, NULL);
-
-        rd_list_copy_to(&dconf->interceptors.on_commit,
-                        &sconf->interceptors.on_commit,
-                        rd_kafka_interceptor_method_copy, NULL);
+        /* Apply interceptor configuration values.
+         * on_conf_dup() has already been called for dconf so
+         * on_conf_set() interceptors are already in place and we can
+         * apply the configuration through the standard conf_set() API. */
+        RD_LIST_FOREACH(confval, &sconf->interceptors.config, i) {
+                /* Ignore errors for now */
+                rd_kafka_conf_set(dconf, confval->name, confval->value,
+                                  NULL, 0);
+        }
 }
 
 
+
+
+/**
+ * @brief Call interceptor on_conf_set methods.
+ * @locality application thread calling rd_kafka_conf_set() and
+ *           rd_kafka_conf_dup()
+ */
+rd_kafka_conf_res_t
+rd_kafka_interceptors_on_conf_set (rd_kafka_conf_t *conf,
+                                   const char *name, const char *val,
+                                   char *errstr, size_t errstr_size) {
+        rd_kafka_interceptor_method_t *method;
+        int i;
+
+        RD_LIST_FOREACH(method, &conf->interceptors.on_conf_set, i) {
+                rd_kafka_conf_res_t res;
+
+                res = method->u.on_conf_set(conf,
+                                            name, val, errstr, errstr_size,
+                                            method->ic_opaque);
+                if (res == RD_KAFKA_CONF_UNKNOWN)
+                        continue;
+
+                /* Add successfully handled properties to list of
+                 * interceptor config properties so conf_t objects
+                 * can be copied. */
+                if (res == RD_KAFKA_CONF_OK)
+                        rd_list_add(&conf->interceptors.config,
+                                    rd_strtup_new(name, val));
+                return res;
+        }
+
+        return RD_KAFKA_CONF_UNKNOWN;
+}
+
+/**
+ * @brief Call interceptor on_conf_dup methods.
+ * @locality application thread calling rd_kafka_conf_dup()
+ */
+void
+rd_kafka_interceptors_on_conf_dup (rd_kafka_conf_t *new_conf,
+                                   const rd_kafka_conf_t *old_conf) {
+        rd_kafka_interceptor_method_t *method;
+        int i;
+
+        RD_LIST_FOREACH(method, &old_conf->interceptors.on_conf_dup, i) {
+                /* FIXME: Ignore error for now */
+                method->u.on_conf_dup(new_conf, old_conf, method->ic_opaque);
+        }
+}
+
+
+/**
+ * @brief Call interceptor on_conf_destroy methods.
+ * @locality application thread calling rd_kafka_conf_destroy(), rd_kafka_new(),
+ *           rd_kafka_destroy()
+ */
+void
+rd_kafka_interceptors_on_conf_destroy (rd_kafka_conf_t *conf) {
+        rd_kafka_interceptor_method_t *method;
+        int i;
+
+        RD_LIST_FOREACH(method, &conf->interceptors.on_conf_destroy, i) {
+                /* FIXME: Ignore error for now */
+                method->u.on_conf_destroy(method->ic_opaque);
+        }
+}
+
+
+/**
+ * @brief Call interceptor on_new methods.
+ * @locality application thread calling rd_kafka_new()
+ */
+void
+rd_kafka_interceptors_on_new (rd_kafka_t *rk) {
+        rd_kafka_interceptor_method_t *method;
+        int i;
+        char errstr[512];
+
+        RD_LIST_FOREACH(method, &rk->rk_conf.interceptors.on_new, i) {
+                rd_kafka_resp_err_t err;
+
+                err = method->u.on_new(rk, method->ic_opaque,
+                                       errstr, sizeof(errstr));
+                if (unlikely(err))
+                        rd_kafka_interceptor_failed(rk, method, "on_new", err,
+                                                    NULL, errstr);
+        }
+}
+
+
+
+/**
+ * @brief Call interceptor on_destroy methods.
+ * @locality application thread calling rd_kafka_new() or rd_kafka_destroy()
+ */
+void
+rd_kafka_interceptors_on_destroy (rd_kafka_t *rk) {
+        rd_kafka_interceptor_method_t *method;
+        int i;
+
+        RD_LIST_FOREACH(method, &rk->rk_conf.interceptors.on_destroy, i) {
+                rd_kafka_resp_err_t err;
+
+                err = method->u.on_destroy(rk, method->ic_opaque);
+                if (unlikely(err))
+                        rd_kafka_interceptor_failed(rk, method, "on_destroy",
+                                                    err, NULL, NULL);
+        }
+}
 
 
 
@@ -252,7 +378,7 @@ rd_kafka_interceptors_on_send (rd_kafka_t *rk, rd_kafka_message_t *rkmessage) {
                 err = method->u.on_send(rk, rkmessage, method->ic_opaque);
                 if (unlikely(err))
                         rd_kafka_interceptor_failed(rk, method, "on_send", err,
-                                                    rkmessage);
+                                                    rkmessage, NULL);
         }
 }
 
@@ -278,7 +404,7 @@ rd_kafka_interceptors_on_acknowledgement (rd_kafka_t *rk,
                 if (unlikely(err))
                         rd_kafka_interceptor_failed(rk, method,
                                                     "on_acknowledgement", err,
-                                                    rkmessage);
+                                                    rkmessage, NULL);
         }
 }
 
@@ -318,9 +444,36 @@ rd_kafka_interceptors_on_consume (rd_kafka_t *rk,
                 if (unlikely(err))
                         rd_kafka_interceptor_failed(rk, method,
                                                     "on_consume", err,
-                                                    rkmessage);
+                                                    rkmessage, NULL);
         }
 }
+
+
+/**
+ * @brief Call interceptor on_commit methods.
+ * @locality application thread calling poll(), consume() or similar,
+ *           or rdkafka main thread if no commit_cb or handler registered.
+ */
+void
+rd_kafka_interceptors_on_commit (rd_kafka_t *rk,
+                                 const rd_kafka_topic_partition_list_t *offsets,
+                                 rd_kafka_resp_err_t err) {
+        rd_kafka_interceptor_method_t *method;
+        int i;
+
+        RD_LIST_FOREACH(method, &rk->rk_conf.interceptors.on_commit, i) {
+                rd_kafka_resp_err_t ic_err;
+
+                ic_err = method->u.on_commit(rk, offsets, err,
+                                             method->ic_opaque);
+                if (unlikely(ic_err))
+                        rd_kafka_interceptor_failed(rk, method,
+                                                    "on_commit", ic_err, NULL,
+                                                    NULL);
+        }
+}
+
+
 
 
 /**
@@ -329,22 +482,75 @@ rd_kafka_interceptors_on_consume (rd_kafka_t *rk,
  */
 
 
+void
+rd_kafka_conf_interceptor_add_on_conf_set (
+        rd_kafka_conf_t *conf, const char *ic_name,
+        rd_kafka_interceptor_f_on_conf_set_t *on_conf_set,
+        void *ic_opaque) {
+        rd_kafka_interceptor_method_add(&conf->interceptors.on_conf_set,
+                                        ic_name, (void *)on_conf_set,
+                                        ic_opaque);
+}
 
 void
-rd_kafka_conf_interceptor_add_on_send (
+rd_kafka_conf_interceptor_add_on_conf_dup (
         rd_kafka_conf_t *conf, const char *ic_name,
+        rd_kafka_interceptor_f_on_conf_dup_t *on_conf_dup,
+        void *ic_opaque) {
+        rd_kafka_interceptor_method_add(&conf->interceptors.on_conf_dup,
+                                        ic_name, (void *)on_conf_dup,
+                                        ic_opaque);
+}
+
+void
+rd_kafka_conf_interceptor_add_on_conf_destroy (
+        rd_kafka_conf_t *conf, const char *ic_name,
+        rd_kafka_interceptor_f_on_conf_destroy_t *on_conf_destroy,
+        void *ic_opaque) {
+        rd_kafka_interceptor_method_add(&conf->interceptors.on_conf_destroy,
+                                        ic_name, (void *)on_conf_destroy,
+                                        ic_opaque);
+}
+
+
+
+void
+rd_kafka_conf_interceptor_add_on_new (
+        rd_kafka_conf_t *conf, const char *ic_name,
+        rd_kafka_interceptor_f_on_new_t *on_new,
+        void *ic_opaque) {
+        rd_kafka_interceptor_method_add(&conf->interceptors.on_new,
+                                        ic_name, (void *)on_new, ic_opaque);
+}
+
+
+void
+rd_kafka_interceptor_add_on_destroy (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_destroy_t *on_destroy,
+        void *ic_opaque) {
+        assert(!rk->rk_initialized);
+        rd_kafka_interceptor_method_add(&rk->rk_conf.interceptors.on_destroy,
+                                        ic_name, (void *)on_destroy, ic_opaque);
+}
+
+void
+rd_kafka_interceptor_add_on_send (
+        rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_send_t *on_send,
         void *ic_opaque) {
-        rd_kafka_interceptor_method_add(&conf->interceptors.on_send,
+        assert(!rk->rk_initialized);
+        rd_kafka_interceptor_method_add(&rk->rk_conf.interceptors.on_send,
                                         ic_name, (void *)on_send, ic_opaque);
 }
 
 void
-rd_kafka_conf_interceptor_add_on_acknowledgement (
-        rd_kafka_conf_t *conf, const char *ic_name,
+rd_kafka_interceptor_add_on_acknowledgement (
+        rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_acknowledgement_t *on_acknowledgement,
         void *ic_opaque) {
-        rd_kafka_interceptor_method_add(&conf->interceptors.
+        assert(!rk->rk_initialized);
+        rd_kafka_interceptor_method_add(&rk->rk_conf.interceptors.
                                         on_acknowledgement,
                                         ic_name,
                                         (void *)on_acknowledgement, ic_opaque);
@@ -352,20 +558,22 @@ rd_kafka_conf_interceptor_add_on_acknowledgement (
 
 
 void
-rd_kafka_conf_interceptor_add_on_consume (
-        rd_kafka_conf_t *conf, const char *ic_name,
+rd_kafka_interceptor_add_on_consume (
+        rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_consume_t *on_consume,
         void *ic_opaque) {
-        rd_kafka_interceptor_method_add(&conf->interceptors.on_consume,
+        assert(!rk->rk_initialized);
+        rd_kafka_interceptor_method_add(&rk->rk_conf.interceptors.on_consume,
                                         ic_name, (void *)on_consume, ic_opaque);
 }
 
 
 void
-rd_kafka_conf_interceptor_add_on_commit (
-        rd_kafka_conf_t *conf, const char *ic_name,
+rd_kafka_interceptor_add_on_commit (
+        rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_commit_t *on_commit,
         void *ic_opaque) {
-        rd_kafka_interceptor_method_add(&conf->interceptors.on_commit,
+        assert(!rk->rk_initialized);
+        rd_kafka_interceptor_method_add(&rk->rk_conf.interceptors.on_commit,
                                         ic_name, (void *)on_commit, ic_opaque);
 }

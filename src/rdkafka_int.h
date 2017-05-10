@@ -192,6 +192,8 @@ struct rd_kafka_s {
 
         rd_kafka_timers_t rk_timers;
 	thrd_t rk_thread;
+
+        int rk_initialized;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)

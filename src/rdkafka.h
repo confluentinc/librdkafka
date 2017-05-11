@@ -3003,6 +3003,7 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_ERROR         0x8  /**< Error */
 #define RD_KAFKA_EVENT_REBALANCE     0x10 /**< Group rebalance (consumer) */
 #define RD_KAFKA_EVENT_OFFSET_COMMIT 0x20 /**< Offset commit result */
+#define RD_KAFKA_EVENT_STATS         0x40 /**< Stats */
 
 
 typedef struct rd_kafka_op_s rd_kafka_event_t;
@@ -3127,6 +3128,21 @@ void *rd_kafka_event_opaque (rd_kafka_event_t *rkev);
 RD_EXPORT
 int rd_kafka_event_log (rd_kafka_event_t *rkev,
 			const char **fac, const char **str, int *level);
+
+
+/**
+ * @brief Extract stats from the event.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_STATS
+ *
+ * @returns stats json string.
+ *
+ * @remark the returned string will be freed automatically along with the event object
+ *
+ */
+RD_EXPORT
+const char *rd_kafka_event_stats (rd_kafka_event_t *rkev);
 
 
 /**

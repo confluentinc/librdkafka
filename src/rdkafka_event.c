@@ -51,6 +51,8 @@ const char *rd_kafka_event_name (const rd_kafka_event_t *rkev) {
 		return "Rebalance";
 	case RD_KAFKA_EVENT_OFFSET_COMMIT:
 		return "OffsetCommit";
+	case RD_KAFKA_EVENT_STATS:
+		return "Stats";
 	default:
 		return "?unknown?";
 	}
@@ -185,6 +187,9 @@ int rd_kafka_event_log (rd_kafka_event_t *rkev, const char **fac,
 	return 0;
 }
 
+const char *rd_kafka_event_stats (rd_kafka_event_t *rkev) {
+	return rkev->rko_u.stats.json;
+}
 
 rd_kafka_topic_partition_list_t *
 rd_kafka_event_topic_partition_list (rd_kafka_event_t *rkev) {

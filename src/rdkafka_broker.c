@@ -3754,7 +3754,8 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 			 *       the messageset, and it also means
 			 *       we cant perform this offset check here
 			 *       in that case. */
-			relative_offsets = ApiVersion == 2;
+			relative_offsets = (ApiVersion == 2 &&
+                                            hdr.MagicByte == 1);
 
                         if (!relative_offsets &&
 			    hdr.Offset < rktp->rktp_offsets.fetch_offset)
@@ -3948,7 +3949,8 @@ rd_kafka_messageset_handle (rd_kafka_broker_t *rkb,
 		if (outbuf) {
 			rd_kafka_q_t relq; /* Temporary queue for use with
 					    * relative offsets. */
-			int relative_offsets = ApiVersion == 2;
+			int relative_offsets = (ApiVersion == 2 &&
+                                                hdr.MagicByte == 1);
                         rd_kafka_timestamp_type_t use_tstype =
                                 RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
                         int64_t use_timestamp = 0;

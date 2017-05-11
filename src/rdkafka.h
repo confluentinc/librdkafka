@@ -1645,10 +1645,10 @@ char *rd_kafka_memberid (const rd_kafka_t *rk);
  * @brief Returns the ClusterId as reported in broker metadata.
  *
  * @param timeout_ms If there is no cached value from metadata retrieval
- *                   the this specified the maximum amount of time
+ *                   then this specifies the maximum amount of time
  *                   (in milliseconds) the call will block waiting
  *                   for metadata to be retrieved.
- *                   Use 0 non-blocking calls.
+ *                   Use 0 for non-blocking calls.
 
  * @remark Requires broker version >=0.10.0 and api.version.request=true.
  *

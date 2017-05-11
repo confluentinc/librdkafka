@@ -1069,16 +1069,15 @@ class RD_EXPORT Handle {
    * @brief Returns the ClusterId as reported in broker metadata.
    *
    * @param timeout_ms If there is no cached value from metadata retrieval
-   *                   the this specified the maximum amount of time
+   *                   then this specifies the maximum amount of time
    *                   (in milliseconds) the call will block waiting
    *                   for metadata to be retrieved.
-   *                   Use 0 non-blocking calls.
+   *                   Use 0 for non-blocking calls.
+   *
    * @remark Requires broker version >=0.10.0 and api.version.request=true.
    *
    * @returns Last cached ClusterId, or empty string if no ClusterId could be
    *          retrieved in the allotted timespan.
-
-   *          a group member.
    */
   virtual const std::string clusterid (int timeout_ms) = 0;
 };

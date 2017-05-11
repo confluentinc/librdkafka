@@ -55,17 +55,12 @@ static void handle_stats (rd_kafka_event_t *rkev) {
 }
 
 int main_0062_stats_event (int argc, char **argv) {
-    int partition = 0;
-    int r;
     rd_kafka_t *rk;
-    rd_kafka_topic_t *rkt;
     rd_kafka_conf_t *conf;
-    char msg[128];
-    int msgcnt = 1000;
-    int i;
-    test_timing_t t_produce, t_delivery;
+    test_timing_t t_delivery;
     rd_kafka_queue_t *eventq;
-
+    const int iterations = 5;
+    int i;
     test_conf_init(NULL, NULL, 10);
 
     /* Set up a global config object */
@@ -79,56 +74,39 @@ int main_0062_stats_event (int argc, char **argv) {
 
     eventq = rd_kafka_queue_get_main(rk);
 
-    rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0062", 0), NULL);
-    if (!rkt)
-        TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
-
-    /* Produce messages */
-    TIMING_START(&t_produce, "PRODUCE");
-    for (i = 0 ; i < msgcnt ; i++) {
-        int *msgidp = malloc(sizeof(*msgidp));
-        *msgidp = i;
-        rd_snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
-        r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
-                             msg, strlen(msg), NULL, 0, msgidp);
-        if (r == -1)
-            TEST_FAIL("Failed to produce message #%i: %s\n",
-                      i, rd_strerror(errno));
-    }
-    TIMING_STOP(&t_produce);
-    TEST_SAY("Produced %i messages, waiting for stats event\n", msgcnt);
-
     /* Wait for stats event */
-    TIMING_START(&t_delivery, "STATS_EVENT");
-    while (rd_kafka_outq_len(rk) > 0) {
-        rd_kafka_event_t *rkev;
-        rkev = rd_kafka_queue_poll(eventq, 100);
-        switch (rd_kafka_event_type(rkev))
-        {
-        case RD_KAFKA_EVENT_STATS:
-            TEST_SAY("%s event\n", rd_kafka_event_name(rkev));
-            handle_stats(rkev);
-            break;
-        default:
-            TEST_SAY("Ignore event: %s\n", rd_kafka_event_name(rkev));
-            break;
-        }
-        rd_kafka_event_destroy(rkev);
-        if (stats_count > 0)
-            break;
-    }
-    TIMING_STOP(&t_delivery);
+    for (i = 0 ; i < iterations ; i++) {
+            TIMING_START(&t_delivery, "STATS_EVENT");
+            stats_count = 0;
+            while (stats_count == 0) {
+                    rd_kafka_event_t *rkev;
+                    rkev = rd_kafka_queue_poll(eventq, 100);
+                    switch (rd_kafka_event_type(rkev))
+                    {
+                    case RD_KAFKA_EVENT_STATS:
+                            TEST_SAY("%s event\n", rd_kafka_event_name(rkev));
+                            handle_stats(rkev);
+                            break;
+                    case RD_KAFKA_EVENT_NONE:
+                            break;
+                    default:
+                            TEST_SAY("Ignore event: %s\n",
+                                     rd_kafka_event_name(rkev));
+                            break;
+                    }
+                    rd_kafka_event_destroy(rkev);
+            }
+            TIMING_STOP(&t_delivery);
 
-    if (stats_count == 0)
-        TEST_FAIL("Fail to receive any stats events\n");
+            if (TIMING_DURATION(&t_delivery) < 1000 * 100 * 0.8 ||
+                TIMING_DURATION(&t_delivery) > 1000 * 100 * 1.2)
+                    TEST_FAIL("Stats duration %.3fms is >= 20%% outside "
+                              "statistics.interval.ms 100",
+                              (float)TIMING_DURATION(&t_delivery)/1000.0f);
+    }
 
     rd_kafka_queue_destroy(eventq);
 
-    /* Destroy topic */
-    rd_kafka_topic_destroy(rkt);
-
-    /* Destroy rdkafka instance */
-    TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
     rd_kafka_destroy(rk);
 
     return 0;

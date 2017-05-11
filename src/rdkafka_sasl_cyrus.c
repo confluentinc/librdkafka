@@ -36,6 +36,12 @@
 #include <sys/wait.h>  /* For WIF.. */
 #endif
 
+#ifdef __APPLE__
+/* Apple has deprecated most of the SASL API for unknown reason,
+ * silence those warnings. */
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 #include <sasl/sasl.h>
 
 static mtx_t rd_kafka_sasl_cyrus_kinit_lock;

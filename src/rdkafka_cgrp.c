@@ -829,6 +829,12 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
         rd_kafka_buf_read_str(rkbuf, &MyMemberId);
         rd_kafka_buf_read_i32(rkbuf, &member_cnt);
 
+        if (!ErrorCode && RD_KAFKAP_STR_IS_NULL(&Protocol)) {
+                /* Protocol not set, we will not be able to find
+                 * a matching assignor so error out early. */
+                ErrorCode = RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
         rd_kafka_dbg(rkb->rkb_rk, CGRP, "JOINGROUP",
                      "JoinGroup response: GenerationId %"PRId32", "
                      "Protocol %.*s, LeaderId %.*s%s, my MemberId %.*s, "

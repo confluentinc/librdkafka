@@ -71,7 +71,7 @@ static char *rd_dl_error (void) {
  * @returns the library handle (platform dependent, thus opaque) on success,
  *          else NULL.
  */
-void *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
+rd_dl_hnd_t *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
         void *handle;
         const char *loadfunc;
 #if WITH_LIBDL
@@ -87,7 +87,7 @@ void *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
                             loadfunc, dlerrstr);
                 rd_free(dlerrstr);
         }
-        return handle;
+        return (rd_dl_hnd_t *)handle;
 }
 
 
@@ -95,9 +95,9 @@ void *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
  * @brief Close handle previously returned by rd_dl_open()
  * @remark errors are ignored (what can we do anyway?)
  */
-void rd_dl_close (void *handle) {
+void rd_dl_close (rd_dl_hnd_t *handle) {
 #if WITH_LIBDL
-        dlclose(handle);
+        dlclose((void *)handle);
 #elif defined(_MSC_VER)
         FreeLibrary((HMODULE)handle);
 #endif
@@ -108,10 +108,11 @@ void rd_dl_close (void *handle) {
  * @returns the function pointer on success or NULL on error.
  */
 void *
-rd_dl_sym (void *handle, const char *symbol, char *errstr, size_t errstr_size) {
+rd_dl_sym (rd_dl_hnd_t *handle, const char *symbol,
+           char *errstr, size_t errstr_size) {
         void *func;
 #if WITH_LIBDL
-        func = dlsym(handle, symbol);
+        func = dlsym((void *)handle, symbol);
 #elif defined(_MSC_VER)
         func = GetProcAddress((HMODULE)handle, symbol);
 #endif

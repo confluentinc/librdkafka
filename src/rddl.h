@@ -31,9 +31,11 @@
 
 #include <sys/types.h>
 
-void *rd_dl_open (const char *path, char *errstr, size_t errstr_size);
-void rd_dl_close (void *handle);
-void *rd_dl_sym (void *handle, const char *symbol,
+typedef void rd_dl_hnd_t;
+
+rd_dl_hnd_t *rd_dl_open (const char *path, char *errstr, size_t errstr_size);
+void rd_dl_close (rd_dl_hnd_t *handle);
+void *rd_dl_sym (rd_dl_hnd_t *handle, const char *symbol,
                  char *errstr, size_t errstr_size);
 
 #endif /* _RDDL_H */

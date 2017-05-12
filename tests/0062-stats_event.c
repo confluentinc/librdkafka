@@ -98,11 +98,15 @@ int main_0062_stats_event (int argc, char **argv) {
             }
             TIMING_STOP(&t_delivery);
 
-            if (TIMING_DURATION(&t_delivery) < 1000 * 100 * 0.8 ||
-                TIMING_DURATION(&t_delivery) > 1000 * 100 * 1.2)
-                    TEST_FAIL("Stats duration %.3fms is >= 20%% outside "
-                              "statistics.interval.ms 100",
-                              (float)TIMING_DURATION(&t_delivery)/1000.0f);
+            if (!strcmp(test_mode, "bare")) {
+                    /* valgrind is too slow to make this meaningful. */
+                    if (TIMING_DURATION(&t_delivery) < 1000 * 100 * 0.8 ||
+                        TIMING_DURATION(&t_delivery) > 1000 * 100 * 1.2)
+                            TEST_FAIL("Stats duration %.3fms is >= 20%% "
+                                      "outside statistics.interval.ms 100",
+                                      (float)TIMING_DURATION(&t_delivery)/
+                                      1000.0f);
+            }
     }
 
     rd_kafka_queue_destroy(eventq);

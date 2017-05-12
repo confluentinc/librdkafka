@@ -146,7 +146,8 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
                                           rd_kafka_resp_err_t *errp,
                                           int *errnop,
                                           int64_t timestamp,
-                                          rd_ts_t now) {
+                                          rd_ts_t now,
+                                          int message_timeout_ms) {
 	rd_kafka_msg_t *rkm;
 
 	if (unlikely(!payload))
@@ -182,12 +183,13 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
                 rkm->rkm_timestamp = rd_uclock()/1000;
         rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_CREATE_TIME;
 
-	if (rkt->rkt_conf.message_timeout_ms == 0) {
-		rkm->rkm_ts_timeout = INT64_MAX;
-	} else {
-		rkm->rkm_ts_timeout = now +
-			rkt->rkt_conf.message_timeout_ms * 1000;
-	}
+        if (message_timeout_ms == -1)
+                message_timeout_ms = rkt->rkt_conf.message_timeout_ms;
+
+        if (message_timeout_ms == 0)
+                rkm->rkm_ts_timeout = INT64_MAX;
+        else
+                rkm->rkm_ts_timeout = now + message_timeout_ms * 1000;
 
         return rkm;
 }
@@ -217,7 +219,7 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
         /* Create message */
         rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
                                 payload, len, key, keylen, msg_opaque,
-                                &err, &errnox, 0, rd_clock());
+                                &err, &errnox, 0, rd_clock(), -1);
         if (unlikely(!rkm)) {
                 /* errno is already set by msg_new() */
 		rd_kafka_set_last_error(err, errnox);
@@ -266,6 +268,7 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         shptr_rd_kafka_itopic_t *s_rkt = NULL;
         rd_kafka_itopic_t *rkt;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        int message_timeout_ms = -1;
 
         va_start(ap, rk);
         while ((vtype = va_arg(ap, rd_kafka_vtype_t)) != RD_KAFKA_VTYPE_END) {
@@ -309,6 +312,10 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                         rkm->rkm_timestamp = va_arg(ap, int64_t);
                         break;
 
+                case RD_KAFKA_VTYPE_MSG_TIMEOUT:
+                        message_timeout_ms = va_arg(ap, int);
+                        break;
+
                 default:
                         err = RD_KAFKA_RESP_ERR__INVALID_ARG;
                         break;
@@ -330,7 +337,8 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                                         rkm->rkm_key, rkm->rkm_key_len,
                                         rkm->rkm_opaque,
                                         &err, NULL,
-                                        rkm->rkm_timestamp, rd_clock());
+                                        rkm->rkm_timestamp, rd_clock(),
+                                        message_timeout_ms);
 
         if (unlikely(err))
                 return err;
@@ -392,7 +400,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                         rkmessages[i].key_len,
                                         rkmessages[i]._private,
                                         &rkmessages[i].err,
-					NULL, utc_now, now);
+					NULL, utc_now, now, -1);
                 if (unlikely(!rkm)) {
 			if (rkmessages[i].err == RD_KAFKA_RESP_ERR__QUEUE_FULL)
 				all_err = rkmessages[i].err;

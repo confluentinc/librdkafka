@@ -735,6 +735,7 @@ typedef enum rd_kafka_vtype_t {
         RD_KAFKA_VTYPE_OPAQUE,    /**< (void *) Application opaque */
         RD_KAFKA_VTYPE_MSGFLAGS,  /**< (int) RD_KAFKA_MSG_F_.. flags */
         RD_KAFKA_VTYPE_TIMESTAMP, /**< (int64_t) Milliseconds since epoch UTC */
+        RD_KAFKA_VTYPE_MSG_TIMEOUT, /**< (int) Message timeout in milliseconds */
 } rd_kafka_vtype_t;
 
 
@@ -797,6 +798,14 @@ typedef enum rd_kafka_vtype_t {
 #define RD_KAFKA_V_TIMESTAMP(timestamp)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_TIMESTAMP, int64_t, timestamp),   \
         (int64_t)timestamp
+
+/*!
+ * Message timeout in milliseconds (int)
+ * Use -1 for configuration value, 0 for no timeout, or a specific timeout.
+ */
+#define RD_KAFKA_V_MSG_TIMEOUT(msgtimeout)                              \
+        _LRK_TYPECHECK(RD_KAFKA_VTYPE_MSG_TIMEOUT, int, msgtimeout),    \
+        (int)msg_timeout
 
 /**@}*/
 

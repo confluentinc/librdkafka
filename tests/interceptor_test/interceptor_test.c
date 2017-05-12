@@ -37,6 +37,8 @@
  * This file implements the latter, an interceptor plugin library.
  */
 
+#define _CRT_SECURE_NO_WARNINGS /* Silence MSVC nonsense */
+
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
@@ -123,9 +125,9 @@ static rd_kafka_conf_res_t on_conf_set (rd_kafka_conf_t *conf,
         if (!strcmp(name, "interceptor_test.good"))
                 return RD_KAFKA_CONF_OK;
         else if (!strcmp(name, "interceptor_test.bad")) {
-                snprintf(errstr, errstr_size,
-                         "on_conf_set failed deliberately for %s=%s",
-                         name, val);
+                strncpy(errstr, "on_conf_set failed deliberately",
+                        errstr_size-1);
+                errstr[errstr_size-1] = '\0';
                 return RD_KAFKA_CONF_INVALID;
         }
 

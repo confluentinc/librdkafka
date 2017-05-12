@@ -146,7 +146,7 @@
     <ClCompile Include="..\..\tests\0060-op_prio.cpp" />
     <ClCompile Include="..\..\tests\0061-consumer_lag.cpp" />
     <ClCompile Include="..\..\tests\0062-stats_event.c" />
-    <ClCompile Include="..\..\tests\0063-clusterid.c" />
+    <ClCompile Include="..\..\tests\0063-clusterid.cpp" />
     <ClCompile Include="..\..\tests\0064-interceptors.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

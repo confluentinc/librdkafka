@@ -25,7 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+
+#ifndef _RDREGEX_H
+#define _RDREGEX_H
 
 typedef struct rd_regex_s rd_regex_t;
 
@@ -35,3 +37,5 @@ int rd_regex_exec (rd_regex_t *re, const char *str);
 
 int rd_regex_match (const char *pattern, const char *str,
 		    char *errstr, size_t errstr_size);
+
+#endif

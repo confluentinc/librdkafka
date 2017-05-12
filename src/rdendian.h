@@ -25,7 +25,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#ifndef _RDENDIAN_H
+#define _RDENDIAN_H
+
 
 /**
  * Provides portable endian-swapping macros/functions.
@@ -101,7 +103,10 @@
 #define be64toh(x) (x)
 #define be32toh(x) (x)
 #define be16toh(x) (x)
-
+#elif defined __370__ /* z/os is always big endian */
+#define be64toh(x) (x)
+#define be32toh(x) (x)
+#define be16toh(x) (x)
 #else
  #include <endian.h>
 #endif
@@ -132,4 +137,6 @@
 #endif
 #ifndef htobe16
 #define htobe16(x) be16toh(x)
+#endif
+
 #endif

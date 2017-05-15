@@ -145,7 +145,7 @@ static void *rd_kafka_interceptor_method_copy (const void *psrc, void *opaque) {
  * @locality application thread calling rd_kafka_conf_destroy() or 
  *           rd_kafka_destroy()
  */
-static void rd_kafka_interceptors_destroy (rd_kafka_conf_t *conf) {
+void rd_kafka_interceptors_destroy (rd_kafka_conf_t *conf) {
         rd_list_destroy(&conf->interceptors.on_conf_set);
         rd_list_destroy(&conf->interceptors.on_conf_dup);
         rd_list_destroy(&conf->interceptors.on_conf_destroy);

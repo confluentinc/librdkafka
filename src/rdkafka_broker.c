@@ -731,7 +731,7 @@ static void rd_kafka_buf_finalize (rd_kafka_t *rk, rd_kafka_buf_t *rkbuf) {
 	rd_kafka_buf_write_i32(rkbuf, 0); /* CorrId: Updated in enq0() */
 
 	/* Write clientId */
-        rd_kafka_buf_write_kstr(rkbuf, rk->rk_conf.client_id);
+        rd_kafka_buf_write_kstr(rkbuf, rk->rk_client_id);
 
 	/* Calculate total message buffer length. */
 	rkbuf->rkbuf_of          = 0;  /* Indicates send position */

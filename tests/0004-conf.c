@@ -122,6 +122,47 @@ static rd_kafka_resp_err_t my_on_new (rd_kafka_t *rk, void *ic_opaque,
 }
 
 
+
+/**
+ * @brief When rd_kafka_new() succeeds it takes ownership of the config object,
+ *        but when it fails the config object remains in application custody.
+ *        These tests makes sure that's the case (preferably run with valgrind)
+ */
+static void do_test_kafka_new_failures (void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        char errstr[512];
+
+        conf = rd_kafka_conf_new();
+
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rk, "kafka_new() failed: %s", errstr);
+        rd_kafka_destroy(rk);
+
+        /* Set an erroneous configuration value that is not checked
+         * by conf_set() but by rd_kafka_new() */
+        conf = rd_kafka_conf_new();
+        if (rd_kafka_conf_set(conf, "partition.assignment.strategy",
+                              "range,thiswillfail", errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK)
+                TEST_FAIL("%s", errstr);
+
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(!rk, "kafka_new() should have failed");
+
+        /* config object should still belong to us,
+         * correct the erroneous config and try again. */
+        if (rd_kafka_conf_set(conf, "partition.assignment.strategy", NULL,
+                              errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK)
+                TEST_FAIL("%s", errstr);
+
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rk, "kafka_new() failed: %s", errstr);
+        rd_kafka_destroy(rk);
+}
+
+
 int main_0004_conf (int argc, char **argv) {
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
@@ -371,6 +412,8 @@ int main_0004_conf (int argc, char **argv) {
 		rd_kafka_topic_conf_destroy(tconf);
 		rd_kafka_conf_destroy(conf);
 	}
+
+        do_test_kafka_new_failures();
 
 	return 0;
 }

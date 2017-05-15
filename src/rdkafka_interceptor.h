@@ -64,4 +64,6 @@ void rd_kafka_conf_interceptor_dtor (int scope, void *pconf);
 void rd_kafka_conf_interceptor_copy (int scope, void *pdst, const void *psrc,
                                      void *dstptr, const void *srcptr);
 
+void rd_kafka_interceptors_destroy (rd_kafka_conf_t *conf);
+
 #endif /* _RDKAFKA_INTERCEPTOR_H */

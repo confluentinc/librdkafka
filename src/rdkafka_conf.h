@@ -94,7 +94,6 @@ struct rd_kafka_conf_s {
 	int     socket_nagle_disable;
         int     socket_max_fails;
 	char   *client_id_str;
-        rd_kafkap_str_t *client_id;
 	char   *brokerlist;
 	int     stats_interval_ms;
 	int     term_sig;
@@ -178,7 +177,6 @@ struct rd_kafka_conf_s {
 	int    fetch_min_bytes;
 	int    fetch_error_backoff_ms;
         char  *group_id_str;
-        rd_kafkap_str_t   *group_id;    /* Consumer group id */
 
         rd_kafka_pattern_list_t *topic_blacklist;
         struct rd_kafka_topic_conf_s *topic_conf; /* Default topic config

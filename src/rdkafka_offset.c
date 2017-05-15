@@ -893,14 +893,13 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
                 char escfile[4096];
 
                 /* Include group.id in filename if configured. */
-                if (!RD_KAFKAP_STR_IS_NULL(rktp->rktp_rkt->rkt_rk->
-                                           rk_conf.group_id))
+                if (!RD_KAFKAP_STR_IS_NULL(rktp->rktp_rkt->rkt_rk->rk_group_id))
                         rd_snprintf(tmpfile, sizeof(tmpfile),
                                  "%s-%"PRId32"-%.*s.offset",
                                  rktp->rktp_rkt->rkt_topic->str,
                                  rktp->rktp_partition,
                                  RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_rk->
-                                                  rk_conf.group_id));
+                                                  rk_group_id));
                 else
                         rd_snprintf(tmpfile, sizeof(tmpfile),
                                  "%s-%"PRId32".offset",

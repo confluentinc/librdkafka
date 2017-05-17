@@ -701,7 +701,14 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                                     "ssl.ca.location failed: ");
                         goto fail;
                 }
-	}
+        } else {
+                /* Use default CA certificate paths: ignore failures. */
+                r = SSL_CTX_set_default_verify_paths(ctx);
+                if (r != 1)
+                        rd_kafka_dbg(rk, SECURITY, "SSL",
+                                     "SSL_CTX_set_default_verify_paths() "
+                                     "failed: ignoring");
+        }
 
 	if (rk->rk_conf.ssl.crl_location) {
 		rd_kafka_dbg(rk, SECURITY, "SSL",

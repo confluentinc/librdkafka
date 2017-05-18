@@ -57,6 +57,7 @@ set(
     0062-stats_event.c
     0063-clusterid.c
     0064-interceptors.c
+    0065-yield.cpp
     test.c
     testcpp.cpp
     sockem.c

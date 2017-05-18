@@ -871,6 +871,8 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
 /**
  * @brief Returns the error string for an errored rd_kafka_message_t or NULL if
  *        there was no error.
+ *
+ * @remark This function MUST NOT be used with the producer.
  */
 static RD_INLINE const char *
 RD_UNUSED 

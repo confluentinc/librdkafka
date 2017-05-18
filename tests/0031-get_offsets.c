@@ -54,7 +54,8 @@ int main_0031_get_offsets (int argc, char **argv) {
         testid = test_produce_msgs_easy(topic, 0, 0, msgcnt);
 
 	/* Get offsets */
-	rk = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
+	rk = test_create_consumer(NULL, NULL, NULL, NULL
+);
 
 	TIMING_START(&t_qry, "query_watermark_offsets");
 	err = rd_kafka_query_watermark_offsets(rk, topic, 0,

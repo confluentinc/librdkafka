@@ -54,10 +54,14 @@
 
 #ifdef _MSC_VER
 #undef RD_EXPORT
+#ifdef LIBRDKAFKA_STATICLIB
+#define RD_EXPORT
+#else
 #ifdef LIBRDKAFKACPP_EXPORTS
 #define RD_EXPORT __declspec(dllexport)
 #else
 #define RD_EXPORT __declspec(dllimport)
+#endif
 #endif
 #else
 #define RD_EXPORT
@@ -87,7 +91,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x00090200
+#define RD_KAFKA_VERSION  0x00090500
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -218,7 +222,12 @@ enum ErrorCode {
 	ERR__OUTDATED = -167,
 	/** Timed out in queue */
 	ERR__TIMED_OUT_QUEUE = -166,
-
+        /** Feature not supported by broker */
+        ERR__UNSUPPORTED_FEATURE = -165,
+        /** Awaiting cache update */
+        ERR__WAIT_CACHE = -164,
+        /** Operation interrupted */
+        ERR__INTR = -163,
 	/** End internal error codes */
 	ERR__END = -100,
 
@@ -307,6 +316,7 @@ std::string  err2str(RdKafka::ErrorCode err);
 /* Forward declarations */
 class Producer;
 class Message;
+class Queue;
 class Event;
 class Topic;
 class TopicPartition;
@@ -608,8 +618,7 @@ public:
    * @brief Set offset commit callback for use with consumer groups
    *
    * The results of automatic or manual offset commits will be scheduled
-   * for this callback and is served by RdKafka::KafkaConsumer::consume()
-   * or RdKafka::KafkaConsumer::commitSync()
+   * for this callback and is served by RdKafka::KafkaConsumer::consume().
    *
    * If no partitions had valid offsets to commit this callback will be called
    * with \p err == ERR__NO_OFFSET which is not to be considered an error.
@@ -725,6 +734,14 @@ class RD_EXPORT Conf {
 
   /**
    * @brief Set configuration property \p name to value \p value.
+   *
+   * Fallthrough:
+   * Topic-level configuration properties may be set using this interface
+   * in which case they are applied on the \c default_topic_conf.
+   * If no \c default_topic_conf has been set one will be created.
+   * Any sub-sequent set("default_topic_conf", ..) calls will
+   * replace the current default topic configuration.
+
    * @returns CONF_OK on success, else writes a human readable error
    *          description to \p errstr on error.
    */
@@ -782,14 +799,66 @@ class RD_EXPORT Conf {
                                 std::string &errstr) = 0;
 
   /** @brief Query single configuration value
+   *
+   * Do not use this method to get callbacks registered by the configuration file.
+   * Instead use the specific get() methods with the specific callback parameter in the signature.
+   *
+   * Fallthrough:
+   * Topic-level configuration properties from the \c default_topic_conf
+   * may be retrieved using this interface.
+   *
    *  @returns CONF_OK if the property was set previously set and
    *           returns the value in \p value. */
   virtual Conf::ConfResult get(const std::string &name,
 	  std::string &value) const = 0;
 
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p dr_cb. */
+  virtual Conf::ConfResult get(DeliveryReportCb *&dr_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p event_cb. */
+  virtual Conf::ConfResult get(EventCb *&event_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p partitioner_cb. */
+  virtual Conf::ConfResult get(PartitionerCb *&partitioner_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p partitioner_kp_cb. */
+  virtual Conf::ConfResult get(PartitionerKeyPointerCb *&partitioner_kp_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p socket_cb. */
+  virtual Conf::ConfResult get(SocketCb *&socket_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p open_cb. */
+  virtual Conf::ConfResult get(OpenCb *&open_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p rebalance_cb. */
+  virtual Conf::ConfResult get(RebalanceCb *&rebalance_cb) const = 0;
+
+  /** @brief Query single configuration value
+   *  @returns CONF_OK if the property was set previously set and
+   *           returns the value in \p offset_commit_cb. */
+  virtual Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const = 0;
+
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */
   virtual std::list<std::string> *dump () = 0;
+
+  /** @brief Use with \p name = \c \"consume_cb\" */
+  virtual Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
+				std::string &errstr) = 0;
 };
 
 /**@}*/
@@ -930,6 +999,87 @@ class RD_EXPORT Handle {
   virtual ErrorCode get_watermark_offsets (const std::string &topic,
 					   int32_t partition,
 					   int64_t *low, int64_t *high) = 0;
+
+
+  /**
+   * @brief Look up the offsets for the given partitions by timestamp.
+   *
+   * The returned offset for each partition is the earliest offset whose
+   * timestamp is greater than or equal to the given timestamp in the
+   * corresponding partition.
+   *
+   * The timestamps to query are represented as \c offset in \p offsets
+   * on input, and \c offset() will return the closest earlier offset
+   * for the timestamp on output.
+   *
+   * The function will block for at most \p timeout_ms milliseconds.
+   *
+   * @remark Duplicate Topic+Partitions are not supported.
+   * @remark Errors are also returned per TopicPartition, see \c err()
+   *
+   * @returns an error code for general errors, else RdKafka::ERR_NO_ERROR
+   *          in which case per-partition errors might be set.
+   */
+  virtual ErrorCode offsetsForTimes (std::vector<TopicPartition*> &offsets,
+                                     int timeout_ms) = 0;
+
+
+  /**
+   * @brief Retrieve queue for a given partition.
+   *
+   * @returns The fetch queue for the given partition if successful. Else,
+   *          NULL is returned.
+   *          
+   * @remark This function only works on consumers.
+   */
+  virtual Queue *get_partition_queue (const TopicPartition *partition) = 0;
+
+  /**
+   * @brief Forward librdkafka logs (and debug) to the specified queue
+   *        for serving with one of the ..poll() calls.
+   *
+   *        This allows an application to serve log callbacks (\c log_cb)
+   *        in its thread of choice.
+   *
+   * @param queue Queue to forward logs to. If the value is NULL the logs
+   *        are forwarded to the main queue.
+   *
+   * @remark The configuration property \c log.queue MUST also be set to true.
+   *
+   * @remark librdkafka maintains its own reference to the provided queue.
+   *
+   * @returns ERR_NO_ERROR on success or an error code on error.
+   */
+  virtual ErrorCode set_log_queue (Queue *queue) = 0;
+
+  /**
+   * @brief Cancels the current callback dispatcher (Producer::poll(),
+   *        Consumer::poll(), KafkaConsumer::consume(), etc).
+   *
+   * A callback may use this to force an immediate return to the calling
+   * code (caller of e.g. ..::poll()) without processing any further
+   * events.
+   *
+   * @remark This function MUST ONLY be called from within a
+   *         librdkafka callback.
+   */
+  virtual void yield () = 0;
+
+  /**
+   * @brief Returns the ClusterId as reported in broker metadata.
+   *
+   * @param timeout_ms If there is no cached value from metadata retrieval
+   *                   then this specifies the maximum amount of time
+   *                   (in milliseconds) the call will block waiting
+   *                   for metadata to be retrieved.
+   *                   Use 0 for non-blocking calls.
+   *
+   * @remark Requires broker version >=0.10.0 and api.version.request=true.
+   *
+   * @returns Last cached ClusterId, or empty string if no ClusterId could be
+   *          retrieved in the allotted timespan.
+   */
+  virtual const std::string clusterid (int timeout_ms) = 0;
 };
 
 
@@ -954,28 +1104,37 @@ class RD_EXPORT Handle {
 class RD_EXPORT TopicPartition {
 public:
   /**
-   * Create topic+partition object for \p topic and \p partition.
+   * Create topic+partition object for \p topic and \p partition
+   * and optionally \p offset.
    *
    * Use \c delete to deconstruct.
    */
   static TopicPartition *create (const std::string &topic, int partition);
+  static TopicPartition *create (const std::string &topic, int partition,
+                                 int64_t offset);
 
   virtual ~TopicPartition() = 0;
+
+  /**
+   * @brief Destroy/delete the TopicPartitions in \p partitions
+   *        and clear the vector.
+   */
+  static void destroy (std::vector<TopicPartition*> &partitions);
 
   /** @returns topic name */
   virtual const std::string &topic () const = 0;
 
   /** @returns partition id */
-  virtual int partition () = 0;
+  virtual int partition () const = 0;
 
   /** @returns offset (if applicable) */
-  virtual int64_t offset () = 0;
+  virtual int64_t offset () const = 0;
 
   /** @brief Set offset */
   virtual void set_offset (int64_t offset) = 0;
 
   /** @returns error code (if applicable) */
-  virtual ErrorCode err () = 0;
+  virtual ErrorCode err () const = 0;
 };
 
 
@@ -992,13 +1151,13 @@ class RD_EXPORT Topic {
    * The unassigned partition is used by the producer API for messages
    * that should be partitioned using the configured or default partitioner.
    */
-  static const int32_t PARTITION_UA = -1;
+  static const int32_t PARTITION_UA;
 
   /** @brief Special offsets */
-  static const int64_t OFFSET_BEGINNING = -2; /**< Consume from beginning */
-  static const int64_t OFFSET_END       = -1; /**< Consume from end */
-  static const int64_t OFFSET_STORED    = -1000; /**< Use offset storage */
-  static const int64_t OFFSET_INVALID   = -1001; /**< Invalid offset */
+  static const int64_t OFFSET_BEGINNING; /**< Consume from beginning */
+  static const int64_t OFFSET_END; /**< Consume from end */
+  static const int64_t OFFSET_STORED; /**< Use offset storage */
+  static const int64_t OFFSET_INVALID; /**< Invalid offset */
 
 
   /**
@@ -1031,11 +1190,10 @@ class RD_EXPORT Topic {
    * The offset will be committed (written) to the offset store according
    * to \p auto.commit.interval.ms.
    *
-   * @remark This API should only be used with the simple RdKafka::Consumer,
-   *         not the high-level RdKafka::KafkaConsumer.
-   * @remark \c auto.commit.enable must be set to \c false when using this API.
+   * @remark \c enable.auto.offset.store must be set to \c false when using this API.
    *
-   * @returns RdKafka::ERR_NO_ERROR on success or an error code on error.
+   * @returns RdKafka::ERR_NO_ERROR on success or an error code if none of the
+   *          offsets could be stored.
    */
   virtual ErrorCode offset_store (int32_t partition, int64_t offset) = 0;
 };
@@ -1138,6 +1296,10 @@ class RD_EXPORT Message {
   virtual void               *msg_opaque () const = 0;
 
   virtual ~Message () = 0;
+
+  /** @returns the latency in microseconds for a produced message measured
+   *           from the produce() call, or -1 if latency is not available. */
+  virtual int64_t             latency () const = 0;
 };
 
 /**@}*/
@@ -1163,14 +1325,49 @@ class RD_EXPORT Message {
  * RdKafka::Consumer::consume_callback() methods that take a queue as the first
  * parameter for more information.
  */
-class Queue {
+class RD_EXPORT Queue {
  public:
   /**
    * @brief Create Queue object
    */
   static Queue *create (Handle *handle);
 
-  virtual ~Queue () { }
+  /**
+   * @brief Forward/re-route queue to \p dst.
+   * If \p dst is \c NULL, the forwarding is removed.
+   *
+   * The internal refcounts for both queues are increased.
+   * 
+   * @remark Regardless of whether \p dst is NULL or not, after calling this
+   *         function, \p src will not forward it's fetch queue to the consumer
+   *         queue.
+   */
+  virtual ErrorCode forward (Queue *dst) = 0;
+
+
+  /**
+   * @brief Consume message or get error event from the queue.
+   *
+   * @remark Use \c delete to free the message.
+   *
+   * @returns One of:
+   *  - proper message (RdKafka::Message::err() is ERR_NO_ERROR)
+   *  - error event (RdKafka::Message::err() is != ERR_NO_ERROR)
+   *  - timeout due to no message or event in \p timeout_ms
+   *    (RdKafka::Message::err() is ERR__TIMED_OUT)
+   */
+  virtual Message *consume (int timeout_ms) = 0;
+
+  /**
+   * @brief Poll queue, serving any enqueued callbacks.
+   *
+   * @remark Must NOT be used for queues containing messages.
+   *
+   * @returns the number of events served or 0 on timeout.
+   */
+  virtual int poll (int timeout_ms) = 0;
+
+  virtual ~Queue () = 0;
 };
 
 /**@}*/
@@ -1238,6 +1435,8 @@ public:
    *
    * Regex pattern matching automatically performed for topics prefixed
    * with \c \"^\" (e.g. \c \"^myPfx[0-9]_.*\"
+   *
+   * @returns an error if the provided list of topics is invalid.
    */
   virtual ErrorCode subscribe (const std::vector<std::string> &topics) = 0;
 
@@ -1337,6 +1536,33 @@ public:
    */
   virtual ErrorCode commitAsync (const std::vector<TopicPartition*> &offsets) = 0;
 
+  /**
+   * @brief Commit offsets for the current assignment.
+   *
+   * @remark This is the synchronous variant that blocks until offsets
+   *         are committed or the commit fails (see return value).
+   *
+   * @remark The provided callback will be called from this function.
+   *
+   * @returns ERR_NO_ERROR or error code.
+   */
+  virtual ErrorCode commitSync (OffsetCommitCb *offset_commit_cb) = 0;
+
+  /**
+   * @brief Commit offsets for the provided list of partitions.
+   *
+   * @remark This is the synchronous variant that blocks until offsets
+   *         are committed or the commit fails (see return value).
+   *
+   * @remark The provided callback will be called from this function.
+   *
+   * @returns ERR_NO_ERROR or error code.
+   */
+  virtual ErrorCode commitSync (std::vector<TopicPartition*> &offsets,
+                                OffsetCommitCb *offset_commit_cb) = 0;
+
+
+
 
   /**
    * @brief Retrieve committed offsets for topics+partitions.
@@ -1383,6 +1609,40 @@ public:
    * @remark The consumer object must later be freed with \c delete
    */
   virtual ErrorCode close () = 0;
+
+
+  /**
+   * @brief Seek consumer for topic+partition to offset which is either an
+   *        absolute or logical offset.
+   *
+   * If \p timeout_ms is not 0 the call will wait this long for the
+   * seek to be performed. If the timeout is reached the internal state
+   * will be unknown and this function returns `ERR__TIMED_OUT`.
+   * If \p timeout_ms is 0 it will initiate the seek but return
+   * immediately without any error reporting (e.g., async).
+   *
+   * This call triggers a fetch queue barrier flush.
+   *
+   * @remark Consumtion for the given partition must have started for the
+   *         seek to work. Use assign() to set the starting offset.
+   *
+   * @returns an ErrorCode to indicate success or failure.
+   */
+  virtual ErrorCode seek (const TopicPartition &partition, int timeout_ms) = 0;
+
+
+  /**
+   * @brief Store offset \p offset for topic partition \p partition.
+   * The offset will be committed (written) to the offset store according
+   * to \p auto.commit.interval.ms or the next manual offset-less commit*()
+   *
+   * Per-partition success/error status propagated through TopicPartition.err()
+   *
+   * @remark \c enable.auto.offset.store must be set to \c false when using this API.
+   *
+   * @returns RdKafka::ERR_NO_ERROR on success or an error code on error.
+   */
+  virtual ErrorCode offsets_store (std::vector<TopicPartition*> &offsets) = 0;
 };
 
 
@@ -1599,35 +1859,40 @@ class RD_EXPORT Producer : public virtual Handle {
    *
    * These flags are optional and mutually exclusive.
    */
-  static const int RK_MSG_FREE = 0x1; /**< rdkafka will free(3) \p payload
-                                        * when it is done with it. */
-  static const int RK_MSG_COPY = 0x2; /**< the \p payload data will be copied
-                                       * and the \p payload pointer will not
-                                       * be used by rdkafka after the
-                                       * call returns. */
-  static const int RK_MSG_BLOCK = 0x4; /**< Block produce*() on message queue
-					*   full.
-					*   WARNING:
-					*   If a delivery report callback
-					*   is used the application MUST
-					*   call rd_kafka_poll() (or equiv.)
-					*   to make sure delivered messages
-					*   are drained from the internal
-					*   delivery report queue.
-					*   Failure to do so will result
-					*   in indefinately blocking on
-					*   the produce() call when the
-					*   message queue is full.
-					*/
+  enum {
+    RK_MSG_FREE = 0x1, /**< rdkafka will free(3) \p payload
+                         * when it is done with it. */
+    RK_MSG_COPY = 0x2, /**< the \p payload data will be copied
+                        * and the \p payload pointer will not
+                        * be used by rdkafka after the
+                        * call returns. */
+    RK_MSG_BLOCK = 0x4  /**< Block produce*() on message queue
+                         *   full.
+                         *   WARNING:
+                         *   If a delivery report callback
+                         *   is used the application MUST
+                         *   call rd_kafka_poll() (or equiv.)
+                         *   to make sure delivered messages
+                         *   are drained from the internal
+                         *   delivery report queue.
+                         *   Failure to do so will result
+                         *   in indefinately blocking on
+                         *   the produce() call when the
+                         *   message queue is full.
+                         */
 
 
   /**@cond NO_DOC*/
   /* For backwards compatibility: */
 #ifndef MSG_COPY /* defined in sys/msg.h */
-  static const int MSG_FREE = RK_MSG_FREE;
-  static const int MSG_COPY = RK_MSG_COPY;
+    , /** this comma must exist betwen
+       *  RK_MSG_BLOCK and MSG_FREE
+       */
+    MSG_FREE = RK_MSG_FREE,
+    MSG_COPY = RK_MSG_COPY
 #endif
   /**@endcond*/
+  };
 
   /**
    * @brief Produce and send a single message to broker.
@@ -1697,6 +1962,19 @@ class RD_EXPORT Producer : public virtual Handle {
                              int msgflags,
                              void *payload, size_t len,
                              const void *key, size_t key_len,
+                             void *msg_opaque) = 0;
+
+  /**
+   * @brief produce() variant that takes topic as a string (no need for
+   *        creating a Topic object), and also allows providing the
+   *        message timestamp (microseconds since beginning of epoch, UTC).
+   *        Otherwise identical to produce() above.
+   */
+  virtual ErrorCode produce (const std::string topic_name, int32_t partition,
+                             int msgflags,
+                             void *payload, size_t len,
+                             const void *key, size_t key_len,
+                             int64_t timestamp,
                              void *msg_opaque) = 0;
 
 

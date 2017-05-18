@@ -63,6 +63,8 @@ static int nonexist_part (void) {
 	for (it = 0 ; it < iterations ; it++) {
 		char group_id[32];
 
+                test_conf_init(NULL, NULL, 15);
+
 		test_str_id_generate(group_id, sizeof(group_id));
 
 		TEST_SAY("Iteration %d/%d, using group.id %s\n", it, iterations,
@@ -76,7 +78,7 @@ static int nonexist_part (void) {
 		 * Now start a new consumer and query stored offsets (positions)
 		 */
 
-		rk = test_create_consumer(group_id, NULL, NULL, NULL, NULL);
+		rk = test_create_consumer(group_id, NULL, NULL, NULL);
 
 		/* Fill in partition set */
 		parts = rd_kafka_topic_partition_list_new(2);

@@ -9,7 +9,7 @@ License: BSD-2-Clause
 URL:     https://github.com/edenhill/librdkafka
 Source:	 librdkafka-%{version}.tar.gz
 
-BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++ openssl-devel cyrus-sasl-devel python
+BuildRequires: zlib-devel libstdc++-devel gcc >= 4.1 gcc-c++ openssl-devel cyrus-sasl-devel lz4-devel python
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 %description

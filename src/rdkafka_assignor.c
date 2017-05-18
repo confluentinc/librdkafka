@@ -40,7 +40,7 @@ void rd_kafka_group_member_clear (rd_kafka_group_member_t *rkgm) {
         if (rkgm->rkgm_assignment)
                 rd_kafka_topic_partition_list_destroy(rkgm->rkgm_assignment);
 
-        rd_list_destroy(&rkgm->rkgm_eligible, NULL);
+        rd_list_destroy(&rkgm->rkgm_eligible);
 
         if (rkgm->rkgm_member_id)
                 rd_kafkap_str_destroy(rkgm->rkgm_member_id);
@@ -110,7 +110,7 @@ rd_kafka_consumer_protocol_member_metadata_new (
          *     UserData     => Bytes
          */
 
-        rkbuf = rd_kafka_buf_new_growable(NULL, 1,
+        rkbuf = rd_kafka_buf_new_growable(NULL, RD_KAFKAP_None, 1,
                                           100 +
 					  (topic_cnt * 100) +
                                           userdata_size);
@@ -188,6 +188,21 @@ static int rd_kafka_member_subscription_match (
 }
 
 
+static void
+rd_kafka_assignor_topic_destroy (rd_kafka_assignor_topic_t *at) {
+        rd_list_destroy(&at->members);
+        rd_free(at);
+}
+
+int rd_kafka_assignor_topic_cmp (const void *_a, const void *_b) {
+        const rd_kafka_assignor_topic_t *a =
+                *(const rd_kafka_assignor_topic_t * const *)_a;
+        const rd_kafka_assignor_topic_t *b =
+                *(const rd_kafka_assignor_topic_t * const *)_b;
+
+        return !strcmp(a->metadata->topic, b->metadata->topic);
+}
+
 /**
  * Maps the available topics to the group members' subscriptions
  * and updates the `member` map with the proper list of eligible topics,
@@ -202,7 +217,8 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
         int ti;
         rd_kafka_assignor_topic_t *eligible_topic = NULL;
 
-        rd_list_init(eligible_topics, RD_MIN(metadata->topic_cnt, 10));
+        rd_list_init(eligible_topics, RD_MIN(metadata->topic_cnt, 10),
+                     (void *)rd_kafka_assignor_topic_destroy);
 
         /* For each topic in the cluster, scan through the member list
          * to find matching subscriptions. */
@@ -225,7 +241,7 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
                 if (!eligible_topic)
                         eligible_topic = rd_calloc(1, sizeof(*eligible_topic));
 
-                rd_list_init(&eligible_topic->members, member_cnt);
+                rd_list_init(&eligible_topic->members, member_cnt, NULL);
 
                 /* For each member: scan through its topic subscription */
                 for (i = 0 ; i < member_cnt ; i++) {
@@ -238,7 +254,7 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
                 }
 
                 if (rd_list_empty(&eligible_topic->members)) {
-                        rd_list_destroy(&eligible_topic->members, NULL);
+                        rd_list_destroy(&eligible_topic->members);
                         continue;
                 }
 
@@ -254,20 +270,6 @@ rd_kafka_member_subscriptions_map (rd_kafka_cgrp_t *rkcg,
                 rd_free(eligible_topic);
 }
 
-static void
-rd_kafka_assignor_topic_destroy (rd_kafka_assignor_topic_t *at) {
-        rd_list_destroy(&at->members, NULL);
-        rd_free(at);
-}
-
-int rd_kafka_assignor_topic_cmp (const void *_a, const void *_b) {
-	const rd_kafka_assignor_topic_t *a =
-                *(const rd_kafka_assignor_topic_t * const *)_a;
-        const rd_kafka_assignor_topic_t *b =
-                *(const rd_kafka_assignor_topic_t * const *)_b;
-
-	return !strcmp(a->metadata->topic, b->metadata->topic);
-}
 
 rd_kafka_resp_err_t
 rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
@@ -371,8 +373,7 @@ rd_kafka_assignor_run (rd_kafka_cgrp_t *rkcg,
                 }
         }
 
-        rd_list_destroy(&eligible_topics,
-                        (void *)rd_kafka_assignor_topic_destroy);
+        rd_list_destroy(&eligible_topics);
 
         return err;
 }
@@ -486,6 +487,9 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 	char *wanted;
 	char *s;
 
+        rd_list_init(&rk->rk_conf.partition_assignors, 2,
+                     (void *)rd_kafka_assignor_destroy);
+
 	rd_strdupa(&wanted, rk->rk_conf.partition_assignment_strategy);
 
 	s = wanted;
@@ -544,6 +548,5 @@ int rd_kafka_assignors_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
  * Free assignors
  */
 void rd_kafka_assignors_term (rd_kafka_t *rk) {
-        rd_list_destroy(&rk->rk_conf.partition_assignors,
-                        (void *)rd_kafka_assignor_destroy);
+        rd_list_destroy(&rk->rk_conf.partition_assignors);
 }

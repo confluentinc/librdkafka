@@ -40,6 +40,7 @@
 #include <fcntl.h>
 #ifdef _MSC_VER
 #include <io.h>
+#pragma comment(lib, "ws2_32.lib")
 #else
 #include <unistd.h>
 #include <poll.h>
@@ -61,18 +62,25 @@ int main_0040_io_event (int argc, char **argv) {
 	int wait_multiplier = 1;
 	struct pollfd pfd;
         int r;
+        rd_kafka_resp_err_t err;
 	enum {
 		_NOPE,
 		_YEP,
 		_REBALANCE
 	} expecting_io = _REBALANCE;
 
+#ifdef _MSC_VER
+        TEST_SKIP("WSAPoll and pipes are not reliable on Win32 (FIXME)\n");
+        return 0;
+#endif
 	testid = test_id_generate();
 	topic = test_mk_topic_name(__FUNCTION__, 1);
 
 	rk_p = test_create_producer();
 	rkt_p = test_create_producer_topic(rk_p, topic, NULL);
-	test_auto_create_topic_rkt(rk_p, rkt_p);
+	err = test_auto_create_topic_rkt(rk_p, rkt_p);
+        TEST_ASSERT(!err, "Topic auto creation failed: %s",
+                    rd_kafka_err2str(err));
 
 	test_conf_init(&conf, &tconf, 0);
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
@@ -81,7 +89,7 @@ int main_0040_io_event (int argc, char **argv) {
 	/* Speed up propagation of new topics */
 	test_conf_set(conf, "metadata.max.age.ms", "5000");
 	test_topic_conf_set(tconf, "auto.offset.reset", "earliest");
-	rk_c = test_create_consumer(topic, NULL, conf, tconf, NULL);
+	rk_c = test_create_consumer(topic, NULL, conf, tconf);
 
 	queue = rd_kafka_queue_get_consumer(rk_c);
 
@@ -141,7 +149,7 @@ int main_0040_io_event (int argc, char **argv) {
 #ifndef _MSC_VER
 			r = read(pfd.fd, &b, 1);
 #else
-                        r = _read(pfd.fd, &b, 1);
+			r = _read((int)pfd.fd, &b, 1);
 #endif
 			if (r == -1)
 				TEST_FAIL("read failed: %s\n", strerror(errno));

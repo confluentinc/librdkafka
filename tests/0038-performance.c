@@ -84,7 +84,7 @@ int main_0038_performance (int argc, char **argv) {
 
 	TEST_SAY("Creating consumer\n");
 	test_conf_init(&conf, NULL, 120);
-	rk = test_create_consumer(NULL, NULL, conf, NULL, NULL);
+	rk = test_create_consumer(NULL, NULL, conf, NULL);
 	rkt = rd_kafka_topic_new(rk, topic, NULL);
 
 	test_consumer_start("CONSUME", rkt, partition,

@@ -364,3 +364,26 @@
    fun:_dl_runtime_resolve_avx
    ...
 }
+{
+   cpp_glibc_globals
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:pool
+   fun:__static_initialization_and_destruction_0
+   fun:_GLOBAL__sub_I_eh_alloc.cc
+}
+{
+   mtx_unlock_plus_destroy
+   Helgrind:Race
+   obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
+   obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
+   fun:rd_kafka_q_destroy_final
+}
+{
+   mtx_unlock_plus_destroy2
+   Helgrind:Race
+   obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
+   obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
+   fun:rd_refcnt_destroy
+}

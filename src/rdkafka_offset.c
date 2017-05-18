@@ -351,6 +351,7 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 		return;
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT|RD_KAFKA_OP_REPLY);
+        rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_HIGH);
 	rko->rko_err = err;
 	rko->rko_u.offset_commit.cb = rk->rk_conf.offset_commit_cb;/*maybe NULL*/
 	rko->rko_u.offset_commit.opaque = rk->rk_conf.opaque;
@@ -378,7 +379,8 @@ rd_kafka_commit0 (rd_kafka_t *rk,
 			      rd_kafka_resp_err_t err,
 			      rd_kafka_topic_partition_list_t *offsets,
 			      void *opaque),
-		  void *opaque) {
+		  void *opaque,
+                  const char *reason) {
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_op_t *rko;
 
@@ -386,6 +388,7 @@ rd_kafka_commit0 (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_OFFSET_COMMIT);
+        rko->rko_u.offset_commit.reason = rd_strdup(reason);
 	rko->rko_replyq = replyq;
 	rko->rko_u.offset_commit.cb = cb;
 	rko->rko_u.offset_commit.opaque = opaque;
@@ -413,6 +416,7 @@ rd_kafka_commit (rd_kafka_t *rk,
         rd_kafka_cgrp_t *rkcg;
 	rd_kafka_resp_err_t err;
 	rd_kafka_q_t *repq = NULL;
+	rd_kafka_replyq_t rq = RD_KAFKA_NO_REPLYQ;
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
@@ -420,15 +424,14 @@ rd_kafka_commit (rd_kafka_t *rk,
         if (!async)
                 repq = rd_kafka_q_new(rk);
 
-        err = rd_kafka_commit0(rk, offsets, NULL,
-			       !async ? RD_KAFKA_REPLYQ(repq, 0) :
-			       RD_KAFKA_NO_REPLYQ, NULL, NULL);
+        if (!async) 
+		rq = RD_KAFKA_REPLYQ(repq, 0);
+ 
+        err = rd_kafka_commit0(rk, offsets, NULL, rq, NULL, NULL, "manual");
 
-        if (!async) {
+        if (!err && !async) {
 		err = rd_kafka_q_wait_result(repq, RD_POLL_INFINITE);
-                rd_kafka_q_destroy(repq);
-        } else {
-                err = RD_KAFKA_RESP_ERR_NO_ERROR;
+		rd_kafka_q_destroy(repq);
         }
 
 	return err;
@@ -482,17 +485,23 @@ rd_kafka_commit_queue (rd_kafka_t *rk,
 
 	err = rd_kafka_commit0(rk, offsets, NULL,
 			       RD_KAFKA_REPLYQ(rkq, 0),
-			       cb, opaque);
+			       cb, opaque, "manual");
 
 	if (!rkqu) {
-		rd_kafka_op_t *rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0);
+                rd_kafka_op_t *rko =
+                        rd_kafka_q_pop_serve(rkq, RD_POLL_INFINITE,
+                                             0, RD_KAFKA_Q_CB_FORCE_RETURN,
+                                             NULL, NULL);
 		if (!rko)
 			err = RD_KAFKA_RESP_ERR__TIMED_OUT;
 		else {
-			err = rko->rko_err;
-			rd_kafka_op_handle_std(rk, rko);
-			rd_kafka_op_destroy(rko);
-		}
+                        if (cb)
+                                cb(rk, rko->rko_err,
+                                   rko->rko_u.offset_commit.partitions,
+                                   opaque);
+                        err = rko->rko_err;
+                        rd_kafka_op_destroy(rko);
+                }
 
                 rd_kafka_q_destroy(rkq);
 	}
@@ -516,31 +525,39 @@ rd_kafka_offset_broker_commit_cb (rd_kafka_t *rk,
 				  void *opaque) {
         shptr_rd_kafka_toppar_t *s_rktp;
         rd_kafka_toppar_t *rktp;
+        rd_kafka_topic_partition_t *rktpar;
 
-        if (!(s_rktp = rd_kafka_topic_partition_list_get_toppar(rk,
-                                                                offsets, 0))) {
+        if (offsets->cnt == 0) {
+                rd_kafka_dbg(rk, TOPIC, "OFFSETCOMMIT",
+                             "No offsets to commit (commit_cb)");
+                return;
+        }
+
+        rktpar = &offsets->elems[0];
+
+        if (!(s_rktp = rd_kafka_topic_partition_list_get_toppar(rk, rktpar))) {
 		rd_kafka_dbg(rk, TOPIC, "OFFSETCOMMIT",
 			     "No local partition found for %s [%"PRId32"] "
 			     "while parsing OffsetCommit response "
 			     "(offset %"PRId64", error \"%s\")",
-			     offsets->elems[0].topic,
-			     offsets->elems[0].partition,
-			     offsets->elems[0].offset,
-			     rd_kafka_err2str(offsets->elems[0].err));
+			     rktpar->topic,
+			     rktpar->partition,
+			     rktpar->offset,
+			     rd_kafka_err2str(rktpar->err));
                 return;
         }
 
         rktp = rd_kafka_toppar_s2i(s_rktp);
 
         if (!err)
-                err = offsets->elems[0].err;
+                err = rktpar->err;
 
 	rd_kafka_toppar_offset_commit_result(rktp, err, offsets);
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
                      "%s [%"PRId32"]: offset %"PRId64" committed: %s",
                      rktp->rktp_rkt->rkt_topic->str,
-                     rktp->rktp_partition, offsets->elems[0].offset,
+                     rktp->rktp_partition, rktpar->offset,
                      rd_kafka_err2str(err));
 
         rktp->rktp_committing_offset = 0;
@@ -555,7 +572,7 @@ rd_kafka_offset_broker_commit_cb (rd_kafka_t *rk,
 
 
 static rd_kafka_resp_err_t
-rd_kafka_offset_broker_commit (rd_kafka_toppar_t *rktp) {
+rd_kafka_offset_broker_commit (rd_kafka_toppar_t *rktp, const char *reason) {
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_topic_partition_t *rktpar;
 
@@ -571,13 +588,15 @@ rd_kafka_offset_broker_commit (rd_kafka_toppar_t *rktp) {
         rktpar->offset = rktp->rktp_committing_offset;
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSETCMT",
-                     "%.*s [%"PRId32"]: committing offset %"PRId64,
+                     "%.*s [%"PRId32"]: committing offset %"PRId64": %s",
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                     rktp->rktp_partition, rktp->rktp_committing_offset);
+                     rktp->rktp_partition, rktp->rktp_committing_offset,
+                     reason);
 
         rd_kafka_commit0(rktp->rktp_rkt->rkt_rk, offsets, rktp,
 			 RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
-			 rd_kafka_offset_broker_commit_cb, NULL);
+			 rd_kafka_offset_broker_commit_cb, NULL,
+                         reason);
 
         rd_kafka_topic_partition_list_destroy(offsets);
 
@@ -593,7 +612,9 @@ rd_kafka_offset_broker_commit (rd_kafka_toppar_t *rktp) {
  *
  * Locality: toppar handler thread
  */
-rd_kafka_resp_err_t rd_kafka_offset_commit (rd_kafka_toppar_t *rktp) {
+static
+rd_kafka_resp_err_t rd_kafka_offset_commit (rd_kafka_toppar_t *rktp,
+                                            const char *reason) {
         if (1)  // FIXME
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
 		     "%s [%"PRId32"]: commit: "
@@ -615,7 +636,7 @@ rd_kafka_resp_err_t rd_kafka_offset_commit (rd_kafka_toppar_t *rktp) {
         case RD_KAFKA_OFFSET_METHOD_FILE:
                 return rd_kafka_offset_file_commit(rktp);
         case RD_KAFKA_OFFSET_METHOD_BROKER:
-                return rd_kafka_offset_broker_commit(rktp);
+                return rd_kafka_offset_broker_commit(rktp, reason);
         default:
                 /* UNREACHABLE */
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
@@ -670,6 +691,36 @@ rd_kafka_resp_err_t rd_kafka_offset_store (rd_kafka_topic_t *app_rkt,
 }
 
 
+rd_kafka_resp_err_t
+rd_kafka_offsets_store (rd_kafka_t *rk,
+                        rd_kafka_topic_partition_list_t *offsets) {
+        int i;
+        int ok_cnt = 0;
+
+        for (i = 0 ; i < offsets->cnt ; i++) {
+                rd_kafka_topic_partition_t *rktpar = &offsets->elems[i];
+                shptr_rd_kafka_toppar_t *s_rktp;
+
+                s_rktp = rd_kafka_topic_partition_get_toppar(rk, rktpar);
+                if (!s_rktp) {
+                        rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
+                        continue;
+                }
+
+                rd_kafka_offset_store0(rd_kafka_toppar_s2i(s_rktp),
+                                       rktpar->offset, 1/*lock*/);
+                rd_kafka_toppar_destroy(s_rktp);
+
+                rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                ok_cnt++;
+        }
+
+        return offsets->cnt > 0 && ok_cnt < offsets->cnt ?
+                RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION :
+                RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 
 
 
@@ -697,7 +748,9 @@ static rd_kafka_resp_err_t rd_kafka_offset_file_term (rd_kafka_toppar_t *rktp) {
         return err;
 }
 
-static void rd_kafka_offset_reset_op_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
+static rd_kafka_op_res_t
+rd_kafka_offset_reset_op_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq,
+                             rd_kafka_op_t *rko) {
 	rd_kafka_toppar_t *rktp =
 		rd_kafka_toppar_s2i(rko->rko_rktp);
 	rd_kafka_toppar_lock(rktp);
@@ -705,6 +758,7 @@ static void rd_kafka_offset_reset_op_cb (rd_kafka_t *rk, rd_kafka_op_t *rko) {
                               rko->rko_u.offset_reset.offset,
                               rko->rko_err, rko->rko_u.offset_reset.reason);
 	rd_kafka_toppar_unlock(rktp);
+        return RD_KAFKA_OP_RES_HANDLED;
 }
 
 /**
@@ -839,14 +893,13 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
                 char escfile[4096];
 
                 /* Include group.id in filename if configured. */
-                if (!RD_KAFKAP_STR_IS_NULL(rktp->rktp_rkt->rkt_rk->
-                                           rk_conf.group_id))
+                if (!RD_KAFKAP_STR_IS_NULL(rktp->rktp_rkt->rkt_rk->rk_group_id))
                         rd_snprintf(tmpfile, sizeof(tmpfile),
                                  "%s-%"PRId32"-%.*s.offset",
                                  rktp->rktp_rkt->rkt_topic->str,
                                  rktp->rktp_partition,
                                  RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_rk->
-                                                  rk_conf.group_id));
+                                                  rk_group_id));
                 else
                         rd_snprintf(tmpfile, sizeof(tmpfile),
                                  "%s-%"PRId32".offset",
@@ -875,7 +928,7 @@ static void rd_kafka_offset_file_init (rd_kafka_toppar_t *rktp) {
 		rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
 				     &rktp->rktp_offset_sync_tmr,
 				     rktp->rktp_rkt->rkt_conf.
-				     offset_store_sync_interval_ms * 1000,
+				     offset_store_sync_interval_ms * 1000ll,
 				     rd_kafka_offset_sync_tmr_cb, rktp);
 
 	if (rd_kafka_offset_file_open(rktp) != -1) {
@@ -1005,7 +1058,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store_stop (rd_kafka_toppar_t *rktp) {
          * This might be an async operation. */
         if (rd_kafka_is_simple_consumer(rktp->rktp_rkt->rkt_rk) &&
             rktp->rktp_stored_offset > rktp->rktp_committed_offset)
-                err = rd_kafka_offset_commit(rktp);
+                err = rd_kafka_offset_commit(rktp, "offset store stop");
 
         /* If stop is in progress (async commit), return now. */
         if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
@@ -1022,7 +1075,7 @@ done:
 static void rd_kafka_offset_auto_commit_tmr_cb (rd_kafka_timers_t *rkts,
 						 void *arg) {
 	rd_kafka_toppar_t *rktp = arg;
-	rd_kafka_offset_commit(rktp);
+	rd_kafka_offset_commit(rktp, "auto commit timer");
 }
 
 void rd_kafka_offset_query_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
@@ -1062,7 +1115,7 @@ void rd_kafka_offset_store_init (rd_kafka_toppar_t *rktp) {
 		rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
 				     &rktp->rktp_offset_commit_tmr,
 				     rktp->rktp_rkt->rkt_conf.
-				     auto_commit_interval_ms * 1000,
+				     auto_commit_interval_ms * 1000ll,
 				     rd_kafka_offset_auto_commit_tmr_cb,
 				     rktp);
 

@@ -30,10 +30,7 @@
 /* This header file is to be used by .c files needing access to the
  * rd_kafka_transport_t struct internals. */
 
-#if WITH_SASL
-#include <sasl/sasl.h>
 #include "rdkafka_sasl.h"
-#endif
 
 #if WITH_SSL
 #include <openssl/ssl.h>
@@ -49,14 +46,16 @@ struct rd_kafka_transport_s {
 	SSL *rktrans_ssl;
 #endif
 
-#if WITH_SASL
 	struct {
-		sasl_conn_t *conn;
+                void *state;               /* SASL implementation
+                                            * state handle */
 
-		int           complete;    /* Auth was completed early
+                int           complete;    /* Auth was completed early
 					    * from the client's perspective
-					    * but we must still wait for
-					    * reply from server. */
+					    * (but we might still have to
+                                            *  wait for server reply). */
+
+                /* SASL framing buffers */
 		struct msghdr msg;
 		struct iovec  iov[2];
 
@@ -65,14 +64,18 @@ struct rd_kafka_transport_s {
 		int            recv_len;   /* Expected receive length for
 					    * current frame. */
 	} rktrans_sasl;
-#endif
 
 	rd_kafka_buf_t *rktrans_recv_buf;  /* Used with framed_recvmsg */
-	
+
+        /* Two pollable fds:
+         * - TCP socket
+         * - wake-up fd
+         */
 #ifndef _MSC_VER
-	struct pollfd rktrans_pfd;
+        struct pollfd rktrans_pfd[2];
 #else
-	WSAPOLLFD rktrans_pfd;
+        WSAPOLLFD rktrans_pfd[2];
 #endif
+        int rktrans_pfd_cnt;
 };
 

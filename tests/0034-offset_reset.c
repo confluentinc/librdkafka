@@ -49,7 +49,7 @@ static void do_test_reset (const char *topic, int partition,
 		 "expect %d msgs, %d EOFs, %d errors\n",
 		 reset, exp_msgcnt, exp_eofcnt, exp_errcnt);
 
-	rk = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
+	rk = test_create_consumer(NULL, NULL, NULL, NULL);
 	rkt = test_create_topic_object(rk, topic, "auto.offset.reset", reset,
 				       NULL);
 

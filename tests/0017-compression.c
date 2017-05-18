@@ -39,85 +39,100 @@
 
 
 int main_0017_compression(int argc, char **argv) {
-	rd_kafka_t *rk_p, *rk_c;
-	const int msg_cnt = 1000;
-	int msg_base = 0;
-	uint64_t testid;
+        rd_kafka_t *rk_p, *rk_c;
+        const int msg_cnt = 1000;
+        int msg_base = 0;
+        uint64_t testid;
 #define CODEC_CNT 4
-	const char *codecs[CODEC_CNT+1] = {
-		"none",
+        const char *codecs[CODEC_CNT+1] = {
+                "none",
 #if WITH_ZLIB
-		"gzip",
+                "gzip",
 #endif
 #if WITH_SNAPPY
-		"snappy",
+                "snappy",
 #endif
-#if WITH_LZ4
-		"lz4",
-#endif
-		NULL
-	};
-	const char *topics[CODEC_CNT];
-	const int32_t partition = 0;
-	int i;
+                "lz4",
+                NULL
+        };
+        const char *topics[CODEC_CNT];
+        const int32_t partition = 0;
+        int i;
+        int crc;
 
-	testid = test_id_generate();
+        testid = test_id_generate();
 
-	/* Produce messages */
-	rk_p = test_create_producer();
-	for (i = 0; codecs[i] != NULL ; i++) {
-		rd_kafka_topic_t *rkt_p;
+        /* Produce messages */
+        rk_p = test_create_producer();
+        for (i = 0; codecs[i] != NULL ; i++) {
+                rd_kafka_topic_t *rkt_p;
 
-		topics[i] = test_mk_topic_name(codecs[i], 1);
-		TEST_SAY("Produce %d messages with %s compression to "
-			 "topic %s\n",
-			msg_cnt, codecs[i], topics[i]);
-		rkt_p = test_create_producer_topic(rk_p, topics[i],
-			"compression.codec", codecs[i], NULL);
+                topics[i] = test_mk_topic_name(codecs[i], 1);
+                TEST_SAY("Produce %d messages with %s compression to "
+                         "topic %s\n",
+                        msg_cnt, codecs[i], topics[i]);
+                rkt_p = test_create_producer_topic(rk_p, topics[i],
+                        "compression.codec", codecs[i], NULL);
 
-		/* Produce small message that will not decrease with
-		 * compression (issue #781) */
-		test_produce_msgs(rk_p, rkt_p, testid, partition,
-				  msg_base + (partition*msg_cnt), 1,
-				  NULL, 5);
+                /* Produce small message that will not decrease with
+                 * compression (issue #781) */
+                test_produce_msgs(rk_p, rkt_p, testid, partition,
+                                  msg_base + (partition*msg_cnt), 1,
+                                  NULL, 5);
 
-		/* Produce standard sized messages */
-		test_produce_msgs(rk_p, rkt_p, testid, partition,
-				  msg_base + (partition*msg_cnt) + 1, msg_cnt-1,
-				  NULL, 512);
-		rd_kafka_topic_destroy(rkt_p);
-	}
+                /* Produce standard sized messages */
+                test_produce_msgs(rk_p, rkt_p, testid, partition,
+                                  msg_base + (partition*msg_cnt) + 1, msg_cnt-1,
+                                  NULL, 512);
+                rd_kafka_topic_destroy(rkt_p);
+        }
 
-	rd_kafka_destroy(rk_p);
+        rd_kafka_destroy(rk_p);
 
 
-	/* Consume messages */
-	rk_c = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
+        /* restart timeout (mainly for helgrind use since it is very slow) */
+        test_timeout_set(30);
 
-	for (i = 0; codecs[i] != NULL ; i++) {
-		rd_kafka_topic_t *rkt_c = rd_kafka_topic_new(rk_c,
-							     topics[i], NULL);
-		TEST_SAY("Consume %d messages from topic %s\n",
-			msg_cnt, topics[i]);
-		/* Start consuming */
-		test_consumer_start(codecs[i], rkt_c, partition,
-				    RD_KAFKA_OFFSET_BEGINNING);
+        /* Consume messages: Without and with CRC checking */
+        for (crc = 0 ; crc < 2 ; crc++) {
+                const char *crc_tof = crc ? "true":"false";
+                rd_kafka_conf_t *conf;
 
-		/* Consume messages */
-		test_consume_msgs(codecs[i], rkt_c, testid, partition,
-				  /* Use offset 0 here, which is wrong, should
-				   * be TEST_NO_SEEK, but it exposed a bug
-				   * where the Offset query was postponed
-				   * till after the seek, causing messages
-				   * to be replayed. */
-				  0,
-				  msg_base, msg_cnt, 1 /* parse format */);
+                test_conf_init(&conf, NULL, 0);
+                test_conf_set(conf, "check.crcs", crc_tof);
 
-		test_consumer_stop(codecs[i], rkt_c, partition);
-		rd_kafka_topic_destroy(rkt_c);
-	}
+                rk_c = test_create_consumer(NULL, NULL, conf, NULL);
 
-	rd_kafka_destroy(rk_c);
+                for (i = 0; codecs[i] != NULL ; i++) {
+                        rd_kafka_topic_t *rkt_c = rd_kafka_topic_new(rk_c,
+                                                                     topics[i],
+                                                                     NULL);
 
-	return 0;
+                        TEST_SAY("Consume %d messages from topic %s (crc=%s)\n",
+                                 msg_cnt, topics[i], crc_tof);
+                        /* Start consuming */
+                        test_consumer_start(codecs[i], rkt_c, partition,
+                                            RD_KAFKA_OFFSET_BEGINNING);
+
+                        /* Consume messages */
+                        test_consume_msgs(
+                                codecs[i], rkt_c, testid, partition,
+                                /* Use offset 0 here, which is wrong, should
+                                 * be TEST_NO_SEEK, but it exposed a bug
+                                 * where the Offset query was postponed
+                                 * till after the seek, causing messages
+                                 * to be replayed. */
+                                0,
+                                msg_base, msg_cnt, 1 /* parse format */);
+
+                        test_consumer_stop(codecs[i], rkt_c, partition);
+
+                        rd_kafka_topic_destroy(rkt_c);
+                }
+
+                rd_kafka_destroy(rk_c);
+        }
+
+
+        return 0;
 }

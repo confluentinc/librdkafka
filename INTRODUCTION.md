@@ -98,9 +98,9 @@ of messages to accumulate in the local queue before sending them off in
 one large message set or batch to the peer. This amortizes the messaging
 overhead and eliminates the adverse effect of the round trip time (rtt).
 
-The default settings, batch.num.messages=1000 and queue.buffering.max.ms=1000,
+The default settings, batch.num.messages=10000 and queue.buffering.max.ms=1000,
 are suitable for high throughput. This allows librdkafka to wait up to
-1000 ms for up to 1000 messages to accumulate in the local queue before
+1000 ms for up to 10000 messages to accumulate in the local queue before
 sending the accumulate messages to the broker.
 
 These setting are set globally (`rd_kafka_conf_t`) but applies on a
@@ -112,8 +112,7 @@ per topic+partition basis.
 When low latency messaging is required the "queue.buffering.max.ms" should be
 tuned to the maximum permitted producer-side latency.
 Setting queue.buffering.max.ms to 1 will make sure messages are sent as
-soon as possible. You could check out [How to decrease message latency]
-(https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency)
+soon as possible. You could check out [How to decrease message latency](https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency)
 to find more details.
 
 
@@ -192,7 +191,7 @@ It is created by calling `rd_kafka_topic_new()`.
 Both `rd_kafka_t` and `rd_kafka_topic_t` comes with a configuration API which
 is optional.
 Not using the API will cause librdkafka to use its default values which are
-documented *`CONFIGURATION.md`*.
+documented in [`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 
 **Note**: An application may create multiple `rd_kafka_t` objects and
 	they share no state.
@@ -211,7 +210,7 @@ properties as found in the official clients of Apache Kafka.
 Configuration is applied prior to object creation using the
 `rd_kafka_conf_set()` and `rd_kafka_topic_conf_set()` APIs.
 
-**Note**: The `rd_kafka.._conf_t` objects are not reusable after have been
+**Note**: The `rd_kafka.._conf_t` objects are not reusable after they have been
 	passed to `rd_kafka.._new()`.
 	The application does not need to free any config resources after a
 	`rd_kafka.._new()` call.
@@ -448,6 +447,56 @@ see KafkaConsumer in rdkafka.h or rdkafkacpp.h
 
 Topic auto creation is supported by librdkafka.
 The broker needs to be configured with "auto.create.topics.enable=true".
+
+
+
+### Metadata
+
+#### < 0.9.3
+Previous to the 0.9.3 release librdkafka's metadata handling
+was chatty and excessive, which usually isn't a problem in small
+to medium-sized clusters, but in large clusters with a large amount
+of librdkafka clients the metadata requests could hog broker CPU and bandwidth.
+
+#### > 0.9.3
+
+The remaining Metadata sections describe the current behaviour.
+
+**Note:** "Known topics" in the following section means topics for
+          locally created `rd_kafka_topic_t` objects.
+
+
+#### Query reasons
+
+There are four reasons to query metadata:
+
+ * brokers - update/populate cluster broker list, so the client can
+             find and connect to any new brokers added.
+
+ * specific topic - find leader or partition count for specific topic
+
+ * known topics - same, but for all locally known topics.
+
+ * all topics - get topic names for consumer group wildcard subscription
+                matching
+
+The above list is sorted so that the sub-sequent entries contain the
+information above, e.g., 'known topics' contains enough information to
+also satisfy 'specific topic' and 'brokers'.
+
+
+#### Caching strategy
+
+The prevalent cache timeout is `metadata.max.age.ms`, any cached entry
+will remain authoritative for this long or until a relevant broker error
+is returned.
+
+
+ * brokers - eternally cached, the broker list is additative.
+
+ * topics - cached for `metadata.max.age.ms`
+
+
 
 
 ## Appendix

@@ -2,6 +2,13 @@
 
 #include "rdlist.h"
 
+
+/**
+ * Forward declarations
+ */
+struct rd_kafka_transport_s;
+
+
 /**
  * MessageSet compression codecs
  */
@@ -38,6 +45,14 @@ typedef	enum {
 } rd_kafka_conf_scope_t;
 
 typedef enum {
+	_RK_CONF_PROP_SET_REPLACE,  /* Replace current value (default) */
+	_RK_CONF_PROP_SET_ADD,      /* Add value (S2F) */
+	_RK_CONF_PROP_SET_DEL      /* Remove value (S2F) */
+} rd_kafka_conf_set_mode_t;
+
+
+
+typedef enum {
         RD_KAFKA_OFFSET_METHOD_NONE,
         RD_KAFKA_OFFSET_METHOD_FILE,
         RD_KAFKA_OFFSET_METHOD_BROKER
@@ -67,6 +82,7 @@ struct rd_kafka_conf_s {
 	int     metadata_refresh_fast_cnt;
 	int     metadata_refresh_fast_interval_ms;
         int     metadata_refresh_sparse;
+        int     metadata_max_age_ms;
 	int     debug;
 	int     broker_addr_ttl;
         int     broker_addr_family;
@@ -75,9 +91,9 @@ struct rd_kafka_conf_s {
 	int     socket_sndbuf_size;
 	int     socket_rcvbuf_size;
         int     socket_keepalive;
+	int     socket_nagle_disable;
         int     socket_max_fails;
 	char   *client_id_str;
-        rd_kafkap_str_t *client_id;
 	char   *brokerlist;
 	int     stats_interval_ms;
 	int     term_sig;
@@ -99,19 +115,51 @@ struct rd_kafka_conf_s {
 	} ssl;
 #endif
 
-#if WITH_SASL
-	struct {
-		char *principal;
-		char *mechanisms;
-		char *service_name;
-		char *kinit_cmd;
-		char *keytab;
-		int   relogin_min_time;
-		char *username;
-		char *password;
-	} sasl;
+        struct {
+                const struct rd_kafka_sasl_provider *provider;
+                char *principal;
+                char *mechanisms;
+                char *service_name;
+                char *kinit_cmd;
+                char *keytab;
+                int   relogin_min_time;
+                char *username;
+                char *password;
+#if WITH_SASL_SCRAM
+                /* SCRAM EVP-wrapped hash function
+                 * (return value from EVP_shaX()) */
+                const void/*EVP_MD*/ *scram_evp;
+                /* SCRAM direct hash function (e.g., SHA256()) */
+                unsigned char *(*scram_H) (const unsigned char *d, size_t n,
+                                           unsigned char *md);
+                /* Hash size */
+                size_t         scram_H_size;
+#endif
+        } sasl;
+
+#if WITH_PLUGINS
+        char *plugin_paths;
+        rd_list_t plugins;
 #endif
 
+        /* Interceptors */
+        struct {
+                /* rd_kafka_interceptor_method_t lists */
+                rd_list_t on_conf_set;        /* on_conf_set interceptors
+                                               * (not copied on conf_dup()) */
+                rd_list_t on_conf_dup;        /* .. (not copied) */
+                rd_list_t on_conf_destroy;    /* .. (not copied) */
+                rd_list_t on_new;             /* .. (copied) */
+                rd_list_t on_destroy;         /* .. (copied) */
+                rd_list_t on_send;            /* .. (copied) */
+                rd_list_t on_acknowledgement; /* .. (copied) */
+                rd_list_t on_consume;         /* .. (copied) */
+                rd_list_t on_commit;          /* .. (copied) */
+
+                /* rd_strtup_t list */
+                rd_list_t config;             /* Configuration name=val's
+                                               * handled by interceptors. */
+        } interceptors;
 
         /* Client group configuration */
         int    coord_query_intvl_ms;
@@ -120,6 +168,7 @@ struct rd_kafka_conf_s {
 	/*
 	 * Consumer configuration
 	 */
+        int    check_crcs;
 	int    queued_min_msgs;
         int    queued_max_msg_kbytes;
         int64_t queued_max_msg_bytes;
@@ -128,7 +177,6 @@ struct rd_kafka_conf_s {
 	int    fetch_min_bytes;
 	int    fetch_error_backoff_ms;
         char  *group_id_str;
-        rd_kafkap_str_t   *group_id;    /* Consumer group id */
 
         rd_kafka_pattern_list_t *topic_blacklist;
         struct rd_kafka_topic_conf_s *topic_conf; /* Default topic config
@@ -198,7 +246,15 @@ struct rd_kafka_conf_s {
         /* Consume callback */
         void (*consume_cb) (rd_kafka_message_t *rkmessage, void *opaque);
 
-	/* Error callback */
+        /* Log callback */
+        void (*log_cb) (const rd_kafka_t *rk, int level,
+                        const char *fac, const char *buf);
+        int    log_level;
+        int    log_queue;
+        int    log_thread_name;
+        int    log_connection_close;
+
+        /* Error callback */
 	void (*error_cb) (rd_kafka_t *rk, int err,
 			  const char *reason, void *opaque);
 
@@ -213,15 +269,18 @@ struct rd_kafka_conf_s {
 			 size_t json_len,
 			 void *opaque);
 
-        /* Log callback */
-        void (*log_cb) (const rd_kafka_t *rk, int level,
-                        const char *fac, const char *buf);
-        int    log_level;
-	int    log_thread_name;
-        int    log_connection_close;
-
         /* Socket creation callback */
         int (*socket_cb) (int domain, int type, int protocol, void *opaque);
+
+        /* Connect callback */
+        int (*connect_cb) (int sockfd,
+                           const struct sockaddr *addr,
+                           int addrlen,
+                           const char *id,
+                           void *opaque);
+
+        /* Close socket callback */
+        int (*closesocket_cb) (int sockfd, void *opaque);
 
 		/* File open callback */
         int (*open_cb) (const char *pathname, int flags, mode_t mode,

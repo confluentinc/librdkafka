@@ -58,7 +58,7 @@ class LibrdkafkaTestCluster(Cluster):
 
     def bootstrap_servers (self):
         """ @return Kafka bootstrap servers based on security.protocol """
-        all_listeners = (','.join(self.get_all('listeners', '', KafkaBrokerApp))).split(',')
+        all_listeners = (','.join(self.get_all('advertised_listeners', '', KafkaBrokerApp))).split(',')
         return ','.join([x for x in all_listeners if x.startswith(self.conf.get('security.protocol'))])
 
 

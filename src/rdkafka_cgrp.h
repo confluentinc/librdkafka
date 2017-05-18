@@ -137,10 +137,16 @@ typedef struct rd_kafka_cgrp_s {
                                                      *   subscription
                                                      * else:
                                                      *   static assignment */
+#define RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT  0x20  /* A Heartbeat request
+                                                     * is in transit, dont
+                                                     * send a new one. */
+#define RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION 0x40  /* Subscription contains
+                                                     * wildcards. */
 
         rd_interval_t      rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t      rkcg_heartbeat_intvl;    /* Heartbeat intvl */
         rd_interval_t      rkcg_join_intvl;         /* JoinGroup interval */
+        rd_interval_t      rkcg_timeout_scan_intvl; /* Timeout scanner */
 
         TAILQ_HEAD(, rd_kafka_topic_s)  rkcg_topics;/* Topics subscribed to */
 
@@ -201,6 +207,18 @@ typedef struct rd_kafka_cgrp_s {
 	rd_ts_t            rkcg_ts_terminate;       /* Timestamp of when
 						     * cgrp termination was
 						     * initiated. */
+
+        /* Protected by rd_kafka_*lock() */
+        struct {
+                rd_ts_t            ts_rebalance;       /* Timestamp of
+                                                        * last rebalance */
+                int                rebalance_cnt;      /* Number of
+                                                          rebalances */
+                int                assignment_size;    /* Partition count
+                                                        * of last rebalance
+                                                        * assignment */
+        } rkcg_c;
+
 } rd_kafka_cgrp_t;
 
 
@@ -243,9 +261,6 @@ void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg);
 void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 					   rd_kafka_resp_err_t err);
 
-void rd_kafka_cgrp_handle_Metadata (rd_kafka_cgrp_t *rkcg,
-                                    rd_kafka_resp_err_t err,
-                                    rd_kafka_metadata_t *md);
 void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
 				     rd_kafka_broker_t *rkb,
                                      rd_kafka_resp_err_t err,
@@ -256,6 +271,7 @@ int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg);
 
 void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 				const char *reason);
-void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg,
-					  const struct rd_kafka_metadata *md);
+void rd_kafka_cgrp_coord_dead (rd_kafka_cgrp_t *rkcg, rd_kafka_resp_err_t err,
+			       const char *reason);
+void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)

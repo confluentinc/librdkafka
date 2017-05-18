@@ -86,7 +86,7 @@ RdKafka::KafkaConsumerImpl::subscribe (const std::vector<std::string> &topics) {
   rd_kafka_topic_partition_list_t *c_topics;
   rd_kafka_resp_err_t err;
 
-  c_topics = rd_kafka_topic_partition_list_new(topics.size());
+  c_topics = rd_kafka_topic_partition_list_new((int)topics.size());
 
   for (unsigned int i = 0 ; i < topics.size() ; i++)
     rd_kafka_topic_partition_list_add(c_topics, topics[i].c_str(),
@@ -213,6 +213,28 @@ RdKafka::KafkaConsumerImpl::position (std::vector<RdKafka::TopicPartition*> &par
 
   return static_cast<RdKafka::ErrorCode>(err);
 }
+
+
+RdKafka::ErrorCode
+RdKafka::KafkaConsumerImpl::seek (const RdKafka::TopicPartition &partition,
+                                  int timeout_ms) {
+  const RdKafka::TopicPartitionImpl *p =
+    dynamic_cast<const RdKafka::TopicPartitionImpl*>(&partition);
+  rd_kafka_topic_t *rkt;
+
+  if (!(rkt = rd_kafka_topic_new(rk_, p->topic_.c_str(), NULL)))
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
+
+  /* FIXME: Use a C API that takes a topic_partition_list_t instead */
+  RdKafka::ErrorCode err =
+    static_cast<RdKafka::ErrorCode>
+    (rd_kafka_seek(rkt, p->partition_, p->offset_, timeout_ms));
+
+  rd_kafka_topic_destroy(rkt);
+
+  return err;
+}
+
 
 
 

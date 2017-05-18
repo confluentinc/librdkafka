@@ -183,13 +183,13 @@
  * Some extra functions for LIST manipulation
  */
 
-#define LIST_INSERT_SORTED(head, elm, headname, field, cmpfunc) do {	\
+#define LIST_INSERT_SORTED(head, elm, elmtype, field, cmpfunc) do {	\
         if(LIST_EMPTY(head)) {					\
            LIST_INSERT_HEAD(head, elm, field);			\
         } else {						\
-           struct headname *_tmp;					\
+           elmtype _tmp;					\
            LIST_FOREACH(_tmp,head,field) {			\
-              if(cmpfunc(elm,_tmp) <= 0) {			\
+              if(cmpfunc(elm,_tmp) < 0) {			\
                 LIST_INSERT_BEFORE(_tmp,elm,field);		\
                 break;						\
               }							\
@@ -202,13 +202,13 @@
 } while(0)
 
 #ifndef TAILQ_INSERT_SORTED
-#define TAILQ_INSERT_SORTED(head, elm, headname, field, cmpfunc) do {	\
+#define TAILQ_INSERT_SORTED(head, elm, elmtype, field, cmpfunc) do {	\
         if(TAILQ_FIRST(head) == NULL) {				\
            TAILQ_INSERT_HEAD(head, elm, field);			\
         } else {						\
-           struct headname *_tmp;					\
+           elmtype _tmp;					\
            TAILQ_FOREACH(_tmp,head,field) {			\
-              if(cmpfunc(elm,_tmp) <= 0) {			\
+              if(cmpfunc(elm,_tmp) < 0) {			\
                 TAILQ_INSERT_BEFORE(_tmp,elm,field);		\
                 break;						\
               }							\

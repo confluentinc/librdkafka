@@ -68,7 +68,15 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 	int32_t            rktp_partition;
         //LOCK: toppar_lock() + topic_wrlock()
         //LOCK: .. in partition_available()
-	rd_kafka_broker_t *rktp_leader;      /**< Current leader broker */
+        int32_t            rktp_leader_id;   /**< Current leader broker id.
+                                              *   This is updated directly
+                                              *   from metadata. */
+	rd_kafka_broker_t *rktp_leader;      /**< Current leader broker
+                                              *   This updated asynchronously
+                                              *   by issuing JOIN op to
+                                              *   broker thread, so be careful
+                                              *   in using this since it
+                                              *   may lag. */
         rd_kafka_broker_t *rktp_next_leader; /**< Next leader broker after
                                               *   async migration op. */
 	rd_refcnt_t        rktp_refcnt;
@@ -77,11 +85,10 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
         //LOCK: toppar_lock. Should move the lock inside the msgq instead
         //LOCK: toppar_lock. toppar_insert_msg(), concat_msgq()
         //LOCK: toppar_lock. toppar_enq_msg(), deq_msg(), insert_msgq()
+        int                rktp_msgq_wakeup_fd; /* Wake-up fd */
 	rd_kafka_msgq_t    rktp_msgq;      /* application->rdkafka queue.
 					    * protected by rktp_lock */
 	rd_kafka_msgq_t    rktp_xmit_msgq; /* internal broker xmit queue */
-
-	rd_ts_t            rktp_ts_last_xmit;
 
         int                rktp_fetch;     /* On rkb_fetch_toppars list */
 
@@ -212,6 +219,10 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_APP_PAUSE  0x10   /* App pause()d consumption */
 #define RD_KAFKA_TOPPAR_F_LIB_PAUSE  0x20   /* librdkafka paused consumption */
 #define RD_KAFKA_TOPPAR_F_REMOVE     0x40   /* partition removed from cluster */
+#define RD_KAFKA_TOPPAR_F_LEADER_ERR 0x80   /* Operation failed:
+                                             * leader might be missing.
+                                             * Typically set from
+                                             * ProduceResponse failure. */
 
         shptr_rd_kafka_toppar_t *rktp_s_for_desp; /* Shared pointer for
                                                    * rkt_desp list */
@@ -328,6 +339,7 @@ rd_kafka_toppar_get_avail (const rd_kafka_itopic_t *rkt,
 
 shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_get (rd_kafka_itopic_t *rkt,
                                                       int32_t partition);
+void rd_kafka_toppar_desired_add0 (rd_kafka_toppar_t *rktp);
 shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_add (rd_kafka_itopic_t *rkt,
                                                       int32_t partition);
 void rd_kafka_toppar_desired_link (rd_kafka_toppar_t *rktp);
@@ -388,7 +400,6 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 
 
 
-void rd_kafka_toppar_op_serve (rd_kafka_t *rk, rd_kafka_op_t *rko);
 void rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
 					    rd_kafka_toppar_t *rktp);
 
@@ -406,7 +417,9 @@ rd_kafka_assignor_find (rd_kafka_t *rk, const char *protocol);
 
 rd_kafka_broker_t *rd_kafka_toppar_leader (rd_kafka_toppar_t *rktp,
                                            int proper_broker);
-
+void rd_kafka_toppar_leader_unavailable (rd_kafka_toppar_t *rktp,
+                                         const char *reason,
+                                         rd_kafka_resp_err_t err);
 
 rd_kafka_resp_err_t
 rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
@@ -422,6 +435,11 @@ rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_list_add0 (rd_kafka_topic_partition_list_t *rktparlist,
                                     const char *topic, int32_t partition,
 				    shptr_rd_kafka_toppar_t *_private);
+
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_upsert (
+        rd_kafka_topic_partition_list_t *rktparlist,
+        const char *topic, int32_t partition);
 
 int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 				    const rd_kafka_group_member_t *rkgm,
@@ -445,16 +463,76 @@ int rd_kafka_topic_partition_list_count_abs_offsets (
 	const rd_kafka_topic_partition_list_t *rktparlist);
 
 shptr_rd_kafka_toppar_t *
+rd_kafka_topic_partition_get_toppar (rd_kafka_t *rk,
+                                     rd_kafka_topic_partition_t *rktpar);
+
+shptr_rd_kafka_toppar_t *
 rd_kafka_topic_partition_list_get_toppar (
-        rd_kafka_t *rk, rd_kafka_topic_partition_list_t *rktparlist, int idx);
+        rd_kafka_t *rk, rd_kafka_topic_partition_t *rktpar);
+
+void
+rd_kafka_topic_partition_list_update_toppars (rd_kafka_t *rk,
+                                              rd_kafka_topic_partition_list_t
+                                              *rktparlist);
+
+int
+rd_kafka_topic_partition_list_get_leaders (
+        rd_kafka_t *rk,
+        rd_kafka_topic_partition_list_t *rktparlist,
+        rd_list_t *leaders, rd_list_t *query_topics);
+
+rd_kafka_resp_err_t
+rd_kafka_topic_partition_list_query_leaders (
+        rd_kafka_t *rk,
+        rd_kafka_topic_partition_list_t *rktparlist,
+        rd_list_t *leaders, int timeout_ms);
+
+int
+rd_kafka_topic_partition_list_get_topics (
+        rd_kafka_t *rk,
+        rd_kafka_topic_partition_list_t *rktparlist,
+        rd_list_t *rkts);
+
+int
+rd_kafka_topic_partition_list_get_topic_names (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        rd_list_t *topics, int include_regex);
 
 void
 rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
 				   const rd_kafka_topic_partition_list_t *rktparlist);
 
+#define RD_KAFKA_FMT_F_OFFSET    0x1  /* Print offset */
+#define RD_KAFKA_FMT_F_ONLY_ERR  0x2  /* Only include errored entries */
+#define RD_KAFKA_FMT_F_NO_ERR    0x4  /* Dont print error string */
+const char *
+rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktparlist,
+                                   char *dest, size_t dest_size,
+                                   int fmt_flags);
+
 void
 rd_kafka_topic_partition_list_update (rd_kafka_topic_partition_list_t *dst,
                                       const rd_kafka_topic_partition_list_t *src);
+
+int rd_kafka_topic_partition_leader_cmp (const void *_a, const void *_b);
+
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_match (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        int (*match) (const void *elem, const void *opaque),
+        void *opaque);
+
+size_t
+rd_kafka_topic_partition_list_sum (
+        const rd_kafka_topic_partition_list_t *rktparlist,
+        size_t (*cb) (const rd_kafka_topic_partition_t *rktpar, void *opaque),
+        void *opaque);
+
+void rd_kafka_topic_partition_list_set_err (
+        rd_kafka_topic_partition_list_t *rktparlist,
+        rd_kafka_resp_err_t err);
+
+int rd_kafka_topic_partition_list_regex_cnt (
+        const rd_kafka_topic_partition_list_t *rktparlist);
 
 /**
  * @brief Toppar + Op version tuple used for mapping Fetched partitions
@@ -517,3 +595,34 @@ rd_kafka_toppar_offset_commit_result (rd_kafka_toppar_t *rktp,
 				      rd_kafka_topic_partition_list_t *offsets);
 
 void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp);
+
+
+/**
+ * @brief Represents a leader and the partitions it is leader for.
+ */
+struct rd_kafka_partition_leader {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_topic_partition_list_t *partitions;
+};
+
+static RD_UNUSED void
+rd_kafka_partition_leader_destroy (struct rd_kafka_partition_leader *leader) {
+        rd_kafka_broker_destroy(leader->rkb);
+        rd_kafka_topic_partition_list_destroy(leader->partitions);
+        rd_free(leader);
+}
+
+static RD_UNUSED struct rd_kafka_partition_leader *
+rd_kafka_partition_leader_new (rd_kafka_broker_t *rkb) {
+        struct rd_kafka_partition_leader *leader = rd_malloc(sizeof(*leader));
+        leader->rkb = rkb;
+        rd_kafka_broker_keep(rkb);
+        leader->partitions = rd_kafka_topic_partition_list_new(0);
+        return leader;
+}
+
+static RD_UNUSED
+int rd_kafka_partition_leader_cmp (const void *_a, const void *_b) {
+        const struct rd_kafka_partition_leader *a = _a, *b = _b;
+        return rd_kafka_broker_cmp(a->rkb, b->rkb);
+}

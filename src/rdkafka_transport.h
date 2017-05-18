@@ -48,7 +48,7 @@ int rd_kafka_transport_framed_recvmsg (rd_kafka_transport_t *rktrans,
 				       char *errstr, size_t errstr_size);
 struct rd_kafka_broker_s;
 rd_kafka_transport_t *rd_kafka_transport_connect(struct rd_kafka_broker_s *rkb, const rd_sockaddr_inx_t *sinx,
-	char *errstr, int errstr_size);
+                                                 char *errstr, size_t errstr_size);
 void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
 				      char *errstr);
 

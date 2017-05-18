@@ -82,7 +82,7 @@ static void rd_kafka_timer_schedule (rd_kafka_timers_t *rkts,
                 cnd_signal(&rkts->rkts_cond);
 	} else
 		TAILQ_INSERT_SORTED(&rkts->rkts_timers, rtmr,
-                                    rd_kafka_timer_s, rtmr_link,
+                                    rd_kafka_timer_t *, rtmr_link,
 				    rd_kafka_timer_cmp);
 }
 
@@ -119,7 +119,7 @@ void rd_kafka_timer_stop (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
  * Use rd_kafka_timer_stop() to stop a timer.
  */
 void rd_kafka_timer_start (rd_kafka_timers_t *rkts,
-			   rd_kafka_timer_t *rtmr, int interval,
+			   rd_kafka_timer_t *rtmr, rd_ts_t interval,
 			   void (*callback) (rd_kafka_timers_t *rkts, void *arg),
 			   void *arg) {
 	rd_kafka_timers_lock(rkts);
@@ -146,6 +146,31 @@ void rd_kafka_timer_backoff (rd_kafka_timers_t *rkts,
 		rd_kafka_timer_unschedule(rkts, rtmr);
 	rd_kafka_timer_schedule(rkts, rtmr, backoff_us);
 	rd_kafka_timers_unlock(rkts);
+}
+
+
+/**
+ * @returns the delta time to the next time (>=0) this timer fires, or -1
+ *          if timer is stopped.
+ */
+rd_ts_t rd_kafka_timer_next (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
+                             int do_lock) {
+        rd_ts_t now = rd_clock();
+        rd_ts_t delta = -1;
+
+        if (do_lock)
+                rd_kafka_timers_lock(rkts);
+
+        if (rd_kafka_timer_scheduled(rtmr)) {
+                delta = rtmr->rtmr_next - now;
+                if (delta < 0)
+                        delta = 0;
+        }
+
+        if (do_lock)
+                rd_kafka_timers_unlock(rkts);
+
+        return delta;
 }
 
 

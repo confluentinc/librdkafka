@@ -108,8 +108,11 @@
 
 
 
-
-#ifndef be64toh
+/*
+ * On Solaris, be64toh is a function, not a macro, so there's no need to error
+ * if it's not defined.
+ */
+#if !defined(__sun) && !defined(be64toh)
 #error Missing definition for be64toh
 #endif
 

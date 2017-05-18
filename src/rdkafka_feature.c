@@ -116,42 +116,52 @@ static const struct rd_kafka_feature_map {
 			{ -1 },
 		},
 
-	},
-	{
-		/* @brief >=0.9.0: SASL (GSSAPI) authentication.
-		 * Since SASL is not using the Kafka protocol
-		 * we must use something else to map us to the
-		 * proper broker version support:
-		 * JoinGroup was released along with SASL in 0.9.0. */
-		.feature = RD_KAFKA_FEATURE_SASL,
-		.depends = {
-			{ RD_KAFKAP_JoinGroup, 0, 0 },
-			{ -1 },
-		},
-	},
-	{
-		/* @brief >=0.10.0: SASL mechanism handshake (KIP-43) */
-		.feature = RD_KAFKA_FEATURE_SASL_HANDSHAKE,
-		.depends = {
-			{ RD_KAFKAP_SaslHandshake, 0, 0 },
-			{ -1 },
-		},
-	},
-	{
-		/* @brief >=0.8.2: LZ4 compression.
-		 * Since LZ4 initially did not rely on a specific API
-		 * type or version (it does in >=0.10.0)
-		 * we must use something else to map us to the
-		 * proper broker version support:
-		 * GrooupCoordinator was released in 0.8.2 */
-		.feature = RD_KAFKA_FEATURE_LZ4,
-		.depends = {
-			{ RD_KAFKAP_GroupCoordinator, 0, 0 },
-			{ -1 },
-		},
-	},
-
-	{ .feature = 0 }, /* sentinel */
+        },
+        {
+                /* @brief >=0.9.0: SASL (GSSAPI) authentication.
+                 * Since SASL is not using the Kafka protocol
+                 * we must use something else to map us to the
+                 * proper broker version support:
+                 * JoinGroup was released along with SASL in 0.9.0. */
+                .feature = RD_KAFKA_FEATURE_SASL_GSSAPI,
+                .depends = {
+                        { RD_KAFKAP_JoinGroup, 0, 0 },
+                        { -1 },
+                },
+        },
+        {
+                /* @brief >=0.10.0: SASL mechanism handshake (KIP-43)
+                 *                  to automatically support other mechanisms
+                 *                  than GSSAPI, such as PLAIN. */
+                .feature = RD_KAFKA_FEATURE_SASL_HANDSHAKE,
+                .depends = {
+                        { RD_KAFKAP_SaslHandshake, 0, 0 },
+                        { -1 },
+                },
+        },
+        {
+                /* @brief >=0.8.2: LZ4 compression.
+                 * Since LZ4 initially did not rely on a specific API
+                 * type or version (it does in >=0.10.0)
+                 * we must use something else to map us to the
+                 * proper broker version support:
+                 * GrooupCoordinator was released in 0.8.2 */
+                .feature = RD_KAFKA_FEATURE_LZ4,
+                .depends = {
+                        { RD_KAFKAP_GroupCoordinator, 0, 0 },
+                        { -1 },
+                },
+        },
+        {
+                /* @brief >=0.10.1.0: Offset v1 (KIP-79)
+                 * Time-based offset requests */
+                .feature = RD_KAFKA_FEATURE_OFFSET_TIME,
+                .depends = {
+                        { RD_KAFKAP_Offset, 1, 1 },
+                        { -1 },
+                }
+        },
+        { .feature = 0 }, /* sentinel */
 };
 
 
@@ -246,6 +256,10 @@ int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 	};
 	int i;
 	int fallback_i = -1;
+        int ret = 0;
+
+        *apisp = NULL;
+        *api_cntp = 0;
 
 	for (i = 0 ; vermap[i].pfx ; i++) {
 		if (!strncmp(vermap[i].pfx, broker_version, strlen(vermap[i].pfx))) {
@@ -253,19 +267,19 @@ int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 				return 0;
 			*apisp = vermap[i].apis;
 			*api_cntp = vermap[i].api_cnt;
-			return 1;
+                        ret = 1;
+                        break;
 		} else if (fallback && !strcmp(vermap[i].pfx, fallback))
 			fallback_i = i;
 	}
 
-	if (fallback) {
+	if (!*apisp && fallback) {
 		rd_kafka_assert(NULL, fallback_i != -1);
 		*apisp    = vermap[fallback_i].apis;
 		*api_cntp = vermap[fallback_i].api_cnt;
-		return 0;
 	}
 
-	return 0;
+        return ret;
 }
 
 
@@ -326,10 +340,6 @@ int rd_kafka_features_check (rd_kafka_broker_t *rkb,
 	int features = 0;
 	int i;
 
-	/* Sort broker_apis for faster lookups. */
-	qsort(broker_apis, broker_api_cnt, sizeof(*broker_apis),
-	      rd_kafka_ApiVersion_key_cmp);
-
 	/* Scan through features. */
 	for (i = 0 ; rd_kafka_feature_map[i].feature != 0 ; i++) {
 		const struct rd_kafka_ApiVersion *match;
@@ -373,12 +383,16 @@ int rd_kafka_features_check (rd_kafka_broker_t *rkb,
 
 
 /**
- * @brief Make an allocated copy of \p src.
+ * @brief Make an allocated and sorted copy of \p src.
  */
-void rd_kafka_ApiVersions_copy (const struct rd_kafka_ApiVersion *src, size_t src_cnt,
-				struct rd_kafka_ApiVersion **dstp, size_t *dst_cntp) {
-	*dstp = rd_memdup(src, sizeof(*src) * src_cnt);
-	*dst_cntp = src_cnt;
+void
+rd_kafka_ApiVersions_copy (const struct rd_kafka_ApiVersion *src,
+                           size_t src_cnt,
+                           struct rd_kafka_ApiVersion **dstp,
+                           size_t *dst_cntp) {
+        *dstp = rd_memdup(src, sizeof(*src) * src_cnt);
+        *dst_cntp = src_cnt;
+        qsort(*dstp, *dst_cntp, sizeof(**dstp), rd_kafka_ApiVersion_key_cmp);
 }
 
 

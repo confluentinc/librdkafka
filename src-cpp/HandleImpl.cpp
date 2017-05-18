@@ -32,6 +32,15 @@
 
 #include "rdkafkacpp_int.h"
 
+void RdKafka::consume_cb_trampoline(rd_kafka_message_t *msg, void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+  RdKafka::Topic* topic = static_cast<Topic *>(rd_kafka_topic_opaque(msg->rkt));
+
+  RdKafka::MessageImpl message(topic, msg, false /*don't free*/);
+
+  handle->consume_cb_->consume_cb(message, opaque);
+}
+
 void RdKafka::log_cb_trampoline (const rd_kafka_t *rk, int level,
                                  const char *fac, const char *buf) {
   if (!rk) {
@@ -171,20 +180,29 @@ RdKafka::rebalance_cb_trampoline (rd_kafka_t *rk,
 
 
 void
-RdKafka::offset_commit_cb_trampoline (
+RdKafka::offset_commit_cb_trampoline0 (
     rd_kafka_t *rk,
     rd_kafka_resp_err_t err,
     rd_kafka_topic_partition_list_t *c_offsets, void *opaque) {
-  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+  OffsetCommitCb *cb = static_cast<RdKafka::OffsetCommitCb *>(opaque);
   std::vector<RdKafka::TopicPartition*> offsets;
 
   if (c_offsets)
     c_parts_to_partitions(c_offsets, offsets);
 
-  handle->offset_commit_cb_->
-      offset_commit_cb(static_cast<RdKafka::ErrorCode>(err), offsets);
+  cb->offset_commit_cb(static_cast<RdKafka::ErrorCode>(err), offsets);
 
   free_partition_vector(offsets);
+}
+
+static void
+offset_commit_cb_trampoline (
+    rd_kafka_t *rk,
+    rd_kafka_resp_err_t err,
+    rd_kafka_topic_partition_list_t *c_offsets, void *opaque) {
+  RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+  RdKafka::offset_commit_cb_trampoline0(rk, err, c_offsets,
+                                        handle->offset_commit_cb_);
 }
 
 
@@ -225,8 +243,14 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
 
   if (confimpl->offset_commit_cb_) {
     rd_kafka_conf_set_offset_commit_cb(confimpl->rk_conf_,
-                                   RdKafka::offset_commit_cb_trampoline);
+                                       offset_commit_cb_trampoline);
     offset_commit_cb_ = confimpl->offset_commit_cb_;
+  }
+
+  if (confimpl->consume_cb_) {
+    rd_kafka_conf_set_consume_cb(confimpl->rk_conf_,
+                                 RdKafka::consume_cb_trampoline);
+    consume_cb_ = confimpl->consume_cb_;
   }
 
 }
@@ -267,6 +291,32 @@ RdKafka::HandleImpl::resume (std::vector<RdKafka::TopicPartition*> &partitions) 
   return static_cast<RdKafka::ErrorCode>(err);
 }
 
+RdKafka::Queue *
+RdKafka::HandleImpl::get_partition_queue (const TopicPartition *part) {
+  rd_kafka_queue_t *rkqu;
+  rkqu = rd_kafka_queue_get_partition(rk_,
+                                      part->topic().c_str(),
+                                      part->partition());
+
+  if (rkqu == NULL)
+    return NULL;
+
+  RdKafka::QueueImpl *queueimpl = new RdKafka::QueueImpl;
+  queueimpl->queue_ = rkqu;
+
+  return queueimpl;
+}
+
+RdKafka::ErrorCode
+RdKafka::HandleImpl::set_log_queue (RdKafka::Queue *queue) {
+        rd_kafka_queue_t *rkqu = NULL;
+        if (queue) {
+                QueueImpl *queueimpl = dynamic_cast<QueueImpl *>(queue);
+                rkqu = queueimpl->queue_;
+        }
+        return static_cast<RdKafka::ErrorCode>(
+                rd_kafka_set_log_queue(rk_, rkqu));
+}
 
 namespace RdKafka {
 
@@ -274,7 +324,7 @@ rd_kafka_topic_partition_list_t *
 partitions_to_c_parts (const std::vector<RdKafka::TopicPartition*> &partitions){
   rd_kafka_topic_partition_list_t *c_parts;
 
-  c_parts = rd_kafka_topic_partition_list_new(partitions.size());
+  c_parts = rd_kafka_topic_partition_list_new((int)partitions.size());
 
   for (unsigned int i = 0 ; i < partitions.size() ; i++) {
     const RdKafka::TopicPartitionImpl *tpi =

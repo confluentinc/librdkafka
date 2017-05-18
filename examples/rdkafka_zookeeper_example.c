@@ -532,6 +532,9 @@ int main (int argc, char **argv) {
 		exit(1);
 	}
 
+        /* Set logger */
+        rd_kafka_conf_set_log_cb(conf, logger);
+
 	/** Initialize zookeeper */
 	zh = initialize_zookeeper(zookeeper, debug != NULL);
 
@@ -568,10 +571,6 @@ int main (int argc, char **argv) {
 				errstr);
 			exit(1);
 		}
-
-		/* Set logger */
-		rd_kafka_set_logger(rk, logger);
-		rd_kafka_set_log_level(rk, LOG_DEBUG);
 
 		/* Create topic */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
@@ -640,10 +639,6 @@ int main (int argc, char **argv) {
 			exit(1);
 		}
 
-		/* Set logger */
-		rd_kafka_set_logger(rk, logger);
-		rd_kafka_set_log_level(rk, LOG_DEBUG);
-
 		/* Create topic */
 		rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 
@@ -688,10 +683,6 @@ int main (int argc, char **argv) {
 				errstr);
 			exit(1);
 		}
-
-		/* Set logger */
-		rd_kafka_set_logger(rk, logger);
-		rd_kafka_set_log_level(rk, LOG_DEBUG);
 
 		/* Create topic */
 		if (topic)

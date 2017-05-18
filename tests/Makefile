@@ -3,12 +3,13 @@ TESTSRCS_CXX= $(wildcard 0*-*.cpp)
 OBJS	  = $(TESTSRCS_C:%.c=%.o) $(TESTSRCS_CXX:%.cpp=%.o)
 
 BIN	  = merged
-LIBS	 += -lrdkafka
-OBJS	 += test.o tinycthread.o
+LIBS	 += -lrdkafka++ -lrdkafka -lstdc++
+OBJS	 += test.o testcpp.o tinycthread.o rdlist.o sockem.o
 CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -L../src -L../src-cpp
 
+KAFKA_VERSION?=0.10.2.0
 
 -include ../Makefile.config
 
@@ -20,8 +21,8 @@ trunk: build
 
 # Run the full test suite(s)
 full: build
-	./broker_version_tests.py
-	./sasl_test.py
+	./broker_version_tests.py $(KAFKA_VERSION)
+	./sasl_test.py $(KAFKA_VERSION)
 
 run_par: $(BIN)
 	@echo "Running tests in parallel"
@@ -35,9 +36,15 @@ run_local: $(BIN)
 	@echo "Running local broker-less tests"
 	./run-test.sh -p5 -l ./$(BIN)
 
-build: $(BIN)
+.PHONY: interceptor_test
 
-test.o: ../src/librdkafka.a
+interceptor_test:
+	$(MAKE) -C $@
+
+build: $(BIN) interceptor_test
+
+test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
+
 
 
 include ../mklove/Makefile.base
@@ -45,10 +52,13 @@ include ../mklove/Makefile.base
 tinycthread.o: ../src/tinycthread.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
+rdlist.o: ../src/rdlist.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
+
 
 clean:
 	rm -f *.test $(OBJS) $(BIN)
-
+	$(MAKE) -C interceptor_test clean
 
 clean-output:
 	# Clean test output files
@@ -56,3 +66,6 @@ clean-output:
 
 realclean: clean clean-output
 	rm -f test_report_*.json
+
+00%:
+	TESTS=$@ ./run-test.sh ./$(BIN)

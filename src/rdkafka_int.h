@@ -47,6 +47,7 @@ typedef int mode_t;
 #include "rdaddr.h"
 #include "rdinterval.h"
 #include "rdavg.h"
+#include "rdlist.h"
 
 #if WITH_SSL
 #include <openssl/ssl.h>
@@ -103,12 +104,14 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 #include "rdkafka_transport.h"
 #include "rdkafka_timer.h"
 #include "rdkafka_assignor.h"
+#include "rdkafka_metadata.h"
+
 
 /**
  * Protocol level sanity
  */
 #define RD_KAFKAP_BROKERS_MAX     1000
-#define RD_KAFKAP_TOPICS_MAX      10000
+#define RD_KAFKAP_TOPICS_MAX      1000000
 #define RD_KAFKAP_PARTITIONS_MAX  10000
 
 
@@ -131,6 +134,7 @@ struct rd_kafka_s {
 	rd_kafka_q_t *rk_ops;   /* any -> rdkafka main thread ops */
 
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
+        rd_list_t                  rk_broker_by_id; /* Fast id lookups. */
 	rd_atomic32_t              rk_broker_cnt;
 	rd_atomic32_t              rk_broker_down_cnt;
         mtx_t                      rk_internal_rkb_lock;
@@ -148,9 +152,12 @@ struct rd_kafka_s {
 
         struct rd_kafka_cgrp_s *rk_cgrp;
 
-	char             rk_name[128];
-	rd_kafkap_str_t *rk_clientid;
-	rd_kafka_conf_t  rk_conf;
+        rd_kafka_conf_t  rk_conf;
+        rd_kafka_q_t    *rk_logq;          /* Log queue if `log.queue` set */
+        char             rk_name[128];
+	rd_kafkap_str_t *rk_client_id;
+        rd_kafkap_str_t *rk_group_id;    /* Consumer group id */
+
 	int              rk_flags;
 	rd_atomic32_t    rk_terminate;
 	rwlock_t         rk_lock;
@@ -166,6 +173,9 @@ struct rd_kafka_s {
 
 	struct rd_kafka_metadata *rk_full_metadata; /* Last full metadata. */
 	rd_ts_t          rk_ts_full_metadata;       /* Timesstamp of .. */
+        struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
+
+        char            *rk_clusterid;      /* ClusterId from metadata */
 
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,
@@ -186,6 +196,8 @@ struct rd_kafka_s {
 
         rd_kafka_timers_t rk_timers;
 	thrd_t rk_thread;
+
+        int rk_initialized;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)
@@ -213,8 +225,8 @@ rd_kafka_curr_msgs_add (rd_kafka_t *rk, unsigned int cnt, size_t size,
 	mtx_lock(&rk->rk_curr_msgs.lock);
 	while (unlikely(rk->rk_curr_msgs.cnt + cnt >
 			rk->rk_curr_msgs.max_cnt ||
-			rk->rk_curr_msgs.size + size >
-			rk->rk_curr_msgs.max_size)) {
+			(unsigned long long)(rk->rk_curr_msgs.size + size) >
+			(unsigned long long)rk->rk_curr_msgs.max_size)) {
 		if (!block) {
 			mtx_unlock(&rk->rk_curr_msgs.lock);
 			return RD_KAFKA_RESP_ERR__QUEUE_FULL;
@@ -325,30 +337,41 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 /**
  * Debug contexts
  */
-#define RD_KAFKA_DBG_GENERIC    0x1
-#define RD_KAFKA_DBG_BROKER     0x2
-#define RD_KAFKA_DBG_TOPIC      0x4
-#define RD_KAFKA_DBG_METADATA   0x8
-#define RD_KAFKA_DBG_FEATURE    0x10
-#define RD_KAFKA_DBG_QUEUE      0x20
-#define RD_KAFKA_DBG_MSG        0x40
-#define RD_KAFKA_DBG_PROTOCOL   0x80
-#define RD_KAFKA_DBG_CGRP       0x100
-#define RD_KAFKA_DBG_SECURITY   0x200
-#define RD_KAFKA_DBG_FETCH      0x400
-#define RD_KAFKA_DBG_ALL        0xfff
+#define RD_KAFKA_DBG_GENERIC        0x1
+#define RD_KAFKA_DBG_BROKER         0x2
+#define RD_KAFKA_DBG_TOPIC          0x4
+#define RD_KAFKA_DBG_METADATA       0x8
+#define RD_KAFKA_DBG_FEATURE        0x10
+#define RD_KAFKA_DBG_QUEUE          0x20
+#define RD_KAFKA_DBG_MSG            0x40
+#define RD_KAFKA_DBG_PROTOCOL       0x80
+#define RD_KAFKA_DBG_CGRP           0x100
+#define RD_KAFKA_DBG_SECURITY       0x200
+#define RD_KAFKA_DBG_FETCH          0x400
+#define RD_KAFKA_DBG_INTERCEPTOR    0x800
+#define RD_KAFKA_DBG_PLUGIN         0x1000
+#define RD_KAFKA_DBG_ALL            0xffff
 
 
-void rd_kafka_log_buf (const rd_kafka_t *rk, int level,
-		       const char *fac, const char *buf);
-void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
-	const char *fac, const char *fmt, ...)	RD_FORMAT(printf, 5, 6);
+void rd_kafka_log0(const rd_kafka_conf_t *conf,
+                   const rd_kafka_t *rk, const char *extra, int level,
+                   const char *fac, const char *fmt, ...) RD_FORMAT(printf,
+                                                                    6, 7);
 
-#define rd_kafka_log(rk,level,fac,...) rd_kafka_log0(rk,NULL,level,fac,__VA_ARGS__)
-#define rd_kafka_dbg(rk,ctx,fac,...) do {				  \
-		if (unlikely((rk)->rk_conf.debug & (RD_KAFKA_DBG_ ## ctx))) \
-			rd_kafka_log0(rk,NULL,LOG_DEBUG,fac,__VA_ARGS__); \
-	} while (0)
+#define rd_kafka_log(rk,level,fac,...) \
+        rd_kafka_log0(&rk->rk_conf, rk, NULL, level, fac, __VA_ARGS__)
+#define rd_kafka_dbg(rk,ctx,fac,...) do {                               \
+                if (unlikely((rk)->rk_conf.debug & (RD_KAFKA_DBG_ ## ctx))) \
+                        rd_kafka_log0(&rk->rk_conf,rk,NULL,             \
+                                      LOG_DEBUG,fac,__VA_ARGS__);       \
+        } while (0)
+
+/* dbg() not requiring an rk, just the conf object, for early logging */
+#define rd_kafka_dbg0(conf,ctx,fac,...) do {                            \
+                if (unlikely((conf)->debug & (RD_KAFKA_DBG_ ## ctx)))   \
+                        rd_kafka_log0(conf,NULL,NULL,                   \
+                                      LOG_DEBUG,fac,__VA_ARGS__);       \
+        } while (0)
 
 /* NOTE: The local copy of _logname is needed due rkb_logname_lock lock-ordering
  *       when logging another broker's name in the message. */
@@ -358,7 +381,8 @@ void rd_kafka_log0(const rd_kafka_t *rk, const char *extra, int level,
 		strncpy(_logname, rkb->rkb_logname, sizeof(_logname)-1); \
 		_logname[RD_KAFKA_NODENAME_SIZE-1] = '\0';		\
                 mtx_unlock(&(rkb)->rkb_logname_lock);                   \
-		rd_kafka_log0((rkb)->rkb_rk, _logname,			\
+		rd_kafka_log0(&(rkb)->rkb_rk->rk_conf, \
+                              (rkb)->rkb_rk, _logname,                  \
                               level, fac, __VA_ARGS__);                 \
         } while (0)
 
@@ -395,8 +419,9 @@ extern char RD_TLS rd_kafka_thread_name[64];
 
 int rd_kafka_path_is_dir (const char *path);
 
-int rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_op_t *rko,
-                      int cb_type, void *opaque);
+rd_kafka_op_res_t
+rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
+                  rd_kafka_q_cb_type_t cb_type, void *opaque);
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
 

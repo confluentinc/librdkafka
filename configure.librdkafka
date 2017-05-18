@@ -30,37 +30,58 @@ mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Ena
 
 mkl_toggle_option "Development" ENABLE_SHAREDPTR_DEBUG "--enable-sharedptr-debug" "Enable sharedptr debugging" "n"
 
+mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Enable external LZ4 library support" "y"
+
 mkl_toggle_option "Feature" ENABLE_SSL "--enable-ssl" "Enable SSL support" "y"
-mkl_toggle_option "Feature" ENABLE_SASL "--enable-sasl" "Enable SASL support" "y"
+mkl_toggle_option "Feature" ENABLE_SASL "--enable-sasl" "Enable SASL support with Cyrus libsasl2" "y"
 
 
 function checks {
 
     # required libs
-    mkl_lib_check "libpthread" "" fail CC "-lpthread"
+    mkl_lib_check "libpthread" "" fail CC "-lpthread" \
+                  "#include <pthread.h>"
 
     # optional libs
-    mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz"
+    mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz" \
+                  "#include <zlib.h>"
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
-    mkl_lib_check "liblz4" "WITH_LZ4" disable CC "-llz4" \
-		  "
-#include <lz4frame.h>
-"
+
+    if [[ "$ENABLE_LZ4_EXT" == "y" ]]; then
+        mkl_lib_check --static=-llz4 "liblz4" "WITH_LZ4_EXT" disable CC "-llz4" \
+                      "#include <lz4frame.h>"
+    fi
 
     # Snappy support is built-in
     mkl_allvar_set WITH_SNAPPY WITH_SNAPPY y
 
+    # Enable sockem (tests)
+    mkl_allvar_set WITH_SOCKEM WITH_SOCKEM y
+
     if [[ "$ENABLE_SSL" == "y" ]]; then
 	mkl_meta_set "libssl" "deb" "libssl-dev"
-	mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl"
+        if [[ $MKL_DISTRO == "osx" ]]; then
+            # Add brew's OpenSSL pkg-config path on OSX
+            export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/opt/openssl/lib/pkgconfig"
+        fi
+	mkl_lib_check "libssl" "WITH_SSL" disable CC "-lssl" \
+                      "#include <openssl/ssl.h>"
     fi
 
     if [[ "$ENABLE_SASL" == "y" ]]; then
         mkl_meta_set "libsasl2" "deb" "libsasl2-dev"
-        if ! mkl_lib_check "libsasl2" "WITH_SASL" disable CC "-lsasl2"; then
-	    mkl_lib_check "libsasl" "WITH_SASL" disable CC "-lsasl"
+        if ! mkl_lib_check "libsasl2" "WITH_SASL_CYRUS" disable CC "-lsasl2" "#include <sasl/sasl.h>" ; then
+	    mkl_lib_check "libsasl" "WITH_SASL_CYRUS" disable CC "-lsasl" \
+                          "#include <sasl/sasl.h>"
         fi
     fi
+
+    if [[ "$WITH_SSL" == "y" ]]; then
+        # SASL SCRAM requires base64 encoding from OpenSSL
+        mkl_allvar_set WITH_SASL_SCRAM WITH_SASL_SCRAM y
+    fi
+
+
 
     # Check for libc regex
     mkl_compile_check "regex" "HAVE_REGEX" disable CC "" \
@@ -84,6 +105,9 @@ void foo (void) {
     # Required on SunOS
     if [[ $MKL_DISTRO == "SunOS" ]]; then
 	mkl_mkvar_append CPPFLAGS CPPFLAGS "-D_POSIX_PTHREAD_SEMANTICS -D_REENTRANT -D__EXTENSIONS__"
+	# Source defines _POSIX_C_SOURCE to 200809L for Solaris, and this is
+	# incompatible on that platform with compilers < c99.
+	mkl_mkvar_append CFLAGS CFLAGS "-std=c99"
     fi
 
     # Check if strndup() is available (isn't on Solaris 10)
@@ -92,6 +116,23 @@ void foo (void) {
 int foo (void) {
    return strndup(\"hi\", 2) ? 0 : 1;
 }"
+
+    # Check if dlopen() is available
+    mkl_lib_check "libdl" "WITH_LIBDL" disable CC "-ldl" \
+"
+#include <stdlib.h>
+#include <dlfcn.h>
+void foo (void) {
+   void *h = dlopen(\"__bad_lib\", 0);
+   void *p = dlsym(h, \"sym\");
+   if (p)
+     p = NULL;
+   dlclose(h);
+}"
+
+    if [[ $WITH_LIBDL == "y" ]]; then
+        mkl_allvar_set WITH_PLUGINS WITH_PLUGINS y
+    fi
 
     # Figure out what tool to use for dumping public symbols.
     # We rely on configure.cc setting up $NM if it exists.

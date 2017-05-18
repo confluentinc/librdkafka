@@ -66,7 +66,7 @@ static int do_test_consume_batch (void) {
 
 
         /* Create simple consumer */
-        rk = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
+        rk = test_create_consumer(NULL, NULL, NULL, NULL);
 
         /* Create generic consume queue */
         rkq = rd_kafka_queue_new(rk);
@@ -113,7 +113,7 @@ static int do_test_consume_batch (void) {
                         TEST_FAIL("Failed to consume messages: %s\n",
                                   rd_kafka_err2str(rd_kafka_errno2err(errno)));
 
-                remains -= r;
+                remains -= (int)r;
 
                 for (i = 0 ; i < r ; i++)
                         rd_kafka_message_destroy(rkmessage[i]);

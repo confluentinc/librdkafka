@@ -48,6 +48,27 @@ rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk) {
 }
 
 
+/** @returns 1 if the topic is invalid (bad regex, empty), else 0 if valid. */
+static size_t _invalid_topic_cb (const rd_kafka_topic_partition_t *rktpar,
+                                 void *opaque) {
+        rd_regex_t *re;
+        char errstr[1];
+
+        if (!*rktpar->topic)
+                return 1;
+
+        if (*rktpar->topic != '^')
+                return 0;
+
+        if (!(re = rd_regex_comp(rktpar->topic, errstr, sizeof(errstr))))
+                return 1;
+
+        rd_regex_destroy(re);
+
+        return 0;
+}
+
+
 rd_kafka_resp_err_t
 rd_kafka_subscribe (rd_kafka_t *rk,
                     const rd_kafka_topic_partition_list_t *topics) {
@@ -57,6 +78,12 @@ rd_kafka_subscribe (rd_kafka_t *rk,
 
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+
+        /* Validate topics */
+        if (topics->cnt == 0 ||
+            rd_kafka_topic_partition_list_sum(topics,
+                                              _invalid_topic_cb, NULL) > 0)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
 	rko->rko_u.subscribe.topics = rd_kafka_topic_partition_list_copy(topics);

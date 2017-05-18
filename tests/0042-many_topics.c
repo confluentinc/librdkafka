@@ -99,7 +99,7 @@ static void legacy_consume_many (char **topics, int topic_cnt, uint64_t testid){
 
 	test_conf_init(NULL, NULL, 60);
 
-	rk = test_create_consumer(NULL, NULL, NULL, NULL, NULL);
+	rk = test_create_consumer(NULL, NULL, NULL, NULL);
 
 	TEST_SAY("Creating %d topic objects\n", topic_cnt);
 		 
@@ -151,7 +151,7 @@ static void subscribe_consume_many (char **topics, int topic_cnt,
 
 	test_conf_init(NULL, &tconf, 60);
 	test_topic_conf_set(tconf, "auto.offset.reset", "earliest");
-	rk = test_create_consumer(__FUNCTION__, NULL, NULL, tconf, NULL);
+	rk = test_create_consumer(__FUNCTION__, NULL, NULL, tconf);
 
 	parts = rd_kafka_topic_partition_list_new(topic_cnt);
 	for (i = 0 ; i < topic_cnt ; i++)
@@ -191,7 +191,7 @@ static void assign_consume_many (char **topics, int topic_cnt, uint64_t testid){
 	TEST_SAY(_C_MAG "%s\n" _C_CLR, __FUNCTION__);
 
 	test_conf_init(NULL, NULL, 60);
-	rk = test_create_consumer(__FUNCTION__, NULL, NULL, NULL, NULL);
+	rk = test_create_consumer(__FUNCTION__, NULL, NULL, NULL);
 
 	parts = rd_kafka_topic_partition_list_new(topic_cnt);
 	for (i = 0 ; i < topic_cnt ; i++)

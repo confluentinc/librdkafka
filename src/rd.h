@@ -123,14 +123,6 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 }
 
 
-char *rd_string_render (const char *template,
-			char *errstr, size_t errstr_size,
-			ssize_t (*callback) (const char *key,
-					     char *buf, size_t size,
-					     void *opaque),
-			void *opaque);
-
-
 
 /*
  * Portability
@@ -213,7 +205,10 @@ static RD_INLINE RD_UNUSED void *rd_memdup (const void *src, size_t size) {
 /**
  * Generic refcnt interface
  */
+#ifndef _MSC_VER
+/* Mutexes (critical sections) are slow, even when uncontended, on Windows */
 #define RD_REFCNT_USE_LOCKS 1
+#endif
 
 #ifdef RD_REFCNT_USE_LOCKS
 typedef struct rd_refcnt_t {
@@ -433,3 +428,13 @@ void rd_shared_ptrs_dump (void);
 
 
 #define RD_IF_FREE(PTR,FUNC) do { if ((PTR)) FUNC(PTR); } while (0)
+
+
+/**
+ * @brief Utility types to hold memory,size tuple.
+ */
+
+typedef struct rd_chariov_s {
+        char  *ptr;
+        size_t size;
+} rd_chariov_t;

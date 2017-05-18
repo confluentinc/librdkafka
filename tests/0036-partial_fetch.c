@@ -70,7 +70,7 @@ int main_0036_partial_fetch (int argc, char **argv) {
 	 * partial fetches, hopefully. */
 	test_conf_set(conf, "fetch.message.max.bytes", "1500");
 	
-	rk = test_create_consumer(NULL, NULL, conf, NULL, NULL);
+	rk = test_create_consumer(NULL, NULL, conf, NULL);
 	rkt = rd_kafka_topic_new(rk, topic, NULL);
 
 	test_consumer_start("CONSUME", rkt, partition,

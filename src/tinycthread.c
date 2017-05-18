@@ -22,6 +22,8 @@ freely, subject to the following restrictions:
     distribution.
 */
 
+#include "rd.h"
+#include "rdtime.h"
 #include "tinycthread.h"
 #include <stdlib.h>
 
@@ -37,7 +39,6 @@ freely, subject to the following restrictions:
   #include <sys/timeb.h>
 #endif
 
-#include "rd.h"
 
 /* Standard, good-to-have defines */
 #ifndef NULL
@@ -506,6 +507,16 @@ int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms) {
 #endif
 }
 
+int cnd_timedwait_msp (cnd_t *cnd, mtx_t *mtx, int *timeout_msp) {
+        rd_ts_t pre = rd_clock();
+        int r;
+        r = cnd_timedwait_ms(cnd, mtx, *timeout_msp);
+        if (r != thrd_timedout) {
+                /* Subtract spent time */
+                (*timeout_msp) -= (int)(rd_clock()-pre) / 1000;
+        }
+        return r;
+}
 
 #if defined(_TTHREAD_WIN32_)
 struct TinyCThreadTSSData {

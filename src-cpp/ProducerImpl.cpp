@@ -142,3 +142,26 @@ RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
   return RdKafka::ERR_NO_ERROR;
 
 }
+
+
+RdKafka::ErrorCode
+RdKafka::ProducerImpl::produce (const std::string topic_name,
+                                int32_t partition, int msgflags,
+                                void *payload, size_t len,
+                                const void *key, size_t key_len,
+                                int64_t timestamp,
+                                void *msg_opaque) {
+  return
+    static_cast<RdKafka::ErrorCode>
+    (
+     rd_kafka_producev(rk_,
+                       RD_KAFKA_V_TOPIC(topic_name.c_str()),
+                       RD_KAFKA_V_PARTITION(partition),
+                       RD_KAFKA_V_MSGFLAGS(msgflags),
+                       RD_KAFKA_V_VALUE(payload, len),
+                       RD_KAFKA_V_KEY(key, key_len),
+                       RD_KAFKA_V_TIMESTAMP(timestamp),
+                       RD_KAFKA_V_OPAQUE(msg_opaque),
+                       RD_KAFKA_V_END)
+     );
+}

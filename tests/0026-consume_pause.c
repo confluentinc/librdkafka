@@ -80,7 +80,7 @@ static int consume_pause (void) {
 			 group_id);
 
 		rk = test_create_consumer(group_id, NULL, NULL,
-					  rd_kafka_topic_conf_dup(tconf), NULL);
+					  rd_kafka_topic_conf_dup(tconf));
 
 
 		TEST_SAY("Subscribing to %d topic(s): %s\n",

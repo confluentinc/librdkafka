@@ -1052,7 +1052,6 @@ class RD_EXPORT Handle {
    */
   virtual ErrorCode set_log_queue (Queue *queue) = 0;
 
-
   /**
    * @brief Cancels the current callback dispatcher (Producer::poll(),
    *        Consumer::poll(), KafkaConsumer::consume(), etc).
@@ -1065,6 +1064,22 @@ class RD_EXPORT Handle {
    *         librdkafka callback.
    */
   virtual void yield () = 0;
+
+  /**
+   * @brief Returns the ClusterId as reported in broker metadata.
+   *
+   * @param timeout_ms If there is no cached value from metadata retrieval
+   *                   then this specifies the maximum amount of time
+   *                   (in milliseconds) the call will block waiting
+   *                   for metadata to be retrieved.
+   *                   Use 0 for non-blocking calls.
+   *
+   * @remark Requires broker version >=0.10.0 and api.version.request=true.
+   *
+   * @returns Last cached ClusterId, or empty string if no ClusterId could be
+   *          retrieved in the allotted timespan.
+   */
+  virtual const std::string clusterid (int timeout_ms) = 0;
 };
 
 
@@ -1281,6 +1296,10 @@ class RD_EXPORT Message {
   virtual void               *msg_opaque () const = 0;
 
   virtual ~Message () = 0;
+
+  /** @returns the latency in microseconds for a produced message measured
+   *           from the produce() call, or -1 if latency is not available. */
+  virtual int64_t             latency () const = 0;
 };
 
 /**@}*/

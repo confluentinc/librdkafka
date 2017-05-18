@@ -45,6 +45,14 @@ typedef	enum {
 } rd_kafka_conf_scope_t;
 
 typedef enum {
+	_RK_CONF_PROP_SET_REPLACE,  /* Replace current value (default) */
+	_RK_CONF_PROP_SET_ADD,      /* Add value (S2F) */
+	_RK_CONF_PROP_SET_DEL      /* Remove value (S2F) */
+} rd_kafka_conf_set_mode_t;
+
+
+
+typedef enum {
         RD_KAFKA_OFFSET_METHOD_NONE,
         RD_KAFKA_OFFSET_METHOD_FILE,
         RD_KAFKA_OFFSET_METHOD_BROKER
@@ -86,7 +94,6 @@ struct rd_kafka_conf_s {
 	int     socket_nagle_disable;
         int     socket_max_fails;
 	char   *client_id_str;
-        rd_kafkap_str_t *client_id;
 	char   *brokerlist;
 	int     stats_interval_ms;
 	int     term_sig;
@@ -130,6 +137,29 @@ struct rd_kafka_conf_s {
 #endif
         } sasl;
 
+#if WITH_PLUGINS
+        char *plugin_paths;
+        rd_list_t plugins;
+#endif
+
+        /* Interceptors */
+        struct {
+                /* rd_kafka_interceptor_method_t lists */
+                rd_list_t on_conf_set;        /* on_conf_set interceptors
+                                               * (not copied on conf_dup()) */
+                rd_list_t on_conf_dup;        /* .. (not copied) */
+                rd_list_t on_conf_destroy;    /* .. (not copied) */
+                rd_list_t on_new;             /* .. (copied) */
+                rd_list_t on_destroy;         /* .. (copied) */
+                rd_list_t on_send;            /* .. (copied) */
+                rd_list_t on_acknowledgement; /* .. (copied) */
+                rd_list_t on_consume;         /* .. (copied) */
+                rd_list_t on_commit;          /* .. (copied) */
+
+                /* rd_strtup_t list */
+                rd_list_t config;             /* Configuration name=val's
+                                               * handled by interceptors. */
+        } interceptors;
 
         /* Client group configuration */
         int    coord_query_intvl_ms;
@@ -147,7 +177,6 @@ struct rd_kafka_conf_s {
 	int    fetch_min_bytes;
 	int    fetch_error_backoff_ms;
         char  *group_id_str;
-        rd_kafkap_str_t   *group_id;    /* Consumer group id */
 
         rd_kafka_pattern_list_t *topic_blacklist;
         struct rd_kafka_topic_conf_s *topic_conf; /* Default topic config

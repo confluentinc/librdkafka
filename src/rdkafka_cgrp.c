@@ -35,6 +35,8 @@
 #include "rdkafka_offset.h"
 #include "rdkafka_metadata.h"
 #include "rdkafka_cgrp.h"
+#include "rdkafka_interceptor.h"
+
 
 static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg,
                                                const char *reason);
@@ -1824,6 +1826,13 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
                         "OffsetCommit done (__NO_OFFSET)");
 		return;
 	}
+
+        /* Call on_commit interceptors */
+        if (err != RD_KAFKA_RESP_ERR__NO_OFFSET &&
+            err != RD_KAFKA_RESP_ERR__DESTROY &&
+            offsets && offsets->cnt > 0)
+                rd_kafka_interceptors_on_commit(rk, offsets, err);
+
 
 	/* If no special callback is set but a offset_commit_cb has
 	 * been set in conf then post an event for the latter. */

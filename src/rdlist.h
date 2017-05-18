@@ -217,6 +217,9 @@ rd_list_t *rd_list_copy (const rd_list_t *src,
 
 /**
  * @brief Copy list \p src to \p dst using optional \p copy_cb (per elem)
+ * @remark The destination list is not initialized or copied by this function.
+ * @remark copy_cb() may return NULL in which case no element is added,
+ *                   but the copy callback might have done so itself.
  */
 void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
                       void *(*copy_cb) (const void *elem, void *opaque),

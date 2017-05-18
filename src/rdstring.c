@@ -28,6 +28,7 @@
 
 
 #include "rd.h"
+#include "rdstring.h"
 
 /**
  * @brief Render string \p template using \p callback for key lookups.
@@ -137,4 +138,25 @@ char *rd_string_render (const char *template,
 
 	buf[of] = '\0';
 	return buf;
+}
+
+
+
+
+void rd_strtup_destroy (rd_strtup_t *strtup) {
+        rd_free(strtup);
+}
+
+rd_strtup_t *rd_strtup_new (const char *name, const char *value) {
+        size_t name_sz = strlen(name) + 1;
+        size_t value_sz = strlen(value) + 1;
+        rd_strtup_t *strtup;
+
+        strtup = rd_malloc(sizeof(*strtup) +
+                           name_sz + value_sz - 1/*name[1]*/);
+        memcpy(strtup->name, name, name_sz+1);
+        strtup->value = &strtup->name[name_sz];
+        memcpy(strtup->value, value, value_sz);
+
+        return strtup;
 }

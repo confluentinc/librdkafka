@@ -71,20 +71,21 @@ typedef struct rd_kafka_msg_s {
 				    * Unit is milliseconds since epoch (UTC).*/
 	rd_kafka_timestamp_type_t rkm_tstype; /* rkm_timestamp type */
 
-	union {
-		struct {
-			rd_ts_t ts_timeout;
-		} producer;
+        union {
+                struct {
+                        rd_ts_t ts_timeout; /* Message timeout */
+                        rd_ts_t ts_enq;     /* Enqueue/Produce time */
+                } producer;
 #define rkm_ts_timeout rkm_u.producer.ts_timeout
-	} rkm_u;
+#define rkm_ts_enq     rkm_u.producer.ts_enq
+        } rkm_u;
 } rd_kafka_msg_t;
 
 TAILQ_HEAD(rd_kafka_msg_head_s, rd_kafka_msg_s);
 
 
 /** @returns the absolute time a message was enqueued (producer) */
-#define rd_kafka_msg_enq_time(rkt,rkm)                                  \
-        ((rkm)->rkm_ts_timeout - ((rkt)->rkt_conf.message_timeout_ms * 1000))
+#define rd_kafka_msg_enq_time(rkm) ((rkm)->rkm_ts_enq)
 
 /**
  * @returns the message's total maximum on-wire size.
@@ -144,13 +145,6 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 		      char *payload, size_t len,
 		      const void *keydata, size_t keylen,
 		      void *msg_opaque);
-rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
-				    int32_t partition,
-				    int msgflags,
-				    char *payload, size_t len,
-				    const void *key, size_t keylen,
-				    void *msg_opaque);
-
 
 static RD_INLINE RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
 	TAILQ_INIT(&rkmq->rkmq_msgs);
@@ -266,4 +260,11 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 
 
 int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
-			      int do_lock);
+                              int do_lock);
+
+
+rd_kafka_message_t *rd_kafka_message_get (struct rd_kafka_op_s *rko);
+rd_kafka_message_t *rd_kafka_message_get_from_rkm (struct rd_kafka_op_s *rko,
+                                                   rd_kafka_msg_t *rkm);
+rd_kafka_message_t *rd_kafka_message_new (void);
+

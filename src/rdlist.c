@@ -302,6 +302,9 @@ void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
         if (!copy_cb)
                 copy_cb = rd_list_nocopy_ptr;
 
-        RD_LIST_FOREACH(elem, src, i)
-                rd_list_add(dst, copy_cb(elem, opaque));
+        RD_LIST_FOREACH(elem, src, i) {
+                void *celem = copy_cb(elem, opaque);
+                if (celem)
+                        rd_list_add(dst, celem);
+        }
 }

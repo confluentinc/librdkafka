@@ -47,6 +47,7 @@
 #include "rdkafka_request.h"
 #include "rdkafka_event.h"
 #include "rdkafka_sasl.h"
+#include "rdkafka_interceptor.h"
 
 #include "rdtime.h"
 #ifdef _MSC_VER
@@ -170,11 +171,12 @@ int rd_kafka_wait_destroyed (int timeout_ms) {
 	return 0;
 }
 
-void rd_kafka_log_buf (const rd_kafka_t *rk, int level, const char *fac,
-                       const char *buf) {
-        if (level > rk->rk_conf.log_level)
+static void rd_kafka_log_buf (const rd_kafka_conf_t *conf,
+                              const rd_kafka_t *rk, int level, const char *fac,
+                              const char *buf) {
+        if (level > conf->log_level)
                 return;
-        else if (rk->rk_conf.log_queue) {
+        else if (rk && conf->log_queue) {
                 rd_kafka_op_t *rko;
 
                 if (!rk->rk_logq)
@@ -188,22 +190,29 @@ void rd_kafka_log_buf (const rd_kafka_t *rk, int level, const char *fac,
                 rko->rko_u.log.str = rd_strdup(buf);
                 rd_kafka_q_enq(rk->rk_logq, rko);
 
-        } else if (rk->rk_conf.log_cb) {
-                rk->rk_conf.log_cb(rk, level, fac, buf);
+        } else if (conf->log_cb) {
+                conf->log_cb(rk, level, fac, buf);
         }
 }
 
-void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
-		   const char *fac, const char *fmt, ...) {
+/**
+ * @brief Logger
+ *
+ * @remark conf must be set, but rk may be NULL
+ */
+void rd_kafka_log0 (const rd_kafka_conf_t *conf,
+                    const rd_kafka_t *rk,
+                    const char *extra, int level,
+                    const char *fac, const char *fmt, ...) {
 	char buf[2048];
 	va_list ap;
 	unsigned int elen = 0;
         unsigned int of = 0;
 
-	if (level > rk->rk_conf.log_level)
+	if (level > conf->log_level)
 		return;
 
-	if (rk->rk_conf.log_thread_name) {
+	if (conf->log_thread_name) {
 		elen = rd_snprintf(buf, sizeof(buf), "[thrd:%s]: ",
 				   rd_kafka_thread_name);
 		if (unlikely(elen >= sizeof(buf)))
@@ -222,7 +231,7 @@ void rd_kafka_log0 (const rd_kafka_t *rk, const char *extra, int level,
 	rd_vsnprintf(buf+of, sizeof(buf)-of, fmt, ap);
 	va_end(ap);
 
-        rd_kafka_log_buf(rk, level, fac, buf);
+        rd_kafka_log_buf(conf, rk, level, fac, buf);
 }
 
 
@@ -584,8 +593,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
 	if (rk->rk_full_metadata)
 		rd_kafka_metadata_destroy(rk->rk_full_metadata);
-	rd_kafkap_str_destroy(rk->rk_conf.client_id);
-        rd_kafkap_str_destroy(rk->rk_conf.group_id);
+	rd_kafkap_str_destroy(rk->rk_client_id);
+        rd_kafkap_str_destroy(rk->rk_group_id);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
         rd_list_destroy(&rk->rk_broker_by_id);
 
@@ -658,7 +667,7 @@ void rd_kafka_destroy (rd_kafka_t *rk) {
 /**
  * Main destructor for rd_kafka_t
  *
- * Locality: rdkafka main thread
+ * Locality: rdkafka main thread or application thread during rd_kafka_new()
  */
 static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 	rd_kafka_itopic_t *rkt, *rkt_tmp;
@@ -668,6 +677,9 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         int i;
 
         rd_kafka_dbg(rk, ALL, "DESTROY", "Destroy internal");
+
+        /* Call on_destroy() interceptors */
+        rd_kafka_interceptors_on_destroy(rk);
 
 	/* Brokers pick up on rk_terminate automatically. */
 
@@ -710,6 +722,10 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 rd_kafka_wrlock(rk);
         }
 
+        if (rk->rk_clusterid) {
+                rd_free(rk->rk_clusterid);
+                rk->rk_clusterid = NULL;
+        }
 
         rd_kafka_wrunlock(rk);
 
@@ -1193,45 +1209,60 @@ static void rd_kafka_term_sig_handler (int sig) {
 }
 
 
-rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
+rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 			  char *errstr, size_t errstr_size) {
 	rd_kafka_t *rk;
 	static rd_atomic32_t rkid;
-        rd_kafka_conf_t *use_conf;
+        rd_kafka_conf_t *conf;
+        rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        int ret_errno = 0;
 #ifndef _MSC_VER
         sigset_t newset, oldset;
 #endif
 
 	call_once(&rd_kafka_global_init_once, rd_kafka_global_init);
 
-        /* Use a copy of conf if supplied, otherwise generate a new one so we can always
-         * delete it upon return without additional conditionals
-         */
-        use_conf = (conf ? rd_kafka_conf_dup(conf) : rd_kafka_conf_new());
+        /* rd_kafka_new() takes ownership of the provided \p app_conf
+         * object if rd_kafka_new() succeeds.
+         * Since \p app_conf is optional we allocate a default configuration
+         * object here if \p app_conf is NULL.
+         * The configuration object itself is struct-copied later
+         * leaving the default *conf pointer to be ready for freeing.
+         * In case new() fails and app_conf was specified we will clear out
+         * rk_conf to avoid double-freeing from destroy_internal() and the
+         * user's eventual call to rd_kafka_conf_destroy().
+         * This is all a bit tricky but that's the nature of
+         * legacy interfaces. */
+        if (!app_conf)
+                conf = rd_kafka_conf_new();
+        else
+                conf = app_conf;
 
         /* Verify mandatory configuration */
-        if (!use_conf->socket_cb) {
+        if (!conf->socket_cb) {
                 rd_snprintf(errstr, errstr_size,
-                         "Mandatory config property 'socket_cb' not set");
-                rd_kafka_conf_destroy(use_conf);
-				rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                            "Mandatory config property 'socket_cb' not set");
+                if (!app_conf)
+                        rd_kafka_conf_destroy(conf);
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
                 return NULL;
         }
 
-        if (!use_conf->open_cb) {
+        if (!conf->open_cb) {
                 rd_snprintf(errstr, errstr_size,
-                         "Mandatory config property 'open_cb' not set");
-                rd_kafka_conf_destroy(use_conf);
-				rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                            "Mandatory config property 'open_cb' not set");
+                if (!app_conf)
+                        rd_kafka_conf_destroy(conf);
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
                 return NULL;
         }
 
-        if (use_conf->metadata_max_age_ms == -1) {
-                if (use_conf->metadata_refresh_interval_ms > 0)
-                        use_conf->metadata_max_age_ms =
-                                use_conf->metadata_refresh_interval_ms * 3;
+        if (conf->metadata_max_age_ms == -1) {
+                if (conf->metadata_refresh_interval_ms > 0)
+                        conf->metadata_max_age_ms =
+                                conf->metadata_refresh_interval_ms * 3;
                 else /* use default value of refresh * 3 */
-                        use_conf->metadata_max_age_ms = 5*60*1000 * 3;
+                        conf->metadata_max_age_ms = 5*60*1000 * 3;
         }
 
 	rd_kafka_global_cnt_incr();
@@ -1243,8 +1274,17 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 
 	rk->rk_type = type;
 
-	rk->rk_conf = *use_conf;
-	rd_free(use_conf);
+        /* Struct-copy the config object. */
+	rk->rk_conf = *conf;
+        if (!app_conf)
+                rd_free(conf); /* Free the base config struct only,
+                                * not its fields since they were copied to
+                                * rk_conf just above. Those fields are
+                                * freed from rd_kafka_destroy_internal()
+                                * as the rk itself is destroyed. */
+
+        /* Call on_new() interceptors */
+        rd_kafka_interceptors_on_new(rk);
 
 	rwlock_init(&rk->rk_lock);
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
@@ -1286,10 +1326,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
                     rd_atomic32_add(&rkid, 1));
 
 	/* Construct clientid kafka string */
-	rk->rk_conf.client_id = rd_kafkap_str_new(rk->rk_conf.client_id_str,-1);
+	rk->rk_client_id = rd_kafkap_str_new(rk->rk_conf.client_id_str,-1);
 
         /* Convert group.id to kafka string (may be NULL) */
-        rk->rk_conf.group_id = rd_kafkap_str_new(rk->rk_conf.group_id_str,-1);
+        rk->rk_group_id = rd_kafkap_str_new(rk->rk_conf.group_id_str,-1);
 
         /* Config fixups */
         rk->rk_conf.queued_max_msg_bytes =
@@ -1314,20 +1354,18 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	}
 
         if (rd_kafka_assignors_init(rk, errstr, errstr_size) == -1) {
-		rd_kafka_destroy_internal(rk);
-		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
-		return NULL;
-	}
+                ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                ret_errno = EINVAL;
+                goto fail;
+        }
 
         if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
             rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) {
                 if (rd_kafka_sasl_select_provider(rk,
                                                   errstr, errstr_size) == -1) {
-                        rd_kafka_destroy_internal(rk);
-                        rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                                EINVAL);
-                        rd_kafka_global_cnt_decr();
-                        return NULL;
+                        ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                        ret_errno = EINVAL;
+                        goto fail;
                 }
         }
 
@@ -1337,22 +1375,19 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 		/* Create SSL context */
 		if (rd_kafka_transport_ssl_ctx_init(rk, errstr,
 						    errstr_size) == -1) {
-
-                        rd_kafka_destroy_internal(rk);
-			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
-						EINVAL);
-			rd_kafka_global_cnt_decr();
-			return NULL;
-		}
-	}
+                        ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                        ret_errno = EINVAL;
+                        goto fail;
+                }
+        }
 #endif
 
 	/* Client group, eligible both in consumer and producer mode. */
         if (type == RD_KAFKA_CONSUMER &&
-	    RD_KAFKAP_STR_LEN(rk->rk_conf.group_id) > 0)
+	    RD_KAFKAP_STR_LEN(rk->rk_group_id) > 0)
                 rk->rk_cgrp = rd_kafka_cgrp_new(rk,
-                                                rk->rk_conf.group_id,
-                                                rk->rk_conf.client_id);
+                                                rk->rk_group_id,
+                                                rk->rk_client_id);
 
 
 
@@ -1380,21 +1415,19 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	/* Create handler thread */
 	if ((thrd_create(&rk->rk_thread,
 			 rd_kafka_thread_main, rk)) != thrd_success) {
+                ret_err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
+                ret_errno = errno;
 		if (errstr)
 			rd_snprintf(errstr, errstr_size,
 				    "Failed to create thread: %s (%i)",
 				    rd_strerror(errno), errno);
 		rd_kafka_wrunlock(rk);
-                rd_kafka_destroy_internal(rk);
 #ifndef _MSC_VER
-		/* Restore sigmask of caller */
-		pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+                /* Restore sigmask of caller */
+                pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
-		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
-					errno);
-		rd_kafka_global_cnt_decr();
-		return NULL;
-	}
+                goto fail;
+        }
 
         rd_kafka_wrunlock(rk);
 
@@ -1416,12 +1449,45 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *conf,
 	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
 #endif
 
-        /* Destroy user supplied conf on success */
-        if (conf)
-                rd_kafka_conf_destroy(conf);
+        /* Free user supplied conf's base pointer on success,
+         * but not the actual allocated fields since the struct
+         * will have been copied in its entirety above. */
+        if (app_conf)
+                rd_free(app_conf);
 	rd_kafka_set_last_error(0, 0);
 
+        rk->rk_initialized = 1;
+
 	return rk;
+
+fail:
+        /*
+         * Error out and clean up
+         */
+
+        /* If on_new() interceptors have been called we also need
+         * to allow interceptor clean-up by calling on_destroy() */
+        rd_kafka_interceptors_on_destroy(rk);
+
+        /* If rk_conf is a struct-copy of the application configuration
+         * we need to avoid rk_conf fields from being freed from
+         * rd_kafka_destroy_internal() since they belong to app_conf.
+         * However, there are some internal fields, such as interceptors,
+         * that belong to rk_conf and thus needs to be cleaned up.
+         * Legacy APIs, sigh.. */
+        if (app_conf) {
+                rd_kafka_assignors_term(rk);
+                rd_kafka_interceptors_destroy(&rk->rk_conf);
+                memset(&rk->rk_conf, 0, sizeof(rk->rk_conf));
+        }
+
+        rd_atomic32_add(&rk->rk_terminate, 1);
+        rd_kafka_destroy_internal(rk);
+        rd_kafka_destroy_final(rk);
+
+        rd_kafka_set_last_error(ret_err, ret_errno);
+
+        return NULL;
 }
 
 
@@ -1514,7 +1580,7 @@ int rd_kafka_consume_start0 (rd_kafka_itopic_t *rkt, int32_t partition,
 
                 if (rkt->rkt_conf.offset_store_method ==
                     RD_KAFKA_OFFSET_METHOD_BROKER &&
-                    RD_KAFKAP_STR_IS_NULL(rkt->rkt_rk->rk_conf.group_id)) {
+                    RD_KAFKAP_STR_IS_NULL(rkt->rkt_rk->rk_group_id)) {
                         /* Broker based offsets require a group id. */
                         rd_kafka_toppar_destroy(s_rktp);
 			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
@@ -2465,27 +2531,25 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 		/* Delivery report:
 		 * call application DR callback for each message. */
 		while ((rkm = TAILQ_FIRST(&rko->rko_u.dr.msgq.rkmq_msgs))) {
-                        rd_kafka_msgq_deq(&rko->rko_u.dr.msgq, rkm, 1/*count*/);
+                        rd_kafka_message_t *rkmessage;
+
+			TAILQ_REMOVE(&rko->rko_u.dr.msgq.rkmq_msgs,
+				     rkm, rkm_link);
+
+                        rkmessage = rd_kafka_message_get_from_rkm(rko, rkm);
 
                         if (rk->rk_conf.dr_msg_cb) {
-				rkm->rkm_rkmessage.err = rko->rko_err;
-				if (!rkm->rkm_rkmessage.rkt)
-					rkm->rkm_rkmessage.rkt =
-                                                rd_kafka_topic_keep_a(
-							rd_kafka_topic_s2i(
-								rko->rko_u.dr.
-								s_rkt));
-                                rk->rk_conf.dr_msg_cb(rk, &rkm->rkm_rkmessage,
+                                rk->rk_conf.dr_msg_cb(rk, rkmessage,
                                                       rk->rk_conf.opaque);
 
                         } else {
 
                                 rk->rk_conf.dr_cb(rk,
-                                                  rkm->rkm_payload,
-                                                  rkm->rkm_len,
-                                                  rko->rko_err,
+                                                  rkmessage->payload,
+                                                  rkmessage->len,
+                                                  rkmessage->err,
                                                   rk->rk_conf.opaque,
-                                                  rkm->rkm_opaque);
+                                                  rkmessage->_private);
                         }
 
                         rd_kafka_msg_destroy(rk, rkm);
@@ -2729,6 +2793,10 @@ const char *rd_kafka_name (const rd_kafka_t *rk) {
 	return rk->rk_name;
 }
 
+rd_kafka_type_t rd_kafka_type(const rd_kafka_t *rk) {
+        return rk->rk_type;
+}
+
 
 char *rd_kafka_memberid (const rd_kafka_t *rk) {
 	rd_kafka_op_t *rko;
@@ -2746,6 +2814,49 @@ char *rd_kafka_memberid (const rd_kafka_t *rk) {
 	rd_kafka_op_destroy(rko);
 
 	return memberid;
+}
+
+
+char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms) {
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
+
+        /* ClusterId is returned in Metadata >=V2 responses and
+         * cached on the rk. If no cached value is available
+         * it means no metadata has been received yet, or we're
+         * using a lower protocol version
+         * (e.g., lack of api.version.request=true). */
+
+        while (1) {
+                int remains_ms;
+
+                rd_kafka_rdlock(rk);
+
+                if (rk->rk_clusterid) {
+                        /* Cached clusterid available. */
+                        char *ret = rd_strdup(rk->rk_clusterid);
+                        rd_kafka_rdunlock(rk);
+                        return ret;
+                } else if (rk->rk_ts_metadata > 0) {
+                        /* Metadata received but no clusterid,
+                         * this probably means the broker is too old
+                         * or api.version.request=false. */
+                        rd_kafka_rdunlock(rk);
+                        return NULL;
+                }
+
+                rd_kafka_rdunlock(rk);
+
+                /* Wait for up to timeout_ms for a metadata refresh,
+                 * if permitted by application. */
+                remains_ms = rd_timeout_remains(abs_timeout);
+                if (remains_ms <= 0)
+                        return NULL;
+
+                rd_kafka_metadata_cache_wait_change(
+                        rk, rd_timeout_remains(abs_timeout));
+        }
+
+        return NULL;
 }
 
 

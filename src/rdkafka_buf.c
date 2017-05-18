@@ -214,7 +214,7 @@ rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk, int16_t ApiKey,
         /* Make room for common protocol request headers */
         if (rk) {
                 headersize = RD_KAFKAP_REQHDR_SIZE +
-                        RD_KAFKAP_STR_SIZE(rk->rk_conf.client_id);
+                        RD_KAFKAP_STR_SIZE(rk->rk_client_id);
                 size += headersize;
                 iovcnt += 1; /* headers */
         }

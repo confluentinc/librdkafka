@@ -37,6 +37,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rdkafka_performance", "rdka
 		{4BEBB59C-477B-4F7A-8AE8-4228D0861E54} = {4BEBB59C-477B-4F7A-8AE8-4228D0861E54}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "interceptor_test", "interceptor_test\interceptor_test.vcxproj", "{492CF5A9-EBF5-494E-8F71-B9B262C4D220}"
+	ProjectSection(ProjectDependencies) = postProject
+		{4BEBB59C-477B-4F7A-8AE8-4228D0861E54} = {4BEBB59C-477B-4F7A-8AE8-4228D0861E54}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true
@@ -134,6 +139,24 @@ Global
 		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Release|x64.ActiveCfg = Release|x64
 		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Release|x64.Build.0 = Release|x64
 		{88B682AB-5082-49D5-A672-9904C5F43ABB}.Release|x86.ActiveCfg = Release|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Debug|Win32.ActiveCfg = Debug|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Debug|Win32.Build.0 = Debug|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Debug|x64.ActiveCfg = Debug|x64
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Debug|x64.Build.0 = Debug|x64
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Debug|x86.ActiveCfg = Debug|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Debug|x86.Build.0 = Debug|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|Any CPU.ActiveCfg = Release|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|Win32.ActiveCfg = Release|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|Win32.Build.0 = Release|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|x64.ActiveCfg = Release|x64
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|x64.Build.0 = Release|x64
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|x86.ActiveCfg = Release|Win32
+		{492CF5A9-EBF5-494E-8F71-B9B262C4D220}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

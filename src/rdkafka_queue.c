@@ -29,6 +29,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_topic.h"
+#include "rdkafka_interceptor.h"
 
 int RD_TLS rd_kafka_yield_thread = 0;
 
@@ -486,109 +487,6 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 }
 
 
-
-void rd_kafka_message_destroy (rd_kafka_message_t *rkmessage) {
-	rd_kafka_op_t *rko;
-
-	if (likely((rko = (rd_kafka_op_t *)rkmessage->_private) != NULL))
-		rd_kafka_op_destroy(rko);
-	else {
-		rd_kafka_msg_t *rkm = rd_kafka_message2msg(rkmessage);
-		rd_kafka_msg_destroy(NULL, rkm);
-	}
-}
-
-
-rd_kafka_message_t *rd_kafka_message_new (void) {
-        rd_kafka_msg_t *rkm = rd_calloc(1, sizeof(*rkm));
-        return (rd_kafka_message_t *)rkm;
-}
-
-
-static rd_kafka_message_t *
-rd_kafka_message_setup (rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
-	rd_kafka_itopic_t *rkt;
-	rd_kafka_toppar_t *rktp = NULL;
-
-	if (rko->rko_type == RD_KAFKA_OP_DR) {
-		rkt = rd_kafka_topic_s2i(rko->rko_u.dr.s_rkt);
-	} else {
-		if (rko->rko_rktp) {
-			rktp = rd_kafka_toppar_s2i(rko->rko_rktp);
-			rkt = rktp->rktp_rkt;
-		} else
-			rkt = NULL;
-
-		rkmessage->_private = rko;
-	}
-
-
-	if (!rkmessage->rkt && rkt)
-		rkmessage->rkt = rd_kafka_topic_keep_a(rkt);
-
-	if (rktp)
-		rkmessage->partition = rktp->rktp_partition;
-
-	if (!rkmessage->err)
-		rkmessage->err = rko->rko_err;
-
-	return rkmessage;
-}
-
-
-
-rd_kafka_message_t *rd_kafka_message_get_from_rkm (rd_kafka_op_t *rko,
-						   rd_kafka_msg_t *rkm) {
-	return rd_kafka_message_setup(rko, &rkm->rkm_rkmessage);
-}
-
-rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
-	rd_kafka_message_t *rkmessage;
-
-	if (!rko)
-		return rd_kafka_message_new(); /* empty */
-
-	switch (rko->rko_type)
-	{
-	case RD_KAFKA_OP_FETCH:
-		/* Use embedded rkmessage */
-		rkmessage = &rko->rko_u.fetch.rkm.rkm_rkmessage;
-		break;
-
-	case RD_KAFKA_OP_ERR:
-	case RD_KAFKA_OP_CONSUMER_ERR:
-		rkmessage = &rko->rko_u.err.rkm.rkm_rkmessage;
-		rkmessage->payload = rko->rko_u.err.errstr;
-		rkmessage->offset  = rko->rko_u.err.offset;
-		break;
-
-	default:
-		rd_kafka_assert(NULL, !*"unhandled optype");
-		RD_NOTREACHED();
-		return NULL;
-	}
-
-	return rd_kafka_message_setup(rko, rkmessage);
-}
-
-
-int64_t rd_kafka_message_timestamp (const rd_kafka_message_t *rkmessage,
-				    rd_kafka_timestamp_type_t *tstype) {
-	rd_kafka_msg_t *rkm;
-
-	if (rkmessage->err) {
-                if (tstype)
-                        *tstype = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
-		return -1;
-	}
-
-	rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
-
-        if (tstype)
-                *tstype = rkm->rkm_tstype;
-
-	return rkm->rkm_timestamp;
-}
 
 
 

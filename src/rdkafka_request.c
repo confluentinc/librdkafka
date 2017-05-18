@@ -545,14 +545,13 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
 
 	rkbuf = rd_kafka_buf_new_growable(
                 rkb->rkb_rk, RD_KAFKAP_OffsetFetch, 1,
-                RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_conf.group_id) +
+                RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_group_id) +
                 4 +
                 (parts->cnt * 32));
 
 
         /* ConsumerGroup */
-        rd_kafka_buf_write_kstr(rkbuf, rkb->rkb_rk->
-                                rk_conf.group_id);
+        rd_kafka_buf_write_kstr(rkbuf, rkb->rkb_rk->rk_group_id);
 
         /* Sort partitions by topic */
         rd_kafka_topic_partition_list_sort_by_topic(parts);

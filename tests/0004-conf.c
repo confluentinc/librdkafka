@@ -110,6 +110,59 @@ static void conf_cmp (const char *desc,
 }
 
 
+/**
+ * @brief Not called, just used for config
+ */
+static int on_new_call_cnt;
+static rd_kafka_resp_err_t my_on_new (rd_kafka_t *rk, void *ic_opaque,
+                                      char *errstr, size_t errstr_size) {
+        TEST_SAY("%s: on_new() called\n", rd_kafka_name(rk));
+        on_new_call_cnt++;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+/**
+ * @brief When rd_kafka_new() succeeds it takes ownership of the config object,
+ *        but when it fails the config object remains in application custody.
+ *        These tests makes sure that's the case (preferably run with valgrind)
+ */
+static void do_test_kafka_new_failures (void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        char errstr[512];
+
+        conf = rd_kafka_conf_new();
+
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rk, "kafka_new() failed: %s", errstr);
+        rd_kafka_destroy(rk);
+
+        /* Set an erroneous configuration value that is not checked
+         * by conf_set() but by rd_kafka_new() */
+        conf = rd_kafka_conf_new();
+        if (rd_kafka_conf_set(conf, "partition.assignment.strategy",
+                              "range,thiswillfail", errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK)
+                TEST_FAIL("%s", errstr);
+
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(!rk, "kafka_new() should have failed");
+
+        /* config object should still belong to us,
+         * correct the erroneous config and try again. */
+        if (rd_kafka_conf_set(conf, "partition.assignment.strategy", NULL,
+                              errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK)
+                TEST_FAIL("%s", errstr);
+
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rk, "kafka_new() failed: %s", errstr);
+        rd_kafka_destroy(rk);
+}
+
+
 int main_0004_conf (int argc, char **argv) {
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
@@ -123,7 +176,7 @@ int main_0004_conf (int argc, char **argv) {
 	static const char *gconfs[] = {
 		"message.max.bytes", "12345", /* int property */
 		"client.id", "my id", /* string property */
-		"debug", "topic,metadata", /* S2F property */
+		"debug", "topic,metadata,interceptor", /* S2F property */
 		"topic.blacklist", "__.*", /* #778 */
                 "auto.offset.reset", "earliest", /* Global->Topic fallthru */
 #if WITH_ZLIB
@@ -148,15 +201,19 @@ int main_0004_conf (int argc, char **argv) {
 	/* Set up a global config object */
 	conf = rd_kafka_conf_new();
 
+        for (i = 0 ; gconfs[i] ; i += 2) {
+                if (rd_kafka_conf_set(conf, gconfs[i], gconfs[i+1],
+                                      errstr, sizeof(errstr)) !=
+                    RD_KAFKA_CONF_OK)
+                        TEST_FAIL("%s\n", errstr);
+        }
+
 	rd_kafka_conf_set_dr_cb(conf, dr_cb);
 	rd_kafka_conf_set_error_cb(conf, error_cb);
-
-	for (i = 0 ; gconfs[i] ; i += 2) {
-		if (rd_kafka_conf_set(conf, gconfs[i], gconfs[i+1],
-				      errstr, sizeof(errstr)) !=
-		    RD_KAFKA_CONF_OK)
-			TEST_FAIL("%s\n", errstr);
-	}
+        /* interceptor configs are not exposed as strings or in dumps
+         * so the dump verification step will not cover them, but valgrind
+         * will help track down memory leaks/use-after-free etc. */
+        rd_kafka_conf_interceptor_add_on_new(conf, "testic", my_on_new, NULL);
 
 	/* Set up a topic config object */
 	tconf = rd_kafka_topic_conf_new();
@@ -202,7 +259,12 @@ int main_0004_conf (int argc, char **argv) {
 	 */
 
 	/* original */
+        TEST_ASSERT(on_new_call_cnt == 0, "expected 0 on_new call, not %d",
+                    on_new_call_cnt);
+        on_new_call_cnt = 0;
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        TEST_ASSERT(on_new_call_cnt == 1, "expected 1 on_new call, not %d",
+                on_new_call_cnt);
 
 	rkt = rd_kafka_topic_new(rk, topic, tconf);
 	if (!rkt)
@@ -213,13 +275,19 @@ int main_0004_conf (int argc, char **argv) {
 	rd_kafka_destroy(rk);
 
 	/* copied */
+        on_new_call_cnt = 0;
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf2);
+        TEST_ASSERT(on_new_call_cnt == 1, "expected 1 on_new call, not %d",
+                on_new_call_cnt);
+
+        if (on_new_call_cnt != 1)
+                TEST_FAIL("Expected on_new call count to be %d, not %d",
+                          1, on_new_call_cnt);
 
 	rkt = rd_kafka_topic_new(rk, topic, tconf2);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
 			  rd_strerror(errno));
-
 	rd_kafka_topic_destroy(rkt);
 	rd_kafka_destroy(rk);
 
@@ -344,6 +412,8 @@ int main_0004_conf (int argc, char **argv) {
 		rd_kafka_topic_conf_destroy(tconf);
 		rd_kafka_conf_destroy(conf);
 	}
+
+        do_test_kafka_new_failures();
 
 	return 0;
 }

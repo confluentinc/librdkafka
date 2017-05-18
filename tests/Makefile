@@ -36,9 +36,15 @@ run_local: $(BIN)
 	@echo "Running local broker-less tests"
 	./run-test.sh -p5 -l ./$(BIN)
 
-build: $(BIN)
+.PHONY: interceptor_test
 
-test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a
+interceptor_test:
+	$(MAKE) -C $@
+
+build: $(BIN) interceptor_test
+
+test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
+
 
 
 include ../mklove/Makefile.base
@@ -52,7 +58,7 @@ rdlist.o: ../src/rdlist.c
 
 clean:
 	rm -f *.test $(OBJS) $(BIN)
-
+	$(MAKE) -C interceptor_test clean
 
 clean-output:
 	# Clean test output files

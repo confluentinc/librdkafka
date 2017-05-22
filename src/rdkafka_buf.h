@@ -35,8 +35,8 @@ typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
 #define RD_KAFKA_HEADERS_IOV_CNT   2
 
-/* Align X (upwards) to STRIDE, which must be power of 2. */
-#define _ALIGN(X,STRIDE) (((X) + ((STRIDE) - 1)) & -(STRIDE))
+/* Round/align X upwards to STRIDE, which must be power of 2. */
+#define RD_ROUNDUP(X,STRIDE) (((X) + ((STRIDE) - 1)) & ~(STRIDE-1))
 
 
 /**
@@ -105,7 +105,7 @@ rd_tmpabuf_alloc0 (const char *func, int line, rd_tmpabuf_t *tab, size_t size) {
 	}
 
         ptr = (void *)(tab->buf + tab->of);
-	tab->of += _ALIGN(size, 8);
+	tab->of += RD_ROUNDUP(size, 8);
 
 	return ptr;
 }

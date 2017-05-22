@@ -324,7 +324,6 @@ typedef enum {
         RD_KAFKA_RESP_ERR__KEY_DESERIALIZATION = -160,
         /** Value Deserialization error */
         RD_KAFKA_RESP_ERR__VALUE_DESERIALIZATION = -159,
-	
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
 

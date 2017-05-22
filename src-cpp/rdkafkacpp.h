@@ -228,6 +228,14 @@ enum ErrorCode {
         ERR__WAIT_CACHE = -164,
         /** Operation interrupted */
         ERR__INTR = -163,
+        /** Key Serialization error */
+        ERR__KEY_SERIALIZATION = -162,
+        /** Value Serialization error */
+        ERR__VALUE_SERIALIZATION = -161,
+        /** Key Deserialization error */
+        ERR__KEY_DESERIALIZATION = -160,
+        /** Value Deserialization error */
+        ERR__VALUE_DESERIALIZATION = -159,
 	/** End internal error codes */
 	ERR__END = -100,
 

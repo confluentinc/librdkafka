@@ -752,6 +752,7 @@ int main (int argc, char **argv) {
         double dtmp;
         int rate_sleep = 0;
 	rd_kafka_topic_partition_list_t *topics;
+        int exitcode = 0;
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -1323,8 +1324,6 @@ int main (int argc, char **argv) {
                         printf("%% All messages produced, "
                                "now waiting for %li deliveries\n",
                                msgs_wait_cnt);
-		if (debug)
-			rd_kafka_dump(stdout, rk);
 
 		/* Wait for messages to be delivered */
                 while (run && rd_kafka_poll(rk, 1000) != -1)
@@ -1345,9 +1344,6 @@ int main (int argc, char **argv) {
 			       cnt.tx_err, cnt.tx,
 			       ((double)cnt.tx_err / (double)cnt.tx) * 100.0);
 
-		if (debug)
-			rd_kafka_dump(stdout, rk);
-
 		/* Destroy topic */
 		rd_kafka_topic_destroy(rkt);
 
@@ -1356,6 +1352,8 @@ int main (int argc, char **argv) {
                 global_rk = rk = NULL;
 
 		free(sbuf);
+
+                exitcode = cnt.msgs == cnt.msgs_dr_ok ? 0 : 1;
 
 	} else if (mode == 'C') {
 		/*
@@ -1565,5 +1563,5 @@ int main (int argc, char **argv) {
 	/* Let background threads clean up and terminate cleanly. */
 	rd_kafka_wait_destroyed(2000);
 
-	return 0;
+	return exitcode;
 }

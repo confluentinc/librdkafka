@@ -98,6 +98,9 @@ static void rd_kafka_global_init (void) {
         atexit(rd_shared_ptrs_dump);
 #endif
 	mtx_init(&rd_kafka_global_lock, mtx_plain);
+#if ENABLE_DEVEL
+	rd_atomic32_init(&rd_kafka_op_cnt, 0);
+#endif
 }
 
 /**

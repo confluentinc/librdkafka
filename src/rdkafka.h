@@ -316,6 +316,14 @@ typedef enum {
         RD_KAFKA_RESP_ERR__WAIT_CACHE = -164,
         /** Operation interrupted (e.g., due to yield)) */
         RD_KAFKA_RESP_ERR__INTR = -163,
+        /** Key serialization error */
+        RD_KAFKA_RESP_ERR__KEY_SERIALIZATION = -162,
+        /** Value serialization error */
+        RD_KAFKA_RESP_ERR__VALUE_SERIALIZATION = -161,
+        /** Key deserialization error */
+        RD_KAFKA_RESP_ERR__KEY_DESERIALIZATION = -160,
+        /** Value deserialization error */
+        RD_KAFKA_RESP_ERR__VALUE_DESERIALIZATION = -159,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,

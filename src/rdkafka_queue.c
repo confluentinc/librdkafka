@@ -557,7 +557,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                         /* Yield. */
                         break;
                 }
-                rd_dassert(res == RD_KAFKA_OP_PASS);
+                rd_dassert(res == RD_KAFKA_OP_RES_PASS);
 
 		/* Auto-commit offset, if enabled. */
 		if (!rko->rko_err && rko->rko_type == RD_KAFKA_OP_FETCH) {

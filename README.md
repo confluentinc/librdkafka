@@ -98,12 +98,17 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 
 ## Instructions
 
-### Building
+### Building(Linux)
 
       ./configure
       make
       sudo make install
 
+### Building(OSX)
+
+      CC=clang CXX=clang ./configure
+      make
+      sudo make install
 
 **NOTE**: See [README.win32](README.win32) for instructions how to build
           on Windows with Microsoft Visual Studio.

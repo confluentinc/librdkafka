@@ -50,6 +50,8 @@
 #include "rdkafka_interceptor.h"
 
 #include "rdtime.h"
+#include "rdunittest.h"
+
 #ifdef _MSC_VER
 #include <sys/types.h>
 #include <sys/timeb.h>
@@ -3355,6 +3357,10 @@ void rd_kafka_mem_free (rd_kafka_t *rk, void *ptr) {
 
 int rd_kafka_errno (void) {
         return errno;
+}
+
+int rd_kafka_unittest (void) {
+        return rd_unittest();
 }
 
 

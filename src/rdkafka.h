@@ -3054,6 +3054,15 @@ RD_EXPORT
 int rd_kafka_wait_destroyed(int timeout_ms);
 
 
+/**
+ * @brief Run librdkafka's built-in unit-tests.
+ *
+ * @returns the number of failures, or 0 if all tests passed.
+ */
+RD_EXPORT
+int rd_kafka_unittest (void);
+
+
 /**@}*/
 
 

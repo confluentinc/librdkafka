@@ -85,6 +85,7 @@ static const char *test_states[] = {
 /**
  * Declare all tests here
  */
+_TEST_DECL(0000_unittests);
 _TEST_DECL(0001_multiobj);
 _TEST_DECL(0002_unkpart);
 _TEST_DECL(0003_msgmaxsize);
@@ -153,6 +154,7 @@ _TEST_DECL(0065_yield);
 struct test tests[] = {
         /* Special MAIN test to hold over-all timings, etc. */
         { .name = "<MAIN>", .flags = TEST_F_LOCAL },
+        _TEST(0000_unittests, TEST_F_LOCAL),
         _TEST(0001_multiobj, 0),
         _TEST(0002_unkpart, 0),
         _TEST(0003_msgmaxsize, 0),

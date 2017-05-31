@@ -124,8 +124,9 @@ void rd_kafka_GroupCoordinatorRequest (rd_kafka_broker_t *rkb,
                                        void *opaque) {
         rd_kafka_buf_t *rkbuf;
 
-        rkbuf = rd_kafka_buf_new(rkb->rkb_rk, RD_KAFKAP_GroupCoordinator, 1, 0);
-        rd_kafka_buf_push_kstr(rkbuf, cgrp);
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_GroupCoordinator, 1,
+                                         RD_KAFKAP_STR_SIZE(cgrp));
+        rd_kafka_buf_write_kstr(rkbuf, cgrp);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
@@ -208,6 +209,8 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
 
         goto done;
 
+ err_parse:
+        ErrorCode = rkbuf->rkbuf_err;
  err:
         actions = rd_kafka_err_action(
                 rkb, ErrorCode, rkbuf, request,
@@ -261,8 +264,8 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
 
         rd_kafka_topic_partition_list_sort_by_topic(partitions);
 
-        rkbuf = rd_kafka_buf_new_growable(
-                rkb->rkb_rk, RD_KAFKAP_Offset, 1,
+        rkbuf = rd_kafka_buf_new_request(
+                rkb, RD_KAFKAP_Offset, 1,
                 /* ReplicaId+TopicArrayCnt+Topic */
                 4+4+100+
                 /* PartArrayCnt */
@@ -313,8 +316,6 @@ void rd_kafka_OffsetRequest (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_update_i32(rkbuf, of_PartArrayCnt, part_cnt);
                 rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt, topic_cnt);
         }
-
-        rd_kafka_buf_autopush(rkbuf);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, api_version,
                                     api_version == 1 ?
@@ -462,6 +463,10 @@ err:
         }
 
 	return err;
+
+ err_parse:
+        err = rkbuf->rkbuf_err;
+        goto err;
 }
 
 
@@ -543,8 +548,8 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
 	int tot_PartCnt = 0;
         int i;
 
-	rkbuf = rd_kafka_buf_new_growable(
-                rkb->rkb_rk, RD_KAFKAP_OffsetFetch, 1,
+        rkbuf = rd_kafka_buf_new_request(
+                rkb, RD_KAFKAP_OffsetFetch, 1,
                 RD_KAFKAP_STR_SIZE(rkb->rkb_rk->rk_group_id) +
                 4 +
                 (parts->cnt * 32));
@@ -603,10 +608,6 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
         /* Finalize TopicCnt */
         rd_kafka_buf_update_u32(rkbuf, of_TopicCnt, TopicCnt);
 
-
-        /* Push write-buffer onto iovec stack */
-        rd_kafka_buf_autopush(rkbuf);
-
         rd_kafka_buf_ApiVersion_set(rkbuf, api_version, 0);
 
 	rd_rkb_dbg(rkb, TOPIC, "OFFSET",
@@ -616,8 +617,6 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
 	if (tot_PartCnt == 0) {
 		/* No partitions needs OffsetFetch, enqueue empty
 		 * response right away. */
-		rkbuf->rkbuf_rkb = rkb;
-		rd_kafka_broker_keep(rkb);
                 rkbuf->rkbuf_replyq = replyq;
                 rkbuf->rkbuf_cb     = resp_cb;
                 rkbuf->rkbuf_opaque = opaque;
@@ -693,7 +692,10 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
 		err = last_ErrorCode;
 	goto done;
 
-err:
+ err_parse:
+        err = rkbuf->rkbuf_err;
+
+ err:
         actions = rd_kafka_err_action(
 		rkb, err, rkbuf, request,
 
@@ -776,8 +778,8 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
 
         rd_kafka_assert(NULL, offsets != NULL);
 
-        rkbuf = rd_kafka_buf_new_growable(rkb->rkb_rk, RD_KAFKAP_OffsetCommit,
-                                          1, 100 + (offsets->cnt * 128));
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_OffsetCommit,
+                                         1, 100 + (offsets->cnt * 128));
 
         /* ConsumerGroup */
         rd_kafka_buf_write_kstr(rkbuf, rkcg->rkcg_group_id);
@@ -861,10 +863,6 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
         /* Finalize TopicCnt */
         rd_kafka_buf_update_u32(rkbuf, of_TopicCnt, TopicCnt);
 
-
-        /* Push write-buffer onto iovec stack */
-        rd_kafka_buf_autopush(rkbuf);
-
         rd_kafka_buf_ApiVersion_set(rkbuf, api_version, 0);
 
         rd_rkb_dbg(rkb, TOPIC, "OFFSET",
@@ -880,9 +878,11 @@ int rd_kafka_OffsetCommitRequest (rd_kafka_broker_t *rkb,
 
 
 /**
- * Write "consumer" protocol type MemberState for SyncGroupRequest.
+ * @brief Write "consumer" protocol type MemberState for SyncGroupRequest to
+ *        enveloping buffer \p rkbuf.
  */
-static rd_kafkap_bytes_t *rd_kafka_group_MemberState_consumer_write (
+static void rd_kafka_group_MemberState_consumer_write (
+        rd_kafka_buf_t *env_rkbuf,
         const rd_kafka_group_member_t *rkgm) {
         rd_kafka_buf_t *rkbuf;
         int i;
@@ -891,9 +891,9 @@ static rd_kafkap_bytes_t *rd_kafka_group_MemberState_consumer_write (
         ssize_t of_PartCnt = -1;
         int TopicCnt = 0;
         int PartCnt = 0;
-        rd_kafkap_bytes_t *MemberState;
+        rd_slice_t slice;
 
-        rkbuf = rd_kafka_buf_new_growable(NULL, RD_KAFKAP_None, 1, 100);
+        rkbuf = rd_kafka_buf_new(1, 100);
         rd_kafka_buf_write_i16(rkbuf, 0); /* Version */
         of_TopicCnt = rd_kafka_buf_write_i32(rkbuf, 0); /* Updated later */
         for (i = 0 ; i < rkgm->rkgm_assignment->cnt ; i++) {
@@ -925,11 +925,14 @@ static rd_kafkap_bytes_t *rd_kafka_group_MemberState_consumer_write (
 
         rd_kafka_buf_write_kbytes(rkbuf, rkgm->rkgm_userdata);
 
-        rd_kafka_buf_autopush(rkbuf);
-        MemberState = rd_kafkap_bytes_from_buf(rkbuf);
-        rd_kafka_buf_destroy(rkbuf);
+        /* Get pointer to binary buffer */
+        rd_slice_init_full(&slice, &rkbuf->rkbuf_buf);
 
-        return MemberState;
+        /* Write binary buffer as Kafka Bytes to enveloping buffer. */
+        rd_kafka_buf_write_i32(env_rkbuf, rd_slice_remains(&slice));
+        rd_buf_write_slice(&env_rkbuf->rkbuf_buf, &slice);
+
+        rd_kafka_buf_destroy(rkbuf);
 }
 
 /**
@@ -948,13 +951,13 @@ void rd_kafka_SyncGroupRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_t *rkbuf;
         int i;
 
-        rkbuf = rd_kafka_buf_new_growable(rkb->rkb_rk, RD_KAFKAP_SyncGroup,
-                                          1,
-                                          RD_KAFKAP_STR_SIZE(group_id) +
-                                          4 /* GenerationId */ +
-                                          RD_KAFKAP_STR_SIZE(member_id) +
-                                          4 /* array size group_assignment */ +
-                                          (assignment_cnt * 100/*guess*/));
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SyncGroup,
+                                         1,
+                                         RD_KAFKAP_STR_SIZE(group_id) +
+                                         4 /* GenerationId */ +
+                                         RD_KAFKAP_STR_SIZE(member_id) +
+                                         4 /* array size group_assignment */ +
+                                         (assignment_cnt * 100/*guess*/));
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, generation_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
@@ -962,17 +965,10 @@ void rd_kafka_SyncGroupRequest (rd_kafka_broker_t *rkb,
 
         for (i = 0 ; i < assignment_cnt ; i++) {
                 const rd_kafka_group_member_t *rkgm = &assignments[i];
-                rd_kafkap_bytes_t *MemberState;
+
                 rd_kafka_buf_write_kstr(rkbuf, rkgm->rkgm_member_id);
-
-                MemberState =
-                        rd_kafka_group_MemberState_consumer_write(rkgm);
-                rd_kafka_buf_write_kbytes(rkbuf, MemberState);
-                rd_kafkap_bytes_destroy(MemberState);
+                rd_kafka_group_MemberState_consumer_write(rkbuf, rkgm);
         }
-
-        /* Push write-buffer onto iovec stack */
-        rd_kafka_buf_autopush(rkbuf);
 
         /* This is a blocking request */
         rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;
@@ -1037,6 +1033,12 @@ err:
                 return; /* Termination */
 
         rd_kafka_cgrp_handle_SyncGroup(rkcg, rkb, ErrorCode, &MemberState);
+
+        return;
+
+ err_parse:
+        ErrorCode = rkbuf->rkbuf_err;
+        goto err;
 }
 
 
@@ -1056,14 +1058,14 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
         rd_kafka_assignor_t *rkas;
         int i;
 
-        rkbuf = rd_kafka_buf_new_growable(rkb->rkb_rk, RD_KAFKAP_JoinGroup,
-                                          1,
-                                          RD_KAFKAP_STR_SIZE(group_id) +
-                                          4 /* sessionTimeoutMs */ +
-                                          RD_KAFKAP_STR_SIZE(member_id) +
-                                          RD_KAFKAP_STR_SIZE(protocol_type) +
-                                          4 /* array count GroupProtocols */ +
-                                          (rd_list_cnt(topics) * 100));
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_JoinGroup,
+                                         1,
+                                         RD_KAFKAP_STR_SIZE(group_id) +
+                                         4 /* sessionTimeoutMs */ +
+                                         RD_KAFKAP_STR_SIZE(member_id) +
+                                         RD_KAFKAP_STR_SIZE(protocol_type) +
+                                         4 /* array count GroupProtocols */ +
+                                         (rd_list_cnt(topics) * 100));
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.group_session_timeout_ms);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
@@ -1079,10 +1081,6 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
         }
-
-        /* Push write-buffer onto iovec stack */
-        rd_kafka_buf_autopush(rkbuf);
-
 
         /* This is a blocking request */
         rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;
@@ -1109,15 +1107,12 @@ void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
 
-        rkbuf = rd_kafka_buf_new(rkb->rkb_rk, RD_KAFKAP_LeaveGroup,
-                                 1,
-                                 RD_KAFKAP_STR_SIZE(group_id) +
-                                 RD_KAFKAP_STR_SIZE(member_id));
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_LeaveGroup,
+                                         1,
+                                         RD_KAFKAP_STR_SIZE(group_id) +
+                                         RD_KAFKAP_STR_SIZE(member_id));
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
-
-        /* Push write-buffer onto iovec stack */
-        rd_kafka_buf_autopush(rkbuf);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
@@ -1164,6 +1159,10 @@ err:
                 rd_kafka_dbg(rkb->rkb_rk, CGRP, "LEAVEGROUP",
                              "LeaveGroup response: %s",
                              rd_kafka_err2str(ErrorCode));
+
+ err_parse:
+        ErrorCode = rkbuf->rkbuf_err;
+        goto err;
 }
 
 
@@ -1187,18 +1186,15 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
                    "Heartbeat for group \"%s\" generation id %"PRId32,
                    group_id->str, generation_id);
 
-        rkbuf = rd_kafka_buf_new(rkb->rkb_rk, RD_KAFKAP_Heartbeat,
-                                 1,
-                                 RD_KAFKAP_STR_SIZE(group_id) +
-                                 4 /* GenerationId */ +
-                                 RD_KAFKAP_STR_SIZE(member_id));
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_Heartbeat,
+                                         1,
+                                         RD_KAFKAP_STR_SIZE(group_id) +
+                                         4 /* GenerationId */ +
+                                         RD_KAFKAP_STR_SIZE(member_id));
 
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, generation_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
-
-        /* Push write-buffer onto iovec stack */
-        rd_kafka_buf_autopush(rkbuf);
 
         rkbuf->rkbuf_ts_timeout = rd_clock() +
                 (rkb->rkb_rk->rk_conf.group_session_timeout_ms * 1000);
@@ -1218,7 +1214,7 @@ void rd_kafka_ListGroupsRequest (rd_kafka_broker_t *rkb,
                                  void *opaque) {
         rd_kafka_buf_t *rkbuf;
 
-        rkbuf = rd_kafka_buf_new(rkb->rkb_rk, RD_KAFKAP_ListGroups, 0, 0);
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_ListGroups, 0, 0);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
@@ -1234,14 +1230,12 @@ void rd_kafka_DescribeGroupsRequest (rd_kafka_broker_t *rkb,
                                      void *opaque) {
         rd_kafka_buf_t *rkbuf;
 
-        rkbuf = rd_kafka_buf_new_growable(rkb->rkb_rk, RD_KAFKAP_DescribeGroups,
-                                          1, 32*group_cnt);
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DescribeGroups,
+                                         1, 32*group_cnt);
 
         rd_kafka_buf_write_i32(rkbuf, group_cnt);
         while (group_cnt-- > 0)
                 rd_kafka_buf_write_str(rkbuf, groups[group_cnt], -1);
-
-        rd_kafka_buf_autopush(rkbuf);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
@@ -1359,9 +1353,8 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                                                           0, 2,
                                                           &features);
 
-        rkbuf = rd_kafka_buf_new_growable(rkb->rkb_rk, RD_KAFKAP_Metadata, 1,
-                                          4 +
-                                          (50 * topic_cnt));
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_Metadata, 1,
+                                         4 + (50 * topic_cnt));
 
         if (!reason)
                 reason = "";
@@ -1436,8 +1429,6 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_str(rkbuf, topic, -1);
 
         }
-
-        rd_kafka_buf_autopush(rkbuf);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -1525,6 +1516,8 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 
 	goto done;
 
+ err_parse:
+        err = rkbuf->rkbuf_err;
  err:
 	if (*apis)
 		rd_free(*apis);
@@ -1554,10 +1547,9 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 				 void *opaque, int flash_msg) {
         rd_kafka_buf_t *rkbuf;
 
-        rkbuf = rd_kafka_buf_new(rkb->rkb_rk, RD_KAFKAP_ApiVersion, 1, 4);
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_ApiVersion, 1, 4);
 	rkbuf->rkbuf_flags |= (flash_msg ? RD_KAFKA_OP_F_FLASH : 0);
 	rd_kafka_buf_write_i32(rkbuf, 0); /* Empty array: request all APIs */
-	rd_kafka_buf_autopush(rkbuf);
 
 	/* Non-supporting brokers will tear down the conneciton when they
 	 * receive an unknown API request, so dont retry request on failure. */
@@ -1588,11 +1580,10 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_t *rkbuf;
 	int mechlen = (int)strlen(mechanism);
 
-        rkbuf = rd_kafka_buf_new(rkb->rkb_rk, RD_KAFKAP_SaslHandshake,
-                                 1, RD_KAFKAP_STR_SIZE0(mechlen));
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SaslHandshake,
+                                         1, RD_KAFKAP_STR_SIZE0(mechlen));
 	rkbuf->rkbuf_flags |= (flash_msg ? RD_KAFKA_OP_F_FLASH : 0);
 	rd_kafka_buf_write_str(rkbuf, mechanism, mechlen);
-	rd_kafka_buf_autopush(rkbuf);
 
 	/* Non-supporting brokers will tear down the conneciton when they
 	 * receive an unknown API request or where the SASL GSSAPI

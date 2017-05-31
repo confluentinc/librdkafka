@@ -327,15 +327,22 @@ static RD_UNUSED void rd_kafkap_bytes_destroy (rd_kafkap_bytes_t *kbytes) {
 
 
 /**
- * Allocate a new Kafka bytes and make a copy of 'bytes'.
- * Supports Kafka NULL bytes.
+ * @brief Allocate a new Kafka bytes and make a copy of 'bytes'.
+ * If \p len > 0 but \p bytes is NULL no copying is performed by
+ * the bytes structure will be allocated to fit \p size bytes.
+ *
+ * Supports:
+ *  - Kafka NULL bytes (bytes==NULL,len==0),
+ *  - Empty bytes (bytes!=NULL,len==0)
+ *  - Copy data (bytes!=NULL,len>0)
+ *  - No-copy, just alloc (bytes==NULL,len>0)
  */
 static RD_INLINE RD_UNUSED
 rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
 	rd_kafkap_bytes_t *kbytes;
 	int32_t klen;
 
-	if (!bytes)
+	if (!bytes && !len)
 		len = RD_KAFKAP_BYTES_LEN_NULL;
 
 	kbytes = rd_malloc(sizeof(*kbytes) + 4 +
@@ -349,7 +356,8 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
 		kbytes->data = NULL;
 	else {
 		kbytes->data = ((const char *)(kbytes+1))+4;
-		memcpy((void *)kbytes->data, bytes, len);
+                if (bytes)
+                        memcpy((void *)kbytes->data, bytes, len);
 	}
 
 	return kbytes;

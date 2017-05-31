@@ -3099,6 +3099,10 @@ static void rd_kafka_DescribeGroups_resp_cb (rd_kafka_t *rk,
 
 err:
         state->err = err;
+        return;
+
+ err_parse:
+        state->err = reply->rkbuf_err;
 }
 
 static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
@@ -3169,6 +3173,10 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
 
 err:
         state->err = err;
+        return;
+
+ err_parse:
+        state->err = reply->rkbuf_err;
 }
 
 rd_kafka_resp_err_t

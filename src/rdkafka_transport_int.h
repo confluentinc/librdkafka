@@ -77,5 +77,8 @@ struct rd_kafka_transport_s {
         WSAPOLLFD rktrans_pfd[2];
 #endif
         int rktrans_pfd_cnt;
+
+        size_t rktrans_rcvbuf_size;    /**< Socket receive buffer size */
+        size_t rktrans_sndbuf_size;    /**< Socket send buffer size */
 };
 

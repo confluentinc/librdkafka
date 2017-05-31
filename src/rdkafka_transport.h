@@ -32,6 +32,7 @@
 #include <poll.h>
 #endif
 
+#include "rdbuf.h"
 #include "rdaddr.h"
 
 typedef struct rd_kafka_transport_s rd_kafka_transport_t;
@@ -39,13 +40,15 @@ typedef struct rd_kafka_transport_s rd_kafka_transport_t;
 void rd_kafka_transport_io_serve (rd_kafka_transport_t *rktrans,
                                   int timeout_ms);
 
-ssize_t rd_kafka_transport_sendmsg(rd_kafka_transport_t *rktrans, const struct msghdr *msg,
-	char *errstr, size_t errstr_size);
-ssize_t rd_kafka_transport_recvmsg(rd_kafka_transport_t *rktrans, struct msghdr *msg,
-	char *errstr, size_t errstr_size);
-int rd_kafka_transport_framed_recvmsg (rd_kafka_transport_t *rktrans,
-				       rd_kafka_buf_t **rkbufp,
-				       char *errstr, size_t errstr_size);
+ssize_t rd_kafka_transport_send (rd_kafka_transport_t *rktrans,
+                                 rd_slice_t *slice,
+                                 char *errstr, size_t errstr_size);
+ssize_t rd_kafka_transport_recv (rd_kafka_transport_t *rktrans,
+                                 rd_buf_t *rbuf,
+                                 char *errstr, size_t errstr_size);
+int rd_kafka_transport_framed_recv (rd_kafka_transport_t *rktrans,
+                                    rd_kafka_buf_t **rkbufp,
+                                    char *errstr, size_t errstr_size);
 struct rd_kafka_broker_s;
 rd_kafka_transport_t *rd_kafka_transport_connect(struct rd_kafka_broker_s *rkb, const rd_sockaddr_inx_t *sinx,
                                                  char *errstr, size_t errstr_size);

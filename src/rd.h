@@ -154,6 +154,8 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #endif
 
 
+/* Round/align X upwards to STRIDE, which must be power of 2. */
+#define RD_ROUNDUP(X,STRIDE) (((X) + ((STRIDE) - 1)) & ~(STRIDE-1))
 
 #define RD_ARRAY_SIZE(A)          (sizeof((A)) / sizeof(*(A)))
 #define RD_ARRAYSIZE(A)           RD_ARRAY_SIZE(A)

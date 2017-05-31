@@ -234,7 +234,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         /* We assume that the marshalled representation is
          * no more than 4 times larger than the wire representation. */
         rd_tmpabuf_new(&tbuf,
-                       sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_len * 4),
+                       sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_totlen * 4),
                        0/*dont assert on fail*/);
 
         if (!(md = rd_tmpabuf_alloc(&tbuf, sizeof(*md))))
@@ -565,6 +565,7 @@ done:
          * to the caller. */
         return md;
 
+ err_parse:
 err:
         if (requested_topics) {
                 /* Failed requests shall purge cache hints for

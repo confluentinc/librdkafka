@@ -177,9 +177,9 @@ struct rd_kafka_s {
          * Exactly Once Semantics
          */
         struct {
-                rd_kafkap_str_t *rk_TransactionalId;
-                int64_t          rk_PID;
-                int16_t          rk_ProducerEpoch;
+                rd_kafkap_str_t *TransactionalId;
+                int64_t          PID;
+                int16_t          ProducerEpoch;
         } rk_eos;
 
 	const rd_kafkap_bytes_t *rk_null_bytes;

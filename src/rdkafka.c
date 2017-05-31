@@ -58,6 +58,8 @@
 #include <sys/timeb.h>
 #endif
 
+
+
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 
 /**
@@ -637,8 +639,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
 	if (rk->rk_full_metadata)
 		rd_kafka_metadata_destroy(rk->rk_full_metadata);
-	rd_kafkap_str_destroy(rk->rk_client_id);
+        rd_kafkap_str_destroy(rk->rk_client_id);
         rd_kafkap_str_destroy(rk->rk_group_id);
+        rd_kafkap_str_destroy(rk->rk_eos.TransactionalId);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
         rd_list_destroy(&rk->rk_broker_by_id);
 
@@ -1474,6 +1477,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 
         rd_kafka_wrunlock(rk);
+
+        rk->rk_eos.PID = -1;
+        rk->rk_eos.TransactionalId = rd_kafkap_str_new(NULL, 0);
 
         mtx_lock(&rk->rk_internal_rkb_lock);
 	rk->rk_internal_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,

@@ -1,3 +1,10 @@
+/* Copied from http://stackoverflow.com/a/17646775/1821055
+ * with the following modifications:
+ *   * remove test code
+ *   * change pthread usage to tinycthread
+ *   * once-per-process hw/sw initialization
+ */
+
 /* crc32c.c -- compute CRC-32C using the Intel crc32 instruction
  * Copyright (C) 2013 Mark Adler
  * Version 1.1  1 Aug 2013  Mark Adler
@@ -37,13 +44,18 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <pthread.h>
+#include "tinycthread.h"
+
+#include "crc32c.h"
 
 /* CRC-32C (iSCSI) polynomial in reversed bit order. */
 #define POLY 0x82f63b78
 
+static once_flag crc32c_once = ONCE_FLAG_INIT;
+static int sse42;  /* Cached SSE42 support */
+
+
 /* Table for a quadword-at-a-time software crc. */
-static pthread_once_t crc32c_once_sw = PTHREAD_ONCE_INIT;
 static uint32_t crc32c_table[8][256];
 
 /* Construct table for software CRC-32C calculation. */
@@ -80,7 +92,6 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
     const unsigned char *next = buf;
     uint64_t crc;
 
-    pthread_once(&crc32c_once_sw, crc32c_init_sw);
     crc = crci ^ 0xffffffff;
     while (len && ((uintptr_t)next & 7) != 0) {
         crc = crc32c_table[0][(crc ^ *next++) & 0xff] ^ (crc >> 8);
@@ -210,7 +221,6 @@ static inline uint32_t crc32c_shift(uint32_t zeros[][256], uint32_t crc)
 #define SHORTx2 "512"
 
 /* Tables for hardware crc that shift a crc by LONG and SHORT zeros. */
-static pthread_once_t crc32c_once_hw = PTHREAD_ONCE_INIT;
 static uint32_t crc32c_long[4][256];
 static uint32_t crc32c_short[4][256];
 
@@ -227,9 +237,6 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
     const unsigned char *next = buf;
     const unsigned char *end;
     uint64_t crc0, crc1, crc2;      /* need to be 64 bits for crc32q */
-
-    /* populate shift tables the first time through */
-    pthread_once(&crc32c_once_hw, crc32c_init_hw);
 
     /* pre-process the crc */
     crc0 = crc ^ 0xffffffff;
@@ -330,49 +337,20 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
    version.  Otherwise, use the software version. */
 uint32_t crc32c(uint32_t crc, const void *buf, size_t len)
 {
-    int sse42;
-
-    SSE42(sse42);
     return sse42 ? crc32c_hw(crc, buf, len) : crc32c_sw(crc, buf, len);
 }
 
-#ifdef TEST
 
-#define SIZE (262144*3)
-#define CHUNK SIZE
 
-int main(int argc, char **argv)
-{
-    char *buf;
-    ssize_t got;
-    size_t off, n;
-    uint32_t crc;
 
-    (void)argv;
-    crc = 0;
-    buf = malloc(SIZE);
-    if (buf == NULL) {
-        fputs("out of memory", stderr);
-        return 1;
-    }
-    while ((got = read(0, buf, SIZE)) > 0) {
-        off = 0;
-        do {
-            n = (size_t)got - off;
-            if (n > CHUNK)
-                n = CHUNK;
-            crc = argc > 1 ? crc32c_sw(crc, buf + off, n) :
-                             crc32c(crc, buf + off, n);
-            off += n;
-        } while (off < (size_t)got);
-    }
-    free(buf);
-    if (got == -1) {
-        fputs("read error\n", stderr);
-        return 1;
-    }
-    printf("%08x\n", crc);
-    return 0;
+
+
+/**
+ * @brief Populate shift tables once
+ */
+void crc32c_global_init (void) {
+        SSE42(sse42);
+        call_once(&crc32c_once, sse42 ?
+                  crc32c_init_hw : crc32c_init_sw);
 }
 
-#endif /* TEST */

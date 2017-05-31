@@ -50,6 +50,7 @@
 #include "rdkafka_interceptor.h"
 
 #include "rdtime.h"
+#include "crc32c.h"
 #include "rdunittest.h"
 
 #ifdef _MSC_VER
@@ -103,6 +104,7 @@ static void rd_kafka_global_init (void) {
 #if ENABLE_DEVEL
 	rd_atomic32_init(&rd_kafka_op_cnt, 0);
 #endif
+        crc32c_global_init();
 }
 
 /**

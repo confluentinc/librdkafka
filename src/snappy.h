@@ -18,18 +18,13 @@ void rd_kafka_snappy_free_env(struct snappy_env *env);
 int rd_kafka_snappy_uncompress_iov(struct iovec *iov_in, int iov_in_len,
 			   size_t input_len, char *uncompressed);
 int rd_kafka_snappy_uncompress(const char *compressed, size_t n, char *uncompressed);
-int rd_kafka_snappy_compress(struct snappy_env *env,
-		    const char *input,
-		    size_t input_length,
-		    char *compressed,
-		    size_t *compressed_length);
+char *rd_kafka_snappy_java_uncompress (const char *inbuf, size_t inlen,
+                                       size_t *outlenp,
+                                       char *errstr, size_t errstr_size);
 int rd_kafka_snappy_compress_iov(struct snappy_env *env,
-			struct iovec *iov_in,
-			int iov_in_len,
-			size_t input_length,
-			struct iovec *iov_out,
-			int *iov_out_len,
-			size_t *compressed_length);
+                                 const struct iovec *iov_in, size_t iov_in_cnt,
+                                 size_t input_length,
+                                 struct iovec *iov_out);
 bool rd_kafka_snappy_uncompressed_length(const char *buf, size_t len, size_t *result);
 size_t rd_kafka_snappy_max_compressed_length(size_t source_len);
 

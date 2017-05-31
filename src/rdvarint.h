@@ -30,9 +30,11 @@
 #ifndef _RDVARINT_H
 #define _RDVARINT_H
 
+#include "rd.h"
+#include "rdbuf.h"
 
 /**
- * @name unsigned varint encoder/decoder
+ * @name signed varint zig-zag encoder/decoder
  * @{
  *
  */
@@ -47,23 +49,21 @@ static RD_INLINE RD_UNUSED
 size_t rd_uvarint_enc_u64 (char *dst, size_t dstsize, uint64_t num) {
         size_t of = 0;
 
-        while (num) {
+        do {
                 if (unlikely(of >= dstsize))
                         return 0; /* Not enough space */
 
-                dst[(int)(of++)] = num & 0xff;
-                num >> 7;
-        }
+                dst[of++] = (num & 0x7f) | (num > 0x7f ? 0x80 : 0);
+                num >>= 7;
+        } while (num);
 
         return of;
 }
 
-static RD_INLINE RD_UNUSED
-size_t rd_uvarint_enc_u32 (char *dst, size_t dstsize, uint32_t num) {
-        return rd_uvarint_enc_u64(dst, dstsize, (uint64_t)num);
-}
-
-
+/**
+ * @brief encodes a signed integer using zig-zag encoding.
+ * @sa rd_uvarint_enc_u64
+ */
 static RD_INLINE RD_UNUSED
 size_t rd_uvarint_enc_i64 (char *dst, size_t dstsize, int64_t num) {
         return rd_uvarint_enc_u64(dst, dstsize, (num << 1) ^ (num >> 63));
@@ -72,8 +72,7 @@ size_t rd_uvarint_enc_i64 (char *dst, size_t dstsize, int64_t num) {
 
 static RD_INLINE RD_UNUSED
 size_t rd_uvarint_enc_i32 (char *dst, size_t dstsize, int32_t num) {
-        return rd_uvarint_enc_u32(dst, dstsize,
-                                  (uint32_t)((num << 1) ^ (num >> 31)));
+        return rd_uvarint_enc_i64(dst, dstsize, num);
 }
 
 
@@ -84,7 +83,7 @@ size_t rd_uvarint_enc_i32 (char *dst, size_t dstsize, int32_t num) {
  *
  * @returns 1 on overflow, else 0.
  */
-#define RD_UVARINT_OVERFLOW(DEC_RETVAL) (DEC_RETVAL > FIXME)
+#define RD_UVARINT_OVERFLOW(DEC_RETVAL) (DEC_RETVAL > SIZE_MAX)
 
 /**
  * @returns 1 if there were not enough bytes to decode the varint, else 0.
@@ -116,29 +115,38 @@ static RD_INLINE RD_UNUSED
 size_t rd_uvarint_dec (const char *src, size_t srcsize, size_t *nump) {
         size_t of = 0;
         size_t num = 0;
+        int shift = 0;
 
         do {
                 if (unlikely(srcsize-- == 0))
                         return 0; /* Underflow */
-                num = (num << 7) | (size_t)src[(int)of] & 0x7f;
+                num |= (uint64_t)(src[(int)of] & 0x7f) << shift;
+                shift += 7;
         } while (src[(int)of++] & 0x80);
 
         *nump = num;
         return of;
 }
 
+static RD_INLINE RD_UNUSED
 size_t rd_varint_dec_i64 (const char *src, size_t srcsize, int64_t *nump) {
         size_t n;
         size_t r;
 
         r = rd_uvarint_dec(src, srcsize, &n);
-        if (!RD_UVARINT_DEC_FAILED(r)) {
-                int64_t in;
+        if (likely(!RD_UVARINT_DEC_FAILED(r)))
+                *nump = (int64_t)(n >> 1) ^ -(n & 1);
 
-                /* FIXME */
-        }
         return r;
 }
+
+
+/**
+ * @brief Read a varint-encoded signed integer from \p slice.
+ *
+ * @sa rd_uvarint_dec()
+ */
+size_t rd_varint_dec_slice (rd_slice_t *slice, int64_t *nump);
 
 
 /**
@@ -151,6 +159,9 @@ size_t rd_varint_dec_i64 (const char *src, size_t srcsize, int64_t *nump) {
  * @returns the encoding size of the value 0
  */
 #define RD_UVARINT_ENC_SIZE_0() 1
+
+
+int unittest_rdvarint (void);
 
 /**@}*/
 

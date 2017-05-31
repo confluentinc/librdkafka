@@ -35,6 +35,7 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 #include "rdkafka_metadata.h"
+#include "rdkafka_msgset.h"
 
 #include "rdrand.h"
 
@@ -1602,4 +1603,226 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
                                                resp_cb, opaque);
 	else /* in broker thread */
 		rd_kafka_broker_buf_enq1(rkb, rkbuf, resp_cb, opaque);
+}
+
+
+
+
+/**
+ * @brief Parses a Produce reply.
+ * @returns 0 on success or an error code on failure.
+ * @locality broker thread
+ */
+static rd_kafka_resp_err_t
+rd_kafka_handle_Produce_parse (rd_kafka_broker_t *rkb,
+                               rd_kafka_toppar_t *rktp,
+                               rd_kafka_buf_t *rkbuf,
+                               rd_kafka_buf_t *request,
+                               int64_t *offsetp,
+                               int64_t *timestampp) {
+        int32_t TopicArrayCnt;
+        int32_t PartitionArrayCnt;
+        struct {
+                int32_t Partition;
+                int16_t ErrorCode;
+                int64_t Offset;
+        } hdr;
+        const int log_decode_errors = 1;
+
+        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
+        if (TopicArrayCnt != 1)
+                goto err;
+
+        /* Since we only produce to one single topic+partition in each
+         * request we assume that the reply only contains one topic+partition
+         * and that it is the same that we requested.
+         * If not the broker is buggy. */
+        rd_kafka_buf_skip_str(rkbuf);
+        rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
+
+        if (PartitionArrayCnt != 1)
+                goto err;
+
+        rd_kafka_buf_read_i32(rkbuf, &hdr.Partition);
+        rd_kafka_buf_read_i16(rkbuf, &hdr.ErrorCode);
+        rd_kafka_buf_read_i64(rkbuf, &hdr.Offset);
+
+        *offsetp = hdr.Offset;
+
+        *timestampp = -1;
+        if (request->rkbuf_reqhdr.ApiVersion >= 2) {
+                rd_kafka_buf_read_i64(rkbuf, timestampp);
+        }
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 1) {
+                int32_t Throttle_Time;
+                rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
+
+                rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
+                                          Throttle_Time);
+        }
+
+
+        return hdr.ErrorCode;
+
+ err_parse:
+        return rkbuf->rkbuf_err;
+ err:
+        return RD_KAFKA_RESP_ERR__BAD_MSG;
+}
+
+
+/**
+ * @brief Handle ProduceResponse
+ *
+ * @locality broker thread
+ */
+static void rd_kafka_handle_Produce (rd_kafka_t *rk,
+                                     rd_kafka_broker_t *rkb,
+                                     rd_kafka_resp_err_t err,
+                                     rd_kafka_buf_t *reply,
+                                     rd_kafka_buf_t *request,
+                                     void *opaque) {
+        shptr_rd_kafka_toppar_t *s_rktp = opaque; /* from ProduceRequest() */
+        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
+        int64_t offset = RD_KAFKA_OFFSET_INVALID;
+        int64_t timestamp = -1;
+
+        /* Parse Produce reply (unless the request errored) */
+        if (!err && reply)
+                err = rd_kafka_handle_Produce_parse(rkb, rktp,
+                                                    reply, request,
+                                                    &offset, &timestamp);
+
+
+        if (likely(!err)) {
+                rd_rkb_dbg(rkb, MSG, "MSGSET",
+                           "%s [%"PRId32"]: MessageSet with %i message(s) "
+                           "delivered",
+                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                           rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt));
+
+        } else {
+                /* Error */
+                int actions;
+
+                actions = rd_kafka_err_action(
+                        rkb, err, reply, request,
+
+                        RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+                        RD_KAFKA_RESP_ERR__TRANSPORT,
+
+                        RD_KAFKA_ERR_ACTION_REFRESH,
+                        RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+
+                        RD_KAFKA_ERR_ACTION_END);
+
+                rd_rkb_dbg(rkb, MSG, "MSGSET",
+                           "%s [%"PRId32"]: MessageSet with %i message(s) "
+                           "encountered error: %s (actions 0x%x)",
+                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                           rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
+                           rd_kafka_err2str(err), actions);
+
+                if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                        /* Request metadata information update */
+                        rd_kafka_toppar_leader_unavailable(rktp,
+                                                           "produce", err);
+
+                        /* Move messages (in the rkbuf) back to the partition's
+                         * queue head. They will be resent when a new leader
+                         * is delegated. */
+                        rd_kafka_toppar_insert_msgq(rktp, &request->rkbuf_msgq);
+                }
+
+                if ((actions & RD_KAFKA_ERR_ACTION_RETRY) &&
+                    rd_kafka_buf_retry(rkb, request))
+                        return; /* Scheduled for retry */
+
+                /* Refresh implies a later retry through other means */
+                if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
+                        goto done;
+
+
+                /* Fatal errors: no message transmission retries */
+                /* FALLTHRU */
+        }
+
+        /* Propagate assigned offset and timestamp back to app. */
+        if (likely(offset != RD_KAFKA_OFFSET_INVALID)) {
+                rd_kafka_msg_t *rkm;
+                if (rktp->rktp_rkt->rkt_conf.produce_offset_report) {
+                        /* produce.offset.report: each message */
+                        TAILQ_FOREACH(rkm, &request->rkbuf_msgq.rkmq_msgs,
+                                      rkm_link) {
+                                rkm->rkm_offset = offset++;
+                                if (timestamp != -1) {
+                                        rkm->rkm_timestamp = timestamp;
+                                        rkm->rkm_tstype = RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME;
+                                }
+                        }
+                } else {
+                        /* Last message in each batch */
+                        rkm = TAILQ_LAST(&request->rkbuf_msgq.rkmq_msgs,
+                                         rd_kafka_msg_head_s);
+                        rkm->rkm_offset = offset +
+                                rd_atomic32_get(&request->rkbuf_msgq.
+                                                rkmq_msg_cnt);
+                        if (timestamp != -1) {
+                                rkm->rkm_timestamp = timestamp;
+                                rkm->rkm_tstype = RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME;
+                        }
+                }
+        }
+
+        /* Enqueue messages for delivery report */
+        rd_kafka_dr_msgq(rktp->rktp_rkt, &request->rkbuf_msgq, err);
+
+ done:
+        rd_kafka_toppar_destroy(s_rktp); /* from ProduceRequest() */
+}
+
+
+/**
+ * @brief Send ProduceRequest for messages in toppar queue.
+ *
+ * @returns the number of messages included, or 0 on error / no messages.
+ *
+ * @locality broker thread
+ */
+int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
+        rd_kafka_buf_t *rkbuf;
+        rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
+        size_t MessageSetSize = 0;
+        int cnt;
+
+        /**
+         * Create ProduceRequest with as many messages from the toppar
+         * transmit queue as possible.
+         */
+        rkbuf = rd_kafka_msgset_create_ProduceRequest(rkb, rktp,
+                                                      &MessageSetSize);
+        if (unlikely(!rkbuf))
+                return 0;
+
+        cnt = rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt);
+        rd_dassert(cnt > 0);
+
+        rd_atomic64_add(&rktp->rktp_c.tx_msgs, cnt);
+        rd_atomic64_add(&rktp->rktp_c.tx_bytes, MessageSetSize);
+
+        if (!rkt->rkt_conf.required_acks)
+                rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_NO_RESPONSE;
+
+        /* Use timeout from first message. */
+        rkbuf->rkbuf_ts_timeout =
+                TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->rkm_ts_timeout;
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
+                                       RD_KAFKA_NO_REPLYQ,
+                                       rd_kafka_handle_Produce,
+                                       /* toppar ref for handle_Produce() */
+                                       rd_kafka_toppar_keep(rktp));
+
+        return cnt;
 }

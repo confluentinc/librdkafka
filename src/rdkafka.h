@@ -3046,9 +3046,8 @@ int rd_kafka_thread_cnt(void);
  *
  * Returns 0 if all kafka objects are now destroyed, or -1 if the
  * timeout was reached.
- * Since `rd_kafka_destroy()` is an asynch operation the 
- * `rd_kafka_wait_destroyed()` function can be used for applications where
- * a clean shutdown is required.
+ *
+ * @remark This function is deprecated.
  */
 RD_EXPORT
 int rd_kafka_wait_destroyed(int timeout_ms);

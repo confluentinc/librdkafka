@@ -2217,17 +2217,27 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb,
 
 
 /**
- * Serve the toppar's assigned to this broker.
+ * @brief Serve the toppar's assigned to this broker.
  *
- * Locality: broker thread
+ * @returns the minimum Fetch backoff time (abs timestamp) for the
+ *          partitions to fetch.
+ *
+ * @locality broker thread
  */
-static void rd_kafka_broker_toppars_serve (rd_kafka_broker_t *rkb) {
+static rd_ts_t rd_kafka_broker_toppars_serve (rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp, *rktp_tmp;
+        rd_ts_t min_backoff = RD_TS_MAX;
 
         TAILQ_FOREACH_SAFE(rktp, &rkb->rkb_toppars, rktp_rkblink, rktp_tmp) {
-		/* Serve toppar to update desired rktp state */
-		rd_kafka_broker_consumer_toppar_serve(rkb, rktp);
+                rd_ts_t backoff;
+
+                /* Serve toppar to update desired rktp state */
+                backoff = rd_kafka_broker_consumer_toppar_serve(rkb, rktp);
+                if (backoff < min_backoff)
+                        min_backoff = backoff;
         }
+
+        return min_backoff;
 }
 
 
@@ -2422,20 +2432,29 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 
 
 /**
- */
-static void rd_kafka_broker_fetch_backoff (rd_kafka_broker_t *rkb,
-}
-
-
-/**
  * Backoff the next Fetch request (due to error).
  */
-static void rd_kafka_broker_fetch_backoff (rd_kafka_broker_t *rkb) {
+static void rd_kafka_broker_fetch_backoff (rd_kafka_broker_t *rkb,
+                                           rd_kafka_resp_err_t err) {
         int backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
         rkb->rkb_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
+        rd_rkb_dbg(rkb, FETCH, "BACKOFF",
+                   "Fetch backoff for %dms: %s",
+                   backoff_ms, rd_kafka_err2str(err));
+}
 
-        if (rkb->rkb_blocking_max_ms > backoff_ms)
-                rkb->rkb_blocking_max_ms = backoff_ms;
+/**
+ * @brief Backoff the next Fetch for specific partition
+ */
+static void rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
+                                           rd_kafka_toppar_t *rktp,
+                                           rd_kafka_resp_err_t err) {
+        int backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
+        rktp->rktp_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
+        rd_rkb_dbg(rkb, FETCH, "BACKOFF",
+                   "%s [%"PRId32"]: Fetch backoff for %dms: %s",
+                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                   backoff_ms, rd_kafka_err2str(err));
 }
 
 
@@ -2777,7 +2796,7 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_t *rk,
 			break;
 		}
 
-		rd_kafka_broker_fetch_backoff(rkb);
+		rd_kafka_broker_fetch_backoff(rkb, err);
 		/* FALLTHRU */
 	}
 }
@@ -2968,26 +2987,38 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
 	while (!rd_kafka_broker_terminating(rkb) &&
 	       rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
 		rd_ts_t now;
+                rd_ts_t min_backoff;
 
 		rd_kafka_broker_unlock(rkb);
 
 		now = rd_clock();
 
                 /* Serve toppars */
-                rd_kafka_broker_toppars_serve(rkb);
+                min_backoff = rd_kafka_broker_toppars_serve(rkb);
+                if (rkb->rkb_ts_fetch_backoff > now &&
+                    rkb->rkb_ts_fetch_backoff < min_backoff)
+                        min_backoff = rkb->rkb_ts_fetch_backoff;
 
 		/* Send Fetch request message for all underflowed toppars */
 		if (!rkb->rkb_fetching) {
-                        if (rkb->rkb_ts_fetch_backoff < now) {
-                                rd_kafka_broker_fetch_toppars(rkb);
+                        if (min_backoff < now) {
+                                rd_kafka_broker_fetch_toppars(rkb, now);
                                 rkb->rkb_blocking_max_ms =
                                         rkb->rkb_rk->
                                         rk_conf.socket_blocking_max_ms;
-                        } else
-                                rd_rkb_dbg(rkb, QUEUE, "FETCH",
-                                           "Fetch backoff for %"PRId64"ms",
-                                           (rkb->rkb_ts_fetch_backoff-now)/
-                                           1000);
+                        } else {
+                                if (min_backoff < RD_TS_MAX)
+                                        rd_rkb_dbg(rkb, FETCH, "FETCH",
+                                                   "Fetch backoff for %"PRId64
+                                                   "ms",
+                                                   (min_backoff-now)/1000);
+
+                                /* Don't block for more than 1000 ms
+                                 * or less than 1 ms. */
+                                rkb->rkb_blocking_max_ms = 1 +
+                                        (RD_MIN(1000000, min_backoff-now) /
+                                         1000);
+                        }
                 }
 
 		/* Check and move retry buffers */

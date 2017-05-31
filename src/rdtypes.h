@@ -38,3 +38,5 @@
 
 /* Timestamp (microseconds) */
 typedef int64_t rd_ts_t;
+
+#define RD_TS_MAX  INT64_MAX

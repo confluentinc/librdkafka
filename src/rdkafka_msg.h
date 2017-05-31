@@ -34,7 +34,8 @@
 
 
 /**
- * Message.Attributes
+ * @brief Message.MsgAttributes for MsgVersion v0..v1,
+ *        also used for MessageSet.Attributes for MsgVersion v2.
  */
 #define RD_KAFKA_MSG_ATTR_GZIP             (1 << 0)
 #define RD_KAFKA_MSG_ATTR_SNAPPY           (1 << 1)
@@ -43,7 +44,10 @@
 #define RD_KAFKA_MSG_ATTR_CREATE_TIME      (0 << 3)
 #define RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME  (1 << 3)
 
-
+/**
+ * @brief Message.MsgAttributes for MsgVersion v2
+ */
+#define RD_KAFKA_MSG_V2_ATTR_CONTROL       (1 << 0)
 
 typedef struct rd_kafka_msg_s {
 	rd_kafka_message_t rkm_rkmessage;  /* MUST be first field */
@@ -93,8 +97,14 @@ TAILQ_HEAD(rd_kafka_msg_head_s, rd_kafka_msg_s);
  *         may be smaller.
  */
 static RD_INLINE RD_UNUSED
-int32_t rd_kafka_msg_wire_size (const rd_kafka_msg_t *rkm) {
-	return (int32_t)(RD_KAFKAP_MESSAGE_OVERHEAD + rkm->rkm_len + rkm->rkm_key_len);
+size_t rd_kafka_msg_wire_size (const rd_kafka_msg_t *rkm, int MsgVersion) {
+        static const size_t overheads[] = {
+                [0] = RD_KAFKAP_MESSAGE_V0_OVERHEAD,
+                [1] = RD_KAFKAP_MESSAGE_V1_OVERHEAD,
+                [2] = RD_KAFKAP_MESSAGE_V2_OVERHEAD
+        };
+        rd_dassert(MsgVersion >= 0 && MsgVersion <= 2);
+        return overheads[MsgVersion] + rkm->rkm_len + rkm->rkm_key_len;
 }
 
 

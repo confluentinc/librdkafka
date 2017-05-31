@@ -368,6 +368,15 @@ rd_kafka_op_res_t rd_kafka_op_call (rd_kafka_t *rk,
                                     rd_kafka_q_t *rkq, rd_kafka_op_t *rko)
         RD_WARN_UNUSED_RESULT;
 
+rd_kafka_op_t *
+rd_kafka_op_new_fetch_msg (rd_kafka_msg_t **rkmp,
+                           rd_kafka_toppar_t *rktp,
+                           int32_t version,
+                           rd_kafka_buf_t *rkbuf,
+                           int64_t offset,
+                           size_t key_len, const void *key,
+                           size_t val_len, const void *val);
+
 void rd_kafka_op_throttle_time (struct rd_kafka_broker_s *rkb,
 				rd_kafka_q_t *rkq,
 				int throttle_time);

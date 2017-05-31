@@ -124,14 +124,6 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 
 
 
-/* Offset + MessageSize */
-#define RD_KAFKAP_MESSAGESET_HDR_SIZE (8+4)
-/* CRC + Magic + Attr + KeyLen + ValueLen + [Timestamp]
- * @remark This includes the optional (MsgVer=1) Timestamp field (8 bytes) */
-#define RD_KAFKAP_MESSAGE_HDR_SIZE    (4+1+1+4+4+8)
-/* Maximum per-message overhead. */
-#define RD_KAFKAP_MESSAGE_OVERHEAD  \
-	(RD_KAFKAP_MESSAGESET_HDR_SIZE + RD_KAFKAP_MESSAGE_HDR_SIZE)
 
 
 
@@ -154,6 +146,9 @@ static RD_UNUSED int rd_kafka_ApiVersion_key_cmp (const void *_a, const void *_b
 }
 
 
+
+#define RD_KAFKAP_READ_UNCOMMITTED  0
+#define RD_KAFKAP_READ_COMMITTED    1
 
 
 /**
@@ -400,3 +395,70 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 
 #define RD_KAFKA_NODENAME_SIZE  128
 
+
+
+
+/**
+ * @brief Message overheads (worst-case)
+ */
+
+/**
+ * MsgVersion v0..v1
+ */
+/* Offset + MessageSize */
+#define RD_KAFKAP_MESSAGESET_V0_HDR_SIZE (8+4)
+/* CRC + Magic + Attr + KeyLen + ValueLen */
+#define RD_KAFKAP_MESSAGE_V0_HDR_SIZE    (4+1+1+4+4)
+/* CRC + Magic + Attr + Timestamp + KeyLen + ValueLen */
+#define RD_KAFKAP_MESSAGE_V1_HDR_SIZE    (4+1+1+8+4+4)
+/* Maximum per-message overhead */
+#define RD_KAFKAP_MESSAGE_V0_OVERHEAD                                   \
+        (RD_KAFKAP_MESSAGESET_V0_HDR_SIZE + RD_KAFKAP_MESSAGE_V0_HDR_SIZE)
+#define RD_KAFKAP_MESSAGE_V1_OVERHEAD                                   \
+        (RD_KAFKAP_MESSAGESET_V0_HDR_SIZE + RD_KAFKAP_MESSAGE_V1_HDR_SIZE)
+
+/**
+ * MsgVersion v2
+ */
+#define RD_KAFKAP_MESSAGE_V2_OVERHEAD                                  \
+        (                                                              \
+        /* Length (varint) */                                          \
+        RD_UVARINT_ENC_SIZEOF(int32_t) +                               \
+        /* Attributes */                                               \
+        1 +                                                            \
+        /* TimestampDelta (varint) */                                  \
+        RD_UVARINT_ENC_SIZEOF(int64_t) +                               \
+        /* OffsetDelta (varint) */                                     \
+        RD_UVARINT_ENC_SIZEOF(int32_t) +                               \
+        /* KeyLen (varint) */                                          \
+        RD_UVARINT_ENC_SIZEOF(int32_t) +                               \
+        /* ValueLen (varint) */                                        \
+        RD_UVARINT_ENC_SIZEOF(int32_t) +                               \
+        /* HeaderCnt (varint): */                                      \
+        RD_UVARINT_ENC_SIZEOF(int32_t)                                 \
+        )
+
+
+
+/**
+ * @brief MessageSets are not explicitly versioned but depends on the
+ *        Produce/Fetch API version and the encompassed Message versions.
+ *        We use the Message version (MsgVersion, aka MagicByte) to describe
+ *        the MessageSet version, that is, MsgVersion <= 1 uses the old
+ *        MessageSet version (v0?) while MsgVersion 2 uses MessageSet version v2
+ */
+
+/* Old MessageSet header: none */
+#define RD_KAFKAP_MSGSET_V0_SIZE                0
+
+/* MessageSet v2 header */
+#define RD_KAFKAP_MSGSET_V2_SIZE                (8+4+4+1+4+2+4+8+8+8+2+4+4)
+
+/* Byte offsets for MessageSet fields */
+#define RD_KAFKAP_MSGSET_V2_OF_Length           (8)
+#define RD_KAFKAP_MSGSET_V2_OF_CRC              (8+4+4+1)
+#define RD_KAFKAP_MSGSET_V2_OF_Attributes       (8+4+4+1+4)
+#define RD_KAFKAP_MSGSET_V2_OF_LastOffsetDelta  (8+4+4+1+4+2)
+#define RD_KAFKAP_MSGSET_V2_OF_BaseTimestamp    (8+4+4+1+4+2+4)
+#define RD_KAFKAP_MSGSET_V2_OF_MaxTimestamp     (8+4+4+1+4+2+4+8)
+#define RD_KAFKAP_MSGSET_V2_OF_RecordCount      (8+4+4+1+4+2+4+8+8+8+2+4)

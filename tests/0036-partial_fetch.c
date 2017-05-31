@@ -38,7 +38,8 @@
  *
  * General idea:
  *  - Produce messages of 1000 bytes each
- *  - Set fetch.message.max.bytes to 2500
+ *  - Set fetch.message.max.bytes to 1500 so that only one full message
+ *    can be fetched per request.
  *  - Make sure all messages are received correctly and in order.
  */
 

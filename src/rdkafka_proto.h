@@ -68,7 +68,20 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_ApiVersion    18
 #define RD_KAFKAP_CreateTopics  19
 #define RD_KAFKAP_DeleteTopics  20
-#define RD_KAFKAP__NUM          21
+#define RD_KAFKAP_DeleteRecords 21
+#define RD_KAFKAP_InitProducerId 22
+#define RD_KAFKAP_OffsetForLeaderEpoch 23
+#define RD_KAFKAP_AddPartitionsToTxn 24
+#define RD_KAFKAP_AddOffsetsToTxn 25
+#define RD_KAFKAP_EndTxn        26
+#define RD_KAFKAP_WriteTxnMarkers 27
+#define RD_KAFKAP_TxnOffsetCommit 28
+#define RD_KAFKAP_DescribeAcls  29
+#define RD_KAFKAP_CreateAcls    30
+#define RD_KAFKAP_DeleteAcls    31
+#define RD_KAFKAP_DescribeConfigs 32
+#define RD_KAFKAP_AlterConfigs  33
+#define RD_KAFKAP__NUM          34
         int16_t  ApiVersion;
         int32_t  CorrId;
         /* ClientId follows */
@@ -108,7 +121,20 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_SaslHandshake] = "SaslHandshake",
                 [RD_KAFKAP_ApiVersion] = "ApiVersion",
                 [RD_KAFKAP_CreateTopics] = "CreateTopics",
-                [RD_KAFKAP_DeleteTopics] = "DeleteTopics"
+                [RD_KAFKAP_DeleteTopics] = "DeleteTopics",
+                [RD_KAFKAP_DeleteRecords] = "DeleteRecords",
+                [RD_KAFKAP_InitProducerId] = "InitProducerId",
+                [RD_KAFKAP_OffsetForLeaderEpoch] = "OffsetForLeaderEpoch",
+                [RD_KAFKAP_AddPartitionsToTxn] = "AddPartitionsToTxn",
+                [RD_KAFKAP_AddOffsetsToTxn] = "AddOffsetsToTxn",
+                [RD_KAFKAP_EndTxn] = "EndTxn",
+                [RD_KAFKAP_WriteTxnMarkers] = "WriteTxnMarkers",
+                [RD_KAFKAP_TxnOffsetCommit] = "TxnOffsetCommit",
+                [RD_KAFKAP_DescribeAcls] = "DescribeAcls",
+                [RD_KAFKAP_CreateAcls] = "CreateAcls",
+                [RD_KAFKAP_DeleteAcls] = "DeleteAcls",
+                [RD_KAFKAP_DescribeConfigs] = "DescribeConfigs",
+                [RD_KAFKAP_AlterConfigs] = "AlterConfigs"
         };
         static RD_TLS char ret[32];
 

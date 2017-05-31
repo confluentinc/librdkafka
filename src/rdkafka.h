@@ -419,6 +419,33 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_INVALID_REQUEST = 42,
 	/** Message format on broker does not support request */
 	RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT = 43,
+        /** Isolation policy volation */
+        RD_KAFKA_RESP_ERR_POLICY_VIOLATION = 44,
+        /** Broker received an out of order sequence number */
+        RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER = 45,
+        /** Broker received a duplicate sequence number */
+        RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER = 46,
+        /** Producer attempted an operation with an old epoch */
+        RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH = 47,
+        /** Producer attempted a transactional operation in an invalid state */
+        RD_KAFKA_RESP_ERR_INVALID_TXN_STATE = 48,
+        /** Producer attempted to use a producer id which is not
+         *  currently assigned to its transactional id */
+        RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING = 49,
+        /** Transaction timeout is larger than the maximum
+         *  value allowed by the broker's max.transaction.timeout.ms */
+        RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT = 50,
+        /** Producer attempted to update a transaction while another
+         *  concurrent operation on the same transaction was ongoing */
+        RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS = 51,
+        /** Indicates that the transaction coordinator sending a
+         *  WriteTxnMarker is no longer the current coordinator for a
+         *  given producer */
+        RD_KAFKA_RESP_ERR_TRANSACTION_COORDINATOR_FENCED = 52,
+        /** Transactional Id authorization failed */
+        RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED = 53,
+        /** Security features are disabled */
+        RD_KAFKA_RESP_ERR_SECURITY_DISABLED = 54,
 
 	RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

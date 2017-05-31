@@ -466,6 +466,35 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Broker: Invalid request"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT,
 		  "Broker: Message format on broker does not support request"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_POLICY_VIOLATION,
+                  "Broker: Isolation policy volation"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER,
+                  "Broker: Broker received an out of order sequence number"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER,
+                  "Broker: Broker received a duplicate sequence number"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH,
+                  "Broker: Producer attempted an operation with an old epoch"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_TXN_STATE,
+                  "Broker: Producer attempted a transactional operation in "
+                  "an invalid state"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING,
+                  "Broker: Producer attempted to use a producer id which is "
+                  "not currently assigned to its transactional id"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT,
+                  "Broker: Transaction timeout is larger than the maximum "
+                  "value allowed by the broker's max.transaction.timeout.ms"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
+                  "Broker: Producer attempted to update a transaction while "
+                  "another concurrent operation on the same transaction was "
+                  "ongoing"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_TRANSACTION_COORDINATOR_FENCED,
+                  "Broker: Indicates that the transaction coordinator sending "
+                  "a WriteTxnMarker is no longer the current coordinator for "
+                  "a given producer"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED,
+                  "Broker: Transactional Id authorization failed"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_SECURITY_DISABLED,
+                  "Broker: Security features are disabled"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
 };

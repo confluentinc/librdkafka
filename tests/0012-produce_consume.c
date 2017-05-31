@@ -345,9 +345,10 @@ static void consume_messages (uint64_t testid, const char *topic,
                                 continue;
                         }
 			TEST_FAIL("Consume message %i/%i from partition %i "
-				  "has error: %s",
+				  "has error: %s: %s",
 				  i, batch_cnt, (int)partition,
-				  rd_kafka_err2str(rkmessage->err));
+				  rd_kafka_err2str(rkmessage->err),
+                                  rd_kafka_message_errstr(rkmessage));
                 }
 
 		verify_consumed_msg(testid, partition, msg_base+i, rkmessage);

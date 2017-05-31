@@ -883,8 +883,10 @@ static void run_tests (const char *tests_to_run,
                 if (!skip_reason) {
                         run_test(test, argc, argv);
                 } else {
-                        TEST_SAY("================= Skipping test %s (%s)"
-                                 "================\n", test->name, skip_reason);
+                        TEST_SAYL(3,
+                                  "================= Skipping test %s (%s)"
+                                  "================\n",
+                                  test->name, skip_reason);
                         TEST_LOCK();
                         test->state = TEST_SKIPPED;
                         TEST_UNLOCK();

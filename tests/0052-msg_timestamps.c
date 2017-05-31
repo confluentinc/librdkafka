@@ -172,7 +172,8 @@ int main_0052_msg_timestamps (int argc, char **argv) {
 
         /* Broker version limits the producer's feature set,
          * for 0.9.0.0 no timestamp will be transmitted,
-         * but for 0.10.1.0 the producer will set the timestamp.
+         * but for 0.10.1.0 (or newer, api.version.request will be true)
+         * the producer will set the timestamp.
          * In all cases we want a reasonable timestamp back.
          *
          * Explicit broker LogAppendTime setting will overwrite
@@ -183,16 +184,16 @@ int main_0052_msg_timestamps (int argc, char **argv) {
          *
          * Any other option should honour the producer create timestamps.
          */
+        test_timestamps("CreateTime",    "0.10.1.0", "none", &my_timestamp);
+        test_timestamps("LogAppendTime", "0.10.1.0", "none", &broker_timestamp);
+        test_timestamps("CreateTime",    "0.9.0.0",  "none", &invalid_timestamp);
+        test_timestamps("LogAppendTime", "0.9.0.0",  "none", &broker_timestamp);
 #if WITH_ZLIB
         test_timestamps("CreateTime",    "0.10.1.0", "gzip", &my_timestamp);
         test_timestamps("LogAppendTime", "0.10.1.0", "gzip", &broker_timestamp);
         test_timestamps("CreateTime",    "0.9.0.0",  "gzip", &invalid_timestamp);
         test_timestamps("LogAppendTime", "0.9.0.0",  "gzip", &broker_timestamp);
 #endif
-        test_timestamps("CreateTime",    "0.10.1.0", "none", &my_timestamp);
-        test_timestamps("LogAppendTime", "0.10.1.0", "none", &broker_timestamp);
-        test_timestamps("CreateTime",    "0.9.0.0",  "none", &invalid_timestamp);
-        test_timestamps("LogAppendTime", "0.9.0.0",  "none", &broker_timestamp);
 
         return 0;
 }

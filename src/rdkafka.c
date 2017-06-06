@@ -1250,7 +1250,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                 conf = app_conf;
 
         /* Verify mandatory configuration */
-        if (!conf->socket_cb) {
+        if (!use_conf->socket_cb) {
                 rd_snprintf(errstr, errstr_size,
                             "Mandatory config property 'socket_cb' not set");
                 if (!app_conf)
@@ -1259,7 +1259,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                 return NULL;
         }
 
-        if (!conf->open_cb) {
+        if (!use_conf->open_cb) {
                 rd_snprintf(errstr, errstr_size,
                             "Mandatory config property 'open_cb' not set");
                 if (!app_conf)

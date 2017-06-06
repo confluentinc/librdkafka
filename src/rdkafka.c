@@ -3172,6 +3172,149 @@ err:
 }
 
 rd_kafka_resp_err_t
+rd_kafka_describe_group_json (rd_kafka_t *rk, const char *group,
+                      char **json,
+                      int timeout_ms) {
+        rd_kafka_resp_err_t err;
+        int i;
+        const struct rd_kafka_group_list *grplist;
+        char  *buf;
+        int coordinator_broker_found=0;
+        size_t size = 1024*10;
+        size_t of = 0;
+        buf = rd_malloc(size);
+        err = rd_kafka_describe_group(rk, group, &grplist, 10000);
+        if (err) 
+           return err;
+        for (i = 0 ; i < grplist->group_cnt ; i++) { // For each broker
+                const struct rd_kafka_group_info *gi = &grplist->groups[i];
+                int j;
+                if (gi->err == RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP)
+                    continue;
+                
+                coordinator_broker_found++;
+                _st_printf("{ \"name\": \"%s\","
+                          "\"state\": \"%s\","
+                          "\"broker\": \"%s:%d/%d\","
+                          "\"members\": { ",
+                          gi->group,
+                          gi->state,
+                          gi->broker.host, gi->broker.port, gi->broker.id
+                );
+
+                for (j = 0 ; j < gi->member_cnt ; j++) {
+                        const struct rd_kafka_group_member_info *mi;
+                        mi = &gi->members[j];
+                        if (j!=0)
+                            _st_printf(",");
+                        _st_printf("\"%s\": { "
+                                 "\"id\": \"%s\","
+                                 "\"client_id\": \"%s\","
+                                 "\"client_host\": \"%s\","
+                                 "\"metadata_size\": \"%d\","
+                                 "\"assignment_size\": \"%d\""
+                                 "}",
+                                 mi->member_id,
+                                 mi->member_id,
+                                 mi->client_id,
+                                 mi->client_host,
+                                 mi->member_metadata_size,
+                                 mi->member_assignment_size
+                        );
+                }
+                _st_printf("}}");
+                *json = buf;
+        }
+        if (group && !grplist->group_cnt)
+                fprintf(stderr, "%% No matching group (%s)\n", group);
+        rd_kafka_group_list_destroy(grplist);
+        if (coordinator_broker_found != 1){ // Should never happen
+                fprintf(stderr, "%% Found %d coordinator for group %s\n", coordinator_broker_found, group);
+                return RD_KAFKA_RESP_ERR_UNKNOWN;
+        }
+        return RD_KAFKA_RESP_ERR_NO_ERROR ;
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_describe_group (rd_kafka_t *rk, const char *group,
+                      const struct rd_kafka_group_list **grplistp,
+                      int timeout_ms) {
+        rd_kafka_broker_t *rkb;
+        const char * grps[1];
+        grps[0] = group;
+        int rkb_cnt = 0;
+        struct list_groups_state state = RD_ZERO_INIT;
+        rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+        int state_version = rd_kafka_brokers_get_state_version(rk);
+        /* Wait until metadata has been fetched from cluster so
+         * that we have a full broker list.
+         * This state only happens during initial client setup, after that
+         * there'll always be a cached metadata copy. */
+
+        rd_kafka_rdlock(rk);
+
+        while (!rk->rk_ts_metadata) {
+                rd_kafka_rdunlock(rk);
+		if (!rd_kafka_brokers_wait_state_change(
+			    rk, state_version, rd_timeout_remains(ts_end)))
+                        return RD_KAFKA_RESP_ERR__TIMED_OUT;
+
+                rd_kafka_rdlock(rk);
+        }
+
+        state.q = rd_kafka_q_new(rk);
+        state.desired_group = group;
+        state.grplist = rd_calloc(1, sizeof(*state.grplist));
+        state.grplist_size = group ? 1 : 32;
+
+        state.grplist->groups = rd_malloc(state.grplist_size *
+                                          sizeof(*state.grplist->groups));
+
+        /* Query each broker for its list of groups */
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_kafka_broker_lock(rkb);
+                if (rkb->rkb_nodeid == -1) {
+                        rd_kafka_broker_unlock(rkb);
+                        continue;
+                }
+
+                state.wait_cnt++;
+
+                rd_kafka_DescribeGroupsRequest(rkb,
+                                               (const char **)grps, 1,
+                                               RD_KAFKA_REPLYQ(state.q, 0),
+                                               rd_kafka_DescribeGroups_resp_cb,
+                                               &state);
+                
+                rkb_cnt++;
+
+                rd_kafka_broker_unlock(rkb);
+        }
+        rd_kafka_rdunlock(rk);
+
+        if (rkb_cnt == 0) {
+                state.err = RD_KAFKA_RESP_ERR__TRANSPORT;
+
+        } else {
+                while (state.wait_cnt > 0){
+                        rd_kafka_q_serve(state.q, 100, 0, _Q_CB_CALLBACK,
+                                         rd_kafka_poll_cb, NULL);
+                }
+        }
+        rd_kafka_q_destroy(state.q);
+
+        if (state.err)
+                rd_kafka_group_list_destroy(state.grplist);
+        else
+                *grplistp = state.grplist;
+        return state.err;
+        
+}
+
+
+
+rd_kafka_resp_err_t
 rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
                       const struct rd_kafka_group_list **grplistp,
                       int timeout_ms) {

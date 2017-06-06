@@ -2858,6 +2858,49 @@ struct rd_kafka_group_list {
 
 
 /**
+ * @brief Describe client group.
+ *
+ * \p group is the group name to describe
+ *
+ * \p timeout_ms is the (approximate) maximum time to wait for response
+ * from brokers and must be a positive value.
+ *
+ * @returns \p RD_KAFKA_RESP_ERR__NO_ERROR on success and \p grplistp is
+ *           updated to point to a newly allocated list of with the group requested.
+ *           Else returns an error code on failure and \p grplistp remains
+ *           untouched.
+ *
+ * @sa Use rd_kafka_group_list_destroy() to release list memory.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_describe_group (rd_kafka_t *rk, const char *group,
+                      const struct rd_kafka_group_list **grplistp,
+                      int timeout_ms);
+
+                      
+/**
+ * @brief Describe client group.
+ *
+ * \p group is the group name to describe
+ *
+ * \p timeout_ms is the (approximate) maximum time to wait for response
+ * from brokers and must be a positive value.
+ *
+ * @returns \p RD_KAFKA_RESP_ERR__NO_ERROR on success and \p json is
+ *           updated to point to a newly allocated json string with the information
+ *           about the group requested. \p Else returns an error code on failure and 
+ *          \p grplistp remains untouched.
+ *           
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_describe_group_json (rd_kafka_t *rk, const char *group,
+                      char **json,
+                      int timeout_ms);
+                      
+
+/**
  * @brief List and describe client groups in cluster.
  *
  * \p group is an optional group name to describe, otherwise (\p NULL) all

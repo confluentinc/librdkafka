@@ -128,6 +128,9 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
  * Portability
  */
 
+#define rd_kafka_broker_terminating(rkb) \
+        (rd_refcnt_get(&(rkb)->rkb_refcnt) <= 1)
+
 #ifdef strndupa
 #define rd_strndupa(DESTPTR,PTR,LEN)  (*(DESTPTR) = strndupa(PTR,LEN))
 #else

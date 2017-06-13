@@ -48,7 +48,7 @@ size_t rd_varint_dec_slice (rd_slice_t *slice, int64_t *nump) {
                 shift += 7;
         } while (oct & 0x80);
 
-        *nump = (int64_t)((num >> 1) ^ -(num & 1));
+        *nump = (int64_t)((num >> 1) ^ -(int64_t)(num & 1));
 
         return shift / 7;
 }

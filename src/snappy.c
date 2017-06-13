@@ -1489,7 +1489,7 @@ int rd_kafka_snappy_compress_iov(struct snappy_env *env,
                                  struct iovec *iov_out) {
         struct source reader = {
                 .iov = (struct iovec *)iov_in,
-                .iovlen = iov_in_cnt,
+                .iovlen = (int)iov_in_cnt,
                 .total = input_length
         };
         struct sink writer = {

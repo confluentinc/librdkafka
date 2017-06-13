@@ -135,7 +135,7 @@ size_t rd_varint_dec_i64 (const char *src, size_t srcsize, int64_t *nump) {
 
         r = rd_uvarint_dec(src, srcsize, &n);
         if (likely(!RD_UVARINT_DEC_FAILED(r)))
-                *nump = (int64_t)(n >> 1) ^ -(n & 1);
+                *nump = (int64_t)(n >> 1) ^ -(int64_t)(n & 1);
 
         return r;
 }

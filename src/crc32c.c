@@ -1,8 +1,8 @@
 /* Copied from http://stackoverflow.com/a/17646775/1821055
  * with the following modifications:
  *   * remove test code
- *   * change pthread usage to tinycthread
- *   * once-per-process hw/sw initialization
+ *   * global hw/sw initialization to be called once per process
+ *   * disabled HW CRC32C on MSVC (for now, needs proper porting)
  */
 
 /* crc32c.c -- compute CRC-32C using the Intel crc32 instruction
@@ -43,15 +43,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#ifndef _MSC_VER
 #include <unistd.h>
-#include "tinycthread.h"
+#endif
 
 #include "crc32c.h"
 
 /* CRC-32C (iSCSI) polynomial in reversed bit order. */
 #define POLY 0x82f63b78
 
-static once_flag crc32c_once = ONCE_FLAG_INIT;
 static int sse42;  /* Cached SSE42 support */
 
 
@@ -234,6 +234,9 @@ static void crc32c_init_hw(void)
 /* Compute CRC-32C using the Intel hardware instruction. */
 static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
 {
+#ifdef _MSC_VER // FIXME
+    return 0;
+#else
     const unsigned char *next = buf;
     const unsigned char *end;
     uint64_t crc0, crc1, crc2;      /* need to be 64 bits for crc32q */
@@ -315,6 +318,7 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
 
     /* return a post-processed crc */
     return (uint32_t)crc0 ^ 0xffffffff;
+#endif
 }
 
 /* Check for SSE 4.2.  SSE 4.2 was first supported in Nehalem processors
@@ -349,8 +353,14 @@ uint32_t crc32c(uint32_t crc, const void *buf, size_t len)
  * @brief Populate shift tables once
  */
 void crc32c_global_init (void) {
+#ifdef _MSC_VER // FIXME
+        sse42 = 0;
+#else
         SSE42(sse42);
-        call_once(&crc32c_once, sse42 ?
-                  crc32c_init_hw : crc32c_init_sw);
+#endif
+        if (sse42)
+                crc32c_init_hw();
+        else
+                crc32c_init_sw();
 }
 

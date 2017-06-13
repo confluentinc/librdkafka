@@ -472,7 +472,7 @@ rd_kafka_msgset_writer_write_msg_v0_1 (rd_kafka_msgset_writer_t *msetw,
         if (msetw->msetw_MsgVersion == 1)
                 MessageSize += 8; /* Timestamp i64 */
 
-        rd_kafka_buf_write_i32(rkbuf, MessageSize);
+        rd_kafka_buf_write_i32(rkbuf, (int32_t)MessageSize);
 
         /*
          * Message
@@ -498,7 +498,7 @@ rd_kafka_msgset_writer_write_msg_v0_1 (rd_kafka_msgset_writer_t *msetw,
 
         /* Write or copy Value/payload */
         if (rkm->rkm_payload) {
-                rd_kafka_buf_write_i32(rkbuf, rkm->rkm_len);
+                rd_kafka_buf_write_i32(rkbuf, (int32_t)rkm->rkm_len);
                 rd_kafka_msgset_writer_write_msg_payload(msetw, rkm, free_cb);
         } else
                 rd_kafka_buf_write_i32(rkbuf, RD_KAFKAP_BYTES_LEN_NULL);
@@ -526,7 +526,7 @@ rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
         size_t MessageSize = 0;
         char varint_Length[RD_UVARINT_ENC_SIZEOF(int32_t)];
         char varint_TimestampDelta[RD_UVARINT_ENC_SIZEOF(int64_t)];
-        char varint_OffsetDelta[RD_UVARINT_ENC_SIZEOF(int32_t)];
+        char varint_OffsetDelta[RD_UVARINT_ENC_SIZEOF(int64_t)];
         char varint_KeyLen[RD_UVARINT_ENC_SIZEOF(int32_t)];
         char varint_ValueLen[RD_UVARINT_ENC_SIZEOF(int32_t)];
         char varint_HeaderCount[RD_UVARINT_ENC_SIZEOF(int32_t)];
@@ -544,16 +544,16 @@ rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
         sz_TimestampDelta = rd_uvarint_enc_i64(
                 varint_TimestampDelta, sizeof(varint_TimestampDelta),
                 rkm->rkm_timestamp - msetw->msetw_firstmsg.timestamp);
-        sz_OffsetDelta = rd_uvarint_enc_i32(
+        sz_OffsetDelta = rd_uvarint_enc_i64(
                 varint_OffsetDelta, sizeof(varint_OffsetDelta), Offset);
         sz_KeyLen = rd_uvarint_enc_i32(
                 varint_KeyLen, sizeof(varint_KeyLen),
-                rkm->rkm_key ? rkm->rkm_key_len :
-                (size_t)RD_KAFKAP_BYTES_LEN_NULL);
+                rkm->rkm_key ? (int32_t)rkm->rkm_key_len :
+                (int32_t)RD_KAFKAP_BYTES_LEN_NULL);
         sz_ValueLen = rd_uvarint_enc_i32(
                 varint_ValueLen, sizeof(varint_ValueLen),
-                rkm->rkm_payload ? rkm->rkm_len :
-                (size_t)RD_KAFKAP_BYTES_LEN_NULL);
+                rkm->rkm_payload ? (int32_t)rkm->rkm_len :
+                (int32_t)RD_KAFKAP_BYTES_LEN_NULL);
         sz_HeaderCount = rd_uvarint_enc_i32(
                 varint_HeaderCount, sizeof(varint_HeaderCount), 0);
 
@@ -637,9 +637,9 @@ rd_kafka_msgset_writer_write_msg (rd_kafka_msgset_writer_t *msetw,
 
         actual_written = rd_buf_write_pos(&msetw->msetw_rkbuf->rkbuf_buf) -
                 pre_pos;
-        rd_dassert(outlen <=
+        rd_assert(outlen <=
                    rd_kafka_msg_wire_size(rkm, msetw->msetw_MsgVersion));
-        rd_dassert(outlen == actual_written);
+        rd_assert(outlen == actual_written);
 
         return outlen;
 
@@ -751,7 +751,7 @@ rd_kafka_msgset_writer_compress_gzip (rd_kafka_msgset_writer_t *msetw,
         /* Calculate maximum compressed size and
          * allocate an output buffer accordingly, being
          * prefixed with the Message header. */
-        ciov->iov_len = deflateBound(&strm, rd_slice_remains(slice));
+        ciov->iov_len = deflateBound(&strm, (uLong)rd_slice_remains(slice));
         ciov->iov_base = rd_malloc(ciov->iov_len);
 
         strm.next_out  = (void *)ciov->iov_base;
@@ -1023,7 +1023,7 @@ rd_kafka_msgset_writer_finalize_MessageSet_v2_header (
          * MessageSetSize minus field widths for FirstOffset+Length */
         rd_kafka_buf_update_i32(rkbuf, msetw->msetw_of_start +
                                 RD_KAFKAP_MSGSET_V2_OF_Length,
-                                msetw->msetw_MessageSetSize - (8+4));
+                                (int32_t)msetw->msetw_MessageSetSize - (8+4));
 
         msetw->msetw_Attributes |= RD_KAFKA_MSG_ATTR_CREATE_TIME;
 
@@ -1068,7 +1068,7 @@ rd_kafka_msgset_writer_finalize_MessageSet (rd_kafka_msgset_writer_t *msetw) {
         /* Update MessageSetSize */
         rd_kafka_buf_update_i32(msetw->msetw_rkbuf,
                                 msetw->msetw_of_MessageSetSize,
-                                msetw->msetw_MessageSetSize);
+                                (int32_t)msetw->msetw_MessageSetSize);
 
 }
 

@@ -179,11 +179,13 @@ rd_kafka_transport_socket_send0 (rd_kafka_transport_t *rktrans,
         while ((rlen = rd_slice_peeker(slice, &p))) {
                 ssize_t r;
 
-                r = send(rktrans->rktrans_s, p, rlen,
+                r = send(rktrans->rktrans_s, p,
 #ifdef _MSC_VER
-                         (int)
+                         (int)rlen, (int)0
+#else
+                         rlen, 0
 #endif
-                         0);
+                );
 
 #ifdef _MSC_VER
                 if (unlikely(r == SOCKET_ERROR)) {
@@ -565,7 +567,7 @@ rd_kafka_transport_ssl_recv (rd_kafka_transport_t *rktrans,
         while ((len = rd_buf_get_writable(rbuf, &p))) {
 		int r;
 
-                r = SSL_read(rktrans->rktrans_ssl, p, len);
+                r = SSL_read(rktrans->rktrans_ssl, p, (int)len);
 
 		if (unlikely(r <= 0)) {
 			if (rd_kafka_transport_ssl_io_update(rktrans, r,

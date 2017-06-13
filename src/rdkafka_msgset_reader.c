@@ -617,7 +617,7 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_toppar_t *rktp = msetr->msetr_rktp;
         struct {
                 int64_t Length;
-                int8_t  MsgAttributes;
+                int64_t  MsgAttributes; /* int8_t, but int64 req. for varint */
                 int64_t TimestampDelta;
                 int64_t OffsetDelta;
                 int64_t Offset;  /* Absolute offset */

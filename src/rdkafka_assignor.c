@@ -125,7 +125,7 @@ rd_kafka_consumer_protocol_member_metadata_new (
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */
         rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
         len = rd_slice_remains(&rkbuf->rkbuf_reader);
-        kbytes = rd_kafkap_bytes_new(NULL, len);
+        kbytes = rd_kafkap_bytes_new(NULL, (int32_t)len);
         rd_slice_read(&rkbuf->rkbuf_reader, (void *)kbytes->data, len);
         rd_kafka_buf_destroy(rkbuf);
 

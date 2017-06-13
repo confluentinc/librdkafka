@@ -3016,8 +3016,8 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb) {
                                 /* Don't block for more than 1000 ms
                                  * or less than 1 ms. */
                                 rkb->rkb_blocking_max_ms = 1 +
-                                        (RD_MIN(1000000, min_backoff-now) /
-                                         1000);
+                                        (int)RD_MIN(1000,
+                                        (min_backoff - now) / 1000);
                         }
                 }
 

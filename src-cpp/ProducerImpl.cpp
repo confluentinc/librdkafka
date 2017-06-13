@@ -100,7 +100,7 @@ RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
                        payload, len,
                        key ? key->c_str() : NULL, key ? key->size() : 0,
                        msg_opaque) == -1)
-    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
 
   return RdKafka::ERR_NO_ERROR;
 }
@@ -118,7 +118,7 @@ RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
   if (rd_kafka_produce(topicimpl->rkt_, partition, msgflags,
                        payload, len, key, key_len,
                        msg_opaque) == -1)
-    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
 
   return RdKafka::ERR_NO_ERROR;
 }
@@ -137,7 +137,7 @@ RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
                        payload ? payload->size() : 0,
                        key ? &(*key)[0] : NULL, key ? key->size() : 0,
                        msg_opaque) == -1)
-    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
 
   return RdKafka::ERR_NO_ERROR;
 

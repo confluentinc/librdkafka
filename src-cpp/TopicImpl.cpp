@@ -110,7 +110,7 @@ RdKafka::Topic *RdKafka::Topic::create (Handle *base,
 
   if (!(rkt = rd_kafka_topic_new(dynamic_cast<HandleImpl*>(base)->rk_,
 				 topic_str.c_str(), rkt_conf))) {
-    errstr = rd_kafka_err2str(rd_kafka_errno2err(errno));
+    errstr = rd_kafka_err2str(rd_kafka_last_error());
     delete topic;
     rd_kafka_topic_conf_destroy(rkt_conf);
     return NULL;

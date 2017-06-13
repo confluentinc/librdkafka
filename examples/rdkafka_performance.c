@@ -1394,9 +1394,8 @@ int main (int argc, char **argv) {
 				partitions[i], start_offset, rkqu);
 
 			if (r == -1) {
-				fprintf(stderr, "%% Error creating queue: %s\n",
-					rd_kafka_err2str(
-						rd_kafka_errno2err(errno)));
+                                fprintf(stderr, "%% Error creating queue: %s\n",
+                                        rd_kafka_err2str(rd_kafka_last_error()));
 				exit(1);
 			}
 		}
@@ -1437,10 +1436,9 @@ int main (int argc, char **argv) {
 			}
 
 			cnt.t_fetch_latency += rd_clock() - fetch_latency;
-			if (r == -1)
-				fprintf(stderr, "%% Error: %s\n",
-					rd_kafka_err2str(
-						rd_kafka_errno2err(errno)));
+                        if (r == -1)
+                                fprintf(stderr, "%% Error: %s\n",
+                                        rd_kafka_err2str(rd_kafka_last_error()));
 
 			print_stats(rk, mode, otype, compression);
 
@@ -1453,10 +1451,9 @@ int main (int argc, char **argv) {
 		for (i=0 ; i<(size_t)partition_cnt ; ++i) {
 			int r = rd_kafka_consume_stop(rkt, (int32_t)i);
 			if (r == -1) {
-				fprintf(stderr,
-					"%% Error in consume_stop: %s\n",
-					rd_kafka_err2str(
-						rd_kafka_errno2err(errno)));
+                                fprintf(stderr,
+                                        "%% Error in consume_stop: %s\n",
+                                        rd_kafka_err2str(rd_kafka_last_error()));
 			}
 		}
 		rd_kafka_queue_destroy(rkqu);

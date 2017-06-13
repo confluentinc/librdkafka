@@ -394,15 +394,24 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 
 
 
-
-
 extern rd_kafka_resp_err_t RD_TLS rd_kafka_last_error_code;
 
 static RD_UNUSED RD_INLINE
 rd_kafka_resp_err_t rd_kafka_set_last_error (rd_kafka_resp_err_t err,
 					     int errnox) {
-	if (errnox)
-		errno = errnox;
+        if (errnox) {
+#ifdef _MSC_VER
+                /* This is the correct way to set errno on Windows,
+                 * but it is still pointless due to different errnos in
+                 * in different runtimes:
+                 * https://social.msdn.microsoft.com/Forums/vstudio/en-US/b4500c0d-1b69-40c7-9ef5-08da1025b5bf/setting-errno-from-within-a-dll?forum=vclanguage/
+                 * errno is thus highly deprecated, and buggy, on Windows
+                 * when using librdkafka as a dynamically loaded DLL. */
+                _set_errno(errnox);
+#else
+                errno = errnox;
+#endif
+        }
 	rd_kafka_last_error_code = err;
 	return err;
 }

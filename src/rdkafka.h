@@ -63,7 +63,7 @@ extern "C" {
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED
 #define RD_INLINE __inline
-#define RD_DEPRECATED
+#define RD_DEPRECATED __declspec(deprecated)
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_STATICLIB
 #define RD_EXPORT
@@ -513,6 +513,9 @@ const char *rd_kafka_err2name (rd_kafka_resp_err_t err);
  *         are used in the same application thread the developer needs to
  *         make sure rd_kafka_last_error() is called immediately after
  *         a failed API call.
+ *
+ * @remark errno propagation from librdkafka is not safe on Windows
+ *         and should not be used, use rd_kafka_last_error() instead.
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_last_error (void);
@@ -537,9 +540,12 @@ rd_kafka_resp_err_t rd_kafka_last_error (void);
  * @remark A better alternative is to call rd_kafka_last_error() immediately
  *         after any of the above functions return -1 or NULL.
  *
+ * @deprecated Use rd_kafka_last_error() to retrieve the last error code
+ *             set by the legacy librdkafka APIs.
+ *
  * @sa rd_kafka_last_error()
  */
-RD_EXPORT
+RD_EXPORT RD_DEPRECATED
 rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
 
 
@@ -548,11 +554,14 @@ rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
  *
  * On most platforms this is the same as \p errno but in case of different
  * runtimes between library and application (e.g., Windows static DLLs)
- * this provides a means for expsing the errno librdkafka uses.
+ * this provides a means for exposing the errno librdkafka uses.
  *
  * @remark The value is local to the current calling thread.
+ *
+ * @deprecated Use rd_kafka_last_error() to retrieve the last error code
+ *             set by the legacy librdkafka APIs.
  */
-RD_EXPORT
+RD_EXPORT RD_DEPRECATED
 int rd_kafka_errno (void);
 
 

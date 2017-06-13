@@ -90,7 +90,7 @@ int main_0002_unkpart (int argc, char **argv) {
                                  topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  rd_strerror(errno));
+                          rd_kafka_err2str(rd_kafka_last_error()));
 
         /* Request metadata so that we know the cluster is up before producing
          * messages, otherwise erroneous partitions will not fail immediately.*/
@@ -109,14 +109,13 @@ int main_0002_unkpart (int argc, char **argv) {
 		rd_snprintf(msg, sizeof(msg), "%s test message #%i", argv[0], i);
 		r = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
 				     msg, strlen(msg), NULL, 0, msgidp);
-		if (r == -1) {
-			if (errno == ESRCH)
+                if (r == -1) {
+			if (rd_kafka_last_error() == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
 				TEST_SAY("Failed to produce message #%i: "
 					 "unknown partition: good!\n", i);
 			else
 				TEST_FAIL("Failed to produce message #%i: %s\n",
-					  i, rd_kafka_err2str(
-						  rd_kafka_errno2err(errno)));
+					  i, rd_kafka_err2str(rd_kafka_last_error()));
                         free(msgidp);
 		} else {
 			if (i > 5) {

@@ -1405,7 +1405,7 @@ rd_kafka_topic_t *test_create_topic_object (rd_kafka_t *rk,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                          rd_kafka_err2str(rd_kafka_last_error()));
 
 	return rkt;
 
@@ -1440,7 +1440,7 @@ rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                          rd_kafka_err2str(rd_kafka_last_error()));
 
 	return rkt;
 
@@ -1501,7 +1501,7 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 			TEST_FAIL("Failed to produce message %i "
 				  "to partition %i: %s",
 				  msg_id, (int)partition,
-				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                                  rd_kafka_err2str(rd_kafka_last_error()));
 
                 (*msgcounterp)++;
 		tot_bytes += size;
@@ -1643,7 +1643,7 @@ rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                          rd_kafka_err2str(rd_kafka_last_error()));
 
 	return rkt;
 }
@@ -1658,7 +1658,7 @@ void test_consumer_start (const char *what,
 
 	if (rd_kafka_consume_start(rkt, partition, start_offset) == -1)
 		TEST_FAIL("%s: consume_start failed: %s\n",
-			  what, rd_kafka_err2str(rd_kafka_errno2err(errno)));
+			  what, rd_kafka_err2str(rd_kafka_last_error()));
 }
 
 void test_consumer_stop (const char *what,
@@ -1669,7 +1669,7 @@ void test_consumer_stop (const char *what,
 
 	if (rd_kafka_consume_stop(rkt, partition) == -1)
 		TEST_FAIL("%s: consume_stop failed: %s\n",
-			  what, rd_kafka_err2str(rd_kafka_errno2err(errno)));
+			  what, rd_kafka_err2str(rd_kafka_last_error()));
 }
 
 void test_consumer_seek (const char *what, rd_kafka_topic_t *rkt,

@@ -34,6 +34,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include <stdio.h>
+#include <wchar.h>
+#include <windows.h>
+
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
@@ -345,6 +349,25 @@ void test_timeout_set (int timeout) {
 }
 
 
+#ifdef _MSC_VER
+static void test_init_win32 (void) {
+        /* Enable VT emulation to support colored output. */
+        HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+        DWORD dwMode = 0;
+
+        if (hOut == INVALID_HANDLE_VALUE ||
+            !GetConsoleMode(hOut, &dwMode))
+                return;
+
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x4
+#endif
+        dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+        SetConsoleMode(hOut, dwMode);
+}
+#endif
+
+
 static void test_init (void) {
         int seed;
         const char *tmp;
@@ -364,6 +387,7 @@ static void test_init (void) {
         else
                 seed = test_clock() & 0xffffffff;
 #ifdef _MSC_VER
+        test_init_win32();
 	{
 		LARGE_INTEGER cycl;
 		QueryPerformanceCounter(&cycl);
@@ -515,8 +539,15 @@ const char *test_getenv (const char *env, const char *def) {
         tmp = getenv(env);
         if (tmp && *tmp)
                 return tmp;
-#endif
         return def;
+#else
+        static RD_TLS char tmp[512];
+        DWORD r;
+        r = GetEnvironmentVariableA(env, tmp, sizeof(tmp));
+        if (r == 0 || r > sizeof(tmp))
+                return def;
+        return tmp;
+#endif
 }
 
 void test_conf_common_init (rd_kafka_conf_t *conf, int timeout) {

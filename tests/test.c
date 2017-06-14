@@ -34,9 +34,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include <stdio.h>
-#include <wchar.h>
-#include <windows.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */

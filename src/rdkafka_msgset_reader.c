@@ -733,6 +733,7 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         size_t len_start;
         size_t payload_size;
+        int64_t LastOffset; /* Last absolute Offset in MessageSet header */
         /* Only log decoding errors if protocol debugging enabled. */
         int log_decode_errors = (rkbuf->rkbuf_rkb->rkb_rk->rk_conf.debug &
                                  RD_KAFKA_DBG_PROTOCOL);
@@ -792,6 +793,7 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
 
         rd_kafka_buf_read_i16(rkbuf, &hdr.Attributes);
         rd_kafka_buf_read_i32(rkbuf, &hdr.LastOffsetDelta);
+        LastOffset = hdr.BaseOffset + hdr.LastOffsetDelta;
         rd_kafka_buf_read_i64(rkbuf, &hdr.BaseTimestamp);
         rd_kafka_buf_read_i64(rkbuf, &hdr.MaxTimestamp);
         rd_kafka_buf_read_i64(rkbuf, &hdr.PID);
@@ -815,8 +817,10 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                                         rd_kafka_buf_read_remain(rkbuf));
 
         /* If entire MessageSet contains old outdated offsets, skip it. */
-        if (hdr.BaseOffset + hdr.LastOffsetDelta <
-            rktp->rktp_offsets.fetch_offset)
+        if (LastOffset < rktp->rktp_offsets.fetch_offset) {
+                rd_kafka_buf_skip(rkbuf, payload_size);
+                goto done;
+        }
                 rd_kafka_buf_skip(rkbuf, payload_size);
 
         msetr->msetr_v2_hdr = &hdr;
@@ -856,6 +860,14 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                         goto err;
         }
 
+
+ done:
+        /* Set the next fetch offset to the MessageSet header's last offset + 1
+         * to avoid getting stuck on compacted MessageSets where the last
+         * Message in the MessageSet has an Offset < MessageSet header's
+         * last offset.  See KAFKA-5443 */
+        if (likely(LastOffset >= msetr->msetr_rktp->rktp_offsets.fetch_offset))
+                msetr->msetr_rktp->rktp_offsets.fetch_offset = LastOffset + 1;
 
         msetr->msetr_v2_hdr = NULL;
 

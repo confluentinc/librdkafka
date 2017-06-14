@@ -36,6 +36,8 @@
 #define  _CRT_SECURE_NO_WARNINGS /* Silence nonsense on MSVC */
 #endif
 
+#include "../src/rd.h"
+
 #define _GNU_SOURCE /* for strndup() */
 #include <ctype.h>
 #include <signal.h>
@@ -447,12 +449,6 @@ static void print_stats (rd_kafka_t *rk,
         int extra_of = 0;
         *extra = '\0';
 
-#define EXTRA_PRINTF(...) do {                                       \
-                if (extra_of < sizeof(extra))                           \
-                        extra_of += snprintf(extra+extra_of,            \
-                                             sizeof(extra)-extra_of, __VA_ARG__); \
-        } while (0)
-
 	if (!(otype & _OTYPE_FORCE) &&
             (((otype & _OTYPE_SUMMARY) && verbosity == 0) ||
              cnt.t_last + dispintvl > now))
@@ -600,7 +596,7 @@ static void print_stats (rd_kafka_t *rk,
 
                 if (otype & _OTYPE_SUMMARY) {
                         if (latency_avg >= 1.0f)
-                                extra_of += snprintf(extra+extra_of,
+                                extra_of += rd_snprintf(extra+extra_of,
                                                      sizeof(extra)-extra_of,
                                                      ", latency "
                                                      "curr/avg/lo/hi "
@@ -762,7 +758,7 @@ int main (int argc, char **argv) {
 
 #ifdef SIGIO
         /* Quick termination */
-	snprintf(tmp, sizeof(tmp), "%i", SIGIO);
+	rd_snprintf(tmp, sizeof(tmp), "%i", SIGIO);
 	rd_kafka_conf_set(conf, "internal.termination.signal", tmp, NULL, 0);
 #endif
 
@@ -1120,7 +1116,7 @@ int main (int argc, char **argv) {
         if (!stats_intvlstr) {
                 /* if no user-desired stats, adjust stats interval
                  * to the display interval. */
-                snprintf(tmp, sizeof(tmp), "%"PRId64, dispintvl / 1000);
+                rd_snprintf(tmp, sizeof(tmp), "%"PRId64, dispintvl / 1000);
         }
 
         if (rd_kafka_conf_set(conf, "statistics.interval.ms",
@@ -1243,10 +1239,10 @@ int main (int argc, char **argv) {
 			}
 
                         if (latency_mode) {
-                                snprintf(sbuf, msgsize-1,
+                                rd_snprintf(sbuf, msgsize-1,
                                          "LATENCY:%"PRIu64,  wall_clock());
                         } else if (do_seq) {
-                                snprintf(sbuf,
+                                rd_snprintf(sbuf,
                                          msgsize-1, "%"PRIu64": ", seq);
                                 seq++;
 			}

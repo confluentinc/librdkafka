@@ -276,7 +276,7 @@ static RD_INLINE RD_UNUSED size_t rd_slice_offset (const rd_slice_t *slice) {
 int rd_slice_init_seg (rd_slice_t *slice, const rd_buf_t *rbuf,
                        const rd_segment_t *seg, size_t rof, size_t size);
 int rd_slice_init (rd_slice_t *slice, const rd_buf_t *rbuf,
-                   int64_t absof, size_t size);
+                   size_t absof, size_t size);
 void rd_slice_init_full (rd_slice_t *slice, const rd_buf_t *rbuf);
 
 size_t rd_slice_reader (rd_slice_t *slice, const void **p);

@@ -721,7 +721,7 @@ int rd_slice_init_seg (rd_slice_t *slice, const rd_buf_t *rbuf,
  *          in the buffer.
  */
 int rd_slice_init (rd_slice_t *slice, const rd_buf_t *rbuf,
-                   int64_t absof, size_t size) {
+                   size_t absof, size_t size) {
         const rd_segment_t *seg = rd_buf_get_segment_at_offset(rbuf, NULL,
                                                                absof);
         if (unlikely(!seg))

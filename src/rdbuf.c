@@ -69,7 +69,7 @@ static void rd_segment_init (rd_segment_t *seg, void *mem, size_t size) {
  * @brief Append segment to buffer
  *
  * @remark Will set the buffer position to the new \p seg if no existing wpos.
- * @remark Will NOT set the seg_absof, must be set by caller.
+ * @remark Will set the segment seg_absof to the current length of the buffer.
  */
 static rd_segment_t *rd_buf_append_segment (rd_buf_t *rbuf, rd_segment_t *seg) {
         TAILQ_INSERT_TAIL(&rbuf->rbuf_segments, seg, seg_link);

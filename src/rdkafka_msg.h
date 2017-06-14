@@ -44,10 +44,20 @@
 #define RD_KAFKA_MSG_ATTR_CREATE_TIME      (0 << 3)
 #define RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME  (1 << 3)
 
+
 /**
- * @brief Message.MsgAttributes for MsgVersion v2
+ * @brief MessageSet.Attributes for MsgVersion v2
+ *
+ * Attributes:
+ *  -------------------------------------------------------------------------------------------------
+ *  | Unused (6-15) | Control (5) | Transactional (4) | Timestamp Type (3) | Compression Type (0-2) |
+ *  -------------------------------------------------------------------------------------------------
  */
-#define RD_KAFKA_MSG_V2_ATTR_CONTROL       (1 << 0)
+/* Compression types same as MsgVersion 0 above */
+/* Timestamp type same as MsgVersion 0 above */
+#define RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL (1 << 4)
+#define RD_KAFKA_MSGSET_V2_ATTR_CONTROL       (1 << 5)
+
 
 typedef struct rd_kafka_msg_s {
 	rd_kafka_message_t rkm_rkmessage;  /* MUST be first field */

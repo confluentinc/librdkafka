@@ -636,12 +636,6 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
         message_end = rd_slice_offset(&rkbuf->rkbuf_reader) + hdr.Length;
         rd_kafka_buf_read_varint(rkbuf, &hdr.MsgAttributes);
 
-        if (unlikely((hdr.MsgAttributes & RD_KAFKA_MSG_V2_ATTR_CONTROL))) {
-                /* Ignore control messages */
-                rd_kafka_buf_skip_to(rkbuf, message_end);
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
-        }
-
         rd_kafka_buf_read_varint(rkbuf, &hdr.TimestampDelta);
         rd_kafka_buf_read_varint(rkbuf, &hdr.OffsetDelta);
         hdr.Offset = msetr->msetr_v2_hdr->BaseOffset + hdr.OffsetDelta;
@@ -821,7 +815,12 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                 rd_kafka_buf_skip(rkbuf, payload_size);
                 goto done;
         }
+
+        /* Ignore control messages */
+        if (unlikely((hdr.Attributes & RD_KAFKA_MSGSET_V2_ATTR_CONTROL))) {
                 rd_kafka_buf_skip(rkbuf, payload_size);
+                goto done;
+        }
 
         msetr->msetr_v2_hdr = &hdr;
 

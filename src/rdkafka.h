@@ -446,6 +446,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED = 53,
         /** Security features are disabled */
         RD_KAFKA_RESP_ERR_SECURITY_DISABLED = 54,
+        /** Operation not attempted */
+        RD_KAFKA_RESP_ERR_OPERATION_NOT_ATTEMPTED = 55,
 
 	RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

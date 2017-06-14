@@ -356,7 +356,9 @@ enum ErrorCode {
         /** Transactional Id authorization failed */
         ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED = 53,
         /** Security features are disabled */
-        ERR_SECURITY_DISABLED = 54
+        ERR_SECURITY_DISABLED = 54,
+        /** Operation not attempted */
+        ERR_OPERATION_NOT_ATTEMPTED = 55
 };
 
 

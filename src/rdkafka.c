@@ -501,6 +501,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Broker: Transactional Id authorization failed"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_SECURITY_DISABLED,
                   "Broker: Security features are disabled"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_OPERATION_NOT_ATTEMPTED,
+                  "Broker: Operation not attempted"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
 };

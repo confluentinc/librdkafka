@@ -575,8 +575,9 @@ rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
         rd_kafka_buf_write(rkbuf, varint_Length, sz_Length);
         MessageSize += sz_Length;
 
-        /* Attributes */
-        rd_kafka_buf_write_i8(rkbuf, MsgAttributes);
+        /* Attributes: The MsgAttributes argument is losely based on MsgVer0
+         *             which don't apply for MsgVer2 */
+        rd_kafka_buf_write_i8(rkbuf, 0);
 
         /* TimestampDelta */
         rd_kafka_buf_write(rkbuf, varint_TimestampDelta, sz_TimestampDelta);

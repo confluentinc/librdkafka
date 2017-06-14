@@ -3,6 +3,7 @@
  *   * remove test code
  *   * global hw/sw initialization to be called once per process
  *   * disabled HW CRC32C on MSVC (for now, needs proper porting)
+ *   * Win porting
  */
 
 /* crc32c.c -- compute CRC-32C using the Intel crc32 instruction
@@ -46,6 +47,8 @@
 #ifndef _MSC_VER
 #include <unistd.h>
 #endif
+
+#include "rd.h"
 
 #include "crc32c.h"
 
@@ -121,7 +124,7 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
    GF(2).  Each element is a bit in an unsigned integer.  mat must have at
    least as many entries as the power of two for most significant one bit in
    vec. */
-static inline uint32_t gf2_matrix_times(uint32_t *mat, uint32_t vec)
+static RD_INLINE uint32_t gf2_matrix_times(uint32_t *mat, uint32_t vec)
 {
     uint32_t sum;
 
@@ -137,7 +140,7 @@ static inline uint32_t gf2_matrix_times(uint32_t *mat, uint32_t vec)
 
 /* Multiply a matrix by itself over GF(2).  Both mat and square must have 32
    rows. */
-static inline void gf2_matrix_square(uint32_t *square, uint32_t *mat)
+static RD_INLINE void gf2_matrix_square(uint32_t *square, uint32_t *mat)
 {
     int n;
 
@@ -204,7 +207,7 @@ static void crc32c_zeros(uint32_t zeros[][256], size_t len)
 }
 
 /* Apply the zeros operator table to crc. */
-static inline uint32_t crc32c_shift(uint32_t zeros[][256], uint32_t crc)
+static RD_INLINE uint32_t crc32c_shift(uint32_t zeros[][256], uint32_t crc)
 {
     return zeros[0][crc & 0xff] ^ zeros[1][(crc >> 8) & 0xff] ^
            zeros[2][(crc >> 16) & 0xff] ^ zeros[3][crc >> 24];

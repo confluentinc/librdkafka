@@ -12,7 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
  *    and/or other materials provided with the distribution.
- *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -159,9 +158,9 @@ rd_kafka_lz4_compress_break_framing (rd_kafka_broker_t *rkb,
 
 /**
  * @brief Decompress LZ4F (framed) data.
- *        Kafka broker versions <0.10.0.0 breaks LZ4 framing checksum, if
- *        \p proper_hc we assume the checksum is okay (broker version >=0.10.0)
- *        else we fix it up.
+ *        Kafka broker versions <0.10.0.0 (MsgVersion 0) breaks LZ4 framing
+ *        checksum, if \p proper_hc we assume the checksum is okay
+ *        (broker version >=0.10.0, MsgVersion >= 1) else we fix it up.
  *
  * @remark May modify \p inbuf (if not \p proper_hc)
  */
@@ -311,7 +310,7 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
 
 /**
  * Allocate space for \p *outbuf and compress all \p iovlen buffers in \p iov.
- * @param proper_hc generate a proper HC (checksum) (kafka >=0.10.0.0)
+ * @param proper_hc generate a proper HC (checksum) (kafka >=0.10.0.0, MsgVersion >= 1)
  * @param MessageSetSize indicates (at least) full uncompressed data size,
  *                       possibly including MessageSet fields that will not
  *                       be compressed.

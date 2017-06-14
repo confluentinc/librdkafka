@@ -29,6 +29,12 @@
 #ifndef _RDBUF_H
 #define _RDBUF_H
 
+#ifndef _MSC_VER
+/* for struct iovec */
+#include <sys/socket.h>
+#include <sys/types.h>
+#endif
+
 #include "rdsysqueue.h"
 
 

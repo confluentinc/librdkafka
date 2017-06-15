@@ -399,17 +399,19 @@ int unittest_crc32c (void) {
 "  3. This notice may not be removed or altered from any source distribution.";
         const uint32_t expected_crc = 0x7dcde113;
         uint32_t crc;
+        const char *how;
 
         crc32c_global_init();
 
-        RD_UT_SAY("CRC32C calc %"PRIusz" bytes: HW=%s, SSE42=%s", strlen(buf),
 #if WITH_CRC32C_HW
-                  "yes",
-                  sse42 ? "yes" : "no"
+        if (sse42)
+                how = "hardware (SSE42)";
+        else
+                how = "software (SE42 supported in build but not at runtime)";
 #else
-                  "no", "no"
+        how = "software";
 #endif
-                );
+        RD_UT_SAY("Calculate CRC32C using %s", how);
 
         crc = crc32c(0, buf, strlen(buf));
         RD_UT_ASSERT(crc == expected_crc,

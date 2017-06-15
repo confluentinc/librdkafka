@@ -1034,6 +1034,7 @@ int main (int argc, char **argv) {
 			"  -s <size>    Message size (producer)\n"
 			"  -k <key>     Message key (producer)\n"
 			"  -c <cnt>     Messages to transmit/receive\n"
+			"  -x <cnt>     Hard exit after transmitting <cnt> messages (producer)\n"
 			"  -D           Copy/Duplicate data buffer (producer)\n"
 			"  -i <ms>      Display interval\n"
 			"  -m <msg>     Message payload pattern\n"

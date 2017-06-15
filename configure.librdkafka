@@ -90,7 +90,7 @@ function checks {
 #define LONGx2 \"16384\"
 void foo (void) {
    const char *n = \"abcdefghijklmnopqrstuvwxyz0123456789\";
-   uint64_t c0, c1, c2;
+   uint64_t c0 = 0, c1 = 1, c2 = 2;
    __asm__(\"crc32b\t\" \"(%1), %0\"
            : \"=r\"(c0)
            : \"r\"(n), \"0\"(c0));

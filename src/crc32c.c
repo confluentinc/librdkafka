@@ -2,8 +2,8 @@
  * with the following modifications:
  *   * remove test code
  *   * global hw/sw initialization to be called once per process
- *   * disabled HW CRC32C on MSVC (for now, needs proper porting)
- *   * Win porting
+ *   * HW support is determined by configure's WITH_CRC32C_HW
+ *   * Windows porting (no hardware support on Windows yet)
  */
 
 /* crc32c.c -- compute CRC-32C using the Intel crc32 instruction
@@ -50,13 +50,12 @@
 #include <unistd.h>
 #endif
 
+#include "rdunittest.h"
+
 #include "crc32c.h"
 
 /* CRC-32C (iSCSI) polynomial in reversed bit order. */
 #define POLY 0x82f63b78
-
-static int sse42;  /* Cached SSE42 support */
-
 
 /* Table for a quadword-at-a-time software crc. */
 static uint32_t crc32c_table[8][256];
@@ -104,7 +103,7 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
 #if defined(__sparc) || defined(__sparc__) || defined(__APPLE__)
         /* Alignment-safe alternative.
          * This is also needed on Apple to avoid compilation warnings for
-         * non-appearant reasons. */
+         * non-appearant alignment reasons. */
         uint64_t ncopy;
         memcpy(&ncopy, next, sizeof(ncopy));
         crc ^= ncopy;
@@ -128,6 +127,10 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
     }
     return (uint32_t)crc ^ 0xffffffff;
 }
+
+
+#if WITH_CRC32C_HW
+static int sse42;  /* Cached SSE42 support */
 
 /* Multiply a matrix times a vector over the Galois field of two elements,
    GF(2).  Each element is a bit in an unsigned integer.  mat must have at
@@ -246,9 +249,6 @@ static void crc32c_init_hw(void)
 /* Compute CRC-32C using the Intel hardware instruction. */
 static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
 {
-#ifdef _MSC_VER // FIXME
-    return 0;
-#else
     const unsigned char *next = buf;
     const unsigned char *end;
     uint64_t crc0, crc1, crc2;      /* need to be 64 bits for crc32q */
@@ -330,7 +330,6 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
 
     /* return a post-processed crc */
     return (uint32_t)crc0 ^ 0xffffffff;
-#endif
 }
 
 /* Check for SSE 4.2.  SSE 4.2 was first supported in Nehalem processors
@@ -349,11 +348,18 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
         (have) = (ecx >> 20) & 1; \
     } while (0)
 
+#endif /* WITH_CRC32C_HW */
+
 /* Compute a CRC-32C.  If the crc32 instruction is available, use the hardware
    version.  Otherwise, use the software version. */
 uint32_t crc32c(uint32_t crc, const void *buf, size_t len)
 {
-    return sse42 ? crc32c_hw(crc, buf, len) : crc32c_sw(crc, buf, len);
+#if WITH_CRC32C_HW
+        if (sse42)
+                return crc32c_hw(crc, buf, len);
+        else
+#endif
+                return crc32c_sw(crc, buf, len);
 }
 
 
@@ -365,14 +371,51 @@ uint32_t crc32c(uint32_t crc, const void *buf, size_t len)
  * @brief Populate shift tables once
  */
 void crc32c_global_init (void) {
-#ifdef _MSC_VER // FIXME
-        sse42 = 0;
-#else
+#if WITH_CRC32C_HW
         SSE42(sse42);
-#endif
         if (sse42)
                 crc32c_init_hw();
         else
+#endif
                 crc32c_init_sw();
 }
 
+int unittest_crc32c (void) {
+        const char *buf =
+"  This software is provided 'as-is', without any express or implied\n"
+"  warranty.  In no event will the author be held liable for any damages\n"
+"  arising from the use of this software.\n"
+"\n"
+"  Permission is granted to anyone to use this software for any purpose,\n"
+"  including commercial applications, and to alter it and redistribute it\n"
+"  freely, subject to the following restrictions:\n"
+"\n"
+"  1. The origin of this software must not be misrepresented; you must not\n"
+"     claim that you wrote the original software. If you use this software\n"
+"     in a product, an acknowledgment in the product documentation would be\n"
+"     appreciated but is not required.\n"
+"  2. Altered source versions must be plainly marked as such, and must not be\n"
+"     misrepresented as being the original software.\n"
+"  3. This notice may not be removed or altered from any source distribution.";
+        const uint32_t expected_crc = 0x7dcde113;
+        uint32_t crc;
+
+        crc32c_global_init();
+
+        RD_UT_SAY("CRC32C calc %"PRIusz" bytes: HW=%s, SSE42=%s", strlen(buf),
+#if WITH_CRC32C_HW
+                  "yes",
+                  sse42 ? "yes" : "no"
+#else
+                  "no", "no"
+#endif
+                );
+
+        crc = crc32c(0, buf, strlen(buf));
+        RD_UT_ASSERT(crc == expected_crc,
+                     "Calculated CRC 0x%"PRIx32
+                     " not matching expected CRC 0x%"PRIx32,
+                     crc, expected_crc);
+
+        RD_UT_PASS();
+}

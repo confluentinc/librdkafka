@@ -31,11 +31,13 @@
 
 #include "rdvarint.h"
 #include "rdbuf.h"
+#include "crc32c.h"
 
 
 int rd_unittest (void) {
         int fails = 0;
         fails += unittest_rdbuf();
         fails += unittest_rdvarint();
+        fails += unittest_crc32c();
         return fails;
 }

@@ -92,6 +92,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\tests\0000-unittests.c" />
     <ClCompile Include="..\..\tests\0001-multiobj.c" />
     <ClCompile Include="..\..\tests\0002-unkpart.c" />
     <ClCompile Include="..\..\tests\0003-msgmaxsize.c" />

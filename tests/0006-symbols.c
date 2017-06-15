@@ -47,8 +47,6 @@ int main_0006_symbols (int argc, char **argv) {
 		rd_kafka_get_err_descs(NULL, NULL);
                 rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR);
 		rd_kafka_err2name(RD_KAFKA_RESP_ERR_NO_ERROR);
-                rd_kafka_errno2err(EINVAL);
-                rd_kafka_errno();
 		rd_kafka_last_error();
                 rd_kafka_conf_new();
                 rd_kafka_conf_destroy(NULL);

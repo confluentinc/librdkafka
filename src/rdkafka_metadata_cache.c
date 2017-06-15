@@ -209,10 +209,10 @@ rd_kafka_metadata_cache_insert (rd_kafka_t *rk,
          * the pointer address. */
         topic_len = strlen(mtopic->topic) + 1;
         rd_tmpabuf_new(&tbuf,
-                       _ALIGN(sizeof(*rkmce), 8) +
-                       _ALIGN(topic_len, 8) +
+                       RD_ROUNDUP(sizeof(*rkmce), 8) +
+                       RD_ROUNDUP(topic_len, 8) +
                        (mtopic->partition_cnt *
-                        _ALIGN(sizeof(*mtopic->partitions), 8)),
+                        RD_ROUNDUP(sizeof(*mtopic->partitions), 8)),
                        1/*assert on fail*/);
 
         rkmce = rd_tmpabuf_alloc(&tbuf, sizeof(*rkmce));

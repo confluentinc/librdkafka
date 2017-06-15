@@ -84,7 +84,7 @@ static void produce_messages (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                          rd_kafka_err2str(rd_kafka_last_error()));
 
         /* Produce messages */
 	prod_msg_remains = msgcnt;
@@ -110,8 +110,7 @@ static void produce_messages (uint64_t testid, const char *topic,
                                 TEST_FAIL("Failed to produce message %i "
                                           "to partition %i: %s",
                                           msgid, (int)partition,
-                                          rd_kafka_err2str(
-                                                  rd_kafka_errno2err(errno)));
+                                          rd_kafka_err2str(rd_kafka_last_error()));
 			msgid++;
 		}
         }
@@ -356,7 +355,7 @@ static void consume_messages_callback_multi (const char *desc,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("%s: Failed to create topic: %s\n",
-                          desc, rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                          desc, rd_kafka_err2str(rd_kafka_last_error()));
 
 	cons_msg_stop = cons_msg_next + msg_cnt - 1;
 
@@ -376,7 +375,7 @@ static void consume_messages_callback_multi (const char *desc,
                 if (rd_kafka_consume_start(rkt, partition, initial_offset) == -1)
                         TEST_FAIL("%s: consume_start(%i) failed: %s",
                                   desc, (int)partition,
-                                  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                                  rd_kafka_err2str(rd_kafka_last_error()));
 
 
                 /* Stop consuming messages when this number of messages

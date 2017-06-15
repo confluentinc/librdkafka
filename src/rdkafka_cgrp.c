@@ -459,8 +459,8 @@ static void rd_kafka_cgrp_handle_GroupCoordinator (rd_kafka_t *rk,
         rd_kafka_cgrp_serve(rkcg); /* Serve updated state, if possible */
         return;
 
-err: /* Parse error */
-        ErrorCode = RD_KAFKA_RESP_ERR__BAD_MSG;
+err_parse: /* Parse error */
+        ErrorCode = rkbuf->rkbuf_err;
         /* FALLTHRU */
 
 err2:
@@ -747,7 +747,8 @@ rd_kafka_group_MemberMetadata_consumer_read (
 
         /* Create a shadow-buffer pointing to the metadata to ease parsing. */
         rkbuf = rd_kafka_buf_new_shadow(MemberMetadata->data,
-                                        RD_KAFKAP_BYTES_LEN(MemberMetadata));
+                                        RD_KAFKAP_BYTES_LEN(MemberMetadata),
+                                        NULL);
 
         rd_kafka_buf_read_i16(rkbuf, &Version);
         rd_kafka_buf_read_i32(rkbuf, &subscription_cnt);
@@ -771,12 +772,14 @@ rd_kafka_group_MemberMetadata_consumer_read (
         rd_kafka_buf_read_bytes(rkbuf, &UserData);
         rkgm->rkgm_userdata = rd_kafkap_bytes_copy(&UserData);
 
-        rkbuf->rkbuf_buf2 = NULL;  /* Avoid freeing payload */
         rd_kafka_buf_destroy(rkbuf);
 
         return 0;
 
-err:
+ err_parse:
+        err = rkbuf->rkbuf_err;
+
+ err:
         rd_rkb_dbg(rkb, CGRP, "MEMBERMETA",
                    "Failed to parse MemberMetadata for \"%.*s\": %s",
                    RD_KAFKAP_STR_PR(rkgm->rkgm_member_id),
@@ -787,7 +790,6 @@ err:
                 rkgm->rkgm_subscription = NULL;
         }
 
-        rkbuf->rkbuf_buf2 = NULL;  /* Avoid freeing payload */
         rd_kafka_buf_destroy(rkbuf);
         return -1;
 }
@@ -983,6 +985,12 @@ err:
                 rd_kafka_cgrp_set_join_state(rkcg,
                                              RD_KAFKA_CGRP_JOIN_STATE_INIT);
         }
+
+        return;
+
+ err_parse:
+        ErrorCode = rkbuf->rkbuf_err;
+        goto err;
 }
 
 
@@ -1305,6 +1313,12 @@ err:
 
         if (ErrorCode != 0 && ErrorCode != RD_KAFKA_RESP_ERR__DESTROY)
                 rd_kafka_cgrp_handle_heartbeat_error(rkcg, ErrorCode);
+
+        return;
+
+ err_parse:
+        ErrorCode = rkbuf->rkbuf_err;
+        goto err;
 }
 
 
@@ -3081,7 +3095,6 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
         int16_t Version;
         int32_t TopicCnt;
         rd_kafkap_bytes_t UserData;
-        rd_kafka_group_member_t rkgm;
 
 	/* Dont handle new assignments when terminating */
 	if (!err && rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)
@@ -3100,7 +3113,8 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
 
         /* Parse assignment from MemberState */
         rkbuf = rd_kafka_buf_new_shadow(member_state->data,
-                                        RD_KAFKAP_BYTES_LEN(member_state));
+                                        RD_KAFKAP_BYTES_LEN(member_state),
+                                        NULL);
 	/* Protocol parser needs a broker handle to log errors on. */
 	if (rkb) {
 		rkbuf->rkbuf_rkb = rkb;
@@ -3134,25 +3148,24 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
         }
 
         rd_kafka_buf_read_bytes(rkbuf, &UserData);
-        rkbuf->rkbuf_buf2 = NULL; /* Avoid free of underlying memory */
-        rd_kafka_buf_destroy(rkbuf);
 
  done:
-        memset(&rkgm, 0, sizeof(rkgm));
-        rkgm.rkgm_assignment = assignment;
-        rkgm.rkgm_userdata = &UserData;
-
         /* Set the new assignment */
 	rd_kafka_cgrp_handle_assignment(rkcg, assignment);
 
         rd_kafka_topic_partition_list_destroy(assignment);
 
-        return;
-err:
-        if (rkbuf) {
-                rkbuf->rkbuf_buf2 = NULL; /* Avoid free of underlying memory */
+        if (rkbuf)
                 rd_kafka_buf_destroy(rkbuf);
-        }
+
+        return;
+
+ err_parse:
+        err = rkbuf->rkbuf_err;
+
+ err:
+        if (rkbuf)
+                rd_kafka_buf_destroy(rkbuf);
 
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "GRPSYNC",
                      "Group \"%s\": synchronization failed: %s: rejoining",

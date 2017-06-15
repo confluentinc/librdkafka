@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2015, Magnus Edenhill
+ * Copyright (c) 2017, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,62 +27,17 @@
  */
 
 #include "test.h"
-
-/* Typical include path would be <librdkafka/rdkafka.h>, but this program
- * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h"  /* for Kafka driver */
+#include "rdkafka.h"
 
 
 /**
- * Various regression tests for hangs on destroy.
+ * @brief Call librdkafka built-in unit-tests
  */
 
 
-
-
-
-/**
- * Issue #530:
- * "Legacy Consumer. Delete hangs if done right after RdKafka::Consumer::create.
- *  But If I put a start and stop in between, there is no issue."
- */
-static int legacy_consumer_early_destroy (void) {
-	rd_kafka_t *rk;
-	rd_kafka_topic_t *rkt;
-	int pass;
-	const char *topic = test_mk_topic_name(__FUNCTION__, 0);
-
-	for (pass = 0 ; pass < 2 ; pass++) {
-		TEST_SAY("%s: pass #%d\n", __FUNCTION__, pass);
-
-		rk = test_create_handle(RD_KAFKA_CONSUMER, NULL);
-
-		if (pass == 1) {
-			/* Second pass, create a topic too. */
-			rkt = rd_kafka_topic_new(rk, topic, NULL);
-			TEST_ASSERT(rkt, "failed to create topic: %s",
-				    rd_kafka_err2str(
-					    rd_kafka_last_error()));
-			rd_sleep(1);
-			rd_kafka_topic_destroy(rkt);
-		}
-
-		rd_kafka_destroy(rk);
-	}
-
-	return 0;
-}
-
-
-int main_0037_destroy_hang_local (int argc, char **argv) {
-        int fails = 0;
-
-	test_conf_init(NULL, NULL, 30);
-
-	fails += legacy_consumer_early_destroy();
-
-        if (fails > 0)
-                TEST_FAIL("See %d previous error(s)\n", fails);
-
+int main_0000_unittests (int argc, char **argv) {
+        int fails = rd_kafka_unittest();
+        if (fails)
+                TEST_FAIL("%d unit-test(s) failed", fails);
         return 0;
 }

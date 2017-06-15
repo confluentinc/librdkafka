@@ -66,16 +66,6 @@ typedef struct rd_ikafka_s rd_ikafka_t;
                                        (rk), "assert: " # cond);        \
         } while (0)
 
-/* Debug assert, only enabled with --enable-devel */
-#if ENABLE_DEVEL == 1
-#define rd_dassert(cond) rd_kafka_assert(NULL, cond)
-#else
-#define rd_dassert(cond)  do {} while (0)
-#endif
-
-
-/** Assert if reached */
-#define RD_NOTREACHED() rd_kafka_assert(NULL, !*"/* NOTREACHED */ violated")
 
 void
 RD_NORETURN
@@ -182,6 +172,15 @@ struct rd_kafka_s {
          *   0: No consumers running
          *  <0: Running in High level consumer mode */
         rd_atomic32_t    rk_simple_cnt;
+
+        /**
+         * Exactly Once Semantics
+         */
+        struct {
+                rd_kafkap_str_t *TransactionalId;
+                int64_t          PID;
+                int16_t          ProducerEpoch;
+        } rk_eos;
 
 	const rd_kafkap_bytes_t *rk_null_bytes;
 
@@ -395,15 +394,24 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 
 
 
-
-
 extern rd_kafka_resp_err_t RD_TLS rd_kafka_last_error_code;
 
 static RD_UNUSED RD_INLINE
 rd_kafka_resp_err_t rd_kafka_set_last_error (rd_kafka_resp_err_t err,
 					     int errnox) {
-	if (errnox)
-		errno = errnox;
+        if (errnox) {
+#ifdef _MSC_VER
+                /* This is the correct way to set errno on Windows,
+                 * but it is still pointless due to different errnos in
+                 * in different runtimes:
+                 * https://social.msdn.microsoft.com/Forums/vstudio/en-US/b4500c0d-1b69-40c7-9ef5-08da1025b5bf/setting-errno-from-within-a-dll?forum=vclanguage/
+                 * errno is thus highly deprecated, and buggy, on Windows
+                 * when using librdkafka as a dynamically loaded DLL. */
+                _set_errno(errnox);
+#else
+                errno = errnox;
+#endif
+        }
 	rd_kafka_last_error_code = err;
 	return err;
 }

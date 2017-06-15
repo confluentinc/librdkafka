@@ -41,6 +41,8 @@ static const char *rd_kafka_feature_names[] = {
 	"SaslHandshake",
 	"BrokerGroupCoordinator",
 	"LZ4",
+        "OffsetTime",
+        "MsgVer2",
 	NULL
 };
 
@@ -73,6 +75,15 @@ static const struct rd_kafka_feature_map {
 			{ -1 },
 		},
 	},
+        {
+                /* @brief >=0.11.0: Message.MagicByte version 2 */
+                .feature = RD_KAFKA_FEATURE_MSGVER2,
+                .depends = {
+                        { RD_KAFKAP_Produce, 3, 3 },
+                        { RD_KAFKAP_Fetch, 4, 4 },
+                        { -1 },
+                },
+        },
 	{
 		
 		/* @brief >=0.10.0: ApiVersionQuery support.

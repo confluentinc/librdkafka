@@ -30,7 +30,7 @@
 
 
 #include "rdendian.h"
-
+#include "rdvarint.h"
 
 
 
@@ -68,7 +68,20 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_ApiVersion    18
 #define RD_KAFKAP_CreateTopics  19
 #define RD_KAFKAP_DeleteTopics  20
-#define RD_KAFKAP__NUM          21
+#define RD_KAFKAP_DeleteRecords 21
+#define RD_KAFKAP_InitProducerId 22
+#define RD_KAFKAP_OffsetForLeaderEpoch 23
+#define RD_KAFKAP_AddPartitionsToTxn 24
+#define RD_KAFKAP_AddOffsetsToTxn 25
+#define RD_KAFKAP_EndTxn        26
+#define RD_KAFKAP_WriteTxnMarkers 27
+#define RD_KAFKAP_TxnOffsetCommit 28
+#define RD_KAFKAP_DescribeAcls  29
+#define RD_KAFKAP_CreateAcls    30
+#define RD_KAFKAP_DeleteAcls    31
+#define RD_KAFKAP_DescribeConfigs 32
+#define RD_KAFKAP_AlterConfigs  33
+#define RD_KAFKAP__NUM          34
         int16_t  ApiVersion;
         int32_t  CorrId;
         /* ClientId follows */
@@ -108,7 +121,20 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_SaslHandshake] = "SaslHandshake",
                 [RD_KAFKAP_ApiVersion] = "ApiVersion",
                 [RD_KAFKAP_CreateTopics] = "CreateTopics",
-                [RD_KAFKAP_DeleteTopics] = "DeleteTopics"
+                [RD_KAFKAP_DeleteTopics] = "DeleteTopics",
+                [RD_KAFKAP_DeleteRecords] = "DeleteRecords",
+                [RD_KAFKAP_InitProducerId] = "InitProducerId",
+                [RD_KAFKAP_OffsetForLeaderEpoch] = "OffsetForLeaderEpoch",
+                [RD_KAFKAP_AddPartitionsToTxn] = "AddPartitionsToTxn",
+                [RD_KAFKAP_AddOffsetsToTxn] = "AddOffsetsToTxn",
+                [RD_KAFKAP_EndTxn] = "EndTxn",
+                [RD_KAFKAP_WriteTxnMarkers] = "WriteTxnMarkers",
+                [RD_KAFKAP_TxnOffsetCommit] = "TxnOffsetCommit",
+                [RD_KAFKAP_DescribeAcls] = "DescribeAcls",
+                [RD_KAFKAP_CreateAcls] = "CreateAcls",
+                [RD_KAFKAP_DeleteAcls] = "DeleteAcls",
+                [RD_KAFKAP_DescribeConfigs] = "DescribeConfigs",
+                [RD_KAFKAP_AlterConfigs] = "AlterConfigs"
         };
         static RD_TLS char ret[32];
 
@@ -124,14 +150,6 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
 
 
 
-/* Offset + MessageSize */
-#define RD_KAFKAP_MESSAGESET_HDR_SIZE (8+4)
-/* CRC + Magic + Attr + KeyLen + ValueLen + [Timestamp]
- * @remark This includes the optional (MsgVer=1) Timestamp field (8 bytes) */
-#define RD_KAFKAP_MESSAGE_HDR_SIZE    (4+1+1+4+4+8)
-/* Maximum per-message overhead. */
-#define RD_KAFKAP_MESSAGE_OVERHEAD  \
-	(RD_KAFKAP_MESSAGESET_HDR_SIZE + RD_KAFKAP_MESSAGE_HDR_SIZE)
 
 
 
@@ -154,6 +172,9 @@ static RD_UNUSED int rd_kafka_ApiVersion_key_cmp (const void *_a, const void *_b
 }
 
 
+
+#define RD_KAFKAP_READ_UNCOMMITTED  0
+#define RD_KAFKAP_READ_COMMITTED    1
 
 
 /**
@@ -302,7 +323,7 @@ typedef struct rd_kafkap_bytes_s {
 	int32_t     len;   /* Kafka bytes length (-1=NULL, 0=empty, >0=data) */
 	const void *data;  /* points just past the struct, or other memory,
 			    * not NULL-terminated */
-	const char _data[]; /* Bytes following struct when new()ed */
+	const char _data[1]; /* Bytes following struct when new()ed */
 } rd_kafkap_bytes_t;
 
 
@@ -332,15 +353,22 @@ static RD_UNUSED void rd_kafkap_bytes_destroy (rd_kafkap_bytes_t *kbytes) {
 
 
 /**
- * Allocate a new Kafka bytes and make a copy of 'bytes'.
- * Supports Kafka NULL bytes.
+ * @brief Allocate a new Kafka bytes and make a copy of 'bytes'.
+ * If \p len > 0 but \p bytes is NULL no copying is performed by
+ * the bytes structure will be allocated to fit \p size bytes.
+ *
+ * Supports:
+ *  - Kafka NULL bytes (bytes==NULL,len==0),
+ *  - Empty bytes (bytes!=NULL,len==0)
+ *  - Copy data (bytes!=NULL,len>0)
+ *  - No-copy, just alloc (bytes==NULL,len>0)
  */
 static RD_INLINE RD_UNUSED
 rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
 	rd_kafkap_bytes_t *kbytes;
 	int32_t klen;
 
-	if (!bytes)
+	if (!bytes && !len)
 		len = RD_KAFKAP_BYTES_LEN_NULL;
 
 	kbytes = rd_malloc(sizeof(*kbytes) + 4 +
@@ -354,7 +382,8 @@ rd_kafkap_bytes_t *rd_kafkap_bytes_new (const char *bytes, int32_t len) {
 		kbytes->data = NULL;
 	else {
 		kbytes->data = ((const char *)(kbytes+1))+4;
-		memcpy((void *)kbytes->data, bytes, len);
+                if (bytes)
+                        memcpy((void *)kbytes->data, bytes, len);
 	}
 
 	return kbytes;
@@ -400,3 +429,70 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 
 #define RD_KAFKA_NODENAME_SIZE  128
 
+
+
+
+/**
+ * @brief Message overheads (worst-case)
+ */
+
+/**
+ * MsgVersion v0..v1
+ */
+/* Offset + MessageSize */
+#define RD_KAFKAP_MESSAGESET_V0_HDR_SIZE (8+4)
+/* CRC + Magic + Attr + KeyLen + ValueLen */
+#define RD_KAFKAP_MESSAGE_V0_HDR_SIZE    (4+1+1+4+4)
+/* CRC + Magic + Attr + Timestamp + KeyLen + ValueLen */
+#define RD_KAFKAP_MESSAGE_V1_HDR_SIZE    (4+1+1+8+4+4)
+/* Maximum per-message overhead */
+#define RD_KAFKAP_MESSAGE_V0_OVERHEAD                                   \
+        (RD_KAFKAP_MESSAGESET_V0_HDR_SIZE + RD_KAFKAP_MESSAGE_V0_HDR_SIZE)
+#define RD_KAFKAP_MESSAGE_V1_OVERHEAD                                   \
+        (RD_KAFKAP_MESSAGESET_V0_HDR_SIZE + RD_KAFKAP_MESSAGE_V1_HDR_SIZE)
+
+/**
+ * MsgVersion v2
+ */
+#define RD_KAFKAP_MESSAGE_V2_OVERHEAD                                  \
+        (                                                              \
+        /* Length (varint) */                                          \
+        RD_UVARINT_ENC_SIZEOF(int32_t) +                               \
+        /* Attributes */                                               \
+        1 +                                                            \
+        /* TimestampDelta (varint) */                                  \
+        RD_UVARINT_ENC_SIZEOF(int64_t) +                               \
+        /* OffsetDelta (varint) */                                     \
+        RD_UVARINT_ENC_SIZEOF(int32_t) +                               \
+        /* KeyLen (varint) */                                          \
+        RD_UVARINT_ENC_SIZEOF(int32_t) +                               \
+        /* ValueLen (varint) */                                        \
+        RD_UVARINT_ENC_SIZEOF(int32_t) +                               \
+        /* HeaderCnt (varint): */                                      \
+        RD_UVARINT_ENC_SIZEOF(int32_t)                                 \
+        )
+
+
+
+/**
+ * @brief MessageSets are not explicitly versioned but depends on the
+ *        Produce/Fetch API version and the encompassed Message versions.
+ *        We use the Message version (MsgVersion, aka MagicByte) to describe
+ *        the MessageSet version, that is, MsgVersion <= 1 uses the old
+ *        MessageSet version (v0?) while MsgVersion 2 uses MessageSet version v2
+ */
+
+/* Old MessageSet header: none */
+#define RD_KAFKAP_MSGSET_V0_SIZE                0
+
+/* MessageSet v2 header */
+#define RD_KAFKAP_MSGSET_V2_SIZE                (8+4+4+1+4+2+4+8+8+8+2+4+4)
+
+/* Byte offsets for MessageSet fields */
+#define RD_KAFKAP_MSGSET_V2_OF_Length           (8)
+#define RD_KAFKAP_MSGSET_V2_OF_CRC              (8+4+4+1)
+#define RD_KAFKAP_MSGSET_V2_OF_Attributes       (8+4+4+1+4)
+#define RD_KAFKAP_MSGSET_V2_OF_LastOffsetDelta  (8+4+4+1+4+2)
+#define RD_KAFKAP_MSGSET_V2_OF_BaseTimestamp    (8+4+4+1+4+2+4)
+#define RD_KAFKAP_MSGSET_V2_OF_MaxTimestamp     (8+4+4+1+4+2+4+8)
+#define RD_KAFKAP_MSGSET_V2_OF_RecordCount      (8+4+4+1+4+2+4+8+8+8+2+4)

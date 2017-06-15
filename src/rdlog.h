@@ -29,3 +29,9 @@
 #pragma once
 
 void rd_hexdump (FILE *fp, const char *name, const void *ptr, size_t len);
+
+void rd_iov_print (const char *what, int iov_idx, const struct iovec *iov,
+                   int hexdump);
+struct msghdr;
+void rd_msghdr_print (const char *what, const struct msghdr *msg,
+                      int hexdump);

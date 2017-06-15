@@ -30,13 +30,12 @@
 #include "rdkafka_int.h"
 #include "rdcrc32.h"
 #include "rdlist.h"
+#include "rdbuf.h"
+
 
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
 #define RD_KAFKA_HEADERS_IOV_CNT   2
-
-/* Align X (upwards) to STRIDE, which must be power of 2. */
-#define _ALIGN(X,STRIDE) (((X) + ((STRIDE) - 1)) & -(STRIDE))
 
 
 /**
@@ -105,7 +104,7 @@ rd_tmpabuf_alloc0 (const char *func, int line, rd_tmpabuf_t *tab, size_t size) {
 	}
 
         ptr = (void *)(tab->buf + tab->of);
-	tab->of += _ALIGN(size, 8);
+	tab->of += RD_ROUNDUP(size, 8);
 
 	return ptr;
 }
@@ -148,26 +147,30 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 
 
 /**
- *
- * Read buffer interface
+ * @name Read buffer interface
  *
  * Memory reading helper macros to be used when parsing network responses.
  *
  * Assumptions:
- *   - an 'err:' goto-label must be available for error bailouts.
+ *   - an 'err_parse:' goto-label must be available for error bailouts,
+ *                     the error code will be set in rkbuf->rkbuf_err
  */
 
 #define rd_kafka_buf_parse_fail(rkbuf,...) do {				\
                 if (log_decode_errors) {                                \
 			rd_kafka_assert(NULL, rkbuf->rkbuf_rkb);	\
                         rd_rkb_log(rkbuf->rkbuf_rkb, LOG_WARNING, "PROTOERR", \
-                                   "Protocol parse failure at %s:%i " \
-				   "(incorrect broker.version.fallback?)",   \
+                                   "Protocol parse failure "            \
+                                   "at %"PRIusz"/%"PRIusz" (%s:%i) "    \
+                                   "(incorrect broker.version.fallback?)", \
+                                   rd_slice_offset(&rkbuf->rkbuf_reader), \
+                                   rd_slice_size(&rkbuf->rkbuf_reader), \
                                    __FUNCTION__, __LINE__);             \
                         rd_rkb_log(rkbuf->rkbuf_rkb, LOG_WARNING,	\
 				   "PROTOERR", __VA_ARGS__);		\
                 }                                                       \
-                goto err;                                               \
+                (rkbuf)->rkbuf_err = RD_KAFKA_RESP_ERR__BAD_MSG;        \
+                goto err_parse;                                         \
 	} while (0)
 
 
@@ -175,54 +178,90 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 /**
  * Returns the number of remaining bytes available to read.
  */
-#define rd_kafka_buf_remain(rkbuf) (int)(rkbuf->rkbuf_wof - rkbuf->rkbuf_of)
+#define rd_kafka_buf_read_remain(rkbuf) \
+        rd_slice_remains(&(rkbuf)->rkbuf_reader)
 
 /**
  * Checks that at least 'len' bytes remain to be read in buffer, else fails.
  */
-#define rd_kafka_buf_check_len(rkbuf,len) do {				\
-		int _LEN = (int)(len);					\
-		if (unlikely(_LEN > rd_kafka_buf_remain(rkbuf))) {	\
-			rd_kafka_buf_parse_fail(rkbuf, \
-						"expected %i bytes > %i " \
-						"remaining bytes",	\
-						_LEN,			\
-						(int)rd_kafka_buf_remain(rkbuf)); \
-			goto err;					\
-		}							\
-	} while (0)
+#define rd_kafka_buf_check_len(rkbuf,len) do {                          \
+                size_t __len0 = (size_t)(len);                          \
+                if (unlikely(__len0 > rd_kafka_buf_read_remain(rkbuf))) { \
+                        rd_kafka_buf_parse_fail(                        \
+                                rkbuf,                                  \
+                                "expected %"PRIusz" bytes > %"PRIusz    \
+                                " remaining bytes",                     \
+                                __len0, rd_kafka_buf_read_remain(rkbuf)); \
+                        (rkbuf)->rkbuf_err = RD_KAFKA_RESP_ERR__BAD_MSG; \
+                        goto err_parse;                                 \
+                }                                                       \
+        } while (0)
 
 /**
  * Skip (as in read and ignore) the next 'len' bytes.
  */
-#define rd_kafka_buf_skip(rkbuf, len) do {	\
-		rd_kafka_buf_check_len(rkbuf, len);		\
-		rkbuf->rkbuf_of += (len);			\
-	} while (0)
+#define rd_kafka_buf_skip(rkbuf, len) do {                              \
+                size_t __len1 = (size_t)(len);                          \
+                if (__len1 &&                                           \
+                    !rd_slice_read(&(rkbuf)->rkbuf_reader, NULL, __len1)) \
+                        rd_kafka_buf_check_len(rkbuf, __len1);           \
+        } while (0)
+
+/**
+ * Skip (as in read and ignore) up to fixed position \p pos.
+ */
+#define rd_kafka_buf_skip_to(rkbuf, pos) do {                           \
+                size_t __len1 = (size_t)(pos) -                         \
+                        rd_slice_offset(&(rkbuf)->rkbuf_reader);        \
+                if (__len1 &&                                           \
+                    !rd_slice_read(&(rkbuf)->rkbuf_reader, NULL, __len1)) \
+                        rd_kafka_buf_check_len(rkbuf, __len1);           \
+        } while (0)
 
 
 
 /**
  * Read 'len' bytes and copy to 'dstptr'
  */
-#define rd_kafka_buf_read(rkbuf,dstptr,len) do {			\
-		rd_kafka_buf_check_len(rkbuf, len);			\
-		memcpy((dstptr), rkbuf->rkbuf_rbuf+rkbuf->rkbuf_of, (len)); \
-		rkbuf->rkbuf_of += (len);				\
-	} while (0)
+#define rd_kafka_buf_read(rkbuf,dstptr,len) do {                        \
+                size_t __len2 = (size_t)(len);                          \
+                if (!rd_slice_read(&(rkbuf)->rkbuf_reader, dstptr, __len2))  \
+                        rd_kafka_buf_check_len(rkbuf, __len2);          \
+        } while (0)
+
 
 /**
- * Read a 16,32,64-bit integer and store it in 'dstptr' (which must be aligned).
+ * @brief Read \p len bytes at slice offset \p offset and copy to \p dstptr
+ *        without affecting the current reader position.
  */
-#define rd_kafka_buf_read_i64(rkbuf,dstptr) do {			\
-		rd_kafka_buf_read(rkbuf, dstptr, 8);			\
-		*(int64_t *)(dstptr) = be64toh(*(int64_t *)(dstptr));	\
-	} while (0)
+#define rd_kafka_buf_peek(rkbuf,offset,dstptr,len) do {                 \
+                size_t __len2 = (size_t)(len);                          \
+                if (!rd_slice_peek(&(rkbuf)->rkbuf_reader, offset,      \
+                                   dstptr, __len2))                     \
+                        rd_kafka_buf_check_len(rkbuf, (offset)+(__len2)); \
+        } while (0)
 
-#define rd_kafka_buf_read_i32(rkbuf,dstptr) do {			\
-		rd_kafka_buf_read(rkbuf, dstptr, 4);			\
-		*(int32_t *)(dstptr) = be32toh(*(int32_t *)(dstptr));	\
-	} while (0)
+
+/**
+ * Read a 16,32,64-bit integer and store it in 'dstptr'
+ */
+#define rd_kafka_buf_read_i64(rkbuf,dstptr) do {                        \
+                int64_t _v;                                             \
+                rd_kafka_buf_read(rkbuf, &_v, sizeof(_v));              \
+                *(dstptr) = be64toh(_v);                                \
+        } while (0)
+
+#define rd_kafka_buf_peek_i64(rkbuf,of,dstptr) do {                     \
+                int64_t _v;                                             \
+                rd_kafka_buf_peek(rkbuf, of, &_v, sizeof(_v));          \
+                *(dstptr) = be64toh(_v);                                \
+        } while (0)
+
+#define rd_kafka_buf_read_i32(rkbuf,dstptr) do {                        \
+                int32_t _v;                                             \
+                rd_kafka_buf_read(rkbuf, &_v, sizeof(_v));              \
+                *(dstptr) = be32toh(_v);                                \
+        } while (0)
 
 /* Same as .._read_i32 but does a direct assignment.
  * dst is assumed to be a scalar, not pointer. */
@@ -232,10 +271,12 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 		dst = (int32_t) be32toh(_v);				\
 	} while (0)
 
-#define rd_kafka_buf_read_i16(rkbuf, dstptr) do {			\
-		rd_kafka_buf_read(rkbuf, dstptr, 2);			\
-		*(int16_t *)(dstptr) = be16toh(*(int16_t *)(dstptr));	\
-	} while (0)
+#define rd_kafka_buf_read_i16(rkbuf,dstptr) do {                        \
+                int16_t _v;                                             \
+                rd_kafka_buf_read(rkbuf, &_v, sizeof(_v));              \
+                *(dstptr) = be16toh(_v);                                \
+        } while (0)
+
 
 #define rd_kafka_buf_read_i16a(rkbuf, dst) do {				\
                 int16_t _v;                                             \
@@ -245,17 +286,35 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 
 #define rd_kafka_buf_read_i8(rkbuf, dst) rd_kafka_buf_read(rkbuf, dst, 1)
 
+#define rd_kafka_buf_peek_i8(rkbuf,of,dst) rd_kafka_buf_peek(rkbuf,of,dst,1)
+
+
+/**
+ * @brief Read varint and store in int64_t \p dst
+ */
+#define rd_kafka_buf_read_varint(rkbuf,dst) do {                        \
+                int64_t _v;                                             \
+                size_t _r = rd_varint_dec_slice(&(rkbuf)->rkbuf_reader, &_v); \
+                if (unlikely(RD_UVARINT_UNDERFLOW(_r)))                 \
+                        rd_kafka_buf_parse_fail(rkbuf,                  \
+                                                "varint parsing failed: " \
+                                                "buffer underflow");    \
+                *(dst) = _v;                                            \
+        } while (0)
 
 /* Read Kafka String representation (2+N).
  * The kstr data will be updated to point to the rkbuf. */
-#define rd_kafka_buf_read_str(rkbuf, kstr) do {				\
-		int _ksize;						\
-		rd_kafka_buf_read_i16a(rkbuf, (kstr)->len);		\
-		_ksize = RD_KAFKAP_STR_LEN(kstr);			\
-		(kstr)->str = RD_KAFKAP_STR_IS_NULL(kstr) ?		\
-			NULL : ((const char *)rkbuf->rkbuf_rbuf+rkbuf->rkbuf_of); \
-		rd_kafka_buf_skip(rkbuf, _ksize);			\
-	} while (0)
+#define rd_kafka_buf_read_str(rkbuf, kstr) do {                         \
+                int _klen;                                              \
+                rd_kafka_buf_read_i16a(rkbuf, (kstr)->len);             \
+                _klen = RD_KAFKAP_STR_LEN(kstr);                        \
+                if (RD_KAFKAP_STR_LEN0(_klen) == 0)                     \
+                        (kstr)->str = NULL;                             \
+                else if (!((kstr)->str =                                \
+                           rd_slice_ensure_contig(&rkbuf->rkbuf_reader, \
+                                                     _klen)))           \
+                        rd_kafka_buf_check_len(rkbuf, _klen);           \
+        } while (0)
 
 /* Read Kafka String representation (2+N) and write it to the \p tmpabuf
  * with a trailing nul byte. */
@@ -288,16 +347,50 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 
 /* Read Kafka Bytes representation (4+N).
  *  The 'kbytes' will be updated to point to rkbuf data */
-#define rd_kafka_buf_read_bytes(rkbuf, kbytes) do {		   \
-		int _klen;						\
-		rd_kafka_buf_read_i32a(rkbuf, _klen);			\
-		(kbytes)->len = _klen;					\
-		(kbytes)->data = RD_KAFKAP_BYTES_IS_NULL(kbytes) ?	\
-			NULL :						\
-			(const void *)(rkbuf->rkbuf_rbuf+rkbuf->rkbuf_of); \
-		rd_kafka_buf_skip(rkbuf, RD_KAFKAP_BYTES_LEN0(_klen));	\
-	} while (0)
+#define rd_kafka_buf_read_bytes(rkbuf, kbytes) do {                     \
+                int _klen;                                              \
+                rd_kafka_buf_read_i32a(rkbuf, _klen);                   \
+                (kbytes)->len = _klen;                                  \
+                if (RD_KAFKAP_BYTES_LEN(kbytes) == 0)                   \
+                        (kbytes)->data = NULL;                          \
+                else if (!((kbytes)->data =                             \
+                           rd_slice_ensure_contig(&(rkbuf)->rkbuf_reader, \
+                                                  _klen)))              \
+                        rd_kafka_buf_check_len(rkbuf, _klen);           \
+        } while (0)
 
+
+/**
+ * @brief Read \p size bytes from buffer, setting \p *ptr to the start
+ *        of the memory region.
+ */
+#define rd_kafka_buf_read_ptr(rkbuf,ptr,size) do {                      \
+                size_t _klen = size;                                    \
+                if (!(*(ptr) = (void *)                                 \
+                      rd_slice_ensure_contig(&(rkbuf)->rkbuf_reader, _klen))) \
+                        rd_kafka_buf_check_len(rkbuf, _klen);           \
+        } while (0)
+
+
+/**
+ * @brief Read varint-lengted Kafka Bytes representation
+ */
+#define rd_kafka_buf_read_bytes_varint(rkbuf,kbytes) do {               \
+                int64_t _len2;                                          \
+                size_t _r = rd_varint_dec_slice(&(rkbuf)->rkbuf_reader, \
+                                                &_len2);                \
+                if (unlikely(RD_UVARINT_UNDERFLOW(_r)))                 \
+                        rd_kafka_buf_parse_fail(rkbuf,                  \
+                                                "varint parsing failed: " \
+                                                "buffer underflow");    \
+                (kbytes)->len = (int32_t)_len2;                         \
+                if (RD_KAFKAP_BYTES_LEN(kbytes) == 0)                   \
+                        (kbytes)->data = NULL;                          \
+                else if (!((kbytes)->data =                             \
+                           rd_slice_ensure_contig(&(rkbuf)->rkbuf_reader, \
+                                                  _len2)))              \
+                        rd_kafka_buf_check_len(rkbuf, _len2);           \
+        } while (0)
 
 
 /**
@@ -326,24 +419,14 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	rd_ts_t rkbuf_ts_retry;    /* Absolute send retry time */
 
 	int     rkbuf_flags; /* RD_KAFKA_OP_F */
-	struct msghdr rkbuf_msg;
-	struct iovec *rkbuf_iov;
-	int           rkbuf_iovcnt;
+
+        rd_buf_t rkbuf_buf;        /**< Send/Recv byte buffer */
+        rd_slice_t rkbuf_reader;   /**< Buffer slice reader for rkbuf_buf */
+
 	int     rkbuf_connid;      /* broker connection id (used when buffer
 				    * was partially sent). */
-	size_t  rkbuf_of;          /* send: send offset,
-				    * recv: parse offset */
-	size_t  rkbuf_len;         /* send: total length,
-				    * recv: total expected length */
-	size_t  rkbuf_size;        /* allocated size */
-
-	char   *rkbuf_buf;         /* Main buffer */
-	char   *rkbuf_buf2;        /* Aux buffer (payload receive buffer) */
-
-	char   *rkbuf_rbuf;        /* Read buffer, points to rkbuf_buf or buf2*/
-        char   *rkbuf_wbuf;        /* Write buffer pointer (into rkbuf_buf). */
-        size_t  rkbuf_wof;         /* Write buffer offset */
-	size_t  rkbuf_wof_init;    /* Initial write offset for current iov */
+        size_t  rkbuf_totlen;      /* recv: total expected length,
+                                    * send: not used */
 
 	rd_crc32_t rkbuf_crc;      /* Current CRC calculation */
 
@@ -368,7 +451,6 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         rd_kafka_resp_cb_t *rkbuf_cb;           /* Response callback */
         struct rd_kafka_buf_s *rkbuf_response;  /* Response buffer */
 
-        rd_kafka_resp_err_t       rkbuf_err;
         struct rd_kafka_broker_s *rkbuf_rkb;
 
 	rd_refcnt_t rkbuf_refcnt;
@@ -391,6 +473,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 					* Used by FetchRequest. */
 
 	rd_kafka_msgq_t rkbuf_msgq;
+
+        rd_kafka_resp_err_t rkbuf_err;      /* Buffer parsing error code */
 
         union {
                 struct {
@@ -428,23 +512,17 @@ typedef struct rd_kafka_bufq_s {
                                  rd_kafka_buf_destroy_final(rkbuf))
 
 void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf);
-void rd_kafka_buf_auxbuf_add (rd_kafka_buf_t *rkbuf, void *auxbuf);
-void rd_kafka_buf_alloc_recvbuf (rd_kafka_buf_t *kbuf, size_t size);
-void rd_kafka_buf_rewind(rd_kafka_buf_t *rkbuf, int iovindex, size_t new_of,
-	size_t new_of_init);
-struct iovec *rd_kafka_buf_iov_next (rd_kafka_buf_t *rkbuf);
 void rd_kafka_buf_push0 (rd_kafka_buf_t *rkbuf, const void *buf, size_t len,
-			 int allow_crc_calc, int auto_push);
-#define rd_kafka_buf_push(rkbuf,buf,len) \
-	rd_kafka_buf_push0(rkbuf,buf,len,1/*allow_crc*/, 1)
-void rd_kafka_buf_autopush (rd_kafka_buf_t *rkbuf);
-rd_kafka_buf_t *rd_kafka_buf_new_growable (const rd_kafka_t *rk, int16_t ApiKey,
-                                           int iovcnt, size_t init_size);
-rd_kafka_buf_t *rd_kafka_buf_new0 (const rd_kafka_t *rk, int16_t ApiKey,
-                                   int iovcnt, size_t size, int flags);
-#define rd_kafka_buf_new(rk,ApiKey,iovcnt,size) \
-        rd_kafka_buf_new0(rk,ApiKey,iovcnt,size,0)
-rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size);
+                         int allow_crc_calc, void (*free_cb) (void *));
+#define rd_kafka_buf_push(rkbuf,buf,len,free_cb)                        \
+        rd_kafka_buf_push0(rkbuf,buf,len,1/*allow_crc*/,free_cb)
+rd_kafka_buf_t *rd_kafka_buf_new0 (int segcnt, size_t size, int flags);
+#define rd_kafka_buf_new(segcnt,size) \
+        rd_kafka_buf_new0(segcnt,size,0)
+rd_kafka_buf_t *rd_kafka_buf_new_request (rd_kafka_broker_t *rkb, int16_t ApiKey,
+                                          int segcnt, size_t size);
+rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size,
+                                         void (*free_cb) (void *));
 void rd_kafka_bufq_enq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf);
 void rd_kafka_bufq_deq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf);
 void rd_kafka_bufq_init(rd_kafka_bufq_t *rkbufq);
@@ -482,24 +560,12 @@ rd_kafka_buf_ApiVersion_set (rd_kafka_buf_t *rkbuf,
         rkbuf->rkbuf_features = features;
 }
 
-void rd_kafka_buf_grow (rd_kafka_buf_t *rkbuf, size_t needed_len);
-
 
 /**
- * Set buffer write position.
+ * @returns the ApiVersion for a request
  */
-static RD_INLINE RD_UNUSED void rd_kafka_buf_write_seek (rd_kafka_buf_t *rkbuf,
-							int of) {
-	rd_kafka_assert(NULL, of >= 0 && of < (int)rkbuf->rkbuf_size);
-	rkbuf->rkbuf_wof = of;
-}
+#define rd_kafka_buf_ApiVersion(rkbuf) ((rkbuf)->rkbuf_reqhdr.ApiVersion)
 
-/**
- * @returns the number of bytes remaining in the write buffer.
- */
-static RD_INLINE size_t rd_kafka_buf_write_remain (rd_kafka_buf_t *rkbuf) {
-	return rkbuf->rkbuf_size - rkbuf->rkbuf_wof;
-}
 
 
 /**
@@ -509,35 +575,16 @@ static RD_INLINE size_t rd_kafka_buf_write_remain (rd_kafka_buf_t *rkbuf) {
  */
 static RD_INLINE size_t rd_kafka_buf_write (rd_kafka_buf_t *rkbuf,
                                         const void *data, size_t len) {
-        ssize_t remain = rkbuf->rkbuf_size - (rkbuf->rkbuf_wof + len);
+        size_t r;
 
-        /* Make sure there's enough room, else increase buffer. */
-        if (remain < 0)
-                rd_kafka_buf_grow(rkbuf, rkbuf->rkbuf_wof + len);
+        r = rd_buf_write(&rkbuf->rkbuf_buf, data, len);
 
-        rd_kafka_assert(NULL, rkbuf->rkbuf_wof + len <= rkbuf->rkbuf_size);
-        memcpy(rkbuf->rkbuf_wbuf + rkbuf->rkbuf_wof, data, len);
-        rkbuf->rkbuf_wof += len;
+        if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC)
+                rkbuf->rkbuf_crc = rd_crc32_update(rkbuf->rkbuf_crc, data, len);
 
-	if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC)
-		rkbuf->rkbuf_crc = rd_crc32_update(rkbuf->rkbuf_crc, data, len);
-
-        return rkbuf->rkbuf_wof - len;
+        return r;
 }
 
-/**
- * Returns pointer to buffer at 'offset' and makes sure at least 'len'
- * following bytes are available, else returns NULL.
- */
-static RD_INLINE RD_UNUSED void *rd_kafka_buf_at (rd_kafka_buf_t *rkbuf,
-						 int of, int len) {
-	ssize_t remain = rkbuf->rkbuf_size - (of + len);
-
-	if (remain < 0)
-		return NULL;
-
-	return rkbuf->rkbuf_wbuf + of;
-}
 
 
 /**
@@ -550,12 +597,8 @@ static RD_INLINE RD_UNUSED void *rd_kafka_buf_at (rd_kafka_buf_t *rkbuf,
  */
 static RD_INLINE void rd_kafka_buf_update (rd_kafka_buf_t *rkbuf, size_t of,
                                           const void *data, size_t len) {
-        ssize_t remain = rkbuf->rkbuf_size - (of + len);
-        rd_kafka_assert(NULL, remain >= 0);
-        rd_kafka_assert(NULL, of >= 0 && of < rkbuf->rkbuf_size);
-	rd_kafka_assert(NULL, !(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC));
-
-        memcpy(rkbuf->rkbuf_wbuf+of, data, len);
+        rd_kafka_assert(NULL, !(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_CRC));
+        rd_buf_write_update(&rkbuf->rkbuf_buf, of, data, len);
 }
 
 /**
@@ -667,7 +710,7 @@ static RD_INLINE size_t rd_kafka_buf_write_str (rd_kafka_buf_t *rkbuf,
                 len = strlen(str);
         r = rd_kafka_buf_write_i16(rkbuf, (int16_t) len);
         if (str)
-                r = rd_kafka_buf_write(rkbuf, str, len);
+                rd_kafka_buf_write(rkbuf, str, len);
         return r;
 }
 
@@ -678,7 +721,7 @@ static RD_INLINE size_t rd_kafka_buf_write_str (rd_kafka_buf_t *rkbuf,
 static RD_INLINE void rd_kafka_buf_push_kstr (rd_kafka_buf_t *rkbuf,
                                              const rd_kafkap_str_t *kstr) {
 	rd_kafka_buf_push(rkbuf, RD_KAFKAP_STR_SER(kstr),
-			  RD_KAFKAP_STR_SIZE(kstr));
+			  RD_KAFKAP_STR_SIZE(kstr), NULL);
 }
 
 
@@ -698,7 +741,7 @@ static RD_INLINE size_t rd_kafka_buf_write_kbytes (rd_kafka_buf_t *rkbuf,
 static RD_INLINE void rd_kafka_buf_push_kbytes (rd_kafka_buf_t *rkbuf,
 					       const rd_kafkap_bytes_t *kbytes){
 	rd_kafka_buf_push(rkbuf, RD_KAFKAP_BYTES_SER(kbytes),
-			  RD_KAFKAP_BYTES_SIZE(kbytes));
+			  RD_KAFKAP_BYTES_SIZE(kbytes), NULL);
 }
 
 /**
@@ -711,7 +754,7 @@ static RD_INLINE size_t rd_kafka_buf_write_bytes (rd_kafka_buf_t *rkbuf,
                 size = RD_KAFKAP_BYTES_LEN_NULL;
         r = rd_kafka_buf_write_i32(rkbuf, (int32_t) size);
         if (payload)
-                r = rd_kafka_buf_write(rkbuf, payload, size);
+                rd_kafka_buf_write(rkbuf, payload, size);
         return r;
 }
 
@@ -751,19 +794,7 @@ rd_crc32_t rd_kafka_buf_crc_finalize (rd_kafka_buf_t *rkbuf) {
 }
 
 
-/**
- * Returns the number of remaining unused iovecs in buffer.
- */
-static RD_INLINE RD_UNUSED
-int rd_kafka_buf_iov_remain (const rd_kafka_buf_t *rkbuf) {
-	return rkbuf->rkbuf_iovcnt - rkbuf->rkbuf_msg.msg_iovlen;
-}
 
-
-rd_kafkap_bytes_t *rd_kafkap_bytes_from_buf (const rd_kafka_buf_t *rkbuf);
-
-void rd_kafka_buf_hexdump (const char *what, const rd_kafka_buf_t *rkbuf,
-			   int read_buffer);
 
 
 /**

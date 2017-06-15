@@ -36,6 +36,8 @@
 #define  _CRT_SECURE_NO_WARNINGS /* Silence nonsense on MSVC */
 #endif
 
+#include "../src/rd.h"
+
 #define _GNU_SOURCE /* for strndup() */
 #include <ctype.h>
 #include <signal.h>
@@ -447,12 +449,6 @@ static void print_stats (rd_kafka_t *rk,
         int extra_of = 0;
         *extra = '\0';
 
-#define EXTRA_PRINTF(...) do {                                       \
-                if (extra_of < sizeof(extra))                           \
-                        extra_of += snprintf(extra+extra_of,            \
-                                             sizeof(extra)-extra_of, __VA_ARG__); \
-        } while (0)
-
 	if (!(otype & _OTYPE_FORCE) &&
             (((otype & _OTYPE_SUMMARY) && verbosity == 0) ||
              cnt.t_last + dispintvl > now))
@@ -600,7 +596,7 @@ static void print_stats (rd_kafka_t *rk,
 
                 if (otype & _OTYPE_SUMMARY) {
                         if (latency_avg >= 1.0f)
-                                extra_of += snprintf(extra+extra_of,
+                                extra_of += rd_snprintf(extra+extra_of,
                                                      sizeof(extra)-extra_of,
                                                      ", latency "
                                                      "curr/avg/lo/hi "
@@ -752,6 +748,7 @@ int main (int argc, char **argv) {
         double dtmp;
         int rate_sleep = 0;
 	rd_kafka_topic_partition_list_t *topics;
+        int exitcode = 0;
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -761,7 +758,7 @@ int main (int argc, char **argv) {
 
 #ifdef SIGIO
         /* Quick termination */
-	snprintf(tmp, sizeof(tmp), "%i", SIGIO);
+	rd_snprintf(tmp, sizeof(tmp), "%i", SIGIO);
 	rd_kafka_conf_set(conf, "internal.termination.signal", tmp, NULL, 0);
 #endif
 
@@ -1119,7 +1116,7 @@ int main (int argc, char **argv) {
         if (!stats_intvlstr) {
                 /* if no user-desired stats, adjust stats interval
                  * to the display interval. */
-                snprintf(tmp, sizeof(tmp), "%"PRId64, dispintvl / 1000);
+                rd_snprintf(tmp, sizeof(tmp), "%"PRId64, dispintvl / 1000);
         }
 
         if (rd_kafka_conf_set(conf, "statistics.interval.ms",
@@ -1242,10 +1239,10 @@ int main (int argc, char **argv) {
 			}
 
                         if (latency_mode) {
-                                snprintf(sbuf, msgsize-1,
+                                rd_snprintf(sbuf, msgsize-1,
                                          "LATENCY:%"PRIu64,  wall_clock());
                         } else if (do_seq) {
-                                snprintf(sbuf,
+                                rd_snprintf(sbuf,
                                          msgsize-1, "%"PRIu64": ", seq);
                                 seq++;
 			}
@@ -1323,8 +1320,6 @@ int main (int argc, char **argv) {
                         printf("%% All messages produced, "
                                "now waiting for %li deliveries\n",
                                msgs_wait_cnt);
-		if (debug)
-			rd_kafka_dump(stdout, rk);
 
 		/* Wait for messages to be delivered */
                 while (run && rd_kafka_poll(rk, 1000) != -1)
@@ -1345,9 +1340,6 @@ int main (int argc, char **argv) {
 			       cnt.tx_err, cnt.tx,
 			       ((double)cnt.tx_err / (double)cnt.tx) * 100.0);
 
-		if (debug)
-			rd_kafka_dump(stdout, rk);
-
 		/* Destroy topic */
 		rd_kafka_topic_destroy(rkt);
 
@@ -1356,6 +1348,8 @@ int main (int argc, char **argv) {
                 global_rk = rk = NULL;
 
 		free(sbuf);
+
+                exitcode = cnt.msgs == cnt.msgs_dr_ok ? 0 : 1;
 
 	} else if (mode == 'C') {
 		/*
@@ -1396,9 +1390,8 @@ int main (int argc, char **argv) {
 				partitions[i], start_offset, rkqu);
 
 			if (r == -1) {
-				fprintf(stderr, "%% Error creating queue: %s\n",
-					rd_kafka_err2str(
-						rd_kafka_errno2err(errno)));
+                                fprintf(stderr, "%% Error creating queue: %s\n",
+                                        rd_kafka_err2str(rd_kafka_last_error()));
 				exit(1);
 			}
 		}
@@ -1439,10 +1432,9 @@ int main (int argc, char **argv) {
 			}
 
 			cnt.t_fetch_latency += rd_clock() - fetch_latency;
-			if (r == -1)
-				fprintf(stderr, "%% Error: %s\n",
-					rd_kafka_err2str(
-						rd_kafka_errno2err(errno)));
+                        if (r == -1)
+                                fprintf(stderr, "%% Error: %s\n",
+                                        rd_kafka_err2str(rd_kafka_last_error()));
 
 			print_stats(rk, mode, otype, compression);
 
@@ -1455,10 +1447,9 @@ int main (int argc, char **argv) {
 		for (i=0 ; i<(size_t)partition_cnt ; ++i) {
 			int r = rd_kafka_consume_stop(rkt, (int32_t)i);
 			if (r == -1) {
-				fprintf(stderr,
-					"%% Error in consume_stop: %s\n",
-					rd_kafka_err2str(
-						rd_kafka_errno2err(errno)));
+                                fprintf(stderr,
+                                        "%% Error in consume_stop: %s\n",
+                                        rd_kafka_err2str(rd_kafka_last_error()));
 			}
 		}
 		rd_kafka_queue_destroy(rkqu);
@@ -1565,5 +1556,5 @@ int main (int argc, char **argv) {
 	/* Let background threads clean up and terminate cleanly. */
 	rd_kafka_wait_destroyed(2000);
 
-	return 0;
+	return exitcode;
 }

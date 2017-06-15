@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
@@ -85,6 +86,7 @@ static const char *test_states[] = {
 /**
  * Declare all tests here
  */
+_TEST_DECL(0000_unittests);
 _TEST_DECL(0001_multiobj);
 _TEST_DECL(0002_unkpart);
 _TEST_DECL(0003_msgmaxsize);
@@ -153,6 +155,7 @@ _TEST_DECL(0065_yield);
 struct test tests[] = {
         /* Special MAIN test to hold over-all timings, etc. */
         { .name = "<MAIN>", .flags = TEST_F_LOCAL },
+        _TEST(0000_unittests, TEST_F_LOCAL),
         _TEST(0001_multiobj, 0),
         _TEST(0002_unkpart, 0),
         _TEST(0003_msgmaxsize, 0),
@@ -343,6 +346,25 @@ void test_timeout_set (int timeout) {
 }
 
 
+#ifdef _MSC_VER
+static void test_init_win32 (void) {
+        /* Enable VT emulation to support colored output. */
+        HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+        DWORD dwMode = 0;
+
+        if (hOut == INVALID_HANDLE_VALUE ||
+            !GetConsoleMode(hOut, &dwMode))
+                return;
+
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x4
+#endif
+        dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+        SetConsoleMode(hOut, dwMode);
+}
+#endif
+
+
 static void test_init (void) {
         int seed;
         const char *tmp;
@@ -362,6 +384,7 @@ static void test_init (void) {
         else
                 seed = test_clock() & 0xffffffff;
 #ifdef _MSC_VER
+        test_init_win32();
 	{
 		LARGE_INTEGER cycl;
 		QueryPerformanceCounter(&cycl);
@@ -513,8 +536,15 @@ const char *test_getenv (const char *env, const char *def) {
         tmp = getenv(env);
         if (tmp && *tmp)
                 return tmp;
-#endif
         return def;
+#else
+        static RD_TLS char tmp[512];
+        DWORD r;
+        r = GetEnvironmentVariableA(env, tmp, sizeof(tmp));
+        if (r == 0 || r > sizeof(tmp))
+                return def;
+        return tmp;
+#endif
 }
 
 void test_conf_common_init (rd_kafka_conf_t *conf, int timeout) {
@@ -881,8 +911,10 @@ static void run_tests (const char *tests_to_run,
                 if (!skip_reason) {
                         run_test(test, argc, argv);
                 } else {
-                        TEST_SAY("================= Skipping test %s (%s)"
-                                 "================\n", test->name, skip_reason);
+                        TEST_SAYL(3,
+                                  "================= Skipping test %s (%s)"
+                                  "================\n",
+                                  test->name, skip_reason);
                         TEST_LOCK();
                         test->state = TEST_SKIPPED;
                         TEST_UNLOCK();
@@ -1401,7 +1433,7 @@ rd_kafka_topic_t *test_create_topic_object (rd_kafka_t *rk,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                          rd_kafka_err2str(rd_kafka_last_error()));
 
 	return rkt;
 
@@ -1436,7 +1468,7 @@ rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                          rd_kafka_err2str(rd_kafka_last_error()));
 
 	return rkt;
 
@@ -1497,7 +1529,7 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 			TEST_FAIL("Failed to produce message %i "
 				  "to partition %i: %s",
 				  msg_id, (int)partition,
-				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                                  rd_kafka_err2str(rd_kafka_last_error()));
 
                 (*msgcounterp)++;
 		tot_bytes += size;
@@ -1639,7 +1671,7 @@ rd_kafka_topic_t *test_create_consumer_topic (rd_kafka_t *rk,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                          rd_kafka_err2str(rd_kafka_last_error()));
 
 	return rkt;
 }
@@ -1654,7 +1686,7 @@ void test_consumer_start (const char *what,
 
 	if (rd_kafka_consume_start(rkt, partition, start_offset) == -1)
 		TEST_FAIL("%s: consume_start failed: %s\n",
-			  what, rd_kafka_err2str(rd_kafka_errno2err(errno)));
+			  what, rd_kafka_err2str(rd_kafka_last_error()));
 }
 
 void test_consumer_stop (const char *what,
@@ -1665,7 +1697,7 @@ void test_consumer_stop (const char *what,
 
 	if (rd_kafka_consume_stop(rkt, partition) == -1)
 		TEST_FAIL("%s: consume_stop failed: %s\n",
-			  what, rd_kafka_err2str(rd_kafka_errno2err(errno)));
+			  what, rd_kafka_err2str(rd_kafka_last_error()));
 }
 
 void test_consumer_seek (const char *what, rd_kafka_topic_t *rkt,

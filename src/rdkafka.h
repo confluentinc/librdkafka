@@ -63,7 +63,7 @@ extern "C" {
 typedef SSIZE_T ssize_t;
 #define RD_UNUSED
 #define RD_INLINE __inline
-#define RD_DEPRECATED
+#define RD_DEPRECATED __declspec(deprecated)
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_STATICLIB
 #define RD_EXPORT
@@ -419,6 +419,35 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_INVALID_REQUEST = 42,
 	/** Message format on broker does not support request */
 	RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT = 43,
+        /** Isolation policy volation */
+        RD_KAFKA_RESP_ERR_POLICY_VIOLATION = 44,
+        /** Broker received an out of order sequence number */
+        RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER = 45,
+        /** Broker received a duplicate sequence number */
+        RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER = 46,
+        /** Producer attempted an operation with an old epoch */
+        RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH = 47,
+        /** Producer attempted a transactional operation in an invalid state */
+        RD_KAFKA_RESP_ERR_INVALID_TXN_STATE = 48,
+        /** Producer attempted to use a producer id which is not
+         *  currently assigned to its transactional id */
+        RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING = 49,
+        /** Transaction timeout is larger than the maximum
+         *  value allowed by the broker's max.transaction.timeout.ms */
+        RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT = 50,
+        /** Producer attempted to update a transaction while another
+         *  concurrent operation on the same transaction was ongoing */
+        RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS = 51,
+        /** Indicates that the transaction coordinator sending a
+         *  WriteTxnMarker is no longer the current coordinator for a
+         *  given producer */
+        RD_KAFKA_RESP_ERR_TRANSACTION_COORDINATOR_FENCED = 52,
+        /** Transactional Id authorization failed */
+        RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED = 53,
+        /** Security features are disabled */
+        RD_KAFKA_RESP_ERR_SECURITY_DISABLED = 54,
+        /** Operation not attempted */
+        RD_KAFKA_RESP_ERR_OPERATION_NOT_ATTEMPTED = 55,
 
 	RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
@@ -486,6 +515,9 @@ const char *rd_kafka_err2name (rd_kafka_resp_err_t err);
  *         are used in the same application thread the developer needs to
  *         make sure rd_kafka_last_error() is called immediately after
  *         a failed API call.
+ *
+ * @remark errno propagation from librdkafka is not safe on Windows
+ *         and should not be used, use rd_kafka_last_error() instead.
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_last_error (void);
@@ -510,9 +542,12 @@ rd_kafka_resp_err_t rd_kafka_last_error (void);
  * @remark A better alternative is to call rd_kafka_last_error() immediately
  *         after any of the above functions return -1 or NULL.
  *
+ * @deprecated Use rd_kafka_last_error() to retrieve the last error code
+ *             set by the legacy librdkafka APIs.
+ *
  * @sa rd_kafka_last_error()
  */
-RD_EXPORT
+RD_EXPORT RD_DEPRECATED
 rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
 
 
@@ -521,11 +556,14 @@ rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
  *
  * On most platforms this is the same as \p errno but in case of different
  * runtimes between library and application (e.g., Windows static DLLs)
- * this provides a means for expsing the errno librdkafka uses.
+ * this provides a means for exposing the errno librdkafka uses.
  *
  * @remark The value is local to the current calling thread.
+ *
+ * @deprecated Use rd_kafka_last_error() to retrieve the last error code
+ *             set by the legacy librdkafka APIs.
  */
-RD_EXPORT
+RD_EXPORT RD_DEPRECATED
 int rd_kafka_errno (void);
 
 
@@ -3019,12 +3057,20 @@ int rd_kafka_thread_cnt(void);
  *
  * Returns 0 if all kafka objects are now destroyed, or -1 if the
  * timeout was reached.
- * Since `rd_kafka_destroy()` is an asynch operation the 
- * `rd_kafka_wait_destroyed()` function can be used for applications where
- * a clean shutdown is required.
+ *
+ * @remark This function is deprecated.
  */
 RD_EXPORT
 int rd_kafka_wait_destroyed(int timeout_ms);
+
+
+/**
+ * @brief Run librdkafka's built-in unit-tests.
+ *
+ * @returns the number of failures, or 0 if all tests passed.
+ */
+RD_EXPORT
+int rd_kafka_unittest (void);
 
 
 /**@}*/

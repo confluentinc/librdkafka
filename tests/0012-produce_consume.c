@@ -120,7 +120,7 @@ static void produce_messages (uint64_t testid, const char *topic,
 			TEST_FAIL("Failed to produce "
 				  "batch for partition %i: %s",
 				  (int)partition,
-				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+				  rd_kafka_err2str(rd_kafka_last_error()));
 
 		/* Scan through messages to check for errors. */
 		for (i = 0 ; i < batch_cnt ; i++) {
@@ -327,7 +327,7 @@ static void consume_messages (uint64_t testid, const char *topic,
 			     RD_KAFKA_OFFSET_TAIL(batch_cnt)) == -1)
 		TEST_FAIL("consume_start(%i, -%i) failed: %s",
 			  (int)partition, batch_cnt,
-			  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+			  rd_kafka_err2str(rd_kafka_last_error()));
 
 	for (i = 0 ; i < batch_cnt ; ) {
 		rd_kafka_message_t *rkmessage;
@@ -338,16 +338,17 @@ static void consume_messages (uint64_t testid, const char *topic,
 			TEST_FAIL("Failed to consume message %i/%i from "
 				  "partition %i: %s",
 				  i, batch_cnt, (int)partition,
-				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+				  rd_kafka_err2str(rd_kafka_last_error()));
 		if (rkmessage->err) {
                         if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF){
                                 rd_kafka_message_destroy(rkmessage);
                                 continue;
                         }
 			TEST_FAIL("Consume message %i/%i from partition %i "
-				  "has error: %s",
+				  "has error: %s: %s",
 				  i, batch_cnt, (int)partition,
-				  rd_kafka_err2str(rkmessage->err));
+				  rd_kafka_err2str(rkmessage->err),
+                                  rd_kafka_message_errstr(rkmessage));
                 }
 
 		verify_consumed_msg(testid, partition, msg_base+i, rkmessage);
@@ -405,7 +406,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 						 rkqu) == -1)
 			TEST_FAIL("consume_start_queue(%i) failed: %s",
 				  (int)partition,
-				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+				  rd_kafka_err2str(rd_kafka_last_error()));
 	}
 
 
@@ -418,7 +419,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 			TEST_FAIL("Failed to consume message %i/%i from "
 				  "queue: %s",
 				  i, msgcnt,
-				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+				  rd_kafka_err2str(rd_kafka_last_error()));
 		if (rkmessage->err) {
                         if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF){
 				TEST_SAY("Topic %s [%"PRId32"] reached "

@@ -86,7 +86,6 @@ function checks {
     mkl_compile_check crc32chw WITH_CRC32C_HW disable CC "" \
                       "
 #include <inttypes.h>
-x
 #define LONGx1 \"8192\"
 #define LONGx2 \"16384\"
 void foo (void) {

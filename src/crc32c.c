@@ -4,6 +4,10 @@
  *   * global hw/sw initialization to be called once per process
  *   * HW support is determined by configure's WITH_CRC32C_HW
  *   * Windows porting (no hardware support on Windows yet)
+ *
+ * FIXME:
+ *   * Hardware support on Windows (MSVC assembler)
+ *   * Hardware support on ARM
  */
 
 /* crc32c.c -- compute CRC-32C using the Intel crc32 instruction

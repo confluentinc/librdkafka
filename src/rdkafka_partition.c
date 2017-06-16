@@ -318,9 +318,10 @@ void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
  *
  * Locks: Caller must hold rd_kafka_topic_*lock()
  */
-shptr_rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_itopic_t *rkt,
-                                              int32_t partition,
-                                              int ua_on_miss) {
+shptr_rd_kafka_toppar_t *rd_kafka_toppar_get0 (const char *func, int line,
+                                               const rd_kafka_itopic_t *rkt,
+                                               int32_t partition,
+                                               int ua_on_miss) {
         shptr_rd_kafka_toppar_t *s_rktp;
 
 	if (partition >= 0 && partition < rkt->rkt_partition_cnt)
@@ -331,7 +332,8 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_itopic_t *rkt,
 		return NULL;
 
 	if (s_rktp)
-		return rd_kafka_toppar_keep(rd_kafka_toppar_s2i(s_rktp));
+                return rd_kafka_toppar_keep_src(func,line,
+                                                rd_kafka_toppar_s2i(s_rktp));
 
 	return NULL;
 }

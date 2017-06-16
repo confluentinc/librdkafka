@@ -328,9 +328,12 @@ void rd_kafka_toppar_concat_msgq (rd_kafka_toppar_t *rktp,
 				  rd_kafka_msgq_t *rkmq);
 void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
                                 rd_kafka_resp_err_t err);
-shptr_rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_itopic_t *rkt,
-                                              int32_t partition,
-                                              int ua_on_miss);
+shptr_rd_kafka_toppar_t *rd_kafka_toppar_get0 (const char *func, int line,
+                                               const rd_kafka_itopic_t *rkt,
+                                               int32_t partition,
+                                               int ua_on_miss);
+#define rd_kafka_toppar_get(rkt,partition,ua_on_miss) \
+        rd_kafka_toppar_get0(__FUNCTION__,__LINE__,rkt,partition,ua_on_miss)
 shptr_rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
                                                const char *topic,
                                                int32_t partition,

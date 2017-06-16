@@ -1756,7 +1756,8 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
 		rd_kafka_message_t *rkmessage;
 		int msg_id;
 
-		rkmessage = rd_kafka_consume(rkt, partition, 5000);
+                rkmessage = rd_kafka_consume(rkt, partition,
+                                             tmout_multip(5000));
 
 		if (TIMING_EVERY(&t_all, 3*1000000))
 			TEST_SAY("%s: "

@@ -2722,6 +2722,8 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                         /* On error: back off the fetcher for this partition */
                         if (unlikely(err))
                                 rd_kafka_toppar_fetch_backoff(rkb, rktp, err);
+
+                        rd_kafka_toppar_destroy(s_rktp); /* from get */
                 }
 
                 if (s_rkt) {

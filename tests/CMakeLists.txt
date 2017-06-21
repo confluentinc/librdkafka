@@ -55,7 +55,7 @@ set(
     0060-op_prio.cpp
     0061-consumer_lag.cpp
     0062-stats_event.c
-    0063-clusterid.c
+    0063-clusterid.cpp
     0064-interceptors.c
     0065-yield.cpp
     test.c

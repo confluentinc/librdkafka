@@ -1,5 +1,6 @@
 set(
     sources
+    0000-unittests.c
     0001-multiobj.c
     0002-unkpart.c
     0003-msgmaxsize.c

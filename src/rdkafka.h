@@ -1724,7 +1724,7 @@ char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms);
  * again with the same topic name will return the previous topic handle
  * without updating the original handle's configuration.
  * Applications must eventually call rd_kafka_topic_destroy() for each
- * succesfull call to rd_kafka_topic_new() to clear up resources.
+ * successful call to rd_kafka_topic_new() to clear up resources.
  *
  * @returns the new topic handle or NULL on error (use rd_kafka_errno2err()
  *          to convert system \p errno to an rd_kafka_resp_err_t error code.
@@ -1736,9 +1736,20 @@ rd_kafka_topic_t *rd_kafka_topic_new(rd_kafka_t *rk, const char *topic,
 				      rd_kafka_topic_conf_t *conf);
 
 
+/**
+ * @brief Increment application's topic handle refcount as previously
+ *        created with `rd_kafka_topic_new()`.
+ *
+ * \p This increases the number of times that the application must call
+ * `rd_kafka_topic_destroy()`.
+ *
+ * @returns the existing topic handle
+ */
+RD_EXPORT
+rd_kafka_topic_t *rd_kafka_topic_clone(rd_kafka_topic_t *app_rkt);
 
 /**
- * @brief Loose application's topic handle refcount as previously created
+ * @brief Lose application's topic handle refcount as previously created
  *        with `rd_kafka_topic_new()`.
  *
  * @remark Since topic objects are refcounted (both internally and for the app)

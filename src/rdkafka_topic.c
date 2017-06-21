@@ -130,7 +130,20 @@ void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
 }
 
 /**
- * Application destroy
+ * Application increment refcnt
+ */
+rd_kafka_topic_t *rd_kafka_topic_clone (rd_kafka_topic_t *app_rkt) {
+        rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
+
+        mtx_lock(&rkt->rkt_app_lock);
+        rkt->rkt_app_refcnt++;
+        mtx_unlock(&rkt->rkt_app_lock);
+
+        return app_rkt;
+}
+
+/**
+ * Application decrement refcnt
  */
 void rd_kafka_topic_destroy (rd_kafka_topic_t *app_rkt) {
 	rd_kafka_topic_destroy_app(app_rkt);

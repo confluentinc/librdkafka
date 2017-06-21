@@ -27,14 +27,12 @@ set(
     rdkafka_topic.c
     rdkafka_transport.c
     rdkafka_interceptor.c
-    rdkafka_plugin.c
     rdlist.c
     rdlog.c
     rdports.c
     rdrand.c
     rdregex.c
     rdstring.c
-    rddl.c
     snappy.c
     tinycthread.c
     xxhash.c
@@ -42,6 +40,14 @@ set(
     lz4frame.c
     lz4hc.c
 )
+
+if(WITH_LIBDL)
+    list(APPEND sources rddl.c)
+endif()
+
+if(WITH_PLUGINS)
+    list(APPEND sources rdkafka_plugin.c)
+endif()
 
 if(WITH_SASL)
   list(

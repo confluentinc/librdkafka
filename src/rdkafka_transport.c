@@ -988,6 +988,8 @@ int rd_kafka_transport_framed_recv (rd_kafka_transport_t *rktrans,
 
 	if (!rkbuf) {
                 rkbuf = rd_kafka_buf_new(1, 4/*length field's length*/);
+                /* Set up buffer reader for the length field */
+                rd_buf_write_ensure(&rkbuf->rkbuf_buf, 4, 4);
 		rktrans->rktrans_recv_buf = rkbuf;
 	}
 
@@ -1007,6 +1009,9 @@ int rd_kafka_transport_framed_recv (rd_kafka_transport_t *rktrans,
 			/* Wait for entire frame header. */
 			return 0;
 		}
+
+                /* Initialize reader */
+                rd_slice_init(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf, 0, 4);
 
 		/* Reader header: payload length */
 		rd_kafka_buf_read_i32(rkbuf, &frame_len);

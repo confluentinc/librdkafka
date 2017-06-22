@@ -878,7 +878,8 @@ size_t rd_slice_peek (const rd_slice_t *slice, size_t offset,
 const void *rd_slice_ensure_contig (rd_slice_t *slice, size_t size) {
         void *p;
 
-        if (unlikely(rd_slice_remains(slice) < size))
+        if (unlikely(rd_slice_remains(slice) < size ||
+                     slice->rof + size > slice->seg->seg_of))
                 return NULL;
 
         p = slice->seg->seg_p + slice->rof;

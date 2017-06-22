@@ -1024,7 +1024,7 @@ int rd_kafka_transport_framed_recv (rd_kafka_transport_t *rktrans,
 			return -1;
 		}
 
-		rkbuf->rkbuf_totlen = frame_len;
+		rkbuf->rkbuf_totlen = 4 + frame_len;
 		if (frame_len == 0) {
 			/* Payload is empty, we're done. */
 			rktrans->rktrans_recv_buf = NULL;

@@ -125,8 +125,9 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
 
         if (rkbuf) {
                 rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
+                /* Seek past framing header */
+                rd_slice_seek(&rkbuf->rkbuf_reader, 4);
                 len = rd_slice_remains(&rkbuf->rkbuf_reader);
-
                 buf = rd_slice_ensure_contig(&rkbuf->rkbuf_reader, len);
         } else {
                 buf = NULL;

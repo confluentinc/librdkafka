@@ -648,7 +648,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(buffering_max_ms),
 	  "Maximum time, in milliseconds, for buffering data "
 	  "on the producer queue.",
-	  0, 900*1000, 1000 },
+	  0, 900*1000, 0 },
+        { _RK_GLOBAL|_RK_PRODUCER, "linger.ms", _RK_C_ALIAS,
+          .sdef = "queue.buffering.max.ms" },
 	{ _RK_GLOBAL|_RK_PRODUCER, "message.send.max.retries", _RK_C_INT,
 	  _RK(max_retries),
 	  "How many times to retry sending a failing MessageSet. "

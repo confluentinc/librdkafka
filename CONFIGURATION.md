@@ -91,7 +91,8 @@ enable.partition.eof                     |  C  | true, false     |          true
 check.crcs                               |  C  | true, false     |         false | Verify CRC32 of consumed messages, ensuring no on-the-wire or on-disk corruption to the messages occurred. This check comes at slightly increased CPU usage. <br>*Type: boolean*
 queue.buffering.max.messages             |  P  | 1 .. 10000000   |        100000 | Maximum number of messages allowed on the producer queue. <br>*Type: integer*
 queue.buffering.max.kbytes               |  P  | 1 .. 2097151    |       4000000 | Maximum total message size sum allowed on the producer queue. <br>*Type: integer*
-queue.buffering.max.ms                   |  P  | 0 .. 900000     |          1000 | Maximum time, in milliseconds, for buffering data on the producer queue. <br>*Type: integer*
+queue.buffering.max.ms                   |  P  | 0 .. 900000     |             0 | Maximum time, in milliseconds, for buffering data on the producer queue. <br>*Type: integer*
+linger.ms                                |  P  |                 |               | Alias for `queue.buffering.max.ms`
 message.send.max.retries                 |  P  | 0 .. 10000000   |             2 | How many times to retry sending a failing MessageSet. **Note:** retrying may cause reordering. <br>*Type: integer*
 retries                                  |  P  |                 |               | Alias for `message.send.max.retries`
 retry.backoff.ms                         |  P  | 1 .. 300000     |           100 | The backoff time in milliseconds before retrying a message send. <br>*Type: integer*

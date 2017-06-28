@@ -1790,7 +1790,6 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  *   - error callbacks (rd_kafka_conf_set_error_cb()) [all]
  *   - stats callbacks (rd_kafka_conf_set_stats_cb()) [all]
  *   - throttle callbacks (rd_kafka_conf_set_throttle_cb()) [all]
- *   - on_acknowledgement() interceptors
  *
  * @returns the number of events served.
  */
@@ -3167,7 +3166,7 @@ void rd_kafka_event_destroy (rd_kafka_event_t *rkev);
  * @remark The returned message(s) MUST NOT be
  *         freed with rd_kafka_message_destroy().
  *
- * @remark on_consume() and on_acknowledgement() interceptors may be called
+ * @remark on_consume() interceptor may be called
  *         from this function prior to passing message to application.
  */
 RD_EXPORT
@@ -3184,7 +3183,7 @@ const rd_kafka_message_t *rd_kafka_event_message_next (rd_kafka_event_t *rkev);
  *
  * @returns the number of messages extracted.
  *
- * @remark on_consume() and on_acknowledgement() interceptors may be called
+ * @remark on_consume() interceptor may be called
  *         from this function prior to passing message to application.
  */
 RD_EXPORT
@@ -3520,10 +3519,8 @@ typedef rd_kafka_resp_err_t
 /**
  * @brief on_acknowledgement() is called to inform interceptors that a message
  *        was succesfully delivered or permanently failed delivery.
- *        The interceptor chain is called from rd_kafka_poll(), the event
- *        interface, internal librdkafka threads (if no dr_cb/dr_msg_cb or
- *        RD_KAFKA_EVENT_DR has been registered), or rd_kafka_produce*() if
- *        the partitioner failed.
+ *        The interceptor chain is called from internal librdkafka background
+ *        threads, or rd_kafka_produce*() if the partitioner failed.
  *
  * @param rk The client instance.
  * @param rkmessage The message being produced. Immutable.
@@ -3534,8 +3531,7 @@ typedef rd_kafka_resp_err_t
  * @remark The \p rkmessage object is NOT mutable and MUST NOT be modified
  *         by the interceptor.
  *
- * @warning If no delivery report callback or event has been configured
- *         the on_acknowledgement() method may be called from internal
+ * @warning The on_acknowledgement() method may be called from internal
  *         librdkafka threads. An on_acknowledgement() interceptor MUST NOT
  *         call any librdkafka API's associated with the \p rk, or perform
  *         any blocking or prolonged work.

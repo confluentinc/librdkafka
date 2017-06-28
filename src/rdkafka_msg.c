@@ -675,8 +675,7 @@ rd_kafka_message_t *rd_kafka_message_new (void) {
 
 /**
  * @brief Set up a rkmessage from an rko for passing to the application.
- * @remark Will trigger on_consume() or on_acknowledgement() interceptors,
- *         if any.
+ * @remark Will trigger on_consume() interceptors if any.
  */
 static rd_kafka_message_t *
 rd_kafka_message_setup (rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
@@ -705,13 +704,9 @@ rd_kafka_message_setup (rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
         if (!rkmessage->err)
                 rkmessage->err = rko->rko_err;
 
-        /* Call on_acknowledgement and on_consume interceptors */
+        /* Call on_consume interceptors */
         switch (rko->rko_type)
         {
-        case RD_KAFKA_OP_DR:
-                rd_kafka_interceptors_on_acknowledgement(rkt->rkt_rk,
-                                                         rkmessage);
-                break;
         case RD_KAFKA_OP_FETCH:
                 if (!rkmessage->err && rkt)
                         rd_kafka_interceptors_on_consume(rkt->rkt_rk,
@@ -730,7 +725,6 @@ rd_kafka_message_setup (rd_kafka_op_t *rko, rd_kafka_message_t *rkmessage) {
 /**
  * @brief Get rkmessage from rkm (for EVENT_DR)
  * @remark Must only be called just prior to passing a dr to the application.
- * @remark Will trigger on_acknowledgement() interceptors, if any.
  */
 rd_kafka_message_t *rd_kafka_message_get_from_rkm (rd_kafka_op_t *rko,
                                                    rd_kafka_msg_t *rkm) {

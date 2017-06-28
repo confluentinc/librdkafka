@@ -1,7 +1,9 @@
 set(
     sources
+    crc32c.c
     rdaddr.c
     rdavl.c
+    rdbuf.c
     rdcrc32.c
     rdkafka.c
     rdkafka_assignor.c
@@ -11,9 +13,12 @@ set(
     rdkafka_conf.c
     rdkafka_event.c
     rdkafka_feature.c
+    rdkafka_lz4.c
     rdkafka_metadata.c
     rdkafka_metadata_cache.c
     rdkafka_msg.c
+    rdkafka_msgset_reader.c
+    rdkafka_msgset_writer.c
     rdkafka_offset.c
     rdkafka_op.c
     rdkafka_partition.c
@@ -22,19 +27,21 @@ set(
     rdkafka_range_assignor.c
     rdkafka_request.c
     rdkafka_roundrobin_assignor.c
+    rdkafka_sasl.c
+    rdkafka_sasl_plain.c
     rdkafka_subscription.c
     rdkafka_timer.c
     rdkafka_topic.c
     rdkafka_transport.c
     rdkafka_interceptor.c
-    rdkafka_plugin.c
     rdlist.c
     rdlog.c
     rdports.c
     rdrand.c
     rdregex.c
     rdstring.c
-    rddl.c
+    rdunittest.c
+    rdvarint.c
     snappy.c
     tinycthread.c
     xxhash.c
@@ -43,14 +50,15 @@ set(
     lz4hc.c
 )
 
+if(WITH_LIBDL)
+    list(APPEND sources rddl.c)
+endif()
+
+if(WITH_PLUGINS)
+    list(APPEND sources rdkafka_plugin.c)
+endif()
+
 if(WITH_SASL)
-  list(
-      APPEND
-      sources
-      rdkafka_sasl.c
-      rdkafka_sasl.h
-      rdkafka_sasl_int.h
-  )
   if(WIN32)
     list(APPEND sources rdkafka_sasl_win32.c)
   else()

@@ -1784,6 +1784,9 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 	if (unlikely(rd_kafka_msgq_len(rkmq) == 0))
 	    return;
 
+        /* Call on_acknowledgement() interceptors */
+        rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq);
+
         if ((rk->rk_conf.enabled_events & RD_KAFKA_EVENT_DR) &&
 	    (!rk->rk_conf.dr_err_only || err)) {
 		/* Pass all messages to application thread in one op. */
@@ -1801,9 +1804,6 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 
 	} else {
 		/* No delivery report callback. */
-
-                /* Call on_acknowledgement() interceptors */
-                rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq);
 
                 /* Destroy the messages right away. */
                 rd_kafka_msgq_purge(rk, rkmq);

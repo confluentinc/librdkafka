@@ -86,11 +86,13 @@ function checks {
     mkl_compile_check crc32chw WITH_CRC32C_HW disable CC "" \
                       "
 #include <inttypes.h>
+#include <stdio.h>
 #define LONGx1 \"8192\"
 #define LONGx2 \"16384\"
 void foo (void) {
    const char *n = \"abcdefghijklmnopqrstuvwxyz0123456789\";
    uint64_t c0 = 0, c1 = 1, c2 = 2;
+   uint64_t s;
    uint32_t eax = 1, ecx;
    __asm__(\"cpuid\"
            : \"=c\"(ecx)
@@ -104,6 +106,8 @@ void foo (void) {
            \"crc32q\t\" LONGx2 \"(%3), %2\"
            : \"=r\"(c0), \"=r\"(c1), \"=r\"(c2)
            : \"r\"(n), \"0\"(c0), \"1\"(c1), \"2\"(c2));
+  s = c0 + c1 + c2;
+  printf(\"avoiding unused code removal by printing %d, %d, %d\n\", (int)s, (int)eax, (int)ecx);
 }
 "
 

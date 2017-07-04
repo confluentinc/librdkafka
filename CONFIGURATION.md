@@ -65,7 +65,7 @@ sasl.kerberos.keytab                     |  *  |                 |              
 sasl.kerberos.min.time.before.relogin    |  *  | 1 .. 86400000   |         60000 | Minimum time in milliseconds between key refresh attempts. <br>*Type: integer*
 sasl.username                            |  *  |                 |               | SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms <br>*Type: string*
 sasl.password                            |  *  |                 |               | SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism <br>*Type: string*
-plugin.library.paths                     |  *  |                 |               | List of plugin libaries to load (; separated) <br>*Type: string*
+plugin.library.paths                     |  *  |                 |               | List of plugin libaries to load (; separated). The library search path is platform dependent (see dlopen(3) for Unix and LoadLibrary() for Windows). If no filename extension is specified the platform-specific extension (such as .dll or .so) will be appended automatically. <br>*Type: string*
 interceptors                             |  *  |                 |               | Interceptors added through rd_kafka_conf_interceptor_add_..() and any configuration handled by interceptors. <br>*Type: *
 group.id                                 |  *  |                 |               | Client group id string. All clients sharing the same group.id belong to the same group. <br>*Type: string*
 partition.assignment.strategy            |  *  |                 | range,roundrobin | Name of partition assignment strategy to use when elected group leader assigns partitions to group members. <br>*Type: string*

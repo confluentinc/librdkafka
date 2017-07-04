@@ -524,7 +524,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         /* Plugins */
         { _RK_GLOBAL, "plugin.library.paths", _RK_C_STR,
           _RK(plugin_paths),
-          "List of plugin libaries to load (; separated)",
+          "List of plugin libaries to load (; separated). "
+          "The library search path is platform dependent (see dlopen(3) for Unix and LoadLibrary() for Windows). If no filename extension is specified the "
+          "platform-specific extension (such as .dll or .so) will be appended automatically.",
           .set = rd_kafka_plugins_conf_set },
 #endif
 

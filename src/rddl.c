@@ -71,7 +71,8 @@ static char *rd_dl_error (void) {
  * @returns the library handle (platform dependent, thus opaque) on success,
  *          else NULL.
  */
-rd_dl_hnd_t *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
+static rd_dl_hnd_t *
+rd_dl_open0 (const char *path, char *errstr, size_t errstr_size) {
         void *handle;
         const char *loadfunc;
 #if WITH_LIBDL
@@ -88,6 +89,47 @@ rd_dl_hnd_t *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
                 rd_free(dlerrstr);
         }
         return (rd_dl_hnd_t *)handle;
+}
+
+
+/**
+ * @brief Attempt to load library \p path, possibly with a filename extension
+ *        which will be automatically resolved depending on platform.
+ * @returns the library handle (platform dependent, thus opaque) on success,
+ *          else NULL.
+ */
+rd_dl_hnd_t *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
+        rd_dl_hnd_t *handle;
+        char *extpath;
+        size_t pathlen;
+        char *td, *fname;
+        const char *solib_ext = SOLIB_EXT;
+
+        /* Try original path first. */
+        handle = rd_dl_open0(path, errstr, errstr_size);
+        if (handle)
+                return handle;
+
+        /* Original path not found, see if we can append the solib_ext
+         * filename extension. */
+
+        /* Get filename and filename extension */
+        fname = basename(path);
+        td = rindex(fname, '.');
+
+        /* If there is a filename extension ('.' within the last characters)
+         * then bail out, we will not append an extension in this case. */
+        if (td && td >= fname + strlen(fname) - strlen(SOLIB_EXT))
+                return NULL;
+
+        /* Append platform-specific library extension. */
+        pathlen = strlen(path);
+        extpath = rd_alloca(pathlen + strlen(solib_ext) + 1);
+        memcpy(extpath, path, pathlen);
+        memcpy(extpath+pathlen, solib_ext, strlen(solib_ext) + 1);
+
+        /* Try again with extension */
+        return rd_dl_open0(extpath, errstr, errstr_size);
 }
 
 

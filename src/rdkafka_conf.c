@@ -78,7 +78,8 @@ struct rd_kafka_property {
         void (*ctor) (int scope, void *pconf);
         void (*dtor) (int scope, void *pconf);
         void (*copy) (int scope, void *pdst, const void *psrc,
-                      void *dstptr, const void *srcptr);
+                      void *dstptr, const void *srcptr,
+                      size_t filter_cnt, const char **filter);
 
         rd_kafka_conf_res_t (*set) (int scope, void *pconf,
                                     const char *name, const char *value,
@@ -1530,7 +1531,8 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
                 if (prop->copy)
                         prop->copy(scope, dst, src,
                                    _RK_PTR(void *, dst, prop->offset),
-                                   _RK_PTR(const void *, src, prop->offset));
+                                   _RK_PTR(const void *, src, prop->offset),
+                                   filter_cnt, filter);
 
                 rd_kafka_anyconf_set_prop0(scope, dst, prop, val, ival,
                                            _RK_CONF_PROP_SET_REPLACE, NULL, 0);
@@ -1541,9 +1543,21 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
 rd_kafka_conf_t *rd_kafka_conf_dup (const rd_kafka_conf_t *conf) {
 	rd_kafka_conf_t *new = rd_kafka_conf_new();
 
-        rd_kafka_interceptors_on_conf_dup(new, conf);
+        rd_kafka_interceptors_on_conf_dup(new, conf, 0, NULL);
 
-	rd_kafka_anyconf_copy(_RK_GLOBAL, new, conf);
+        rd_kafka_anyconf_copy(_RK_GLOBAL, new, conf, 0, NULL);
+
+	return new;
+}
+
+rd_kafka_conf_t *rd_kafka_conf_dup_filter (const rd_kafka_conf_t *conf,
+                                           size_t filter_cnt,
+                                           const char **filter) {
+	rd_kafka_conf_t *new = rd_kafka_conf_new();
+
+        rd_kafka_interceptors_on_conf_dup(new, conf, filter_cnt, filter);
+
+        rd_kafka_anyconf_copy(_RK_GLOBAL, new, conf, filter_cnt, filter);
 
 	return new;
 }
@@ -1553,7 +1567,7 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
 						*conf) {
 	rd_kafka_topic_conf_t *new = rd_kafka_topic_conf_new();
 
-	rd_kafka_anyconf_copy(_RK_TOPIC, new, conf);
+	rd_kafka_anyconf_copy(_RK_TOPIC, new, conf, 0, NULL);
 
 	return new;
 }

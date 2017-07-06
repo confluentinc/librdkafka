@@ -1035,6 +1035,17 @@ rd_kafka_conf_t *rd_kafka_conf_dup(const rd_kafka_conf_t *conf);
 
 
 /**
+ * @brief Same as rd_kafka_conf_dup() but with an array of property name
+ *        prefixes to filter out (ignore) when copying.
+ */
+RD_EXPORT
+rd_kafka_conf_t *rd_kafka_conf_dup_filter (const rd_kafka_conf_t *conf,
+                                           size_t filter_cnt,
+                                           const char **filter);
+
+
+
+/**
  * @brief Sets a configuration property.
  *
  * \p conf must have been previously created with rd_kafka_conf_new().
@@ -3466,6 +3477,8 @@ typedef rd_kafka_conf_res_t
 typedef rd_kafka_resp_err_t
 (rd_kafka_interceptor_f_on_conf_dup_t) (rd_kafka_conf_t *new_conf,
                                         const rd_kafka_conf_t *old_conf,
+                                        size_t filter_cnt,
+                                        const char **filter,
                                         void *ic_opaque);
 
 

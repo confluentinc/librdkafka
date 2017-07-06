@@ -1333,7 +1333,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                 * as the rk itself is destroyed. */
 
         /* Call on_new() interceptors */
-        rd_kafka_interceptors_on_new(rk);
+        rd_kafka_interceptors_on_new(rk, &rk->rk_conf);
 
 	rwlock_init(&rk->rk_lock);
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);

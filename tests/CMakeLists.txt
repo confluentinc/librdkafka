@@ -59,6 +59,7 @@ set(
     0063-clusterid.cpp
     0064-interceptors.c
     0065-yield.cpp
+    0066-plugins.cpp
     test.c
     testcpp.cpp
     sockem.c

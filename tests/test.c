@@ -148,6 +148,7 @@ _TEST_DECL(0062_stats_event);
 _TEST_DECL(0063_clusterid);
 _TEST_DECL(0064_interceptors);
 _TEST_DECL(0065_yield);
+_TEST_DECL(0066_plugins);
 
 /**
  * Define all tests here
@@ -222,6 +223,7 @@ struct test tests[] = {
         _TEST(0063_clusterid, 0, TEST_BRKVER(0,10,0,0)),
         _TEST(0064_interceptors, 0),
         _TEST(0065_yield, 0),
+        _TEST(0066_plugins, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE_WIN32),
         { NULL }
 };
 
@@ -2833,7 +2835,7 @@ void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val) {
                           name, val, errstr);
 }
 
-char *test_conf_get (rd_kafka_conf_t *conf, const char *name) {
+char *test_conf_get (const rd_kafka_conf_t *conf, const char *name) {
 	static RD_TLS char ret[256];
 	size_t ret_sz = sizeof(ret);
 	if (rd_kafka_conf_get(conf, name, ret, &ret_sz) != RD_KAFKA_CONF_OK)

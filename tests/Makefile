@@ -7,7 +7,7 @@ LIBS	 += -lrdkafka++ -lrdkafka -lstdc++
 OBJS	 += test.o testcpp.o tinycthread.o rdlist.o sockem.o
 CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
-LDFLAGS += -L../src -L../src-cpp
+LDFLAGS += -rdynamic -L../src -L../src-cpp
 
 KAFKA_VERSION?=0.10.2.0
 

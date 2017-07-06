@@ -212,7 +212,8 @@ static rd_kafka_resp_err_t on_commit (
 
 
 static void do_test_produce (rd_kafka_t *rk, const char *topic,
-                             int32_t partition, int msgid, int exp_fail) {
+                             int32_t partition, int msgid, int exp_fail,
+                             int exp_ic_cnt) {
         rd_kafka_resp_err_t err;
         char key[16];
         struct msg_state *msg = &msgs[msgid];
@@ -233,11 +234,10 @@ static void do_test_produce (rd_kafka_t *rk, const char *topic,
                                 RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
                                 RD_KAFKA_V_OPAQUE(msg),
                                 RD_KAFKA_V_END);
-
-        msg_verify_ic_cnt(msg, "on_send", msg->bits[_ON_SEND], producer_ic_cnt);
+        msg_verify_ic_cnt(msg, "on_send", msg->bits[_ON_SEND], exp_ic_cnt);
 
         if (err) {
-                msg_verify_ic_cnt(msg, "on_ack", msg->bits[_ON_ACK], producer_ic_cnt);
+                msg_verify_ic_cnt(msg, "on_ack", msg->bits[_ON_ACK], exp_ic_cnt);
                 TEST_ASSERT(exp_fail,
                             "producev() failed: %s", rd_kafka_err2str(err));
         } else {
@@ -250,62 +250,72 @@ static void do_test_produce (rd_kafka_t *rk, const char *topic,
 
 
 
-static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk, void *ic_opaque,
+static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
+                                            const rd_kafka_conf_t *conf,
+                                            void *ic_opaque,
                                             char *errstr, size_t errstr_size) {
         int i;
 
         for (i = 0 ; i < producer_ic_cnt ; i++) {
-                rd_kafka_interceptor_add_on_send(
+                rd_kafka_resp_err_t err;
+
+                err = rd_kafka_interceptor_add_on_send(
                         rk, tsprintf("on_send:%d",i),
                         on_send, (void *)(intptr_t)(on_send_base | i));
+                TEST_ASSERT(!err, "add_on_send failed: %s",
+                            rd_kafka_err2str(err));
 
-                rd_kafka_interceptor_add_on_acknowledgement(
+                err = rd_kafka_interceptor_add_on_acknowledgement(
                         rk, tsprintf("on_acknowledgement:%d",i),
                         on_ack, (void *)(intptr_t)(on_ack_base | i));
+                TEST_ASSERT(!err, "add_on_ack.. failed: %s",
+                            rd_kafka_err2str(err));
+
 
                 /* Add consumer interceptors as well to make sure
                  * they are not called. */
-                rd_kafka_interceptor_add_on_consume(
+                err = rd_kafka_interceptor_add_on_consume(
                         rk, tsprintf("on_consume:%d",i),
                         on_consume, NULL);
+                TEST_ASSERT(!err, "add_on_consume failed: %s",
+                            rd_kafka_err2str(err));
 
-                rd_kafka_interceptor_add_on_commit(
+
+                err = rd_kafka_interceptor_add_on_commit(
                         rk, tsprintf("on_commit:%d",i),
                         on_commit, NULL);
-
+                TEST_ASSERT(!err, "add_on_commit failed: %s",
+                            rd_kafka_err2str(err));
         }
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 static void do_test_producer (const char *topic) {
-        rd_kafka_conf_t *conf, *conf2;
+        rd_kafka_conf_t *conf;
         int i;
         rd_kafka_t *rk;
+
+        TEST_SAY(_C_MAG "[ %s ]\n" _C_CLR, __FUNCTION__);
 
         test_conf_init(&conf, NULL, 0);
 
         rd_kafka_conf_interceptor_add_on_new(conf, "on_new_prodcer",
                                              on_new_producer, NULL);
 
-        /* Now copy the configuration to verify that the interceptor
-         * copy constructor works */
-        conf2 = conf;
-        conf = rd_kafka_conf_dup(conf2);
-        rd_kafka_conf_destroy(conf2);
-
         /* Create producer */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
         for (i = 0 ; i < msgcnt-1 ; i++)
-                do_test_produce(rk, topic, RD_KAFKA_PARTITION_UA, i, 0);
+                do_test_produce(rk, topic, RD_KAFKA_PARTITION_UA, i, 0,
+                                producer_ic_cnt);
 
         /* Wait for messages to be delivered */
         test_flush(rk, -1);
 
         /* Now send a message that will fail in produce()
          * due to bad partition */
-        do_test_produce(rk, topic, 1234, i, 1);
+        do_test_produce(rk, topic, 1234, i, 1, producer_ic_cnt);
 
 
         /* Verify acks */
@@ -319,7 +329,9 @@ static void do_test_producer (const char *topic) {
 }
 
 
-static rd_kafka_resp_err_t on_new_consumer (rd_kafka_t *rk, void *ic_opaque,
+static rd_kafka_resp_err_t on_new_consumer (rd_kafka_t *rk,
+                                            const rd_kafka_conf_t *conf,
+                                            void *ic_opaque,
                                             char *errstr, size_t errstr_size) {
         int i;
 
@@ -350,20 +362,16 @@ static rd_kafka_resp_err_t on_new_consumer (rd_kafka_t *rk, void *ic_opaque,
 
 static void do_test_consumer (const char *topic) {
 
-        rd_kafka_conf_t *conf, *conf2;
+        rd_kafka_conf_t *conf;
         int i;
         rd_kafka_t *rk;
+
+        TEST_SAY(_C_MAG "[ %s ]\n" _C_CLR, __FUNCTION__);
 
         test_conf_init(&conf, NULL, 0);
 
         rd_kafka_conf_interceptor_add_on_new(conf, "on_new_consumer",
                                              on_new_consumer, NULL);
-
-        /* Now copy the configuration to verify that the interceptor
-         * copy constructor works */
-        conf2 = conf;
-        conf = rd_kafka_conf_dup(conf2);
-        rd_kafka_conf_destroy(conf2);
 
         test_conf_set(conf, "auto.offset.reset", "earliest");
 
@@ -395,12 +403,60 @@ static void do_test_consumer (const char *topic) {
         rd_kafka_destroy(rk);
 }
 
+/**
+ * @brief Interceptors must not be copied automatically by conf_dup()
+ *        unless the interceptors have added on_conf_dup().
+ *        This behaviour makes sure an interceptor's instance
+ *        is not duplicated without the interceptor's knowledge or
+ *        assistance.
+ */
+static void do_test_conf_copy (const char *topic) {
+        rd_kafka_conf_t *conf, *conf2;
+        int i;
+        rd_kafka_t *rk;
+
+        TEST_SAY(_C_MAG "[ %s ]\n" _C_CLR, __FUNCTION__);
+
+        memset(&msgs[0], 0, sizeof(msgs));
+
+        test_conf_init(&conf, NULL, 0);
+
+        rd_kafka_conf_interceptor_add_on_new(conf, "on_new_conf_copy",
+                                             on_new_producer, NULL);
+
+        /* Now copy the configuration to verify that interceptors are
+         * NOT copied. */
+        conf2 = conf;
+        conf = rd_kafka_conf_dup(conf2);
+        rd_kafka_conf_destroy(conf2);
+
+        /* Create producer */
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        for (i = 0 ; i < msgcnt-1 ; i++)
+                do_test_produce(rk, topic, RD_KAFKA_PARTITION_UA, i, 0, 0);
+
+        /* Wait for messages to be delivered */
+        test_flush(rk, -1);
+
+        /* Verify acks */
+        for (i = 0 ; i < msgcnt ; i++) {
+                struct msg_state *msg = &msgs[i];
+                msg_verify_ic_cnt(msg, "on_ack", msg->bits[_ON_ACK], 0);
+        }
+
+        rd_kafka_destroy(rk);
+}
+
+
 int main_0064_interceptors (int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
         do_test_producer(topic);
 
         do_test_consumer(topic);
+
+        do_test_conf_copy(topic);
 
         return 0;
 }

@@ -47,14 +47,20 @@ typedef struct rd_list_s {
 				   * When this flag is set bsearch() is used
 				   * by find(), otherwise a linear search. */
 #define RD_LIST_F_FIXED_SIZE 0x4  /* Assert on grow */
+#define RD_LIST_F_UNIQUE     0x8  /* Don't allow duplicates:
+                                   * ONLY ENFORCED BY CALLER. */
 } rd_list_t;
 
 
 /**
- * Initialize a list, preallocate space for 'initial_size' elements (optional).
- * List elements will optionally be freed by \p free_cb.
+ * @brief Initialize a list, preallocate space for 'initial_size' elements
+ *       (optional).
+ *       List elements will optionally be freed by \p free_cb.
+ *
+ * @returns \p rl
  */
-void rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *));
+rd_list_t *
+rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *));
 
 
 /**

@@ -39,7 +39,7 @@ rd_kafka_interceptors_on_conf_dup (rd_kafka_conf_t *new_conf,
 void
 rd_kafka_interceptors_on_conf_destroy (rd_kafka_conf_t *conf) ;
 void
-rd_kafka_interceptors_on_new (rd_kafka_t *rk);
+rd_kafka_interceptors_on_new (rd_kafka_t *rk, const rd_kafka_conf_t *conf);
 void
 rd_kafka_interceptors_on_destroy (rd_kafka_t *rk);
 void

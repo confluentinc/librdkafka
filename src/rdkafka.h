@@ -1026,6 +1026,9 @@ void rd_kafka_conf_destroy(rd_kafka_conf_t *conf);
 
 /**
  * @brief Creates a copy/duplicate of configuration object \p conf
+ *
+ * @remark Interceptors are NOT copied to the new configuration object.
+ * @sa rd_kafka_interceptor_f_on_conf_dup
  */
 RD_EXPORT
 rd_kafka_conf_t *rd_kafka_conf_dup(const rd_kafka_conf_t *conf);
@@ -3370,17 +3373,21 @@ typedef rd_kafka_resp_err_t
  * @brief A callback interface that allows message interception for both
  *        producer and consumer data pipelines.
  *
- * Except for the on_new() interceptor, interceptors are added to the
- * newly created rd_kafka_t client instance. These interceptor MUST only
+ * Except for the on_new(), on_conf_set(), on_conf_dup() and on_conf_destroy()
+ * interceptors, interceptors are added to the
+ * newly created rd_kafka_t client instance. These interceptors MUST only
  * be added from on_new() and MUST NOT be added after rd_kafka_new() returns.
  *
- * The on_new() interceptor is added to the configuration object
- * which is later passed to rd_kafka_new() where the it is called,
- * allowing the on_new() callback to add other interceptors.
+ * The on_new(), on_conf_set(), on_conf_dup() and on_conf_destroy() interceptors
+ * are added to the configuration object which is later passed to
+ * rd_kafka_new() where on_new() is called to allow addition of
+ * other interceptors.
  *
  * Each interceptor reference consists of a display name (ic_name),
  * a callback function, and an application-specified opaque value that is
  * passed as-is to the callback.
+ * The ic_name must be unique for the interceptor implementation and is used
+ * to reject duplicate interceptor methods.
  *
  * Any number of interceptors can be added and they are called in the order
  * they were added, unless otherwise noted.
@@ -3392,12 +3399,25 @@ typedef rd_kafka_resp_err_t
  *         discouraged in the Java client and the combination of
  *         serializers and headers cover most use-cases.
  *
- * @remark Configuration interceptors (on_conf_..*) are NOT copied to
- *         the new configuration on rd_kafka_conf_dup() since it would be hard
- *         for applications to track usage of the interceptor opaque value.
+ * @remark Interceptors are NOT copied to the new configuration on
+ *         rd_kafka_conf_dup() since it would be hard for interceptors to
+ *         track usage of the interceptor's opaque value.
+ *         An interceptor should rely on the plugin, which will be copied
+ *         in rd_kafka_conf_conf_dup(), to set up the initial interceptors.
  *         An interceptor should implement the on_conf_dup() method
- *         to manually set up its interceptors on the newly created
- *         configuration object that is being copied-to.
+ *         to manually set up its internal configuration on the newly created
+ *         configuration object that is being copied-to based on the
+ *         interceptor-specific configuration properties.
+ *         conf_dup() should thus be treated the same as conf_init().
+ *
+ * @remark Interceptors are keyed by the interceptor type (on_..()), the
+ *         interceptor name (ic_name) and the interceptor method function.
+ *         Duplicates are not allowed and the .._add_on_..() method will
+ *         return RD_KAFKA_RESP_ERR__CONFLICT if attempting to add a duplicate
+ *         method.
+ *         The only exception is on_conf_destroy() which may be added multiple
+ *         times by the same interceptor to allow proper cleanup of
+ *         interceptor configuration state.
  */
 
 
@@ -3432,6 +3452,8 @@ typedef rd_kafka_conf_res_t
  *        order the interceptors were added and is used to let
  *        an interceptor re-register its conf interecptors with a new
  *        opaque value.
+ *        The on_conf_dup() method is called prior to the configuration from
+ *        \p old_conf being copied to \p new_conf.
  *
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  *
@@ -3462,6 +3484,7 @@ typedef rd_kafka_resp_err_t
  *        the newly created client instance to the application.
  *
  * @param rk The client instance.
+ * @param conf The client instance's final configuration.
  * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
  * @param errstr A human readable error string in case the interceptor fails.
  * @param errstr_size Maximum space (including \0) in \p errstr.
@@ -3474,7 +3497,8 @@ typedef rd_kafka_resp_err_t
  *
  */
 typedef rd_kafka_resp_err_t
-(rd_kafka_interceptor_f_on_new_t) (rd_kafka_t *rk, void *ic_opaque,
+(rd_kafka_interceptor_f_on_new_t) (rd_kafka_t *rk, const rd_kafka_conf_t *conf,
+                                   void *ic_opaque,
                                    char *errstr, size_t errstr_size);
 
 
@@ -3600,8 +3624,12 @@ typedef rd_kafka_resp_err_t
  * @param ic_name Interceptor name, used in logging.
  * @param on_conf_set Function pointer.
  * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_conf_interceptor_add_on_conf_set (
         rd_kafka_conf_t *conf, const char *ic_name,
         rd_kafka_interceptor_f_on_conf_set_t *on_conf_set,
@@ -3615,8 +3643,12 @@ rd_kafka_conf_interceptor_add_on_conf_set (
  * @param ic_name Interceptor name, used in logging.
  * @param on_conf_dup Function pointer.
  * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_conf_interceptor_add_on_conf_dup (
         rd_kafka_conf_t *conf, const char *ic_name,
         rd_kafka_interceptor_f_on_conf_dup_t *on_conf_dup,
@@ -3629,8 +3661,13 @@ rd_kafka_conf_interceptor_add_on_conf_dup (
  * @param ic_name Interceptor name, used in logging.
  * @param on_conf_destroy Function pointer.
  * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR
+ *
+ * @remark Multiple on_conf_destroy() interceptors are allowed to be added
+ *         to the same configuration object.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_conf_interceptor_add_on_conf_destroy (
         rd_kafka_conf_t *conf, const char *ic_name,
         rd_kafka_interceptor_f_on_conf_destroy_t *on_conf_destroy,
@@ -3650,8 +3687,15 @@ rd_kafka_conf_interceptor_add_on_conf_destroy (
  *         An interceptor implementation must thus be able to handle
  *         the same interceptor,ic_opaque tuple to be used by multiple
  *         client instances.
+ *
+ * @remark An interceptor plugin should check the return value to make sure it
+ *         has not already been added.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_conf_interceptor_add_on_new (
         rd_kafka_conf_t *conf, const char *ic_name,
         rd_kafka_interceptor_f_on_new_t *on_new,
@@ -3666,8 +3710,12 @@ rd_kafka_conf_interceptor_add_on_new (
  * @param ic_name Interceptor name, used in logging.
  * @param on_destroy Function pointer.
  * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_interceptor_add_on_destroy (
         rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_destroy_t *on_destroy,
@@ -3681,8 +3729,12 @@ rd_kafka_interceptor_add_on_destroy (
  * @param ic_name Interceptor name, used in logging.
  * @param on_send Function pointer.
  * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_interceptor_add_on_send (
         rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_send_t *on_send,
@@ -3695,8 +3747,12 @@ rd_kafka_interceptor_add_on_send (
  * @param ic_name Interceptor name, used in logging.
  * @param on_acknowledgement Function pointer.
  * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_interceptor_add_on_acknowledgement (
         rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_acknowledgement_t *on_acknowledgement,
@@ -3710,8 +3766,12 @@ rd_kafka_interceptor_add_on_acknowledgement (
  * @param ic_name Interceptor name, used in logging.
  * @param on_consume Function pointer.
  * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_interceptor_add_on_consume (
         rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_consume_t *on_consume,
@@ -3725,8 +3785,12 @@ rd_kafka_interceptor_add_on_consume (
  * @param ic_name Interceptor name, used in logging.
  * @param on_commit() Function pointer.
  * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_interceptor_add_on_commit (
         rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_commit_t *on_commit,

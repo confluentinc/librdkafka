@@ -266,7 +266,8 @@ void rd_kafka_conf_interceptor_dtor (int scope, void *pconf) {
  *
  */
 void rd_kafka_conf_interceptor_copy (int scope, void *pdst, const void *psrc,
-                                     void *dstptr, const void *srcptr) {
+                                     void *dstptr, const void *srcptr,
+                                     size_t filter_cnt, const char **filter) {
         rd_kafka_conf_t *dconf = pdst;
         const rd_kafka_conf_t *sconf = psrc;
         int i;
@@ -279,6 +280,20 @@ void rd_kafka_conf_interceptor_copy (int scope, void *pdst, const void *psrc,
          * on_conf_set() interceptors are already in place and we can
          * apply the configuration through the standard conf_set() API. */
         RD_LIST_FOREACH(confval, &sconf->interceptors.config, i) {
+                size_t fi;
+                size_t nlen = strlen(confval->name);
+
+                /* Apply filter */
+                for (fi = 0 ; fi < filter_cnt ; fi++) {
+                        size_t flen = strlen(filter[fi]);
+                        if (nlen >= flen && !strncmp(filter[fi], confval->name,
+                                                     flen))
+                                break;
+                }
+
+                if (fi < filter_cnt)
+                        continue; /* Filter matched: ignore property. */
+
                 /* Ignore errors for now */
                 rd_kafka_conf_set(dconf, confval->name, confval->value,
                                   NULL, 0);
@@ -327,13 +342,15 @@ rd_kafka_interceptors_on_conf_set (rd_kafka_conf_t *conf,
  */
 void
 rd_kafka_interceptors_on_conf_dup (rd_kafka_conf_t *new_conf,
-                                   const rd_kafka_conf_t *old_conf) {
+                                   const rd_kafka_conf_t *old_conf,
+                                   size_t filter_cnt, const char **filter) {
         rd_kafka_interceptor_method_t *method;
         int i;
 
         RD_LIST_FOREACH(method, &old_conf->interceptors.on_conf_dup, i) {
                 /* FIXME: Ignore error for now */
-                method->u.on_conf_dup(new_conf, old_conf, method->ic_opaque);
+                method->u.on_conf_dup(new_conf, old_conf,
+                                      filter_cnt, filter, method->ic_opaque);
         }
 }
 

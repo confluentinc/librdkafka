@@ -223,13 +223,9 @@ struct test tests[] = {
         _TEST(0063_clusterid, 0, TEST_BRKVER(0,10,0,0)),
         _TEST(0064_interceptors, 0),
         _TEST(0065_yield, 0),
-        _TEST(0066_plugins, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE_WIN32 |
-#if __APPLE__
-              TEST_F_KNOWN_ISSUE
-#else
-              0
-#endif
-              , .extra = "dynamic loading of tests might not be fixed for this platform"),
+        _TEST(0066_plugins,
+              TEST_F_LOCAL|TEST_F_KNOWN_ISSUE_WIN32|TEST_F_KNOWN_ISSUE_OSX,
+              .extra = "dynamic loading of tests might not be fixed for this platform"),
         { NULL }
 };
 

@@ -145,6 +145,12 @@ struct test {
 #define TEST_F_KNOWN_ISSUE_WIN32 0
 #endif
 
+#ifdef __APPLE__
+#define TEST_F_KNOWN_ISSUE_OSX  TEST_F_KNOWN_ISSUE
+#else
+#define TEST_F_KNOWN_ISSUE_OSX  0
+#endif
+
 
 #define TEST_FAIL0(file,line,do_lock,fail_now,...) do {                 \
                 int is_thrd = 0;                                        \

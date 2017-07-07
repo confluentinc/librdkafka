@@ -38,9 +38,6 @@ run_local: $(BIN)
 
 .PHONY: interceptor_test
 
-interceptor_test:
-	$(MAKE) -C $@
-
 build: $(BIN) interceptor_test
 
 test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
@@ -48,6 +45,14 @@ test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
 
 
 include ../mklove/Makefile.base
+
+ifeq ($(_UNAME_S),Darwin)
+interceptor_test:
+else
+interceptor_test:
+	$(MAKE) -C $@
+endif
+
 
 tinycthread.o: ../src/tinycthread.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<

@@ -102,7 +102,7 @@ rd_dl_hnd_t *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
         rd_dl_hnd_t *handle;
         char *extpath;
         size_t pathlen;
-        char *td, *fname;
+        const char *td, *fname;
         const char *solib_ext = SOLIB_EXT;
 
         /* Try original path first. */
@@ -113,9 +113,18 @@ rd_dl_hnd_t *rd_dl_open (const char *path, char *errstr, size_t errstr_size) {
         /* Original path not found, see if we can append the solib_ext
          * filename extension. */
 
-        /* Get filename and filename extension */
-        fname = basename(path);
-        td = rindex(fname, '.');
+        /* Get filename and filename extension.
+         * We can't rely on basename(3) since it is not portable */
+        fname = strrchr(path, '/');
+#ifdef _MSC_VER
+        td = strrchr(path, '\\');
+        if (td > fname)
+                fname = td;
+#endif
+        if (!fname)
+                fname = path;
+
+        td = strrchr(fname, '.');
 
         /* If there is a filename extension ('.' within the last characters)
          * then bail out, we will not append an extension in this case. */

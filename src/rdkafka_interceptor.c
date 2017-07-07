@@ -158,22 +158,6 @@ rd_kafka_interceptor_method_add (rd_list_t *list, const char *ic_name,
 }
 
 /**
- * @brief Copy constructor for method
- */
-static void *rd_kafka_interceptor_method_copy (const void *psrc, void *opaque) {
-        const rd_kafka_interceptor_method_t *src = psrc;
-        rd_list_t *dlist = opaque; /* Destination list */
-
-        rd_kafka_interceptor_method_add(dlist,
-                                        src->ic_name,
-                                        src->u.generic,
-                                        src->ic_opaque);
-
-        return NULL; /* method added by _add() (possibly) */
-}
-
-
-/**
  * @brief Destroy all interceptors
  * @locality application thread calling rd_kafka_conf_destroy() or 
  *           rd_kafka_destroy()

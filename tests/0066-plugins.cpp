@@ -49,13 +49,14 @@ struct ictest ictest;
 static void do_test_plugin () {
   std::string errstr;
   std::string topic = Test::mk_topic_name("0066_plugins", 1);
-  std::pair<std::string, std::string> config[] = {
-    { "session.timeout.ms", "6000" }, /* Before plugin */
-    { "plugin.library.paths", "interceptor_test/interceptor_test" },
-    { "socket.timeout.ms", "12" }, /* After plugin */
-    { "interceptor_test.config1", "one" },
-    { "interceptor_test.config2", "two" },
-    { "topic.metadata.refresh.interval.ms", "1234" },
+  static const char *config[] = {
+    "session.timeout.ms", "6000", /* Before plugin */
+    "plugin.library.paths", "interceptor_test/interceptor_test",
+    "socket.timeout.ms", "12", /* After plugin */
+    "interceptor_test.config1", "one",
+    "interceptor_test.config2", "two",
+    "topic.metadata.refresh.interval.ms", "1234",
+    NULL,
   };
 
   /* Interceptor back-channel config */
@@ -66,10 +67,10 @@ static void do_test_plugin () {
   /* Config for intercepted client */
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
 
-  for (unsigned int i = 0 ; i < sizeof(config) / sizeof(*config) ; i++) {
-    Test::Say("set(" + config[i].first + ", " + config[i].second + ")\n");
-    if (conf->set(config[i].first, config[i].second, errstr))
-      Test::Fail("set(" + config[i].first + ") failed: " + errstr);
+  for (int i = 0 ; config[i] ; i += 2) {
+    Test::Say(tostr() << "set(" << config[i] << ", " << config[i+1] << ")\n");
+    if (conf->set(config[i], config[i+1], errstr))
+      Test::Fail(tostr() << "set(" << config[i] << ") failed: " << errstr);
   }
 
   /* Create producer */

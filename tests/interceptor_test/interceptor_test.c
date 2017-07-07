@@ -153,10 +153,10 @@ static rd_kafka_resp_err_t on_new (rd_kafka_t *rk, const rd_kafka_conf_t *conf,
         TEST_ASSERT(!ictest.socket_timeout_ms);
         /* Extract some well known config properties from the interceptor's
          * configuration. */
-        ictest.session_timeout_ms = strdup(test_conf_get(ici->conf, "session.timeout.ms"));
-        ictest.socket_timeout_ms  = strdup(test_conf_get(ici->conf, "socket.timeout.ms"));
-        ictest.config1 = strdup(ici->config1);
-        ictest.config2 = strdup(ici->config2);
+        ictest.session_timeout_ms = rd_strdup(test_conf_get(ici->conf, "session.timeout.ms"));
+        ictest.socket_timeout_ms  = rd_strdup(test_conf_get(ici->conf, "socket.timeout.ms"));
+        ictest.config1 = srd_trdup(ici->config1);
+        ictest.config2 = rd_strdup(ici->config2);
 
         rd_kafka_interceptor_add_on_send(rk, __FILE__, on_send, ici);
         rd_kafka_interceptor_add_on_acknowledgement(rk, __FILE__,
@@ -200,7 +200,7 @@ static rd_kafka_conf_res_t on_conf_set (rd_kafka_conf_t *conf,
                         ici->config1 = NULL;
                 }
                 if (val)
-                        ici->config1 = strdup(val);
+                        ici->config1 = rd_strdup(val);
                 TEST_SAY("on_conf_set(conf %p, %s, %s): %p\n",
                          conf, name, val, ici);
                 return RD_KAFKA_CONF_OK;
@@ -210,7 +210,7 @@ static rd_kafka_conf_res_t on_conf_set (rd_kafka_conf_t *conf,
                         ici->config2 = NULL;
                 }
                 if (val)
-                        ici->config2 = strdup(val);
+                        ici->config2 = rd_strdup(val);
                 return RD_KAFKA_CONF_OK;
         } else {
                 /* Apply intercepted client's config properties on

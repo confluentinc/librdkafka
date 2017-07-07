@@ -155,7 +155,7 @@ static rd_kafka_resp_err_t on_new (rd_kafka_t *rk, const rd_kafka_conf_t *conf,
          * configuration. */
         ictest.session_timeout_ms = rd_strdup(test_conf_get(ici->conf, "session.timeout.ms"));
         ictest.socket_timeout_ms  = rd_strdup(test_conf_get(ici->conf, "socket.timeout.ms"));
-        ictest.config1 = srd_trdup(ici->config1);
+        ictest.config1 = rd_strdup(ici->config1);
         ictest.config2 = rd_strdup(ici->config2);
 
         rd_kafka_interceptor_add_on_send(rk, __FILE__, on_send, ici);

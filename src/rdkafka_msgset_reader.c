@@ -116,7 +116,12 @@ typedef struct rd_kafka_msgset_reader_s {
                                           *          reference! */
 
         int          msetr_msgcnt;      /**< Number of messages in rkq */
-        rd_kafka_q_t msetr_rkq;         /**< Message and error queue */
+        rd_kafka_q_t msetr_rkq;         /**< Temp Message and error queue */
+        rd_kafka_q_t *msetr_par_rkq;    /**< Parent message and error queue,
+                                         *   the temp msetr_rkq will be moved
+                                         *   to this queue when parsing
+                                         *   is done.
+                                         *   Refcount is not increased. */
 } rd_kafka_msgset_reader_t;
 
 
@@ -135,7 +140,8 @@ static void
 rd_kafka_msgset_reader_init (rd_kafka_msgset_reader_t *msetr,
                              rd_kafka_buf_t *rkbuf,
                              rd_kafka_toppar_t *rktp,
-                             const struct rd_kafka_toppar_ver *tver) {
+                             const struct rd_kafka_toppar_ver *tver,
+                             rd_kafka_q_t *par_rkq) {
 
         memset(msetr, 0, sizeof(*msetr));
 
@@ -150,8 +156,13 @@ rd_kafka_msgset_reader_init (rd_kafka_msgset_reader_t *msetr,
 
         /* Make sure enqueued ops get the correct serve/opaque reflecting the
          * original queue. */
-        msetr->msetr_rkq.rkq_serve  = rktp->rktp_fetchq->rkq_serve;
-        msetr->msetr_rkq.rkq_opaque = rktp->rktp_fetchq->rkq_opaque;
+        msetr->msetr_rkq.rkq_serve  = par_rkq->rkq_serve;
+        msetr->msetr_rkq.rkq_opaque = par_rkq->rkq_opaque;
+
+        /* Keep (non-refcounted) reference to parent queue for
+         * moving the messages and events in msetr_rkq to when
+         * parsing is done. */
+        msetr->msetr_par_rkq = par_rkq;
 }
 
 
@@ -352,7 +363,8 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
                 rd_kafka_msgset_reader_init(&inner_msetr,
                                             rkbufz,
                                             msetr->msetr_rktp,
-                                            msetr->msetr_tver);
+                                            msetr->msetr_tver,
+                                            &msetr->msetr_rkq);
 
                 if (MsgVersion == 1) {
                         /* postproc() will convert relative to
@@ -1042,8 +1054,9 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
                    rktp->rktp_partition, rd_kafka_q_len(&msetr->msetr_rkq),
                    msetr->msetr_tver->version, last_offset);
 
-        /* Concat all messages&errors onto the partition's fetch queue */
-        if (rd_kafka_q_concat(rktp->rktp_fetchq, &msetr->msetr_rkq) != -1) {
+        /* Concat all messages&errors onto the parent's queue
+         * (the partition's fetch queue) */
+        if (rd_kafka_q_concat(msetr->msetr_par_rkq, &msetr->msetr_rkq) != -1) {
                 /* Update partition's fetch offset based on
                  * last message's offest. */
                 if (likely(last_offset != -1)) {
@@ -1078,7 +1091,8 @@ rd_kafka_msgset_parse (rd_kafka_buf_t *rkbuf,
                        const struct rd_kafka_toppar_ver *tver) {
         rd_kafka_msgset_reader_t msetr;
 
-        rd_kafka_msgset_reader_init(&msetr, rkbuf, rktp, tver);
+        rd_kafka_msgset_reader_init(&msetr, rkbuf, rktp, tver,
+                                    rktp->rktp_fetchq);
 
         /* Parse and handle the message set */
         return rd_kafka_msgset_reader_run(&msetr);

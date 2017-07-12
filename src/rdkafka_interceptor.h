@@ -35,11 +35,12 @@ rd_kafka_interceptors_on_conf_set (rd_kafka_conf_t *conf,
                                    char *errstr, size_t errstr_size);
 void
 rd_kafka_interceptors_on_conf_dup (rd_kafka_conf_t *new_conf,
-                                   const rd_kafka_conf_t *old_conf);
+                                   const rd_kafka_conf_t *old_conf,
+                                   size_t filter_cnt, const char **filter);
 void
 rd_kafka_interceptors_on_conf_destroy (rd_kafka_conf_t *conf) ;
 void
-rd_kafka_interceptors_on_new (rd_kafka_t *rk);
+rd_kafka_interceptors_on_new (rd_kafka_t *rk, const rd_kafka_conf_t *conf);
 void
 rd_kafka_interceptors_on_destroy (rd_kafka_t *rk);
 void
@@ -62,7 +63,8 @@ rd_kafka_interceptors_on_commit (rd_kafka_t *rk,
 void rd_kafka_conf_interceptor_ctor (int scope, void *pconf);
 void rd_kafka_conf_interceptor_dtor (int scope, void *pconf);
 void rd_kafka_conf_interceptor_copy (int scope, void *pdst, const void *psrc,
-                                     void *dstptr, const void *srcptr);
+                                     void *dstptr, const void *srcptr,
+                                     size_t filter_cnt, const char **filter);
 
 void rd_kafka_interceptors_destroy (rd_kafka_conf_t *conf);
 

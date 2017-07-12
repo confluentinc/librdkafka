@@ -48,13 +48,16 @@ void rd_list_grow (rd_list_t *rl, size_t size) {
                                   sizeof(*rl->rl_elems) * rl->rl_size);
 }
 
-void rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *)) {
+rd_list_t *
+rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *)) {
         memset(rl, 0, sizeof(*rl));
 
 	if (initial_size > 0)
 		rd_list_grow(rl, initial_size);
 
         rl->rl_free_cb = free_cb;
+
+        return rl;
 }
 
 rd_list_t *rd_list_new (int initial_size, void (*free_cb) (void *)) {

@@ -1,5 +1,6 @@
 set(
     sources
+    0000-unittests.c
     0001-multiobj.c
     0002-unkpart.c
     0003-msgmaxsize.c
@@ -55,9 +56,10 @@ set(
     0060-op_prio.cpp
     0061-consumer_lag.cpp
     0062-stats_event.c
-    0063-clusterid.c
+    0063-clusterid.cpp
     0064-interceptors.c
     0065-yield.cpp
+    0066-plugins.cpp
     test.c
     testcpp.cpp
     sockem.c

@@ -145,6 +145,12 @@ struct test {
 #define TEST_F_KNOWN_ISSUE_WIN32 0
 #endif
 
+#ifdef __APPLE__
+#define TEST_F_KNOWN_ISSUE_OSX  TEST_F_KNOWN_ISSUE
+#else
+#define TEST_F_KNOWN_ISSUE_OSX  0
+#endif
+
 
 #define TEST_FAIL0(file,line,do_lock,fail_now,...) do {                 \
                 int is_thrd = 0;                                        \
@@ -473,7 +479,7 @@ void test_consumer_close (rd_kafka_t *rk);
 void test_flush (rd_kafka_t *rk, int timeout_ms);
 
 void test_conf_set (rd_kafka_conf_t *conf, const char *name, const char *val);
-char *test_conf_get (rd_kafka_conf_t *conf, const char *name);
+char *test_conf_get (const rd_kafka_conf_t *conf, const char *name);
 int test_conf_match (rd_kafka_conf_t *conf, const char *name, const char *val);
 void test_topic_conf_set (rd_kafka_topic_conf_t *tconf,
                           const char *name, const char *val);

@@ -959,6 +959,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                 rd_kafka_topic_rdunlock(rkt);
         }
 
+        rd_kafka_wrunlock(rk);
 
         if (rd_list_cnt(&topics) == 0) {
                 /* No leader-less topics+partitions, stop the timer. */
@@ -977,8 +978,6 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                         rd_kafka_timer_backoff(rkts, rtmr,
                                                (int)rtmr->rtmr_interval);
         }
-
-        rd_kafka_wrunlock(rk);
 
         rd_list_destroy(&topics);
 }

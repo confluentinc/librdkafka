@@ -387,3 +387,11 @@
    obj:/usr/lib/valgrind/vgpreload_helgrind-amd64-linux.so
    fun:rd_refcnt_destroy
 }
+{
+   nss_dl_lookup
+   Helgrind:Race
+   ...
+   fun:do_lookup_x
+   fun:_dl_lookup_symbol_x
+   ...
+}

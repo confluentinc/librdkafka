@@ -2021,7 +2021,8 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *app_rkt,
 
 	rd_kafka_toppar_destroy(s_rktp); /* refcnt from .._get() */
 
-	rd_kafka_set_last_error(0, 0);
+        if (likely(rkmessage))
+                rd_kafka_set_last_error(0, 0);
 
 	return rkmessage;
 }

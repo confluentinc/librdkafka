@@ -149,6 +149,7 @@ _TEST_DECL(0063_clusterid);
 _TEST_DECL(0064_interceptors);
 _TEST_DECL(0065_yield);
 _TEST_DECL(0066_plugins);
+_TEST_DECL(0067_empty_topic);
 
 /**
  * Define all tests here
@@ -226,6 +227,7 @@ struct test tests[] = {
         _TEST(0066_plugins,
               TEST_F_LOCAL|TEST_F_KNOWN_ISSUE_WIN32|TEST_F_KNOWN_ISSUE_OSX,
               .extra = "dynamic loading of tests might not be fixed for this platform"),
+        _TEST(0067_empty_topic, 0),
         { NULL }
 };
 

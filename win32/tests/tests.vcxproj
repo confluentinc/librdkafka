@@ -150,6 +150,8 @@
     <ClCompile Include="..\..\tests\0063-clusterid.cpp" />
     <ClCompile Include="..\..\tests\0064-interceptors.c" />
     <ClCompile Include="..\..\tests\0065-yield.cpp" />
+    <ClCompile Include="..\..\tests\0066-plugins.cpp" />
+    <ClCompile Include="..\..\tests\0067-empty_topic.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />
     <ClCompile Include="..\..\src\tinycthread.c" />

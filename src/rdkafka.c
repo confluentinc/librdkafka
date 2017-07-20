@@ -1333,7 +1333,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                 * as the rk itself is destroyed. */
 
         /* Call on_new() interceptors */
-        rd_kafka_interceptors_on_new(rk);
+        rd_kafka_interceptors_on_new(rk, &rk->rk_conf);
 
 	rwlock_init(&rk->rk_lock);
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
@@ -2020,8 +2020,6 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *app_rkt,
                                       rktp->rktp_fetchq, timeout_ms);
 
 	rd_kafka_toppar_destroy(s_rktp); /* refcnt from .._get() */
-
-	rd_kafka_set_last_error(0, 0);
 
 	return rkmessage;
 }

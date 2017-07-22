@@ -447,7 +447,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	},
 	{ _RK_GLOBAL, "ssl.key_inmemory", _RK_C_BYTES,
 	  _RK(ssl.key_inmemory),
-	  "In-memory client private key (DSA or RSA bytes, specify with ssl.key_inmemory_type), used for authentication."
+	  "In-memory client private key (ASN.1-encoded DSA or RSA bytes: specify with ssl.key_inmemory_type), used for authentication."
 	},
 	{ _RK_GLOBAL, "ssl.key_inmemory_type", _RK_C_S2I,
 	  _RK(ssl.key_inmemory_nid_type),
@@ -467,7 +467,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	},
 	{ _RK_GLOBAL, "ssl.certificate.location_inmemory", _RK_C_BYTES,
 	  _RK(ssl.cert_location_inmemory),
-	  "In-memory certificate used for authentication."
+	  "In-memory X509 certificate bytes used for authentication."
 	},
 	{ _RK_GLOBAL, "ssl.ca.location", _RK_C_STR,
 	  _RK(ssl.ca_location),
@@ -476,7 +476,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	},
 	{ _RK_GLOBAL, "ssl.ca.location_inmemory", _RK_C_BYTES,
 	  _RK(ssl.ca_location_inmemory),
-	  "In-memory CA certificate(s) for verifying the broker's key."
+	  "In-memory X509 CA certificate bytes for verifying the broker's key."
 	},
 	{ _RK_GLOBAL, "ssl.crl.location", _RK_C_STR,
 	  _RK(ssl.crl_location),
@@ -1342,12 +1342,10 @@ static int rd_kafka_anyconf_set (int scope, void *conf,
 	return RD_KAFKA_CONF_UNKNOWN;
 }
 
-static void rd_kafka_conf_create_default_topic_if_not_set(
-	rd_kafka_conf_t *const conf) 
+static void rd_kafka_conf_create_default_topic_if_not_set(rd_kafka_conf_t *const conf) 
 {
-	if (!conf->topic_conf) 
-	{
-		/* Create topic config, might be over-written by application
+	if (!conf->topic_conf) {
+		/* Create topic config, might be overwritten by application
 		* later. */
 		conf->topic_conf = rd_kafka_topic_conf_new();
 	}
@@ -1373,8 +1371,7 @@ rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
                                        errstr, errstr_size);
 }
 
-static const char *rd_kafka_conf_strip_topic_from_prop_name(
-	const char *name) 
+static const char *rd_kafka_conf_strip_topic_from_prop_name(const char *name) 
 {
 	if (!strncmp(name, "topic.", strlen("topic."))) 
 		return name += strlen("topic.");
@@ -1616,8 +1613,7 @@ void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
 	conf->enabled_events = events;
 }
 
-rd_kafka_conf_res_t rd_kafka_anyconf_set_bytes(
-	int scope,
+rd_kafka_conf_res_t rd_kafka_anyconf_set_bytes(int scope,
 	void *conf,
 	const char *name,
 	const unsigned char* pBytes,
@@ -1626,21 +1622,21 @@ rd_kafka_conf_res_t rd_kafka_anyconf_set_bytes(
 	size_t errstr_size) 
 {
 	char estmp[1];
+	const struct rd_kafka_property *prop;
 
 	if (!errstr) {
 		errstr = estmp;
 		errstr_size = 0;
 	}
 
-	if (!pBytes)
-	{
+	if (!pBytes) {
 		rd_snprintf(errstr, errstr_size,
 			"Invalid value of configuration property: \"%s\"", name);
 
 		return RD_KAFKA_CONF_INVALID;
 	}
 
-	for (const struct rd_kafka_property *prop = rd_kafka_properties; prop->name; prop++) {
+	for (prop = rd_kafka_properties; prop->name; prop++) {
 		if (!(prop->scope & scope))
 			continue;
 
@@ -1669,8 +1665,7 @@ rd_kafka_conf_res_t rd_kafka_anyconf_set_bytes(
 	return RD_KAFKA_CONF_UNKNOWN;
 }
 
-rd_kafka_conf_res_t rd_kafka_topic_conf_set_bytes(
-	rd_kafka_topic_conf_t *const conf,
+rd_kafka_conf_res_t rd_kafka_topic_conf_set_bytes(rd_kafka_topic_conf_t *const conf,
 	const char *name,
 	const unsigned char* pBytes,
 	unsigned int length,
@@ -1689,8 +1684,7 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set_bytes(
 		errstr_size);
 }
 
-rd_kafka_conf_res_t rd_kafka_conf_set_bytes(
-	rd_kafka_conf_t *const conf,
+rd_kafka_conf_res_t rd_kafka_conf_set_bytes(rd_kafka_conf_t *const conf,
 	const char *name,
 	const unsigned char* pBytes,
 	unsigned int length,

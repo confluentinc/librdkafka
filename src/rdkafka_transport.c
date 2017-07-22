@@ -828,36 +828,27 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		}
 	}
 
-
 	if (rk->rk_conf.ssl.ca_location_inmemory) {
 		rd_kafka_dbg(rk, SECURITY, "SSL",
 			"Loading CA certificate(s) from memory");
 
-		// TODO - should be able to add multiple certs from memory:
-		// https://stackoverflow.com/questions/3810058/read-certificate-files-from-memory-instead-of-a-file-using-openssl/32250441#32250441
-
-		X509 *pX509 = d2i_X509(
-			NULL,
+		X509 *pX509 = d2i_X509(NULL,
 			(const unsigned char **)&rk->rk_conf.ssl.ca_location_inmemory->str,
 			rk->rk_conf.ssl.ca_location_inmemory->len);
 
-		if (pX509)
-		{
+		if (pX509) {
 			X509_STORE *pX509Store = SSL_CTX_get_cert_store(ctx);
-			if (pX509Store)
-			{
+			if (pX509Store)	{
 				r = X509_STORE_add_cert(pX509Store, pX509);
 			}
-			else
-			{
+			else {
 				rd_kafka_dbg(rk, SECURITY, "SSL",
 					"Failure getting X509 store");
 			}
 
 			X509_free(pX509);
 		}
-		else
-		{
+		else {
 			rd_kafka_dbg(rk, SECURITY, "SSL",
 				"Failure decoding in-memory CA certificate bytes to X509");
 		}
@@ -926,21 +917,17 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		rd_kafka_dbg(rk, SECURITY, "SSL",
 			"Loading certificate from memory");
 
-		X509 *pX509 = d2i_X509(
-			NULL, 
+		X509 *pX509 = d2i_X509(NULL, 
 			(const unsigned char **)&rk->rk_conf.ssl.cert_location_inmemory->str,
 			rk->rk_conf.ssl.cert_location_inmemory->len);
 
-		if (pX509)
-		{
-			r = SSL_CTX_use_certificate(
-				ctx,
+		if (pX509) {
+			r = SSL_CTX_use_certificate(ctx,
 				pX509);
 
 			X509_free(pX509);
 		}
-		else
-		{
+		else {
 			rd_kafka_dbg(rk, SECURITY, "SSL",
 				"Failure decoding in-memory certificate bytes to X509");
 		}
@@ -968,6 +955,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 
 	if (rk->rk_conf.ssl.key_inmemory) {
 		char *pszPkType = "unsupported";
+
 		if (rk->rk_conf.ssl.key_inmemory_nid_type == EVP_PKEY_DSA) {
 			pszPkType = "DSA";
 		}
@@ -979,8 +967,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 			"Loading %s private key from memory",
 			pszPkType);
 
-		r = SSL_CTX_use_PrivateKey_ASN1(
-			rk->rk_conf.ssl.key_inmemory_nid_type,
+		r = SSL_CTX_use_PrivateKey_ASN1(rk->rk_conf.ssl.key_inmemory_nid_type,
 			ctx,
 			rk->rk_conf.ssl.key_inmemory->str,
 			rk->rk_conf.ssl.key_inmemory->len);

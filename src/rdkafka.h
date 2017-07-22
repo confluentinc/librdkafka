@@ -1085,8 +1085,7 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
 * error string.
 */
 RD_EXPORT
-rd_kafka_conf_res_t rd_kafka_conf_set_bytes(
-	rd_kafka_conf_t *const conf,
+rd_kafka_conf_res_t rd_kafka_conf_set_bytes(rd_kafka_conf_t *const conf,
 	const char *name,
 	const unsigned char* pBytes,
 	unsigned int length,

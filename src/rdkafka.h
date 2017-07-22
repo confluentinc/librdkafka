@@ -1086,11 +1086,11 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
 */
 RD_EXPORT
 rd_kafka_conf_res_t rd_kafka_conf_set_bytes(rd_kafka_conf_t *const conf,
-	const char *name,
-	const char* pBytes,
-	unsigned int length,
-	char *errstr,
-	size_t errstr_size);
+    const char *name,
+    const char* pBytes,
+    unsigned int length,
+    char *errstr,
+    size_t errstr_size);
 
 
 /**

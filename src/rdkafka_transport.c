@@ -828,38 +828,39 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		}
 	}
 
-	if (rk->rk_conf.ssl.ca_location_inmemory) {
-		rd_kafka_dbg(rk, SECURITY, "SSL",
-			"Loading CA certificate from memory");
+    if (rk->rk_conf.ssl.ca_location_inmemory) {
+        rd_kafka_dbg(rk, SECURITY, "SSL",
+            "Loading CA certificate from memory");
 
-		X509 *pX509 = d2i_X509(NULL,
-			(const unsigned char **)&rk->rk_conf.ssl.ca_location_inmemory->str,
-			rk->rk_conf.ssl.ca_location_inmemory->len);
+        X509 *pX509 = d2i_X509(NULL,
+            (const unsigned char **)&rk->rk_conf.ssl.ca_location_inmemory->str,
+            rk->rk_conf.ssl.ca_location_inmemory->len);
 
-		if (pX509) {
-			X509_STORE *pX509Store = SSL_CTX_get_cert_store(ctx);
-			if (pX509Store)	{
-				r = X509_STORE_add_cert(pX509Store, pX509);
-			}
-			else {
-				rd_kafka_dbg(rk, SECURITY, "SSL",
-					"Failure getting X509 store");
-			}
+        if (pX509) {
+            X509_STORE *pX509Store = SSL_CTX_get_cert_store(ctx);
 
-			X509_free(pX509);
-		}
-		else {
-			rd_kafka_dbg(rk, SECURITY, "SSL",
-				"Failure decoding in-memory CA certificate bytes to X509");
-		}
+            if (pX509Store)	{
+                r = X509_STORE_add_cert(pX509Store, pX509);
+            }
+            else {
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                    "Failure getting X509 store");
+            }
 
-		if (r != 1) {
-			rd_snprintf(errstr, errstr_size,
-				"ssl.ca.location_inmemory failed: ");
-			goto fail;
-		}
-	}
-	else if (rk->rk_conf.ssl.ca_location) {
+            X509_free(pX509);
+        }
+        else {
+            rd_kafka_dbg(rk, SECURITY, "SSL",
+                "Failure decoding in-memory CA certificate bytes to X509");
+        }
+
+        if (r != 1) {
+            rd_snprintf(errstr, errstr_size,
+                "ssl.ca.location_inmemory failed: ");
+            goto fail;
+        }
+    }
+    else if (rk->rk_conf.ssl.ca_location) {
 		/* CA certificate location, either file or directory. */
 		int is_dir = rd_kafka_path_is_dir(rk->rk_conf.ssl.ca_location);
 
@@ -881,14 +882,14 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                                     "ssl.ca.location failed: ");
                         goto fail;
                 }
-	} else {
-		/* Use default CA certificate paths: ignore failures. */
-		r = SSL_CTX_set_default_verify_paths(ctx);
-		if (r != 1)
-			rd_kafka_dbg(rk, SECURITY, "SSL",
-			"SSL_CTX_set_default_verify_paths() "
-			"failed: ignoring");
-	}
+    } else {
+        /* Use default CA certificate paths: ignore failures. */
+        r = SSL_CTX_set_default_verify_paths(ctx);
+        if (r != 1)
+            rd_kafka_dbg(rk, SECURITY, "SSL",
+                "SSL_CTX_set_default_verify_paths() "
+                "failed: ignoring");
+    }
 
 	if (rk->rk_conf.ssl.crl_location) {
 		rd_kafka_dbg(rk, SECURITY, "SSL",
@@ -913,32 +914,32 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 				     X509_V_FLAG_CRL_CHECK);
 	}
 
-	if (rk->rk_conf.ssl.cert_location_inmemory) {
-		rd_kafka_dbg(rk, SECURITY, "SSL",
-			"Loading certificate from memory");
+    if (rk->rk_conf.ssl.cert_location_inmemory) {
+        rd_kafka_dbg(rk, SECURITY, "SSL",
+            "Loading certificate from memory");
 
-		X509 *pX509 = d2i_X509(NULL, 
-			(const unsigned char **)&rk->rk_conf.ssl.cert_location_inmemory->str,
-			rk->rk_conf.ssl.cert_location_inmemory->len);
+        X509 *pX509 = d2i_X509(NULL, 
+            (const unsigned char **)&rk->rk_conf.ssl.cert_location_inmemory->str,
+            rk->rk_conf.ssl.cert_location_inmemory->len);
 
-		if (pX509) {
-			r = SSL_CTX_use_certificate(ctx,
-				pX509);
+        if (pX509) {
+            r = SSL_CTX_use_certificate(ctx,
+                pX509);
 
-			X509_free(pX509);
-		}
-		else {
-			rd_kafka_dbg(rk, SECURITY, "SSL",
-				"Failure decoding in-memory certificate bytes to X509");
-		}
+            X509_free(pX509);
+        }
+        else {
+            rd_kafka_dbg(rk, SECURITY, "SSL",
+                "Failure decoding in-memory certificate bytes to X509");
+        }
 
-		if (r != 1) {
-			rd_snprintf(errstr, errstr_size,
-				"ssl.certificate.location_inmemory failed: ");
-			goto fail;
-		}
-	}
-	else if (rk->rk_conf.ssl.cert_location) {
+        if (r != 1) {
+            rd_snprintf(errstr, errstr_size,
+                "ssl.certificate.location_inmemory failed: ");
+            goto fail;
+        }
+    }
+    else if (rk->rk_conf.ssl.cert_location) {
 		rd_kafka_dbg(rk, SECURITY, "SSL",
 			     "Loading certificate from file %s",
 			     rk->rk_conf.ssl.cert_location);
@@ -953,32 +954,32 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                 }
 	}
 
-	if (rk->rk_conf.ssl.key_inmemory) {
-		char *pszPkType = "unsupported";
+    if (rk->rk_conf.ssl.key_inmemory) {
+        char *pszPkType = "unsupported";
 
-		if (rk->rk_conf.ssl.key_inmemory_nid_type == EVP_PKEY_DSA) {
-			pszPkType = "DSA";
-		}
-		else if (rk->rk_conf.ssl.key_inmemory_nid_type == EVP_PKEY_RSA) {
-			pszPkType = "RSA";
-		}
+        if (rk->rk_conf.ssl.key_inmemory_nid_type == EVP_PKEY_DSA) {
+            pszPkType = "DSA";
+        }
+        else if (rk->rk_conf.ssl.key_inmemory_nid_type == EVP_PKEY_RSA) {
+            pszPkType = "RSA";
+        }
 
-		rd_kafka_dbg(rk, SECURITY, "SSL",
-			"Loading %s private key from memory",
-			pszPkType);
+        rd_kafka_dbg(rk, SECURITY, "SSL",
+            "Loading %s private key from memory",
+            pszPkType);
 
-		r = SSL_CTX_use_PrivateKey_ASN1(rk->rk_conf.ssl.key_inmemory_nid_type,
-			ctx,
-			(const unsigned char*)rk->rk_conf.ssl.key_inmemory->str,
-			rk->rk_conf.ssl.key_inmemory->len);
+        r = SSL_CTX_use_PrivateKey_ASN1(rk->rk_conf.ssl.key_inmemory_nid_type,
+            ctx,
+            (const unsigned char*)rk->rk_conf.ssl.key_inmemory->str,
+            rk->rk_conf.ssl.key_inmemory->len);
 
-		if (r != 1) {
-			rd_snprintf(errstr, errstr_size,
-				"ssl.key.inmemory failed: ");
-			goto fail;
-		}
-	}
-	else if (rk->rk_conf.ssl.key_location) {
+        if (r != 1) {
+            rd_snprintf(errstr, errstr_size,
+                "ssl.key.inmemory failed: ");
+            goto fail;
+        }
+    }
+    else if (rk->rk_conf.ssl.key_location) {
 		rd_kafka_dbg(rk, SECURITY, "SSL",
 			     "Loading private key file from %s",
 			     rk->rk_conf.ssl.key_location);

@@ -790,7 +790,7 @@ void rd_kafka_transport_ssl_ctx_term (rd_kafka_t *rk) {
  */
 int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 				     char *errstr, size_t errstr_size) {
-	int r;
+	int r = 0;
 	SSL_CTX *ctx;
 
         if (errstr_size > 0)
@@ -969,7 +969,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 
 		r = SSL_CTX_use_PrivateKey_ASN1(rk->rk_conf.ssl.key_inmemory_nid_type,
 			ctx,
-			rk->rk_conf.ssl.key_inmemory->str,
+			(const unsigned char*)rk->rk_conf.ssl.key_inmemory->str,
 			rk->rk_conf.ssl.key_inmemory->len);
 
 		if (r != 1) {

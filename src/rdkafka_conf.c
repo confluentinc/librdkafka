@@ -1617,7 +1617,7 @@ void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
 rd_kafka_conf_res_t rd_kafka_anyconf_set_bytes(int scope,
 	void *conf,
 	const char *name,
-	const unsigned char* pBytes,
+	const char* pBytes,
 	unsigned int length,
 	char *errstr,
 	size_t errstr_size) 
@@ -1668,7 +1668,7 @@ rd_kafka_conf_res_t rd_kafka_anyconf_set_bytes(int scope,
 
 rd_kafka_conf_res_t rd_kafka_topic_conf_set_bytes(rd_kafka_topic_conf_t *const conf,
 	const char *name,
-	const unsigned char* pBytes,
+	const char* pBytes,
 	unsigned int length,
 	char *errstr,
 	size_t errstr_size) 
@@ -1687,7 +1687,7 @@ rd_kafka_conf_res_t rd_kafka_topic_conf_set_bytes(rd_kafka_topic_conf_t *const c
 
 rd_kafka_conf_res_t rd_kafka_conf_set_bytes(rd_kafka_conf_t *const conf,
 	const char *name,
-	const unsigned char* pBytes,
+	const char* pBytes,
 	unsigned int length,
 	char *errstr,
 	size_t errstr_size) 

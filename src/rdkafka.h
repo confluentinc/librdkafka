@@ -1074,7 +1074,7 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
 * \p conf must have been previously created with rd_kafka_conf_new().
 *
 * Fallthrough:
-* Topic-level configuration properties may be set using this interface
+* Topic-level bytes-based configuration properties may be set using this interface
 * in which case they are applied on the \c default_topic_conf.
 * If no \c default_topic_conf has been set one will be created.
 * Any sub-sequent rd_kafka_conf_set_default_topic_conf() calls will

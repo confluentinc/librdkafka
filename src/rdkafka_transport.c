@@ -830,7 +830,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 
 	if (rk->rk_conf.ssl.ca_location_inmemory) {
 		rd_kafka_dbg(rk, SECURITY, "SSL",
-			"Loading CA certificate(s) from memory");
+			"Loading CA certificate from memory");
 
 		X509 *pX509 = d2i_X509(NULL,
 			(const unsigned char **)&rk->rk_conf.ssl.ca_location_inmemory->str,

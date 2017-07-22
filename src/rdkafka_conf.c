@@ -1245,6 +1245,10 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		return RD_KAFKA_CONF_OK;
 	}
 
+	case _RK_C_BYTES:
+		/* Should be set via rd_kafka_conf_set_bytes */
+		return RD_KAFKA_CONF_UNKNOWN;
+
 	default:
                 rd_kafka_assert(NULL, !*"unknown conf type");
 	}

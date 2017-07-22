@@ -56,7 +56,7 @@ struct rd_kafka_property {
                 _RK_C_KSTR, /* Kafka string */
                 _RK_C_ALIAS, /* Alias: points to other property through .sdef */
                 _RK_C_INTERNAL, /* Internal, don't expose to application */
-				_RK_C_BYTES, /* Internally a Kafka string, but set using the function rd_kafka_conf_set_bytes */
+                _RK_C_BYTES, /* Internally a Kafka string, but set using the function rd_kafka_conf_set_bytes */
 	} type;
 	int   offset;
 	const char *desc;
@@ -445,18 +445,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(ssl.key_location),
 	  "Path to client's private key (PEM) used for authentication."
 	},
-	{ _RK_GLOBAL, "ssl.key_inmemory", _RK_C_BYTES,
-	  _RK(ssl.key_inmemory),
-	  "In-memory client private key (DSA or RSA bytes, specify with ssl.key_inmemory_type), used for authentication."
-	},
-	{ _RK_GLOBAL, "ssl.key_inmemory_type", _RK_C_S2I,
-	  _RK(ssl.key_inmemory_nid_type),
-	  "In-memory client private key type: DSA or RSA.",
-	  .vdef = EVP_PKEY_RSA,
-	  .s2i = {
-		  { EVP_PKEY_DSA, "DSA" },
-		  { EVP_PKEY_RSA, "RSA" } }
-	},
+    { _RK_GLOBAL, "ssl.key_inmemory", _RK_C_BYTES,
+        _RK(ssl.key_inmemory),
+        "In-memory client private key (ASN.1-encoded DSA or RSA bytes: specify "
+        "with ssl.key_inmemory_type), used for authentication."
+    },
+    { _RK_GLOBAL, "ssl.key_inmemory_type", _RK_C_S2I,
+        _RK(ssl.key_inmemory_nid_type),
+        "In-memory client private key type: DSA or RSA.",
+        .vdef = EVP_PKEY_RSA,
+        .s2i = {
+            { EVP_PKEY_DSA, "DSA" },
+            { EVP_PKEY_RSA, "RSA" } }
+    },
 	{ _RK_GLOBAL, "ssl.key.password", _RK_C_STR,
 	  _RK(ssl.key_password),
 	  "Private key passphrase"
@@ -465,18 +466,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(ssl.cert_location),
 	  "Path to client's public key (PEM) used for authentication."
 	},
-	{ _RK_GLOBAL, "ssl.certificate.location_inmemory", _RK_C_BYTES,
-	  _RK(ssl.cert_location_inmemory),
-	  "In-memory certificate used for authentication."
-	},
+    { _RK_GLOBAL, "ssl.certificate.location_inmemory", _RK_C_BYTES,
+        _RK(ssl.cert_location_inmemory),
+        "In-memory X509 certificate bytes used for authentication."
+    },
 	{ _RK_GLOBAL, "ssl.ca.location", _RK_C_STR,
 	  _RK(ssl.ca_location),
 	  "File or directory path to CA certificate(s) for verifying "
 	  "the broker's key."
 	},
-	{ _RK_GLOBAL, "ssl.ca.location_inmemory", _RK_C_BYTES,
-	  _RK(ssl.ca_location_inmemory),
-	  "In-memory CA certificate(s) for verifying the broker's key."
+    { _RK_GLOBAL, "ssl.ca.location_inmemory", _RK_C_BYTES,
+        _RK(ssl.ca_location_inmemory),
+        "In-memory X509 CA certificate bytes for verifying the broker's key."
 	},
 	{ _RK_GLOBAL, "ssl.crl.location", _RK_C_STR,
 	  _RK(ssl.crl_location),
@@ -994,9 +995,9 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
                 /* Probably handled by setter */
                 return RD_KAFKA_CONF_OK;
 
-		case _RK_C_BYTES:
-			/* Should be set via rd_kafka_conf_set_bytes */
-			return RD_KAFKA_CONF_UNKNOWN;
+        case _RK_C_BYTES:
+            /* Should be set via rd_kafka_conf_set_bytes */
+            return RD_KAFKA_CONF_UNKNOWN;
 
 	default:
 		rd_kafka_assert(NULL, !*"unknown conf type");
@@ -1244,6 +1245,10 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		return RD_KAFKA_CONF_OK;
 	}
 
+	case _RK_C_BYTES:
+		/* Should be set via rd_kafka_conf_set_bytes */
+		return RD_KAFKA_CONF_UNKNOWN;
+
 	default:
                 rd_kafka_assert(NULL, !*"unknown conf type");
 	}
@@ -1342,15 +1347,12 @@ static int rd_kafka_anyconf_set (int scope, void *conf,
 	return RD_KAFKA_CONF_UNKNOWN;
 }
 
-static void rd_kafka_conf_create_default_topic_if_not_set(
-	rd_kafka_conf_t *const conf) 
+static void rd_kafka_conf_create_default_topic_if_not_set(rd_kafka_conf_t *const conf) 
 {
-	if (!conf->topic_conf) 
-	{
-		/* Create topic config, might be over-written by application
-		* later. */
-		conf->topic_conf = rd_kafka_topic_conf_new();
-	}
+    if (!conf->topic_conf) {
+        /* Create topic config, might be overwritten by application later. */
+        conf->topic_conf = rd_kafka_topic_conf_new();
+    }
 }
 
 rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
@@ -1367,28 +1369,27 @@ rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
         /* Fallthru:
          * If the global property was unknown, try setting it on the
          * default topic config. */
-		rd_kafka_conf_create_default_topic_if_not_set(conf);
+        rd_kafka_conf_create_default_topic_if_not_set(conf);
 
         return rd_kafka_topic_conf_set(conf->topic_conf, name, value,
                                        errstr, errstr_size);
 }
 
-static const char *rd_kafka_conf_strip_topic_from_prop_name(
-	const char *name) 
+static const char *rd_kafka_conf_strip_topic_from_prop_name(const char *name) 
 {
-	if (!strncmp(name, "topic.", strlen("topic."))) 
-		return name += strlen("topic.");
+    if (!strncmp(name, "topic.", strlen("topic."))) 
+        return name += strlen("topic.");
 
-	return name;
+    return name;
 }
 
 rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
 					     const char *name,
 					     const char *value,
 					     char *errstr, size_t errstr_size) {
-	name = rd_kafka_conf_strip_topic_from_prop_name(name);
+    name = rd_kafka_conf_strip_topic_from_prop_name(name);
 
-	return rd_kafka_anyconf_set(_RK_TOPIC, conf, name, value,
+    return rd_kafka_anyconf_set(_RK_TOPIC, conf, name, value,
 				    errstr, errstr_size);
 }
 
@@ -1413,7 +1414,7 @@ static void rd_kafka_anyconf_clear (int scope, void *conf,
 	break;
 
         case _RK_C_KSTR:
-		case _RK_C_BYTES:
+        case _RK_C_BYTES:
         {
                 rd_kafkap_str_t **kstr = _RK_PTR(rd_kafkap_str_t **, conf,
                                                  prop->offset);
@@ -1530,13 +1531,13 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
 			break;
 				case _RK_C_BYTES:
                 case _RK_C_KSTR:
-				{
-					rd_kafkap_str_t **kstr = _RK_PTR(rd_kafkap_str_t **,
-						src, prop->offset);
-					if (*kstr)
-						val = (*kstr)->str;
-					break;
-				}
+                {
+                    rd_kafkap_str_t **kstr = _RK_PTR(rd_kafkap_str_t **,
+                        src, prop->offset);
+                    if (*kstr)
+                        val = (*kstr)->str;
+                    break;
+                }
 
 		case _RK_C_BOOL:
 		case _RK_C_INT:
@@ -1616,114 +1617,112 @@ void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
 	conf->enabled_events = events;
 }
 
-rd_kafka_conf_res_t rd_kafka_anyconf_set_bytes(
-	int scope,
-	void *conf,
-	const char *name,
-	const unsigned char* pBytes,
-	unsigned int length,
-	char *errstr,
-	size_t errstr_size) 
+rd_kafka_conf_res_t rd_kafka_anyconf_set_bytes(int scope,
+    void *conf,
+    const char *name,
+    const char* pBytes,
+    unsigned int length,
+    char *errstr,
+    size_t errstr_size) 
 {
-	char estmp[1];
+    char estmp[1];
+    const struct rd_kafka_property *prop;
 
-	if (!errstr) {
-		errstr = estmp;
-		errstr_size = 0;
-	}
+    if (!errstr) {
+        errstr = estmp;
+        errstr_size = 0;
+    }
 
-	if (!pBytes)
-	{
-		rd_snprintf(errstr, errstr_size,
-			"Invalid value of configuration property: \"%s\"", name);
+    if (!pBytes) {
+        rd_snprintf(errstr, errstr_size,
+            "Invalid value of configuration property: \"%s\"", name);
 
-		return RD_KAFKA_CONF_INVALID;
-	}
+        return RD_KAFKA_CONF_INVALID;
+    }
 
-	for (const struct rd_kafka_property *prop = rd_kafka_properties; prop->name; prop++) {
-		if (!(prop->scope & scope))
-			continue;
+    for (prop = rd_kafka_properties; prop->name; prop++) {
+		rd_kafkap_str_t **kstr;
 
-		if (strcmp(prop->name, name))
-			continue;
+        if (!(prop->scope & scope))
+            continue;
 
-		if (prop->type != _RK_C_BYTES)
-			continue;
+        if (strcmp(prop->name, name))
+            continue;
 
-		rd_kafkap_str_t **kstr = _RK_PTR(rd_kafkap_str_t **, conf,
-			prop->offset);
+        if (prop->type != _RK_C_BYTES)
+            continue;
 
-		if (*kstr)
-			rd_kafkap_str_destroy(*kstr);
-		if (pBytes)
-			*kstr = rd_kafkap_str_new(pBytes, length);
-		else
-			*kstr = NULL;
+        kstr = _RK_PTR(rd_kafkap_str_t **, conf, prop->offset);
 
-		return RD_KAFKA_CONF_OK;
-	}
+        if (*kstr)
+            rd_kafkap_str_destroy(*kstr);
+        if (pBytes)
+            *kstr = rd_kafkap_str_new(pBytes, length);
+        else
+            *kstr = NULL;
 
-	rd_snprintf(errstr, errstr_size,
-		"No such configuration property: \"%s\"", name);
+        return RD_KAFKA_CONF_OK;
+    }
 
-	return RD_KAFKA_CONF_UNKNOWN;
+    rd_snprintf(errstr, errstr_size,
+        "No such configuration property: \"%s\"", name);
+
+    return RD_KAFKA_CONF_UNKNOWN;
 }
 
-rd_kafka_conf_res_t rd_kafka_topic_conf_set_bytes(
-	rd_kafka_topic_conf_t *const conf,
-	const char *name,
-	const unsigned char* pBytes,
-	unsigned int length,
-	char *errstr,
-	size_t errstr_size) 
+rd_kafka_conf_res_t rd_kafka_topic_conf_set_bytes(rd_kafka_topic_conf_t *const conf,
+    const char *name,
+    const char* pBytes,
+    unsigned int length,
+    char *errstr,
+    size_t errstr_size) 
 {
-	name = rd_kafka_conf_strip_topic_from_prop_name(name);
+    name = rd_kafka_conf_strip_topic_from_prop_name(name);
 
-	return rd_kafka_anyconf_set_bytes(
-		_RK_TOPIC,
-		conf,
-		name,
-		pBytes,
-		length,
-		errstr,
-		errstr_size);
+    return rd_kafka_anyconf_set_bytes(
+        _RK_TOPIC,
+        conf,
+        name,
+        pBytes,
+        length,
+        errstr,
+        errstr_size);
 }
 
-rd_kafka_conf_res_t rd_kafka_conf_set_bytes(
-	rd_kafka_conf_t *const conf,
-	const char *name,
-	const unsigned char* pBytes,
-	unsigned int length,
-	char *errstr,
-	size_t errstr_size) 
+rd_kafka_conf_res_t rd_kafka_conf_set_bytes(rd_kafka_conf_t *const conf,
+    const char *name,
+    const char* pBytes,
+    unsigned int length,
+    char *errstr,
+    size_t errstr_size) 
 {
-	rd_kafka_conf_res_t res = rd_kafka_anyconf_set_bytes(_RK_GLOBAL,
-		conf, 
-		name, 
-		pBytes,
-		length,
-		errstr, 
-		errstr_size);
+    rd_kafka_conf_res_t res = rd_kafka_anyconf_set_bytes(_RK_GLOBAL,
+        conf, 
+        name, 
+        pBytes,
+        length,
+        errstr, 
+        errstr_size);
 
-	if (res != RD_KAFKA_CONF_UNKNOWN)
-		return res;
+    if (res != RD_KAFKA_CONF_UNKNOWN)
+        return res;
 
-	rd_kafka_conf_create_default_topic_if_not_set(conf);
+    rd_kafka_conf_create_default_topic_if_not_set(conf);
 
-	return rd_kafka_topic_conf_set_bytes(conf->topic_conf,
-		name,
-		pBytes,
-		length,
-		errstr,
-		errstr_size);
+    return rd_kafka_topic_conf_set_bytes(conf->topic_conf,
+        name,
+        pBytes,
+        length,
+        errstr,
+        errstr_size);
 }
 
 void rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
-	void (*dr_cb) (rd_kafka_t *rk,
-	void *payload, size_t len,
-	rd_kafka_resp_err_t err,
-	void *opaque, void *msg_opaque)) {
-	conf->dr_cb = dr_cb;
+    void (*dr_cb) (rd_kafka_t *rk,
+    void *payload, size_t len,
+    rd_kafka_resp_err_t err,
+    void *opaque, void *msg_opaque)) {
+    conf->dr_cb = dr_cb;
 }
 
 
@@ -2220,11 +2219,11 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 			fprintf(fp, "%13s", tmp);
 
 			break;
-		case _RK_C_BYTES:
-			typeinfo = "bytes";
-			fprintf(fp, "%-15s | %-13s", "", " ");
+        case _RK_C_BYTES:
+            typeinfo = "bytes";
+            fprintf(fp, "%-15s | %-13s", "", " ");
 
-			break;
+            break;
 		case _RK_C_PTR:
 			typeinfo = "pointer";
 			/* FALLTHRU */

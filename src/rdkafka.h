@@ -1074,7 +1074,7 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
 * \p conf must have been previously created with rd_kafka_conf_new().
 *
 * Fallthrough:
-* Topic-level configuration properties may be set using this interface
+* Topic-level bytes-based configuration properties may be set using this interface
 * in which case they are applied on the \c default_topic_conf.
 * If no \c default_topic_conf has been set one will be created.
 * Any sub-sequent rd_kafka_conf_set_default_topic_conf() calls will
@@ -1085,13 +1085,12 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
 * error string.
 */
 RD_EXPORT
-rd_kafka_conf_res_t rd_kafka_conf_set_bytes(
-	rd_kafka_conf_t *const conf,
-	const char *name,
-	const unsigned char* pBytes,
-	unsigned int length,
-	char *errstr,
-	size_t errstr_size);
+rd_kafka_conf_res_t rd_kafka_conf_set_bytes(rd_kafka_conf_t *const conf,
+    const char *name,
+    const char* pBytes,
+    unsigned int length,
+    char *errstr,
+    size_t errstr_size);
 
 
 /**

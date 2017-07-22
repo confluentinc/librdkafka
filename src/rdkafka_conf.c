@@ -447,7 +447,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	},
 	{ _RK_GLOBAL, "ssl.key_inmemory", _RK_C_BYTES,
 	  _RK(ssl.key_inmemory),
-	  "In-memory client private key (ASN.1-encoded DSA or RSA bytes: specify with ssl.key_inmemory_type), used for authentication."
+	  "In-memory client private key (ASN.1-encoded DSA or RSA bytes: specify "
+	  "with ssl.key_inmemory_type), used for authentication."
 	},
 	{ _RK_GLOBAL, "ssl.key_inmemory_type", _RK_C_S2I,
 	  _RK(ssl.key_inmemory_nid_type),

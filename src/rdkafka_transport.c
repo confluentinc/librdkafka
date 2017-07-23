@@ -854,6 +854,9 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                 "Failure decoding in-memory CA certificate bytes to X509");
         }
 
+		rd_kafkap_str_destroy(rk->rk_conf.ssl.ca_location_inmemory);
+		rk->rk_conf.ssl.ca_location_inmemory = NULL;
+
         if (r != 1) {
             rd_snprintf(errstr, errstr_size,
                 "ssl.ca.location_inmemory failed: ");
@@ -933,6 +936,9 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                 "Failure decoding in-memory certificate bytes to X509");
         }
 
+		rd_kafkap_str_destroy(rk->rk_conf.ssl.cert_location_inmemory);
+		rk->rk_conf.ssl.cert_location_inmemory = NULL;
+
         if (r != 1) {
             rd_snprintf(errstr, errstr_size,
                 "ssl.certificate.location_inmemory failed: ");
@@ -972,6 +978,9 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
             ctx,
             (const unsigned char*)rk->rk_conf.ssl.key_inmemory->str,
             rk->rk_conf.ssl.key_inmemory->len);
+
+		rd_kafkap_str_destroy(rk->rk_conf.ssl.key_inmemory);
+		rk->rk_conf.ssl.key_inmemory = NULL;
 
         if (r != 1) {
             rd_snprintf(errstr, errstr_size,

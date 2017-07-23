@@ -829,18 +829,15 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	}
 
     if (rk->rk_conf.ssl.ca_location_inmemory) {
-		X509 *pX509;
-		X509_STORE *pX509Store;
-
         rd_kafka_dbg(rk, SECURITY, "SSL",
             "Loading CA certificate from memory");
 
-        pX509 = d2i_X509(NULL,
+        X509 *pX509 = d2i_X509(NULL,
             (const unsigned char **)&rk->rk_conf.ssl.ca_location_inmemory->str,
             rk->rk_conf.ssl.ca_location_inmemory->len);
 
         if (pX509) {
-            pX509Store = SSL_CTX_get_cert_store(ctx);
+            X509_STORE *pX509Store = SSL_CTX_get_cert_store(ctx);
 
             if (pX509Store)	{
                 r = X509_STORE_add_cert(pX509Store, pX509);
@@ -921,12 +918,10 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	}
 
     if (rk->rk_conf.ssl.cert_location_inmemory) {
-		X509 *pX509;
-
         rd_kafka_dbg(rk, SECURITY, "SSL",
             "Loading certificate from memory");
 
-        pX509 = d2i_X509(NULL, 
+        X509 *pX509 = d2i_X509(NULL, 
             (const unsigned char **)&rk->rk_conf.ssl.cert_location_inmemory->str,
             rk->rk_conf.ssl.cert_location_inmemory->len);
 

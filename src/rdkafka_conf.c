@@ -1641,8 +1641,6 @@ rd_kafka_conf_res_t rd_kafka_anyconf_set_bytes(int scope,
     }
 
     for (prop = rd_kafka_properties; prop->name; prop++) {
-		rd_kafkap_str_t **kstr;
-
         if (!(prop->scope & scope))
             continue;
 
@@ -1652,7 +1650,8 @@ rd_kafka_conf_res_t rd_kafka_anyconf_set_bytes(int scope,
         if (prop->type != _RK_C_BYTES)
             continue;
 
-        kstr = _RK_PTR(rd_kafkap_str_t **, conf, prop->offset);
+        rd_kafkap_str_t **kstr = _RK_PTR(rd_kafkap_str_t **, conf,
+            prop->offset);
 
         if (*kstr)
             rd_kafkap_str_destroy(*kstr);

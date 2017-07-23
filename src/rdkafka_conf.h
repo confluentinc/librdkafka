@@ -112,6 +112,11 @@ struct rd_kafka_conf_s {
 		char *cert_location;
 		char *ca_location;
 		char *crl_location;
+
+		rd_kafkap_str_t *cert_location_inmemory;
+		rd_kafkap_str_t *ca_location_inmemory;
+		rd_kafkap_str_t *key_inmemory;
+		int key_inmemory_nid_type;
 	} ssl;
 #endif
 

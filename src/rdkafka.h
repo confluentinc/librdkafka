@@ -1069,6 +1069,31 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
 
 
 /**
+* @brief Sets an _RK_C_BYTES type configuration property.
+*
+* \p conf must have been previously created with rd_kafka_conf_new().
+*
+* Fallthrough:
+* Topic-level bytes-based configuration properties may be set using this interface
+* in which case they are applied on the \c default_topic_conf.
+* If no \c default_topic_conf has been set one will be created.
+* Any sub-sequent rd_kafka_conf_set_default_topic_conf() calls will
+* replace the current default topic configuration.
+*
+* @returns \c rd_kafka_conf_res_t to indicate success or failure.
+* In case of failure \p errstr is updated to contain a human readable
+* error string.
+*/
+RD_EXPORT
+rd_kafka_conf_res_t rd_kafka_conf_set_bytes(rd_kafka_conf_t *const conf,
+    const char *name,
+    const char* pBytes,
+    unsigned int length,
+    char *errstr,
+    size_t errstr_size);
+
+
+/**
  * @brief Enable event sourcing.
  * \p events is a bitmask of \c RD_KAFKA_EVENT_* of events to enable
  * for consumption by `rd_kafka_queue_poll()`.

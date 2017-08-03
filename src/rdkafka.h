@@ -1078,6 +1078,28 @@ void rd_kafka_conf_set_events(rd_kafka_conf_t *conf, int events);
 
 
 /**
+ * @brief Configures the SSL context using the given callback
+ *
+ * SSL contexts are usually created by providing the locations of the
+ * various files containing certificates and keys. With this set,
+ * the client has the ability to configure and set up the context
+ * to their needs (in addition to or instead of using file-based APIs)
+ *
+ * This is called once per rd_kafka_t instance initialization from rd_kafka_new()
+ * and can override any other SSL configuration if set (called after
+ * regular librdkafka SSL configuration).
+ *
+ */
+#ifdef HEADER_SSL_H
+RD_EXPORT
+void rd_kafka_conf_set_ssl_ctx_cb (rd_kafka_conf_t *conf,
+			      rd_kafka_resp_err_t (*ssl_ctx_cb) (rd_kafka_t *rk,
+			                                         SSL_CTX *ssl_ctx,
+			                                         void *opaque));
+#endif
+
+
+/**
  @deprecated See rd_kafka_conf_set_dr_msg_cb()
 */
 RD_EXPORT

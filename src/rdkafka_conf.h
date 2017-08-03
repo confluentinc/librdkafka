@@ -112,7 +112,13 @@ struct rd_kafka_conf_s {
 		char *cert_location;
 		char *ca_location;
 		char *crl_location;
+
+		/* Callback for configuring SSL context via application */
+		rd_kafka_resp_err_t (*ssl_ctx_cb) (rd_kafka_t *rk,
+						SSL_CTX *ssl_ctx,
+						void *opaque);
 	} ssl;
+
 #endif
 
         struct {

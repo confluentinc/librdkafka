@@ -913,6 +913,23 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                 }
 	}
 
+	/*
+	 * If set, can override the above, as well as do other configurations
+	 * with the context object (none of the above is necessary to use this)
+	 */
+	if (rk->rk_conf.ssl.ssl_ctx_cb) {
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+		            "Using user-defined SSL_CTX callback");
+
+		rd_kafka_resp_err_t cb_err = rk->rk_conf.ssl.ssl_ctx_cb(rk,
+                                        ctx, rk->rk_conf.opaque);
+
+		if (cb_err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+			rd_snprintf(errstr, errstr_size,
+			        "User-defined SSL_CTX callback failed: %s", rd_kafka_err2str(cb_err));
+			goto fail;
+		}
+	}
 
 	SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
 

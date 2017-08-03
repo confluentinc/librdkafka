@@ -461,6 +461,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(ssl.crl_location),
 	  "Path to CRL for verifying broker's certificate validity."
 	},
+	{ _RK_GLOBAL, "ssl_ctx_cb", _RK_C_PTR,
+	  _RK(ssl.ssl_ctx_cb),
+	  "SSL context callback (set with rd_kafka_conf_set_ssl_ctx_cb())"
+	},
 #endif /* WITH_SSL */
 
 	{_RK_GLOBAL,"sasl.mechanisms", _RK_C_STR,
@@ -1576,6 +1580,16 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
 void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
 	conf->enabled_events = events;
 }
+
+
+#if WITH_SSL
+void rd_kafka_conf_set_ssl_ctx_cb (rd_kafka_conf_t *conf,
+                    rd_kafka_resp_err_t (*ssl_ctx_cb) (rd_kafka_t *rk,
+                                                       SSL_CTX *ssl_ctx,
+                                                       void *opaque)) {
+	conf->ssl.ssl_ctx_cb = ssl_ctx_cb;
+}
+#endif
 
 
 void rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,

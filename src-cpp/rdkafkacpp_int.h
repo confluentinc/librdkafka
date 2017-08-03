@@ -58,6 +58,7 @@ void throttle_cb_trampoline (rd_kafka_t *rk, const char *broker_name,
 			     void *opaque);
 int stats_cb_trampoline (rd_kafka_t *rk, char *json, size_t json_len,
                          void *opaque);
+rd_kafka_resp_err_t ssl_ctx_cb_trampoline (rd_kafka_t *rk, void *ssl_ctx, void *opaque);
 int socket_cb_trampoline (int domain, int type, int protocol, void *opaque);
 int open_cb_trampoline (const char *pathname, int flags, mode_t mode,
                         void *opaque);
@@ -223,6 +224,7 @@ class ConfImpl : public Conf {
  public:
   ConfImpl()
       :consume_cb_(NULL),
+      ssl_ctx_cb_(NULL),
       dr_cb_(NULL),
       event_cb_(NULL),
       socket_cb_(NULL),
@@ -243,6 +245,22 @@ class ConfImpl : public Conf {
   Conf::ConfResult set(const std::string &name,
                        const std::string &value,
                        std::string &errstr);
+
+  Conf::ConfResult set (const std::string &name, SSLContextCb *ssl_ctx_cb,
+                        std::string &errstr) {
+    if (name != "ssl_ctx_cb") {
+      errstr = "Invalid value type";
+      return Conf::CONF_INVALID;
+    }
+    
+    if (!rk_conf_) {
+      errstr = "Requires RdKafka::Conf::CONF_GLOBAL object";
+      return Conf::CONF_INVALID;
+    }
+
+    ssl_ctx_cb_ = ssl_ctx_cb;
+    return Conf::CONF_OK;
+  }
 
   Conf::ConfResult set (const std::string &name, DeliveryReportCb *dr_cb,
                         std::string &errstr) {
@@ -519,6 +537,7 @@ class ConfImpl : public Conf {
 
 
   ConsumeCb *consume_cb_;
+  SSLContextCb *ssl_ctx_cb_;
   DeliveryReportCb *dr_cb_;
   EventCb *event_cb_;
   SocketCb *socket_cb_;
@@ -607,6 +626,7 @@ class HandleImpl : virtual public Handle {
    * ProducerImpl and ConsumerImpl classes cannot be safely directly cast to
    * HandleImpl due to the skewed diamond inheritance. */
   ConsumeCb *consume_cb_;
+  SSLContextCb *ssl_ctx_cb_;
   EventCb *event_cb_;
   SocketCb *socket_cb_;
   OpenCb *open_cb_;

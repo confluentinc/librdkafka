@@ -426,6 +426,30 @@ class RD_EXPORT DeliveryReportCb {
 
 
 /**
+ * @brief Configures the SSL context using the given callback
+ *
+ * SSL contexts are usually created by providing the locations of the
+ * various files containing certificates and keys. With this set,
+ * the client has the ability to configure and set up the context
+ * to their needs (in addition to or instead of using file-based APIs)
+ *
+ * This is called once per rd_kafka_t instance initialization from rd_kafka_new()
+ * and can override any other SSL configuration if set (called after
+ * regular librdkafka SSL configuration).
+ *
+ */
+class RD_EXPORT SSLContextCb {
+ public:
+ /**
+  * @brief SSL context configuration callback
+  */
+  virtual RdKafka::ErrorCode ssl_ctx_cb(void *ssl_ctx) = 0;
+
+  virtual ~SSLContextCb() { }
+};
+
+
+/**
  * @brief Partitioner callback class
  *
  * Generic partitioner callback class for implementing custom partitioners.
@@ -809,6 +833,11 @@ class RD_EXPORT Conf {
   virtual Conf::ConfResult set (const std::string &name,
                                 const std::string &value,
                                 std::string &errstr) = 0;
+
+  /* @brief Use with \p name = \c \"ssl_ctx_cb\" */
+  virtual Conf::ConfResult set (const std::string &name,
+                               SSLContextCb *ssl_ctx_cb,
+                               std::string &errstr) = 0;
 
   /** @brief Use with \p name = \c \"dr_cb\" */
   virtual Conf::ConfResult set (const std::string &name,

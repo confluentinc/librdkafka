@@ -43,7 +43,8 @@ static rd_kafka_resp_err_t state1, state2;
 
 static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                           rd_kafka_topic_partition_list_t *parts, void *opaque) {
-        rd_kafka_resp_err_t *statep;
+        rd_kafka_resp_err_t *statep = NULL;
+
         if (rk == c1)
                 statep = &state1;
         else if (rk == c2)

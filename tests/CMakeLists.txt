@@ -60,6 +60,8 @@ set(
     0064-interceptors.c
     0065-yield.cpp
     0066-plugins.cpp
+    0067-empty_topic.cpp
+    0069-consumer_add_parts.c
     test.c
     testcpp.cpp
     sockem.c

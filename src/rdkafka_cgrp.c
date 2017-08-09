@@ -58,6 +58,9 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                         rd_kafka_op_t *rko, rd_kafka_q_cb_type_t cb_type,
                         void *opaque);
 
+static void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg,
+                                              const char *reason);
+
 /**
  * @returns true if cgrp can start partition fetchers, which is true if
  *          there is a subscription and the group is fully joined, or there
@@ -712,7 +715,15 @@ rd_kafka_cgrp_assignor_handle_Metadata_op (rd_kafka_t *rk,
                 return RD_KAFKA_OP_RES_HANDLED; /* Terminating */
 
         if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA)
+                return RD_KAFKA_OP_RES_HANDLED; /* From outdated state */
+
+        if (!rkcg->rkcg_group_leader.protocol) {
+                rd_kafka_dbg(rk, CGRP, "GRPLEADER",
+                             "Group \"%.*s\": no longer leader: "
+                             "not running assignor",
+                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
                 return RD_KAFKA_OP_RES_HANDLED;
+        }
 
         rd_kafka_cgrp_assignor_run(rkcg,
                                    rkcg->rkcg_group_leader.protocol,
@@ -920,7 +931,8 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                  *        It is a sign of incompatibility. */
 
 
-                rd_kafka_cgrp_group_leader_reset(rkcg);
+                rd_kafka_cgrp_group_leader_reset(rkcg,
+                                                 "JoinGroup response clean-up");
 
                 rkcg->rkcg_group_leader.protocol = RD_KAFKAP_STR_DUP(&Protocol);
                 rd_kafka_assert(NULL, rkcg->rkcg_group_leader.members == NULL);
@@ -1182,7 +1194,14 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
         /*
          * Clean-up group leader duties, if any.
          */
-        rd_kafka_cgrp_group_leader_reset(rkcg);
+        rd_kafka_cgrp_group_leader_reset(rkcg, "Group rejoin");
+
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "REJOIN",
+                     "Group \"%.*s\" rejoining in join-state %s "
+                     "with%s an assignment",
+                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
+                     rkcg->rkcg_assignment ? "" : "out");
 
         /* Remove assignment (async), if any. If there is already an
          * unassign in progress we dont need to bother. */
@@ -1196,6 +1215,8 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
 				rkcg->rkcg_assignment, "unsubscribe");
 		}
 	} else {
+                rd_kafka_cgrp_set_join_state(rkcg,
+                                             RD_KAFKA_CGRP_JOIN_STATE_INIT);
 		rd_kafka_cgrp_join(rkcg);
 	}
 }
@@ -2379,7 +2400,11 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
  *
  * Locality: cgrp thread
  */
-void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg){
+static void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg,
+                                              const char *reason) {
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "GRPLEADER",
+                     "Group \"%.*s\": resetting group leader info: %s",
+                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id), reason);
         if (rkcg->rkcg_group_leader.protocol) {
                 rd_free(rkcg->rkcg_group_leader.protocol);
                 rkcg->rkcg_group_leader.protocol = NULL;
@@ -2426,7 +2451,7 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
         /*
          * Clean-up group leader duties, if any.
          */
-        rd_kafka_cgrp_group_leader_reset(rkcg);
+        rd_kafka_cgrp_group_leader_reset(rkcg, "unsubscribe");
 
 	if (leave_group)
 		rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN;
@@ -3080,6 +3105,11 @@ void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join) {
          */
         if (rd_kafka_cgrp_update_subscribed_topics(rkcg, tinfos) && do_join) {
                 /* List of subscribed topics changed, trigger rejoin. */
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_METADATA, "REJOIN",
+                             "Group \"%.*s\": "
+                             "subscription updated from metadata change: "
+                             "rejoining group",
+                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
                 rd_kafka_cgrp_rejoin(rkcg);
         }
 }

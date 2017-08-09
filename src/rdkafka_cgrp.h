@@ -256,8 +256,6 @@ int rd_kafka_cgrp_topic_check (rd_kafka_cgrp_t *rkcg, const char *topic);
 
 void rd_kafka_cgrp_set_member_id (rd_kafka_cgrp_t *rkcg, const char *member_id);
 
-void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg);
-
 void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 					   rd_kafka_resp_err_t err);
 

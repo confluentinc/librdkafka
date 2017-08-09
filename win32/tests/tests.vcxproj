@@ -152,6 +152,7 @@
     <ClCompile Include="..\..\tests\0065-yield.cpp" />
     <ClCompile Include="..\..\tests\0066-plugins.cpp" />
     <ClCompile Include="..\..\tests\0067-empty_topic.cpp" />
+    <ClCompile Include="..\..\tests\0068-produce_timeout.c" />
     <ClCompile Include="..\..\tests\0069-consumer_add_parts.c" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

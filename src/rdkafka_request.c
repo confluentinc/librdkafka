@@ -1743,6 +1743,10 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                 if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
                         goto done;
 
+                /* Translate request-level timeout error code
+                 * to message-level timeout error code. */
+                if (err == RD_KAFKA_RESP_ERR__TIMED_OUT)
+                        err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
 
                 /* Fatal errors: no message transmission retries */
                 /* FALLTHRU */

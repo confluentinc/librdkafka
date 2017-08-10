@@ -56,14 +56,25 @@ option(WITH_SSL "With SSL" ${with_ssl_default})
 # }
 
 # SASL {
-include(FindPkgConfig)
-pkg_check_modules(SASL QUIET libsasl2)
-if(SASL_FOUND)
+if(WIN32)
   set(with_sasl_default ON)
 else()
-  set(with_sasl_default OFF)
+  include(FindPkgConfig)
+  pkg_check_modules(SASL QUIET libsasl2)
+  if(SASL_FOUND)
+    set(with_sasl_default ON)
+  else()
+    set(with_sasl_default OFF)
+  endif()
 endif()
 option(WITH_SASL "With SASL" ${with_sasl_default})
+if(WITH_SASL)
+  if(WIN32)
+    set(WITH_SASL_SCRAM ON)
+  else()
+    set(WITH_SASL_CYRUS ON)
+  endif()
+endif()
 # }
 
 # }

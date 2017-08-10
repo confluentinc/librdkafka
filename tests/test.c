@@ -230,7 +230,9 @@ struct test tests[] = {
               TEST_F_LOCAL|TEST_F_KNOWN_ISSUE_WIN32|TEST_F_KNOWN_ISSUE_OSX,
               .extra = "dynamic loading of tests might not be fixed for this platform"),
         _TEST(0067_empty_topic, 0),
+#if WITH_SOCKEM
         _TEST(0068_produce_timeout, 0),
+#endif
         _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32),
         { NULL }
 };

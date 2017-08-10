@@ -28,7 +28,6 @@
 
 #include "test.h"
 
-#if WITH_SOCKEM
 #include "rdkafka.h"
 
 #include <stdarg.h>
@@ -126,6 +125,3 @@ int main_0068_produce_timeout (int argc, char **argv) {
 
         return 0;
 }
-
-
-#endif

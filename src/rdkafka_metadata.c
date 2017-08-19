@@ -944,7 +944,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                 no_leader = rkt->rkt_flags & RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
 
                 /* Check if any partitions are missing their leaders. */
-                for (i = 0 ; i < rkt->rkt_partition_cnt || no_leader ; i++) {
+                for (i = 0 ; !no_leader && i < rkt->rkt_partition_cnt ; i++) {
                         rd_kafka_toppar_t *rktp =
                                 rd_kafka_toppar_s2i(rkt->rkt_p[i]);
                         rd_kafka_toppar_lock(rktp);

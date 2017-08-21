@@ -1553,7 +1553,7 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 	rkbuf->rkbuf_flags |= (flash_msg ? RD_KAFKA_OP_F_FLASH : 0);
 	rd_kafka_buf_write_i32(rkbuf, 0); /* Empty array: request all APIs */
 
-	/* Non-supporting brokers will tear down the conneciton when they
+	/* Non-supporting brokers will tear down the connection when they
 	 * receive an unknown API request, so dont retry request on failure. */
 	rkbuf->rkbuf_retries = RD_KAFKA_BUF_NO_RETRIES;
 

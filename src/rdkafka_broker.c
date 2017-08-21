@@ -2150,6 +2150,16 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 /* nop: just a wake-up. */
                 if (rkb->rkb_blocking_max_ms > 1)
                         rkb->rkb_blocking_max_ms = 1; /* Speed up termination*/
+                rd_rkb_dbg(rkb, BROKER, "TERM",
+                           "Received TERMINATE op in state %s: "
+                           "%d refcnts, %d toppar(s), %d fetch toppar(s), "
+                           "%d outbufs, %d waitresps, %d retrybufs",
+                           rd_kafka_broker_state_names[rkb->rkb_state],
+                           rd_refcnt_get(&rkb->rkb_refcnt),
+                           rkb->rkb_toppar_cnt, rkb->rkb_fetch_toppar_cnt,
+                           (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
+                           (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
+                           (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs));
                 ret = 0;
                 break;
 

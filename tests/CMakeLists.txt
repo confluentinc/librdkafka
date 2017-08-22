@@ -63,6 +63,7 @@ set(
     0067-empty_topic.cpp
     0068-produce_timeout.c
     0069-consumer_add_parts.c
+    0070-null_empty.cpp
     test.c
     testcpp.cpp
     sockem.c

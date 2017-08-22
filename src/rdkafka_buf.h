@@ -351,8 +351,11 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                 int _klen;                                              \
                 rd_kafka_buf_read_i32a(rkbuf, _klen);                   \
                 (kbytes)->len = _klen;                                  \
-                if (RD_KAFKAP_BYTES_LEN(kbytes) == 0)                   \
+                if (RD_KAFKAP_BYTES_IS_NULL(kbytes)) {                  \
                         (kbytes)->data = NULL;                          \
+                        (kbytes)->len = 0;                              \
+                } else if (RD_KAFKAP_BYTES_LEN(kbytes) == 0)            \
+                        (kbytes)->data = "";                            \
                 else if (!((kbytes)->data =                             \
                            rd_slice_ensure_contig(&(rkbuf)->rkbuf_reader, \
                                                   _klen)))              \
@@ -384,8 +387,11 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                                                 "varint parsing failed: " \
                                                 "buffer underflow");    \
                 (kbytes)->len = (int32_t)_len2;                         \
-                if (RD_KAFKAP_BYTES_LEN(kbytes) == 0)                   \
+                if (RD_KAFKAP_BYTES_IS_NULL(kbytes)) {                  \
                         (kbytes)->data = NULL;                          \
+                        (kbytes)->len = 0;                              \
+                } else if (RD_KAFKAP_BYTES_LEN(kbytes) == 0)            \
+                        (kbytes)->data = "";                            \
                 else if (!((kbytes)->data =                             \
                            rd_slice_ensure_contig(&(rkbuf)->rkbuf_reader, \
                                                   _len2)))              \

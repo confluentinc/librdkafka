@@ -152,6 +152,7 @@ _TEST_DECL(0066_plugins);
 _TEST_DECL(0067_empty_topic);
 _TEST_DECL(0068_produce_timeout);
 _TEST_DECL(0069_consumer_add_parts);
+_TEST_DECL(0070_null_empty);
 
 /**
  * Define all tests here
@@ -234,6 +235,7 @@ struct test tests[] = {
         _TEST(0068_produce_timeout, 0),
 #endif
         _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32),
+        _TEST(0070_null_empty, 0),
         { NULL }
 };
 

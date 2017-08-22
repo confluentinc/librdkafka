@@ -277,10 +277,10 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb);
 
-static RD_INLINE RD_UNUSED void rd_kafka_broker_destroy (rd_kafka_broker_t *rkb) {
-        rd_refcnt_destroywrapper(&rkb->rkb_refcnt,
-                                 rd_kafka_broker_destroy_final(rkb));
-}
+#define rd_kafka_broker_destroy(rkb)                                    \
+        rd_refcnt_destroywrapper(&(rkb)->rkb_refcnt,                    \
+                                 rd_kafka_broker_destroy_final(rkb))
+
 
 void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
                              const struct rd_kafka_metadata_broker *mdb);

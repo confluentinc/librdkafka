@@ -1710,7 +1710,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                 actions = rd_kafka_err_action(
                         rkb, err, reply, request,
 
-                        RD_KAFKA_ERR_ACTION_REFRESH|RD_KAFKA_ERR_ACTION_RETRY,
+                        RD_KAFKA_ERR_ACTION_REFRESH,
                         RD_KAFKA_RESP_ERR__TRANSPORT,
 
                         RD_KAFKA_ERR_ACTION_REFRESH,
@@ -1725,6 +1725,16 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                            rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
                            rd_kafka_err2str(err), actions);
 
+                /* NOTE: REFRESH implies a later retry, which does NOT affect
+                 *       the retry count since refresh-errors are considered
+                 *       to be stale metadata rather than temporary errors.
+                 *
+                 *       This is somewhat problematic since it may cause
+                 *       duplicate messages even with retries=0 if the
+                 *       ProduceRequest made it to the broker but only the
+                 *       response was lost due to network connectivity issues.
+                 *       That problem will be sorted when EoS is implemented.
+                 */
                 if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                         /* Request metadata information update */
                         rd_kafka_toppar_leader_unavailable(rktp,
@@ -1734,6 +1744,10 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                          * queue head. They will be resent when a new leader
                          * is delegated. */
                         rd_kafka_toppar_insert_msgq(rktp, &request->rkbuf_msgq);
+
+                        /* No need for fallthru here since the request
+                         * no longer has any messages associated with it. */
+                        goto done;
                 }
 
                 if ((actions & RD_KAFKA_ERR_ACTION_RETRY) &&

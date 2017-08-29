@@ -2545,6 +2545,14 @@ static int rd_kafka_topic_partition_cmp (const void *_a, const void *_b,
 }
 
 
+static int rd_kafka_topic_partition_cmp_topic (const void *_a, const void *_b,
+                                               void *opaque) {
+        const rd_kafka_topic_partition_t *a = _a;
+        const rd_kafka_topic_partition_t *b = _b;
+        return strcmp(a->topic, b->topic);
+}
+
+
 /**
  * @brief Search 'rktparlist' for 'topic' and 'partition'.
  * @returns the elems[] index or -1 on miss.
@@ -2578,6 +2586,30 @@ rd_kafka_topic_partition_list_find (rd_kafka_topic_partition_list_t *rktparlist,
 	else
 		return &rktparlist->elems[i];
 }
+
+/**
+ * @brief Search 'rktparlist' for 'topic'.
+ * @returns the elems[] index or -1 on miss.
+ */
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_find_topic (rd_kafka_topic_partition_list_t *rktparlist,
+                                          const char *topic) {
+
+        rd_kafka_topic_partition_t skel;
+        int i;
+
+        skel.topic = (char *)topic;
+
+        for (i = 0 ; i < rktparlist->cnt ; i++) {
+                if (!rd_kafka_topic_partition_cmp_topic(&skel,
+                                                        &rktparlist->elems[i],
+                                                        NULL))
+                        return &rktparlist->elems[i];
+        }
+
+        return NULL;
+}
+
 
 
 int

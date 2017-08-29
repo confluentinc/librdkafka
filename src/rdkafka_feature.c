@@ -43,6 +43,7 @@ static const char *rd_kafka_feature_names[] = {
 	"LZ4",
         "OffsetTime",
         "MsgVer2",
+        "AdminAPI",
 	NULL
 };
 
@@ -169,6 +170,14 @@ static const struct rd_kafka_feature_map {
                 .feature = RD_KAFKA_FEATURE_OFFSET_TIME,
                 .depends = {
                         { RD_KAFKAP_Offset, 1, 1 },
+                        { -1 },
+                }
+        },
+        {
+                /* @brief >=0.10.1.0: Admin APIs (KIP-4) */
+                .feature = RD_KAFKA_FEATURE_ADMIN_API,
+                .depends = {
+                        { RD_KAFKAP_DeleteTopics, 0, 0 },
                         { -1 },
                 }
         },

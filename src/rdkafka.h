@@ -3330,6 +3330,56 @@ int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms);
 
 
 /**
+ * @name Admin interface
+ *
+ */
+
+/**
+ * @brief Delete topic(s) in cluster.
+ *
+ * @param topics List of topic (names) to delete. Per-topic errors are
+ *        returned in the \c err field of each topic.
+ * @param timeout_ms Time for both controller lookup and actual topic deletion
+ *                   on the broker. If < 0 the absolute value is used
+ *                   for controller lookup timeout only and no timeout is
+ *                   used on the broker - the topic will only be marked for
+ *                   deletion. If > 0 the remaining time after controller
+ *                   lookup will be used as DeleteTopics request timeout
+ *                   on the broker, depicting how long the broker will
+ *                   wait for all replicas to have deleted the topic
+ *                   before responding to the client.
+ *                   Despite timeout setting, the topic will be marked
+ *                   for deletion.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__TRANSPORT if no controller was found in
+ *          \p timeout_ms, or any other error code if the request failed.
+ *          If all topics errored out with the same error code that error code
+ *          will be returned, otherwise RD_KAFKA_RESP_ERR_NO_ERROR is
+ *          returned and the application will need to check for individual
+ *          topic error codes.
+ *
+ * @warning Deleting a topic will delete all messages from all replicas.
+ *
+ * @remark It may take several seconds after the call returns for the deletes to
+ *         propagate to all brokers in the close.
+ *
+ * @remark Requires broker version 0.10.1.0 or higher and
+ *         delete.topic.enable broker configuration set to true.
+ *
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_admin_delete_topics (rd_kafka_t *rk,
+                              rd_kafka_topic_partition_list_t *topics,
+                              int timeout_ms);
+
+
+/**@}*/
+
+
+
+
+/**
  * @name Plugin interface
  *
  * @brief A plugin interface that allows external runtime-loaded libraries
@@ -3813,7 +3863,6 @@ rd_kafka_interceptor_add_on_commit (
 
 
 /**@}*/
-
 
 #ifdef __cplusplus
 }

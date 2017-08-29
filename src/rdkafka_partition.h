@@ -449,6 +449,10 @@ rd_kafka_topic_partition_list_upsert (
         rd_kafka_topic_partition_list_t *rktparlist,
         const char *topic, int32_t partition);
 
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_list_find_topic (rd_kafka_topic_partition_list_t *rktparlist,
+                                          const char *topic);
+
 int rd_kafka_topic_partition_match (rd_kafka_t *rk,
 				    const rd_kafka_group_member_t *rkgm,
 				    const rd_kafka_topic_partition_t *rktpar,

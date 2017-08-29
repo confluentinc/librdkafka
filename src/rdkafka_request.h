@@ -194,3 +194,17 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    void *opaque, int flash_msg);
 
 int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp);
+
+rd_kafka_resp_err_t
+rd_kafka_handle_DeleteTopics (rd_kafka_t *rk,
+                              rd_kafka_broker_t *rkb,
+                              rd_kafka_resp_err_t err,
+                              rd_kafka_buf_t *rkbuf,
+                              rd_kafka_buf_t *request,
+                              rd_kafka_topic_partition_list_t *topics);
+void rd_kafka_DeleteTopics (rd_kafka_broker_t *rkb,
+                            rd_kafka_topic_partition_list_t *topics,
+                            int timeout_ms,
+                            rd_kafka_replyq_t replyq,
+                            rd_kafka_resp_cb_t *resp_cb,
+                            void *opaque, int flash_msg);

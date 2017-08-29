@@ -147,7 +147,8 @@ struct rd_kafka_s {
         char             rk_name[128];
 	rd_kafkap_str_t *rk_client_id;
         rd_kafkap_str_t *rk_group_id;    /* Consumer group id */
-
+        int32_t          rk_controller_id;  /* Controller broker id,
+                                             * from cluster metadata. */
 	int              rk_flags;
 	rd_atomic32_t    rk_terminate;
 	rwlock_t         rk_lock;

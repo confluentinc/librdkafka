@@ -65,6 +65,9 @@
  *  + EOS message format KIP-98 */
 #define RD_KAFKA_FEATURE_MSGVER2     0x200
 
+/* >= 0.10.1.0: Topic Admin APIs (KIP-4) */
+#define RD_KAFKA_FEATURE_ADMIN_API   0x400
+
 
 int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 				     struct rd_kafka_ApiVersion **apisp,

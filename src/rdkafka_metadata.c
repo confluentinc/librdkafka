@@ -275,6 +275,18 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                 rd_rkb_dbg(rkb, METADATA,
                            "METADATA", "ClusterId: %.*s, ControllerId: %"PRId32,
                            RD_KAFKAP_STR_PR(&cluster_id), controller_id);
+
+                rd_kafka_wrlock(rkb->rkb_rk);
+                if (rk->rk_controller_id != controller_id) {
+                        rd_rkb_dbg(rkb, METADATA|RD_KAFKA_DBG_BROKER,
+                                   "CONTROLLER",
+                                   "Cluster controller changed from %"PRId32
+                                   " to %"PRId32,
+                                   rk->rk_controller_id, controller_id);
+                        rk->rk_controller_id = controller_id;
+                        rd_kafka_brokers_broadcast_state_change(rk);
+                }
+                rd_kafka_wrunlock(rkb->rkb_rk);
         }
 
 

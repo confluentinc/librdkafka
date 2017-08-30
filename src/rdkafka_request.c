@@ -1560,8 +1560,8 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 	/* 0.9.0.x brokers will not close the connection on unsupported
 	 * API requests, so we minimize the timeout to 10s for the request.
 	 * This is a regression on the broker part. */
-	if (rkb->rkb_rk->rk_conf.socket_timeout_ms > 10*1000)
-		rkbuf->rkbuf_ts_timeout = rd_clock() + (10 * 1000 * 1000);
+	if (rkb->rkb_rk->rk_conf.socket_timeout_ms > rkb->rkb_rk->rk_conf.api_version_request_timeout_ms)
+		rkbuf->rkbuf_ts_timeout = rd_clock() + (rkb->rkb_rk->rk_conf.api_version_request_timeout_ms * 1000);
 
         if (replyq.q)
                 rd_kafka_broker_buf_enq_replyq(rkb,
@@ -1596,8 +1596,8 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 	 * API requests, so we minimize the timeout of the request.
 	 * This is a regression on the broker part. */
 	if (!rkb->rkb_rk->rk_conf.api_version_request &&
-            rkb->rkb_rk->rk_conf.socket_timeout_ms > 10*1000)
-		rkbuf->rkbuf_ts_timeout = rd_clock() + (10 * 1000 * 1000);
+            rkb->rkb_rk->rk_conf.socket_timeout_ms > rkb->rkb_rk->rk_conf.api_version_request_timeout_ms)
+		rkbuf->rkbuf_ts_timeout = rd_clock() + (rkb->rkb_rk->rk_conf.api_version_request_timeout_ms * 1000);
 
 	if (replyq.q)
 		rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq,

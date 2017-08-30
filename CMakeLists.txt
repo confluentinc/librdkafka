@@ -22,6 +22,25 @@ endif()
 option(WITH_ZLIB "With ZLIB" ${with_zlib_default})
 # }
 
+# LibDL {
+find_package(LIBDL QUIET)
+if(LIBDL_FOUND)
+  set(with_libdl_default ON)
+else()
+  set(with_libdl_default OFF)
+endif()
+option(WITH_LIBDL "With LibDL" ${with_libdl_default})
+# }
+
+# WITH_PLUGINS {
+if(WITH_LIBDL)
+  set(with_plugins_default ON)
+else()
+  set(with_plugins_default OFF)
+endif()
+option(WITH_PLUGINS "With plugin support" ${with_plugins_default})
+# }
+
 # OpenSSL {
 if(WITH_BUNDLED_SSL) # option from 'h2o' parent project
   set(with_ssl_default ON)
@@ -37,14 +56,25 @@ option(WITH_SSL "With SSL" ${with_ssl_default})
 # }
 
 # SASL {
-include(FindPkgConfig)
-pkg_check_modules(SASL QUIET libsasl2)
-if(SASL_FOUND)
+if(WIN32)
   set(with_sasl_default ON)
 else()
-  set(with_sasl_default OFF)
+  include(FindPkgConfig)
+  pkg_check_modules(SASL QUIET libsasl2)
+  if(SASL_FOUND)
+    set(with_sasl_default ON)
+  else()
+    set(with_sasl_default OFF)
+  endif()
 endif()
 option(WITH_SASL "With SASL" ${with_sasl_default})
+if(WITH_SASL)
+  if(WIN32)
+    set(WITH_SASL_SCRAM ON)
+  else()
+    set(WITH_SASL_CYRUS ON)
+  endif()
+endif()
 # }
 
 # }

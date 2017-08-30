@@ -100,9 +100,9 @@ int main_0062_stats_event (int argc, char **argv) {
 
             if (!strcmp(test_mode, "bare")) {
                     /* valgrind is too slow to make this meaningful. */
-                    if (TIMING_DURATION(&t_delivery) < 1000 * 100 * 0.8 ||
-                        TIMING_DURATION(&t_delivery) > 1000 * 100 * 1.2)
-                            TEST_FAIL("Stats duration %.3fms is >= 20%% "
+                    if (TIMING_DURATION(&t_delivery) < 1000 * 100 * 0.5 ||
+                        TIMING_DURATION(&t_delivery) > 1000 * 100 * 1.5)
+                            TEST_FAIL("Stats duration %.3fms is >= 50%% "
                                       "outside statistics.interval.ms 100",
                                       (float)TIMING_DURATION(&t_delivery)/
                                       1000.0f);

@@ -83,5 +83,6 @@
         "ctest -VV -R RdKafkaTestBrokerLess"
       ],
     }
-  }
+  },
+  "artifacts": ["config.log", "Makefile.config", "config.h"]
 }

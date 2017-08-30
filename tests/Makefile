@@ -7,7 +7,7 @@ LIBS	 += -lrdkafka++ -lrdkafka -lstdc++
 OBJS	 += test.o testcpp.o tinycthread.o rdlist.o sockem.o
 CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
-LDFLAGS += -L../src -L../src-cpp
+LDFLAGS += -rdynamic -L../src -L../src-cpp
 
 KAFKA_VERSION?=0.10.2.0
 
@@ -38,9 +38,6 @@ run_local: $(BIN)
 
 .PHONY: interceptor_test
 
-interceptor_test:
-	$(MAKE) -C $@
-
 build: $(BIN) interceptor_test
 
 test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
@@ -48,6 +45,14 @@ test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
 
 
 include ../mklove/Makefile.base
+
+ifeq ($(_UNAME_S),Darwin)
+interceptor_test:
+else
+interceptor_test:
+	$(MAKE) -C $@
+endif
+
 
 tinycthread.o: ../src/tinycthread.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<

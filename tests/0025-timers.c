@@ -94,6 +94,7 @@ static void do_test_stats_timer (void) {
         test_conf_init(&conf, NULL, 200);
 
         test_conf_set(conf, "statistics.interval.ms", "600");
+        test_conf_set(conf, "bootstrap.servers", NULL); /*no need for brokers*/
         rd_kafka_conf_set_stats_cb(conf, stats_cb);
 
         TIMING_START(&t_new, "rd_kafka_new()");

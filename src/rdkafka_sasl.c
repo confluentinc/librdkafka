@@ -40,26 +40,21 @@
 int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
                         const void *payload, int len,
                         char *errstr, size_t errstr_size) {
-	struct msghdr msg = RD_ZERO_INIT;
-	struct iovec iov[1];
+        rd_buf_t buf;
+        rd_slice_t slice;
 	int32_t hdr;
-	char *frame;
-	int total_len = sizeof(hdr) + len;
 
 	rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
 		   "Send SASL frame to broker (%d bytes)", len);
 
-	frame = rd_malloc(total_len);
+        rd_buf_init(&buf, 1+1, sizeof(hdr));
 
 	hdr = htobe32(len);
-	memcpy(frame, &hdr, sizeof(hdr));
+        rd_buf_write(&buf, &hdr, sizeof(hdr));
 	if (payload)
-		memcpy(frame+sizeof(hdr), payload, len);
+                rd_buf_push(&buf, payload, len, NULL);
 
-	msg.msg_iov = iov;
-	msg.msg_iovlen = 1;
-	iov[0].iov_base = frame;
-	iov[0].iov_len  = total_len;
+        rd_slice_init_full(&slice, &buf);
 
 	/* Simulate blocking behaviour on non-blocking socket..
 	 * FIXME: This isn't optimal but is highly unlikely to stall since
@@ -67,30 +62,24 @@ int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
 	do {
 		int r;
 
-		r = (int)rd_kafka_transport_sendmsg(rktrans, &msg,
-                                                    errstr, errstr_size);
+		r = (int)rd_kafka_transport_send(rktrans, &slice,
+                                                 errstr, errstr_size);
 		if (r == -1) {
 			rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
-				   "SASL send of %d bytes failed: %s",
-				   total_len, errstr);
-			free(frame);
+				   "SASL send failed: %s", errstr);
+                        rd_buf_destroy(&buf);
 			return -1;
 		}
 
-		if (r == total_len)
-			break;
+                if (rd_slice_remains(&slice) == 0)
+                        break;
 
 		/* Avoid busy-looping */
 		rd_usleep(10*1000, NULL);
 
-		/* Shave off written bytes */
-		total_len -= r;
-		iov[0].iov_base = ((char *)(iov[0].iov_base)) + r;
-		iov[0].iov_len  = total_len;
+	} while (1);
 
-	} while (total_len > 0);
-
-	free(frame);
+        rd_buf_destroy(&buf);
 
 	return 0;
 }
@@ -111,12 +100,14 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
                             char *errstr, size_t errstr_size) {
         rd_kafka_buf_t *rkbuf;
         int r;
+        const void *buf;
+        size_t len;
 
         if (!(events & POLLIN))
                 return 0;
 
-        r = rd_kafka_transport_framed_recvmsg(rktrans, &rkbuf,
-                                              errstr, errstr_size);
+        r = rd_kafka_transport_framed_recv(rktrans, &rkbuf,
+                                           errstr, errstr_size);
         if (r == -1) {
                 if (!strcmp(errstr, "Disconnected"))
                         rd_snprintf(errstr, errstr_size,
@@ -130,14 +121,21 @@ int rd_kafka_sasl_io_event (rd_kafka_transport_t *rktrans, int events,
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
                    "Received SASL frame from broker (%"PRIusz" bytes)",
-                   rkbuf ? rkbuf->rkbuf_len : 0);
+                   rkbuf ? rkbuf->rkbuf_totlen : 0);
+
+        if (rkbuf) {
+                rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
+                /* Seek past framing header */
+                rd_slice_seek(&rkbuf->rkbuf_reader, 4);
+                len = rd_slice_remains(&rkbuf->rkbuf_reader);
+                buf = rd_slice_ensure_contig(&rkbuf->rkbuf_reader, len);
+        } else {
+                buf = NULL;
+                len = 0;
+        }
 
         r = rktrans->rktrans_rkb->rkb_rk->
-                rk_conf.sasl.provider->recv(rktrans,
-                                            rkbuf ?
-                                            rkbuf->rkbuf_rbuf : NULL,
-                                            rkbuf ?
-                                            rkbuf->rkbuf_len : 0,
+                rk_conf.sasl.provider->recv(rktrans, buf, len,
                                             errstr, errstr_size);
         rd_kafka_buf_destroy(rkbuf);
 

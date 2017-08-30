@@ -69,7 +69,7 @@ int main_0001_multiobj (int argc, char **argv) {
 		if (!rkt)
 			TEST_FAIL("Failed to create topic for "
 				  "rdkafka instance #%i: %s\n",
-				  i, rd_kafka_err2str(rd_kafka_errno2err(errno)));
+				  i, rd_kafka_err2str(rd_kafka_last_error()));
 
 		rd_snprintf(msg, sizeof(msg), "%s test message for iteration #%i",
 			 argv[0], i);

@@ -101,6 +101,7 @@ rd_kafka_consumer_protocol_member_metadata_new (
         int i;
 	int topic_cnt = rd_list_cnt(topics);
 	const rd_kafka_topic_info_t *tinfo;
+        size_t len;
 
         /*
          * MemberMetadata => Version Subscription AssignmentStrategies
@@ -110,10 +111,7 @@ rd_kafka_consumer_protocol_member_metadata_new (
          *     UserData     => Bytes
          */
 
-        rkbuf = rd_kafka_buf_new_growable(NULL, RD_KAFKAP_None, 1,
-                                          100 +
-					  (topic_cnt * 100) +
-                                          userdata_size);
+        rkbuf = rd_kafka_buf_new(1, 100 + (topic_cnt * 100) + userdata_size);
 
         rd_kafka_buf_write_i16(rkbuf, 0);
         rd_kafka_buf_write_i32(rkbuf, topic_cnt);
@@ -124,10 +122,11 @@ rd_kafka_consumer_protocol_member_metadata_new (
 	else /* Kafka 0.9.0.0 cant parse NULL bytes, so we provide empty. */
 		rd_kafka_buf_write_bytes(rkbuf, "", 0);
 
-        rd_kafka_buf_autopush(rkbuf);
-
-        kbytes = rd_kafkap_bytes_from_buf(rkbuf);
-
+        /* Get binary buffer and allocate a new Kafka Bytes with a copy. */
+        rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
+        len = rd_slice_remains(&rkbuf->rkbuf_reader);
+        kbytes = rd_kafkap_bytes_new(NULL, (int32_t)len);
+        rd_slice_read(&rkbuf->rkbuf_reader, (void *)kbytes->data, len);
         rd_kafka_buf_destroy(rkbuf);
 
         return kbytes;

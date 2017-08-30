@@ -593,6 +593,9 @@ int main (int argc, char **argv) {
   bool do_conf_dump = false;
   MyHashPartitionerCb hash_partitioner;
 
+  std::cerr << now() << ": librdkafka version " << RdKafka::version_str() <<
+    " (" << RdKafka::version() << ")" << std::endl;
+
   /*
    * Create configuration objects
    */
@@ -601,7 +604,7 @@ int main (int argc, char **argv) {
 
   /* Avoid slow shutdown on error */
   if (tconf->set("message.timeout.ms", "60000", errstr)) {
-    std::cerr << now() << errstr << std::endl;
+    std::cerr << now() << ": " << errstr << std::endl;
     exit(1);
   }
 

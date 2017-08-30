@@ -498,6 +498,53 @@ rd_kafka_op_res_t rd_kafka_op_call (rd_kafka_t *rk, rd_kafka_q_t *rkq,
 
 
 /**
+ * @brief Creates a new RD_KAFKA_OP_FETCH op and sets up the
+ *        embedded message according to the parameters.
+ *
+ * @param rkmp will be set to the embedded rkm in the rko (for convenience)
+ * @param offset may be updated later if relative offset.
+ */
+rd_kafka_op_t *
+rd_kafka_op_new_fetch_msg (rd_kafka_msg_t **rkmp,
+                           rd_kafka_toppar_t *rktp,
+                           int32_t version,
+                           rd_kafka_buf_t *rkbuf,
+                           int64_t offset,
+                           size_t key_len, const void *key,
+                           size_t val_len, const void *val) {
+        rd_kafka_msg_t *rkm;
+        rd_kafka_op_t *rko;
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_FETCH);
+        rko->rko_rktp    = rd_kafka_toppar_keep(rktp);
+        rko->rko_version = version;
+        rkm   = &rko->rko_u.fetch.rkm;
+        *rkmp = rkm;
+
+        /* Since all the ops share the same payload buffer
+         * a refcnt is used on the rkbuf that makes sure all
+         * consume_cb() will have been
+         * called for each of these ops before the rkbuf
+         * and its memory backing buffers are freed. */
+        rko->rko_u.fetch.rkbuf = rkbuf;
+        rd_kafka_buf_keep(rkbuf);
+
+        rkm->rkm_offset    = offset;
+
+        rkm->rkm_key       = (void *)key;
+        rkm->rkm_key_len   = key_len;
+
+        rkm->rkm_payload   = (void *)val;
+        rkm->rkm_len       = val_len;
+        rko->rko_len       = (int32_t)rkm->rkm_len;
+
+        rkm->rkm_partition = rktp->rktp_partition;
+
+        return rko;
+}
+
+
+/**
  * Enqueue ERR__THROTTLE op, if desired.
  */
 void rd_kafka_op_throttle_time (rd_kafka_broker_t *rkb,

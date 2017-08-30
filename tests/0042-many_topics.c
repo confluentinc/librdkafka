@@ -63,7 +63,8 @@ static void produce_many (char **topics, int topic_cnt, uint64_t testid) {
 	rkts = malloc(sizeof(*rkts) * topic_cnt);
 	TIMING_START(&t_rkt_create, "Topic object create");
 	for (i = 0 ; i < topic_cnt ; i++) {
-		rkts[i] = test_create_topic_object(rk, topics[i], NULL);
+		rkts[i] = test_create_topic_object(rk, topics[i],
+                                                   "acks", "all", NULL);
 	}
 	TIMING_STOP(&t_rkt_create);
 

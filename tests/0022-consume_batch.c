@@ -111,7 +111,7 @@ static int do_test_consume_batch (void) {
 
                 if (r == -1)
                         TEST_FAIL("Failed to consume messages: %s\n",
-                                  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                                  rd_kafka_err2str(rd_kafka_last_error()));
 
                 remains -= (int)r;
 

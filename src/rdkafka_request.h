@@ -192,3 +192,5 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    rd_kafka_replyq_t replyq,
 				    rd_kafka_resp_cb_t *resp_cb,
 				    void *opaque, int flash_msg);
+
+int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp);

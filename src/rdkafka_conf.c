@@ -78,7 +78,8 @@ struct rd_kafka_property {
         void (*ctor) (int scope, void *pconf);
         void (*dtor) (int scope, void *pconf);
         void (*copy) (int scope, void *pdst, const void *psrc,
-                      void *dstptr, const void *srcptr);
+                      void *dstptr, const void *srcptr,
+                      size_t filter_cnt, const char **filter);
 
         rd_kafka_conf_res_t (*set) (int scope, void *pconf,
                                     const char *name, const char *value,
@@ -91,6 +92,10 @@ struct rd_kafka_property {
 #define _RK(field)  offsetof(rd_kafka_conf_t, field)
 #define _RKT(field) offsetof(rd_kafka_topic_conf_t, field)
 
+
+static rd_kafka_conf_res_t
+rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
+                       char *dest, size_t *dest_size);
 
 
 /**
@@ -381,11 +386,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "api.version.request", _RK_C_BOOL,
 	  _RK(api_version_request),
 	  "Request broker's supported API versions to adjust functionality to "
-	  "available protocol features. If set to false the fallback version "
+	  "available protocol features. If set to false, or the "
+          "ApiVersionRequest fails, the fallback version "
 	  "`broker.version.fallback` will be used. "
 	  "**NOTE**: Depends on broker version >=0.10.0. If the request is not "
 	  "supported by (an older) broker the `broker.version.fallback` fallback is used.",
-	  0, 1, 0 },
+	  0, 1, 1 },
 	{ _RK_GLOBAL, "api.version.fallback.ms", _RK_C_INT,
 	  _RK(api_version_fallback_ms),
 	  "Dictates how long the `broker.version.fallback` fallback is used "
@@ -502,12 +508,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         /* Plugins */
         { _RK_GLOBAL, "plugin.library.paths", _RK_C_STR,
           _RK(plugin_paths),
-          "List of plugin libaries to load (; separated)",
+          "List of plugin libaries to load (; separated). "
+          "The library search path is platform dependent (see dlopen(3) for Unix and LoadLibrary() for Windows). If no filename extension is specified the "
+          "platform-specific extension (such as .dll or .so) will be appended automatically.",
           .set = rd_kafka_plugins_conf_set },
 #endif
 
         /* Interceptors are added through specific API and not exposed
-         * as configuration properties. */
+         * as configuration properties.
+         * The interceptor property must be defined after plugin.library.paths
+         * so that the plugin libraries are properly loaded before
+         * interceptors are configured when duplicating configuration objects.*/
         { _RK_GLOBAL, "interceptors", _RK_C_INTERNAL,
           _RK(interceptors),
           "Interceptors added through rd_kafka_conf_interceptor_add_..() "
@@ -647,7 +658,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(buffering_max_ms),
 	  "Maximum time, in milliseconds, for buffering data "
 	  "on the producer queue.",
-	  0, 900*1000, 1000 },
+	  0, 900*1000, 0 },
+        { _RK_GLOBAL|_RK_PRODUCER, "linger.ms", _RK_C_ALIAS,
+          .sdef = "queue.buffering.max.ms" },
 	{ _RK_GLOBAL|_RK_PRODUCER, "message.send.max.retries", _RK_C_INT,
 	  _RK(max_retries),
 	  "How many times to retry sending a failing MessageSet. "
@@ -850,8 +863,14 @@ rd_kafka_anyconf_set_prop0 (int scope, void *conf,
 
         /* Try interceptors first (only for GLOBAL config) */
         if (scope & _RK_GLOBAL) {
-                res = rd_kafka_interceptors_on_conf_set(conf, prop->name, istr,
-                                                        errstr, errstr_size);
+                if (prop->type == _RK_C_PTR || prop->type == _RK_C_INTERNAL)
+                        res = RD_KAFKA_CONF_UNKNOWN;
+                else
+                        res = rd_kafka_interceptors_on_conf_set(conf,
+                                                                prop->name,
+                                                                istr,
+                                                                errstr,
+                                                                errstr_size);
                 if (res != RD_KAFKA_CONF_UNKNOWN)
                         return res;
         }
@@ -1053,7 +1072,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			return RD_KAFKA_CONF_INVALID;
 		}
 
-		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival,
+		rd_kafka_anyconf_set_prop0(scope, conf, prop, value, ival,
 					   _RK_CONF_PROP_SET_REPLACE,
                                            errstr, errstr_size);
 		return RD_KAFKA_CONF_OK;
@@ -1097,7 +1116,7 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			return RD_KAFKA_CONF_INVALID;
 		}
 
-		rd_kafka_anyconf_set_prop0(scope, conf, prop, NULL, ival,
+		rd_kafka_anyconf_set_prop0(scope, conf, prop, value, ival,
 					   _RK_CONF_PROP_SET_REPLACE,
                                            errstr, errstr_size);
 		return RD_KAFKA_CONF_OK;
@@ -1173,7 +1192,8 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 					continue;
 
 				rd_kafka_anyconf_set_prop0(scope, conf, prop,
-							   NULL, new_val, set_mode,
+                                                           value, new_val,
+                                                           set_mode,
                                                            errstr, errstr_size);
 
 				if (prop->type == _RK_C_S2F) {
@@ -1430,18 +1450,34 @@ void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf) {
 
 
 
-static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
+static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
+                                   size_t filter_cnt, const char **filter) {
 	const struct rd_kafka_property *prop;
 
 	for (prop = rd_kafka_properties ; prop->name ; prop++) {
 		const char *val = NULL;
 		int ival = 0;
+                char *valstr;
+                size_t valsz;
+                size_t fi;
+                size_t nlen;
 
 		if (!(prop->scope & scope))
 			continue;
 
 		if (prop->type == _RK_C_ALIAS)
 			continue;
+
+                /* Apply filter, if any. */
+                nlen = strlen(prop->name);
+                for (fi = 0 ; fi < filter_cnt ; fi++) {
+                        size_t flen = strlen(filter[fi]);
+                        if (nlen >= flen &&
+                            !strncmp(filter[fi], prop->name, flen))
+                                break;
+                }
+                if (fi < filter_cnt)
+                        continue; /* Filter matched */
 
 		switch (prop->type)
 		{
@@ -1468,6 +1504,13 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 		case _RK_C_S2I:
 		case _RK_C_S2F:
 			ival = *_RK_PTR(const int *, src, prop->offset);
+
+                        /* Get string representation of configuration value. */
+                        valsz = 0;
+                        rd_kafka_anyconf_get0(src, prop, NULL, &valsz);
+                        valstr = rd_alloca(valsz);
+                        rd_kafka_anyconf_get0(src, prop, valstr, &valsz);
+                        val = valstr;
 			break;
                 case _RK_C_PATLIST:
                 {
@@ -1488,7 +1531,8 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
                 if (prop->copy)
                         prop->copy(scope, dst, src,
                                    _RK_PTR(void *, dst, prop->offset),
-                                   _RK_PTR(const void *, src, prop->offset));
+                                   _RK_PTR(const void *, src, prop->offset),
+                                   filter_cnt, filter);
 
                 rd_kafka_anyconf_set_prop0(scope, dst, prop, val, ival,
                                            _RK_CONF_PROP_SET_REPLACE, NULL, 0);
@@ -1499,9 +1543,21 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src) {
 rd_kafka_conf_t *rd_kafka_conf_dup (const rd_kafka_conf_t *conf) {
 	rd_kafka_conf_t *new = rd_kafka_conf_new();
 
-        rd_kafka_interceptors_on_conf_dup(new, conf);
+        rd_kafka_interceptors_on_conf_dup(new, conf, 0, NULL);
 
-	rd_kafka_anyconf_copy(_RK_GLOBAL, new, conf);
+        rd_kafka_anyconf_copy(_RK_GLOBAL, new, conf, 0, NULL);
+
+	return new;
+}
+
+rd_kafka_conf_t *rd_kafka_conf_dup_filter (const rd_kafka_conf_t *conf,
+                                           size_t filter_cnt,
+                                           const char **filter) {
+	rd_kafka_conf_t *new = rd_kafka_conf_new();
+
+        rd_kafka_interceptors_on_conf_dup(new, conf, filter_cnt, filter);
+
+        rd_kafka_anyconf_copy(_RK_GLOBAL, new, conf, filter_cnt, filter);
 
 	return new;
 }
@@ -1511,7 +1567,7 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
 						*conf) {
 	rd_kafka_topic_conf_t *new = rd_kafka_topic_conf_new();
 
-	rd_kafka_anyconf_copy(_RK_TOPIC, new, conf);
+	rd_kafka_anyconf_copy(_RK_TOPIC, new, conf, 0, NULL);
 
 	return new;
 }

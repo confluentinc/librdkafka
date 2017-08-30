@@ -71,6 +71,19 @@
 #include "rdtypes.h"
 
 
+/* Debug assert, only enabled with --enable-devel */
+#if ENABLE_DEVEL == 1
+#define rd_dassert(cond) rd_assert(cond)
+#else
+#define rd_dassert(cond)  do {} while (0)
+#endif
+
+
+/** Assert if reached */
+#define RD_NOTREACHED() rd_kafka_assert(NULL, !*"/* NOTREACHED */ violated")
+
+
+
 /**
 * Allocator wrappers.
 * We serve under the premise that if a (small) memory
@@ -79,19 +92,19 @@
 */
 static RD_INLINE RD_UNUSED void *rd_calloc(size_t num, size_t sz) {
 	void *p = calloc(num, sz);
-	assert(p);
+	rd_assert(p);
 	return p;
 }
 
 static RD_INLINE RD_UNUSED void *rd_malloc(size_t sz) {
 	void *p = malloc(sz);
-	assert(p);
+	rd_assert(p);
 	return p;
 }
 
 static RD_INLINE RD_UNUSED void *rd_realloc(void *ptr, size_t sz) {
 	void *p = realloc(ptr, sz);
-	assert(p);
+	rd_assert(p);
 	return p;
 }
 
@@ -105,17 +118,17 @@ static RD_INLINE RD_UNUSED char *rd_strdup(const char *s) {
 #else
 	char *n = _strdup(s);
 #endif
-	assert(n);
+	rd_assert(n);
 	return n;
 }
 
 static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #if HAVE_STRNDUP
 	char *n = strndup(s, len);
-	assert(n);
+	rd_assert(n);
 #else
 	char *n = malloc(len + 1);
-	assert(n);
+	rd_assert(n);
 	memcpy(n, s, len);
 	n[len] = '\0';
 #endif
@@ -154,6 +167,8 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #endif
 
 
+/* Round/align X upwards to STRIDE, which must be power of 2. */
+#define RD_ROUNDUP(X,STRIDE) (((X) + ((STRIDE) - 1)) & ~(STRIDE-1))
 
 #define RD_ARRAY_SIZE(A)          (sizeof((A)) / sizeof(*(A)))
 #define RD_ARRAYSIZE(A)           RD_ARRAY_SIZE(A)
@@ -235,7 +250,7 @@ static RD_INLINE RD_UNUSED int rd_refcnt_init (rd_refcnt_t *R, int v) {
 #ifdef RD_REFCNT_USE_LOCKS
 static RD_INLINE RD_UNUSED void rd_refcnt_destroy (rd_refcnt_t *R) {
         mtx_lock(&R->lock);
-        assert(R->v == 0);
+        rd_assert(R->v == 0);
         mtx_unlock(&R->lock);
 
         mtx_destroy(&R->lock);
@@ -280,7 +295,7 @@ static RD_INLINE RD_UNUSED int rd_refcnt_sub0 (rd_refcnt_t *R) {
         r = rd_atomic32_sub(R, 1);
 #endif
         if (r < 0)
-                assert(!*"refcnt sub-zero");
+                rd_assert(!*"refcnt sub-zero");
         return r;
 }
 

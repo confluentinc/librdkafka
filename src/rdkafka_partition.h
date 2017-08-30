@@ -160,6 +160,11 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                       * Locality: broker thread
                                                       */
 
+        rd_ts_t            rktp_ts_fetch_backoff; /* Back off fetcher for
+                                                   * this partition until this
+                                                   * absolute timestamp
+                                                   * expires. */
+
 	int64_t            rktp_query_offset;    /* Offset to query broker for*/
 	int64_t            rktp_next_offset;     /* Next offset to start
                                                   * fetching from.
@@ -323,9 +328,12 @@ void rd_kafka_toppar_concat_msgq (rd_kafka_toppar_t *rktp,
 				  rd_kafka_msgq_t *rkmq);
 void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
                                 rd_kafka_resp_err_t err);
-shptr_rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_itopic_t *rkt,
-                                              int32_t partition,
-                                              int ua_on_miss);
+shptr_rd_kafka_toppar_t *rd_kafka_toppar_get0 (const char *func, int line,
+                                               const rd_kafka_itopic_t *rkt,
+                                               int32_t partition,
+                                               int ua_on_miss);
+#define rd_kafka_toppar_get(rkt,partition,ua_on_miss) \
+        rd_kafka_toppar_get0(__FUNCTION__,__LINE__,rkt,partition,ua_on_miss)
 shptr_rd_kafka_toppar_t *rd_kafka_toppar_get2 (rd_kafka_t *rk,
                                                const char *topic,
                                                int32_t partition,
@@ -394,14 +402,14 @@ void rd_kafka_broker_fetch_toppar_next (rd_kafka_broker_t *rkb,
 }
 
 
-void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
-				   rd_kafka_broker_t *rkb,
-				   int force_remove);
+rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
+                                      rd_kafka_broker_t *rkb,
+                                      int force_remove);
 
 
 
-void rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
-					    rd_kafka_toppar_t *rktp);
+rd_ts_t rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
+                                               rd_kafka_toppar_t *rktp);
 
 
 void rd_kafka_toppar_offset_fetch (rd_kafka_toppar_t *rktp,

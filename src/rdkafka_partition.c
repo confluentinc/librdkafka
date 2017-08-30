@@ -318,9 +318,10 @@ void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
  *
  * Locks: Caller must hold rd_kafka_topic_*lock()
  */
-shptr_rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_itopic_t *rkt,
-                                              int32_t partition,
-                                              int ua_on_miss) {
+shptr_rd_kafka_toppar_t *rd_kafka_toppar_get0 (const char *func, int line,
+                                               const rd_kafka_itopic_t *rkt,
+                                               int32_t partition,
+                                               int ua_on_miss) {
         shptr_rd_kafka_toppar_t *s_rktp;
 
 	if (partition >= 0 && partition < rkt->rkt_partition_cnt)
@@ -331,7 +332,8 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_get (const rd_kafka_itopic_t *rkt,
 		return NULL;
 
 	if (s_rktp)
-		return rd_kafka_toppar_keep(rd_kafka_toppar_s2i(s_rktp));
+                return rd_kafka_toppar_keep_src(func,line,
+                                                rd_kafka_toppar_s2i(s_rktp));
 
 	return NULL;
 }
@@ -1668,19 +1670,23 @@ static RD_INLINE void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
 
 
 /**
- * Decide whether this toppar should be on the fetch list or not.
+ * @brief Decide whether this toppar should be on the fetch list or not.
+ *
  * Also:
  *  - update toppar's op version (for broker thread's copy)
  *  - finalize statistics (move rktp_offsets to rktp_offsets_fin)
  *
- * Locality: broker thread
+ * @returns the partition's Fetch backoff timestamp, or 0 if no backoff.
+ *
+ * @locality broker thread
  */
-void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
+rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 				   rd_kafka_broker_t *rkb,
 				   int force_remove) {
         int should_fetch = 1;
         const char *reason = "";
         int32_t version;
+        rd_ts_t ts_backoff = 0;
 
 	rd_kafka_toppar_lock(rktp);
 
@@ -1756,6 +1762,11 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
             rkb->rkb_rk->rk_conf.queued_max_msg_bytes) {
                 reason = "queued.max.messages.kbytes exceeded";
                 should_fetch = 0;
+
+        } else if (rktp->rktp_ts_fetch_backoff > rd_clock()) {
+                reason = "fetch backed off";
+                ts_backoff = rktp->rktp_ts_fetch_backoff;
+                should_fetch = 0;
         }
 
  done:
@@ -1781,25 +1792,34 @@ void rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
                 if (should_fetch) {
 			rd_dassert(rktp->rktp_fetch_version > 0);
                         rd_kafka_broker_fetch_toppar_add(rkb, rktp);
-		} else
+                } else {
                         rd_kafka_broker_fetch_toppar_del(rkb, rktp);
+                        /* Non-fetching partitions will have an
+                         * indefinate backoff, unless explicitly specified. */
+                        if (!ts_backoff)
+                                ts_backoff = RD_TS_MAX;
+                }
         }
 
         rd_kafka_toppar_unlock(rktp);
+
+        return ts_backoff;
 }
 
 
 /**
- * Serve a toppar in a consumer broker thread.
- * This is considered the fast path and should be minimal, mostly focusing
- * on fetch related mechanisms.
+ * @brief Serve a toppar in a consumer broker thread.
+ *        This is considered the fast path and should be minimal,
+ *        mostly focusing on fetch related mechanisms.
  *
- * Locality: broker thread
- * Locks: none
+ * @returns the partition's Fetch backoff timestamp, or 0 if no backoff.
+ *
+ * @locality broker thread
+ * @locks none
  */
-void rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
-					    rd_kafka_toppar_t *rktp) {
-	rd_kafka_toppar_fetch_decide(rktp, rkb, 0);
+rd_ts_t rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
+                                               rd_kafka_toppar_t *rktp) {
+        return rd_kafka_toppar_fetch_decide(rktp, rkb, 0);
 }
 
 

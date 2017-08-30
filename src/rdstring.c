@@ -154,7 +154,7 @@ rd_strtup_t *rd_strtup_new (const char *name, const char *value) {
 
         strtup = rd_malloc(sizeof(*strtup) +
                            name_sz + value_sz - 1/*name[1]*/);
-        memcpy(strtup->name, name, name_sz+1);
+        memcpy(strtup->name, name, name_sz);
         strtup->value = &strtup->name[name_sz];
         memcpy(strtup->value, value, value_sz);
 

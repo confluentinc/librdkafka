@@ -78,7 +78,7 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
   RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
 
   if (rd_kafka_consume_start(topicimpl->rkt_, partition, offset) == -1)
-    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
 
   return RdKafka::ERR_NO_ERROR;
 }
@@ -93,7 +93,7 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
 
   if (rd_kafka_consume_start_queue(topicimpl->rkt_, partition, offset,
                                    queueimpl->queue_) == -1)
-    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
 
   return RdKafka::ERR_NO_ERROR;
 }
@@ -104,7 +104,7 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::stop (Topic *topic,
   RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
 
   if (rd_kafka_consume_stop(topicimpl->rkt_, partition) == -1)
-    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
 
   return RdKafka::ERR_NO_ERROR;
 }
@@ -116,7 +116,7 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::seek (Topic *topic,
   RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
 
   if (rd_kafka_seek(topicimpl->rkt_, partition, offset, timeout_ms) == -1)
-    return static_cast<RdKafka::ErrorCode>(rd_kafka_errno2err(errno));
+    return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
 
   return RdKafka::ERR_NO_ERROR;
 }
@@ -131,7 +131,7 @@ RdKafka::Message *RdKafka::ConsumerImpl::consume (Topic *topic,
   if (!rkmessage)
     return new RdKafka::MessageImpl(topic,
                                     static_cast<RdKafka::ErrorCode>
-                                    (rd_kafka_errno2err(errno)));
+                                    (rd_kafka_last_error()));
 
   return new RdKafka::MessageImpl(topic, rkmessage);
 }
@@ -181,7 +181,7 @@ RdKafka::Message *RdKafka::ConsumerImpl::consume (Queue *queue,
   if (!rkmessage)
     return new RdKafka::MessageImpl(NULL,
                                     static_cast<RdKafka::ErrorCode>
-                                    (rd_kafka_errno2err(errno)));
+                                    (rd_kafka_last_error()));
   /*
    * Recover our Topic * from the topic conf's opaque field, which we
    * set in RdKafka::Topic::create() for just this kind of situation.

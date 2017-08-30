@@ -19,7 +19,7 @@ ifneq ($(WITH_LZ4_EXT), y)
 # Use built-in liblz4
 SRCS_LZ4 += lz4.c lz4frame.c lz4hc.c
 endif
-SRCS_y += $(SRCS_LZ4)
+SRCS_y += rdkafka_lz4.c $(SRCS_LZ4)
 
 SRCS_$(WITH_LIBDL) += rddl.c
 SRCS_$(WITH_PLUGINS) += rdkafka_plugin.c
@@ -35,10 +35,12 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_partition.c rdkafka_subscription.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
 		rdkafka_roundrobin_assignor.c rdkafka_feature.c \
-		rdcrc32.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
+		rdcrc32.c crc32c.c rdaddr.c rdrand.c rdlist.c tinycthread.c \
 		rdlog.c rdstring.c rdkafka_event.c rdkafka_metadata.c \
 		rdregex.c rdports.c rdkafka_metadata_cache.c rdavl.c \
 		rdkafka_sasl.c rdkafka_sasl_plain.c rdkafka_interceptor.c \
+		rdkafka_msgset_writer.c rdkafka_msgset_reader.c \
+		rdvarint.c rdbuf.c rdunittest.c \
 		$(SRCS_y)
 
 HDRS=		rdkafka.h

@@ -50,10 +50,15 @@
 #include "rdkafka_interceptor.h"
 
 #include "rdtime.h"
+#include "crc32c.h"
+#include "rdunittest.h"
+
 #ifdef _MSC_VER
 #include <sys/types.h>
 #include <sys/timeb.h>
 #endif
+
+
 
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 
@@ -101,6 +106,7 @@ static void rd_kafka_global_init (void) {
 #if ENABLE_DEVEL
 	rd_atomic32_init(&rd_kafka_op_cnt, 0);
 #endif
+        crc32c_global_init();
 }
 
 /**
@@ -466,6 +472,37 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 		  "Broker: Invalid request"),
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT,
 		  "Broker: Message format on broker does not support request"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_POLICY_VIOLATION,
+                  "Broker: Isolation policy volation"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER,
+                  "Broker: Broker received an out of order sequence number"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER,
+                  "Broker: Broker received a duplicate sequence number"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH,
+                  "Broker: Producer attempted an operation with an old epoch"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_TXN_STATE,
+                  "Broker: Producer attempted a transactional operation in "
+                  "an invalid state"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_PRODUCER_ID_MAPPING,
+                  "Broker: Producer attempted to use a producer id which is "
+                  "not currently assigned to its transactional id"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_TRANSACTION_TIMEOUT,
+                  "Broker: Transaction timeout is larger than the maximum "
+                  "value allowed by the broker's max.transaction.timeout.ms"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS,
+                  "Broker: Producer attempted to update a transaction while "
+                  "another concurrent operation on the same transaction was "
+                  "ongoing"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_TRANSACTION_COORDINATOR_FENCED,
+                  "Broker: Indicates that the transaction coordinator sending "
+                  "a WriteTxnMarker is no longer the current coordinator for "
+                  "a given producer"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED,
+                  "Broker: Transactional Id authorization failed"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_SECURITY_DISABLED,
+                  "Broker: Security features are disabled"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_OPERATION_NOT_ATTEMPTED,
+                  "Broker: Operation not attempted"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
 };
@@ -604,8 +641,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
 	if (rk->rk_full_metadata)
 		rd_kafka_metadata_destroy(rk->rk_full_metadata);
-	rd_kafkap_str_destroy(rk->rk_client_id);
+        rd_kafkap_str_destroy(rk->rk_client_id);
         rd_kafkap_str_destroy(rk->rk_group_id);
+        rd_kafkap_str_destroy(rk->rk_eos.TransactionalId);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
         rd_list_destroy(&rk->rk_broker_by_id);
 
@@ -1295,7 +1333,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                 * as the rk itself is destroyed. */
 
         /* Call on_new() interceptors */
-        rd_kafka_interceptors_on_new(rk);
+        rd_kafka_interceptors_on_new(rk, &rk->rk_conf);
 
 	rwlock_init(&rk->rk_lock);
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
@@ -1441,6 +1479,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 
         rd_kafka_wrunlock(rk);
+
+        rk->rk_eos.PID = -1;
+        rk->rk_eos.TransactionalId = rd_kafkap_str_new(NULL, 0);
 
         mtx_lock(&rk->rk_internal_rkb_lock);
 	rk->rk_internal_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,
@@ -1979,8 +2020,6 @@ rd_kafka_message_t *rd_kafka_consume (rd_kafka_topic_t *app_rkt,
                                       rktp->rktp_fetchq, timeout_ms);
 
 	rd_kafka_toppar_destroy(s_rktp); /* refcnt from .._get() */
-
-	rd_kafka_set_last_error(0, 0);
 
 	return rkmessage;
 }
@@ -3099,6 +3138,10 @@ static void rd_kafka_DescribeGroups_resp_cb (rd_kafka_t *rk,
 
 err:
         state->err = err;
+        return;
+
+ err_parse:
+        state->err = reply->rkbuf_err;
 }
 
 static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
@@ -3169,6 +3212,10 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
 
 err:
         state->err = err;
+        return;
+
+ err_parse:
+        state->err = reply->rkbuf_err;
 }
 
 rd_kafka_resp_err_t
@@ -3318,6 +3365,10 @@ void rd_kafka_mem_free (rd_kafka_t *rk, void *ptr) {
 
 int rd_kafka_errno (void) {
         return errno;
+}
+
+int rd_kafka_unittest (void) {
+        return rd_unittest();
 }
 
 

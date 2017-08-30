@@ -187,7 +187,7 @@ static int test_producer_latency (const char *topic,
 
 int main_0055_producer_latency (int argc, char **argv) {
         struct latconf latconfs[] = {
-                { "standard settings", {NULL}, 10, 1100 },
+                { "standard settings", {NULL}, 0, 0 }, /* default is now 0ms */
                 { "low queue.buffering.max.ms",
                   {"queue.buffering.max.ms", "0", NULL}, 0, 0 },
                 { "high queue.buffering.max.ms",

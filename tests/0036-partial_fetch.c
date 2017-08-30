@@ -38,7 +38,8 @@
  *
  * General idea:
  *  - Produce messages of 1000 bytes each
- *  - Set fetch.message.max.bytes to 2500
+ *  - Set fetch.message.max.bytes to 1500 so that only one full message
+ *    can be fetched per request.
  *  - Make sure all messages are received correctly and in order.
  */
 
@@ -69,7 +70,7 @@ int main_0036_partial_fetch (int argc, char **argv) {
 	/* This should fetch 1.5 messages per fetch, thus resulting in
 	 * partial fetches, hopefully. */
 	test_conf_set(conf, "fetch.message.max.bytes", "1500");
-	
+        test_conf_set(conf, "socket.blocking.max.ms", "1");
 	rk = test_create_consumer(NULL, NULL, conf, NULL);
 	rkt = rd_kafka_topic_new(rk, topic, NULL);
 

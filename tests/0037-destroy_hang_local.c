@@ -62,7 +62,7 @@ static int legacy_consumer_early_destroy (void) {
 			rkt = rd_kafka_topic_new(rk, topic, NULL);
 			TEST_ASSERT(rkt, "failed to create topic: %s",
 				    rd_kafka_err2str(
-					    rd_kafka_errno2err(errno)));
+					    rd_kafka_last_error()));
 			rd_sleep(1);
 			rd_kafka_topic_destroy(rkt);
 		}

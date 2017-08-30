@@ -49,6 +49,7 @@ static mtx_t rd_kafka_sasl_cyrus_kinit_lock;
 
 typedef struct rd_kafka_sasl_cyrus_state_s {
         sasl_conn_t *conn;
+        sasl_callback_t callbacks[16];
 } rd_kafka_sasl_cyrus_state_t;
 
 
@@ -453,12 +454,14 @@ static int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
                 callbacks[endidx].id = SASL_CB_LIST_END;
         }
 
+        memcpy(state->callbacks, callbacks, sizeof(callbacks));
+
         /* Acquire or refresh ticket if kinit is configured */ 
         rd_kafka_sasl_cyrus_kinit_refresh(rkb);
 
         r = sasl_client_new(rk->rk_conf.sasl.service_name, hostname,
                             NULL, NULL, /* no local & remote IP checks */
-                            callbacks, 0, &state->conn);
+                            state->callbacks, 0, &state->conn);
         if (r != SASL_OK) {
                 rd_snprintf(errstr, errstr_size, "%s",
                             sasl_errstring(r, NULL, NULL));

@@ -61,6 +61,9 @@
 /* >= 0.10.1.0: Time-based Offset fetch (KIP-79) */
 #define RD_KAFKA_FEATURE_OFFSET_TIME 0x100
 
+/* >= 0.11.0.0: Message version 2 (MagicByte=2):
+ *  + EOS message format KIP-98 */
+#define RD_KAFKA_FEATURE_MSGVER2     0x200
 
 
 int rd_kafka_get_legacy_ApiVersions (const char *broker_version,

@@ -327,7 +327,7 @@ rd_kafka_sasl_scram_Hi (rd_kafka_transport_t *rktrans,
  *          with their escaped counterparts in a newly allocated string.
  */
 static char *rd_kafka_sasl_safe_string (const char *str) {
-        char *safe, *d = NULL/*avoid warning*/;
+        char *safe = NULL, *d = NULL/*avoid warning*/;
         int pass;
         size_t len = 0;
 

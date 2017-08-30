@@ -89,7 +89,7 @@ static void produce_null_messages (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-			  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+			  rd_kafka_err2str(rd_kafka_last_error()));
 
         /* Produce messages */
 	prod_msg_remains = msgcnt;
@@ -109,8 +109,7 @@ static void produce_null_messages (uint64_t testid, const char *topic,
                                 TEST_FAIL("Failed to produce message %i "
                                           "to partition %i: %s",
                                           msgid, (int)partition,
-                                          rd_kafka_err2str(
-                                                  rd_kafka_errno2err(errno)));
+                                          rd_kafka_err2str(rd_kafka_last_error()));
 			msgid++;
 		}
         }
@@ -283,7 +282,7 @@ static void consume_messages (uint64_t testid, const char *topic,
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
-                          rd_kafka_err2str(rd_kafka_errno2err(errno)));
+                          rd_kafka_err2str(rd_kafka_last_error()));
 
 	TEST_SAY("Consuming %i messages from partition %i\n",
 		 batch_cnt, partition);
@@ -293,7 +292,7 @@ static void consume_messages (uint64_t testid, const char *topic,
 			     RD_KAFKA_OFFSET_TAIL(batch_cnt)) == -1)
 		TEST_FAIL("consume_start(%i, -%i) failed: %s",
 			  (int)partition, batch_cnt,
-			  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+			  rd_kafka_err2str(rd_kafka_last_error()));
 
 	for (i = 0 ; i < batch_cnt ; i++) {
 		rd_kafka_message_t *rkmessage;
@@ -303,7 +302,7 @@ static void consume_messages (uint64_t testid, const char *topic,
 			TEST_FAIL("Failed to consume message %i/%i from "
 				  "partition %i: %s",
 				  i, batch_cnt, (int)partition,
-				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+				  rd_kafka_err2str(rd_kafka_last_error()));
 		if (rkmessage->err)
 			TEST_FAIL("Consume message %i/%i from partition %i "
 				  "has error: %s",
@@ -347,10 +346,9 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 
 
 	rkt = rd_kafka_topic_new(rk, topic, topic_conf);
-	if (!rkt)
-		TEST_FAIL("Failed to create topic: %s\n",
-                          rd_kafka_err2str(rd_kafka_errno2err(errno
-)));
+        if (!rkt)
+                TEST_FAIL("Failed to create topic: %s\n",
+                          rd_kafka_err2str(rd_kafka_last_error()));
 
 	TEST_SAY("Consuming %i messages from one queue serving %i partitions\n",
 		 msgcnt, partition_cnt);
@@ -365,7 +363,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 						 rkqu) == -1)
 			TEST_FAIL("consume_start_queue(%i) failed: %s",
 				  (int)partition,
-				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+				  rd_kafka_err2str(rd_kafka_last_error()));
 	}
 
 
@@ -378,7 +376,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 			TEST_FAIL("Failed to consume message %i/%i from "
 				  "queue: %s",
 				  i, msgcnt,
-				  rd_kafka_err2str(rd_kafka_errno2err(errno)));
+				  rd_kafka_err2str(rd_kafka_last_error()));
 		if (rkmessage->err)
 			TEST_FAIL("Consume message %i/%i from queue "
 				  "has error (partition %"PRId32"): %s",

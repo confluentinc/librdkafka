@@ -234,7 +234,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         /* We assume that the marshalled representation is
          * no more than 4 times larger than the wire representation. */
         rd_tmpabuf_new(&tbuf,
-                       sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_len * 4),
+                       sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_totlen * 4),
                        0/*dont assert on fail*/);
 
         if (!(md = rd_tmpabuf_alloc(&tbuf, sizeof(*md))))
@@ -565,6 +565,7 @@ done:
          * to the caller. */
         return md;
 
+ err_parse:
 err:
         if (requested_topics) {
                 /* Failed requests shall purge cache hints for
@@ -943,7 +944,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                 no_leader = rkt->rkt_flags & RD_KAFKA_TOPIC_F_LEADER_UNAVAIL;
 
                 /* Check if any partitions are missing their leaders. */
-                for (i = 0 ; i < rkt->rkt_partition_cnt || no_leader ; i++) {
+                for (i = 0 ; !no_leader && i < rkt->rkt_partition_cnt ; i++) {
                         rd_kafka_toppar_t *rktp =
                                 rd_kafka_toppar_s2i(rkt->rkt_p[i]);
                         rd_kafka_toppar_lock(rktp);
@@ -958,6 +959,7 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                 rd_kafka_topic_rdunlock(rkt);
         }
 
+        rd_kafka_wrunlock(rk);
 
         if (rd_list_cnt(&topics) == 0) {
                 /* No leader-less topics+partitions, stop the timer. */
@@ -976,8 +978,6 @@ static void rd_kafka_metadata_leader_query_tmr_cb (rd_kafka_timers_t *rkts,
                         rd_kafka_timer_backoff(rkts, rtmr,
                                                (int)rtmr->rtmr_interval);
         }
-
-        rd_kafka_wrunlock(rk);
 
         rd_list_destroy(&topics);
 }

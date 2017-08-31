@@ -393,9 +393,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "supported by (an older) broker the `broker.version.fallback` fallback is used.",
 	  0, 1, 1 },
 	{ _RK_GLOBAL, "api.version.request.timeout.ms", _RK_C_INT,
-	  _RK( api_version_request_timeout_ms ),
-	  "Timeout for broker version request.",
-	  1000, 10 * 1000, 10 * 1000 },
+	  _RK(api_version_request_timeout_ms),
+	  "Timeout for broker API version requests.",
+	  1, 5*60*1000, 10*1000 },
 	{ _RK_GLOBAL, "api.version.fallback.ms", _RK_C_INT,
 	  _RK(api_version_fallback_ms),
 	  "Dictates how long the `broker.version.fallback` fallback is used "

@@ -111,8 +111,7 @@ static void logger (const rd_kafka_t *rk, int level,
  * librdkafka to the application. The application needs to check
  * the `rkmessage->err` field for this purpose.
  */
-static void msg_consume (rd_kafka_message_t *rkmessage,
-			 void *opaque) {
+static void msg_consume (rd_kafka_message_t *rkmessage) {
 	if (rkmessage->err) {
 		if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
 			fprintf(stderr,
@@ -306,7 +305,7 @@ int main (int argc, char **argv) {
 	/* Topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();
 
-	while ((opt = getopt(argc, argv, "g:b:qd:eX:As:DO")) != -1) {
+	while ((opt = getopt(argc, argv, "g:b:qd:eX:ADO")) != -1) {
 		switch (opt) {
 		case 'b':
 			brokers = optarg;
@@ -596,7 +595,7 @@ int main (int argc, char **argv) {
 
                 rkmessage = rd_kafka_consumer_poll(rk, 1000);
                 if (rkmessage) {
-                        msg_consume(rkmessage, NULL);
+                        msg_consume(rkmessage);
                         rd_kafka_message_destroy(rkmessage);
                 }
         }

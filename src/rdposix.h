@@ -90,7 +90,27 @@
 /**
  * Errors
  */
+#if HAVE_STRERROR_R
+static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
+        static RD_TLS char ret[128];
+
+#if defined(__linux__) && defined(_GNU_SOURCE)
+        return strerror_r(err, ret, sizeof(ret));
+#else /* XSI version */
+        int r;
+        /* The r assignment is to catch the case where
+         * _GNU_SOURCE is not defined but the GNU version is
+         * picked up anyway. */
+        r = strerror_r(err, ret, sizeof(ret));
+        if (unlikely(r))
+                rd_snprintf(ret, sizeof(ret),
+                            "strerror_r(%d) failed (ret %d)", err, r);
+        return ret;
+#endif
+}
+#else
 #define rd_strerror(err) strerror(err)
+#endif
 
 
 /**

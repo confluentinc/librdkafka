@@ -146,6 +146,17 @@ int foo (void) {
    return strndup(\"hi\", 2) ? 0 : 1;
 }"
 
+    # Check if strerror_r() is available.
+    # The check for GNU vs XSI is done in rdposix.h since
+    # we can't rely on all defines to be set here (_GNU_SOURCE).
+    mkl_compile_check "strerror_r" "HAVE_STRERROR_R" disable CC "" \
+"#include <string.h>
+const char *foo (void) {
+   static char buf[64];
+   strerror_r(1, buf, sizeof(buf));
+   return buf;
+}"
+
     # Check if dlopen() is available
     mkl_lib_check "libdl" "WITH_LIBDL" disable CC "-ldl" \
 "

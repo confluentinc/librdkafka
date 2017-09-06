@@ -288,6 +288,9 @@ struct rd_kafka_conf_s {
 
 	/* Opaque passed to callbacks. */
 	void  *opaque;
+
+        /* For use with value-less properties. */
+        int     dummy;
 };
 
 int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);

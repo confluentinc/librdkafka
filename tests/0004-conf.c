@@ -165,6 +165,73 @@ static void do_test_kafka_new_failures (void) {
 }
 
 
+/**
+ * @brief Verify that INVALID properties (such as for Java SSL properties)
+ *        work, as well as INTERNAL properties.
+ */
+static void do_test_special_invalid_conf (void) {
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+        rd_kafka_conf_res_t res;
+
+        conf = rd_kafka_conf_new();
+
+        res = rd_kafka_conf_set(conf, "ssl.keystore.location", "abc",
+                                errstr, sizeof(errstr));
+        /* Existing apps might not print the error string when conf_set
+         * returns UNKNOWN, only on INVALID, so make sure that is
+         * what is being returned. */
+        TEST_ASSERT(res == RD_KAFKA_CONF_INVALID,
+                    "expected ssl.keystore.location to fail with INVALID, "
+                    "not %d", res);
+        /* Make sure there is a link to documentation */
+        TEST_ASSERT(strstr(errstr, "http"),
+                    "expected ssl.keystore.location to provide link to "
+                    "documentation, not \"%s\"", errstr);
+        TEST_SAY(_C_GRN "Ok: %s\n" _C_CLR, errstr);
+
+
+        res = rd_kafka_conf_set(conf, "ssl.truststore.location", "abc",
+                                errstr, sizeof(errstr));
+        /* Existing apps might not print the error string when conf_set
+         * returns UNKNOWN, only on INVALID, so make sure that is
+         * what is being returned. */
+        TEST_ASSERT(res == RD_KAFKA_CONF_INVALID,
+                    "expected ssl.truststore.location to fail with INVALID, "
+                    "not %d", res);
+        /* Make sure there is a link to documentation */
+        TEST_ASSERT(strstr(errstr, "http"),
+                    "expected ssl.truststore.location to provide link to "
+                    "documentation, not \"%s\"", errstr);
+        TEST_SAY(_C_GRN "Ok: %s\n" _C_CLR, errstr);
+
+
+        res = rd_kafka_conf_set(conf, "sasl.jaas.config", "abc",
+                                errstr, sizeof(errstr));
+        /* Existing apps might not print the error string when conf_set
+         * returns UNKNOWN, only on INVALID, so make sure that is
+         * what is being returned. */
+        TEST_ASSERT(res == RD_KAFKA_CONF_INVALID,
+                    "expected sasl.jaas.config to fail with INVALID, "
+                    "not %d", res);
+        /* Make sure there is a link to documentation */
+        TEST_ASSERT(strstr(errstr, "http"),
+                    "expected sasl.jaas.config to provide link to "
+                    "documentation, not \"%s\"", errstr);
+        TEST_SAY(_C_GRN "Ok: %s\n" _C_CLR, errstr);
+
+
+        res = rd_kafka_conf_set(conf, "interceptors", "1",
+                                errstr, sizeof(errstr));
+        TEST_ASSERT(res == RD_KAFKA_CONF_INVALID,
+                    "expected interceptors to fail with INVALID, "
+                    "not %d", res);
+        TEST_SAY(_C_GRN "Ok: %s\n" _C_CLR, errstr);
+
+        rd_kafka_conf_destroy(conf);
+}
+
+
 int main_0004_conf (int argc, char **argv) {
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
@@ -415,6 +482,8 @@ int main_0004_conf (int argc, char **argv) {
 	}
 
         do_test_kafka_new_failures();
+
+        do_test_special_invalid_conf();
 
 	return 0;
 }

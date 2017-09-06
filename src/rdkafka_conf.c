@@ -56,6 +56,8 @@ struct rd_kafka_property {
                 _RK_C_KSTR, /* Kafka string */
                 _RK_C_ALIAS, /* Alias: points to other property through .sdef */
                 _RK_C_INTERNAL, /* Internal, don't expose to application */
+                _RK_C_INVALID,  /* Invalid property, used to catch known
+                                 * but unsupported Java properties. */
 	} type;
 	int   offset;
 	const char *desc;
@@ -462,6 +464,27 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Path to CRL for verifying broker's certificate validity."
 	},
 #endif /* WITH_SSL */
+
+        /* Point user in the right direction if they try to apply
+         * Java client SSL / JAAS properties. */
+        { _RK_GLOBAL, "ssl.keystore.location", _RK_C_INVALID,
+          _RK(dummy),
+          "Java KeyStores are not supported, use `ssl.key.location` and "
+          "a private key (PEM) file instead. "
+          "See https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka for more information."
+        },
+        { _RK_GLOBAL, "ssl.truststore.location", _RK_C_INVALID,
+          _RK(dummy),
+          "Java TrustStores are not supported, use `ssl.ca.location` "
+          "and a certificate file instead. "
+          "See https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka for more information."
+        },
+        { _RK_GLOBAL, "sasl.jaas.config", _RK_C_INVALID,
+          _RK(dummy),
+          "Java JAAS configuration is not supported, see "
+          "https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka "
+          "for more information."
+        },
 
 	{_RK_GLOBAL,"sasl.mechanisms", _RK_C_STR,
 	 _RK(sasl.mechanisms),
@@ -1219,6 +1242,16 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 		return RD_KAFKA_CONF_OK;
 	}
 
+        case _RK_C_INTERNAL:
+                rd_snprintf(errstr, errstr_size,
+                            "Internal property \"%s\" not settable",
+                            prop->name);
+                return RD_KAFKA_CONF_INVALID;
+
+        case _RK_C_INVALID:
+                rd_snprintf(errstr, errstr_size, "%s", prop->desc);
+                return RD_KAFKA_CONF_INVALID;
+
 	default:
                 rd_kafka_assert(NULL, !*"unknown conf type");
 	}
@@ -1236,7 +1269,7 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
 		if (!(prop->scope & scope))
 			continue;
 
-		if (prop->type == _RK_C_ALIAS)
+		if (prop->type == _RK_C_ALIAS || prop->type == _RK_C_INVALID)
 			continue;
 
                 if (prop->ctor)
@@ -1465,7 +1498,7 @@ static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
 		if (!(prop->scope & scope))
 			continue;
 
-		if (prop->type == _RK_C_ALIAS)
+		if (prop->type == _RK_C_ALIAS || prop->type == _RK_C_INVALID)
 			continue;
 
                 /* Apply filter, if any. */
@@ -1942,8 +1975,9 @@ static const char **rd_kafka_anyconf_dump (int scope, const void *conf,
 		if (!(prop->scope & scope))
 			continue;
 
-		/* Skip aliases, show original property instead. */
-		if (prop->type == _RK_C_ALIAS)
+		/* Skip aliases, show original property instead.
+                 * Skip invalids. */
+		if (prop->type == _RK_C_ALIAS || prop->type == _RK_C_INVALID)
 			continue;
 
                 /* Query value size */
@@ -1995,6 +2029,10 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 
 	for (prop = rd_kafka_properties; prop->name ; prop++) {
 		const char *typeinfo = "";
+
+                /* Skip invalid properties. */
+                if (prop->type == _RK_C_INVALID)
+                        continue;
 
 		if (!(prop->scope & last)) {
 			fprintf(fp,
@@ -2080,7 +2118,6 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 			fprintf(fp, "%13s", tmp);
 
 			break;
-
 		case _RK_C_PTR:
 			typeinfo = "pointer";
 			/* FALLTHRU */

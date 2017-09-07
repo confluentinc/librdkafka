@@ -884,8 +884,8 @@ static int run_test (struct test *test, int argc, char **argv) {
                 TEST_LOCK();
         }
         tests_running_cnt++;
-        test->timeout = test_clock() + (20.0 * 1000000.0 *
-                                        test_timeout_multiplier);
+        test->timeout = test_clock() + (int64_t)(20.0 * 1000000.0 *
+                                                 test_timeout_multiplier);
         test->state = TEST_RUNNING;
         TEST_UNLOCK();
 

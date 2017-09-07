@@ -182,7 +182,7 @@ struct test tests[] = {
         _TEST(0022_consume_batch, 0),
         _TEST(0025_timers, TEST_F_LOCAL),
 	_TEST(0026_consume_pause, 0, TEST_BRKVER(0,9,0,0)),
-	_TEST(0028_long_topicnames, TEST_F_KNOWN_ISSUE,
+	_TEST(0028_long_topicnames, TEST_F_KNOWN_ISSUE, TEST_BRKVER(0,9,0,0),
 	      .extra = "https://github.com/edenhill/librdkafka/issues/529"),
 	_TEST(0029_assign_offset, 0),
 	_TEST(0030_offset_commit, 0, TEST_BRKVER(0,9,0,0)),
@@ -215,7 +215,7 @@ struct test tests[] = {
         _TEST(0051_assign_adds, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0052_msg_timestamps, 0, TEST_BRKVER(0,10,0,0)),
         _TEST(0053_stats_cb, TEST_F_LOCAL),
-        _TEST(0054_offset_time, 0, TEST_BRKVER(0,10,0,0)),
+        _TEST(0054_offset_time, 0, TEST_BRKVER(0,10,1,0)),
         _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
         _TEST(0056_balanced_group_mt, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0057_invalid_topic, 0, TEST_BRKVER(0,9,0,0)),
@@ -224,8 +224,8 @@ struct test tests[] = {
         _TEST(0060_op_prio, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0061_consumer_lag, 0),
         _TEST(0062_stats_event, TEST_F_LOCAL),
-        _TEST(0063_clusterid, 0, TEST_BRKVER(0,10,0,0)),
-        _TEST(0064_interceptors, 0),
+        _TEST(0063_clusterid, 0, TEST_BRKVER(0,10,1,0)),
+        _TEST(0064_interceptors, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0065_yield, 0),
         _TEST(0066_plugins,
               TEST_F_LOCAL|TEST_F_KNOWN_ISSUE_WIN32|TEST_F_KNOWN_ISSUE_OSX,
@@ -234,7 +234,8 @@ struct test tests[] = {
 #if WITH_SOCKEM
         _TEST(0068_produce_timeout, 0),
 #endif
-        _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32),
+        _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32,
+              TEST_BRKVER(0,9,0,0)),
         _TEST(0070_null_empty, 0),
         { NULL }
 };

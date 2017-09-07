@@ -63,7 +63,7 @@ static RdKafka::Message *get_msg (RdKafka::KafkaConsumer *c, int64_t offset,
     if (err)
       Test::Fail("assign() failed: " + RdKafka::err2str(err));
   } else {
-    err = c->seek(*next, 5000);
+    err = c->seek(*next, tmout_multip(5000));
     if (err)
       Test::Fail("seek() failed: " + RdKafka::err2str(err));
   }
@@ -73,7 +73,7 @@ static RdKafka::Message *get_msg (RdKafka::KafkaConsumer *c, int64_t offset,
   test_timing_t t_consume;
   TIMING_START(&t_consume, "consume");
 
-  RdKafka::Message *msg = c->consume(5000);
+  RdKafka::Message *msg = c->consume(tmout_multip(5000));
   if (!msg)
     Test::Fail("consume() returned NULL");
   TIMING_STOP(&t_consume);
@@ -138,7 +138,7 @@ static void do_test_bsearch (void) {
       timestamp += 100 + (timestamp % 9);
   }
 
-  if (p->flush(5000) != 0)
+  if (p->flush(tmout_multip(5000)) != 0)
     Test::Fail("Not all messages flushed");
 
   Test::Say(tostr() << "Produced " << msgcnt << " messages, " <<
@@ -170,7 +170,8 @@ static void do_test_bsearch (void) {
   int64_t low, high;
   test_timing_t t_qr;
   TIMING_START(&t_qr, "query_watermark_offsets");
-  err = c->query_watermark_offsets(topic, partition, &low, &high, 5000);
+  err = c->query_watermark_offsets(topic, partition, &low, &high,
+                                   tmout_multip(5000));
   TIMING_STOP(&t_qr);
   if (err)
     Test::Fail("query_watermark_offsets failed: " + RdKafka::err2str(err));

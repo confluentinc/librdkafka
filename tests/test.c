@@ -359,6 +359,15 @@ void test_timeout_set (int timeout) {
 	TEST_UNLOCK();
 }
 
+int tmout_multip (int msecs) {
+        int r;
+        TEST_LOCK();
+        r = (int)(((double)(msecs)) * test_timeout_multiplier);
+        TEST_UNLOCK();
+        return r;
+}
+
+
 
 #ifdef _MSC_VER
 static void test_init_win32 (void) {
@@ -865,7 +874,8 @@ static int run_test (struct test *test, int argc, char **argv) {
                 TEST_LOCK();
         }
         tests_running_cnt++;
-	test->timeout = test_clock() + (20 * 1000000);
+        test->timeout = test_clock() + (20.0 * 1000000.0 *
+                                        test_timeout_multiplier);
         test->state = TEST_RUNNING;
         TEST_UNLOCK();
 
@@ -1266,21 +1276,29 @@ int main(int argc, char **argv) {
 	if (!strcmp(test_mode, "helgrind") ||
 	    !strcmp(test_mode, "drd")) {
 		TEST_LOCK();
-		test_timeout_multiplier *= 5;
+		test_timeout_multiplier += 5;
 		TEST_UNLOCK();
 	} else if (!strcmp(test_mode, "valgrind")) {
 		TEST_LOCK();
-		test_timeout_multiplier *= 3;
+		test_timeout_multiplier += 3;
 		TEST_UNLOCK();
 	}
 
-        if (test_concurrent_max >= 3)
-                test_timeout_multiplier *= (double)test_concurrent_max / 3.0;
+        /* Broker version 0.9 and api.version.request=true (which is default)
+         * will cause a 10s stall per connection. Instead of fixing
+         * that for each affected API in every test we increase the timeout
+         * multiplier accordingly instead. The typical consume timeout is 5
+         * seconds, so a multiplier of 3 should be good. */
+        if ((test_broker_version & 0xffff0000) == 0x00090000)
+                test_timeout_multiplier += 3;
+
+        test_timeout_multiplier += (double)test_concurrent_max / 3;
 
 	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 	TEST_SAY("Test mode   : %s\n", test_mode);
         TEST_SAY("Test filter : %s\n",
                  (test_flags & TEST_F_LOCAL) ? "local tests only" : "no filter");
+        TEST_SAY("Test timeout multiplier: %.1f\n", test_timeout_multiplier);
         TEST_SAY("Action on test failure: %s\n",
                  test_assert_on_fail ? "assert crash" : "continue other tests");
 

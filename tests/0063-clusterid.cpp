@@ -67,7 +67,7 @@ static void do_test_clusterid (void) {
    * good producer, give the first call a timeout to allow time
    * for background metadata requests to finish.
    */
-  std::string clusterid_good_1 = p_good->clusterid(2000);
+  std::string clusterid_good_1 = p_good->clusterid(tmout_multip(2000));
   if (clusterid_good_1.empty())
     Test::Fail("good producer(w timeout): ClusterId is empty");
   Test::Say("good producer(w timeout): ClusterId " + clusterid_good_1 + "\n");
@@ -85,7 +85,7 @@ static void do_test_clusterid (void) {
   /*
    * Try bad producer, should return empty string.
    */
-  std::string clusterid_bad_1 = p_bad->clusterid(2000);
+  std::string clusterid_bad_1 = p_bad->clusterid(tmout_multip(2000));
   if (!clusterid_bad_1.empty())
     Test::Fail("bad producer(w timeout): ClusterId should be empty, not " +
                clusterid_bad_1);

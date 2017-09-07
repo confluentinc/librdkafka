@@ -122,7 +122,7 @@ static void do_test_commit_cb (void) {
   Test::Say("Consuming topic " + topic + "\n");
   int cnt = 0;
   while (!cbs.seen_commit || !cbs.seen_stats) {
-    RdKafka::Message *msg = c->consume(1000);
+    RdKafka::Message *msg = c->consume(tmout_multip(1000));
     if (!msg->err()) {
       cnt++;
       Test::Say(tostr() << "Received message #" << cnt << "\n");

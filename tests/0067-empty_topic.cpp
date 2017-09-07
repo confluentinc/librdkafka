@@ -60,7 +60,8 @@ static void do_test_empty_topic_consumer () {
   /* Create the topic through a metadata request. */
   Test::Say("Creating empty topic " + topic + "\n");
   RdKafka::Metadata *md;
-  RdKafka::ErrorCode err = consumer->metadata(false, rkt, &md, 10 * 1000);
+  RdKafka::ErrorCode err = consumer->metadata(false, rkt, &md,
+                                              tmout_multip(10*1000));
   if (err)
           Test::Fail("Failed to create topic " + topic + ": " + RdKafka::err2str(err));
   delete md;
@@ -72,7 +73,8 @@ static void do_test_empty_topic_consumer () {
 
   /* Consume using legacy consumer, should give an EOF and nothing else. */
   Test::Say("Simple Consumer: consuming\n");
-  RdKafka::Message *msg = consumer->consume(rkt, partition, 10 * 1000);
+  RdKafka::Message *msg = consumer->consume(rkt, partition,
+                                            tmout_multip(10 * 1000));
   if (msg->err() != RdKafka::ERR__PARTITION_EOF)
           Test::Fail("Simple consume() expected EOF, got " + RdKafka::err2str(msg->err()));
   delete msg;
@@ -109,7 +111,7 @@ static void do_test_empty_topic_consumer () {
   RdKafka::TopicPartition::destroy(part);
 
   Test::Say("KafkaConsumer: consuming\n");
-  msg = kconsumer->consume(5 * 1000);
+  msg = kconsumer->consume(tmout_multip(5 * 1000));
   if (msg->err() != RdKafka::ERR__PARTITION_EOF)
           Test::Fail("KafkaConsumer consume() expected EOF, got " + RdKafka::err2str(msg->err()));
   delete msg;

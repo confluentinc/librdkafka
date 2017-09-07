@@ -91,7 +91,7 @@ static void test_offset_time (void) {
 
   /* First query timestamps before topic exists, should fail. */
   Test::Say("Attempting first offsetsForTimes() query (should fail)\n");
-  RdKafka::ErrorCode err = p->offsetsForTimes(query_parts, 10000);
+  RdKafka::ErrorCode err = p->offsetsForTimes(query_parts, tmout_multip(10000));
   Test::Say("offsetsForTimes #1 with non-existing partitions returned " +
             RdKafka::err2str(err) + "\n");
   Test::print_TopicPartitions("offsetsForTimes #1", query_parts);
@@ -111,7 +111,7 @@ static void test_offset_time (void) {
     }
   }
 
-  if (p->flush(5000) != 0)
+  if (p->flush(tmout_multip(5000)) != 0)
     Test::Fail("Not all messages flushed");
 
 
@@ -121,7 +121,7 @@ static void test_offset_time (void) {
     query_parts.push_back(RdKafka::TopicPartition::create(topic, 1, timestamps[ti]));
 
     Test::Say(tostr() << "Attempting offsetsForTimes() for timestamp " << timestamps[ti] << "\n");
-    err = p->offsetsForTimes(query_parts, 5000);
+    err = p->offsetsForTimes(query_parts, tmout_multip(5000));
     Test::print_TopicPartitions("offsetsForTimes", query_parts);
     if (err != RdKafka::ERR_NO_ERROR)
       Test::Fail("offsetsForTimes failed: " + RdKafka::err2str(err));

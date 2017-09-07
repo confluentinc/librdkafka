@@ -104,7 +104,7 @@ static void measure_rtt (struct latconf *latconf, rd_kafka_t *rk) {
         const struct rd_kafka_metadata *md;
         int64_t ts = test_clock();
 
-        err = rd_kafka_metadata(rk, 0, NULL, &md, 5000);
+        err = rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(5000));
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
         latconf->rtt = (float)(test_clock() - ts) / 1000.0f;
 
@@ -151,7 +151,7 @@ static int test_producer_latency (const char *topic,
                           latconf->name, rd_kafka_err2str(err));
 
         /* Await delivery */
-        rd_kafka_flush(rk, 5000);
+        rd_kafka_flush(rk, tmout_multip(5000));
 
         /* Get a network+broker round-trip-time base time. */
         measure_rtt(latconf, rk);

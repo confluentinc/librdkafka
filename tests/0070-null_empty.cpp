@@ -115,7 +115,7 @@ static void do_test_null_empty (bool api_version_request) {
       Test::Fail("Produce failed: " + RdKafka::err2str(err));
   }
 
-  if (p->flush(3*5000) != 0)
+  if (p->flush(tmout_multip(3*5000)) != 0)
     Test::Fail("Not all messages flushed");
 
   Test::Say(tostr() << "Produced " << msgcnt << " messages to " << topic << "\n");
@@ -151,7 +151,7 @@ static void do_test_null_empty (bool api_version_request) {
   /* Start consuming */
   int failures = 0;
   for (int i = 0 ; i < msgcnt * 2 ; i += 2) {
-    RdKafka::Message *msg = c->consume(5000);
+    RdKafka::Message *msg = c->consume(tmout_multip(5000));
     if (msg->err())
       Test::Fail(tostr() << "consume() failed at message " << (i/2) << ": " <<
                  msg->errstr());

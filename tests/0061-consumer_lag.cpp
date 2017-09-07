@@ -153,7 +153,7 @@ static void do_test_consumer_lag (void) {
   Test::Say("Consuming topic " + topic + "\n");
   int cnt = 0;
   while (cnt < msgcnt) {
-    RdKafka::Message *msg = c->consume(1000);
+    RdKafka::Message *msg = c->consume(tmout_multip(1000));
     switch (msg->err())
       {
       case RdKafka::ERR__TIMED_OUT:

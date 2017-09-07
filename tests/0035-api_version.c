@@ -54,13 +54,13 @@ int main_0035_api_version (int argc, char **argv) {
 
 	TEST_SAY("Querying for metadata\n");
 	TIMING_START(&t_meta, "metadata()");
-	err = rd_kafka_metadata(rk, 0, NULL, &metadata, 10*1000);
+	err = rd_kafka_metadata(rk, 0, NULL, &metadata, tmout_multip(5*1000));
 	TIMING_STOP(&t_meta);
 	if (err)
 		TEST_FAIL("metadata() failed: %s",
 			  rd_kafka_err2str(err));
 
-	if (TIMING_DURATION(&t_meta) / 1000 > 11*1000)
+	if (TIMING_DURATION(&t_meta) / 1000 > 15*1000)
 		TEST_FAIL("metadata() took too long: %.3fms",
 			  (float)TIMING_DURATION(&t_meta) / 1000.0f);
 

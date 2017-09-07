@@ -31,6 +31,10 @@
  * C variables and functions shared with C++ tests
  */
 
+/** @returns the \p msecs timeout multiplied by the test timeout multiplier */
+extern int tmout_multip (int msecs);
+
+
 /** @brief Broker version to int */
 #define TEST_BRKVER(A,B,C,D) \
         (((A) << 24) | ((B) << 16) | ((C) << 8) | (D))

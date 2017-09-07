@@ -57,7 +57,7 @@ static void do_test_reset (const char *topic, int partition,
 	while (1) {
 		rd_kafka_message_t *rkm;
 
-		rkm = rd_kafka_consume(rkt, partition, 1000*10);
+		rkm = rd_kafka_consume(rkt, partition, tmout_multip(1000*10));
 		if (!rkm)
 			TEST_FAIL("%s: no message for 10s: "
 				  "%d/%d messages, %d/%d EOFs, %d/%d errors\n",

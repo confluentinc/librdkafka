@@ -466,11 +466,22 @@ static void do_nonexist_commit (void) {
 	rd_kafka_resp_err_t err;
 
 	test_conf_init(&conf, &tconf, 20);
+        /* Offset commit deferrals when the broker is down is limited to
+         * session.timeout.ms. With 0.9 brokers and api.version.request=true
+         * the initial connect to all brokers will take 10*2 seconds
+         * and the commit_queue() below will time out too quickly.
+         * Set the session timeout high here to avoid it. */
+        test_conf_set(conf, "session.timeout.ms", "60000");
+
 	test_str_id_generate(group_id, sizeof(group_id));
+        test_conf_set(conf, "group.id", group_id);
 
-	TEST_SAY(_C_MAG "[ do_nonexist_commit group.id %s ]\n", group_id);
+        rd_kafka_conf_set_default_topic_conf(conf, tconf);
 
-	rk = test_create_consumer(group_id, NULL, conf, tconf);
+        TEST_SAY(_C_MAG "[ do_nonexist_commit group.id %s ]\n", group_id);
+
+        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+        rd_kafka_poll_set_consumer(rk);
 
 	TEST_SAY("Try nonexist commit\n");
 	offsets = rd_kafka_topic_partition_list_new(2);
@@ -481,7 +492,7 @@ static void do_nonexist_commit (void) {
 				    nonexist_offset_commit_cb, NULL);
 	TEST_SAY("nonexist commit returned %s\n", rd_kafka_err2str(err));
 	if (err != RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
-		TEST_FAIL("commit() should succeed, not: %s",
+		TEST_FAIL("commit() should give UnknownTopicOrPart, not: %s",
 			  rd_kafka_err2str(err));
 
 	rd_kafka_topic_partition_list_destroy(offsets);

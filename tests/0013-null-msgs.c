@@ -297,7 +297,7 @@ static void consume_messages (uint64_t testid, const char *topic,
 	for (i = 0 ; i < batch_cnt ; i++) {
 		rd_kafka_message_t *rkmessage;
 
-		rkmessage = rd_kafka_consume(rkt, partition, 5000);
+		rkmessage = rd_kafka_consume(rkt, partition, tmout_multip(5000));
 		if (!rkmessage)
 			TEST_FAIL("Failed to consume message %i/%i from "
 				  "partition %i: %s",
@@ -371,7 +371,7 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 	for (i = 0 ; i < msgcnt ; i++) {
 		rd_kafka_message_t *rkmessage;
 
-		rkmessage = rd_kafka_consume_queue(rkqu, 5000);
+		rkmessage = rd_kafka_consume_queue(rkqu, tmout_multip(5000));
 		if (!rkmessage)
 			TEST_FAIL("Failed to consume message %i/%i from "
 				  "queue: %s",

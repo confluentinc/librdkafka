@@ -59,7 +59,8 @@ int main_0031_get_offsets (int argc, char **argv) {
 
 	TIMING_START(&t_qry, "query_watermark_offsets");
 	err = rd_kafka_query_watermark_offsets(rk, topic, 0,
-					       &qry_low, &qry_high, 10*1000);
+					       &qry_low, &qry_high,
+                                               tmout_multip(10*1000));
 	TIMING_STOP(&t_qry);
 	if (err)
 		TEST_FAIL("query_watermark_offsets failed: %s\n",

@@ -95,7 +95,7 @@ static void test_invalid_topic (void) {
     check_err(err, RdKafka::ERR_NO_ERROR);
   }
 
-  p->flush(10000);
+  p->flush(tmout_multip(10000));
 
   if (p->outq_len() > 0)
     Test::Fail(tostr() << "Expected producer to be flushed, " <<

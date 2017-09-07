@@ -1778,7 +1778,7 @@ size_t rd_kafka_conf_flags2str (char *dest, size_t dest_size, const char *delim,
 	size_t of = 0;
 	int j;
 
-	if (dest)
+	if (dest && dest_size > 0)
 		*dest = '\0';
 
 	/* Phase 1: scan for set flags, accumulate needed size.
@@ -1807,7 +1807,7 @@ size_t rd_kafka_conf_flags2str (char *dest, size_t dest_size, const char *delim,
 		}
 	}
 
-	return of;
+	return of+1/*nul*/;
 }
 
 

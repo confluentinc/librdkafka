@@ -683,8 +683,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  1, INT_MAX/1024, 4000000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.ms", _RK_C_INT,
 	  _RK(buffering_max_ms),
-	  "Maximum time, in milliseconds, for buffering data "
-	  "on the producer queue.",
+	  "Delay in milliseconds to wait for messages in the producer queue "
+          "to accumulate before constructing message batches (MessageSets) to "
+          "transmit to brokers. "
+	  "A higher value allows larger and more effective "
+          "(less overhead, improved compression) batches of messages to "
+          "accumulate at the expense of increased message delivery latency.",
 	  0, 900*1000, 0 },
         { _RK_GLOBAL|_RK_PRODUCER, "linger.ms", _RK_C_ALIAS,
           .sdef = "queue.buffering.max.ms" },

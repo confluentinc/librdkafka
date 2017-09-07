@@ -40,7 +40,7 @@
 int main_0001_multiobj (int argc, char **argv) {
 	int partition = RD_KAFKA_PARTITION_UA; /* random */
 	int i;
-	const int NUM_ITER = 1;
+	const int NUM_ITER = 5;
         const char *topic = NULL;
 
 	TEST_SAY("Creating and destroying %i kafka instances\n", NUM_ITER);

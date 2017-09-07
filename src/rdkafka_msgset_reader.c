@@ -598,27 +598,6 @@ rd_kafka_msgset_reader_msg_v0_1 (rd_kafka_msgset_reader_t *msetr) {
 
 
 
-/**
- * @brief MessageSet reader for MsgVersion v0..1 (FetchRequest v0..3)
- */
-static rd_kafka_resp_err_t
-rd_kafka_msgset_reader_v0_1 (rd_kafka_msgset_reader_t *msetr) {
-        rd_kafka_buf_t *rkbuf = msetr->msetr_rkbuf;
-
-        /* Read messages until MessageSet is exhausted */
-        while (rd_kafka_buf_read_remain(rkbuf) > 0) {
-                rd_kafka_resp_err_t err;
-                err = rd_kafka_msgset_reader_msg_v0_1(msetr);
-                if (unlikely(err))
-                        break;
-        }
-
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
-}
-
-
-
-
 
 /**
  * @brief Message parser for MsgVersion v2
@@ -906,8 +885,8 @@ rd_kafka_msgset_reader (rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_resp_err_t (*reader[]) (rd_kafka_msgset_reader_t *) = {
                 /* Indexed by MsgVersion/MagicByte, pointing to
                  * a Msg(Set)Version reader */
-                [0] = rd_kafka_msgset_reader_v0_1,
-                [1] = rd_kafka_msgset_reader_v0_1,
+                [0] = rd_kafka_msgset_reader_msg_v0_1,
+                [1] = rd_kafka_msgset_reader_msg_v0_1,
                 [2] = rd_kafka_msgset_reader_v2
         };
         rd_kafka_resp_err_t err;
@@ -951,8 +930,11 @@ rd_kafka_msgset_reader (rd_kafka_msgset_reader_t *msetr) {
                 return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
         }
 
-        /* Let version-specific reader parse the buffer. */
-        err = reader[(int)MagicByte](msetr);
+        /* Let version-specific reader parse MessageSets until the slice
+         * is exhausted or an error occurs (typically a partial message). */
+        do {
+                err = reader[(int)MagicByte](msetr);
+        } while (!err && rd_slice_remains(&rkbuf->rkbuf_reader) > 0);
 
         return err;
 
@@ -1044,12 +1026,19 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
         } else {
                 /* MessageSet post-processing. */
                 rd_kafka_msgset_reader_postproc(msetr, &last_offset);
+
+                /* Ignore parse errors if there was at least one
+                 * good message since it probably indicates a
+                 * partial response rather than an erroneous one. */
+                if (err == RD_KAFKA_RESP_ERR__BAD_MSG &&
+                    msetr->msetr_msgcnt > 0)
+                        err = RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
         rd_rkb_dbg(msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
-                   "Enqueue %i message(s) on %s [%"PRId32"] "
+                   "Enqueue %i message(s) (%d ops) on %s [%"PRId32"] "
                    "fetch queue (qlen %d, v%d, last_offset %"PRId64")",
-                   msetr->msetr_msgcnt,
+                   msetr->msetr_msgcnt, rd_kafka_q_len(&msetr->msetr_rkq),
                    rktp->rktp_rkt->rkt_topic->str,
                    rktp->rktp_partition, rd_kafka_q_len(&msetr->msetr_rkq),
                    msetr->msetr_tver->version, last_offset);

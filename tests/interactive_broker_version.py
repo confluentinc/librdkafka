@@ -125,8 +125,14 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
               (brokers[0].conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version, cluster.instance_path())
     if not cmd:
         cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
+
+    ret = True
+
     for i in range(0, exec_cnt):
-        subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
+        retcode = subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
+        if retcode != 0:
+            print('# Command failed with returncode %d: %s %s' % (retcode, cmd_env, cmd))
+            ret = False
 
     try:
         os.remove(test_conf_file)
@@ -136,7 +142,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     cluster.stop(force=True)
 
     cluster.cleanup(keeptypes=['log'])
-    return True
+    return ret
 
 if __name__ == '__main__':
 
@@ -181,7 +187,13 @@ if __name__ == '__main__':
 
     args.conf.get('conf', list()).append("log.retention.bytes=1000000000")
 
+    retcode = 0
     for version in args.versions:
-        test_version(version, cmd=args.cmd, deploy=args.deploy,
-                     conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt,
-                     root_path=args.root, broker_cnt=args.broker_cnt)
+        r = test_version(version, cmd=args.cmd, deploy=args.deploy,
+                         conf=args.conf, debug=args.debug, exec_cnt=args.exec_cnt,
+                         root_path=args.root, broker_cnt=args.broker_cnt)
+        if not r:
+            retcode = 2
+
+
+    sys.exit(retcode)

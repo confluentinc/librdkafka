@@ -1,5 +1,5 @@
-TESTSRCS_C = $(wildcard 0*-*.c)
-TESTSRCS_CXX= $(wildcard 0*-*.cpp)
+TESTSRCS_C = $(wildcard [08]*-*.c)
+TESTSRCS_CXX= $(wildcard [08]*-*.cpp)
 OBJS	  = $(TESTSRCS_C:%.c=%.o) $(TESTSRCS_CXX:%.cpp=%.o)
 
 BIN	  = merged

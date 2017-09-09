@@ -100,6 +100,8 @@ struct test {
 #define TEST_F_LOCAL   0x1   /**< Test is local, no broker requirement */
 #define TEST_F_KNOWN_ISSUE 0x2 /**< Known issue, can fail without affecting
 				*   total test run status. */
+#define TEST_F_MANUAL      0x4 /**< Manual test, only started when specifically
+                                *   stated */
 	int minver;          /**< Limit tests to broker version range. */
 	int maxver;
 

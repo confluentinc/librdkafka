@@ -154,6 +154,11 @@ _TEST_DECL(0068_produce_timeout);
 _TEST_DECL(0069_consumer_add_parts);
 _TEST_DECL(0070_null_empty);
 
+
+/* Manual tests */
+_TEST_DECL(8000_idle);
+
+
 /**
  * Define all tests here
  */
@@ -237,6 +242,10 @@ struct test tests[] = {
         _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32,
               TEST_BRKVER(0,9,0,0)),
         _TEST(0070_null_empty, 0),
+
+        /* Manual tests */
+        _TEST(8000_idle, TEST_F_MANUAL),
+
         { NULL }
 };
 
@@ -932,6 +941,8 @@ static void run_tests (const char *tests_to_run,
 
                 if (tests_to_run && !strstr(tests_to_run, testnum))
                         skip_reason = "not included in TESTS list";
+                else if (!tests_to_run && (test->flags & TEST_F_MANUAL))
+                        skip_reason = "manual test";
 
                 if (!skip_reason) {
                         run_test(test, argc, argv);

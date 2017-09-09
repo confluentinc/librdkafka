@@ -124,3 +124,9 @@ The trivup download and run-time root defaults to 'tmp' (in current directory),
 the interactive_broker_version.py script takes a '-root <dir>' option and
 all trivup based scripts (in tests/) honour the TRIVUP_ROOT environment
 variable.
+
+
+Test numbers
+============
+Automated tests: 0000-0999
+Manual tests:    8000-8999

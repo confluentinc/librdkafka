@@ -16,10 +16,10 @@ script:
 - rm -rf artifacts dest
 - mkdir dest artifacts
 - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then CPPFLAGS="-I/usr/local/opt/openssl/include
-  -L/usr/local/opt/openssl/lib" ./configure --enable-static --prefix="$PWD/dest" ; else ./configure --enable-static --prefix="$PWD/dest" ; fi
+  -L/usr/local/opt/openssl/lib" ./configure --enable-static --disable-lz4 --prefix="$PWD/dest" ; else ./configure --enable-static --disable-lz4 --prefix="$PWD/dest" ; fi
 - make -j2 all examples check && make -C tests run_local
 - make install
-- (cd dest && tar cvzf ../artifacts/librdkafka-X.tar.gz .)
+- (cd dest && tar cvzf ../artifacts/librdkafka.tar.gz .)
 deploy:
   provider: s3
   access_key_id:
@@ -30,11 +30,9 @@ deploy:
   region: us-west-1
   skip_cleanup: true
   local-dir: artifacts
-  upload-dir: travis-${TRAVIS_OS_NAME}-${ARCH}-tag_${TRAVIS_TAG}-${TRAVIS_COMMIT}-${TRAVIS_BUILD_ID}
+  upload-dir: librdkafka/p-librdkafka__bld-travis__plat-${TRAVIS_OS_NAME}__arch-${ARCH}__tag-${TRAVIS}__sha-${TRAVIS_COMMIT}__bid-${TRAVIS_BUILD_ID}
   on:
-    condition: $CC = gcc
-    #condition: $TRAVIS_PULL_REQUEST = false
+    condition: "$CC = gcc"
     repo: edenhill/librdkafka
     all_branches: true
-    #tags: true  ## for tag builds only
-##
+    tags: true

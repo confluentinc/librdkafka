@@ -186,11 +186,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  1000, 1000000000, 100000000 },
 	{ _RK_GLOBAL, "max.in.flight.requests.per.connection", _RK_C_INT,
 	  _RK(max_inflight),
-		"Maximum number of in-flight requests per broker connection. "
-		"This is a generic property applied to all broker communication, "
-					"however it is primarily relevant to produce requests. "
-					"In particular, note that other mechanisms limit the number "
-					"of outstanding consumer fetch request per broker to one.",
+	  "Maximum number of in-flight requests per broker connection. "
+	  "This is a generic property applied to all broker communication, "
+	  "however it is primarily relevant to produce requests. "
+	  "In particular, note that other mechanisms limit the number "
+	  "of outstanding consumer fetch request per broker to one.",
 	  1, 1000000, 1000000 },
         { _RK_GLOBAL, "max.in.flight", _RK_C_ALIAS,
           .sdef = "max.in.flight.requests.per.connection" },
@@ -612,8 +612,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(queued_max_msg_kbytes),
           "Maximum number of kilobytes per topic+partition in the "
           "local consumer queue. "
-					"This value may be overshot by fetch.message.max.bytes. "
-					"This property has higher priority than queued.min.messages.",
+	  "This value may be overshot by fetch.message.max.bytes. "
+	  "This property has higher priority than queued.min.messages.",
           1, 1000000000, 1000000 /* 1 Gig */ },
 	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.wait.max.ms", _RK_C_INT,
 	  _RK(fetch_wait_max_ms),
@@ -683,8 +683,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  1, 10000000, 100000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.kbytes", _RK_C_INT,
 	  _RK(queue_buffering_max_kbytes),
-		"Maximum total message size sum allowed on the producer queue. "
-					"This property has higher priority than queue.buffering.max.messages.",
+	  "Maximum total message size sum allowed on the producer queue. "
+	  "This property has higher priority than queue.buffering.max.messages.",
 	  1, INT_MAX/1024, 4000000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.ms", _RK_C_INT,
 	  _RK(buffering_max_ms),

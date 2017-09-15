@@ -168,7 +168,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "See metadata.broker.list",
 	  .sdef = "metadata.broker.list" },
 	{ _RK_GLOBAL, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
-	  "Maximum transmit message size.",
+	  "Maximum Kafka protocol request message size.",
 	  1000, 1000000000, 1000000 },
 	{ _RK_GLOBAL, "message.copy.max.bytes", _RK_C_INT,
 	  _RK(msg_copy_max_size),
@@ -178,7 +178,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  0, 1000000000, 0xffff },
 	{ _RK_GLOBAL, "receive.message.max.bytes", _RK_C_INT,
           _RK(recv_max_msg_size),
-	  "Maximum receive message size. "
+	  "Maximum Kafka protocol response message size. "
 	  "This is a safety precaution to avoid memory exhaustion in case of "
 	  "protocol hickups. "
           "The value should be at least fetch.message.max.bytes * number of "
@@ -186,8 +186,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  1000, 1000000000, 100000000 },
 	{ _RK_GLOBAL, "max.in.flight.requests.per.connection", _RK_C_INT,
 	  _RK(max_inflight),
-	  "Maximum number of in-flight requests the client will send. "
-	  "This setting applies per broker connection.",
+		"Maximum number of in-flight requests per broker connection. "
+		"This is a generic property applied to all broker communication, "
+					"however it is primarily relevant to produce requests. "
+					"In particular, note that other mechanisms limit the number "
+					"of outstanding consumer fetch request per broker to one.",
 	  1, 1000000, 1000000 },
         { _RK_GLOBAL, "max.in.flight", _RK_C_ALIAS,
           .sdef = "max.in.flight.requests.per.connection" },
@@ -602,14 +605,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           0, 1, 1 },
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
 	  _RK(queued_min_msgs),
-	  "Minimum number of messages per topic+partition in the "
-          "local consumer queue.",
+	  "Minimum number of messages per topic+partition "
+          "librdkafka tries to maintain in the local consumer queue.",
 	  1, 10000000, 100000 },
 	{ _RK_GLOBAL|_RK_CONSUMER, "queued.max.messages.kbytes", _RK_C_INT,
 	  _RK(queued_max_msg_kbytes),
           "Maximum number of kilobytes per topic+partition in the "
           "local consumer queue. "
-          "This value may be overshot by fetch.message.max.bytes.",
+					"This value may be overshot by fetch.message.max.bytes. "
+					"This property has higher priority than queued.min.messages.",
           1, 1000000000, 1000000 /* 1 Gig */ },
 	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.wait.max.ms", _RK_C_INT,
 	  _RK(fetch_wait_max_ms),
@@ -679,7 +683,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  1, 10000000, 100000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.kbytes", _RK_C_INT,
 	  _RK(queue_buffering_max_kbytes),
-	  "Maximum total message size sum allowed on the producer queue.",
+		"Maximum total message size sum allowed on the producer queue. "
+					"This property has higher priority than queue.buffering.max.messages.",
 	  1, INT_MAX/1024, 4000000 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.ms", _RK_C_INT,
 	  _RK(buffering_max_ms),

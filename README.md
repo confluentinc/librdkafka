@@ -46,6 +46,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * C++: [cppkafka](https://github.com/mfontanini/cppkafka)
   * D (C-like): [librdkafka](https://github.com/DlangApache/librdkafka/)
   * D (C++-like): [librdkafkad](https://github.com/tamediadigital/librdkafka-d)
+  * Erlang: [erlkaf](https://github.com/silviucpp/erlkaf)
   * Go: [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go)
   * Haskell (kafka, conduit, avro, schema registry): [hw-kafka](https://github.com/haskell-works/hw-kafka)
   * Haskell: [haskakafka](https://github.com/cosbynator/haskakafka)

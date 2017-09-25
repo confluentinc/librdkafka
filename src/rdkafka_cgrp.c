@@ -727,7 +727,7 @@ rd_kafka_cgrp_assignor_handle_Metadata_op (rd_kafka_t *rk,
 
         rd_kafka_cgrp_assignor_run(rkcg,
                                    rkcg->rkcg_group_leader.protocol,
-                                   rko->rko_err, rko->rko_u.metadata,
+                                   rko->rko_err, rko->rko_u.metadata.md,
                                    rkcg->rkcg_group_leader.members,
                                    rkcg->rkcg_group_leader.member_cnt);
 

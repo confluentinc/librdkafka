@@ -282,7 +282,11 @@ struct rd_kafka_op_s {
 		} xbuf; /* XMIT_BUF and RECV_BUF */
 
                 /* RD_KAFKA_OP_METADATA */
-                rd_kafka_metadata_t *metadata;
+                struct {
+                        rd_kafka_metadata_t *md;
+                        int force; /* force request regardless of outstanding
+                                    * metadata requests. */
+                } metadata;
 
 		struct {
 			shptr_rd_kafka_itopic_t *s_rkt;

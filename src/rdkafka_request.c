@@ -1303,7 +1303,7 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */
                 rko->rko_err = err;
-                rko->rko_u.metadata = md;
+                rko->rko_u.metadata.md = md;
 
                 rd_kafka_replyq_enq(&rko->rko_replyq, rko, 0);
                 rko = NULL;
@@ -1394,11 +1394,13 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
 
         if (full_incr) {
                 /* Avoid multiple outstanding full requests
-                 * (since they are redundant and side-effect-less). */
+                 * (since they are redundant and side-effect-less).
+                 * Forced requests (app using metadata() API) are passed
+                 * through regardless. */
 
                 mtx_lock(&rkb->rkb_rk->rk_metadata_cache.
                          rkmc_full_lock);
-                if (*full_incr > 0) {
+                if (*full_incr > 0 && (!rko || !rko->rko_u.metadata.force)) {
                         mtx_unlock(&rkb->rkb_rk->rk_metadata_cache.
                                    rkmc_full_lock);
                         rd_rkb_dbg(rkb, METADATA, "METADATA",

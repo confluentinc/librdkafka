@@ -3038,7 +3038,7 @@ static void rd_kafka_DescribeGroups_resp_cb (rd_kafka_t *rk,
                                              rd_kafka_buf_t *request,
                                              void *opaque) {
         struct list_groups_state *state = opaque;
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int cnt;
 
         state->wait_cnt--;
@@ -3151,7 +3151,7 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
                                          rd_kafka_buf_t *request,
                                          void *opaque) {
         struct list_groups_state *state = opaque;
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode;
         char **grps;
         int cnt, grpcnt, i = 0;

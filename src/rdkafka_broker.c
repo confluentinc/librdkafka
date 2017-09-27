@@ -1050,7 +1050,7 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
         /* errstr is not set by buf_read errors, so default it here. */
         char errstr[512] = "Protocol parse failure";
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
-	const int log_decode_errors = 1;
+	const int log_decode_errors = LOG_ERR;
 
 
         /* It is impossible to estimate the correct size of the response
@@ -1280,7 +1280,7 @@ rd_kafka_broker_handle_SaslHandshake (rd_kafka_t *rk,
 				      rd_kafka_buf_t *rkbuf,
 				      rd_kafka_buf_t *request,
 				      void *opaque) {
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
 	int32_t MechCnt;
 	int16_t ErrorCode;
 	int i = 0;
@@ -2477,7 +2477,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			     rd_kafka_buf_t *rkbuf, rd_kafka_buf_t *request) {
 	int32_t TopicArrayCnt;
 	int i;
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         shptr_rd_kafka_itopic_t *s_rkt = NULL;
 
 	if (rd_kafka_buf_ApiVersion(request) >= 1) {

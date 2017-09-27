@@ -154,19 +154,22 @@ rd_tmpabuf_write_str0 (const char *func, int line,
  * Assumptions:
  *   - an 'err_parse:' goto-label must be available for error bailouts,
  *                     the error code will be set in rkbuf->rkbuf_err
+ *   - local `int log_decode_errors` variable set to the logging level
+ *     to log parse errors (or 0 to turn off logging).
  */
 
 #define rd_kafka_buf_parse_fail(rkbuf,...) do {				\
-                if (log_decode_errors) {                                \
+                if (log_decode_errors > 0) {                            \
 			rd_kafka_assert(NULL, rkbuf->rkbuf_rkb);	\
-                        rd_rkb_log(rkbuf->rkbuf_rkb, LOG_WARNING, "PROTOERR", \
+                        rd_rkb_log(rkbuf->rkbuf_rkb, log_decode_errors, \
+                                   "PROTOERR",                          \
                                    "Protocol parse failure "            \
                                    "at %"PRIusz"/%"PRIusz" (%s:%i) "    \
                                    "(incorrect broker.version.fallback?)", \
                                    rd_slice_offset(&rkbuf->rkbuf_reader), \
                                    rd_slice_size(&rkbuf->rkbuf_reader), \
                                    __FUNCTION__, __LINE__);             \
-                        rd_rkb_log(rkbuf->rkbuf_rkb, LOG_WARNING,	\
+                        rd_rkb_log(rkbuf->rkbuf_rkb, log_decode_errors, \
 				   "PROTOERR", __VA_ARGS__);		\
                 }                                                       \
                 (rkbuf)->rkbuf_err = RD_KAFKA_RESP_ERR__BAD_MSG;        \

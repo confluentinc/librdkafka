@@ -985,7 +985,7 @@ int rd_kafka_transport_framed_recv (rd_kafka_transport_t *rktrans,
                                     char *errstr, size_t errstr_size) {
 	rd_kafka_buf_t *rkbuf = rktrans->rktrans_recv_buf;
 	ssize_t r;
-	const int log_decode_errors = 0;
+	const int log_decode_errors = LOG_ERR;
 
 	/* States:
 	 *   !rktrans_recv_buf: initial state; set up buf to receive header.

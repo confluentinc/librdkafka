@@ -151,7 +151,7 @@ rd_kafka_resp_err_t rd_kafka_handle_Offset (rd_kafka_t *rk,
                                             rd_kafka_topic_partition_list_t
                                             *offsets) {
 
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
         int32_t TopicArrayCnt;
         int actions;
@@ -348,7 +348,7 @@ rd_kafka_handle_OffsetFetch (rd_kafka_t *rk,
 			     rd_kafka_buf_t *request,
 			     rd_kafka_topic_partition_list_t *offsets,
 			     int update_toppar) {
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int32_t TopicArrayCnt;
         int64_t offset = RD_KAFKA_OFFSET_INVALID;
         rd_kafkap_str_t metadata;
@@ -642,7 +642,7 @@ rd_kafka_handle_OffsetCommit (rd_kafka_t *rk,
 			      rd_kafka_buf_t *rkbuf,
 			      rd_kafka_buf_t *request,
 			      rd_kafka_topic_partition_list_t *offsets) {
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int32_t TopicArrayCnt;
         int16_t ErrorCode = 0, last_ErrorCode = 0;
 	int errcnt = 0;
@@ -992,7 +992,7 @@ void rd_kafka_handle_SyncGroup (rd_kafka_t *rk,
                                 rd_kafka_buf_t *request,
                                 void *opaque) {
         rd_kafka_cgrp_t *rkcg = opaque;
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
         rd_kafkap_bytes_t MemberState = RD_ZERO_INIT;
         int actions;
@@ -1131,7 +1131,7 @@ void rd_kafka_handle_LeaveGroup (rd_kafka_t *rk,
                                  rd_kafka_buf_t *request,
                                  void *opaque) {
         rd_kafka_cgrp_t *rkcg = opaque;
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
         int actions;
 
@@ -1476,7 +1476,7 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 			    rd_kafka_buf_t *request,
 			    struct rd_kafka_ApiVersion **apis,
 			    size_t *api_cnt) {
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int actions;
 	int32_t ApiArrayCnt;
 	int16_t ErrorCode;
@@ -1629,7 +1629,7 @@ rd_kafka_handle_Produce_parse (rd_kafka_broker_t *rkb,
                 int16_t ErrorCode;
                 int64_t Offset;
         } hdr;
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
 
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
         if (TopicArrayCnt != 1)

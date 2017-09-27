@@ -451,7 +451,7 @@ rd_kafka_msgset_reader_msg_v0_1 (rd_kafka_msgset_reader_t *msetr) {
         const char *reloff_str = "";
         /* Only log decoding errors if protocol debugging enabled. */
         int log_decode_errors = (rkbuf->rkbuf_rkb->rkb_rk->rk_conf.debug &
-                                 RD_KAFKA_DBG_PROTOCOL);
+                                 RD_KAFKA_DBG_PROTOCOL) ? LOG_DEBUG : 0;
         size_t message_end;
 
         rd_kafka_buf_read_i64(rkbuf, &hdr.Offset);
@@ -620,7 +620,7 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_msg_t *rkm;
         /* Only log decoding errors if protocol debugging enabled. */
         int log_decode_errors = (rkbuf->rkbuf_rkb->rkb_rk->rk_conf.debug &
-                                 RD_KAFKA_DBG_PROTOCOL);
+                                 RD_KAFKA_DBG_PROTOCOL) ? LOG_DEBUG : 0;
         size_t message_end;
 
         rd_kafka_buf_read_varint(rkbuf, &hdr.Length);
@@ -721,7 +721,7 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
         int64_t LastOffset; /* Last absolute Offset in MessageSet header */
         /* Only log decoding errors if protocol debugging enabled. */
         int log_decode_errors = (rkbuf->rkbuf_rkb->rkb_rk->rk_conf.debug &
-                                 RD_KAFKA_DBG_PROTOCOL);
+                                 RD_KAFKA_DBG_PROTOCOL) ? LOG_DEBUG : 0;
 
         rd_kafka_buf_read_i64(rkbuf, &hdr.BaseOffset);
         rd_kafka_buf_read_i32(rkbuf, &hdr.Length);
@@ -892,7 +892,7 @@ rd_kafka_msgset_reader (rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_resp_err_t err;
         /* Only log decoding errors if protocol debugging enabled. */
         int log_decode_errors = (rkbuf->rkbuf_rkb->rkb_rk->rk_conf.debug &
-                                 RD_KAFKA_DBG_PROTOCOL);
+                                 RD_KAFKA_DBG_PROTOCOL) ? LOG_DEBUG : 0;
         int8_t MagicByte;
         size_t read_offset = rd_slice_offset(&rkbuf->rkbuf_reader);
 

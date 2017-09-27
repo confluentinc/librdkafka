@@ -429,7 +429,7 @@ static void rd_kafka_cgrp_handle_GroupCoordinator (rd_kafka_t *rk,
                                                    rd_kafka_buf_t *rkbuf,
                                                    rd_kafka_buf_t *request,
                                                    void *opaque) {
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
         int32_t CoordId;
         rd_kafkap_str_t CoordHost = RD_ZERO_INIT;
@@ -753,7 +753,7 @@ rd_kafka_group_MemberMetadata_consumer_read (
         int16_t Version;
         int32_t subscription_cnt;
         rd_kafkap_bytes_t UserData;
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__BAD_MSG;
 
         /* Create a shadow-buffer pointing to the metadata to ease parsing. */
@@ -821,7 +821,7 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                                             rd_kafka_buf_t *request,
                                             void *opaque) {
         rd_kafka_cgrp_t *rkcg = opaque;
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
         int32_t GenerationId;
         rd_kafkap_str_t Protocol, LeaderId, MyMemberId;
@@ -1300,7 +1300,7 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
                                      rd_kafka_buf_t *request,
                                      void *opaque) {
         rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode = 0;
         int actions;
 
@@ -3121,7 +3121,7 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                                      const rd_kafkap_bytes_t *member_state) {
         rd_kafka_buf_t *rkbuf = NULL;
         rd_kafka_topic_partition_list_t *assignment;
-        const int log_decode_errors = 1;
+        const int log_decode_errors = LOG_ERR;
         int16_t Version;
         int32_t TopicCnt;
         rd_kafkap_bytes_t UserData;

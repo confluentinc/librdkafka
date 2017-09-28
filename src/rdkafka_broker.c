@@ -1940,6 +1940,10 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
                         rkb->rkb_nodeid = rko->rko_u.node.nodeid;
 
+                        /* Update system thread name */
+                        rd_kafka_set_thread_sysname("rdk:broker%"PRId32,
+                                                    rkb->rkb_nodeid);
+
                         /* Update broker_by_id sorted list */
                         if (old_nodeid == -1)
                                 rd_list_add(&rkb->rkb_rk->rk_broker_by_id, rkb);
@@ -3091,8 +3095,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_t *rkb = arg;
 	rd_kafka_t *rk = rkb->rkb_rk;
 
-        rd_snprintf(rd_kafka_thread_name, sizeof(rd_kafka_thread_name),
-		    "%s", rkb->rkb_name);
+        rd_kafka_set_thread_name("%s", rkb->rkb_name);
+        rd_kafka_set_thread_sysname("rdk:broker%"PRId32, rkb->rkb_nodeid);
 
 	(void)rd_atomic32_add(&rd_kafka_thread_cnt_curr, 1);
 

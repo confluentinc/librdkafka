@@ -407,6 +407,11 @@ int thrd_sleep(const struct timespec *duration, struct timespec *remaining);
 */
 void thrd_yield(void);
 
+/** Set thread system name if platform supports it (pthreads)
+* @return thrd_success or thrd_error
+*/
+int thrd_setname (const char *name);
+
 /* Thread local storage */
 #if defined(_TTHREAD_WIN32_)
 typedef DWORD tss_t;

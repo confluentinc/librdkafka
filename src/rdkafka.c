@@ -90,11 +90,37 @@ int rd_kafka_thread_cnt (void) {
 }
 
 /**
- * Current thread's name (TLS)
+ * Current thread's log name (TLS)
  */
-char RD_TLS rd_kafka_thread_name[64] = "app";
+static char RD_TLS rd_kafka_thread_name[64] = "app";
 
+void rd_kafka_set_thread_name (const char *fmt, ...) {
+        va_list ap;
 
+        va_start(ap, fmt);
+        rd_vsnprintf(rd_kafka_thread_name, sizeof(rd_kafka_thread_name),
+                     fmt, ap);
+        va_end(ap);
+}
+
+/**
+ * @brief Current thread's system name (TLS)
+ *
+ * Note the name must be 15 characters or less, because it is passed to
+ * pthread_setname_np on Linux which imposes this limit.
+ */
+static char RD_TLS rd_kafka_thread_sysname[16] = "app";
+
+void rd_kafka_set_thread_sysname (const char *fmt, ...) {
+        va_list ap;
+
+        va_start(ap, fmt);
+        rd_vsnprintf(rd_kafka_thread_sysname, sizeof(rd_kafka_thread_sysname),
+                     fmt, ap);
+        va_end(ap);
+
+        thrd_setname(rd_kafka_thread_sysname);
+}
 
 static void rd_kafka_global_init (void) {
 #if ENABLE_SHAREDPTR_DEBUG
@@ -1203,7 +1229,8 @@ static int rd_kafka_thread_main (void *arg) {
 	rd_kafka_timer_t tmr_stats_emit = RD_ZERO_INIT;
 	rd_kafka_timer_t tmr_metadata_refresh = RD_ZERO_INIT;
 
-        rd_snprintf(rd_kafka_thread_name, sizeof(rd_kafka_thread_name), "main");
+        rd_kafka_set_thread_name("main");
+        rd_kafka_set_thread_sysname("rdk:main");
 
 	(void)rd_atomic32_add(&rd_kafka_thread_cnt_curr, 1);
 

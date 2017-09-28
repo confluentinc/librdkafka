@@ -420,11 +420,8 @@ rd_kafka_resp_err_t rd_kafka_set_last_error (rd_kafka_resp_err_t err,
 
 extern rd_atomic32_t rd_kafka_thread_cnt_curr;
 
-extern char RD_TLS rd_kafka_thread_name[64];
-
-
-
-
+void rd_kafka_set_thread_name (const char *fmt, ...);
+void rd_kafka_set_thread_sysname (const char *fmt, ...);
 
 int rd_kafka_path_is_dir (const char *path);
 

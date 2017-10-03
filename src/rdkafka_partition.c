@@ -549,11 +549,13 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_add (rd_kafka_itopic_t *rkt,
                                           partition, 0/*no_ua_on_miss*/))) {
                 rktp = rd_kafka_toppar_s2i(s_rktp);
 		rd_kafka_toppar_lock(rktp);
-		rd_kafka_dbg(rkt->rkt_rk, TOPIC, "DESP",
-			     "Setting topic %s [%"PRId32"] partition "
-			     "as desired",
-			     rkt->rkt_topic->str, rktp->rktp_partition);
-		rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_DESIRED;
+                if (unlikely(!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_DESIRED))) {
+                        rd_kafka_dbg(rkt->rkt_rk, TOPIC, "DESP",
+                                     "Setting topic %s [%"PRId32"] partition "
+                                     "as desired",
+                                     rkt->rkt_topic->str, rktp->rktp_partition);
+                        rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_DESIRED;
+                }
 		rd_kafka_toppar_unlock(rktp);
 		return s_rktp;
 	}

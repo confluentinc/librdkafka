@@ -591,6 +591,6 @@ class NugetPackage (Package):
             print('Missing files in package %s:\n%s' % (path, '\n'.join(missing)))
             return False
         else:
-            print('OK - %d expected files found' % expect)
+            print('OK - %d expected files found' % len(expect))
             return True
 

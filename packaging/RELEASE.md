@@ -34,26 +34,47 @@ If all tests pass, carry on, otherwise identify and fix bug and start over.
 
 **Switch to the release branch which is of the format `A.B.C.x` or `A.B.x`.**
 
-    $ git checkout 0.11.1.x
+    $ git checkout -b 0.11.1.x
 
 
 **Update in-code versions.**
-
-Change the RD_KAFKA_VERSION defines in src/rdkafka.h and src-cpp/rdkafkacpp.h
-to the version to build, such as 0x000b01c9 for v0.11.1-RC1, or 0x000b01ff for
-the final v0.11.1 release.
 
 The last octet in the version hex number is the pre-build/release-candidate
 number, where 0xAABBCCff is the final release for version 0xAABBCC.
 Release candidates start at 200, thus 0xAABBCCc9 is RC1, 0xAABBCCca is RC2, etc.
 
+Change the `RD_KAFKA_VERSION` defines in both `src/rdkafka.h` and
+`src-cpp/rdkafkacpp.h` to the version to build, such as 0x000b01c9
+for v0.11.1-RC1, or 0x000b01ff for the final v0.11.1 release.
+
+   # Update defines
+   $ $EDITOR src/rdkafka.h src-cpp/rdkafkacpp.h
+
+   # Reconfigure and build
+   $ ./configure
+   $ make
+
+   # Check git diff for correctness
+   $ git diff
+
+   # Commit
+   $ git commit -m "Version v0.11.1-RC1" src/rdkafka.h src-cpp/rdkafkacpp.h
+
 
 **Create tag.**
 
-    $  git tag v0.11.1-RC1 # for an RC
-    # #git tag v0.11.1     # for the final release
+    $ git tag v0.11.1-RC1 # for an RC
+    # or for the final release:
+    $ git tag v0.11.1     # for the final release
 
 
+**Push branch and commit to github**
+
+    # Dry-run first to make sure things look correct
+    $ git push --dry-run origin 0.11.1.x
+
+    # Live
+    $ git push origin 0.11.1.x
 **Push tags and commit to github**
 
     # Dry-run first to make sure things look correct.
@@ -79,7 +100,7 @@ Wait until this process is finished by monitoring the two CIs:
 On a Linux host with docker installed, this will also require S3 credentials
 to be set up.
 
-    $ cd package/nuget
+    $ cd packaging/nuget
     $ pip install -r requirements.txt  # if necessary
     $ ./release.py v0.11.1-RC1
 

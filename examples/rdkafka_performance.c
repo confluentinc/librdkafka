@@ -1303,11 +1303,17 @@ int main (int argc, char **argv) {
 			cnt.bytes += msgsize;
 
                         if (rate_sleep) {
+				if (rate_sleep > 100) {
 #ifdef _MSC_VER
-                                Sleep(rate_sleep / 1000);
+					Sleep(rate_sleep / 1000);
 #else
-                                usleep(rate_sleep);
+					usleep(rate_sleep);
 #endif
+				} else {
+					rd_ts_t next = rd_clock() + rate_sleep;
+					while (next > rd_clock())
+						;
+				}
                         }
 
 			/* Must poll to handle delivery reports */

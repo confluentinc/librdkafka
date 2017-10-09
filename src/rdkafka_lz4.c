@@ -212,10 +212,14 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
         /* If uncompressed size is unknown or out of bounds, use a sane
          * default (2x compression) and reallocate if needed
          * More info on max size: http://stackoverflow.com/a/25751871/1821055 */
-        if (fi.contentSize == 0 || fi.contentSize > inlen * 255)
+        if (fi.contentSize == 0 || fi.contentSize > inlen * 255) {
                 estimated_uncompressed_size = inlen * 2;
-        else
-                estimated_uncompressed_size = (size_t)fi.contentSize;
+        } else {
+                estimated_uncompressed_size = RD_MIN(
+                        inlen * 255,
+                        RD_MAX(inlen * 2,
+                               (size_t)(rkb->rkb_rk->rk_conf.max_msg_size)));
+        }
 
         /* Allocate output buffer, we increase this later if needed,
          * but hopefully not. */
@@ -261,12 +265,9 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
                  * contentSize was properly set. */
                 if (unlikely(out_of == outlen)) {
                         char *tmp;
-                        // Grow exponentially with some factor > 1 (using 1.75)
-                        // for ammortized O(1) copying.
-                        size_t extra = outlen * 3 / 4;
-                        if (extra < 128) {
-                            extra = 128;
-                        }
+                        /* Grow exponentially with some factor > 1 (using 1.75)
+                         * for amortized O(1) copying */
+                        size_t extra = RD_MAX(outlen * 3 / 4, 1024);
 
                         rd_atomic64_add(&rkb->rkb_c.zbuf_grow, 1);
 

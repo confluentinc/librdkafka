@@ -236,8 +236,13 @@ int16_t rd_kafka_broker_ApiVersion_supported (rd_kafka_broker_t *rkb,
 
 
 /**
- * Locks: rd_kafka_broker_lock() MUST be held.
- * Locality: broker thread
+ * @brief Set broker state.
+ *
+ *        \c rkb->rkb_state is the previous state, while
+ *        \p state is the new state.
+ *
+ * @locks rd_kafka_broker_lock() MUST be held.
+ * @locality broker thread
  */
 void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 	if ((int)rkb->rkb_state == state)
@@ -270,7 +275,7 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
                                                         rk_broker_cnt));
 		rkb->rkb_down_reported = 1;
 
-	} else if (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
+        } else if (state >= RD_KAFKA_BROKER_STATE_UP &&
 		   rkb->rkb_down_reported) {
 		rd_atomic32_sub(&rkb->rkb_rk->rk_broker_down_cnt, 1);
 		rkb->rkb_down_reported = 0;

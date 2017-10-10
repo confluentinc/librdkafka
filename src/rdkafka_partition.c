@@ -609,26 +609,28 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp) {
  * Append message at tail of 'rktp' message queue.
  */
 void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
+	int wakeup_fd, queue_len;
 
 	rd_kafka_toppar_lock(rktp);
+	wakeup_fd = rktp->rktp_msgq_wakeup_fd;
 	rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
+	queue_len = rd_kafka_msgq_len(&rktp->rktp_msgq);
+        rd_kafka_toppar_unlock(rktp);
 #ifndef _MSC_VER
-        if (rktp->rktp_msgq_wakeup_fd != -1 &&
-            rd_kafka_msgq_len(&rktp->rktp_msgq) == 1) {
+        if (wakeup_fd != -1 && queue_len == 1) {
                 char one = 1;
                 int r;
-                r = rd_write(rktp->rktp_msgq_wakeup_fd, &one, sizeof(one));
+                r = rd_write(wakeup_fd, &one, sizeof(one));
                 if (r == -1)
                         rd_kafka_log(rktp->rktp_rkt->rkt_rk, LOG_ERR, "PARTENQ",
                                      "%s [%"PRId32"]: write to "
                                      "wake-up fd %d failed: %s",
                                      rktp->rktp_rkt->rkt_topic->str,
                                      rktp->rktp_partition,
-                                     rktp->rktp_msgq_wakeup_fd,
+                                     wakeup_fd,
                                      rd_strerror(errno));
         }
 #endif
-        rd_kafka_toppar_unlock(rktp);
 }
 
 

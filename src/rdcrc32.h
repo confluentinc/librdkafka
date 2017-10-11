@@ -21,6 +21,7 @@
 #ifndef __RDCRC32___H__
 #define __RDCRC32___H__
 
+#include "MurMurHash2.h"
 #include "rd.h"
 
 #include <stdlib.h>
@@ -47,6 +48,7 @@ extern "C" {
  * This type must be big enough to contain at least 32 bits.
  *****************************************************************************/
 typedef uint32_t rd_crc32_t;
+typedef uint32_t rd_murmur2_t;
 
 #if !WITH_ZLIB
 extern 	const rd_crc32_t crc_table[256];
@@ -138,6 +140,13 @@ static RD_INLINE rd_crc32_t rd_crc32 (const char *data, size_t data_len) {
 						 (const unsigned char *)data,
 						 data_len));
 }
+
+static uint32_t rd_murmur2_seed = 0x9747b28c;
+
+static RD_INLINE rd_murmur2_t rd_murmur2 (const char *data, size_t data_len) {
+    return MurmurHash2(data, data_len, rd_murmur2_seed);
+}
+
 
 #ifdef __cplusplus
 }           /* closing brace for extern "C" */

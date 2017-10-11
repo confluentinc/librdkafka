@@ -1531,7 +1531,9 @@ static void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
 		if (rk->rk_type == RD_KAFKA_CONSUMER) {
 			/* Save offset of last consumed message+1 as the
 			 * next message to fetch on resume. */
-			rktp->rktp_next_offset = rktp->rktp_app_offset;
+			if (rktp->rktp_app_offset != RD_KAFKA_OFFSET_INVALID) {
+				rktp->rktp_next_offset = rktp->rktp_app_offset;
+			}
 
 			rd_kafka_dbg(rk, TOPIC, pause?"PAUSE":"RESUME",
 				     "%s %s [%"PRId32"]: at offset %s "

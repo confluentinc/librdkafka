@@ -218,7 +218,7 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
                         RD_MAX(inlen * 2,
                                (size_t)(rkb->rkb_rk->rk_conf.max_msg_size)));
         } else {
-                estimated_uncompressed_size = fi.contentSize;
+                estimated_uncompressed_size = (size_t)fi.contentSize;
         }
 
         /* Allocate output buffer, we increase this later if needed,

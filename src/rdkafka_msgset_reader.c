@@ -624,7 +624,7 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
         size_t message_end;
 
         rd_kafka_buf_read_varint(rkbuf, &hdr.Length);
-        message_end = rd_slice_offset(&rkbuf->rkbuf_reader) + hdr.Length;
+        message_end = rd_slice_offset(&rkbuf->rkbuf_reader)+(size_t)hdr.Length;
         rd_kafka_buf_read_varint(rkbuf, &hdr.MsgAttributes);
 
         rd_kafka_buf_read_varint(rkbuf, &hdr.TimestampDelta);

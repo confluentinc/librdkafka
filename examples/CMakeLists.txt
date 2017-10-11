@@ -1,6 +1,9 @@
 add_executable(rdkafka_example rdkafka_example.c)
 target_link_libraries(rdkafka_example PUBLIC rdkafka)
 
+add_executable(rdkafka_simple_producer_set_partitioner rdkafka_simple_producer_set_partitioner.c)
+target_link_libraries(rdkafka_simple_producer_set_partitioner PUBLIC rdkafka)
+
 add_executable(rdkafka_simple_producer rdkafka_simple_producer.c)
 target_link_libraries(rdkafka_simple_producer PUBLIC rdkafka)
 

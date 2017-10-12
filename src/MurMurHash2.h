@@ -1,3 +1,7 @@
+/* MurmurHash2, by abrandoned
+ * hosted on https://github.com/abrandoned/murmur2
+ */
+
 #ifndef MURMUR_PLATFORM_H
 #define MURMUR_PLATFORM_H
 

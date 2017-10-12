@@ -623,8 +623,7 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 
 	rd_kafka_toppar_lock(rktp);
 	wakeup_fd = rktp->rktp_msgq_wakeup_fd;
-	rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
-	queue_len = rd_kafka_msgq_len(&rktp->rktp_msgq);
+	queue_len = rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
         rd_kafka_toppar_unlock(rktp);
 #ifndef _MSC_VER
         if (wakeup_fd != -1 && queue_len == 1) {

@@ -260,11 +260,15 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
 /**
  * Append message to tail of message queue.
  */
-static RD_INLINE RD_UNUSED void rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
+static RD_INLINE RD_UNUSED int rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
 						rd_kafka_msg_t *rkm) {
+	int len;
+
 	TAILQ_INSERT_TAIL(&rkmq->rkmq_msgs, rkm, rkm_link);
-	rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
+	len = rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
 	rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len+rkm->rkm_key_len);
+	
+	return len;
 }
 
 

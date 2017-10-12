@@ -83,6 +83,7 @@ static void dr_msg_cb (rd_kafka_t *rk,
 int main (int argc, char **argv) {
         rd_kafka_t *rk;         /* Producer instance handle */
         rd_kafka_topic_t *rkt;  /* Topic object */
+        rd_kafka_topic_conf_t * tconf; /* Topic conf */
         rd_kafka_conf_t *conf;  /* Temporary configuration object */
         char errstr[512];       /* librdkafka API error reporting buffer */
         char buf[512];          /* Message value temporary buffer */
@@ -99,12 +100,16 @@ int main (int argc, char **argv) {
 
         brokers = argv[1];
         topic   = argv[2];
+        const char key[4] = "Test";
 
 
         /*
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
+        tconf = rd_kafka_topic_conf_new();
+        rd_kafka_topic_conf_set_partitioner_cb(tconf, rd_kafka_msg_partitioner_murmur2);
+        fprintf(stderr, "should be murmur2\n");
 
         /* Set bootstrap broker(s) as a comma-separated list of
          * host or host:port (default port 9092).
@@ -115,11 +120,8 @@ int main (int argc, char **argv) {
                 fprintf(stderr, "%s\n", errstr);
                 return 1;
         }
-        // if(rd_kafka_conf_set(conf, "partitioner_cb", & rd_kafka_msg_partitioner_consistent_random,
-        //                      errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-        //         fprintf(stderr, "%s\n", errstr);
-        //         return 1;
-        // }
+
+        rd_kafka_conf_set_default_topic_conf(conf, tconf);
 
         /* Set the delivery report callback.
          * This callback will be called once per message to inform
@@ -150,7 +152,6 @@ int main (int argc, char **argv) {
          * are long-lived objects that should be reused as much as possible.
          */
         rkt = rd_kafka_topic_new(rk, topic, NULL);
-        rd_kafka_topic_conf_set_partitioner_cb(rkt, rd_kafka_msg_partitioner_consistent_random);
         if (!rkt) {
                 fprintf(stderr, "%% Failed to create topic object: %s\n",
                         rd_kafka_err2str(rd_kafka_last_error()));
@@ -199,7 +200,7 @@ int main (int argc, char **argv) {
                             /* Message payload (value) and length */
                             buf, len,
                             /* Optional key and its length */
-                            NULL, 0,
+                            key, 4,
                             /* Message opaque, provided in
                              * delivery report callback as
                              * msg_opaque. */

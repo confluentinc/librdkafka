@@ -144,7 +144,10 @@ static RD_INLINE rd_crc32_t rd_crc32 (const char *data, size_t data_len) {
 static uint32_t rd_murmur2_seed = 0x9747b28c;
 
 static RD_INLINE rd_murmur2_t rd_murmur2 (const char *data, size_t data_len) {
-    return MurmurHash2(data, data_len, rd_murmur2_seed);
+    printf("murmur2 partitioner\n");
+    rd_murmur2_t out = MurmurHash2(data, data_len, rd_murmur2_seed);
+    fprintf(stderr, "out: %d\n", out);
+    return out;
 }
 
 

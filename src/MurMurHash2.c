@@ -1,4 +1,4 @@
-#include "MurmurHash2.h"
+#include "MurMurHash2.h"
 
 /* MurmurHash2, by Austin Appleby
 // Note - This code makes a few assumptions about how your machine behaves -
@@ -15,7 +15,6 @@ uint32_t MurmurHash2 ( const void * key, int len, uint32_t seed )
 {
   /* 'm' and 'r' are mixing constants generated offline.
      They're not really 'magic', they just happen to work well.  */
-
   const uint32_t m = 0x5bd1e995;
   const int r = 24;
 
@@ -26,6 +25,7 @@ uint32_t MurmurHash2 ( const void * key, int len, uint32_t seed )
   /* Mix 4 bytes at a time into the hash */
 
   const unsigned char * data = (const unsigned char *)key;
+  const char * data_char = (const char *)key;
 
   while(len >= 4)
   {
@@ -60,12 +60,12 @@ uint32_t MurmurHash2 ( const void * key, int len, uint32_t seed )
   h ^= h >> 15;
 
   return h;
-} 
+}
 
 /*-----------------------------------------------------------------------------
 // MurmurHash2, 64-bit versions, by Austin Appleby
 //
-// The same caveats as 32-bit MurmurHash2 apply here - beware of alignment 
+// The same caveats as 32-bit MurmurHash2 apply here - beware of alignment
 // and endian-ness issues if used across multiple platforms.
 //
 // 64-bit hash for 64-bit platforms
@@ -85,12 +85,12 @@ uint64_t MurmurHash64A ( const void * key, int len, uint64_t seed )
   {
     uint64_t k = *data++;
 
-    k *= m; 
-    k ^= k >> r; 
-    k *= m; 
-    
+    k *= m;
+    k ^= k >> r;
+    k *= m;
+
     h ^= k;
-    h *= m; 
+    h *= m;
   }
 
   const unsigned char * data2 = (const unsigned char*)data;
@@ -106,13 +106,13 @@ uint64_t MurmurHash64A ( const void * key, int len, uint64_t seed )
   case 1: h ^= ((uint64_t) data2[0]);
           h *= m;
   };
- 
+
   h ^= h >> r;
   h *= m;
   h ^= h >> r;
 
   return h;
-} 
+}
 
 /* 64-bit hash for 32-bit platforms */
 
@@ -165,13 +165,13 @@ uint64_t MurmurHash64B ( const void * key, int len, uint64_t seed )
   h = (h << 32) | h2;
 
   return h;
-} 
+}
 
 /*-----------------------------------------------------------------------------
 // MurmurHash2A, by Austin Appleby
 //
-// This is a variant of MurmurHash2 modified to use the Merkle-Damgard 
-// construction. Bulk speed should be identical to Murmur2, small-key speed 
+// This is a variant of MurmurHash2 modified to use the Merkle-Damgard
+// construction. Bulk speed should be identical to Murmur2, small-key speed
 // will be 10%-20% slower due to the added overhead at the end of the hash.
 //
 // This variant fixes a minor issue where null keys were more likely to
@@ -245,8 +245,8 @@ uint32_t MurmurHashNeutral2 ( const void * key, int len, uint32_t seed )
     k |= data[2] << 16;
     k |= data[3] << 24;
 
-    k *= m; 
-    k ^= k >> r; 
+    k *= m;
+    k ^= k >> r;
     k *= m;
 
     h *= m;
@@ -255,7 +255,7 @@ uint32_t MurmurHashNeutral2 ( const void * key, int len, uint32_t seed )
     data += 4;
     len -= 4;
   }
-  
+
   switch(len)
   {
   case 3: h ^= data[2] << 16;
@@ -269,13 +269,13 @@ uint32_t MurmurHashNeutral2 ( const void * key, int len, uint32_t seed )
   h ^= h >> 15;
 
   return h;
-} 
+}
 
 /*-----------------------------------------------------------------------------
 // MurmurHashAligned2, by Austin Appleby
 //
 // Same algorithm as MurmurHash2, but only does aligned reads - should be safer
-// on certain platforms. 
+// on certain platforms.
 //
 // Performance will be lower than MurmurHash2
 */

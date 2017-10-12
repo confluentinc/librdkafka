@@ -7,7 +7,6 @@
 
   void SetAffinity ( int cpu );
   #include <stdint.h>
-  #include <strings.h>
 
   #define BIG_CONSTANT(x) (x##LLU)
 

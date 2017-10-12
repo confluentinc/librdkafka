@@ -33,6 +33,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_interceptor.h"
 #include "rdcrc32.h"
+#include "rdmurmur2.h"
 #include "rdrand.h"
 #include "rdtime.h"
 

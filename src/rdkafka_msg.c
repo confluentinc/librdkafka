@@ -3,24 +3,24 @@
  *
  * Copyright (c) 2012,2013 Magnus Edenhill
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met: 
- * 
+ * modification, are permitted provided that the following conditions are met:
+ *
  * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer. 
+ *    this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution. 
- * 
+ *    and/or other materials provided with the distribution.
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
@@ -33,6 +33,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_interceptor.h"
 #include "rdcrc32.h"
+#include "rdmurmur2.h"
 #include "rdrand.h"
 #include "rdtime.h"
 
@@ -222,7 +223,7 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 	int errnox;
 
         /* Create message */
-        rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
+        rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags,
                                 payload, len, key, keylen, msg_opaque,
                                 &err, &errnox, 0, rd_clock());
         if (unlikely(!rkm)) {
@@ -511,6 +512,35 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
 		return p;
 }
 
+int32_t rd_kafka_msg_partitioner_murmur2_consistnent (const rd_kafka_topic_t *rkt,
+					 const void *key, size_t keylen,
+					 int32_t partition_cnt,
+					 void *rkt_opaque,
+					 void *msg_opaque) {
+	return rd_murmur2(key, keylen) % partition_cnt;
+}
+
+int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
+					 const void *key, size_t keylen,
+					 int32_t partition_cnt,
+					 void *rkt_opaque,
+					 void *msg_opaque) {
+	if (keylen == 0)
+		return rd_kafka_msg_partitioner_random(rkt,
+																					 key,
+																					 keylen,
+	                                         partition_cnt,
+	                                         rkt_opaque,
+	                                         msg_opaque);
+	else
+		return rd_kafka_msg_partitioner_murmur2_consistnent(rkt,
+																					 							key,
+																					 							keylen,
+	                                         							partition_cnt,
+	                                         							rkt_opaque,
+	                                         							msg_opaque);
+}
+
 int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,
                                              const void *key, size_t keylen,
                                              int32_t partition_cnt,
@@ -797,4 +827,3 @@ int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage) {
 
         return rd_clock() - rkm->rkm_ts_enq;
 }
-

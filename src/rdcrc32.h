@@ -30,10 +30,6 @@
 #include <zlib.h>
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 
 /**
  * The definition of the used algorithm.
@@ -138,6 +134,7 @@ static RD_INLINE rd_crc32_t rd_crc32 (const char *data, size_t data_len) {
 						 (const unsigned char *)data,
 						 data_len));
 }
+
 
 #ifdef __cplusplus
 }           /* closing brace for extern "C" */

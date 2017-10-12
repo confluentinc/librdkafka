@@ -108,8 +108,7 @@ int main (int argc, char **argv) {
          */
         conf = rd_kafka_conf_new();
         tconf = rd_kafka_topic_conf_new();
-        rd_kafka_topic_conf_set_partitioner_cb(tconf, rd_kafka_msg_partitioner_murmur2);
-        fprintf(stderr, "should be murmur2\n");
+        rd_kafka_topic_conf_set_partitioner_cb(tconf, rd_kafka_msg_partitioner_murmur2_random);
 
         /* Set bootstrap broker(s) as a comma-separated list of
          * host or host:port (default port 9092).

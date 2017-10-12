@@ -513,17 +513,33 @@ int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
 		return p;
 }
 
-int32_t rd_kafka_msg_partitioner_murmur2 (const rd_kafka_topic_t *rkt,
+int32_t rd_kafka_msg_partitioner_murmur2_consistnent (const rd_kafka_topic_t *rkt,
 					 const void *key, size_t keylen,
 					 int32_t partition_cnt,
 					 void *rkt_opaque,
 					 void *msg_opaque) {
-	int32_t p = rd_murmur2(key, keylen) % partition_cnt;
-	fprintf(stderr, "murmur2 partition: %d\n", p);
-	if (unlikely(!rd_kafka_topic_partition_available(rkt, p)))
-		return rd_jitter(0, partition_cnt-1);
+	return rd_murmur2(key, keylen) % partition_cnt;
+}
+
+int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
+					 const void *key, size_t keylen,
+					 int32_t partition_cnt,
+					 void *rkt_opaque,
+					 void *msg_opaque) {
+	if (keylen == 0)
+		return rd_kafka_msg_partitioner_random(rkt,
+																					 key,
+																					 keylen,
+	                                         partition_cnt,
+	                                         rkt_opaque,
+	                                         msg_opaque);
 	else
-		return p;
+		return rd_kafka_msg_partitioner_murmur2_consistnent(rkt,
+																					 							key,
+																					 							keylen,
+	                                         							partition_cnt,
+	                                         							rkt_opaque,
+	                                         							msg_opaque);
 }
 
 int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,

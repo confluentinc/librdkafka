@@ -1610,7 +1610,7 @@ int32_t rd_kafka_msg_partitioner_murmur2_random(const rd_kafka_topic_t *rkt,
  *
  */
 RD_EXPORT
-int32_t rd_kafka_msg_partitioner_murmur2_consistnent(const rd_kafka_topic_t *rkt,
+int32_t rd_kafka_msg_partitioner_murmur2_consistent(const rd_kafka_topic_t *rkt,
            const void *key, size_t keylen,
            int32_t partition_cnt,
            void *opaque, void *msg_opaque);

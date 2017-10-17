@@ -535,7 +535,7 @@ int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
 	                                         rkt_opaque,
 	                                         msg_opaque);
 	else
-		return rd_kafka_msg_partitioner_murmur2_consistnent(rkt,
+		return rd_kafka_msg_partitioner_murmur2_consistent(rkt,
 																					 							key,
 																					 							keylen,
 	                                         							partition_cnt,

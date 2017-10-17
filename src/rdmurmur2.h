@@ -10,10 +10,10 @@ extern "C" {
 
 typedef uint32_t rd_murmur2_t;
 
-static uint32_t rd_murmur2_seed = 0x9747b28c;
+#define MURMUR2_SEED 0x9747b28c
 
 static RD_INLINE rd_murmur2_t rd_murmur2 (const char *data, size_t data_len) {
-    return MurmurHash2(data, data_len, rd_murmur2_seed);
+    return MurmurHash2(data, data_len, MURMUR2_SEED);
 }
 
 #ifdef __cplusplus

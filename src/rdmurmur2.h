@@ -1,14 +1,14 @@
 #ifndef __RDMURMUR2___H__
 #define __RDMURMUR2___H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "MurMurHash2.h"
 #include "rd.h"
 
 typedef uint32_t rd_murmur2_t;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 static uint32_t rd_murmur2_seed = 0x9747b28c;
 

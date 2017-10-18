@@ -25,6 +25,7 @@ if __name__ == '__main__':
     parser.add_argument("--directory", help="Download directory (default: dl-<tag>)", default=None)
     parser.add_argument("--no-cleanup", help="Don't clean up temporary folders", action="store_true")
     parser.add_argument("--sha", help="Also match on this git sha1", default=None)
+    parser.add_argument("--nuget-version", help="The nuget package version (defaults to same as tag)", default=None)
     parser.add_argument("tag", help="Git tag to collect")
 
     args = parser.parse_args()
@@ -59,8 +60,12 @@ if __name__ == '__main__':
 
     print('Packaging classes: %s' % package_for)
 
+    package_version = match['tag']
+    if args.nuget_version is not None:
+        package_version = args.nuget_version
+
     for pcl in package_for:
-        p = pcl(match['tag'], arts)
+        p = pcl(package_version, arts)
         packages.append(p)
     print('')
 

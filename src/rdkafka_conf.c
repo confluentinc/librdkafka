@@ -284,7 +284,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(broker_addr_ttl),
 	  "How long to cache the broker address resolving "
           "results (milliseconds).",
-	  0, 86400*1000, 1*1000 },
+	  0, 86400*1000, 60*1000 },
         { _RK_GLOBAL, "broker.address.family", _RK_C_S2I,
           _RK(broker_addr_family),
           "Allowed broker IP address families: any, v4, v6",

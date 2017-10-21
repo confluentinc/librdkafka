@@ -195,6 +195,7 @@
     <ClCompile Include="..\src\rdkafka_plugin.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
+    <ClCompile Include="..\src\rdmurmur2.c" />
     <ClCompile Include="..\src\rdstring.c" />
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\rdregex.c" />

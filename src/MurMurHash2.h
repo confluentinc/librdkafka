@@ -1,5 +1,8 @@
 /* MurmurHash2, by abrandoned
  * hosted on https://github.com/abrandoned/murmur2
+ * with the following modifications:
+ *   * added unitest to compare to kafka java client's murmurhash2
+
  */
 
 #ifndef MURMUR_PLATFORM_H

@@ -195,8 +195,6 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                                 "expected %"PRIusz" bytes > %"PRIusz    \
                                 " remaining bytes",                     \
                                 __len0, rd_kafka_buf_read_remain(rkbuf)); \
-                        (rkbuf)->rkbuf_err = RD_KAFKA_RESP_ERR__BAD_MSG; \
-                        goto err_parse;                                 \
                 }                                                       \
         } while (0)
 
@@ -695,6 +693,20 @@ static RD_INLINE void rd_kafka_buf_update_i64 (rd_kafka_buf_t *rkbuf,
                                               size_t of, int64_t v) {
         v = htobe64(v);
         rd_kafka_buf_update(rkbuf, of, &v, sizeof(v));
+}
+
+
+/**
+ * @brief Write varint-encoded signed value to buffer.
+ */
+static RD_INLINE size_t
+rd_kafka_buf_write_varint (rd_kafka_buf_t *rkbuf, int64_t v) {
+        char varint[RD_UVARINT_ENC_SIZEOF(v)];
+        size_t sz;
+
+        sz = rd_uvarint_enc_i64(varint, sizeof(varint), v);
+
+        return rd_kafka_buf_write(rkbuf, varint, sz);
 }
 
 

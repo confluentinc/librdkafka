@@ -93,6 +93,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\src\crc32c.h" />
+    <ClInclude Include="..\src\MurMurHash2.h" />
     <ClInclude Include="..\src\queue.h" />
     <ClInclude Include="..\src\rdatomic.h" />
     <ClInclude Include="..\src\rdavg.h" />
@@ -155,6 +156,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\crc32c.c" />
+    <ClCompile Include="..\src\MurMurHash2.c" />
     <ClCompile Include="..\src\rdaddr.c" />
     <ClCompile Include="..\src\rdbuf.c" />
     <ClCompile Include="..\src\rdcrc32.c" />

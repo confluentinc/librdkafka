@@ -1263,10 +1263,11 @@ int main(int argc, char **argv) {
 	if (!strcmp(test_broker_version_str, "trunk"))
 		test_broker_version_str = "0.10.0.0"; /* for now */
 
-	if (sscanf(test_broker_version_str, "%d.%d.%d.%d",
-		   &a, &b, &c, &d) != 4) {
+        d = 0;
+        if (sscanf(test_broker_version_str, "%d.%d.%d.%d",
+		   &a, &b, &c, &d) < 3) {
 		printf("%% Expected broker version to be in format "
-		       "N.N.N.N (N=int), not %s\n",
+		       "N.N.N (N=int), not %s\n",
 		       test_broker_version_str);
 		exit(1);
 	}

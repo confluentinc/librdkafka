@@ -35,11 +35,18 @@
 #include <stdio.h>
 #include <signal.h>
 #include <string.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
+
+#ifdef _MSC_VER
+#include "../win32/wingetopt.h"
+#endif
 
 
 static int run = 1;
@@ -83,28 +90,68 @@ static void dr_msg_cb (rd_kafka_t *rk,
 int main (int argc, char **argv) {
         rd_kafka_t *rk;         /* Producer instance handle */
         rd_kafka_topic_t *rkt;  /* Topic object */
+        rd_kafka_topic_conf_t * tconf; /* Topic conf */
         rd_kafka_conf_t *conf;  /* Temporary configuration object */
         char errstr[512];       /* librdkafka API error reporting buffer */
         char buf[512];          /* Message value temporary buffer */
-        const char *brokers;    /* Argument: broker list */
-        const char *topic;      /* Argument: topic to produce to */
+        const char *brokers = NULL;    /* Argument: broker list */
+        const char *topic = NULL;      /* Argument: topic to produce to */
+        const char *murmur2_key = NULL; /* Argument: key for murmur2 message */
+        int key_length = 0;
+        int use_murmur2 = 0;
+        int opt;
 
-        /*
-         * Argument validation
-         */
-        if (argc != 3) {
-                fprintf(stderr, "%% Usage: %s <broker> <topic>\n", argv[0]);
-                return 1;
+        while ((opt = getopt(argc, argv, "b:t:mk:h")) != -1) {
+          switch (opt) {
+            case 'b':
+              brokers = optarg;
+              break;
+            case 't':
+              topic = optarg;
+              break;
+            case 'm':
+              use_murmur2 = 1;
+              break;
+            case 'k':
+              murmur2_key = optarg;
+              key_length = strlen(murmur2_key);
+              break;
+            case '?':
+              if ((opt == 'c') || (opt == 'b')) {
+                fprintf (stderr, "Option -%c requires an argument.\n", opt);
+              }
+              return 1;
+            case 'h':
+              fprintf(stdout, "Usage Insitructions\n-b<Broker>\n-t<topic>\n-m (flag use murmur2 partitioner)\n-k (only required if -m is used) message key\n-h This help message\n");
+              return 1;
+            default:
+              abort();
+          }
         }
 
-        brokers = argv[1];
-        topic   = argv[2];
+        if(brokers == NULL) {
+          fprintf(stderr, "-b<brokers> must be provided\n");
+        }
+        if(topic == NULL) {
+          fprintf(stderr, "-t<topic> must be provided\n");
+        }
+        if(use_murmur2 == 1) {
+          if (murmur2_key == NULL) {
+            fprintf(stderr, "-k<key> must be provided\n");
+            return 1;
+          }
+        }
 
 
         /*
          * Create Kafka client configuration place-holder
          */
         conf = rd_kafka_conf_new();
+        if (use_murmur2) {
+          tconf = rd_kafka_topic_conf_new();
+          rd_kafka_topic_conf_set_partitioner_cb(tconf, rd_kafka_msg_partitioner_murmur2_random);
+          rd_kafka_conf_set_default_topic_conf(conf, tconf);
+        }
 
         /* Set bootstrap broker(s) as a comma-separated list of
          * host or host:port (default port 9092).
@@ -193,7 +240,7 @@ int main (int argc, char **argv) {
                             /* Message payload (value) and length */
                             buf, len,
                             /* Optional key and its length */
-                            NULL, 0,
+                            murmur2_key, key_length,
                             /* Message opaque, provided in
                              * delivery report callback as
                              * msg_opaque. */

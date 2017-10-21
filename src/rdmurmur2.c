@@ -44,7 +44,8 @@ int unittest_murmurhashneutral2 (void) {
   };
 
   int keys_length = sizeof(java_murmur2_results) / sizeof(uint32_t);
-  for (int i = 0; i < keys_length; i++) {
+  int i;
+  for (i = 0; i < keys_length; i++) {
     uint32_t murmur2_result = rd_murmur2(keysToTest[i], strlen(keysToTest[i]));
     RD_UT_SAY("GOT HASH: %u"
               " FOR KEY: %s"

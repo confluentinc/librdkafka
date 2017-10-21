@@ -238,6 +238,11 @@ enum ErrorCode {
         ERR__VALUE_DESERIALIZATION = -159,
         /** Partial response */
         ERR__PARTIAL = -158,
+        /** Modification attempted on read-only object */
+        ERR__READ_ONLY = -157,
+        /** No such entry / item not found */
+        ERR__NOENT = -156,
+
         /** End internal error codes */
 	ERR__END = -100,
 

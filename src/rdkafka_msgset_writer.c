@@ -32,6 +32,7 @@
 #include "rdkafka_msgset.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
+#include "rdkafka_header.h"
 #include "rdkafka_lz4.h"
 
 #include "snappy.h"
@@ -443,6 +444,41 @@ rd_kafka_msgset_writer_write_msg_payload (rd_kafka_msgset_writer_t *msetw,
 
 
 /**
+ * @brief Write message headers to buffer.
+ *
+ * @remark The enveloping HeaderCount varint must already have been written.
+ * @returns the number of bytes written to msetw->msetw_rkbuf
+ */
+static size_t
+rd_kafka_msgset_writer_write_msg_headers (rd_kafka_msgset_writer_t *msetw,
+                                          const rd_kafka_headers_t *hdrs) {
+        rd_kafka_buf_t *rkbuf = msetw->msetw_rkbuf;
+        const rd_kafka_header_t *hdr;
+        int i;
+        size_t start_pos = rd_buf_write_pos(&rkbuf->rkbuf_buf);
+        size_t written;
+
+        RD_LIST_FOREACH(hdr, &hdrs->rkhdrs_list, i) {
+                rd_kafka_buf_write_varint(rkbuf, hdr->rkhdr_name_size);
+                rd_kafka_buf_write(rkbuf,
+                                   hdr->rkhdr_name, hdr->rkhdr_name_size);
+                rd_kafka_buf_write_varint(rkbuf,
+                                          hdr->rkhdr_value ?
+                                          hdr->rkhdr_value_size : -1);
+                rd_kafka_buf_write(rkbuf,
+                                   hdr->rkhdr_value,
+                                   hdr->rkhdr_value_size);
+        }
+
+        written = rd_buf_write_pos(&rkbuf->rkbuf_buf) - start_pos;
+        rd_dassert(written == hdrs->rkhdrs_ser_size);
+
+        return written;
+}
+
+
+
+/**
  * @brief Write message to messageset buffer with MsgVersion 0 or 1.
  * @returns the number of bytes written.
  */
@@ -536,6 +572,13 @@ rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
         size_t sz_KeyLen;
         size_t sz_ValueLen;
         size_t sz_HeaderCount;
+        int    HeaderCount = 0;
+        size_t HeaderSize = 0;
+
+        if (rkm->rkm_headers) {
+                HeaderCount = rkm->rkm_headers->rkhdrs_list.rl_cnt;
+                HeaderSize  = rkm->rkm_headers->rkhdrs_ser_size;
+        }
 
         /* All varints, except for Length, needs to be pre-built
          * so that the Length field can be set correctly and thus have
@@ -555,7 +598,8 @@ rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
                 rkm->rkm_payload ? (int32_t)rkm->rkm_len :
                 (int32_t)RD_KAFKAP_BYTES_LEN_NULL);
         sz_HeaderCount = rd_uvarint_enc_i32(
-                varint_HeaderCount, sizeof(varint_HeaderCount), 0);
+                varint_HeaderCount, sizeof(varint_HeaderCount),
+                (int32_t)HeaderCount);
 
         /* Calculate MessageSize without length of Length (added later)
          * to store it in Length. */
@@ -567,7 +611,8 @@ rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
                 rkm->rkm_key_len +
                 sz_ValueLen +
                 rkm->rkm_len +
-                sz_HeaderCount;
+                sz_HeaderCount +
+                HeaderSize;
 
         /* Length */
         sz_Length = rd_uvarint_enc_i64(varint_Length, sizeof(varint_Length),
@@ -599,8 +644,13 @@ rd_kafka_msgset_writer_write_msg_v2 (rd_kafka_msgset_writer_t *msetw,
         if (rkm->rkm_payload)
                 rd_kafka_msgset_writer_write_msg_payload(msetw, rkm, free_cb);
 
-        /* HeaderCount (headers currently not implemented) */
+        /* HeaderCount */
         rd_kafka_buf_write(rkbuf, varint_HeaderCount, sz_HeaderCount);
+
+        /* Headers array */
+        if (rkm->rkm_headers)
+                rd_kafka_msgset_writer_write_msg_headers(msetw,
+                                                         rkm->rkm_headers);
 
         /* Return written message size */
         return MessageSize;

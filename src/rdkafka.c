@@ -381,6 +381,10 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Value deserialization error"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__PARTIAL,
                   "Local: Partial response"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__READ_ONLY,
+                  "Local: Read-only object"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__NOENT,
+                  "Local: No such entry"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),

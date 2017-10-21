@@ -110,7 +110,7 @@ void *rd_list_add (rd_list_t *rl, void *elem) {
 	return rl->rl_elems[rl->rl_cnt++];
 }
 
-static void rd_list_remove0 (rd_list_t *rl, int idx) {
+void rd_list_remove_elem (rd_list_t *rl, int idx) {
         rd_assert(idx < rl->rl_cnt);
 
         if (idx + 1 < rl->rl_cnt)
@@ -126,7 +126,7 @@ void *rd_list_remove (rd_list_t *rl, void *match_elem) {
 
         RD_LIST_FOREACH(elem, rl, i) {
                 if (elem == match_elem) {
-                        rd_list_remove0(rl, i);
+                        rd_list_remove_elem(rl, i);
                         return elem;
                 }
         }
@@ -143,12 +143,32 @@ void *rd_list_remove_cmp (rd_list_t *rl, void *match_elem,
         RD_LIST_FOREACH(elem, rl, i) {
                 if (elem == match_elem ||
                     !cmp(elem, match_elem)) {
-                        rd_list_remove0(rl, i);
+                        rd_list_remove_elem(rl, i);
                         return elem;
                 }
         }
 
         return NULL;
+}
+
+
+int rd_list_remove_multi_cmp (rd_list_t *rl, void *match_elem,
+                              int (*cmp) (void *_a, void *_b)) {
+
+        void *elem;
+        int i;
+        int cnt = 0;
+
+        /* Scan backwards to minimize memmoves */
+        RD_LIST_FOREACH_REVERSE(elem, rl, i) {
+                if (match_elem == cmp ||
+                    !cmp(elem, match_elem)) {
+                        rd_list_remove_elem(rl, i);
+                        cnt++;
+                }
+        }
+
+        return cnt;
 }
 
 
@@ -267,7 +287,7 @@ void rd_list_apply (rd_list_t *rl,
 
         RD_LIST_FOREACH(elem, rl, i) {
                 if (!cb(elem, opaque)) {
-                        rd_list_remove0(rl, i);
+                        rd_list_remove_elem(rl, i);
                         i--;
                 }
         }

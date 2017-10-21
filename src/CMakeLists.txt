@@ -37,6 +37,7 @@ set(
     rdkafka_interceptor.c
     rdlist.c
     rdlog.c
+    rdmurmur2.c
     rdports.c
     rdrand.c
     rdregex.c

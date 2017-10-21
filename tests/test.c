@@ -153,6 +153,7 @@ _TEST_DECL(0067_empty_topic);
 _TEST_DECL(0068_produce_timeout);
 _TEST_DECL(0069_consumer_add_parts);
 _TEST_DECL(0070_null_empty);
+_TEST_DECL(0074_producev);
 
 
 /* Manual tests */
@@ -242,6 +243,7 @@ struct test tests[] = {
         _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32,
               TEST_BRKVER(0,9,0,0)),
         _TEST(0070_null_empty, 0),
+        _TEST(0074_producev, TEST_F_LOCAL),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

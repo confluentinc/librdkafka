@@ -64,6 +64,7 @@ set(
     0068-produce_timeout.c
     0069-consumer_add_parts.c
     0070-null_empty.cpp
+    0074-producev.c
     8000-idle.cpp
     test.c
     testcpp.cpp

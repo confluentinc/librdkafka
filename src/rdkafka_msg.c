@@ -344,8 +344,10 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                                         &err, NULL,
                                         rkm->rkm_timestamp, rd_clock());
 
-        if (unlikely(err))
+        if (unlikely(err)) {
+                rd_kafka_topic_destroy0(s_rkt);
                 return err;
+        }
 
         /* Partition the message */
         err = rd_kafka_msg_partitioner(rkt, rkm, 1);

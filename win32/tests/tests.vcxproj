@@ -155,6 +155,7 @@
     <ClCompile Include="..\..\tests\0068-produce_timeout.c" />
     <ClCompile Include="..\..\tests\0069-consumer_add_parts.c" />
     <ClCompile Include="..\..\tests\0070-null_empty.cpp" />
+    <ClCompile Include="..\..\tests\0074-producev.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

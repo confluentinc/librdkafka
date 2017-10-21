@@ -534,11 +534,11 @@ int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
 	                                         msg_opaque);
 	else
 		return rd_kafka_msg_partitioner_murmur2_consistent(rkt,
-																					 							key,
-																					 							keylen,
-	                                         							partition_cnt,
-	                                         							rkt_opaque,
-	                                         							msg_opaque);
+																					 						 key,
+																					 						 keylen,
+	                                         						 partition_cnt,
+	                                         						 rkt_opaque,
+	                                         						 msg_opaque);
 }
 
 int32_t rd_kafka_msg_partitioner_consistent (const rd_kafka_topic_t *rkt,

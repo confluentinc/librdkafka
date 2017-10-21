@@ -236,6 +236,11 @@ enum ErrorCode {
         ERR__KEY_DESERIALIZATION = -160,
         /** Value deserialization error */
         ERR__VALUE_DESERIALIZATION = -159,
+        /** Modification attempted on read-only object */
+        ERR__READ_ONLY = -158,
+        /** No such entry / item not found */
+        ERR__NOENT = -157,
+
 	/** End internal error codes */
 	ERR__END = -100,
 

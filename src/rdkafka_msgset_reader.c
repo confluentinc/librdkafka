@@ -59,6 +59,7 @@
 #include "rdkafka_msgset.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
+#include "rdkafka_header.h"
 #include "rdkafka_lz4.h"
 
 #include "rdvarint.h"
@@ -614,7 +615,7 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
                 int64_t Offset;  /* Absolute offset */
                 rd_kafkap_bytes_t Key;
                 rd_kafkap_bytes_t Value;
-                int64_t HeaderCnt;
+                rd_kafkap_bytes_t Headers;
         } hdr;
         rd_kafka_op_t *rko;
         rd_kafka_msg_t *rkm;
@@ -644,8 +645,11 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
 
         rd_kafka_buf_read_bytes_varint(rkbuf, &hdr.Value);
 
-        /* Ignore headers for now */
-        rd_kafka_buf_skip_to(rkbuf, message_end);
+        /* We parse the Headers later, just store the size (possibly truncated)
+         * and pointer to the headers. */
+        hdr.Headers.len = (int32_t)(message_end -
+                                    rd_slice_offset(&rkbuf->rkbuf_reader));
+        rd_kafka_buf_read_ptr(rkbuf, &hdr.Headers.data, hdr.Headers.len);
 
         /* Create op/message container for message. */
         rko = rd_kafka_op_new_fetch_msg(&rkm,
@@ -657,6 +661,13 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
                                         (size_t)RD_KAFKAP_BYTES_LEN(&hdr.Value),
                                         RD_KAFKAP_BYTES_IS_NULL(&hdr.Value) ?
                                         NULL : hdr.Value.data);
+
+        /* Store pointer to unparsed message headers, they will
+         * be parsed on the first access.
+         * This pointer points to the rkbuf payload.
+         * Note: can't perform struct copy here due to const fields (MSVC) */
+        rkm->rkm_u.consumer.binhdrs.len  = hdr.Headers.len;
+        rkm->rkm_u.consumer.binhdrs.data = hdr.Headers.data;
 
         /* Set timestamp.
          *

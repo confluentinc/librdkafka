@@ -34,6 +34,7 @@ set(
     rdkafka_topic.c
     rdkafka_transport.c
     rdkafka_interceptor.c
+    rdkafka_header.c
     rdlist.c
     rdlog.c
     rdports.c

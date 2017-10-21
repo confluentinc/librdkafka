@@ -32,6 +32,7 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 #include "rdkafka_interceptor.h"
+#include "rdkafka_header.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
 #include "rdtime.h"
@@ -50,6 +51,9 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 			1, rkm->rkm_len);
 	}
 
+        if (rkm->rkm_headers)
+                rd_kafka_headers_destroy(rkm->rkm_headers);
+
 	if (likely(rkm->rkm_rkmessage.rkt != NULL))
 		rd_kafka_topic_destroy0(
                         rd_kafka_topic_a2s(rkm->rkm_rkmessage.rkt));
@@ -65,7 +69,8 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 
 
 /**
- * @brief Create a new message, copying the payload as indicated by msgflags.
+ * @brief Create a new Producer message, copying the payload as
+ *        indicated by msgflags.
  *
  * @returns the new message
  */
@@ -92,7 +97,8 @@ rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
 	 *       are properly set up. */
 	rkm                 = rd_malloc(mlen);
 	rkm->rkm_err        = 0;
-	rkm->rkm_flags      = RD_KAFKA_MSG_F_FREE_RKM | msgflags;
+	rkm->rkm_flags      = (RD_KAFKA_MSG_F_PRODUCER |
+                               RD_KAFKA_MSG_F_FREE_RKM | msgflags);
 	rkm->rkm_len        = len;
 	rkm->rkm_opaque     = msg_opaque;
 	rkm->rkm_rkmessage.rkt = rd_kafka_topic_keep_a(rkt);
@@ -101,6 +107,7 @@ rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
         rkm->rkm_offset     = 0;
 	rkm->rkm_timestamp  = 0;
 	rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+        rkm->rkm_headers    = NULL;
 
 	p = (char *)(rkm+1);
 
@@ -132,7 +139,7 @@ rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
 
 
 /**
- * @brief Create a new message.
+ * @brief Create a new Producer message.
  *
  * @remark Must only be used by producer code.
  *
@@ -147,16 +154,20 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
                                           void *msg_opaque,
                                           rd_kafka_resp_err_t *errp,
                                           int *errnop,
+                                          rd_kafka_headers_t *hdrs,
                                           int64_t timestamp,
                                           rd_ts_t now) {
 	rd_kafka_msg_t *rkm;
+        size_t hdrs_size = 0;
 
 	if (unlikely(!payload))
 		len = 0;
 	if (!key)
 		keylen = 0;
+        if (hdrs)
+                hdrs_size = rd_kafka_headers_serialized_size(hdrs);
 
-	if (unlikely(len + keylen >
+	if (unlikely(len + keylen + hdrs_size >
 		     (size_t)rkt->rkt_rk->rk_conf.max_msg_size ||
 		     keylen > INT32_MAX)) {
 		*errp = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
@@ -183,6 +194,11 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
         else
                 rkm->rkm_timestamp = rd_uclock()/1000;
         rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_CREATE_TIME;
+
+        if (hdrs) {
+                rd_dassert(!rkm->rkm_headers);
+                rkm->rkm_headers = hdrs;
+        }
 
         rkm->rkm_ts_enq = now;
 
@@ -224,7 +240,7 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
         /* Create message */
         rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
                                 payload, len, key, keylen, msg_opaque,
-                                &err, &errnox, 0, rd_clock());
+                                &err, &errnox, NULL, 0, rd_clock());
         if (unlikely(!rkm)) {
                 /* errno is already set by msg_new() */
 		rd_kafka_set_last_error(err, errnox);
@@ -278,9 +294,12 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         shptr_rd_kafka_itopic_t *s_rkt = NULL;
         rd_kafka_itopic_t *rkt;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_headers_t *hdrs = NULL;
+        rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
 
         va_start(ap, rk);
-        while ((vtype = va_arg(ap, rd_kafka_vtype_t)) != RD_KAFKA_VTYPE_END) {
+        while (!err &&
+               (vtype = va_arg(ap, rd_kafka_vtype_t)) != RD_KAFKA_VTYPE_END) {
                 switch (vtype)
                 {
                 case RD_KAFKA_VTYPE_TOPIC:
@@ -321,6 +340,36 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                         rkm->rkm_timestamp = va_arg(ap, int64_t);
                         break;
 
+                case RD_KAFKA_VTYPE_HEADER:
+                {
+                        const char *name;
+                        const void *value;
+                        ssize_t size;
+
+                        if (unlikely(app_hdrs != NULL)) {
+                                err = RD_KAFKA_RESP_ERR__CONFLICT;
+                                break;
+                        }
+
+                        if (unlikely(!hdrs))
+                                hdrs = rd_kafka_headers_new(8);
+
+                        name = va_arg(ap, const char *);
+                        value = va_arg(ap, const void *);
+                        size = va_arg(ap, ssize_t);
+
+                        err = rd_kafka_header_add(hdrs, name, -1, value, size);
+                }
+                break;
+
+                case RD_KAFKA_VTYPE_HEADERS:
+                        if (unlikely(hdrs != NULL)) {
+                                err = RD_KAFKA_RESP_ERR__CONFLICT;
+                                break;
+                        }
+                        app_hdrs = va_arg(ap, rd_kafka_headers_t *);
+                        break;
+
                 default:
                         err = RD_KAFKA_RESP_ERR__INVALID_ARG;
                         break;
@@ -342,10 +391,14 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                                         rkm->rkm_key, rkm->rkm_key_len,
                                         rkm->rkm_opaque,
                                         &err, NULL,
-                                        rkm->rkm_timestamp, rd_clock());
+                                        app_hdrs ? app_hdrs : hdrs,
+                                        rkm->rkm_timestamp,
+                                        rd_clock());
 
         if (unlikely(err)) {
                 rd_kafka_topic_destroy0(s_rkt);
+                if (hdrs)
+                        rd_kafka_headers_destroy(hdrs);
                 return err;
         }
 
@@ -365,6 +418,12 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
                  * flag since our contract says we don't free the payload on
                  * failure. */
                 rkm->rkm_flags &= ~RD_KAFKA_MSG_F_FREE;
+
+                /* Deassociate application owned headers from message
+                 * since headers remain in application ownership
+                 * when producev() fails */
+                if (app_hdrs && app_hdrs == rkm->rkm_headers)
+                        rkm->rkm_headers = NULL;
 
                 rd_kafka_msg_destroy(rk, rkm);
         }
@@ -412,7 +471,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                         rkmessages[i].key,
                                         rkmessages[i].key_len,
                                         rkmessages[i]._private,
-                                        &rkmessages[i].err,
+                                        &rkmessages[i].err, NULL,
 					NULL, utc_now, now);
                 if (unlikely(!rkm)) {
 			if (rkmessages[i].err == RD_KAFKA_RESP_ERR__QUEUE_FULL)
@@ -800,3 +859,118 @@ int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage) {
         return rd_clock() - rkm->rkm_ts_enq;
 }
 
+
+
+
+/**
+ * @brief Parse serialized message headers and populate
+ *        rkm->rkm_headers (which must be NULL).
+ */
+static rd_kafka_resp_err_t rd_kafka_msg_headers_parse (rd_kafka_msg_t *rkm) {
+        rd_kafka_buf_t *rkbuf;
+        int64_t HeaderCount;
+        const int log_decode_errors = 0;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__BAD_MSG;
+        int i;
+        rd_kafka_headers_t *hdrs = NULL;
+
+        rd_dassert(!rkm->rkm_headers);
+
+        if (RD_KAFKAP_BYTES_LEN(&rkm->rkm_u.consumer.binhdrs) == 0)
+                return RD_KAFKA_RESP_ERR__NOENT;
+
+        rkbuf = rd_kafka_buf_new_shadow(rkm->rkm_u.consumer.binhdrs.data,
+                                        RD_KAFKAP_BYTES_LEN(&rkm->rkm_u.
+                                                            consumer.binhdrs),
+                                        NULL);
+
+        rd_kafka_buf_read_varint(rkbuf, &HeaderCount);
+
+        if (HeaderCount <= 0) {
+                rd_kafka_buf_destroy(rkbuf);
+                return RD_KAFKA_RESP_ERR__NOENT;
+        } else if (unlikely(HeaderCount > 100000)) {
+                rd_kafka_buf_destroy(rkbuf);
+                return RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+        hdrs = rd_kafka_headers_new((size_t)HeaderCount);
+
+        for (i = 0 ; (int64_t)i < HeaderCount ; i++) {
+                int64_t KeyLen, ValueLen;
+                const char *Key, *Value;
+
+                rd_kafka_buf_read_varint(rkbuf, &KeyLen);
+                rd_kafka_buf_read_ptr(rkbuf, &Key, (size_t)KeyLen);
+
+                rd_kafka_buf_read_varint(rkbuf, &ValueLen);
+                if (unlikely(ValueLen == -1))
+                        Value = NULL;
+                else
+                        rd_kafka_buf_read_ptr(rkbuf, &Value, (size_t)ValueLen);
+
+                rd_kafka_header_add(hdrs, Key, KeyLen, Value, ValueLen);
+        }
+
+        rkm->rkm_headers = hdrs;
+
+        rd_kafka_buf_destroy(rkbuf);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+ err_parse:
+        err = rkbuf->rkbuf_err;
+        rd_kafka_buf_destroy(rkbuf);
+        if (hdrs)
+                rd_kafka_headers_destroy(hdrs);
+        return err;
+}
+
+
+
+
+rd_kafka_resp_err_t
+rd_kafka_message_headers (const rd_kafka_message_t *rkmessage,
+                          rd_kafka_headers_t **hdrsp) {
+        rd_kafka_msg_t *rkm;
+        rd_kafka_resp_err_t err;
+
+        rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+
+        if (rkm->rkm_headers) {
+                *hdrsp = rkm->rkm_headers;
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        /* Producer (rkm_headers will be set if there were any headers) */
+        if (rkm->rkm_flags & RD_KAFKA_MSG_F_PRODUCER)
+                return RD_KAFKA_RESP_ERR__NOENT;
+
+        /* Consumer */
+
+        /* No previously parsed headers, check if the underlying
+         * protocol message had headers and if so, parse them. */
+        if (unlikely(!RD_KAFKAP_BYTES_LEN(&rkm->rkm_u.consumer.binhdrs)))
+                return RD_KAFKA_RESP_ERR__NOENT;
+
+        err = rd_kafka_msg_headers_parse(rkm);
+        if (unlikely(err))
+                return err;
+
+        *hdrsp = rkm->rkm_headers;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+void rd_kafka_message_set_headers (rd_kafka_message_t *rkmessage,
+                                   rd_kafka_headers_t *hdrs) {
+        rd_kafka_msg_t *rkm;
+
+        rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+
+        if (rkm->rkm_headers) {
+                assert(rkm->rkm_headers != hdrs);
+                rd_kafka_headers_destroy(rkm->rkm_headers);
+        }
+
+        rkm->rkm_headers = hdrs;
+}

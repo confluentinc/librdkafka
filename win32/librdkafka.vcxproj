@@ -134,6 +134,7 @@
     <ClInclude Include="..\src\rdkafka_metadata.h" />
     <ClInclude Include="..\src\rdkafka_interceptor.h" />
     <ClInclude Include="..\src\rdkafka_plugin.h" />
+    <ClInclude Include="..\src\rdkafka_header.h" />
     <ClInclude Include="..\src\rdlog.h" />
     <ClInclude Include="..\src\rdstring.h" />
     <ClInclude Include="..\src\rdrand.h" />
@@ -191,6 +192,7 @@
     <ClCompile Include="..\src\rdkafka_metadata_cache.c" />
     <ClCompile Include="..\src\rdkafka_interceptor.c" />
     <ClCompile Include="..\src\rdkafka_plugin.c" />
+    <ClCompile Include="..\src\rdkafka_header.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdstring.c" />

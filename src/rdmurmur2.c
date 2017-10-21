@@ -51,8 +51,8 @@ int unittest_murmurhashneutral2 (void) {
               " USING SEED: %d",
               murmur2_result, keysToTest[i], MURMUR2_SEED);
     RD_UT_ASSERT(murmur2_result == java_murmur2_results[i],
-                 "Calculated murmur2 hash %u"
-                 " not matching expected murmur2 hash %u",
+                 "CALCULATED MURMUR2 HASH: %u"
+                 " NOT MATCHING EXPECTED MURMUR2 HASH: %u",
                  murmur2_result, java_murmur2_results[i]);
   }
   RD_UT_PASS();

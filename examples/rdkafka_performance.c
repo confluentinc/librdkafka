@@ -1166,8 +1166,9 @@ int main (int argc, char **argv) {
 			RD_KAFKA_PARTITION_UA;
 
                 if (latency_mode) {
-                        msgsize = (int)(strlen("LATENCY:") +
-                                strlen("18446744073709551615 ")+1);
+                        size_t minlen = (int)(strlen("LATENCY:") +
+                                        strlen("18446744073709551615 ")+1);
+                        msgsize = RD_MAX(minlen, msgsize);
                         sendflags |= RD_KAFKA_MSG_F_COPY;
 		} else if (do_seq) {
                         int minlen = (int)strlen("18446744073709551615 ")+1;

@@ -3,24 +3,24 @@
  *
  * Copyright (c) 2012-2013 Magnus Edenhill
  * All rights reserved.
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
+ * modification, are permitted provided that the following conditions are met: 
+ * 
  * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
+ *    this list of conditions and the following disclaimer. 
  * 2. Redistributions in binary form must reproduce the above copyright notice,
  *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *
+ *    and/or other materials provided with the distribution. 
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
@@ -923,7 +923,7 @@ void rd_kafka_message_destroy(rd_kafka_message_t *rkmessage);
  * @remark This function MUST NOT be used with the producer.
  */
 static RD_INLINE const char *
-RD_UNUSED
+RD_UNUSED 
 rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
 	if (!rkmessage->err)
 		return NULL;
@@ -1001,7 +1001,7 @@ typedef enum {
  *                           errstr, sizeof(errstr));
  *   if (res != RD_KAFKA_CONF_OK)
  *      die("%s\n", errstr);
- *
+ *   
  *   rk = rd_kafka_new(..., myconf);
  * @endcode
  *
@@ -1095,7 +1095,7 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  * The delivery report callback will be called once for each message
  * accepted by rd_kafka_produce() (et.al) with \p err set to indicate
  * the result of the produce request.
- *
+ * 
  * The callback is called when a message is succesfully produced or
  * if librdkafka encountered a permanent failure, or the retry counter for
  * temporary errors has been exhausted.
@@ -1149,7 +1149,7 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  * @remark The \p partitions list is destroyed by librdkafka on return
  *         return from the rebalance_cb and must not be freed or
  *         saved by the application.
- *
+ * 
  * The following example shows the application's responsibilities:
  * @code
  *    static void rebalance_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
@@ -1591,33 +1591,6 @@ int32_t rd_kafka_msg_partitioner_random(const rd_kafka_topic_t *rkt,
 					 void *opaque, void *msg_opaque);
 
 /**
-* @brief MurMur2 Random partitioner.
-*
-* Will try not to return unavailable partitions.
-*
-* @returns a partition between 0 and partition_cnt according to murmur2 hash.
-  Will return a random partition if the partition is not available.
-*
-*/
-RD_EXPORT
-int32_t rd_kafka_msg_partitioner_murmur2_random(const rd_kafka_topic_t *rkt,
-					 const void *key, size_t keylen,
-					 int32_t partition_cnt,
-					 void *opaque, void *msg_opaque);
-
-/**
- * @brief MurMur2 Consistent partitioner.
- *
- * @returns a partition between 0 and partition_cnt according to murmur2 hash.
- *
- */
-RD_EXPORT
-int32_t rd_kafka_msg_partitioner_murmur2_consistent(const rd_kafka_topic_t *rkt,
-           const void *key, size_t keylen,
-           int32_t partition_cnt,
-           void *opaque, void *msg_opaque);
-
-/**
  * @brief Consistent partitioner.
  *
  * Uses consistent hashing to map identical keys onto identical partitions.
@@ -1718,7 +1691,7 @@ rd_kafka_type_t rd_kafka_type(const rd_kafka_t *rk);
 
 
 /**
- * @brief Returns this client's broker-assigned group member id
+ * @brief Returns this client's broker-assigned group member id 
  *
  * @remark This currently requires the high-level KafkaConsumer
  *
@@ -2029,7 +2002,7 @@ rd_kafka_queue_t *rd_kafka_queue_get_consumer (rd_kafka_t *rk);
  * Use rd_kafka_queue_destroy() to loose the reference.
  *
  * @remark rd_kafka_queue_destroy() MUST be called on this queue
- *
+ * 
  * @remark This function only works on consumers.
  */
 RD_EXPORT
@@ -2042,7 +2015,7 @@ rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
  * If \p dst is \c NULL the forwarding is removed.
  *
  * The internal refcounts for both queues are increased.
- *
+ * 
  * @remark Regardless of whether \p dst is NULL or not, after calling this
  *         function, \p src will not forward it's fetch queue to the consumer
  *         queue.
@@ -2689,14 +2662,14 @@ rd_kafka_position (rd_kafka_t *rk,
  *                           Messages are considered in-queue from the point they
  *                           are accepted by produce() until their corresponding
  *                           delivery report callback/event returns.
- *                           It is thus a requirement to call
+ *                           It is thus a requirement to call 
  *                           rd_kafka_poll() (or equiv.) from a separate
  *                           thread when F_BLOCK is used.
  *                           See WARNING on \c RD_KAFKA_MSG_F_BLOCK above.
  *
  *    RD_KAFKA_MSG_F_FREE - rdkafka will free(3) \p payload when it is done
  *                          with it.
- *    RD_KAFKA_MSG_F_COPY - the \p payload data will be copied and the
+ *    RD_KAFKA_MSG_F_COPY - the \p payload data will be copied and the 
  *                          \p payload pointer will not be used by rdkafka
  *                          after the call returns.
  *

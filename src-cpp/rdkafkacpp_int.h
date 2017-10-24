@@ -824,6 +824,7 @@ class QueueImpl : virtual public Queue {
   ErrorCode forward (Queue *queue);
   Message *consume (int timeout_ms);
   int poll (int timeout_ms);
+  void io_event_enable(int fd, const void *payload, size_t size);
 
   rd_kafka_queue_t *queue_;
 };

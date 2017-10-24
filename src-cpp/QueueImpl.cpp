@@ -64,3 +64,8 @@ RdKafka::Message *RdKafka::QueueImpl::consume (int timeout_ms) {
 int RdKafka::QueueImpl::poll (int timeout_ms) {
         return rd_kafka_queue_poll_callback(queue_, timeout_ms);
 }
+
+void RdKafka::QueueImpl::io_event_enable (int fd, const void *payload,
+                                          size_t size) {
+        rd_kafka_queue_io_event_enable(queue_, fd, payload, size);
+}

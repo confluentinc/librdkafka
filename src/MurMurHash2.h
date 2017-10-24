@@ -12,7 +12,6 @@
     extern "C" {
   #endif
 
-  void SetAffinity ( int cpu );
   #include <stdint.h>
 
   #define BIG_CONSTANT(x) (x##LLU)

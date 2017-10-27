@@ -1589,33 +1589,6 @@ int32_t rd_kafka_msg_partitioner_random(const rd_kafka_topic_t *rkt,
 					 void *opaque, void *msg_opaque);
 
 /**
-* @brief MurMur2 Random partitioner.
-*
-* Will try not to return unavailable partitions.
-*
-* @returns a partition between 0 and partition_cnt according to murmur2 hash.
-  Will return a random partition if the partition is not available.
-*
-*/
-RD_EXPORT
-int32_t rd_kafka_msg_partitioner_murmur2_random(const rd_kafka_topic_t *rkt,
-					 const void *key, size_t keylen,
-					 int32_t partition_cnt,
-					 void *opaque, void *msg_opaque);
-
-/**
- * @brief MurMur2 Consistent partitioner.
- *
- * @returns a partition between 0 and partition_cnt according to murmur2 hash.
- *
- */
-RD_EXPORT
-int32_t rd_kafka_msg_partitioner_murmur2_consistent(const rd_kafka_topic_t *rkt,
-           const void *key, size_t keylen,
-           int32_t partition_cnt,
-           void *opaque, void *msg_opaque);
-
-/**
  * @brief Consistent partitioner.
  *
  * Uses consistent hashing to map identical keys onto identical partitions.
@@ -1644,6 +1617,34 @@ int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
            const void *key, size_t keylen,
            int32_t partition_cnt,
            void *opaque, void *msg_opaque);
+
+/**
+ * @brief Java-compatible MurMur2 random partitioner.
+ *
+ * Will try not to return unavailable partitions.
+ *
+ * @returns a partition between 0 and partition_cnt -1 according to murmur2 hash.
+ * Will return a random partition if the partition is not available.
+ *
+ */
+RD_EXPORT
+int32_t rd_kafka_msg_partitioner_murmur2_random(const rd_kafka_topic_t *rkt,
+                                   const void *key, size_t keylen,
+                                   int32_t partition_cnt,
+                                   void *opaque, void *msg_opaque);
+
+
+/**
+ * @brief Java-compatible MurMur2 Consistent partitioner.
+ *
+ * @returns a partition between 0 and partition_cnt - 1 according to murmur2 hash.
+ *
+ */
+RD_EXPORT
+int32_t rd_kafka_msg_partitioner_murmur2_consistent(const rd_kafka_topic_t *rkt,
+                                           const void *key, size_t keylen,
+                                           int32_t partition_cnt,
+                                           void *opaque, void *msg_opaque);
 
 
 /**@}*/

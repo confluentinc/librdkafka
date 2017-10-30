@@ -113,6 +113,13 @@ struct rd_kafka_conf_s {
 		char *cert_location;
 		char *ca_location;
 		char *crl_location;
+		
+		/* Andrea Minuto (PKCS12) */
+		struct {
+			char *keystore_location;
+			char *keystore_password;
+		} pkcs12;
+		/* Andrea Minuto (PKCS12) */
 	} ssl;
 #endif
 

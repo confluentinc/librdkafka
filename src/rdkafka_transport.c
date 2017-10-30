@@ -920,6 +920,61 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                 }
 	}
 
+	/* Andrea Minuto (PKCS12) */
+	if (rk->rk_conf.ssl.pkcs12.keystore_location) {
+		FILE *fp;
+		EVP_PKEY *pkey;
+		X509 *cert;
+		STACK_OF(X509) *ca = NULL;
+		PKCS12 *p12;
+
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+		"Loading client's keystore file from %s",
+		rk->rk_conf.ssl.pkcs12.keystore_location);
+
+		if (!rk->rk_conf.ssl.pkcs12.keystore_password) {
+			rd_snprintf(errstr, errstr_size,
+				"The ssl.pkcs12.keystore.password is mandatory: ");
+			goto fail;
+		}
+
+		ERR_load_crypto_strings();
+		if (!(fp = fopen(rk->rk_conf.ssl.pkcs12.keystore_location, "rb"))) {
+			rd_snprintf(errstr, errstr_size,
+				"ssl.pkcs12.keystore.location failed: ");
+			goto fail;
+		}
+
+		p12 = d2i_PKCS12_fp(fp, NULL);
+		fclose (fp);
+		if (!p12) {
+			rd_snprintf(errstr, errstr_size,
+				"Error reading PKCS#12 file: ");
+			goto fail;
+		}
+
+		if (!PKCS12_parse(p12, rk->rk_conf.ssl.pkcs12.keystore_password, &pkey, &cert, &ca)) {
+			rd_snprintf(errstr, errstr_size,
+				"Error parsing PKCS#12 file: ");
+			goto fail;
+		}
+		PKCS12_free(p12);
+
+		r = SSL_CTX_use_certificate(ctx, cert);
+		if (r != 1) {
+			rd_snprintf(errstr, errstr_size,
+						"ssl.pkcs12.keystore.location failed: ");
+			goto fail;
+		}
+
+		r = SSL_CTX_use_PrivateKey(ctx, pkey);
+		if (r != 1) {
+			rd_snprintf(errstr, errstr_size,
+						"ssl.pkcs12.keystore.location failed: ");
+			goto fail;
+		}
+	}
+	/* Andrea Minuto (PKCS12) */
 
 	SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
 

@@ -471,6 +471,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(ssl.crl_location),
 	  "Path to CRL for verifying broker's certificate validity."
 	},
+	/* Andrea Minuto (PKCS12) */
+	{ _RK_GLOBAL, "ssl.pkcs12.keystore.location", _RK_C_STR,
+	_RK(ssl.pkcs12.keystore_location),
+	"Path to client's keystore (PKCS12) used for authentication."
+	},
+	{ _RK_GLOBAL, "ssl.pkcs12.keystore.password", _RK_C_STR,
+	_RK(ssl.pkcs12.keystore_password),
+	"Client's keystore (PKCS12) password."
+	},
+	/* Andrea Minuto (PKCS12) */
 #endif /* WITH_SSL */
 
         /* Point user in the right direction if they try to apply

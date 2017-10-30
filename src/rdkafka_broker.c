@@ -596,11 +596,9 @@ rd_kafka_broker_send (rd_kafka_broker_t *rkb, rd_slice_t *slice) {
 static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 	const char *errstr;
 
-	rd_ts_t now = rd_clock();
-
 	if (rkb->rkb_rsal &&
 	    rkb->rkb_t_rsal_last + (rkb->rkb_rk->rk_conf.broker_addr_ttl*1000)
-	    < now) {
+	    < rd_clock()) {
 		/* Address list has expired. */
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
 		rkb->rkb_rsal = NULL;

@@ -39,7 +39,7 @@ function checks {
             fi
         fi
         export CXX="${CXX}"
-        mkl_mkvar_set "CXX" CXX $CXX
+        mkl_mkvar_set "CXX" CXX "$CXX"
     fi
 
     # Handle machine bits, if specified.

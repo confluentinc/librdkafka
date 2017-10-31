@@ -1741,16 +1741,18 @@ void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
                 return;
         }
 
-        rd_rkb_dbg(rkb, PROTOCOL, "RETRY",
-                   "Retrying %sRequest (v%hd, %"PRIusz" bytes, retry %d/%d)",
-                   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
-                   rkbuf->rkbuf_reqhdr.ApiVersion,
-                   rd_slice_size(&rkbuf->rkbuf_reader),
-                   rkbuf->rkbuf_retries, rkb->rkb_rk->rk_conf.max_retries);
+	rd_ts_t now = rd_clock();
+
+	rd_rkb_dbg(rkb, PROTOCOL, "RETRY",
+		   "Retrying %sRequest (v%hd, %" PRIusz " bytes, retry %d/%d%s)",
+		   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
+		   rkbuf->rkbuf_reqhdr.ApiVersion,
+		   rd_slice_size(&rkbuf->rkbuf_reader),
+		   rkbuf->rkbuf_retries, rkb->rkb_rk->rk_conf.max_retries,
+		   now >= rkbuf->rkbuf_ts_timeout ? " timed out" : "");
 
 	rd_atomic64_add(&rkb->rkb_c.tx_retries, 1);
 
-	rd_ts_t now = rd_clock();
 	rkbuf->rkbuf_ts_retry = now +
 		(rkb->rkb_rk->rk_conf.retry_backoff_ms * 1000);
 

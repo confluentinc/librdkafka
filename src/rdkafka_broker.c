@@ -1750,9 +1750,14 @@ void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 
 	rd_atomic64_add(&rkb->rkb_c.tx_retries, 1);
 
-	rkbuf->rkbuf_ts_retry = rd_clock() +
+	rd_ts_t now = rd_clock();
+	rkbuf->rkbuf_ts_retry = now +
 		(rkb->rkb_rk->rk_conf.retry_backoff_ms * 1000);
-        /* Reset send offset */
+
+	/* Reset timeout */
+	rkbuf->rkbuf_ts_timeout = now + (rkbuf->rkbuf_ts_timeout - rkbuf->rkbuf_ts_enq);
+
+	/* Reset send offset */
         rd_slice_seek(&rkbuf->rkbuf_reader, 0);
 	rkbuf->rkbuf_corrid = 0;
 

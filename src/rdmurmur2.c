@@ -26,16 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
- #include "limits.h"
  #include "rd.h"
  #include "rdunittest.h"
  #include "rdmurmur2.h"
-
- #ifdef WORD_BIT
- #define RD_WORD_BIT WORD_BIT
- #elif __WORDSIZE
- #define RD_WORD_BIT __WORDSIZE
- #endif
 
 int is_aligned(void *p, int alignment) {
         return (int)p % alignment == 0;
@@ -71,7 +64,6 @@ int unittest_murmurhashneutral2 (void) {
 }
 
 int unittest_unaligned_murmurhashneutral2 (void) {
-        RD_UT_SAY("current word size is: %d", RD_WORD_BIT);
         uint32_t expected_result = 1348980580;
         const char key_lit[] = "kafka";
         size_t key_len = strlen(key_lit);

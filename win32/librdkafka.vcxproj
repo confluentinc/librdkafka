@@ -93,6 +93,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\src\crc32c.h" />
+    <ClInclude Include="..\src\MurMurHash2.h" />
     <ClInclude Include="..\src\queue.h" />
     <ClInclude Include="..\src\rdatomic.h" />
     <ClInclude Include="..\src\rdavg.h" />
@@ -155,6 +156,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\crc32c.c" />
+    <ClCompile Include="..\src\MurMurHash2.c" />
     <ClCompile Include="..\src\rdaddr.c" />
     <ClCompile Include="..\src\rdbuf.c" />
     <ClCompile Include="..\src\rdcrc32.c" />
@@ -193,6 +195,7 @@
     <ClCompile Include="..\src\rdkafka_plugin.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
+    <ClCompile Include="..\src\rdmurmur2.c" />
     <ClCompile Include="..\src\rdstring.c" />
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\rdregex.c" />

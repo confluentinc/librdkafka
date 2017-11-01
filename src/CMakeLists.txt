@@ -1,5 +1,6 @@
 set(
     sources
+    MurMurHash2.c
     crc32c.c
     rdaddr.c
     rdavl.c
@@ -36,6 +37,7 @@ set(
     rdkafka_interceptor.c
     rdlist.c
     rdlog.c
+    rdmurmur2.c
     rdports.c
     rdrand.c
     rdregex.c

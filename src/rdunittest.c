@@ -32,6 +32,7 @@
 #include "rdvarint.h"
 #include "rdbuf.h"
 #include "crc32c.h"
+#include "rdmurmur2.h"
 
 
 int rd_unittest (void) {
@@ -39,5 +40,7 @@ int rd_unittest (void) {
         fails += unittest_rdbuf();
         fails += unittest_rdvarint();
         fails += unittest_crc32c();
+        fails += unittest_murmurhashneutral2();
+        fails += unittest_unaligned_murmurhashneutral2();
         return fails;
 }

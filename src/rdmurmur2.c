@@ -77,7 +77,7 @@ int unittest_unaligned_murmurhashneutral2 (void) {
         size_t key_len = strlen(key_lit);
         RD_UT_SAY("using string %s of length %u\n", key_lit, key_len);
         const void *aligned_ptr = malloc(strlen(key_lit) + 3);
-        char *unaligned_char_ptr = aligned_ptr + 3;
+        char *unaligned_char_ptr = ((char*)aligned_ptr) + 3;
         memcpy(unaligned_char_ptr, key_lit, key_len);
         RD_UT_SAY("address of unaligned ptr %p\n", &(*unaligned_char_ptr));
         uint32_t murmur2_result = rd_murmur2(unaligned_char_ptr, key_len);

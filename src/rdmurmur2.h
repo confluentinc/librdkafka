@@ -23,6 +23,8 @@ static RD_INLINE rd_murmur2_t rd_murmur2(const char *data, size_t data_len) {
 
 int unittest_murmurhashneutral2(void);
 
+int unittest_unaligned_murmurhashneutral2(void);
+
 #ifdef __cplusplus
 }
 #endif

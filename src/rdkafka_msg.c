@@ -554,7 +554,7 @@ int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
 					 int32_t partition_cnt,
 					 void *rkt_opaque,
 					 void *msg_opaque) {
-	if (keylen == 0)
+	if (!key)
 	  return rd_kafka_msg_partitioner_random(rkt,
 					         key,
 						 keylen,

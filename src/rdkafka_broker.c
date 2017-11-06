@@ -343,6 +343,15 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 		rkb->rkb_recv_buf = NULL;
 	}
 
+        /* Reset max blocking time back to the default to avoid busy-looping
+         * on reconnect if blocking=0 (#1397).
+         * But honour the lower on-termination blocking time. */
+        if (rd_kafka_terminating(rkb->rkb_rk))
+                rkb->rkb_blocking_max_ms = 1;
+        else
+                rkb->rkb_blocking_max_ms =
+                        rkb->rkb_rk->rk_conf.socket_blocking_max_ms;
+
 	rd_kafka_broker_lock(rkb);
 
 	/* The caller may omit the format if it thinks this is a recurring

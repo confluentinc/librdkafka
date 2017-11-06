@@ -2285,14 +2285,16 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb, int timeout_ms) {
          * in state ..BROKER_STATE_CONNECT we only run this loop
          * as long as the state remains the same as the initial, on a state
          * change - most likely to UP, a correct serve() function
-         * should be used instead. */
-        while (!rd_kafka_broker_terminating(rkb) &&
-               (int)rkb->rkb_state == initial_state &&
-               !rd_timeout_expired(rd_timeout_remains(abs_timeout))) {
-
+         * should be used instead.
+         * Regardless of constraints (terminating, timeouts), poll at
+         * least once. The state will not have changed on the first iteration.
+         */
+        do {
                 rd_kafka_broker_toppars_serve(rkb);
                 rd_kafka_broker_serve(rkb, abs_timeout);
-        }
+        } while (!rd_kafka_broker_terminating(rkb) &&
+                 (int)rkb->rkb_state == initial_state &&
+                 !rd_timeout_expired(rd_timeout_remains(abs_timeout)));
 }
 
 

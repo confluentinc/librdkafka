@@ -121,17 +121,26 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
 
     print('# Connect to cluster with bootstrap.servers %s' % bootstrap_servers)
 
-    cmd_env = 'export KAFKA_PATH="%s" RDKAFKA_TEST_CONF="%s" ZK_ADDRESS="%s" BROKERS="%s" TEST_KAFKA_VERSION="%s" TRIVUP_ROOT="%s"; ' % \
-              (brokers[0].conf.get('destdir'), test_conf_file, zk_address, bootstrap_servers, version, cluster.instance_path())
+    cmd_env = os.environ.copy()
+    cmd_env['KAFKA_PATH'] = brokers[0].conf.get('destdir')
+    cmd_env['RDKAFKA_TEST_CONF'] = test_conf_file
+    cmd_env['ZK_ADDRESS'] = zk_address
+    cmd_env['BROKERS'] = bootstrap_servers
+    cmd_env['TEST_KAFKA_VERSION'] = version
+    cmd_env['TRIVUP_ROOT'] = cluster.instance_path()
+    # Add each broker pid as an env so they can be killed indivdidually.
+    for b in [x for x in cluster.apps if isinstance(x, KafkaBrokerApp)]:
+        cmd_env['BROKER_PID_%d' % b.appid] = str(b.proc.pid)
+
     if not cmd:
         cmd = 'bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version)
 
     ret = True
 
     for i in range(0, exec_cnt):
-        retcode = subprocess.call('%s %s' % (cmd_env, cmd), shell=True, executable='/bin/bash')
+        retcode = subprocess.call(cmd, env=cmd_env, shell=True, executable='/bin/bash')
         if retcode != 0:
-            print('# Command failed with returncode %d: %s %s' % (retcode, cmd_env, cmd))
+            print('# Command failed with returncode %d: %s' % (retcode, cmd))
             ret = False
 
     try:

@@ -503,11 +503,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	 .validate = rd_kafka_conf_validate_single },
 	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
 	  _RK(sasl.service_name),
-	  "Kerberos principal name that Kafka runs as.",
+	  "Kerberos principal name that Kafka runs as, "
+          "not including /hostname@REALM",
 	  .sdef = "kafka" },
 	{ _RK_GLOBAL, "sasl.kerberos.principal", _RK_C_STR,
 	  _RK(sasl.principal),
-	  "This client's Kerberos principal name.",
+          "This client's Kerberos principal name. "
+          "(Not supported on Windows, will use the logon user's principal).",
 	  .sdef = "kafkaclient" },
 #ifndef _MSC_VER
 	{ _RK_GLOBAL, "sasl.kerberos.kinit.cmd", _RK_C_STR,

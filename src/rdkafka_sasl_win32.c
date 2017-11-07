@@ -62,7 +62,7 @@
 typedef struct rd_kafka_sasl_win32_state_s {
         CredHandle *cred;
         CtxtHandle *ctx;
-        wchar_t principal[512];
+        wchar_t principal[512];  /* Broker service principal and hostname */
 } rd_kafka_sasl_win32_state_t;
 
 
@@ -487,7 +487,7 @@ static int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
 
         _snwprintf(state->principal, RD_ARRAYSIZE(state->principal),
                    L"%hs/%hs",
-                   rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.principal,
+                   rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.service_name,
                    hostname);
 
         state->cred = rd_kafka_sasl_sspi_cred_new(rktrans, errstr,
@@ -508,9 +508,9 @@ static int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
 static int rd_kafka_sasl_win32_conf_validate (rd_kafka_t *rk,
                                               char *errstr,
                                               size_t errstr_size) {
-        if (!rk->rk_conf.sasl.principal) {
+        if (!rk->rk_conf.sasl.service.name) {
                 rd_snprintf(errstr, errstr_size,
-                            "sasl.kerberos.principal must be set");
+                            "sasl.kerberos.service.name must be set");
                 return -1;
         }
 

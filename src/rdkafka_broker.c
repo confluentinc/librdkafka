@@ -623,9 +623,9 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
                                              "Failed to resolve '%s': %s",
                                              rkb->rkb_nodename, errstr);
 			return -1;
-		} else {
-			rkb->rkb_t_rsal_last = rd_clock();
-		}
+                } else {
+                        rkb->rkb_t_rsal_last = rd_clock();
+                }
 	}
 
 	return 0;

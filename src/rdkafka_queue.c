@@ -44,6 +44,15 @@ void rd_kafka_yield (rd_kafka_t *rk) {
 void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
 
         mtx_lock(&rkq->rkq_lock);
+        if (unlikely(rkq->rkq_refcnt > 0)) {
+                // Race condition between checking the reference count
+                // and when rd_kafka_q_destroy_final is called.
+                // Do not destroy the queue beause another thread
+                // has a reference to it!
+                // See comment in rd_kafka_q_destroy
+                mtx_unlock(&rkq->rkq_lock);
+                return;
+        }
 	if (unlikely(rkq->rkq_qio != NULL)) {
 		rd_free(rkq->rkq_qio);
 		rkq->rkq_qio = NULL;

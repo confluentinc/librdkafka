@@ -152,6 +152,13 @@ void rd_kafka_q_destroy (rd_kafka_q_t *rkq) {
         do_delete = !--rkq->rkq_refcnt;
         mtx_unlock(&rkq->rkq_lock);
 
+        // A race condition may be introduced
+        // if another thread increases the reference count
+        // at this point, after we check it's zero
+        // but before rd_kafka_q_destroy_final is called.
+        // This condition is handled internally by
+        // rd_kafka_q_destroy_final
+
         if (unlikely(do_delete))
                 rd_kafka_q_destroy_final(rkq);
 }

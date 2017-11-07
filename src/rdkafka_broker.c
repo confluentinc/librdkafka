@@ -606,8 +606,8 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 	const char *errstr;
 
 	if (rkb->rkb_rsal &&
-	    rkb->rkb_t_rsal_last + rkb->rkb_rk->rk_conf.broker_addr_ttl <
-	    time(NULL)) { // FIXME: rd_clock()
+	    rkb->rkb_t_rsal_last + (rkb->rkb_rk->rk_conf.broker_addr_ttl*1000)
+	    < rd_clock()) {
 		/* Address list has expired. */
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
 		rkb->rkb_rsal = NULL;
@@ -615,7 +615,6 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 
 	if (!rkb->rkb_rsal) {
 		/* Resolve */
-
 		rkb->rkb_rsal = rd_getaddrinfo(rkb->rkb_nodename,
 					       RD_KAFKA_PORT_STR,
 					       AI_ADDRCONFIG,
@@ -633,7 +632,9 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
                                              "Failed to resolve '%s': %s",
                                              rkb->rkb_nodename, errstr);
 			return -1;
-		}
+                } else {
+                        rkb->rkb_t_rsal_last = rd_clock();
+                }
 	}
 
 	return 0;

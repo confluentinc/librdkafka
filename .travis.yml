@@ -23,6 +23,7 @@ script:
 - make install
 - (cd dest && tar cvzf ../artifacts/librdkafka.tar.gz .)
 - if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then sudo make -C packaging/rpm MOCK_CONFIG=el7-x86_64 all copy-artifacts ; fi
+- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then docker run -it -v $PWD:/v microsoft/dotnet:2-sdk /v/packaging/tools/build-debian.sh /v /v/artifacts/librdkafka-debian9.tgz; fi
 deploy:
   provider: s3
   access_key_id:

@@ -2000,7 +2000,7 @@ class RD_EXPORT Producer : public virtual Handle {
    *
    *  NOTE: RK_MSG_FREE and RK_MSG_COPY are mutually exclusive.
    *
-   *  If the function returns -1 and RK_MSG_FREE was specified, then
+   *  If the function returns an error code and RK_MSG_FREE was specified, then
    *  the memory associated with the payload is still the caller's
    *  responsibility.
    *
@@ -2015,8 +2015,10 @@ class RD_EXPORT Producer : public virtual Handle {
    * referencing this message.
    *
    * @returns an ErrorCode to indicate success or failure:
-   *  - ERR__QUEUE_FULL - maximum number of outstanding messages has been
-   *                      reached: \c queue.buffering.max.message
+   *  - ERR_NO_ERROR           - message successfully enqueued for transmission.
+   *
+   *  - ERR__QUEUE_FULL        - maximum number of outstanding messages has been
+   *                             reached: \c queue.buffering.max.message
    *
    *  - ERR_MSG_SIZE_TOO_LARGE - message is larger than configured max size:
    *                            \c messages.max.bytes

@@ -359,8 +359,11 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
                                         break; /* Proper op, handle below. */
                         }
 
-                        /* No op, wait for one */
-                        pre = rd_clock();
+                        /* No op, wait for one if we have time left */
+                        if (timeout_ms == RD_POLL_NOWAIT)
+                                break;
+
+			pre = rd_clock();
 			if (cnd_timedwait_ms(&rkq->rkq_cond,
 					     &rkq->rkq_lock,
 					     timeout_ms) ==

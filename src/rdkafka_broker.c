@@ -606,7 +606,7 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 	const char *errstr;
 
 	if (rkb->rkb_rsal &&
-	    rkb->rkb_t_rsal_last + (rkb->rkb_rk->rk_conf.broker_addr_ttl*1000)
+	    rkb->rkb_ts_rsal_last + (rkb->rkb_rk->rk_conf.broker_addr_ttl*1000)
 	    < rd_clock()) {
 		/* Address list has expired. */
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
@@ -633,7 +633,7 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
                                              rkb->rkb_nodename, errstr);
 			return -1;
                 } else {
-                        rkb->rkb_t_rsal_last = rd_clock();
+                        rkb->rkb_ts_rsal_last = rd_clock();
                 }
 	}
 

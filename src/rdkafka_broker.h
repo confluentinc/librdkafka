@@ -41,7 +41,7 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 #define RD_KAFKA_NODEID_UA -1
 
 	rd_sockaddr_list_t *rkb_rsal;
-	time_t              rkb_t_rsal_last;
+        rd_ts_t             rkb_ts_rsal_last;
         const rd_sockaddr_inx_t  *rkb_addr_last; /* Last used connect address */
 
 	rd_kafka_transport_t *rkb_transport;

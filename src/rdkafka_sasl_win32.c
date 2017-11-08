@@ -508,7 +508,7 @@ static int rd_kafka_sasl_win32_client_new (rd_kafka_transport_t *rktrans,
 static int rd_kafka_sasl_win32_conf_validate (rd_kafka_t *rk,
                                               char *errstr,
                                               size_t errstr_size) {
-        if (!rk->rk_conf.sasl.service.name) {
+        if (!rk->rk_conf.sasl.service_name) {
                 rd_snprintf(errstr, errstr_size,
                             "sasl.kerberos.service.name must be set");
                 return -1;

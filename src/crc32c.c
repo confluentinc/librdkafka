@@ -412,7 +412,7 @@ int unittest_crc32c (void) {
         if (sse42)
                 how = "hardware (SSE42)";
         else
-                how = "software (SE42 supported in build but not at runtime)";
+                how = "software (SSE42 supported in build but not at runtime)";
 #else
         how = "software";
 #endif

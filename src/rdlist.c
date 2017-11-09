@@ -141,7 +141,7 @@ void *rd_list_remove_cmp (rd_list_t *rl, void *match_elem,
         int i;
 
         RD_LIST_FOREACH(elem, rl, i) {
-                if (match_elem == cmp ||
+                if (elem == match_elem ||
                     !cmp(elem, match_elem)) {
                         rd_list_remove0(rl, i);
                         return elem;

@@ -124,7 +124,7 @@ set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 # * WITH_SASL
 # * HAVE_REGEX
 # * HAVE_STRNDUP
-configure_file(config.h.in "${GENERATED_DIR}/config.h" @ONLY)
+configure_file("packaging/cmake/config.h.in" "${GENERATED_DIR}/config.h")
 
 # Installation (https://github.com/forexample/package-example) {
 

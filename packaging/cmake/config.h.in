@@ -37,3 +37,4 @@
 #cmakedefine01 WITH_SASL_CYRUS
 #cmakedefine01 HAVE_REGEX
 #cmakedefine01 HAVE_STRNDUP
+#define SOLIB_EXT "${CMAKE_SHARED_LIBRARY_SUFFIX}"

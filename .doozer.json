@@ -63,6 +63,28 @@
       ],
     },
 
+    "stretch-mips": {
+
+      "buildenv": "stretch-mips",
+      "builddeps": [
+        "build-essential",
+        "python",
+        "zlib1g-dev",
+        "libssl-dev",
+        "libsasl2-dev"
+      ],
+      "buildcmd": [
+        "./configure",
+        "make -j ${PARALLEL}",
+          "make -j ${PARALLEL} -C tests build",
+      ],
+      "testcmd": [
+        "cd tests",
+        "./run-test.sh -p1 -l ./merged",
+        "cd .."
+      ],
+    },
+
     "cmake-xenial-amd64": {
 
       "buildenv": "xenial-amd64",

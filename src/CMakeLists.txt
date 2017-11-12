@@ -116,6 +116,10 @@ if(WITH_SASL_CYRUS)
   target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})
 endif()
 
+if(WITH_LIBDL)
+  target_link_libraries(rdkafka PUBLIC ${CMAKE_DL_LIBS})
+endif()
+
 install(
     TARGETS rdkafka
     EXPORT "${targets_export_name}"

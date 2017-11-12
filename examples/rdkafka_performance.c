@@ -214,16 +214,89 @@ static void msg_delivered (rd_kafka_t *rk,
 	}
 }
 
-static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
-		     void *opaque) {
 
-        /* Extract values for our own stats */
-        json_parse_stats(json);
+///**
+// * Find and extract single value from a two-level search.
+// * First find 'field1', then find 'field2' and extract its value.
+// * Returns 0 on miss else the value.
+// */
+//static uint64_t json_parse_fields (const char *json, const char **end,
+//                                   const char *field1, const char *field2) {
+//        const char *t = json;
+//        const char *t2;
+//        int len1 = (int)strlen(field1);
+//        int len2 = (int)strlen(field2);
+//
+//        while ((t2 = strstr(t, field1))) {
+//                uint64_t v;
+//
+//                t = t2;
+//                t += len1;
+//
+//                /* Find field */
+//                if (!(t2 = strstr(t, field2)))
+//                        continue;
+//                t2 += len2;
+//
+//                while (isspace((int)*t2))
+//                        t2++;
+//
+//                v = strtoull(t2, (char **)&t, 10);
+//                if (t2 == t)
+//                        continue;
+//
+//                *end = t;
+//                return v;
+//        }
+//
+//        *end = t + strlen(t);
+//        return 0;
+//}
 
-        if (stats_fp)
-                fprintf(stats_fp, "%s\n", json);
-	return 0;
-}
+///**
+// * Parse various values from rdkafka stats
+// */
+//static void json_parse_stats (const char *json) {
+//        const char *t;
+//#define MAX_AVGS 100 /* max number of brokers to scan for rtt */
+//        uint64_t avg_rtt[MAX_AVGS+1];
+//        int avg_rtt_i     = 0;
+//
+//        /* Store totals at end of array */
+//        avg_rtt[MAX_AVGS]     = 0;
+//
+//        /* Extract all broker RTTs */
+//        t = json;
+//        while (avg_rtt_i < MAX_AVGS && *t) {
+//                avg_rtt[avg_rtt_i] = json_parse_fields(t, &t,
+//                                                       "\"rtt\":",
+//                                                       "\"avg\":");
+//
+//                /* Skip low RTT values, means no messages are passing */
+//                if (avg_rtt[avg_rtt_i] < 100 /*0.1ms*/)
+//                        continue;
+//
+//
+//                avg_rtt[MAX_AVGS] += avg_rtt[avg_rtt_i];
+//                avg_rtt_i++;
+//        }
+//
+//        if (avg_rtt_i > 0)
+//                avg_rtt[MAX_AVGS] /= avg_rtt_i;
+//
+//        cnt.avg_rtt = avg_rtt[MAX_AVGS];
+//}
+
+//static int stats_cb (rd_kafka_t *rk, char *json, size_t json_len,
+//		     void *opaque) {
+//
+//        /* Extract values for our own stats */
+//        json_parse_stats(json);
+//
+//        if (stats_fp)
+//                fprintf(stats_fp, "%s\n", json);
+//	return 0;
+//}
 
 #define _OTYPE_TAB      0x1  /* tabular format */
 #define _OTYPE_SUMMARY  0x2  /* summary format */
@@ -420,27 +493,27 @@ int main (int argc, char **argv) {
 	int sendflags = 0;
 	char *msgpattern = "librdkafka_performance testing!";
 	int msgsize = (int)strlen(msgpattern);
-	const char *debug = NULL;
-	rd_ts_t now;
+//	const char *debug = NULL;
+//	rd_ts_t now;
 	char errstr[512];
-	uint64_t seq = 0;
+//	uint64_t seq = 0;
 	int seed = (int)time(NULL);
         rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
-	rd_kafka_queue_t *rkqu = NULL;
+//	rd_kafka_queue_t *rkqu = NULL;
 	const char *compression = "no";
-	int64_t start_offset = 0;
-	int batch_size = 0;
+//	int64_t start_offset = 0;
+//	int batch_size = 0;
 	int idle = 0;
         const char *stats_cmd = NULL;
         char *stats_intvlstr = NULL;
         char tmp[128];
-        char *tmp2;
+//        char *tmp2;
         int otype = _OTYPE_SUMMARY;
-        double dtmp;
-        int rate_sleep = 0;
+//        double dtmp;
+//        int rate_sleep = 0;
 	rd_kafka_topic_partition_list_t *topics;
         int exitcode = 0;
 
@@ -551,7 +624,8 @@ int main (int argc, char **argv) {
 			}
 			break;
 		case 'B':
-			batch_size = atoi(optarg);
+//			***** REMOVED *****
+			fprintf(stderr, "-B option disabled\n");
 			break;
 		case 'z':
 			if (rd_kafka_conf_set(conf, "compression.codec",
@@ -571,7 +645,8 @@ int main (int argc, char **argv) {
 				exit_eof = 1;
 			break;
 		case 'd':
-				debug = optarg;
+//			***** REMOVED *****
+			fprintf(stderr, "-d option disabled\n");
 			break;
 		case 'X':
 //			***** REMOVED *****
@@ -754,6 +829,9 @@ int main (int argc, char **argv) {
                 } else
 #endif
                         stats_fp = stdout;
+
+
+
         }
 
 	if (msgcnt != -1)
@@ -902,7 +980,6 @@ int main (int argc, char **argv) {
 			       statsCollector.tx_err, statsCollector.tx,
 			       ((double)statsCollector.tx_err / (double)statsCollector.tx) * 100.0);
 
-		stats_cb();
 		/* Destroy topic */
 		rd_kafka_topic_destroy(rkt);
 

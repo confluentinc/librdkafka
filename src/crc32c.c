@@ -110,9 +110,9 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
          * non-appearant alignment reasons. */
         uint64_t ncopy;
         memcpy(&ncopy, next, sizeof(ncopy));
-        crc ^= ncopy;
+        crc ^= le64toh(ncopy);
 #else
-        crc ^= *(uint64_t *)next;
+        crc ^= le64toh(*(uint64_t *)next);
 #endif
         crc = crc32c_table[7][crc & 0xff] ^
               crc32c_table[6][(crc >> 8) & 0xff] ^

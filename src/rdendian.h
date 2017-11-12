@@ -100,10 +100,16 @@
 #define be64toh(x) (x)
 #define be32toh(x) (x)
 #define be16toh(x) (x)
+#define le16toh(x) OSSwapInt16(x)
+#define le32toh(x) OSSwapInt32(x)
+#define le64toh(x) OSSwapInt64(x)
 #else
 #define be64toh(x) OSSwapInt64(x)
 #define be32toh(x) OSSwapInt32(x)
 #define be16toh(x) OSSwapInt16(x)
+#define le16toh(x) (x)
+#define le32toh(x) (x)
+#define le64toh(x) (x)
 #endif
 
 #elif defined(_MSC_VER)
@@ -112,6 +118,9 @@
 #define be64toh(x) _byteswap_uint64(x)
 #define be32toh(x) _byteswap_ulong(x)
 #define be16toh(x) _byteswap_ushort(x)
+#define le16toh(x) (x)
+#define le32toh(x) (x)
+#define le64toh(x) (x)
 
 #elif defined _AIX      /* AIX is always big endian */
 #define be64toh(x) (x)

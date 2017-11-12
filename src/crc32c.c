@@ -55,6 +55,7 @@
 #endif
 
 #include "rdunittest.h"
+#include "rdendian.h"
 
 #include "crc32c.h"
 

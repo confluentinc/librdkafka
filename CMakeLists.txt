@@ -12,6 +12,8 @@ option(ENABLE_DEVEL "Enable development asserts, checks, etc" OFF)
 option(ENABLE_REFCNT_DEBUG "Enable refcnt debugging" OFF)
 option(ENABLE_SHAREDPTR_DEBUG "Enable sharedptr debugging" OFF)
 
+set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/packaging/cmake/try_compile")
+
 # ZLIB {
 find_package(ZLIB QUIET)
 if(ZLIB_FOUND)
@@ -23,13 +25,12 @@ option(WITH_ZLIB "With ZLIB" ${with_zlib_default})
 # }
 
 # LibDL {
-find_package(LIBDL QUIET)
-if(LIBDL_FOUND)
-  set(with_libdl_default ON)
-else()
-  set(with_libdl_default OFF)
-endif()
-option(WITH_LIBDL "With LibDL" ${with_libdl_default})
+try_compile(
+    WITH_LIBDL
+    "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
+    "${TRYCOMPILE_SRC_DIR}/dlopen_test.c"
+    LINK_LIBRARIES "${CMAKE_DL_LIBS}"
+)
 # }
 
 # WITH_PLUGINS {
@@ -60,18 +61,30 @@ if(WIN32)
   set(with_sasl_default ON)
 else()
   include(FindPkgConfig)
-  pkg_check_modules(SASL QUIET libsasl2)
+  pkg_check_modules(SASL libsasl2)
   if(SASL_FOUND)
     set(with_sasl_default ON)
   else()
-    set(with_sasl_default OFF)
+    try_compile(
+        WITH_SASL_CYRUS_BOOL
+        "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
+        "${TRYCOMPILE_SRC_DIR}/libsasl2_test.c"
+        LINK_LIBRARIES "-lsasl2"
+        )
+     if(WITH_SASL_CYRUS_BOOL)
+        set(with_sasl_default ON)
+        set(SASL_LIBRARIES "-lsasl2")
+     else()
+        set(with_sasl_default OFF)
+     endif()
   endif()
 endif()
 option(WITH_SASL "With SASL" ${with_sasl_default})
 if(WITH_SASL)
-  if(WIN32)
+  if(WITH_SSL)
     set(WITH_SASL_SCRAM ON)
-  else()
+  endif()
+  if(NOT WIN32)
     set(WITH_SASL_CYRUS ON)
   endif()
 endif()
@@ -82,7 +95,6 @@ endif()
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
 
-set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/packaging/cmake/try_compile")
 
 # In:
 # * TRYCOMPILE_SRC_DIR

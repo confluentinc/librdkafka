@@ -58,10 +58,14 @@ if(WITH_PLUGINS)
     list(APPEND sources rdkafka_plugin.c)
 endif()
 
-if(WITH_SASL_SCRAM)
+if(WIN32)
   list(APPEND sources rdkafka_sasl_win32.c)
 elseif(WITH_SASL_CYRUS)
   list(APPEND sources rdkafka_sasl_cyrus.c)
+endif()
+
+if(WITH_SASL_SCRAM)
+  list(APPEND sources rdkafka_sasl_scram.c)
 endif()
 
 if(WITH_ZLIB)
@@ -109,7 +113,6 @@ find_package(Threads REQUIRED)
 target_link_libraries(rdkafka PUBLIC Threads::Threads)
 
 if(WITH_SASL_CYRUS)
-  pkg_check_modules(SASL REQUIRED libsasl2)
   target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})
 endif()
 

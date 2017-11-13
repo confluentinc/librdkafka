@@ -412,7 +412,7 @@ int unittest_crc32c (void) {
         if (sse42)
                 how = "hardware (SSE42)";
         else
-                how = "software (SE42 supported in build but not at runtime)";
+                how = "software (SSE42 supported in build but not at runtime)";
 #else
         how = "software";
 #endif
@@ -420,7 +420,17 @@ int unittest_crc32c (void) {
 
         crc = crc32c(0, buf, strlen(buf));
         RD_UT_ASSERT(crc == expected_crc,
-                     "Calculated CRC 0x%"PRIx32
+                     "Calculated CRC (%s) 0x%"PRIx32
+                     " not matching expected CRC 0x%"PRIx32,
+                     how, crc, expected_crc);
+
+        /* Verify software version too, regardless of which
+         * version was used above. */
+        crc32c_init_sw();
+        RD_UT_SAY("Calculate CRC32C using software");
+        crc = crc32c_sw(0, buf, strlen(buf));
+        RD_UT_ASSERT(crc == expected_crc,
+                     "Calculated CRC (software) 0x%"PRIx32
                      " not matching expected CRC 0x%"PRIx32,
                      crc, expected_crc);
 

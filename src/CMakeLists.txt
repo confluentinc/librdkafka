@@ -58,10 +58,14 @@ if(WITH_PLUGINS)
     list(APPEND sources rdkafka_plugin.c)
 endif()
 
-if(WITH_SASL_SCRAM)
+if(WIN32)
   list(APPEND sources rdkafka_sasl_win32.c)
 elseif(WITH_SASL_CYRUS)
   list(APPEND sources rdkafka_sasl_cyrus.c)
+endif()
+
+if(WITH_SASL_SCRAM)
+  list(APPEND sources rdkafka_sasl_scram.c)
 endif()
 
 if(WITH_ZLIB)
@@ -72,7 +76,7 @@ if(NOT HAVE_REGEX)
   list(APPEND sources regexp.c)
 endif()
 
-add_library(rdkafka ${sources})
+add_library(rdkafka SHARED ${sources})
 
 # Support '#include <rdkafka.h>'
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
@@ -109,9 +113,17 @@ find_package(Threads REQUIRED)
 target_link_libraries(rdkafka PUBLIC Threads::Threads)
 
 if(WITH_SASL_CYRUS)
-  pkg_check_modules(SASL REQUIRED libsasl2)
   target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})
 endif()
+
+if(WITH_LIBDL)
+  target_link_libraries(rdkafka PUBLIC ${CMAKE_DL_LIBS})
+endif()
+
+# Set up path to these sources for other sub-projects (tests, examples)
+# to be able to reach them.
+#set(rdkafka_SRC_DIR ${PROJECT_SOURCE_DIR}
+#    CACHE INTERNAL "${PROJECT_NAME} source dir" FORCE)
 
 install(
     TARGETS rdkafka

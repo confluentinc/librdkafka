@@ -90,12 +90,8 @@
 #endif /* sun */
 
 #elif defined __APPLE__
-  #include <sys/_endian.h>
+  #include <machine/endian.h>
   #include <libkern/OSByteOrder.h>
-  #define __bswap_64(x)      OSSwapInt64(x)
-  #define __bswap_32(x)      OSSwapInt32(x)
-  #define __bswap_16(x)      OSSwapInt16(x)
-
 #if __DARWIN_BYTE_ORDER == __DARWIN_BIG_ENDIAN
 #define be64toh(x) (x)
 #define be32toh(x) (x)

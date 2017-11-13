@@ -920,8 +920,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                 }
 	}
 
-	/* Andrea Minuto (PKCS12) */
-	if (rk->rk_conf.ssl.pkcs12.keystore_location) {
+	if (rk->rk_conf.ssl.keystore_location) {
 		FILE *fp;
 		EVP_PKEY *pkey;
 		X509 *cert;
@@ -929,52 +928,60 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		PKCS12 *p12;
 
 		rd_kafka_dbg(rk, SECURITY, "SSL",
-		"Loading client's keystore file from %s",
-		rk->rk_conf.ssl.pkcs12.keystore_location);
+			     "Loading client's keystore file from %s",
+			     rk->rk_conf.ssl.keystore_location);
 
-		if (!rk->rk_conf.ssl.pkcs12.keystore_password) {
+		if (!(fp = fopen(rk->rk_conf.ssl.keystore_location, "rb"))) {
 			rd_snprintf(errstr, errstr_size,
-				"The ssl.pkcs12.keystore.password is mandatory: ");
-			goto fail;
-		}
-
-		ERR_load_crypto_strings();
-		if (!(fp = fopen(rk->rk_conf.ssl.pkcs12.keystore_location, "rb"))) {
-			rd_snprintf(errstr, errstr_size,
-				"ssl.pkcs12.keystore.location failed: ");
+				    "Failed to open ssl.keystore.location: %s: %s", 
+				    rk->rk_conf.ssl.keystore_location, 
+				    rd_strerror(errno));
 			goto fail;
 		}
 
 		p12 = d2i_PKCS12_fp(fp, NULL);
-		fclose (fp);
+		fclose(fp);
 		if (!p12) {
 			rd_snprintf(errstr, errstr_size,
-				"Error reading PKCS#12 file: ");
+				   "Error reading PKCS#12 file: ");
 			goto fail;
 		}
 
-		if (!PKCS12_parse(p12, rk->rk_conf.ssl.pkcs12.keystore_password, &pkey, &cert, &ca)) {
+		pkey = EVP_PKEY_new();
+		cert = X509_new();
+		if (!PKCS12_parse(p12, rk->rk_conf.ssl.keystore_password, &pkey, &cert, &ca)) {
+			EVP_PKEY_free(pkey);
+			X509_free(cert);
+			PKCS12_free(p12);
+			if (ca != NULL)
+				sk_X509_pop_free(ca, X509_free);
 			rd_snprintf(errstr, errstr_size,
-				"Error parsing PKCS#12 file: ");
+				    "Failed to parse PKCS#12 file: %s: ",
+				    rk->rk_conf.ssl.keystore_location);
 			goto fail;
 		}
+
 		PKCS12_free(p12);
 
+		if (ca != NULL)
+			sk_X509_pop_free(ca, X509_free);
+
 		r = SSL_CTX_use_certificate(ctx, cert);
+		X509_free(cert);
 		if (r != 1) {
 			rd_snprintf(errstr, errstr_size,
-						"ssl.pkcs12.keystore.location failed: ");
+				    "Failed to use ssl.keystore.location certificate: ");
 			goto fail;
 		}
 
 		r = SSL_CTX_use_PrivateKey(ctx, pkey);
+		EVP_PKEY_free(pkey);
 		if (r != 1) {
 			rd_snprintf(errstr, errstr_size,
-						"ssl.pkcs12.keystore.location failed: ");
+				    "Failed to use ssl.keystore.location private key: ");
 			goto fail;
 		}
 	}
-	/* Andrea Minuto (PKCS12) */
 
 	SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
 

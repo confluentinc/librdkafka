@@ -35,9 +35,7 @@
 #if WITH_SSL
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-/* Andrea Minuto (PKCS12) */
 #include <openssl/pkcs12.h>
-/* Andrea Minuto (PKCS12) */
 #endif
 
 struct rd_kafka_transport_s {	

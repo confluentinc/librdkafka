@@ -1306,6 +1306,17 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                 return NULL;
         }
 
+#if WITH_SSL
+        if (conf->ssl.keystore_location && !conf->ssl.keystore_password) {
+                rd_snprintf(errstr, errstr_size,
+                            "Mandatory config property 'ssl.keystore.password' not set (mandatory because 'ssl.keystore.location' is set)");
+                if (!app_conf)
+                        rd_kafka_conf_destroy(conf);
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return NULL;
+        }
+#endif
+
         if (conf->metadata_max_age_ms == -1) {
                 if (conf->metadata_refresh_interval_ms > 0)
                         conf->metadata_max_age_ms =

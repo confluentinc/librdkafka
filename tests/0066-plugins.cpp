@@ -31,6 +31,10 @@
 #include <cstdlib>
 #include "testcpp.h"
 
+#ifdef _MSC_VER
+#include <direct.h>
+#endif
+
 
 extern "C" {
 #include "interceptor_test/interceptor_test.h"
@@ -58,6 +62,14 @@ static void do_test_plugin () {
     "topic.metadata.refresh.interval.ms", "1234",
     NULL,
   };
+
+  char cwd[512];
+#ifdef _MSC_VER
+  _getcwd(cwd, sizeof(cwd)-1);
+#else
+  getcwd(cwd, sizeof(cwd)-1);
+#endif
+  Test::Say(tostr() << "running test from cwd " << cwd << "\n");
 
   /* Interceptor back-channel config */
   ictest_init(&ictest);

@@ -76,7 +76,7 @@ if(NOT HAVE_REGEX)
   list(APPEND sources regexp.c)
 endif()
 
-add_library(rdkafka ${sources})
+add_library(rdkafka SHARED ${sources})
 
 # Support '#include <rdkafka.h>'
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
@@ -119,6 +119,11 @@ endif()
 if(WITH_LIBDL)
   target_link_libraries(rdkafka PUBLIC ${CMAKE_DL_LIBS})
 endif()
+
+# Set up path to these sources for other sub-projects (tests, examples)
+# to be able to reach them.
+#set(rdkafka_SRC_DIR ${PROJECT_SOURCE_DIR}
+#    CACHE INTERNAL "${PROJECT_NAME} source dir" FORCE)
 
 install(
     TARGETS rdkafka

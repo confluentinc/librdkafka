@@ -136,7 +136,7 @@ static void test_offset_time (void) {
     query_parts.push_back(RdKafka::TopicPartition::create(topic, 0, timestamps[ti]));
     query_parts.push_back(RdKafka::TopicPartition::create(topic, 1, timestamps[ti]));
 
-    Test::Say(tostr() << "Attempting offsetsForTimes() for timestamp " << timestamps[ti] << "\n");
+    Test::Say(tostr() << "Attempting offsetsForTimes() for timestamp with a timeout of -1" << timestamps[ti] << "\n");
     err = p->offsetsForTimes(query_parts, -1);
     Test::print_TopicPartitions("offsetsForTimes", query_parts);
     if (err != RdKafka::ERR_NO_ERROR)

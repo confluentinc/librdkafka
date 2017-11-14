@@ -943,7 +943,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		fclose(fp);
 		if (!p12) {
 			rd_snprintf(errstr, errstr_size,
-				   "Error reading PKCS#12 file: ");
+				    "Error reading PKCS#12 file: ");
 			goto fail;
 		}
 

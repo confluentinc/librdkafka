@@ -36,6 +36,7 @@
  *   htobe32()
  *   be16toh()
  *   htobe16()
+ *   le64toh()
  */
 
 #ifdef __FreeBSD__
@@ -49,10 +50,12 @@
    #define be16toh(x) (x)
    #define be32toh(x) (x)
    #define be64toh(x) (x)
+   #define le64toh(x) __bswap_64 (x)
   #else
    #define be16toh(x) __bswap_16 (x)
    #define be32toh(x) __bswap_32 (x)
    #define be64toh(x) __bswap_64 (x)
+   #define le64toh(x) (x)
   #endif
  #endif
 

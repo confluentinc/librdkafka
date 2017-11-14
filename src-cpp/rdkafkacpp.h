@@ -1718,7 +1718,10 @@ public:
    *
    * @remark \c enable.auto.offset.store must be set to \c false when using this API.
    *
-   * @returns RdKafka::ERR_NO_ERROR on success or an error code on error.
+   * @returns RdKafka::ERR_NO_ERROR on success, or
+   *          RdKafka::ERR___UNKNOWN_PARTITION if none of the offsets could
+   *          be stored, or
+   *          RdKafka::ERR___INVALID_ARG if \c enable.auto.offset.store is true.
    */
   virtual ErrorCode offsets_store (std::vector<TopicPartition*> &offsets) = 0;
 };

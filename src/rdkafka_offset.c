@@ -697,6 +697,9 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
         int i;
         int ok_cnt = 0;
 
+        if (rk->rk_conf.enable_auto_offset_store)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
         for (i = 0 ; i < offsets->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &offsets->elems[i];
                 shptr_rd_kafka_toppar_t *s_rktp;
@@ -715,7 +718,7 @@ rd_kafka_offsets_store (rd_kafka_t *rk,
                 ok_cnt++;
         }
 
-        return offsets->cnt > 0 && ok_cnt < offsets->cnt ?
+        return offsets->cnt > 0 && ok_cnt == 0 ?
                 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION :
                 RD_KAFKA_RESP_ERR_NO_ERROR;
 }

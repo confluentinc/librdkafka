@@ -2357,7 +2357,7 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *rkt,
 
 
 /**
- * @brief Store offsets for one or more partitions.
+ * @brief Store offsets for next auto-commit for one or more partitions.
  *
  * The offset will be committed (written) to the offset store according
  * to \c `auto.commit.interval.ms` or manual offset-less commit().
@@ -2367,8 +2367,10 @@ rd_kafka_resp_err_t rd_kafka_offset_store(rd_kafka_topic_t *rkt,
  *
  * @remark \c `enable.auto.offset.store` must be set to "false" when using this API.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an error code if
- *          none of the offsets could be stored.
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
+ *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION if none of the
+ *          offsets could be stored, or
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \c enable.auto.offset.store is true.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_offsets_store(rd_kafka_t *rk,

@@ -617,7 +617,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "local consumer queue. "
 	  "This value may be overshot by fetch.message.max.bytes. "
 	  "This property has higher priority than queued.min.messages.",
-          1, 1000000000, 1000000 /* 1 Gig */ },
+          1, INT_MAX/1024, 0x100000/*1GB*/ },
 	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.wait.max.ms", _RK_C_INT,
 	  _RK(fetch_wait_max_ms),
 	  "Maximum time the broker may wait to fill the response "
@@ -688,7 +688,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(queue_buffering_max_kbytes),
 	  "Maximum total message size sum allowed on the producer queue. "
 	  "This property has higher priority than queue.buffering.max.messages.",
-	  1, INT_MAX/1024, 4000000 },
+	  1, INT_MAX/1024, 0x100000/*1GB*/ },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.ms", _RK_C_INT,
 	  _RK(buffering_max_ms),
 	  "Delay in milliseconds to wait for messages in the producer queue "

@@ -63,13 +63,14 @@ static void do_test_plugin () {
     NULL,
   };
 
-  char cwd[512];
+  char cwd[512], *pcwd;
 #ifdef _MSC_VER
-  _getcwd(cwd, sizeof(cwd)-1);
+  pcwd = _getcwd(cwd, sizeof(cwd)-1);
 #else
-  getcwd(cwd, sizeof(cwd)-1);
+  pcwd = getcwd(cwd, sizeof(cwd)-1);
 #endif
-  Test::Say(tostr() << "running test from cwd " << cwd << "\n");
+  if (pcwd)
+    Test::Say(tostr() << "running test from cwd " << cwd << "\n");
 
   /* Interceptor back-channel config */
   ictest_init(&ictest);

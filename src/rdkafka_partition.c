@@ -267,8 +267,8 @@ void rd_kafka_toppar_destroy_final (rd_kafka_toppar_t *rktp) {
 			rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) == 0);
 	rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
 			 RD_KAFKA_RESP_ERR__DESTROY);
-	rd_kafka_q_destroy(rktp->rktp_fetchq);
-        rd_kafka_q_destroy(rktp->rktp_ops);
+	rd_kafka_q_destroy_owner(rktp->rktp_fetchq);
+        rd_kafka_q_destroy_owner(rktp->rktp_ops);
 
 	rd_kafka_replyq_destroy(&rktp->rktp_replyq);
 

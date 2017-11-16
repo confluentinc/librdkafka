@@ -158,9 +158,9 @@ void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_group_leader.members);
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
 
-        rd_kafka_q_destroy(rkcg->rkcg_q);
-        rd_kafka_q_destroy(rkcg->rkcg_ops);
-	rd_kafka_q_destroy(rkcg->rkcg_wait_coord_q);
+        rd_kafka_q_destroy_owner(rkcg->rkcg_q);
+        rd_kafka_q_destroy_owner(rkcg->rkcg_ops);
+	rd_kafka_q_destroy_owner(rkcg->rkcg_wait_coord_q);
         rd_kafka_assert(rkcg->rkcg_rk, TAILQ_EMPTY(&rkcg->rkcg_topics));
         rd_kafka_assert(rkcg->rkcg_rk, rd_list_empty(&rkcg->rkcg_toppars));
         rd_list_destroy(&rkcg->rkcg_toppars);

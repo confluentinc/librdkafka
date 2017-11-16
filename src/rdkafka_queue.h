@@ -142,18 +142,56 @@ const char *rd_kafka_q_dest_name (rd_kafka_q_t *rkq) {
 	return ret;
 }
 
-
+/**
+ * @brief Disable a queue.
+ *        Attempting to enqueue ops to the queue will destroy the ops.
+ */
 static RD_INLINE RD_UNUSED
-void rd_kafka_q_destroy (rd_kafka_q_t *rkq) {
+void rd_kafka_q_disable0 (rd_kafka_q_t *rkq, int do_lock) {
+        if (do_lock)
+                mtx_lock(&rkq->rkq_lock);
+        rkq->rkq_flags &= ~RD_KAFKA_Q_F_READY;
+        if (do_lock)
+                mtx_unlock(&rkq->rkq_lock);
+}
+#define rd_kafka_q_disable(rkq) rd_kafka_q_disable0(rkq, 1/*lock*/)
+
+/**
+ * @brief Loose reference to queue, when refcount reaches 0 the queue
+ *        will be destroyed.
+ *
+ * @param disable Also disable the queue, to be used by owner of the queue.
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_q_destroy0 (rd_kafka_q_t *rkq, int disable) {
         int do_delete = 0;
 
         mtx_lock(&rkq->rkq_lock);
         rd_kafka_assert(NULL, rkq->rkq_refcnt > 0);
+        if (disable)
+                rd_kafka_q_disable0(rkq, 0/*no-lock*/);
         do_delete = !--rkq->rkq_refcnt;
         mtx_unlock(&rkq->rkq_lock);
 
         if (unlikely(do_delete))
                 rd_kafka_q_destroy_final(rkq);
+}
+
+#define rd_kafka_q_destroy(rkq) rd_kafka_q_destroy0(rkq, 0/*dont-disable*/)
+
+/**
+ * @brief Queue destroy method to be used by the owner (poller) of
+ *        the queue. The only difference to q_destroy() is that this
+ *        method also disables the queue so that any q_enq() operations
+ *        will fail.
+ *        Failure to disable a queue on the poller when it destroys its
+ *        queue reference results in ops being enqueued on the queue
+ *        but there is noone left to poll it, possibly resulting in a
+ *        hang on termination due to refcounts held by the op.
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_q_destroy_owner (rd_kafka_q_t *rkq) {
+        rd_kafka_q_destroy0(rkq, 1/*disable*/);
 }
 
 
@@ -171,19 +209,6 @@ void rd_kafka_q_reset (rd_kafka_q_t *rkq) {
 }
 
 
-/**
- * Disable a queue.
- * Attempting to enqueue messages to the queue will destroy them.
- */
-static RD_INLINE RD_UNUSED
-void rd_kafka_q_disable0 (rd_kafka_q_t *rkq, int do_lock) {
-        if (do_lock)
-                mtx_lock(&rkq->rkq_lock);
-        rkq->rkq_flags &= ~RD_KAFKA_Q_F_READY;
-        if (do_lock)
-                mtx_unlock(&rkq->rkq_lock);
-}
-#define rd_kafka_q_disable(rkq) rd_kafka_q_disable0(rkq, 1/*lock*/)
 
 /**
  * Forward 'srcq' to 'destq'

@@ -156,6 +156,11 @@ void rd_kafka_q_disable0 (rd_kafka_q_t *rkq, int do_lock) {
 }
 #define rd_kafka_q_disable(rkq) rd_kafka_q_disable0(rkq, 1/*lock*/)
 
+int  rd_kafka_q_purge0 (rd_kafka_q_t *rkq, int do_lock);
+#define rd_kafka_q_purge(rkq) rd_kafka_q_purge0(rkq, 1/*lock*/)
+void rd_kafka_q_purge_toppar_version (rd_kafka_q_t *rkq,
+                                      rd_kafka_toppar_t *rktp, int version);
+
 /**
  * @brief Loose reference to queue, when refcount reaches 0 the queue
  *        will be destroyed.
@@ -168,8 +173,10 @@ void rd_kafka_q_destroy0 (rd_kafka_q_t *rkq, int disable) {
 
         mtx_lock(&rkq->rkq_lock);
         rd_kafka_assert(NULL, rkq->rkq_refcnt > 0);
-        if (disable)
+        if (disable) {
                 rd_kafka_q_disable0(rkq, 0/*no-lock*/);
+                rd_kafka_q_purge0(rkq, 0/*no-lock*/);
+        }
         do_delete = !--rkq->rkq_refcnt;
         mtx_unlock(&rkq->rkq_lock);
 
@@ -701,10 +708,6 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms, int max_cnt,
                       rd_kafka_q_serve_cb_t *callback,
                       void *opaque);
 
-int  rd_kafka_q_purge0 (rd_kafka_q_t *rkq, int do_lock);
-#define rd_kafka_q_purge(rkq) rd_kafka_q_purge0(rkq, 1/*lock*/)
-void rd_kafka_q_purge_toppar_version (rd_kafka_q_t *rkq,
-                                      rd_kafka_toppar_t *rktp, int version);
 
 int rd_kafka_q_move_cnt (rd_kafka_q_t *dstq, rd_kafka_q_t *srcq,
 			 int cnt, int do_locks);

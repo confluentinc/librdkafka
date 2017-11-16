@@ -236,7 +236,9 @@ enum ErrorCode {
         ERR__KEY_DESERIALIZATION = -160,
         /** Value deserialization error */
         ERR__VALUE_DESERIALIZATION = -159,
-	/** End internal error codes */
+        /** Partial response */
+        ERR__PARTIAL = -158,
+        /** End internal error codes */
 	ERR__END = -100,
 
 	/* Kafka broker errors: */

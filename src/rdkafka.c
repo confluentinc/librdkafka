@@ -379,6 +379,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Key deserialization error"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__VALUE_DESERIALIZATION,
                   "Local: Value deserialization error"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__PARTIAL,
+                  "Local: Partial response"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -3290,6 +3292,15 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
         }
 
         rd_kafka_q_destroy_owner(state.q);
+
+        if (state.wait_cnt > 0 && !state.err) {
+                if (state.grplist->group_cnt == 0)
+                        state.err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                else {
+                        *grplistp = state.grplist;
+                        return RD_KAFKA_RESP_ERR__PARTIAL;
+                }
+        }
 
         if (state.err)
                 rd_kafka_group_list_destroy(state.grplist);

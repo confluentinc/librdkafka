@@ -1908,8 +1908,14 @@ rd_kafka_get_watermark_offsets (rd_kafka_t *rk,
  * @remark Duplicate Topic+Partitions are not supported.
  * @remark Per-partition errors may be returned in \c rd_kafka_topic_partition_t.err
  *
- * @returns an error code for general errors, else RD_KAFKA_RESP_ERR_NO_ERROR
- *          in which case per-partition errors might be set.
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if offsets were be queried (do note
+ *          that per-partition errors might be set),
+ *          RD_KAFKA_RESP_ERR__TIMED_OUT if not all offsets could be fetched
+ *          within \p timeout_ms,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if the \p offsets list is empty,
+ *          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION if all partitions are unknown,
+ *          RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE if unable to query leaders
+ *          for the given partitions.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_offsets_for_times (rd_kafka_t *rk,

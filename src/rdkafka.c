@@ -2481,6 +2481,9 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
 
         rd_kafka_q_destroy_owner(rkq);
 
+        if (state.wait_reply > 0 && !state.err)
+                state.err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+
         /* Then update the queried partitions. */
         if (!state.err)
                 rd_kafka_topic_partition_list_update(offsets, state.results);

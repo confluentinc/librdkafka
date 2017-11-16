@@ -137,6 +137,12 @@ static RD_INLINE rd_ts_t rd_timeout_init (int timeout_ms) {
  *          up by rd_timeout_init()
  *
  * Honours RD_POLL_INFINITE, RD_POLL_NOWAIT.
+ *
+ * @remark Check explicitly for 0 (NOWAIT) to check if there is
+ *         no remaining time to way. Any other value, even negative (INFINITE),
+ *         means there is remaining time.
+ *         rd_timeout_expired() can be used to check the return value
+ *         in a bool fashion.
  */
 static RD_INLINE int rd_timeout_remains (rd_ts_t abs_timeout) {
 	int timeout_ms;

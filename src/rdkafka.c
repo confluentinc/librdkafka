@@ -2439,6 +2439,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
         int i;
         rd_kafka_resp_err_t err;
         struct rd_kafka_partition_leader *leader;
+        int tmout;
 
         if (offsets->cnt == 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
@@ -2471,9 +2472,9 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
         rd_list_destroy(&leaders);
 
         /* Wait for reply (or timeout) */
-        while (state.wait_reply > 0 && rd_timeout_remains(ts_end) > 0)
-                rd_kafka_q_serve(rkq, rd_timeout_remains(ts_end),
-                                0, RD_KAFKA_Q_CB_CALLBACK,
+        while (state.wait_reply > 0 &&
+               !rd_timeout_expired((tmout = rd_timeout_remains(ts_end))))
+                rd_kafka_q_serve(rkq, tmout, 0, RD_KAFKA_Q_CB_CALLBACK,
                                  rd_kafka_poll_cb, NULL);
 
         rd_kafka_q_destroy_owner(rkq);
@@ -2900,11 +2901,10 @@ char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms) {
                 /* Wait for up to timeout_ms for a metadata refresh,
                  * if permitted by application. */
                 remains_ms = rd_timeout_remains(abs_timeout);
-                if (remains_ms <= 0)
+                if (rd_timeout_expired(remains_ms))
                         return NULL;
 
-                rd_kafka_metadata_cache_wait_change(
-                        rk, rd_timeout_remains(abs_timeout));
+                rd_kafka_metadata_cache_wait_change(rk, remains_ms);
         }
 
         return NULL;
@@ -3277,8 +3277,12 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
                 state.err = RD_KAFKA_RESP_ERR__TRANSPORT;
 
         } else {
-                while (state.wait_cnt > 0) {
-                        rd_kafka_q_serve(state.q, 100, 0,
+                int remains;
+
+                while (state.wait_cnt > 0 &&
+                       !rd_timeout_expired((remains =
+                                            rd_timeout_remains(ts_end)))) {
+                        rd_kafka_q_serve(state.q, remains, 0,
                                          RD_KAFKA_Q_CB_CALLBACK,
                                          rd_kafka_poll_cb, NULL);
                         /* Ignore yields */

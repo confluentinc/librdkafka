@@ -2221,9 +2221,17 @@ static void rd_kafka_query_wmark_offsets_resp_cb (rd_kafka_t *rk,
 						  rd_kafka_buf_t *rkbuf,
 						  rd_kafka_buf_t *request,
 						  void *opaque) {
-	struct _query_wmark_offsets_state *state = opaque;
+	struct _query_wmark_offsets_state *state;
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_topic_partition_t *rktpar;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* 'state' has gone out of scope when query_watermark..()
+                 * timed out and returned to the caller. */
+                return;
+        }
+
+        state = opaque;
 
         offsets = rd_kafka_topic_partition_list_new(1);
         err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request, offsets);
@@ -2401,7 +2409,15 @@ static void rd_kafka_get_offsets_for_times_resp_cb (rd_kafka_t *rk,
                                                   rd_kafka_buf_t *rkbuf,
                                                   rd_kafka_buf_t *request,
                                                   void *opaque) {
-        struct _get_offsets_for_times *state = opaque;
+        struct _get_offsets_for_times *state;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* 'state' has gone out of scope when offsets_for_times()
+                 * timed out and returned to the caller. */
+                return;
+        }
+
+        state = opaque;
 
         err = rd_kafka_handle_Offset(rk, rkb, err, rkbuf, request,
                                      state->results);
@@ -3043,10 +3059,17 @@ static void rd_kafka_DescribeGroups_resp_cb (rd_kafka_t *rk,
                                              rd_kafka_buf_t *reply,
                                              rd_kafka_buf_t *request,
                                              void *opaque) {
-        struct list_groups_state *state = opaque;
+        struct list_groups_state *state;
         const int log_decode_errors = LOG_ERR;
         int cnt;
 
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* 'state' has gone out of scope due to list_groups()
+                 * timing out and returning. */
+                return;
+        }
+
+        state = opaque;
         state->wait_cnt--;
 
         if (err)
@@ -3156,11 +3179,20 @@ static void rd_kafka_ListGroups_resp_cb (rd_kafka_t *rk,
                                          rd_kafka_buf_t *reply,
                                          rd_kafka_buf_t *request,
                                          void *opaque) {
-        struct list_groups_state *state = opaque;
+        struct list_groups_state *state;
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode;
         char **grps;
         int cnt, grpcnt, i = 0;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* 'state' is no longer in scope because
+                 * list_groups() timed out and returned to the caller.
+                 * We must not touch anything here but simply return. */
+                return;
+        }
+
+        state = opaque;
 
         state->wait_cnt--;
 

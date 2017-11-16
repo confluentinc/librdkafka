@@ -307,18 +307,22 @@ class NugetPackage (Package):
             [{'arch': 'x64', 'plat': 'linux', 'fname_startswith': 'librdkafka.tar.gz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/librdkafka.so'],
 
             [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win7-x64/native/msvcr120.dll'],
+            # matches librdkafka.redist.{VER}.nupkg
             [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/x64/Release/librdkafka.dll', 'runtimes/win7-x64/native/librdkafka.dll'],
             [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/x64/Release/librdkafkacpp.dll', 'runtimes/win7-x64/native/librdkafkacpp.dll'],
             [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/x64/Release/zlib.dll', 'runtimes/win7-x64/native/zlib.dll'],
+            # matches librdkafka.{VER}.nupkg
             [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'librdkafka', 'fname_excludes': ['redist', 'symbols']},
              'build/native/lib/v120/x64/Release/librdkafka.lib', 'build/native/lib/win7/x64/win7-x64-Release/v120/librdkafka.lib'],
             [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'librdkafka', 'fname_excludes': ['redist', 'symbols']},
              'build/native/lib/v120/x64/Release/librdkafkacpp.lib', 'build/native/lib/win7/x64/win7-x64-Release/v120/librdkafkacpp.lib'],
 
             [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win7-x86/native/msvcr120.dll'],
+            # matches librdkafka.redist.{VER}.nupkg
             [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/Win32/Release/librdkafka.dll', 'runtimes/win7-x86/native/librdkafka.dll'],
             [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/Win32/Release/librdkafkacpp.dll', 'runtimes/win7-x86/native/librdkafkacpp.dll'],
             [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/Win32/Release/zlib.dll', 'runtimes/win7-x86/native/zlib.dll'],
+            # matches librdkafka.{VER}.nupkg
             [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'librdkafka', 'fname_excludes': ['redist', 'symbols']}, 
             'build/native/lib/v120/Win32/Release/librdkafka.lib', 'build/native/lib/win7/x86/win7-x86-Release/v120/librdkafka.lib'],
             [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'librdkafka', 'fname_excludes': ['redist', 'symbols']}, 
@@ -355,8 +359,8 @@ class NugetPackage (Package):
                     artifact = a
                     break
 
-            if artifact == None:
-                raise Exception('unable to find file in archive %s with tags %s that ends with "%s"' % (a.fname, str(attributes), fname_startswith))
+            if artifact is None:
+                raise Exception('unable to find file in archive %s with tags %s that starts with "%s"' % (a.fname, str(attributes), fname_startswith))
 
             outf = os.path.join(self.stpath, m[2])
             member = m[1]

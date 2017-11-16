@@ -45,7 +45,7 @@ def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt
     if 'GSSAPI' in args.conf.get('sasl_mechanisms', []):
         KerberosKdcApp(cluster, 'MYREALM').start()
 
-    defconf = {'replication_factor': min(broker_cnt, 3), 'num_partitions': 4, 'version': version}
+    defconf = {'replication_factor': min(int(conf.get('replication_factor', broker_cnt)), 3), 'num_partitions': 4, 'version': version}
     defconf.update(conf)
 
     print('conf: ', defconf)

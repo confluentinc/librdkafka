@@ -52,7 +52,7 @@ int main_0050_subscribe_adds (int argc, char **argv) {
                 rd_strdup(test_mk_topic_name("0050_subscribe_adds_3", 1)),
         };
         uint64_t testid;
-        int msgcnt = 100000;
+        int msgcnt = 10000;
         test_msgver_t mv;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *tconf;
@@ -71,7 +71,7 @@ int main_0050_subscribe_adds (int argc, char **argv) {
 
                 test_produce_msgs(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
                                   (msgcnt / TOPIC_CNT) * i,
-                                  (msgcnt / TOPIC_CNT), NULL, 100);
+                                  (msgcnt / TOPIC_CNT), NULL, 1000);
 
                 rd_kafka_topic_destroy(rkt);
         }

@@ -67,7 +67,7 @@ if __name__ == '__main__':
     print('Building packages:')
 
     p = packaging.NugetPackage(package_version, arts)
-    pkgfiles = p.build(buildtype='release')
+    pkgfile = p.build(buildtype='release')
 
     if not args.no_cleanup:
         p.cleanup()
@@ -76,10 +76,8 @@ if __name__ == '__main__':
 
     print('')
 
-    if len(pkgfiles) > 0:
-        print('Created package:')
-        for pkg in pkgfiles:
-            print(pkg)
-    else:
-        print('Package not created.')
+    if not p.verify(pkgfile):
+        print('Package failed verification.')
         sys.exit(1)
+    else:
+        print('Created package: %s' % pkgfile)

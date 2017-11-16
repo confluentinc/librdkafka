@@ -54,13 +54,3 @@ for t in $TOPICS; do
 done
 
 echo "Done"
-
-if [[ $DO_DELETE == 1 ]]; then
-    echo -n "Collecting list of matching topics... "
-    TOPICS=$($KATOPS --zookeeper $ZK --list 2>/dev/null | grep "$RE") || true
-    N_TOPICS=$(echo "$TOPICS" | wc -w)
-    echo "$N_TOPICS topics found"
-fi
-
-
-    

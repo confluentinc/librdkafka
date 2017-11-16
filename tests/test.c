@@ -56,6 +56,8 @@ int          test_broker_version;
 static const char *test_broker_version_str = "0.9.0.0";
 int          test_flags = 0;
 int          test_neg_flags = TEST_F_KNOWN_ISSUE;
+/* run delete-test-topics.sh between each test (when concurrent_max = 1) */
+static int   test_delete_topics_between = 0;
 static const char *test_git_version = "HEAD";
 static const char *test_sockem_conf = "";
 
@@ -842,6 +844,15 @@ static int run_test0 (struct run_args *run_args) {
                 }
         }
 
+#ifndef _MSC_VER
+        if (test_delete_topics_between && test_concurrent_max == 1) {
+                if (system("./delete-test-topics.sh $ZK_ADDRESS "
+                           "$KAFKA_PATH/bin/kafka-topics.sh") != 0) {
+                        /* ignore failures but avoid unused-result warning */
+                }
+        }
+#endif
+
 	return r;
 }
 
@@ -1231,6 +1242,10 @@ int main(int argc, char **argv) {
  			test_broker_version_str = argv[++i];
 		else if (!strcmp(argv[i], "-S"))
 			show_summary = 0;
+#ifndef _MSC_VER
+                else if (!strcmp(argv[i], "-D"))
+                        test_delete_topics_between = 1;
+#endif
 		else if (*argv[i] != '-')
                         tests_to_run = argv[i];
                 else {
@@ -1244,6 +1259,9 @@ int main(int argc, char **argv) {
                                "  -a     Assert on failures\n"
 			       "  -S     Dont show test summary\n"
 			       "  -V <N.N.N.N> Broker version.\n"
+#ifndef _MSC_VER
+                               "  -D     Run delete-test-topics.sh between each test (requires -p1)\n"
+#endif
 			       "\n"
 			       "Environment variables:\n"
 			       "  TESTS - substring matched test to run (e.g., 0033)\n"

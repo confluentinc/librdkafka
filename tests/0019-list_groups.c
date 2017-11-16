@@ -155,6 +155,7 @@ int main_0019_list_groups (int argc, char **argv) {
 	int i;
         int groups_seen;
 	rd_kafka_topic_t *rkt;
+        const struct rd_kafka_group_list *grplist;
 
         /* Handle for group listings */
         rk = test_create_producer();
@@ -204,6 +205,17 @@ int main_0019_list_groups (int argc, char **argv) {
                 rd_sleep(1);
         }
         TIMING_STOP(&t_grps);
+
+        /* Try a list_groups with a low enough timeout to fail. */
+        grplist = NULL;
+        TIMING_START(&t_grps, "WAIT.GROUPS.TIMEOUT0");
+        err = rd_kafka_list_groups(rk, NULL, &grplist, 0);
+        TIMING_STOP(&t_grps);
+        TEST_SAY("list_groups(timeout=0) returned %d groups and status: %s\n",
+                 grplist ? grplist->group_cnt : -1, rd_kafka_err2str(err));
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected list_groups(timeout=0) to fail "
+                    "with timeout, got %s", rd_kafka_err2str(err));
 
 
 	TEST_SAY("Closing remaining consumers\n");

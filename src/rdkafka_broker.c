@@ -3261,9 +3261,9 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
         rd_free(rkb->rkb_origname);
 
 	rd_kafka_q_purge(rkb->rkb_ops);
-	rd_kafka_q_destroy(rkb->rkb_ops);
+        rd_kafka_q_destroy_owner(rkb->rkb_ops);
 
-	    rd_avg_destroy(&rkb->rkb_avg_int_latency);
+        rd_avg_destroy(&rkb->rkb_avg_int_latency);
         rd_avg_destroy(&rkb->rkb_avg_rtt);
 	rd_avg_destroy(&rkb->rkb_avg_throttle);
 

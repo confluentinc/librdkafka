@@ -48,8 +48,12 @@ void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
 		rd_free(rkq->rkq_qio);
 		rkq->rkq_qio = NULL;
 	}
+        /* Queue must have been disabled prior to final destruction,
+         * this is to catch the case where the queue owner/poll does not
+         * use rd_kafka_q_destroy_owner(). */
+        rd_dassert(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY));
+        rd_kafka_q_disable0(rkq, 0/*no-lock*/); /* for the non-devel case */
         rd_kafka_q_fwd_set0(rkq, NULL, 0/*no-lock*/, 0 /*no-fwd-app*/);
-        rd_kafka_q_disable0(rkq, 0/*no-lock*/);
         rd_kafka_q_purge0(rkq, 0/*no-lock*/);
 	assert(!rkq->rkq_fwdq);
         mtx_unlock(&rkq->rkq_lock);
@@ -484,7 +488,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
                 }
 	}
 
-	rd_kafka_q_destroy(&localq);
+	rd_kafka_q_destroy_owner(&localq);
 
 	return cnt;
 }
@@ -595,9 +599,8 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 
 
 void rd_kafka_queue_destroy (rd_kafka_queue_t *rkqu) {
-	rd_kafka_q_disable(rkqu->rkqu_q);
-	rd_kafka_q_destroy(rkqu->rkqu_q);
-	rd_free(rkqu);
+        rd_kafka_q_destroy_owner(rkqu->rkqu_q);
+        rd_free(rkqu);
 }
 
 rd_kafka_queue_t *rd_kafka_queue_new0 (rd_kafka_t *rk, rd_kafka_q_t *rkq) {

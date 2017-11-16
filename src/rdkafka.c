@@ -612,8 +612,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         }
 
 	/* Purge op-queues */
-	rd_kafka_q_destroy(rk->rk_rep);
-	rd_kafka_q_destroy(rk->rk_ops);
+	rd_kafka_q_destroy_owner(rk->rk_rep);
+	rd_kafka_q_destroy_owner(rk->rk_ops);
 
 #if WITH_SSL
 	if (rk->rk_conf.ssl.ctx) {
@@ -627,7 +627,7 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
                      "Termination done: freeing resources");
 
         if (rk->rk_logq) {
-                rd_kafka_q_destroy(rk->rk_logq);
+                rd_kafka_q_destroy_owner(rk->rk_logq);
                 rk->rk_logq = NULL;
         }
 
@@ -1694,7 +1694,7 @@ static RD_UNUSED int rd_kafka_consume_stop0 (rd_kafka_toppar_t *rktp) {
 
         /* Synchronisation: Wait for stop reply from broker thread */
         err = rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
-        rd_kafka_q_destroy(tmpq);
+        rd_kafka_q_destroy_owner(tmpq);
 
 	rd_kafka_set_last_error(err, err ? EINVAL : 0);
 
@@ -1762,7 +1762,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
         if ((err = rd_kafka_toppar_op_seek(rktp, offset,
 					   RD_KAFKA_REPLYQ(tmpq, 0)))) {
                 if (tmpq)
-                        rd_kafka_q_destroy(tmpq);
+                        rd_kafka_q_destroy_owner(tmpq);
                 rd_kafka_toppar_destroy(s_rktp);
                 return err;
         }
@@ -1771,7 +1771,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
 
         if (tmpq) {
                 err = rd_kafka_q_wait_result(tmpq, timeout_ms);
-                rd_kafka_q_destroy(tmpq);
+                rd_kafka_q_destroy_owner(tmpq);
                 return err;
         }
 
@@ -2092,9 +2092,10 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
                 /* Ignore YIELD, we need to finish */
         }
 
-        rd_kafka_q_destroy(rkq);
+        rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
 
-	rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
+        rd_kafka_q_destroy_owner(rkq);
+
 
         return err;
 }
@@ -2161,7 +2162,7 @@ rd_kafka_committed (rd_kafka_t *rk,
         } while (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
 		 err == RD_KAFKA_RESP_ERR__WAIT_COORD);
 
-        rd_kafka_q_destroy(rkq);
+        rd_kafka_q_destroy_owner(rkq);
 
         return err;
 }
@@ -2331,7 +2332,7 @@ rd_kafka_query_watermark_offsets (rd_kafka_t *rk, const char *topic,
                RD_KAFKA_OP_RES_YIELD)
                 ;
 
-        rd_kafka_q_destroy(rkq);
+        rd_kafka_q_destroy_owner(rkq);
 
         if (state.err)
                 return state.err;
@@ -2475,7 +2476,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
                                 0, RD_KAFKA_Q_CB_CALLBACK,
                                  rd_kafka_poll_cb, NULL);
 
-        rd_kafka_q_destroy(rkq);
+        rd_kafka_q_destroy_owner(rkq);
 
         /* Then update the queried partitions. */
         if (!state.err)
@@ -3284,7 +3285,7 @@ rd_kafka_list_groups (rd_kafka_t *rk, const char *group,
                 }
         }
 
-        rd_kafka_q_destroy(state.q);
+        rd_kafka_q_destroy_owner(state.q);
 
         if (state.err)
                 rd_kafka_group_list_destroy(state.grplist);

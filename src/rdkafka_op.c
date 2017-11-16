@@ -453,7 +453,7 @@ rd_kafka_op_t *rd_kafka_op_req (rd_kafka_q_t *destq,
 
         reply = rd_kafka_op_req0(destq, recvq, rko, timeout_ms);
 
-        rd_kafka_q_destroy(recvq);
+        rd_kafka_q_destroy_owner(recvq);
 
         return reply;
 }

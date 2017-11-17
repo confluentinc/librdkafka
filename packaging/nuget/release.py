@@ -55,42 +55,29 @@ if __name__ == '__main__':
         print(' %s' % a.lpath)
     print('')
 
-    package_for = [packaging.NugetPackage]
-    packages = list()
-
-    print('Packaging classes: %s' % package_for)
-
     package_version = match['tag']
     if args.nuget_version is not None:
         package_version = args.nuget_version
 
-    for pcl in package_for:
-        p = pcl(package_version, arts)
-        packages.append(p)
     print('')
 
     if dry_run:
         sys.exit(0)
 
-    # Build packages
     print('Building packages:')
-    pkgfiles = []
-    for p in packages:
-        paths = p.build(buildtype='release')
-        for path in paths:
-            # Verify package files
-            if p.verify(path):
-                pkgfiles.append(path)
-        if not args.no_cleanup:
-            p.cleanup()
-        else:
-            print(' --no-cleanup: leaving %s' % p.stpath)
+
+    p = packaging.NugetPackage(package_version, arts)
+    pkgfile = p.build(buildtype='release')
+
+    if not args.no_cleanup:
+        p.cleanup()
+    else:
+        print(' --no-cleanup: leaving %s' % p.stpath)
+
     print('')
 
-    if len(pkgfiles) > 0:
-        print('Created packages:')
-        for pkg in pkgfiles:
-            print(pkg)
-    else:
-        print('No packages created')
+    if not p.verify(pkgfile):
+        print('Package failed verification.')
         sys.exit(1)
+    else:
+        print('Created package: %s' % pkgfile)

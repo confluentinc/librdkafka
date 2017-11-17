@@ -2470,7 +2470,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
         rd_list_destroy(&leaders);
 
         /* Wait for reply (or timeout) */
-        while (state.wait_reply > 0 && rd_timeout_remains(ts_end) > 0)
+        while (state.wait_reply > 0 && ((rd_timeout_remains(ts_end) > 0) || (timeout_ms == RD_POLL_INFINITE)))
                 rd_kafka_q_serve(rkq, rd_timeout_remains(ts_end),
                                 0, RD_KAFKA_Q_CB_CALLBACK,
                                  rd_kafka_poll_cb, NULL);

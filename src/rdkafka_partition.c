@@ -88,6 +88,12 @@ static void rd_kafka_toppar_lag_handle_Offset (rd_kafka_t *rk,
         /* Parse and return Offset */
         err = rd_kafka_handle_Offset(rkb->rkb_rk, rkb, err,
                                      rkbuf, request, offsets);
+
+        if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
+                rd_kafka_topic_partition_list_destroy(offsets);
+                return; /* Retrying */
+        }
+
         if (!err && !(rktpar = rd_kafka_topic_partition_list_find(
                               offsets,
                               rktp->rktp_rkt->rkt_topic->str,

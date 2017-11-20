@@ -375,22 +375,14 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
  * \p response may be NULL.
  *
  * Will decrease refcount for both response and request, eventually.
+ *
+ * The decision to retry, and the call to buf_retry(), is delegated
+ * to the buffer's response callback.
  */
 void rd_kafka_buf_callback (rd_kafka_t *rk,
 			    rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
                             rd_kafka_buf_t *response, rd_kafka_buf_t *request){
 
-        /* Decide if the request should be retried.
-         * This is always done in the originating broker thread. */
-        if (unlikely(err && err != RD_KAFKA_RESP_ERR__DESTROY &&
-		     rd_kafka_buf_retry(rkb, request))) {
-		/* refcount for retry was increased in buf_retry() so we can
-		 * let go of this caller's refcounts. */
-		rd_kafka_buf_destroy(request);
-		if (response)
-			rd_kafka_buf_destroy(response);
-                return;
-	}
 
         if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq.q) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);

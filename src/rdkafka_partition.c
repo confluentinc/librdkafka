@@ -1089,7 +1089,7 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
 
 	rd_kafka_toppar_lock(rktp);
 	/* Drop reply from previous partition leader */
-	if (rktp->rktp_leader != rkb)
+	if (err != RD_KAFKA_RESP_ERR__DESTROY && rktp->rktp_leader != rkb)
 		err = RD_KAFKA_RESP_ERR__OUTDATED;
 	rd_kafka_toppar_unlock(rktp);
 

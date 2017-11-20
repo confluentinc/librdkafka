@@ -1028,9 +1028,11 @@ void rd_kafka_SyncGroupRequest (rd_kafka_broker_t *rkb,
 
         /* This is a blocking request */
         rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;
-        rkbuf->rkbuf_ts_timeout = rd_clock() +
-                (rkb->rkb_rk->rk_conf.group_session_timeout_ms * 1000) +
-                (3*1000*1000/* 3s grace period*/);
+        rd_kafka_buf_set_abs_timeout(
+                rkbuf,
+                rkb->rkb_rk->rk_conf.group_session_timeout_ms +
+                3000/* 3s grace period*/,
+                0);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
@@ -1146,9 +1148,11 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
 
         /* This is a blocking request */
         rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;
-        rkbuf->rkbuf_ts_timeout = rd_clock() +
-                (rk->rk_conf.group_session_timeout_ms * 1000) +
-                (3*1000*1000/* 3s grace period*/);
+        rd_kafka_buf_set_abs_timeout(
+                rkbuf,
+                rk->rk_conf.group_session_timeout_ms +
+                3000/* 3s grace period*/,
+                0);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
@@ -1261,8 +1265,10 @@ void rd_kafka_HeartbeatRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_i32(rkbuf, generation_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
 
-        rkbuf->rkbuf_ts_timeout = rd_clock() +
-                (rkb->rkb_rk->rk_conf.group_session_timeout_ms * 1000);
+        rd_kafka_buf_set_abs_timeout(
+                rkbuf,
+                rkb->rkb_rk->rk_conf.group_session_timeout_ms,
+                0);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
@@ -1636,7 +1642,10 @@ void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 	/* 0.9.0.x brokers will not close the connection on unsupported
 	 * API requests, so we minimize the timeout for the request.
 	 * This is a regression on the broker part. */
-	rkbuf->rkbuf_ts_timeout = rd_clock() + (rkb->rkb_rk->rk_conf.api_version_request_timeout_ms * 1000);
+        rd_kafka_buf_set_abs_timeout(
+                rkbuf,
+                rkb->rkb_rk->rk_conf.api_version_request_timeout_ms,
+                0);
 
         if (replyq.q)
                 rd_kafka_broker_buf_enq_replyq(rkb,
@@ -1670,9 +1679,9 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 	/* 0.9.0.x brokers will not close the connection on unsupported
 	 * API requests, so we minimize the timeout of the request.
 	 * This is a regression on the broker part. */
-	if (!rkb->rkb_rk->rk_conf.api_version_request &&
+        if (!rkb->rkb_rk->rk_conf.api_version_request &&
             rkb->rkb_rk->rk_conf.socket_timeout_ms > 10*1000)
-		rkbuf->rkbuf_ts_timeout = rd_clock() + (10 * 1000 * 1000);
+                rd_kafka_buf_set_abs_timeout(rkbuf, 10*1000 /*10s*/, 0);
 
 	if (replyq.q)
 		rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq,
@@ -1888,6 +1897,8 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
         rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
         size_t MessageSetSize = 0;
         int cnt;
+        rd_ts_t now;
+        int tmout;
 
         /**
          * Create ProduceRequest with as many messages from the toppar
@@ -1907,9 +1918,25 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
         if (!rkt->rkt_conf.required_acks)
                 rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_NO_RESPONSE;
 
-        /* Use timeout from first message. */
-        rkbuf->rkbuf_ts_timeout =
-                TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->rkm_ts_timeout;
+        /* Use timeout from first message.
+         * FIXME: Use socket.timeout.ms if smaller than message timeout
+         *        to avoid 5 minute HOLB */
+        now = rd_clock();
+
+        if (TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->rkm_ts_timeout > now)
+                tmout = (TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->
+                         rkm_ts_timeout - now) / 1000;
+        else
+                /* else allow a 100ms request grace timeout if message
+                 * has already expired. */
+                tmout = 100;
+
+        rd_kafka_buf_set_abs_timeout(
+                rkbuf,
+                /* Convert absolute message timeout to relative time,
+                 * making sure we don't get a <= 0 value. */
+                tmout,
+                now);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
                                        RD_KAFKA_NO_REPLYQ,

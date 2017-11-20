@@ -474,7 +474,47 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	rd_ts_t rkbuf_ts_enq;
 	rd_ts_t rkbuf_ts_sent;    /* Initially: Absolute time of transmission,
 				   * after response: RTT. */
-	rd_ts_t rkbuf_ts_timeout;
+
+        /* Request timeouts:
+         *  rkbuf_ts_timeout is the effective absolute request timeout used
+         *  by the timeout scanner to see if a request has timed out.
+         *  It is is set when a request is enqueued on the broker transmit
+         *  queue based on the relative or absolute timeout:
+         *
+         *  rkbuf_rel_timeout is the per-request-transmit relative timeout,
+         *  this value is reused for each sub-sequent retry of a request.
+         *
+         *  rkbuf_abs_timeout is the absolute request timeout, spanning
+         *  all retries.
+         *  This value is effectively limited by socket.timeout.ms for
+         *  each transmission, but the absolute timeout for a request's
+         *  lifetiem is the absolute value.
+         *
+         *  Use rd_kafka_buf_set_timeout() to set a relative timeout
+         *  that will be reused on retry,
+         *  or rd_kafka_buf_set_abs_timeout() to set a fixed absolute timeout
+         *  for the case where the caller knows the request will be
+         *  semantically outdated when that absolute time expires, such as for
+         *  session.timeout.ms-based requests.
+         *
+         * The decision to retry a request is delegated to the rkbuf_cb
+         * response callback, which should use rd_kafka_err_action()
+         * and check the return actions for RD_KAFKA_ERR_ACTION_RETRY to be set
+         * and then call rd_kafka_buf_retry().
+         * rd_kafka_buf_retry() will enqueue the request on the rkb_retrybufs
+         * queue with a backoff time of retry.backoff.ms.
+         * The rkb_retrybufs queue is served by the broker thread's timeout
+         * scanner.
+         * @warning rkb_retrybufs is NOT purged on broker down.
+         */
+        rd_ts_t rkbuf_ts_timeout; /* Request timeout (absolute time). */
+        rd_ts_t rkbuf_abs_timeout;/* Absolute timeout for request, including
+                                   * retries.
+                                   * Mutually exclusive with rkbuf_rel_timeout*/
+        int     rkbuf_rel_timeout;/* Relative timeout (ms), used for retries.
+                                   * Defaults to socket.timeout.ms.
+                                   * Mutually exclusive with rkbuf_abs_timeout*/
+
 
         int64_t rkbuf_offset;     /* Used by OffsetCommit */
 
@@ -513,6 +553,47 @@ typedef struct rd_kafka_bufq_s {
 } rd_kafka_bufq_t;
 
 #define rd_kafka_bufq_cnt(rkbq) rd_atomic32_get(&(rkbq)->rkbq_cnt)
+
+/**
+ * @brief Set buffer's request timeout to relative \p timeout_ms measured
+ *        from the time the buffer is sent on the underlying socket.
+ *
+ * @param now Reuse current time from existing rd_clock() var, else 0.
+ *
+ * The relative timeout value is reused upon request retry.
+ */
+static RD_INLINE void
+rd_kafka_buf_set_timeout (rd_kafka_buf_t *rkbuf, int timeout_ms, rd_ts_t now) {
+        if (!now)
+                now = rd_clock();
+        rkbuf->rkbuf_rel_timeout = timeout_ms;
+        rkbuf->rkbuf_abs_timeout = 0;
+}
+
+
+/**
+ * @brief Calculate the effective timeout for a request attempt
+ */
+void rd_kafka_buf_calc_timeout (const rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
+                                rd_ts_t now);
+
+
+/**
+ * @brief Set buffer's request timeout to relative \p timeout_ms measured
+ *        from \p now.
+ *
+ * @param now Reuse current time from existing rd_clock() var, else 0.
+ *
+ * The remaining time is used as timeout for request retries.
+ */
+static RD_INLINE void
+rd_kafka_buf_set_abs_timeout (rd_kafka_buf_t *rkbuf, int timeout_ms,
+                              rd_ts_t now) {
+        if (!now)
+                now = rd_clock();
+        rkbuf->rkbuf_rel_timeout = 0;
+        rkbuf->rkbuf_abs_timeout = now + (timeout_ms * 1000);
+}
 
 
 #define rd_kafka_buf_keep(rkbuf) rd_refcnt_add(&(rkbuf)->rkbuf_refcnt)

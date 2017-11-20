@@ -724,7 +724,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                 .sdef = "message.send.max.retries" },
 	{ _RK_GLOBAL|_RK_PRODUCER, "retry.backoff.ms", _RK_C_INT,
 	  _RK(retry_backoff_ms),
-	  "The backoff time in milliseconds before retrying a message send.",
+	  "The backoff time in milliseconds before retrying a protocol request.",
 	  1, 300*1000, 100 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),

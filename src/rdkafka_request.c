@@ -1226,6 +1226,8 @@ err:
                              "LeaveGroup response: %s",
                              rd_kafka_err2str(ErrorCode));
 
+        return;
+
  err_parse:
         ErrorCode = rkbuf->rkbuf_err;
         goto err;

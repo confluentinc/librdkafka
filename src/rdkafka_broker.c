@@ -549,10 +549,9 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
 		/* If this was an in-flight request that timed out, or
 		 * the other queues has reached the socket.max.fails threshold,
 		 * we need to take down the connection. */
-                if ((req_cnt > 0 ||
-		     (rkb->rkb_rk->rk_conf.socket_max_fails &&
-		      rkb->rkb_req_timeouts >=
-		      rkb->rkb_rk->rk_conf.socket_max_fails)) &&
+                if (rkb->rkb_rk->rk_conf.socket_max_fails &&
+                    rkb->rkb_req_timeouts >=
+                    rkb->rkb_rk->rk_conf.socket_max_fails &&
                     rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP) {
                         char rttinfo[32];
                         /* Print average RTT (if avail) to help diagnose. */

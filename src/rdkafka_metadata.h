@@ -30,9 +30,10 @@
 
 #include "rdavl.h"
 
-struct rd_kafka_metadata *
+rd_kafka_resp_err_t
 rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
-                         rd_kafka_buf_t *request, rd_kafka_buf_t *rkbuf);
+                         rd_kafka_buf_t *request, rd_kafka_buf_t *rkbuf,
+                         struct rd_kafka_metadata **mdp);
 
 struct rd_kafka_metadata *
 rd_kafka_metadata_copy (const struct rd_kafka_metadata *md, size_t size);

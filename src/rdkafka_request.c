@@ -1322,45 +1322,36 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
         rd_kafka_op_t *rko = opaque; /* Possibly NULL */
         struct rd_kafka_metadata *md = NULL;
         const rd_list_t *topics = request->rkbuf_u.Metadata.topics;
+        char actstr[64];
+        int actions;
 
         rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
                         thrd_is_current(rk->rk_thread));
 
-	/* Avoid metadata updates when we're terminating. */
-	if (rd_kafka_terminating(rkb->rkb_rk))
-                err = RD_KAFKA_RESP_ERR__DESTROY;
-
-	if (unlikely(err)) {
-                if (err == RD_KAFKA_RESP_ERR__DESTROY) {
-                        /* Terminating */
-                        goto done;
-                }
-
-                /* FIXME: handle errors */
-                rd_rkb_log(rkb, LOG_WARNING, "METADATA",
-                           "Metadata request failed: %s (%dms)",
-                           rd_kafka_err2str(err),
-			   (int)(request->rkbuf_ts_sent/1000));
-	} else {
-
-                if (!topics)
-                        rd_rkb_dbg(rkb, METADATA, "METADATA",
-                                   "===== Received metadata: %s =====",
-                                   request->rkbuf_u.Metadata.reason);
-                else
-                        rd_rkb_dbg(rkb, METADATA, "METADATA",
-                                   "===== Received metadata "
-                                   "(for %d requested topics): %s =====",
-                                   rd_list_cnt(topics),
-                                   request->rkbuf_u.Metadata.reason);
-
-                md = rd_kafka_parse_Metadata(rkb, request, rkbuf);
-		if (!md) {
-			if (rd_kafka_buf_retry(rkb, request))
-				return;
-			err = RD_KAFKA_RESP_ERR__BAD_MSG;
-                }
+        /* Avoid metadata updates when we're terminating. */
+        if (rd_kafka_terminating(rkb->rkb_rk) ||
+            err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* Terminating */
+                goto done;
         }
+
+        if (err)
+                goto err;
+
+        if (!topics)
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "===== Received metadata: %s =====",
+                           request->rkbuf_u.Metadata.reason);
+        else
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "===== Received metadata "
+                           "(for %d requested topics): %s =====",
+                           rd_list_cnt(topics),
+                           request->rkbuf_u.Metadata.reason);
+
+        err = rd_kafka_parse_Metadata(rkb, request, rkbuf, &md);
+        if (err)
+                goto err;
 
         if (rko && rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
@@ -1375,11 +1366,40 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
                         rd_free(md);
         }
 
+        goto done;
+
+ err:
+        actions = rd_kafka_err_action(
+                rkb, err, rkbuf, request,
+
+                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_RESP_ERR__PARTIAL,
+
+                RD_KAFKA_ERR_ACTION_END);
+
+        if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+                if (rd_kafka_buf_retry(rkb, request))
+                        return;
+                /* FALLTHRU */
+        } else {
+                rd_rkb_log(rkb, LOG_WARNING, "METADATA",
+                           "Metadata request failed: %s: %s (%dms): %s",
+                           request->rkbuf_u.Metadata.reason,
+                           rd_kafka_err2str(err),
+                           (int)(request->rkbuf_ts_sent/1000),
+                           rd_flags2str(actstr, sizeof(actstr),
+                                        rd_kafka_actions_descs,
+                                        actions));
+        }
+
+
+
+        /* FALLTHRU */
+
  done:
         if (rko)
                 rd_kafka_op_destroy(rko);
 }
-
 
 
 /**

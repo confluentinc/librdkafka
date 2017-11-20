@@ -195,20 +195,23 @@ rd_kafka_metadata_copy (const struct rd_kafka_metadata *src, size_t size) {
 
 
 /**
- * Handle a Metadata response message.
+ * @brief Handle a Metadata response message.
  *
  * @param topics are the requested topics (may be NULL)
  *
  * The metadata will be marshalled into 'struct rd_kafka_metadata*' structs.
  *
- * Returns the marshalled metadata, or NULL on parse error.
+ * The marshalled metadata is returned in \p *mdp, (NULL on error).
+
+ * @returns an error code on parse failure, else NO_ERRRO.
  *
  * @locality rdkafka main thread
  */
-struct rd_kafka_metadata *
+rd_kafka_resp_err_t
 rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                          rd_kafka_buf_t *request,
-                         rd_kafka_buf_t *rkbuf) {
+                         rd_kafka_buf_t *rkbuf,
+                         struct rd_kafka_metadata **mdp) {
         rd_kafka_t *rk = rkb->rkb_rk;
         int i, j, k;
         rd_tmpabuf_t tbuf;
@@ -223,6 +226,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         int ApiVersion = request->rkbuf_reqhdr.ApiVersion;
         rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
         int32_t controller_id = -1;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
@@ -239,8 +243,11 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                        sizeof(*md) + rkb_namelen + (rkbuf->rkbuf_totlen * 4),
                        0/*dont assert on fail*/);
 
-        if (!(md = rd_tmpabuf_alloc(&tbuf, sizeof(*md))))
+        if (!(md = rd_tmpabuf_alloc(&tbuf, sizeof(*md)))) {
+                err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
                 goto err;
+        }
+
         md->orig_broker_id = rkb->rkb_nodeid;
         md->orig_broker_name = rd_tmpabuf_write(&tbuf,
                                                 rkb->rkb_name, rkb_namelen);
@@ -407,12 +414,15 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
          * update our internal state according to the response. */
 
         /* Avoid metadata updates when we're terminating. */
-        if (rd_kafka_terminating(rkb->rkb_rk))
+        if (rd_kafka_terminating(rkb->rkb_rk)) {
+                err = RD_KAFKA_RESP_ERR__DESTROY;
                 goto done;
+        }
 
         if (md->broker_cnt == 0 && md->topic_cnt == 0) {
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
-                           "No brokers or topics in metadata: retrying");
+                           "No brokers or topics in metadata: should retry");
+                err = RD_KAFKA_RESP_ERR__PARTIAL;
                 goto err;
         }
 
@@ -565,10 +575,13 @@ done:
          * the requestee will do.
          * The tbuf is explicitly not destroyed as we return its memory
          * to the caller. */
-        return md;
+        *mdp = md;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 
  err_parse:
-err:
+        err = rkbuf->rkbuf_err;
+ err:
         if (requested_topics) {
                 /* Failed requests shall purge cache hints for
                  * the requested topics. */
@@ -581,7 +594,8 @@ err:
                 rd_list_destroy(missing_topics);
 
         rd_tmpabuf_destroy(&tbuf);
-        return NULL;
+
+        return err;
 }
 
 

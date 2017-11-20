@@ -603,11 +603,17 @@ rd_kafka_broker_send (rd_kafka_broker_t *rkb, rd_slice_t *slice) {
 
 static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 	const char *errstr;
+        int save_idx = 0;
 
 	if (rkb->rkb_rsal &&
 	    rkb->rkb_ts_rsal_last + (rkb->rkb_rk->rk_conf.broker_addr_ttl*1000)
 	    < rd_clock()) {
 		/* Address list has expired. */
+
+                /* Save the address index to make sure we still round-robin
+                 * if we get the same address list back */
+                save_idx = rkb->rkb_rsal->rsal_curr;
+
 		rd_sockaddr_list_destroy(rkb->rkb_rsal);
 		rkb->rkb_rsal = NULL;
 	}

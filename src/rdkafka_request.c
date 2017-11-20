@@ -66,6 +66,8 @@ static const char *rd_kafka_actions_descs[] = {
  * The optional var-args is a .._ACTION_END terminated list
  * of action,error tuples which overrides the general behaviour.
  * It is to be read as: for \p error, return \p action(s).
+ *
+ * @warning \p request, \p rkbuf and \p rkb may be NULL.
  */
 int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 			 rd_kafka_resp_err_t err,
@@ -75,6 +77,9 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
         int actions = 0;
 	int exp_act;
         char actstr[64];
+
+        if (!err)
+                return 0;
 
 	/* Match explicitly defined error mappings first. */
 	va_start(ap, request);
@@ -117,6 +122,7 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                 actions |= RD_KAFKA_ERR_ACTION_REFRESH;
                 break;
         case RD_KAFKA_RESP_ERR__TIMED_OUT:
+                /* Client-side wait-response/in-queue timeout */
         case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
                 /* Broker-side request handling timeout */
 	case RD_KAFKA_RESP_ERR__TRANSPORT:
@@ -131,6 +137,11 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                 break;
         }
 
+        /* If no request buffer was specified, which might be the case
+         * in certain error call chains, mask out the retry action. */
+        if (!request)
+                actions &= ~RD_KAFKA_ERR_ACTION_RETRY;
+
 
         if (err && actions && rkb && request)
                 rd_rkb_dbg(rkb, BROKER, "REQERR",
@@ -139,6 +150,7 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                            rd_kafka_err2str(err),
                            rd_flags2str(actstr, sizeof(actstr),
                                         rd_kafka_actions_descs, actions));
+
         return actions;
 }
 
@@ -484,11 +496,12 @@ err:
                 rd_kafka_cgrp_op(rkb->rkb_rk->rk_cgrp, NULL,
                                  RD_KAFKA_NO_REPLYQ,
 				 RD_KAFKA_OP_COORD_QUERY, err);
-                if (request) {
-                        /* Schedule a retry */
-                        rd_kafka_buf_keep(request);
-                        rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
-                }
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+                if (rd_kafka_buf_retry(rkb, request))
+                        return RD_KAFKA_RESP_ERR__IN_PROGRESS;
+                /* FALLTHRU */
         }
 
 	return err;
@@ -501,13 +514,21 @@ err:
 
 
 /**
- * opaque=rko wrapper for handle_OffsetFetch.
- * rko->rko_payload MUST be a `rd_kafka_topic_partition_list_t *` which will
- * be filled in with fetch offsets.
+ * @brief Handle OffsetFetch response based on an RD_KAFKA_OP_OFFSET_FETCH
+ *        rko in \p opaque.
+ *
+ * @param opaque rko wrapper for handle_OffsetFetch.
+ *
+ * The \c rko->rko_u.offset_fetch.partitions list will be filled in with
+ * the fetched offsets.
  *
  * A reply will be sent on 'rko->rko_replyq' with type RD_KAFKA_OP_OFFSET_FETCH.
  *
- * Locality: cgrp's broker thread
+ * @remark \p rkb, \p rkbuf and \p request are optional.
+ *
+ * @remark The \p request buffer may be retried on error.
+ *
+ * @locality cgrp's broker thread
  */
 void rd_kafka_op_handle_OffsetFetch (rd_kafka_t *rk,
 				     rd_kafka_broker_t *rkb,
@@ -1053,6 +1074,12 @@ err:
                 /* FALLTHRU */
         }
 
+        if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+                if (rd_kafka_buf_retry(rkb, request))
+                        return;
+                /* FALLTHRU */
+        }
+
         rd_kafka_dbg(rkb->rkb_rk, CGRP, "SYNCGROUP",
                      "SyncGroup response: %s (%d bytes of MemberState data)",
                      rd_kafka_err2str(ErrorCode),
@@ -1169,7 +1196,6 @@ void rd_kafka_handle_LeaveGroup (rd_kafka_t *rk,
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
-
 err:
         actions = rd_kafka_err_action(rkb, ErrorCode, rkbuf, request,
 				      RD_KAFKA_ERR_ACTION_END);
@@ -1178,10 +1204,12 @@ err:
                 /* Re-query for coordinator */
                 rd_kafka_cgrp_op(rkcg, NULL, RD_KAFKA_NO_REPLYQ,
 				 RD_KAFKA_OP_COORD_QUERY, ErrorCode);
-                /* Schedule a retry */
-                rd_kafka_buf_keep(request);
-                rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
-                return;
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+                if (rd_kafka_buf_retry(rkb, request))
+                        return;
+                /* FALLTHRU */
         }
 
         if (ErrorCode)
@@ -1504,7 +1532,6 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 			    struct rd_kafka_ApiVersion **apis,
 			    size_t *api_cnt) {
         const int log_decode_errors = LOG_ERR;
-        int actions;
 	int32_t ApiArrayCnt;
 	int16_t ErrorCode;
 	int i = 0;
@@ -1553,17 +1580,9 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 	if (*apis)
 		rd_free(*apis);
 
-        actions = rd_kafka_err_action(
-		rkb, err, rkbuf, request,
-		RD_KAFKA_ERR_ACTION_END);
+        /* There are no retryable errors. */
 
-	if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-		if (rd_kafka_buf_retry(rkb, request))
-			return RD_KAFKA_RESP_ERR__IN_PROGRESS;
-		/* FALLTHRU */
-	}
-
-done:
+ done:
         return err;
 }
 
@@ -1784,10 +1803,6 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                 if ((actions & RD_KAFKA_ERR_ACTION_RETRY) &&
                     rd_kafka_buf_retry(rkb, request))
                         return; /* Scheduled for retry */
-
-                /* Refresh implies a later retry through other means */
-                if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
-                        goto done;
 
                 /* Translate request-level timeout error code
                  * to message-level timeout error code. */

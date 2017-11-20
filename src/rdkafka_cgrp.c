@@ -475,6 +475,8 @@ err2:
         if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY)
                 return;
 
+        /* No need for retries since the coord query is intervalled. */
+
         if (ErrorCode == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE)
                 rd_kafka_cgrp_coord_update(rkcg, -1);
 	else {
@@ -984,6 +986,9 @@ err:
                                  RD_KAFKA_OP_COORD_QUERY, ErrorCode);
         }
 
+        /* No need for retries here since the join is intervalled,
+         * see rkcg_join_intvl */
+
         if (ErrorCode) {
                 if (ErrorCode == RD_KAFKA_RESP_ERR__DESTROY)
                         return; /* Termination */
@@ -1327,14 +1332,14 @@ err:
                 /* Re-query for coordinator */
                 rd_kafka_cgrp_op(rkcg, NULL, RD_KAFKA_NO_REPLYQ,
                                  RD_KAFKA_OP_COORD_QUERY, ErrorCode);
-                /* Schedule a retry */
-                if (ErrorCode != RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP) {
+        }
+
+        if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+                if (rd_kafka_buf_retry(rkb, request)) {
                         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
-                        rd_kafka_buf_keep(request);
-                        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
-                        rd_kafka_broker_buf_retry(request->rkbuf_rkb, request);
+                        return;
                 }
-                return;
+                /* FALLTHRU */
         }
 
         if (ErrorCode != 0 && ErrorCode != RD_KAFKA_RESP_ERR__DESTROY)
@@ -1533,10 +1538,13 @@ static void rd_kafka_cgrp_offsets_fetch_response (
 	/* If all partitions already had usable offsets then there
 	 * was no request sent and thus no reply, the offsets list is
 	 * good to go. */
-	if (reply)
+	if (reply) {
 		err = rd_kafka_handle_OffsetFetch(rk, rkb, err,
 						  reply, request, offsets,
 						  1/* Update toppars */);
+                if (err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                        return; /* retrying */
+        }
 	if (err) {
 		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "OFFSET",
 			     "Offset fetch error: %s",

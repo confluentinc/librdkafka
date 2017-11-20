@@ -633,6 +633,9 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 			return -1;
                 } else {
                         rkb->rkb_ts_rsal_last = rd_clock();
+                        /* Continue at previous round-robin position */
+                        if (rkb->rkb_rsal->rsal_cnt > save_idx)
+                                rkb->rkb_rsal->rsal_curr = save_idx;
                 }
 	}
 
@@ -642,14 +645,15 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 
 static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 				      rd_kafka_buf_t *rkbuf, int at_head) {
+        rd_ts_t now;
+
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
-        rkbuf->rkbuf_ts_enq = rd_clock();
+        now = rd_clock();
+        rkbuf->rkbuf_ts_enq = now;
 
-        /* Set timeout if not already set */
-        if (!rkbuf->rkbuf_ts_timeout)
-        	rkbuf->rkbuf_ts_timeout = rkbuf->rkbuf_ts_enq +
-                        rkb->rkb_rk->rk_conf.socket_timeout_ms * 1000;
+        /* Calculate request attempt timeout */
+        rd_kafka_buf_calc_timeout(rkb->rkb_rk, rkbuf, now);
 
 	if (unlikely(at_head)) {
 		/* Insert message at head of queue */
@@ -1751,16 +1755,25 @@ void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
         }
 
         rd_rkb_dbg(rkb, PROTOCOL, "RETRY",
-                   "Retrying %sRequest (v%hd, %"PRIusz" bytes, retry %d/%d)",
+                   "Retrying %sRequest (v%hd, %"PRIusz" bytes, retry %d/%d, "
+                   "prev CorrId %"PRId32") in %dms",
                    rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
                    rkbuf->rkbuf_reqhdr.ApiVersion,
                    rd_slice_size(&rkbuf->rkbuf_reader),
-                   rkbuf->rkbuf_retries, rkb->rkb_rk->rk_conf.max_retries);
+                   rkbuf->rkbuf_retries, rkb->rkb_rk->rk_conf.max_retries,
+                   rkbuf->rkbuf_corrid,
+                   rkb->rkb_rk->rk_conf.retry_backoff_ms);
 
 	rd_atomic64_add(&rkb->rkb_c.tx_retries, 1);
 
 	rkbuf->rkbuf_ts_retry = rd_clock() +
 		(rkb->rkb_rk->rk_conf.retry_backoff_ms * 1000);
+        /* Precaution: time out the request if it hasn't moved from the
+         * retry queue within the retry interval (such as when the broker is
+         * down). */
+        // FIXME: implememt this properly.
+        rkbuf->rkbuf_ts_timeout = rkbuf->rkbuf_ts_retry + (5*1000*1000);
+
         /* Reset send offset */
         rd_slice_seek(&rkbuf->rkbuf_reader, 0);
 	rkbuf->rkbuf_corrid = 0;
@@ -1776,6 +1789,7 @@ void rd_kafka_broker_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb) {
 	rd_ts_t now = rd_clock();
 	rd_kafka_buf_t *rkbuf;
+        int cnt = 0;
 
 	while ((rkbuf = TAILQ_FIRST(&rkb->rkb_retrybufs.rkbq_bufs))) {
 		if (rkbuf->rkbuf_ts_retry > now)
@@ -1784,7 +1798,12 @@ static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb) {
 		rd_kafka_bufq_deq(&rkb->rkb_retrybufs, rkbuf);
 
 		rd_kafka_broker_buf_enq0(rkb, rkbuf, 0/*tail*/);
+                cnt++;
 	}
+
+        if (cnt > 0)
+                rd_rkb_dbg(rkb, BROKER, "RETRY",
+                           "Moved %d retry buffer(s) to output queue", cnt);
 }
 
 
@@ -2990,10 +3009,11 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 	/* Update TopicArrayCnt */
 	rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
 
-	/* Use configured timeout */
-	rkbuf->rkbuf_ts_timeout = now +
-		((rkb->rkb_rk->rk_conf.socket_timeout_ms +
-		  rkb->rkb_rk->rk_conf.fetch_wait_max_ms) * 1000);
+        /* Use configured timeout */
+        rd_kafka_buf_set_timeout(rkbuf,
+                                 rkb->rkb_rk->rk_conf.socket_timeout_ms +
+                                 rkb->rkb_rk->rk_conf.fetch_wait_max_ms,
+                                 now);
 
 	/* Sort toppar versions for quicker lookups in Fetch response. */
 	rd_list_sort(rkbuf->rkbuf_rktp_vers, rd_kafka_toppar_ver_cmp);

@@ -160,3 +160,45 @@ rd_strtup_t *rd_strtup_new (const char *name, const char *value) {
 
         return strtup;
 }
+
+
+
+/**
+ * @brief Convert bit-flags in \p flags to human-readable CSV string
+ *        use the bit-description strings in \p desc.
+ *
+ *        \p desc array element N corresponds to bit (1<<N).
+ *        \p desc MUST be terminated by a NULL array element.
+ *        Empty descriptions are ignored even if the bit is set.
+ *
+ * @returns a null-terminated \p dst
+ */
+char *rd_flags2str (char *dst, size_t size,
+                    const char **desc, int flags) {
+        int bit = 0;
+        size_t of = 0;
+
+        for ( ; *desc ; desc++, bit++) {
+                int r;
+
+                if (!(flags & (1 << bit)) || !*desc)
+                        continue;
+
+                if (of >= size) {
+                        /* Dest buffer too small, indicate truncation */
+                        if (size > 3)
+                                rd_snprintf(dst+(size-3), 3, "..");
+                        break;
+                }
+
+                r = rd_snprintf(dst+of, size-of, "%s%s",
+                                !of ? "" : ",", *desc);
+
+                of += r;
+        }
+
+        if (of == 0 && size > 0)
+                *dst = '\0';
+
+        return dst;
+}

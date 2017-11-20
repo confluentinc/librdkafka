@@ -38,6 +38,7 @@
 #include "rdkafka_msgset.h"
 
 #include "rdrand.h"
+#include "rdstring.h"
 
 /**
  * Kafka protocol request and response handling.
@@ -45,6 +46,18 @@
  * propagating results back to the various sub-systems operating in
  * other threads.
  */
+
+
+/* RD_KAFKA_ERR_ACTION_.. to string map */
+static const char *rd_kafka_actions_descs[] = {
+        "Permanent",
+        "Ignore",
+        "Refresh",
+        "Retry",
+        "Inform",
+        "Special",
+        NULL,
+};
 
 
 /**
@@ -61,6 +74,7 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 	va_list ap;
         int actions = 0;
 	int exp_act;
+        char actstr[64];
 
 	/* Match explicitly defined error mappings first. */
 	va_start(ap, request);
@@ -72,15 +86,20 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 	}
 	va_end(ap);
 
-	if (err && rkb && request)
-                rd_rkb_dbg(rkb, BROKER, "REQERR",
-                           "%sRequest failed: %s: explicit actions 0x%x",
-                           rd_kafka_ApiKey2str(request->rkbuf_reqhdr.ApiKey),
-                           rd_kafka_err2str(err), actions);
+        /* Explicit error match. */
+        if (actions) {
+                if (err && rkb && request)
+                        rd_rkb_dbg(rkb, BROKER, "REQERR",
+                                   "%sRequest failed: %s: explicit actions %s",
+                                   rd_kafka_ApiKey2str(request->rkbuf_reqhdr.
+                                                       ApiKey),
+                                   rd_kafka_err2str(err),
+                                   rd_flags2str(actstr, sizeof(actstr),
+                                                rd_kafka_actions_descs,
+                                                actions));
 
-	/* Explicit error match. */
-	if (actions)
-		return actions;
+                return actions;
+        }
 
 	/* Default error matching */
         switch (err)
@@ -112,6 +131,14 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                 break;
         }
 
+
+        if (err && actions && rkb && request)
+                rd_rkb_dbg(rkb, BROKER, "REQERR",
+                           "%sRequest failed: %s: actions %s",
+                           rd_kafka_ApiKey2str(request->rkbuf_reqhdr.ApiKey),
+                           rd_kafka_err2str(err),
+                           rd_flags2str(actstr, sizeof(actstr),
+                                        rd_kafka_actions_descs, actions));
         return actions;
 }
 

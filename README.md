@@ -61,7 +61,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Python: [confluent-kafka-python](https://github.com/confluentinc/confluent-kafka-python)
   * Python: [PyKafka](https://github.com/Parsely/pykafka)
   * Ruby: [Hermann](https://github.com/reiseburo/hermann)
-  * Ruby: [rdkafka-ruby](https://github.com/thijsc/rdkafka-ruby)
+  * Ruby: [rdkafka-ruby](https://github.com/appsignal/rdkafka-ruby)
   * Rust: [rust-rdkafka](https://github.com/fede1024/rust-rdkafka)
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
   * Swift: [Perfect-Kafka](https://github.com/PerfectlySoft/Perfect-Kafka)

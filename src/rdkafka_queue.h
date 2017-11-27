@@ -171,12 +171,17 @@ static RD_INLINE RD_UNUSED
 void rd_kafka_q_destroy0 (rd_kafka_q_t *rkq, int disable) {
         int do_delete = 0;
 
+        if (disable) {
+                /* To avoid recursive locking (from ops being purged
+                 * that reference this queue somehow),
+                 * we disable the queue and purge it with individual
+                 * locking. */
+                rd_kafka_q_disable0(rkq, 1/*lock*/);
+                rd_kafka_q_purge0(rkq, 1/*lock*/);
+        }
+
         mtx_lock(&rkq->rkq_lock);
         rd_kafka_assert(NULL, rkq->rkq_refcnt > 0);
-        if (disable) {
-                rd_kafka_q_disable0(rkq, 0/*no-lock*/);
-                rd_kafka_q_purge0(rkq, 0/*no-lock*/);
-        }
         do_delete = !--rkq->rkq_refcnt;
         mtx_unlock(&rkq->rkq_lock);
 

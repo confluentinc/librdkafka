@@ -1708,6 +1708,9 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                 /* Error */
                 int actions;
 
+                if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                        goto done; /* Terminating */
+
                 actions = rd_kafka_err_action(
                         rkb, err, reply, request,
 

@@ -829,6 +829,9 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
         int actions;
         int i_am_leader = 0;
 
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                return; /* Terminating */
+
         if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN) {
                 rd_kafka_dbg(rkb->rkb_rk, CGRP, "JOINGROUP",
                              "JoinGroup response: discarding outdated request "
@@ -1305,6 +1308,8 @@ void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
         int actions;
 
         if (err) {
+                if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                        return; /* Terminating */
                 ErrorCode = err;
                 goto err;
         }

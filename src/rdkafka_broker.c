@@ -2786,6 +2786,10 @@ static void rd_kafka_broker_fetch_reply (rd_kafka_t *rk,
 					 rd_kafka_buf_t *reply,
 					 rd_kafka_buf_t *request,
 					 void *opaque) {
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                return; /* Terminating */
+
 	rd_kafka_assert(rkb->rkb_rk, rkb->rkb_fetching > 0);
 	rkb->rkb_fetching = 0;
 

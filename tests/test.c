@@ -275,11 +275,10 @@ static void test_socket_add (struct test *test, sockem_t *skm) {
 }
 
 static void test_socket_del (struct test *test, sockem_t *skm, int do_lock) {
-        void *p;
         if (do_lock)
                 TEST_LOCK();
-        p = rd_list_remove(&test->sockets, skm);
-        assert(p);
+        /* Best effort, skm might not have been added if connect_cb failed */
+        rd_list_remove(&test->sockets, skm);
         if (do_lock)
                 TEST_UNLOCK();
 }

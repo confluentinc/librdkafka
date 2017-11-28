@@ -58,7 +58,7 @@ static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
         if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
             err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN ||
             err == RD_KAFKA_RESP_ERR__AUTHENTICATION ||
-            err == RD_KAFKA_RESP_ERR__MSG_TIMED_OUT)
+            err == RD_KAFKA_RESP_ERR__TIMED_OUT)
                 return 0;
         return 1;
 }

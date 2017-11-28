@@ -159,6 +159,7 @@ _TEST_DECL(0070_null_empty);
 _TEST_DECL(0072_headers_ut);
 _TEST_DECL(0073_headers);
 _TEST_DECL(0074_producev);
+_TEST_DECL(0075_retry);
 
 
 /* Manual tests */
@@ -251,6 +252,9 @@ struct test tests[] = {
         _TEST(0072_headers_ut, TEST_F_LOCAL),
         _TEST(0073_headers, 0, TEST_BRKVER(0,11,0,0)),
         _TEST(0074_producev, TEST_F_LOCAL),
+#if WITH_SOCKEM
+        _TEST(0075_retry, 0),
+#endif
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

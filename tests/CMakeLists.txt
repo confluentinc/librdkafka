@@ -67,6 +67,7 @@ set(
     0072-headers_ut.c
     0073-headers.c
     0074-producev.c
+    0075-retry.c
     8000-idle.cpp
     test.c
     testcpp.cpp

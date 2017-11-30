@@ -1898,6 +1898,7 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
         size_t MessageSetSize = 0;
         int cnt;
         rd_ts_t now;
+        int64_t first_msg_timeout;
         int tmout;
 
         /**
@@ -1918,25 +1919,23 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
         if (!rkt->rkt_conf.required_acks)
                 rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_NO_RESPONSE;
 
-        /* Use timeout from first message.
-         * FIXME: Use socket.timeout.ms if smaller than message timeout
-         *        to avoid 5 minute HOLB */
+        /* Use timeout from first message in batch */
         now = rd_clock();
+        first_msg_timeout = (TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->
+                             rkm_ts_timeout - now) / 1000;
 
-        if (TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->rkm_ts_timeout > now)
-                tmout = (TAILQ_FIRST(&rkbuf->rkbuf_msgq.rkmq_msgs)->
-                         rkm_ts_timeout - now) / 1000;
-        else
-                /* else allow a 100ms request grace timeout if message
-                 * has already expired. */
+        if (unlikely(first_msg_timeout <= 0)) {
+                /* Message has already timed out, allow 100 ms
+                 * to produce anyway */
                 tmout = 100;
+        } else {
+                tmout = (int)first_msg_timeout;
+        }
 
-        rd_kafka_buf_set_abs_timeout(
-                rkbuf,
-                /* Convert absolute message timeout to relative time,
-                 * making sure we don't get a <= 0 value. */
-                tmout,
-                now);
+        /* Set absolute timeout (including retries), the
+         * effective timeout for this specific request will be
+         * capped by socket.timeout.ms */
+        rd_kafka_buf_set_abs_timeout(rkbuf, tmout, now);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
                                        RD_KAFKA_NO_REPLYQ,

@@ -250,7 +250,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ RD_KAFKA_DBG_ALL,      "all" },
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
-	  "Timeout for network requests.",
+	  "Default timeout for network requests. "
+          "Producer: ProduceRequests will use the lesser value of "
+          "socket.timeout.ms and remaining message.timeout.ms for the "
+          "first message in the batch. "
+          "Consumer: FetchRequests will use "
+          "fetch.wait.max.ms + socket.timeout.ms. ",
 	  10, 300*1000, 60*1000 },
 	{ _RK_GLOBAL, "socket.blocking.max.ms", _RK_C_INT,
 	  _RK(socket_blocking_max_ms),

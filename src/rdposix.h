@@ -94,7 +94,7 @@
 static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
         static RD_TLS char ret[128];
 
-#if defined(__linux__) && defined(_GNU_SOURCE)
+#if defined(__GLIBC__) && defined(_GNU_SOURCE)
         return strerror_r(err, ret, sizeof(ret));
 #else /* XSI version */
         int r;

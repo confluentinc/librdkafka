@@ -483,13 +483,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
         /* Point user in the right direction if they try to apply
          * Java client SSL / JAAS properties. */
-		/* 
-        { _RK_GLOBAL, "ssl.keystore.location", _RK_C_INVALID,
-          _RK(dummy),
-          "Java KeyStores are not supported, use `ssl.key.location` and "
-          "a private key (PEM) file instead. "
-          "See https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka for more information."
-        },*/
         { _RK_GLOBAL, "ssl.truststore.location", _RK_C_INVALID,
           _RK(dummy),
           "Java TrustStores are not supported, use `ssl.ca.location` "

@@ -961,14 +961,15 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 			goto fail;
 		}
 
-		PKCS12_free(p12);
-
 		if (ca != NULL)
 			sk_X509_pop_free(ca, X509_free);
+
+		PKCS12_free(p12);
 
 		r = SSL_CTX_use_certificate(ctx, cert);
 		X509_free(cert);
 		if (r != 1) {
+			EVP_PKEY_free(pkey);
 			rd_snprintf(errstr, errstr_size,
 				    "Failed to use ssl.keystore.location certificate: ");
 			goto fail;

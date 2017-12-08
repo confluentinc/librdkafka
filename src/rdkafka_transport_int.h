@@ -35,6 +35,7 @@
 #if WITH_SSL
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/pkcs12.h>
 #endif
 
 struct rd_kafka_transport_s {	

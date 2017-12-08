@@ -176,21 +176,6 @@ static void do_test_special_invalid_conf (void) {
 
         conf = rd_kafka_conf_new();
 
-        res = rd_kafka_conf_set(conf, "ssl.keystore.location", "abc",
-                                errstr, sizeof(errstr));
-        /* Existing apps might not print the error string when conf_set
-         * returns UNKNOWN, only on INVALID, so make sure that is
-         * what is being returned. */
-        TEST_ASSERT(res == RD_KAFKA_CONF_INVALID,
-                    "expected ssl.keystore.location to fail with INVALID, "
-                    "not %d", res);
-        /* Make sure there is a link to documentation */
-        TEST_ASSERT(strstr(errstr, "http"),
-                    "expected ssl.keystore.location to provide link to "
-                    "documentation, not \"%s\"", errstr);
-        TEST_SAY(_C_GRN "Ok: %s\n" _C_CLR, errstr);
-
-
         res = rd_kafka_conf_set(conf, "ssl.truststore.location", "abc",
                                 errstr, sizeof(errstr));
         /* Existing apps might not print the error string when conf_set

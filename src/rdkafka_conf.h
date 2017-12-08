@@ -113,6 +113,8 @@ struct rd_kafka_conf_s {
 		char *cert_location;
 		char *ca_location;
 		char *crl_location;
+		char *keystore_location;
+		char *keystore_password;
 	} ssl;
 #endif
 

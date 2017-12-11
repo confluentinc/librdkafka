@@ -77,7 +77,7 @@ rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
 				    char *payload, size_t len,
 				    const void *key, size_t keylen,
 				    void *msg_opaque) {
-        rd_kafka_msg_t *rkm;
+	rd_kafka_msg_t *rkm;
 	size_t mlen = sizeof(*rkm);
 	char *p;
 
@@ -829,3 +829,4 @@ int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage) {
 
         return rd_clock() - rkm->rkm_ts_enq;
 }
+

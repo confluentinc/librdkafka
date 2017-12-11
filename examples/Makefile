@@ -89,3 +89,4 @@ rdkafka_zookeeper_example: ../src/librdkafka.a rdkafka_zookeeper_example.c
 
 clean:
 	rm -f $(EXAMPLES)
+

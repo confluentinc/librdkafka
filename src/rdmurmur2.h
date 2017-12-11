@@ -1,10 +1,6 @@
 #ifndef __RDMURMUR2___H__
 #define __RDMURMUR2___H__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "MurMurHash2.h"
 
 typedef uint32_t rd_murmur2_t;
@@ -22,9 +18,5 @@ static RD_INLINE rd_murmur2_t rd_murmur2(const char *data, size_t data_len) {
 }
 
 int unittest_murmurhashneutral2(void);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // __RDMURMUR2___H__

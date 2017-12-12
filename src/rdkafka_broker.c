@@ -530,11 +530,11 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
 	/* Requests in retry queue */
 	retry_cnt = rd_kafka_broker_bufq_timeout_scan(
 		rkb, 0, &rkb->rkb_retrybufs, NULL,
-		RD_KAFKA_RESP_ERR__TIMED_OUT, now);
+		RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
 	/* Requests in local queue not sent yet. */
 	q_cnt = rd_kafka_broker_bufq_timeout_scan(
 		rkb, 0, &rkb->rkb_outbufs, &req_cnt,
-		RD_KAFKA_RESP_ERR__TIMED_OUT, now);
+		RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
 
 	if (req_cnt + retry_cnt + q_cnt > 0) {
 		rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_BROKER,
@@ -2339,6 +2339,7 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                            rd_ts_t *next_wakeup) {
         int cnt = 0;
         int r;
+        rd_kafka_msg_t *rkm;
 
         rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
                    "%.*s [%"PRId32"] %i+%i msgs",
@@ -2368,21 +2369,20 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
         if (r == 0)
                 return 0;
 
+        rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs);
+        rd_dassert(rkm != NULL);
+
         /* Attempt to fill the batch size, but limit
          * our waiting to queue.buffering.max.ms
          * and batch.num.messages. */
         if (r < rkb->rkb_rk->rk_conf.batch_num_messages) {
-                rd_kafka_msg_t *rkm_oldest;
                 rd_ts_t wait_max;
 
-                rkm_oldest = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs);
-                if (unlikely(!rkm_oldest))
-                        return 0;
-
-                /* Calculate maximum wait-time to
-                 * honour queue.buffering.max.ms contract. */
-                wait_max = rd_kafka_msg_enq_time(rkm_oldest) +
+                /* Calculate maximum wait-time to honour
+                 * queue.buffering.max.ms contract. */
+                wait_max = rd_kafka_msg_enq_time(rkm) +
                         (rkb->rkb_rk->rk_conf.buffering_max_ms * 1000);
+
                 if (wait_max > now) {
                         if (wait_max < *next_wakeup)
                                 *next_wakeup = wait_max;
@@ -2390,6 +2390,13 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                          * to expire. */
                         return 0;
                 }
+        }
+
+        /* Honour retry.backoff.ms. */
+        if (unlikely(rkm->rkm_u.producer.ts_backoff > now)) {
+                *next_wakeup = rkm->rkm_u.producer.ts_backoff;
+                /* Wait for backoff to expire */
+                return 0;
         }
 
         /* Send Produce requests for this toppar */
@@ -2400,6 +2407,11 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                 else
                         break;
         }
+
+        /* If there are messages still in the queue, make the next
+         * wakeup immediate. */
+        if (rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) > 0)
+                *next_wakeup = now;
 
         return cnt;
 }

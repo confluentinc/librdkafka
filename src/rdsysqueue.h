@@ -243,6 +243,22 @@
 	} while (0)
 #endif
 
+/* @brief Insert \p shead after element \p listelm in \p dhead */
+#define TAILQ_INSERT_LIST(dhead,listelm,shead,headname,elmtype,field) do { \
+        if (TAILQ_LAST(dhead, headname) == listelm) {                   \
+                TAILQ_CONCAT(dhead, shead, field);                      \
+        } else {                                                        \
+                elmtype _elm = TAILQ_FIRST(shead);                      \
+                elmtype _last = TAILQ_LAST(shead, headname);            \
+                elmtype _aft = TAILQ_NEXT(listelm, field);              \
+                (listelm)->field.tqe_next = _elm;                       \
+                _elm->field.tqe_prev  = &(listelm)->field.tqe_next;     \
+                _last->field.tqe_next = _aft;                           \
+                _aft->field.tqe_prev  = &_last->field.tqe_next;         \
+                TAILQ_INIT((shead));                                    \
+        }                                                               \
+        } while (0)
+
 #ifndef SIMPLEQ_HEAD
 #define SIMPLEQ_HEAD(name, type)					\
 struct name {								\

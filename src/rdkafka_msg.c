@@ -33,6 +33,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_interceptor.h"
 #include "rdcrc32.h"
+#include "rdmurmur2.h"
 #include "rdrand.h"
 #include "rdtime.h"
 
@@ -540,6 +541,35 @@ int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
                                                  partition_cnt,
                                                  rkt_opaque,
                                                  msg_opaque);
+}
+
+int32_t rd_kafka_msg_partitioner_murmur2_consistent (const rd_kafka_topic_t *rkt,
+					 const void *key, size_t keylen,
+					 int32_t partition_cnt,
+					 void *rkt_opaque,
+					 void *msg_opaque) {
+	return rd_murmur2(key, keylen) % partition_cnt;
+}
+
+int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
+					 const void *key, size_t keylen,
+					 int32_t partition_cnt,
+					 void *rkt_opaque,
+					 void *msg_opaque) {
+	if (!key)
+		return rd_kafka_msg_partitioner_random(rkt,
+						       key,
+						       keylen,
+						       partition_cnt,
+						       rkt_opaque,
+						       msg_opaque);
+	else
+		return rd_kafka_msg_partitioner_murmur2_consistent(rkt,
+								   key,
+								   keylen,
+								   partition_cnt,
+								   rkt_opaque,
+								   msg_opaque);
 }
 
 

@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2017 Magnus Edenhill
+ * Copyright (c) 2012-2015, Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,21 +26,35 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rd.h"
-#include "rdunittest.h"
+ #include "rd.h"
+ #include "rdunittest.h"
+ #include "rdmurmur2.h"
 
-#include "rdvarint.h"
-#include "rdbuf.h"
-#include "crc32c.h"
-#include "rdmurmur2.h"
+int unittest_murmurhashneutral2 (void) {
+        const char *keysToTest[] = {
+                "kafka",
+                "amqp",
+                "giberish123456789"
+        };
 
+        const uint32_t java_murmur2_results[] = {
+        1348980580, // kafka
+        767747138, // amqp
+        257239820 // giberish123456789
+        };
 
-int rd_unittest (void) {
-        int fails = 0;
-        fails += unittest_rdbuf();
-        fails += unittest_rdvarint();
-        fails += unittest_crc32c();
-        fails += unittest_murmurhashneutral2();
-
-        return fails;
+        int keys_length = sizeof(java_murmur2_results) / sizeof(uint32_t);
+        int i;
+        for (i = 0; i < keys_length; i++) {
+        uint32_t murmur2_result = rd_murmur2(keysToTest[i], strlen(keysToTest[i]));
+        RD_UT_SAY("GOT HASH: %u"
+                  " FOR KEY: %s"
+                  " USING SEED: %d",
+                  murmur2_result, keysToTest[i], MURMUR2_SEED);
+        RD_UT_ASSERT(murmur2_result == java_murmur2_results[i],
+                     "CALCULATED MURMUR2 HASH: %u"
+                     " NOT MATCHING EXPECTED MURMUR2 HASH: %u",
+                     murmur2_result, java_murmur2_results[i]);
+        }
+        RD_UT_PASS();
 }

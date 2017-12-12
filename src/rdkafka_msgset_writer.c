@@ -649,6 +649,8 @@ rd_kafka_msgset_writer_write_msg (rd_kafka_msgset_writer_t *msetw,
 /**
  * @brief Write as many messages from the given message queue to
  *        the messageset.
+ *
+ *        May not write any messages.
  */
 static void
 rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
@@ -663,10 +665,11 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
         rd_ts_t MaxTimestamp = 0;
         rd_kafka_msg_t *rkm;
         int msgcnt = 0;
+        const rd_ts_t now = rd_clock();
 
         /* Internal latency calculation base.
          * Uses rkm_ts_timeout which is enqueue time + timeout */
-        int_latency_base = rd_clock() +
+        int_latency_base = now +
                 (rktp->rktp_rkt->rkt_conf.message_timeout_ms * 1000);
 
         /* Acquire BaseTimestamp from first message. */
@@ -687,6 +690,12 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                                    "No more space in current MessageSet "
                                    "(%i message(s), %"PRIusz" bytes)",
                                    msgcnt, len);
+                        break;
+                }
+
+                if (unlikely(rkm->rkm_u.producer.ts_backoff > now)) {
+                        /* Stop accumulation when we've reached
+                         * a message with a retry backoff in the future */
                         break;
                 }
 

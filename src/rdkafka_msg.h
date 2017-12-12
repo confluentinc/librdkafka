@@ -89,6 +89,11 @@ typedef struct rd_kafka_msg_s {
                 struct {
                         rd_ts_t ts_timeout; /* Message timeout */
                         rd_ts_t ts_enq;     /* Enqueue/Produce time */
+                        rd_ts_t ts_backoff; /* Backoff next Produce until
+                                             * this time. */
+                        uint64_t msgseq;    /* Message sequence number,
+                                             * used to maintain ordering. */
+                        int     retries;    /* Number of retries so far */
                 } producer;
 #define rkm_ts_timeout rkm_u.producer.ts_timeout
 #define rkm_ts_enq     rkm_u.producer.ts_enq
@@ -131,8 +136,9 @@ rd_kafka_msg_t *rd_kafka_message2msg (rd_kafka_message_t *rkmessage) {
 
 
 
+TAILQ_HEAD(rd_kafka_msgs_head_s, rd_kafka_msg_s);
 typedef struct rd_kafka_msgq_s {
-	TAILQ_HEAD(, rd_kafka_msg_s) rkmq_msgs;
+        struct rd_kafka_msgs_head_s rkmq_msgs;  /* TAILQ_HEAD */
 	rd_atomic32_t rkmq_msg_cnt;
 	rd_atomic64_t rkmq_msg_bytes;
 } rd_kafka_msgq_t;
@@ -142,6 +148,9 @@ typedef struct rd_kafka_msgq_s {
 
 #define RD_KAFKA_MSGQ_FOREACH(elm,head) \
 	TAILQ_FOREACH(elm, &(head)->rkmq_msgs, rkm_link)
+
+/* @brief Check if queue is empty. Proper locks must be held. */
+#define RD_KAFKA_MSGQ_EMPTY(rkmq) TAILQ_EMPTY(&(rkmq)->rkmq_msgs)
 
 /**
  * Returns the number of messages in the specified queue.
@@ -247,6 +256,29 @@ rd_kafka_msg_t *rd_kafka_msgq_pop (rd_kafka_msgq_t *rkmq) {
 	return rkm;
 }
 
+
+static RD_INLINE
+int rd_kafka_msg_cmp_msgseq (const void *_a, const void *_b) {
+        const rd_kafka_msg_t *a = _a, *b = _b;
+
+        return a->rkm_u.producer.msgseq - b->rkm_u.producer.msgseq;
+}
+
+/**
+ * @brief Insert message at its sorted position using the msgseq.
+ * @remark This is an O(n) operation.
+ * @warning The message must have a msgseq set.
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_msgq_enq_sorted (rd_kafka_msgq_t *rkmq,
+                               rd_kafka_msg_t *rkm) {
+        rd_dassert(rkm->rkm_u.producer.msgseq != 0);
+        TAILQ_INSERT_SORTED(&rkmq->rkmq_msgs, rkm, rd_kafka_msg_t *,
+                            rkm_link, rd_kafka_msg_cmp_msgseq);
+        rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
+        rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len+rkm->rkm_key_len);
+}
+
 /**
  * Insert message at head of message queue.
  */
@@ -278,6 +310,8 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_kafka_msgq_t *timedout,
 			    rd_ts_t now);
 
+rd_kafka_msg_t *rd_kafka_msgq_find_msgseq_pos (rd_kafka_msgq_t *rkmq,
+                                               uint64_t msgseq);
 
 int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
                               int do_lock);

@@ -498,7 +498,25 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 	return rd_atomic32_get(&timedout->rkmq_msg_cnt) - cnt;
 }
 
+/**
+ * @brief Find the insert position (i.e., the previous element)
+ *        for message sequence \p msgseq.
+ *
+ * @remark This needs to be true: rkmq.first < msgseq < rkmq.last
+ */
+rd_kafka_msg_t *rd_kafka_msgq_find_msgseq_pos (rd_kafka_msgq_t *rkmq,
+                                               uint64_t msgseq) {
+        rd_kafka_msg_t *rkm, *last = NULL;
 
+        TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
+                if (rkm->rkm_u.producer.msgseq > msgseq)
+                        return last;
+                last = rkm;
+        }
+
+        rd_assert(!*"msgseq outside rkmq window");
+        return NULL; /* NOTREACHED */
+}
 
 
 

@@ -84,7 +84,7 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 
         //LOCK: toppar_lock. Should move the lock inside the msgq instead
         //LOCK: toppar_lock. toppar_insert_msg(), concat_msgq()
-        //LOCK: toppar_lock. toppar_enq_msg(), deq_msg(), insert_msgq()
+        //LOCK: toppar_lock. toppar_enq_msg(), deq_msg(), toppar_retry_msgq()
         int                rktp_msgq_wakeup_fd; /* Wake-up fd */
 	rd_kafka_msgq_t    rktp_msgq;      /* application->rdkafka queue.
 					    * protected by rktp_lock */
@@ -98,6 +98,16 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                   * Broker thread -> App */
         rd_kafka_q_t      *rktp_ops;             /* * -> Main thread */
 
+        uint64_t           rktp_msgseq;     /* Current message sequence number.
+                                             * Each message enqueued on a
+                                             * non-UA partition will get a
+                                             * unique sequencial number assigned.
+                                             * This number is used to
+                                             * re-enqueue the message
+                                             * on resends but making sure
+                                             * the input ordering is still
+                                             * maintained.
+                                             * Starts at 1. */
 
 	/**
 	 * rktp version barriers
@@ -322,8 +332,9 @@ void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
 void rd_kafka_toppar_insert_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
-void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
-				  rd_kafka_msgq_t *rkmq);
+int  rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp,
+                                 rd_kafka_msgq_t *rkmq,
+                                 int incr_retry);
 void rd_kafka_toppar_concat_msgq (rd_kafka_toppar_t *rktp,
 				  rd_kafka_msgq_t *rkmq);
 void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,

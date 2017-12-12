@@ -122,9 +122,13 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                 actions |= RD_KAFKA_ERR_ACTION_REFRESH;
                 break;
         case RD_KAFKA_RESP_ERR__TIMED_OUT:
+        case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
                 /* Client-side wait-response/in-queue timeout */
         case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
                 /* Broker-side request handling timeout */
+        case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS:
+        case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND:
+                /* Temporary broker-side problem */
 	case RD_KAFKA_RESP_ERR__TRANSPORT:
 		/* Broker connection down */
 		actions |= RD_KAFKA_ERR_ACTION_RETRY;
@@ -1790,6 +1794,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
         } else {
                 /* Error */
                 int actions;
+                char actstr[64];
 
                 if (err == RD_KAFKA_RESP_ERR__DESTROY)
                         goto done; /* Terminating */
@@ -1803,47 +1808,90 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                         RD_KAFKA_ERR_ACTION_REFRESH,
                         RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
 
+                        RD_KAFKA_ERR_ACTION_RETRY,
+                        RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS,
+
+                        RD_KAFKA_ERR_ACTION_RETRY,
+                        RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND,
+
+                        RD_KAFKA_ERR_ACTION_RETRY,
+                        RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE,
+
+                        RD_KAFKA_ERR_ACTION_RETRY,
+                        RD_KAFKA_RESP_ERR__TIMED_OUT,
+
+                        RD_KAFKA_ERR_ACTION_PERMANENT,
+                        RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
+
                         RD_KAFKA_ERR_ACTION_END);
 
                 rd_rkb_dbg(rkb, MSG, "MSGSET",
                            "%s [%"PRId32"]: MessageSet with %i message(s) "
-                           "encountered error: %s (actions 0x%x)",
+                           "encountered error: %s (actions %s)",
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                            rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
-                           rd_kafka_err2str(err), actions);
+                           rd_kafka_err2str(err),
+                           rd_flags2str(actstr, sizeof(actstr),
+                                        rd_kafka_actions_descs,
+                                        actions));
 
-                /* NOTE: REFRESH implies a later retry, which does NOT affect
-                 *       the retry count since refresh-errors are considered
-                 *       to be stale metadata rather than temporary errors.
-                 *
-                 *       This is somewhat problematic since it may cause
-                 *       duplicate messages even with retries=0 if the
-                 *       ProduceRequest made it to the broker but only the
-                 *       response was lost due to network connectivity issues.
-                 *       That problem will be sorted when EoS is implemented.
-                 */
-                if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
-                        /* Request metadata information update */
-                        rd_kafka_toppar_leader_unavailable(rktp,
-                                                           "produce", err);
 
-                        /* Move messages (in the rkbuf) back to the partition's
-                         * queue head. They will be resent when a new leader
-                         * is delegated. */
-                        rd_kafka_toppar_insert_msgq(rktp, &request->rkbuf_msgq);
+                if (actions & (RD_KAFKA_ERR_ACTION_REFRESH |
+                               RD_KAFKA_ERR_ACTION_RETRY)) {
+                        /* Retry */
+                        int incr_retry = 1; /* Increase per-message retry cnt */
 
-                        /* No need for fallthru here since the request
-                         * no longer has any messages associated with it. */
-                        goto done;
+                        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                                /* Request metadata information update.
+                                 * These errors imply that we have stale
+                                 * information and that the message was
+                                 * either rejected or not sent -
+                                 * we don't need to increment the retry count
+                                 * when we perform a retry since:
+                                 *   - it is a temporary error (hopefully)
+                                 *   - there is no change of duplicate delivery
+                                 */
+                                rd_kafka_toppar_leader_unavailable(
+                                        rktp, "produce", err);
+
+                                /* We can't be certain the request wasn't
+                                 * sent in case of transport failure,
+                                 * so the ERR__TRANSPORT case will need
+                                 * the retry count to be increased */
+                                if (err != RD_KAFKA_RESP_ERR__TRANSPORT)
+                                        incr_retry = 0;
+                        }
+
+                        /* If message timed in queue, not in transit,
+                         * we will retry at a later time but not increment
+                         * the retry count since there is no risk
+                         * of duplicates. */
+                        if (err == RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE)
+                                incr_retry = 0;
+
+                        /* Since requests are specific to a broker
+                         * we move the retryable messages from the request
+                         * back to the partition queue (prepend) and then
+                         * let the new broker construct a new request.
+                         * While doing this we also make sure the retry count
+                         * for each message is honoured, any messages that
+                         * would exceeded the retry count will not be
+                         * moved but instead fail below. */
+                        rd_kafka_toppar_retry_msgq(rktp, &request->rkbuf_msgq,
+                                                   incr_retry);
+
+                        if (rd_kafka_msgq_len(&request->rkbuf_msgq) == 0) {
+                                /* No need do anything more with the request
+                                 * here since the request no longer has any
+                                 messages associated with it. */
+                                goto done;
+                        }
                 }
-
-                if ((actions & RD_KAFKA_ERR_ACTION_RETRY) &&
-                    rd_kafka_buf_retry(rkb, request))
-                        return; /* Scheduled for retry */
 
                 /* Translate request-level timeout error code
                  * to message-level timeout error code. */
-                if (err == RD_KAFKA_RESP_ERR__TIMED_OUT)
+                if (err == RD_KAFKA_RESP_ERR__TIMED_OUT ||
+                    err == RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE)
                         err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
 
                 /* Fatal errors: no message transmission retries */
@@ -1851,7 +1899,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
         }
 
         /* Propagate assigned offset and timestamp back to app. */
-        if (likely(offset != RD_KAFKA_OFFSET_INVALID)) {
+        if (likely(!err && offset != RD_KAFKA_OFFSET_INVALID)) {
                 rd_kafka_msg_t *rkm;
                 if (rktp->rktp_rkt->rkt_conf.produce_offset_report) {
                         /* produce.offset.report: each message */

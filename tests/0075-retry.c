@@ -75,10 +75,10 @@ static int ctrl_thrd_main (void *arg) {
                         ctrl.cmd.ack = 1;
                         printf(_C_CYA "## %s: sockem: "
                                "receieved command to set delay "
-                               "to %d in %lldms\n" _C_CLR,
+                               "to %d in %dms\n" _C_CLR,
                                __FILE__,
                                ctrl.next.delay,
-                               (ctrl.next.ts_at - test_clock()) / 1000);
+                               (int)(ctrl.next.ts_at - test_clock()) / 1000);
 
                 }
 

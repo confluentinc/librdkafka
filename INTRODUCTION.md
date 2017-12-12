@@ -140,7 +140,7 @@ for message commit acknowledgements from brokers (any value but 0, see
 [`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
 for specifics) then librdkafka will hold on to the message until
 all expected acks have been received, gracefully handling the following events:
-     
+
   * Broker connection failure
   * Topic leader change
   * Produce errors signaled by the broker
@@ -160,9 +160,131 @@ to report the status of message delivery:
 
 See Producer API chapter for more details on delivery report callback usage.
 
-The delivery report callback is optional.
+The delivery report callback is optional but highly recommended.
 
 
+### Producer message delivery success
+
+When a ProduceRequest is successfully handled by the broker and a
+ProduceResponse is received (also called the ack) without an error code
+the messages from the ProduceRequest are enqueued on the delivery report
+queue (if a delivery report callback has been set) and will be passed to
+the application on the next invocation rd_kafka_poll().
+
+
+### Producer message delivery failure
+
+The following sub-chapters explains how different produce errors
+are handled.
+
+If the error is retryable and there are remaining retry attempts for
+the given message(s), an automatic retry will be scheduled by librdkafka.
+The application should typically not attempt to retry producing the message
+on failure, but instead configure librdkafka to perform these retries
+using the `retries` and `retry.backoff.ms` configuration properties.
+
+
+#### Error: Timed out in transmission queue
+
+Internal error ERR__TIMED_OUT_QUEUE.
+
+The connectivity to the broker may be stalled due to networking contention,
+local or remote system issues, etc, and the request has not yet been sent.
+
+The producer can be certain that the message has not been sent to the broker.
+
+This is a retryable error, but is not counted as a retry attempt
+since the message was never actually transmitted.
+
+A retry at this point will not cause duplicate messages.
+
+
+#### Error: Timed out in flight to/from broker
+
+Internal error ERR__TIMED_OUT, ERR__TRANSPORT.
+
+Same reasons as for "Timed out in transmission queue" above, with the
+difference that the message may have been sent to the broker and might
+be stalling waiting for broker replicas to ack the message, or the response
+could be stalled due to networking issues.
+At this point the producer can't know if the message reached the broker,
+nor if the broker wrote the message to disk and replicas.
+
+This is a retryable error.
+
+A retry at this point may cause duplicate messages.
+
+
+#### Error: Temporary broker-side error
+
+Broker errors ERR_REQUEST_TIMED_OUT, ERR_NOT_ENOUGH_REPLICAS,
+ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND.
+
+These errors are considered temporary and a retry is warranted.
+
+
+#### Error: Temporary errors due to stale metadata
+
+Broker errors ERR_LEADER_NOT_AVAILABLE, ERR_NOT_LEADER_FOR_PARTITION.
+
+These errors are considered temporary and a retry is warranted, a metadata
+request is automatically sent to find a new leader for the partition.
+
+A retry at this point will not cause duplicate messages.
+
+
+#### Error: Local time out
+
+Internal error ERR__MSG_TIMED_OUT.
+
+The message could not be successfully transmitted before message.timeout.ms
+expired, typically due to no leader being available or no broker connection.
+The message may have been retried due to other errors but
+those error messages are abstracted by the ERR__MSG_TIMED_OUT error code.
+
+Since the message.timeout.ms has passed there will be no more retries.
+
+
+#### Error: Permanent errors
+
+Any other error is considered a permanent error and the message
+will fail immediately, generating a delivery report event with the
+distinctive error code.
+
+The full list of permanent errors depend on the broker version and
+will likely grow in the future.
+
+Typical permanent broker errors are:
+ * ERR_CORRUPT_MESSAGE
+ * ERR_MSG_SIZE_TOO_LARGE  - adjust client's or broker's `message.max.bytes`.
+ * ERR_UNKNOWN_TOPIC_OR_PART - topic or partition does not exist,
+                               automatic topic creation is disabled on the
+                               broker or the application is specifying a
+                               partition that does not exist.
+ * ERR_RECORD_LIST_TOO_LARGE
+ * ERR_INVALID_REQUIRED_ACKS
+ * ERR_TOPIC_AUTHORIZATION_FAILED
+ * ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT
+ * ERR_CLUSTER_AUTHORIZATION_FAILED
+
+
+### Producer retries
+
+The ProduceRequest itself is not retried, instead the messages
+are put back on the internal partition queue by an insert sort
+that maintains their original position (the message order is defined
+at the time a message is initially appended to a partition queue, i.e., after
+partitioning).
+A backoff time (retry.backoff.ms) is set on the retried messages which
+effectively blocks retry attempts until the backoff time has expired.
+
+
+### Reordering
+
+As for all retries, if `max.in.flight` > 1 and `retries` > 0, retried messages
+may be produced out of order, since a sub-sequent message in a sub-sequent
+ProduceRequest may already be in-flight (and accepted by the broker)
+by the time the retry for the failing message is sent.
 
 
 
@@ -173,7 +295,7 @@ The delivery report callback is optional.
 
 The librdkafka API is documented in the
 [`rdkafka.h`](https://github.com/edenhill/librdkafka/blob/master/src/rdkafka.h)
-header file, the configuration properties are documented in 
+header file, the configuration properties are documented in
 [`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
 
 ### Initialization

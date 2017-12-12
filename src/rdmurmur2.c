@@ -43,7 +43,7 @@ int unittest_murmurhashneutral2 (void) {
         257239820 // giberish123456789
         };
 
-        int keys_length = sizeof(java_murmunr2_results) / sizeof(uint32_t);
+        int keys_length = sizeof(java_murmur2_results) / sizeof(uint32_t);
         int i;
         for (i = 0; i < keys_length; i++) {
         uint32_t murmur2_result = rd_murmur2(keysToTest[i], strlen(keysToTest[i]));

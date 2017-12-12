@@ -223,7 +223,7 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 	int errnox;
 
         /* Create message */
-        rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags,
+        rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
                                 payload, len, key, keylen, msg_opaque,
                                 &err, &errnox, 0, rd_clock());
         if (unlikely(!rkm)) {

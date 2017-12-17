@@ -31,14 +31,14 @@
 
 typedef struct {
 	int32_t val;
-#ifndef HAVE_ATOMICS_32
+#if !HAVE_ATOMICS_32
 	mtx_t lock;
 #endif
 } rd_atomic32_t;
 
 typedef struct {
 	int64_t val;
-#ifndef HAVE_ATOMICS_64
+#if !HAVE_ATOMICS_64
 	mtx_t lock;
 #endif
 } rd_atomic64_t;
@@ -46,7 +46,7 @@ typedef struct {
 
 static RD_INLINE RD_UNUSED void rd_atomic32_init (rd_atomic32_t *ra, int32_t v) {
 	ra->val = v;
-#if !defined(_MSC_VER) && !defined(HAVE_ATOMICS_32)
+#if !defined(_MSC_VER) && !HAVE_ATOMICS_32
 	mtx_init(&ra->lock, mtx_plain);
 #endif
 }
@@ -57,7 +57,7 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_add (rd_atomic32_t *ra, int32_t v
 	return atomic_add_32_nv(&ra->val, v);
 #elif defined(_MSC_VER)
 	return InterlockedAdd(&ra->val, v);
-#elif !defined(HAVE_ATOMICS_32)
+#elif !HAVE_ATOMICS_32
 	int32_t r;
 	mtx_lock(&ra->lock);
 	ra->val += v;
@@ -74,7 +74,7 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v)
 	return atomic_add_32_nv(&ra->val, -v);
 #elif defined(_MSC_VER)
 	return InterlockedAdd(&ra->val, -v);
-#elif !defined(HAVE_ATOMICS_32)
+#elif !HAVE_ATOMICS_32
 	int32_t r;
 	mtx_lock(&ra->lock);
 	ra->val -= v;
@@ -89,7 +89,7 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_sub(rd_atomic32_t *ra, int32_t v)
 static RD_INLINE int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
 #if defined(_MSC_VER) || defined(__SUNPRO_C)
 	return ra->val;
-#elif !defined(HAVE_ATOMICS_32)
+#elif !HAVE_ATOMICS_32
 	int32_t r;
 	mtx_lock(&ra->lock);
 	r = ra->val;
@@ -103,7 +103,7 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_get(rd_atomic32_t *ra) {
 static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v) {
 #ifdef _MSC_VER
 	return InterlockedExchange(&ra->val, v);
-#elif !defined(HAVE_ATOMICS_32)
+#elif !HAVE_ATOMICS_32
 	int32_t r;
 	mtx_lock(&ra->lock);
 	r = ra->val = v;
@@ -118,7 +118,7 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra, int32_t v)
 
 static RD_INLINE RD_UNUSED void rd_atomic64_init (rd_atomic64_t *ra, int64_t v) {
 	ra->val = v;
-#if !defined(_MSC_VER) && !defined(HAVE_ATOMICS_64)
+#if !defined(_MSC_VER) && !HAVE_ATOMICS_64
 	mtx_init(&ra->lock, mtx_plain);
 #endif
 }
@@ -128,7 +128,7 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_add (rd_atomic64_t *ra, int64_t v
 	return atomic_add_64_nv(&ra->val, v);
 #elif defined(_MSC_VER)
 	return InterlockedAdd64(&ra->val, v);
-#elif !defined(HAVE_ATOMICS_64)
+#elif !HAVE_ATOMICS_64
 	int64_t r;
 	mtx_lock(&ra->lock);
 	ra->val += v;
@@ -145,7 +145,7 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v)
 	return atomic_add_64_nv(&ra->val, -v);
 #elif defined(_MSC_VER)
 	return InterlockedAdd64(&ra->val, -v);
-#elif !defined(HAVE_ATOMICS_64)
+#elif !HAVE_ATOMICS_64
 	int64_t r;
 	mtx_lock(&ra->lock);
 	ra->val -= v;
@@ -160,7 +160,7 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_sub(rd_atomic64_t *ra, int64_t v)
 static RD_INLINE int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
 #if defined(_MSC_VER) || defined(__SUNPRO_C)
 	return ra->val;
-#elif !defined(HAVE_ATOMICS_64)
+#elif !HAVE_ATOMICS_64
 	int64_t r;
 	mtx_lock(&ra->lock);
 	r = ra->val;
@@ -175,7 +175,7 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_get(rd_atomic64_t *ra) {
 static RD_INLINE int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra, int64_t v) {
 #ifdef _MSC_VER
 	return InterlockedExchange64(&ra->val, v);
-#elif !defined(HAVE_ATOMICS_64)
+#elif !HAVE_ATOMICS_64
 	int64_t r;
 	mtx_lock(&ra->lock);
 	ra->val = v;

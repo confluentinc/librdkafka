@@ -61,7 +61,7 @@ static void test_producer_partition_cnt_change (void) {
 			  topic, partition_cnt/2);
 
 	test_conf_init(&conf, NULL, 20);
-
+        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 	rkt = test_create_topic_object(rk, __FUNCTION__,
 				       "message.timeout.ms",

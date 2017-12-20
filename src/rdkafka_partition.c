@@ -620,8 +620,15 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
         if (!rkm->rkm_u.producer.msgseq &&
             rktp->rktp_partition != RD_KAFKA_PARTITION_UA)
                 rkm->rkm_u.producer.msgseq = ++rktp->rktp_msgseq;
-        /* No need for enq_sorted(), this is the oldest message. */
-	rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
+
+        if (rktp->rktp_partition == RD_KAFKA_PARTITION_UA ||
+            rktp->rktp_rkt->rkt_conf.msg_order_cmp == rd_kafka_msg_cmp_msgseq) {
+                /* No need for enq_sorted(), this is the oldest message. */
+                rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
+        } else {
+                rd_kafka_msgq_enq_sorted(rktp->rktp_rkt, &rktp->rktp_msgq, rkm);
+        }
+
 #ifndef _MSC_VER
         if (rktp->rktp_msgq_wakeup_fd != -1 &&
             rd_kafka_msgq_len(&rktp->rktp_msgq) == 1) {
@@ -651,34 +658,106 @@ void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 	rd_kafka_toppar_unlock(rktp);
 }
 
+
+void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
+                                rd_kafka_msgq_t *srcq,
+                                int (*cmp) (const void *a, const void *b)) {
+        rd_kafka_msg_t *first, *last;
+
+        /*
+         * Try to optimize insertion of source list.
+         */
+        if (unlikely(RD_KAFKA_MSGQ_EMPTY(destq))) {
+                /* Dest queue is empty, simply move the srcq. */
+                rd_kafka_msgq_move(destq, srcq);
+
+                return;
+        }
+
+        first = TAILQ_FIRST(&srcq->rkmq_msgs);
+        last  = TAILQ_LAST(&srcq->rkmq_msgs, rd_kafka_msgs_head_s);
+
+        /* See if we can optimize the insertion by bulk-loading
+         * the messages in place.
+         * We know that:
+         *  - destq is sorted
+         *  - srcq is sorted
+         *  - there is no overlap between the two.
+         */
+        rd_kafka_msg_t *part_first;
+
+        part_first = TAILQ_FIRST(&destq->rkmq_msgs);
+
+        if (cmp(first, part_first) < 0) {
+                /* Prepend src to dest queue.
+                 * First append existing dest queue to src queue,
+                 * then move src queue to now-empty dest queue,
+                 * effectively prepending src queue to dest queue. */
+                rd_kafka_msgq_concat(srcq, destq);
+                rd_kafka_msgq_move(destq, srcq);
+
+        } else if (cmp(first,
+                       TAILQ_LAST(&destq->rkmq_msgs,
+                                  rd_kafka_msgs_head_s)) > 0) {
+                /* Append input to dest queue */
+                rd_kafka_msgq_concat(destq, srcq);
+
+        } else {
+                /* Input queue messages reside somewhere
+                 * in the dest queue range, find the insert position. */
+                rd_kafka_msg_t *at;
+
+                at = rd_kafka_msgq_find_pos(destq, first, cmp);
+                rd_assert(at &&
+                          *"Bug in msg_order_cmp(): "
+                          "could not find insert position");
+
+                /* Insert input queue after 'at' position.
+                 * We know that:
+                 * - at is non-NULL
+                 * - at is not the last element. */
+                TAILQ_INSERT_LIST(&destq->rkmq_msgs,
+                                  at, &srcq->rkmq_msgs,
+                                  rd_kafka_msgs_head_s,
+                                  rd_kafka_msg_t *, rkm_link);
+
+                rd_atomic32_add(&destq->rkmq_msg_cnt,
+                                rd_atomic32_get(&srcq->rkmq_msg_cnt));
+                rd_atomic64_add(&destq->rkmq_msg_bytes,
+                                rd_atomic64_get(&srcq->rkmq_msg_bytes));
+                rd_kafka_msgq_init(srcq);
+        }
+}
+
+
 /**
- * @brief Inserts messages from \p rkmq according to their sorted position
- *        into the partition xmit queue (i.e., the broker xmit work queue).
+ * @brief Inserts messages from \p srcq according to their sorted position
+ *        into \p destq, filtering out messages that can not be retried.
  *
  * @param incr_retry Increment retry count for messages.
+ * @param max_retries Maximum retries allowed per message.
+ * @param backoff Absolute retry backoff for retried messages.
  *
  * @returns the number of messages that could not be retried.
- *
- * @locality Broker thread
  */
-int rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp, rd_kafka_msgq_t *rkmq,
-                                int incr_retry) {
-        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
+int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
+                         rd_kafka_msgq_t *srcq,
+                         int incr_retry, int max_retries, rd_ts_t backoff,
+                         int (*cmp) (const void *a, const void *b)) {
         rd_kafka_msgq_t retryable = RD_KAFKA_MSGQ_INITIALIZER(retryable);
-        rd_ts_t backoff = rd_clock() + (rk->rk_conf.retry_backoff_ms * 1000);
-        int max_retries = rk->rk_conf.max_retries;
         rd_kafka_msg_t *rkm, *tmp;
-        rd_kafka_msg_t *first, *last;
 
         /* Scan through messages to see which ones are eligible for retry,
          * move the retryable ones to temporary queue and
          * set backoff time for first message and optionally
-         * increase retry count for each message. */
-        TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp) {
+         * increase retry count for each message.
+         * Sorted insert is not necessary since the original order
+         * srcq order is maintained. */
+        TAILQ_FOREACH_SAFE(rkm, &srcq->rkmq_msgs, rkm_link, tmp) {
                 if (rkm->rkm_u.producer.retries + incr_retry > max_retries)
                         continue;
 
-                rd_kafka_msgq_deq(rkmq, rkm, 1);
+                rd_kafka_msgq_deq(srcq, rkm, 1);
                 rd_kafka_msgq_enq(&retryable, rkm);
 
                 rkm->rkm_u.producer.ts_backoff = backoff;
@@ -689,105 +768,52 @@ int rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp, rd_kafka_msgq_t *rkmq,
         if (RD_KAFKA_MSGQ_EMPTY(&retryable))
                 return 0;
 
-        first = TAILQ_FIRST(&retryable.rkmq_msgs);
-        last  = TAILQ_LAST(&retryable.rkmq_msgs, rd_kafka_msgs_head_s);
-
-        rd_kafka_toppar_lock(rktp);
-
-        /*
-         * Try to optimize insertion of retryable list.
-         */
-        if (unlikely(RD_KAFKA_MSGQ_EMPTY(&rktp->rktp_xmit_msgq))) {
-                /* Partition queue is empty, simply move the retryable. */
-                rd_kafka_msgq_move(&rktp->rktp_xmit_msgq, &retryable);
-
-        } else {
-                /* See if we can optimize the insertion by bulk-loading
-                 * the messages in place/
-                 * We know that:
-                 *  - rktp_xmit_msgq is sorted
-                 *  - retryable is sorted
-                 *  - there is no overlap between the two.
-                 */
-                rd_kafka_msg_t *part_first;
-
-                part_first = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs);
-
-                if (first->rkm_u.producer.msgseq <
-                    part_first->rkm_u.producer.msgseq) {
-                        /* Prepend input to partition queue.
-                         * First append existing rktp queue to input queue,
-                         * then move input queue to now-empty rktp queue,
-                         * effectively prepending input queue to rktp queue. */
-                        rd_kafka_msgq_concat(&retryable, &rktp->rktp_xmit_msgq);
-                        rd_kafka_msgq_move(&rktp->rktp_xmit_msgq, &retryable);
-
-                } else if (first->rkm_u.producer.msgseq >
-                           TAILQ_LAST(&rktp->rktp_xmit_msgq.rkmq_msgs,
-                                      rd_kafka_msgs_head_s)->
-                           rkm_u.producer.msgseq) {
-                        /* Append input to partition queue */
-                        rd_kafka_msgq_concat(&rktp->rktp_xmit_msgq, &retryable);
-
-                } else {
-                        /* Input queue messages reside somewhere
-                         * in the partition queue range. Find where to add it. */
-                        rd_kafka_msg_t *at;
-
-                        at = rd_kafka_msgq_find_msgseq_pos(&rktp->
-                                                           rktp_xmit_msgq,
-                                                           first->rkm_u.
-                                                           producer.msgseq);
-                        rd_assert(at);
-
-                        /* Insert input queue after 'at' position.
-                         * We know that:
-                         * - at is non-NULL
-                         * - at is not the last element. */
-                        TAILQ_INSERT_LIST(&rktp->rktp_xmit_msgq.rkmq_msgs,
-                                          at, &retryable.rkmq_msgs,
-                                          rd_kafka_msgs_head_s,
-                                          rd_kafka_msg_t *, rkm_link);
-                }
-        }
-
-        rd_kafka_toppar_unlock(rktp);
+        /* Insert retryable list at sorted position */
+        rd_kafka_msgq_insert_msgq(destq, &retryable, cmp);
 
         return 1;
 }
 
-
 /**
- * Concats all messages from 'rkmq' at tail of toppar 'rktp's queue.
- * 'rkmq' will be cleared.
+ * @brief Inserts messages from \p rkmq according to their sorted position
+ *        into the partition xmit queue (i.e., the broker xmit work queue).
+ *
+ * @param incr_retry Increment retry count for messages.
+ *
+ * @returns the number of messages that could not be retried.
+ *
+ * @locality Broker thread
  */
-void rd_kafka_toppar_concat_msgq (rd_kafka_toppar_t *rktp,
-				  rd_kafka_msgq_t *rkmq) {
-	rd_kafka_toppar_lock(rktp);
-	rd_kafka_msgq_concat(&rktp->rktp_msgq, rkmq);
-	rd_kafka_toppar_unlock(rktp);
+
+int rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp, rd_kafka_msgq_t *rkmq,
+                                int incr_retry) {
+        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
+        rd_ts_t backoff = rd_clock() + (rk->rk_conf.retry_backoff_ms * 1000);
+        int r;
+
+        rd_kafka_toppar_lock(rktp);
+        r = rd_kafka_retry_msgq(&rktp->rktp_xmit_msgq, rkmq,
+                                incr_retry, rk->rk_conf.max_retries,
+                                backoff,
+                                rktp->rktp_rkt->rkt_conf.msg_order_cmp);
+        rd_kafka_toppar_unlock(rktp);
+
+        return r;
 }
 
 /**
- * Move all messages in 'rkmq' to the unassigned partition, if any.
- * Returns 0 on success or -1 if there was no UA partition.
+ * @brief Insert sorted message list \p rkmq at sorted position in \p rktp 's
+ *        message queue. The queues must not overlap.
+ * @remark \p rkmq will be cleared.
  */
-int rd_kafka_toppar_ua_move (rd_kafka_itopic_t *rkt, rd_kafka_msgq_t *rkmq) {
-	shptr_rd_kafka_toppar_t *s_rktp_ua;
-
-	rd_kafka_topic_rdlock(rkt);
-	s_rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA, 0);
-	rd_kafka_topic_rdunlock(rkt);
-
-	if (unlikely(s_rktp_ua == NULL))
-		return -1;
-
-	rd_kafka_msgq_concat(&rd_kafka_toppar_s2i(s_rktp_ua)->rktp_msgq, rkmq);
-
-	rd_kafka_toppar_destroy(s_rktp_ua);
-
-	return 0;
+void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
+                                  rd_kafka_msgq_t *rkmq) {
+        rd_kafka_toppar_lock(rktp);
+        rd_kafka_msgq_insert_msgq(&rktp->rktp_msgq, rkmq,
+                                  rktp->rktp_rkt->rkt_conf.msg_order_cmp);
+        rd_kafka_toppar_unlock(rktp);
 }
+
 
 
 /**

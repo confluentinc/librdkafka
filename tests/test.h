@@ -111,6 +111,8 @@ struct test {
 	int report_cnt;
 	int report_size;
 
+        rd_kafka_resp_err_t exp_dr_err; /* Expected error in test_dr_cb */
+
         /**
          * Runtime
          */
@@ -507,5 +509,6 @@ void test_prepare_msg (uint64_t testid, int32_t partition, int msg_id,
 #if WITH_SOCKEM
 void test_socket_enable (rd_kafka_conf_t *conf);
 void test_socket_close_all (struct test *test, int reinit);
+void test_socket_sockem_set_all (const char *key, int val);
 #endif
 

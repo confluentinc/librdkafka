@@ -116,10 +116,14 @@ typedef struct test_timing_s {
 /**
  * @brief Start timing, Va-Argument is textual name (printf format)
  */
-#define TIMING_START(TIMING,...) do {                                   \
-        rd_snprintf((TIMING)->name, sizeof((TIMING)->name), __VA_ARGS__); \
+#define TIMING_RESTART(TIMING) do {                                     \
         (TIMING)->ts_start = test_clock();                              \
         (TIMING)->duration = 0;                                         \
+        } while (0)
+
+#define TIMING_START(TIMING,...) do {                                   \
+        rd_snprintf((TIMING)->name, sizeof((TIMING)->name), __VA_ARGS__); \
+        TIMING_RESTART(TIMING);                                         \
         (TIMING)->ts_every = (TIMING)->ts_start;                        \
         } while (0)
 
@@ -129,6 +133,10 @@ typedef struct test_timing_s {
         TEST_SAY("%s: duration %.3fms\n",                               \
                  (TIMING)->name, (float)(TIMING)->duration / 1000.0f);  \
         } while (0)
+#define TIMING_REPORT(TIMING) \
+        TEST_SAY("%s: duration %.3fms\n",                               \
+                 (TIMING)->name, (float)(TIMING)->duration / 1000.0f);  \
+
 #else
 #define TIMING_STOP(TIMING) do {                                        \
         char _str[128];                                                 \

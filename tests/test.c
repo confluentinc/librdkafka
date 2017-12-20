@@ -158,6 +158,7 @@ _TEST_DECL(0069_consumer_add_parts);
 _TEST_DECL(0070_null_empty);
 _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
+_TEST_DECL(0076_produce_retry);
 
 
 /* Manual tests */
@@ -250,6 +251,7 @@ struct test tests[] = {
         _TEST(0074_producev, TEST_F_LOCAL),
 #if WITH_SOCKEM
         _TEST(0075_retry, 0),
+        _TEST(0076_produce_retry, 0),
 #endif
 
         /* Manual tests */
@@ -281,6 +283,24 @@ static void test_socket_del (struct test *test, sockem_t *skm, int do_lock) {
         rd_list_remove(&test->sockets, skm);
         if (do_lock)
                 TEST_UNLOCK();
+}
+
+void test_socket_sockem_set_all (const char *key, int val) {
+        int i;
+        sockem_t *skm;
+
+        TEST_LOCK();
+
+        TEST_SAY("Setting sockem %s=%d on %d socket(s)\n",
+                 key, val, rd_list_cnt(&test_curr->sockets));
+        TEST_ASSERT(rd_list_cnt(&test_curr->sockets) > 0);
+
+        RD_LIST_FOREACH(skm, &test_curr->sockets, i) {
+                if (sockem_set(skm, key, val, NULL) == -1)
+                        TEST_FAIL("sockem_set(%s, %d) failed", key, val);
+        }
+
+        TEST_UNLOCK();
 }
 
 void test_socket_close_all (struct test *test, int reinit) {
@@ -1434,9 +1454,12 @@ void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
                  rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
 	int *remainsp = msg_opaque;
 
-	if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
-		TEST_FAIL("Message delivery failed: %s\n",
-			  rd_kafka_err2str(err));
+        TEST_SAYL(4, "Delivery report: %s\n", rd_kafka_err2str(err));
+
+        if (err != test_curr->exp_dr_err)
+                TEST_FAIL("Message delivery failed: expected %s, got %s\n",
+                          rd_kafka_err2str(test_curr->exp_dr_err),
+                          rd_kafka_err2str(err));
 
 	if (*remainsp == 0)
 		TEST_FAIL("Too many messages delivered (remains %i)",
@@ -1569,10 +1592,11 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                const char *payload, size_t size,
                                int *msgcounterp) {
 	int msg_id;
-	test_timing_t t_all;
+	test_timing_t t_all, t_poll;
 	char key[128];
 	void *buf;
 	int64_t tot_bytes = 0;
+        int64_t tot_time_poll;
 
 	if (payload)
 		buf = (void *)payload;
@@ -1586,8 +1610,10 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 		 rd_kafka_topic_name(rkt), partition, msg_base, msg_base+cnt);
 
 	TIMING_START(&t_all, "PRODUCE");
+        TIMING_START(&t_poll, "SUM(POLL)");
 
 	for (msg_id = msg_base ; msg_id < msg_base + cnt ; msg_id++) {
+
                 if (!payload)
                         test_prepare_msg(testid, partition, msg_id,
                                          buf, size, key, sizeof(key));
@@ -1607,7 +1633,9 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                 (*msgcounterp)++;
 		tot_bytes += size;
 
+                TIMING_RESTART(&t_poll);
 		rd_kafka_poll(rk, 0);
+                tot_time_poll = TIMING_DURATION(&t_poll);
 
 		if (TIMING_EVERY(&t_all, 3*1000000))
 			TEST_SAY("produced %3d%%: %d/%d messages "
@@ -1623,6 +1651,8 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	if (!payload)
 		free(buf);
 
+        t_poll.duration = tot_time_poll;
+        TIMING_STOP(&t_poll);
 	TIMING_STOP(&t_all);
 }
 
@@ -1650,6 +1680,10 @@ void test_wait_delivery (rd_kafka_t *rk, int *msgcounterp) {
 
 	TIMING_STOP(&t_all);
 
+        TEST_ASSERT(*msgcounterp == 0,
+                    "Not all messages delivered: msgcounter still at %d, "
+                    "outq_len %d",
+                    *msgcounterp, rd_kafka_outq_len(rk));
 }
 
 /**
@@ -3046,15 +3080,32 @@ rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
 	rd_kafka_resp_err_t err;
 	test_timing_t t;
 
-	TIMING_START(&t, "auto_create_topic");
-	err = rd_kafka_metadata(rk, 0, rkt, &metadata, tmout_multip(15000));
-	TIMING_STOP(&t);
-	if (err)
-                TEST_WARN("metadata() for %s failed: %s",
-                          rkt ? rd_kafka_topic_name(rkt) : "(all-local)",
-                          rd_kafka_err2str(err));
-        else
-                rd_kafka_metadata_destroy(metadata);
+        do {
+                TIMING_START(&t, "auto_create_topic");
+                err = rd_kafka_metadata(rk, 0, rkt, &metadata,
+                                        tmout_multip(15000));
+                TIMING_STOP(&t);
+                if (err)
+                        TEST_WARN("metadata() for %s failed: %s",
+                                  rkt ? rd_kafka_topic_name(rkt) :
+                                  "(all-local)",
+                                  rd_kafka_err2str(err));
+                else {
+                        if (metadata->topic_cnt == 1) {
+                                if (metadata->topics[0].err == 0 ||
+                                    metadata->topics[0].partition_cnt > 0) {
+                                        rd_kafka_metadata_destroy(metadata);
+                                        return 0;
+                                }
+                                TEST_SAY("metadata(%s) returned %s: retrying\n",
+                                         rd_kafka_topic_name(rkt),
+                                         rd_kafka_err2str(metadata->
+                                                          topics[0].err));
+                        }
+                        rd_kafka_metadata_destroy(metadata);
+                        rd_sleep(1);
+                }
+        } while (1);
 
         return err;
 }

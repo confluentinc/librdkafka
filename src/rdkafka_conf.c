@@ -804,6 +804,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "produced message waits for successful delivery. "
           "A time of 0 is infinite.",
 	  0, 900*1000, 300*1000 },
+        { _RK_TOPIC|_RK_PRODUCER, "queuing.strategy", _RK_C_S2I,
+          _RKT(queuing_strategy),
+          "Producer queuing strategy. FIFO preserves produce ordering, "
+          "while LIFO prioritizes new messages.",
+          .vdef = 0,
+          .s2i = {
+                        { 0, "fifo" },
+                        { 1, "lifo" }
+                }
+        },
         { _RK_TOPIC|_RK_PRODUCER, "produce.offset.report", _RK_C_BOOL,
           _RKT(produce_offset_report),
           "Report offset of produced message back to application. "
@@ -824,6 +834,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(partitioner),
 	  "Custom partitioner callback "
 	  "(set with rd_kafka_topic_conf_set_partitioner_cb())" },
+	{ _RK_TOPIC|_RK_PRODUCER, "msg_order_cmp", _RK_C_PTR,
+	  _RKT(msg_order_cmp),
+	  "Message queue ordering comparator "
+	  "(set with rd_kafka_topic_conf_set_msg_order_cmp()). "
+          "Also see `queuing.strategy`." },
 	{ _RK_TOPIC, "opaque", _RK_C_PTR,
 	  _RKT(opaque),
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
@@ -1802,6 +1817,15 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
 						void *rkt_opaque,
 						void *msg_opaque)) {
 	topic_conf->partitioner = partitioner;
+}
+
+void
+rd_kafka_topic_conf_set_msg_order_cmp (rd_kafka_topic_conf_t *topic_conf,
+                                       int (*msg_order_cmp) (
+                                               const rd_kafka_message_t *a,
+                                               const rd_kafka_message_t *b)) {
+        topic_conf->msg_order_cmp =
+                (int (*)(const void *, const void *))msg_order_cmp;
 }
 
 void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *topic_conf,

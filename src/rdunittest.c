@@ -33,14 +33,31 @@
 #include "rdbuf.h"
 #include "crc32c.h"
 #include "rdmurmur2.h"
+#include "rdkafka_int.h"
 
 
 int rd_unittest (void) {
         int fails = 0;
-        fails += unittest_rdbuf();
-        fails += unittest_rdvarint();
-        fails += unittest_crc32c();
-        fails += unittest_murmur2();
+        const struct {
+                const char *name;
+                int (*call) (void);
+        } unittests[] = {
+                { "rdbuf",    unittest_rdbuf },
+                { "rdvarint", unittest_rdvarint },
+                { "crc32c",   unittest_crc32c },
+                { "msg",      unittest_msg },
+                { "murmurhash", unittest_murmurhashneutral2 },
+                { NULL }
+        };
+        int i;
+
+        for (i = 0 ; unittests[i].name ; i++) {
+                int f = unittests[i].call();
+                RD_UT_SAY("unittest: %s: %4s\033[0m",
+                          unittests[i].name,
+                          f ? "\033[31mFAIL" : "\033[32mPASS");
+                fails += f;
+        }
 
         return fails;
 }

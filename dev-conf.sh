@@ -10,6 +10,10 @@ set -e
 FSAN="-fsanitize=address"
 export CPPFLAGS="$CPPFLAGS $FSAN"
 export LDFLAGS="$LDFLAGS $FSAN"
-./configure --enable-devel --enable-werror
+./configure --enable-devel
+#--enable-werror
 #--disable-optimization
 #            --enable-sharedptr-debug #--enable-refcnt-debug
+make clean
+make -j
+(cd tests ; make -j build)

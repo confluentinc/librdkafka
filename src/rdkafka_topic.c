@@ -264,6 +264,11 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	if (!rkt->rkt_conf.partitioner)
 		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_consistent_random;
 
+        if (rkt->rkt_conf.queuing_strategy == 0)
+                rkt->rkt_conf.msg_order_cmp = rd_kafka_msg_cmp_msgseq;
+        else
+                rkt->rkt_conf.msg_order_cmp = rd_kafka_msg_cmp_msgseq_lifo;
+
 	if (rkt->rkt_conf.compression_codec == RD_KAFKA_COMPRESSION_INHERIT)
 		rkt->rkt_conf.compression_codec = rk->rk_conf.compression_codec;
 

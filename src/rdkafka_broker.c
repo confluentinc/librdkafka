@@ -2139,12 +2139,12 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 			   rd_kafka_broker_name(rktp->rktp_next_leader) :
 			   "(none)", rktp);
 
-		/* Prepend xmitq(broker-local) messages to the msgq(global).
-		 * There is no msgq_prepend() so we append msgq to xmitq
-		 * and then move the queue altogether back over to msgq. */
-		rd_kafka_msgq_concat(&rktp->rktp_xmit_msgq,
-				     &rktp->rktp_msgq);
-		rd_kafka_msgq_move(&rktp->rktp_msgq, &rktp->rktp_xmit_msgq);
+                /* Insert xmitq(broker-local) messages to the msgq(global)
+                 * at their sorted position to maintain ordering. */
+                rd_kafka_msgq_insert_msgq(&rktp->rktp_xmit_msgq,
+                                          &rktp->rktp_msgq,
+                                          rktp->rktp_rkt->rkt_conf.
+                                          msg_order_cmp);
 
                 rd_kafka_broker_lock(rkb);
 		TAILQ_REMOVE(&rkb->rkb_toppars, rktp, rktp_rkblink);
@@ -2351,7 +2351,10 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                    rkmq_msg_cnt));
 
         if (rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt) > 0)
-                rd_kafka_msgq_concat(&rktp->rktp_xmit_msgq, &rktp->rktp_msgq);
+                rd_kafka_msgq_insert_msgq(&rktp->rktp_xmit_msgq,
+                                          &rktp->rktp_msgq,
+                                          rktp->rktp_rkt->rkt_conf.
+                                          msg_order_cmp);
 
         /* Timeout scan */
         if (unlikely(do_timeout_scan)) {

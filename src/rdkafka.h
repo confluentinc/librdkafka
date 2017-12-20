@@ -1558,6 +1558,32 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
 						void *rkt_opaque,
 						void *msg_opaque));
 
+
+/**
+ * @brief \b Producer: Set message queueing order comparator callback.
+ *
+ * The callback may be called in any thread at any time,
+ * it may be called multiple times for the same message.
+ *
+ * Ordering comparator function constraints:
+ *   - MUST be stable sort (same input gives same output).
+ *   - MUST NOT call any rd_kafka_*() functions.
+ *   - MUST NOT block or execute for prolonged periods of time.
+ *
+ * The comparator shall compare the two messages and return:
+ *  - < 0 if message \p a should be inserted before message \p b.
+ *  - >=0 if message \p a should be inserted after message \p b.
+ *
+ * @warning THIS IS AN EXPERIMENTAL API, SUBJECT TO CHANGE OR REMOVAL,
+ *          DO NOT USE IN PRODUCTION.
+ */
+RD_EXPORT void
+rd_kafka_topic_conf_set_msg_order_cmp (rd_kafka_topic_conf_t *topic_conf,
+                                       int (*msg_order_cmp) (
+                                               const rd_kafka_message_t *a,
+                                               const rd_kafka_message_t *b));
+
+
 /**
  * @brief Check if partition is available (has a leader broker).
  *

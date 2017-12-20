@@ -32,7 +32,6 @@
 
 #include "rdkafka_proto.h"
 
-
 /**
  * @brief Message.MsgAttributes for MsgVersion v0..v1,
  *        also used for MessageSet.Attributes for MsgVersion v2.
@@ -257,11 +256,40 @@ rd_kafka_msg_t *rd_kafka_msgq_pop (rd_kafka_msgq_t *rkmq) {
 }
 
 
+/**
+ * @brief Message ordering comparator using the message sequence
+ *        number to order messages in ascending order (FIFO).
+ */
 static RD_INLINE
 int rd_kafka_msg_cmp_msgseq (const void *_a, const void *_b) {
         const rd_kafka_msg_t *a = _a, *b = _b;
 
-        return a->rkm_u.producer.msgseq - b->rkm_u.producer.msgseq;
+        rd_dassert(a->rkm_u.producer.msgseq);
+
+        if (a->rkm_u.producer.msgseq > b->rkm_u.producer.msgseq)
+                return 1;
+        else if (a->rkm_u.producer.msgseq < b->rkm_u.producer.msgseq)
+                return -1;
+        else
+                return 0;
+}
+
+/**
+ * @brief Message ordering comparator using the message sequence
+ *        number to order messages in descending order (LIFO).
+ */
+static RD_INLINE
+int rd_kafka_msg_cmp_msgseq_lifo (const void *_a, const void *_b) {
+        const rd_kafka_msg_t *a = _a, *b = _b;
+
+        rd_dassert(a->rkm_u.producer.msgseq);
+
+        if (a->rkm_u.producer.msgseq < b->rkm_u.producer.msgseq)
+                return 1;
+        else if (a->rkm_u.producer.msgseq > b->rkm_u.producer.msgseq)
+                return -1;
+        else
+                return 0;
 }
 
 /**
@@ -269,15 +297,9 @@ int rd_kafka_msg_cmp_msgseq (const void *_a, const void *_b) {
  * @remark This is an O(n) operation.
  * @warning The message must have a msgseq set.
  */
-static RD_INLINE RD_UNUSED
-void rd_kafka_msgq_enq_sorted (rd_kafka_msgq_t *rkmq,
-                               rd_kafka_msg_t *rkm) {
-        rd_dassert(rkm->rkm_u.producer.msgseq != 0);
-        TAILQ_INSERT_SORTED(&rkmq->rkmq_msgs, rkm, rd_kafka_msg_t *,
-                            rkm_link, rd_kafka_msg_cmp_msgseq);
-        rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
-        rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len+rkm->rkm_key_len);
-}
+void rd_kafka_msgq_enq_sorted (const rd_kafka_itopic_t *rkt,
+                               rd_kafka_msgq_t *rkmq,
+                               rd_kafka_msg_t *rkm);
 
 /**
  * Insert message at head of message queue.
@@ -310,8 +332,10 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_kafka_msgq_t *timedout,
 			    rd_ts_t now);
 
-rd_kafka_msg_t *rd_kafka_msgq_find_msgseq_pos (rd_kafka_msgq_t *rkmq,
-                                               uint64_t msgseq);
+rd_kafka_msg_t *rd_kafka_msgq_find_pos (const rd_kafka_msgq_t *rkmq,
+                                        const rd_kafka_msg_t *rkm,
+                                        int (*cmp) (const void *,
+                                                    const void *));
 
 int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
                               int do_lock);
@@ -322,3 +346,6 @@ rd_kafka_message_t *rd_kafka_message_get_from_rkm (struct rd_kafka_op_s *rko,
                                                    rd_kafka_msg_t *rkm);
 rd_kafka_message_t *rd_kafka_message_new (void);
 
+void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq);
+
+int unittest_msg (void);

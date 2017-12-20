@@ -319,6 +319,9 @@ struct rd_kafka_topic_conf_s {
 				void *rkt_opaque,
 				void *msg_opaque);
 
+        int queuing_strategy; /* 0 = fifo, 1 = lifo */
+        int (*msg_order_cmp) (const void *a, const void *b);
+
 	rd_kafka_compression_t compression_codec;
         int     produce_offset_report;
 

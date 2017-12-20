@@ -36,8 +36,8 @@
 #include "rdmurmur2.h"
 #include "rdrand.h"
 #include "rdtime.h"
-
 #include "rdsysqueue.h"
+#include "rdunittest.h"
 
 #include <stdarg.h>
 
@@ -61,7 +61,6 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE_RKM)
 		rd_free(rkm);
 }
-
 
 
 
@@ -178,6 +177,8 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 	rkm = rd_kafka_msg_new00(rkt, force_partition,
 				 msgflags|RD_KAFKA_MSG_F_ACCOUNT /* curr_msgs_add() */,
 				 payload, len, key, keylen, msg_opaque);
+
+        memset(&rkm->rkm_u.producer, 0, sizeof(rkm->rkm_u.producer));
 
         if (timestamp)
                 rkm->rkm_timestamp  = timestamp;
@@ -390,11 +391,18 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         int good = 0;
         rd_kafka_resp_err_t all_err = 0;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
+        rd_kafka_toppar_t *rktp = NULL;
+        shptr_rd_kafka_toppar_t *s_rktp;
 
         /* For partitioner; hold lock for entire run,
-         * for one partition: only acquire when needed at the end. */
-	if (partition == RD_KAFKA_PARTITION_UA)
-		rd_kafka_topic_rdlock(rkt);
+         * for one partition: only acquire for now. */
+        rd_kafka_topic_rdlock(rkt);
+        if (partition != RD_KAFKA_PARTITION_UA) {
+                s_rktp = rd_kafka_toppar_get_avail(rkt, partition,
+                                                   1/*ua on miss*/, &all_err);
+                rktp = rd_kafka_toppar_s2i(s_rktp);
+                rd_kafka_topic_rdunlock(rkt);
+        }
 
         for (i = 0 ; i < message_cnt ; i++) {
                 rd_kafka_msg_t *rkm;
@@ -441,35 +449,18 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 
 
                 } else {
-                        /* Single destination partition, enqueue message
-                         * on temporary queue for later queue concat. */
-                        rd_kafka_msgq_enq(&tmpq, rkm);
+                        /* Single destination partition. */
+                        rd_kafka_toppar_enq_msg(rktp, rkm);
                 }
 
                 rkmessages[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
                 good++;
         }
 
-
-
-	/* Specific partition */
-        if (partition != RD_KAFKA_PARTITION_UA) {
-                shptr_rd_kafka_toppar_t *s_rktp;
-
-		rd_kafka_topic_rdlock(rkt);
-
-                s_rktp = rd_kafka_toppar_get_avail(rkt, partition,
-                                                   1/*ua on miss*/, &all_err);
-                /* Concatenate tmpq onto partition queue. */
-                if (likely(s_rktp != NULL)) {
-                        rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
-                        rd_atomic64_add(&rktp->rktp_c.msgs, good);
-                        rd_kafka_toppar_concat_msgq(rktp, &tmpq);
-                        rd_kafka_toppar_destroy(s_rktp);
-                }
-        }
-
-	rd_kafka_topic_rdunlock(rkt);
+        if (partition == RD_KAFKA_PARTITION_UA)
+                rd_kafka_topic_rdunlock(rkt);
+        else
+                rd_kafka_toppar_destroy(s_rktp);
 
         return good;
 }
@@ -488,6 +479,7 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 
 	/* Assume messages are added in time sequencial order */
 	TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp) {
+                /* FIXME: this is no longer true */
 		if (likely(rkm->rkm_ts_timeout > now))
 			break;
 
@@ -498,24 +490,44 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 	return rd_atomic32_get(&timedout->rkmq_msg_cnt) - cnt;
 }
 
+
+static RD_INLINE void
+rd_kafka_msgq_enq_sorted0 (rd_kafka_msgq_t *rkmq,
+                           rd_kafka_msg_t *rkm,
+                           int (*order_cmp) (const void *, const void *)) {
+        TAILQ_INSERT_SORTED(&rkmq->rkmq_msgs, rkm, rd_kafka_msg_t *,
+                            rkm_link, order_cmp);
+        rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
+        rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len+rkm->rkm_key_len);
+}
+
+void rd_kafka_msgq_enq_sorted (const rd_kafka_itopic_t *rkt,
+                               rd_kafka_msgq_t *rkmq,
+                               rd_kafka_msg_t *rkm) {
+        rd_dassert(rkm->rkm_u.producer.msgseq != 0);
+        rd_kafka_msgq_enq_sorted0(rkmq, rkm, rkt->rkt_conf.msg_order_cmp);
+}
+
 /**
  * @brief Find the insert position (i.e., the previous element)
- *        for message sequence \p msgseq.
+ *        for message \p rkm.
  *
- * @remark This needs to be true: rkmq.first < msgseq < rkmq.last
+ * @returns the insert position element, or NULL if \p rkm should be
+ *          added at head of queue.
  */
-rd_kafka_msg_t *rd_kafka_msgq_find_msgseq_pos (rd_kafka_msgq_t *rkmq,
-                                               uint64_t msgseq) {
-        rd_kafka_msg_t *rkm, *last = NULL;
+rd_kafka_msg_t *rd_kafka_msgq_find_pos (const rd_kafka_msgq_t *rkmq,
+                                        const rd_kafka_msg_t *rkm,
+                                        int (*cmp) (const void *,
+                                                    const void *)) {
+        const rd_kafka_msg_t *curr, *last = NULL;
 
-        TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
-                if (rkm->rkm_u.producer.msgseq > msgseq)
-                        return last;
-                last = rkm;
+        TAILQ_FOREACH(curr, &rkmq->rkmq_msgs, rkm_link) {
+                if (cmp(rkm, curr) < 0)
+                        return (rd_kafka_msg_t *)last;
+                last = curr;
         }
 
-        rd_assert(!*"msgseq outside rkmq window");
-        return NULL; /* NOTREACHED */
+        return (rd_kafka_msg_t *)last;
 }
 
 
@@ -848,3 +860,196 @@ int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage) {
         return rd_clock() - rkm->rkm_ts_enq;
 }
 
+
+void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {
+        rd_kafka_msg_t *rkm;
+
+        fprintf(fp, "%s msgq_dump (%d messages, %"PRIusz" bytes):\n", what,
+                rd_kafka_msgq_len(rkmq), rd_kafka_msgq_size(rkmq));
+        TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
+                fprintf(fp, " [%"PRId32"]@%"PRId64
+                        ": rkm msgseq %"PRIu64": \"%.*s\"\n",
+                        rkm->rkm_partition, rkm->rkm_offset,
+                        rkm->rkm_u.producer.msgseq,
+                        (int)rkm->rkm_len, (const char *)rkm->rkm_payload);
+        }
+}
+
+/**
+ * @name Unit tests
+ */
+
+/**
+ * @brief Unittest: message allocator
+ */
+static rd_kafka_msg_t *ut_rd_kafka_msg_new (void) {
+        rd_kafka_msg_t *rkm;
+
+        rkm = rd_calloc(1, sizeof(*rkm));
+        rkm->rkm_flags      = RD_KAFKA_MSG_F_FREE_RKM;
+        rkm->rkm_offset     = RD_KAFKA_OFFSET_INVALID;
+        rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+
+        return rkm;
+}
+
+
+
+/**
+ * @brief Unittest: destroy all messages in queue
+ */
+static void ut_rd_kafka_msgq_purge (rd_kafka_msgq_t *rkmq) {
+        rd_kafka_msg_t *rkm, *tmp;
+
+        TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp)
+                rd_kafka_msg_destroy(NULL, rkm);
+
+
+        rd_kafka_msgq_init(rkmq);
+}
+
+
+
+static int ut_verify_msgq_order (const char *what,
+                                 const rd_kafka_msgq_t *rkmq,
+                                 int first, int last) {
+        const rd_kafka_msg_t *rkm;
+        uint64_t expected = first;
+        int incr = first < last ? +1 : -1;
+        int fails = 0;
+        int cnt = 0;
+
+        TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
+                if (rkm->rkm_u.producer.msgseq != expected) {
+                        RD_UT_SAY("%s: expected msgseq %"PRIu64
+                                  " not %"PRIu64" at index #%d",
+                                  what, expected,
+                                  rkm->rkm_u.producer.msgseq, cnt);
+                        fails++;
+                }
+                cnt++;
+                expected += incr;
+        }
+
+        RD_UT_ASSERT(!fails, "See %d previous failure(s)", fails);
+        return fails;
+}
+
+/**
+ * @brief Verify ordering comparator for message queues.
+ */
+static int unittest_msgq_order (const char *what, int fifo,
+                          int (*cmp) (const void *, const void *)) {
+        rd_kafka_msgq_t rkmq = RD_KAFKA_MSGQ_INITIALIZER(rkmq);
+        rd_kafka_msg_t *rkm;
+        rd_kafka_msgq_t sendq;
+        int i;
+
+        RD_UT_SAY("%s: testing in %s mode", what, fifo? "FIFO" : "LIFO");
+
+        for (i = 1 ; i <= 6 ; i++) {
+                rkm = ut_rd_kafka_msg_new();
+                rkm->rkm_u.producer.msgseq = i;
+                rd_kafka_msgq_enq_sorted0(&rkmq, rkm, cmp);
+        }
+
+        if (fifo) {
+                if (ut_verify_msgq_order("added", &rkmq, 1, 6))
+                        return 1;
+        } else {
+                if (ut_verify_msgq_order("added", &rkmq, 6, 1))
+                        return 1;
+        }
+
+        /* Move 3 messages to "send" queue which we then re-insert
+         * in the original queue (i.e., "retry"). */
+        rd_kafka_msgq_init(&sendq);
+        while (rd_kafka_msgq_len(&sendq) < 3)
+                rd_kafka_msgq_enq(&sendq, rd_kafka_msgq_pop(&rkmq));
+
+        if (fifo) {
+                if (ut_verify_msgq_order("send removed", &rkmq, 4, 6))
+                        return 1;
+
+                if (ut_verify_msgq_order("sendq", &sendq, 1, 3))
+                        return 1;
+        } else {
+                if (ut_verify_msgq_order("send removed", &rkmq, 3, 1))
+                        return 1;
+
+                if (ut_verify_msgq_order("sendq", &sendq, 6, 4))
+                        return 1;
+        }
+
+        /* Retry the messages, which moves them back to sendq
+         * maintaining the original order */
+        rd_kafka_retry_msgq(&rkmq, &sendq, 1, 1, 0, cmp);
+
+        RD_UT_ASSERT(rd_kafka_msgq_len(&sendq) == 0,
+                     "sendq FIFO should be empty, not contain %d messages",
+                     rd_kafka_msgq_len(&sendq));
+
+        if (fifo) {
+                if (ut_verify_msgq_order("readded", &rkmq, 1, 6))
+                        return 1;
+        } else {
+                if (ut_verify_msgq_order("readded", &rkmq, 6, 1))
+                        return 1;
+        }
+
+        /* Move 4 first messages to to "send" queue, then
+         * retry them with max_retries=1 which should now fail for
+         * the 3 first messages that were already retried. */
+        rd_kafka_msgq_init(&sendq);
+        while (rd_kafka_msgq_len(&sendq) < 4)
+                rd_kafka_msgq_enq(&sendq, rd_kafka_msgq_pop(&rkmq));
+
+        if (fifo) {
+                if (ut_verify_msgq_order("send removed #2", &rkmq, 5, 6))
+                        return 1;
+
+                if (ut_verify_msgq_order("sendq #2", &sendq, 1, 4))
+                        return 1;
+        } else {
+                if (ut_verify_msgq_order("send removed #2", &rkmq, 2, 1))
+                        return 1;
+
+                if (ut_verify_msgq_order("sendq #2", &sendq, 6, 3))
+                        return 1;
+        }
+
+        /* Retry the messages, which should now keep the 3 first messages
+         * on sendq (no more retries) and just number 4 moved back. */
+        rd_kafka_retry_msgq(&rkmq, &sendq, 1, 1, 0, cmp);
+
+        if (fifo) {
+                if (ut_verify_msgq_order("readded #2", &rkmq, 4, 6))
+                        return 1;
+
+                if (ut_verify_msgq_order("no more retries", &sendq, 1, 3))
+                        return 1;
+
+        } else {
+                if (ut_verify_msgq_order("readded #2", &rkmq, 3, 1))
+                        return 1;
+
+                if (ut_verify_msgq_order("no more retries", &sendq, 6, 4))
+                        return 1;
+        }
+
+        ut_rd_kafka_msgq_purge(&sendq);
+        ut_rd_kafka_msgq_purge(&rkmq);
+
+        return 0;
+
+}
+
+
+int unittest_msg (void) {
+        int fails = 0;
+
+        fails += unittest_msgq_order("FIFO", 1, rd_kafka_msg_cmp_msgseq);
+        fails += unittest_msgq_order("LIFO", 0, rd_kafka_msg_cmp_msgseq_lifo);
+
+        return fails;
+}

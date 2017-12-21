@@ -80,9 +80,10 @@ endif()
 
 option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
 if (RDKAFKA_BUILD_STATIC)
-  set (RDKAFKA_BUILD_MODE STATIC)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+  set(RDKAFKA_BUILD_MODE STATIC)
 else()
-  set (RDKAFKA_BUILD_MODE SHARED)
+  set(RDKAFKA_BUILD_MODE SHARED)
 endif()
 
 add_library(rdkafka ${RDKAFKA_BUILD_MODE} ${sources})

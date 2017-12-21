@@ -78,7 +78,14 @@ if(NOT HAVE_REGEX)
   list(APPEND sources regexp.c)
 endif()
 
-add_library(rdkafka SHARED ${sources})
+option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
+if (RDKAFKA_BUILD_STATIC)
+  set (RDKAFKA_BUILD_MODE STATIC)
+else()
+  set (RDKAFKA_BUILD_MODE SHARED)
+endif()
+
+add_library(rdkafka ${RDKAFKA_BUILD_MODE} ${sources})
 
 # Support '#include <rdkafka.h>'
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")

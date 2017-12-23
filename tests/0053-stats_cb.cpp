@@ -79,9 +79,16 @@ void test_stats_cb () {
 			elapsed << "ms (expected " << expected_time << "ms +-25%)\n");
 
   if (elapsed < expected_time * 0.75 ||
-	  elapsed > expected_time * 1.25)
-	  Test::Fail(tostr() << "Elapsed time " << elapsed << "ms outside +-25% window (" <<
-				  expected_time << "ms), cnt " << my_event.stats_cnt);
+      elapsed > expected_time * 1.25) {
+    /* We can't rely on CIs giving our test job enough CPU to finish
+     * in time, so don't error out even if the time is outside the window */
+    if (test_on_ci)
+      Test::Say(tostr() << "WARNING: Elapsed time " << elapsed << "ms outside +-25% window (" <<
+                expected_time << "ms), cnt " << my_event.stats_cnt);
+    else
+      Test::Fail(tostr() << "Elapsed time " << elapsed << "ms outside +-25% window (" <<
+                 expected_time << "ms), cnt " << my_event.stats_cnt);
+  }
   delete p;
 }
 

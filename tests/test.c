@@ -60,7 +60,8 @@ int          test_neg_flags = TEST_F_KNOWN_ISSUE;
 static int   test_delete_topics_between = 0;
 static const char *test_git_version = "HEAD";
 static const char *test_sockem_conf = "";
-
+int          test_on_ci = 0; /* Tests are being run on CI, be more forgiving
+                              * with regards to timeouts, etc. */
 static int show_summary = 1;
 static int test_summary (int do_lock);
 
@@ -1222,6 +1223,10 @@ int main(int argc, char **argv) {
         test_broker_version_str = test_getenv("TEST_KAFKA_VERSION",
                                               test_broker_version_str);
         test_git_version = test_getenv("RDKAFKA_GITVER", "HEAD");
+
+        /* Are we running on CI? */
+        if (test_getenv("CI", NULL))
+                test_on_ci = 1;
 
 	test_conf_init(NULL, NULL, 10);
 

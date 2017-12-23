@@ -42,6 +42,7 @@
 
 static int consume_pause (void) {
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        const int partition_cnt = 3;
 	rd_kafka_t *rk;
 	rd_kafka_topic_conf_t *tconf;
 	rd_kafka_topic_partition_list_t *topics;
@@ -51,10 +52,13 @@ static int consume_pause (void) {
 	int it, iterations = 3;
 	int msg_base = 0;
 	int fails = 0;
+        char group_id[32];
 
 	test_conf_init(NULL, &tconf, 60 + (test_session_timeout_ms * 3 / 1000));
 	test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
-	
+
+        test_create_topic(topic, partition_cnt, 1);
+
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0,
                                         RD_KAFKA_PARTITION_UA, msgcnt);
@@ -63,10 +67,10 @@ static int consume_pause (void) {
 	rd_kafka_topic_partition_list_add(topics, topic, -1);
 
 	for (it = 0 ; it < iterations ; it++) {
-		char group_id[32];
 		const int pause_cnt = 5;
-		const int per_pause_msg_cnt = msgcnt / pause_cnt;
-		const int pause_time = 1200 /* 1.2s */;
+		int per_pause_msg_cnt = msgcnt / pause_cnt;
+                const int pause_time = 1200 /* 1.2s */;
+                int eof_cnt = -1;
 		int pause;
 		rd_kafka_topic_partition_list_t *parts;
 		test_msgver_t mv_all;
@@ -74,10 +78,21 @@ static int consume_pause (void) {
 
 		test_msgver_init(&mv_all, testid); /* All messages */
 
-		test_str_id_generate(group_id, sizeof(group_id));
+                /* On the last iteration reuse the previous group.id
+                 * to make consumer start at committed offsets which should
+                 * also be EOF. This to trigger #1307. */
+                if (it < iterations-1)
+                        test_str_id_generate(group_id, sizeof(group_id));
+                else {
+                        TEST_SAY("Reusing previous group.id %s\n", group_id);
+                        per_pause_msg_cnt = 0;
+                        eof_cnt = partition_cnt;
+                }
 
-		TEST_SAY("Iteration %d/%d, using group.id %s\n", it, iterations,
-			 group_id);
+		TEST_SAY("Iteration %d/%d, using group.id %s, "
+                         "expecting %d messages/pause and %d EOFs\n",
+                         it, iterations-1, group_id,
+                         per_pause_msg_cnt, eof_cnt);
 
 		rk = test_create_consumer(group_id, NULL, NULL,
 					  rd_kafka_topic_conf_dup(tconf));
@@ -103,8 +118,10 @@ static int consume_pause (void) {
 				 "msg_base %d\n", pause, per_pause_msg_cnt,
 				 msg_base);
 			rcnt = test_consumer_poll("consume.part", rk, testid,
-						  -1,
-						  msg_base, per_pause_msg_cnt,
+                                                  eof_cnt,
+						  msg_base,
+                                                  per_pause_msg_cnt == 0 ?
+                                                  -1 : per_pause_msg_cnt,
 						  &mv);
 
 			TEST_ASSERT(rcnt == per_pause_msg_cnt,
@@ -175,9 +192,13 @@ static int consume_pause (void) {
 			rd_kafka_topic_partition_list_destroy(parts);
 		}
 
-		test_msgver_verify("all.msgs", &mv_all, TEST_MSGVER_ALL_PART,
-				   0, msgcnt);
-		test_msgver_clear(&mv_all);
+                if (per_pause_msg_cnt > 0)
+                        test_msgver_verify("all.msgs", &mv_all,
+                                           TEST_MSGVER_ALL_PART, 0, msgcnt);
+                else
+                        test_msgver_verify("all.msgs", &mv_all,
+                                           TEST_MSGVER_ALL_PART, 0, 0);
+                        test_msgver_clear(&mv_all);
 		
 		/* Should now not see any more messages. */
 		test_consumer_poll_no_msgs("end.exp.no.msgs", rk, testid, 3000);

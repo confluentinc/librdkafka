@@ -125,6 +125,7 @@ If you use librdkafra as submodule in cmake project and want static link of libr
 
       set(RDKAFKA_BUILD_STATIC ON CACHE BOOL "")
       add_subdirectory(librdkafka)
+      target_link_libraries(your_library_or_executable rdkafka)
 
 ## Documentation
 

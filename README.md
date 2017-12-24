@@ -117,6 +117,12 @@ See [examples/rdkafka_example.c](https://github.com/edenhill/librdkafka/blob/mas
 
 Link your program with `-lrdkafka -lz -lpthread -lrt`.
 
+If you use cmake and want to make static library:
+      cmake -DRDKAFKA_BUILD_STATIC
+
+If you use librdkafra as submodule in cmake project and want static link of librdkafka:
+      set(RDKAFKA_BUILD_STATIC ON CACHE BOOL "")
+      add_subdirectory(librdkafka)
 
 ## Documentation
 

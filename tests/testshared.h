@@ -43,7 +43,7 @@ extern int tmout_multip (int msecs);
         (((V) >> (24-((I)*8))) & 0xff)
 
 extern int test_broker_version;
-
+extern int test_on_ci;
 
 const char *test_mk_topic_name (const char *suffix, int randomized);
 

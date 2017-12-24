@@ -11,6 +11,7 @@
 
 #include "MurMurHash2.h"
 
+#if 0 /* FIXME: Not currently in use */
 uint32_t MurmurHash2 ( const void * key, int len, uint32_t seed )
 {
   /* 'm' and 'r' are mixing constants generated offline.
@@ -219,6 +220,8 @@ uint32_t MurmurHash2A ( const void * key, int len, uint32_t seed )
 
   return h;
 }
+#endif /* FIXME: Not currenty in use */
+
 
 /*-----------------------------------------------------------------------------
 // MurmurHashNeutral2, by Austin Appleby
@@ -287,28 +290,29 @@ uint32_t MurmurHashAligned2 ( const void * key, int len, uint32_t seed )
   const uint32_t m = 0x5bd1e995;
   const int r = 24;
 
-  const unsigned char * data = (const unsigned char *)key;
+  const uint32_t *data;
 
   uint32_t h = seed ^ len;
 
-  int align = (uint64_t)data & 3;
+  int align = (uint64_t)key & 3;
 
   if(align && (len >= 4))
   {
     /* Pre-load the temp registers  */
+    const unsigned char *bdata = (const unsigned char *)key;
 
     uint32_t t = 0, d = 0;
 
     switch(align)
     {
-      case 1: t |= data[2] << 16;
-      case 2: t |= data[1] << 8;
-      case 3: t |= data[0];
+      case 1: t |= bdata[2] << 16;
+      case 2: t |= bdata[1] << 8;
+      case 3: t |= bdata[0];
     }
 
     t <<= (8 * align);
 
-    data += 4-align;
+    data = (uint32_t *)((int64_t)(bdata+align) & ~0x3);
     len -= 4-align;
 
     int sl = 8 * (4-align);
@@ -380,6 +384,8 @@ uint32_t MurmurHashAligned2 ( const void * key, int len, uint32_t seed )
   }
   else
   {
+    data = (uint32_t *)((int64_t)(key) & ~0x3);
+
     while(len >= 4)
     {
       uint32_t k = *(uint32_t *)data;

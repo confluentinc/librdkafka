@@ -58,6 +58,8 @@ ssl.key.password                         |  *  |                 |              
 ssl.certificate.location                 |  *  |                 |               | Path to client's public key (PEM) used for authentication. <br>*Type: string*
 ssl.ca.location                          |  *  |                 |               | File or directory path to CA certificate(s) for verifying the broker's key. <br>*Type: string*
 ssl.crl.location                         |  *  |                 |               | Path to CRL for verifying broker's certificate validity. <br>*Type: string*
+ssl.keystore.location                    |  *  |                 |               | Path to client's keystore (PKCS#12) used for authentication. <br>*Type: string*
+ssl.keystore.password                    |  *  |                 |               | Client's keystore (PKCS#12) password. <br>*Type: string*
 sasl.mechanisms                          |  *  |                 |        GSSAPI | SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512. **NOTE**: Despite the name only one mechanism must be configured. <br>*Type: string*
 sasl.kerberos.service.name               |  *  |                 |         kafka | Kerberos principal name that Kafka runs as, not including /hostname@REALM <br>*Type: string*
 sasl.kerberos.principal                  |  *  |                 |   kafkaclient | This client's Kerberos principal name. (Not supported on Windows, will use the logon user's principal). <br>*Type: string*

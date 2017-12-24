@@ -19,7 +19,7 @@ Build the library:
 
 If you want to build static library:
 
-    $ cmake --build _cmake_build -DRDKAFKA_BUILD_STATIC
+    $ cmake --build _cmake_build -DRDKAFKA_BUILD_STATIC=1
 
 
 Run (local) tests:

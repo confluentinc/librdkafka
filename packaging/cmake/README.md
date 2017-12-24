@@ -17,6 +17,10 @@ Build the library:
 
     $ cmake --build _cmake_build
 
+If you want to build static library:
+
+    $ cmake --build _cmake_build -DRDKAFKA_BUILD_STATIC
+
 
 Run (local) tests:
 
@@ -26,3 +30,10 @@ Run (local) tests:
 Install library:
 
     $ cmake --build _cmake_build --target install
+
+
+If you use librdkafka as submodule in cmake project and want static link of librdkafka:
+
+      set(RDKAFKA_BUILD_STATIC ON CACHE BOOL "")
+      add_subdirectory(librdkafka)
+      target_link_libraries(your_library_or_executable rdkafka)

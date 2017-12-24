@@ -265,6 +265,9 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
 
 rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms,
                                                int do_lock);
+rd_kafka_broker_t *rd_kafka_broker_controller (rd_kafka_t *rk,
+                                               int timeout_ms, int usable,
+                                               int do_lock);
 
 rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state);
 

@@ -1393,6 +1393,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         /* Convert group.id to kafka string (may be NULL) */
         rk->rk_group_id = rd_kafkap_str_new(rk->rk_conf.group_id_str,-1);
 
+        rk->rk_controller_id = -1;
+
         /* Config fixups */
         rk->rk_conf.queued_max_msg_bytes =
                 (int64_t)rk->rk_conf.queued_max_msg_kbytes * 1000ll;

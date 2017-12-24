@@ -910,6 +910,7 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk,
                 /* Try non-blocking (e.g., non-fetching) brokers first. */
                 if (do_lock)
                         rd_kafka_rdlock(rk);
+
                 rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
                                           rd_kafka_broker_filter_non_blocking,
                                           NULL);
@@ -930,6 +931,52 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk,
 	}
 
 	return NULL;
+}
+
+/**
+ * @brief Spend at most \p timeout_ms to acquire the controller broker.
+ *
+ * @param usable int: If true, only return a usable (Up) broker.
+ *
+ * @remark Requires broker version >= 0.10.2.0 or later.
+ *
+ * @returns The controller broker with increased refcount, or NULL on timeout
+ * @locks rd_kafka_*lock() if !do_lock
+ * @locality any
+ */
+rd_kafka_broker_t *rd_kafka_broker_controller (rd_kafka_t *rk,
+                                               int timeout_ms, int usable,
+                                               int do_lock) {
+        const rd_ts_t ts_end = rd_timeout_init(timeout_ms);
+
+        while (1) {
+                rd_kafka_broker_t *rkb = NULL;
+                int remains;
+                int version = rd_kafka_brokers_get_state_version(rk);
+
+                /* Try non-blocking (e.g., non-fetching) brokers first. */
+                if (do_lock)
+                        rd_kafka_rdlock(rk);
+
+                if (rk->rk_controller_id != -1)
+                        rkb = rd_kafka_broker_find_by_nodeid0(
+                                rk, rk->rk_controller_id,
+                                usable ? RD_KAFKA_BROKER_STATE_UP : -1);
+
+                if (do_lock)
+                        rd_kafka_rdunlock(rk);
+
+                if (rkb)
+                        return rkb;
+
+                remains = rd_timeout_remains(ts_end);
+                if (rd_timeout_expired(remains))
+                        return NULL;
+
+                rd_kafka_brokers_wait_state_change(rk, version, remains);
+        }
+
+        return NULL;
 }
 
 

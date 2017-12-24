@@ -43,6 +43,7 @@ static const char *rd_kafka_feature_names[] = {
 	"LZ4",
         "OffsetTime",
         "MsgVer2",
+        "AdminAPI",
 	NULL
 };
 
@@ -169,6 +170,14 @@ static const struct rd_kafka_feature_map {
                 .feature = RD_KAFKA_FEATURE_OFFSET_TIME,
                 .depends = {
                         { RD_KAFKAP_Offset, 1, 1 },
+                        { -1 },
+                }
+        },
+        {
+                /* @brief >=0.10.1.0: Admin APIs (KIP-4) */
+                .feature = RD_KAFKA_FEATURE_ADMIN_API,
+                .depends = {
+                        { RD_KAFKAP_DeleteTopics, 0, 0 },
                         { -1 },
                 }
         },
@@ -415,7 +424,7 @@ rd_kafka_ApiVersions_copy (const struct rd_kafka_ApiVersion *src,
  * @returns a human-readable feature flag string.
  */
 const char *rd_kafka_features2str (int features) {
-	static RD_TLS char ret[4][128];
+	static RD_TLS char ret[4][256];
 	size_t of = 0;
 	static RD_TLS int reti = 0;
 	int i;

@@ -193,6 +193,7 @@
     <ClCompile Include="..\src\rdkafka_metadata_cache.c" />
     <ClCompile Include="..\src\rdkafka_interceptor.c" />
     <ClCompile Include="..\src\rdkafka_plugin.c" />
+    <ClCompile Include="..\src\rdkafka_admin.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />

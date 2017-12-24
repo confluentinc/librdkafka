@@ -35,6 +35,7 @@ set(
     rdkafka_topic.c
     rdkafka_transport.c
     rdkafka_interceptor.c
+    rdkafka_admin.c
     rdlist.c
     rdlog.c
     rdmurmur2.c
@@ -96,7 +97,7 @@ endif()
 if(WITH_SSL)
   if(WITH_BUNDLED_SSL) # option from 'h2o' parent project
     if(NOT TARGET bundled-ssl)
-      message(FATAL_ERROR "bundled-ssl target not exist")
+      message(FATAL_ERROR "bundled-ssl target does not exist")
     endif()
     target_include_directories(rdkafka BEFORE PUBLIC ${BUNDLED_SSL_INCLUDE_DIR})
     target_link_libraries(rdkafka PUBLIC ${BUNDLED_SSL_LIBRARIES})

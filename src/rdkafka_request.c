@@ -1849,3 +1849,114 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
 
         return cnt;
 }
+
+
+
+rd_kafka_resp_err_t
+rd_kafka_handle_DeleteTopics (rd_kafka_t *rk,
+                              rd_kafka_broker_t *rkb,
+                              rd_kafka_resp_err_t err,
+                              rd_kafka_buf_t *rkbuf,
+                              rd_kafka_buf_t *request,
+                              rd_kafka_topic_partition_list_t *topics) {
+        const int log_decode_errors = 1;
+        int actions;
+        int32_t TopicArrayCnt;
+        int i = 0;
+        rd_kafka_resp_err_t same_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        int same_err_cnt = 0;
+
+        if (err)
+                goto err;
+
+        rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
+        if (TopicArrayCnt != topics->cnt)
+                rd_kafka_buf_parse_fail(rkbuf,
+                                        "TopicArrayCnt %"PRId32" should be "
+                                        "same as %d requested topic(s)",
+                                        TopicArrayCnt, topics->cnt);
+
+        for (i = 0 ; i < (int)TopicArrayCnt ; i++) {
+                rd_kafkap_str_t topic;
+                char *topic_name;
+                rd_kafka_topic_partition_t *rktpar;
+                rd_kafka_resp_err_t ErrorCode;
+
+                rd_kafka_buf_read_str(rkbuf, &topic);
+                rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+                RD_KAFKAP_STR_DUPA(&topic_name, &topic);
+
+                rktpar = rd_kafka_topic_partition_list_find_topic(topics,
+                                                                  topic_name);
+                if (!rktpar)
+                        rd_kafka_buf_parse_fail(rkbuf,
+                                                "Non-requested topic %s "
+                                                "returned by broker",
+                                                topic_name);
+
+                rktpar->err = ErrorCode;
+
+                if (i == 0)
+                        same_err = ErrorCode;
+
+                if (same_err == ErrorCode)
+                        same_err_cnt++;
+        }
+
+        /* If all topics have the same error (or success), propagate that
+         * error as the request-level error (or success). */
+        if (same_err_cnt == TopicArrayCnt)
+                err = same_err;
+
+        goto done;
+
+ err_parse:
+        err = rkbuf->rkbuf_err;
+ err:
+        actions = rd_kafka_err_action(
+                rkb, err, rkbuf, request,
+                RD_KAFKA_ERR_ACTION_END);
+
+        if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
+                if (rd_kafka_buf_retry(rkb, request))
+                        return RD_KAFKA_RESP_ERR__IN_PROGRESS;
+                /* FALLTHRU */
+        }
+
+ done:
+        return err;
+}
+
+
+/**
+ * Send DeleteTopics (KIP-4)
+ */
+void rd_kafka_DeleteTopics (rd_kafka_broker_t *rkb,
+                            rd_kafka_topic_partition_list_t *topics,
+                            int timeout_ms,
+                            rd_kafka_replyq_t replyq,
+                            rd_kafka_resp_cb_t *resp_cb,
+                            void *opaque, int flash_msg) {
+        rd_kafka_buf_t *rkbuf;
+        int i;
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteTopics,
+                                         1, topics->cnt * 100);
+        rkbuf->rkbuf_flags |= (flash_msg ? RD_KAFKA_OP_F_FLASH : 0);
+
+        rd_kafka_buf_write_i32(rkbuf, topics->cnt); /* #topics */
+        for (i = 0 ; i < topics->cnt ; i++) {
+                rd_kafka_buf_write_str(rkbuf, topics->elems[i].topic, -1);
+                topics->elems[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        rd_kafka_buf_write_i32(rkbuf, timeout_ms);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, 0, RD_KAFKA_FEATURE_ADMIN_API);
+
+        if (replyq.q)
+                rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq,
+                                               resp_cb, opaque);
+        else /* in broker thread */
+                rd_kafka_broker_buf_enq1(rkb, rkbuf, resp_cb, opaque);
+}

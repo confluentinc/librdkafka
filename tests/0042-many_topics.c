@@ -218,6 +218,37 @@ static void assign_consume_many (char **topics, int topic_cnt, uint64_t testid){
 }
 
 
+/**
+ * @brief Delete the topics best-effortly using the Admin API, if
+ *        available.
+ */
+static void delete_topics (char **topics, int topic_cnt) {
+        rd_kafka_topic_partition_list_t *topic_list;
+        rd_kafka_resp_err_t err;
+        rd_kafka_t *rk;
+        int i;
+        test_timing_t ts_deletes;
+
+        topic_list = rd_kafka_topic_partition_list_new(topic_cnt);
+        for (i = 0 ; i < topic_cnt ; i++)
+                rd_kafka_topic_partition_list_add(topic_list, topics[i], 0);
+
+        rk = test_create_producer();
+
+        TIMING_START(&ts_deletes, "DeleteTopics");
+        err = rd_kafka_admin_delete_topics(rk, topic_list,
+                                           tmout_multip(10*1000));
+        TIMING_STOP(&ts_deletes);
+
+        TEST_SAY("DeleteTopics returned: %s\n", rd_kafka_err2str(err));
+        for (i = 0 ; i < topic_list->cnt ; i++)
+                TEST_SAY("  DeleteTopics on \"%s\" returned: %s\n",
+                         topic_list->elems[i].topic,
+                         rd_kafka_err2str(topic_list->elems[i].err));
+        rd_kafka_topic_partition_list_destroy(topic_list);
+        rd_kafka_destroy(rk);
+}
+
 
 int main_0042_many_topics (int argc, char **argv) {
 	char **topics;
@@ -243,6 +274,8 @@ int main_0042_many_topics (int argc, char **argv) {
 		subscribe_consume_many(topics, topic_cnt, testid);
 		assign_consume_many(topics, topic_cnt, testid);
 	}
+
+        delete_topics(topics, topic_cnt);
 
 	for (i = 0 ; i < topic_cnt ; i++)
 		free(topics[i]);

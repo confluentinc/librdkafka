@@ -261,17 +261,28 @@ static rd_kafka_resp_err_t on_send1 (rd_kafka_t *rk,
                 "hey"
         };
         rd_kafka_headers_t *hdrs;
+        int header_length;
         rd_kafka_resp_err_t err;
         const void *value;
         size_t size;
 
+
         expect_check(__FUNCTION__, expected, rkmessage);
 
         err = rd_kafka_message_headers(rkmessage, &hdrs);
+
         if (err) /* First message has no headers. */
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
+        header_length = rd_kafka_header_length(hdrs);
+        TEST_ASSERT(header_length == 7,
+                    "Expected 7 length got %i", header_length);
+
         rd_kafka_header_add(hdrs, "multi", -1, "multi4", -1);
+
+        header_length = rd_kafka_header_length(hdrs);
+        TEST_ASSERT(header_length == 8,
+                    "Expected 8 length got %i", header_length);
 
         /* test iter() */
         expect_iter(__FUNCTION__, hdrs, "multi", expect_iter_multi, 4);
@@ -279,8 +290,22 @@ static rd_kafka_resp_err_t on_send1 (rd_kafka_t *rk,
         expect_iter(__FUNCTION__, hdrs, "notexists", NULL, 0);
 
         rd_kafka_header_add(hdrs, "send1", -1, "1", -1);
+
+        header_length = rd_kafka_header_length(hdrs);
+        TEST_ASSERT(header_length == 9,
+                    "Expected 9 length got %i", header_length);
+
         rd_kafka_header_remove(hdrs, "multi");
+
+        header_length = rd_kafka_header_length(hdrs);
+        TEST_ASSERT(header_length == 5,
+                    "Expected 5 length got %i", header_length);
+
         rd_kafka_header_add(hdrs, "multi", -1, "multi5", -1);
+
+        header_length = rd_kafka_header_length(hdrs);
+        TEST_ASSERT(header_length == 6,
+                    "Expected 6 length got %i", header_length);
 
         /* test get_last() */
         err = rd_kafka_header_get_last(hdrs, "multi", &value, &size);
@@ -333,6 +358,7 @@ int main_0072_headers_ut (int argc, char **argv) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         int i;
+        int header_length;
         const int msgcnt = 10;
         rd_kafka_resp_err_t err;
 
@@ -360,6 +386,11 @@ int main_0072_headers_ut (int argc, char **argv) {
                 /* Use headers list on one message */
                 if (i == 3) {
                         rd_kafka_headers_t *hdrs = rd_kafka_headers_new(4);
+
+                        header_length = rd_kafka_header_length(hdrs);
+                        TEST_ASSERT(header_length == 0,
+                                    "Expected 0 length got %i", header_length);
+
                         rd_kafka_headers_t *copied;
 
                         rd_kafka_header_add(hdrs, "msgid", -1, &i, sizeof(i));
@@ -369,8 +400,17 @@ int main_0072_headers_ut (int argc, char **argv) {
                         rd_kafka_header_add(hdrs, "multi", -1, "multi3", strlen("multi3"));
                         rd_kafka_header_add(hdrs, "null", -1, NULL, 0);
 
+                        header_length = rd_kafka_header_length(hdrs);
+                        TEST_ASSERT(header_length == 6,
+                                    "Expected 6 length got %i", header_length);
+
                         /* Make a copy of the headers to verify copy() */
                         copied = rd_kafka_headers_copy(hdrs);
+
+                        header_length = rd_kafka_header_length(copied);
+                        TEST_ASSERT(header_length == 6,
+                                    "Expected 6 length got %i", header_length);
+
                         rd_kafka_headers_destroy(hdrs);
 
                         /* Last header ("empty") is added below */

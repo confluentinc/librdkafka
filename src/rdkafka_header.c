@@ -27,6 +27,7 @@
  */
 
 #include "rdkafka_int.h"
+#include "rdlist.h"
 #include "rdkafka_header.h"
 
 
@@ -217,4 +218,6 @@ rd_kafka_header_iter_all (const rd_kafka_headers_t *hdrs, size_t idx,
 }
 
 
-
+int rd_kafka_header_length(const rd_kafka_headers_t *hdrs) {
+        return rd_list_cnt(&hdrs->rkhdrs_list);
+}

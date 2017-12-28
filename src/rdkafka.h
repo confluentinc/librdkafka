@@ -1014,6 +1014,12 @@ rd_kafka_header_iter_all (const rd_kafka_headers_t *hdrs, size_t idx,
                           const char **namep,
                           const void **valuep, size_t *sizep);
 
+/**
+ * @brief Returns the number of header key/value pairs
+ *
+ * @param hdrs   Headers to count
+ */
+RD_EXPORT int rd_kafka_header_length (const rd_kafka_headers_t *hdrs);
 
 
 /**@}*/

@@ -1621,6 +1621,38 @@ int32_t rd_kafka_msg_partitioner_consistent_random (const rd_kafka_topic_t *rkt,
            void *opaque, void *msg_opaque);
 
 
+/**
+ * @brief Murmur2 partitioner (Java compatible).
+ *
+ * Uses consistent hashing to map identical keys onto identical partitions
+ * using Java-compatible Murmur2 hashing.
+ *
+ * @returns a partition between 0 and \p partition_cnt - 1.
+ */
+RD_EXPORT
+int32_t rd_kafka_msg_partitioner_murmur2 (const rd_kafka_topic_t *rkt,
+                                          const void *key, size_t keylen,
+                                          int32_t partition_cnt,
+                                          void *rkt_opaque,
+                                          void *msg_opaque);
+
+/**
+ * @brief Consistent-Random Murmur2 partitioner (Java compatible).
+ *
+ * Uses consistent hashing to map identical keys onto identical partitions
+ * using Java-compatible Murmur2 hashing.
+ * Messages without keys will be assigned via the random partitioner.
+ *
+ * @returns a partition between 0 and \p partition_cnt - 1.
+ */
+RD_EXPORT
+int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
+                                                 const void *key, size_t keylen,
+                                                 int32_t partition_cnt,
+                                                 void *rkt_opaque,
+                                                 void *msg_opaque);
+
+
 /**@}*/
 
 

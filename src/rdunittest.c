@@ -40,7 +40,7 @@ int rd_unittest (void) {
         fails += unittest_rdbuf();
         fails += unittest_rdvarint();
         fails += unittest_crc32c();
-        fails += unittest_murmurhashneutral2();
+        fails += unittest_murmur2();
 
         return fails;
 }

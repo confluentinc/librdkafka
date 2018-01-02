@@ -83,8 +83,10 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * [OVH](http://ovh.com) - [AntiDDOS](http://www.slideshare.net/hugfrance/hugfr-6-oct2014ovhantiddos)
   * [otto.de](http://otto.de)'s [trackdrd](https://github.com/otto-de/trackrdrd) - Varnish log reader
   * [Microwish](https://github.com/microwish) has a range of Kafka utilites for log aggregation, HDFS integration, etc.
-  * [aidp](https://github.com/weiboad/aidp) - kafka consumer embedded Lua scripting language in data process framework 
-  * large unnamed financial institution
+  * [aidp](https://github.com/weiboad/aidp) - kafka consumer embedded Lua scripting language in data process framework
+  * [Yandex ClickHouse](https://github.com/yandex/ClickHouse)
+  * large unnamed financial institutions
+  * and many more..
   * *Let [me](mailto:rdkafka@edenhill.se) know if you are using librdkafka*
 
 

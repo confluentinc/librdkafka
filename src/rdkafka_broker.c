@@ -2190,6 +2190,22 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 }
 
 
+
+/**
+ * @brief Serve broker ops.
+ * @returns the number of ops served
+ */
+static int rd_kafka_broker_ops_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
+        rd_kafka_op_t *rko;
+        int cnt = 0;
+
+        while ((rko = rd_kafka_q_pop(rkb->rkb_ops, timeout_ms, 0)) &&
+               (cnt++, rd_kafka_broker_op_serve(rkb, rko)))
+                timeout_ms = RD_POLL_NOWAIT;
+
+        return cnt;
+}
+
 /**
  * @brief Serve broker ops and IOs.
  *
@@ -2200,17 +2216,14 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
  */
 static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb,
                                    rd_ts_t abs_timeout) {
-        rd_kafka_op_t *rko;
         rd_ts_t now;
         int initial_state = rkb->rkb_state;
         int remains_ms = rd_timeout_remains(abs_timeout);
 
         /* Serve broker ops */
-        while ((rko = rd_kafka_q_pop(rkb->rkb_ops,
-                                     !rkb->rkb_transport ?
-                                     remains_ms : RD_POLL_NOWAIT,
-                                     0))
-               && rd_kafka_broker_op_serve(rkb, rko))
+        if (rd_kafka_broker_ops_serve(rkb,
+                                      !rkb->rkb_transport ?
+                                      remains_ms : RD_POLL_NOWAIT))
                 remains_ms = RD_POLL_NOWAIT;
 
         /* If the broker state changed in op_serve() we minimize
@@ -2222,7 +2235,8 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb,
                 if ((int)rkb->rkb_state != initial_state)
                         blocking_max_ms = 0;
                 else {
-                        int remains_ms = rd_timeout_remains(abs_timeout);
+                        if (remains_ms == RD_POLL_NOWAIT)
+                                remains_ms = rd_timeout_remains(abs_timeout);
                         if (remains_ms == RD_POLL_INFINITE ||
                             remains_ms > rkb->rkb_blocking_max_ms)
                                 remains_ms = rkb->rkb_blocking_max_ms;
@@ -3213,6 +3227,16 @@ static int rd_kafka_broker_thread_main (void *arg) {
 	}
 
 	rd_kafka_broker_fail(rkb, LOG_DEBUG, RD_KAFKA_RESP_ERR__DESTROY, NULL);
+
+        /* Disable and drain ops queue.
+         * Simply purging the ops queue risks leaving dangling references
+         * for ops such as PARTITION_JOIN/PARTITION_LEAVE where the broker
+         * reference is not maintained in the rko (but in rktp_next_leader).
+         * #1596 */
+        rd_kafka_q_disable(rkb->rkb_ops);
+        while (rd_kafka_broker_ops_serve(rkb, RD_POLL_NOWAIT))
+                ;
+
 	rd_kafka_broker_destroy(rkb);
 
 #if WITH_SSL

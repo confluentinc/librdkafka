@@ -35,6 +35,7 @@
  * Various partitioner tests
  *
  * - Issue #797 - deadlock on failed partitioning
+ * - Verify that partitioning works across partitioners.
  */
 
 int32_t my_invalid_partitioner (const rd_kafka_topic_t *rkt,
@@ -87,7 +88,200 @@ static void do_test_failed_partitioning (void) {
 	rd_kafka_destroy(rk);
 }
 
+
+static void part_dr_msg_cb (rd_kafka_t *rk,
+                            const rd_kafka_message_t *rkmessage, void *opaque) {
+        int32_t *partp = rkmessage->_private;
+        int *remainsp = opaque;
+
+        if (rkmessage->err) {
+                /* Will fail later */
+                TEST_WARN("Delivery failed: %s\n",
+                          rd_kafka_err2str(rkmessage->err));
+                *partp = -1;
+        } else {
+                *partp = rkmessage->partition;
+        }
+
+        (*remainsp)--;
+}
+
+/**
+ * @brief Test single \p partitioner
+ */
+static void do_test_partitioner (const char *topic, const char *partitioner,
+                                 int msgcnt, const char **keys,
+                                 const int32_t *exp_part) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        int i;
+        int32_t *parts;
+        int remains = msgcnt;
+        int randcnt = 0;
+        int fails = 0;
+
+        TEST_SAY(_C_MAG "Test partitioner \"%s\"\n", partitioner);
+
+        test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_set_opaque(conf, &remains);
+        rd_kafka_conf_set_dr_msg_cb(conf, part_dr_msg_cb);
+        test_conf_set(conf, "partitioner", partitioner);
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        parts = malloc(msgcnt * sizeof(*parts));
+        for (i = 0 ; i < msgcnt ; i++)
+                parts[i] = -1;
+
+        /*
+         * Produce messages
+         */
+        for (i = 0 ; i < msgcnt ; i++) {
+                rd_kafka_resp_err_t err;
+
+                err = rd_kafka_producev(rk,
+                                        RD_KAFKA_V_TOPIC(topic),
+                                        RD_KAFKA_V_KEY(keys[i],
+                                                       keys[i] ?
+                                                       strlen(keys[i]) : 0),
+                                        RD_KAFKA_V_OPAQUE(&parts[i]),
+                                        RD_KAFKA_V_END);
+                TEST_ASSERT(!err,
+                            "producev() failed: %s", rd_kafka_err2str(err));
+
+                randcnt += exp_part[i] == -1;
+        }
+
+        rd_kafka_flush(rk, tmout_multip(10000));
+
+        TEST_ASSERT(remains == 0,
+                    "Expected remains=%d, not %d for %d messages",
+                    0, remains, msgcnt);
+
+        /*
+         * Verify produced partitions to expected partitions.
+         */
+
+        /* First look for produce failures */
+        for (i = 0 ; i < msgcnt ; i++) {
+                if (parts[i] == -1) {
+                        TEST_WARN("Message #%d (exp part %"PRId32") "
+                                  "was not successfully produced\n",
+                                  i, exp_part[i]);
+                        fails++;
+                }
+        }
+
+        TEST_ASSERT(!fails, "See %d previous failure(s)", fails);
+
+
+        if (randcnt == msgcnt) {
+                /* If all expected partitions are random make sure
+                 * the produced partitions have some form of
+                 * random distribution */
+                int32_t last_part = parts[0];
+                int samecnt = 0;
+
+                for (i = 0 ; i < msgcnt ; i++) {
+                        samecnt += parts[i] == last_part;
+                        last_part = parts[i];
+                }
+
+                TEST_ASSERT(samecnt < msgcnt,
+                            "No random distribution, all on partition %"PRId32,
+                            last_part);
+        } else {
+                for (i = 0 ; i < msgcnt ; i++) {
+                        if (exp_part[i] != -1 &&
+                            parts[i] != exp_part[i]) {
+                                TEST_WARN("Message #%d expected partition "
+                                          "%"PRId32" but got %"PRId32": %s\n",
+                                          i, exp_part[i], parts[i],
+                                          keys[i]);
+                                fails++;
+                        }
+                }
+
+
+                TEST_ASSERT(!fails, "See %d previous failure(s)", fails);
+        }
+
+        free(parts);
+
+        rd_kafka_destroy(rk);
+
+        TEST_SAY(_C_GRN "Test partitioner \"%s\": PASS\n", partitioner);
+}
+
+extern uint32_t rd_crc32 (const char *, size_t);
+
+/**
+ * @brief Test all builtin partitioners
+ */
+static void do_test_partitioners (void) {
+#define _PART_CNT 17
+#define _MSG_CNT 5
+        const char *unaligned = "123456";
+        /* Message keys */
+        const char *keys[_MSG_CNT] = {
+                NULL,
+                "", // empty
+                unaligned+1,
+                "this is another string with more length to it perhaps",
+                "hejsan"
+        };
+        struct {
+                const char *partitioner;
+                /* Expected partition per message (see keys above) */
+                int32_t exp_part[_MSG_CNT];
+        } ptest[] = {
+                { "random", { -1, -1, -1, -1, -1 } },
+                { "consistent", {
+                                /* These constants were acquired using
+                                 * the 'crc32' command on OSX */
+                                0x0 % _PART_CNT,
+                                0x0 % _PART_CNT,
+                                0xb1b451d7 % _PART_CNT,
+                                0xb0150df7 % _PART_CNT,
+                                0xd077037e % _PART_CNT
+                        } },
+                { "consistent_random", {
+                                -1,
+                                -1,
+                                0xb1b451d7 % _PART_CNT,
+                                0xb0150df7 % _PART_CNT,
+                                0xd077037e % _PART_CNT
+                        } },
+                { "murmur2", {
+                                /* .. using tests/java/Murmur2Cli */
+                                0x106e08d9 % _PART_CNT,
+                                0x106e08d9 % _PART_CNT,
+                                0x858d780f % _PART_CNT,
+                                0xcf7703da % _PART_CNT,
+                                0x5ec19395 % _PART_CNT
+                        } },
+                { "murmur2_random", {
+                                -1,
+                                0x106e08d9 % _PART_CNT,
+                                0x858d780f % _PART_CNT,
+                                0xcf7703da % _PART_CNT,
+                                0x5ec19395 % _PART_CNT
+                        } },
+                { NULL }
+        };
+        int pi;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+
+        test_create_topic(topic, _PART_CNT, 1);
+
+        for (pi = 0 ; ptest[pi].partitioner ; pi++) {
+                do_test_partitioner(topic, ptest[pi].partitioner,
+                                    _MSG_CNT, keys, ptest[pi].exp_part);
+        }
+}
+
 int main_0048_partitioner (int argc, char **argv) {
+        do_test_partitioners();
 	do_test_failed_partitioning();
 	return 0;
 }

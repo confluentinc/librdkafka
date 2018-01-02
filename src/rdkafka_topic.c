@@ -260,9 +260,47 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                         * just the placeholder. The internal members
                         * were copied on the line above. */
 
-	/* Default partitioner: consistent_random */
-	if (!rkt->rkt_conf.partitioner)
-		rkt->rkt_conf.partitioner = rd_kafka_msg_partitioner_consistent_random;
+        /* Partitioner */
+        if (!rkt->rkt_conf.partitioner) {
+                const struct {
+                        const char *str;
+                        void *part;
+                } part_map[] = {
+                        { "random",
+                          (void *)rd_kafka_msg_partitioner_random },
+                        { "consistent",
+                          (void *)rd_kafka_msg_partitioner_consistent },
+                        { "consistent_random",
+                          (void *)rd_kafka_msg_partitioner_consistent_random },
+                        { "murmur2",
+                          (void *)rd_kafka_msg_partitioner_murmur2 },
+                        { "murmur2_random",
+                          (void *)rd_kafka_msg_partitioner_murmur2_random },
+                        { NULL }
+                };
+                int i;
+
+                /* Use "partitioner" configuration property string, if set */
+                for (i = 0 ; rkt->rkt_conf.partitioner_str && part_map[i].str ;
+                     i++) {
+                        if (!strcmp(rkt->rkt_conf.partitioner_str,
+                                    part_map[i].str)) {
+                                rkt->rkt_conf.partitioner = part_map[i].part;
+                                break;
+                        }
+                }
+
+                /* Default partitioner: consistent_random */
+                if (!rkt->rkt_conf.partitioner) {
+                        /* Make sure part_map matched something, otherwise
+                         * there is a discreprency between this code
+                         * and the validator in rdkafka_conf.c */
+                        assert(!rkt->rkt_conf.partitioner_str);
+
+                        rkt->rkt_conf.partitioner =
+                                rd_kafka_msg_partitioner_consistent_random;
+                }
+        }
 
 	if (rkt->rkt_conf.compression_codec == RD_KAFKA_COMPRESSION_INHERIT)
 		rkt->rkt_conf.compression_codec = rk->rk_conf.compression_codec;

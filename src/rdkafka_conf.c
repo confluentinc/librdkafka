@@ -120,6 +120,19 @@ rd_kafka_conf_validate_single (const struct rd_kafka_property *prop,
 	return !strchr(val, ',') && !strchr(val, ' ');
 }
 
+/**
+ * @brief Validate builtin partitioner string
+ */
+static RD_UNUSED int
+rd_kafka_conf_validate_partitioner (const struct rd_kafka_property *prop,
+                                    const char *val, int ival) {
+        return !strcmp(val, "random") ||
+                !strcmp(val, "consistent") ||
+                !strcmp(val, "consistent_random") ||
+                !strcmp(val, "murmur2") ||
+                !strcmp(val, "murmur2_random");
+}
+
 
 /**
  * librdkafka configuration property definitions.
@@ -788,9 +801,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "The application must be use the `dr_msg_cb` to retrieve the offset "
           "from `rd_kafka_message_t.offset`.",
           0, 1, 0 },
+        { _RK_TOPIC|_RK_PRODUCER, "partitioner", _RK_C_STR,
+          _RKT(partitioner_str),
+          "Partitioner: "
+          "`random` - random distribution, "
+          "`consistent` - CRC32 hash of key (Empty and NULL keys are mapped to single partition), "
+          "`consistent_random` - CRC32 hash of key (Empty and NULL keys are randomly partitioned), "
+          "`murmur2` - Java Producer compatible Murmur2 hash of key (NULL keys are mapped to single partition), "
+          "`murmur2_random` - Java Producer compatible Murmur2 hash of key (NULL keys are randomly partitioned. This is functionally equivalent to the default partitioner in the Java Producer.).",
+          .sdef = "consistent_random",
+          .validate = rd_kafka_conf_validate_partitioner },
 	{ _RK_TOPIC|_RK_PRODUCER, "partitioner_cb", _RK_C_PTR,
 	  _RKT(partitioner),
-	  "Partitioner callback "
+	  "Custom partitioner callback "
 	  "(set with rd_kafka_topic_conf_set_partitioner_cb())" },
 	{ _RK_TOPIC, "opaque", _RK_C_PTR,
 	  _RKT(opaque),

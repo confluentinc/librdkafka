@@ -662,7 +662,7 @@ void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                                 rd_kafka_msgq_t *srcq,
                                 int (*cmp) (const void *a, const void *b)) {
-        rd_kafka_msg_t *first, *last;
+        rd_kafka_msg_t *first;
 
         /*
          * Try to optimize insertion of source list.
@@ -675,7 +675,6 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
         }
 
         first = TAILQ_FIRST(&srcq->rkmq_msgs);
-        last  = TAILQ_LAST(&srcq->rkmq_msgs, rd_kafka_msgs_head_s);
 
         /* See if we can optimize the insertion by bulk-loading
          * the messages in place.

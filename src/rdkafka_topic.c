@@ -502,7 +502,6 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 						int32_t partition_cnt) {
 	rd_kafka_t *rk = rkt->rkt_rk;
 	shptr_rd_kafka_toppar_t **rktps;
-	shptr_rd_kafka_toppar_t *rktp_ua;
         shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
 	int32_t i;
@@ -558,8 +557,6 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 			rd_kafka_toppar_destroy(rkt->rkt_p[i]);
 		}
 	}
-
-	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA, 0);
 
         /* Propagate notexist errors for desired partitions */
         RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i) {

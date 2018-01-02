@@ -318,6 +318,7 @@ struct rd_kafka_topic_conf_s {
 				int32_t partition_cnt,
 				void *rkt_opaque,
 				void *msg_opaque);
+        char   *partitioner_str;
 
 	rd_kafka_compression_t compression_codec;
         int     produce_offset_report;

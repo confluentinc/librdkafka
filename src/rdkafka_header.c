@@ -217,4 +217,6 @@ rd_kafka_header_get_all (const rd_kafka_headers_t *hdrs, size_t idx,
 }
 
 
-
+size_t rd_kafka_header_cnt(const rd_kafka_headers_t *hdrs) {
+        return (size_t)rd_list_cnt(&hdrs->rkhdrs_list);
+}

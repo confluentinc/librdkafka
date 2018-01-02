@@ -98,14 +98,21 @@ int main_0062_stats_event (int argc, char **argv) {
             }
             TIMING_STOP(&t_delivery);
 
-            if (!strcmp(test_mode, "bare")) {
-                    /* valgrind is too slow to make this meaningful. */
-                    if (TIMING_DURATION(&t_delivery) < 1000 * 100 * 0.5 ||
-                        TIMING_DURATION(&t_delivery) > 1000 * 100 * 1.5)
+            if (TIMING_DURATION(&t_delivery) < 1000 * 100 * 0.5 ||
+                TIMING_DURATION(&t_delivery) > 1000 * 100 * 1.5) {
+                    /* CIs and valgrind are too flaky/slow to
+                     * make this failure meaningful. */
+                    if (!test_on_ci && !strcmp(test_mode, "bare")) {
                             TEST_FAIL("Stats duration %.3fms is >= 50%% "
                                       "outside statistics.interval.ms 100",
                                       (float)TIMING_DURATION(&t_delivery)/
                                       1000.0f);
+                    } else {
+                            TEST_WARN("Stats duration %.3fms is >= 50%% "
+                                      "outside statistics.interval.ms 100\n",
+                                      (float)TIMING_DURATION(&t_delivery)/
+                                      1000.0f);
+                    }
             }
     }
 

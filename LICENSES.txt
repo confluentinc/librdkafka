@@ -91,7 +91,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 LICENSE.murmur2
 --------------------------------------------------------------
-src/MurMurHash2.[ch]: git@github.com:abrandoned/murmur2.git
+parts of src/rdmurmur2.c: git@github.com:abrandoned/murmur2.git
 
 
 MurMurHash2 Library

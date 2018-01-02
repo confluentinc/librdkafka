@@ -1,6 +1,5 @@
 set(
     sources
-    MurMurHash2.c
     crc32c.c
     rdaddr.c
     rdavl.c

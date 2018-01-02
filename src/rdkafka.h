@@ -1170,6 +1170,15 @@ RD_EXPORT
 void rd_kafka_message_set_headers (rd_kafka_message_t *rkmessage,
                                    rd_kafka_headers_t *hdrs);
 
+
+/**
+ * @brief Returns the number of header key/value pairs
+ *
+ * @param hdrs   Headers to count
+ */
+RD_EXPORT size_t rd_kafka_header_cnt (const rd_kafka_headers_t *hdrs);
+
+
 /**@}*/
 
 

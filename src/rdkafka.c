@@ -2082,6 +2082,8 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
         if (!(rkcg = rd_kafka_cgrp_get(rk)))
                 return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
 
+        rd_kafka_dbg(rk, CONSUMER, "CLOSE", "Closing consumer");
+
 	/* Redirect cgrp queue to our temporary queue to make sure
 	 * all posted ops (e.g., rebalance callbacks) are served by
 	 * this function. */

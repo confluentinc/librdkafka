@@ -245,22 +245,24 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "broker metadata information as if the topics did not exist." },
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
 	  "A comma-separated list of debug contexts to enable. "
-	  "Debugging the Producer: broker,topic,msg. Consumer: cgrp,topic,fetch",
+          "Detailed Producer debugging: broker,topic,msg. "
+          "Consumer: consumer,cgrp,topic,fetch",
 	  .s2i = {
                         { RD_KAFKA_DBG_GENERIC,  "generic" },
 			{ RD_KAFKA_DBG_BROKER,   "broker" },
 			{ RD_KAFKA_DBG_TOPIC,    "topic" },
 			{ RD_KAFKA_DBG_METADATA, "metadata" },
+                        { RD_KAFKA_DBG_FEATURE,  "feature" },
 			{ RD_KAFKA_DBG_QUEUE,    "queue" },
 			{ RD_KAFKA_DBG_MSG,      "msg" },
 			{ RD_KAFKA_DBG_PROTOCOL, "protocol" },
                         { RD_KAFKA_DBG_CGRP,     "cgrp" },
 			{ RD_KAFKA_DBG_SECURITY, "security" },
 			{ RD_KAFKA_DBG_FETCH,    "fetch" },
-			{ RD_KAFKA_DBG_FEATURE,  "feature" },
                         { RD_KAFKA_DBG_INTERCEPTOR, "interceptor" },
                         { RD_KAFKA_DBG_PLUGIN,   "plugin" },
-			{ RD_KAFKA_DBG_ALL,      "all" },
+                        { RD_KAFKA_DBG_CONSUMER, "consumer" },
+			{ RD_KAFKA_DBG_ALL,      "all" }
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
 	  "Timeout for network requests.",

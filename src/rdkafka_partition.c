@@ -304,6 +304,16 @@ void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
                      rd_kafka_fetch_states[fetch_state]);
 
         rktp->rktp_fetch_state = fetch_state;
+
+        if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE)
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
+                             CONSUMER|RD_KAFKA_DBG_TOPIC,
+                             "FETCH",
+                             "Partition %.*s [%"PRId32"] start fetching "
+                             "at offset %s",
+                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                             rktp->rktp_partition,
+                             rd_kafka_offset2str(rktp->rktp_next_offset));
 }
 
 
@@ -3117,16 +3127,16 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_match (
 }
 
 void
-rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
+rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac, int dbg,
 				   const rd_kafka_topic_partition_list_t *rktparlist) {
         int i;
 
-	rd_kafka_dbg(rk, TOPIC, fac, "List with %d partition(s):",
+	rd_kafka_dbg(rk, NONE|dbg, fac, "List with %d partition(s):",
 		     rktparlist->cnt);
         for (i = 0 ; i < rktparlist->cnt ; i++) {
 		const rd_kafka_topic_partition_t *rktpar =
 			&rktparlist->elems[i];
-		rd_kafka_dbg(rk, TOPIC, fac, " %s [%"PRId32"] offset %s%s%s",
+		rd_kafka_dbg(rk, NONE|dbg, fac, " %s [%"PRId32"] offset %s%s%s",
 			     rktpar->topic, rktpar->partition,
 			     rd_kafka_offset2str(rktpar->offset),
 			     rktpar->err ? ": error: " : "",

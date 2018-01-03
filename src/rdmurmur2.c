@@ -26,9 +26,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
- #include "rd.h"
- #include "rdunittest.h"
- #include "rdmurmur2.h"
+#include "rd.h"
+#include "rdunittest.h"
+#include "rdmurmur2.h"
+#include "rdendian.h"
+
 
 /* MurmurHash2, by Austin Appleby
  *
@@ -57,7 +59,7 @@ uint32_t rd_murmur2 (const void *key, size_t len) {
                 const uint32_t *data = (const uint32_t *)key;
 
                 while (len >= 4) {
-                        uint32_t k = *(uint32_t *)data;
+                        uint32_t k = htole32(*(uint32_t *)data);
 
                         MM_MIX(h,k,m);
 

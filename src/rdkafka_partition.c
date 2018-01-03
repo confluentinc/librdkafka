@@ -3154,7 +3154,7 @@ rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktpar
 
                 if (trunc) {
                         if (dest_size > 3)
-                                rd_snprintf(&dest[dest_size-3], 3, "...");
+                                rd_snprintf(&dest[dest_size-3], 3, "..");
                         break;
                 }
 

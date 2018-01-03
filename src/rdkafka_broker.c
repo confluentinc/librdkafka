@@ -3086,8 +3086,14 @@ static int rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_t *rkb = arg;
 	rd_kafka_t *rk = rkb->rkb_rk;
 
+        /* Ignore gcc format truncation, the thread name is
+         * more limited than the broker name, which is okay as the thread
+         * name is only informational. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
         rd_snprintf(rd_kafka_thread_name, sizeof(rd_kafka_thread_name),
 		    "%s", rkb->rkb_name);
+#pragma GCC diagnostic pop
 
 	(void)rd_atomic32_add(&rd_kafka_thread_cnt_curr, 1);
 

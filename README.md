@@ -113,6 +113,10 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 **NOTE**: See [README.win32](README.win32) for instructions how to build
           on Windows with Microsoft Visual Studio.
 
+**NOTE**: See [CMake instructions](packaging/cmake/README.md) for experimental
+          CMake build (unsupported).
+
+
 ### Usage in code
 
 See [examples/rdkafka_example.c](https://github.com/edenhill/librdkafka/blob/master/examples/rdkafka_example.c) for an example producer and consumer.

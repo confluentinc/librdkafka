@@ -138,7 +138,8 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
         };
         static RD_TLS char ret[32];
 
-        if (ApiKey < 0 || ApiKey >= (int)RD_ARRAYSIZE(names)) {
+        if (ApiKey < 0 || ApiKey >= (int)RD_ARRAYSIZE(names) ||
+            !names[ApiKey]) {
                 rd_snprintf(ret, sizeof(ret), "Unknown-%hd?", ApiKey);
                 return ret;
         }

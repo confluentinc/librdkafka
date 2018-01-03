@@ -46,7 +46,7 @@ int rd_unittest (void) {
                 { "rdvarint", unittest_rdvarint },
                 { "crc32c",   unittest_crc32c },
                 { "msg",      unittest_msg },
-                { "murmurhash", unittest_murmurhashneutral2 },
+                { "murmurhash", unittest_murmur2 },
                 { NULL }
         };
         int i;

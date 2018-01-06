@@ -36,8 +36,6 @@
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"  /* for Kafka driver */
-#include "rdkafka_topic.h"
-#include "rdkafka_partition.h"
 
 
 static int msgid_next = 0;
@@ -99,7 +97,6 @@ static void test_single_partition (void) {
 
 	rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0),
                                  topic_conf);
-    int a = rkt->partition_cnt;
 	if (!rkt)
 		TEST_FAIL("Failed to create topic: %s\n",
 			  rd_strerror(errno));

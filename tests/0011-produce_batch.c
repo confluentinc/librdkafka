@@ -37,6 +37,8 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"  /* for Kafka driver */
 
+#define PARTITION_CNT 4
+
 
 static int msgid_next = 0;
 static int fails = 0;
@@ -328,8 +330,8 @@ static void test_per_message_partition_flag (void) {
                   rd_strerror(errno));
     
     /* Create messages */
-    rkpartition_counts = calloc(sizeof(int), 4);
-    dr_partition_count = calloc(sizeof(int), 4);
+    rkpartition_counts = calloc(sizeof(int), PARTITION_CNT);
+    dr_partition_count = calloc(sizeof(int), PARTITION_CNT);
     rkmessages = calloc(sizeof(*rkmessages), msgcnt);
     for (i = 0 ; i < msgcnt ; i++) {
         int *msgidp = malloc(sizeof(*msgidp));
@@ -379,7 +381,7 @@ static void test_per_message_partition_flag (void) {
     
     TEST_SAY("msg %i partition: %i", 0, rkmessages[0].partition);
     
-    for(i = 0; i < 4; i++) {
+    for(i = 0; i < PARTITION_CNT; i++) {
         if (dr_partition_count[i] != rkpartition_counts[i]) {
             TEST_FAIL("messages were not sent to designated partitions");
         }

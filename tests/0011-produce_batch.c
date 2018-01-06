@@ -189,20 +189,6 @@ static void dr_partitioner_cb (rd_kafka_t *rk, void *payload, size_t len,
         msgcounter--;
 }
 
-static void dr_per_message_partition_cb (rd_kafka_t *rk,
-                       const rd_kafka_message_t *rkmessage, void *opaque) {
-        if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
-            TEST_FAIL("Message delivery failed: %s\n",
-                      rd_kafka_err2str(rkmessage->err));
-    
-            if (msgcounter <= 0)
-                TEST_FAIL("Too many message dr_cb callback calls "
-                          "(at msg offset #%lld)\n", rkmessage->offset);
-            msgcounter--;
-    
-            dr_partition_count[rkmessage->partition]++;
-}
-
 /* Produce a batch of messages using random (default) partitioner */
 static void test_partitioner (void) {
 	int partition = RD_KAFKA_PARTITION_UA;
@@ -297,6 +283,20 @@ static void test_partitioner (void) {
 	return;
 }
 
+static void dr_per_message_partition_cb (rd_kafka_t *rk,
+                                         const rd_kafka_message_t *rkmessage, void *opaque) {
+    if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
+        TEST_FAIL("Message delivery failed: %s\n",
+                  rd_kafka_err2str(rkmessage->err));
+    
+    if (msgcounter <= 0)
+        TEST_FAIL("Too many message dr_cb callback calls "
+                  "(at msg offset #%lld)\n", rkmessage->offset);
+    msgcounter--;
+    
+    dr_partition_count[rkmessage->partition]++;
+}
+
 /* Produce a batch of messages using with per message partition flag */
 static void test_per_message_partition_flag (void) {
     int partition = 0;
@@ -372,14 +372,12 @@ static void test_per_message_partition_flag (void) {
     }
     
     free(rkmessages);
-    TEST_SAY("Partitioner: "
+    TEST_SAY("Per-message partition: "
              "Produced %i messages, waiting for deliveries\n", r);
     
     msgcounter = msgcnt;
     /* Wait for messages to be delivered */
     test_wait_delivery(rk, &msgcounter);
-    
-    TEST_SAY("msg %i partition: %i", 0, rkmessages[0].partition);
     
     for(i = 0; i < PARTITION_CNT; i++) {
         if (dr_partition_count[i] != rkpartition_counts[i]) {
@@ -389,9 +387,6 @@ static void test_per_message_partition_flag (void) {
     
     free(rkpartition_counts);
     free(dr_partition_count);
-    
-    if (fails)
-        TEST_FAIL("%i failures, see previous errors", fails);
     
     if (msgcounter != 0)
         TEST_FAIL("Still waiting for %i/%i messages\n",

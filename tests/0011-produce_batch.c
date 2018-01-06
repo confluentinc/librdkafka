@@ -379,7 +379,7 @@ static void test_per_message_partition_flag (void) {
     
     TEST_SAY("msg %i partition: %i", 0, rkmessages[0].partition);
     
-    for(int i = 0; i < 4; i++) {
+    for(i = 0; i < 4; i++) {
         if (dr_partition_count[i] != rkpartition_counts[i]) {
             TEST_FAIL("messages were not sent to designated partitions");
         }

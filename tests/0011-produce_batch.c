@@ -37,8 +37,6 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"  /* for Kafka driver */
 
-#define PARTITION_CNT 4
-
 
 static int msgid_next = 0;
 static int fails = 0;
@@ -300,6 +298,7 @@ static void dr_per_message_partition_cb (rd_kafka_t *rk,
 /* Produce a batch of messages using with per message partition flag */
 static void test_per_message_partition_flag (void) {
     int partition = 0;
+    int topic_num_partitions = 4;
     int r;
     rd_kafka_t *rk;
     rd_kafka_topic_t *rkt;
@@ -322,16 +321,18 @@ static void test_per_message_partition_flag (void) {
     
     TEST_SAY("test_per_message_partition_flag: Created kafka instance %s\n",
              rd_kafka_name(rk));
+    char *topic_name = rd_strdup(test_mk_topic_name("0011_per_message_flag", 1));
+    test_create_topic(topic_name, topic_num_partitions, 1);
     
-    rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0011", 0),
+    rkt = rd_kafka_topic_new(rk, topic_name,
                              topic_conf);
     if (!rkt)
         TEST_FAIL("Failed to create topic: %s\n",
                   rd_strerror(errno));
     
     /* Create messages */
-    rkpartition_counts = calloc(sizeof(int), PARTITION_CNT);
-    dr_partition_count = calloc(sizeof(int), PARTITION_CNT);
+    rkpartition_counts = calloc(sizeof(int), topic_num_partitions);
+    dr_partition_count = calloc(sizeof(int), topic_num_partitions);
     rkmessages = calloc(sizeof(*rkmessages), msgcnt);
     for (i = 0 ; i < msgcnt ; i++) {
         int *msgidp = malloc(sizeof(*msgidp));
@@ -379,7 +380,7 @@ static void test_per_message_partition_flag (void) {
     /* Wait for messages to be delivered */
     test_wait_delivery(rk, &msgcounter);
     
-    for(i = 0; i < PARTITION_CNT; i++) {
+    for(i = 0; i < topic_num_partitions; i++) {
         if (dr_partition_count[i] != rkpartition_counts[i]) {
             TEST_FAIL("messages were not sent to designated partitions");
         }
@@ -398,6 +399,10 @@ static void test_per_message_partition_flag (void) {
     /* Destroy rdkafka instance */
     TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
     rd_kafka_destroy(rk);
+    
+    TEST_SAY("removing topic %s", topic_name);
+    test_kafka_topics("--delete --topic %s", topic_name);
+    free(topic_name);
     
     return;
 }

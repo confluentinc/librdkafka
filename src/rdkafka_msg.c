@@ -389,15 +389,16 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 	int64_t utc_now = rd_uclock() / 1000;
         rd_ts_t now = rd_clock();
         int good = 0;
+        int multiple_partitions = (partition == RD_KAFKA_PARTITION_UA || msgflags & RD_KAFKA_MSG_F_PARTITION);
         rd_kafka_resp_err_t all_err = 0;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
         rd_kafka_toppar_t *rktp = NULL;
         shptr_rd_kafka_toppar_t *s_rktp;
 
-        /* For partitioner; hold lock for entire run,
+        /* For multiple partitions; hold lock for entire run,
          * for one partition: only acquire for now. */
         rd_kafka_topic_rdlock(rkt);
-        if (partition != RD_KAFKA_PARTITION_UA) {
+        if (!multiple_partitions) {
                 s_rktp = rd_kafka_toppar_get_avail(rkt, partition,
                                                    1/*ua on miss*/, &all_err);
                 rktp = rd_kafka_toppar_s2i(s_rktp);
@@ -415,7 +416,8 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 
                 /* Create message */
                 rkm = rd_kafka_msg_new0(rkt,
-                                        partition , msgflags,
+                                        (msgflags | RD_KAFKA_MSG_F_PARTITION) ? rkmessages[i].partition : partition,
+                                        msgflags,
                                         rkmessages[i].payload,
                                         rkmessages[i].len,
                                         rkmessages[i].key,
@@ -432,11 +434,23 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                 /* Two cases here:
                  *  partition==UA:     run the partitioner (slow)
                  *  fixed partition:   simply concatenate the queue to partit */
-                if (partition == RD_KAFKA_PARTITION_UA) {
-                        /* Partition the message */
-                        rkmessages[i].err =
-                                rd_kafka_msg_partitioner(rkt, rkm,
-                                                         0/*already locked*/);
+                if (multiple_partitions) {
+                        if (partition == RD_KAFKA_PARTITION_UA) {
+                            /* Partition the message */
+                            rkmessages[i].err =
+                            rd_kafka_msg_partitioner(rkt, rkm,
+                                                     0/*already locked*/);
+                        } else {
+                            if((i == 0) || ((i + 1 < message_cnt) && (rkmessages[i - 1].partition != rkmessages[i + 1].partition)))
+                            {
+                                    if (i != 0)
+                                            rd_kafka_toppar_destroy(s_rktp);
+                                    s_rktp = rd_kafka_toppar_get_avail(rkt, rkmessages[i].partition,
+                                                                       1/*ua on miss*/, &all_err);
+                            }
+                            rktp = rd_kafka_toppar_s2i(s_rktp);
+                            rd_kafka_toppar_enq_msg(rktp, rkm);
+                        }
 
                         if (unlikely(rkmessages[i].err)) {
                                 /* Interceptors: Unroll on_send by on_ack.. */
@@ -457,9 +471,9 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                 good++;
         }
 
-        if (partition == RD_KAFKA_PARTITION_UA)
+        if (multiple_partitions)
                 rd_kafka_topic_rdunlock(rkt);
-        else
+        if(!multiple_partitions || (msgflags & RD_KAFKA_MSG_F_PARTITION))
                 rd_kafka_toppar_destroy(s_rktp);
 
         return good;

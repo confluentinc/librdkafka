@@ -41,6 +41,7 @@
 static int msgid_next = 0;
 static int fails = 0;
 static int msgcounter = 0;
+static int *dr_partition_count = NULL;
 
 /**
  * Delivery reported callback.
@@ -280,8 +281,136 @@ static void test_partitioner (void) {
 	return;
 }
 
+static void dr_per_message_partition_cb (rd_kafka_t *rk,
+                                         const rd_kafka_message_t *rkmessage, void *opaque) {
+    if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
+        TEST_FAIL("Message delivery failed: %s\n",
+                  rd_kafka_err2str(rkmessage->err));
+    
+    if (msgcounter <= 0)
+        TEST_FAIL("Too many message dr_cb callback calls "
+                  "(at msg offset #%lld)\n", rkmessage->offset);
+    msgcounter--;
+    
+    dr_partition_count[rkmessage->partition]++;
+}
+
+/* Produce a batch of messages using with per message partition flag */
+static void test_per_message_partition_flag (void) {
+    int partition = 0;
+    int topic_num_partitions = 4;
+    int r;
+    rd_kafka_t *rk;
+    rd_kafka_topic_t *rkt;
+    rd_kafka_conf_t *conf;
+    rd_kafka_topic_conf_t *topic_conf;
+    char msg[128];
+    int msgcnt = 100000;
+    int failcnt = 0;
+    int i;
+    int *rkpartition_counts;
+    rd_kafka_message_t *rkmessages;
+    
+    test_conf_init(&conf, &topic_conf, 30);
+    
+    /* Set delivery report callback */
+    rd_kafka_conf_set_dr_msg_cb(conf, dr_per_message_partition_cb);
+    
+    /* Create kafka instance */
+    rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+    
+    TEST_SAY("test_per_message_partition_flag: Created kafka instance %s\n",
+             rd_kafka_name(rk));
+    char *topic_name = rd_strdup(test_mk_topic_name("0011_per_message_flag", 1));
+    test_create_topic(topic_name, topic_num_partitions, 1);
+    
+    rkt = rd_kafka_topic_new(rk, topic_name,
+                             topic_conf);
+    if (!rkt)
+        TEST_FAIL("Failed to create topic: %s\n",
+                  rd_strerror(errno));
+    
+    /* Create messages */
+    rkpartition_counts = calloc(sizeof(int), topic_num_partitions);
+    dr_partition_count = calloc(sizeof(int), topic_num_partitions);
+    rkmessages = calloc(sizeof(*rkmessages), msgcnt);
+    for (i = 0 ; i < msgcnt ; i++) {
+        int *msgidp = malloc(sizeof(*msgidp));
+        *msgidp = i;
+        rd_snprintf(msg, sizeof(msg), "%s:%s test message #%i",
+                    __FILE__, __FUNCTION__, i);
+        
+        rkmessages[i].payload = rd_strdup(msg);
+        rkmessages[i].len     = strlen(msg);
+        rkmessages[i]._private = msgidp;
+        rkmessages[i].partition = rand() % 3;
+        rkpartition_counts[rkmessages[i].partition]++;
+    }
+    
+    r = rd_kafka_produce_batch(rkt, partition, RD_KAFKA_MSG_F_PARTITION | RD_KAFKA_MSG_F_FREE,
+                               rkmessages, msgcnt);
+    
+    /* Scan through messages to check for errors. */
+    for (i = 0 ; i < msgcnt ; i++) {
+        if (rkmessages[i].err) {
+            failcnt++;
+            if (failcnt < 100)
+                TEST_SAY("Message #%i failed: %s\n",
+                         i,
+                         rd_kafka_err2str(rkmessages[i].err));
+        }
+    }
+    
+    /* All messages should've been produced. */
+    if (r < msgcnt) {
+        TEST_SAY("Not all messages were accepted "
+                 "by produce_batch(): %i < %i\n", r, msgcnt);
+        if (msgcnt - r != failcnt)
+            TEST_SAY("Discrepency between failed messages (%i) "
+                     "and return value %i (%i - %i)\n",
+                     failcnt, msgcnt - r, msgcnt, r);
+        TEST_FAIL("%i/%i messages failed\n", msgcnt - r, msgcnt);
+    }
+    
+    free(rkmessages);
+    TEST_SAY("Per-message partition: "
+             "Produced %i messages, waiting for deliveries\n", r);
+    
+    msgcounter = msgcnt;
+    /* Wait for messages to be delivered */
+    test_wait_delivery(rk, &msgcounter);
+    
+    for(i = 0; i < topic_num_partitions; i++) {
+        if (dr_partition_count[i] != rkpartition_counts[i]) {
+            TEST_FAIL("messages were not sent to designated partitions");
+        }
+    }
+    
+    free(rkpartition_counts);
+    free(dr_partition_count);
+    
+    if (msgcounter != 0)
+        TEST_FAIL("Still waiting for %i/%i messages\n",
+                  msgcounter, msgcnt);
+    
+    /* Destroy topic */
+    rd_kafka_topic_destroy(rkt);
+    
+    /* Destroy rdkafka instance */
+    TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
+    rd_kafka_destroy(rk);
+    
+    TEST_SAY("removing topic %s", topic_name);
+    test_kafka_topics("--delete --topic %s", topic_name);
+    free(topic_name);
+    
+    return;
+}
+
+
 int main_0011_produce_batch (int argc, char **argv) {
         test_single_partition();
         test_partitioner();
+        test_per_message_partition_flag();
 	return 0;
 }

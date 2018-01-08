@@ -123,6 +123,14 @@ typedef struct rd_kafka_msgset_reader_s {
                                          *   to this queue when parsing
                                          *   is done.
                                          *   Refcount is not increased. */
+
+        const char *msetr_srcname;      /**< Optional message source string,
+                                         *   used in debug logging to
+                                         *   indicate messages were
+                                         *   from an inner compressed
+                                         *   message set.
+                                         *   Not freed (use const memory).
+                                         *   Add trailing space. */
 } rd_kafka_msgset_reader_t;
 
 
@@ -150,6 +158,7 @@ rd_kafka_msgset_reader_init (rd_kafka_msgset_reader_t *msetr,
         msetr->msetr_rktp       = rktp;
         msetr->msetr_tver       = tver;
         msetr->msetr_rkbuf      = rkbuf;
+        msetr->msetr_srcname    = "";
 
         /* All parsed messages are put on this temporary op
          * queue first and then moved in one go to the real op queue. */
@@ -367,6 +376,8 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
                                             msetr->msetr_tver,
                                             &msetr->msetr_rkq);
 
+                inner_msetr.msetr_srcname = "compressed ";
+
                 if (MsgVersion == 1) {
                         /* postproc() will convert relative to
                          * absolute offsets */
@@ -384,6 +395,9 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
 
                 /* Parse the inner MessageSet */
                 err = rd_kafka_msgset_reader_run(&inner_msetr);
+
+                /* Transfer message count from inner to outer */
+                msetr->msetr_msgcnt += inner_msetr.msetr_msgcnt;
 
 
         } else {
@@ -1047,9 +1061,10 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
         }
 
         rd_rkb_dbg(msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
-                   "Enqueue %i message(s) (%d ops) on %s [%"PRId32"] "
+                   "Enqueue %i %smessage(s) (%d ops) on %s [%"PRId32"] "
                    "fetch queue (qlen %d, v%d, last_offset %"PRId64")",
-                   msetr->msetr_msgcnt, rd_kafka_q_len(&msetr->msetr_rkq),
+                   msetr->msetr_msgcnt, msetr->msetr_srcname,
+                   rd_kafka_q_len(&msetr->msetr_rkq),
                    rktp->rktp_rkt->rkt_topic->str,
                    rktp->rktp_partition, rd_kafka_q_len(&msetr->msetr_rkq),
                    msetr->msetr_tver->version, last_offset);
@@ -1059,11 +1074,8 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
         if (rd_kafka_q_concat(msetr->msetr_par_rkq, &msetr->msetr_rkq) != -1) {
                 /* Update partition's fetch offset based on
                  * last message's offest. */
-                if (likely(last_offset != -1)) {
+                if (likely(last_offset != -1))
                         rktp->rktp_offsets.fetch_offset = last_offset + 1;
-                        rd_atomic64_add(&rktp->rktp_c.msgs,
-                                        msetr->msetr_msgcnt);
-                }
         }
 
         rd_kafka_q_destroy_owner(&msetr->msetr_rkq);
@@ -1090,12 +1102,18 @@ rd_kafka_msgset_parse (rd_kafka_buf_t *rkbuf,
                        rd_kafka_toppar_t *rktp,
                        const struct rd_kafka_toppar_ver *tver) {
         rd_kafka_msgset_reader_t msetr;
+        rd_kafka_resp_err_t err;
 
         rd_kafka_msgset_reader_init(&msetr, rkbuf, rktp, tver,
                                     rktp->rktp_fetchq);
 
         /* Parse and handle the message set */
-        return rd_kafka_msgset_reader_run(&msetr);
+        err = rd_kafka_msgset_reader_run(&msetr);
+
+        rd_atomic64_add(&rktp->rktp_c.msgs, msetr.msetr_msgcnt);
+
+        return err;
+
 }
 
 

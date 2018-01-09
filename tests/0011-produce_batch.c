@@ -42,6 +42,7 @@ static int msgid_next = 0;
 static int fails = 0;
 static int msgcounter = 0;
 static int *dr_partition_count = NULL;
+static const int topic_num_partitions = 4;
 
 /**
  * Delivery reported callback.
@@ -283,22 +284,23 @@ static void test_partitioner (void) {
 
 static void dr_per_message_partition_cb (rd_kafka_t *rk,
                                          const rd_kafka_message_t *rkmessage, void *opaque) {
-    if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
-        TEST_FAIL("Message delivery failed: %s\n",
-                  rd_kafka_err2str(rkmessage->err));
+        if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
+            TEST_FAIL("Message delivery failed: %s\n",
+                      rd_kafka_err2str(rkmessage->err));
     
-    if (msgcounter <= 0)
-        TEST_FAIL("Too many message dr_cb callback calls "
-                  "(at msg offset #%lld)\n", rkmessage->offset);
-    msgcounter--;
+        if (msgcounter <= 0)
+            TEST_FAIL("Too many message dr_cb callback calls "
+                      "(at msg offset #%lld)\n", rkmessage->offset);
     
-    dr_partition_count[rkmessage->partition]++;
+        TEST_ASSERT(rkmessage->partition < topic_num_partitions);
+        msgcounter--;
+    
+        dr_partition_count[rkmessage->partition]++;
 }
 
 /* Produce a batch of messages using with per message partition flag */
 static void test_per_message_partition_flag (void) {
     int partition = 0;
-    int topic_num_partitions = 4;
     int r;
     rd_kafka_t *rk;
     rd_kafka_topic_t *rkt;
@@ -310,6 +312,7 @@ static void test_per_message_partition_flag (void) {
     int i;
     int *rkpartition_counts;
     rd_kafka_message_t *rkmessages;
+    const char *topic_name;
     
     test_conf_init(&conf, &topic_conf, 30);
     
@@ -321,7 +324,7 @@ static void test_per_message_partition_flag (void) {
     
     TEST_SAY("test_per_message_partition_flag: Created kafka instance %s\n",
              rd_kafka_name(rk));
-    char *topic_name = rd_strdup(test_mk_topic_name("0011_per_message_flag", 1));
+    topic_name = test_mk_topic_name("0011_per_message_flag", 1);
     test_create_topic(topic_name, topic_num_partitions, 1);
     
     rkt = rd_kafka_topic_new(rk, topic_name,
@@ -343,7 +346,7 @@ static void test_per_message_partition_flag (void) {
         rkmessages[i].payload = rd_strdup(msg);
         rkmessages[i].len     = strlen(msg);
         rkmessages[i]._private = msgidp;
-        rkmessages[i].partition = rand() % 3;
+        rkmessages[i].partition = jitter(0, topic_num_partitions - 1);
         rkpartition_counts[rkmessages[i].partition]++;
     }
     
@@ -380,7 +383,7 @@ static void test_per_message_partition_flag (void) {
     /* Wait for messages to be delivered */
     test_wait_delivery(rk, &msgcounter);
     
-    for(i = 0; i < topic_num_partitions; i++) {
+    for (i = 0; i < topic_num_partitions; i++) {
         if (dr_partition_count[i] != rkpartition_counts[i]) {
             TEST_FAIL("messages were not sent to designated partitions");
         }
@@ -401,7 +404,6 @@ static void test_per_message_partition_flag (void) {
     rd_kafka_destroy(rk);
     
     TEST_SAY("removing topic %s", topic_name);
-    test_kafka_topics("--delete --topic %s", topic_name);
     free(topic_name);
     
     return;

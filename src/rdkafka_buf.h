@@ -176,6 +176,35 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                 goto err_parse;                                         \
 	} while (0)
 
+/**
+ * @name Fail buffer reading due to buffer underflow.
+ */
+#define rd_kafka_buf_underflow_fail(rkbuf,wantedlen,...) do {           \
+                if (log_decode_errors > 0) {                            \
+                        rd_kafka_assert(NULL, rkbuf->rkbuf_rkb);        \
+                        char __tmpstr[256];                             \
+                        rd_snprintf(__tmpstr, sizeof(__tmpstr),         \
+                                    ": " __VA_ARGS__);                  \
+                        if (strlen(__tmpstr) == 2) __tmpstr[0] = '\0';  \
+                        rd_rkb_log(rkbuf->rkbuf_rkb, log_decode_errors, \
+                                   "PROTOUFLOW",                        \
+                                   "Protocol read buffer underflow "    \
+                                   "at %"PRIusz"/%"PRIusz" (%s:%i): "   \
+                                   "expected %"PRIusz" bytes > "        \
+                                   "%"PRIusz" remaining bytes (%s)%s",  \
+                                   rd_slice_offset(&rkbuf->rkbuf_reader), \
+                                   rd_slice_size(&rkbuf->rkbuf_reader), \
+                                   __FUNCTION__, __LINE__,              \
+                                   wantedlen,                           \
+                                   rd_slice_remains(&rkbuf->rkbuf_reader), \
+                                   rkbuf->rkbuf_uflow_mitigation ?      \
+                                   rkbuf->rkbuf_uflow_mitigation :      \
+                                   "incorrect broker.version.fallback?", \
+                                   __tmpstr);                           \
+                }                                                       \
+                (rkbuf)->rkbuf_err = RD_KAFKA_RESP_ERR__UNDERFLOW;      \
+                goto err_parse;                                         \
+        } while (0)
 
 
 /**
@@ -190,11 +219,7 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 #define rd_kafka_buf_check_len(rkbuf,len) do {                          \
                 size_t __len0 = (size_t)(len);                          \
                 if (unlikely(__len0 > rd_kafka_buf_read_remain(rkbuf))) { \
-                        rd_kafka_buf_parse_fail(                        \
-                                rkbuf,                                  \
-                                "expected %"PRIusz" bytes > %"PRIusz    \
-                                " remaining bytes",                     \
-                                __len0, rd_kafka_buf_read_remain(rkbuf)); \
+                        rd_kafka_buf_underflow_fail(rkbuf, __len0);     \
                 }                                                       \
         } while (0)
 
@@ -297,9 +322,8 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                 int64_t _v;                                             \
                 size_t _r = rd_varint_dec_slice(&(rkbuf)->rkbuf_reader, &_v); \
                 if (unlikely(RD_UVARINT_UNDERFLOW(_r)))                 \
-                        rd_kafka_buf_parse_fail(rkbuf,                  \
-                                                "varint parsing failed: " \
-                                                "buffer underflow");    \
+                        rd_kafka_buf_underflow_fail(rkbuf, (size_t)0,   \
+                                                    "varint parsing failed");\
                 *(dst) = _v;                                            \
         } while (0)
 
@@ -384,9 +408,8 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                 size_t _r = rd_varint_dec_slice(&(rkbuf)->rkbuf_reader, \
                                                 &_len2);                \
                 if (unlikely(RD_UVARINT_UNDERFLOW(_r)))                 \
-                        rd_kafka_buf_parse_fail(rkbuf,                  \
-                                                "varint parsing failed: " \
-                                                "buffer underflow");    \
+                        rd_kafka_buf_underflow_fail(rkbuf, (size_t)0,   \
+                                                    "varint parsing failed"); \
                 (kbytes)->len = (int32_t)_len2;                         \
                 if (RD_KAFKAP_BYTES_IS_NULL(kbytes)) {                  \
                         (kbytes)->data = NULL;                          \
@@ -501,6 +524,14 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 
                 } Metadata;
         } rkbuf_u;
+
+        const char *rkbuf_uflow_mitigation; /**< Buffer read underflow
+                                             *   human readable mitigation
+                                             *   string (const memory).
+                                             *   This is used to hint the
+                                             *   user why the underflow
+                                             *   might have occurred, which
+                                             *   depends on request type. */
 };
 
 

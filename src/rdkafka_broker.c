@@ -2491,6 +2491,11 @@ static void rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
                                            rd_kafka_toppar_t *rktp,
                                            rd_kafka_resp_err_t err) {
         int backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
+
+        /* Don't back off on reaching end of partition */
+        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF)
+                return;
+
         rktp->rktp_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
         rd_rkb_dbg(rkb, FETCH, "BACKOFF",
                    "%s [%"PRId32"]: Fetch backoff for %dms: %s",

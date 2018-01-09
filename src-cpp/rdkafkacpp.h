@@ -242,6 +242,8 @@ enum ErrorCode {
         ERR__READ_ONLY = -157,
         /** No such entry / item not found */
         ERR__NOENT = -156,
+        /** Read underflow */
+        ERR__UNDERFLOW = -155,
 
         /** End internal error codes */
 	ERR__END = -100,

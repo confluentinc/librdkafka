@@ -160,6 +160,8 @@ rd_kafka_msgset_reader_init (rd_kafka_msgset_reader_t *msetr,
         msetr->msetr_rkbuf      = rkbuf;
         msetr->msetr_srcname    = "";
 
+        rkbuf->rkbuf_uflow_mitigation = "truncated response from broker (ok)";
+
         /* All parsed messages are put on this temporary op
          * queue first and then moved in one go to the real op queue. */
         rd_kafka_q_init(&msetr->msetr_rkq, msetr->msetr_rkb->rkb_rk);
@@ -403,6 +405,9 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
         } else {
                 /* MsgVersion 2 */
                 rd_kafka_buf_t *orig_rkbuf = msetr->msetr_rkbuf;
+
+                rkbufz->rkbuf_uflow_mitigation =
+                        "truncated response from broker (ok)";
 
                 /* Temporarily replace read buffer with uncompressed buffer */
                 msetr->msetr_rkbuf = rkbufz;
@@ -816,15 +821,13 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                                      len_start);
 
         if (unlikely(payload_size > rd_kafka_buf_read_remain(rkbuf)))
-                rd_kafka_buf_parse_fail(rkbuf,
-                                        "%s [%"PRId32"] "
-                                        "MessageSet at offset %"PRId64
-                                        " payload size %"PRIusz
-                                        " > %"PRIusz" remaining bytes",
-                                        rktp->rktp_rkt->rkt_topic->str,
-                                        rktp->rktp_partition,
-                                        hdr.BaseOffset, payload_size,
-                                        rd_kafka_buf_read_remain(rkbuf));
+                rd_kafka_buf_underflow_fail(rkbuf, payload_size,
+                                            "%s [%"PRId32"] "
+                                            "MessageSet at offset %"PRId64
+                                            " payload size %"PRIusz,
+                                            rktp->rktp_rkt->rkt_topic->str,
+                                            rktp->rktp_partition,
+                                            hdr.BaseOffset, payload_size);
 
         /* If entire MessageSet contains old outdated offsets, skip it. */
         if (LastOffset < rktp->rktp_offsets.fetch_offset) {
@@ -1055,7 +1058,7 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
                 /* Ignore parse errors if there was at least one
                  * good message since it probably indicates a
                  * partial response rather than an erroneous one. */
-                if (err == RD_KAFKA_RESP_ERR__BAD_MSG &&
+                if (err == RD_KAFKA_RESP_ERR__UNDERFLOW &&
                     msetr->msetr_msgcnt > 0)
                         err = RD_KAFKA_RESP_ERR_NO_ERROR;
         }

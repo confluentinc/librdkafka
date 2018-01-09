@@ -340,6 +340,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__READ_ONLY = -157,
         /** No such entry / item not found */
         RD_KAFKA_RESP_ERR__NOENT = -156,
+        /** Read underflow */
+        RD_KAFKA_RESP_ERR__UNDERFLOW = -155,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,

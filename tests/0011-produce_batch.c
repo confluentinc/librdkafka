@@ -404,7 +404,6 @@ static void test_per_message_partition_flag (void) {
     rd_kafka_destroy(rk);
     
     TEST_SAY("removing topic %s", topic_name);
-    free(topic_name);
     
     return;
 }

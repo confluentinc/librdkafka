@@ -2683,22 +2683,21 @@ rd_kafka_position (rd_kafka_t *rk,
 /**
  * @brief Producer message flags
  */
-#define RD_KAFKA_MSG_F_FREE  0x1 /**< Delegate freeing of payload to rdkafka. */
-#define RD_KAFKA_MSG_F_COPY  0x2 /**< rdkafka will make a copy of the payload. */
-#define RD_KAFKA_MSG_F_BLOCK 0x4 /**< Block produce*() on message queue full. */
-#define RD_KAFKA_MSG_F_PARTITION 0x8 /**< produce_batch() will honor per-message partition.
-				  *   WARNING: If a delivery report callback
-				  *            is used the application MUST
-				  *            call rd_kafka_poll() (or equiv.)
-				  *            to make sure delivered messages
-				  *            are drained from the internal
-				  *            delivery report queue.
-				  *            Failure to do so will result
-				  *            in indefinately blocking on
-				  *            the produce() call when the
-				  *            message queue is full.
-				  */
-
+#define RD_KAFKA_MSG_F_FREE      0x1 /**< Delegate freeing of payload to rdkafka. */
+#define RD_KAFKA_MSG_F_COPY      0x2 /**< rdkafka will make a copy of the payload. */
+#define RD_KAFKA_MSG_F_BLOCK     0x4 /**< Block produce*() on message queue full.
+                                     *   WARNING: If a delivery report callback
+                                     *            is used the application MUST
+                                     *            call rd_kafka_poll() (or equiv.)
+                                     *            to make sure delivered messages
+                                     *            are drained from the internal
+                                     *            delivery report queue.
+                                     *            Failure to do so will result
+                                     *            in indefinately blocking on
+                                     *            the produce() call when the
+                                     *            message queue is full.
+                                     */
+#define RD_KAFKA_MSG_F_PARTITION 0x8 /**< produce_batch() will honor per-message partition. */
 
 
 /**
@@ -2731,7 +2730,7 @@ rd_kafka_position (rd_kafka_t *rk,
  *    RD_KAFKA_MSG_F_COPY - the \p payload data will be copied and the 
  *                          \p payload pointer will not be used by rdkafka
  *                          after the call returns.
- *    RD_KAFKA_MSG_F_PARTITION - rdkafka \p produce_batch() will honour \p per-message
+ *    RD_KAFKA_MSG_F_PARTITION - produce_batch() will honour per-message
  *                               partition, either set manually or by the configured
  *                               partitioner.
  *

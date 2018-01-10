@@ -418,7 +418,7 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                         (kbytes)->data = "";                            \
                 else if (!((kbytes)->data =                             \
                            rd_slice_ensure_contig(&(rkbuf)->rkbuf_reader, \
-                                                  _len2)))              \
+                                                  (size_t)_len2)))      \
                         rd_kafka_buf_check_len(rkbuf, _len2);           \
         } while (0)
 

@@ -225,7 +225,8 @@ static void expect_iter (const char *what,
 
                 TEST_ASSERT(!strcmp((const char *)value, expected[idx]),
                             "%s: get(%"PRIusz", '%s') expected '%s', not '%s'",
-                            what, idx, name, expected[idx], value);
+                            what, idx, name, expected[idx],
+                            (const char *)value);
         }
 
         TEST_ASSERT(idx == cnt,

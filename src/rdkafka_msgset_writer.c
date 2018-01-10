@@ -464,7 +464,7 @@ rd_kafka_msgset_writer_write_msg_headers (rd_kafka_msgset_writer_t *msetw,
                                    hdr->rkhdr_name, hdr->rkhdr_name_size);
                 rd_kafka_buf_write_varint(rkbuf,
                                           hdr->rkhdr_value ?
-                                          hdr->rkhdr_value_size : -1);
+                                          (int64_t)hdr->rkhdr_value_size : -1);
                 rd_kafka_buf_write(rkbuf,
                                    hdr->rkhdr_value,
                                    hdr->rkhdr_value_size);

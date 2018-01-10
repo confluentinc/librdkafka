@@ -935,7 +935,8 @@ static rd_kafka_resp_err_t rd_kafka_msg_headers_parse (rd_kafka_msg_t *rkm) {
                 else
                         rd_kafka_buf_read_ptr(rkbuf, &Value, (size_t)ValueLen);
 
-                rd_kafka_header_add(hdrs, Key, KeyLen, Value, ValueLen);
+                rd_kafka_header_add(hdrs, Key, (ssize_t)KeyLen,
+                                    Value, (ssize_t)ValueLen);
         }
 
         rkm->rkm_headers = hdrs;

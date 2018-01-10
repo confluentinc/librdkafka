@@ -1603,7 +1603,7 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	char key[128];
 	void *buf;
 	int64_t tot_bytes = 0;
-        int64_t tot_time_poll;
+        int64_t tot_time_poll = 0;
 
 	if (payload)
 		buf = (void *)payload;

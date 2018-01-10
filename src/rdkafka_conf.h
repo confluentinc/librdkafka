@@ -320,7 +320,7 @@ struct rd_kafka_topic_conf_s {
 				void *msg_opaque);
         char   *partitioner_str;
 
-        int queuing_strategy; /* 0 = fifo, 1 = lifo */
+        int queuing_strategy; /* RD_KAFKA_QUEUE_FIFO|LIFO */
         int (*msg_order_cmp) (const void *a, const void *b);
 
 	rd_kafka_compression_t compression_codec;

@@ -1792,6 +1792,13 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
  *  - < 0 if message \p a should be inserted before message \p b.
  *  - >=0 if message \p a should be inserted after message \p b.
  *
+ * @remark Insert sorting will be used to enqueue the message in the
+ *         correct queue position, this comes at a cost of O(n).
+ *
+ * @remark If `queuing.strategy=fifo` new messages are enqueued to the
+ *         tail of the queue regardless of msg_order_cmp, but retried messages
+ *         are still affected by msg_order_cmp.
+ *
  * @warning THIS IS AN EXPERIMENTAL API, SUBJECT TO CHANGE OR REMOVAL,
  *          DO NOT USE IN PRODUCTION.
  */

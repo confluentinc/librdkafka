@@ -35,6 +35,9 @@
 #include <io.h> /* for _write() */
 #endif
 
+/** @brief Queueing strategy */
+#define RD_KAFKA_QUEUE_FIFO   0
+#define RD_KAFKA_QUEUE_LIFO   1
 
 TAILQ_HEAD(rd_kafka_op_tailq, rd_kafka_op_s);
 

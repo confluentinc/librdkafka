@@ -629,8 +629,12 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 
         rd_kafka_toppar_lock(rktp);
 
+        if (!rkm->rkm_u.producer.msgseq &&
+            rktp->rktp_partition != RD_KAFKA_PARTITION_UA)
+                rkm->rkm_u.producer.msgseq = ++rktp->rktp_msgseq;
+
         if (rktp->rktp_partition == RD_KAFKA_PARTITION_UA ||
-            rktp->rktp_rkt->rkt_conf.msg_order_cmp == rd_kafka_msg_cmp_msgseq) {
+            rktp->rktp_rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO) {
                 /* No need for enq_sorted(), this is the oldest message. */
                 queue_len = rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
         } else {
@@ -672,19 +676,26 @@ void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                                 rd_kafka_msgq_t *srcq,
                                 int (*cmp) (const void *a, const void *b)) {
-        rd_kafka_msg_t *first;
+        rd_kafka_msg_t *first, *part_first;
+
+        first = TAILQ_FIRST(&srcq->rkmq_msgs);
+        if (unlikely(!first)) {
+                /* srcq is empty */
+                return;
+        }
+
+        part_first = TAILQ_FIRST(&destq->rkmq_msgs);
 
         /*
          * Try to optimize insertion of source list.
          */
-        if (unlikely(RD_KAFKA_MSGQ_EMPTY(destq))) {
+
+        if (unlikely(!part_first)) {
                 /* Dest queue is empty, simply move the srcq. */
                 rd_kafka_msgq_move(destq, srcq);
 
                 return;
         }
-
-        first = TAILQ_FIRST(&srcq->rkmq_msgs);
 
         /* See if we can optimize the insertion by bulk-loading
          * the messages in place.
@@ -693,9 +704,6 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
          *  - srcq is sorted
          *  - there is no overlap between the two.
          */
-        rd_kafka_msg_t *part_first;
-
-        part_first = TAILQ_FIRST(&destq->rkmq_msgs);
 
         if (cmp(first, part_first) < 0) {
                 /* Prepend src to dest queue.

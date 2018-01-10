@@ -302,7 +302,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                 }
         }
 
-        if (rkt->rkt_conf.queuing_strategy == 0)
+        if (rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO)
                 rkt->rkt_conf.msg_order_cmp = rd_kafka_msg_cmp_msgseq;
         else
                 rkt->rkt_conf.msg_order_cmp = rd_kafka_msg_cmp_msgseq_lifo;

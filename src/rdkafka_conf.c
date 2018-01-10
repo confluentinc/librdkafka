@@ -810,8 +810,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "while LIFO prioritizes new messages.",
           .vdef = 0,
           .s2i = {
-                        { 0, "fifo" },
-                        { 1, "lifo" }
+                        { RD_KAFKA_QUEUE_FIFO, "fifo" },
+                        { RD_KAFKA_QUEUE_LIFO, "lifo" }
                 }
         },
         { _RK_TOPIC|_RK_PRODUCER, "produce.offset.report", _RK_C_BOOL,

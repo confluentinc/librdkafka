@@ -754,7 +754,7 @@ static rd_kafka_resp_err_t do_produce (rd_kafka_t *rk,
 
         } else {
                 if (rd_kafka_produce(rkt, partition, msgflags, payload, size,
-                                     key, key_size, NULL) == 1)
+                                     key, key_size, NULL) == -1)
                         return rd_kafka_last_error();
         }
 

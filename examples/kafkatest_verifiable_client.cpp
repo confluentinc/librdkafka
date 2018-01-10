@@ -567,13 +567,45 @@ class ExampleRebalanceCb : public RdKafka::RebalanceCb {
 
 
 
-
-static void read_conf_file (const std::string &conf_file) {
+/**
+ * @brief Read (Java client) configuration file
+ */
+static void read_conf_file (RdKafka::Conf *conf, const std::string &conf_file) {
   std::ifstream inf(conf_file.c_str());
 
+  if (!inf) {
+    std::cerr << now() << ": " << conf_file << ": could not open file" << std::endl;
+    exit(1);
+  }
+
+  std::cerr << now() << ": " << conf_file << ": read config file" << std::endl;
+
   std::string line;
+  int linenr = 0;
+
   while (std::getline(inf, line)) {
-    std::cerr << now() << ": conf_file: " << conf_file << ": " << line << std::endl;
+    linenr++;
+
+    // Ignore comments and empty lines
+    if (line[0] == '#' || line.length() == 0)
+      continue;
+
+    // Match on key=value..
+    size_t d = line.find("=");
+    if (d == 0 || d == std::string::npos) {
+      std::cerr << now() << ": " << conf_file << ":" << linenr << ": " << line << ": ignoring invalid line (expect key=value): " << ::std::endl;
+      continue;
+    }
+
+    std::string key = line.substr(0, d);
+    std::string val = line.substr(d+1);
+
+    std::string errstr;
+    if (conf->set(key, val, errstr)) {
+      std::cerr << now() << ": " << conf_file << ":" << linenr << ": " << key << "=" << val << ": " << errstr << ": ignoring error" << std::endl;
+    } else {
+      std::cerr << now() << ": " << conf_file << ":" << linenr << ": " << key << "=" << val << ": applied to configuration" << std::endl;
+    }
   }
 
   inf.close();
@@ -586,11 +618,9 @@ int main (int argc, char **argv) {
   std::string brokers = "localhost";
   std::string errstr;
   std::vector<std::string> topics;
-  std::string conf_file;
   std::string mode = "P";
   int throughput = 0;
   int32_t partition = RdKafka::Topic::PARTITION_UA;
-  bool do_conf_dump = false;
   MyHashPartitionerCb hash_partitioner;
 
   std::cerr << now() << ": librdkafka version " << RdKafka::version_str() <<
@@ -600,10 +630,9 @@ int main (int argc, char **argv) {
    * Create configuration objects
    */
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-  RdKafka::Conf *tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
 
   /* Avoid slow shutdown on error */
-  if (tconf->set("message.timeout.ms", "60000", errstr)) {
+  if (conf->set("message.timeout.ms", "60000", errstr)) {
     std::cerr << now() << ": " << errstr << std::endl;
     exit(1);
   }
@@ -617,7 +646,7 @@ int main (int argc, char **argv) {
   conf->set("log.thread.name", "true", errstr);
 
   /* correct producer offsets */
-  tconf->set("produce.offset.report", "true", errstr);
+  conf->set("produce.offset.report", "true", errstr);
 
   /* auto commit is explicitly enabled with --enable-autocommit */
   conf->set("enable.auto.commit", "false", errstr);
@@ -650,13 +679,13 @@ int main (int argc, char **argv) {
         throughput = atoi(val);
       else if (!strcmp(name, "--producer.config") ||
                !strcmp(name, "--consumer.config"))
-        read_conf_file(val);
+        read_conf_file(conf, val);
       else if (!strcmp(name, "--group-id"))
         conf->set("group.id", val, errstr);
       else if (!strcmp(name, "--session-timeout"))
         conf->set("session.timeout.ms", val, errstr);
       else if (!strcmp(name, "--reset-policy")) {
-        if (tconf->set("auto.offset.reset", val, errstr)) {
+        if (conf->set("auto.offset.reset", val, errstr)) {
           std::cerr << now() << ": " << errstr << std::endl;
           exit(1);
         }
@@ -742,31 +771,6 @@ int main (int argc, char **argv) {
   ExampleEventCb ex_event_cb;
   conf->set("event_cb", &ex_event_cb, errstr);
 
-  if (do_conf_dump) {
-    int pass;
-
-    for (pass = 0 ; pass < 2 ; pass++) {
-      std::list<std::string> *dump;
-      if (pass == 0) {
-        dump = conf->dump();
-        std::cerr << now() << ": # Global config" << std::endl;
-      } else {
-        dump = tconf->dump();
-        std::cerr << now() << ": # Topic config" << std::endl;
-      }
-
-      for (std::list<std::string>::iterator it = dump->begin();
-           it != dump->end(); ) {
-        std::cerr << *it << " = ";
-        it++;
-        std::cerr << *it << std::endl;
-        it++;
-      }
-      std::cerr << std::endl;
-    }
-    exit(0);
-  }
-
   signal(SIGINT, sigterm);
   signal(SIGTERM, sigterm);
   signal(SIGALRM,  sigwatchdog);
@@ -797,7 +801,7 @@ int main (int argc, char **argv) {
      * Create topic handle.
      */
     RdKafka::Topic *topic = RdKafka::Topic::create(producer, topics[0],
-                                                   tconf, errstr);
+                                                   NULL, errstr);
     if (!topic) {
       std::cerr << now() << ": Failed to create topic: " << errstr << std::endl;
       exit(1);
@@ -859,10 +863,7 @@ int main (int argc, char **argv) {
      * Consumer mode
      */
 
-    tconf->set("auto.offset.reset", "smallest", errstr);
-
-    /* Set default topic config */
-    conf->set("default_topic_conf", tconf, errstr);
+    conf->set("auto.offset.reset", "smallest", errstr);
 
     ExampleRebalanceCb ex_rebalance_cb;
     conf->set("rebalance_cb", &ex_rebalance_cb, errstr);

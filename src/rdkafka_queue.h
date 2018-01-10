@@ -429,7 +429,6 @@ int rd_kafka_q_reenq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
  */
 static RD_INLINE RD_UNUSED
 void rd_kafka_q_deq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
-        rd_dassert(rkq->rkq_flags & RD_KAFKA_Q_F_READY);
 	rd_dassert(rkq->rkq_qlen > 0 &&
                    rkq->rkq_qsize >= (int64_t)rko->rko_len);
 

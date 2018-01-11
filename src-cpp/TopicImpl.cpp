@@ -81,13 +81,18 @@ RdKafka::Topic *RdKafka::Topic::create (Handle *base,
   RdKafka::ConfImpl *confimpl = static_cast<RdKafka::ConfImpl *>(conf);
   rd_kafka_topic_t *rkt;
   rd_kafka_topic_conf_t *rkt_conf;
+  rd_kafka_t *rk = dynamic_cast<HandleImpl*>(base)->rk_;
 
   RdKafka::TopicImpl *topic = new RdKafka::TopicImpl();
 
-  if (!confimpl)
-    rkt_conf = rd_kafka_topic_conf_new();
-  else /* Make a copy of conf struct to allow Conf reuse. */
+  if (!confimpl) {
+    /* Reuse default topic config, but we need our own copy to
+     * set the topic opaque. */
+    rkt_conf = rd_kafka_default_topic_conf_dup(rk);
+  } else {
+    /* Make a copy of conf struct to allow Conf reuse. */
     rkt_conf = rd_kafka_topic_conf_dup(confimpl->rkt_conf_);
+  }
 
   /* Set topic opaque to the topic so that we can reach our topic object
    * from whatever callbacks get registered.
@@ -108,8 +113,7 @@ RdKafka::Topic *RdKafka::Topic::create (Handle *base,
   }
 
 
-  if (!(rkt = rd_kafka_topic_new(dynamic_cast<HandleImpl*>(base)->rk_,
-				 topic_str.c_str(), rkt_conf))) {
+  if (!(rkt = rd_kafka_topic_new(rk, topic_str.c_str(), rkt_conf))) {
     errstr = rd_kafka_err2str(rd_kafka_last_error());
     delete topic;
     rd_kafka_topic_conf_destroy(rkt_conf);

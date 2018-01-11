@@ -1673,6 +1673,12 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
 	return new;
 }
 
+rd_kafka_topic_conf_t *rd_kafka_default_topic_conf_dup (rd_kafka_t *rk) {
+        if (rk->rk_conf.topic_conf)
+                return rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
+        else
+                return rd_kafka_topic_conf_new();
+}
 
 void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
 	conf->enabled_events = events;

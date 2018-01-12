@@ -159,6 +159,7 @@
     <ClCompile Include="..\..\tests\0073-headers.c" />
     <ClCompile Include="..\..\tests\0074-producev.c" />
     <ClCompile Include="..\..\tests\0075-retry.c" />
+    <ClCompile Include="..\..\tests\0076-produce_retry.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

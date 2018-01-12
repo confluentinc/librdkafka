@@ -3190,8 +3190,10 @@ static int rd_kafka_broker_thread_main (void *arg) {
 		case RD_KAFKA_BROKER_STATE_UP:
 			if (rkb->rkb_nodeid == RD_KAFKA_NODEID_UA)
 				rd_kafka_broker_ua_idle(rkb, RD_POLL_INFINITE);
-			else if (rk->rk_type == RD_KAFKA_PRODUCER)
+			else if (rk->rk_type == RD_KAFKA_PRODUCER) {
 				rd_kafka_broker_producer_serve(rkb);
+				rkb->rkb_blocking_max_ms = rk->rk_conf.socket_blocking_max_ms;
+			}
 			else if (rk->rk_type == RD_KAFKA_CONSUMER)
 				rd_kafka_broker_consumer_serve(rkb);
 

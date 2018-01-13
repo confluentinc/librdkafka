@@ -32,6 +32,22 @@
 #include <stdarg.h>
 #include <errno.h>
 
+static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                        const char *reason) {
+        /* Ignore connectivity errors since we'll be bringing down
+         * .. connectivity.
+         * SASL auther will think a connection-down even in the auth
+         * state means the broker doesn't support SASL PLAIN. */
+        TEST_SAY("is_fatal?: %s: %s\n", rd_kafka_err2str(err), reason);
+        if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN ||
+            err == RD_KAFKA_RESP_ERR__AUTHENTICATION ||
+            err == RD_KAFKA_RESP_ERR__TIMED_OUT)
+                return 0;
+        return 1;
+}
+
+
 #if WITH_SOCKEM
 /**
  * Producer message retry testing
@@ -96,20 +112,6 @@ static int ctrl_thrd_main (void *arg) {
 }
 
 
-static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                        const char *reason) {
-        /* Ignore connectivity errors since we'll be bringing down
-         * .. connectivity.
-         * SASL auther will think a connection-down even in the auth
-         * state means the broker doesn't support SASL PLAIN. */
-        TEST_SAY("is_fatal?: %s: %s\n", rd_kafka_err2str(err), reason);
-        if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
-            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN ||
-            err == RD_KAFKA_RESP_ERR__AUTHENTICATION ||
-            err == RD_KAFKA_RESP_ERR__TIMED_OUT)
-                return 0;
-        return 1;
-}
 
 /**
  * @brief Set socket delay to kick in after \p after ms

@@ -255,8 +255,8 @@ struct test tests[] = {
         _TEST(0074_producev, TEST_F_LOCAL),
 #if WITH_SOCKEM
         _TEST(0075_retry, 0),
-        _TEST(0076_produce_retry, 0),
 #endif
+        _TEST(0076_produce_retry, 0),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

@@ -27,13 +27,12 @@
  */
 
 #include "test.h"
-
-#if WITH_SOCKEM
 #include "rdkafka.h"
 
 #include <stdarg.h>
 #include <errno.h>
 
+#if WITH_SOCKEM
 /**
  * Producer message retry testing
  */
@@ -210,15 +209,149 @@ static void do_test_produce_retries (const char *topic, int should_fail) {
         TEST_SAY(_C_GRN "Test produce retries (should_fail=%d): PASS\n",
                  should_fail);
 }
+#endif
+
+
+
+
+/**
+ * @brief Simple on_request_sent interceptor that simply disconnects
+ *        the socket when first ProduceRequest is seen.
+ *        Sub-sequent ProduceRequests will not trigger a disconnect, to allow
+ *        for retries.
+ */
+static mtx_t produce_disconnect_lock;
+static int produce_disconnects = 0;
+static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
+                                            int sockfd,
+                                            const char *brokername,
+                                            int32_t brokerid,
+                                            int16_t ApiKey,
+                                            int16_t ApiVersion,
+                                            int32_t CorrId,
+                                            size_t  size,
+                                            void *ic_opaque) {
+
+        /* Ignore if not a ProduceRequest */
+        if (ApiKey != 0)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        mtx_lock(&produce_disconnect_lock);
+        if (produce_disconnects == 0) {
+                printf(_C_CYA "%s:%d: shutting down socket %d (%s)\n" _C_CLR,
+                       __FILE__, __LINE__, sockfd, brokername);
+#ifdef _MSC_VER
+                shutdown(sockfd, SD_BOTH);
+#else
+                shutdown(sockfd, SHUT_WR);
+#endif
+                produce_disconnects = 1;
+        }
+        mtx_unlock(&produce_disconnect_lock);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
+                                            const rd_kafka_conf_t *conf,
+                                            void *ic_opaque,
+                                            char *errstr, size_t errstr_size) {
+        return rd_kafka_interceptor_add_on_request_sent(
+                rk, "disconnect_on_send",
+                on_request_sent, NULL);
+}
+
+/**
+ * @brief Test produce retries by disconnecting right after ProduceRequest
+ *        has been sent.
+ *
+ * @param should_fail If true, do negative testing which should fail.
+ */
+static void do_test_produce_retries_disconnect (const char *topic,
+                                                int should_fail) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_t *rkt;
+        uint64_t testid;
+        rd_kafka_resp_err_t err;
+        int msgcnt = 1;
+        int partition_cnt;
+
+        TEST_SAY(_C_BLU "Test produce retries by disconnect (should_fail=%d)\n",
+                 should_fail);
+
+        test_curr->is_fatal_cb = is_fatal_cb;
+
+        testid = test_id_generate();
+
+        test_conf_init(&conf, NULL, 60);
+        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+        test_conf_set(conf, "socket.timeout.ms", "10000");
+        test_conf_set(conf, "message.timeout.ms", "30000");
+        if (!should_fail)
+                test_conf_set(conf, "retries", "1");
+        else
+                test_conf_set(conf, "retries", "0");
+
+        mtx_init(&produce_disconnect_lock, mtx_plain);
+        produce_disconnects = 0;
+
+        rd_kafka_conf_interceptor_add_on_new(conf, "on_new_producer",
+                                             on_new_producer, NULL);
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rkt = test_create_producer_topic(rk, topic, NULL);
+
+        err = test_produce_sync(rk, rkt, testid, 0);
+
+        if (should_fail) {
+                if (!err)
+                        TEST_FAIL("Expected produce to fail\n");
+                else
+                        TEST_SAY("Produced message failed as expected: %s\n",
+                                 rd_kafka_err2str(err));
+        } else {
+                if (err)
+                        TEST_FAIL("Produced message failed: %s\n",
+                                  rd_kafka_err2str(err));
+                else
+                        TEST_SAY("Produced message delivered\n");
+        }
+
+        mtx_lock(&produce_disconnect_lock);
+        TEST_ASSERT(produce_disconnects == 1,
+                    "expected %d disconnects, not %d", 1, produce_disconnects);
+        mtx_unlock(&produce_disconnect_lock);
+
+
+        partition_cnt = test_get_partition_count(rk, topic);
+
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(rk);
+
+        TEST_SAY("Verifying messages with consumer\n");
+        test_consume_msgs_easy(NULL, topic, testid,
+                               partition_cnt, should_fail ? 0 : msgcnt, NULL);
+
+        TEST_SAY(_C_GRN "Test produce retries by disconnect "
+                 "(should_fail=%d): PASS\n",
+                 should_fail);
+}
+
 
 int main_0076_produce_retry (int argc, char **argv) {
         const char *topic = test_mk_topic_name("0076_produce_retry", 1);
 
+#if WITH_SOCKEM
         do_test_produce_retries(topic, 0/*good test*/);
         do_test_produce_retries(topic, 1/*fail test*/);
+#endif
+
+        do_test_produce_retries_disconnect(topic, 0/*good test*/);
+        do_test_produce_retries_disconnect(topic, 1/*fail test*/);
 
         return 0;
 }
 
 
-#endif

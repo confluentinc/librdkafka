@@ -44,6 +44,7 @@ typedef struct rd_kafka_interceptor_method_s {
                 rd_kafka_interceptor_f_on_acknowledgement_t *on_acknowledgement;
                 rd_kafka_interceptor_f_on_consume_t *on_consume;
                 rd_kafka_interceptor_f_on_commit_t  *on_commit;
+                rd_kafka_interceptor_f_on_request_sent_t *on_request_sent;
                 void *generic; /* For easy assignment */
 
         } u;
@@ -172,6 +173,7 @@ void rd_kafka_interceptors_destroy (rd_kafka_conf_t *conf) {
         rd_list_destroy(&conf->interceptors.on_acknowledgement);
         rd_list_destroy(&conf->interceptors.on_consume);
         rd_list_destroy(&conf->interceptors.on_commit);
+        rd_list_destroy(&conf->interceptors.on_request_sent);
 
         /* Interceptor config */
         rd_list_destroy(&conf->interceptors.config);
@@ -209,6 +211,9 @@ rd_kafka_interceptors_init (rd_kafka_conf_t *conf) {
                      rd_kafka_interceptor_method_destroy)
                 ->rl_flags |= RD_LIST_F_UNIQUE;
         rd_list_init(&conf->interceptors.on_commit, 0,
+                     rd_kafka_interceptor_method_destroy)
+                ->rl_flags |= RD_LIST_F_UNIQUE;
+        rd_list_init(&conf->interceptors.on_request_sent, 0,
                      rd_kafka_interceptor_method_destroy)
                 ->rl_flags |= RD_LIST_F_UNIQUE;
 
@@ -511,6 +516,39 @@ rd_kafka_interceptors_on_commit (rd_kafka_t *rk,
 }
 
 
+/**
+ * @brief Call interceptor on_request_sent methods
+ * @locality internal broker thread
+ */
+void rd_kafka_interceptors_on_request_sent (rd_kafka_t *rk,
+                                            int sockfd,
+                                            const char *brokername,
+                                            int32_t brokerid,
+                                            int16_t ApiKey,
+                                            int16_t ApiVersion,
+                                            int32_t CorrId,
+                                            size_t  size) {
+        rd_kafka_interceptor_method_t *method;
+        int i;
+
+        RD_LIST_FOREACH(method, &rk->rk_conf.interceptors.on_request_sent, i) {
+                rd_kafka_resp_err_t ic_err;
+
+                ic_err = method->u.on_request_sent(rk,
+                                                   sockfd,
+                                                   brokername,
+                                                   brokerid,
+                                                   ApiKey,
+                                                   ApiVersion,
+                                                   CorrId,
+                                                   size,
+                                                   method->ic_opaque);
+                if (unlikely(ic_err))
+                        rd_kafka_interceptor_failed(rk, method,
+                                                    "on_request_sent",
+                                                    ic_err, NULL, NULL);
+        }
+}
 
 
 /**
@@ -620,5 +658,18 @@ rd_kafka_interceptor_add_on_commit (
         return rd_kafka_interceptor_method_add(&rk->rk_conf.interceptors.
                                                on_commit,
                                                ic_name, (void *)on_commit,
+                                               ic_opaque);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_interceptor_add_on_request_sent (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_request_sent_t *on_request_sent,
+        void *ic_opaque) {
+        assert(!rk->rk_initialized);
+        return rd_kafka_interceptor_method_add(&rk->rk_conf.interceptors.
+                                               on_request_sent,
+                                               ic_name, (void *)on_request_sent,
                                                ic_opaque);
 }

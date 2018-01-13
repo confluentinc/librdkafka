@@ -1714,6 +1714,10 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
                            rd_slice_size(&rkbuf->rkbuf_reader),
                            pre_of, rkbuf->rkbuf_corrid);
 
+                /* Notify transport layer of full request sent */
+                if (likely(rkb->rkb_transport != NULL))
+                        rd_kafka_transport_request_sent(rkb, rkbuf);
+
 		/* Entire buffer sent, unlink from outbuf */
 		rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
 

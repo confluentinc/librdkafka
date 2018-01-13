@@ -38,6 +38,7 @@
 #include "rdkafka_transport.h"
 #include "rdkafka_transport_int.h"
 #include "rdkafka_broker.h"
+#include "rdkafka_interceptor.h"
 
 #include <errno.h>
 
@@ -1028,6 +1029,26 @@ rd_kafka_transport_recv (rd_kafka_transport_t *rktrans, rd_buf_t *rbuf,
 #endif
                 return rd_kafka_transport_socket_recv(rktrans, rbuf,
                                                       errstr, errstr_size);
+}
+
+
+
+/**
+ * @brief Notify transport layer of full request sent.
+ */
+void rd_kafka_transport_request_sent (rd_kafka_broker_t *rkb,
+                                      rd_kafka_buf_t *rkbuf) {
+        rd_kafka_transport_t *rktrans = rkb->rkb_transport;
+
+        /* Call on_request_sent interceptors */
+        rd_kafka_interceptors_on_request_sent(
+                rkb->rkb_rk,
+                rktrans->rktrans_s,
+                rkb->rkb_name, rkb->rkb_nodeid,
+                rkbuf->rkbuf_reqhdr.ApiKey,
+                rkbuf->rkbuf_reqhdr.ApiVersion,
+                rkbuf->rkbuf_corrid,
+                rd_slice_size(&rkbuf->rkbuf_reader));
 }
 
 

@@ -158,6 +158,7 @@ struct rd_kafka_conf_s {
                 rd_list_t on_acknowledgement; /* .. (copied) */
                 rd_list_t on_consume;         /* .. (copied) */
                 rd_list_t on_commit;          /* .. (copied) */
+                rd_list_t on_request_sent;    /* .. (copied) */
 
                 /* rd_strtup_t list */
                 rd_list_t config;             /* Configuration name=val's

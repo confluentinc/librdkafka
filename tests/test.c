@@ -1463,7 +1463,7 @@ void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 
         TEST_SAYL(4, "Delivery report: %s\n", rd_kafka_err2str(err));
 
-        if (err != test_curr->exp_dr_err)
+        if (!test_curr->produce_sync && err != test_curr->exp_dr_err)
                 TEST_FAIL("Message delivery failed: expected %s, got %s\n",
                           rd_kafka_err2str(test_curr->exp_dr_err),
                           rd_kafka_err2str(err));
@@ -1473,6 +1473,9 @@ void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 			  *remainsp);
 
 	(*remainsp)--;
+
+        if (test_curr->produce_sync)
+                test_curr->produce_sync_err = err;
 }
 
 
@@ -1733,6 +1736,14 @@ test_produce_msgs_easy (const char *topic, uint64_t testid,
         rd_kafka_destroy(rk);
 
         return testid;
+}
+
+rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+                                       uint64_t testid, int32_t partition) {
+        test_curr->produce_sync = 1;
+        test_produce_msgs(rk, rkt, testid, partition, 0, 1, NULL, 0);
+        test_curr->produce_sync = 0;
+        return test_curr->produce_sync_err;
 }
 
 
@@ -3077,6 +3088,49 @@ void test_create_topic (const char *topicname, int partition_cnt,
 			  topicname, replication_factor, partition_cnt);
 }
 
+int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
+        rd_kafka_t *use_rk;
+        rd_kafka_resp_err_t err;
+        rd_kafka_topic_t *rkt;
+
+        if (!rk)
+                use_rk = test_create_producer();
+        else
+                use_rk = rk;
+
+        rkt = rd_kafka_topic_new(rk, topicname, NULL);
+
+        do {
+                const struct rd_kafka_metadata *metadata;
+
+                err = rd_kafka_metadata(rk, 0, rkt, &metadata,
+                                        tmout_multip(15000));
+                if (err)
+                        TEST_WARN("metadata() for %s failed: %s",
+                                  rkt ? rd_kafka_topic_name(rkt) :
+                                  "(all-local)",
+                                  rd_kafka_err2str(err));
+                else {
+                        if (metadata->topic_cnt == 1) {
+                                if (metadata->topics[0].err == 0 ||
+                                    metadata->topics[0].partition_cnt > 0) {
+                                        int32_t cnt;
+                                        cnt = metadata->topics[0].partition_cnt;
+                                        rd_kafka_metadata_destroy(metadata);
+                                        return (int)cnt;
+                                }
+                                TEST_SAY("metadata(%s) returned %s: retrying\n",
+                                         rd_kafka_topic_name(rkt),
+                                         rd_kafka_err2str(metadata->
+                                                          topics[0].err));
+                        }
+                        rd_kafka_metadata_destroy(metadata);
+                        rd_sleep(1);
+                }
+        } while (1);
+
+        return -1;
+}
 
 /**
  * @brief Let the broker auto-create the topic for us.

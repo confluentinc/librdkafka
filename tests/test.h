@@ -112,6 +112,8 @@ struct test {
 	int report_size;
 
         rd_kafka_resp_err_t exp_dr_err; /* Expected error in test_dr_cb */
+        int produce_sync;    /**< test_produce_sync() call in action */
+        rd_kafka_resp_err_t produce_sync_err;  /**< DR error */
 
         /**
          * Runtime
@@ -413,6 +415,8 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                         uint64_t testid, int32_t partition,
                         int msg_base, int cnt,
 			const char *payload, size_t size);
+rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+                                       uint64_t testid, int32_t partition);
 
 rd_kafka_t *test_create_consumer (const char *group_id,
 				  void (*rebalance_cb) (
@@ -494,6 +498,8 @@ rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
                                                 rd_kafka_topic_t *rkt);
 rd_kafka_resp_err_t test_auto_create_topic (rd_kafka_t *rk, const char *name);
 int test_check_auto_create_topic (void);
+
+int test_get_partition_count (rd_kafka_t *rk, const char *topicname);
 
 int test_check_builtin (const char *feature);
 

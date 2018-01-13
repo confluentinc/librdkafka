@@ -807,7 +807,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         { _RK_TOPIC|_RK_PRODUCER, "queuing.strategy", _RK_C_S2I,
           _RKT(queuing_strategy),
           "Producer queuing strategy. FIFO preserves produce ordering, "
-          "while LIFO prioritizes new messages.",
+          "while LIFO prioritizes new messages. "
+          "WARNING: `lifo` is experimental and subject to change or removal.",
           .vdef = 0,
           .s2i = {
                         { RD_KAFKA_QUEUE_FIFO, "fifo" },

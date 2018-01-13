@@ -676,7 +676,7 @@ void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                                 rd_kafka_msgq_t *srcq,
                                 int (*cmp) (const void *a, const void *b)) {
-        rd_kafka_msg_t *first, *part_first;
+        rd_kafka_msg_t *first, *dest_first;
 
         first = TAILQ_FIRST(&srcq->rkmq_msgs);
         if (unlikely(!first)) {
@@ -684,13 +684,13 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                 return;
         }
 
-        part_first = TAILQ_FIRST(&destq->rkmq_msgs);
+        dest_first = TAILQ_FIRST(&destq->rkmq_msgs);
 
         /*
          * Try to optimize insertion of source list.
          */
 
-        if (unlikely(!part_first)) {
+        if (unlikely(!dest_first)) {
                 /* Dest queue is empty, simply move the srcq. */
                 rd_kafka_msgq_move(destq, srcq);
 
@@ -705,7 +705,7 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
          *  - there is no overlap between the two.
          */
 
-        if (cmp(first, part_first) < 0) {
+        if (cmp(first, dest_first) < 0) {
                 /* Prepend src to dest queue.
                  * First append existing dest queue to src queue,
                  * then move src queue to now-empty dest queue,
@@ -716,11 +716,11 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
         } else if (cmp(first,
                        TAILQ_LAST(&destq->rkmq_msgs,
                                   rd_kafka_msgs_head_s)) > 0) {
-                /* Append input to dest queue */
+                /* Append src to dest queue */
                 rd_kafka_msgq_concat(destq, srcq);
 
         } else {
-                /* Input queue messages reside somewhere
+                /* Source queue messages reside somewhere
                  * in the dest queue range, find the insert position. */
                 rd_kafka_msg_t *at;
 

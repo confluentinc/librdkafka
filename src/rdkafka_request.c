@@ -1847,12 +1847,12 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                                 /* Request metadata information update.
                                  * These errors imply that we have stale
-                                 * information and that the message was
+                                 * information and the request was
                                  * either rejected or not sent -
                                  * we don't need to increment the retry count
                                  * when we perform a retry since:
                                  *   - it is a temporary error (hopefully)
-                                 *   - there is no change of duplicate delivery
+                                 *   - there is no chance of duplicate delivery
                                  */
                                 rd_kafka_toppar_leader_unavailable(
                                         rktp, "produce", err);
@@ -1865,7 +1865,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                                         incr_retry = 0;
                         }
 
-                        /* If message timed in queue, not in transit,
+                        /* If message timed out in queue, not in transit,
                          * we will retry at a later time but not increment
                          * the retry count since there is no risk
                          * of duplicates. */

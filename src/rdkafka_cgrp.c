@@ -1801,12 +1801,10 @@ rd_kafka_cgrp_handle_OffsetCommit (rd_kafka_cgrp_t *rkcg,
 		}
 	}
 
-        if (rd_kafka_cgrp_try_terminate(rkcg))
-                return errcnt; /* terminated */
-
         if (rkcg->rkcg_join_state == RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN)
-		rd_kafka_cgrp_check_unassign_done(rkcg,
-                                                  "OffsetCommit done");
+                rd_kafka_cgrp_check_unassign_done(rkcg, "OffsetCommit done");
+
+        rd_kafka_cgrp_try_terminate(rkcg);
 
         return errcnt;
 }

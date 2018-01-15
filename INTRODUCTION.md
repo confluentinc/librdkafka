@@ -43,10 +43,13 @@ property interface.
 
 The two most important configuration properties for performance tuning are:
 
-  * batch.num.messages - the minimum number of messages to wait for to
+  * `batch.num.messages` - the minimum number of messages to wait for to
 	  accumulate in the local queue before sending off a message set.
-  * queue.buffering.max.ms - how long to wait for batch.num.messages to
-	  fill up in the local queue.
+  * `queue.buffering.max.ms` - how long to wait for batch.num.messages to
+	  fill up in the local queue. A lower value improves latency at the
+          cost of lower throughput and higher per-message overhead.
+          A higher value improves throughput at the expense of latency.
+          The recommended value for high throughput is > 50ms.
 
 
 ### Performance numbers
@@ -98,10 +101,42 @@ of messages to accumulate in the local queue before sending them off in
 one large message set or batch to the peer. This amortizes the messaging
 overhead and eliminates the adverse effect of the round trip time (rtt).
 
-The default settings, batch.num.messages=10000 and queue.buffering.max.ms=1000,
-are suitable for high throughput. This allows librdkafka to wait up to
-1000 ms for up to 10000 messages to accumulate in the local queue before
-sending the accumulate messages to the broker.
+`queue.buffering.max.ms` (also called `linger.ms`) allows librdkafka to
+wait up to the specified amount of time to accumulate up to
+`batch.num.messages` in a single batch (MessageSet) before sending
+to the broker. The larger the batch the higher the throughput.
+Enabling `msg` debugging (set `debug` property to `msg`) will emit log
+messages for the accumulation process which lets you see what batch sizes
+are being produced.
+
+Example using `queue.buffering.max.ms=1`:
+
+```
+... test [0]: MessageSet with 1514 message(s) delivered
+... test [3]: MessageSet with 1690 message(s) delivered
+... test [0]: MessageSet with 1720 message(s) delivered
+... test [3]: MessageSet with 2 message(s) delivered
+... test [3]: MessageSet with 4 message(s) delivered
+... test [0]: MessageSet with 4 message(s) delivered
+... test [3]: MessageSet with 11 message(s) delivered
+```
+
+Example using `queue.buffering.max.ms=1000`:
+```
+... test [0]: MessageSet with 10000 message(s) delivered
+... test [0]: MessageSet with 10000 message(s) delivered
+... test [0]: MessageSet with 4667 message(s) delivered
+... test [3]: MessageSet with 10000 message(s) delivered
+... test [3]: MessageSet with 10000 message(s) delivered
+... test [3]: MessageSet with 4476 message(s) delivered
+
+```
+
+
+The default setting of `queue.buffering.max.ms=1` is not suitable for
+high throughput, it is recommended to set this value to >50ms, with
+throughput leveling out somewhere around 100-1000ms depending on
+message produce pattern and sizes.
 
 These setting are set globally (`rd_kafka_conf_t`) but applies on a
 per topic+partition basis.
@@ -109,22 +144,24 @@ per topic+partition basis.
 
 ### Low latency
 
-When low latency messaging is required the "queue.buffering.max.ms" should be
+When low latency messaging is required the `queue.buffering.max.ms` should be
 tuned to the maximum permitted producer-side latency.
 Setting queue.buffering.max.ms to 1 will make sure messages are sent as
 soon as possible. You could check out [How to decrease message latency](https://github.com/edenhill/librdkafka/wiki/How-to-decrease-message-latency)
 to find more details.
+Lower buffering time leads to smaller batches and larger per-message overheads,
+increasing network, memory and CPU usage for producers, brokers and consumers.
 
 
 ### Compression
 
-Producer message compression is enabled through the "compression.codec"
+Producer message compression is enabled through the `compression.codec`
 configuration property.
 
 Compression is performed on the batch of messages in the local queue, the
 larger the batch the higher likelyhood of a higher compression ratio.
-The local batch queue size is controlled through the "batch.num.messages" and
-"queue.buffering.max.ms" configuration properties as described in the
+The local batch queue size is controlled through the `batch.num.messages` and
+`queue.buffering.max.ms` configuration properties as described in the
 **High throughput** chapter above.
 
 
@@ -133,21 +170,22 @@ The local batch queue size is controlled through the "batch.num.messages" and
 
 Message reliability is an important factor of librdkafka - an application
 can rely fully on librdkafka to deliver a message according to the specified
-configuration ("request.required.acks" and "message.send.max.retries", etc).
+configuration (`request.required.acks` and `message.send.max.retries`, etc).
 
-If the topic configuration property "request.required.acks" is set to wait
+If the topic configuration property `request.required.acks` is set to wait
 for message commit acknowledgements from brokers (any value but 0, see
 [`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
 for specifics) then librdkafka will hold on to the message until
 all expected acks have been received, gracefully handling the following events:
-     
+
   * Broker connection failure
   * Topic leader change
   * Produce errors signaled by the broker
+  * Network problems
 
 This is handled automatically by librdkafka and the application does not need
 to take any action at any of the above events.
-The message will be resent up to "message.send.max.retries" times before
+The message will be resent up to `message.send.max.retries` times before
 reporting a failure back to the application.
 
 The delivery report callback is used by librdkafka to signal the status of
@@ -160,9 +198,139 @@ to report the status of message delivery:
 
 See Producer API chapter for more details on delivery report callback usage.
 
-The delivery report callback is optional.
+The delivery report callback is optional but highly recommended.
 
 
+### Producer message delivery success
+
+When a ProduceRequest is successfully handled by the broker and a
+ProduceResponse is received (also called the ack) without an error code
+the messages from the ProduceRequest are enqueued on the delivery report
+queue (if a delivery report callback has been set) and will be passed to
+the application on the next invocation rd_kafka_poll().
+
+
+### Producer message delivery failure
+
+The following sub-chapters explains how different produce errors
+are handled.
+
+If the error is retryable and there are remaining retry attempts for
+the given message(s), an automatic retry will be scheduled by librdkafka,
+these retries are not visible to the application.
+
+Only permanent errors and temporary errors that have reached their maximum
+retry count will generate a delivery report event to the application with an
+error code set.
+
+The application should typically not attempt to retry producing the message
+on failure, but instead configure librdkafka to perform these retries
+using the `retries` and `retry.backoff.ms` configuration properties.
+
+
+#### Error: Timed out in transmission queue
+
+Internal error ERR__TIMED_OUT_QUEUE.
+
+The connectivity to the broker may be stalled due to networking contention,
+local or remote system issues, etc, and the request has not yet been sent.
+
+The producer can be certain that the message has not been sent to the broker.
+
+This is a retryable error, but is not counted as a retry attempt
+since the message was never actually transmitted.
+
+A retry by librdkafka at this point will not cause duplicate messages.
+
+
+#### Error: Timed out in flight to/from broker
+
+Internal error ERR__TIMED_OUT, ERR__TRANSPORT.
+
+Same reasons as for `Timed out in transmission queue` above, with the
+difference that the message may have been sent to the broker and might
+be stalling waiting for broker replicas to ack the message, or the response
+could be stalled due to networking issues.
+At this point the producer can't know if the message reached the broker,
+nor if the broker wrote the message to disk and replicas.
+
+This is a retryable error.
+
+A retry by librdkafka at this point may cause duplicate messages.
+
+
+#### Error: Temporary broker-side error
+
+Broker errors ERR_REQUEST_TIMED_OUT, ERR_NOT_ENOUGH_REPLICAS,
+ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND.
+
+These errors are considered temporary and librdkafka is will retry them
+if permitted by configuration.
+
+
+#### Error: Temporary errors due to stale metadata
+
+Broker errors ERR_LEADER_NOT_AVAILABLE, ERR_NOT_LEADER_FOR_PARTITION.
+
+These errors are considered temporary and a retry is warranted, a metadata
+request is automatically sent to find a new leader for the partition.
+
+A retry by librdkafka at this point will not cause duplicate messages.
+
+
+#### Error: Local time out
+
+Internal error ERR__MSG_TIMED_OUT.
+
+The message could not be successfully transmitted before `message.timeout.ms`
+expired, typically due to no leader being available or no broker connection.
+The message may have been retried due to other errors but
+those error messages are abstracted by the ERR__MSG_TIMED_OUT error code.
+
+Since the `message.timeout.ms` has passed there will be no more retries
+by librdkafka.
+
+
+#### Error: Permanent errors
+
+Any other error is considered a permanent error and the message
+will fail immediately, generating a delivery report event with the
+distinctive error code.
+
+The full list of permanent errors depend on the broker version and
+will likely grow in the future.
+
+Typical permanent broker errors are:
+ * ERR_CORRUPT_MESSAGE
+ * ERR_MSG_SIZE_TOO_LARGE  - adjust client's or broker's `message.max.bytes`.
+ * ERR_UNKNOWN_TOPIC_OR_PART - topic or partition does not exist,
+                               automatic topic creation is disabled on the
+                               broker or the application is specifying a
+                               partition that does not exist.
+ * ERR_RECORD_LIST_TOO_LARGE
+ * ERR_INVALID_REQUIRED_ACKS
+ * ERR_TOPIC_AUTHORIZATION_FAILED
+ * ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT
+ * ERR_CLUSTER_AUTHORIZATION_FAILED
+
+
+### Producer retries
+
+The ProduceRequest itself is not retried, instead the messages
+are put back on the internal partition queue by an insert sort
+that maintains their original position (the message order is defined
+at the time a message is initially appended to a partition queue, i.e., after
+partitioning).
+A backoff time (`retry.backoff.ms`) is set on the retried messages which
+effectively blocks retry attempts until the backoff time has expired.
+
+
+### Reordering
+
+As for all retries, if `max.in.flight` > 1 and `retries` > 0, retried messages
+may be produced out of order, since a sub-sequent message in a sub-sequent
+ProduceRequest may already be in-flight (and accepted by the broker)
+by the time the retry for the failing message is sent.
 
 
 
@@ -173,7 +341,7 @@ The delivery report callback is optional.
 
 The librdkafka API is documented in the
 [`rdkafka.h`](https://github.com/edenhill/librdkafka/blob/master/src/rdkafka.h)
-header file, the configuration properties are documented in 
+header file, the configuration properties are documented in
 [`CONFIGURATION.md`](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
 
 ### Initialization
@@ -268,11 +436,11 @@ Optional callbacks not triggered by poll, these may be called from any thread:
 librdkafka only needs an initial list of brokers (at least one), called the
 bootstrap brokers.
 It will connect to all the bootstrap brokers, specified by the
-"metadata.broker.list" configuration property or by `rd_kafka_brokers_add()`,
+`metadata.broker.list` configuration property or by `rd_kafka_brokers_add()`,
 and query each one for Metadata information which contains the full list of
 brokers, topic, partitions and their leaders in the Kafka cluster.
 
-Broker names are specified as "host[:port]" where the port is optional 
+Broker names are specified as `host[:port]` where the port is optional 
 (default 9092) and the host is either a resolvable hostname or an IPv4 or IPv6
 address.
 If host resolves to multiple addresses librdkafka will round-robin the
@@ -338,9 +506,10 @@ The `rd_kafka_produce()` function takes the following arguments:
 
 `rd_kafka_produce()` is a non-blocking API, it will enqueue the message
 on an internal queue and return immediately.
-If the number of queued messages would exceed the "queue.buffering.max.messages"
+If the number of queued messages would exceed the `queue.buffering.max.messages`
 configuration property then `rd_kafka_produce()` returns -1 and sets errno
-to `ENOBUFS`, thus providing a backpressure mechanism.
+to `ENOBUFS` and last_error to `RD_KAFKA_RESP_ERR__QUEUE_FULL`, thus
+providing a backpressure mechanism.
 
 
 **Note**: See `examples/rdkafka_performance.c` for a producer implementation.
@@ -369,7 +538,7 @@ for a given partition by calling `rd_kafka_consume_start()`.
 	     `RD_KAFKA_OFFSET_STORED` to use the offset store.
 
 After a topic+partition consumer has been started librdkafka will attempt
-to keep "queued.min.messages" messages in the local queue by repeatedly
+to keep `queued.min.messages` messages in the local queue by repeatedly
 fetching batches of messages from the broker.
 
 This local message queue is then served to the application through three
@@ -446,7 +615,7 @@ see KafkaConsumer in rdkafka.h or rdkafkacpp.h
 #### Topic auto creation
 
 Topic auto creation is supported by librdkafka.
-The broker needs to be configured with "auto.create.topics.enable=true".
+The broker needs to be configured with `auto.create.topics.enable=true`.
 
 
 

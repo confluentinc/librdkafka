@@ -302,6 +302,11 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                 }
         }
 
+        if (rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO)
+                rkt->rkt_conf.msg_order_cmp = rd_kafka_msg_cmp_msgseq;
+        else
+                rkt->rkt_conf.msg_order_cmp = rd_kafka_msg_cmp_msgseq_lifo;
+
 	if (rkt->rkt_conf.compression_codec == RD_KAFKA_COMPRESSION_INHERIT)
 		rkt->rkt_conf.compression_codec = rk->rk_conf.compression_codec;
 
@@ -497,10 +502,8 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 						int32_t partition_cnt) {
 	rd_kafka_t *rk = rkt->rkt_rk;
 	shptr_rd_kafka_toppar_t **rktps;
-	shptr_rd_kafka_toppar_t *rktp_ua;
         shptr_rd_kafka_toppar_t *s_rktp;
 	rd_kafka_toppar_t *rktp;
-	rd_kafka_msgq_t tmpq = RD_KAFKA_MSGQ_INITIALIZER(tmpq);
 	int32_t i;
 
 	if (likely(rkt->rkt_partition_cnt == partition_cnt))
@@ -555,8 +558,6 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 		}
 	}
 
-	rktp_ua = rd_kafka_toppar_get(rkt, RD_KAFKA_PARTITION_UA, 0);
-
         /* Propagate notexist errors for desired partitions */
         RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i) {
                 rd_kafka_dbg(rkt->rkt_rk, TOPIC, "DESIRED",
@@ -610,42 +611,6 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 		rd_kafka_toppar_unlock(rktp);
 
 		rd_kafka_toppar_destroy(s_rktp);
-	}
-
-	if (likely(rktp_ua != NULL)) {
-		/* Move messages from removed partitions to UA for
-		 * further processing. */
-		rktp = rd_kafka_toppar_s2i(rktp_ua);
-
-		// FIXME: tmpq not used
-		if (rd_kafka_msgq_len(&tmpq) > 0) {
-			rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPPARMOVE",
-				     "Moving %d messages (%zd bytes) from "
-				     "%d removed partitions to UA partition",
-				     rd_kafka_msgq_len(&tmpq),
-				     rd_kafka_msgq_size(&tmpq),
-				     i - partition_cnt);
-
-
-			rd_kafka_toppar_lock(rktp);
-			rd_kafka_msgq_concat(&rktp->rktp_msgq, &tmpq);
-			rd_kafka_toppar_unlock(rktp);
-		}
-
-		rd_kafka_toppar_destroy(rktp_ua); /* .._get() above */
-	} else {
-		/* No UA, fail messages from removed partitions. */
-		if (rd_kafka_msgq_len(&tmpq) > 0) {
-			rd_kafka_dbg(rkt->rkt_rk, TOPIC, "TOPPARMOVE",
-				     "Failing %d messages (%zd bytes) from "
-				     "%d removed partitions",
-				     rd_kafka_msgq_len(&tmpq),
-				     rd_kafka_msgq_size(&tmpq),
-				     i - partition_cnt);
-
-			rd_kafka_dr_msgq(rkt, &tmpq,
-					 RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
-		}
 	}
 
 	if (rkt->rkt_p)

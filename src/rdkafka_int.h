@@ -78,6 +78,7 @@ struct rd_kafka_s;
 struct rd_kafka_itopic_s;
 struct rd_kafka_msg_s;
 struct rd_kafka_broker_s;
+struct rd_kafka_toppar_s;
 
 typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_toppar_s) shptr_rd_kafka_toppar_t;
 typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;

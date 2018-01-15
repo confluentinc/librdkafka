@@ -622,6 +622,7 @@ int main (int argc, char **argv) {
   int throughput = 0;
   int32_t partition = RdKafka::Topic::PARTITION_UA;
   MyHashPartitionerCb hash_partitioner;
+  int64_t create_time = -1;
 
   std::cerr << now() << ": librdkafka version " << RdKafka::version_str() <<
     " (" << RdKafka::version() << ")" << std::endl;
@@ -630,6 +631,12 @@ int main (int argc, char **argv) {
    * Create configuration objects
    */
   RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+
+  /* Java VerifiableProducer defaults to acks=all */
+  if (conf->set("acks", "all", errstr)) {
+    std::cerr << now() << ": " << errstr << std::endl;
+    exit(1);
+  }
 
   /* Avoid slow shutdown on error */
   if (conf->set("message.timeout.ms", "60000", errstr)) {
@@ -715,6 +722,13 @@ int main (int argc, char **argv) {
         }
       } else if (!strcmp(name, "--value-prefix")) {
         value_prefix = std::string(val) + ".";
+      } else if (!strcmp(name, "--acks")) {
+       if (conf->set("acks", val, errstr)) {
+         std::cerr << now() << ": " << errstr << std::endl;
+         exit(1);
+       }
+      } else if (!strcmp(name, "--message-create-time")) {
+       create_time = (int64_t)atoi(val);
       } else if (!strcmp(name, "--debug")) {
         conf->set("debug", val, errstr);
       } else if (!strcmp(name, "-X")) {
@@ -819,11 +833,22 @@ int main (int argc, char **argv) {
       std::ostringstream msg;
       msg << value_prefix << i;
       while (true) {
-        RdKafka::ErrorCode resp =
-            producer->produce(topic, partition,
-                              RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
-                              const_cast<char *>(msg.str().c_str()),
-                              msg.str().size(), NULL, NULL);
+        RdKafka::ErrorCode resp;
+       if (create_time == -1) {
+         resp = producer->produce(topic, partition,
+                                  RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
+                                  const_cast<char *>(msg.str().c_str()),
+                                  msg.str().size(), NULL, NULL);
+       } else {
+         resp = producer->produce(topics[0], partition,
+                                  RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
+                                  const_cast<char *>(msg.str().c_str()),
+                                  msg.str().size(),
+                                  NULL, 0,
+                                  create_time,
+                                  NULL);
+       }
+
         if (resp == RdKafka::ERR__QUEUE_FULL) {
           producer->poll(100);
           continue;

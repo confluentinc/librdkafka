@@ -265,7 +265,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ RD_KAFKA_DBG_ALL,      "all" }
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
-	  "Timeout for network requests.",
+	  "Default timeout for network requests. "
+          "Producer: ProduceRequests will use the lesser value of "
+          "socket.timeout.ms and remaining message.timeout.ms for the "
+          "first message in the batch. "
+          "Consumer: FetchRequests will use "
+          "fetch.wait.max.ms + socket.timeout.ms. ",
 	  10, 300*1000, 60*1000 },
 	{ _RK_GLOBAL, "socket.blocking.max.ms", _RK_C_INT,
 	  _RK(socket_blocking_max_ms),
@@ -294,7 +299,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Disconnect from broker when this number of send failures "
           "(e.g., timed out requests) is reached. Disable with 0. "
           "NOTE: The connection is automatically re-established.",
-          0, 1000000, 3 },
+          0, 1000000, 1 },
 	{ _RK_GLOBAL, "broker.address.ttl", _RK_C_INT,
 	  _RK(broker_addr_ttl),
 	  "How long to cache the broker address resolving "
@@ -726,7 +731,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                 .sdef = "message.send.max.retries" },
 	{ _RK_GLOBAL|_RK_PRODUCER, "retry.backoff.ms", _RK_C_INT,
 	  _RK(retry_backoff_ms),
-	  "The backoff time in milliseconds before retrying a message send.",
+	  "The backoff time in milliseconds before retrying a protocol request.",
 	  1, 300*1000, 100 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),
@@ -799,6 +804,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "produced message waits for successful delivery. "
           "A time of 0 is infinite.",
 	  0, 900*1000, 300*1000 },
+        { _RK_TOPIC|_RK_PRODUCER, "queuing.strategy", _RK_C_S2I,
+          _RKT(queuing_strategy),
+          "Producer queuing strategy. FIFO preserves produce ordering, "
+          "while LIFO prioritizes new messages. "
+          "WARNING: `lifo` is experimental and subject to change or removal.",
+          .vdef = 0,
+          .s2i = {
+                        { RD_KAFKA_QUEUE_FIFO, "fifo" },
+                        { RD_KAFKA_QUEUE_LIFO, "lifo" }
+                }
+        },
         { _RK_TOPIC|_RK_PRODUCER, "produce.offset.report", _RK_C_BOOL,
           _RKT(produce_offset_report),
           "Report offset of produced message back to application. "
@@ -819,6 +835,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(partitioner),
 	  "Custom partitioner callback "
 	  "(set with rd_kafka_topic_conf_set_partitioner_cb())" },
+	{ _RK_TOPIC|_RK_PRODUCER, "msg_order_cmp", _RK_C_PTR,
+	  _RKT(msg_order_cmp),
+	  "Message queue ordering comparator "
+	  "(set with rd_kafka_topic_conf_set_msg_order_cmp()). "
+          "Also see `queuing.strategy`." },
 	{ _RK_TOPIC, "opaque", _RK_C_PTR,
 	  _RKT(opaque),
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
@@ -1653,6 +1674,12 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
 	return new;
 }
 
+rd_kafka_topic_conf_t *rd_kafka_default_topic_conf_dup (rd_kafka_t *rk) {
+        if (rk->rk_conf.topic_conf)
+                return rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
+        else
+                return rd_kafka_topic_conf_new();
+}
 
 void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
 	conf->enabled_events = events;
@@ -1797,6 +1824,15 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
 						void *rkt_opaque,
 						void *msg_opaque)) {
 	topic_conf->partitioner = partitioner;
+}
+
+void
+rd_kafka_topic_conf_set_msg_order_cmp (rd_kafka_topic_conf_t *topic_conf,
+                                       int (*msg_order_cmp) (
+                                               const rd_kafka_message_t *a,
+                                               const rd_kafka_message_t *b)) {
+        topic_conf->msg_order_cmp =
+                (int (*)(const void *, const void *))msg_order_cmp;
 }
 
 void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *topic_conf,

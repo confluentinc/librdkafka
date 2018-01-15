@@ -59,6 +59,15 @@ rd_kafka_interceptors_on_commit (rd_kafka_t *rk,
                                  const rd_kafka_topic_partition_list_t *offsets,
                                  rd_kafka_resp_err_t err);
 
+void rd_kafka_interceptors_on_request_sent (rd_kafka_t *rk,
+                                            int sockfd,
+                                            const char *brokername,
+                                            int32_t brokerid,
+                                            int16_t ApiKey,
+                                            int16_t ApiVersion,
+                                            int32_t CorrId,
+                                            size_t  size);
+
 
 void rd_kafka_conf_interceptor_ctor (int scope, void *pconf);
 void rd_kafka_conf_interceptor_dtor (int scope, void *pconf);

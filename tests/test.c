@@ -159,6 +159,9 @@ _TEST_DECL(0070_null_empty);
 _TEST_DECL(0072_headers_ut);
 _TEST_DECL(0073_headers);
 _TEST_DECL(0074_producev);
+_TEST_DECL(0075_retry);
+_TEST_DECL(0076_produce_retry);
+_TEST_DECL(0077_compaction);
 
 
 /* Manual tests */
@@ -251,6 +254,11 @@ struct test tests[] = {
         _TEST(0072_headers_ut, TEST_F_LOCAL),
         _TEST(0073_headers, 0, TEST_BRKVER(0,11,0,0)),
         _TEST(0074_producev, TEST_F_LOCAL),
+#if WITH_SOCKEM
+        _TEST(0075_retry, 0),
+#endif
+        _TEST(0076_produce_retry, 0),
+        _TEST(0077_compaction, 0, TEST_BRKVER(0,9,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -275,13 +283,33 @@ static void test_socket_add (struct test *test, sockem_t *skm) {
 }
 
 static void test_socket_del (struct test *test, sockem_t *skm, int do_lock) {
-        void *p;
         if (do_lock)
                 TEST_LOCK();
-        p = rd_list_remove(&test->sockets, skm);
-        assert(p);
+        /* Best effort, skm might not have been added if connect_cb failed */
+        rd_list_remove(&test->sockets, skm);
         if (do_lock)
                 TEST_UNLOCK();
+}
+
+int test_socket_sockem_set_all (const char *key, int val) {
+        int i;
+        sockem_t *skm;
+        int cnt = 0;
+
+        TEST_LOCK();
+
+        cnt = rd_list_cnt(&test_curr->sockets);
+        TEST_SAY("Setting sockem %s=%d on %s%d socket(s)\n", key, val,
+                 cnt > 0 ? "" : _C_RED, cnt);
+
+        RD_LIST_FOREACH(skm, &test_curr->sockets, i) {
+                if (sockem_set(skm, key, val, NULL) == -1)
+                        TEST_FAIL("sockem_set(%s, %d) failed", key, val);
+        }
+
+        TEST_UNLOCK();
+
+        return cnt;
 }
 
 void test_socket_close_all (struct test *test, int reinit) {
@@ -715,7 +743,7 @@ void test_msg_fmt (char *dest, size_t dest_size,
         size_t of;
 
         of = rd_snprintf(dest, dest_size,
-                         "testid=%"PRIu64", partition=%"PRId32", msg=%i",
+                         "testid=%"PRIu64", partition=%"PRId32", msg=%i\n",
                          testid, partition, msgid);
         if (of < dest_size - 1) {
                 memset(dest+of, '!', dest_size-of);
@@ -763,7 +791,7 @@ void test_msg_parse0 (const char *func, int line,
 	rd_snprintf(buf, sizeof(buf), "%.*s", (int)rkmessage->key_len,
 		    (char *)rkmessage->key);
 
-	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i\n",
 		   &in_testid, &in_part, msgidp) != 3)
 		TEST_FAIL("%s:%i: Incorrect key format: %s", func, line, buf);
 
@@ -1435,15 +1463,21 @@ void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
                  rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
 	int *remainsp = msg_opaque;
 
-	if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
-		TEST_FAIL("Message delivery failed: %s\n",
-			  rd_kafka_err2str(err));
+        TEST_SAYL(4, "Delivery report: %s\n", rd_kafka_err2str(err));
+
+        if (!test_curr->produce_sync && err != test_curr->exp_dr_err)
+                TEST_FAIL("Message delivery failed: expected %s, got %s\n",
+                          rd_kafka_err2str(test_curr->exp_dr_err),
+                          rd_kafka_err2str(err));
 
 	if (*remainsp == 0)
 		TEST_FAIL("Too many messages delivered (remains %i)",
 			  *remainsp);
 
 	(*remainsp)--;
+
+        if (test_curr->produce_sync)
+                test_curr->produce_sync_err = err;
 }
 
 
@@ -1570,10 +1604,11 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                                const char *payload, size_t size,
                                int *msgcounterp) {
 	int msg_id;
-	test_timing_t t_all;
+	test_timing_t t_all, t_poll;
 	char key[128];
 	void *buf;
 	int64_t tot_bytes = 0;
+        int64_t tot_time_poll = 0;
 
 	if (payload)
 		buf = (void *)payload;
@@ -1587,8 +1622,10 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 		 rd_kafka_topic_name(rkt), partition, msg_base, msg_base+cnt);
 
 	TIMING_START(&t_all, "PRODUCE");
+        TIMING_START(&t_poll, "SUM(POLL)");
 
 	for (msg_id = msg_base ; msg_id < msg_base + cnt ; msg_id++) {
+
                 if (!payload)
                         test_prepare_msg(testid, partition, msg_id,
                                          buf, size, key, sizeof(key));
@@ -1608,7 +1645,9 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                 (*msgcounterp)++;
 		tot_bytes += size;
 
+                TIMING_RESTART(&t_poll);
 		rd_kafka_poll(rk, 0);
+                tot_time_poll = TIMING_DURATION(&t_poll);
 
 		if (TIMING_EVERY(&t_all, 3*1000000))
 			TEST_SAY("produced %3d%%: %d/%d messages "
@@ -1624,6 +1663,8 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	if (!payload)
 		free(buf);
 
+        t_poll.duration = tot_time_poll;
+        TIMING_STOP(&t_poll);
 	TIMING_STOP(&t_all);
 }
 
@@ -1651,6 +1692,10 @@ void test_wait_delivery (rd_kafka_t *rk, int *msgcounterp) {
 
 	TIMING_STOP(&t_all);
 
+        TEST_ASSERT(*msgcounterp == 0,
+                    "Not all messages delivered: msgcounter still at %d, "
+                    "outq_len %d",
+                    *msgcounterp, rd_kafka_outq_len(rk));
 }
 
 /**
@@ -1693,6 +1738,14 @@ test_produce_msgs_easy (const char *topic, uint64_t testid,
         rd_kafka_destroy(rk);
 
         return testid;
+}
+
+rd_kafka_resp_err_t test_produce_sync (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
+                                       uint64_t testid, int32_t partition) {
+        test_curr->produce_sync = 1;
+        test_produce_msgs(rk, rkt, testid, partition, 0, 1, NULL, 0);
+        test_curr->produce_sync = 0;
+        return test_curr->produce_sync_err;
 }
 
 
@@ -2125,6 +2178,8 @@ static struct test_mv_m *test_mv_mvec_add (struct test_mv_mvec *mvec) {
  */
 static RD_INLINE struct test_mv_m *test_mv_mvec_get (struct test_mv_mvec *mvec,
 						    int mi) {
+        if (mi >= mvec->cnt)
+                return NULL;
 	return &mvec->m[mi];
 }
 
@@ -2151,6 +2206,49 @@ static void test_mv_mvec_sort (struct test_mv_mvec *mvec,
 
 
 /**
+ * @brief Adds a message to the msgver service.
+ *
+ * @returns 1 if message is from the expected testid, else 0 (not added)
+ */
+int test_msgver_add_msg00 (const char *func, int line, test_msgver_t *mv,
+                           uint64_t testid,
+                           const char *topic, int32_t partition,
+                           int64_t offset, int64_t timestamp,
+                           rd_kafka_resp_err_t err, int msgnum) {
+        struct test_mv_p *p;
+        struct test_mv_m *m;
+
+        if (testid != mv->testid)
+                return 0; /* Ignore message */
+
+        p = test_msgver_p_get(mv, topic, partition, 1);
+
+        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+                p->eof_offset = offset;
+                return 1;
+        }
+
+        m = test_mv_mvec_add(&p->mvec);
+
+        m->offset = offset;
+        m->msgid  = msgnum;
+        m->timestamp = timestamp;
+
+        if (test_level > 2) {
+                TEST_SAY("%s:%d: "
+                         "Recv msg %s [%"PRId32"] offset %"PRId64" msgid %d "
+                         "timestamp %"PRId64"\n",
+                         func, line,
+                         p->topic, p->partition, m->offset, m->msgid,
+                         m->timestamp);
+        }
+
+        mv->msgcnt++;
+
+        return 1;
+}
+
+/**
  * Adds a message to the msgver service.
  *
  * Message must be a proper message or PARTITION_EOF.
@@ -2163,8 +2261,11 @@ int test_msgver_add_msg0 (const char *func, int line,
 	int in_part;
 	int in_msgnum;
 	char buf[128];
-	struct test_mv_p *p;
-	struct test_mv_m *m;
+        const void *val;
+        size_t valsize;
+
+        if (mv->fwd)
+                test_msgver_add_msg(mv->fwd, rkmessage);
 
 	if (rkmessage->err) {
 		if (rkmessage->err != RD_KAFKA_RESP_ERR__PARTITION_EOF)
@@ -2173,47 +2274,47 @@ int test_msgver_add_msg0 (const char *func, int line,
 		in_testid = mv->testid;
 
 	} else {
-		rd_snprintf(buf, sizeof(buf), "%.*s",
-			    (int)rkmessage->len, (char *)rkmessage->payload);
 
-		if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
-			   &in_testid, &in_part, &in_msgnum) != 3)
-			TEST_FAIL("%s:%d: Incorrect format at offset %"PRId64
-				  ": %s",
-				  func, line, rkmessage->offset, buf);
-	}
+                if (!mv->msgid_hdr) {
+                        rd_snprintf(buf, sizeof(buf), "%.*s",
+                                    (int)rkmessage->len,
+                                    (char *)rkmessage->payload);
+                        val = buf;
+                } else {
+                        /* msgid is in message header */
+                        rd_kafka_headers_t *hdrs;
 
-	if (mv->fwd)
-		test_msgver_add_msg(mv->fwd, rkmessage);
+                        if (rd_kafka_message_headers(rkmessage, &hdrs) ||
+                            rd_kafka_header_get_last(hdrs, mv->msgid_hdr,
+                                                     &val, &valsize)) {
+                                TEST_SAYL(3,
+                                          "%s:%d: msgid expected in header %s "
+                                          "but %s exists for "
+                                          "message at offset %"PRId64
+                                          " has no headers",
+                                          func, line, mv->msgid_hdr,
+                                          hdrs ? "no such header" : "no headers",
+                                          rkmessage->offset);
 
-	if (in_testid != mv->testid)
-		return 0; /* Ignore message */
+                                return 0;
+                        }
+                }
 
-	p = test_msgver_p_get(mv, rd_kafka_topic_name(rkmessage->rkt),
-			      rkmessage->partition, 1);
+                if (sscanf(val, "testid=%"SCNu64", partition=%i, msg=%i\n",
+                           &in_testid, &in_part, &in_msgnum) != 3)
+                        TEST_FAIL("%s:%d: Incorrect format at offset %"PRId64
+                                  ": %s",
+                                  func, line, rkmessage->offset,
+                                  (const char *)val);
+        }
 
-	if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
-		p->eof_offset = rkmessage->offset;
-		return 1;
-	}
-
-	m = test_mv_mvec_add(&p->mvec);
-
-	m->offset = rkmessage->offset;
-	m->msgid  = in_msgnum;
-        m->timestamp = rd_kafka_message_timestamp(rkmessage, NULL);
-	
-	if (test_level > 2) {
-		TEST_SAY("%s:%d: "
-			 "Recv msg %s [%"PRId32"] offset %"PRId64" msgid %d "
-                         "timestamp %"PRId64"\n",
-			 func, line,
-			 p->topic, p->partition, m->offset, m->msgid,
-                         m->timestamp);
-	}
-
-	mv->msgcnt++;
-
+        return test_msgver_add_msg00(func, line, mv, in_testid,
+                                     rd_kafka_topic_name(rkmessage->rkt),
+                                     rkmessage->partition,
+                                     rkmessage->offset,
+                                     rd_kafka_message_timestamp(rkmessage, NULL),
+                                     rkmessage->err,
+                                     in_msgnum);
         return 1;
 }
 
@@ -2256,6 +2357,84 @@ static int test_mv_mvec_verify_order (test_msgver_t *mv, int flags,
 	}
 
 	return fails;
+}
+
+
+/**
+ * @brief Verify that messages correspond to 'correct' msgver.
+ */
+static int test_mv_mvec_verify_corr (test_msgver_t *mv, int flags,
+                                      struct test_mv_p *p,
+                                      struct test_mv_mvec *mvec,
+                                      struct test_mv_vs *vs) {
+        int mi;
+        int fails = 0;
+        struct test_mv_p *corr_p = NULL;
+        struct test_mv_mvec *corr_mvec;
+
+        TEST_ASSERT(vs->corr);
+
+        /* Get correct mvec for comparison. */
+        if (p)
+                corr_p = test_msgver_p_get(vs->corr, p->topic, p->partition, 0);
+        if (!corr_p) {
+                TEST_MV_WARN(mv,
+                             " %s [%"PRId32"]: "
+                             "no corresponding correct partition found\n",
+                             p ? p->topic : "*",
+                             p ? p->partition : -1);
+                return 1;
+        }
+
+        corr_mvec = &corr_p->mvec;
+
+        for (mi = 0 ; mi < mvec->cnt ; mi++) {
+                struct test_mv_m *this = test_mv_mvec_get(mvec, mi);
+                const struct test_mv_m *corr = test_mv_mvec_get(corr_mvec, mi);
+
+                if (0)
+                        TEST_MV_WARN(mv,
+                                     "msg #%d: msgid %d, offset %"PRId64"\n",
+                                     mi, this->msgid, this->offset);
+                if (!corr) {
+                        TEST_MV_WARN(
+                                mv,
+                                " %s [%"PRId32"] msg rcvidx #%d/%d: "
+                                "out of range: correct mvec has %d messages: "
+                                "message offset %"PRId64", msgid %d\n",
+                                p ? p->topic : "*",
+                                p ? p->partition : -1,
+                                mi, mvec->cnt, corr_mvec->cnt,
+                                this->offset, this->msgid);
+                        fails++;
+                        continue;
+                }
+
+                if (((flags & TEST_MSGVER_BY_OFFSET) &&
+                     this->offset != corr->offset) ||
+                    ((flags & TEST_MSGVER_BY_MSGID) &&
+                     this->msgid != corr->msgid) ||
+                    ((flags & TEST_MSGVER_BY_TIMESTAMP) &&
+                     this->timestamp != corr->timestamp)) {
+                        TEST_MV_WARN(
+                                mv,
+                                " %s [%"PRId32"] msg rcvidx #%d/%d: "
+                                "did not match correct msg: "
+                                "offset %"PRId64" vs %"PRId64", "
+                                "msgid %d vs %d, "
+                                "timestamp %"PRId64" vs %"PRId64" (fl 0x%x)\n",
+                                p ? p->topic : "*",
+                                p ? p->partition : -1,
+                                mi, mvec->cnt,
+                                this->offset, corr->offset,
+                                this->msgid, corr->msgid,
+                                this->timestamp, corr->timestamp,
+                                flags);
+                        fails++;
+                }
+        }
+
+        return fails;
 }
 
 
@@ -2667,7 +2846,7 @@ void test_verify_rkmessage0 (const char *func, int line,
 	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->len, (char *)rkmessage->payload);
 
-	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i\n",
 		   &in_testid, &in_part, &in_msgnum) != 3)
 		TEST_FAIL("Incorrect format: %s", buf);
 
@@ -2692,6 +2871,51 @@ fail_match:
 		  "not match message: \"%s\"\n",
 		  func, line,
 		  testid, (int)partition, msgnum, buf);
+}
+
+
+/**
+ * @brief Verify that \p mv is identical to \p corr according to flags.
+ */
+void test_msgver_verify_compare0 (const char *func, int line,
+                                  const char *what, test_msgver_t *mv,
+                                  test_msgver_t *corr, int flags) {
+        struct test_mv_vs vs;
+        int fails = 0;
+
+        memset(&vs, 0, sizeof(vs));
+
+        TEST_SAY("%s:%d: %s: Verifying %d received messages (flags 0x%x) by "
+                 "comparison to correct msgver (%d messages)\n",
+                 func, line, what, mv->msgcnt, flags, corr->msgcnt);
+
+        vs.corr = corr;
+
+        /* Per-partition checks */
+        fails += test_mv_p_verify_f(mv, flags,
+                                    test_mv_mvec_verify_corr, &vs);
+
+        if (mv->log_suppr_cnt > 0)
+                TEST_WARN("%s:%d: %s: %d message warning logs suppressed\n",
+                          func, line, what, mv->log_suppr_cnt);
+
+        if (corr->msgcnt != mv->msgcnt) {
+                TEST_WARN("%s:%d: %s: expected %d messages, got %d\n",
+                          func, line, what, corr->msgcnt, mv->msgcnt);
+                fails++;
+        }
+
+        if (fails)
+                TEST_FAIL("%s:%d: %s: Verification of %d received messages "
+                          "failed: expected %d messages: see previous errors\n",
+                          func, line, what,
+                          mv->msgcnt, corr->msgcnt);
+        else
+                TEST_SAY("%s:%d: %s: Verification of %d received messages "
+                         "succeeded: matching %d messages from correct msgver\n",
+                         func, line, what,
+                         mv->msgcnt, corr->msgcnt);
+
 }
 
 
@@ -3037,6 +3261,54 @@ void test_create_topic (const char *topicname, int partition_cnt,
 			  topicname, replication_factor, partition_cnt);
 }
 
+int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
+        rd_kafka_t *use_rk;
+        rd_kafka_resp_err_t err;
+        rd_kafka_topic_t *rkt;
+
+        if (!rk)
+                use_rk = test_create_producer();
+        else
+                use_rk = rk;
+
+        rkt = rd_kafka_topic_new(use_rk, topicname, NULL);
+
+        do {
+                const struct rd_kafka_metadata *metadata;
+
+                err = rd_kafka_metadata(use_rk, 0, rkt, &metadata,
+                                        tmout_multip(15000));
+                if (err)
+                        TEST_WARN("metadata() for %s failed: %s",
+                                  rkt ? rd_kafka_topic_name(rkt) :
+                                  "(all-local)",
+                                  rd_kafka_err2str(err));
+                else {
+                        if (metadata->topic_cnt == 1) {
+                                if (metadata->topics[0].err == 0 ||
+                                    metadata->topics[0].partition_cnt > 0) {
+                                        int32_t cnt;
+                                        cnt = metadata->topics[0].partition_cnt;
+                                        rd_kafka_metadata_destroy(metadata);
+                                        return (int)cnt;
+                                }
+                                TEST_SAY("metadata(%s) returned %s: retrying\n",
+                                         rd_kafka_topic_name(rkt),
+                                         rd_kafka_err2str(metadata->
+                                                          topics[0].err));
+                        }
+                        rd_kafka_metadata_destroy(metadata);
+                        rd_sleep(1);
+                }
+        } while (1);
+
+        rd_kafka_topic_destroy(rkt);
+
+        if (!rk)
+                rd_kafka_destroy(use_rk);
+
+        return -1;
+}
 
 /**
  * @brief Let the broker auto-create the topic for us.
@@ -3047,15 +3319,32 @@ rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
 	rd_kafka_resp_err_t err;
 	test_timing_t t;
 
-	TIMING_START(&t, "auto_create_topic");
-	err = rd_kafka_metadata(rk, 0, rkt, &metadata, tmout_multip(15000));
-	TIMING_STOP(&t);
-	if (err)
-                TEST_WARN("metadata() for %s failed: %s",
-                          rkt ? rd_kafka_topic_name(rkt) : "(all-local)",
-                          rd_kafka_err2str(err));
-        else
-                rd_kafka_metadata_destroy(metadata);
+        do {
+                TIMING_START(&t, "auto_create_topic");
+                err = rd_kafka_metadata(rk, 0, rkt, &metadata,
+                                        tmout_multip(15000));
+                TIMING_STOP(&t);
+                if (err)
+                        TEST_WARN("metadata() for %s failed: %s",
+                                  rkt ? rd_kafka_topic_name(rkt) :
+                                  "(all-local)",
+                                  rd_kafka_err2str(err));
+                else {
+                        if (metadata->topic_cnt == 1) {
+                                if (metadata->topics[0].err == 0 ||
+                                    metadata->topics[0].partition_cnt > 0) {
+                                        rd_kafka_metadata_destroy(metadata);
+                                        return 0;
+                                }
+                                TEST_SAY("metadata(%s) returned %s: retrying\n",
+                                         rd_kafka_topic_name(rkt),
+                                         rd_kafka_err2str(metadata->
+                                                          topics[0].err));
+                        }
+                        rd_kafka_metadata_destroy(metadata);
+                        rd_sleep(1);
+                }
+        } while (1);
 
         return err;
 }

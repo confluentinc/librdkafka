@@ -50,3 +50,7 @@ typedef struct rd_strtup_s {
 
 void rd_strtup_destroy (rd_strtup_t *strtup);
 rd_strtup_t *rd_strtup_new (const char *name, const char *value);
+
+
+char *rd_flags2str (char *dst, size_t size,
+                    const char **desc, int flags);

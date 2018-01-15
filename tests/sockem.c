@@ -105,10 +105,18 @@ struct sockem_conf {
         int delay;       /* latency in ms */
         int jitter;      /* latency variation in ms */
         int debug;       /* enable sockem printf debugging */
-        size_t bufsz;    /* recv chunk/buffer size */
+        size_t recv_bufsz;    /* recv chunk/buffer size */
+        int direct;      /* direct forward, no delay or rate-limiting */
 };
 
 
+typedef struct sockem_buf_s {
+        TAILQ_ENTRY(sockem_buf_s) sb_link;
+        size_t  sb_size;
+        size_t  sb_of;
+        char   *sb_data;
+        int64_t sb_at;  /* Transmit at this absolute time. */
+} sockem_buf_t;
 
 
 struct sockem_s {
@@ -126,8 +134,8 @@ struct sockem_s {
         int ls;        /* internal application listen socket */
         int ps;        /* internal peer socket connecting sockem to the peer.*/
 
-        void *buf;     /* Receive buffer */
-        size_t bufsz;  /* .. size */
+        void *recv_buf;     /* Receive buffer */
+        size_t recv_bufsz;  /* .. size */
 
         int linked;    /* On sockems list */
 
@@ -140,6 +148,18 @@ struct sockem_s {
 
         struct sockem_conf use;   /* last copy of .conf
                                    * local to skm thread */
+
+        TAILQ_HEAD(, sockem_buf_s) bufs; /* Buffers in queue waiting for
+                                          * transmission (delayed) */
+
+        size_t bufs_size; /* Total number of bytes currently enqueued
+                           * for transmission */
+        size_t bufs_size_max; /* Soft max threshold for bufs_size,
+                               * when this value is exceeded the app fd
+                               * is removed from the poll set until
+                               * bufs_size falls below the threshold again. */
+        int poll_fd_cnt;
+        int64_t ts_last_fwd;  /* For rate-limiter: timestamp of last forward */
 };
 
 
@@ -187,12 +207,115 @@ static void sockem_init (void) {
  * @returns the maximum waittime in ms for poll()
  * @remark lock must be held
  */
-static int sockem_calc_waittime (sockem_t *skm) {
-        if (skm->use.delay + skm->use.jitter == 0)
+static int sockem_calc_waittime (sockem_t *skm, int64_t now) {
+        const sockem_buf_t *sb;
+
+        if (!(sb = TAILQ_FIRST(&skm->bufs)))
                 return 1000;
+        else if (now > sb->sb_at)
+                return 0;
         else
-                return skm->use.jitter < skm->use.delay ?
-                        skm->use.jitter : skm->use.delay;
+                return (sb->sb_at - now) / 1000;
+}
+
+
+/**
+ * @brief Unlink and destroy a buffer
+ */
+static void sockem_buf_destroy (sockem_t *skm, sockem_buf_t *sb) {
+        skm->bufs_size -= sb->sb_size - sb->sb_of;
+        TAILQ_REMOVE(&skm->bufs, sb, sb_link);
+        free(sb);
+}
+
+/**
+ * @brief Add delayed buffer to transmit.
+ */
+static sockem_buf_t *sockem_buf_add (sockem_t *skm,
+                                     size_t size, const void *data) {
+        sockem_buf_t *sb;
+
+        skm->bufs_size += size;
+        if (skm->bufs_size > skm->bufs_size_max) {
+                /* No more buffer space, halt recv fd until
+                 * queued buffers drop below threshold. */
+                skm->poll_fd_cnt = 1;
+        }
+
+        sb = malloc(sizeof(*sb) + size);
+
+        sb->sb_of   = 0;
+        sb->sb_size = size;
+        sb->sb_data = (char *)(sb+1);
+        sb->sb_at   = sockem_clock() +
+                ((skm->use.delay +
+                  (skm->use.jitter / 2)/*FIXME*/) * 1000);
+        memcpy(sb->sb_data, data, size);
+
+        TAILQ_INSERT_TAIL(&skm->bufs, sb, sb_link);
+
+        return sb;
+}
+
+
+/**
+ * @brief Forward any delayed buffers that have passed their deadline
+ * @remark lock must be held but will be released momentarily while
+ *         performing send syscall.
+ */
+static int sockem_fwd_bufs (sockem_t *skm, int ofd) {
+        sockem_buf_t *sb;
+        int64_t now = sockem_clock();
+        size_t to_write;
+        int64_t elapsed = now - skm->ts_last_fwd;
+
+        if (!elapsed)
+                return 0;
+
+        /* Calculate how many bytes to send to adhere to rate-limit */
+        to_write = (size_t)((double)skm->use.tx_thruput *
+                            ((double)elapsed / 1000000.0));
+
+        while (to_write > 0 &&
+               (sb = TAILQ_FIRST(&skm->bufs)) && sb->sb_at <= now) {
+                ssize_t r;
+                size_t remain = sb->sb_size - sb->sb_of;
+                size_t wr = to_write < remain ? to_write : remain;
+
+                if (wr == 0)
+                        break;
+
+                mtx_unlock(&skm->lock);
+
+                r = send(ofd, sb->sb_data+sb->sb_of, wr, 0);
+
+                mtx_lock(&skm->lock);
+
+                if (r == -1) {
+                        if (errno == ENOBUFS || errno == EAGAIN ||
+                            errno == EWOULDBLOCK)
+                                return 0;
+                        return -1;
+                }
+
+                skm->ts_last_fwd = now;
+
+                sb->sb_of += r;
+                to_write  -= r;
+
+                if (sb->sb_of < sb->sb_size)
+                        break;
+
+                sockem_buf_destroy(skm, sb);
+
+                now = sockem_clock();
+        }
+
+        /* Re-enable app fd poll if queued buffers are below threshold */
+        if (skm->bufs_size < skm->bufs_size_max)
+                skm->poll_fd_cnt = 2;
+
+        return 0;
 }
 
 
@@ -201,11 +324,10 @@ static int sockem_calc_waittime (sockem_t *skm) {
  *
  * @returns the number of bytes forwarded, or -1 on error.
  */
-static int sockem_recv_fwd (sockem_t *skm, int ifd, int ofd) {
+static int sockem_recv_fwd (sockem_t *skm, int ifd, int ofd, int direct) {
         ssize_t r, wr;
-        int64_t delay;
 
-        r = recv(ifd, skm->buf, skm->bufsz, MSG_DONTWAIT);
+        r = recv(ifd, skm->recv_buf, skm->recv_bufsz, MSG_DONTWAIT);
         if (r == -1) {
                 int serr = socket_errno();
                 if (serr == EAGAIN || serr == EWOULDBLOCK)
@@ -217,16 +339,17 @@ static int sockem_recv_fwd (sockem_t *skm, int ifd, int ofd) {
                 return -1;
         }
 
-        /* FIXME: proper */
-        delay = skm->use.delay + (skm->use.jitter / 2);
-        if (delay)
-                usleep(delay * 1000);
+        if (direct) {
+                /* No delay or rate limit, send right away */
+                wr = send(ofd, skm->recv_buf, r, 0);
+                if (wr < r)
+                        return -1;
 
-        wr = send(ofd, skm->buf, r, 0);
-        if (wr < r)
-                return -1;
-
-        return wr;
+                return wr;
+        } else {
+                sockem_buf_add(skm, r, skm->recv_buf);
+                return r;
+        }
 }
 
 
@@ -254,13 +377,22 @@ static void sockem_close_all (sockem_t *skm) {
 }
 
 
+/**
+ * @brief Copy desired (app) config to internally use(d) configuration.
+ * @remark lock must be held
+ */
+static __inline void sockem_conf_use (sockem_t *skm) {
+        skm->use = skm->conf;
+        /* Figure out if direct forward is to be used */
+        skm->use.direct = !(skm->use.delay || skm->use.jitter ||
+                            (skm->use.tx_thruput < (1 << 30)));
+}
 
 /**
  * @brief sockem internal per-socket forwarder thread
  */
 static void *sockem_run (void *arg) {
         sockem_t *skm = arg;
-        int waittime;
         int cs = -1;
         int ls;
         struct pollfd pfd[2];
@@ -268,12 +400,12 @@ static void *sockem_run (void *arg) {
         mtx_lock(&skm->lock);
         if (skm->run == SOCKEM_START)
                 skm->run = SOCKEM_RUN;
-        skm->use = skm->conf;
+        sockem_conf_use(skm);
         ls = skm->ls;
         mtx_unlock(&skm->lock);
 
-        skm->bufsz = skm->use.bufsz;
-        skm->buf = malloc(skm->bufsz);
+        skm->recv_bufsz = skm->use.recv_bufsz;
+        skm->recv_buf = malloc(skm->recv_bufsz);
 
         /* Accept connection from sockfd in sockem_connect() */
         cs = accept(ls, NULL, 0);
@@ -290,35 +422,49 @@ static void *sockem_run (void *arg) {
 
         /* Set up poll (blocking IO) */
         memset(pfd, 0, sizeof(pfd));
-        pfd[0].fd = cs;
-        pfd[0].events = POLLIN;
-
-        mtx_lock(&skm->lock);
-        pfd[1].fd = skm->ps;
-        mtx_unlock(&skm->lock);
+        pfd[1].fd = cs;
         pfd[1].events = POLLIN;
 
-        waittime = sockem_calc_waittime(skm);
+        mtx_lock(&skm->lock);
+        pfd[0].fd = skm->ps;
+        mtx_unlock(&skm->lock);
+        pfd[0].events = POLLIN;
+
+        skm->poll_fd_cnt = 2;
 
         mtx_lock(&skm->lock);
         while (skm->run == SOCKEM_RUN) {
                 int r;
                 int i;
+                int waittime = sockem_calc_waittime(skm, sockem_clock());
 
                 mtx_unlock(&skm->lock);
-                r = poll(pfd, 2, waittime);
-
+                r = poll(pfd, skm->poll_fd_cnt, waittime);
                 if (r == -1)
                         break;
+
+                /* Send/forward delayed buffers */
+                mtx_lock(&skm->lock);
+                if (sockem_fwd_bufs(skm, skm->ps) == -1) {
+                        mtx_unlock(&skm->lock);
+                        skm->run = SOCKEM_TERM;
+                        break;
+                }
+                mtx_unlock(&skm->lock);
 
                 for (i = 0 ; r > 0 && i < 2 ; i++) {
                         if (pfd[i].revents & (POLLHUP|POLLERR)) {
                                 skm->run = SOCKEM_TERM;
 
                         } else if (pfd[i].revents & POLLIN) {
-                                if (sockem_recv_fwd(skm,
-                                                    pfd[i].fd,
-                                                    pfd[i^1].fd) == -1) {
+                                if (sockem_recv_fwd(
+                                            skm,
+                                            pfd[i].fd,
+                                            pfd[i^1].fd,
+                                            /* direct mode for app socket
+                                             * with delay, and always for
+                                             * peer socket (receive channel) */
+                                            i == 0 || skm->use.direct) == -1) {
                                         skm->run = SOCKEM_TERM;
                                         break;
                                 }
@@ -326,7 +472,7 @@ static void *sockem_run (void *arg) {
                 }
 
                 mtx_lock(&skm->lock);
-                skm->use = skm->conf;
+                sockem_conf_use(skm);
         }
  done:
         if (cs != -1)
@@ -334,7 +480,7 @@ static void *sockem_run (void *arg) {
         sockem_close_all(skm);
 
         mtx_unlock(&skm->lock);
-        free(skm->buf);
+        free(skm->recv_buf);
 
 
         return NULL;
@@ -418,14 +564,17 @@ sockem_t *sockem_connect (int sockfd, const struct sockaddr *addr,
         skm->as = sockfd;
         skm->ls = ls;
         skm->ps = ps;
+        skm->bufs_size_max = 16 * 1024 * 1024; /* 16kb of queue buffer */
+        TAILQ_INIT(&skm->bufs);
         mtx_init(&skm->lock);
 
-        /* Default config*/
+        /* Default config */
         skm->conf.rx_thruput = 1 << 30;
         skm->conf.tx_thruput = 1 << 30;
         skm->conf.delay = 0;
         skm->conf.jitter = 0;
-        skm->conf.bufsz = 1024*1024;
+        skm->conf.recv_bufsz = 1024*1024;
+        skm->conf.direct = 1;
 
         /* Apply passed configuration */
         va_start(ap, addrlen);
@@ -464,6 +613,18 @@ sockem_t *sockem_connect (int sockfd, const struct sockaddr *addr,
         return skm;
 }
 
+
+/**
+ * @brief Purge/drop all queued buffers
+ */
+static void sockem_bufs_purge (sockem_t *skm) {
+        sockem_buf_t *sb;
+
+        while ((sb = TAILQ_FIRST(&skm->bufs)))
+                sockem_buf_destroy(skm, sb);
+}
+
+
 void sockem_close (sockem_t *skm) {
 
 
@@ -484,6 +645,8 @@ void sockem_close (sockem_t *skm) {
         mtx_unlock(&skm->lock);
 
         thrd_join(skm->thrd, NULL);
+
+        sockem_bufs_purge(skm);
 
         mtx_destroy(&skm->lock);
 
@@ -509,7 +672,7 @@ static int sockem_set0 (sockem_t *skm, const char *key, int val) {
         else if (!strcmp(key, "jitter"))
                 skm->conf.jitter = val;
         else if (!strcmp(key, "rx.bufsz"))
-                skm->conf.bufsz = val;
+                skm->conf.recv_bufsz = val;
         else if (!strcmp(key, "debug"))
                 skm->conf.debug = val;
         else if (!strcmp(key, "true"))
@@ -534,6 +697,7 @@ static int sockem_set0 (sockem_t *skm, const char *key, int val) {
                 }
         } else
                 return -1;
+
         return 0;
 }
 

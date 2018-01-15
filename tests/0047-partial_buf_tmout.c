@@ -53,9 +53,9 @@ static int got_timeout_err = 0;
 
 static void my_error_cb (rd_kafka_t *rk, int err,
 			 const char *reason, void *opaque) {
-	got_timeout_err += (err == RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
+	got_timeout_err += (err == RD_KAFKA_RESP_ERR__TIMED_OUT);
 
-	if (err == RD_KAFKA_RESP_ERR__MSG_TIMED_OUT ||
+	if (err == RD_KAFKA_RESP_ERR__TIMED_OUT ||
 	    err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN)
 		TEST_SAY("Expected error: %s: %s\n",
 			 rd_kafka_err2str(err), reason);

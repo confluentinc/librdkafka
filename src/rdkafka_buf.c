@@ -130,6 +130,8 @@ rd_kafka_buf_t *rd_kafka_buf_new_request (rd_kafka_broker_t *rkb, int16_t ApiKey
         rkbuf->rkbuf_rkb = rkb;
         rd_kafka_broker_keep(rkb);
 
+        rkbuf->rkbuf_rel_timeout = rkb->rkb_rk->rk_conf.socket_timeout_ms;
+
         rkbuf->rkbuf_reqhdr.ApiKey = ApiKey;
 
         /* Write request header, will be updated later. */
@@ -249,6 +251,7 @@ void rd_kafka_bufq_purge (rd_kafka_broker_t *rkb,
 void rd_kafka_bufq_connection_reset (rd_kafka_broker_t *rkb,
 				     rd_kafka_bufq_t *rkbufq) {
 	rd_kafka_buf_t *rkbuf, *tmp;
+        rd_ts_t now = rd_clock();
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
@@ -269,6 +272,8 @@ void rd_kafka_bufq_connection_reset (rd_kafka_broker_t *rkb,
                 default:
                         /* Reset buffer send position */
                         rd_slice_seek(&rkbuf->rkbuf_reader, 0);
+                        /* Reset timeout */
+                        rd_kafka_buf_calc_timeout(rkb->rkb_rk, rkbuf, now);
                         break;
 		}
         }
@@ -306,6 +311,26 @@ void rd_kafka_bufq_dump (rd_kafka_broker_t *rkb, const char *fac,
 
 
 /**
+ * @brief Calculate the effective timeout for a request attempt
+ */
+void rd_kafka_buf_calc_timeout (const rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
+                                rd_ts_t now) {
+        if (likely(rkbuf->rkbuf_rel_timeout)) {
+                /* Default:
+                 * Relative timeout, set request timeout to
+                 * to now + rel timeout. */
+                rkbuf->rkbuf_ts_timeout = now + rkbuf->rkbuf_rel_timeout * 1000;
+        } else {
+                /* Use absolute timeout, limited by socket.timeout.ms */
+                rd_ts_t sock_timeout = now +
+                        rk->rk_conf.socket_timeout_ms * 1000;
+
+                rkbuf->rkbuf_ts_timeout =
+                        RD_MIN(sock_timeout, rkbuf->rkbuf_abs_timeout);
+        }
+}
+
+/**
  * Retry failed request, depending on the error.
  * @remark \p rkb may be NULL
  * Returns 1 if the request was scheduled for retry, else 0.
@@ -319,8 +344,14 @@ int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 		     rkb->rkb_rk->rk_conf.max_retries))
                 return 0;
 
+        /* Absolute timeout, check for expiry. */
+        if (rkbuf->rkbuf_abs_timeout &&
+            rkbuf->rkbuf_abs_timeout < rd_clock())
+                return 0; /* Expired */
+
 	/* Try again */
 	rkbuf->rkbuf_ts_sent = 0;
+        rkbuf->rkbuf_ts_timeout = 0; /* Will be updated in calc_timeout() */
 	rkbuf->rkbuf_retries++;
 	rd_kafka_buf_keep(rkbuf);
 	rd_kafka_broker_buf_retry(rkb, rkbuf);
@@ -375,22 +406,14 @@ void rd_kafka_buf_handle_op (rd_kafka_op_t *rko, rd_kafka_resp_err_t err) {
  * \p response may be NULL.
  *
  * Will decrease refcount for both response and request, eventually.
+ *
+ * The decision to retry, and the call to buf_retry(), is delegated
+ * to the buffer's response callback.
  */
 void rd_kafka_buf_callback (rd_kafka_t *rk,
 			    rd_kafka_broker_t *rkb, rd_kafka_resp_err_t err,
                             rd_kafka_buf_t *response, rd_kafka_buf_t *request){
 
-        /* Decide if the request should be retried.
-         * This is always done in the originating broker thread. */
-        if (unlikely(err && err != RD_KAFKA_RESP_ERR__DESTROY &&
-		     rd_kafka_buf_retry(rkb, request))) {
-		/* refcount for retry was increased in buf_retry() so we can
-		 * let go of this caller's refcounts. */
-		rd_kafka_buf_destroy(request);
-		if (response)
-			rd_kafka_buf_destroy(response);
-                return;
-	}
 
         if (err != RD_KAFKA_RESP_ERR__DESTROY && request->rkbuf_replyq.q) {
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);

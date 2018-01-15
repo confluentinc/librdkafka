@@ -848,7 +848,8 @@ typedef enum rd_kafka_vtype_t {
         _LRK_TYPECHECK2(RD_KAFKA_VTYPE_KEY, const void *, KEY, size_t, LEN), \
         (void *)KEY, (size_t)LEN
 /*!
- * Opaque pointer (void *)
+ * Message opaque pointer (void *)
+ * Same as \c produce(.., msg_opaque), and \c rkmessage->_private .
  */
 #define RD_KAFKA_V_OPAQUE(opaque)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, opaque),    \
@@ -1721,6 +1722,13 @@ RD_EXPORT
 rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup(const rd_kafka_topic_conf_t
 						*conf);
 
+/**
+ * @brief Creates a copy/duplicate of \p rk 's default topic configuration
+ *        object.
+ */
+RD_EXPORT
+rd_kafka_topic_conf_t *rd_kafka_default_topic_conf_dup (rd_kafka_t *rk);
+
 
 /**
  * @brief Destroys a topic conf object.
@@ -1775,6 +1783,39 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
 						int32_t partition_cnt,
 						void *rkt_opaque,
 						void *msg_opaque));
+
+
+/**
+ * @brief \b Producer: Set message queueing order comparator callback.
+ *
+ * The callback may be called in any thread at any time,
+ * it may be called multiple times for the same message.
+ *
+ * Ordering comparator function constraints:
+ *   - MUST be stable sort (same input gives same output).
+ *   - MUST NOT call any rd_kafka_*() functions.
+ *   - MUST NOT block or execute for prolonged periods of time.
+ *
+ * The comparator shall compare the two messages and return:
+ *  - < 0 if message \p a should be inserted before message \p b.
+ *  - >=0 if message \p a should be inserted after message \p b.
+ *
+ * @remark Insert sorting will be used to enqueue the message in the
+ *         correct queue position, this comes at a cost of O(n).
+ *
+ * @remark If `queuing.strategy=fifo` new messages are enqueued to the
+ *         tail of the queue regardless of msg_order_cmp, but retried messages
+ *         are still affected by msg_order_cmp.
+ *
+ * @warning THIS IS AN EXPERIMENTAL API, SUBJECT TO CHANGE OR REMOVAL,
+ *          DO NOT USE IN PRODUCTION.
+ */
+RD_EXPORT void
+rd_kafka_topic_conf_set_msg_order_cmp (rd_kafka_topic_conf_t *topic_conf,
+                                       int (*msg_order_cmp) (
+                                               const rd_kafka_message_t *a,
+                                               const rd_kafka_message_t *b));
+
 
 /**
  * @brief Check if partition is available (has a leader broker).
@@ -3905,6 +3946,40 @@ typedef rd_kafka_resp_err_t
         rd_kafka_resp_err_t err, void *ic_opaque);
 
 
+/**
+ * @brief on_request_sent() is called when a request has been fully written
+ *        to a broker TCP connections socket.
+ *
+ * @param rk The client instance.
+ * @param sockfd Socket file descriptor.
+ * @param brokername Broker request is being sent to.
+ * @param brokerid Broker request is being sent to.
+ * @param ApiKey Kafka protocol request type.
+ * @param ApiVersion Kafka protocol request type version.
+ * @param Corrid Kafka protocol request correlation id.
+ * @param size Size of request.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @warning The on_request_sent() interceptor is called from internal
+ *          librdkafka broker threads. An on_request_sent() interceptor MUST NOT
+ *          call any librdkafka API's associated with the \p rk, or perform
+ *          any blocking or prolonged work.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_request_sent_t) (
+        rd_kafka_t *rk,
+        int sockfd,
+        const char *brokername,
+        int32_t brokerid,
+        int16_t ApiKey,
+        int16_t ApiVersion,
+        int32_t CorrId,
+        size_t  size,
+        void *ic_opaque);
+
+
 
 /**
  * @brief Append an on_conf_set() interceptor.
@@ -4083,6 +4158,25 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_interceptor_add_on_commit (
         rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_commit_t *on_commit,
+        void *ic_opaque);
+
+
+/**
+ * @brief Append an on_request_sent() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_request_sent() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_interceptor_add_on_request_sent (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_request_sent_t *on_request_sent,
         void *ic_opaque);
 
 

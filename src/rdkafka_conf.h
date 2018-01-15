@@ -158,6 +158,7 @@ struct rd_kafka_conf_s {
                 rd_list_t on_acknowledgement; /* .. (copied) */
                 rd_list_t on_consume;         /* .. (copied) */
                 rd_list_t on_commit;          /* .. (copied) */
+                rd_list_t on_request_sent;    /* .. (copied) */
 
                 /* rd_strtup_t list */
                 rd_list_t config;             /* Configuration name=val's
@@ -319,6 +320,9 @@ struct rd_kafka_topic_conf_s {
 				void *rkt_opaque,
 				void *msg_opaque);
         char   *partitioner_str;
+
+        int queuing_strategy; /* RD_KAFKA_QUEUE_FIFO|LIFO */
+        int (*msg_order_cmp) (const void *a, const void *b);
 
 	rd_kafka_compression_t compression_codec;
         int     produce_offset_report;

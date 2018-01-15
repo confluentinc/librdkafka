@@ -848,7 +848,8 @@ typedef enum rd_kafka_vtype_t {
         _LRK_TYPECHECK2(RD_KAFKA_VTYPE_KEY, const void *, KEY, size_t, LEN), \
         (void *)KEY, (size_t)LEN
 /*!
- * Opaque pointer (void *)
+ * Message opaque pointer (void *)
+ * Same as \c produce(.., msg_opaque), and \c rkmessage->_private .
  */
 #define RD_KAFKA_V_OPAQUE(opaque)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, opaque),    \

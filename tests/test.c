@@ -161,6 +161,7 @@ _TEST_DECL(0073_headers);
 _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
+_TEST_DECL(0077_compaction);
 
 
 /* Manual tests */
@@ -257,6 +258,7 @@ struct test tests[] = {
         _TEST(0075_retry, 0),
 #endif
         _TEST(0076_produce_retry, 0),
+        _TEST(0077_compaction, 0, TEST_BRKVER(0,9,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -741,7 +743,7 @@ void test_msg_fmt (char *dest, size_t dest_size,
         size_t of;
 
         of = rd_snprintf(dest, dest_size,
-                         "testid=%"PRIu64", partition=%"PRId32", msg=%i",
+                         "testid=%"PRIu64", partition=%"PRId32", msg=%i\n",
                          testid, partition, msgid);
         if (of < dest_size - 1) {
                 memset(dest+of, '!', dest_size-of);
@@ -789,7 +791,7 @@ void test_msg_parse0 (const char *func, int line,
 	rd_snprintf(buf, sizeof(buf), "%.*s", (int)rkmessage->key_len,
 		    (char *)rkmessage->key);
 
-	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i\n",
 		   &in_testid, &in_part, msgidp) != 3)
 		TEST_FAIL("%s:%i: Incorrect key format: %s", func, line, buf);
 
@@ -2176,6 +2178,8 @@ static struct test_mv_m *test_mv_mvec_add (struct test_mv_mvec *mvec) {
  */
 static RD_INLINE struct test_mv_m *test_mv_mvec_get (struct test_mv_mvec *mvec,
 						    int mi) {
+        if (mi >= mvec->cnt)
+                return NULL;
 	return &mvec->m[mi];
 }
 
@@ -2202,6 +2206,49 @@ static void test_mv_mvec_sort (struct test_mv_mvec *mvec,
 
 
 /**
+ * @brief Adds a message to the msgver service.
+ *
+ * @returns 1 if message is from the expected testid, else 0 (not added)
+ */
+int test_msgver_add_msg00 (const char *func, int line, test_msgver_t *mv,
+                           uint64_t testid,
+                           const char *topic, int32_t partition,
+                           int64_t offset, int64_t timestamp,
+                           rd_kafka_resp_err_t err, int msgnum) {
+        struct test_mv_p *p;
+        struct test_mv_m *m;
+
+        if (testid != mv->testid)
+                return 0; /* Ignore message */
+
+        p = test_msgver_p_get(mv, topic, partition, 1);
+
+        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
+                p->eof_offset = offset;
+                return 1;
+        }
+
+        m = test_mv_mvec_add(&p->mvec);
+
+        m->offset = offset;
+        m->msgid  = msgnum;
+        m->timestamp = timestamp;
+
+        if (test_level > 2) {
+                TEST_SAY("%s:%d: "
+                         "Recv msg %s [%"PRId32"] offset %"PRId64" msgid %d "
+                         "timestamp %"PRId64"\n",
+                         func, line,
+                         p->topic, p->partition, m->offset, m->msgid,
+                         m->timestamp);
+        }
+
+        mv->msgcnt++;
+
+        return 1;
+}
+
+/**
  * Adds a message to the msgver service.
  *
  * Message must be a proper message or PARTITION_EOF.
@@ -2214,8 +2261,11 @@ int test_msgver_add_msg0 (const char *func, int line,
 	int in_part;
 	int in_msgnum;
 	char buf[128];
-	struct test_mv_p *p;
-	struct test_mv_m *m;
+        const void *val;
+        size_t valsize;
+
+        if (mv->fwd)
+                test_msgver_add_msg(mv->fwd, rkmessage);
 
 	if (rkmessage->err) {
 		if (rkmessage->err != RD_KAFKA_RESP_ERR__PARTITION_EOF)
@@ -2224,47 +2274,47 @@ int test_msgver_add_msg0 (const char *func, int line,
 		in_testid = mv->testid;
 
 	} else {
-		rd_snprintf(buf, sizeof(buf), "%.*s",
-			    (int)rkmessage->len, (char *)rkmessage->payload);
 
-		if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
-			   &in_testid, &in_part, &in_msgnum) != 3)
-			TEST_FAIL("%s:%d: Incorrect format at offset %"PRId64
-				  ": %s",
-				  func, line, rkmessage->offset, buf);
-	}
+                if (!mv->msgid_hdr) {
+                        rd_snprintf(buf, sizeof(buf), "%.*s",
+                                    (int)rkmessage->len,
+                                    (char *)rkmessage->payload);
+                        val = buf;
+                } else {
+                        /* msgid is in message header */
+                        rd_kafka_headers_t *hdrs;
 
-	if (mv->fwd)
-		test_msgver_add_msg(mv->fwd, rkmessage);
+                        if (rd_kafka_message_headers(rkmessage, &hdrs) ||
+                            rd_kafka_header_get_last(hdrs, mv->msgid_hdr,
+                                                     &val, &valsize)) {
+                                TEST_SAYL(3,
+                                          "%s:%d: msgid expected in header %s "
+                                          "but %s exists for "
+                                          "message at offset %"PRId64
+                                          " has no headers",
+                                          func, line, mv->msgid_hdr,
+                                          hdrs ? "no such header" : "no headers",
+                                          rkmessage->offset);
 
-	if (in_testid != mv->testid)
-		return 0; /* Ignore message */
+                                return 0;
+                        }
+                }
 
-	p = test_msgver_p_get(mv, rd_kafka_topic_name(rkmessage->rkt),
-			      rkmessage->partition, 1);
+                if (sscanf(val, "testid=%"SCNu64", partition=%i, msg=%i\n",
+                           &in_testid, &in_part, &in_msgnum) != 3)
+                        TEST_FAIL("%s:%d: Incorrect format at offset %"PRId64
+                                  ": %s",
+                                  func, line, rkmessage->offset,
+                                  (const char *)val);
+        }
 
-	if (rkmessage->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
-		p->eof_offset = rkmessage->offset;
-		return 1;
-	}
-
-	m = test_mv_mvec_add(&p->mvec);
-
-	m->offset = rkmessage->offset;
-	m->msgid  = in_msgnum;
-        m->timestamp = rd_kafka_message_timestamp(rkmessage, NULL);
-	
-	if (test_level > 2) {
-		TEST_SAY("%s:%d: "
-			 "Recv msg %s [%"PRId32"] offset %"PRId64" msgid %d "
-                         "timestamp %"PRId64"\n",
-			 func, line,
-			 p->topic, p->partition, m->offset, m->msgid,
-                         m->timestamp);
-	}
-
-	mv->msgcnt++;
-
+        return test_msgver_add_msg00(func, line, mv, in_testid,
+                                     rd_kafka_topic_name(rkmessage->rkt),
+                                     rkmessage->partition,
+                                     rkmessage->offset,
+                                     rd_kafka_message_timestamp(rkmessage, NULL),
+                                     rkmessage->err,
+                                     in_msgnum);
         return 1;
 }
 
@@ -2307,6 +2357,84 @@ static int test_mv_mvec_verify_order (test_msgver_t *mv, int flags,
 	}
 
 	return fails;
+}
+
+
+/**
+ * @brief Verify that messages correspond to 'correct' msgver.
+ */
+static int test_mv_mvec_verify_corr (test_msgver_t *mv, int flags,
+                                      struct test_mv_p *p,
+                                      struct test_mv_mvec *mvec,
+                                      struct test_mv_vs *vs) {
+        int mi;
+        int fails = 0;
+        struct test_mv_p *corr_p = NULL;
+        struct test_mv_mvec *corr_mvec;
+
+        TEST_ASSERT(vs->corr);
+
+        /* Get correct mvec for comparison. */
+        if (p)
+                corr_p = test_msgver_p_get(vs->corr, p->topic, p->partition, 0);
+        if (!corr_p) {
+                TEST_MV_WARN(mv,
+                             " %s [%"PRId32"]: "
+                             "no corresponding correct partition found\n",
+                             p ? p->topic : "*",
+                             p ? p->partition : -1);
+                return 1;
+        }
+
+        corr_mvec = &corr_p->mvec;
+
+        for (mi = 0 ; mi < mvec->cnt ; mi++) {
+                struct test_mv_m *this = test_mv_mvec_get(mvec, mi);
+                const struct test_mv_m *corr = test_mv_mvec_get(corr_mvec, mi);
+
+                if (0)
+                        TEST_MV_WARN(mv,
+                                     "msg #%d: msgid %d, offset %"PRId64"\n",
+                                     mi, this->msgid, this->offset);
+                if (!corr) {
+                        TEST_MV_WARN(
+                                mv,
+                                " %s [%"PRId32"] msg rcvidx #%d/%d: "
+                                "out of range: correct mvec has %d messages: "
+                                "message offset %"PRId64", msgid %d\n",
+                                p ? p->topic : "*",
+                                p ? p->partition : -1,
+                                mi, mvec->cnt, corr_mvec->cnt,
+                                this->offset, this->msgid);
+                        fails++;
+                        continue;
+                }
+
+                if (((flags & TEST_MSGVER_BY_OFFSET) &&
+                     this->offset != corr->offset) ||
+                    ((flags & TEST_MSGVER_BY_MSGID) &&
+                     this->msgid != corr->msgid) ||
+                    ((flags & TEST_MSGVER_BY_TIMESTAMP) &&
+                     this->timestamp != corr->timestamp)) {
+                        TEST_MV_WARN(
+                                mv,
+                                " %s [%"PRId32"] msg rcvidx #%d/%d: "
+                                "did not match correct msg: "
+                                "offset %"PRId64" vs %"PRId64", "
+                                "msgid %d vs %d, "
+                                "timestamp %"PRId64" vs %"PRId64" (fl 0x%x)\n",
+                                p ? p->topic : "*",
+                                p ? p->partition : -1,
+                                mi, mvec->cnt,
+                                this->offset, corr->offset,
+                                this->msgid, corr->msgid,
+                                this->timestamp, corr->timestamp,
+                                flags);
+                        fails++;
+                }
+        }
+
+        return fails;
 }
 
 
@@ -2718,7 +2846,7 @@ void test_verify_rkmessage0 (const char *func, int line,
 	rd_snprintf(buf, sizeof(buf), "%.*s",
 		 (int)rkmessage->len, (char *)rkmessage->payload);
 
-	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i",
+	if (sscanf(buf, "testid=%"SCNu64", partition=%i, msg=%i\n",
 		   &in_testid, &in_part, &in_msgnum) != 3)
 		TEST_FAIL("Incorrect format: %s", buf);
 
@@ -2743,6 +2871,51 @@ fail_match:
 		  "not match message: \"%s\"\n",
 		  func, line,
 		  testid, (int)partition, msgnum, buf);
+}
+
+
+/**
+ * @brief Verify that \p mv is identical to \p corr according to flags.
+ */
+void test_msgver_verify_compare0 (const char *func, int line,
+                                  const char *what, test_msgver_t *mv,
+                                  test_msgver_t *corr, int flags) {
+        struct test_mv_vs vs;
+        int fails = 0;
+
+        memset(&vs, 0, sizeof(vs));
+
+        TEST_SAY("%s:%d: %s: Verifying %d received messages (flags 0x%x) by "
+                 "comparison to correct msgver (%d messages)\n",
+                 func, line, what, mv->msgcnt, flags, corr->msgcnt);
+
+        vs.corr = corr;
+
+        /* Per-partition checks */
+        fails += test_mv_p_verify_f(mv, flags,
+                                    test_mv_mvec_verify_corr, &vs);
+
+        if (mv->log_suppr_cnt > 0)
+                TEST_WARN("%s:%d: %s: %d message warning logs suppressed\n",
+                          func, line, what, mv->log_suppr_cnt);
+
+        if (corr->msgcnt != mv->msgcnt) {
+                TEST_WARN("%s:%d: %s: expected %d messages, got %d\n",
+                          func, line, what, corr->msgcnt, mv->msgcnt);
+                fails++;
+        }
+
+        if (fails)
+                TEST_FAIL("%s:%d: %s: Verification of %d received messages "
+                          "failed: expected %d messages: see previous errors\n",
+                          func, line, what,
+                          mv->msgcnt, corr->msgcnt);
+        else
+                TEST_SAY("%s:%d: %s: Verification of %d received messages "
+                         "succeeded: matching %d messages from correct msgver\n",
+                         func, line, what,
+                         mv->msgcnt, corr->msgcnt);
+
 }
 
 

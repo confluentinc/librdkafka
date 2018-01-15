@@ -302,6 +302,9 @@ typedef struct test_msgver_s {
 	int log_cnt;           /* Current number of warning logs */
 	int log_max;           /* Max warning logs before suppressing. */
 	int log_suppr_cnt;     /* Number of suppressed log messages. */
+
+        const char *msgid_hdr; /**< msgid string is in header by this name,
+                                * rather than in the payload (default). */
 } test_msgver_t;
 
 /* Message */
@@ -339,11 +342,19 @@ struct test_mv_vs {
         int64_t timestamp_max;
 
 	struct test_mv_mvec mvec;
+
+        /* Correct msgver for comparison */
+        test_msgver_t *corr;
 } vs;
 
 
 void test_msgver_init (test_msgver_t *mv, uint64_t testid);
 void test_msgver_clear (test_msgver_t *mv);
+int test_msgver_add_msg00 (const char *func, int line, test_msgver_t *mv,
+                           uint64_t testid,
+                           const char *topic, int32_t partition,
+                           int64_t offset, int64_t timestamp,
+                           rd_kafka_resp_err_t err, int msgnum);
 int test_msgver_add_msg0 (const char *func, int line,
 			  test_msgver_t *mv, rd_kafka_message_t *rkm);
 #define test_msgver_add_msg(mv,rkm) \
@@ -392,6 +403,12 @@ int test_msgver_verify0 (const char *func, int line, const char *what,
                             (struct test_mv_vs){.msg_base = msgbase,   \
                                             .exp_cnt = expcnt})
 
+
+void test_msgver_verify_compare0 (const char *func, int line,
+                                  const char *what, test_msgver_t *mv,
+                                  test_msgver_t *corr, int flags);
+#define test_msgver_verify_compare(what,mv,corr,flags) \
+        test_msgver_verify_compare0(__FUNCTION__,__LINE__, what, mv, corr, flags)
 
 rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf);
 

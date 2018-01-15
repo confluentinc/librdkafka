@@ -3271,12 +3271,12 @@ int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
         else
                 use_rk = rk;
 
-        rkt = rd_kafka_topic_new(rk, topicname, NULL);
+        rkt = rd_kafka_topic_new(use_rk, topicname, NULL);
 
         do {
                 const struct rd_kafka_metadata *metadata;
 
-                err = rd_kafka_metadata(rk, 0, rkt, &metadata,
+                err = rd_kafka_metadata(use_rk, 0, rkt, &metadata,
                                         tmout_multip(15000));
                 if (err)
                         TEST_WARN("metadata() for %s failed: %s",
@@ -3301,6 +3301,11 @@ int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
                         rd_sleep(1);
                 }
         } while (1);
+
+        rd_kafka_topic_destroy(rkt);
+
+        if (!rk)
+                rd_kafka_destroy(use_rk);
 
         return -1;
 }

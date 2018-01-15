@@ -451,7 +451,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         rd_kafka_resp_err_t all_err = 0;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
         rd_kafka_toppar_t *rktp = NULL;
-        shptr_rd_kafka_toppar_t *s_rktp;
+        shptr_rd_kafka_toppar_t *s_rktp = NULL;
 
         /* For partitioner; hold lock for entire run,
          * for one partition: only acquire for now. */

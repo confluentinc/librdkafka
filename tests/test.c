@@ -156,6 +156,8 @@ _TEST_DECL(0067_empty_topic);
 _TEST_DECL(0068_produce_timeout);
 _TEST_DECL(0069_consumer_add_parts);
 _TEST_DECL(0070_null_empty);
+_TEST_DECL(0072_headers_ut);
+_TEST_DECL(0073_headers);
 _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
@@ -248,6 +250,8 @@ struct test tests[] = {
         _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32,
               TEST_BRKVER(0,9,0,0)),
         _TEST(0070_null_empty, 0),
+        _TEST(0072_headers_ut, TEST_F_LOCAL),
+        _TEST(0073_headers, 0, TEST_BRKVER(0,11,0,0)),
         _TEST(0074_producev, TEST_F_LOCAL),
 #if WITH_SOCKEM
         _TEST(0075_retry, 0),
@@ -1599,7 +1603,7 @@ void test_produce_msgs_nowait (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
 	char key[128];
 	void *buf;
 	int64_t tot_bytes = 0;
-        int64_t tot_time_poll;
+        int64_t tot_time_poll = 0;
 
 	if (payload)
 		buf = (void *)payload;
@@ -3293,4 +3297,21 @@ void test_SAY (const char *file, int line, int level, const char *str) {
 
 const char *test_curr_name (void) {
         return test_curr->name;
+}
+
+
+/**
+ * @brief Dump/print message haders
+ */
+void test_headers_dump (const char *what, int lvl,
+                        const rd_kafka_headers_t *hdrs) {
+        size_t idx = 0;
+        const char *name, *value;
+        size_t size;
+
+        while (!rd_kafka_header_get_all(hdrs, idx++, &name,
+                                        (const void **)&value, &size))
+                TEST_SAYL(lvl, "%s: Header #%"PRIusz": %s='%s'\n",
+                          what, idx-1, name,
+                          value ? value : "(NULL)");
 }

@@ -310,6 +310,16 @@ void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
                      rd_kafka_fetch_states[fetch_state]);
 
         rktp->rktp_fetch_state = fetch_state;
+
+        if (fetch_state == RD_KAFKA_TOPPAR_FETCH_ACTIVE)
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
+                             CONSUMER|RD_KAFKA_DBG_TOPIC,
+                             "FETCH",
+                             "Partition %.*s [%"PRId32"] start fetching "
+                             "at offset %s",
+                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                             rktp->rktp_partition,
+                             rd_kafka_offset2str(rktp->rktp_next_offset));
 }
 
 
@@ -615,37 +625,41 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp) {
  * Append message at tail of 'rktp' message queue.
  */
 void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
+        int wakeup_fd, queue_len;
 
-	rd_kafka_toppar_lock(rktp);
+        rd_kafka_toppar_lock(rktp);
+
         if (!rkm->rkm_u.producer.msgseq &&
             rktp->rktp_partition != RD_KAFKA_PARTITION_UA)
                 rkm->rkm_u.producer.msgseq = ++rktp->rktp_msgseq;
 
         if (rktp->rktp_partition == RD_KAFKA_PARTITION_UA ||
-            rktp->rktp_rkt->rkt_conf.msg_order_cmp == rd_kafka_msg_cmp_msgseq) {
+            rktp->rktp_rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO) {
                 /* No need for enq_sorted(), this is the oldest message. */
-                rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
+                queue_len = rd_kafka_msgq_enq(&rktp->rktp_msgq, rkm);
         } else {
-                rd_kafka_msgq_enq_sorted(rktp->rktp_rkt, &rktp->rktp_msgq, rkm);
+                queue_len = rd_kafka_msgq_enq_sorted(rktp->rktp_rkt,
+                                                     &rktp->rktp_msgq, rkm);
         }
 
+        wakeup_fd = rktp->rktp_msgq_wakeup_fd;
+        rd_kafka_toppar_unlock(rktp);
+
 #ifndef _MSC_VER
-        if (rktp->rktp_msgq_wakeup_fd != -1 &&
-            rd_kafka_msgq_len(&rktp->rktp_msgq) == 1) {
+        if (wakeup_fd != -1 && queue_len == 1) {
                 char one = 1;
                 int r;
-                r = rd_write(rktp->rktp_msgq_wakeup_fd, &one, sizeof(one));
+                r = rd_write(wakeup_fd, &one, sizeof(one));
                 if (r == -1)
                         rd_kafka_log(rktp->rktp_rkt->rkt_rk, LOG_ERR, "PARTENQ",
                                      "%s [%"PRId32"]: write to "
                                      "wake-up fd %d failed: %s",
                                      rktp->rktp_rkt->rkt_topic->str,
                                      rktp->rktp_partition,
-                                     rktp->rktp_msgq_wakeup_fd,
+                                     wakeup_fd,
                                      rd_strerror(errno));
         }
 #endif
-        rd_kafka_toppar_unlock(rktp);
 }
 
 
@@ -662,19 +676,26 @@ void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                                 rd_kafka_msgq_t *srcq,
                                 int (*cmp) (const void *a, const void *b)) {
-        rd_kafka_msg_t *first;
+        rd_kafka_msg_t *first, *part_first;
+
+        first = TAILQ_FIRST(&srcq->rkmq_msgs);
+        if (unlikely(!first)) {
+                /* srcq is empty */
+                return;
+        }
+
+        part_first = TAILQ_FIRST(&destq->rkmq_msgs);
 
         /*
          * Try to optimize insertion of source list.
          */
-        if (unlikely(RD_KAFKA_MSGQ_EMPTY(destq))) {
+
+        if (unlikely(!part_first)) {
                 /* Dest queue is empty, simply move the srcq. */
                 rd_kafka_msgq_move(destq, srcq);
 
                 return;
         }
-
-        first = TAILQ_FIRST(&srcq->rkmq_msgs);
 
         /* See if we can optimize the insertion by bulk-loading
          * the messages in place.
@@ -683,9 +704,6 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
          *  - srcq is sorted
          *  - there is no overlap between the two.
          */
-        rd_kafka_msg_t *part_first;
-
-        part_first = TAILQ_FIRST(&destq->rkmq_msgs);
 
         if (cmp(first, part_first) < 0) {
                 /* Prepend src to dest queue.
@@ -3245,16 +3263,16 @@ rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_match (
 }
 
 void
-rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
+rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac, int dbg,
 				   const rd_kafka_topic_partition_list_t *rktparlist) {
         int i;
 
-	rd_kafka_dbg(rk, TOPIC, fac, "List with %d partition(s):",
+	rd_kafka_dbg(rk, NONE|dbg, fac, "List with %d partition(s):",
 		     rktparlist->cnt);
         for (i = 0 ; i < rktparlist->cnt ; i++) {
 		const rd_kafka_topic_partition_t *rktpar =
 			&rktparlist->elems[i];
-		rd_kafka_dbg(rk, TOPIC, fac, " %s [%"PRId32"] offset %s%s%s",
+		rd_kafka_dbg(rk, NONE|dbg, fac, " %s [%"PRId32"] offset %s%s%s",
 			     rktpar->topic, rktpar->partition,
 			     rd_kafka_offset2str(rktpar->offset),
 			     rktpar->err ? ": error: " : "",
@@ -3281,8 +3299,8 @@ rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktpar
                 int r;
 
                 if (trunc) {
-                        if (dest_size > 3)
-                                rd_snprintf(&dest[dest_size-3], 3, "...");
+                        if (dest_size > 4)
+                                rd_snprintf(&dest[dest_size-4], 4, "...");
                         break;
                 }
 

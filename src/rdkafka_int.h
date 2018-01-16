@@ -350,8 +350,9 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 #define RD_KAFKA_DBG_FETCH          0x400
 #define RD_KAFKA_DBG_INTERCEPTOR    0x800
 #define RD_KAFKA_DBG_PLUGIN         0x1000
+#define RD_KAFKA_DBG_CONSUMER       0x2000
 #define RD_KAFKA_DBG_ALL            0xffff
-
+#define RD_KAFKA_DBG_NONE           0x0
 
 void rd_kafka_log0(const rd_kafka_conf_t *conf,
                    const rd_kafka_t *rk, const char *extra, int level,
@@ -420,11 +421,8 @@ rd_kafka_resp_err_t rd_kafka_set_last_error (rd_kafka_resp_err_t err,
 
 extern rd_atomic32_t rd_kafka_thread_cnt_curr;
 
-extern char RD_TLS rd_kafka_thread_name[64];
-
-
-
-
+void rd_kafka_set_thread_name (const char *fmt, ...);
+void rd_kafka_set_thread_sysname (const char *fmt, ...);
 
 int rd_kafka_path_is_dir (const char *path);
 

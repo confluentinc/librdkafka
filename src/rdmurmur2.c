@@ -54,7 +54,7 @@ uint32_t rd_murmur2 (const void *key, size_t len) {
         uint32_t h = seed ^ (uint32_t)len;
         const unsigned char *tail;
 
-        if (likely(((uint64_t)key & 0x3) == 0)) {
+        if (likely(((intptr_t)key & 0x3) == 0)) {
                 /* Input is 32-bit word aligned. */
                 const uint32_t *data = (const uint32_t *)key;
 

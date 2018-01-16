@@ -245,22 +245,24 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "broker metadata information as if the topics did not exist." },
 	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
 	  "A comma-separated list of debug contexts to enable. "
-	  "Debugging the Producer: broker,topic,msg. Consumer: cgrp,topic,fetch",
+          "Detailed Producer debugging: broker,topic,msg. "
+          "Consumer: consumer,cgrp,topic,fetch",
 	  .s2i = {
                         { RD_KAFKA_DBG_GENERIC,  "generic" },
 			{ RD_KAFKA_DBG_BROKER,   "broker" },
 			{ RD_KAFKA_DBG_TOPIC,    "topic" },
 			{ RD_KAFKA_DBG_METADATA, "metadata" },
+                        { RD_KAFKA_DBG_FEATURE,  "feature" },
 			{ RD_KAFKA_DBG_QUEUE,    "queue" },
 			{ RD_KAFKA_DBG_MSG,      "msg" },
 			{ RD_KAFKA_DBG_PROTOCOL, "protocol" },
                         { RD_KAFKA_DBG_CGRP,     "cgrp" },
 			{ RD_KAFKA_DBG_SECURITY, "security" },
 			{ RD_KAFKA_DBG_FETCH,    "fetch" },
-			{ RD_KAFKA_DBG_FEATURE,  "feature" },
                         { RD_KAFKA_DBG_INTERCEPTOR, "interceptor" },
                         { RD_KAFKA_DBG_PLUGIN,   "plugin" },
-			{ RD_KAFKA_DBG_ALL,      "all" },
+                        { RD_KAFKA_DBG_CONSUMER, "consumer" },
+			{ RD_KAFKA_DBG_ALL,      "all" }
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
 	  "Default timeout for network requests. "
@@ -748,6 +750,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { RD_KAFKA_COMPRESSION_LZ4, "lz4" },
 			{ 0 }
 		} },
+        { _RK_GLOBAL|_RK_PRODUCER, "compression.type", _RK_C_ALIAS,
+          .sdef = "compression.codec" },
 	{ _RK_GLOBAL|_RK_PRODUCER, "batch.num.messages", _RK_C_INT,
 	  _RK(batch_num_messages),
 	  "Maximum number of messages batched in one MessageSet. "
@@ -806,8 +810,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "while LIFO prioritizes new messages.",
           .vdef = 0,
           .s2i = {
-                        { 0, "fifo" },
-                        { 1, "lifo" }
+                        { RD_KAFKA_QUEUE_FIFO, "fifo" },
+                        { RD_KAFKA_QUEUE_LIFO, "lifo" }
                 }
         },
         { _RK_TOPIC|_RK_PRODUCER, "produce.offset.report", _RK_C_BOOL,
@@ -840,7 +844,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
 	{ _RK_TOPIC | _RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RKT(compression_codec),
-	  "Compression codec to use for compressing message sets. ",
+	  "Compression codec to use for compressing message sets. "
+          "inherit = inherit global compression.codec configuration.",
 	  .vdef = RD_KAFKA_COMPRESSION_INHERIT,
 	  .s2i = {
 		  { RD_KAFKA_COMPRESSION_NONE, "none" },
@@ -854,6 +859,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 		  { RD_KAFKA_COMPRESSION_INHERIT, "inherit" },
 		  { 0 }
 		} },
+        { _RK_TOPIC | _RK_PRODUCER, "compression.type", _RK_C_ALIAS,
+          .sdef = "compression.codec" },
 
 
         /* Topic consumer properties */
@@ -1666,6 +1673,12 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
 	return new;
 }
 
+rd_kafka_topic_conf_t *rd_kafka_default_topic_conf_dup (rd_kafka_t *rk) {
+        if (rk->rk_conf.topic_conf)
+                return rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
+        else
+                return rd_kafka_topic_conf_new();
+}
 
 void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
 	conf->enabled_events = events;

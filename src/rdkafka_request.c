@@ -684,6 +684,9 @@ void rd_kafka_OffsetFetchRequest (rd_kafka_broker_t *rkb,
 		return;
 	}
 
+        rd_rkb_dbg(rkb, CGRP|RD_KAFKA_DBG_CONSUMER, "OFFSET",
+                   "Fetch committed offsets for %d/%d partition(s)",
+                   tot_PartCnt, parts->cnt);
 
 
 	rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);

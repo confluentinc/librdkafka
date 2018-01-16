@@ -170,6 +170,8 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 	if (!quiet) {
 		rd_kafka_timestamp_type_t tstype;
 		int64_t timestamp;
+                rd_kafka_headers_t *hdrs;
+
 		fprintf(stdout, "%% Message (offset %"PRId64", %zd bytes):\n",
 			rkmessage->offset, rkmessage->len);
 
@@ -187,6 +189,27 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 				!timestamp ? 0 :
 				(int)time(NULL) - (int)(timestamp/1000));
 		}
+
+                if (!rd_kafka_message_headers(rkmessage, &hdrs)) {
+                        size_t idx = 0;
+                        const char *name;
+                        const void *val;
+                        size_t size;
+
+                        fprintf(stdout, "%% Headers:");
+
+                        while (!rd_kafka_header_get_all(hdrs, idx++,
+                                                        &name, &val, &size)) {
+                                fprintf(stdout, "%s%s=",
+                                        idx == 1 ? " " : ", ", name);
+                                if (val)
+                                        fprintf(stdout, "\"%.*s\"",
+                                                (int)size, (const char *)val);
+                                else
+                                        fprintf(stdout, "NULL");
+                        }
+                        fprintf(stdout, "\n");
+                }
 	}
 
 	if (rkmessage->key_len) {
@@ -287,6 +310,8 @@ int main (int argc, char **argv) {
         int64_t seek_offset = 0;
         int64_t tmp_offset = 0;
 	int get_wmarks = 0;
+        rd_kafka_headers_t *hdrs = NULL;
+        rd_kafka_resp_err_t err;
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -301,7 +326,7 @@ int main (int argc, char **argv) {
 	/* Topic configuration */
 	topic_conf = rd_kafka_topic_conf_new();
 
-	while ((opt = getopt(argc, argv, "PCLt:p:b:z:qd:o:eX:As:")) != -1) {
+	while ((opt = getopt(argc, argv, "PCLt:p:b:z:qd:o:eX:As:H:")) != -1) {
 		switch (opt) {
 		case 'P':
 		case 'C':
@@ -370,6 +395,31 @@ int main (int argc, char **argv) {
 		case 'A':
 			output = OUTPUT_RAW;
 			break;
+                case 'H':
+                {
+                        char *name, *val;
+                        size_t name_sz = -1;
+
+                        name = optarg;
+                        val = strchr(name, '=');
+                        if (val) {
+                                name_sz = (size_t)(val-name);
+                                val++; /* past the '=' */
+                        }
+
+                        if (!hdrs)
+                                hdrs = rd_kafka_headers_new(8);
+
+                        err = rd_kafka_header_add(hdrs, name, name_sz, val, -1);
+                        if (err) {
+                                fprintf(stderr,
+                                        "%% Failed to add header %s: %s\n",
+                                        name, rd_kafka_err2str(err));
+                                exit(1);
+                        }
+                }
+                break;
+
 		case 'X':
 		{
 			char *name, *val;
@@ -503,6 +553,7 @@ int main (int argc, char **argv) {
 			"                  %s\n"
 			"  -q              Be quiet\n"
 			"  -A              Raw payload output (consumer)\n"
+                        "  -H <name[=value]> Add header to message (producer)\n"
 			"  -X <prop=name>  Set arbitrary librdkafka "
 			"configuration property\n"
 			"                  Properties prefixed with \"topic.\" "
@@ -585,21 +636,46 @@ int main (int argc, char **argv) {
 				buf[--len] = '\0';
 
 			/* Send/Produce message. */
-			if (rd_kafka_produce(rkt, partition,
-					     RD_KAFKA_MSG_F_COPY,
-					     /* Payload and length */
-					     buf, len,
-					     /* Optional key and its length */
-					     NULL, 0,
-					     /* Message opaque, provided in
-					      * delivery report callback as
-					      * msg_opaque. */
-					     NULL) == -1) {
-				fprintf(stderr,
-					"%% Failed to produce to topic %s "
+                        if (hdrs) {
+                                rd_kafka_headers_t *hdrs_copy;
+
+                                hdrs_copy = rd_kafka_headers_copy(hdrs);
+
+                                err = rd_kafka_producev(
+                                        rk,
+                                        RD_KAFKA_V_RKT(rkt),
+                                        RD_KAFKA_V_PARTITION(partition),
+                                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                        RD_KAFKA_V_VALUE(buf, len),
+                                        RD_KAFKA_V_HEADERS(hdrs_copy),
+                                        RD_KAFKA_V_END);
+
+                                if (err)
+                                        rd_kafka_headers_destroy(hdrs_copy);
+
+                        } else {
+                                if (rd_kafka_produce(
+                                            rkt, partition,
+                                            RD_KAFKA_MSG_F_COPY,
+                                            /* Payload and length */
+                                            buf, len,
+                                            /* Optional key and its length */
+                                            NULL, 0,
+                                            /* Message opaque, provided in
+                                             * delivery report callback as
+                                             * msg_opaque. */
+                                            NULL) == -1) {
+                                        err = rd_kafka_last_error();
+                                }
+                        }
+
+                        if (err) {
+                                fprintf(stderr,
+                                        "%% Failed to produce to topic %s "
 					"partition %i: %s\n",
 					rd_kafka_topic_name(rkt), partition,
-					rd_kafka_err2str(rd_kafka_last_error()));
+					rd_kafka_err2str(err));
+
 				/* Poll to handle delivery reports */
 				rd_kafka_poll(rk, 0);
 				continue;
@@ -791,6 +867,9 @@ int main (int argc, char **argv) {
                  * done anything important anyway. */
                 exit(err ? 2 : 0);
         }
+
+        if (hdrs)
+                rd_kafka_headers_destroy(hdrs);
 
         if (topic_conf)
                 rd_kafka_topic_conf_destroy(topic_conf);

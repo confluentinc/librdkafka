@@ -801,6 +801,14 @@ void thrd_yield(void)
 #endif
 }
 
+int thrd_setname (const char *name) {
+#if defined(_TTHREAD_POSIX_) && defined(__linux__)
+  if (!pthread_setname_np(pthread_self(), name))
+    return thrd_success;
+#endif
+  return thrd_error;
+}
+
 int tss_create(tss_t *key, tss_dtor_t dtor)
 {
 #if defined(_TTHREAD_WIN32_)

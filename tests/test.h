@@ -177,6 +177,10 @@ struct test {
 /* Whine right away, mark the test as failed, but continue the test. */
 #define TEST_FAIL_LATER(...) TEST_FAIL0(__FILE__,__LINE__,1,0,__VA_ARGS__)
 
+#define TEST_LATER_CHECK(...) do {                              \
+        if (test_curr->state == TEST_FAILED)                    \
+                TEST_FAIL("See previous errors. " __VA_ARGS__); \
+        } while (0)
 
 #define TEST_PERROR(call) do {						\
 		if (!(call))						\
@@ -512,3 +516,5 @@ void test_socket_close_all (struct test *test, int reinit);
 int  test_socket_sockem_set_all (const char *key, int val);
 #endif
 
+void test_headers_dump (const char *what, int lvl,
+                        const rd_kafka_headers_t *hdrs);

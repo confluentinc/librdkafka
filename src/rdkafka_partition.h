@@ -523,7 +523,7 @@ rd_kafka_topic_partition_list_get_topic_names (
         rd_list_t *topics, int include_regex);
 
 void
-rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac,
+rd_kafka_topic_partition_list_log (rd_kafka_t *rk, const char *fac, int dbg,
 				   const rd_kafka_topic_partition_list_t *rktparlist);
 
 #define RD_KAFKA_FMT_F_OFFSET    0x1  /* Print offset */

@@ -1964,6 +1964,10 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
                         rkb->rkb_nodeid = rko->rko_u.node.nodeid;
 
+                        /* Update system thread name */
+                        rd_kafka_set_thread_sysname("rdk:broker%"PRId32,
+                                                    rkb->rkb_nodeid);
+
                         /* Update broker_by_id sorted list */
                         if (old_nodeid == -1)
                                 rd_list_add(&rkb->rkb_rk->rk_broker_by_id, rkb);
@@ -2141,8 +2145,8 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
                 /* Insert xmitq(broker-local) messages to the msgq(global)
                  * at their sorted position to maintain ordering. */
-                rd_kafka_msgq_insert_msgq(&rktp->rktp_xmit_msgq,
-                                          &rktp->rktp_msgq,
+                rd_kafka_msgq_insert_msgq(&rktp->rktp_msgq,
+                                          &rktp->rktp_xmit_msgq,
                                           rktp->rktp_rkt->rkt_conf.
                                           msg_order_cmp);
 
@@ -2530,6 +2534,11 @@ static void rd_kafka_toppar_fetch_backoff (rd_kafka_broker_t *rkb,
                                            rd_kafka_toppar_t *rktp,
                                            rd_kafka_resp_err_t err) {
         int backoff_ms = rkb->rkb_rk->rk_conf.fetch_error_backoff_ms;
+
+        /* Don't back off on reaching end of partition */
+        if (err == RD_KAFKA_RESP_ERR__PARTITION_EOF)
+                return;
+
         rktp->rktp_ts_fetch_backoff = rd_clock() + (backoff_ms * 1000);
         rd_rkb_dbg(rkb, FETCH, "BACKOFF",
                    "%s [%"PRId32"]: Fetch backoff for %dms: %s",
@@ -3126,8 +3135,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_t *rkb = arg;
 	rd_kafka_t *rk = rkb->rkb_rk;
 
-        rd_snprintf(rd_kafka_thread_name, sizeof(rd_kafka_thread_name),
-		    "%s", rkb->rkb_name);
+        rd_kafka_set_thread_name("%s", rkb->rkb_name);
+        rd_kafka_set_thread_sysname("rdk:broker%"PRId32, rkb->rkb_nodeid);
 
 	(void)rd_atomic32_add(&rd_kafka_thread_cnt_curr, 1);
 

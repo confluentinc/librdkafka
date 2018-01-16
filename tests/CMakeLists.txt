@@ -64,6 +64,8 @@ set(
     0068-produce_timeout.c
     0069-consumer_add_parts.c
     0070-null_empty.cpp
+    0072-headers_ut.c
+    0073-headers.c
     0074-producev.c
     0075-retry.c
     0076-produce_retry.c

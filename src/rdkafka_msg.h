@@ -31,6 +31,7 @@
 #include "rdsysqueue.h"
 
 #include "rdkafka_proto.h"
+#include "rdkafka_header.h"
 
 /**
  * @brief Message.MsgAttributes for MsgVersion v0..v1,
@@ -76,6 +77,7 @@ typedef struct rd_kafka_msg_s {
 	 *         the RD_KAFKA_MSG_F_* flags in rdkafka.h */
 #define RD_KAFKA_MSG_F_FREE_RKM     0x10000 /* msg_t is allocated */
 #define RD_KAFKA_MSG_F_ACCOUNT      0x20000 /* accounted for in curr_msgs */
+#define RD_KAFKA_MSG_F_PRODUCER     0x40000 /* Producer message */
 
 	int64_t    rkm_timestamp;  /* Message format V1.
 				    * Meaning of timestamp depends on
@@ -83,6 +85,8 @@ typedef struct rd_kafka_msg_s {
 				    * or CreateTime (producer).
 				    * Unit is milliseconds since epoch (UTC).*/
 	rd_kafka_timestamp_type_t rkm_tstype; /* rkm_timestamp type */
+
+        rd_kafka_headers_t *rkm_headers; /**< Parsed headers list, if any. */
 
         union {
                 struct {
@@ -96,6 +100,12 @@ typedef struct rd_kafka_msg_s {
                 } producer;
 #define rkm_ts_timeout rkm_u.producer.ts_timeout
 #define rkm_ts_enq     rkm_u.producer.ts_enq
+
+                struct {
+                        rd_kafkap_bytes_t binhdrs; /**< Unparsed
+                                                    *   binary headers in
+                                                    *   protocol msg */
+                } consumer;
         } rkm_u;
 } rd_kafka_msg_t;
 
@@ -117,8 +127,14 @@ size_t rd_kafka_msg_wire_size (const rd_kafka_msg_t *rkm, int MsgVersion) {
                 [1] = RD_KAFKAP_MESSAGE_V1_OVERHEAD,
                 [2] = RD_KAFKAP_MESSAGE_V2_OVERHEAD
         };
+        size_t size;
         rd_dassert(MsgVersion >= 0 && MsgVersion <= 2);
-        return overheads[MsgVersion] + rkm->rkm_len + rkm->rkm_key_len;
+
+        size = overheads[MsgVersion] + rkm->rkm_len + rkm->rkm_key_len;
+        if (MsgVersion == 2 && rkm->rkm_headers)
+                size += rd_kafka_headers_serialized_size(rkm->rkm_headers);
+
+        return size;
 }
 
 
@@ -296,8 +312,9 @@ int rd_kafka_msg_cmp_msgseq_lifo (const void *_a, const void *_b) {
  * @brief Insert message at its sorted position using the msgseq.
  * @remark This is an O(n) operation.
  * @warning The message must have a msgseq set.
+ * @returns the message count of the queue after enqueuing the message.
  */
-void rd_kafka_msgq_enq_sorted (const rd_kafka_itopic_t *rkt,
+int rd_kafka_msgq_enq_sorted (const rd_kafka_itopic_t *rkt,
                                rd_kafka_msgq_t *rkmq,
                                rd_kafka_msg_t *rkm);
 
@@ -314,11 +331,15 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_insert (rd_kafka_msgq_t *rkmq,
 /**
  * Append message to tail of message queue.
  */
-static RD_INLINE RD_UNUSED void rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
-						rd_kafka_msg_t *rkm) {
-	TAILQ_INSERT_TAIL(&rkmq->rkmq_msgs, rkm, rkm_link);
-	rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
-	rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len+rkm->rkm_key_len);
+static RD_INLINE RD_UNUSED int rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
+                                                rd_kafka_msg_t *rkm) {
+        int len;
+
+        TAILQ_INSERT_TAIL(&rkmq->rkmq_msgs, rkm, rkm_link);
+        len = rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
+        rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len+rkm->rkm_key_len);
+
+        return len;
 }
 
 

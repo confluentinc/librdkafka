@@ -75,6 +75,8 @@ static int incremental_mode = 0;
 static int partition_cnt = 0;
 static int eof_cnt = 0;
 static int with_dr = 1;
+static int read_hdrs = 0;
+
 
 static void stop (int sig) {
         if (!run)
@@ -313,6 +315,12 @@ static void msg_consume (rd_kafka_message_t *rkmessage, void *opaque) {
                                (int)rkmessage->len,
                                (char *)rkmessage->payload);
 
+        }
+
+        if (read_hdrs) {
+                rd_kafka_headers_t *hdrs;
+                /* Force parsing of headers but don't do anything with them. */
+                rd_kafka_message_headers(rkmessage, &hdrs);
         }
 
         if (msgcnt != -1 && (int)cnt.msgs >= msgcnt)
@@ -715,6 +723,44 @@ static int read_conf_file (rd_kafka_conf_t *conf,
 }
 
 
+static rd_kafka_resp_err_t do_produce (rd_kafka_t *rk,
+                                       rd_kafka_topic_t *rkt, int32_t partition,
+                                       int msgflags,
+                                       void *payload, size_t size,
+                                       const void *key, size_t key_size,
+                                       const rd_kafka_headers_t *hdrs) {
+
+        /* Send/Produce message. */
+        if (hdrs) {
+                rd_kafka_headers_t *hdrs_copy;
+                rd_kafka_resp_err_t err;
+
+                hdrs_copy = rd_kafka_headers_copy(hdrs);
+
+                err = rd_kafka_producev(
+                        rk,
+                        RD_KAFKA_V_RKT(rkt),
+                        RD_KAFKA_V_PARTITION(partition),
+                        RD_KAFKA_V_MSGFLAGS(msgflags),
+                        RD_KAFKA_V_VALUE(payload, size),
+                        RD_KAFKA_V_KEY(key, key_size),
+                        RD_KAFKA_V_HEADERS(hdrs_copy),
+                        RD_KAFKA_V_END);
+
+                if (err)
+                        rd_kafka_headers_destroy(hdrs_copy);
+
+                return err;
+
+        } else {
+                if (rd_kafka_produce(rkt, partition, msgflags, payload, size,
+                                     key, key_size, NULL) == -1)
+                        return rd_kafka_last_error();
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 
 int main (int argc, char **argv) {
 	char *brokers = NULL;
@@ -749,6 +795,8 @@ int main (int argc, char **argv) {
         int rate_sleep = 0;
 	rd_kafka_topic_partition_list_t *topics;
         int exitcode = 0;
+        rd_kafka_headers_t *hdrs = NULL;
+        rd_kafka_resp_err_t err;
 
 	/* Kafka configuration */
 	conf = rd_kafka_conf_new();
@@ -789,7 +837,7 @@ int main (int argc, char **argv) {
 	while ((opt =
 		getopt(argc, argv,
 		       "PCG:t:p:b:s:k:c:fi:MDd:m:S:x:"
-                       "R:a:z:o:X:B:eT:Y:qvIur:lA:OwN")) != -1) {
+                       "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNHH:")) != -1) {
 		switch (opt) {
 		case 'G':
 			if (rd_kafka_conf_set(conf, "group.id", optarg,
@@ -888,6 +936,37 @@ int main (int argc, char **argv) {
 		case 'd':
 			debug = optarg;
 			break;
+                case 'H':
+                {
+                        char *name, *val;
+                        size_t name_sz = -1;
+
+                        if (!optarg) {
+                                read_hdrs = 1;
+                                break;
+                        }
+
+                        name = optarg;
+                        val = strchr(name, '=');
+                        if (val) {
+                                name_sz = (size_t)(val-name);
+                                val++; /* past the '=' */
+                        }
+
+                        if (!hdrs)
+                                hdrs = rd_kafka_headers_new(8);
+
+                        err = rd_kafka_header_add(hdrs, name, name_sz, val, -1);
+                        if (err) {
+                                fprintf(stderr,
+                                        "%% Failed to add header %s: %s\n",
+                                        name, rd_kafka_err2str(err));
+                                exit(1);
+                        }
+
+                        read_hdrs = 1;
+                }
+                break;
 		case 'X':
 		{
 			char *name, *val;
@@ -1033,6 +1112,8 @@ int main (int argc, char **argv) {
 			"  -b <brokers> Broker address list (host[:port],..)\n"
 			"  -s <size>    Message size (producer)\n"
 			"  -k <key>     Message key (producer)\n"
+                        "  -H <name[=value]> Add header to message (producer)\n"
+                        "  -H           Read message headers (consumer)\n"
 			"  -c <cnt>     Messages to transmit/receive\n"
 			"  -x <cnt>     Hard exit after transmitting <cnt> messages (producer)\n"
 			"  -D           Copy/Duplicate data buffer (producer)\n"
@@ -1261,10 +1342,9 @@ int main (int argc, char **argv) {
 
 			cnt.tx++;
 			while (run &&
-			       rd_kafka_produce(rkt, partition,
-						sendflags, pbuf, msgsize,
-						key, keylen, NULL) == -1) {
-				rd_kafka_resp_err_t err = rd_kafka_last_error();
+                               (err = do_produce(rk, rkt, partition, sendflags,
+                                                 pbuf, msgsize,
+                                                 key, keylen, hdrs))) {
 				if (err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
 					printf("%% No such partition: "
 						   "%"PRId32"\n", partition);
@@ -1539,6 +1619,9 @@ int main (int argc, char **argv) {
 
 		rd_kafka_destroy(rk);
 	}
+
+        if (hdrs)
+                rd_kafka_headers_destroy(hdrs);
 
 	print_stats(NULL, mode, otype|_OTYPE_FORCE, compression);
 

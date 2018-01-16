@@ -560,10 +560,13 @@ void rd_kafka_cgrp_coord_dead (rd_kafka_cgrp_t *rkcg, rd_kafka_resp_err_t err,
 
 static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg, int ignore_response) {
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "LEAVE",
-                   "Group \"%.*s\": leave",
-                   RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
+                     "Group \"%.*s\": leave (in state %s)",
+                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                     rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
 
-        if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP)
+        if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP) {
+                rd_rkb_dbg(rkcg->rkcg_rkb, CONSUMER, "LEAVE",
+                           "Leaving group");
                 rd_kafka_LeaveGroupRequest(rkcg->rkcg_rkb, rkcg->rkcg_group_id,
                                            rkcg->rkcg_member_id,
 					   ignore_response ?
@@ -571,7 +574,7 @@ static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg, int ignore_response) {
                                            RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                                            ignore_response ? NULL :
                                            rd_kafka_handle_LeaveGroup, rkcg);
-        else if (!ignore_response)
+        } else if (!ignore_response)
                 rd_kafka_handle_LeaveGroup(rkcg->rkcg_rk, rkcg->rkcg_rkb,
                                            RD_KAFKA_RESP_ERR__WAIT_COORD,
                                            NULL, NULL, rkcg);
@@ -676,7 +679,7 @@ rd_kafka_cgrp_assignor_run (rd_kafka_cgrp_t *rkcg,
                 goto err;
         }
 
-        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGNOR",
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "ASSIGNOR",
                      "Group \"%s\": \"%s\" assignor run for %d member(s)",
                      rkcg->rkcg_group_id->str, protocol_name, member_cnt);
 
@@ -1163,7 +1166,7 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
          * refresh metadata if necessary. */
         if (rd_kafka_cgrp_metadata_refresh(rkcg, &metadata_age,
                                            "consumer join") == 1) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "JOIN",
                              "Group \"%.*s\": "
                              "postponing join until up-to-date "
                              "metadata is available",
@@ -1175,7 +1178,7 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_cgrp_metadata_update_check(rkcg, 0/*dont join*/);
 
         if (rd_list_empty(rkcg->rkcg_subscribed_topics)) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "JOIN",
                              "Group \"%.*s\": "
                              "no matching topics based on %dms old metadata: "
                              "next metadata refresh in %dms",
@@ -1185,6 +1188,11 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
                              metadata_refresh_interval_ms - metadata_age);
                 return;
         }
+
+        rd_rkb_dbg(rkcg->rkcg_rkb, CONSUMER, "JOIN",
+                   "Joining group \"%.*s\" with %d subscribed topic(s)",
+                   RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                   rd_list_cnt(rkcg->rkcg_subscribed_topics));
 
         rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_JOIN);
         rd_kafka_JoinGroupRequest(rkcg->rkcg_rkb, rkcg->rkcg_group_id,
@@ -1534,7 +1542,9 @@ static void rd_kafka_cgrp_offsets_fetch_response (
                 return;
         }
 
-	rd_kafka_topic_partition_list_log(rk, "OFFSETFETCH", offsets);
+	rd_kafka_topic_partition_list_log(rk, "OFFSETFETCH",
+                                          RD_KAFKA_DBG_TOPIC|RD_KAFKA_DBG_CGRP,
+                                          offsets);
 	/* If all partitions already had usable offsets then there
 	 * was no request sent and thus no reply, the offsets list is
 	 * good to go. */
@@ -1590,9 +1600,6 @@ rd_kafka_cgrp_offsets_fetch (rd_kafka_cgrp_t *rkcg, rd_kafka_broker_t *rkb,
 			rkcg->rkcg_rk, rkb, RD_KAFKA_RESP_ERR__WAIT_COORD,
 			NULL, NULL, use_offsets);
         else {
-		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "OFFSET",
-			     "Fetch %d offsets with v%d",
-			     use_offsets->cnt, rkcg->rkcg_version);
                 rd_kafka_OffsetFetchRequest(
                         rkb, 1, offsets,
                         RD_KAFKA_REPLYQ(rkcg->rkcg_ops, rkcg->rkcg_version),
@@ -1642,7 +1649,9 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
 		     rkcg->rkcg_version, line);
 
 	rd_kafka_topic_partition_list_log(rkcg->rkcg_rk,
-					  "FETCHSTART", assignment);
+					  "FETCHSTART",
+                                          RD_KAFKA_DBG_TOPIC|RD_KAFKA_DBG_CGRP,
+                                          assignment);
 
         if (assignment->cnt == 0)
                 return;
@@ -2018,6 +2027,15 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
         if (rkcg->rkcg_state != RD_KAFKA_CGRP_STATE_UP || !rkcg->rkcg_rkb ||
 	    rkcg->rkcg_rkb->rkb_source == RD_KAFKA_INTERNAL) {
 
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "COMMIT",
+                             "Deferring \"%s\" offset commit "
+                             "for %d partition(s) in state %s: %s",
+                             reason, valid_offsets,
+                             rd_kafka_cgrp_state_names[rkcg->rkcg_state],
+                             (!rkcg->rkcg_rkb ||
+                              rkcg->rkcg_rkb->rkb_source == RD_KAFKA_INTERNAL)
+                             ? "no coordinator available" : "not in state up");
+
 		if (rd_kafka_cgrp_defer_offset_commit(rkcg, rko, reason))
 			return;
 
@@ -2025,6 +2043,10 @@ static void rd_kafka_cgrp_offsets_commit (rd_kafka_cgrp_t *rkcg,
 
 	} else {
                 int r;
+
+                rd_rkb_dbg(rkcg->rkcg_rkb, CONSUMER, "COMMIT",
+                           "Committing offsets for %d partition(s): %s",
+                           valid_offsets, reason);
 
                 /* Send OffsetCommit */
                 r = rd_kafka_OffsetCommitRequest(
@@ -2185,7 +2207,7 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
 
 	rd_kafka_cgrp_version_new_barrier(rkcg);
 
-	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
+	rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "UNASSIGN",
                      "Group \"%s\": unassigning %d partition(s) (v%"PRId32")",
                      rkcg->rkcg_group_id->str, old_assignment->cnt,
 		     rkcg->rkcg_version);
@@ -2240,7 +2262,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
                       rd_kafka_topic_partition_list_t *assignment) {
         int i;
 
-        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "ASSIGN",
+        rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "ASSIGN",
                      "Group \"%s\": new assignment of %d partition(s) "
                      "in join state %s",
                      rkcg->rkcg_group_id->str,
@@ -2376,6 +2398,13 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 	case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
 	case RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE:
 	case RD_KAFKA_RESP_ERR__TRANSPORT:
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
+                             "Heartbeat failed due to coordinator (%s) "
+                             "no longer available: %s: "
+                             "re-querying for coordinator",
+                             rkcg->rkcg_rkb ?
+                             rd_kafka_broker_name(rkcg->rkcg_rkb) : "none",
+                             rd_kafka_err2str(err));
 		/* Remain in joined state and keep querying for coordinator */
 		rd_interval_expedite(&rkcg->rkcg_coord_query_intvl, 0);
 		break;
@@ -2384,6 +2413,13 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 		rd_kafka_cgrp_set_member_id(rkcg, "");
 	case RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS:
 	case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
+                rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
+                             "Heartbeat failed: %s: %s",
+                             rd_kafka_err2str(err),
+                             err == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID ?
+                             "resetting member-id" :
+                             "group is rebalancing");
+
 	default:
                 /* Just revert to INIT state if join state is active. */
                 if (rkcg->rkcg_join_state <
@@ -2496,7 +2532,7 @@ static rd_kafka_resp_err_t
 rd_kafka_cgrp_subscribe (rd_kafka_cgrp_t *rkcg,
                          rd_kafka_topic_partition_list_t *rktparlist) {
 
-	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SUBSCRIBE",
+	rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_CONSUMER, "SUBSCRIBE",
 		     "Group \"%.*s\": subscribe to new %ssubscription "
 		     "of %d topics (join state %s)",
 		     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
@@ -3118,7 +3154,9 @@ void rd_kafka_cgrp_metadata_update_check (rd_kafka_cgrp_t *rkcg, int do_join) {
          */
         if (rd_kafka_cgrp_update_subscribed_topics(rkcg, tinfos) && do_join) {
                 /* List of subscribed topics changed, trigger rejoin. */
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP|RD_KAFKA_DBG_METADATA, "REJOIN",
+                rd_kafka_dbg(rkcg->rkcg_rk,
+                             CGRP|RD_KAFKA_DBG_METADATA|RD_KAFKA_DBG_CONSUMER,
+                             "REJOIN",
                              "Group \"%.*s\": "
                              "subscription updated from metadata change: "
                              "rejoining group",

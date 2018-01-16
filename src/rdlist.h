@@ -123,6 +123,26 @@ void *rd_list_remove (rd_list_t *rl, void *match_elem);
 void *rd_list_remove_cmp (rd_list_t *rl, void *match_elem,
                          int (*cmp) (void *_a, void *_b));
 
+
+/**
+ * @brief Remove element at index \p idx.
+ *
+ * This is a O(1) + memmove operation
+ */
+void rd_list_remove_elem (rd_list_t *rl, int idx);
+
+
+/**
+ * @brief Remove all elements matching comparator.
+ *
+ * @returns the number of elements removed.
+ *
+ * @sa rd_list_remove()
+ */
+int rd_list_remove_multi_cmp (rd_list_t *rl, void *match_elem,
+                               int (*cmp) (void *_a, void *_b));
+
+
 /**
  * Sort list using comparator
  */

@@ -848,7 +848,8 @@ typedef enum rd_kafka_vtype_t {
         _LRK_TYPECHECK2(RD_KAFKA_VTYPE_KEY, const void *, KEY, size_t, LEN), \
         (void *)KEY, (size_t)LEN
 /*!
- * Opaque pointer (void *)
+ * Message opaque pointer (void *)
+ * Same as \c produce(.., msg_opaque), and \c rkmessage->_private .
  */
 #define RD_KAFKA_V_OPAQUE(opaque)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_OPAQUE, void *, opaque),    \
@@ -3948,6 +3949,40 @@ typedef rd_kafka_resp_err_t
         rd_kafka_resp_err_t err, void *ic_opaque);
 
 
+/**
+ * @brief on_request_sent() is called when a request has been fully written
+ *        to a broker TCP connections socket.
+ *
+ * @param rk The client instance.
+ * @param sockfd Socket file descriptor.
+ * @param brokername Broker request is being sent to.
+ * @param brokerid Broker request is being sent to.
+ * @param ApiKey Kafka protocol request type.
+ * @param ApiVersion Kafka protocol request type version.
+ * @param Corrid Kafka protocol request correlation id.
+ * @param size Size of request.
+ * @param ic_opaque The interceptor's opaque pointer specified in ..add..().
+ *
+ * @warning The on_request_sent() interceptor is called from internal
+ *          librdkafka broker threads. An on_request_sent() interceptor MUST NOT
+ *          call any librdkafka API's associated with the \p rk, or perform
+ *          any blocking or prolonged work.
+ *
+ * @returns an error code on failure, the error is logged but otherwise ignored.
+ */
+typedef rd_kafka_resp_err_t
+(rd_kafka_interceptor_f_on_request_sent_t) (
+        rd_kafka_t *rk,
+        int sockfd,
+        const char *brokername,
+        int32_t brokerid,
+        int16_t ApiKey,
+        int16_t ApiVersion,
+        int32_t CorrId,
+        size_t  size,
+        void *ic_opaque);
+
+
 
 /**
  * @brief Append an on_conf_set() interceptor.
@@ -4126,6 +4161,25 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_interceptor_add_on_commit (
         rd_kafka_t *rk, const char *ic_name,
         rd_kafka_interceptor_f_on_commit_t *on_commit,
+        void *ic_opaque);
+
+
+/**
+ * @brief Append an on_request_sent() interceptor.
+ *
+ * @param rk Client instance.
+ * @param ic_name Interceptor name, used in logging.
+ * @param on_request_sent() Function pointer.
+ * @param ic_opaque Opaque value that will be passed to the function.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or RD_KAFKA_RESP_ERR__CONFLICT
+ *          if an existing intercepted with the same \p ic_name and function
+ *          has already been added to \p conf.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_interceptor_add_on_request_sent (
+        rd_kafka_t *rk, const char *ic_name,
+        rd_kafka_interceptor_f_on_request_sent_t *on_request_sent,
         void *ic_opaque);
 
 

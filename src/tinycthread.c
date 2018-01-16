@@ -802,7 +802,7 @@ void thrd_yield(void)
 }
 
 int thrd_setname (const char *name) {
-#if defined(_TTHREAD_POSIX_) && defined(__linux__)
+#if HAVE_PTHREAD_SETNAME_GNU
   if (!pthread_setname_np(pthread_self(), name))
     return thrd_success;
 #endif

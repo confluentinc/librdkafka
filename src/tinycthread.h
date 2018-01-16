@@ -83,6 +83,9 @@ extern "C" {
 
 /* Platform specific includes */
 #if defined(_TTHREAD_POSIX_)
+  #ifndef _GNU_SOURCE
+   #define _GNU_SOURCE  /* for pthread_setname_np() */
+  #endif
   #include <pthread.h>
 #elif defined(_TTHREAD_WIN32_)
   #ifndef WIN32_LEAN_AND_MEAN

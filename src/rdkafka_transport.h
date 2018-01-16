@@ -46,6 +46,10 @@ ssize_t rd_kafka_transport_send (rd_kafka_transport_t *rktrans,
 ssize_t rd_kafka_transport_recv (rd_kafka_transport_t *rktrans,
                                  rd_buf_t *rbuf,
                                  char *errstr, size_t errstr_size);
+
+void rd_kafka_transport_request_sent (rd_kafka_broker_t *rkb,
+                                      rd_kafka_buf_t *rkbuf);
+
 int rd_kafka_transport_framed_recv (rd_kafka_transport_t *rktrans,
                                     rd_kafka_buf_t **rkbufp,
                                     char *errstr, size_t errstr_size);

@@ -69,6 +69,7 @@ set(
     0074-producev.c
     0075-retry.c
     0076-produce_retry.c
+    0077-compaction.c
     8000-idle.cpp
     test.c
     testcpp.cpp

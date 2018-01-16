@@ -499,7 +499,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         /* Request timeouts:
          *  rkbuf_ts_timeout is the effective absolute request timeout used
          *  by the timeout scanner to see if a request has timed out.
-         *  It is is set when a request is enqueued on the broker transmit
+         *  It is set when a request is enqueued on the broker transmit
          *  queue based on the relative or absolute timeout:
          *
          *  rkbuf_rel_timeout is the per-request-transmit relative timeout,
@@ -509,7 +509,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
          *  all retries.
          *  This value is effectively limited by socket.timeout.ms for
          *  each transmission, but the absolute timeout for a request's
-         *  lifetiem is the absolute value.
+         *  lifetime is the absolute value.
          *
          *  Use rd_kafka_buf_set_timeout() to set a relative timeout
          *  that will be reused on retry,

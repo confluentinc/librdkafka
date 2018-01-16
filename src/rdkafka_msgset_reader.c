@@ -124,6 +124,14 @@ typedef struct rd_kafka_msgset_reader_s {
                                          *   is done.
                                          *   Refcount is not increased. */
 
+        int64_t msetr_next_offset;      /**< Next offset to fetch after
+                                         *   this reader run is done.
+                                         *   Optional: only used for special
+                                         *   cases where the per-message offset
+                                         *   can't be relied on for next
+                                         *   fetch offset, such as with
+                                         *   compacted topics. */
+
         const char *msetr_srcname;      /**< Optional message source string,
                                          *   used in debug logging to
                                          *   indicate messages were
@@ -884,8 +892,7 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
          * to avoid getting stuck on compacted MessageSets where the last
          * Message in the MessageSet has an Offset < MessageSet header's
          * last offset.  See KAFKA-5443 */
-        if (likely(LastOffset >= msetr->msetr_rktp->rktp_offsets.fetch_offset))
-                msetr->msetr_rktp->rktp_offsets.fetch_offset = LastOffset + 1;
+        msetr->msetr_next_offset = LastOffset + 1;
 
         msetr->msetr_v2_hdr = NULL;
 
@@ -1080,6 +1087,11 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
                 if (likely(last_offset != -1))
                         rktp->rktp_offsets.fetch_offset = last_offset + 1;
         }
+
+        /* Adjust next fetch offset if outlier code has indicated
+         * an even later next offset. */
+        if (msetr->msetr_next_offset > rktp->rktp_offsets.fetch_offset)
+                rktp->rktp_offsets.fetch_offset = msetr->msetr_next_offset;
 
         rd_kafka_q_destroy_owner(&msetr->msetr_rkq);
 

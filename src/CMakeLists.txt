@@ -90,7 +90,9 @@ add_library(rdkafka ${RDKAFKA_BUILD_MODE} ${sources})
 
 # Support '#include <rdkafka.h>'
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
-
+if(RDKAFKA_BUILD_STATIC)
+  target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
+endif()
 # We need 'dummy' directory to support `#include "../config.h"` path
 set(dummy "${GENERATED_DIR}/dummy")
 file(MAKE_DIRECTORY "${dummy}")

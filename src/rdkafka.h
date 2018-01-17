@@ -2965,8 +2965,8 @@ rd_kafka_position (rd_kafka_t *rk,
  *                          \p payload pointer will not be used by rdkafka
  *                          after the call returns.
  *    RD_KAFKA_MSG_F_PARTITION - produce_batch() will honour per-message
- *                               partition, either set manually or by the configured
- *                               partitioner.
+ *                               partition, either set manually or by the
+ *                               configured partitioner.
  *
  *    .._F_FREE and .._F_COPY are mutually exclusive.
  *

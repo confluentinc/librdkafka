@@ -494,8 +494,10 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 
                 /* Three cases here:
                  *  partition==UA:            run the partitioner (slow)
-                 *  RD_KAFKA_MSG_F_PARTITION: produce message to specified partition
-                 *  fixed partition:          simply concatenate the queue to partit */
+                 *  RD_KAFKA_MSG_F_PARTITION: produce message to specified
+                 *                            partition
+                 *  fixed partition:          simply concatenate the queue
+                 *                            to partit */
                 if (multiple_partitions) {
                         if (partition == RD_KAFKA_PARTITION_UA) {
                                 /* Partition the message */
@@ -503,8 +505,9 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                 rd_kafka_msg_partitioner(rkt, rkm,
                                                          0/*already locked*/);
                         } else {
-                                if(s_rktp == NULL || rkmessages[i].partition != s_rktp->rktp_partition)
-                                {
+                                if (s_rktp == NULL
+                                    || rkmessages[i].partition
+                                    != s_rktp->rktp_partition) {
                                         if (s_rktp != NULL)
                                                 rd_kafka_toppar_destroy(s_rktp);
                                         s_rktp = rd_kafka_toppar_get_avail(rkt, rkmessages[i].partition,
@@ -535,7 +538,7 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 
         if (multiple_partitions)
                 rd_kafka_topic_rdunlock(rkt);
-        if(s_rktp != NULL)
+        if (s_rktp != NULL)
                 rd_kafka_toppar_destroy(s_rktp);
 
         return good;

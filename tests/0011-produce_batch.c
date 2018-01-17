@@ -310,7 +310,7 @@ static void test_per_message_partition_flag (void) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *topic_conf;
         char msg[128];
-        int msgcnt = 100000;
+        int msgcnt = 1000;
         int failcnt = 0;
         int i;
         int *rkpartition_counts;
@@ -386,18 +386,21 @@ static void test_per_message_partition_flag (void) {
         /* Wait for messages to be delivered */
         test_wait_delivery(rk, &msgcounter);
         
+        if (msgcounter != 0)
+                TEST_FAIL("Still waiting for %i/%i messages\n",
+                          msgcounter, msgcnt);
+        
         for (i = 0; i < topic_num_partitions; i++) {
                 if (dr_partition_count[i] != rkpartition_counts[i]) {
-                        TEST_FAIL("messages were not sent to designated partitions");
+                        TEST_FAIL("messages were not sent to designated partitions"
+                                  "expected messages %i in partition %i, but only "
+                                  "%i messages were sent", rkpartition_counts[i],
+                                  i, dr_partition_count[i]);
                 }
         }
         
         free(rkpartition_counts);
         free(dr_partition_count);
-        
-        if (msgcounter != 0)
-                TEST_FAIL("Still waiting for %i/%i messages\n",
-                        msgcounter, msgcnt);
         
         /* Destroy topic */
         rd_kafka_topic_destroy(rkt);
@@ -405,8 +408,6 @@ static void test_per_message_partition_flag (void) {
         /* Destroy rdkafka instance */
         TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
         rd_kafka_destroy(rk);
-        
-        TEST_SAY("removing topic %s", topic_name);
         
         return;
 }
@@ -434,7 +435,7 @@ static void test_message_partitioner_wo_per_message_flag (void) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *topic_conf;
         char msg[128];
-        int msgcnt = 100000;
+        int msgcnt = 1000;
         int failcnt = 0;
         int i;
         rd_kafka_message_t *rkmessages;

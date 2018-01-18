@@ -554,7 +554,7 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 			    rd_kafka_msgq_t *timedout,
 			    rd_ts_t now) {
 	rd_kafka_msg_t *rkm, *tmp;
-	int cnt = rd_atomic32_get(&timedout->rkmq_msg_cnt);
+	int cnt = timedout->rkmq_msg_cnt;
 
 	/* Assume messages are added in time sequencial order */
 	TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp) {
@@ -566,7 +566,7 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 		rd_kafka_msgq_enq(timedout, rkm);
 	}
 
-	return rd_atomic32_get(&timedout->rkmq_msg_cnt) - cnt;
+	return timedout->rkmq_msg_cnt - cnt;
 }
 
 
@@ -574,13 +574,10 @@ static RD_INLINE int
 rd_kafka_msgq_enq_sorted0 (rd_kafka_msgq_t *rkmq,
                            rd_kafka_msg_t *rkm,
                            int (*order_cmp) (const void *, const void *)) {
-        int len;
         TAILQ_INSERT_SORTED(&rkmq->rkmq_msgs, rkm, rd_kafka_msg_t *,
                             rkm_link, order_cmp);
-        len = rd_atomic32_add(&rkmq->rkmq_msg_cnt, 1);
-        rd_atomic64_add(&rkmq->rkmq_msg_bytes, rkm->rkm_len+rkm->rkm_key_len);
-
-        return len;
+        rkmq->rkmq_msg_bytes += rkm->rkm_len+rkm->rkm_key_len;
+        return ++rkmq->rkmq_msg_cnt;
 }
 
 int rd_kafka_msgq_enq_sorted (const rd_kafka_itopic_t *rkt,

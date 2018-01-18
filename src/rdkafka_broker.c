@@ -689,8 +689,8 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 	}
 
 	(void)rd_atomic32_add(&rkb->rkb_outbufs.rkbq_cnt, 1);
-	(void)rd_atomic32_add(&rkb->rkb_outbufs.rkbq_msg_cnt,
-                            rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
+        (void)rd_atomic32_add(&rkb->rkb_outbufs.rkbq_msg_cnt,
+                              rkbuf->rkbuf_msgq.rkmq_msg_cnt);
 }
 
 
@@ -2355,8 +2355,10 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb, int timeout_ms) {
  * @param next_wakeup will be updated to when the next wake-up/attempt is
  *                    desired, only lower (sooner) values will be set.
  *
- * Locks: toppar_lock(rktp) MUST be held. 
- * Returns the number of messages produced.
+ * @returns the number of messages produced.
+ *
+ * @locks toppar_lock(rktp) MUST be held.
+ * @locality broker thread
  */
 static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                            rd_kafka_toppar_t *rktp,
@@ -2366,17 +2368,11 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
         int cnt = 0;
         int r;
         rd_kafka_msg_t *rkm;
+        int move_cnt = 0;
 
-        rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
-                   "%.*s [%"PRId32"] %i+%i msgs",
-                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
-                                    rkt_topic),
-                   rktp->rktp_partition,
-                   rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
-                   rd_atomic32_get(&rktp->rktp_xmit_msgq.
-                                   rkmq_msg_cnt));
-
-        if (rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt) > 0)
+        /* Move messages from locked partition produce queue
+         * to broker-local xmit queue. */
+        if ((move_cnt = rktp->rktp_msgq.rkmq_msg_cnt) > 0)
                 rd_kafka_msgq_insert_msgq(&rktp->rktp_xmit_msgq,
                                           &rktp->rktp_msgq,
                                           rktp->rktp_rkt->rkt_conf.
@@ -2394,9 +2390,16 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                 }
         }
 
-        r = rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt);
+        r = rktp->rktp_xmit_msgq.rkmq_msg_cnt;
         if (r == 0)
                 return 0;
+
+        rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
+                   "%.*s [%"PRId32"] %d message(s) in "
+                   "xmit queue (%d added from partition queue)",
+                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                   rktp->rktp_partition,
+                   r, move_cnt);
 
         rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs);
         rd_dassert(rkm != NULL);

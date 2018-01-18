@@ -124,7 +124,7 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko) {
 		break;
 	case RD_KAFKA_OP_DR:
 		fprintf(fp, "%s %"PRId32" messages on %s\n", prefix,
-			rd_atomic32_get(&rko->rko_u.dr.msgq.rkmq_msg_cnt),
+			rko->rko_u.dr.msgq.rkmq_msg_cnt,
 			rko->rko_u.dr.s_rkt ?
 			rd_kafka_topic_s2i(rko->rko_u.dr.s_rkt)->
 			rkt_topic->str : "(n/a)");

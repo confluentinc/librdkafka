@@ -134,7 +134,7 @@ size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev) {
 	switch (rkev->rko_evtype)
 	{
 	case RD_KAFKA_EVENT_DR:
-		return rd_atomic32_get(&rkev->rko_u.dr.msgq.rkmq_msg_cnt);
+                return (size_t)rkev->rko_u.dr.msgq.rkmq_msg_cnt;
 	case RD_KAFKA_EVENT_FETCH:
 		return 1;
 	default:

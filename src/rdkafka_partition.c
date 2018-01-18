@@ -738,10 +738,8 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                                   rd_kafka_msgs_head_s,
                                   rd_kafka_msg_t *, rkm_link);
 
-                rd_atomic32_add(&destq->rkmq_msg_cnt,
-                                rd_atomic32_get(&srcq->rkmq_msg_cnt));
-                rd_atomic64_add(&destq->rkmq_msg_bytes,
-                                rd_atomic64_get(&srcq->rkmq_msg_bytes));
+                destq->rkmq_msg_cnt   += srcq->rkmq_msg_cnt;
+                destq->rkmq_msg_bytes += srcq->rkmq_msg_bytes;
                 rd_kafka_msgq_init(srcq);
         }
 }
@@ -1020,8 +1018,8 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
 			     rd_kafka_broker_name(rkb),
-			     rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
-			     rd_atomic64_get(&rktp->rktp_msgq.rkmq_msg_bytes));
+                             rktp->rktp_msgq.rkmq_msg_cnt,
+                             rktp->rktp_msgq.rkmq_msg_bytes);
 
 
 	} else {

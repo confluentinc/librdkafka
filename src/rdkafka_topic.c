@@ -676,16 +676,17 @@ static void rd_kafka_topic_assign_uas (rd_kafka_itopic_t *rkt,
         rktp_ua = rd_kafka_toppar_s2i(s_rktp_ua);
 
 	/* Assign all unassigned messages to new topics. */
-	rd_kafka_dbg(rk, TOPIC, "PARTCNT",
-		     "Partitioning %i unassigned messages in topic %.*s to "
-		     "%"PRId32" partitions",
-		     rd_atomic32_get(&rktp_ua->rktp_msgq.rkmq_msg_cnt),
-		     RD_KAFKAP_STR_PR(rkt->rkt_topic),
-		     rkt->rkt_partition_cnt);
+        rd_kafka_toppar_lock(rktp_ua);
 
-	rd_kafka_toppar_lock(rktp_ua);
+        rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+                     "Partitioning %i unassigned messages in topic %.*s to "
+                     "%"PRId32" partitions",
+                     rktp_ua->rktp_msgq.rkmq_msg_cnt,
+                     RD_KAFKAP_STR_PR(rkt->rkt_topic),
+                     rkt->rkt_partition_cnt);
+
 	rd_kafka_msgq_move(&uas, &rktp_ua->rktp_msgq);
-	cnt = rd_atomic32_get(&uas.rkmq_msg_cnt);
+	cnt = uas.rkmq_msg_cnt;
 	rd_kafka_toppar_unlock(rktp_ua);
 
 	TAILQ_FOREACH_SAFE(rkm, &uas.rkmq_msgs, rkm_link, tmp) {

@@ -704,18 +704,16 @@ static void rd_kafka_topic_assign_uas (rd_kafka_itopic_t *rkt,
 		}
 	}
 
-	rd_kafka_dbg(rk, TOPIC, "UAS",
-		     "%i/%i messages were partitioned in topic %s",
-		     cnt - rd_atomic32_get(&failed.rkmq_msg_cnt),
-		     cnt, rkt->rkt_topic->str);
+        rd_kafka_dbg(rk, TOPIC, "UAS",
+                     "%i/%i messages were partitioned in topic %s",
+                     cnt - failed.rkmq_msg_cnt, cnt, rkt->rkt_topic->str);
 
-	if (rd_atomic32_get(&failed.rkmq_msg_cnt) > 0) {
-		/* Fail the messages */
-		rd_kafka_dbg(rk, TOPIC, "UAS",
-			     "%"PRId32"/%i messages failed partitioning "
-			     "in topic %s",
-			     rd_atomic32_get(&uas.rkmq_msg_cnt), cnt,
-			     rkt->rkt_topic->str);
+        if (failed.rkmq_msg_cnt > 0) {
+                /* Fail the messages */
+                rd_kafka_dbg(rk, TOPIC, "UAS",
+                             "%"PRId32"/%i messages failed partitioning "
+                             "in topic %s",
+                             failed.rkmq_msg_cnt, cnt, rkt->rkt_topic->str);
 		rd_kafka_dr_msgq(rkt, &failed,
 				 rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS ?
 				 err :
@@ -1037,10 +1035,12 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
 
 
 /**
- * Scan all topics and partitions for:
+ * @brief Scan all topics and partitions for:
  *  - timed out messages.
  *  - topics that needs to be created on the broker.
  *  - topics who's metadata is too old.
+ *
+ * @locality rdkafka main thread
  */
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	rd_kafka_itopic_t *rkt;
@@ -1125,11 +1125,6 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                 query_this = 1;
                         }
 
-			/* Scan toppar's message queues for timeouts */
-			if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq,
-						   &timedout, now) > 0)
-				did_tmout = 1;
-
 			if (rd_kafka_msgq_age_scan(&rktp->rktp_msgq,
 						   &timedout, now) > 0)
 				did_tmout = 1;
@@ -1142,7 +1137,7 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 
                 rd_kafka_topic_rdunlock(rkt);
 
-                if ((cnt = rd_atomic32_get(&timedout.rkmq_msg_cnt)) > 0) {
+                if ((cnt = timedout.rkmq_msg_cnt) > 0) {
                         totcnt += cnt;
                         rd_kafka_dbg(rk, MSG, "TIMEOUT",
                                      "%s: %"PRId32" message(s) "

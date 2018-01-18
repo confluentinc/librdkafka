@@ -2362,7 +2362,6 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb, int timeout_ms) {
  */
 static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                            rd_kafka_toppar_t *rktp,
-                                           int do_timeout_scan,
                                            rd_ts_t now,
                                            rd_ts_t *next_wakeup) {
         int cnt = 0;
@@ -2377,18 +2376,6 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                           &rktp->rktp_msgq,
                                           rktp->rktp_rkt->rkt_conf.
                                           msg_order_cmp);
-
-        /* Timeout scan */
-        if (unlikely(do_timeout_scan)) {
-                rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
-
-                if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq,
-                                           &timedout, now)) {
-                        /* Trigger delivery report for timed out messages */
-                        rd_kafka_dr_msgq(rktp->rktp_rkt, &timedout,
-                                         RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
-                }
-        }
 
         r = rktp->rktp_xmit_msgq.rkmq_msg_cnt;
         if (r == 0)
@@ -2450,6 +2437,24 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
 
 
 /**
+ * @brief Scan toppar's xmit queue for message timeouts.
+ * @locality broker thread
+ * @locks none
+ */
+static void rd_kafka_broker_toppar_msgq_scan (rd_kafka_broker_t *rkb,
+                                              rd_kafka_toppar_t *rktp,
+                                              rd_ts_t now) {
+        rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
+
+        if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq, &timedout, now)) {
+                /* Trigger delivery report for timed out messages */
+                rd_kafka_dr_msgq(rktp->rktp_rkt, &timedout,
+                                 RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
+        }
+}
+
+
+/**
  * Producer serving
  */
 static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
@@ -2467,7 +2472,7 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
 		int cnt;
 		rd_ts_t now;
                 rd_ts_t next_wakeup;
-                int do_timeout_scan = 0;
+                int do_timeout_scan;
 
 		rd_kafka_broker_unlock(rkb);
 
@@ -2475,8 +2480,9 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
                 next_wakeup = now + (rkb->rkb_rk->rk_conf.
                                      socket_blocking_max_ms * 1000);
 
-                if (rd_interval(&timeout_scan, 1000*1000, now) >= 0)
-                        do_timeout_scan = 1;
+                do_timeout_scan = rd_interval(&timeout_scan, 1000*1000,
+                                              now) >= 0;
+
 
 		do {
 			cnt = 0;
@@ -2491,15 +2497,22 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
                                         rd_kafka_toppar_unlock(rktp);
                                         continue;
                                 }
+
+                                if (unlikely(do_timeout_scan)) {
+                                        /* Scan xmit queue for msg timeouts */
+                                        rd_kafka_broker_toppar_msgq_scan(
+                                                rkb, rktp, now);
+                                }
+
 				if (unlikely(RD_KAFKA_TOPPAR_IS_PAUSED(rktp))) {
 					/* Partition is paused */
 					rd_kafka_toppar_unlock(rktp);
 					continue;
 				}
+
                                 /* Try producing toppar */
                                 cnt += rd_kafka_toppar_producer_serve(
-                                        rkb, rktp, do_timeout_scan, now,
-                                        &next_wakeup);
+                                        rkb, rktp, now, &next_wakeup);
 
                                 rd_kafka_toppar_unlock(rktp);
 			}

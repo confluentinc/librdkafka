@@ -2259,7 +2259,7 @@ int test_msgver_add_msg0 (const char *func, int line,
 			  test_msgver_t *mv, rd_kafka_message_t *rkmessage) {
 	uint64_t in_testid;
 	int in_part;
-	int in_msgnum;
+	int in_msgnum = -1;
 	char buf[128];
         const void *val;
         size_t valsize;

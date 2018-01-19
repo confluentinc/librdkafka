@@ -162,6 +162,7 @@ _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
 _TEST_DECL(0077_compaction);
+_TEST_DECL(0078_c_from_cpp);
 
 
 /* Manual tests */
@@ -259,6 +260,7 @@ struct test tests[] = {
 #endif
         _TEST(0076_produce_retry, 0),
         _TEST(0077_compaction, 0, TEST_BRKVER(0,9,0,0)),
+        _TEST(0078_c_from_cpp, TEST_F_LOCAL),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

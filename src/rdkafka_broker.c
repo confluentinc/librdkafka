@@ -2262,13 +2262,13 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb,
                                       remains_ms : RD_POLL_NOWAIT))
                 remains_ms = RD_POLL_NOWAIT;
 
-        /* If the broker state changed in op_serve() we minimize
-         * the IO timeout since our caller might want to exit out of
-         * its loop on state change. */
         if (likely(rkb->rkb_transport != NULL)) {
                 int blocking_max_ms;
 
-                if ((int)rkb->rkb_state != initial_state)
+                /* If the broker state changed in op_serve() we minimize
+                 * the IO timeout since our caller might want to exit out of
+                 * its loop on state change. */
+                if (unlikely((int)rkb->rkb_state != initial_state))
                         blocking_max_ms = 0;
                 else {
                         if (remains_ms == RD_POLL_NOWAIT)
@@ -2350,6 +2350,23 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb, int timeout_ms) {
 
 
 /**
+ * @brief Scan toppar's xmit queue for message timeouts.
+ * @locality broker thread
+ * @locks none
+ */
+static void rd_kafka_broker_toppar_msgq_scan (rd_kafka_broker_t *rkb,
+                                              rd_kafka_toppar_t *rktp,
+                                              rd_ts_t now) {
+        rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
+
+        if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq, &timedout, now)) {
+                /* Trigger delivery report for timed out messages */
+                rd_kafka_dr_msgq(rktp->rktp_rkt, &timedout,
+                                 RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
+        }
+}
+
+/**
  * @brief Serve a toppar for producing.
  *
  * @param next_wakeup will be updated to when the next wake-up/attempt is
@@ -2363,11 +2380,34 @@ static void rd_kafka_broker_ua_idle (rd_kafka_broker_t *rkb, int timeout_ms) {
 static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                            rd_kafka_toppar_t *rktp,
                                            rd_ts_t now,
-                                           rd_ts_t *next_wakeup) {
+                                           rd_ts_t *next_wakeup,
+                                           int do_timeout_scan) {
         int cnt = 0;
         int r;
         rd_kafka_msg_t *rkm;
         int move_cnt = 0;
+
+        rd_kafka_toppar_lock(rktp);
+
+        if (unlikely(rktp->rktp_leader != rkb)) {
+                /* Currently migrating away from this
+                 * broker. */
+                rd_kafka_toppar_unlock(rktp);
+                return 0;
+        }
+
+        if (unlikely(do_timeout_scan)) {
+                /* Scan xmit queue for msg timeouts */
+                rd_kafka_broker_toppar_msgq_scan(rkb, rktp, now);
+        }
+
+        if (unlikely(RD_KAFKA_TOPPAR_IS_PAUSED(rktp))) {
+                /* Partition is paused */
+                rd_kafka_toppar_unlock(rktp);
+                return 0;
+        }
+
+
 
         /* Move messages from locked partition produce queue
          * to broker-local xmit queue. */
@@ -2376,6 +2416,7 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                           &rktp->rktp_msgq,
                                           rktp->rktp_rkt->rkt_conf.
                                           msg_order_cmp);
+        rd_kafka_toppar_unlock(rktp);
 
         r = rktp->rktp_xmit_msgq.rkmq_msg_cnt;
         if (r == 0)
@@ -2403,10 +2444,9 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                         (rkb->rkb_rk->rk_conf.buffering_max_ms * 1000);
 
                 if (wait_max > now) {
-                        if (wait_max < *next_wakeup)
-                                *next_wakeup = wait_max;
                         /* Wait for more messages or queue.buffering.max.ms
                          * to expire. */
+                        *next_wakeup = wait_max;
                         return 0;
                 }
         }
@@ -2436,22 +2476,6 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
 }
 
 
-/**
- * @brief Scan toppar's xmit queue for message timeouts.
- * @locality broker thread
- * @locks none
- */
-static void rd_kafka_broker_toppar_msgq_scan (rd_kafka_broker_t *rkb,
-                                              rd_kafka_toppar_t *rktp,
-                                              rd_ts_t now) {
-        rd_kafka_msgq_t timedout = RD_KAFKA_MSGQ_INITIALIZER(timedout);
-
-        if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq, &timedout, now)) {
-                /* Trigger delivery report for timed out messages */
-                rd_kafka_dr_msgq(rktp->rktp_rkt, &timedout,
-                                 RD_KAFKA_RESP_ERR__MSG_TIMED_OUT);
-        }
-}
 
 
 /**
@@ -2483,38 +2507,20 @@ static void rd_kafka_broker_producer_serve (rd_kafka_broker_t *rkb) {
                 do_timeout_scan = rd_interval(&timeout_scan, 1000*1000,
                                               now) >= 0;
 
-
 		do {
 			cnt = 0;
 
                         /* Serve each toppar */
 			TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
-                                /* Serve toppar op queue */
-                                rd_kafka_toppar_lock(rktp);
-                                if (unlikely(rktp->rktp_leader != rkb)) {
-                                        /* Currently migrating away from this
-                                         * broker. */
-                                        rd_kafka_toppar_unlock(rktp);
-                                        continue;
-                                }
-
-                                if (unlikely(do_timeout_scan)) {
-                                        /* Scan xmit queue for msg timeouts */
-                                        rd_kafka_broker_toppar_msgq_scan(
-                                                rkb, rktp, now);
-                                }
-
-				if (unlikely(RD_KAFKA_TOPPAR_IS_PAUSED(rktp))) {
-					/* Partition is paused */
-					rd_kafka_toppar_unlock(rktp);
-					continue;
-				}
+                                rd_ts_t this_next_wakeup = next_wakeup;
 
                                 /* Try producing toppar */
                                 cnt += rd_kafka_toppar_producer_serve(
-                                        rkb, rktp, now, &next_wakeup);
+                                        rkb, rktp, now, &this_next_wakeup,
+                                        do_timeout_scan);
 
-                                rd_kafka_toppar_unlock(rktp);
+                                if (this_next_wakeup < next_wakeup)
+                                        next_wakeup = this_next_wakeup;
 			}
 
 		} while (cnt);

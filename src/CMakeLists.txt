@@ -118,6 +118,7 @@ target_compile_definitions(rdkafka PUBLIC ${rdkafka_compile_definitions})
 if(RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
 endif()
+
 if(WIN32)
   target_link_libraries(rdkafka PUBLIC crypt32)
   if(NOT RDKAFKA_BUILD_STATIC)

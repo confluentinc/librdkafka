@@ -94,7 +94,9 @@ endif()
 
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
-
+if(WIN32)
+    option(WITHOUT_WIN32_CONFIG "Avoid including win32_config.h on cmake builds" ON)
+endif(WIN32)
 
 # In:
 # * TRYCOMPILE_SRC_DIR

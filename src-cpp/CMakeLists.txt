@@ -17,7 +17,9 @@ target_link_libraries(rdkafka++ PUBLIC rdkafka)
 
 # Support '#include <rdkafcpp.h>'
 target_include_directories(rdkafka++ PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
-
+if(NOT RDKAFKA_BUILD_STATIC)
+    target_compile_definitions(rdkafka++ PRIVATE LIBRDKAFKACPP_EXPORTS)
+endif()
 install(
     TARGETS rdkafka++
     EXPORT "${targets_export_name}"

@@ -52,12 +52,12 @@ set(
     lz4hc.c
 )
 
-if(WITH_LIBDL)
-    list(APPEND sources rddl.c)
+if(WITH_LIBDL OR WIN32)
+  list(APPEND sources rddl.c)
 endif()
 
 if(WITH_PLUGINS)
-    list(APPEND sources rdkafka_plugin.c)
+  list(APPEND sources rdkafka_plugin.c)
 endif()
 
 if(WIN32)
@@ -113,6 +113,7 @@ add_library(rdkafka ${RDKAFKA_BUILD_MODE} ${sources})
 
 # Support '#include <rdkafka.h>'
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
+target_compile_definitions(rdkafka PUBLIC ${rdkafka_compile_definitions})
 if(RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
 endif()

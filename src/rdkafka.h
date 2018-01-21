@@ -2928,8 +2928,9 @@ rd_kafka_position (rd_kafka_t *rk,
 				  *            Failure to do so will result
 				  *            in indefinately blocking on
 				  *            the produce() call when the
-				  *            message queue is full.
-				  */
+				  *            message queue is full. */
+#define RD_KAFKA_MSG_F_PARTITION 0x8 /**< produce_batch() will honor
+                                     * per-message partition. */
 
 
 
@@ -2963,6 +2964,9 @@ rd_kafka_position (rd_kafka_t *rk,
  *    RD_KAFKA_MSG_F_COPY - the \p payload data will be copied and the 
  *                          \p payload pointer will not be used by rdkafka
  *                          after the call returns.
+ *    RD_KAFKA_MSG_F_PARTITION - produce_batch() will honour per-message
+ *                               partition, either set manually or by the
+ *                               configured partitioner.
  *
  *    .._F_FREE and .._F_COPY are mutually exclusive.
  *

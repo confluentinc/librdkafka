@@ -15,7 +15,7 @@ if(WIN32)
     list(APPEND rdkafka_example_cpp_sources ../win32/wingetopt.c ../win32/wingetopt.h)
 endif()
 add_executable(rdkafka_example_cpp ${rdkafka_example_cpp_sources})
-target_link_libraries(rdkafka_example_cpp PUBLIC rdkafka++ crypt32)
+target_link_libraries(rdkafka_example_cpp PUBLIC rdkafka++)
 
 add_executable(kafkatest_verifiable_client kafkatest_verifiable_client.cpp)
 target_link_libraries(kafkatest_verifiable_client PUBLIC rdkafka++)

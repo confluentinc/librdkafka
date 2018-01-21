@@ -3,8 +3,6 @@
 The cmake build mode is experimental and not officially supported,
 the community is asked to maintain and support this mode through PRs.
 
-On Windows the option WITH_PLUGINS is set to off by default, but in src/win32_config.h macro WITH_PLUGINS is set to 1, this cause a link error, so you have to manually set WITH_PLUGINS to 0 in src/win32_config.h for cmake build to work without link errors.
-
 Set up build environment (from top-level librdkafka directory):
 
     $ cmake -H. -B_cmake_build

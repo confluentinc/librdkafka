@@ -1329,6 +1329,11 @@ void rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
                                                      rkmessage,
                                                      void *opaque));
 
+RD_EXPORT
+void rd_kafka_conf_set_free_payload_cb (rd_kafka_conf_t *conf,
+			      void (*free_payload_cb) (rd_kafka_t *rk,
+					     void *payload));
+
 
 /**
  * @brief \b Consumer: Set consume callback for use with rd_kafka_consumer_poll()
@@ -3448,6 +3453,7 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_REBALANCE     0x10 /**< Group rebalance (consumer) */
 #define RD_KAFKA_EVENT_OFFSET_COMMIT 0x20 /**< Offset commit result */
 #define RD_KAFKA_EVENT_STATS         0x40 /**< Stats */
+#define RD_KAFKA_EVENT_FREE_PAYLOAD  0x50 /**< Free message payload when RD_KAFKA_MSG_F_FREE is used */
 
 
 typedef struct rd_kafka_op_s rd_kafka_event_t;

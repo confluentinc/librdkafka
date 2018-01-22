@@ -1409,6 +1409,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_REBALANCE;
 	if (rk->rk_conf.offset_commit_cb)
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OFFSET_COMMIT;
+	if (rk->rk_conf.free_payload_cb)
+		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_FREE_PAYLOAD;
+
 
 	/* Convenience Kafka protocol null bytes */
 	rk->rk_null_bytes = rd_kafkap_bytes_new(NULL, 0);
@@ -2720,6 +2723,11 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
         case RD_KAFKA_OP_TERMINATE:
                 /* nop: just a wake-up */
                 break;
+
+        case RD_KAFKA_OP_PAYLOAD_FREE:
+            if (likely(rk->rk_conf.free_payload_cb != NULL))
+                    rk->rk_conf.free_payload_cb(rk, rko->rko_u.payload_free.payload);
+            break;
 
         default:
                 rd_kafka_assert(rk, !*"cant handle op type");

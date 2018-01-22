@@ -107,6 +107,7 @@ typedef enum {
         RD_KAFKA_OP_METADATA,        /* Metadata response */
         RD_KAFKA_OP_LOG,             /* Log */
         RD_KAFKA_OP_WAKEUP,          /* Wake-up signaling */
+        RD_KAFKA_OP_PAYLOAD_FREE, /* Free message payload */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -320,6 +321,10 @@ struct rd_kafka_op_s {
                         int  level;
                         char *str;
                 } log;
+
+                struct {
+                        void *payload;
+                } payload_free;
 	} rko_u;
 };
 

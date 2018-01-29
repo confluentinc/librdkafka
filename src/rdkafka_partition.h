@@ -60,7 +60,7 @@ static RD_UNUSED void rd_kafka_offset_stats_reset (struct offset_stats *offs) {
 struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rklink;  /* rd_kafka_t link */
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rkblink; /* rd_kafka_broker_t link*/
-        CIRCLEQ_ENTRY(rd_kafka_toppar_s) rktp_fetchlink; /* rkb_fetch_toppars */
+        CIRCLEQ_ENTRY(rd_kafka_toppar_s) rktp_activelink; /* rkb_active_toppars */
 	TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rktlink; /* rd_kafka_itopic_t link*/
         TAILQ_ENTRY(rd_kafka_toppar_s) rktp_cgrplink;/* rd_kafka_cgrp_t link */
         rd_kafka_itopic_t       *rktp_rkt;
@@ -90,7 +90,7 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
         rd_kafka_msgq_t    rktp_xmit_msgq; /* internal broker xmit queue.
                                             * local to broker thread. */
 
-        int                rktp_fetch;     /* On rkb_fetch_toppars list */
+        int                rktp_fetch;     /* On rkb_active_toppars list */
 
 	/* Consumer */
 	rd_kafka_q_t      *rktp_fetchq;          /* Queue of fetched messages
@@ -401,21 +401,6 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_pause (rd_kafka_toppar_t *rktp,
 void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
                                     rd_kafka_resp_err_t err);
 
-/**
- * Updates the current toppar fetch round-robin next pointer.
- */
-static RD_INLINE RD_UNUSED
-void rd_kafka_broker_fetch_toppar_next (rd_kafka_broker_t *rkb,
-                                        rd_kafka_toppar_t *sugg_next) {
-        if (CIRCLEQ_EMPTY(&rkb->rkb_fetch_toppars) ||
-            (void *)sugg_next == CIRCLEQ_ENDC(&rkb->rkb_fetch_toppars))
-                rkb->rkb_fetch_toppar_next = NULL;
-        else if (sugg_next)
-                rkb->rkb_fetch_toppar_next = sugg_next;
-        else
-                rkb->rkb_fetch_toppar_next =
-                        CIRCLEQ_FIRST(&rkb->rkb_fetch_toppars);
-}
 
 
 rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,

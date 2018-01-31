@@ -509,19 +509,20 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                  *  fixed partition:          simply concatenate the queue
                  *                            to partit */
                 if (multiple_partitions) {
-                        if (partition == RD_KAFKA_PARTITION_UA) {
+                        if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA) {
                                 /* Partition the message */
                                 rkmessages[i].err =
-                                rd_kafka_msg_partitioner(rkt, rkm,
-                                                         0/*already locked*/);
+                                        rd_kafka_msg_partitioner(
+                                                rkt, rkm, 0/*already locked*/);
                         } else {
-                                if (s_rktp == NULL
-                                    || rkmessages[i].partition
-                                    != s_rktp->rktp_partition) {
+                                if (s_rktp == NULL ||
+                                    rkm->rkm_partition !=
+                                    s_rktp->rktp_partition) {
                                         if (s_rktp != NULL)
                                                 rd_kafka_toppar_destroy(s_rktp);
-                                        s_rktp = rd_kafka_toppar_get_avail(rkt, rkmessages[i].partition,
-                                                                           1/*ua on miss*/, &all_err);
+                                        s_rktp = rd_kafka_toppar_get_avail(
+                                                rkt, rkm->rkm_partition,
+                                                1/*ua on miss*/, &all_err);
                                 }
                                 rktp = rd_kafka_toppar_s2i(s_rktp);
                                 rd_kafka_toppar_enq_msg(rktp, rkm);

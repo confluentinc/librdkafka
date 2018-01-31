@@ -176,9 +176,15 @@ static rd_kafka_msg_t *rd_kafka_msg_new0 (rd_kafka_itopic_t *rkt,
 		return NULL;
 	}
 
-	*errp = rd_kafka_curr_msgs_add(rkt->rkt_rk, 1, len,
-				       msgflags & RD_KAFKA_MSG_F_BLOCK);
-	if (unlikely(*errp)) {
+        if (msgflags & RD_KAFKA_MSG_F_BLOCK)
+                *errp = rd_kafka_curr_msgs_add(
+                        rkt->rkt_rk, 1, len, 1/*block*/,
+                        (msgflags & RD_KAFKA_MSG_F_RKT_RDLOCKED) ?
+                        &rkt->rkt_lock : NULL);
+        else
+                *errp = rd_kafka_curr_msgs_add(rkt->rkt_rk, 1, len, 0, NULL);
+
+        if (unlikely(*errp)) {
 		if (errnop)
 			*errnop = ENOBUFS;
 		return NULL;
@@ -240,7 +246,7 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 	int errnox;
 
         /* Create message */
-        rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags, 
+        rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags,
                                 payload, len, key, keylen, msg_opaque,
                                 &err, &errnox, NULL, 0, rd_clock());
         if (unlikely(!rkm)) {
@@ -463,6 +469,10 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                                    1/*ua on miss*/, &all_err);
                 rktp = rd_kafka_toppar_s2i(s_rktp);
                 rd_kafka_topic_rdunlock(rkt);
+        } else {
+                /* Indicate to lower-level msg_new..() that rkt is locked
+                 * so that they may unlock it momentarily if blocking. */
+                msgflags |= RD_KAFKA_MSG_F_RKT_RDLOCKED;
         }
 
         for (i = 0 ; i < message_cnt ; i++) {

@@ -33,6 +33,13 @@
 #include "rdkafka_proto.h"
 #include "rdkafka_header.h"
 
+
+/**
+ * @brief Internal RD_KAFKA_MSG_F_.. flags
+ */
+#define RD_KAFKA_MSG_F_RKT_RDLOCKED    0x100000 /* rkt is rdlock():ed */
+
+
 /**
  * @brief Message.MsgAttributes for MsgVersion v0..v1,
  *        also used for MessageSet.Attributes for MsgVersion v2.

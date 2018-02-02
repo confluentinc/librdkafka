@@ -289,6 +289,9 @@ static void
 dr_per_message_partition_cb (rd_kafka_t *rk,
                              const rd_kafka_message_t *rkmessage,
                              void *opaque) {
+
+        free(rkmessage->_private);
+
         if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
             TEST_FAIL("Message delivery failed: %s\n",
                       rd_kafka_err2str(rkmessage->err));
@@ -421,6 +424,8 @@ static void
 dr_partitioner_wo_per_message_flag_cb (rd_kafka_t *rk,
                                        const rd_kafka_message_t *rkmessage,
                                        void *opaque) {
+        free(rkmessage->_private);
+
         if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
                 TEST_FAIL("Message delivery failed: %s\n",
                           rd_kafka_err2str(rkmessage->err));

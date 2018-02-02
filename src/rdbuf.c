@@ -616,8 +616,11 @@ int rd_buf_write_seek (rd_buf_t *rbuf, size_t absof) {
          * destroy_segment() length checks are correct.
          * Will decrement rbuf_len et.al. */
         for (next = TAILQ_LAST(&rbuf->rbuf_segments, rd_segment_head) ;
-             next != seg ; next = TAILQ_PREV(next, rd_segment_head, seg_link))
-                rd_buf_destroy_segment(rbuf, next);
+             next != seg ; ) {
+                rd_segment_t *this = next;
+                next = TAILQ_PREV(this, rd_segment_head, seg_link);
+                rd_buf_destroy_segment(rbuf, this);
+        }
 
         /* Update relative write offset */
         seg->seg_of         = relof;

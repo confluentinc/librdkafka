@@ -907,9 +907,9 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
 		   "\"desired\":%s, "
 		   "\"unknown\":%s, "
 		   "\"msgq_cnt\":%i, "
-		   "\"msgq_bytes\":%"PRIu64", "
+		   "\"msgq_bytes\":%"PRIusz", "
 		   "\"xmit_msgq_cnt\":%i, "
-		   "\"xmit_msgq_bytes\":%"PRIu64", "
+		   "\"xmit_msgq_bytes\":%"PRIusz", "
 		   "\"fetchq_cnt\":%i, "
 		   "\"fetchq_size\":%"PRIu64", "
 		   "\"fetch_state\":\"%s\", "
@@ -934,10 +934,11 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (char **bufp, size_t *sizep,
                    leader_nodeid,
 		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_DESIRED)?"true":"false",
 		   (rktp->rktp_flags&RD_KAFKA_TOPPAR_F_UNKNOWN)?"true":"false",
-		   rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
-		   rd_atomic64_get(&rktp->rktp_msgq.rkmq_msg_bytes),
-		   rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt),
-		   rd_atomic64_get(&rktp->rktp_xmit_msgq.rkmq_msg_bytes),
+                   rd_kafka_msgq_len(&rktp->rktp_msgq),
+		   rd_kafka_msgq_size(&rktp->rktp_msgq),
+                   /* FIXME: xmit_msgq is local to the broker thread. */
+                   0,
+                   (size_t)0,
 		   rd_kafka_q_len(rktp->rktp_fetchq),
 		   rd_kafka_q_size(rktp->rktp_fetchq),
 		   rd_kafka_fetch_states[rktp->rktp_fetch_state],
@@ -2769,8 +2770,8 @@ static void rd_kafka_toppar_dump (FILE *fp, const char *indent,
 		"%s xmit_msgq: %i messages\n"
 		"%s total:     %"PRIu64" messages, %"PRIu64" bytes\n",
 		indent, rd_refcnt_get(&rktp->rktp_refcnt),
-		indent, rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
-		indent, rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt),
+		indent, rktp->rktp_msgq.rkmq_msg_cnt,
+		indent, rktp->rktp_xmit_msgq.rkmq_msg_cnt,
 		indent, rd_atomic64_get(&rktp->rktp_c.tx_msgs), rd_atomic64_get(&rktp->rktp_c.tx_bytes));
 }
 

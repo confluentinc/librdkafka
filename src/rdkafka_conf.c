@@ -733,6 +733,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(retry_backoff_ms),
 	  "The backoff time in milliseconds before retrying a protocol request.",
 	  1, 300*1000, 100 },
+
+        { _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.backpressure.threshold",
+          _RK_C_INT, _RK(queue_backpressure_thres),
+          "The threshold of outstanding not yet transmitted requests "
+          "needed to backpressure the producer's message accumulator. "
+          "A lower number yields larger and more effective batches.",
+          0, 1000000, 10 },
+
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),
 	  "compression codec to use for compressing message sets. "

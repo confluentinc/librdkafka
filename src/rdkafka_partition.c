@@ -48,9 +48,6 @@ static rd_kafka_op_res_t
 rd_kafka_toppar_op_serve (rd_kafka_t *rk,
                           rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                           rd_kafka_q_cb_type_t cb_type, void *opaque);
-static RD_INLINE void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
-                                                       rd_kafka_toppar_t *rktp);
-
 
 
 static RD_INLINE int32_t
@@ -738,10 +735,8 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                                   rd_kafka_msgs_head_s,
                                   rd_kafka_msg_t *, rkm_link);
 
-                rd_atomic32_add(&destq->rkmq_msg_cnt,
-                                rd_atomic32_get(&srcq->rkmq_msg_cnt));
-                rd_atomic64_add(&destq->rkmq_msg_bytes,
-                                rd_atomic64_get(&srcq->rkmq_msg_bytes));
+                destq->rkmq_msg_cnt   += srcq->rkmq_msg_cnt;
+                destq->rkmq_msg_bytes += srcq->rkmq_msg_bytes;
                 rd_kafka_msgq_init(srcq);
         }
 }
@@ -1020,8 +1015,8 @@ void rd_kafka_toppar_broker_delegate (rd_kafka_toppar_t *rktp,
 			     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
 			     rktp->rktp_partition,
 			     rd_kafka_broker_name(rkb),
-			     rd_atomic32_get(&rktp->rktp_msgq.rkmq_msg_cnt),
-			     rd_atomic64_get(&rktp->rktp_msgq.rkmq_msg_bytes));
+                             rktp->rktp_msgq.rkmq_msg_cnt,
+                             rktp->rktp_msgq.rkmq_msg_bytes);
 
 
 	} else {
@@ -1760,66 +1755,6 @@ static void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
 
 
 /**
- * Add toppar to fetch list.
- *
- * Locality: broker thread
- * Locks: none
- */
-static RD_INLINE void rd_kafka_broker_fetch_toppar_add (rd_kafka_broker_t *rkb,
-                                                       rd_kafka_toppar_t *rktp){
-        if (rktp->rktp_fetch)
-                return; /* Already added */
-
-        CIRCLEQ_INSERT_TAIL(&rkb->rkb_fetch_toppars, rktp, rktp_fetchlink);
-        rkb->rkb_fetch_toppar_cnt++;
-        rktp->rktp_fetch = 1;
-
-        if (unlikely(rkb->rkb_fetch_toppar_cnt == 1))
-                rd_kafka_broker_fetch_toppar_next(rkb, rktp);
-
-        rd_rkb_dbg(rkb, TOPIC, "FETCHADD",
-                   "Added %.*s [%"PRId32"] to fetch list (%d entries, opv %d)",
-                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                   rktp->rktp_partition,
-                   rkb->rkb_fetch_toppar_cnt, rktp->rktp_fetch_version);
-}
-
-
-/**
- * Remove toppar from fetch list.
- *
- * Locality: broker thread
- * Locks: none
- */
-static RD_INLINE void rd_kafka_broker_fetch_toppar_del (rd_kafka_broker_t *rkb,
-                                                       rd_kafka_toppar_t *rktp){
-        if (!rktp->rktp_fetch)
-                return; /* Not added */
-
-        CIRCLEQ_REMOVE(&rkb->rkb_fetch_toppars, rktp, rktp_fetchlink);
-        rd_kafka_assert(NULL, rkb->rkb_fetch_toppar_cnt > 0);
-        rkb->rkb_fetch_toppar_cnt--;
-        rktp->rktp_fetch = 0;
-
-        if (rkb->rkb_fetch_toppar_next == rktp) {
-                /* Update next pointer */
-                rd_kafka_broker_fetch_toppar_next(
-			rkb, CIRCLEQ_LOOP_NEXT(&rkb->rkb_fetch_toppars,
-					       rktp, rktp_fetchlink));
-        }
-
-        rd_rkb_dbg(rkb, TOPIC, "FETCHADD",
-                   "Removed %.*s [%"PRId32"] from fetch list "
-                   "(%d entries, opv %d)",
-                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                   rktp->rktp_partition,
-                   rkb->rkb_fetch_toppar_cnt, rktp->rktp_fetch_version);
-
-}
-
-
-
-/**
  * @brief Decide whether this toppar should be on the fetch list or not.
  *
  * Also:
@@ -1941,9 +1876,9 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
 
                 if (should_fetch) {
 			rd_dassert(rktp->rktp_fetch_version > 0);
-                        rd_kafka_broker_fetch_toppar_add(rkb, rktp);
+                        rd_kafka_broker_active_toppar_add(rkb, rktp);
                 } else {
-                        rd_kafka_broker_fetch_toppar_del(rkb, rktp);
+                        rd_kafka_broker_active_toppar_del(rkb, rktp);
                         /* Non-fetching partitions will have an
                          * indefinate backoff, unless explicitly specified. */
                         if (!ts_backoff)

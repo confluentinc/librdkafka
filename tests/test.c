@@ -162,6 +162,7 @@ _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
 _TEST_DECL(0077_compaction);
+_TEST_DECL(0078_c_from_cpp);
 
 
 /* Manual tests */
@@ -259,6 +260,7 @@ struct test tests[] = {
 #endif
         _TEST(0076_produce_retry, 0),
         _TEST(0077_compaction, 0, TEST_BRKVER(0,9,0,0)),
+        _TEST(0078_c_from_cpp, TEST_F_LOCAL),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -2259,7 +2261,7 @@ int test_msgver_add_msg0 (const char *func, int line,
 			  test_msgver_t *mv, rd_kafka_message_t *rkmessage) {
 	uint64_t in_testid;
 	int in_part;
-	int in_msgnum;
+	int in_msgnum = -1;
 	char buf[128];
         const void *val;
         size_t valsize;
@@ -3290,6 +3292,7 @@ int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
                                         int32_t cnt;
                                         cnt = metadata->topics[0].partition_cnt;
                                         rd_kafka_metadata_destroy(metadata);
+                                        rd_kafka_topic_destroy(rkt);
                                         return (int)cnt;
                                 }
                                 TEST_SAY("metadata(%s) returned %s: retrying\n",

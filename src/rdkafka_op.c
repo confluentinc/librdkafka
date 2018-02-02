@@ -586,8 +586,6 @@ rd_kafka_op_handle_std (rd_kafka_t *rk, rd_kafka_q_t *rkq,
                 return rd_kafka_op_call(rk, rkq, rko);
         else if (rko->rko_type == RD_KAFKA_OP_RECV_BUF) /* Handle Response */
                 rd_kafka_buf_handle_op(rko, rko->rko_err);
-        else if (rko->rko_type == RD_KAFKA_OP_WAKEUP)
-                ;/* do nothing, wake up is a fact anyway */
         else if (cb_type != RD_KAFKA_Q_CB_RETURN &&
                  rko->rko_type & RD_KAFKA_OP_REPLY &&
                  rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)

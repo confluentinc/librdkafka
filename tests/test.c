@@ -3292,6 +3292,7 @@ int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
                                         int32_t cnt;
                                         cnt = metadata->topics[0].partition_cnt;
                                         rd_kafka_metadata_destroy(metadata);
+                                        rd_kafka_topic_destroy(rkt);
                                         return (int)cnt;
                                 }
                                 TEST_SAY("metadata(%s) returned %s: retrying\n",

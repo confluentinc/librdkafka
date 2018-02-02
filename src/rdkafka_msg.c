@@ -517,7 +517,8 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                         } else {
                                 if (s_rktp == NULL ||
                                     rkm->rkm_partition !=
-                                    s_rktp->rktp_partition) {
+                                    rd_kafka_toppar_s2i(s_rktp)->
+                                    rktp_partition) {
                                         if (s_rktp != NULL)
                                                 rd_kafka_toppar_destroy(s_rktp);
                                         s_rktp = rd_kafka_toppar_get_avail(

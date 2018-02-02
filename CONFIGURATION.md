@@ -61,6 +61,7 @@ ssl.crl.location                         |  *  |                 |              
 ssl.keystore.location                    |  *  |                 |               | Path to client's keystore (PKCS#12) used for authentication. <br>*Type: string*
 ssl.keystore.password                    |  *  |                 |               | Client's keystore (PKCS#12) password. <br>*Type: string*
 sasl.mechanisms                          |  *  |                 |        GSSAPI | SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512. **NOTE**: Despite the name only one mechanism must be configured. <br>*Type: string*
+sasl.mechanism                           |  *  |                 |               | Alias for `sasl.mechanisms`
 sasl.kerberos.service.name               |  *  |                 |         kafka | Kerberos principal name that Kafka runs as, not including /hostname@REALM <br>*Type: string*
 sasl.kerberos.principal                  |  *  |                 |   kafkaclient | This client's Kerberos principal name. (Not supported on Windows, will use the logon user's principal). <br>*Type: string*
 sasl.kerberos.kinit.cmd                  |  *  |                 | kinit -S "%{sasl.kerberos.service.name}/%{broker.name}" -k -t "%{sasl.kerberos.keytab}" %{sasl.kerberos.principal} | Full kerberos kinit command string, %{config.prop.name} is replaced by corresponding config object value, %{broker.name} returns the broker's hostname. <br>*Type: string*

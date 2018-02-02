@@ -523,6 +523,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
 	 .validate = rd_kafka_conf_validate_single },
+        {_RK_GLOBAL,"sasl.mechanism", _RK_C_ALIAS,
+         .sdef = "sasl.mechanisms" },
 	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
 	  _RK(sasl.service_name),
 	  "Kerberos principal name that Kafka runs as, "

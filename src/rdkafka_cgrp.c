@@ -1870,6 +1870,15 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 	rd_kafka_assert(NULL, rkcg->rkcg_wait_commit_cnt > 0);
 	rkcg->rkcg_wait_commit_cnt--;
 
+        if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
+                rd_kafka_dbg(rk, CGRP, "COMMIT", "All commited, call fetch_start.");
+                if (rkcg->rkcg_wait_commit_cnt == 0 &&
+                    rkcg->rkcg_assignment &&
+                    RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
+                        rd_kafka_cgrp_partitions_fetch_start(rkcg,
+                                                             rkcg->rkcg_assignment, 0);
+	}
+
 	if (err == RD_KAFKA_RESP_ERR__DESTROY ||
             (err == RD_KAFKA_RESP_ERR__NO_OFFSET &&
              rko_orig->rko_u.offset_commit.silent_empty)) {

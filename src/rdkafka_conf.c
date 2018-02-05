@@ -461,6 +461,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "such as 0.10.2.1, enables ApiVersionRequests.",
 	  .sdef = "0.9.0",
 	  .validate = rd_kafka_conf_validate_broker_version },
+	{ _RK_GLOBAL, "connect.on.demand", _RK_C_BOOL,
+	  _RK(connect_on_demand),
+	  "A connection to a broker is established only when it needs to be "
+	  "used. Idle connections closed by brokers (connections.max.idle.ms "
+      "setting on server side) are not re-opened unless required. If false, "
+      "librdkafka opens connections to all brokers it knows about and tries "
+      "maintaining them up (even when they are closed from server side).",
+	  0, 1, 0 },
 
 	/* Security related global properties */
 	{ _RK_GLOBAL, "security.protocol", _RK_C_S2I,

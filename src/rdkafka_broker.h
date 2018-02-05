@@ -255,11 +255,20 @@ rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0 (rd_kafka_t *rk,
         rd_kafka_broker_find_by_nodeid0(rk,nodeid,-1)
 
 /**
- * Filter out brokers that are currently in a blocking request.
+ * Filter out brokers that are not connected.
+ */
+static RD_INLINE RD_UNUSED int
+rd_kafka_broker_filter_connected (rd_kafka_broker_t *rkb, void *opaque) {
+        return !rkb->rkb_transport;
+}
+
+/**
+ * Filter out brokers that are not connected or currently in a blocking request.
  */
 static RD_INLINE RD_UNUSED int
 rd_kafka_broker_filter_non_blocking (rd_kafka_broker_t *rkb, void *opaque) {
-        return rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0;
+        return !rkb->rkb_transport ||
+               rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0;
 }
 
 /**
@@ -267,7 +276,8 @@ rd_kafka_broker_filter_non_blocking (rd_kafka_broker_t *rkb, void *opaque) {
  */
 static RD_INLINE RD_UNUSED int
 rd_kafka_broker_filter_can_group_query (rd_kafka_broker_t *rkb, void *opaque) {
-        return rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0 ||
+        return !rkb->rkb_transport ||
+               rd_atomic32_get(&rkb->rkb_blocking_request_cnt) > 0 ||
 		!(rkb->rkb_features & RD_KAFKA_FEATURE_BROKER_GROUP_COORD);
 }
 
@@ -276,10 +286,10 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
                                                        void *opaque),
                                         void *opaque);
 
+rd_kafka_broker_t *rd_kafka_broker_any_connected (rd_kafka_t *rk);
+
 rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms,
                                                int do_lock);
-
-rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state);
 
 rd_kafka_broker_t *
 rd_kafka_broker_get_async (rd_kafka_t *rk, int32_t broker_id, int state,
@@ -357,7 +367,8 @@ int rd_kafka_brokers_wait_state_change_async (rd_kafka_t *rk,
                                               rd_kafka_enq_once_t *eonce);
 void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk);
 
-
+void rd_kafka_broker_trigger_connection (rd_kafka_broker_t *rkb,
+                                         int wakeup);
 
 /**
  * Updates the current toppar active round-robin next pointer.

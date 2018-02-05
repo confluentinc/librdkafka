@@ -251,9 +251,7 @@ static rd_kafka_broker_t *rd_kafka_cgrp_select_broker (rd_kafka_cgrp_t *rkcg) {
                 rkb = rd_kafka_broker_find_by_nodeid(rkcg->rkcg_rk,
                                                      rkcg->rkcg_coord_id);
         if (!rkb)
-                rkb = rd_kafka_broker_prefer(rkcg->rkcg_rk,
-                                             rkcg->rkcg_coord_id,
-                                             RD_KAFKA_BROKER_STATE_UP);
+                rkb = rd_kafka_broker_any_connected(rkcg->rkcg_rk);
         if (!rkb)
                 rkb = rd_kafka_broker_internal(rkcg->rkcg_rk);
 
@@ -512,6 +510,12 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 	rd_kafka_rdlock(rkcg->rkcg_rk);
 	rkb = rd_kafka_broker_any(rkcg->rkcg_rk, RD_KAFKA_BROKER_STATE_UP,
 				  rd_kafka_broker_filter_can_group_query, NULL);
+
+        /* If no broker is connected, trigger connection for one of them. This
+         * ensures that a connected broker will eventually be available. */
+        if (!rkb)
+                rkb = rd_kafka_broker_any_connected(rkcg->rkcg_rk);
+
 	rd_kafka_rdunlock(rkcg->rkcg_rk);
 
 	if (!rkb) {
@@ -3035,6 +3039,11 @@ void rd_kafka_cgrp_serve (rd_kafka_cgrp_t *rkcg) {
                 if (rkb_state < RD_KAFKA_BROKER_STATE_UP || !rkb ||
 		    !rd_kafka_broker_supports(
 			    rkb, RD_KAFKA_FEATURE_BROKER_GROUP_COORD)) {
+			/* Trigger connection if the broker up but not connected
+			 * (possible with connection on demand). */
+			if (rkb_state == RD_KAFKA_BROKER_STATE_UP &&
+			    !rkb->rkb_transport)
+				rd_kafka_broker_trigger_connection(rkb, 1);
 			/* Coordinator query */
 			if (rd_interval(&rkcg->rkcg_coord_query_intvl,
 					1000*1000, now) > 0)

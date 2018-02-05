@@ -1607,6 +1607,9 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         /* Convert group.id to kafka string (may be NULL) */
         rk->rk_group_id = rd_kafkap_str_new(rk->rk_conf.group_id_str,-1);
 
+        mtx_init(&rk->rk_ts_trigger_connect_mtx, mtx_plain);
+        rk->rk_ts_trigger_connect = 0;
+
         /* Config fixups */
         rk->rk_conf.queued_max_msg_bytes =
                 (int64_t)rk->rk_conf.queued_max_msg_kbytes * 1000ll;
@@ -3807,6 +3810,22 @@ int rd_kafka_errno (void) {
 
 int rd_kafka_unittest (void) {
         return rd_unittest();
+}
+
+
+/**
+ * @brief Check if last connection triggered to a broker occurred more than
+ *        after_ms ago, in which case the timestamp for the last connection
+ *        triggered is updated.
+ */
+int rd_kafka_can_trigger_new_connection (rd_kafka_t *rk, int after_ms) {
+        mtx_lock(&rk->rk_ts_trigger_connect_mtx);
+        rd_ts_t now = rd_clock();
+        int res = (now > rk->rk_ts_trigger_connect + after_ms * 1000) ? 1 : 0;
+        if (res)
+                rk->rk_ts_trigger_connect = now;
+        mtx_unlock(&rk->rk_ts_trigger_connect_mtx);
+        return res;
 }
 
 

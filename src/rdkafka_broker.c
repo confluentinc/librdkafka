@@ -402,9 +402,12 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY)
 		rd_kafka_broker_feature_disable(rkb, RD_KAFKA_FEATURE_APIVERSION);
 
-	/* Set broker state */
+	/* Set broker state. If connection on demand is set and state was UP,
+	 * don't trigger immediate reconnection. */
         old_state = rkb->rkb_state;
-	rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
+	if (!rkb->rkb_rk->rk_conf.connect_on_demand ||
+	    old_state != RD_KAFKA_BROKER_STATE_UP)
+		rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
 
 	/* Unlock broker since a requeue will try to lock it. */
 	rd_kafka_broker_unlock(rkb);
@@ -966,6 +969,43 @@ void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
 
 
 /**
+ * Trigger a connection by changing the broker state to INIT, to exit the base
+ * .._serve() loop.
+ *
+ * @param wakeup is set to 1 to force an immediate wake up of the broker thread
+ * (likely idling on rd_kafka_broker_op_serve if this is called from a thread
+ * different than the broker thread itself).
+ */
+void rd_kafka_broker_trigger_connection (rd_kafka_broker_t *rkb, int wakeup) {
+        rd_kafka_broker_lock(rkb);
+        rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_INIT);
+        rd_kafka_broker_unlock(rkb);
+        if (wakeup)
+                rd_kafka_broker_wakeup(rkb);
+}
+
+
+/**
+ * Trigger a connection for a broker in state UP but not connected (possible
+ * with connection on demand) if data is queued for sending.
+ *
+ * @returns: 1 if connection was triggered, 0 otherwise
+ * @locality broker thread
+ */
+static int rd_kafka_broker_trigger_connection_on_data_queued (
+        rd_kafka_broker_t *rkb) {
+        if (!rkb->rkb_transport &&
+            (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP ||
+             rkb->rkb_state == RD_KAFKA_BROKER_STATE_UPDATE) &&
+            rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0) {
+                rd_kafka_broker_trigger_connection(rkb, 0);
+                return 1;
+        }
+        return 0;
+}
+
+
+/**
  * Returns a random broker (with refcnt increased) in state 'state'.
  * Uses Reservoir sampling.
  *
@@ -1004,6 +1044,45 @@ rd_kafka_broker_t *rd_kafka_broker_any (rd_kafka_t *rk, int state,
 
 
 /**
+ * Returns a random broker (with refcnt increased) in state UP and connected.
+ *
+ * In case none of the brokers in state UP are connected (possible with
+ * connection on demand), a connection to a random UP broker is triggered,
+ * unless such a connection was triggered not long ago (in which case, we let it
+ * a bit of time to complete).
+ *
+ * @locks: rd_kafka_rdlock(rk) MUST be held.
+ * @locality: any thread
+ */
+rd_kafka_broker_t *rd_kafka_broker_any_connected (rd_kafka_t *rk) {
+        rd_kafka_broker_t *rkb;
+
+        rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
+                                  rd_kafka_broker_filter_connected, NULL);
+        if (rkb)
+                return rkb;
+
+        /* No broker is in state UP and connected. Trigger connection to a
+         * random UP broker, unless we did so not long ago (100 ms) */
+
+        if (!rd_kafka_can_trigger_new_connection(rk, 100))
+                return NULL;
+
+        rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP, NULL, NULL);
+        if (rkb) {
+                /* Unlikely (connection occurred between the 2
+                 * rd_kafka_broker_any calls), but possible. */
+                if (unlikely(rkb->rkb_transport != NULL))
+                        return rkb;
+
+                rd_kafka_broker_trigger_connection(rkb, 1);
+                rd_kafka_broker_destroy(rkb);
+        }
+        return NULL;
+}
+
+
+/**
  * @brief Spend at most \p timeout_ms to acquire a usable (Up && non-blocking)
  *        broker.
  *
@@ -1021,15 +1100,20 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk,
 		int remains;
 		int version = rd_kafka_brokers_get_state_version(rk);
 
-                /* Try non-blocking (e.g., non-fetching) brokers first. */
+                /* Try non-blocking (e.g., connected and non-fetching) brokers
+                 * first. */
                 if (do_lock)
                         rd_kafka_rdlock(rk);
                 rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
                                           rd_kafka_broker_filter_non_blocking,
                                           NULL);
+
+                /* Try with any connected broker otherwise. This triggers
+                 * connection for a random broker in state UP if no connected
+                 * broker is available. */
                 if (!rkb)
-                        rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
-                                                  NULL, NULL);
+                        rkb = rd_kafka_broker_any_connected(rk);
+
                 if (do_lock)
                         rd_kafka_rdunlock(rk);
 
@@ -1044,46 +1128,6 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk,
 	}
 
 	return NULL;
-}
-
-
-
-/**
- * Returns a broker in state `state`, preferring the one with
- * matching `broker_id`.
- * Uses Reservoir sampling.
- *
- * Locks: rd_kafka_rdlock(rk) MUST be held.
- * Locality: any thread
- */
-rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id,
-					   int state) {
-	rd_kafka_broker_t *rkb, *good = NULL;
-        int cnt = 0;
-
-	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-		rd_kafka_broker_lock(rkb);
-		if ((int)rkb->rkb_state == state) {
-                        if (broker_id != -1 && rkb->rkb_nodeid == broker_id) {
-                                if (good)
-                                        rd_kafka_broker_destroy(good);
-                                rd_kafka_broker_keep(rkb);
-                                good = rkb;
-                                rd_kafka_broker_unlock(rkb);
-                                break;
-                        }
-                        if (cnt < 1 || rd_jitter(0, cnt) < 1) {
-                                if (good)
-                                        rd_kafka_broker_destroy(good);
-                                rd_kafka_broker_keep(rkb);
-                                good = rkb;
-                        }
-                        cnt += 1;
-                }
-		rd_kafka_broker_unlock(rkb);
-	}
-
-        return good;
 }
 
 
@@ -2514,8 +2558,16 @@ static int rd_kafka_broker_ops_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb,
                                    rd_ts_t abs_timeout) {
         rd_ts_t now;
-        int initial_state = rkb->rkb_state;
-        int remains_ms = rd_timeout_remains(abs_timeout);
+        int initial_state;
+        int remains_ms;
+
+        if (rd_kafka_broker_trigger_connection_on_data_queued(rkb))
+                /* Quickly exit out of the broker loop (the state changed) */
+                remains_ms = RD_POLL_NOWAIT;
+        else
+                remains_ms = rd_timeout_remains(abs_timeout);
+
+        initial_state = rkb->rkb_state;
 
         /* Serve broker ops */
         if (rd_kafka_broker_ops_serve(rkb,
@@ -2544,6 +2596,8 @@ static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb,
                 rd_kafka_transport_io_serve(rkb->rkb_transport,
                                             blocking_max_ms);
         }
+        else
+                rd_kafka_broker_trigger_connection_on_data_queued(rkb);
 
         /* Scan wait-response queue for timeouts. */
         now = rd_clock();
@@ -3764,6 +3818,9 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */
 
         rkb->rkb_blocking_max_ms = rk->rk_conf.socket_blocking_max_ms;
+
+        if (rk->rk_conf.connect_on_demand)
+                rkb->rkb_state = RD_KAFKA_BROKER_STATE_UP;
 
 	/* ApiVersion fallback interval */
 	if (rkb->rkb_rk->rk_conf.api_version_request) {

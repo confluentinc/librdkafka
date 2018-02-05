@@ -257,6 +257,10 @@ struct rd_kafka_s {
                                    *   This can be used for troubleshooting
                                    *   purposes. */
         } rk_background;
+
+        mtx_t rk_ts_trigger_connect_mtx;
+        rd_ts_t rk_ts_trigger_connect; /* Timestamp of last broker connection
+                                          triggered */
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)
@@ -526,5 +530,8 @@ rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
  * rdkafka_background.c
  */
 int rd_kafka_background_thread_main (void *arg);
+
+
+int rd_kafka_can_trigger_new_connection (rd_kafka_t *rk, int after_ms);
 
 #endif /* _RDKAFKA_INT_H_ */

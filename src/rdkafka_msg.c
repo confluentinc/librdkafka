@@ -1050,6 +1050,23 @@ rd_kafka_message_headers (const rd_kafka_message_t *rkmessage,
 }
 
 
+rd_kafka_resp_err_t
+rd_kafka_message_detach_headers (rd_kafka_message_t *rkmessage,
+                                 rd_kafka_headers_t **hdrsp) {
+        rd_kafka_msg_t *rkm;
+        rd_kafka_resp_err_t err;
+
+        err = rd_kafka_message_headers(rkmessage, hdrsp);
+        if (err)
+                return err;
+
+        rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+        rkm->rkm_headers = NULL;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 void rd_kafka_message_set_headers (rd_kafka_message_t *rkmessage,
                                    rd_kafka_headers_t *hdrs) {
         rd_kafka_msg_t *rkm;

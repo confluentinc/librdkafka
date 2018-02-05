@@ -1157,6 +1157,21 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_message_headers (const rd_kafka_message_t *rkmessage,
                           rd_kafka_headers_t **hdrsp);
 
+/**
+ * @brief Get the message header list and detach the list from the message
+ *        making the application the owner of the headers.
+ *        The application must eventually destroy the headers using
+ *        rd_kafka_headers_destroy().
+ *        The message's headers will be set to NULL.
+ *
+ *        Otherwise same semantics as rd_kafka_message_headers()
+ *
+ * @sa rd_kafka_message_headers
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_message_detach_headers (rd_kafka_message_t *rkmessage,
+                                 rd_kafka_headers_t **hdrsp);
+
 
 /**
  * @brief Replace the message's current headers with a new list.

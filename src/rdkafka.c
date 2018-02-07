@@ -734,7 +734,10 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
                      "Joining main background thread");
 
         if (thrd_join(thrd, NULL) != thrd_success)
-                rd_kafka_assert(NULL, !*"failed to join main thread");
+                rd_kafka_log(rk, LOG_ERR, "DESTROY",
+                             "Failed to join main thread: %s "
+                             "(was process forked?)",
+                             rd_strerror(errno));
 
         rd_kafka_destroy_final(rk);
 }

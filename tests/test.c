@@ -163,6 +163,7 @@ _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
 _TEST_DECL(0077_compaction);
 _TEST_DECL(0078_c_from_cpp);
+_TEST_DECL(0079_fork);
 
 
 /* Manual tests */
@@ -261,6 +262,7 @@ struct test tests[] = {
         _TEST(0076_produce_retry, 0),
         _TEST(0077_compaction, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0078_c_from_cpp, TEST_F_LOCAL),
+        _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE_WIN32),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

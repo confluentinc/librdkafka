@@ -271,8 +271,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_read_i32a(rkbuf, md->brokers[i].port);
 
                 if (ApiVersion >= 1) {
-                        rd_kafkap_str_t rack;
-                        rd_kafka_buf_read_str(rkbuf, &rack);
+                        rd_kafka_buf_read_str_tmpabuf(rkbuf, &tbuf, md->brokers[i].rack);
                 }
         }
 

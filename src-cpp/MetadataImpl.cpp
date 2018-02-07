@@ -42,11 +42,12 @@ Metadata::~Metadata() {};
 class BrokerMetadataImpl : public BrokerMetadata {
  public:
   BrokerMetadataImpl(const rd_kafka_metadata_broker_t *broker_metadata)
-  :broker_metadata_(broker_metadata),host_(broker_metadata->host) {}
+  :broker_metadata_(broker_metadata),host_(broker_metadata->host),rack_(broker_metadata->rack) {}
 
   int32_t      id() const{return broker_metadata_->id;}
 
   const std::string host() const {return host_;}
+  const std::string rack() const {return rack_;}
   int port() const {return broker_metadata_->port;}
 
   virtual ~BrokerMetadataImpl() {}
@@ -54,6 +55,7 @@ class BrokerMetadataImpl : public BrokerMetadata {
  private:
   const rd_kafka_metadata_broker_t *broker_metadata_;
   const std::string host_;
+  const std::string rack_;
 };
 
 /**

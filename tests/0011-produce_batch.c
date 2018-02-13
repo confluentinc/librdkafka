@@ -545,6 +545,7 @@ int main_0011_produce_batch (int argc, char **argv) {
         test_message_partitioner_wo_per_message_flag();
         test_single_partition();
         test_partitioner();
-        test_per_message_partition_flag();
+        if (test_can_create_topics(1))
+                test_per_message_partition_flag();
         return 0;
 }

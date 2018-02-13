@@ -281,7 +281,8 @@ static void do_test_partitioners (void) {
 }
 
 int main_0048_partitioner (int argc, char **argv) {
-        do_test_partitioners();
+        if (test_can_create_topics(0))
+                do_test_partitioners();
 	do_test_failed_partitioning();
 	return 0;
 }

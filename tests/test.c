@@ -3468,7 +3468,7 @@ void test_report_add (struct test *test, const char *fmt, ...) {
 int test_can_create_topics (int skip) {
 #ifdef _MSC_VER
 	if (skip)
-		TEST_SKIP("Cannot create topics on Win32");
+		TEST_SKIP("Cannot create topics on Win32\n");
 	return 0;
 #else
 

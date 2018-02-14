@@ -42,6 +42,11 @@
  */
 
 int main_0079_fork (int argc, char **argv) {
+
+#if __SANITIZE_ADDRESS__
+        TEST_SKIP("AddressSanitizer is enabled: this test leaks memory (due to fork())\n");
+        return 0;
+#endif
 #ifdef _MSC_VER
         TEST_SKIP("No fork() support on Windows");
         return 0;

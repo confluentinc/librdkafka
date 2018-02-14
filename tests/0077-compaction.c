@@ -78,7 +78,7 @@ static void wait_compaction (rd_kafka_t *rk,
                  "Low watermark offset from %"PRId64" on %s [%"PRId32"]\n",
                  low_offset, topic, partition);
 
-        do {
+        while (1) {
                 low = get_low_wmark(rk, topic, partition);
 
                 TEST_SAY("Low watermark offset for %s [%"PRId32"] is "
@@ -88,9 +88,68 @@ static void wait_compaction (rd_kafka_t *rk,
                 if (low > low_offset)
                         break;
 
+                if (ts_start + (timeout_ms * 1000) < test_clock())
+                        break;
+
                 rd_sleep(5);
-        } while (ts_start + (timeout_ms * 1000) > test_clock());
+        }
 }
+
+static void produce_compactable_msgs (const char *topic, int32_t partition,
+                                      uint64_t testid,
+                                      int msgcnt, size_t msgsize) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        int i;
+        char *val;
+        char key[16];
+        rd_kafka_resp_err_t err;
+        int msgcounter = msgcnt;
+
+        if (!testid)
+                testid = test_id_generate();
+
+        test_str_id_generate(key, sizeof(key));
+
+        val = calloc(1, msgsize);
+
+        TEST_SAY("Producing %d messages (total of %"PRIusz" bytes) of "
+                 "compactable messages\n", msgcnt, (size_t)msgcnt*msgsize);
+
+        test_conf_init(&conf, NULL, 0);
+        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+        /* Make sure batch size does not exceed segment.bytes since that
+         * will make the ProduceRequest fail. */
+        test_conf_set(conf, "batch.num.messages", "1");
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        for (i = 0 ; i < msgcnt-1 ; i++) {
+                err = rd_kafka_producev(rk,
+                                        RD_KAFKA_V_TOPIC(topic),
+                                        RD_KAFKA_V_PARTITION(partition),
+                                        RD_KAFKA_V_KEY(key, sizeof(key)-1),
+                                        RD_KAFKA_V_VALUE(val, msgsize),
+                                        RD_KAFKA_V_OPAQUE(&msgcounter),
+                                        RD_KAFKA_V_END);
+                TEST_ASSERT(!err, "producev(): %s", rd_kafka_err2str(err));
+        }
+
+        /* Final message is the tombstone */
+        err = rd_kafka_producev(rk,
+                                RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_PARTITION(partition),
+                                RD_KAFKA_V_KEY(key, sizeof(key)-1),
+                                RD_KAFKA_V_OPAQUE(&msgcounter),
+                                RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "producev(): %s", rd_kafka_err2str(err));
+
+        test_flush(rk, tmout_multip(10000));
+        TEST_ASSERT(msgcounter == 0, "%d messages unaccounted for", msgcounter);
+
+        rd_kafka_destroy(rk);
+}
+
 
 
 static void do_test_compaction (int msgs_per_key, const char *compression) {
@@ -107,8 +166,7 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
         test_msgver_t mv;
         test_msgver_t mv_correct;
         int msgcounter = 0;
-        rd_kafka_t *dummy_rk;
-        rd_kafka_topic_t *dummy_rkt;
+        const int fillcnt = 20;
 
         testid = test_id_generate();
 
@@ -137,6 +195,11 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = rd_kafka_topic_new(rk, topic, NULL);
 
+        /* The low watermark is not updated on message deletion(compaction)
+         * but on segment deletion, so fill up the first segment with
+         * random messages eligible for hasty compaction. */
+        produce_compactable_msgs(topic, 0, partition, fillcnt, 1000);
+
         /* Populate a correct msgver for later comparison after compact. */
         test_msgver_init(&mv_correct, testid);
 
@@ -155,6 +218,7 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
                         char unique_key[16];
                         const void *key;
                         size_t keysize;
+                        int64_t offset = fillcnt + cnt;
 
                         test_msg_fmt(rdk_msgid, sizeof(rdk_msgid),
                                      testid, partition, cnt);
@@ -186,7 +250,7 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
                                 test_msgver_add_msg00(__FUNCTION__, __LINE__,
                                                       &mv_correct, testid,
                                                       topic, partition,
-                                                      cnt,  -1, 0, cnt);
+                                                      offset,  -1, 0, cnt);
                         }
 
 
@@ -222,24 +286,14 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
          * We can't reuse the existing producer instance because it
          * might be using compression which makes it hard to know how
          * much data we need to produce to trigger compaction. */
-        TEST_SAY(_C_YEL "Trigger compaction by producing dummy messages\n");
-        test_conf_init(&conf, NULL, 0);
-        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
-        test_conf_set(conf, "message.max.bytes", "6000");
-        test_conf_set(conf, "linger.ms", "10");
-        dummy_rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
-        dummy_rkt = rd_kafka_topic_new(dummy_rk, topic, NULL);
-        test_produce_msgs(dummy_rk, dummy_rkt, 0, partition,  0,
-                          20, NULL, 1024);
-        rd_kafka_topic_destroy(dummy_rkt);
-        rd_kafka_destroy(dummy_rk);
+        produce_compactable_msgs(topic, 0, partition, 20, 1024);
 
         /* Wait for compaction:
          * this doesn't really work because the low watermark offset
          * is not updated on compaction if the first segment is not deleted.
          * But it serves as a pause to let compaction kick in
          * which is triggered by the dummy produce above. */
-        wait_compaction(rk, topic, partition, 0, 11*1000);
+        wait_compaction(rk, topic, partition, 0, 20*1000);
 
         TEST_SAY(_C_YEL "Verify messages after compaction\n");
         /* After compaction we expect the following messages:

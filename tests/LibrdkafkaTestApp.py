@@ -97,6 +97,8 @@ class LibrdkafkaTestApp(App):
             bootstrap_servers = all_listeners[0]
             self.log('WARNING: No eligible listeners for security.protocol=%s in %s: falling back to first listener: %s: tests will fail (which might be the intention)' % (security_protocol, all_listeners, bootstrap_servers))
 
+        self.bootstrap_servers = bootstrap_servers
+
         conf_blob.append('bootstrap.servers=%s' % bootstrap_servers)
         conf_blob.append('security.protocol=%s' % security_protocol)
 
@@ -105,6 +107,7 @@ class LibrdkafkaTestApp(App):
 
         self.env_add('RDKAFKA_TEST_CONF', self.test_conf_file)
         self.env_add('TEST_KAFKA_VERSION', version)
+        self.env_add('TRIVUP_ROOT', cluster.instance_path())
 
         if self.test_mode != 'bash':
             self.test_report_file = self.mkpath('test_report', pathtype='perm')
@@ -114,6 +117,10 @@ class LibrdkafkaTestApp(App):
                 self.env_add('TESTS', ','.join(tests))
 
     def start_cmd (self):
+        self.env_add('KAFKA_PATH', self.cluster.get_all('destdir', '', KafkaBrokerApp)[0], False)
+        self.env_add('ZK_ADDRESS', self.cluster.get_all('address', '', ZookeeperApp)[0], False)
+        self.env_add('BROKERS', self.cluster.bootstrap_servers(), False)
+
         extra_args = list()
         if not self.local_tests:
             extra_args.append('-L')

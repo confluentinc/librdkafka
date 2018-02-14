@@ -25,9 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
-
-
+#ifndef _RDKAFKA_ASSIGNOR_H_
+#define _RDKAFKA_ASSIGNOR_H_
 
 
 
@@ -157,3 +156,4 @@ rd_kafka_roundrobin_assignor_assign_cb (rd_kafka_t *rk,
 					char *errstr, size_t errstr_size,
 					void *opaque);
 
+#endif /* _RDKAFKA_ASSIGNOR_H_ */

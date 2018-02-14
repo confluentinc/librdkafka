@@ -25,7 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#ifndef _RDATOMIC_H_
+#define _RDATOMIC_H_
 
 #include "tinycthread.h"
 
@@ -186,3 +187,5 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra, int64_t v)
 	return ra->val = v; // FIXME
 #endif
 }
+
+#endif /* _RDATOMIC_H_ */

@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDTYPES_H_
+#define _RDTYPES_H_
 
 #include <inttypes.h>
 
@@ -40,3 +41,5 @@
 typedef int64_t rd_ts_t;
 
 #define RD_TS_MAX  INT64_MAX
+
+#endif /* _RDTYPES_H_ */

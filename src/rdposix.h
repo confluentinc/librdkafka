@@ -1,4 +1,3 @@
-#pragma once
 /*
 * librdkafka - Apache Kafka C library
 *
@@ -30,7 +29,8 @@
 /**
  * POSIX system support
  */
-#pragma once
+#ifndef _RDPOSIX_H_
+#define _RDPOSIX_H_
 
 #include <unistd.h>
 #include <stdio.h>
@@ -180,3 +180,5 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
 #define rd_read(fd,buf,sz) read(fd,buf,sz)
 #define rd_write(fd,buf,sz) write(fd,buf,sz)
 #define rd_close(fd) close(fd)
+
+#endif /* _RDPOSIX_H_ */

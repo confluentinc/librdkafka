@@ -41,7 +41,8 @@
 
 
 /* @cond NO_DOC */
-#pragma once
+#ifndef _RDKAFKA_H_
+#define _RDKAFKA_H_
 
 #include <stdio.h>
 #include <inttypes.h>
@@ -4188,3 +4189,4 @@ rd_kafka_interceptor_add_on_request_sent (
 #ifdef __cplusplus
 }
 #endif
+#endif /* _RDKAFKA_H_ */

@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDRAND_H_
+#define _RDRAND_H_
 
 
 /**
@@ -43,3 +44,5 @@ static RD_INLINE int rd_jitter (int low, int high) {
  * Shuffles (randomizes) an array using the modern Fisher-Yates algorithm.
  */
 void rd_array_shuffle (void *base, size_t nmemb, size_t entry_size);
+
+#endif /* _RDRAND_H_ */

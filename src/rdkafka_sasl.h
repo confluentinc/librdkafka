@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_SASL_H_
+#define _RDKAFKA_SASL_H_
 
 
 
@@ -44,3 +45,5 @@ int rd_kafka_sasl_global_init (void);
 
 int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
                                    char *errstr, size_t errstr_size);
+
+#endif /* _RDKAFKA_SASL_H_ */

@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKACPP_H_
+#define _RDKAFKACPP_H_
 
 /**
  * @file rdkafkacpp.h
@@ -2219,3 +2220,4 @@ class Metadata {
 
 }
 
+#endif /* _RDKAFKACPP_H_ */

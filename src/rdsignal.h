@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDSIGNAL_H_
+#define _RDSIGNAL_H_
 
 #include <signal.h>
 
@@ -52,3 +53,5 @@ static __inline void rd_intr_unblock (void) {
 
 	sigprocmask(SIG_UNBLOCK, &rd_intr_sigset, NULL);
 }
+
+#endif /* _RDSIGNAL_H_ */

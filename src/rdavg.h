@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _RDAVG_H_
+#define _RDAVG_H_
 
 
 typedef struct rd_avg_s {
@@ -93,3 +94,4 @@ static RD_UNUSED void rd_avg_destroy (rd_avg_t *ra) {
         mtx_destroy(&ra->ra_lock);
 }
 
+#endif /* _RDAVG_H_ */

@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_BROKER_H_
+#define _RDKAFKA_BROKER_H_
 
 #include "rdkafka_feature.h"
 
@@ -326,3 +327,5 @@ int rd_kafka_brokers_get_state_version (rd_kafka_t *rk);
 int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int stored_version,
 					int timeout_ms);
 void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk);
+
+#endif /* _RDKAFKA_BROKER_H_ */

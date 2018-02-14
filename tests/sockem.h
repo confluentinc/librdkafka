@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RD_SOCKEM_H_
+#define _RD_SOCKEM_H_
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -80,3 +81,5 @@ int sockem_set (sockem_t *skm, ...);
  * @remark Application is responsible for locking.
  */
 sockem_t *sockem_find (int sockfd);
+
+#endif /* _RD_SOCKEM_H_ */

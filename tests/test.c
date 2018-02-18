@@ -525,7 +525,7 @@ static void test_read_conf_file (const char *conf_path,
                                  rd_kafka_topic_conf_t *topic_conf,
                                  int *timeoutp) {
         FILE *fp;
-	char buf[512];
+	char buf[1024];
 	int line = 0;
 
 #ifndef _MSC_VER

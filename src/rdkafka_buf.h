@@ -160,9 +160,9 @@ rd_tmpabuf_write_str0 (const char *func, int line,
  */
 
 #define rd_kafka_buf_parse_fail(rkbuf,...) do {				\
-                if (log_decode_errors > 0) {                            \
+                if (1 || log_decode_errors > 0) {                       \
 			rd_kafka_assert(NULL, rkbuf->rkbuf_rkb);	\
-                        rd_rkb_log(rkbuf->rkbuf_rkb, log_decode_errors, \
+                        rd_rkb_log(rkbuf->rkbuf_rkb, LOG_ERR,           \
                                    "PROTOERR",                          \
                                    "Protocol parse failure "            \
                                    "at %"PRIusz"/%"PRIusz" (%s:%i) "    \

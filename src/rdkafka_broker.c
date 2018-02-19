@@ -1149,6 +1149,9 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
                                     rkbuf->rkbuf_reshdr.Size,
                                     rkb->rkb_rk->rk_conf.recv_max_msg_size);
                         err = RD_KAFKA_RESP_ERR__BAD_MSG;
+                        rd_rkb_log(rkb, LOG_ERR,
+                                   "INVALID",
+                                   "%s: %s", errstr, rd_kafka_err2str(err));
 			rd_atomic64_add(&rkb->rkb_c.rx_err, 1);
 			goto err;
 		}

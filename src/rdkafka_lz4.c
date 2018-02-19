@@ -286,7 +286,7 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
 
 
         if (in_of < inlen) {
-                rd_rkb_dbg(rkb, MSG, "LZ4DEC",
+                rd_rkb_log(rkb, LOG_ERR, "LZ4DEC",
                            "Failed to LZ4 (%s HC) decompress message "
                            "(offset %"PRId64"): "
                            "%"PRIusz" (out of %"PRIusz") bytes remaining",
@@ -345,7 +345,7 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc,
 
         out_sz = LZ4F_compressBound(len, NULL) + 1000;
         if (LZ4F_isError(out_sz)) {
-                rd_rkb_dbg(rkb, MSG, "LZ4COMPR",
+                rd_rkb_log(rkb, LOG_ERR, "LZ4COMPR",
                            "Unable to query LZ4 compressed size "
                            "(for %"PRIusz" uncompressed bytes): %s",
                            len, LZ4F_getErrorName(out_sz));

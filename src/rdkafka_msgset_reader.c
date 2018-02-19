@@ -528,6 +528,14 @@ rd_kafka_msgset_reader_msg_v0_1 (rd_kafka_msgset_reader_t *msetr) {
                 if (unlikely(hdr.Crc != calc_crc)) {
                         /* Propagate CRC error to application and
                          * continue with next message. */
+                        rd_rkb_log(rkb, LOG_ERR, "ERR",
+                                   "Message at %soffset %"PRId64
+                                   " (%"PRId32" bytes) "
+                                   "failed CRC32 check "
+                                   "(original 0x%"PRIx32" != "
+                                   "calculated 0x%"PRIx32")",
+                                   reloff_str, hdr.Offset,
+                                   hdr.MessageSize, hdr.Crc, calc_crc);
                         rd_kafka_q_op_err(&msetr->msetr_rkq,
                                           RD_KAFKA_OP_CONSUMER_ERR,
                                           RD_KAFKA_RESP_ERR__BAD_MSG,
@@ -795,6 +803,14 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
                 if (unlikely((uint32_t)hdr.Crc != calc_crc)) {
                         /* Propagate CRC error to application and
                          * continue with next message. */
+                        rd_rkb_log(msetr->msetr_rkb, LOG_ERR, "ERR",
+                                   "MessageSet at offset %"PRId64
+                                   " (%"PRId32" bytes) "
+                                   "failed CRC32C check "
+                                   "(original 0x%"PRIx32" != "
+                                   "calculated 0x%"PRIx32")",
+                                   hdr.BaseOffset,
+                                   hdr.Length, hdr.Crc, calc_crc);
                         rd_kafka_q_op_err(&msetr->msetr_rkq,
                                           RD_KAFKA_OP_CONSUMER_ERR,
                                           RD_KAFKA_RESP_ERR__BAD_MSG,

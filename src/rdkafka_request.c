@@ -1722,8 +1722,10 @@ rd_kafka_handle_Produce_parse (rd_kafka_broker_t *rkb,
         const int log_decode_errors = LOG_ERR;
 
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
-        if (TopicArrayCnt != 1)
+        if (TopicArrayCnt != 1) {
+                rd_rkb_log(rkb, LOG_ERR, "ERR", "TopicArrayCnt %d", TopicArrayCnt);
                 goto err;
+        }
 
         /* Since we only produce to one single topic+partition in each
          * request we assume that the reply only contains one topic+partition
@@ -1732,8 +1734,10 @@ rd_kafka_handle_Produce_parse (rd_kafka_broker_t *rkb,
         rd_kafka_buf_skip_str(rkbuf);
         rd_kafka_buf_read_i32(rkbuf, &PartitionArrayCnt);
 
-        if (PartitionArrayCnt != 1)
+        if (PartitionArrayCnt != 1) {
+                rd_rkb_log(rkb, LOG_ERR, "ERR", "PartitionArrayCnt %d", PartitionArrayCnt);
                 goto err;
+        }
 
         rd_kafka_buf_read_i32(rkbuf, &hdr.Partition);
         rd_kafka_buf_read_i16(rkbuf, &hdr.ErrorCode);
@@ -1758,8 +1762,12 @@ rd_kafka_handle_Produce_parse (rd_kafka_broker_t *rkb,
         return hdr.ErrorCode;
 
  err_parse:
+        rd_rkb_log(rkb, LOG_ERR, "ERR",
+                   "Produce_parse: err_parse: %s", rd_kafka_err2str(rkbuf->rkbuf_err));
         return rkbuf->rkbuf_err;
  err:
+        rd_rkb_log(rkb, LOG_ERR, "ERR",
+                   "Produce_parse failed");
         return RD_KAFKA_RESP_ERR__BAD_MSG;
 }
 

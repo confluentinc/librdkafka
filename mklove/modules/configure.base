@@ -1098,11 +1098,10 @@ function mkl_lib_check {
     fi
 
     if [[ $pkg_conf_failed == 1 ]]; then
-        if [[ $is_static == 1 ]]; then
-            mkl_mkvar_prepend "$1" LIBS "$libs"
-        else
-            mkl_mkvar_append "$1" LIBS "$libs"
-        fi
+        # Add libraries in reverse order to make sure inter-dependencies
+        # are resolved in the correct order.
+        # E.g., check for crypto and then ssl should result in -lssl -lcrypto
+        mkl_mkvar_prepend "$1" LIBS "$libs"
     fi
 
     return 0
@@ -1160,10 +1159,8 @@ $cflags"
 
     if [[ $WITH_STATIC_LINKING == y && ! -z $staticopt ]]; then
         libs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
-        mkl_mkvar_prepend "$1" LIBS "$libs"
-    else
-        mkl_mkvar_append "$1" LIBS "$libs"
     fi
+    mkl_mkvar_prepend "$1" LIBS "$libs"
 
     mkl_check_done "$1" "$2" "$3" "ok"
 

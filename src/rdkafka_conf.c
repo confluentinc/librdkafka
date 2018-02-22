@@ -617,7 +617,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         /* Global consumer properties */
         { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.commit", _RK_C_BOOL,
           _RK(enable_auto_commit),
-          "Automatically and periodically commit offsets in the background.",
+          "Automatically and periodically commit offsets in the background. "
+          "Note: setting this to false does not prevent the consumer from "
+          "fetching previously committed start offsets. To circumvent this "
+          "behaviour set specific start offsets per partition in the call "
+          "to assign().",
           0, 1, 1 },
         { _RK_GLOBAL|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RK(auto_commit_interval_ms),

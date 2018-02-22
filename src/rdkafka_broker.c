@@ -1553,6 +1553,15 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 		rd_kafka_broker_feature_enable(rkb, RD_KAFKA_FEATURE_APIVERSION);
 	}
 
+        if (!(rkb->rkb_features & RD_KAFKA_FEATURE_APIVERSION)) {
+                /* Use configured broker.version.fallback to
+                 * figure out API versions.
+                 * In case broker.version.fallback indicates a version
+                 * that supports ApiVersionRequest it will update
+                 * rkb_features to have FEATURE_APIVERSION set which will
+                 * trigger an ApiVersionRequest below. */
+                rd_kafka_broker_set_api_versions(rkb, NULL, 0);
+        }
 
 	if (rkb->rkb_features & RD_KAFKA_FEATURE_APIVERSION) {
 		/* Query broker for supported API versions.
@@ -1568,11 +1577,6 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 			rd_kafka_broker_handle_ApiVersion, NULL,
 			1 /*Flash message: prepend to transmit queue*/);
 	} else {
-
-		/* Use configured broker.version.fallback to
-		 * figure out API versions */
-		rd_kafka_broker_set_api_versions(rkb, NULL, 0);
-
 		/* Authenticate if necessary */
 		rd_kafka_broker_connect_auth(rkb);
 	}

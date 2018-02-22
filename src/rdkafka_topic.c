@@ -566,7 +566,10 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                              rkt->rkt_topic->str,
                              rd_kafka_toppar_s2i(s_rktp)->rktp_partition);
                 rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp),
-                                          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
+                                          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
+                                          "desired partition does not exist "
+                                          "in cluster");
+
         }
 
 	/* Remove excessive partitions */
@@ -598,7 +601,8 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                         if (!rd_kafka_terminating(rkt->rkt_rk))
                                 rd_kafka_toppar_enq_error(
                                         rktp,
-                                        RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
+                                        RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
+                                        "desired partition no longer exists");
 
 			rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
 
@@ -644,7 +648,8 @@ static void rd_kafka_topic_propagate_notexists (rd_kafka_itopic_t *rkt,
 
         /* Notify consumers that the topic doesn't exist. */
         RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i)
-                rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp), err);
+                rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp), err,
+                                          "topic does not exist");
 }
 
 

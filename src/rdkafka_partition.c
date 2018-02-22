@@ -2301,13 +2301,21 @@ rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
  * Propagate error for toppar
  */
 void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
-                                rd_kafka_resp_err_t err) {
+                                rd_kafka_resp_err_t err,
+                                const char *reason) {
         rd_kafka_op_t *rko;
+        char buf[512];
 
         rko = rd_kafka_op_new(RD_KAFKA_OP_ERR);
         rko->rko_err  = err;
         rko->rko_rktp = rd_kafka_toppar_keep(rktp);
-        rko->rko_u.err.errstr = rd_strdup(rd_kafka_err2str(rko->rko_err));
+
+        rd_snprintf(buf, sizeof(buf), "%.*s [%"PRId32"]: %s (%s)",
+                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                    rktp->rktp_partition, reason,
+                    rd_kafka_err2str(err));
+
+        rko->rko_u.err.errstr = rd_strdup(buf);
 
         rd_kafka_q_enq(rktp->rktp_fetchq, rko);
 }

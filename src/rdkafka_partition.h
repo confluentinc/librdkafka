@@ -345,7 +345,8 @@ int  rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp,
 void rd_kafka_toppar_insert_msgq (rd_kafka_toppar_t *rktp,
                                   rd_kafka_msgq_t *rkmq);
 void rd_kafka_toppar_enq_error (rd_kafka_toppar_t *rktp,
-                                rd_kafka_resp_err_t err);
+                                rd_kafka_resp_err_t err,
+                                const char *reason);
 shptr_rd_kafka_toppar_t *rd_kafka_toppar_get0 (const char *func, int line,
                                                const rd_kafka_itopic_t *rkt,
                                                int32_t partition,

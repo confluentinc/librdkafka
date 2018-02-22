@@ -87,6 +87,7 @@ rm -rf %{buildroot}
 %{_libdir}/librdkafka++.so
 %{_libdir}/pkgconfig/rdkafka++.pc
 %{_libdir}/pkgconfig/rdkafka.pc
+%{_libdir}/pkgconfig/rdkafka-static.pc
 
 
 %changelog

@@ -34,8 +34,10 @@ set(
     rdkafka_topic.c
     rdkafka_transport.c
     rdkafka_interceptor.c
+    rdkafka_header.c
     rdlist.c
     rdlog.c
+    rdmurmur2.c
     rdports.c
     rdrand.c
     rdregex.c
@@ -50,12 +52,12 @@ set(
     lz4hc.c
 )
 
-if(WITH_LIBDL)
-    list(APPEND sources rddl.c)
+if(WITH_LIBDL OR WIN32)
+  list(APPEND sources rddl.c)
 endif()
 
 if(WITH_PLUGINS)
-    list(APPEND sources rdkafka_plugin.c)
+  list(APPEND sources rdkafka_plugin.c)
 endif()
 
 if(WIN32)
@@ -76,10 +78,51 @@ if(NOT HAVE_REGEX)
   list(APPEND sources regexp.c)
 endif()
 
-add_library(rdkafka SHARED ${sources})
+# Define flags with cmake instead of by defining them on win32_config.h
+if(WITHOUT_WIN32_CONFIG)
+  if(WITH_SSL)
+    list(APPEND rdkafka_compile_definitions WITH_SSL)
+  endif(WITH_SSL)
+  if(WITH_ZLIB)
+    list(APPEND rdkafka_compile_definitions WITH_ZLIB)
+  endif(WITH_ZLIB)
+  if(WITH_SNAPPY)
+    list(APPEND rdkafka_compile_definitions WITH_SNAPPY)
+  endif(WITH_SNAPPY)
+  if(WITH_SASL_SCRAM)
+    list(APPEND rdkafka_compile_definitions WITH_SASL_SCRAM)
+  endif(WITH_SASL_SCRAM)
+  if(ENABLE_DEVEL)
+    list(APPEND rdkafka_compile_definitions ENABLE_DEVEL)
+  endif(ENABLE_DEVEL)
+  if(WITH_PLUGINS)
+    list(APPEND rdkafka_compile_definitions WITH_PLUGINS)
+  endif(WITH_PLUGINS)
+endif()
+
+option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
+
+if(RDKAFKA_BUILD_STATIC)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+  set(RDKAFKA_BUILD_MODE STATIC)
+else()
+  set(RDKAFKA_BUILD_MODE SHARED)
+endif()
+
+add_library(rdkafka ${RDKAFKA_BUILD_MODE} ${sources})
 
 # Support '#include <rdkafka.h>'
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")
+target_compile_definitions(rdkafka PUBLIC ${rdkafka_compile_definitions})
+if(RDKAFKA_BUILD_STATIC)
+  target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
+endif()
+if(WIN32)
+  target_link_libraries(rdkafka PUBLIC crypt32)
+  if(NOT RDKAFKA_BUILD_STATIC)
+    target_compile_definitions(rdkafka PRIVATE LIBRDKAFKA_EXPORTS)
+  endif()
+endif()
 
 # We need 'dummy' directory to support `#include "../config.h"` path
 set(dummy "${GENERATED_DIR}/dummy")

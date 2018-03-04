@@ -141,7 +141,7 @@ ssize_t rd_kafka_transport_socket_sendmsg (rd_kafka_transport_t *rktrans,
         rd_slice_get_iov(slice, msg.msg_iov, &iovlen, IOV_MAX,
                          /* FIXME: Measure the effects of this */
                          rktrans->rktrans_sndbuf_size);
-        msg.msg_iovlen = (typeof(msg.msg_iovlen))iovlen;
+        msg.msg_iovlen = (int)iovlen;
 
 #ifdef sun
         /* See recvmsg() comment. Setting it here to be safe. */
@@ -259,7 +259,7 @@ rd_kafka_transport_socket_recvmsg (rd_kafka_transport_t *rktrans,
         rd_buf_get_write_iov(rbuf, msg.msg_iov, &iovlen, IOV_MAX,
                              /* FIXME: Measure the effects of this */
                              rktrans->rktrans_rcvbuf_size);
-        msg.msg_iovlen = (typeof(msg.msg_iovlen))iovlen;
+        msg.msg_iovlen = (int)iovlen;
 
 #ifdef sun
         /* SunOS doesn't seem to set errno when recvmsg() fails

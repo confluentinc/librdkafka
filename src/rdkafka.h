@@ -148,7 +148,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x000b01ff
+#define RD_KAFKA_VERSION  0x000b04c9
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -1157,6 +1157,21 @@ int64_t rd_kafka_message_latency (const rd_kafka_message_t *rkmessage);
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_message_headers (const rd_kafka_message_t *rkmessage,
                           rd_kafka_headers_t **hdrsp);
+
+/**
+ * @brief Get the message header list and detach the list from the message
+ *        making the application the owner of the headers.
+ *        The application must eventually destroy the headers using
+ *        rd_kafka_headers_destroy().
+ *        The message's headers will be set to NULL.
+ *
+ *        Otherwise same semantics as rd_kafka_message_headers()
+ *
+ * @sa rd_kafka_message_headers
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_message_detach_headers (rd_kafka_message_t *rkmessage,
+                                 rd_kafka_headers_t **hdrsp);
 
 
 /**
@@ -2929,8 +2944,9 @@ rd_kafka_position (rd_kafka_t *rk,
 				  *            Failure to do so will result
 				  *            in indefinately blocking on
 				  *            the produce() call when the
-				  *            message queue is full.
-				  */
+				  *            message queue is full. */
+#define RD_KAFKA_MSG_F_PARTITION 0x8 /**< produce_batch() will honor
+                                     * per-message partition. */
 
 
 
@@ -2964,6 +2980,9 @@ rd_kafka_position (rd_kafka_t *rk,
  *    RD_KAFKA_MSG_F_COPY - the \p payload data will be copied and the 
  *                          \p payload pointer will not be used by rdkafka
  *                          after the call returns.
+ *    RD_KAFKA_MSG_F_PARTITION - produce_batch() will honour per-message
+ *                               partition, either set manually or by the
+ *                               configured partitioner.
  *
  *    .._F_FREE and .._F_COPY are mutually exclusive.
  *

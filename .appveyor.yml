@@ -1,4 +1,4 @@
-version: 0.11.1-R-post{build}
+version: 0.11.4-R-pre{build}
 pull_requests:
   do_not_increment_build_number: true
 image: Visual Studio 2013
@@ -69,9 +69,9 @@ before_deploy:
 deploy:
 - provider: S3
   access_key_id:
-    secure: BDJ8FdNEzVKO7MTZX50dWIvrBEPOl9oHSRQ9S/s3uu0=
+    secure: t+Xo4x1mYVbqzvUDlnuMgFGp8LjQJNOfsDUAMxBsVH4=
   secret_access_key:
-    secure: GBmNSeDpUa7hqqTJBT+PLMgsZCxQMBau+6Vnitzqw15UlpuaZRzid1s5egIacZO6
+    secure: SNziQPPJs4poCHM7dk6OxufUYcGQhMWiNPx6Y1y6DYuWGjPc3K0APGeousLHsbLv
   region: us-west-1
   bucket: librdkafka-ci-packages
   folder: librdkafka/p-librdkafka__bld-appveyor__plat-windows__arch-$(platform)__bldtype-$(configuration)__tag-$(APPVEYOR_REPO_TAG_NAME)__sha-$(APPVEYOR_REPO_COMMIT)__bid-$(APPVEYOR_BUILD_ID)

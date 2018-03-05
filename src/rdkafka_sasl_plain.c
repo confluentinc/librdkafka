@@ -67,28 +67,28 @@ int rd_kafka_sasl_plain_client_new (rd_kafka_transport_t *rktrans,
         rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
         rd_kafka_t *rk = rkb->rkb_rk;
         /* [authzid] UTF8NUL authcid UTF8NUL passwd */
-        char buf[255+1+255+1+255+1];
+        char *buf;
         int of = 0;
+        int zidlen = 0;
+        int cidlen = rk->rk_conf.sasl.username ?
+                (int)strlen(rk->rk_conf.sasl.username) : 0;
+        int pwlen = rk->rk_conf.sasl.password ?
+                (int)strlen(rk->rk_conf.sasl.password) : 0;
+
+
+        buf = rd_alloca(zidlen + 1 + cidlen + 1 + pwlen + 1);
 
         /* authzid: none (empty) */
         /* UTF8NUL */
         buf[of++] = 0;
         /* authcid */
-        if (rk->rk_conf.sasl.username) {
-                int r = (int)strlen(rk->rk_conf.sasl.username);
-                r = RD_MIN(255, r);
-                memcpy(&buf[of], rk->rk_conf.sasl.username, r);
-                of += r;
-        }
+        memcpy(&buf[of], rk->rk_conf.sasl.username, cidlen);
+        of += cidlen;
         /* UTF8NUL */
         buf[of++] = 0;
         /* passwd */
-        if (rk->rk_conf.sasl.password) {
-                int r = (int)strlen(rk->rk_conf.sasl.password);
-                r = RD_MIN(255, r);
-                memcpy(&buf[of], rk->rk_conf.sasl.password, r);
-                of += r;
-        }
+        memcpy(&buf[of], rk->rk_conf.sasl.password, pwlen);
+        of += pwlen;
 
         rd_rkb_dbg(rkb, SECURITY, "SASLPLAIN",
                    "Sending SASL PLAIN (builtin) authentication token");

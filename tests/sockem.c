@@ -445,6 +445,8 @@ static void *sockem_run (void *arg) {
 
                 /* Send/forward delayed buffers */
                 mtx_lock(&skm->lock);
+                sockem_conf_use(skm);
+
                 if (sockem_fwd_bufs(skm, skm->ps) == -1) {
                         mtx_unlock(&skm->lock);
                         skm->run = SOCKEM_TERM;
@@ -472,7 +474,6 @@ static void *sockem_run (void *arg) {
                 }
 
                 mtx_lock(&skm->lock);
-                sockem_conf_use(skm);
         }
  done:
         if (cs != -1)

@@ -70,14 +70,24 @@ set(
     0075-retry.c
     0076-produce_retry.c
     0077-compaction.c
+    0078-c_from_cpp.cpp
+    0079-fork.c
     8000-idle.cpp
     test.c
-    testcpp.cpp
-    sockem.c
+    testcpp.cpp    
 )
+
+if(NOT WIN32)
+    list(APPEND sources sockem.c)
+else()
+    list(APPEND sources ../src/tinycthread.c)
+endif()
 
 add_executable(rdkafka_test ${sources})
 target_link_libraries(rdkafka_test PUBLIC rdkafka++)
+if(WIN32)
+    target_compile_definitions(rdkafka_test PRIVATE LIBRDKAFKACPP_EXPORTS=0)
+endif(WIN32)
 
 add_test(NAME RdKafkaTestInParallel COMMAND rdkafka_test -p5)
 add_test(NAME RdKafkaTestSequentially COMMAND rdkafka_test -p1)

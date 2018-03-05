@@ -72,6 +72,10 @@ rdkafka_consumer_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdka
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) rdkafka_consumer_example.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS) -lstdc++
 
+rdkafka_consume_batch: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_consume_batch.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) rdkafka_consume_batch.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS) -lstdc++
+
 rdkafka_zookeeper_example: ../src/librdkafka.a rdkafka_zookeeper_example.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -I/usr/include/zookeeper rdkafka_zookeeper_example.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS) -lzookeeper_mt -ljansson

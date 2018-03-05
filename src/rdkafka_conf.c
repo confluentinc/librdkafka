@@ -523,6 +523,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
 	 .validate = rd_kafka_conf_validate_single },
+        {_RK_GLOBAL,"sasl.mechanism", _RK_C_ALIAS,
+         .sdef = "sasl.mechanisms" },
 	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
 	  _RK(sasl.service_name),
 	  "Kerberos principal name that Kafka runs as, "
@@ -615,7 +617,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         /* Global consumer properties */
         { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.commit", _RK_C_BOOL,
           _RK(enable_auto_commit),
-          "Automatically and periodically commit offsets in the background.",
+          "Automatically and periodically commit offsets in the background. "
+          "Note: setting this to false does not prevent the consumer from "
+          "fetching previously committed start offsets. To circumvent this "
+          "behaviour set specific start offsets per partition in the call "
+          "to assign().",
           0, 1, 1 },
         { _RK_GLOBAL|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RK(auto_commit_interval_ms),
@@ -733,6 +739,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(retry_backoff_ms),
 	  "The backoff time in milliseconds before retrying a protocol request.",
 	  1, 300*1000, 100 },
+
+        { _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.backpressure.threshold",
+          _RK_C_INT, _RK(queue_backpressure_thres),
+          "The threshold of outstanding not yet transmitted requests "
+          "needed to backpressure the producer's message accumulator. "
+          "A lower number yields larger and more effective batches.",
+          0, 1000000, 10 },
+
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),
 	  "compression codec to use for compressing message sets. "

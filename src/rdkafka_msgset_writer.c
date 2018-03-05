@@ -365,11 +365,13 @@ rd_kafka_msgset_writer_write_Produce_header (rd_kafka_msgset_writer_t *msetw) {
  *
  * @remark This currently constructs the entire ProduceRequest, containing
  *         a single outer MessageSet for a single partition.
+ *
+ * @locality broker thread
  */
 static int rd_kafka_msgset_writer_init (rd_kafka_msgset_writer_t *msetw,
                                          rd_kafka_broker_t *rkb,
                                          rd_kafka_toppar_t *rktp) {
-        int msgcnt = rd_atomic32_get(&rktp->rktp_xmit_msgq.rkmq_msg_cnt);
+        int msgcnt = rktp->rktp_xmit_msgq.rkmq_msg_cnt;
 
         if (msgcnt == 0)
                 return 0;
@@ -434,10 +436,12 @@ rd_kafka_msgset_writer_write_msg_payload (rd_kafka_msgset_writer_t *msetw,
          * room in the buffer we'll copy the payload to the buffer,
          * otherwise we push a reference to the memory. */
         if (rkm->rkm_len <= (size_t)rk->rk_conf.msg_copy_max_size &&
-            rd_buf_write_remains(&rkbuf->rkbuf_buf) > rkm->rkm_len)
+            rd_buf_write_remains(&rkbuf->rkbuf_buf) > rkm->rkm_len) {
                 rd_kafka_buf_write(rkbuf,
                                    rkm->rkm_payload, rkm->rkm_len);
-        else
+                if (free_cb)
+                        free_cb(rkm->rkm_payload);
+        } else
                 rd_kafka_buf_push(rkbuf, rkm->rkm_payload, rkm->rkm_len,
                                   free_cb);
 }
@@ -1203,6 +1207,8 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
  *
  * @returns the buffer to transmit or NULL if there were no messages
  *          in messageset.
+ *
+ * @locality broker thread
  */
 rd_kafka_buf_t *
 rd_kafka_msgset_create_ProduceRequest (rd_kafka_broker_t *rkb,

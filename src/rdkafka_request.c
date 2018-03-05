@@ -1792,7 +1792,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                            "%s [%"PRId32"]: MessageSet with %i message(s) "
                            "delivered",
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                           rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt));
+                           request->rkbuf_msgq.rkmq_msg_cnt);
 
         } else {
                 /* Error */
@@ -1832,7 +1832,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                            "%s [%"PRId32"]: MessageSet with %i message(s) "
                            "encountered error: %s (actions %s)",
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                           rd_atomic32_get(&request->rkbuf_msgq.rkmq_msg_cnt),
+                           request->rkbuf_msgq.rkmq_msg_cnt,
                            rd_kafka_err2str(err),
                            rd_flags2str(actstr, sizeof(actstr),
                                         rd_kafka_actions_descs,
@@ -1919,8 +1919,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                         rkm = TAILQ_LAST(&request->rkbuf_msgq.rkmq_msgs,
                                          rd_kafka_msg_head_s);
                         rkm->rkm_offset = offset +
-                                rd_atomic32_get(&request->rkbuf_msgq.
-                                                rkmq_msg_cnt) - 1;
+                                request->rkbuf_msgq.rkmq_msg_cnt - 1;
                         if (timestamp != -1) {
                                 rkm->rkm_timestamp = timestamp;
                                 rkm->rkm_tstype = RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME;
@@ -1961,7 +1960,7 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
         if (unlikely(!rkbuf))
                 return 0;
 
-        cnt = rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt);
+        cnt = rkbuf->rkbuf_msgq.rkmq_msg_cnt;
         rd_dassert(cnt > 0);
 
         rd_atomic64_add(&rktp->rktp_c.tx_msgs, cnt);

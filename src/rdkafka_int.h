@@ -214,10 +214,14 @@ struct rd_kafka_s {
  *        \p block the function either blocks until enough space is available
  *        if \p block is 1, else immediately returns
  *        RD_KAFKA_RESP_ERR__QUEUE_FULL.
+ *
+ * @param rdmtx If non-null and \p block is set and blocking is to ensue,
+ *              then unlock this mutex for the duration of the blocking
+ *              and then reacquire with a read-lock.
  */
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_curr_msgs_add (rd_kafka_t *rk, unsigned int cnt, size_t size,
-			int block) {
+			int block, rwlock_t *rdlock) {
 
 	if (rk->rk_type != RD_KAFKA_PRODUCER)
 		return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -232,7 +236,14 @@ rd_kafka_curr_msgs_add (rd_kafka_t *rk, unsigned int cnt, size_t size,
 			return RD_KAFKA_RESP_ERR__QUEUE_FULL;
 		}
 
+                if (rdlock)
+                        rwlock_rdunlock(rdlock);
+
 		cnd_wait(&rk->rk_curr_msgs.cnd, &rk->rk_curr_msgs.lock);
+
+                if (rdlock)
+                        rwlock_rdlock(rdlock);
+
 	}
 
 	rk->rk_curr_msgs.cnt  += cnt;

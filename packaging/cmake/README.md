@@ -3,7 +3,6 @@
 The cmake build mode is experimental and not officially supported,
 the community is asked to maintain and support this mode through PRs.
 
-
 Set up build environment (from top-level librdkafka directory):
 
     $ cmake -H. -B_cmake_build

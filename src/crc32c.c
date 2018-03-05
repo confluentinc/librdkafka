@@ -105,7 +105,7 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
         len--;
     }
     while (len >= 8) {
-#if defined(__sparc) || defined(__sparc__) || defined(__APPLE__) || defined(__mips__)
+#if defined(__sparc) || defined(__sparc__) || defined(__APPLE__) || defined(__mips__) || defined(__arm__)
         /* Alignment-safe alternative.
          * This is also needed on Apple to avoid compilation warnings for
          * non-appearant alignment reasons. */

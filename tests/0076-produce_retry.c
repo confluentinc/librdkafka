@@ -240,13 +240,23 @@ static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
 
         mtx_lock(&produce_disconnect_lock);
         if (produce_disconnects == 0) {
+                char buf[512];
+                ssize_t r;
                 printf(_C_CYA "%s:%d: shutting down socket %d (%s)\n" _C_CLR,
                        __FILE__, __LINE__, sockfd, brokername);
 #ifdef _MSC_VER
-                shutdown(sockfd, SD_BOTH);
+                closesocket(sockfd);
 #else
-                shutdown(sockfd, SHUT_WR);
+                close(sockfd);
 #endif
+                /* There is a chance the broker responded in the
+                 * time it took us to get here, so purge the
+                 * socket recv buffer to make sure librdkafka does not see
+                 * the response. */
+                while ((r = recv(sockfd, buf, sizeof(buf), 0)) > 0)
+                        printf(_C_CYA "%s:%d: "
+                               "purged %"PRIdsz" bytes from socket\n",
+                               __FILE__, __LINE__, r);
                 produce_disconnects = 1;
         }
         mtx_unlock(&produce_disconnect_lock);

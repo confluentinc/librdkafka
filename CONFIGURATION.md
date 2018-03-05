@@ -61,6 +61,7 @@ ssl.crl.location                         |  *  |                 |              
 ssl.keystore.location                    |  *  |                 |               | Path to client's keystore (PKCS#12) used for authentication. <br>*Type: string*
 ssl.keystore.password                    |  *  |                 |               | Client's keystore (PKCS#12) password. <br>*Type: string*
 sasl.mechanisms                          |  *  |                 |        GSSAPI | SASL mechanism to use for authentication. Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512. **NOTE**: Despite the name only one mechanism must be configured. <br>*Type: string*
+sasl.mechanism                           |  *  |                 |               | Alias for `sasl.mechanisms`
 sasl.kerberos.service.name               |  *  |                 |         kafka | Kerberos principal name that Kafka runs as, not including /hostname@REALM <br>*Type: string*
 sasl.kerberos.principal                  |  *  |                 |   kafkaclient | This client's Kerberos principal name. (Not supported on Windows, will use the logon user's principal). <br>*Type: string*
 sasl.kerberos.kinit.cmd                  |  *  |                 | kinit -S "%{sasl.kerberos.service.name}/%{broker.name}" -k -t "%{sasl.kerberos.keytab}" %{sasl.kerberos.principal} | Full kerberos kinit command string, %{config.prop.name} is replaced by corresponding config object value, %{broker.name} returns the broker's hostname. <br>*Type: string*
@@ -76,7 +77,7 @@ session.timeout.ms                       |  *  | 1 .. 3600000    |         30000
 heartbeat.interval.ms                    |  *  | 1 .. 3600000    |          1000 | Group session keepalive heartbeat interval. <br>*Type: integer*
 group.protocol.type                      |  *  |                 |      consumer | Group protocol type <br>*Type: string*
 coordinator.query.interval.ms            |  *  | 1 .. 3600000    |        600000 | How often to query for the current client group coordinator. If the currently assigned coordinator is down the configured query interval will be divided by ten to more quickly recover in case of coordinator reassignment. <br>*Type: integer*
-enable.auto.commit                       |  C  | true, false     |          true | Automatically and periodically commit offsets in the background. <br>*Type: boolean*
+enable.auto.commit                       |  C  | true, false     |          true | Automatically and periodically commit offsets in the background. Note: setting this to false does not prevent the consumer from fetching previously committed start offsets. To circumvent this behaviour set specific start offsets per partition in the call to assign(). <br>*Type: boolean*
 auto.commit.interval.ms                  |  C  | 0 .. 86400000   |          5000 | The frequency in milliseconds that the consumer offsets are committed (written) to offset storage. (0 = disable). This setting is used by the high-level consumer. <br>*Type: integer*
 enable.auto.offset.store                 |  C  | true, false     |          true | Automatically store offset of last message provided to application. <br>*Type: boolean*
 queued.min.messages                      |  C  | 1 .. 10000000   |        100000 | Minimum number of messages per topic+partition librdkafka tries to maintain in the local consumer queue. <br>*Type: integer*
@@ -99,6 +100,7 @@ linger.ms                                |  P  |                 |              
 message.send.max.retries                 |  P  | 0 .. 10000000   |             2 | How many times to retry sending a failing MessageSet. **Note:** retrying may cause reordering. <br>*Type: integer*
 retries                                  |  P  |                 |               | Alias for `message.send.max.retries`
 retry.backoff.ms                         |  P  | 1 .. 300000     |           100 | The backoff time in milliseconds before retrying a protocol request. <br>*Type: integer*
+queue.buffering.backpressure.threshold   |  P  | 0 .. 1000000    |            10 | The threshold of outstanding not yet transmitted requests needed to backpressure the producer's message accumulator. A lower number yields larger and more effective batches. <br>*Type: integer*
 compression.codec                        |  P  | none, gzip, snappy, lz4 |          none | compression codec to use for compressing message sets. This is the default value for all topics, may be overriden by the topic configuration property `compression.codec`.  <br>*Type: enum value*
 compression.type                         |  P  |                 |               | Alias for `compression.codec`
 batch.num.messages                       |  P  | 1 .. 1000000    |         10000 | Maximum number of messages batched in one MessageSet. The total MessageSet size is also limited by message.max.bytes. <br>*Type: integer*

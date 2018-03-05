@@ -12,7 +12,6 @@ from cluster_testing import LibrdkafkaTestCluster, print_report_summary, print_t
 from LibrdkafkaTestApp import LibrdkafkaTestApp
 
 
-import subprocess
 import time
 import tempfile
 import os
@@ -26,7 +25,7 @@ def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None, debug=False)
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
     Then run librdkafka's regression tests.
     """
-    
+
     cluster = LibrdkafkaTestCluster(version, conf, debug=debug)
 
     # librdkafka's regression tests, as an App.

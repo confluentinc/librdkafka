@@ -262,7 +262,9 @@ struct test tests[] = {
         _TEST(0076_produce_retry, 0),
         _TEST(0077_compaction, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0078_c_from_cpp, TEST_F_LOCAL),
-        _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE_WIN32),
+        _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE,
+              .extra = "using a fork():ed rd_kafka_t is not supported and will "
+              "most likely hang"),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

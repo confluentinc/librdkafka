@@ -88,7 +88,7 @@ rm -rf %{buildroot}
 %{_libdir}/pkgconfig/rdkafka++.pc
 %{_libdir}/pkgconfig/rdkafka.pc
 %{_libdir}/pkgconfig/rdkafka-static.pc
-
+%{_libdir}/pkgconfig/rdkafka++-static.pc
 
 %changelog
 * Thu Apr 09 2015 Eduard Iskandarov <e.iskandarov@corp.mail.ru> 0.8.6-0

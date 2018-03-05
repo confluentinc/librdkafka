@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _INTERCEPTOR_TEST_H_
+#define _INTERCEPTOR_TEST_H_
 
 
 struct ictcnt {
@@ -42,3 +43,5 @@ struct ictest {
 
 /* The ictest struct is defined and set up by the calling test. */
 extern struct ictest ictest;
+
+#endif /* _INTERCEPTOR_TEST_H_ */

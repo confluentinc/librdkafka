@@ -34,7 +34,6 @@
  */
 
 #include "rdkafka_int.h"
-#include "rdkafka_subscription.h"
 
 
 rd_kafka_resp_err_t rd_kafka_unsubscribe (rd_kafka_t *rk) {

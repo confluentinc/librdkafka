@@ -25,7 +25,8 @@
 * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 * POSSIBILITY OF SUCH DAMAGE.
 */
-#pragma once
+#ifndef _TESTSHARED_H_
+#define _TESTSHARED_H_
 
 /**
  * C variables and functions shared with C++ tests
@@ -168,10 +169,10 @@ static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
 #define rd_sleep(S) Sleep((S)*1000)
 #endif
 
-
 /* Make sure __SANITIZE_ADDRESS__ (gcc) is defined if compiled with asan */
 #if !defined(__SANITIZE_ADDRESS__) && defined(__has_feature)
  #if __has_feature(address_sanitizer)
  #define __SANITIZE_ADDRESS__ 1
  #endif
 #endif
+#endif /* _TESTSHARED_H_ */

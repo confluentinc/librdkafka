@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_BROKER_H_
+#define _RDKAFKA_BROKER_H_
 
 #include "rdkafka_feature.h"
 
@@ -334,7 +335,6 @@ void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk);
 
 
 
-
 /**
  * Updates the current toppar active round-robin next pointer.
  */
@@ -357,3 +357,5 @@ void rd_kafka_broker_active_toppar_add (rd_kafka_broker_t *rkb,
 
 void rd_kafka_broker_active_toppar_del (rd_kafka_broker_t *rkb,
                                         rd_kafka_toppar_t *rktp);
+
+#endif /* _RDKAFKA_BROKER_H_ */

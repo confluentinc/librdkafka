@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_TIMER_H_
+#define _RDKAFKA_TIMER_H_
 
 #include "rd.h"
 
@@ -75,3 +76,5 @@ rd_ts_t rd_kafka_timers_next (rd_kafka_timers_t *rkts, int timeout_ms,
 void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us);
 void rd_kafka_timers_destroy (rd_kafka_timers_t *rkts);
 void rd_kafka_timers_init (rd_kafka_timers_t *rkte, rd_kafka_t *rk);
+
+#endif /* _RDKAFKA_TIMER_H_ */

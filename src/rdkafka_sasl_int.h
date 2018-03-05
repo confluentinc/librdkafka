@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_SASL_INT_H_
+#define _RDKAFKA_SASL_INT_H_
 
 struct rd_kafka_sasl_provider {
         const char *name;
@@ -68,3 +69,4 @@ int rd_kafka_sasl_send (rd_kafka_transport_t *rktrans,
                         const void *payload, int len,
                         char *errstr, size_t errstr_size);
 
+#endif /* _RDKAFKA_SASL_INT_H_ */

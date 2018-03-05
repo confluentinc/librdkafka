@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDADDR_H_
+#define _RDADDR_H_
 
 #ifndef _MSC_VER
 #include <netinet/in.h>
@@ -182,3 +183,5 @@ static const char *rd_family2str (int af) {
 			return "af?";
 	};
 }
+
+#endif /* _RDADDR_H_ */

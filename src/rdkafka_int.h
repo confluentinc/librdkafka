@@ -26,8 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
-
+#ifndef _RDKAFKA_INT_H_
+#define _RDKAFKA_INT_H_
 
 #ifndef _MSC_VER
 #define _GNU_SOURCE  /* for strndup() */
@@ -443,3 +443,4 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
 
+#endif /* _RDKAFKA_INT_H_ */

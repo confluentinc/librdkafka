@@ -25,7 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#ifndef _RDKAFKA_BUF_H_
+#define _RDKAFKA_BUF_H_
 
 #include "rdkafka_int.h"
 #include "rdcrc32.h"
@@ -941,3 +942,5 @@ rd_kafka_buf_version_outdated (const rd_kafka_buf_t *rkbuf, int version) {
         return rkbuf && rkbuf->rkbuf_replyq.version &&
                 rkbuf->rkbuf_replyq.version < version;
 }
+
+#endif /* _RDKAFKA_BUF_H_ */

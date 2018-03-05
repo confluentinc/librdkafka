@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDLIST_H_
+#define _RDLIST_H_
 
 
 /**
@@ -264,3 +265,5 @@ void *rd_list_string_copy (const void *elem, void *opaque) {
  * Debugging: Print list to stdout.
  */
 void rd_list_dump (const char *what, const rd_list_t *rl);
+
+#endif /* _RDLIST_H_ */

@@ -25,9 +25,12 @@
 * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 * POSSIBILITY OF SUCH DAMAGE.
 */
-#pragma once
+#ifndef _RDPORTS_H_
+#define _RDPORTS_H_
 
 
 void rd_qsort_r (void *base, size_t nmemb, size_t size,
               int (*compar)(const void *, const void *, void *),
               void *arg);
+
+#endif /* _RDPORTS_H_ */

@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_TRANSPORT_H_
+#define _RDKAFKA_TRANSPORT_H_
 
 #ifndef _MSC_VER
 #include <poll.h>
@@ -74,3 +75,5 @@ void rd_kafka_transport_ssl_init (void);
 #endif
 void rd_kafka_transport_term (void);
 void rd_kafka_transport_init(void);
+
+#endif /* _RDKAFKA_TRANSPORT_H_ */

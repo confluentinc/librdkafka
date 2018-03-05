@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKACPP_INT_H_
+#define _RDKAFKACPP_INT_H_
 
 #include <string>
 #include <iostream>
@@ -905,3 +906,5 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
 
 
 }
+
+#endif /* _RDKAFKACPP_INT_H_ */

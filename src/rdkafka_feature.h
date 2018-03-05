@@ -25,7 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#ifndef _RDKAFKA_FEATURE_H_
+#define _RDKAFKA_FEATURE_H_
 
 
 /**
@@ -77,3 +78,5 @@ int rd_kafka_features_check (rd_kafka_broker_t *rkb,
 			     size_t broker_api_cnt);
 
 const char *rd_kafka_features2str (int features);
+
+#endif /* _RDKAFKA_FEATURE_H_ */

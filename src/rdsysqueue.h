@@ -53,7 +53,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDSYSQUEUE_H_
+#define _RDSYSQUEUE_H_
 
 #include "queue.h"
 
@@ -344,3 +345,4 @@ if (((elm)->field.sqe_next = (listelm)->field.sqe_next) == NULL)        \
 
 
 
+#endif /* _RDSYSQUEUE_H_ */

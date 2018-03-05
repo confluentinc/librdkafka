@@ -25,7 +25,8 @@
 * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 * POSSIBILITY OF SUCH DAMAGE.
 */
-#pragma once
+#ifndef _TEST_H_
+#define _TEST_H_
 
 #include "../src/rd.h"
 
@@ -541,3 +542,5 @@ int  test_socket_sockem_set_all (const char *key, int val);
 
 void test_headers_dump (const char *what, int lvl,
                         const rd_kafka_headers_t *hdrs);
+
+#endif /* _TEST_H_ */

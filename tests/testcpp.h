@@ -25,7 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#ifndef _TESTCPP_H_
+#define _TESTCPP_H_
 
 #include <sstream>
 
@@ -123,3 +124,5 @@ namespace Test {
 
   static DeliveryReportCb DrCb;
 };
+
+#endif /* _TESTCPP_H_ */

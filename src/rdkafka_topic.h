@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_TOPIC_H_
+#define _RDKAFKA_TOPIC_H_
 
 #include "rdlist.h"
 
@@ -183,3 +184,5 @@ void rd_kafka_topic_leader_query0 (rd_kafka_t *rk, rd_kafka_itopic_t *rkt,
         rd_kafka_metadata_fast_leader_query(rk)
 
 void rd_kafka_local_topics_to_list (rd_kafka_t *rk, rd_list_t *topics);
+
+#endif /* _RDKAFKA_TOPIC_H_ */

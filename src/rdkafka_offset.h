@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_OFFSET_H_
+#define _RDKAFKA_OFFSET_H_
 
 #include "rdkafka_partition.h"
 
@@ -70,3 +71,4 @@ void rd_kafka_offset_commit_cb_op (rd_kafka_t *rk,
 				   rd_kafka_resp_err_t err,
 				   const rd_kafka_topic_partition_list_t *offsets);
 
+#endif /* _RDKAFKA_OFFSET_H_ */

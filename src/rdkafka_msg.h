@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_MSG_H_
+#define _RDKAFKA_MSG_H_
 
 #include "rdsysqueue.h"
 
@@ -376,3 +377,5 @@ rd_kafka_message_t *rd_kafka_message_new (void);
 void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq);
 
 int unittest_msg (void);
+
+#endif /* _RDKAFKA_MSG_H_ */

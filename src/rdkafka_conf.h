@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _RDKAFKA_CONF_H_
+#define _RDKAFKA_CONF_H_
 
 #include "rdlist.h"
 
@@ -344,3 +345,5 @@ struct rd_kafka_topic_conf_s {
 
 
 void rd_kafka_anyconf_destroy (int scope, void *conf);
+
+#endif /* _RDKAFKA_CONF_H_ */

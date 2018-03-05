@@ -25,7 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#ifndef _RDENDIAN_H_
+#define _RDENDIAN_H_
 
 /**
  * Provides portable endian-swapping macros/functions.
@@ -164,3 +165,5 @@
 #ifndef htole32
 #define htole32(x) le32toh(x)
 #endif
+
+#endif /* _RDENDIAN_H_ */

@@ -71,6 +71,8 @@ nuget:
 before_build:
 - cmd: nuget restore win32/librdkafka.sln
 - sh: sudo apt-get install -y libssl-dev zlib1g-dev libsasl2-dev
+build_script:
+- sh: ./configure && make -j2 all examples check
 build:
   project: win32/librdkafka.sln
   publish_nuget: true
@@ -78,8 +80,6 @@ build:
   include_nuget_references: true
   parallel: true
   verbosity: normal
-after_build:
-- sh: ./configure && make -j2 all examples check
 
 test_script:
 - cmd: if exist DISABLED\win32\outdir\v140 ( win32\outdir\v140\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 ) else ( win32\outdir\v120\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 )

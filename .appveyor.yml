@@ -28,7 +28,9 @@ build:
   include_nuget_references: true
   parallel: true
   verbosity: normal
-  sh: ./configure && make -j2 all examples check
+after_build:
+- sh: ./configure && make -j2 all examples check
+
 test_script:
 - cmd: if exist DISABLED\win32\outdir\v140 ( win32\outdir\v140\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 ) else ( win32\outdir\v120\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 )
 - sh: make -C tests run_local

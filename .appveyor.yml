@@ -60,7 +60,7 @@ install:
          # Make the tools available for later PS scripts to use.
          $env:PSModulePath = $env:PSModulePath + ';C:\\Program Files (x86)\\Outercurve Foundation\\Modules'
          Import-Module CoApp
-     }
+      }
 cache:
 - c:\OpenSSL-Win32
 - c:\OpenSSL-Win64

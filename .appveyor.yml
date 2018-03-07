@@ -10,7 +10,57 @@ environment:
   - platform: x64
   - platform: win32
 install:
-- ps: "if ($isWindows) { $OpenSSLVersion = \"1_0_2n\"\n$OpenSSLExe = \"OpenSSL-$OpenSSLVersion.exe\"\n\nRemove-Item C:\\OpenSSL-Win32 -recurse\nRemove-Item C:\\OpenSSL-Win64 -recurse\n\nWrite-Host \"Installing OpenSSL v1.0 32-bit ...\" -ForegroundColor Cyan\nWrite-Host \"Downloading...\"\n$exePath = \"$($env:USERPROFILE)\\Win32OpenSSL-1_0_2n.exe\"\n(New-Object Net.WebClient).DownloadFile('https://slproweb.com/download/Win32OpenSSL-1_0_2n.exe', $exePath)\nWrite-Host \"Installing...\"\ncmd /c start /wait $exePath /silent /verysilent /sp- /suppressmsgboxes /DIR=C:\\OpenSSL-Win32\nWrite-Host \"Installed\" -ForegroundColor Green\n\nWrite-Host \"Installing OpenSSL v1.0 64-bit ...\" -ForegroundColor Cyan\nWrite-Host \"Downloading...\"\n$exePath = \"$($env:USERPROFILE)\\Win64OpenSSL-1_0_2n.exe\"\n(New-Object Net.WebClient).DownloadFile('https://slproweb.com/download/Win64OpenSSL-1_0_2n.exe', $exePath)\nWrite-Host \"Installing...\"\ncmd /c start /wait $exePath /silent /verysilent /sp- /suppressmsgboxes /DIR=C:\\OpenSSL-Win64\nWrite-Host \"Installed\" -ForegroundColor Green\n\nif (!(Test-Path(\"C:\\OpenSSL-Win32\"))) {\n  echo \"Downloading https://slproweb.com/download/Win32$OpenSSLExe\"\n  Start-FileDownload 'https://slproweb.com/download/Win32$OpenSSLExe'\n  Start-Process \"Win32$OpenSSLExe\" -ArgumentList \"/silent /verysilent /sp- /suppressmsgboxes\" -Wait\n} else {\n   echo \"OpenSSL-Win32 already exists: not downloading\"\n}\n\nif (!(Test-Path(\"C:\\OpenSSL-Win64\"))) {\n  echo \"Downloading https://slproweb.com/download/Win64$OpenSSLExe\"\n  Start-FileDownload 'https://slproweb.com/download/Win64$OpenSSLExe' \n  Start-Process \"Win64$OpenSSLExe\" -ArgumentList \"/silent /verysilent /sp- /suppressmsgboxes\" -Wait\n} else {\n   echo \"OpenSSL-Win64 already exists: not downloading\"\n}\n\n\n\n# Download the CoApp tools.\n$msiPath = \"$($env:USERPROFILE)\\CoApp.Tools.Powershell.msi\"\n(New-Object Net.WebClient).DownloadFile('http://coapp.org/files/CoApp.Tools.Powershell.msi', $msiPath)\n\n# Install the CoApp tools from the downloaded .msi.\nStart-Process -FilePath msiexec -ArgumentList /i, $msiPath, /quiet -Wait\n\n# Make the tools available for later PS scripts to use.\n$env:PSModulePath = $env:PSModulePath + ';C:\\Program Files (x86)\\Outercurve Foundation\\Modules'\nImport-Module CoApp\n\n# Install NuGet\n#Install-PackageProvider NuGet -MinimumVersion '2.8.5.201' -Force\n#Import-PackageProvider NuGet -MinimumVersion '2.8.5.201' -Force\n\n# Install CoApp for creating nuget packages\n#$msiPath = \"$($env:USERPROFILE)\\CoApp.Tools.Powershell.msi\"\n#(New-Object #Net.WebClient).DownloadFile('http://downloads.coapp.org/files/CoApp.Tools.Powershell.msi', $msiPath)\n#cmd /c start /wait msiexec /i \"$msiPath\" /quiet\n\n# Install CoApp module\n#Install-Module CoApp -Force }"
+- ps: |
+      if ($isWindows) {
+         $OpenSSLVersion = "1_0_2n"
+         $OpenSSLExe = "OpenSSL-$OpenSSLVersion.exe"
+
+         Remove-Item C:\\OpenSSL-Win32 -recurse
+         Remove-Item C:\\OpenSSL-Win64 -recurse
+
+         Write-Host "Installing OpenSSL v1.0 32-bit ..." -ForegroundColor Cyan
+         Write-Host "Downloading..."
+         $exePath = "$($env:USERPROFILE)\\Win32OpenSSL-1_0_2n.exe"
+         (New-Object Net.WebClient).DownloadFile('https://slproweb.com/download/Win32OpenSSL-1_0_2n.exe', $exePath)
+         Write-Host "Installing..."
+         cmd /c start /wait $exePath /silent /verysilent /sp- /suppressmsgboxes /DIR=C:\\OpenSSL-Win32
+         Write-Host "Installed" -ForegroundColor Green
+
+         Write-Host "Installing OpenSSL v1.0 64-bit ..." -ForegroundColor Cyan
+         Write-Host "Downloading..."
+         $exePath = "$($env:USERPROFILE)\\Win64OpenSSL-1_0_2n.exe"
+         (New-Object Net.WebClient).DownloadFile('https://slproweb.com/download/Win64OpenSSL-1_0_2n.exe', $exePath)
+         Write-Host "Installing..."
+         cmd /c start /wait $exePath /silent /verysilent /sp- /suppressmsgboxes /DIR=C:\\OpenSSL-Win64
+         Write-Host "Installed" -ForegroundColor Green
+
+         if (!(Test-Path("C:\\OpenSSL-Win32"))) {
+                  echo "Downloading https://slproweb.com/download/Win32$OpenSSLExe"
+                  Start-FileDownload 'https://slproweb.com/download/Win32$OpenSSLExe'
+                  Start-Process "Win32$OpenSSLExe" -ArgumentList "/silent /verysilent /sp- /suppressmsgboxes" -Wait
+         } else {
+                echo "OpenSSL-Win32 already exists: not downloading"
+         }
+
+         if (!(Test-Path("C:\\OpenSSL-Win64"))) {
+              echo "Downloading https://slproweb.com/download/Win64$OpenSSLExe"
+              Start-FileDownload 'https://slproweb.com/download/Win64$OpenSSLExe' 
+              Start-Process "Win64$OpenSSLExe" -ArgumentList "/silent /verysilent /sp- /suppressmsgboxes" -Wait
+         } else {
+              echo "OpenSSL-Win64 already exists: not downloading"
+         }
+
+         # Download the CoApp tools.
+         $msiPath = "$($env:USERPROFILE)\\CoApp.Tools.Powershell.msi"
+         (New-Object Net.WebClient).DownloadFile('http://coapp.org/files/CoApp.Tools.Powershell.msi', $msiPath)
+
+         # Install the CoApp tools from the downloaded .msi.
+         Start-Process -FilePath msiexec -ArgumentList /i, $msiPath, /quiet -Wait
+
+         # Make the tools available for later PS scripts to use.
+         $env:PSModulePath = $env:PSModulePath + ';C:\\Program Files (x86)\\Outercurve Foundation\\Modules'
+         Import-Module CoApp
+     }
 cache:
 - c:\OpenSSL-Win32
 - c:\OpenSSL-Win64

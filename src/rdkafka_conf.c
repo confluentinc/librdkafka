@@ -795,7 +795,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "*0*=Broker does not send any response/ack to client, "
 	  "*1*=Only the leader broker will need to ack the message, "
 	  "*-1* or *all*=broker will block until message is committed by all "
-	  "in sync replicas (ISRs) or broker's `in.sync.replicas` "
+	  "in sync replicas (ISRs) or broker's `min.insync.replicas` "
 	  "setting before sending response. ",
 	  -1, 1000, 1,
 	  .s2i = {

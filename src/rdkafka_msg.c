@@ -59,8 +59,21 @@ void rd_kafka_msg_destroy (rd_kafka_t *rk, rd_kafka_msg_t *rkm) {
 		rd_kafka_topic_destroy0(
                         rd_kafka_topic_a2s(rkm->rkm_rkmessage.rkt));
 
-	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE && rkm->rkm_payload)
-		rd_free(rkm->rkm_payload);
+	if ((rkm->rkm_flags & RD_KAFKA_MSG_F_FREE) && rkm->rkm_payload)
+	{
+		if (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_FREE_PAYLOAD) {
+		    rd_kafka_op_t *rko;
+            if (likely(rk->rk_ops != NULL)) {
+                rko = rd_kafka_op_new(RD_KAFKA_OP_PAYLOAD_FREE);
+                rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_MEDIUM);
+                rko->rko_u.payload_free.payload = rkm->rkm_payload;
+                rd_kafka_q_enq(rk->rk_ops, rko);
+            }
+		} else {
+			rd_free(rkm->rkm_payload);
+		}
+	}
+
 
 	if (rkm->rkm_flags & RD_KAFKA_MSG_F_FREE_RKM)
 		rd_free(rkm);

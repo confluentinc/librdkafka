@@ -53,6 +53,8 @@ const char *rd_kafka_event_name (const rd_kafka_event_t *rkev) {
 		return "OffsetCommit";
 	case RD_KAFKA_EVENT_STATS:
 		return "Stats";
+	case RD_KAFKA_EVENT_FREE_PAYLOAD:
+		return "PayloadFree";
 	default:
 		return "?unknown?";
 	}

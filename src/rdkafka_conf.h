@@ -260,6 +260,8 @@ struct rd_kafka_conf_s {
         int    log_thread_name;
         int    log_connection_close;
 
+        void (*free_payload_cb) (rd_kafka_t *rk, void *payload);
+
         /* Error callback */
 	void (*error_cb) (rd_kafka_t *rk, int err,
 			  const char *reason, void *opaque);

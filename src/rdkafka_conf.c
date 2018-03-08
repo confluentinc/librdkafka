@@ -775,6 +775,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(dr_err_only),
 	  "Only provide delivery reports for failed messages.",
 	  0, 1, 0 },
+	{ _RK_GLOBAL|_RK_PRODUCER, "free_payload_cb", _RK_C_PTR,
+	      _RK(free_payload_cb),
+	      "Free payload callback (set with rd_kafka_conf_set_free_payload_cb())" },
 	{ _RK_GLOBAL|_RK_PRODUCER, "dr_cb", _RK_C_PTR,
 	  _RK(dr_cb),
 	  "Delivery report callback (set with rd_kafka_conf_set_dr_cb())" },
@@ -1717,6 +1720,9 @@ void rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
         conf->dr_msg_cb = dr_msg_cb;
 }
 
+void rd_kafka_conf_set_free_payload_cb(rd_kafka_conf_t *conf, void (*free_payload_cb)(rd_kafka_t *rk, void *payload)) {
+    conf->free_payload_cb = free_payload_cb;
+}
 
 void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
                                    void (*consume_cb) (rd_kafka_message_t *

@@ -140,66 +140,69 @@ static char *rd_kafka_sasl_scram_get_attr (const rd_chariov_t *inbuf, char attr,
 
 /**
  * @brief Base64 encode binary input \p in
- * @returns a newly allocated base64 string
+ * @returns a newly allocated, base64-encoded string or NULL on error.
  */
 static char *rd_base64_encode (const rd_chariov_t *in) {
-        BIO *buf, *b64f;
-        BUF_MEM *ptr;
-        char *out;
+        char *ret;
+        size_t ret_len, max_len;
 
-        b64f = BIO_new(BIO_f_base64());
-        buf = BIO_new(BIO_s_mem());
-        buf = BIO_push(b64f, buf);
+        /* OpenSSL takes an |int| argument so the input cannot exceed that. */
+        if (in->size > INT_MAX) {
+                return NULL;
+        }
 
-        BIO_set_flags(buf, BIO_FLAGS_BASE64_NO_NL);
-        BIO_set_close(buf, BIO_CLOSE);
-        BIO_write(buf, in->ptr, (int)in->size);
-        BIO_flush(buf);
+        /* This does not overflow given the |INT_MAX| bound, above. */
+        max_len = (((in->size + 2) / 3) * 4) + 1;
+        ret = rd_malloc(max_len);
+        if (ret == NULL) {
+                return NULL;
+        }
 
-        BIO_get_mem_ptr(buf, &ptr);
-        out = malloc(ptr->length + 1);
-        memcpy(out, ptr->data, ptr->length);
-        out[ptr->length] = '\0';
+        ret_len = EVP_EncodeBlock((uint8_t*)ret, (uint8_t*)in->ptr, (int)in->size);
+        assert(ret_len < max_len);
+        ret[ret_len] = 0;
 
-        BIO_free_all(buf);
-
-        return out;
+        return ret;
 }
 
+
 /**
- * @brief Base64 decode input string \p in of size \p insize.
+ * @brief Base64 decode input string \p in. Ignores leading and trailing
+ *         whitespace.
  * @returns -1 on invalid Base64, or 0 on successes in which case a
  *         newly allocated binary string is set in out (and size).
  */
 static int rd_base64_decode (const rd_chariov_t *in, rd_chariov_t *out) {
-        size_t asize;
-        BIO *b64, *bmem;
+        size_t ret_len;
 
-        if (in->size == 0 || (in->size % 4) != 0)
+        /* OpenSSL takes an |int| argument, so |in->size| must not exceed
+         * that. */
+        if (in->size % 4 != 0 || in->size > INT_MAX) {
                 return -1;
-
-        asize = (in->size * 3) / 4; /* allocation size */
-        out->ptr = rd_malloc(asize+1);
-
-        b64 = BIO_new(BIO_f_base64());
-        BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-
-        bmem = BIO_new_mem_buf(in->ptr, (int)in->size);
-        bmem = BIO_push(b64, bmem);
-
-        out->size = BIO_read(bmem, out->ptr, (int)asize+1);
-        assert(out->size <= asize);
-        BIO_free_all(bmem);
-
-#if ENABLE_DEVEL
-        /* Verify that decode==encode */
-        {
-                char *encoded = rd_base64_encode(out);
-                assert(strlen(encoded) == in->size);
-                assert(!strncmp(encoded, in->ptr, in->size));
-                rd_free(encoded);
         }
-#endif
+
+        ret_len = ((in->size / 4) * 3);
+        out->ptr = rd_malloc(ret_len+1);
+
+        if (EVP_DecodeBlock((uint8_t*)out->ptr, (uint8_t*)in->ptr, in->size) ==
+            -1) {
+                free(out->ptr);
+                out->ptr = NULL;
+                return -1;
+        }
+
+        /* EVP_DecodeBlock will pad the output with trailing NULs and count
+         * them in the return value. */
+        if (in->size > 1 && in->ptr[in->size-1] == '=') {
+          if (in->size > 2 && in->ptr[in->size-2] == '=') {
+                  ret_len -= 2;
+          } else {
+                  ret_len -= 1;
+          }
+        }
+
+        out->ptr[ret_len] = 0;
+        out->size = ret_len;
 
         return 0;
 }
@@ -499,7 +502,10 @@ rd_kafka_sasl_scram_build_client_final_message (
 
         /* Store the Base64 encoded ServerSignature for quick comparison */
         state->ServerSignatureB64 = rd_base64_encode(&ServerSignature);
-
+        if (state->ServerSignatureB64 == NULL) {
+                rd_free(client_final_msg_wo_proof.ptr);
+                return -1;
+        }
 
         /*
          * Continue with client-final-message
@@ -521,6 +527,10 @@ rd_kafka_sasl_scram_build_client_final_message (
 
         /* Base64 encoded ClientProof */
         ClientProofB64 = rd_base64_encode(&ClientProof);
+        if (ClientProofB64 == NULL) {
+                rd_free(client_final_msg_wo_proof.ptr);
+                return -1;
+        }
 
         /* Construct client-final-message */
         out->size = client_final_msg_wo_proof.size +

@@ -125,6 +125,7 @@ struct test {
         FILE   *stats_fp;
 	int64_t timeout;
         test_state_t state;
+        int     failcnt;     /**< Number of failures, useful with FAIL_LATER */
 
 #if WITH_SOCKEM
         rd_list_t sockets;
@@ -161,6 +162,7 @@ struct test {
                 if (do_lock)                                            \
                         TEST_LOCK();                                    \
                 test_curr->state = TEST_FAILED;                         \
+                test_curr->failcnt += 1;                                \
                 if (fail_now && test_curr->mainfunc) {                  \
                         tests_running_cnt--;                            \
                         is_thrd = 1;                                    \
@@ -179,6 +181,11 @@ struct test {
 
 /* Whine right away, mark the test as failed, but continue the test. */
 #define TEST_FAIL_LATER(...) TEST_FAIL0(__FILE__,__LINE__,1,0,__VA_ARGS__)
+
+/* Whine right away, maybe mark the test as failed, but continue the test. */
+#define TEST_FAIL_LATER0(LATER,...) TEST_FAIL0(__FILE__,__LINE__,1,!(LATER),__VA_ARGS__)
+
+#define TEST_FAILCNT()  (test_curr->failcnt)
 
 #define TEST_LATER_CHECK(...) do {                              \
         if (test_curr->state == TEST_FAILED)                    \
@@ -542,5 +549,7 @@ int  test_socket_sockem_set_all (const char *key, int val);
 
 void test_headers_dump (const char *what, int lvl,
                         const rd_kafka_headers_t *hdrs);
+
+int32_t *test_get_broker_ids (rd_kafka_t *use_rk, size_t *cntp);
 
 #endif /* _TEST_H_ */

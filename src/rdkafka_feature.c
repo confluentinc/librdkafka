@@ -172,6 +172,15 @@ static const struct rd_kafka_feature_map {
                         { -1 },
                 }
         },
+        {
+                /* @brief >=0.10.2.0: Topic Admin API (KIP-4) */
+                .feature = RD_KAFKA_FEATURE_TOPIC_ADMIN_API,
+                .depends = {
+                        { RD_KAFKAP_CreateTopics, 0, 0 },
+                        { RD_KAFKAP_DeleteTopics, 0, 0 },
+                        { -1 },
+                }
+        },
         { .feature = 0 }, /* sentinel */
 };
 

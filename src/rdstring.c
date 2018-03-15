@@ -149,14 +149,18 @@ void rd_strtup_destroy (rd_strtup_t *strtup) {
 
 rd_strtup_t *rd_strtup_new (const char *name, const char *value) {
         size_t name_sz = strlen(name) + 1;
-        size_t value_sz = strlen(value) + 1;
+        size_t value_sz = value ? strlen(value) + 1 : 0;
         rd_strtup_t *strtup;
 
         strtup = rd_malloc(sizeof(*strtup) +
                            name_sz + value_sz - 1/*name[1]*/);
         memcpy(strtup->name, name, name_sz);
-        strtup->value = &strtup->name[name_sz];
-        memcpy(strtup->value, value, value_sz);
+        if (value) {
+                strtup->value = &strtup->name[name_sz];
+                memcpy(strtup->value, value, value_sz);
+        } else {
+                strtup->value = NULL;
+        }
 
         return strtup;
 }

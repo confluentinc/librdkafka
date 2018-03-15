@@ -164,8 +164,9 @@ _TEST_DECL(0076_produce_retry);
 _TEST_DECL(0077_compaction);
 _TEST_DECL(0078_c_from_cpp);
 _TEST_DECL(0079_fork);
-_TEST_DECL(0081_fetch_max_bytes);
-
+_TEST_DECL(0080_admin_ut);
+_TEST_DECL(0081_admin);
+_TEST_DECL(0082_fetch_max_bytes);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -266,7 +267,9 @@ struct test tests[] = {
         _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE,
               .extra = "using a fork():ed rd_kafka_t is not supported and will "
               "most likely hang"),
-        _TEST(0081_fetch_max_bytes, 0, TEST_BRKVER(0,10,1,0)),
+        _TEST(0080_admin_ut, TEST_F_LOCAL),
+        _TEST(0081_admin, 0, TEST_BRKVER(0,10,2,0)),
+        _TEST(0082_fetch_max_bytes, 0, TEST_BRKVER(0,10,1,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -3259,15 +3262,108 @@ void test_kafka_topics (const char *fmt, ...) {
 }
 
 
+
+/**
+ * @brief Create topic using Topic Admin API
+ */
+static void test_admin_create_topic (rd_kafka_t *use_rk,
+                                     const char *topicname, int partition_cnt,
+                                     int replication_factor) {
+        rd_kafka_t *rk;
+        rd_kafka_NewTopic_t *newt[1];
+        const size_t newt_cnt = 1;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *rkqu;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_CreateTopics_result_t *res;
+        const rd_kafka_topic_result_t **terr;
+        int timeout_ms = tmout_multip(10000);
+        size_t res_cnt;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        test_timing_t t_create;
+
+        if (!(rk = use_rk))
+                rk = test_create_producer();
+
+        rkqu = rd_kafka_queue_new(rk);
+
+        newt[0] = rd_kafka_NewTopic_new(topicname, partition_cnt,
+                                     replication_factor);
+        TEST_ASSERT(newt[0] != NULL);
+
+        options = rd_kafka_AdminOptions_new(rk);
+        err = rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms,
+                                                          errstr,
+                                                          sizeof(errstr));
+        TEST_ASSERT(!err, "%s", errstr);
+
+        TEST_SAY("Creating topic \"%s\" "
+                 "(partitions=%d, replication_factor=%d, timeout=%d)\n",
+                 topicname, partition_cnt, replication_factor, timeout_ms);
+
+        TIMING_START(&t_create, "CreateTopics");
+        rd_kafka_admin_CreateTopics(rk, newt, newt_cnt, options, rkqu);
+
+        /* Wait for result */
+        rkev = rd_kafka_queue_poll(rkqu, timeout_ms + 2000);
+        TEST_ASSERT(rkev, "Timed out waiting for CreateTopics result");
+
+        TIMING_STOP(&t_create);
+
+        res = rd_kafka_event_CreateTopics_result(rkev);
+        TEST_ASSERT(res, "Expected CreateTopics_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        terr = rd_kafka_CreateTopics_result_topics(res, &res_cnt);
+        TEST_ASSERT(terr, "CreateTopics_result_topics returned NULL");
+        TEST_ASSERT(res_cnt == newt_cnt,
+                    "CreateTopics_result_topics returned %"PRIusz" topics, "
+                    "not the expected %"PRIusz,
+                    res_cnt, newt_cnt);
+
+        TEST_ASSERT(!rd_kafka_topic_result_error(terr[0]),
+                    "Topic %s result error: %s",
+                    rd_kafka_topic_result_name(terr[0]),
+                    rd_kafka_topic_result_error_string(terr[0]));
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_queue_destroy(rkqu);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_kafka_NewTopic_destroy(newt[0]);
+
+        if (!use_rk)
+                rd_kafka_destroy(rk);
+}
+
+
 /**
  * @brief Create topic using kafka-topics.sh --create
  */
-void test_create_topic (const char *topicname, int partition_cnt,
-			int replication_factor) {
+static void test_create_topic_sh (const char *topicname, int partition_cnt,
+                                  int replication_factor) {
 	test_kafka_topics("--create --topic \"%s\" "
 			  "--replication-factor %d --partitions %d",
 			  topicname, replication_factor, partition_cnt);
 }
+
+
+/**
+ * @brief Create topic
+ */
+void test_create_topic (const char *topicname, int partition_cnt,
+                        int replication_factor) {
+        if (test_broker_version < TEST_BRKVER(0,10,2,0))
+                test_create_topic_sh(topicname, partition_cnt,
+                                     replication_factor);
+        else
+                test_admin_create_topic(NULL, topicname, partition_cnt,
+                                        replication_factor);
+}
+
 
 int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
         rd_kafka_t *use_rk;
@@ -3555,4 +3651,43 @@ void test_headers_dump (const char *what, int lvl,
                 TEST_SAYL(lvl, "%s: Header #%"PRIusz": %s='%s'\n",
                           what, idx-1, name,
                           value ? value : "(NULL)");
+}
+
+
+/**
+ * @brief Retrieve and return the list of broker ids in the cluster.
+ *
+ * @param rk Optional instance to use.
+ * @param cntp Will be updated to the number of brokers returned.
+ *
+ * @returns a malloc:ed list of int32_t broker ids.
+ */
+int32_t *test_get_broker_ids (rd_kafka_t *use_rk, size_t *cntp) {
+        int32_t *ids;
+        rd_kafka_t *rk;
+        const rd_kafka_metadata_t *md;
+        rd_kafka_resp_err_t err;
+        size_t i;
+
+        if (!(rk = use_rk))
+                rk = test_create_producer();
+
+        err = rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(5000));
+        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        TEST_ASSERT(md->broker_cnt > 0,
+                    "%d brokers, expected > 0", md->broker_cnt);
+
+        ids = malloc(sizeof(*ids) * md->broker_cnt);
+
+        for (i = 0 ; i < (size_t)md->broker_cnt ; i++)
+                ids[i] = md->brokers[i].id;
+
+        *cntp = md->broker_cnt;
+
+        rd_kafka_metadata_destroy(md);
+
+        if (!use_rk)
+                rd_kafka_destroy(rk);
+
+        return ids;
 }

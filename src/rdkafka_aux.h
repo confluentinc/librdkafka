@@ -1,7 +1,7 @@
 /*
- * librdkafka - The Apache Kafka C/C++ library
+ * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2017 Magnus Edenhill
+ * Copyright (c) 2018 Magnus Edenhill
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,35 +26,39 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _RDKAFKA_AUX_H_
+#define _RDKAFKA_AUX_H_
 
-#ifndef _RDSTRING_H_
-#define _RDSTRING_H_
+/**
+ * @name Auxiliary types
+ */
 
-
-
-char *rd_string_render (const char *templ,
-                        char *errstr, size_t errstr_size,
-                        ssize_t (*callback) (const char *key,
-                                             char *buf, size_t size,
-                                             void *opaque),
-                        void *opaque);
+#include "rdkafka_conf.h"
 
 
 
 /**
- * @brief An immutable string tuple (name, value) in a single allocation.
- *        \p value may be NULL.
+ * @brief Topic [ + Error code + Error string ]
+ *
+ * @remark Public type.
+ * @remark Single allocation.
  */
-typedef struct rd_strtup_s {
-        char *value;
-        char  name[1];  /* Actual allocation of name + val here */
-} rd_strtup_t;
+struct rd_kafka_topic_result_s {
+        char *topic;             /**< Points to data */
+        rd_kafka_resp_err_t err; /**< Error code */
+        char *errstr;            /**< Points to data after topic, unless NULL */
+        char  data[1];           /**< topic followed by errstr */
+};
 
-void rd_strtup_destroy (rd_strtup_t *strtup);
-rd_strtup_t *rd_strtup_new (const char *name, const char *value);
+void rd_kafka_topic_result_destroy (rd_kafka_topic_result_t *terr);
+void rd_kafka_topic_result_free (void *ptr);
+
+rd_kafka_topic_result_t *
+rd_kafka_topic_result_new (const char *topic, ssize_t topic_size,
+                           rd_kafka_resp_err_t err,
+                           const char *errstr);
 
 
-char *rd_flags2str (char *dst, size_t size,
-                    const char **desc, int flags);
+/**@}*/
 
-#endif /* _RDSTRING_H_ */
+#endif /* _RDKAFKA_AUX_H_ */

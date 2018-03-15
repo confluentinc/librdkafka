@@ -413,6 +413,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: No such entry"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__UNDERFLOW,
                   "Local: Read underflow"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__INVALID_TYPE,
+                  "Local: Invalid type"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -1426,6 +1428,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_REBALANCE;
 	if (rk->rk_conf.offset_commit_cb)
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OFFSET_COMMIT;
+
+        rk->rk_controllerid = -1;
+
+        /* Admin client defaults */
+        rk->rk_conf.admin.request_timeout_ms =
+                RD_MIN(5*60*1000, rk->rk_conf.socket_timeout_ms);
 
 	/* Convenience Kafka protocol null bytes */
 	rk->rk_null_bytes = rd_kafkap_bytes_new(NULL, 0);
@@ -2748,6 +2756,21 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 
         case RD_KAFKA_OP_TERMINATE:
                 /* nop: just a wake-up */
+                break;
+
+        case RD_KAFKA_OP_CREATETOPICS:
+        case RD_KAFKA_OP_DELETETOPICS:
+                /* Calls op_destroy() from worker callback,
+                 * when the time comes. */
+                res = rd_kafka_op_call(rk, rkq, rko);
+                break;
+
+        case RD_KAFKA_OP_ADMIN_RESULT:
+                if (cb_type == RD_KAFKA_Q_CB_RETURN ||
+                    cb_type == RD_KAFKA_Q_CB_FORCE_RETURN)
+                        return RD_KAFKA_OP_RES_PASS; /* Don't handle here */
+
+                /* Op is silently destroyed below */
                 break;
 
         default:

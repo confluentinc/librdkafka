@@ -163,7 +163,9 @@
     <ClCompile Include="..\..\tests\0077-compaction.c" />
     <ClCompile Include="..\..\tests\0078-c_from_cpp.cpp" />
     <ClCompile Include="..\..\tests\0079-fork.c" />
-    <ClCompile Include="..\..\tests\0081-fetch_max_bytes.cpp" />
+    <ClCompile Include="..\..\tests\0080-admin_ut.c" />
+    <ClCompile Include="..\..\tests\0081-admin.c" />
+    <ClCompile Include="..\..\tests\0082-fetch_max_bytes.cpp" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

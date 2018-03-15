@@ -2246,3 +2246,187 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 	fprintf(fp, "\n");
         fprintf(fp, "### C/P legend: C = Consumer, P = Producer, * = both\n");
 }
+
+
+
+
+/**
+ * @name Configuration value methods
+ *
+ * @remark This generic interface will eventually replace the config property
+ *         used above.
+ * @{
+ */
+
+
+/**
+ * @brief Set up an INT confval.
+ *
+ * @oaram name Property name, must be a const static string (will not be copied)
+ */
+void rd_kafka_confval_init_int (rd_kafka_confval_t *confval,
+                                const char *name,
+                                int vmin, int vmax, int vdef) {
+        confval->name = name;
+        confval->valuetype = RD_KAFKA_CONFVAL_INT;
+        confval->u.INT.vmin = vmin;
+        confval->u.INT.vmax = vmax;
+        confval->u.INT.vdef = vdef;
+        confval->u.INT.v    = vdef;
+}
+
+/**
+ * @brief Set up a PTR confval.
+ *
+ * @oaram name Property name, must be a const static string (will not be copied)
+ */
+void rd_kafka_confval_init_ptr (rd_kafka_confval_t *confval,
+                                const char *name) {
+        confval->name = name;
+        confval->valuetype = RD_KAFKA_CONFVAL_PTR;
+        confval->u.PTR = NULL;
+}
+
+
+/**
+ * @brief Set confval's value to \p valuep, verifying the passed
+ *        \p valuetype matches (or can be cast to) \p confval's type.
+ *
+ * @param dispname is the display name for the configuration value and is
+ *        included in error strings.
+ * @param valuep is a pointer to the value, or NULL to revert to default.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the new value was set, or
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if the value was of incorrect type,
+ *          out of range, or otherwise not a valid value.
+ */
+rd_kafka_resp_err_t
+rd_kafka_confval_set_type (rd_kafka_confval_t *confval,
+                           rd_kafka_confval_type_t valuetype,
+                           const void *valuep,
+                           char *errstr, size_t errstr_size) {
+        switch (confval->valuetype)
+        {
+        case RD_KAFKA_CONFVAL_INT:
+        {
+                int v;
+                const char *end;
+
+                if (!valuep) {
+                        /* Revert to default */
+                        confval->u.INT.v = confval->u.INT.vdef;
+                        confval->is_set = 0;
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+
+                switch (valuetype)
+                {
+                case RD_KAFKA_CONFVAL_INT:
+                        v = *(const int *)valuep;
+                        break;
+                case RD_KAFKA_CONFVAL_STR:
+                        v = (int)strtol((const char *)valuep, (char **)&end, 0);
+                        if (end == (const char *)valuep) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "Invalid value type for \"%s\": "
+                                            "expecting integer",
+                                            confval->name);
+                                return RD_KAFKA_RESP_ERR__INVALID_TYPE;
+                        }
+                default:
+                        rd_snprintf(errstr, errstr_size,
+                                    "Invalid value type for \"%s\": "
+                                    "expecting integer", confval->name);
+                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                }
+
+
+                if ((confval->u.INT.vmin || confval->u.INT.vmax) &&
+                    (v < confval->u.INT.vmin || v > confval->u.INT.vmax)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Invalid value type for \"%s\": "
+                                    "expecting integer in range %d..%d",
+                                    confval->name,
+                                    confval->u.INT.vmin,
+                                    confval->u.INT.vmax);
+                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                }
+
+                confval->u.INT.v = v;
+                confval->is_set = 1;
+        }
+        break;
+
+        case RD_KAFKA_CONFVAL_STR:
+        {
+                size_t vlen;
+                const char *v = (const char *)valuep;
+
+                if (!valuep) {
+                        confval->is_set = 0;
+                        if (confval->u.STR.vdef)
+                                confval->u.STR.v = rd_strdup(confval->u.STR.
+                                                             vdef);
+                        else
+                                confval->u.STR.v = NULL;
+                }
+
+                if (valuetype != RD_KAFKA_CONFVAL_STR) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Invalid value type for \"%s\": "
+                                    "expecting string", confval->name);
+                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                }
+
+                vlen = strlen(v);
+                if ((confval->u.STR.minlen || confval->u.STR.maxlen) &&
+                    (vlen < confval->u.STR.minlen ||
+                     vlen > confval->u.STR.maxlen)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Invalid value for \"%s\": "
+                                    "expecting string with length "
+                                    "%"PRIusz"..%"PRIusz,
+                                    confval->name,
+                                    confval->u.STR.minlen,
+                                    confval->u.STR.maxlen);
+                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                }
+
+                if (confval->u.STR.v)
+                        rd_free(confval->u.STR.v);
+
+                confval->u.STR.v = rd_strdup(v);
+        }
+        break;
+
+        case RD_KAFKA_CONFVAL_PTR:
+                confval->u.PTR = (void *)valuep;
+                break;
+
+        default:
+                RD_NOTREACHED();
+                return RD_KAFKA_RESP_ERR__NOENT;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+int rd_kafka_confval_get_int (const rd_kafka_confval_t *confval) {
+        rd_assert(confval->valuetype == RD_KAFKA_CONFVAL_INT);
+        return confval->u.INT.v;
+}
+
+
+const char *rd_kafka_confval_get_str (const rd_kafka_confval_t *confval) {
+        rd_assert(confval->valuetype == RD_KAFKA_CONFVAL_STR);
+        return confval->u.STR.v;
+}
+
+void *rd_kafka_confval_get_ptr (const rd_kafka_confval_t *confval) {
+        rd_assert(confval->valuetype == RD_KAFKA_CONFVAL_PTR);
+        return confval->u.PTR;
+}
+
+
+/**@}*/

@@ -104,6 +104,7 @@
     <ClInclude Include="..\src\rdkafka_buf.h" />
     <ClInclude Include="..\src\rdkafka_cgrp.h" />
     <ClInclude Include="..\src\rdkafka_conf.h" />
+    <ClInclude Include="..\src\rdkafka_confval.h" />
     <ClInclude Include="..\src\rdkafka_event.h" />
     <ClInclude Include="..\src\rdkafka_feature.h" />
     <ClInclude Include="..\src\rdkafka_lz4.h" />
@@ -192,6 +193,8 @@
     <ClCompile Include="..\src\rdkafka_interceptor.c" />
     <ClCompile Include="..\src\rdkafka_plugin.c" />
     <ClCompile Include="..\src\rdkafka_header.c" />
+    <ClCompile Include="..\src\rdkafka_admin.c" />
+    <ClCompile Include="..\src\rdkafka_aux.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />

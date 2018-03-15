@@ -152,6 +152,8 @@ typedef struct test_timing_s {
         (TIMING)->ts_every = (TIMING)->ts_start;                        \
         } while (0)
 
+#define TIMING_STOPPED(TIMING) ((TIMING)->duration != 0)
+
 #ifndef __cplusplus
 #define TIMING_STOP(TIMING) do {                                \
         (TIMING)->duration = test_clock() - (TIMING)->ts_start; \
@@ -175,6 +177,27 @@ typedef struct test_timing_s {
 
 #define TIMING_DURATION(TIMING) ((TIMING)->duration ? (TIMING)->duration : \
                                  (test_clock() - (TIMING)->ts_start))
+
+#define TIMING_ASSERT0(TIMING,DO_FAIL_LATER,TMIN_MS,TMAX_MS) do {       \
+        if (!TIMING_STOPPED(TIMING))                                    \
+                TIMING_STOP(&timing);                                   \
+        int _dur_ms = TIMING_DURATION(TIMING) / 1000;                   \
+        if (TMIN_MS <= _dur_ms && _dur_ms <= TMAX_MS)                   \
+                break;                                                  \
+        if (test_on_ci)                                                 \
+                TEST_WARN("%s: expected duration %d <= %d <= %d ms%s\n", \
+                          (TIMING)->name, TMIN_MS, _dur_ms, TMAX_MS,    \
+                          ": not FAILING test on CI");                  \
+        else                                                            \
+                TEST_FAIL_LATER0(DO_FAIL_LATER,                         \
+                                 "%s: expected duration %d <= %d <= %d ms", \
+                                 (TIMING)->name, TMIN_MS, _dur_ms, TMAX_MS); \
+        } while (0)
+
+#define TIMING_ASSERT(TIMING,TMIN_MS,TMAX_MS)           \
+        TIMING_ASSERT0(TIMING,0,TMIN_MS,TMAX_MS)
+#define TIMING_ASSERT_LATER(TIMING,TMIN_MS,TMAX_MS)     \
+        TIMING_ASSERT0(TIMING,1,TMIN_MS,TMAX_MS)
 
 /* Trigger something every US microseconds. */
 static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {

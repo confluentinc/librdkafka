@@ -30,6 +30,9 @@
 
 
 #include "rdkafka_msg.h"
+#include "rdkafka_timer.h"
+#include "rdkafka_admin.h"
+
 
 /* Forward declarations */
 typedef struct rd_kafka_q_s rd_kafka_q_t;
@@ -108,6 +111,9 @@ typedef enum {
         RD_KAFKA_OP_METADATA,        /* Metadata response */
         RD_KAFKA_OP_LOG,             /* Log */
         RD_KAFKA_OP_WAKEUP,          /* Wake-up signaling */
+        RD_KAFKA_OP_CREATETOPICS,    /**< Admin: CreateTopics: u.admin_request*/
+        RD_KAFKA_OP_DELETETOPICS,    /**< Admin: DeleteTopics: u.admin_request*/
+        RD_KAFKA_OP_ADMIN_RESULT,    /**< Admin API .._result_t */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -143,6 +149,11 @@ typedef enum {
 typedef enum {
         RD_KAFKA_OP_RES_PASS,    /* Not handled, pass to caller */
         RD_KAFKA_OP_RES_HANDLED, /* Op was handled (through callbacks) */
+        RD_KAFKA_OP_RES_KEEP,    /* Op was handled (through callbacks)
+                                  * but must not be destroyed by op_handle().
+                                  * It is NOT PERMITTED to return RES_KEEP
+                                  * from a callback handling a ERR__DESTROY
+                                  * event. */
         RD_KAFKA_OP_RES_YIELD    /* Callback called yield */
 } rd_kafka_op_res_t;
 
@@ -321,6 +332,58 @@ struct rd_kafka_op_s {
                         int  level;
                         char *str;
                 } log;
+
+                struct {
+                        rd_kafka_AdminOptions_t options; /**< Copy of user's
+                                                          * options, or NULL */
+                        rd_ts_t abs_timeout;        /**< Absolute timeout
+                                                     *   for this request. */
+                        rd_kafka_timer_t tmr;       /**< Timeout timer */
+                        struct rd_kafka_enq_once_s *eonce; /**< Enqueue op
+                                                            * only once,
+                                                            * used to
+                                                            * (re)trigger
+                                                            * the request op
+                                                            * upon broker state
+                                                            * changes while
+                                                            * waiting for the
+                                                            * controller, or
+                                                            * due to .tmr
+                                                            * timeout. */
+                        rd_list_t args;/**< Type depends on request, e.g.
+                                        *   rd_kafka_NewTopic_t for CreateTopics
+                                        */
+
+                        rd_kafka_buf_t *reply_buf; /**< Protocol reply,
+                                                    *   temporary reference not
+                                                    *   owned by this rko */
+
+                        /** Worker state */
+                        enum {
+                                RD_KAFKA_ADMIN_STATE_INIT,
+                                RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER,
+                                RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
+                        } state;
+
+                        /** Application's reply queue */
+                        rd_kafka_replyq_t replyq;
+                        rd_kafka_event_type_t reply_event_type;
+                } admin_request;
+
+                struct {
+                        rd_kafka_op_type_t reqtype; /**< Request op type,
+                                                     *   used for logging. */
+
+                        char *errstr;      /**< Error string, if rko_err
+                                            *   is set, else NULL. */
+
+                        /* CreateTopics, DeleteTopics */
+                        rd_list_t topics; /**< Type (rd_kafka_topic_result_t *)*/
+
+                        void *opaque;     /**< Application's opaque as set by
+                                           *   rd_kafka_AdminOptions_set_opaque
+                                           */
+                } admin_result;
 	} rko_u;
 };
 

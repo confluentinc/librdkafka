@@ -35,6 +35,8 @@ set(
     rdkafka_transport.c
     rdkafka_interceptor.c
     rdkafka_header.c
+    rdkafka_admin.c
+    rdkafka_aux.c
     rdlist.c
     rdlog.c
     rdmurmur2.c

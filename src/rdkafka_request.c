@@ -1995,3 +1995,143 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
 
         return cnt;
 }
+
+
+/**
+ * @brief Construct and send CreateTopicsRequest to \p rkb
+ *        with the topics (NewTopic_t*) in \p new_topics, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
+                              rd_list_t *new_topics /*(NewTopic_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        int i = 0;
+        rd_kafka_NewTopic_t *newt;
+        int op_timeout;
+
+        if (rd_list_cnt(new_topics) == 0) {
+                rd_snprintf(errstr, errstr_size, "No topics to create");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_CreateTopics, 0, 2, &features);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "Topic Admin API (KIP-4) not supported "
+                            "by broker, requires broker version >= 0.10.2.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        if (rd_kafka_confval_get_int(&options->validate_only) &&
+            ApiVersion < 1) {
+                rd_snprintf(errstr, errstr_size,
+                            "CreateTopics.validate_only=true not "
+                            "supported by broker");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreateTopics, 1,
+                                         /* FIXME */
+                                         4 +
+                                         (rd_list_cnt(new_topics) * 123));
+
+        /* #topics */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(new_topics));
+
+        while ((newt = rd_list_elem(new_topics, i++))) {
+                int partition;
+                int ci = 0;
+                const rd_strtup_t *tup;
+
+                /* topic */
+                rd_kafka_buf_write_str(rkbuf, newt->topic, -1);
+
+                if (rd_list_cnt(&newt->replicas)) {
+                        /* num_partitions and replication_factor must be
+                         * set to -1 if a replica assignment is sent. */
+                        /* num_partitions */
+                        rd_kafka_buf_write_i32(rkbuf, -1);
+                        /* replication_factor */
+                        rd_kafka_buf_write_i16(rkbuf, -1);
+                } else {
+                        /* num_partitions */
+                        rd_kafka_buf_write_i32(rkbuf, newt->num_partitions);
+                        /* replication_factor */
+                        rd_kafka_buf_write_i16(rkbuf,
+                                               (int16_t)newt->
+                                               replication_factor);
+                }
+
+                /* #replica_assignment */
+                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&newt->replicas));
+
+                /* Replicas per partition, see rdkafka_admin.[ch]
+                 * for how these are constructed. */
+                for (partition = 0 ; partition < rd_list_cnt(&newt->replicas);
+                     partition++) {
+                        const rd_list_t *replicas;
+                        int32_t *replicap;
+                        int ri = 0;
+
+                        replicas = rd_list_elem(&newt->replicas, partition);
+                        if (!replicas)
+                                continue;
+
+                        /* partition */
+                        rd_kafka_buf_write_i32(rkbuf, partition);
+                        /* #replicas */
+                        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(replicas));
+
+                        while ((replicap = rd_list_elem(replicas, ri++))) {
+                                /* replica */
+                                rd_kafka_buf_write_i32(rkbuf, *replicap);
+                        }
+                }
+
+                /* #config_entries */
+                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&newt->config));
+
+                while ((tup = rd_list_elem(&newt->config, ci++))) {
+                        rd_kafka_buf_write_str(rkbuf, tup->name, -1);
+                        rd_kafka_buf_write_str(rkbuf, tup->value, -1);
+                }
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
+
+        if (ApiVersion >= 1) {
+                /* validate_only */
+                rd_kafka_buf_write_i8(rkbuf,
+                                      rd_kafka_confval_get_int(&options->
+                                                               validate_only));
+        }
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}

@@ -49,8 +49,10 @@ extern int test_on_ci;
 const char *test_mk_topic_name (const char *suffix, int randomized);
 
 uint64_t
-test_produce_msgs_easy (const char *topic, uint64_t testid,
-                        int32_t partition, int msgcnt);
+test_produce_msgs_easy_size (const char *topic, uint64_t testid,
+                             int32_t partition, int msgcnt, size_t size);
+#define test_produce_msgs_easy(topic,testid,partition,msgcnt) \
+        test_produce_msgs_easy_size(topic,testid,partition,msgcnt,0)
 
 void test_FAIL (const char *file, int line, int fail_now, const char *str);
 void test_SAY (const char *file, int line, int level, const char *str);

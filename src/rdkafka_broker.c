@@ -3038,7 +3038,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
         if (rd_kafka_buf_ApiVersion(rkbuf) == 4) {
                 /* MaxBytes */
                 rd_kafka_buf_write_i32(rkbuf,
-                                       rkb->rkb_rk->rk_conf.recv_max_msg_size);
+                                       rkb->rkb_rk->rk_conf.fetch_max_bytes);
                 /* IsolationLevel */
                 rd_kafka_buf_write_i8(rkbuf, RD_KAFKAP_READ_UNCOMMITTED);
         }

@@ -164,6 +164,7 @@ _TEST_DECL(0076_produce_retry);
 _TEST_DECL(0077_compaction);
 _TEST_DECL(0078_c_from_cpp);
 _TEST_DECL(0079_fork);
+_TEST_DECL(0081_fetch_max_bytes);
 
 
 /* Manual tests */
@@ -265,6 +266,7 @@ struct test tests[] = {
         _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE,
               .extra = "using a fork():ed rd_kafka_t is not supported and will "
               "most likely hang"),
+        _TEST(0081_fetch_max_bytes, 0, TEST_BRKVER(0,10,1,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -1726,8 +1728,8 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
  * destroy consumer, and returns the used testid.
  */
 uint64_t
-test_produce_msgs_easy (const char *topic, uint64_t testid,
-                        int32_t partition, int msgcnt) {
+test_produce_msgs_easy_size (const char *topic, uint64_t testid,
+                             int32_t partition, int msgcnt, size_t size) {
         rd_kafka_t *rk;
         rd_kafka_topic_t *rkt;
         test_timing_t t_produce;
@@ -1738,7 +1740,7 @@ test_produce_msgs_easy (const char *topic, uint64_t testid,
         rkt = test_create_producer_topic(rk, topic, NULL);
 
         TIMING_START(&t_produce, "PRODUCE");
-        test_produce_msgs(rk, rkt, testid, partition, 0, msgcnt, NULL, 0);
+        test_produce_msgs(rk, rkt, testid, partition, 0, msgcnt, NULL, size);
         TIMING_STOP(&t_produce);
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);

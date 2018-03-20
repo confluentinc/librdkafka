@@ -1356,6 +1356,19 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 #endif
 
+        if (type == RD_KAFKA_CONSUMER) {
+                /* Automatically adjust `fetch.max.bytes` to be >=
+                 * `message.max.bytes`. */
+                conf->fetch_max_bytes = RD_MAX(conf->fetch_max_bytes,
+                                               conf->max_msg_size);
+
+                /* Automatically adjust 'receive.message.max.bytes' to
+                 * be 512 bytes larger than 'fetch.max.bytes' to have enough
+                 * room for protocol framing (including topic name). */
+                conf->recv_max_msg_size = RD_MAX(conf->recv_max_msg_size,
+                                                 conf->fetch_max_bytes + 512);
+        }
+
         if (conf->metadata_max_age_ms == -1) {
                 if (conf->metadata_refresh_interval_ms > 0)
                         conf->metadata_max_age_ms =

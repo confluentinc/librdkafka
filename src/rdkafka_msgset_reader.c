@@ -662,7 +662,10 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
         /* Skip message if outdated */
         if (hdr.Offset < rktp->rktp_offsets.fetch_offset) {
                 rd_rkb_dbg(msetr->msetr_rkb, MSG, "MSG",
+                           "%s [%"PRId32"]: "
                            "Skip offset %"PRId64" < fetch_offset %"PRId64,
+                           rktp->rktp_rkt->rkt_topic->str,
+                           rktp->rktp_partition,
                            hdr.Offset, rktp->rktp_offsets.fetch_offset);
                 rd_kafka_buf_skip_to(rkbuf, message_end);
                 return RD_KAFKA_RESP_ERR_NO_ERROR; /* Continue with next msg */

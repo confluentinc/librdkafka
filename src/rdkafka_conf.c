@@ -1330,8 +1330,9 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 
 			/* No match */
 			rd_snprintf(errstr, errstr_size,
-				 "Invalid value for "
-				 "configuration property \"%s\"", prop->name);
+                                "Invalid value \"%.*s\" for "
+                                "configuration property \"%s\"",
+                                (int)(t-s), s, prop->name);
 			return RD_KAFKA_CONF_INVALID;
 
 		}

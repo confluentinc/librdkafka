@@ -148,6 +148,8 @@ static void produce_compactable_msgs (const char *topic, int32_t partition,
         TEST_ASSERT(msgcounter == 0, "%d messages unaccounted for", msgcounter);
 
         rd_kafka_destroy(rk);
+
+        free(val);
 }
 
 

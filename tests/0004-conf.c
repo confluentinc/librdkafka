@@ -381,6 +381,30 @@ int main_0004_conf (int argc, char **argv) {
 		rd_kafka_conf_destroy(conf);
 	}
 
+        {
+                rd_kafka_conf_res_t res;
+
+                TEST_SAY("Error reporting for S2F properties\n");
+                conf = rd_kafka_conf_new();
+
+                res = rd_kafka_conf_set(conf, "debug",
+                        "cgrp,invalid-value,topic", errstr, sizeof(errstr));
+
+                TEST_ASSERT(res == RD_KAFKA_CONF_INVALID,
+                        "expected 'debug=invalid-value' to fail with INVALID, "
+                        "not %d", res);
+                TEST_ASSERT(strstr(errstr, "invalid-value"),
+                        "expected invalid value to be mentioned in error, "
+                        "not \"%s\"", errstr);
+                TEST_ASSERT(
+                        !strstr(errstr, "cgrp") && !strstr(errstr, "topic"),
+                        "expected only invalid value to be mentioned, "
+                        "not \"%s\"", errstr);
+                TEST_SAY(_C_GRN "Ok: %s\n" _C_CLR, errstr);
+
+                rd_kafka_conf_destroy(conf);
+        }
+
 	/* Canonical int values, aliases, s2i-verified strings */
 	{
 		static const struct {

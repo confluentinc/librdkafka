@@ -124,12 +124,36 @@
 #define be64toh(x) (x)
 #define be32toh(x) (x)
 #define be16toh(x) (x)
-#define le32toh(x)                              \
-        ((((x) & 0xff) << 24) |                 \
-         (((x) & 0xff00) << 8) |                \
-         (((x) & 0xff0000) >> 8) |              \
-         (((x) & 0xff000000) >> 24))
+#ifdef __GNUC__
+#define le32toh(x) __builtin_bswap32(x)
+#define le64toh(x) __builtin_bswap64(x)
+#else
+static inline uint32_t
+le32toh(uint32_t le)
+{
+    uint32_t r = 0;
+    uint8_t *p = (uint8_t*) (void*) &le;
+    int i;
+    for (i = 0; i < 4; i++) {
+        r |= (((uint32_t)p[i]) << (i * 8));
+    }
 
+    return r;
+}
+
+static inline uint64_t
+le64toh(uint64_t le)
+{
+    uint64_t r = 0;
+    uint8_t *p = (uint8_t*) (void*) &le;
+    int i;
+    for (i = 0; i < 8; i++) {
+        r |= (((uint64_t)p[i]) << (i * 8));
+    }
+
+    return r;
+}
+#endif
 #else
  #include <endian.h>
 #endif

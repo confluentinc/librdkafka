@@ -19,7 +19,7 @@
 #endif
 
 
-#elif !defined(__WIN32__) && !defined(_MSC_VER) && !defined(sun) && !defined(_AIX)
+#elif !defined(__WIN32__) && !defined(_MSC_VER) && !defined(__sun) && !defined(_AIX)
 #  include <endian.h>
 #endif
 
@@ -157,7 +157,7 @@ typedef unsigned long long u64;
 #endif
 #endif
 
-#if defined(sun)
+#if defined(__sun)
 #ifndef htole16
 #define htole16(x) LE_16(x)
 #endif

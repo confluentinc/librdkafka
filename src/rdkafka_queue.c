@@ -864,3 +864,10 @@ void rd_kafka_q_dump (FILE *fp, rd_kafka_q_t *rkq) {
 
         mtx_unlock(&rkq->rkq_lock);
 }
+
+
+void rd_kafka_enq_once_trigger_destroy (void *ptr) {
+        rd_kafka_enq_once_t *eonce = ptr;
+
+        rd_kafka_enq_once_trigger(eonce, RD_KAFKA_RESP_ERR__DESTROY, "destroy");
+}

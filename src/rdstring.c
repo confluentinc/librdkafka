@@ -147,6 +147,10 @@ void rd_strtup_destroy (rd_strtup_t *strtup) {
         rd_free(strtup);
 }
 
+void rd_strtup_free (void *strtup) {
+        rd_strtup_destroy((rd_strtup_t *)strtup);
+}
+
 rd_strtup_t *rd_strtup_new (const char *name, const char *value) {
         size_t name_sz = strlen(name) + 1;
         size_t value_sz = value ? strlen(value) + 1 : 0;
@@ -163,6 +167,22 @@ rd_strtup_t *rd_strtup_new (const char *name, const char *value) {
         }
 
         return strtup;
+}
+
+
+/**
+ * @returns a new copy of \p src
+ */
+rd_strtup_t *rd_strtup_dup (const rd_strtup_t *src) {
+        return rd_strtup_new(src->name, src->value);
+}
+
+/**
+ * @brief Wrapper for rd_strtup_dup() suitable rd_list_copy*() use
+ */
+void *rd_strtup_list_copy (const void *elem, void *opaque) {
+        const rd_strtup_t *src = elem;
+        return (void *)rd_strtup_dup(src);
 }
 
 

@@ -65,6 +65,12 @@ rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *));
 
 
 /**
+ * @brief Same as rd_list_init() but uses initial_size and free_cb
+ *        from the provided \p src list.
+ */
+rd_list_t *rd_list_init_copy (rd_list_t *rl, const rd_list_t *src);
+
+/**
  * Allocate a new list pointer and initialize it according to rd_list_init().
  *
  * Use rd_list_destroy() to free.
@@ -85,10 +91,19 @@ void rd_list_grow (rd_list_t *rl, size_t size);
  *
  * @param elemsize element size
  * @param size number of elements
+ * @param memzero initialize element memory to zeros.
  *
  * @remark Preallocated element lists can't grow past \p size.
  */
-void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size);
+void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size,
+                             int memzero);
+
+/**
+ * @brief Set the number of valid elements, this must only be used
+ *        with prealloc_elems() to make the preallocated elements directly
+ *        usable.
+ */
+void rd_list_set_cnt (rd_list_t *rl, size_t cnt);
 
 
 /**
@@ -108,6 +123,16 @@ void rd_list_free_cb (rd_list_t *rl, void *ptr);
  *          will be returned (for use with set_elems).
  */
 void *rd_list_add (rd_list_t *rl, void *elem);
+
+
+/**
+ * @brief Set element at \p idx to \p ptr.
+ *
+ * @remark MUST NOT overwrite an existing element.
+ * @remark The list will be grown, if needed, any gaps between the current
+ *         highest element and \p idx will be set to NULL.
+ */
+void rd_list_set (rd_list_t *rl, int idx, void *ptr);
 
 
 /**
@@ -164,6 +189,12 @@ void rd_list_clear (rd_list_t *rl);
  */
 void rd_list_destroy (rd_list_t *rl);
 
+/**
+ * @brief Wrapper for rd_list_destroy() that has same signature as free(3),
+ *        allowing it to be used as free_cb for nested lists.
+ */
+void rd_list_destroy_free (void *rl);
+
 
 /**
  * Returns the element at index 'idx', or NULL if out of range.
@@ -197,11 +228,27 @@ static RD_INLINE RD_UNUSED int rd_list_cnt (const rd_list_t *rl) {
 #define rd_list_empty(rl) (rd_list_cnt(rl) == 0)
 
 
+/**
+ * @brief Find element index using comparator.
+ *
+ * \p match is the first argument to \p cmp, and each element (up to a match)
+ * is the second argument to \p cmp.
+ *
+ * @remark this is a O(n) scan.
+ * @returns the first matching element or NULL.
+ */
+int rd_list_index (const rd_list_t *rl, const void *match,
+                   int (*cmp) (const void *, const void *));
 
 /**
- * Find element using comparator
- * 'match' will be the first argument to 'cmp', and each element (up to a match)
- * will be the second argument to 'cmp'.
+ * @brief Find element using comparator
+ *
+ * \p match is the first argument to \p cmp, and each element (up to a match)
+ * is the second argument to \p cmp.
+ *
+ * @remark if the list is sorted bsearch() is used, otherwise an O(n) scan.
+ *
+ * @returns the first matching element or NULL.
  */
 void *rd_list_find (const rd_list_t *rl, const void *match,
                     int (*cmp) (const void *, const void *));

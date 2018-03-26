@@ -683,7 +683,7 @@ rd_kafka_replyq_enq (rd_kafka_replyq_t *replyq, rd_kafka_op_t *rko,
 
 	/* The replyq queue reference is done after we've enqueued the rko
 	 * so clear it here. */
-	replyq->q = NULL;
+        replyq->q = NULL; /* destroyed separately below */
 
 #if ENABLE_DEVEL
 	if (replyq->_id) {
@@ -765,5 +765,232 @@ struct rd_kafka_queue_s {
 void rd_kafka_q_dump (FILE *fp, rd_kafka_q_t *rkq);
 
 extern int RD_TLS rd_kafka_yield_thread;
+
+
+
+/**
+ * @name Enqueue op once
+ * @{
+ */
+
+/**
+ * @brief Minimal rd_kafka_op_t wrapper that ensures that
+ *        the op is only enqueued on the provided queue once.
+ *
+ * Typical use-case is for an op to be triggered from multiple sources,
+ * but at most once, such as from a timer and some other source.
+ */
+typedef struct rd_kafka_enq_once_s {
+        mtx_t lock;
+        int refcnt;
+        rd_kafka_op_t *rko;
+        rd_kafka_replyq_t replyq;
+} rd_kafka_enq_once_t;
+
+
+/**
+ * @brief Allocate and set up a new eonce and set the initial refcount to 1.
+ * @remark This is to be called by the owner of the rko.
+ */
+static RD_INLINE RD_UNUSED
+rd_kafka_enq_once_t *
+rd_kafka_enq_once_new (rd_kafka_op_t *rko, rd_kafka_replyq_t replyq) {
+        rd_kafka_enq_once_t *eonce = rd_calloc(1, sizeof(*eonce));
+        mtx_init(&eonce->lock, mtx_plain);
+        eonce->rko = rko;
+        eonce->replyq = replyq; /* struct copy */
+        eonce->refcnt = 1;
+        return eonce;
+}
+
+/**
+ * @brief Re-enable triggering of a eonce even after it has been triggered
+ *        once.
+ *
+ * @remark This is to be called by the owner.
+ */
+static RD_INLINE RD_UNUSED
+void
+rd_kafka_enq_once_reenable (rd_kafka_enq_once_t *eonce,
+                            rd_kafka_op_t *rko, rd_kafka_replyq_t replyq) {
+        mtx_lock(&eonce->lock);
+        eonce->rko = rko;
+        rd_kafka_replyq_destroy(&eonce->replyq);
+        eonce->replyq = replyq; /* struct copy */
+        mtx_unlock(&eonce->lock);
+}
+
+
+/**
+ * @brief Free eonce and its resources. Must only be called with refcnt==0
+ *        and eonce->lock NOT held.
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_enq_once_destroy0 (rd_kafka_enq_once_t *eonce) {
+        /* This must not be called with the rko or replyq still set, which would
+         * indicate that no enqueueing was performed and that the owner
+         * did not clean up, which is a bug. */
+        rd_assert(!eonce->rko);
+        rd_assert(!eonce->replyq.q);
+        rd_assert(!eonce->replyq._id);
+        rd_assert(eonce->refcnt == 0);
+
+        mtx_destroy(&eonce->lock);
+        rd_free(eonce);
+}
+
+
+/**
+ * @brief Increment refcount for source (non-owner), such as a timer.
+ *
+ * @param srcdesc a human-readable descriptive string of the source.
+ *                May be used for future debugging.
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_enq_once_add_source (rd_kafka_enq_once_t *eonce,
+                                   const char *srcdesc) {
+        mtx_lock(&eonce->lock);
+        eonce->refcnt++;
+        mtx_unlock(&eonce->lock);
+}
+
+
+/**
+ * @brief Decrement refcount for source (non-owner), such as a timer.
+ *
+ * @param srcdesc a human-readable descriptive string of the source.
+ *                May be used for future debugging.
+ *
+ * @remark Must only be called from the owner with the owner
+ *         still holding its own refcount.
+ *         This API is used to undo an add_source() from the
+ *         same code.
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_enq_once_del_source (rd_kafka_enq_once_t *eonce,
+                                   const char *srcdesc) {
+        int do_destroy;
+
+        mtx_lock(&eonce->lock);
+        rd_assert(eonce->refcnt > 1);
+        eonce->refcnt--;
+        do_destroy = eonce->refcnt == 0;
+        mtx_unlock(&eonce->lock);
+
+        if (do_destroy) {
+                /* We're the last refcount holder, clean up eonce. */
+                rd_kafka_enq_once_destroy0(eonce);
+        }
+}
+
+/**
+ * @brief Trigger a source's reference where the eonce resides on
+ *        an rd_list_t. This is typically used as a free_cb for
+ *        rd_list_destroy() and the trigger error code is
+ *        always RD_KAFKA_RESP_ERR__DESTROY.
+ */
+void rd_kafka_enq_once_trigger_destroy (void *ptr);
+
+
+/**
+ * @brief Trigger enqueuing of the rko (unless already enqueued)
+ *        and drops the source's refcount.
+ *
+ * @remark Must only be called by sources (non-owner).
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_enq_once_trigger (rd_kafka_enq_once_t *eonce,
+                                rd_kafka_resp_err_t err,
+                                const char *srcdesc) {
+        int do_destroy;
+
+        mtx_lock(&eonce->lock);
+
+        rd_assert(eonce->refcnt > 0);
+        eonce->refcnt--;
+        do_destroy = eonce->refcnt == 0;
+
+        if (eonce->rko) {
+                /* Not already enqueued, do it. */
+                eonce->rko->rko_err = err;
+                rd_kafka_replyq_enq(&eonce->replyq, eonce->rko,
+                                    eonce->replyq.version);
+                eonce->rko = NULL;
+                rd_kafka_replyq_destroy(&eonce->replyq);
+        }
+
+        mtx_unlock(&eonce->lock);
+
+        if (do_destroy) {
+                /* We're the last refcount holder, clean up eonce. */
+                rd_kafka_enq_once_destroy0(eonce);
+        }
+}
+
+/**
+ * @brief Destroy eonce, must only be called by the owner.
+ *        There may be outstanding refcounts by non-owners after this call
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_enq_once_destroy (rd_kafka_enq_once_t *eonce) {
+       int do_destroy;
+
+        mtx_lock(&eonce->lock);
+        rd_assert(eonce->refcnt > 0);
+        eonce->refcnt--;
+        do_destroy = eonce->refcnt == 0;
+
+        eonce->rko = NULL;
+        rd_kafka_replyq_destroy(&eonce->replyq);
+
+        mtx_unlock(&eonce->lock);
+
+        if (do_destroy) {
+                /* We're the last refcount holder, clean up eonce. */
+                rd_kafka_enq_once_destroy0(eonce);
+        }
+}
+
+
+/**
+ * @brief Disable the owner's eonce, extracting, resetting and returning
+ *        the \c rko object.
+ *
+ *        This is the same as rd_kafka_enq_once_destroy() but returning
+ *        the rko.
+ *
+ *        Use this for owner-thread triggering where the enqueuing of the
+ *        rko on the replyq is not necessary.
+ *
+ * @returns the eonce's rko object, if still available, else NULL.
+ */
+static RD_INLINE RD_UNUSED
+rd_kafka_op_t *rd_kafka_enq_once_disable (rd_kafka_enq_once_t *eonce) {
+       int do_destroy;
+       rd_kafka_op_t *rko;
+
+        mtx_lock(&eonce->lock);
+        rd_assert(eonce->refcnt > 0);
+        eonce->refcnt--;
+        do_destroy = eonce->refcnt == 0;
+
+        /* May be NULL */
+        rko = eonce->rko;
+        eonce->rko = NULL;
+        rd_kafka_replyq_destroy(&eonce->replyq);
+
+        mtx_unlock(&eonce->lock);
+
+        if (do_destroy) {
+                /* We're the last refcount holder, clean up eonce. */
+                rd_kafka_enq_once_destroy0(eonce);
+        }
+
+        return rko;
+}
+
+
+/**@}*/
+
 
 #endif /* _RDKAFKA_QUEUE_H_ */

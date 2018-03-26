@@ -60,6 +60,10 @@ rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *)) {
         return rl;
 }
 
+rd_list_t *rd_list_init_copy (rd_list_t *rl, const rd_list_t *src) {
+        return rd_list_init(rl, rd_list_cnt(src), rl->rl_free_cb);
+}
+
 rd_list_t *rd_list_new (int initial_size, void (*free_cb) (void *)) {
 	rd_list_t *rl = malloc(sizeof(*rl));
 	rd_list_init(rl, initial_size, free_cb);
@@ -67,7 +71,8 @@ rd_list_t *rd_list_new (int initial_size, void (*free_cb) (void *)) {
 	return rl;
 }
 
-void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size) {
+void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t cnt,
+                             int memzero) {
 	size_t allocsize;
 	char *p;
 	size_t i;
@@ -79,19 +84,29 @@ void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size) {
 	 *   elems[elemsize][cnt];
 	 */
 
-	allocsize = (sizeof(void *) * size) + (elemsize * size);
-	rl->rl_elems = rd_malloc(allocsize);
+	allocsize = (sizeof(void *) * cnt) + (elemsize * cnt);
+        if (memzero)
+                rl->rl_elems = rd_calloc(1, allocsize);
+        else
+                rl->rl_elems = rd_malloc(allocsize);
 
 	/* p points to first element's memory. */
-	p = (char *)&rl->rl_elems[size];
+	p = (char *)&rl->rl_elems[cnt];
 
 	/* Pointer -> elem mapping */
-	for (i = 0 ; i < size ; i++, p += elemsize)
+	for (i = 0 ; i < cnt ; i++, p += elemsize)
 		rl->rl_elems[i] = p;
 
-	rl->rl_size = (int)size;
+	rl->rl_size = (int)cnt;
 	rl->rl_cnt = 0;
 	rl->rl_flags |= RD_LIST_F_FIXED_SIZE;
+}
+
+
+void rd_list_set_cnt (rd_list_t *rl, size_t cnt) {
+        rd_assert(rl->rl_flags & RD_LIST_F_FIXED_SIZE);
+        rd_assert((int)cnt <= rl->rl_size);
+        rl->rl_cnt = cnt;
 }
 
 
@@ -109,6 +124,24 @@ void *rd_list_add (rd_list_t *rl, void *elem) {
 		rl->rl_elems[rl->rl_cnt] = elem;
 	return rl->rl_elems[rl->rl_cnt++];
 }
+
+void rd_list_set (rd_list_t *rl, int idx, void *ptr) {
+        if (idx >= rl->rl_size)
+                rd_list_grow(rl, idx+1);
+
+        if (idx >= rl->rl_cnt) {
+                memset(&rl->rl_elems[rl->rl_cnt], 0,
+                       sizeof(*rl->rl_elems) * (idx-rl->rl_cnt));
+                rl->rl_cnt = idx+1;
+        } else {
+                /* Not allowed to replace existing element. */
+                rd_assert(!rl->rl_elems[idx]);
+        }
+
+        rl->rl_elems[idx] = ptr;
+}
+
+
 
 void rd_list_remove_elem (rd_list_t *rl, int idx) {
         rd_assert(idx < rl->rl_cnt);
@@ -220,12 +253,29 @@ void rd_list_destroy (rd_list_t *rl) {
 		rd_free(rl);
 }
 
+void rd_list_destroy_free (void *rl) {
+        rd_list_destroy((rd_list_t *)rl);
+}
 
 void *rd_list_elem (const rd_list_t *rl, int idx) {
         if (likely(idx < rl->rl_cnt))
                 return (void *)rl->rl_elems[idx];
         return NULL;
 }
+
+int rd_list_index (const rd_list_t *rl, const void *match,
+                   int (*cmp) (const void *, const void *)) {
+        int i;
+        const void *elem;
+
+        RD_LIST_FOREACH(elem, rl, i) {
+                if (!cmp(match, elem))
+                        return i;
+        }
+
+        return -1;
+}
+
 
 void *rd_list_find (const rd_list_t *rl, const void *match,
                     int (*cmp) (const void *, const void *)) {
@@ -302,7 +352,6 @@ void rd_list_apply (rd_list_t *rl,
 static void *rd_list_nocopy_ptr (const void *elem, void *opaque) {
         return (void *)elem;
 }
-
 
 rd_list_t *rd_list_copy (const rd_list_t *src,
                          void *(*copy_cb) (const void *elem, void *opaque),

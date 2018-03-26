@@ -3053,7 +3053,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
                 0, (void *)rd_kafka_toppar_ver_destroy);
         rd_list_prealloc_elems(rkbuf->rkbuf_rktp_vers,
                                sizeof(struct rd_kafka_toppar_ver),
-                               rkb->rkb_active_toppar_cnt);
+                               rkb->rkb_active_toppar_cnt, 0);
 
 	/* Round-robin start of the list. */
         rktp = rkb->rkb_active_toppar_next;

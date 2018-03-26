@@ -262,6 +262,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { RD_KAFKA_DBG_INTERCEPTOR, "interceptor" },
                         { RD_KAFKA_DBG_PLUGIN,   "plugin" },
                         { RD_KAFKA_DBG_CONSUMER, "consumer" },
+                        { RD_KAFKA_DBG_ADMIN,    "admin" },
 			{ RD_KAFKA_DBG_ALL,      "all" }
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),

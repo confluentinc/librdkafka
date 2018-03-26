@@ -101,9 +101,9 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 /**
  * Protocol level sanity
  */
-#define RD_KAFKAP_BROKERS_MAX     1000
+#define RD_KAFKAP_BROKERS_MAX     10000
 #define RD_KAFKAP_TOPICS_MAX      1000000
-#define RD_KAFKAP_PARTITIONS_MAX  10000
+#define RD_KAFKAP_PARTITIONS_MAX  100000
 
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF)  ((OFF) < 0)

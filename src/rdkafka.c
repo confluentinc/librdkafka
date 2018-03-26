@@ -2594,11 +2594,12 @@ rd_kafka_op_res_t
 rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                   rd_kafka_q_cb_type_t cb_type, void *opaque) {
 	rd_kafka_msg_t *rkm;
+        rd_kafka_op_res_t res = RD_KAFKA_OP_RES_HANDLED;
 
 	/* Return-as-event requested, see if op can be converted to event,
 	 * otherwise fall through and trigger callbacks. */
 	if (cb_type == RD_KAFKA_Q_CB_EVENT && rd_kafka_event_setup(rk, rko))
-		return 0; /* Return as event */
+                return RD_KAFKA_OP_RES_PASS; /* Return as event */
 
         switch ((int)rko->rko_type)
         {
@@ -2778,9 +2779,10 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                 break;
         }
 
-        rd_kafka_op_destroy(rko);
+        if (res == RD_KAFKA_OP_RES_HANDLED)
+                rd_kafka_op_destroy(rko);
 
-        return 1; /* op was handled */
+        return res;
 }
 
 int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {

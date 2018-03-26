@@ -352,7 +352,8 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
                                 res = rd_kafka_op_handle(rkq->rkq_rk, rkq, rko,
                                                          cb_type, opaque,
                                                          callback);
-                                if (res == RD_KAFKA_OP_RES_HANDLED)
+                                if (res == RD_KAFKA_OP_RES_HANDLED ||
+                                    res == RD_KAFKA_OP_RES_KEEP)
                                         goto retry; /* Next op */
                                 else if (unlikely(res ==
                                                   RD_KAFKA_OP_RES_YIELD)) {
@@ -556,8 +557,9 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                 /* Serve non-FETCH callbacks */
                 res = rd_kafka_poll_cb(rk, rkq, rko,
                                        RD_KAFKA_Q_CB_RETURN, NULL);
-                if (res == RD_KAFKA_OP_RES_HANDLED) {
-                        /* Callback served, rko is destroyed. */
+                if (res == RD_KAFKA_OP_RES_KEEP ||
+                    res == RD_KAFKA_OP_RES_HANDLED) {
+                        /* Callback served, rko is destroyed (if HANDLED). */
                         continue;
                 } else if (unlikely(res == RD_KAFKA_OP_RES_YIELD ||
                                     rd_kafka_yield_thread)) {

@@ -817,6 +817,11 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
         rd_kafka_wrunlock(rk);
 
+        mtx_lock(&rk->rk_broker_state_change_lock);
+        /* Purge broker state change waiters */
+        rd_list_destroy(&rk->rk_broker_state_change_waiters);
+        mtx_unlock(&rk->rk_broker_state_change_lock);
+
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                      "Purging reply queue");
 
@@ -1405,6 +1410,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
 	cnd_init(&rk->rk_broker_state_change_cnd);
 	mtx_init(&rk->rk_broker_state_change_lock, mtx_plain);
+        rd_list_init(&rk->rk_broker_state_change_waiters, 8,
+                     rd_kafka_enq_once_trigger_destroy);
 
 	rk->rk_rep = rd_kafka_q_new(rk);
 	rk->rk_ops = rd_kafka_q_new(rk);
@@ -3029,6 +3036,50 @@ char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms) {
         }
 
         return NULL;
+}
+
+
+int32_t rd_kafka_controllerid (rd_kafka_t *rk, int timeout_ms) {
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
+
+        /* ControllerId is returned in Metadata >=V1 responses and
+         * cached on the rk. If no cached value is available
+         * it means no metadata has been received yet, or we're
+         * using a lower protocol version
+         * (e.g., lack of api.version.request=true). */
+
+        while (1) {
+                int remains_ms;
+                int version;
+
+                version = rd_kafka_brokers_get_state_version(rk);
+
+                rd_kafka_rdlock(rk);
+
+                if (rk->rk_controllerid != -1) {
+                        /* Cached controllerid available. */
+                        rd_kafka_rdunlock(rk);
+                        return rk->rk_controllerid;
+                } else if (rk->rk_ts_metadata > 0) {
+                        /* Metadata received but no clusterid,
+                         * this probably means the broker is too old
+                         * or api.version.request=false. */
+                        rd_kafka_rdunlock(rk);
+                        return -1;
+                }
+
+                rd_kafka_rdunlock(rk);
+
+                /* Wait for up to timeout_ms for a metadata refresh,
+                 * if permitted by application. */
+                remains_ms = rd_timeout_remains(abs_timeout);
+                if (rd_timeout_expired(remains_ms))
+                        return -1;
+
+                rd_kafka_brokers_wait_state_change(rk, version, remains_ms);
+        }
+
+        return -1;
 }
 
 

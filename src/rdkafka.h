@@ -2042,6 +2042,24 @@ char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms);
 
 
 /**
+ * @brief Returns the current ControllerId as reported in broker metadata.
+ *
+ * @param timeout_ms If there is no cached value from metadata retrieval
+ *                   then this specifies the maximum amount of time
+ *                   (in milliseconds) the call will block waiting
+ *                   for metadata to be retrieved.
+ *                   Use 0 for non-blocking calls.
+
+ * @remark Requires broker version >=0.10.0 and api.version.request=true.
+ *
+ * @returns the controller broker id (>= 0), or -1 if no ControllerId could be
+ *          retrieved in the allotted timespan.
+ */
+RD_EXPORT
+int32_t rd_kafka_controllerid (rd_kafka_t *rk, int timeout_ms);
+
+
+/**
  * @brief Creates a new topic handle for topic named \p topic.
  *
  * \p conf is an optional configuration for the topic created with

@@ -274,6 +274,12 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms,
 
 rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state);
 
+rd_kafka_broker_t *rd_kafka_broker_controller (rd_kafka_t *rk, int state,
+                                               rd_ts_t abs_timeout);
+rd_kafka_broker_t *
+rd_kafka_broker_controller_async (rd_kafka_t *rk, int state,
+                                  rd_kafka_enq_once_t *eonce);
+
 int rd_kafka_brokers_add0 (rd_kafka_t *rk, const char *brokerlist);
 void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state);
 
@@ -331,6 +337,9 @@ void rd_kafka_broker_wakeup (rd_kafka_broker_t *rkb);
 int rd_kafka_brokers_get_state_version (rd_kafka_t *rk);
 int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int stored_version,
 					int timeout_ms);
+int rd_kafka_brokers_wait_state_change_async (rd_kafka_t *rk,
+                                              int stored_version,
+                                              rd_kafka_enq_once_t *eonce);
 void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk);
 
 

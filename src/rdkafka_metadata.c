@@ -227,6 +227,7 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
         rd_kafkap_str_t cluster_id = RD_ZERO_INIT;
         int32_t controller_id = -1;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        int broadcast_changes = 0;
 
         rd_kafka_assert(NULL, thrd_is_current(rk->rk_thread));
 
@@ -534,6 +535,15 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                 rkb->rkb_rk->rk_clusterid = RD_KAFKAP_STR_DUP(&cluster_id);
         }
 
+        /* Update controller id. */
+        if (rkb->rkb_rk->rk_controllerid != controller_id) {
+                rd_rkb_dbg(rkb, BROKER, "CONTROLLERID",
+                           "ControllerId update %"PRId32" -> %"PRId32,
+                           rkb->rkb_rk->rk_controllerid, controller_id);
+                rkb->rkb_rk->rk_controllerid = controller_id;
+                broadcast_changes++;
+        }
+
         if (all_topics) {
                 rd_kafka_metadata_cache_update(rkb->rkb_rk,
                                                md, 1/*abs update*/);
@@ -556,6 +566,11 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                 rd_kafka_metadata_cache_purge_hints(rk, requested_topics);
 
         rd_kafka_wrunlock(rkb->rkb_rk);
+
+        if (broadcast_changes) {
+                /* Broadcast metadata changes to listeners. */
+                rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
+        }
 
         /* Check if cgrp effective subscription is affected by
          * new metadata. */

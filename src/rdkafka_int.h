@@ -136,7 +136,9 @@ struct rd_kafka_s {
 	cnd_t                      rk_broker_state_change_cnd;
 	mtx_t                      rk_broker_state_change_lock;
 	int                        rk_broker_state_change_version;
-
+        /* List of (rd_kafka_enq_once_t*) objects waiting for broker
+         * state changes. Protected by rk_broker_state_change_lock. */
+        rd_list_t rk_broker_state_change_waiters; /**< (rd_kafka_enq_once_t*) */
 
 	TAILQ_HEAD(, rd_kafka_itopic_s)  rk_topics;
 	int              rk_topic_cnt;
@@ -167,6 +169,7 @@ struct rd_kafka_s {
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         char            *rk_clusterid;      /* ClusterId from metadata */
+        int32_t          rk_controllerid;   /* ControllerId from metadata */
 
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,

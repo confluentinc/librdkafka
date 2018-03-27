@@ -1178,6 +1178,23 @@ class RD_EXPORT Handle {
    * @returns \c rd_kafka_t*
    */
   virtual struct rd_kafka_s *c_ptr () = 0;
+
+  /**
+   * @brief Returns the current ControllerId (controller broker id)
+   *        as reported in broker metadata.
+   *
+   * @param timeout_ms If there is no cached value from metadata retrieval
+   *                   then this specifies the maximum amount of time
+   *                   (in milliseconds) the call will block waiting
+   *                   for metadata to be retrieved.
+   *                   Use 0 for non-blocking calls.
+   *
+   * @remark Requires broker version >=0.10.0 and api.version.request=true.
+   *
+   * @returns Last cached ControllerId, or -1 if no ControllerId could be
+   *          retrieved in the allotted timespan.
+   */
+  virtual int32_t controllerid (int timeout_ms) = 0;
 };
 
 

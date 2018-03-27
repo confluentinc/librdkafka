@@ -1048,6 +1048,9 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
 		   rkbuf->rkbuf_totlen, rkbuf->rkbuf_reshdr.CorrId,
 		   (float)req->rkbuf_ts_sent / 1000.0f);
 
+        /* Copy request's header to response object's reqhdr for convenience. */
+        rkbuf->rkbuf_reqhdr = req->rkbuf_reqhdr;
+
         /* Set up response reader slice starting past the response header */
         rd_slice_init(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf,
                       RD_KAFKAP_RESHDR_SIZE,

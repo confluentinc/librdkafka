@@ -464,7 +464,12 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	struct rd_kafkap_reqhdr rkbuf_reqhdr;   /* Request header.
                                                  * These fields are encoded
                                                  * and written to output buffer
-                                                 * on buffer finalization. */
+                                                 * on buffer finalization.
+                                                 * Note:
+                                                 * The request's
+                                                 * reqhdr is copied to the
+                                                 * response's reqhdr as a
+                                                 * convenience. */
 	struct rd_kafkap_reshdr rkbuf_reshdr;   /* Response header.
                                                  * Decoded fields are copied
                                                  * here from the buffer

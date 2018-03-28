@@ -1,7 +1,7 @@
 librdkafka - the Apache Kafka C/C++ client library
 ==================================================
 
-Copyright (c) 2012-2016, [Magnus Edenhill](http://www.edenhill.se/).
+Copyright (c) 2012-2018, [Magnus Edenhill](http://www.edenhill.se/).
 
 [https://github.com/edenhill/librdkafka](https://github.com/edenhill/librdkafka)
 
@@ -37,7 +37,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
   * RPM package: librdkafka and librdkafka-devel
   * Gentoo package: dev-libs/librdkafka
-  * Portable: runs on Linux, OSX, Win32, Solaris, FreeBSD, ...
+  * Portable: runs on Linux, OSX, Win32, Solaris, FreeBSD, AIX, ...
 
 
 # Language bindings #

@@ -552,4 +552,27 @@ void test_headers_dump (const char *what, int lvl,
 
 int32_t *test_get_broker_ids (rd_kafka_t *use_rk, size_t *cntp);
 
+void test_wait_metadata_update (rd_kafka_t *rk,
+                                rd_kafka_metadata_topic_t *topics,
+                                size_t topic_cnt,
+                                rd_kafka_metadata_topic_t *not_topics,
+                                size_t not_topic_cnt,
+                                int tmout);
+
+
+rd_kafka_resp_err_t
+test_CreateTopics_simple (rd_kafka_t *rk,
+                          rd_kafka_queue_t *useq,
+                          char **topics, size_t topic_cnt,
+                          int num_partitions,
+                          void *opaque);
+
+rd_kafka_resp_err_t
+test_DeleteTopics_simple (rd_kafka_t *rk,
+                          rd_kafka_queue_t *useq,
+                          char **topics, size_t topic_cnt,
+                          void *opaque);
+
+rd_kafka_resp_err_t test_delete_all_test_topics (void);
+
 #endif /* _TEST_H_ */

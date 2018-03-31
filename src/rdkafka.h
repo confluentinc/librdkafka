@@ -4594,12 +4594,33 @@ rd_kafka_CreateTopics_result_topics (
 
 typedef struct rd_kafka_DeleteTopic_s rd_kafka_DeleteTopic_t;
 
+/**
+ * @brief Create a new DeleteTopic object. This object is later passed to
+ *        rd_kafka_admin_DeleteTopics().
+ *
+ * @param topic Topic name to delete.
+ *
+ * @returns a new allocated DeleteTopic object.
+ *          Use rd_kafka_DeleteTopic_destroy() to free object when done.
+ */
 RD_EXPORT rd_kafka_DeleteTopic_t *
 rd_kafka_DeleteTopic_new (const char *topic);
 
+/**
+ * @brief Destroy and free a DeleteTopic object previously created with
+ *        rd_kafka_DeleteTopic_new()
+ */
 RD_EXPORT void
-rd_kafka_DeleteTopic_destroy (rd_kafka_DeleteTopic_t *deltopic);
+rd_kafka_DeleteTopic_destroy (rd_kafka_DeleteTopic_t *del_topic);
 
+/**
+ * @brief Helper function to destroy all DeleteTopic objects in
+ *        the \p del_topics array (of \p del_topic_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_DeleteTopic_destroy_array (rd_kafka_DeleteTopic_t **del_topics,
+                                    size_t del_topic_cnt);
 
 /**
  * @brief Delete topics from cluster as specified by the \p topics
@@ -4615,8 +4636,8 @@ rd_kafka_DeleteTopic_destroy (rd_kafka_DeleteTopic_t *deltopic);
  */
 RD_EXPORT
 void rd_kafka_admin_DeleteTopics (rd_kafka_t *rk,
-                                  rd_kafka_DeleteTopic_t **topics,
-                                  size_t topic_cnt,
+                                  rd_kafka_DeleteTopic_t **del_topics,
+                                  size_t del_topic_cnt,
                                   const rd_kafka_AdminOptions_t *options,
                                   rd_kafka_queue_t *rkqu);
 

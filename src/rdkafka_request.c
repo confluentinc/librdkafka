@@ -2049,9 +2049,9 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
 
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreateTopics, 1,
-                                         /* FIXME */
                                          4 +
-                                         (rd_list_cnt(new_topics) * 123));
+                                         (rd_list_cnt(new_topics) * 200) +
+                                         4 + 1);
 
         /* #topics */
         rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(new_topics));
@@ -2128,6 +2128,74 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
                                       rd_kafka_confval_get_int(&options->
                                                                validate_only));
         }
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Construct and send DeleteTopicsRequest to \p rkb
+ *        with the topics (DeleteTopic_t *) in \p del_topics, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
+                              rd_list_t *del_topics /*(DeleteTopic_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        int i = 0;
+        rd_kafka_DeleteTopic_t *delt;
+        int op_timeout;
+
+        if (rd_list_cnt(del_topics) == 0) {
+                rd_snprintf(errstr, errstr_size, "No topics to delete");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_DeleteTopics, 0, 1, &features);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "Topic Admin API (KIP-4) not supported "
+                            "by broker, requires broker version >= 0.10.2.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteTopics, 1,
+                                         /* FIXME */
+                                         4 +
+                                         (rd_list_cnt(del_topics) * 100) +
+                                         4);
+
+        /* #topics */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(del_topics));
+
+        while ((delt = rd_list_elem(del_topics, i++)))
+                rd_kafka_buf_write_str(rkbuf, delt->topic, -1);
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

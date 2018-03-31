@@ -52,22 +52,145 @@ static const char *rd_kafka_admin_state_desc[] = {
  * is non-blocking and returns immediately, and the application polls
  * a ..queue_t for the result.
  *
- * Let's illustrate this with an example:
- *  TBD
+ * The underlying handling of the request is also completely asynchronous
+ * inside librdkafka, for two reasons:
+ *  - everything is async in librdkafka so adding something new that isn't
+ *    would mean that existing functionality will need to be changed if
+ *    it should be able to work simultaneously (such as statistics, timers,
+ *    etc). There is no functional value to making the admin API
+ *    synchronous internally, even if it would simplify its implementation.
+ *    So making it async allows the Admin API to be used with existing
+ *    client types in existing applications without breakage.
+ *  - the async approach allows multiple outstanding Admin API requests
+ *    simultaneously.
+ *
+ * The internal async implementation relies on the following concepts:
+ *  - it uses a single rko (rd_kafka_op_t) to maintain state.
+ *  - the rko has a callback attached - called the worker callback.
+ *  - the worker callback is a small state machine that triggers
+ *    async operations (be it controller lookups, timeout timers,
+ *    protocol transmits, etc).
+ *  - the worker callback is only called on the rdkafka main thread.
+ *  - the callback is triggered by different events and sources by enqueuing
+ *    the rko on the rdkafka man ops queue.
  *
  *
- * Due to Admin requests async nature (from the callers perspective) the
- * Admin requests are served in rdkafka's main background thread.
- * An rko is set up in the public request API method (application thread)
- * with a callback and then enqueued on the main rdkafka ops queue,
- * which will trigger the callback to be called from rdkafka's main
- * background thread.
- * These handling callbacks are typically designed to be called
- * multiple times until a required state is fullfilled, such as
- * waiting for the controller broker to come up.
- * When the callback is finally done it posts a reply op on
- * the user's provided rkqu queue which is polled by the user
- * to retrieve the results.
+ * Let's illustrate this with a DeleteTopics example. This might look
+ * daunting, but it boils down to an asynchronous state machine being
+ * triggered by enqueuing the rko op.
+ *
+ *  1. [app thread] The user constructs the input arguments,
+ *     including a response rkqu queue and then calls DeleteTopics().
+ *
+ *  2. [app thread] DeleteTopics() creates a new internal op (rko) of type
+ *     RD_KAFKA_OP_CREATETOPICS, makes a **copy** on the rko of all the
+ *     input arguments (which allows the caller to free the originals
+ *     whenever she likes). The rko op worker callback is set to the
+ *     DeleteTopics asynchronous worker callback rd_kafka_DeleteTopics_worker().
+ *
+ *  3. [app thread] DeleteTopics() enqueues the rko on librdkafka's main ops
+ *     queue that is served by the rdkafka main thread in rd_kafka_thread_main()
+ *
+ *  4. [rdkafka main thread] The rko is dequeued by rd_kafka_q_serve and
+ *     the rd_kafka_poll_cb() is called.
+ *
+ *  5. [rdkafka main thread] The rko_type switch case identifies the rko
+ *     as an RD_KAFKA_OP_DELETETOPICS which is served by the op callback
+ *     set in step 2.
+ *
+ *  6. [rdkafka main thread] rd_kafka_DeleteTopics_worker() (the worker cb)
+ *     is called. After some initial checking of err==ERR__DESTROY events
+ *     (which is used to clean up outstanding ops (etc) on termination),
+ *     the code hits a state machine using rko_u.admin.request_state.
+ *
+ *  7. [rdkafka main thread] The initial state is RD_KAFKA_ADMIN_STATE_INIT
+ *     where the worker validates the user input.
+ *     An enqueue once (eonce) object is created - the use of this object
+ *     allows having multiple outstanding async functions referencing the
+ *     same underlying rko object, but only allowing the first one
+ *     to trigger an event.
+ *     A timeout timer is set up to trigger the eonce object when the
+ *     full options.request_timeout has elapsed.
+ *
+ *  8. [rdkafka main thread] After initialization the state is updated
+ *     to WAIT_CONTROLLER and the code falls through to looking up
+ *     the controller broker and waiting for an active connection.
+ *     Both the lookup and the waiting for an active connection are
+ *     fully asynchronous, and the same eonce used for the timer is passed
+ *     to the rd_kafka_broker_controller_async() function which will
+ *     trigger the eonce when a broker state change occurs.
+ *     If the controller is already known (from metadata) and the connection
+ *     is up a rkb broker object is returned and the eonce is not used,
+ *     skip to step 11.
+ *
+ *  9. [rdkafka main thread] Upon metadata retrieval (which is triggered
+ *     automatically by other parts of the code) the controller_id may be
+ *     updated in which case the eonce is triggered.
+ *     The eonce triggering enqueues the original rko on the rdkafka main
+ *     ops queue again and we go to step 8 which will check if the controller
+ *     connection is up.
+ *
+ * 10. [broker thread] If the controller_id is now known we now wait for
+ *     the corresponding broker's connection to come up. This signaling
+ *     is performed from the broker thread upon broker state changes
+ *     and uses the same eonce. The eonce triggering enqueues the original
+ *     rko on the rdkafka main ops queue again we go to back to step 8
+ *     to check if broker is now available.
+ *
+ * 11. [rdkafka main thread] Back in the worker callback we now have an
+ *     rkb broker pointer (with reference count increased) for the controller
+ *     with the connection up (it might go down while we're referencing it,
+ *     but that does not stop us from enqueuing a protocl request later on).
+ *
+ * 12. [rdkafka main thread] A DeleteTopics protocol request buffer is
+ *     constructed using the input parameters saved on the rko and the
+ *     buffer is enqueued on the broker's transmit queue.
+ *     The buffer is set up to provide the reply buffer on the rdkafka main
+ *     ops queue (the same queue we are operating from) with a handler
+ *     callback of rd_kafka_admin_DeleteTopics_handle_response().
+ *     The state is updated to the RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE.
+ *
+ * 13. [broker thread] If the request times out, a response with error code
+ *     (ERR__TIMED_OUT) is enqueued. Go to 16.
+ *
+ * 14. [broker thread] If a response is received, the response buffer
+ *     is enqueued. Go to 16.
+ *
+ * 15. [rdkafka main thread] The buffer callback (..handle_response())
+ *     is called, which attempts to extra the original rko from the eonce,
+ *     but if the eonce has already been triggered by some other source
+ *     (the timeout timer) the buffer callback simply returns and does nothing
+ *     since the admin request is over and a result (probably a timeout)
+ *     has been enqueued for the application.
+ *     If the rko was still intact we temporarily set the reply buffer
+ *     in the rko struct and call the worker callback. Go to 17.
+ *
+ * 16. [rdkafka main thread] The worker callback is called in state
+ *     RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE without a response but with an error.
+ *     An error result op is created and enqueued on the application's
+ *     provided response rkqu queue.
+ *     
+ * 17. [rdkafka main thread] The worker callback is called din state
+ *     RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE with a response buffer with no
+ *     error set.
+ *     The worker calls DeleteTopics_parse_response() to parse the response
+ *     buffer and populates a result op (rko_result) with the response
+ *     information (such as per-topic error codes, etc).
+ *     The result op is returned to the worker.
+ *
+ * 18. [rdkafka main thread] The worker enqueues the result up (rko_result)
+ *     on the application's provided response rkqu queue.
+ *
+ * 19. [app thread] The application calls rd_kafka_queue_poll() to
+ *     receive the result of the operation. The result may have been
+ *     enqueued in step 18 thanks to succesful completion, or in any
+ *     of the earlier stages when an error was encountered.
+ *
+ * 20. [app thread] The application uses rd_kafka_event_DeleteTopics_result()
+ *     to retrieve the request-specific result type.
+ *
+ * 21. Done, so easy.
+ *     
  */
 
 
@@ -156,6 +279,33 @@ static void rd_kafka_admin_result_fail (rd_kafka_op_t *rko_req,
 
 
 
+/**
+ * @brief Helper for rd_kafka_<..>_result_error() method.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_result_ret_error (const rd_kafka_op_t *rko,
+                                 const char **errstrp) {
+
+        if (errstrp) {
+                if (rko->rko_err)
+                        *errstrp = rko->rko_u.admin_result.errstr;
+                else
+                        *errstrp = NULL;
+        }
+
+        return rko->rko_err;
+}
+
+
+static const rd_kafka_topic_result_t **
+rd_kafka_admin_result_ret_topics (const rd_kafka_op_t *rko,
+                                  size_t *cntp) {
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.topics);
+        return (const rd_kafka_topic_result_t **)rko->rko_u.admin_result.
+                topics.rl_elems;
+}
+
+
 
 rd_kafka_resp_err_t
 rd_kafka_AdminOptions_set_request_timeout (rd_kafka_AdminOptions_t *options,
@@ -236,7 +386,7 @@ rd_kafka_NewTopic_new (const char *topic,
         rd_kafka_NewTopic_t *new_topic;
 
         if (!topic ||
-            num_partitions < 0 || num_partitions > RD_KAFKAP_PARTITIONS_MAX ||
+            num_partitions < 1 || num_partitions > RD_KAFKAP_PARTITIONS_MAX ||
             replication_factor < -1 ||
             replication_factor > RD_KAFKAP_BROKERS_MAX)
                 return NULL;
@@ -453,22 +603,177 @@ static void rd_kafka_admin_eonce_timeout_cb (rd_kafka_timers_t *rkts,
 }
 
 
+
+
 /**
- * @brief Handle CreateTopics response from broker
+ * @brief Common worker state machine handling regardless of request type.
  *
- * @param opaque is the eonce from the CreateTopicsRequest call.
+ * Tasks:
+ *  - Sets up timeout on first call.
+ *  - Checks for timeout.
+ *  - Checks for and fails on errors.
+ *
+ * @remark All errors are handled by this function and it will
+ *         never return != -1 if an rko_err was set. Thus there is no need
+ *         for error checking in the caller.
+ *
+ * @returns -1 if worker must `goto destroy;` label, else 0.
  */
-static void
-rd_kafka_admin_CreateTopics_handle_response (rd_kafka_t *rk,
-                                             rd_kafka_broker_t *rkb,
-                                             rd_kafka_resp_err_t err,
-                                             rd_kafka_buf_t *reply,
-                                             rd_kafka_buf_t *request,
-                                             void *opaque) {
+static int rd_kafka_admin_common_worker (rd_kafka_t *rk, rd_kafka_op_t *rko) {
+        const char *name = rd_kafka_op2str(rko->rko_type);
+        rd_ts_t timeout_in;
+
+        rd_kafka_dbg(rk, ADMIN, name,
+                     "%s worker called in state %s: %s",
+                     name,
+                     rd_kafka_admin_state_desc[rko->rko_u.admin_request.state],
+                     rd_kafka_err2str(rko->rko_err));
+
+        if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
+                return -1; /* Terminating */
+
+        rd_assert(thrd_is_current(rko->rko_rk->rk_thread));
+
+        if (rko->rko_err) {
+                rd_kafka_admin_result_fail(
+                        rko, RD_KAFKA_RESP_ERR__TIMED_OUT,
+                        "Failed while %s: %s",
+                        rd_kafka_admin_state_desc[rko->rko_u.
+                                                  admin_request.state],
+                        rd_kafka_err2str(rko->rko_err));
+                return -1;
+        }
+
+        /* Check for timeout */
+        timeout_in = rd_timeout_remains_us(rko->rko_u.admin_request.
+                                           abs_timeout);
+
+        if (timeout_in <= 0) {
+                rd_kafka_admin_result_fail(
+                        rko, RD_KAFKA_RESP_ERR__TIMED_OUT,
+                        "Timed out %s",
+                        rd_kafka_admin_state_desc[rko->rko_u.
+                                                  admin_request.state]);
+                return -1;
+        }
+
+        switch (rko->rko_u.admin_request.state)
+        {
+        case RD_KAFKA_ADMIN_STATE_INIT:
+                /* First call.
+                 * Set up timeout timer. */
+                if (rko->rko_err) {
+                        rd_kafka_admin_result_fail(
+                                rko, rko->rko_err,
+                                "Failed to initialize %s worker: %s",
+                                name, rd_kafka_err2str(rko->rko_err));
+                        return -1;
+                }
+
+                /* Set up timeout timer. */
+                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
+                                             "timeout timer");
+                rd_kafka_timer_start_oneshot(&rk->rk_timers,
+                                             &rko->rko_u.admin_request.tmr,
+                                             timeout_in,
+                                             rd_kafka_admin_eonce_timeout_cb,
+                                             rko->rko_u.admin_request.eonce);
+                break;
+
+        default:
+                break;
+        }
+
+        return 0;
+}
+
+
+/**
+ * @brief Common worker destroy to be called in destroy: label
+ *        in worker.
+ */
+static void rd_kafka_admin_common_worker_destroy (rd_kafka_t *rk,
+                                                  rd_kafka_op_t *rko) {
+        /* Free resources for this op. */
+        rd_kafka_timer_stop(&rk->rk_timers, &rko->rko_u.admin_request.tmr,
+                            rd_true);
+
+        if (rko->rko_u.admin_request.eonce) {
+                /* This is thread-safe to do even if there are outstanding
+                 * timers or wait-controller references to the eonce
+                 * since they only hold direct reference to the eonce,
+                 * not the rko (the eonce holds a reference to the rko but
+                 * it is cleared here). */
+                rd_kafka_enq_once_destroy(rko->rko_u.admin_request.eonce);
+                rko->rko_u.admin_request.eonce = NULL;
+        }
+}
+
+
+
+/**
+ * @brief Asynchronously look up the controller.
+ *        To be called repeatedly from each invocation of the worker
+ *        when in state RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER until
+ *        a valid rkb is returned.
+ *
+ * @returns the controller rkb with refcount increased, or NULL if not yet
+ *          available.
+ */
+static rd_kafka_broker_t *
+rd_kafka_admin_common_get_controller (rd_kafka_t *rk,
+                                      rd_kafka_op_t *rko) {
+        rd_kafka_broker_t *rkb;
+
+        rd_kafka_dbg(rk, ADMIN, "ADMIN", "%s: looking up controller",
+                     rd_kafka_op2str(rko->rko_type));
+
+        /* Since we're iterating over this controller_async() call
+         * (asynchronously) until a controller is availabe (or timeout)
+         * we need to re-enable the eonce to be triggered again (which
+         * is not necessary the first time we get here, but there
+         * is no harm doing it then either). */
+        rd_kafka_enq_once_reenable(rko->rko_u.admin_request.eonce,
+                                   rko, RD_KAFKA_REPLYQ(rk->rk_ops, 0));
+
+        /* Look up the controller asynchronously, if the controller
+         * is not available the eonce is registered for broker
+         * state changes which will cause our function to be called
+         * again as soon as (any) broker state changes.
+         * When we are called again we perform the controller lookup
+         * again and hopefully get an rkb back, otherwise defer a new
+         * async wait. Repeat until success or timeout. */
+        if (!(rkb = rd_kafka_broker_controller_async(
+                      rk, RD_KAFKA_BROKER_STATE_UP,
+                      rko->rko_u.admin_request.eonce))) {
+                /* Controller not available, wait asynchronously
+                 * for controller code to trigger eonce. */
+                return NULL;
+        }
+
+        rd_kafka_dbg(rk, ADMIN, "ADMIN", "%s: controller %s",
+                     rd_kafka_op2str(rko->rko_type), rkb->rkb_name);
+
+        return rkb;
+}
+
+
+
+/**
+ * @brief Handle response from broker by triggering worker callback.
+ *
+ * @param opaque is the eonce from the worker protocol request call.
+ */
+static void rd_kafka_admin_handle_response (rd_kafka_t *rk,
+                                            rd_kafka_broker_t *rkb,
+                                            rd_kafka_resp_err_t err,
+                                            rd_kafka_buf_t *reply,
+                                            rd_kafka_buf_t *request,
+                                            void *opaque) {
         rd_kafka_enq_once_t *eonce = opaque;
         rd_kafka_op_t *rko;
 
-        /* From "send CreateTopics" */
+        /* From "send <protocolrequest>" */
         rko = rd_kafka_enq_once_disable(eonce);
 
         if (!rko) {
@@ -493,6 +798,18 @@ rd_kafka_admin_CreateTopics_handle_response (rd_kafka_t *rk,
                 rd_kafka_op_destroy(rko);
 
 }
+
+
+
+/**
+ * @name CreateTopics
+ * @{
+ *
+ *
+ *
+ */
+
+
 
 
 /**
@@ -626,103 +943,30 @@ static rd_kafka_op_res_t
 rd_kafka_admin_CreateTopics_worker (rd_kafka_t *rk,
                                     rd_kafka_q_t *rkq,
                                     rd_kafka_op_t *rko) {
-        rd_kafka_resp_err_t err = rko->rko_err;
         rd_kafka_broker_t *rkb;
-        rd_ts_t timeout_in;
         rd_kafka_op_t *rko_result;
+        rd_kafka_resp_err_t err;
         char errstr[512];
 
-        rd_kafka_dbg(rk, ADMIN, "CREATETOPICS",
-                     "CreateTopics worker called in state %s: %s",
-                     rd_kafka_admin_state_desc[rko->rko_u.admin_request.state],
-                     rd_kafka_err2str(err));
-
-        if (err == RD_KAFKA_RESP_ERR__DESTROY) /* Terminating */
+        /* Common worker handling. */
+        if (rd_kafka_admin_common_worker(rk, rko) == -1)
                 goto destroy;
-
-        rd_assert(thrd_is_current(rko->rko_rk->rk_thread));
-
-        /* Check for timeout */
-        timeout_in = rd_timeout_remains_us(rko->rko_u.admin_request.abs_timeout);
-
-        if (timeout_in <= 0) {
-                rd_kafka_admin_result_fail(
-                        rko, err, "Request timed out %s",
-                        rd_kafka_admin_state_desc[rko->rko_u.
-                                                  admin_request.state]);
-                goto destroy;
-        }
 
         switch (rko->rko_u.admin_request.state)
         {
         case RD_KAFKA_ADMIN_STATE_INIT:
-                /* First call. */
-
-                if (err) {
-                        rd_kafka_admin_result_fail(
-                                rko, err, "Failed to initialize CreateTopics "
-                                "worker: %s", rd_kafka_err2str(err));
-                        goto destroy;
-                }
-
-                /* Set up timeout timer. */
-                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
-                                             "timeout timer");
-                rd_kafka_timer_start_oneshot(&rk->rk_timers,
-                                             &rko->rko_u.admin_request.tmr,
-                                             timeout_in,
-                                             rd_kafka_admin_eonce_timeout_cb,
-                                             rko->rko_u.admin_request.eonce);
-
+                /* First call, fall thru to controller lookup */
                 rko->rko_u.admin_request.state =
                         RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER;
                 /*FALLTHRU*/
 
         case RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER:
-                if (err == RD_KAFKA_RESP_ERR__TIMED_OUT) {
-                        rd_kafka_admin_result_fail(
-                                rko, RD_KAFKA_RESP_ERR__TRANSPORT,
-                                "Timed out waiting for controller "
-                                "to become available");
-                        goto destroy;
-                } else if (err) {
-                        rd_kafka_admin_result_fail(
-                                rko, RD_KAFKA_RESP_ERR__TRANSPORT,
-                                "CreateTopics worker failed %s: %s",
-                                rd_kafka_admin_state_desc[rko->rko_u.
-                                                          admin_request.state],
-                                rd_kafka_err2str(err));
-                        goto destroy;
-                }
-
-                rd_kafka_dbg(rk, ADMIN, "ADMIN",
-                             "CreateTopics: looking up controller");
-
-                /* Since we're iterating over this controller_async() call
-                 * (asynchronously) until a controller is availabe (or timeout)
-                 * we need to re-enable the eonce to be triggered again (which
-                 * is not necessary the first time we get here, but there
-                 * is no harm doing it then either). */
-                rd_kafka_enq_once_reenable(rko->rko_u.admin_request.eonce,
-                                           rko, RD_KAFKA_REPLYQ(rk->rk_ops, 0));
-
-                /* Look up the controller asynchronously, if the controller
-                 * is not available the eonce is registered for broker
-                 * state changes which will cause our function to be called
-                 * again as soon as (any) broker state changes.
-                 * When we are called again we perfomr the controller lookup
-                 * again and hopefully get an rkb back, otherwise defer a new
-                 * async wait. Repeat until success or timeout. */
-                if (!(rkb = rd_kafka_broker_controller_async(
-                              rk, RD_KAFKA_BROKER_STATE_UP,
-                              rko->rko_u.admin_request.eonce))) {
-                        /* Controller not available, wait asynchronously
-                         * for controller code to trigger eonce. */
+                if (!(rkb = rd_kafka_admin_common_get_controller(rk, rko))) {
+                        /* Waiting for controller. */
                         return RD_KAFKA_OP_RES_KEEP;
                 }
 
-                rd_kafka_dbg(rk, ADMIN, "ADMIN",
-                             "Got controller %s", rkb->rkb_name);
+                /* Got controller, send protocol request. */
 
                 /* Still need to use the eonce since this worker may
                  * time out while waiting for response from broker, in which
@@ -737,7 +981,7 @@ rd_kafka_admin_CreateTopics_worker (rd_kafka_t *rk,
                         &rko->rko_u.admin_request.options,
                         errstr, sizeof(errstr),
                         RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                        rd_kafka_admin_CreateTopics_handle_response,
+                        rd_kafka_admin_handle_response,
                         rko->rko_u.admin_request.eonce);
 
                 /* Loose refcount from controller_async() */
@@ -755,24 +999,15 @@ rd_kafka_admin_CreateTopics_worker (rd_kafka_t *rk,
                         RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE;
 
                 /* Wait asynchronously for broker response, which will
-                 * trigger the eonce. */
+                 * trigger the eonce and worker to be called again. */
                 return RD_KAFKA_OP_RES_KEEP;
 
 
         case RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE:
+                /* CreateTopics response */
+
                 rd_kafka_enq_once_del_source(rko->rko_u.admin_request.eonce,
                                              "send CreateTopics");
-
-                /* CreateTopics response (either ok or with error). */
-                if (err) {
-                        rd_kafka_admin_result_fail(
-                                rko, RD_KAFKA_RESP_ERR__TRANSPORT,
-                                "CreateTopics worker failed %s: %s",
-                                rd_kafka_admin_state_desc[rko->rko_u.
-                                                          admin_request.state],
-                                rd_kafka_err2str(err));
-                        goto destroy;
-                }
 
                 /* Parse response and populate result to application */
                 err = rd_kafka_admin_CreateTopics_parse_response(
@@ -797,20 +1032,7 @@ rd_kafka_admin_CreateTopics_worker (rd_kafka_t *rk,
         return RD_KAFKA_OP_RES_KEEP;
 
  destroy:
-        /* Free resources for this op. */
-        rd_kafka_timer_stop(&rk->rk_timers, &rko->rko_u.admin_request.tmr,
-                            rd_true);
-
-        if (rko->rko_u.admin_request.eonce) {
-                /* This is thread-safe to do even if there are outstanding
-                 * timers or wait-controller references to the eonce
-                 * since they only hold direct reference to the eonce,
-                 * not the rko (the eonce holds a reference to the rko but
-                 * it is cleared here). */
-                rd_kafka_enq_once_destroy(rko->rko_u.admin_request.eonce);
-                rko->rko_u.admin_request.eonce = NULL;
-        }
-
+        rd_kafka_admin_common_worker_destroy(rk, rko);
         return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy() */
 }
 
@@ -844,16 +1066,8 @@ rd_kafka_resp_err_t
 rd_kafka_CreateTopics_result_error (
         const rd_kafka_CreateTopics_result_t *result,
         const char **errstrp) {
-        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
-
-        if (errstrp) {
-                if (rko->rko_err)
-                        *errstrp = rko->rko_u.admin_result.errstr;
-                else
-                        *errstrp = NULL;
-        }
-
-        return rko->rko_err;
+        return rd_kafka_admin_result_ret_error((const rd_kafka_op_t *)result,
+                                               errstrp);
 }
 
 
@@ -867,10 +1081,341 @@ const rd_kafka_topic_result_t **
 rd_kafka_CreateTopics_result_topics (
         const rd_kafka_CreateTopics_result_t *result,
         size_t *cntp) {
-        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
-
-        *cntp = rd_list_cnt(&rko->rko_u.admin_result.topics);
-        return (const rd_kafka_topic_result_t **)rko->rko_u.admin_result.
-                topics.rl_elems;
+        return rd_kafka_admin_result_ret_topics((const rd_kafka_op_t *)result,
+                                                cntp);
 }
 
+/**@}*/
+
+
+
+
+/**
+ * @name Delete topics
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+rd_kafka_DeleteTopic_t *rd_kafka_DeleteTopic_new (const char *topic) {
+        size_t tsize = strlen(topic) + 1;
+        rd_kafka_DeleteTopic_t *del_topic;
+
+        /* Single allocation */
+        del_topic = rd_malloc(sizeof(*del_topic) + tsize);
+        del_topic->topic = del_topic->data;
+        memcpy(del_topic->topic, topic, tsize);
+
+        return del_topic;
+}
+
+void rd_kafka_DeleteTopic_destroy (rd_kafka_DeleteTopic_t *del_topic) {
+        rd_free(del_topic);
+}
+
+static void rd_kafka_DeleteTopic_free (void *ptr) {
+        rd_kafka_DeleteTopic_destroy(ptr);
+}
+
+
+void rd_kafka_DeleteTopic_destroy_array (rd_kafka_DeleteTopic_t **del_topics,
+                                         size_t del_topic_cnt) {
+        size_t i;
+        for (i = 0 ; i < del_topic_cnt ; i++)
+                rd_kafka_DeleteTopic_destroy(del_topics[i]);
+}
+
+
+/**
+ * @brief Topic name comparator for DeleteTopic_t
+ */
+static int rd_kafka_DeleteTopic_cmp (const void *_a, const void *_b) {
+        const rd_kafka_DeleteTopic_t *a = _a, *b = _b;
+        return strcmp(a->topic, b->topic);
+}
+
+/**
+ * @brief Allocate a new DeleteTopic and make a copy of \p src
+ */
+static rd_kafka_DeleteTopic_t *
+rd_kafka_DeleteTopic_copy (const rd_kafka_DeleteTopic_t *src) {
+        return rd_kafka_DeleteTopic_new(src->topic);
+}
+
+
+
+
+
+
+
+/**
+ * @brief Parse DeleteTopicsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_DeleteTopics_parse_response (rd_kafka_op_t *rko_req,
+                                            rd_kafka_op_t **rko_resultp,
+                                            rd_kafka_buf_t *reply,
+                                            char *errstr, size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
+        rd_kafka_t *rk = rkb->rkb_rk;
+        rd_kafka_op_t *rko_result = NULL;
+        int32_t topic_cnt;
+        int i;
+
+        if (rd_kafka_buf_ApiVersion(reply) >= 1) {
+                int32_t Throttle_Time;
+                rd_kafka_buf_read_i32(reply, &Throttle_Time);
+                rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+        }
+
+        rd_kafka_buf_read_i32(reply, &topic_cnt);
+
+        if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
+                rd_snprintf(errstr, errstr_size,
+                            "Received %"PRId32" topics in response "
+                            "when only %d were requested", topic_cnt,
+                            rd_list_cnt(&rko_req->rko_u.admin_request.args));
+                return RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        rd_list_init(&rko_result->rko_u.admin_result.topics, topic_cnt,
+                     rd_kafka_topic_result_free);
+
+        for (i = 0 ; i < (int)topic_cnt ; i++) {
+                rd_kafkap_str_t ktopic;
+                rd_kafka_resp_err_t error_code;
+                rd_kafka_topic_result_t *terr;
+                rd_kafka_NewTopic_t skel;
+                int orig_pos;
+
+                rd_kafka_buf_read_str(reply, &ktopic);
+                rd_kafka_buf_read_i16(reply, &error_code);
+
+                /* For non-blocking DeleteTopicsRequests the broker
+                 * will returned REQUEST_TIMED_OUT for topics
+                 * that were triggered for creation -
+                 * we hide this error code from the application
+                 * since the topic creation is in fact in progress. */
+                if (error_code == RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT &&
+                    rd_kafka_confval_get_int(&rko_req->rko_u.
+                                             admin_request.options.
+                                             operation_timeout) <= 0) {
+                        error_code = RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+
+                terr = rd_kafka_topic_result_new(ktopic.str,
+                                                 RD_KAFKAP_STR_LEN(&ktopic),
+                                                 error_code,
+                                                 error_code ?
+                                                 rd_kafka_err2str(error_code) :
+                                                 NULL);
+
+                /* As a convenience to the application we insert topic result
+                 * in the same order as they were requested. The broker
+                 * does not maintain ordering unfortunately. */
+                skel.topic = terr->topic;
+                orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
+                                         &skel, rd_kafka_DeleteTopic_cmp);
+                if (orig_pos == -1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Broker returned topic %s that was not "
+                                    "included in the original request",
+                                    terr->topic);
+                        rd_kafka_topic_result_destroy(terr);
+                        rd_kafka_op_destroy(rko_result);
+                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                }
+
+                if (rd_list_elem(&rko_result->rko_u.admin_result.topics,
+                                 orig_pos) != NULL) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Broker returned topic %s multiple times",
+                                    terr->topic);
+                        rd_kafka_topic_result_destroy(terr);
+                        rd_kafka_op_destroy(rko_result);
+                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                }
+
+                rd_list_set(&rko_result->rko_u.admin_result.topics, orig_pos,
+                            terr);
+        }
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+ err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "DeleteTopics response protocol parse failure: %s",
+                    rd_kafka_err2str(err));
+
+        return err;
+}
+
+
+
+
+
+/**
+ * @brief Asynchronous worker for DeleteTopics
+ */
+static rd_kafka_op_res_t
+rd_kafka_admin_DeleteTopics_worker (rd_kafka_t *rk,
+                                    rd_kafka_q_t *rkq,
+                                    rd_kafka_op_t *rko) {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_op_t *rko_result;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+
+        /* Common worker handling. */
+        if (rd_kafka_admin_common_worker(rk, rko) == -1)
+                goto destroy;
+
+        switch (rko->rko_u.admin_request.state)
+        {
+        case RD_KAFKA_ADMIN_STATE_INIT:
+                /* First call, fall thru to controller lookup */
+                rko->rko_u.admin_request.state =
+                        RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER;
+                /*FALLTHRU*/
+
+        case RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER:
+                if (!(rkb = rd_kafka_admin_common_get_controller(rk, rko))) {
+                        /* Waiting for controller. */
+                        return RD_KAFKA_OP_RES_KEEP;
+                }
+
+                /* Got controller, send protocol request. */
+
+                /* Still need to use the eonce since this worker may
+                 * time out while waiting for response from broker, in which
+                 * case the broker response will hit an empty eonce (ok). */
+                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
+                                             "send DeleteTopics");
+
+                /* Send request (async) */
+                err = rd_kafka_DeleteTopicsRequest(
+                        rkb,
+                        &rko->rko_u.admin_request.args,
+                        &rko->rko_u.admin_request.options,
+                        errstr, sizeof(errstr),
+                        RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                        rd_kafka_admin_handle_response,
+                        rko->rko_u.admin_request.eonce);
+
+                /* Loose refcount from controller_async() */
+                rd_kafka_broker_destroy(rkb);
+
+                if (err) {
+                        rd_kafka_enq_once_del_source(
+                                rko->rko_u.admin_request.eonce,
+                                "send DeleteTopics");
+                        rd_kafka_admin_result_fail(rko, err, "%s", errstr);
+                        goto destroy;
+                }
+
+                rko->rko_u.admin_request.state =
+                        RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE;
+
+                /* Wait asynchronously for broker response, which will
+                 * trigger the eonce and worker to be called again. */
+                return RD_KAFKA_OP_RES_KEEP;
+
+
+        case RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE:
+                /* DeleteTopics response */
+
+                rd_kafka_enq_once_del_source(rko->rko_u.admin_request.eonce,
+                                             "send DeleteTopics");
+
+                /* Parse response and populate result to application */
+                err = rd_kafka_admin_DeleteTopics_parse_response(
+                        rko, &rko_result,
+                        rko->rko_u.admin_request.reply_buf,
+                        errstr, sizeof(errstr));
+                if (err) {
+                        rd_kafka_admin_result_fail(
+                                rko, err,
+                                "DeleteTopics worker failed parse response: %s",
+                                errstr);
+                        goto destroy;
+                }
+
+                /* Enqueue result on application queue, we're done. */
+                rd_kafka_admin_result_enq(rko, rko_result);
+
+                goto destroy;
+        }
+
+
+        return RD_KAFKA_OP_RES_KEEP;
+
+ destroy:
+        rd_kafka_admin_common_worker_destroy(rk, rko);
+        return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy() */
+}
+
+
+void rd_kafka_admin_DeleteTopics (rd_kafka_t *rk,
+                                  rd_kafka_DeleteTopic_t **del_topics,
+                                  size_t del_topic_cnt,
+                                  const rd_kafka_AdminOptions_t *options,
+                                  rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        size_t i;
+
+        rko = rd_kafka_admin_request_op_new(rk,
+                                            RD_KAFKA_OP_DELETETOPICS,
+                                            RD_KAFKA_EVENT_DELETETOPICS_RESULT,
+                                            rd_kafka_admin_DeleteTopics_worker,
+                                            options, rkqu);
+
+        rd_list_init(&rko->rko_u.admin_request.args, del_topic_cnt,
+                     rd_kafka_DeleteTopic_free);
+
+        for (i = 0 ; i < del_topic_cnt ; i++)
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_DeleteTopic_copy(del_topics[i]));
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_DeleteTopics_result_error (
+        const rd_kafka_DeleteTopics_result_t *result,
+        const char **errstrp) {
+        return rd_kafka_admin_result_ret_error((const rd_kafka_op_t *)result,
+                                               errstrp);
+}
+
+
+
+/**
+ * @brief Get an array of topic results from a DeleteTopics result.
+ *
+ * The returned \p topics life-time is the same as the \p result object.
+ * @param cntp is updated to the number of elements in the array.
+ */
+const rd_kafka_topic_result_t **
+rd_kafka_DeleteTopics_result_topics (
+        const rd_kafka_DeleteTopics_result_t *result,
+        size_t *cntp) {
+        return rd_kafka_admin_result_ret_topics((const rd_kafka_op_t *)result,
+                                                cntp);
+}
+
+
+
+
+/**@}*/

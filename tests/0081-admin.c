@@ -38,90 +38,6 @@ static int32_t *avail_brokers;
 static size_t avail_broker_cnt;
 
 
-/**
- * @brief Verify that all topics in \p topics are reported in metadata.
- *
- * @returns the number of failures (but does not FAIL).
- */
-static int verify_topics_in_metadata (rd_kafka_t *rk,
-                                      rd_kafka_metadata_topic_t *topics,
-                                      int topic_cnt,
-                                      rd_kafka_metadata_topic_t *not_topics,
-                                      int not_topic_cnt) {
-        const rd_kafka_metadata_t *md;
-        rd_kafka_resp_err_t err;
-        int ti, i;
-        int fails = 0;
-
-        /* Mark expected topics with dummy error which is overwritten
-         * when topic is found in metadata, allowing us to check
-         * for missed topics. */
-        for (i = 0 ; i < topic_cnt ; i++)
-                topics[i].err = -12345;
-
-        err = rd_kafka_metadata(rk, 1/*all_topics*/, NULL, &md,
-                                tmout_multip(5000));
-        TEST_ASSERT(!err, "metadata failed: %s", rd_kafka_err2str(err));
-
-        for (ti = 0 ; ti < md->topic_cnt ; ti++) {
-                const rd_kafka_metadata_topic_t *mdt = &md->topics[ti];
-
-                for (i = 0 ; i < topic_cnt ; i++) {
-                        if (strcmp(topics[i].topic, mdt->topic))
-                                continue;
-
-                        topics[i].err = mdt->err; /* indicate found */
-                        if (mdt->err) {
-                                TEST_SAY("metadata: "
-                                         "Topic %s has error %s\n",
-                                         mdt->topic,
-                                         rd_kafka_err2str(mdt->err));
-                                fails++;
-                        }
-
-                        if (mdt->partition_cnt != topics[i].partition_cnt) {
-                                TEST_SAY("metadata: "
-                                         "Topic %s, expected %d topics"
-                                         ", not %d\n",
-                                         mdt->topic,
-                                         topics[i].partition_cnt,
-                                         mdt->partition_cnt);
-                                fails++;
-                        }
-                }
-
-                for (i = 0 ; i < not_topic_cnt ; i++) {
-                        if (strcmp(not_topics[i].topic, mdt->topic))
-                                continue;
-
-                        TEST_SAY("metadata: "
-                                 "Topic %s found in metadata, "
-                                 "very unexpected\n",
-                                 mdt->topic);
-                        fails++;
-                }
-
-        }
-
-        for (i  = 0 ; i < topic_cnt ; i++) {
-                if (topics[i].err == -12345) {
-                        TEST_SAY("metadata: "
-                                 "Topic %s not seen in metadata\n",
-                                 topics[i].topic);
-                        fails++;
-                }
-        }
-
-        if (fails > 0)
-                TEST_SAY("Metadata verification for %d topics failed "
-                         "with %d errors (see above)\n",
-                         topic_cnt, fails);
-
-        rd_kafka_metadata_destroy(md);
-
-        return fails;
-}
-
 
 
 static void do_test_CreateTopics (const char *what,
@@ -149,7 +65,7 @@ static void do_test_CreateTopics (const char *what,
         const rd_kafka_CreateTopics_result_t *res;
         const rd_kafka_topic_result_t **restopics;
         size_t restopic_cnt;
-        int64_t abs_timeout;
+        int metadata_tmout ;
         int num_replicas = jitter(1, avail_broker_cnt);
 
         TEST_SAY(_C_MAG "[ %s CreateTopics with %s, "
@@ -263,7 +179,7 @@ static void do_test_CreateTopics (const char *what,
         TIMING_START(&timing, "CreateTopics.queue_poll");
         do {
                 rkev = rd_kafka_queue_poll(q, tmout_multip(20*1000));
-                TEST_SAY("CreateTopics: got %s in %.3fs\n",
+                TEST_SAY("CreateTopics: got %s in %.3fms\n",
                          rd_kafka_event_name(rkev),
                          TIMING_DURATION(&timing) / 1000.0f);
                 if (rd_kafka_event_error(rkev))
@@ -327,47 +243,20 @@ static void do_test_CreateTopics (const char *what,
                 /* No topics should have been created, give it some time
                  * before checking. */
                 rd_sleep(2);
-                abs_timeout = test_clock() + 5000 + 1000;
+                metadata_tmout = 5 * 1000;
         } else {
-                int exp_creation_time;
-
                 if (op_timeout > 0)
-                        exp_creation_time = op_timeout + 1000;
+                        metadata_tmout = op_timeout + 1000;
                 else
-                        exp_creation_time = tmout_multip(5000);
-
-                abs_timeout = test_clock() +
-                        ((exp_creation_time + 1000) * 1000);
-
-                test_timeout_set(10 + (exp_creation_time/1000));
-
-                TEST_SAY("Waiting for up to %dms for CreateTopics "
-                         "to propagate\n", exp_creation_time);
+                        metadata_tmout = 10 * 1000;
         }
 
-
-        do {
-                int md_fails;
-
-                md_fails = verify_topics_in_metadata(
-                        rk,
-                        exp_mdtopics, exp_mdtopic_cnt,
-                        exp_not_mdtopics, exp_not_mdtopic_cnt);
-
-                if (!md_fails) {
-                        TEST_SAY("All expected topics seen in metadata\n");
-                        abs_timeout = 0;
-                        break;
-                } else if (validate_only) {
-                        TEST_FAIL("validate_only=true but requested topics "
-                                  "seen in metadata (%d failures)", md_fails);
-                }
-
-                rd_sleep(1);
-        } while (test_clock() < abs_timeout);
-
-        if (abs_timeout)
-                TEST_FAIL("Expected topics not seen in given time.");
+        test_wait_metadata_update(rk,
+                                  exp_mdtopics,
+                                  exp_mdtopic_cnt,
+                                  exp_not_mdtopics,
+                                  exp_not_mdtopic_cnt,
+                                  metadata_tmout);
 
         rd_kafka_event_destroy(rkev);
 
@@ -382,6 +271,193 @@ static void do_test_CreateTopics (const char *what,
         if (!useq)
                 rd_kafka_queue_destroy(q);
 }
+
+
+
+
+/**
+ * @brief Test deletion of topics
+ *
+ *
+ */
+static void do_test_DeleteTopics (const char *what,
+                                  rd_kafka_t *rk, rd_kafka_queue_t *useq,
+                                  int op_timeout) {
+        rd_kafka_queue_t *q = useq ? useq : rd_kafka_queue_new(rk);
+        const int skip_topic_cnt = 2;
+#define MY_DEL_TOPICS_CNT 9
+        char *topics[MY_DEL_TOPICS_CNT];
+        rd_kafka_DeleteTopic_t *del_topics[MY_DEL_TOPICS_CNT];
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_resp_err_t exp_topicerr[MY_DEL_TOPICS_CNT] = {0};
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        /* Expected topics in metadata */
+        rd_kafka_metadata_topic_t exp_mdtopics[MY_DEL_TOPICS_CNT] = {0};
+        int exp_mdtopic_cnt = 0;
+        /* Not expected topics in metadata */
+        rd_kafka_metadata_topic_t exp_not_mdtopics[MY_DEL_TOPICS_CNT] = {0};
+        int exp_not_mdtopic_cnt = 0;
+        int i;
+        char errstr[512];
+        const char *errstr2;
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_DeleteTopics_result_t *res;
+        const rd_kafka_topic_result_t **restopics;
+        size_t restopic_cnt;
+        int metadata_tmout;
+
+        TEST_SAY(_C_MAG "[ %s DeleteTopics with %s, op_timeout %d ]\n",
+                 rd_kafka_name(rk), what, op_timeout);
+
+        /**
+         * Construct DeleteTopic array
+         */
+        for (i = 0 ; i < MY_DEL_TOPICS_CNT ; i++) {
+                char *topic = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                int notexist_topic = i >= MY_DEL_TOPICS_CNT - skip_topic_cnt;
+
+                topics[i] = topic;
+
+                del_topics[i] = rd_kafka_DeleteTopic_new(topic);
+
+                if (notexist_topic)
+                        exp_topicerr[i] =
+                                RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+                else {
+                        exp_topicerr[i] =
+                                RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                        exp_mdtopics[exp_mdtopic_cnt++].topic = topic;
+                }
+
+                exp_not_mdtopics[exp_not_mdtopic_cnt++].topic = topic;
+        }
+
+        if (op_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(rk);
+
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options, op_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+
+        /* Create the topics first, minus the skip count. */
+        test_CreateTopics_simple(rk, NULL, topics,
+                                 MY_DEL_TOPICS_CNT-skip_topic_cnt,
+                                 2/*num_partitions*/,
+                                 NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk,
+                                  exp_mdtopics, exp_mdtopic_cnt,
+                                  NULL, 0,
+                                  15*1000);
+
+        TIMING_START(&timing, "DeleteTopics");
+        TEST_SAY("Call DeleteTopics\n");
+        rd_kafka_admin_DeleteTopics(rk, del_topics, MY_DEL_TOPICS_CNT,
+                                    options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        /* Poll result queue for DeleteTopics result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        TIMING_START(&timing, "DeleteTopics.queue_poll");
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20*1000));
+                TEST_SAY("DeleteTopics: got %s in %.3fms\n",
+                         rd_kafka_event_name(rkev),
+                         TIMING_DURATION(&timing) / 1000.0f);
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n",
+                                 rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_DELETETOPICS_RESULT)
+                        break;
+
+                rd_kafka_event_destroy(rkev);
+        }
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DeleteTopics_result(rkev);
+        TEST_ASSERT(res, "expected DeleteTopics_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        /* Expecting error */
+        errstr2 = (const char *)0x1;
+        err = rd_kafka_DeleteTopics_result_error(res, &errstr2);
+        TEST_ASSERT(err == exp_err,
+                    "expected DeleteTopics to return %s, not %s (%s)",
+                    rd_kafka_err2str(exp_err),
+                    rd_kafka_err2str(err),
+                    err ? errstr2 : "n/a");
+
+        TEST_SAY("DeleteTopics: returned %s (%s)\n",
+                 rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        /* Extract topics */
+        restopics = rd_kafka_DeleteTopics_result_topics(res, &restopic_cnt);
+
+
+        /* Scan topics for proper fields and expected failures. */
+        for (i = 0 ; i < (int)restopic_cnt ; i++) {
+                const rd_kafka_topic_result_t *terr = restopics[i];
+
+                /* Verify that topic order matches our request. */
+                if (strcmp(rd_kafka_topic_result_name(terr), topics[i]))
+                        TEST_FAIL_LATER("Topic result order mismatch at #%d: "
+                                        "expected %s, got %s",
+                                        i, topics[i],
+                                        rd_kafka_topic_result_name(terr));
+
+                TEST_SAY("DeleteTopics result: #%d: %s: %s: %s\n",
+                         i,
+                         rd_kafka_topic_result_name(terr),
+                         rd_kafka_err2name(rd_kafka_topic_result_error(terr)),
+                         rd_kafka_topic_result_error_string(terr));
+                if (rd_kafka_topic_result_error(terr) != exp_topicerr[i])
+                        TEST_FAIL_LATER(
+                                "Expected %s, not %d: %s",
+                                rd_kafka_err2name(exp_topicerr[i]),
+                                rd_kafka_topic_result_error(terr),
+                                rd_kafka_err2name(rd_kafka_topic_result_error(
+                                                          terr)));
+        }
+
+        /**
+         * Verify that the expect topics are deleted and the non-expected
+         * are not. Allow it some time to propagate.
+         */
+        if (op_timeout > 0)
+                metadata_tmout = op_timeout + 1000;
+        else
+                metadata_tmout = 10 * 1000;
+
+        test_wait_metadata_update(rk,
+                                  NULL, 0,
+                                  exp_not_mdtopics,
+                                  exp_not_mdtopic_cnt,
+                                  metadata_tmout);
+
+        rd_kafka_event_destroy(rkev);
+
+        for (i = 0 ; i < MY_DEL_TOPICS_CNT ; i++) {
+                rd_kafka_DeleteTopic_destroy(del_topics[i]);
+                rd_free(topics[i]);
+        }
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+}
+
 
 
 static void do_test_apis (rd_kafka_type_t cltype) {
@@ -412,6 +488,10 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         do_test_CreateTopics("temp queue, op timeout 9000, validate_only",
                              rk, NULL, 9000, rd_true);
         do_test_CreateTopics("main queue, options", rk, mainq, -1, 0);
+
+        /* Delete topics */
+        do_test_DeleteTopics("temp queue, op timeout 0", rk, NULL, 0);
+        do_test_DeleteTopics("main queue, op timeout 15000", rk, NULL, 1500);
 
         rd_kafka_queue_destroy(mainq);
 

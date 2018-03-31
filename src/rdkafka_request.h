@@ -204,4 +204,13 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
                               rd_kafka_resp_cb_t *resp_cb,
                               void *opaque);
 
+rd_kafka_resp_err_t
+rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
+                              rd_list_t *del_topics /*(DeleteTopic_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque);
+
 #endif /* _RDKAFKA_REQUEST_H_ */

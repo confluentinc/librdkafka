@@ -118,7 +118,7 @@ struct rd_kafka_DeleteTopics_result_s {
 
 struct rd_kafka_DeleteTopic_s {
         char *topic;   /**< Points to data */
-        char data[1];  /**< The topic name is allocated along with the
+        char  data[1]; /**< The topic name is allocated along with the
                         *   the struct here. */
 };
 

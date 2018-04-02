@@ -334,7 +334,7 @@ rd_tmpabuf_write_str0 (const char *func, int line,
                 int _klen;                                              \
                 rd_kafka_buf_read_i16a(rkbuf, (kstr)->len);             \
                 _klen = RD_KAFKAP_STR_LEN(kstr);                        \
-                if (RD_KAFKAP_STR_LEN0(_klen) == 0)                     \
+                if (RD_KAFKAP_STR_IS_NULL(kstr))                        \
                         (kstr)->str = NULL;                             \
                 else if (!((kstr)->str =                                \
                            rd_slice_ensure_contig(&rkbuf->rkbuf_reader, \

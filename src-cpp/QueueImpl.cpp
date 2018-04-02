@@ -30,10 +30,6 @@
 
 #include "rdkafkacpp_int.h"
 
-RdKafka::Queue::~Queue () {
-
-}
-
 RdKafka::Queue *RdKafka::Queue::create (Handle *base) {
   RdKafka::QueueImpl *queueimpl = new RdKafka::QueueImpl;
   queueimpl->queue_ = rd_kafka_queue_new(dynamic_cast<HandleImpl*>(base)->rk_);

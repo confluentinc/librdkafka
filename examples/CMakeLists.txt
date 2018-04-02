@@ -26,5 +26,5 @@ if(NOT WIN32)
     target_link_libraries(rdkafka_consumer_example PUBLIC rdkafka)
     
     add_executable(kafkatest_verifiable_client kafkatest_verifiable_client.cpp)
-    target_link_libraries(kafkatest_verifiable_client PUBLIC rdkafka++)
+    target_link_libraries(kafkatest_verifiable_client PUBLIC rdkafka++ rt) #librt for clock_gettime
 endif(NOT WIN32)

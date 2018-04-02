@@ -943,6 +943,62 @@ class RD_EXPORT Conf {
 
 
 /**
+ * @name Kafka polling interface.
+ * @{
+ *
+ */
+ 
+/**
+ * @brief Base class for generic polling functionality.
+ */
+   
+struct Pollable
+{
+	virtual ~Pollable(){}
+	
+	/**
+	* @brief Polls the provided implementation object for events.
+	*
+	* Events will trigger application provided callbacks to be called.
+	*
+	* The \p timeout_ms argument specifies the maximum amount of time
+	* (in milliseconds) that the call will block waiting for events.
+	* For non-blocking calls, provide 0 as \p timeout_ms.
+	* To wait indefinitely for events, provide -1.
+	*
+	* Events:
+	*   - delivery report callbacks (if an RdKafka::DeliveryCb is configured) [producer]
+	*   - event callbacks (if an RdKafka::EventCb is configured) [producer & consumer]
+	*   - queue callbacks (if RdKafka::ConsumeCb is configured) [queue]
+	*
+	* @remark  An application should make sure to call poll() at regular
+	*          intervals to serve any queued callbacks waiting to be called.
+	*
+	* @warning (1) This method MUST NOT be used with the RdKafka::KafkaConsumer,
+	*          use its RdKafka::KafkaConsumer::consume() instead.
+	*          (2) It MUST NOT be used for queues containing messages.
+	*
+	* @returns the number of events served or 0 on timeout.
+	*/
+	virtual int poll (int timeout_ms) = 0;
+	
+	
+	/**
+	* @brief Cancels the current poll().
+	*
+	* A callback may use this to force an immediate return to the calling
+	* code (caller of poll()) without processing any further events.
+	*
+	* @remark This function MUST ONLY be called from within a
+	*         librdkafka callback.
+	*/
+	virtual void yield () = 0;
+};
+
+/**@}*/
+
+
+/**
  * @name Kafka base client handle
  * @{
  *
@@ -951,9 +1007,8 @@ class RD_EXPORT Conf {
 /**
  * @brief Base handle, super class for specific clients.
  */
-class RD_EXPORT Handle {
+class RD_EXPORT Handle : public Pollable {
  public:
-  virtual ~Handle() { }
 
   /** @returns the name of the handle */
   virtual const std::string name () const = 0;
@@ -967,31 +1022,6 @@ class RD_EXPORT Handle {
    *          a group member.
    */
   virtual const std::string memberid () const = 0;
-
-
-  /**
-   * @brief Polls the provided kafka handle for events.
-   *
-   * Events will trigger application provided callbacks to be called.
-   *
-   * The \p timeout_ms argument specifies the maximum amount of time
-   * (in milliseconds) that the call will block waiting for events.
-   * For non-blocking calls, provide 0 as \p timeout_ms.
-   * To wait indefinately for events, provide -1.
-   *
-   * Events:
-   *   - delivery report callbacks (if an RdKafka::DeliveryCb is configured) [producer]
-   *   - event callbacks (if an RdKafka::EventCb is configured) [producer & consumer]
-   *
-   * @remark  An application should make sure to call poll() at regular
-   *          intervals to serve any queued callbacks waiting to be called.
-   *
-   * @warning This method MUST NOT be used with the RdKafka::KafkaConsumer,
-   *          use its RdKafka::KafkaConsumer::consume() instead.
-   *
-   * @returns the number of events served.
-   */
-  virtual int poll (int timeout_ms) = 0;
 
   /**
    * @brief  Returns the current out queue length
@@ -1129,19 +1159,6 @@ class RD_EXPORT Handle {
    * @returns ERR_NO_ERROR on success or an error code on error.
    */
   virtual ErrorCode set_log_queue (Queue *queue) = 0;
-
-  /**
-   * @brief Cancels the current callback dispatcher (Producer::poll(),
-   *        Consumer::poll(), KafkaConsumer::consume(), etc).
-   *
-   * A callback may use this to force an immediate return to the calling
-   * code (caller of e.g. ..::poll()) without processing any further
-   * events.
-   *
-   * @remark This function MUST ONLY be called from within a
-   *         librdkafka callback.
-   */
-  virtual void yield () = 0;
 
   /**
    * @brief Returns the ClusterId as reported in broker metadata.
@@ -1457,7 +1474,7 @@ class RD_EXPORT Message {
  * RdKafka::Consumer::consume_callback() methods that take a queue as the first
  * parameter for more information.
  */
-class RD_EXPORT Queue {
+class RD_EXPORT Queue : public Pollable {
  public:
   /**
    * @brief Create Queue object
@@ -1475,8 +1492,7 @@ class RD_EXPORT Queue {
    *         queue.
    */
   virtual ErrorCode forward (Queue *dst) = 0;
-
-
+  
   /**
    * @brief Consume message or get error event from the queue.
    *
@@ -1489,17 +1505,6 @@ class RD_EXPORT Queue {
    *    (RdKafka::Message::err() is ERR__TIMED_OUT)
    */
   virtual Message *consume (int timeout_ms) = 0;
-
-  /**
-   * @brief Poll queue, serving any enqueued callbacks.
-   *
-   * @remark Must NOT be used for queues containing messages.
-   *
-   * @returns the number of events served or 0 on timeout.
-   */
-  virtual int poll (int timeout_ms) = 0;
-
-  virtual ~Queue () = 0;
 
   /**
    * @brief Enable IO event triggering for queue.
@@ -1537,7 +1542,7 @@ class RD_EXPORT Queue {
  * Currently supports the \c range and \c roundrobin partition assignment
  * strategies (see \c partition.assignment.strategy)
  */
-class RD_EXPORT KafkaConsumer : public virtual Handle {
+class RD_EXPORT KafkaConsumer : virtual public Handle {
 public:
   /**
    * @brief Creates a KafkaConsumer.
@@ -1812,7 +1817,7 @@ public:
  *
  * A simple non-balanced, non-group-aware, consumer.
  */
-class RD_EXPORT Consumer : public virtual Handle {
+class RD_EXPORT Consumer : virtual public Handle {
  public:
   /**
    * @brief Creates a new Kafka consumer handle.
@@ -1989,7 +1994,7 @@ class RD_EXPORT Consumer : public virtual Handle {
 /**
  * @brief Producer
  */
-class RD_EXPORT Producer : public virtual Handle {
+class RD_EXPORT Producer : virtual public Handle {
  public:
   /**
    * @brief Creates a new Kafka producer handle.

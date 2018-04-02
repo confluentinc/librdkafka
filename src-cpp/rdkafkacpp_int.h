@@ -704,12 +704,8 @@ public:
 
 
 
-class KafkaConsumerImpl : virtual public KafkaConsumer, virtual public HandleImpl {
+class KafkaConsumerImpl : public KafkaConsumer, public HandleImpl {
 public:
-  ~KafkaConsumerImpl () {
-
-  }
-
   static KafkaConsumer *create (Conf *conf, std::string &errstr);
 
   ErrorCode assignment (std::vector<TopicPartition*> &partitions);
@@ -825,7 +821,7 @@ private:
 };
 
 
-class QueueImpl : virtual public Queue {
+class QueueImpl : public Queue {
  public:
   ~QueueImpl () {
     rd_kafka_queue_destroy(queue_);
@@ -834,6 +830,7 @@ class QueueImpl : virtual public Queue {
   ErrorCode forward (Queue *queue);
   Message *consume (int timeout_ms);
   int poll (int timeout_ms);
+  void yield () { rd_kafka_yield(NULL); }
   void io_event_enable(int fd, const void *payload, size_t size);
 
   rd_kafka_queue_t *queue_;
@@ -843,7 +840,7 @@ class QueueImpl : virtual public Queue {
 
 
 
-class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
+class ConsumerImpl : public Consumer, public HandleImpl {
  public:
   ~ConsumerImpl () {
     rd_kafka_destroy(rk_); };
@@ -865,7 +862,7 @@ class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
 
 
 
-class ProducerImpl : virtual public Producer, virtual public HandleImpl {
+class ProducerImpl : public Producer, public HandleImpl {
 
  public:
   ~ProducerImpl () { if (rk_) rd_kafka_destroy(rk_); };

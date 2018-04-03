@@ -952,7 +952,7 @@ class RD_EXPORT Conf {
  * @brief Base class for generic polling functionality.
  */
    
-struct Pollable
+struct RD_EXPORT Pollable
 {
 	virtual ~Pollable(){}
 	

@@ -36,7 +36,7 @@ RdKafka::KafkaConsumer::~KafkaConsumer () {}
 RdKafka::KafkaConsumer *RdKafka::KafkaConsumer::create (RdKafka::Conf *conf,
                                                         std::string &errstr) {
   char errbuf[512];
-  RdKafka::ConfImpl *confimpl = dynamic_cast<RdKafka::ConfImpl *>(conf);
+  RdKafka::ConfImpl *confimpl = static_cast<RdKafka::ConfImpl *>(conf);
   RdKafka::KafkaConsumerImpl *rkc = new RdKafka::KafkaConsumerImpl();
   rd_kafka_conf_t *rk_conf = NULL;
   size_t grlen;
@@ -219,7 +219,7 @@ RdKafka::ErrorCode
 RdKafka::KafkaConsumerImpl::seek (const RdKafka::TopicPartition &partition,
                                   int timeout_ms) {
   const RdKafka::TopicPartitionImpl *p =
-    dynamic_cast<const RdKafka::TopicPartitionImpl*>(&partition);
+    static_cast<const RdKafka::TopicPartitionImpl*>(&partition);
   rd_kafka_topic_t *rkt;
 
   if (!(rkt = rd_kafka_topic_new(rk_, p->topic_.c_str(), NULL)))

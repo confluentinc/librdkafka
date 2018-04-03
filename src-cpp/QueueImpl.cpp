@@ -41,7 +41,7 @@ RdKafka::QueueImpl::forward (Queue *queue) {
   if (!queue) {
     rd_kafka_queue_forward(queue_, NULL);
   } else {
-    QueueImpl *queueimpl = dynamic_cast<QueueImpl *>(queue);
+    QueueImpl *queueimpl = static_cast<QueueImpl *>(queue);
     rd_kafka_queue_forward(queue_, queueimpl->queue_);
   }
   return RdKafka::ERR_NO_ERROR;

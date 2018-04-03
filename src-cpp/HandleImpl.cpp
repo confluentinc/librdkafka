@@ -311,7 +311,7 @@ RdKafka::ErrorCode
 RdKafka::HandleImpl::set_log_queue (RdKafka::Queue *queue) {
         rd_kafka_queue_t *rkqu = NULL;
         if (queue) {
-                QueueImpl *queueimpl = dynamic_cast<QueueImpl *>(queue);
+                QueueImpl *queueimpl = static_cast<QueueImpl *>(queue);
                 rkqu = queueimpl->queue_;
         }
         return static_cast<RdKafka::ErrorCode>(
@@ -328,7 +328,7 @@ partitions_to_c_parts (const std::vector<RdKafka::TopicPartition*> &partitions){
 
   for (unsigned int i = 0 ; i < partitions.size() ; i++) {
     const RdKafka::TopicPartitionImpl *tpi =
-        dynamic_cast<const RdKafka::TopicPartitionImpl*>(partitions[i]);
+        static_cast<const RdKafka::TopicPartitionImpl*>(partitions[i]);
     rd_kafka_topic_partition_t *rktpar =
       rd_kafka_topic_partition_list_add(c_parts,
 					tpi->topic_.c_str(), tpi->partition_);
@@ -351,7 +351,7 @@ update_partitions_from_c_parts (std::vector<RdKafka::TopicPartition*> &partition
     /* Find corresponding C++ entry */
     for (unsigned int j = 0 ; j < partitions.size() ; j++) {
       RdKafka::TopicPartitionImpl *pp =
-	dynamic_cast<RdKafka::TopicPartitionImpl*>(partitions[j]);
+	static_cast<RdKafka::TopicPartitionImpl*>(partitions[j]);
       if (!strcmp(p->topic, pp->topic_.c_str()) &&
 	  p->partition == pp->partition_) {
 	pp->offset_ = p->offset;

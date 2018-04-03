@@ -52,7 +52,7 @@ static void dr_msg_cb_trampoline (rd_kafka_t *rk,
 RdKafka::Producer *RdKafka::Producer::create (RdKafka::Conf *conf,
                                               std::string &errstr) {
   char errbuf[512];
-  RdKafka::ConfImpl *confimpl = dynamic_cast<RdKafka::ConfImpl *>(conf);
+  RdKafka::ConfImpl *confimpl = static_cast<RdKafka::ConfImpl *>(conf);
   RdKafka::ProducerImpl *rkp = new RdKafka::ProducerImpl();
   rd_kafka_conf_t *rk_conf = NULL;
 
@@ -94,7 +94,7 @@ RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
                                                    void *payload, size_t len,
                                                    const std::string *key,
                                                    void *msg_opaque) {
-  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+  RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(topic);
 
   if (rd_kafka_produce(topicimpl->rkt_, partition, msgflags,
                        payload, len,
@@ -113,7 +113,7 @@ RdKafka::ErrorCode RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
                                                    const void *key,
                                                    size_t key_len,
                                                    void *msg_opaque) {
-  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+  RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(topic);
 
   if (rd_kafka_produce(topicimpl->rkt_, partition, msgflags,
                        payload, len, key, key_len,
@@ -130,7 +130,7 @@ RdKafka::ProducerImpl::produce (RdKafka::Topic *topic,
                                 const std::vector<char> *payload,
                                 const std::vector<char> *key,
                                 void *msg_opaque) {
-  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+  RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(topic);
 
   if (rd_kafka_produce(topicimpl->rkt_, partition, RD_KAFKA_MSG_F_COPY,
                        payload ? (void *)&(*payload)[0] : NULL,

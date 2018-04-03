@@ -38,7 +38,7 @@ RdKafka::Consumer::~Consumer () {}
 RdKafka::Consumer *RdKafka::Consumer::create (RdKafka::Conf *conf,
                                               std::string &errstr) {
   char errbuf[512];
-  RdKafka::ConfImpl *confimpl = dynamic_cast<RdKafka::ConfImpl *>(conf);
+  RdKafka::ConfImpl *confimpl = static_cast<RdKafka::ConfImpl *>(conf);
   RdKafka::ConsumerImpl *rkc = new RdKafka::ConsumerImpl();
   rd_kafka_conf_t *rk_conf = NULL;
 
@@ -75,7 +75,7 @@ int64_t RdKafka::Consumer::OffsetTail (int64_t offset) {
 RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
                                                  int32_t partition,
                                                  int64_t offset) {
-  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+  RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(topic);
 
   if (rd_kafka_consume_start(topicimpl->rkt_, partition, offset) == -1)
     return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
@@ -88,8 +88,8 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
                                                  int32_t partition,
                                                  int64_t offset,
                                                  Queue *queue) {
-  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
-  RdKafka::QueueImpl *queueimpl = dynamic_cast<RdKafka::QueueImpl *>(queue);
+  RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(topic);
+  RdKafka::QueueImpl *queueimpl = static_cast<RdKafka::QueueImpl *>(queue);
 
   if (rd_kafka_consume_start_queue(topicimpl->rkt_, partition, offset,
                                    queueimpl->queue_) == -1)
@@ -101,7 +101,7 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::start (Topic *topic,
 
 RdKafka::ErrorCode RdKafka::ConsumerImpl::stop (Topic *topic,
                                                 int32_t partition) {
-  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+  RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(topic);
 
   if (rd_kafka_consume_stop(topicimpl->rkt_, partition) == -1)
     return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
@@ -113,7 +113,7 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::seek (Topic *topic,
 						int32_t partition,
 						int64_t offset,
 						int timeout_ms) {
-  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+  RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(topic);
 
   if (rd_kafka_seek(topicimpl->rkt_, partition, offset, timeout_ms) == -1)
     return static_cast<RdKafka::ErrorCode>(rd_kafka_last_error());
@@ -124,7 +124,7 @@ RdKafka::ErrorCode RdKafka::ConsumerImpl::seek (Topic *topic,
 RdKafka::Message *RdKafka::ConsumerImpl::consume (Topic *topic,
                                                   int32_t partition,
                                                   int timeout_ms) {
-  RdKafka::TopicImpl *topicimpl = dynamic_cast<RdKafka::TopicImpl *>(topic);
+  RdKafka::TopicImpl *topicimpl = static_cast<RdKafka::TopicImpl *>(topic);
   rd_kafka_message_t *rkmessage;
 
   rkmessage = rd_kafka_consume(topicimpl->rkt_, partition, timeout_ms);
@@ -174,7 +174,7 @@ int RdKafka::ConsumerImpl::consume_callback (RdKafka::Topic* topic,
 
 RdKafka::Message *RdKafka::ConsumerImpl::consume (Queue *queue,
                                                   int timeout_ms) {
-  RdKafka::QueueImpl *queueimpl = dynamic_cast<RdKafka::QueueImpl *>(queue);
+  RdKafka::QueueImpl *queueimpl = static_cast<RdKafka::QueueImpl *>(queue);
   rd_kafka_message_t *rkmessage;
 
   rkmessage = rd_kafka_consume_queue(queueimpl->queue_, timeout_ms);
@@ -225,7 +225,7 @@ int RdKafka::ConsumerImpl::consume_callback (Queue *queue,
                                              int timeout_ms,
                                              RdKafka::ConsumeCb *consume_cb,
                                              void *opaque) {
-  RdKafka::QueueImpl *queueimpl = dynamic_cast<RdKafka::QueueImpl *>(queue);
+  RdKafka::QueueImpl *queueimpl = static_cast<RdKafka::QueueImpl *>(queue);
   ConsumerImplQueueCallback context(consume_cb, opaque);
   return rd_kafka_consume_callback_queue(queueimpl->queue_, timeout_ms,
                                          &ConsumerImplQueueCallback::consume_cb_trampoline,

@@ -281,7 +281,7 @@ class ConfImpl : public Conf {
   Conf::ConfResult set (const std::string &name, const Conf *topic_conf,
                         std::string &errstr) {
     const ConfImpl *tconf_impl =
-        dynamic_cast<const RdKafka::ConfImpl *>(topic_conf);
+        static_cast<const RdKafka::ConfImpl *>(topic_conf);
     if (name != "default_topic_conf" || !tconf_impl->rkt_conf_) {
       errstr = "Invalid value type, expected RdKafka::Conf";
       return Conf::CONF_INVALID;
@@ -723,12 +723,12 @@ public:
     return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 1/*async*/));
   }
   ErrorCode commitSync (Message *message) {
-	  MessageImpl *msgimpl = dynamic_cast<MessageImpl*>(message);
+	  MessageImpl *msgimpl = static_cast<MessageImpl*>(message);
 	  return static_cast<ErrorCode>(
                   rd_kafka_commit_message(rk_, msgimpl->rkmessage_, 0/*sync*/));
   }
   ErrorCode commitAsync (Message *message) {
-	  MessageImpl *msgimpl = dynamic_cast<MessageImpl*>(message);
+	  MessageImpl *msgimpl = static_cast<MessageImpl*>(message);
 	  return static_cast<ErrorCode>(
                   rd_kafka_commit_message(rk_, msgimpl->rkmessage_,1/*async*/));
   }

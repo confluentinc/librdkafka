@@ -17,7 +17,7 @@ typedef enum {
 	RD_KAFKA_COMPRESSION_NONE,
 	RD_KAFKA_COMPRESSION_GZIP = RD_KAFKA_MSG_ATTR_GZIP,
 	RD_KAFKA_COMPRESSION_SNAPPY = RD_KAFKA_MSG_ATTR_SNAPPY,
-        RD_KAFKA_COMPRESSION_LZ4 = RD_KAFKA_MSG_ATTR_LZ4,
+	RD_KAFKA_COMPRESSION_LZ4 = RD_KAFKA_MSG_ATTR_LZ4,
 	RD_KAFKA_COMPRESSION_INHERIT /* Inherit setting from global conf */
 } rd_kafka_compression_t;
 
@@ -37,20 +37,12 @@ typedef enum {
 	RD_KAFKA_INTERNAL,
 } rd_kafka_confsource_t;
 
-typedef	enum {
-	_RK_GLOBAL = 0x1,
-	_RK_PRODUCER = 0x2,
-	_RK_CONSUMER = 0x4,
-	_RK_TOPIC = 0x8,
-        _RK_CGRP = 0x10
-} rd_kafka_conf_scope_t;
 
 typedef enum {
 	_RK_CONF_PROP_SET_REPLACE,  /* Replace current value (default) */
 	_RK_CONF_PROP_SET_ADD,      /* Add value (S2F) */
 	_RK_CONF_PROP_SET_DEL      /* Remove value (S2F) */
 } rd_kafka_conf_set_mode_t;
-
 
 
 typedef enum {

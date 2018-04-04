@@ -678,7 +678,7 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         rd_kafkap_str_destroy(rk->rk_client_id);
         rd_kafkap_str_destroy(rk->rk_group_id);
         rd_kafkap_str_destroy(rk->rk_eos.TransactionalId);
-	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
+	rd_kafka_anyconf_destroy(RD_GLOBAL, &rk->rk_conf);
         rd_list_destroy(&rk->rk_broker_by_id);
 
 	rd_kafkap_bytes_destroy((rd_kafkap_bytes_t *)rk->rk_null_bytes);

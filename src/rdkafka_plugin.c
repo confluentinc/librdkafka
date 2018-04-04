@@ -202,7 +202,7 @@ rd_kafka_conf_res_t rd_kafka_plugins_conf_set (
         void *dstptr, rd_kafka_conf_set_mode_t set_mode,
         char *errstr, size_t errstr_size) {
 
-        assert(scope == _RK_GLOBAL);
+        assert(scope == RD_GLOBAL);
         return rd_kafka_plugins_conf_set0((rd_kafka_conf_t *)pconf,
                                           set_mode == _RK_CONF_PROP_SET_DEL ?
                                           NULL : value, errstr, errstr_size);

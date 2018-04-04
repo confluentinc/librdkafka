@@ -156,7 +156,7 @@ typedef SSIZE_T ssize_t;
  * @returns Version integer.
  *
  * @sa See RD_KAFKA_VERSION for how to parse the integer format.
- * @sa Use rd_kafka_version_str() to retreive the version as a string.
+ * @sa Use rd_kafka_version_str() to retrieve the version as a string.
  */
 RD_EXPORT
 int rd_kafka_version(void);
@@ -1219,6 +1219,84 @@ typedef enum {
 	RD_KAFKA_CONF_OK = 0        /**< Configuration okay */
 } rd_kafka_conf_res_t;
 
+/**
+ * @enum rd_kafka_conf_scope_t
+ * @brief Represents the scope of each configuration option
+ */
+typedef	enum {
+	RD_GLOBAL   = 1,
+	RD_PRODUCER = 1 << 1,
+	RD_CONSUMER = 1 << 2,
+	RD_TOPIC    = 1 << 3,
+	RD_CGRP     = 1 << 4
+} rd_kafka_conf_scope_t;
+
+/**
+ * @enum rd_kafka_config_type_t
+ * @brief The type of the configuration option
+ */
+typedef enum {
+	RD_C_STR,
+	RD_C_INT,
+	RD_C_S2I,       /* String to Integer mapping.
+                     * Supports limited canonical str->int mappings
+                     * using s2i[] */
+	RD_C_S2F,       /* CSV String to Integer flag mapping (OR:ed) */
+	RD_C_BOOL,
+	RD_C_PTR,       /* Only settable through special set functions */
+	RD_C_PATLIST,   /* Pattern list */
+	RD_C_KSTR,      /* Kafka string */
+	RD_C_ALIAS,     /* Alias: points to other property through .sdef */
+	RD_C_INTERNAL,  /* Internal, don't expose to application */
+	RD_C_INVALID,   /* Invalid property, used to catch known
+                     * but unsupported Java properties. */
+} rd_kafka_config_type_t;
+
+
+/**
+ * @struct rd_kafka_config_option_t
+ * @brief Structure containing basic information about a configuration option
+ */
+typedef struct rd_kakfa_config_option {
+	rd_kafka_conf_scope_t scope;    /* Configuration scope */
+	rd_kafka_config_type_t type;    /* Configuration type */
+	const char *name;               /* Configuration name */
+	const char *alias_name;         /* Alias name if any, NULL otherwise */
+} rd_kafka_config_option_t;
+
+/**
+ * @brief Returns a list of librdkafka configuration options. This allows for runtime
+ *        discoverability and instrospection of configuration options.
+ *
+ * @param size Pointer to an integer which will contain the number of elements returned.
+ *
+ * @returns A pointer to the first rd_kafka_config_option_t in the list.
+ *          The last element can be detected when rd_kakfa_property_desc_t::name == NULL.
+ *
+ * @remark This function is not thread safe the first time it is called. Afterwards
+ *         it may be accessed from different threads.
+ */
+RD_EXPORT
+const rd_kafka_config_option_t* rd_kafka_get_config_options(int* size);
+
+/**
+ * @brief Get details of a specific configuration parameter.
+ *
+ * @param name The name of the configuration parameter.
+ *
+ * @param config A pointer to a rd_kafka_config_option_t structure. This will contain the
+ *               result in case of success.
+ *
+ * @returns If the operation succeeds, the config parameter will be populated with the
+ *          appropriate data and RD_KAFKA_CONF_OK is returned. Otherwise
+ *          config is left unchanged and RD_KAFKA_CONF_UNKNOWN is returned. If either
+ *          input parameter is NULL, RD_KAFKA_CONF_INVALID is returned.
+ *
+ * @remark Name must be in lower case.
+ */
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_get_config_option(const char* name, rd_kafka_config_option_t* config);
+
 
 /**
  * @brief Create configuration object.
@@ -1303,7 +1381,6 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
 				       const char *name,
 				       const char *value,
 				       char *errstr, size_t errstr_size);
-
 
 /**
  * @brief Enable event sourcing.

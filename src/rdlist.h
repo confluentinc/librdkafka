@@ -47,16 +47,20 @@ typedef struct rd_list_s {
 #define RD_LIST_F_SORTED     0x2  /* Set by sort(), cleared by any mutations.
 				   * When this flag is set bsearch() is used
 				   * by find(), otherwise a linear search. */
-#define RD_LIST_F_FIXED_SIZE 0x4  /* Assert on grow */
+#define RD_LIST_F_FIXED_SIZE 0x4  /* Assert on grow, when prealloc()ed */
 #define RD_LIST_F_UNIQUE     0x8  /* Don't allow duplicates:
                                    * ONLY ENFORCED BY CALLER. */
+        int     rl_elemsize;      /**< Element size (when prealloc()ed) */
+        void   *rl_p;             /**< Start of prealloced elements,
+                                   *   the allocation itself starts at rl_elems
+                                   */
 } rd_list_t;
 
 
 /**
- * @brief Initialize a list, preallocate space for 'initial_size' elements
- *       (optional).
- *       List elements will optionally be freed by \p free_cb.
+ * @brief Initialize a list, prepare for 'initial_size' elements
+ *        (optional optimization).
+ *        List elements will optionally be freed by \p free_cb.
  *
  * @returns \p rl
  */
@@ -71,11 +75,20 @@ rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *));
 rd_list_t *rd_list_init_copy (rd_list_t *rl, const rd_list_t *src);
 
 /**
- * Allocate a new list pointer and initialize it according to rd_list_init().
+ * @brief Allocate a new list pointer and initialize
+ *        it according to rd_list_init().
+ *
+ *        This is the same as calling \c rd_list_init(rd_list_alloc(), ..));
  *
  * Use rd_list_destroy() to free.
  */
 rd_list_t *rd_list_new (int initial_size, void (*free_cb) (void *));
+
+
+/**
+ * @brief Allocate memory for new list but do not initialize it.
+ */
+rd_list_t *rd_list_alloc (void);
 
 
 /**
@@ -89,7 +102,7 @@ void rd_list_grow (rd_list_t *rl, size_t size);
  *        rd_list_add(), instead pass NULL to rd_list_add() and use the returned
  *        pointer as the element.
  *
- * @param elemsize element size
+ * @param elemsize element size, or 0 if elements are allocated separately.
  * @param size number of elements
  * @param memzero initialize element memory to zeros.
  *
@@ -298,6 +311,13 @@ rd_list_t *rd_list_copy (const rd_list_t *src,
 void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
                       void *(*copy_cb) (const void *elem, void *opaque),
                       void *opaque);
+
+
+/**
+ * @brief Copy callback to copy elements that are preallocated lists.
+ */
+void *rd_list_copy_preallocated (const void *elem, void *opaque);
+
 
 /**
  * @brief String copier for rd_list_copy()

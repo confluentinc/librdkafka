@@ -178,8 +178,8 @@ rd_kafka_metadata_cache_find (rd_kafka_t *rk, const char *topic, int valid) {
 /**
  * @brief Partition (id) comparator
  */
-static int rd_kafka_metadata_partition_id_cmp (const void *_a,
-                                               const void *_b) {
+int rd_kafka_metadata_partition_id_cmp (const void *_a,
+                                        const void *_b) {
         const rd_kafka_metadata_partition_t *a = _a, *b = _b;
         return a->id - b->id;
 }

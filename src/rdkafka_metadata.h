@@ -71,6 +71,11 @@ rd_kafka_metadata_request (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                            const char *reason, rd_kafka_op_t *rko);
 
 
+
+int rd_kafka_metadata_partition_id_cmp (const void *_a,
+                                        const void *_b);
+
+
 /**
  * @{
  *

@@ -409,6 +409,12 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                                        partitions[j].isrs[k]);
 
                 }
+
+                /* Sort partitions by partition id */
+                qsort(md->topics[i].partitions,
+                      md->topics[i].partition_cnt,
+                      sizeof(*md->topics[i].partitions),
+                      rd_kafka_metadata_partition_id_cmp);
         }
 
         /* Entire Metadata response now parsed without errors:

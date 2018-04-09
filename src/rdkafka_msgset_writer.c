@@ -799,9 +799,11 @@ rd_kafka_msgset_writer_compress_gzip (rd_kafka_msgset_writer_t *msetw,
         const void *p;
         size_t rlen;
         int r;
-
+        int comp_level =
+                msetw->msetw_rktp->rktp_rkt->rkt_conf.compression_level;
+				
         memset(&strm, 0, sizeof(strm));
-        r = deflateInit2(&strm, Z_DEFAULT_COMPRESSION,
+        r = deflateInit2(&strm, comp_level,
                          Z_DEFLATED, 15+16,
                          8, Z_DEFAULT_STRATEGY);
         if (r != Z_OK) {
@@ -936,9 +938,12 @@ static int
 rd_kafka_msgset_writer_compress_lz4 (rd_kafka_msgset_writer_t *msetw,
                                      rd_slice_t *slice, struct iovec *ciov) {
         rd_kafka_resp_err_t err;
+        int comp_level =
+                msetw->msetw_rktp->rktp_rkt->rkt_conf.compression_level;
         err = rd_kafka_lz4_compress(msetw->msetw_rkb,
                                     /* Correct or incorrect HC */
                                     msetw->msetw_MsgVersion >= 1 ? 1 : 0,
+                                    comp_level,
                                     slice, &ciov->iov_base, &ciov->iov_len);
         return (err ? -1 : 0);
 }

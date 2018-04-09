@@ -325,7 +325,7 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
  * @returns allocated buffer in \p *outbuf, length in \p *outlenp.
  */
 rd_kafka_resp_err_t
-rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc,
+rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
                        rd_slice_t *slice, void **outbuf, size_t *outlenp) {
         LZ4F_compressionContext_t cctx;
         LZ4F_errorCode_t r;
@@ -339,8 +339,11 @@ rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc,
 
         /* Required by Kafka */
         const LZ4F_preferences_t prefs =
-                { .frameInfo = { .blockMode = LZ4F_blockIndependent } };
-
+                {
+                        .frameInfo = { .blockMode = LZ4F_blockIndependent },
+                        .compressionLevel = comp_level
+                };
+				
         *outbuf = NULL;
 
         out_sz = LZ4F_compressBound(len, NULL) + 1000;

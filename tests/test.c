@@ -3376,7 +3376,7 @@ int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
                 err = rd_kafka_metadata(use_rk, 0, rkt, &metadata,
                                         tmout_multip(15000));
                 if (err)
-                        TEST_WARN("metadata() for %s failed: %s",
+                        TEST_WARN("metadata() for %s failed: %s\n",
                                   rkt ? rd_kafka_topic_name(rkt) :
                                   "(all-local)",
                                   rd_kafka_err2str(err));
@@ -3423,7 +3423,7 @@ rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
                                         tmout_multip(15000));
                 TIMING_STOP(&t);
                 if (err)
-                        TEST_WARN("metadata() for %s failed: %s",
+                        TEST_WARN("metadata() for %s failed: %s\n",
                                   rkt ? rd_kafka_topic_name(rkt) :
                                   "(all-local)",
                                   rd_kafka_err2str(err));

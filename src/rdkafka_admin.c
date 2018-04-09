@@ -416,14 +416,14 @@ static int rd_kafka_admin_common_worker (rd_kafka_t *rk, rd_kafka_op_t *rko) {
         const char *name = rd_kafka_op2str(rko->rko_type);
         rd_ts_t timeout_in;
 
+        if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
+                return -1; /* Terminating, or rko being destroyed */
+
         rd_kafka_dbg(rk, ADMIN, name,
                      "%s worker called in state %s: %s",
                      name,
                      rd_kafka_admin_state_desc[rko->rko_u.admin_request.state],
                      rd_kafka_err2str(rko->rko_err));
-
-        if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
-                return -1; /* Terminating */
 
         rd_assert(thrd_is_current(rko->rko_rk->rk_thread));
 

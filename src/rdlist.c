@@ -77,7 +77,7 @@ rd_list_t *rd_list_init_copy (rd_list_t *dst, const rd_list_t *src) {
         return dst;
 }
 
-rd_list_t *rd_list_alloc (void) {
+static RD_INLINE rd_list_t *rd_list_alloc (void) {
         return malloc(sizeof(rd_list_t));
 }
 
@@ -409,15 +409,19 @@ void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
 /**
  * @brief Copy elements of preallocated \p src to preallocated \p dst.
  *
- * @remark \p dst will be overwritten and initialized.
+ * @remark \p dst will be overwritten and initialized, but its
+ *         flags will be retained.
  *
  * @returns \p dst
  */
 static rd_list_t *rd_list_copy_preallocated0 (rd_list_t *dst,
                                               const rd_list_t *src) {
+        int dst_flags = dst->rl_flags & RD_LIST_F_ALLOCATED;
+
         rd_assert(dst != src);
 
         rd_list_init_copy(dst, src);
+        dst->rl_flags |= dst_flags;
 
         rd_assert((dst->rl_flags & RD_LIST_F_FIXED_SIZE));
         rd_assert((src->rl_flags & RD_LIST_F_FIXED_SIZE));
@@ -431,7 +435,7 @@ static rd_list_t *rd_list_copy_preallocated0 (rd_list_t *dst,
 }
 
 void *rd_list_copy_preallocated (const void *elem, void *opaque) {
-        return rd_list_copy_preallocated0(rd_list_alloc(),
+        return rd_list_copy_preallocated0(rd_list_new(0, NULL),
                                           (const rd_list_t *)elem);
 }
 
@@ -442,7 +446,9 @@ void *rd_list_copy_preallocated (const void *elem, void *opaque) {
  *
  */
 rd_list_t *rd_list_init_int32 (rd_list_t *rl, int max_size) {
+        int rl_flags = rl->rl_flags & RD_LIST_F_ALLOCATED;
         rd_list_init(rl, 0, NULL);
+        rl->rl_flags |= rl_flags;
         rd_list_prealloc_elems(rl, sizeof(int32_t), max_size, 1/*memzero*/);
         return rl;
 }

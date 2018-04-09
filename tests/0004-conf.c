@@ -223,17 +223,17 @@ int main_0004_conf (int argc, char **argv) {
 	rd_kafka_conf_t *ignore_conf, *conf, *conf2;
 	rd_kafka_topic_conf_t *ignore_topic_conf, *tconf, *tconf2;
 	char errstr[512];
-        rd_kafka_resp_err_t err;
+	rd_kafka_resp_err_t err;
 	const char **arr_orig, **arr_dup;
 	size_t cnt_orig, cnt_dup;
 	int i;
-        const char *topic;
+	const char *topic;
 	static const char *gconfs[] = {
 		"message.max.bytes", "12345", /* int property */
 		"client.id", "my id", /* string property */
 		"debug", "topic,metadata,interceptor", /* S2F property */
 		"topic.blacklist", "__.*", /* #778 */
-                "auto.offset.reset", "earliest", /* Global->Topic fallthru */
+		"auto.offset.reset", "earliest", /* Global->Topic fallthru */
 #if WITH_ZLIB
 		"compression.codec", "gzip", /* S2I property */
 #endif
@@ -251,7 +251,7 @@ int main_0004_conf (int argc, char **argv) {
 	rd_kafka_conf_destroy(ignore_conf);
 	rd_kafka_topic_conf_destroy(ignore_topic_conf);
 
-        topic = test_mk_topic_name("0004", 0);
+	topic = test_mk_topic_name("0004", 0);
 
 	/* Set up a global config object */
 	conf = rd_kafka_conf_new();

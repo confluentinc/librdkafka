@@ -58,7 +58,7 @@
 #include <sys/timeb.h>
 #endif
 
-
+extern int validate_scope;
 
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 
@@ -1298,9 +1298,9 @@ static void rd_kafka_term_sig_handler (int sig) {
 
 
 rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
-			  char *errstr, size_t errstr_size) {
-	rd_kafka_t *rk;
-	static rd_atomic32_t rkid;
+                          char *errstr, size_t errstr_size) {
+        rd_kafka_t *rk;
+        static rd_atomic32_t rkid;
         rd_kafka_conf_t *conf;
         rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int ret_errno = 0;
@@ -1308,7 +1308,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         sigset_t newset, oldset;
 #endif
 
-	call_once(&rd_kafka_global_init_once, rd_kafka_global_init);
+        call_once(&rd_kafka_global_init_once, rd_kafka_global_init);
 
         /* rd_kafka_new() takes ownership of the provided \p app_conf
          * object if rd_kafka_new() succeeds.
@@ -1356,7 +1356,12 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 #endif
 
-        if (type == RD_KAFKA_CONSUMER) {
+        if (type == RD_KAFKA_PRODUCER) {
+                if (validate_scope && (conf->scope & _RK_CONSUMER)) {
+                    rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                    return NULL;
+                }
+                conf->scope |= _RK_PRODUCER;
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes`. */
                 conf->fetch_max_bytes = RD_MAX(conf->fetch_max_bytes,
@@ -1367,6 +1372,13 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                  * room for protocol framing (including topic name). */
                 conf->recv_max_msg_size = RD_MAX(conf->recv_max_msg_size,
                                                  conf->fetch_max_bytes + 512);
+        }
+        else { /* RD_KAFKA_CONSUMER */
+            if (validate_scope && (conf->scope & _RK_PRODUCER)) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                return NULL;
+            }
+            conf->scope |= _RK_CONSUMER;
         }
 
         if (conf->metadata_max_age_ms == -1) {

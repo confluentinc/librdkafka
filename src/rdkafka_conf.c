@@ -78,7 +78,7 @@ struct rd_kafka_property {
 
 #define _RK(field)  offsetof(rd_kafka_conf_t, field)
 #define _RKT(field) offsetof(rd_kafka_topic_conf_t, field)
-
+#define _RK_PC_MASK (RD_PRODUCER | RD_CONSUMER)
 
 static rd_kafka_conf_res_t
 rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
@@ -1110,6 +1110,28 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 			   const char *value,
 			   char *errstr, size_t errstr_size) {
 	int ival;
+	
+	/* Check if configuration scopes match */
+	int* conf_scope = (scope & RD_GLOBAL) ? &((rd_kafka_conf_t*)conf)->scope :
+                                            &((rd_kafka_topic_conf_t*)conf)->scope;
+	
+	if ((*conf_scope & RD_CONSUMER) && (prop->scope & RD_PRODUCER) ||
+		(*conf_scope & RD_PRODUCER) && (prop->scope & RD_CONSUMER)) {
+		return RD_KAFKA_CONF_SCOPE_MISMATCH; /* mismatch */
+	}
+	if (prop->scope & RD_CGRP) {
+		if (scope & RD_TOPIC) {
+			return RD_KAFKA_CONF_SCOPE_MISMATCH; /* group config on a topic is not allowed */
+		}
+		if (*conf_scope & RD_PRODUCER) {
+			return RD_KAFKA_CONF_SCOPE_MISMATCH;
+		}
+		*conf_scope |= RD_CONSUMER; /* mark as a consumer */
+	}
+	else { /* all other scopes */
+		/* set scope value */
+		*conf_scope |= (prop->scope & _RK_PC_MASK);
+	}
 
 	switch (prop->type)
 	{
@@ -1345,6 +1367,14 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
 
 static void rd_kafka_defaultconf_set (int scope, void *conf) {
 	const struct rd_kafka_property *prop;
+	
+	/* set scope value */
+	if (scope & RD_GLOBAL) {
+		((rd_kafka_conf_t*)conf)->scope = scope;
+	}
+	else {
+		((rd_kafka_topic_conf_t*)conf)->scope = scope;
+	}
 
 	for (prop = rd_kafka_properties ; prop->name ; prop++) {
 		if (!(prop->scope & scope))
@@ -1435,7 +1465,6 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
 				       const char *name,
 				       const char *value,
 				       char *errstr, size_t errstr_size) {
-	
 	rd_kafka_conf_res_t res;
 	res = rd_kafka_anyconf_set(RD_GLOBAL, conf, name, value,
 							   errstr, errstr_size);
@@ -1450,10 +1479,19 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
 		/* Create topic config, might be over-written by application
 		 * later. */
 		conf->topic_conf = rd_kafka_topic_conf_new();
+		
+		/* Update the scope to match that of the handle configuration */
+		conf->topic_conf->scope |= (conf->scope & _RK_PC_MASK);
 	}
-
-	return rd_kafka_topic_conf_set(conf->topic_conf, name, value,
+	
+	rd_kafka_conf_res_t rc = rd_kafka_topic_conf_set(conf->topic_conf, name, value,
 								   errstr, errstr_size);
+	if (rc == RD_KAFKA_CONF_OK) {
+		/* setter succeeded so we update the handle configuration scope if necessary */
+		conf->scope |= (conf->topic_conf->scope & _RK_PC_MASK);
+	}
+	
+	return rc;
 }
 
 rd_kafka_conf_res_t rd_kafka_topic_conf_set (rd_kafka_topic_conf_t *conf,
@@ -1566,6 +1604,14 @@ void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf) {
 static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
                                    size_t filter_cnt, const char **filter) {
 	const struct rd_kafka_property *prop;
+	
+	/* copy the scope */
+	if (scope == RD_GLOBAL) {
+		((rd_kafka_conf_t*)dst)->scope = ((rd_kafka_conf_t*)src)->scope;
+	}
+	else {
+		((rd_kafka_topic_conf_t*)dst)->scope = ((rd_kafka_topic_conf_t*)src)->scope;
+	}
 
 	for (prop = rd_kafka_properties ; prop->name ; prop++) {
 		const char *val = NULL;
@@ -1676,8 +1722,7 @@ rd_kafka_conf_t *rd_kafka_conf_dup_filter (const rd_kafka_conf_t *conf,
 }
 
 
-rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
-						*conf) {
+rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t *conf) {
 	rd_kafka_topic_conf_t *new = rd_kafka_topic_conf_new();
 
 	rd_kafka_anyconf_copy(RD_TOPIC, new, conf, 0, NULL);
@@ -1686,128 +1731,239 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
 }
 
 rd_kafka_topic_conf_t *rd_kafka_default_topic_conf_dup (rd_kafka_t *rk) {
-        if (rk->rk_conf.topic_conf)
-                return rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
-        else
-                return rd_kafka_topic_conf_new();
+	if (rk->rk_conf.topic_conf) {
+		return rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
+	}
+	else {
+		rd_kafka_topic_conf_t *tconf = rd_kafka_topic_conf_new();
+		
+		/* copy scope from handle config */
+		tconf->scope |= (rk->rk_conf.scope & _RK_PC_MASK);
+		return tconf;
+	}
 }
 
-void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
+rd_kafka_conf_res_t
+rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
+	/* validate scope */
+	if ((events & RD_KAFKA_EVENT_DR) &&
+	    (events & (RD_KAFKA_EVENT_FETCH | RD_KAFKA_EVENT_REBALANCE | RD_KAFKA_EVENT_OFFSET_COMMIT))) {
+		/* user selected both producer and consumer events */
+		return RD_KAFKA_CONF_SCOPE_MISMATCH;
+	}
+	if (events & RD_KAFKA_EVENT_DR) {
+		/* this is a producer event */
+		if (conf->scope & RD_CONSUMER) {
+			return RD_KAFKA_CONF_SCOPE_MISMATCH;
+		}
+		conf->scope |= RD_PRODUCER;
+		
+		/* propagate to the default config */
+		if (conf->topic_conf) {
+			conf->topic_conf->scope |= RD_PRODUCER;
+		}
+	}
+	else if (events & (RD_KAFKA_EVENT_FETCH | RD_KAFKA_EVENT_REBALANCE | RD_KAFKA_EVENT_OFFSET_COMMIT)) {
+		/* this is a consumer event */
+		if (conf->scope & RD_PRODUCER) {
+			return RD_KAFKA_CONF_SCOPE_MISMATCH;
+		}
+		conf->scope |= RD_CONSUMER;
+		
+		/* propagate to the default config */
+		if (conf->topic_conf) {
+			conf->topic_conf->scope |= RD_CONSUMER;
+		}
+	}
+	
+	/* set the events */
 	conf->enabled_events = events;
+	return RD_KAFKA_CONF_OK;
 }
 
-
-void rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
-			      void (*dr_cb) (rd_kafka_t *rk,
-					     void *payload, size_t len,
-					     rd_kafka_resp_err_t err,
-					     void *opaque, void *msg_opaque)) {
+rd_kafka_conf_res_t
+rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
+						void (*dr_cb) (rd_kafka_t *rk,
+							 void *payload, size_t len,
+							 rd_kafka_resp_err_t err,
+							 void *opaque, void *msg_opaque)) {
+	/* validate scope */
+	if (conf->scope & RD_CONSUMER) {
+		return RD_KAFKA_CONF_SCOPE_MISMATCH;
+	}
+	conf->scope |= RD_PRODUCER;
+	
+	/* propagate to the default config */
+	if (conf->topic_conf) {
+		conf->topic_conf->scope |= RD_PRODUCER;
+	}
+	
 	conf->dr_cb = dr_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-
-void rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
-                                  void (*dr_msg_cb) (rd_kafka_t *rk,
-                                                     const rd_kafka_message_t *
-                                                     rkmessage,
-                                                     void *opaque)) {
-        conf->dr_msg_cb = dr_msg_cb;
+rd_kafka_conf_res_t
+rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
+							  void (*dr_msg_cb) (rd_kafka_t *rk,
+												 const rd_kafka_message_t *
+												 rkmessage,
+												 void *opaque)) {
+	/* validate scope */
+	if (conf->scope & RD_CONSUMER) {
+		return RD_KAFKA_CONF_SCOPE_MISMATCH;
+	}
+	conf->scope |= RD_PRODUCER;
+	
+	/* propagate to the default config */
+	if (conf->topic_conf) {
+		conf->topic_conf->scope |= RD_PRODUCER;
+	}
+	
+	conf->dr_msg_cb = dr_msg_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-
-void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
-                                   void (*consume_cb) (rd_kafka_message_t *
-                                                       rkmessage,
-                                                       void *opaque)) {
-        conf->consume_cb = consume_cb;
+rd_kafka_conf_res_t
+rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
+							   void (*consume_cb) (rd_kafka_message_t *
+												   rkmessage,
+												   void *opaque)) {
+	/* validate scope */
+	if (conf->scope & RD_PRODUCER) {
+		return RD_KAFKA_CONF_SCOPE_MISMATCH;
+	}
+	conf->scope |= RD_CONSUMER;
+	
+	/* propagate to the default config */
+	if (conf->topic_conf) {
+		conf->topic_conf->scope |= RD_CONSUMER;
+	}
+	
+	consume_cb = consume_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-void rd_kafka_conf_set_rebalance_cb (
+rd_kafka_conf_res_t
+rd_kafka_conf_set_rebalance_cb (
         rd_kafka_conf_t *conf,
         void (*rebalance_cb) (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
                               rd_kafka_topic_partition_list_t *partitions,
                               void *opaque)) {
-        conf->rebalance_cb = rebalance_cb;
+	/* validate scope */
+	if (conf->scope & RD_PRODUCER) {
+		return RD_KAFKA_CONF_SCOPE_MISMATCH;
+	}
+	conf->scope |= RD_CONSUMER;
+	
+	/* propagate to the default config */
+	if (conf->topic_conf) {
+		conf->topic_conf->scope |= RD_CONSUMER;
+	}
+	
+	conf->rebalance_cb = rebalance_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-void rd_kafka_conf_set_offset_commit_cb (
+rd_kafka_conf_res_t
+rd_kafka_conf_set_offset_commit_cb (
         rd_kafka_conf_t *conf,
         void (*offset_commit_cb) (rd_kafka_t *rk,
                                   rd_kafka_resp_err_t err,
                                   rd_kafka_topic_partition_list_t *offsets,
                                   void *opaque)) {
-        conf->offset_commit_cb = offset_commit_cb;
+	/* validate scope */
+	if (conf->scope & RD_PRODUCER) {
+		return RD_KAFKA_CONF_SCOPE_MISMATCH;
+	}
+	conf->scope |= RD_CONSUMER;
+	
+	/* propagate to the default config */
+	if (conf->topic_conf) {
+		conf->topic_conf->scope |= RD_CONSUMER;
+	}
+	
+	conf->offset_commit_cb = offset_commit_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-
-
-void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
+rd_kafka_conf_res_t
+rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
 				 void  (*error_cb) (rd_kafka_t *rk, int err,
 						    const char *reason,
 						    void *opaque)) {
 	conf->error_cb = error_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-
-void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
-				    void (*throttle_cb) (
-					    rd_kafka_t *rk,
-					    const char *broker_name,
-					    int32_t broker_id,
-					    int throttle_time_ms,
-					    void *opaque)) {
+rd_kafka_conf_res_t
+rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
+							   void (*throttle_cb) (
+									rd_kafka_t *rk,
+									const char *broker_name,
+									int32_t broker_id,
+									int throttle_time_ms,
+									void *opaque)) {
 	conf->throttle_cb = throttle_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-
-void rd_kafka_conf_set_log_cb (rd_kafka_conf_t *conf,
-			  void (*log_cb) (const rd_kafka_t *rk, int level,
+rd_kafka_conf_res_t
+rd_kafka_conf_set_log_cb (rd_kafka_conf_t *conf,
+                          void (*log_cb) (const rd_kafka_t *rk, int level,
                                           const char *fac, const char *buf)) {
 	conf->log_cb = log_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-
-void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
-				 int (*stats_cb) (rd_kafka_t *rk,
-						  char *json,
-						  size_t json_len,
-						  void *opaque)) {
+rd_kafka_conf_res_t
+rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
+							int (*stats_cb) (rd_kafka_t *rk,
+								             char *json,
+								             size_t json_len,
+								             void *opaque)) {
 	conf->stats_cb = stats_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
-                                  int (*socket_cb) (int domain, int type,
-                                                    int protocol,
-                                                    void *opaque)) {
-        conf->socket_cb = socket_cb;
+rd_kafka_conf_res_t
+rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
+							 int (*socket_cb) (int domain, int type,
+											   int protocol,
+											   void *opaque)) {
+	conf->socket_cb = socket_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-void
+rd_kafka_conf_res_t
 rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
                               int (*connect_cb) (int sockfd,
                                                  const struct sockaddr *addr,
                                                  int addrlen,
                                                  const char *id,
                                                  void *opaque)) {
-        conf->connect_cb = connect_cb;
+	conf->connect_cb = connect_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
-void
+rd_kafka_conf_res_t
 rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
                                   int (*closesocket_cb) (int sockfd,
                                                          void *opaque)) {
-        conf->closesocket_cb = closesocket_cb;
+	conf->closesocket_cb = closesocket_cb;
+	return RD_KAFKA_CONF_OK;
 }
 
 
 
 #ifndef _MSC_VER
-void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
-                                int (*open_cb) (const char *pathname,
-                                                int flags, mode_t mode,
-                                                void *opaque)) {
-        conf->open_cb = open_cb;
+rd_kafka_conf_res_t
+rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
+						   int (*open_cb) (const char *pathname,
+										   int flags, mode_t mode,
+										   void *opaque)) {
+	conf->open_cb = open_cb;
+	return RD_KAFKA_CONF_OK;
 }
 #endif
 
@@ -1815,17 +1971,29 @@ void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 	conf->opaque = opaque;
 }
 
+rd_kafka_conf_res_t
+rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
+                                      rd_kafka_topic_conf_t *tconf) {
+	/* validate if scopes match */
+	if ((conf->scope & RD_CONSUMER) && (tconf->scope & RD_PRODUCER) ||
+		(conf->scope & RD_PRODUCER) && (tconf->scope & RD_CONSUMER)) {
+		return RD_KAFKA_CONF_SCOPE_MISMATCH; /* mismatch */
+	}
+	
+	/* update scope flags for both configurations */
+	tconf->scope |= (conf->scope & _RK_PC_MASK);
+	conf->scope |= (tconf->scope & _RK_PC_MASK);
+	
+	if (conf->topic_conf) {
+		rd_kafka_topic_conf_destroy(conf->topic_conf);
+	}
 
-void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
-                                           rd_kafka_topic_conf_t *tconf) {
-        if (conf->topic_conf)
-                rd_kafka_topic_conf_destroy(conf->topic_conf);
-
-        conf->topic_conf = tconf;
+	conf->topic_conf = tconf;
+	return RD_KAFKA_CONF_OK;
 }
 
 
-void
+rd_kafka_conf_res_t
 rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
 					int32_t (*partitioner) (
 						const rd_kafka_topic_t *rkt,
@@ -1834,7 +2002,13 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
 						int32_t partition_cnt,
 						void *rkt_opaque,
 						void *msg_opaque)) {
+	/* validate scope */
+	if (topic_conf->scope & RD_CONSUMER) {
+		return RD_KAFKA_CONF_SCOPE_MISMATCH;
+	}
+	topic_conf->scope |= RD_PRODUCER;
 	topic_conf->partitioner = partitioner;
+	return RD_KAFKA_CONF_OK;
 }
 
 void

@@ -1214,9 +1214,10 @@ RD_EXPORT size_t rd_kafka_header_cnt (const rd_kafka_headers_t *hdrs);
  * @brief Configuration result type
  */
 typedef enum {
-	RD_KAFKA_CONF_UNKNOWN = -2, /**< Unknown configuration name. */
-	RD_KAFKA_CONF_INVALID = -1, /**< Invalid configuration value. */
-	RD_KAFKA_CONF_OK = 0        /**< Configuration okay */
+	RD_KAFKA_CONF_SCOPE_MISMATCH = -3, /**< Invalid scope for consumer or producer configuration option */
+	RD_KAFKA_CONF_UNKNOWN = -2,        /**< Unknown configuration name. */
+	RD_KAFKA_CONF_INVALID = -1,        /**< Invalid configuration value. */
+	RD_KAFKA_CONF_OK = 0               /**< Configuration okay */
 } rd_kafka_conf_res_t;
 
 /**
@@ -1387,19 +1388,19 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
  * \p events is a bitmask of \c RD_KAFKA_EVENT_* of events to enable
  * for consumption by `rd_kafka_queue_poll()`.
  */
-RD_EXPORT
-void rd_kafka_conf_set_events(rd_kafka_conf_t *conf, int events);
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_events(rd_kafka_conf_t *conf, int events);
 
 
 /**
  @deprecated See rd_kafka_conf_set_dr_msg_cb()
 */
-RD_EXPORT
-void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
-			      void (*dr_cb) (rd_kafka_t *rk,
-					     void *payload, size_t len,
-					     rd_kafka_resp_err_t err,
-					     void *opaque, void *msg_opaque));
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
+						void (*dr_cb) (rd_kafka_t *rk,
+									 void *payload, size_t len,
+									 rd_kafka_resp_err_t err,
+									 void *opaque, void *msg_opaque));
 
 /**
  * @brief \b Producer: Set delivery report callback in provided \p conf object.
@@ -1415,23 +1416,23 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  * An application must call rd_kafka_poll() at regular intervals to
  * serve queued delivery report callbacks.
  */
-RD_EXPORT
-void rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
-                                  void (*dr_msg_cb) (rd_kafka_t *rk,
-                                                     const rd_kafka_message_t *
-                                                     rkmessage,
-                                                     void *opaque));
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
+							void (*dr_msg_cb) (rd_kafka_t *rk,
+											 const rd_kafka_message_t *
+											 rkmessage,
+											 void *opaque));
 
 
 /**
  * @brief \b Consumer: Set consume callback for use with rd_kafka_consumer_poll()
  *
  */
-RD_EXPORT
-void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
-                                   void (*consume_cb) (rd_kafka_message_t *
-                                                       rkmessage,
-                                                       void *opaque));
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
+							  void (*consume_cb) (rd_kafka_message_t *
+											      rkmessage,
+											      void *opaque));
 
 /**
  * @brief \b Consumer: Set rebalance callback for use with
@@ -1492,8 +1493,8 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *    }
  * @endcode
  */
-RD_EXPORT
-void rd_kafka_conf_set_rebalance_cb (
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_rebalance_cb (
         rd_kafka_conf_t *conf,
         void (*rebalance_cb) (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
@@ -1516,8 +1517,8 @@ void rd_kafka_conf_set_rebalance_cb (
  *   - \c offset: committed offset (attempted)
  *   - \c err:    commit error
  */
-RD_EXPORT
-void rd_kafka_conf_set_offset_commit_cb (
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_offset_commit_cb (
         rd_kafka_conf_t *conf,
         void (*offset_commit_cb) (rd_kafka_t *rk,
                                   rd_kafka_resp_err_t err,
@@ -1533,8 +1534,8 @@ void rd_kafka_conf_set_offset_commit_cb (
  *
  * If no \p error_cb is registered then the errors will be logged instead.
  */
-RD_EXPORT
-void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
 				 void  (*error_cb) (rd_kafka_t *rk, int err,
 						    const char *reason,
 						    void *opaque));
@@ -1553,8 +1554,8 @@ void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
  *
  * @remark Requires broker version 0.9.0 or later.
  */
-RD_EXPORT
-void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
 				    void (*throttle_cb) (
 					    rd_kafka_t *rk,
 					    const char *broker_name,
@@ -1579,8 +1580,8 @@ void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
  *         An application MUST NOT call any librdkafka APIs or do any prolonged
  *         work in a non-forwarded \c log_cb.
  */
-RD_EXPORT
-void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
 			  void (*log_cb) (const rd_kafka_t *rk, int level,
                                           const char *fac, const char *buf));
 
@@ -1601,8 +1602,8 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
  * If the application returns 0 from the \p stats_cb then librdkafka
  * will immediately free the \p json pointer.
  */
-RD_EXPORT
-void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
 				 int (*stats_cb) (rd_kafka_t *rk,
 						  char *json,
 						  size_t json_len,
@@ -1624,11 +1625,11 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  *
  * @remark The callback will be called from an internal librdkafka thread.
  */
-RD_EXPORT
-void rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
-                                  int (*socket_cb) (int domain, int type,
-                                                    int protocol,
-                                                    void *opaque));
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
+						  int (*socket_cb) (int domain, int type,
+											int protocol,
+											void *opaque));
 
 
 
@@ -1644,7 +1645,7 @@ void rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
  *
  * @remark The callback will be called from an internal librdkafka thread.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_conf_res_t
 rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
                               int (*connect_cb) (int sockfd,
                                                  const struct sockaddr *addr,
@@ -1659,7 +1660,7 @@ rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
  *
  * @remark The callback will be called from an internal librdkafka thread.
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_conf_res_t
 rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
                                   int (*closesocket_cb) (int sockfd,
                                                          void *opaque));
@@ -1681,11 +1682,11 @@ rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
  *
  * @remark The callback will be called from an internal librdkafka thread.
  */
-RD_EXPORT
-void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
-                                int (*open_cb) (const char *pathname,
-                                                int flags, mode_t mode,
-                                                void *opaque));
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
+							int (*open_cb) (const char *pathname,
+											int flags, mode_t mode,
+											void *opaque));
 #endif
 
 /**
@@ -1707,9 +1708,9 @@ void *rd_kafka_opaque(const rd_kafka_t *rk);
  * subscribed topics (e.g., through pattern-matched topics).
  * The topic config object is not usable after this call.
  */
-RD_EXPORT
-void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
-                                           rd_kafka_topic_conf_t *tconf);
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
+                                      rd_kafka_topic_conf_t *tconf);
 
 
 
@@ -1866,16 +1867,15 @@ void rd_kafka_topic_conf_set_opaque(rd_kafka_topic_conf_t *conf, void *opaque);
  *     special \c RD_KAFKA_PARTITION_UA value if partitioning
  *     could not be performed.
  */
-RD_EXPORT
-void
+RD_EXPORT rd_kafka_conf_res_t
 rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
-					int32_t (*partitioner) (
-						const rd_kafka_topic_t *rkt,
-						const void *keydata,
-						size_t keylen,
-						int32_t partition_cnt,
-						void *rkt_opaque,
-						void *msg_opaque));
+										int32_t (*partitioner) (
+											const rd_kafka_topic_t *rkt,
+											const void *keydata,
+											size_t keylen,
+											int32_t partition_cnt,
+											void *rkt_opaque,
+											void *msg_opaque));
 
 
 /**

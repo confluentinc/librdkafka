@@ -36,6 +36,10 @@ run_local: $(BIN)
 	@echo "Running local broker-less tests"
 	./run-test.sh -p5 -l ./$(BIN)
 
+# Delete all test topics (based on prefix)
+delete_topics:
+	TESTS=none ./run-test.sh -D ./$(BIN) bare
+
 .PHONY: interceptor_test
 
 build: $(BIN) interceptor_test

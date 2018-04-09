@@ -37,7 +37,7 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
                          void **outbuf, size_t *outlenp);
 
 rd_kafka_resp_err_t
-rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc,
+rd_kafka_lz4_compress (rd_kafka_broker_t *rkb, int proper_hc, int comp_level,
                        rd_slice_t *slice, void **outbuf, size_t *outlenp);
 
 #endif /* _RDKAFKA_LZ4_H_ */

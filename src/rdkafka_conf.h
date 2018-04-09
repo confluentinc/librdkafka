@@ -49,6 +49,17 @@ typedef enum {
 	RD_KAFKA_COMPRESSION_INHERIT /* Inherit setting from global conf */
 } rd_kafka_compression_t;
 
+/**
+ * MessageSet compression levels
+ */
+typedef enum {
+	RD_KAFKA_COMPLEVEL_DEFAULT = -1,
+	RD_KAFKA_COMPLEVEL_MIN = -1,
+	RD_KAFKA_COMPLEVEL_GZIP_MAX = 9,
+	RD_KAFKA_COMPLEVEL_LZ4_MAX = 12,
+	RD_KAFKA_COMPLEVEL_SNAPPY_MAX = 0,
+	RD_KAFKA_COMPLEVEL_MAX = 12
+} rd_kafka_complevel_t;
 
 typedef enum {
 	RD_KAFKA_PROTO_PLAINTEXT,
@@ -371,6 +382,7 @@ struct rd_kafka_topic_conf_s {
         int (*msg_order_cmp) (const void *a, const void *b);
 
 	rd_kafka_compression_t compression_codec;
+	rd_kafka_complevel_t compression_level;
         int     produce_offset_report;
 
         int     consume_callback_max_msgs;

@@ -928,6 +928,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 		} },
         { _RK_TOPIC | _RK_PRODUCER, "compression.type", _RK_C_ALIAS,
           .sdef = "compression.codec" },
+	{ _RK_TOPIC|_RK_PRODUCER, "compression.level", _RK_C_INT,
+	  _RKT(compression_level),
+	  "Compression level parameter for algorithm selected by configuration "
+	  "property `compression.codec`. Higher values will result in better "
+	  "compression at the cost of more CPU usage. Usable range is "
+	  "algorithm-dependent: [0-9] for gzip; [0-12] for lz4; only 0 for snappy; "
+	  "-1 = codec-dependent default compression level.",
+	  RD_KAFKA_COMPLEVEL_MIN,
+	  RD_KAFKA_COMPLEVEL_MAX,
+	  RD_KAFKA_COMPLEVEL_DEFAULT },
 
 
         /* Topic consumer properties */

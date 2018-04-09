@@ -130,7 +130,7 @@ static const char *rd_kafka_admin_state_desc[] = {
  *     ops queue again and we go to step 8 which will check if the controller
  *     connection is up.
  *
- * 10. [broker thread] If the controller_id is now known we now wait for
+ * 10. [broker thread] If the controller_id is now known we wait for
  *     the corresponding broker's connection to come up. This signaling
  *     is performed from the broker thread upon broker state changes
  *     and uses the same eonce. The eonce triggering enqueues the original
@@ -140,7 +140,7 @@ static const char *rd_kafka_admin_state_desc[] = {
  * 11. [rdkafka main thread] Back in the worker callback we now have an
  *     rkb broker pointer (with reference count increased) for the controller
  *     with the connection up (it might go down while we're referencing it,
- *     but that does not stop us from enqueuing a protocl request later on).
+ *     but that does not stop us from enqueuing a protocol request).
  *
  * 12. [rdkafka main thread] A DeleteTopics protocol request buffer is
  *     constructed using the input parameters saved on the rko and the
@@ -194,6 +194,17 @@ static const char *rd_kafka_admin_state_desc[] = {
  */
 
 
+
+static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
+                                        rd_kafka_AdminOptions_t *options);
+
+
+/**
+ * @name Common admin request code
+ * @{
+ *
+ *
+ */
 
 /**
  * @brief Create a new admin_result op based on the request op \p rko_req
@@ -304,224 +315,6 @@ rd_kafka_admin_result_ret_topics (const rd_kafka_op_t *rko,
         return (const rd_kafka_topic_result_t **)rko->rko_u.admin_result.
                 topics.rl_elems;
 }
-
-
-
-rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_request_timeout (rd_kafka_AdminOptions_t *options,
-                                           int timeout_ms,
-                                           char *errstr, size_t errstr_size) {
-        return rd_kafka_confval_set_type(&options->request_timeout,
-                                         RD_KAFKA_CONFVAL_INT, &timeout_ms,
-                                         errstr, errstr_size);
-}
-
-
-rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
-                                             int timeout_ms,
-                                             char *errstr, size_t errstr_size) {
-        return rd_kafka_confval_set_type(&options->operation_timeout,
-                                         RD_KAFKA_CONFVAL_INT, &timeout_ms,
-                                         errstr, errstr_size);
-}
-
-
-rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_validate_only (rd_kafka_AdminOptions_t *options,
-                                        int true_or_false,
-                                        char *errstr, size_t errstr_size) {
-        return rd_kafka_confval_set_type(&options->validate_only,
-                                         RD_KAFKA_CONFVAL_INT, &true_or_false,
-                                         errstr, errstr_size);
-}
-
-void
-rd_kafka_AdminOptions_set_opaque (rd_kafka_AdminOptions_t *options,
-                                  void *opaque) {
-        rd_kafka_confval_set_type(&options->opaque,
-                                  RD_KAFKA_CONFVAL_PTR, opaque, NULL, 0);
-}
-
-
-/**
- * @brief Initialize and set up defaults for AdminOptions
- */
-static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
-                                        rd_kafka_AdminOptions_t *options) {
-        rd_kafka_confval_init_int(&options->request_timeout, "request_timeout",
-                                  0, 3600*1000,
-                                  rk->rk_conf.admin.request_timeout_ms);
-        rd_kafka_confval_init_int(&options->operation_timeout,
-                                  "operation_timeout",
-                                  -1, 3600*1000, 0);
-        rd_kafka_confval_init_int(&options->validate_only, "validate_only",
-                                  0, 1, 0);
-        rd_kafka_confval_init_ptr(&options->opaque, "opaque");
-}
-
-
-rd_kafka_AdminOptions_t *rd_kafka_AdminOptions_new (rd_kafka_t *rk) {
-        rd_kafka_AdminOptions_t *options;
-
-        options = rd_calloc(1, sizeof(*options));
-
-        rd_kafka_AdminOptions_init(rk, options);
-
-        return options;
-}
-
-void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options) {
-        rd_free(options);
-}
-
-
-
-
-
-rd_kafka_NewTopic_t *
-rd_kafka_NewTopic_new (const char *topic,
-                       int num_partitions,
-                       int replication_factor) {
-        rd_kafka_NewTopic_t *new_topic;
-
-        if (!topic ||
-            num_partitions < 1 || num_partitions > RD_KAFKAP_PARTITIONS_MAX ||
-            replication_factor < -1 ||
-            replication_factor > RD_KAFKAP_BROKERS_MAX)
-                return NULL;
-
-        new_topic = rd_calloc(1, sizeof(*new_topic));
-        new_topic->topic = rd_strdup(topic);
-        new_topic->num_partitions = num_partitions;
-        new_topic->replication_factor = replication_factor;
-
-        rd_list_init(&new_topic->replicas, 0, rd_list_destroy_free);
-
-        rd_list_init(&new_topic->config, 0, rd_strtup_free);
-
-        return new_topic;
-
-}
-
-
-/**
- * @brief Topic name comparator for NewTopic_t
- */
-static int rd_kafka_NewTopic_cmp (const void *_a, const void *_b) {
-        const rd_kafka_NewTopic_t *a = _a, *b = _b;
-        return strcmp(a->topic, b->topic);
-}
-
-
-/**
- * @brief rd_list_copy() callback for NewTopic.replicas elements.
- */
-static void *rd_kafka_NewTopic_replica_copy (const void *elem, void *opaque) {
-        const rd_list_t *src = elem;
-        rd_list_t *dst = rd_list_new(0, src->rl_free_cb);
-        int i;
-
-        rd_list_prealloc_elems(dst, sizeof(int32_t), rd_list_cnt(src),
-                               rd_false);
-
-        for (i = 0 ; i < rd_list_cnt(src) ; i++)
-                *(int32_t *)rd_list_add(dst, NULL) =
-                        *(int32_t *)rd_list_elem(src, i);
-        return dst;
-}
-
-
-/**
- * @brief Allocate a new NewTopic and make a copy of \p src
- */
-static rd_kafka_NewTopic_t *
-rd_kafka_NewTopic_copy (const rd_kafka_NewTopic_t *src) {
-        rd_kafka_NewTopic_t *dst;
-
-        dst = rd_kafka_NewTopic_new(src->topic, src->num_partitions,
-                                    src->replication_factor);
-
-        rd_list_init_copy(&dst->replicas, &src->replicas);
-        rd_list_copy_to(&dst->replicas, &src->replicas,
-                        rd_kafka_NewTopic_replica_copy, NULL);
-
-        rd_list_init_copy(&dst->config, &src->config);
-        rd_list_copy_to(&dst->config, &src->config, rd_strtup_list_copy, NULL);
-
-        return dst;
-}
-
-void rd_kafka_NewTopic_destroy (rd_kafka_NewTopic_t *new_topic) {
-        rd_list_destroy(&new_topic->replicas);
-        rd_list_destroy(&new_topic->config);
-        rd_free(new_topic->topic);
-        rd_free(new_topic);
-}
-
-static void rd_kafka_NewTopic_free (void *ptr) {
-        rd_kafka_NewTopic_destroy(ptr);
-}
-
-void
-rd_kafka_NewTopic_destroy_array (rd_kafka_NewTopic_t **new_topics,
-                                 size_t new_topic_cnt) {
-        size_t i;
-        for (i = 0 ; i < new_topic_cnt ; i++)
-                rd_kafka_NewTopic_destroy(new_topics[i]);
-}
-
-
-rd_kafka_resp_err_t
-rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
-                                          int32_t partition,
-                                          int32_t *broker_ids,
-                                          size_t broker_id_cnt) {
-        rd_list_t *rl;
-        int i;
-
-        if (new_topic->replication_factor != -1 ||
-            partition < 0 || partition >= new_topic->num_partitions ||
-            broker_id_cnt > RD_KAFKAP_BROKERS_MAX)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        if (rd_list_cnt(&new_topic->replicas) == 0) {
-                /* First time use, initialize */
-                rd_list_prealloc_elems(&new_topic->replicas, sizeof(rd_list_t),
-                                       new_topic->num_partitions, 1/*zeroed*/);
-                rd_list_set_cnt(&new_topic->replicas,
-                                new_topic->num_partitions);
-        }
-
-        rl = rd_list_elem(&new_topic->replicas, (int)partition);
-        /* Destroy previous replica set for this partition, if any */
-        rd_list_destroy(rl);
-
-        rd_list_init(rl, 0, NULL);
-        rd_list_prealloc_elems(rl, sizeof(int32_t), broker_id_cnt, 0);
-
-        for (i = 0 ; i < (int)broker_id_cnt ; i++)
-                *(int32_t *)rd_list_add(rl, NULL) = broker_ids[i];
-
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
-}
-
-
-rd_kafka_resp_err_t
-rd_kafka_NewTopic_add_config (rd_kafka_NewTopic_t *new_topic,
-                              const char *name, const char *value) {
-        rd_strtup_t *tup;
-
-        if (!name)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        tup = rd_strtup_new(name, value);
-
-        rd_list_add(&new_topic->config, tup);
-
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
-}
-
 
 
 
@@ -636,7 +429,7 @@ static int rd_kafka_admin_common_worker (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 
         if (rko->rko_err) {
                 rd_kafka_admin_result_fail(
-                        rko, RD_KAFKA_RESP_ERR__TIMED_OUT,
+                        rko, rko->rko_err,
                         "Failed while %s: %s",
                         rd_kafka_admin_state_desc[rko->rko_u.
                                                   admin_request.state],
@@ -662,15 +455,6 @@ static int rd_kafka_admin_common_worker (rd_kafka_t *rk, rd_kafka_op_t *rko) {
         case RD_KAFKA_ADMIN_STATE_INIT:
                 /* First call.
                  * Set up timeout timer. */
-                if (rko->rko_err) {
-                        rd_kafka_admin_result_fail(
-                                rko, rko->rko_err,
-                                "Failed to initialize %s worker: %s",
-                                name, rd_kafka_err2str(rko->rko_err));
-                        return -1;
-                }
-
-                /* Set up timeout timer. */
                 rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
                                              "timeout timer");
                 rd_kafka_timer_start_oneshot(&rk->rk_timers,
@@ -800,6 +584,102 @@ static void rd_kafka_admin_handle_response (rd_kafka_t *rk,
 }
 
 
+/**@}*/
+
+
+/**
+ * @name Misc helpers
+ * @{
+ *
+ *
+ */
+
+
+/**@}*/
+
+
+
+/**
+ * @name Generic AdminOptions
+ * @{
+ *
+ *
+ */
+
+rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_request_timeout (rd_kafka_AdminOptions_t *options,
+                                           int timeout_ms,
+                                           char *errstr, size_t errstr_size) {
+        return rd_kafka_confval_set_type(&options->request_timeout,
+                                         RD_KAFKA_CONFVAL_INT, &timeout_ms,
+                                         errstr, errstr_size);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
+                                             int timeout_ms,
+                                             char *errstr, size_t errstr_size) {
+        return rd_kafka_confval_set_type(&options->operation_timeout,
+                                         RD_KAFKA_CONFVAL_INT, &timeout_ms,
+                                         errstr, errstr_size);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_validate_only (rd_kafka_AdminOptions_t *options,
+                                        int true_or_false,
+                                        char *errstr, size_t errstr_size) {
+        return rd_kafka_confval_set_type(&options->validate_only,
+                                         RD_KAFKA_CONFVAL_INT, &true_or_false,
+                                         errstr, errstr_size);
+}
+
+void
+rd_kafka_AdminOptions_set_opaque (rd_kafka_AdminOptions_t *options,
+                                  void *opaque) {
+        rd_kafka_confval_set_type(&options->opaque,
+                                  RD_KAFKA_CONFVAL_PTR, opaque, NULL, 0);
+}
+
+
+/**
+ * @brief Initialize and set up defaults for AdminOptions
+ */
+static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
+                                        rd_kafka_AdminOptions_t *options) {
+        rd_kafka_confval_init_int(&options->request_timeout, "request_timeout",
+                                  0, 3600*1000,
+                                  rk->rk_conf.admin.request_timeout_ms);
+        rd_kafka_confval_init_int(&options->operation_timeout,
+                                  "operation_timeout",
+                                  -1, 3600*1000, 0);
+        rd_kafka_confval_init_int(&options->validate_only, "validate_only",
+                                  0, 1, 0);
+        rd_kafka_confval_init_ptr(&options->opaque, "opaque");
+}
+
+
+rd_kafka_AdminOptions_t *rd_kafka_AdminOptions_new (rd_kafka_t *rk) {
+        rd_kafka_AdminOptions_t *options;
+
+        options = rd_calloc(1, sizeof(*options));
+
+        rd_kafka_AdminOptions_init(rk, options);
+
+        return options;
+}
+
+void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options) {
+        rd_free(options);
+}
+
+/**@}*/
+
+
+
+
+
 
 /**
  * @name CreateTopics
@@ -808,6 +688,132 @@ static void rd_kafka_admin_handle_response (rd_kafka_t *rk,
  *
  *
  */
+
+
+
+rd_kafka_NewTopic_t *
+rd_kafka_NewTopic_new (const char *topic,
+                       int num_partitions,
+                       int replication_factor) {
+        rd_kafka_NewTopic_t *new_topic;
+
+        if (!topic ||
+            num_partitions < 1 || num_partitions > RD_KAFKAP_PARTITIONS_MAX ||
+            replication_factor < -1 ||
+            replication_factor > RD_KAFKAP_BROKERS_MAX)
+                return NULL;
+
+        new_topic = rd_calloc(1, sizeof(*new_topic));
+        new_topic->topic = rd_strdup(topic);
+        new_topic->num_partitions = num_partitions;
+        new_topic->replication_factor = replication_factor;
+
+        /* List of int32 lists */
+        rd_list_init(&new_topic->replicas, 0, rd_list_destroy_free);
+        rd_list_prealloc_elems(&new_topic->replicas, 0,
+                               num_partitions, 0/*nozero*/);
+
+        /* List of strtups */
+        rd_list_init(&new_topic->config, 0, rd_strtup_free);
+
+        return new_topic;
+
+}
+
+
+/**
+ * @brief Topic name comparator for NewTopic_t
+ */
+static int rd_kafka_NewTopic_cmp (const void *_a, const void *_b) {
+        const rd_kafka_NewTopic_t *a = _a, *b = _b;
+        return strcmp(a->topic, b->topic);
+}
+
+
+
+/**
+ * @brief Allocate a new NewTopic and make a copy of \p src
+ */
+static rd_kafka_NewTopic_t *
+rd_kafka_NewTopic_copy (const rd_kafka_NewTopic_t *src) {
+        rd_kafka_NewTopic_t *dst;
+
+        dst = rd_kafka_NewTopic_new(src->topic, src->num_partitions,
+                                    src->replication_factor);
+
+        rd_list_destroy(&dst->replicas); /* created in .._new() */
+        rd_list_init_copy(&dst->replicas, &src->replicas);
+        rd_list_copy_to(&dst->replicas, &src->replicas,
+                        rd_list_copy_preallocated, NULL);
+
+        rd_list_init_copy(&dst->config, &src->config);
+        rd_list_copy_to(&dst->config, &src->config, rd_strtup_list_copy, NULL);
+
+        return dst;
+}
+
+void rd_kafka_NewTopic_destroy (rd_kafka_NewTopic_t *new_topic) {
+        rd_list_destroy(&new_topic->replicas);
+        rd_list_destroy(&new_topic->config);
+        rd_free(new_topic->topic);
+        rd_free(new_topic);
+}
+
+static void rd_kafka_NewTopic_free (void *ptr) {
+        rd_kafka_NewTopic_destroy(ptr);
+}
+
+void
+rd_kafka_NewTopic_destroy_array (rd_kafka_NewTopic_t **new_topics,
+                                 size_t new_topic_cnt) {
+        size_t i;
+        for (i = 0 ; i < new_topic_cnt ; i++)
+                rd_kafka_NewTopic_destroy(new_topics[i]);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
+                                          int32_t partition,
+                                          int32_t *broker_ids,
+                                          size_t broker_id_cnt) {
+        rd_list_t *rl;
+        int i;
+
+        if (new_topic->replication_factor != -1 ||
+            partition < 0 || partition >= new_topic->num_partitions ||
+            broker_id_cnt > RD_KAFKAP_BROKERS_MAX)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Do not allow overwrites */
+        if (rd_list_elem(&new_topic->replicas, partition))
+                return RD_KAFKA_RESP_ERR__CONFLICT;
+
+        rl = rd_list_init_int32(rd_list_alloc(), broker_id_cnt);
+
+        for (i = 0 ; i < (int)broker_id_cnt ; i++)
+                rd_list_set_int32(rl, i, broker_ids[i]);
+
+        rd_list_set(&new_topic->replicas, partition, rl);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_NewTopic_add_config (rd_kafka_NewTopic_t *new_topic,
+                              const char *name, const char *value) {
+        rd_strtup_t *tup;
+
+        if (!name)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        tup = rd_strtup_new(name, value);
+
+        rd_list_add(&new_topic->config, tup);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 
 
@@ -853,7 +859,7 @@ rd_kafka_admin_CreateTopics_parse_response (rd_kafka_op_t *rko_req,
                 rd_kafkap_str_t ktopic;
                 rd_kafka_resp_err_t error_code;
                 rd_kafkap_str_t error_msg = RD_KAFKAP_STR_INITIALIZER;
-                char *errstr;
+                char *errstr = NULL;
                 rd_kafka_topic_result_t *terr;
                 rd_kafka_NewTopic_t skel;
                 int orig_pos;
@@ -864,6 +870,19 @@ rd_kafka_admin_CreateTopics_parse_response (rd_kafka_op_t *rko_req,
                 if (rd_kafka_buf_ApiVersion(reply) >= 1)
                         rd_kafka_buf_read_str(reply, &error_msg);
 
+                /* For non-blocking CreateTopicsRequests the broker
+                 * will returned REQUEST_TIMED_OUT for topics
+                 * that were triggered for creation -
+                 * we hide this error code from the application
+                 * since the topic creation is in fact in progress. */
+                if (error_code == RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT &&
+                    rd_kafka_confval_get_int(&rko_req->rko_u.
+                                             admin_request.options.
+                                             operation_timeout) <= 0) {
+                        error_code = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        errstr = NULL;
+                }
+
                 if (error_code) {
                         if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
                             RD_KAFKAP_STR_LEN(&error_msg) == 0)
@@ -871,18 +890,6 @@ rd_kafka_admin_CreateTopics_parse_response (rd_kafka_op_t *rko_req,
                         else
                                 RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
 
-                        /* For non-blocking CreateTopicsRequests the broker
-                         * will returned REQUEST_TIMED_OUT for topics
-                         * that were triggered for creation -
-                         * we hide this error code from the application
-                         * since the topic creation is in fact in progress. */
-                        if (error_code == RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT &&
-                            rd_kafka_confval_get_int(&rko_req->rko_u.
-                                                     admin_request.options.
-                                                     operation_timeout) <= 0) {
-                                error_code = RD_KAFKA_RESP_ERR_NO_ERROR;
-                                errstr = NULL;
-                        }
                 } else {
                         errstr = NULL;
                 }
@@ -1416,6 +1423,384 @@ rd_kafka_DeleteTopics_result_topics (
 }
 
 
+
+
+/**
+ * @name Create partitions
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+rd_kafka_NewPartitions_t *rd_kafka_NewPartitions_new (const char *topic,
+                                                      size_t new_total_cnt) {
+        size_t tsize = strlen(topic) + 1;
+        rd_kafka_NewPartitions_t *newps;
+
+        /* Single allocation */
+        newps = rd_malloc(sizeof(*newps) + tsize);
+        newps->total_cnt = new_total_cnt;
+        newps->topic = newps->data;
+        memcpy(newps->topic, topic, tsize);
+
+        /* List of int32 lists */
+        rd_list_init(&newps->replicas, 0, rd_list_destroy_free);
+        rd_list_prealloc_elems(&newps->replicas, 0, new_total_cnt, 0/*nozero*/);
+
+        return newps;
+}
+
+/**
+ * @brief Topic name comparator for NewPartitions_t
+ */
+static int rd_kafka_NewPartitions_cmp (const void *_a, const void *_b) {
+        const rd_kafka_NewPartitions_t *a = _a, *b = _b;
+        return strcmp(a->topic, b->topic);
+}
+
+
+/**
+ * @brief Allocate a new CreatePartitions and make a copy of \p src
+ */
+static rd_kafka_NewPartitions_t *
+rd_kafka_NewPartitions_copy (const rd_kafka_NewPartitions_t *src) {
+        rd_kafka_NewPartitions_t *dst;
+
+        dst = rd_kafka_NewPartitions_new(src->topic, src->total_cnt);
+
+        rd_list_destroy(&dst->replicas); /* created in .._new() */
+        rd_list_init_copy(&dst->replicas, &src->replicas);
+        rd_list_copy_to(&dst->replicas, &src->replicas,
+                        rd_list_copy_preallocated, NULL);
+
+        return dst;
+}
+
+void rd_kafka_NewPartitions_destroy (rd_kafka_NewPartitions_t *newps) {
+        rd_list_destroy(&newps->replicas);
+        rd_free(newps);
+}
+
+static void rd_kafka_NewPartitions_free (void *ptr) {
+        rd_kafka_NewPartitions_destroy(ptr);
+}
+
+
+void rd_kafka_NewPartitions_destroy_array (rd_kafka_NewPartitions_t **newps,
+                                         size_t newps_cnt) {
+        size_t i;
+        for (i = 0 ; i < newps_cnt ; i++)
+                rd_kafka_NewPartitions_destroy(newps[i]);
+}
+
+
+
+
+
+rd_kafka_resp_err_t
+rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *newp,
+                                               int32_t new_partition_idx,
+                                               int32_t *broker_ids,
+                                               size_t broker_id_cnt) {
+        rd_list_t *rl;
+        int i;
+
+        /* Replica partitions must be added consecutively starting from 0. */
+        if (new_partition_idx < 0 ||
+            new_partition_idx != rd_list_cnt(&newp->replicas) ||
+            broker_id_cnt > RD_KAFKAP_BROKERS_MAX)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        rl = rd_list_init_int32(rd_list_alloc(), broker_id_cnt);
+
+        for (i = 0 ; i < (int)broker_id_cnt ; i++)
+                rd_list_set_int32(rl, i, broker_ids[i]);
+
+        rd_list_add(&newp->replicas, rl);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+
+/**
+ * @brief Parse CreatePartitionsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_CreatePartitions_parse_response (rd_kafka_op_t *rko_req,
+                                            rd_kafka_op_t **rko_resultp,
+                                            rd_kafka_buf_t *reply,
+                                            char *errstr, size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
+        rd_kafka_t *rk = rkb->rkb_rk;
+        rd_kafka_op_t *rko_result = NULL;
+        int32_t topic_cnt;
+        int i;
+        int32_t Throttle_Time;
+
+        rd_kafka_buf_read_i32(reply, &Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+
+        rd_kafka_buf_read_i32(reply, &topic_cnt);
+
+        if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
+                rd_snprintf(errstr, errstr_size,
+                            "Received %"PRId32" topics in response "
+                            "when only %d were requested", topic_cnt,
+                            rd_list_cnt(&rko_req->rko_u.admin_request.args));
+                return RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        rd_list_init(&rko_result->rko_u.admin_result.topics, topic_cnt,
+                     rd_kafka_topic_result_free);
+
+        for (i = 0 ; i < (int)topic_cnt ; i++) {
+                rd_kafkap_str_t ktopic;
+                rd_kafka_resp_err_t error_code;
+                char *errstr = NULL;
+                rd_kafka_topic_result_t *terr;
+                rd_kafka_NewTopic_t skel;
+                rd_kafkap_str_t error_msg;
+                int orig_pos;
+
+                rd_kafka_buf_read_str(reply, &ktopic);
+                rd_kafka_buf_read_i16(reply, &error_code);
+                rd_kafka_buf_read_str(reply, &error_msg);
+
+                /* For non-blocking CreatePartitionsRequests the broker
+                 * will returned REQUEST_TIMED_OUT for topics
+                 * that were triggered for creation -
+                 * we hide this error code from the application
+                 * since the topic creation is in fact in progress. */
+                if (error_code == RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT &&
+                    rd_kafka_confval_get_int(&rko_req->rko_u.
+                                             admin_request.options.
+                                             operation_timeout) <= 0) {
+                        error_code = RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+
+                if (error_code) {
+                        if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                            RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                                errstr = (char *)rd_kafka_err2str(error_code);
+                        else
+                                RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
+                }
+
+
+                terr = rd_kafka_topic_result_new(ktopic.str,
+                                                 RD_KAFKAP_STR_LEN(&ktopic),
+                                                 error_code,
+                                                 error_code ?
+                                                 rd_kafka_err2str(error_code) :
+                                                 NULL);
+
+                /* As a convenience to the application we insert topic result
+                 * in the same order as they were requested. The broker
+                 * does not maintain ordering unfortunately. */
+                skel.topic = terr->topic;
+                orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
+                                         &skel, rd_kafka_NewPartitions_cmp);
+                if (orig_pos == -1) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Broker returned topic %s that was not "
+                                    "included in the original request",
+                                    terr->topic);
+                        rd_kafka_topic_result_destroy(terr);
+                        rd_kafka_op_destroy(rko_result);
+                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                }
+
+                if (rd_list_elem(&rko_result->rko_u.admin_result.topics,
+                                 orig_pos) != NULL) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Broker returned topic %s multiple times",
+                                    terr->topic);
+                        rd_kafka_topic_result_destroy(terr);
+                        rd_kafka_op_destroy(rko_result);
+                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                }
+
+                rd_list_set(&rko_result->rko_u.admin_result.topics, orig_pos,
+                            terr);
+        }
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+ err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "CreatePartitions response protocol parse failure: %s",
+                    rd_kafka_err2str(err));
+
+        return err;
+}
+
+
+
+
+
+/**
+ * @brief Asynchronous worker for CreatePartitions
+ */
+static rd_kafka_op_res_t
+rd_kafka_admin_CreatePartitions_worker (rd_kafka_t *rk,
+                                    rd_kafka_q_t *rkq,
+                                    rd_kafka_op_t *rko) {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_op_t *rko_result;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+
+        /* Common worker handling. */
+        if (rd_kafka_admin_common_worker(rk, rko) == -1)
+                goto destroy;
+
+        switch (rko->rko_u.admin_request.state)
+        {
+        case RD_KAFKA_ADMIN_STATE_INIT:
+                /* First call, fall thru to controller lookup */
+                rko->rko_u.admin_request.state =
+                        RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER;
+                /*FALLTHRU*/
+
+        case RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER:
+                if (!(rkb = rd_kafka_admin_common_get_controller(rk, rko))) {
+                        /* Waiting for controller. */
+                        return RD_KAFKA_OP_RES_KEEP;
+                }
+
+                /* Got controller, send protocol request. */
+
+                /* Still need to use the eonce since this worker may
+                 * time out while waiting for response from broker, in which
+                 * case the broker response will hit an empty eonce (ok). */
+                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
+                                             "send CreatePartitions");
+
+                /* Send request (async) */
+                err = rd_kafka_CreatePartitionsRequest(
+                        rkb,
+                        &rko->rko_u.admin_request.args,
+                        &rko->rko_u.admin_request.options,
+                        errstr, sizeof(errstr),
+                        RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                        rd_kafka_admin_handle_response,
+                        rko->rko_u.admin_request.eonce);
+
+                /* Loose refcount from controller_async() */
+                rd_kafka_broker_destroy(rkb);
+
+                if (err) {
+                        rd_kafka_enq_once_del_source(
+                                rko->rko_u.admin_request.eonce,
+                                "send CreatePartitions");
+                        rd_kafka_admin_result_fail(rko, err, "%s", errstr);
+                        goto destroy;
+                }
+
+                rko->rko_u.admin_request.state =
+                        RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE;
+
+                /* Wait asynchronously for broker response, which will
+                 * trigger the eonce and worker to be called again. */
+                return RD_KAFKA_OP_RES_KEEP;
+
+
+        case RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE:
+                /* CreatePartitions response */
+
+                rd_kafka_enq_once_del_source(rko->rko_u.admin_request.eonce,
+                                             "send CreatePartitions");
+
+                /* Parse response and populate result to application */
+                err = rd_kafka_admin_CreatePartitions_parse_response(
+                        rko, &rko_result,
+                        rko->rko_u.admin_request.reply_buf,
+                        errstr, sizeof(errstr));
+                if (err) {
+                        rd_kafka_admin_result_fail(
+                                rko, err,
+                                "CreatePartitions worker failed parse response: %s",
+                                errstr);
+                        goto destroy;
+                }
+
+                /* Enqueue result on application queue, we're done. */
+                rd_kafka_admin_result_enq(rko, rko_result);
+
+                goto destroy;
+        }
+
+
+        return RD_KAFKA_OP_RES_KEEP;
+
+ destroy:
+        rd_kafka_admin_common_worker_destroy(rk, rko);
+        return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy() */
+}
+
+
+void rd_kafka_admin_CreatePartitions (rd_kafka_t *rk,
+                                      rd_kafka_NewPartitions_t **newps,
+                                      size_t newps_cnt,
+                                      const rd_kafka_AdminOptions_t *options,
+                                      rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        size_t i;
+
+        rko = rd_kafka_admin_request_op_new(
+                rk,
+                RD_KAFKA_OP_CREATEPARTITIONS,
+                RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT,
+                rd_kafka_admin_CreatePartitions_worker,
+                options, rkqu);
+
+        rd_list_init(&rko->rko_u.admin_request.args, newps_cnt,
+                     rd_kafka_NewPartitions_free);
+
+        for (i = 0 ; i < newps_cnt ; i++)
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_NewPartitions_copy(newps[i]));
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_CreatePartitions_result_error (
+        const rd_kafka_CreatePartitions_result_t *result,
+        const char **errstrp) {
+        return rd_kafka_admin_result_ret_error((const rd_kafka_op_t *)result,
+                                               errstrp);
+}
+
+
+
+/**
+ * @brief Get an array of topic results from a CreatePartitions result.
+ *
+ * The returned \p topics life-time is the same as the \p result object.
+ * @param cntp is updated to the number of elements in the array.
+ */
+const rd_kafka_topic_result_t **
+rd_kafka_CreatePartitions_result_topics (
+        const rd_kafka_CreatePartitions_result_t *result,
+        size_t *cntp) {
+        return rd_kafka_admin_result_ret_topics((const rd_kafka_op_t *)result,
+                                                cntp);
+}
 
 
 /**@}*/

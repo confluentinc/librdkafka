@@ -559,6 +559,9 @@ void test_wait_metadata_update (rd_kafka_t *rk,
                                 size_t not_topic_cnt,
                                 int tmout);
 
+rd_kafka_resp_err_t
+test_wait_any_admin_result (rd_kafka_queue_t *q, rd_kafka_event_type_t evtype,
+                            int tmout);
 
 rd_kafka_resp_err_t
 test_CreateTopics_simple (rd_kafka_t *rk,
@@ -566,6 +569,12 @@ test_CreateTopics_simple (rd_kafka_t *rk,
                           char **topics, size_t topic_cnt,
                           int num_partitions,
                           void *opaque);
+rd_kafka_resp_err_t
+test_CreatePartitions_simple (rd_kafka_t *rk,
+                              rd_kafka_queue_t *useq,
+                              const char *topic,
+                              size_t total_part_cnt,
+                              void *opaque);
 
 rd_kafka_resp_err_t
 test_DeleteTopics_simple (rd_kafka_t *rk,

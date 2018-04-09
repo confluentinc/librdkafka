@@ -234,8 +234,6 @@ typedef struct rd_kafka_conf_s rd_kafka_conf_t;
 typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
 typedef struct rd_kafka_queue_s rd_kafka_queue_t;
 typedef struct rd_kafka_topic_result_s rd_kafka_topic_result_t;
-typedef struct rd_kafka_DeleteTopics_result_s rd_kafka_DeleteTopics_result_t;
-typedef struct rd_kafka_CreatePartitions_result_s rd_kafka_CreatePartitions_result_t;
 typedef struct rd_kafka_AlterConfigs_result_s rd_kafka_AlterConfigs_result_t;
 typedef struct rd_kafka_ConfigResource_result_s rd_kafka_ConfigResource_result_t;
 typedef struct rd_kafka_DescribeConfigs_result_s rd_kafka_DescribeConfigs_result_t;
@@ -3496,6 +3494,7 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_STATS         0x40 /**< Stats */
 #define RD_KAFKA_EVENT_CREATETOPICS_RESULT 100 /**< CreateTopics_result_t */
 #define RD_KAFKA_EVENT_DELETETOPICS_RESULT 101 /**< DeleteTopics_result_t */
+#define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
 
 
 typedef struct rd_kafka_op_s rd_kafka_event_t;
@@ -3612,6 +3611,7 @@ const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_OFFSET_COMMIT
  *  - RD_KAFKA_EVENT_CREATETOPICS_RESULT
  *  - RD_KAFKA_EVENT_DELETETOPICS_RESULT
+ *  - RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
  */
 RD_EXPORT
 void *rd_kafka_event_opaque (rd_kafka_event_t *rkev);
@@ -3672,16 +3672,17 @@ rd_kafka_event_topic_partition (rd_kafka_event_t *rkev);
 
 
 
+typedef rd_kafka_event_t rd_kafka_CreateTopics_result_t;
+typedef rd_kafka_event_t rd_kafka_DeleteTopics_result_t;
+typedef rd_kafka_event_t rd_kafka_CreatePartitions_result_t;
 
 /**
  * @returns the result of a CreateTopics request, or NULL if event is of
  *          different type.
  *
  * Event types:
- *   RD_KAFKA_EVENT_CREATE_TOPICS_RESULT
+ *   RD_KAFKA_EVENT_CREATETOPICS_RESULT
  */
-typedef rd_kafka_event_t rd_kafka_CreateTopics_result_t;
-
 RD_EXPORT const rd_kafka_CreateTopics_result_t *
 rd_kafka_event_CreateTopics_result (rd_kafka_event_t *rkev);
 
@@ -3690,10 +3691,21 @@ rd_kafka_event_CreateTopics_result (rd_kafka_event_t *rkev);
  *          different type.
  *
  * Event types:
- *   RD_KAFKA_EVENT_DELETE_TOPICS_RESULT
+ *   RD_KAFKA_EVENT_DELETETOPICS_RESULT
  */
 RD_EXPORT const rd_kafka_DeleteTopics_result_t *
 rd_kafka_event_DeleteTopics_result (rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a CreatePartitions request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
+ */
+RD_EXPORT const rd_kafka_CreatePartitions_result_t *
+rd_kafka_event_CreatePartitions_result (rd_kafka_event_t *rkev);
+
 
 
 
@@ -4541,7 +4553,7 @@ rd_kafka_NewTopic_add_config (rd_kafka_NewTopic_t *new_topic,
  *  - rd_kafka_AdminOptions_set_timeout() - default socket.timeout.ms
  *
  * @remark The result event type emitted on the supplied queue is of type
- *         \c rd_kafka_CreateTopics_result_t.
+ *         \c RD_KAFKA_EVENT_CREATETOPICS_RESULT
  */
 RD_EXPORT void
 rd_kafka_admin_CreateTopics (rd_kafka_t *rk,
@@ -4632,7 +4644,7 @@ rd_kafka_DeleteTopic_destroy_array (rd_kafka_DeleteTopic_t **del_topics,
  * @param rkqu Queue to emit result on.
  *
  * @remark The result event type emitted on the supplied queue is of type
- *         \c rd_kafka_DeleteTopics_result_t.
+ *         \c RD_KAFKA_EVENT_DELETETOPICS_RESULT
  */
 RD_EXPORT
 void rd_kafka_admin_DeleteTopics (rd_kafka_t *rk,
@@ -4685,31 +4697,89 @@ rd_kafka_DeleteTopics_result_topics (
  *
  */
 
-
 typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
 
+/**
+ * @brief Create a new NewPartitions. This object is later passed to
+ *        rd_kafka_admin_CreatePartitions() to increas the number of partitions
+ *        to \p new_total_cnt for an existing topic.
+ *
+ * @param topic Topic name to create more partitions for.
+ * @param new_total_cnt Increase the topic's partition count to this value.
+ *
+ * @returns a new allocated NewPartitions object, or NULL if the
+ *          input parameters are invalid.
+ *          Use rd_kafka_NewPartitions_destroy() to free object when done.
+ */
 RD_EXPORT rd_kafka_NewPartitions_t *
-rd_kafka_NewPartitions_new (const char *topic,
-                            int new_total_count);
+rd_kafka_NewPartitions_new (const char *topic, size_t new_total_cnt);
 
+/**
+ * @brief Destroy and free a NewPartitions object previously created with
+ *        rd_kafka_NewPartitions_new()
+ */
 RD_EXPORT void
 rd_kafka_NewPartitions_destroy (rd_kafka_NewPartitions_t *new_parts);
 
+/**
+ * @brief Helper function to destroy all NewPartitions objects in the
+ *        \p new_parts array (of \p new_parts_cnt elements).
+ *        The array itself is not freed.
+ */
 RD_EXPORT void
 rd_kafka_NewPartitions_destroy_array (rd_kafka_NewPartitions_t **new_parts,
-                                      size_t new_topic_cnt);
+                                      size_t new_parts_cnt);
 
+/**
+ * @brief Set the replica (broker id) assignment for \p new_partition_idx to the
+ *        replica set in \p broker_ids (of \p broker_id_cnt elements).
+ *
+ * @remark An application must either set the replica assignment for
+ *         all new partitions, or none.
+ *
+ * @remark If called, this function must be called consecutively for each
+ *         new partition being created,
+ *         where \p new_partition_idx 0 is the first new partition,
+ *         1 is the second, and so on.
+ *
+ * @remark \p broker_id_cnt should match the topic's replication factor.
+ *
+ * @remark Use rd_kafka_metadata() to retrieve the list of brokers
+ *         in the cluster.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or an error code
+ *          if the arguments were invalid.
+ *
+ * @sa rd_kafka_AdminOptions_set_validate_only()
+ */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *new_parts,
-                                               int32_t partition,
+                                               int32_t new_partition_idx,
                                                int32_t *broker_ids,
                                                size_t broker_id_cnt);
 
 
+/**
+ * @brief Create additional partitions for the given topics, as specified
+ *        by the \p new_parts array of size \p new_parts_cnt elements.
+ *
+ * @param new_parts Array of topics for which new partitions are to be created.
+ * @param new_parts_cnt Number of elements in \p new_parts array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_validate_only() - default false
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *  - rd_kafka_AdminOptions_set_timeout() - default socket.timeout.ms
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
+ */
 RD_EXPORT void
 rd_kafka_admin_CreatePartitions (rd_kafka_t *rk,
-                                 rd_kafka_NewPartitions_t **partitions,
-                                 size_t partition_cnt,
+                                 rd_kafka_NewPartitions_t **new_parts,
+                                 size_t new_parts_cnt,
                                  const rd_kafka_AdminOptions_t *options,
                                  rd_kafka_queue_t *rkqu);
 
@@ -4745,6 +4815,7 @@ RD_EXPORT const rd_kafka_topic_result_t **
 rd_kafka_CreatePartitions_result_topics (
         const rd_kafka_CreatePartitions_result_t *result,
         size_t *cntp);
+
 
 
 

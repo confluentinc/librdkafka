@@ -74,6 +74,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_WAKEUP] = "REPLY:WAKEUP",
                 [RD_KAFKA_OP_CREATETOPICS] = "REPLY:CREATETOPICS",
                 [RD_KAFKA_OP_DELETETOPICS] = "REPLY:DELETETOPICS",
+                [RD_KAFKA_OP_CREATEPARTITIONS] = "REPLY:CREATEPARTITIONS",
                 [RD_KAFKA_OP_ADMIN_RESULT] = "REPLY:ADMIN_RESULT",
         };
 
@@ -190,6 +191,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_WAKEUP] = 0,
                 [RD_KAFKA_OP_CREATETOPICS] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_DELETETOPICS] = sizeof(rko->rko_u.admin_request),
+                [RD_KAFKA_OP_CREATEPARTITIONS] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_ADMIN_RESULT] = sizeof(rko->rko_u.admin_result),
 	};
 	size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
@@ -299,6 +301,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
 
         case RD_KAFKA_OP_CREATETOPICS:
         case RD_KAFKA_OP_DELETETOPICS:
+        case RD_KAFKA_OP_CREATEPARTITIONS:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
                 break;

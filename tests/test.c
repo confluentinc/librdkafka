@@ -3708,7 +3708,7 @@ static int verify_topics_in_metadata (rd_kafka_t *rk,
          * when topic is found in metadata, allowing us to check
          * for missed topics. */
         for (i = 0 ; i < topic_cnt ; i++)
-                topics[i].err = -12345;
+                topics[i].err = 12345;
 
         err = rd_kafka_metadata(rk, 1/*all_topics*/, NULL, &md,
                                 tmout_multip(5000));
@@ -3718,10 +3718,15 @@ static int verify_topics_in_metadata (rd_kafka_t *rk,
                 const rd_kafka_metadata_topic_t *mdt = &md->topics[ti];
 
                 for (i = 0 ; i < topic_cnt ; i++) {
+                        int pi;
+                        rd_kafka_metadata_topic_t *exp_mdt;
+
                         if (strcmp(topics[i].topic, mdt->topic))
                                 continue;
 
-                        topics[i].err = mdt->err; /* indicate found */
+                        exp_mdt = &topics[i];
+
+                        exp_mdt->err = mdt->err; /* indicate found */
                         if (mdt->err) {
                                 TEST_SAY("metadata: "
                                          "Topic %s has error %s\n",
@@ -3730,15 +3735,80 @@ static int verify_topics_in_metadata (rd_kafka_t *rk,
                                 fails++;
                         }
 
-                        if (topics[i].partition_cnt != 0 &&
-                            mdt->partition_cnt != topics[i].partition_cnt) {
+                        if (exp_mdt->partition_cnt != 0 &&
+                            mdt->partition_cnt != exp_mdt->partition_cnt) {
                                 TEST_SAY("metadata: "
                                          "Topic %s, expected %d partitions"
                                          ", not %d\n",
                                          mdt->topic,
-                                         topics[i].partition_cnt,
+                                         exp_mdt->partition_cnt,
                                          mdt->partition_cnt);
                                 fails++;
+                                continue;
+                        }
+
+                        /* Verify per-partition values */
+                        for (pi = 0 ; exp_mdt->partitions &&
+                                     pi < exp_mdt->partition_cnt ; pi++) {
+                                const rd_kafka_metadata_partition_t *mdp =
+                                        &mdt->partitions[pi];
+                                const rd_kafka_metadata_partition_t *exp_mdp =
+                                        &exp_mdt->partitions[pi];
+
+                                if (mdp->id != exp_mdp->id) {
+                                        TEST_SAY("metadata: "
+                                                 "Topic %s, "
+                                                 "partition %d, "
+                                                 "partition list out of order,"
+                                                 " expected %d, not %d\n",
+                                                 mdt->topic, pi,
+                                                 exp_mdp->id, mdp->id);
+                                        fails++;
+                                        continue;
+                                }
+
+                                if (exp_mdp->replicas) {
+                                        if (mdp->replica_cnt !=
+                                            exp_mdp->replica_cnt) {
+                                                TEST_SAY("metadata: "
+                                                         "Topic %s, "
+                                                         "partition %d, "
+                                                         "expected %d replicas,"
+                                                         " not %d\n",
+                                                         mdt->topic, pi,
+                                                         exp_mdp->replica_cnt,
+                                                         mdp->replica_cnt);
+                                                fails++;
+                                        } else if (memcmp(mdp->replicas,
+                                                          exp_mdp->replicas,
+                                                          mdp->replica_cnt *
+                                                          sizeof(*mdp->replicas))) {
+                                                int ri;
+
+                                                TEST_SAY("metadata: "
+                                                         "Topic %s, "
+                                                         "partition %d, "
+                                                         "replica mismatch:\n",
+                                                         mdt->topic, pi);
+
+                                                for (ri = 0 ;
+                                                     ri < mdp->replica_cnt ;
+                                                     ri++) {
+                                                        TEST_SAY(" #%d: "
+                                                                 "expected "
+                                                                 "replica %d, "
+                                                                 "not %d\n",
+                                                                 ri,
+                                                                 exp_mdp->
+                                                                 replicas[ri],
+                                                                 mdp->
+                                                                 replicas[ri]);
+                                                }
+
+                                                fails++;
+                                        }
+
+                                }
                         }
                 }
 
@@ -3755,7 +3825,7 @@ static int verify_topics_in_metadata (rd_kafka_t *rk,
         }
 
         for (i  = 0 ; i < topic_cnt ; i++) {
-                if (topics[i].err == -12345) {
+                if ((int)topics[i].err == 12345) {
                         TEST_SAY("metadata: "
                                  "Topic %s not seen in metadata\n",
                                  topics[i].topic);
@@ -3770,7 +3840,7 @@ static int verify_topics_in_metadata (rd_kafka_t *rk,
         else
                 TEST_SAY("Metadata verification succeeded: "
                          "%"PRIusz" desired topics seen, "
-                         "%"PRIusz" undesired topics not seen",
+                         "%"PRIusz" undesired topics not seen\n",
                          topic_cnt, not_topic_cnt);
 
         rd_kafka_metadata_destroy(md);
@@ -3829,7 +3899,7 @@ void test_wait_metadata_update (rd_kafka_t *rk,
  *        and return the distilled error code.
  */
 rd_kafka_resp_err_t
-test_wait_anyTopics_result (rd_kafka_queue_t *q, rd_kafka_event_type_t evtype,
+test_wait_any_admin_result (rd_kafka_queue_t *q, rd_kafka_event_type_t evtype,
                             int tmout) {
         rd_kafka_event_t *rkev;
         size_t i;
@@ -3866,6 +3936,14 @@ test_wait_anyTopics_result (rd_kafka_queue_t *q, rd_kafka_event_type_t evtype,
                                   rd_kafka_event_name(rkev));
 
                 terr = rd_kafka_DeleteTopics_result_topics(res, &terr_cnt);
+
+        } else if (evtype == RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT) {
+                const rd_kafka_CreatePartitions_result_t *res;
+                if (!(res = rd_kafka_event_CreatePartitions_result(rkev)))
+                        TEST_FAIL("Expected a CreatePartitions result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                terr = rd_kafka_CreatePartitions_result_topics(res, &terr_cnt);
 
         } else {
                 TEST_FAIL("Bad evtype: %d", evtype);
@@ -3956,7 +4034,69 @@ test_CreateTopics_simple (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 
-        err = test_wait_anyTopics_result(q, RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+        err = test_wait_any_admin_result(q, RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+                                         tmout+5000);
+
+        rd_kafka_queue_destroy(q);
+
+        return err;
+}
+
+
+rd_kafka_resp_err_t
+test_CreatePartitions_simple (rd_kafka_t *rk,
+                              rd_kafka_queue_t *useq,
+                              const char *topic,
+                              size_t total_part_cnt,
+                              void *opaque) {
+        rd_kafka_NewPartitions_t *newp[1];
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *q;
+        const int tmout = 30 * 1000;
+        rd_kafka_resp_err_t err;
+
+        newp[0] = rd_kafka_NewPartitions_new(topic, total_part_cnt);
+        TEST_ASSERT(newp[0],
+                    "Failed to NewPartitions(\"%s\", %"PRIusz")",
+                    topic, total_part_cnt);
+
+        options = rd_kafka_AdminOptions_new(rk);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                char errstr[512];
+
+                err = rd_kafka_AdminOptions_set_request_timeout(options,
+                                                                tmout,
+                                                                errstr,
+                                                                sizeof(errstr));
+                TEST_ASSERT(!err, "set_request_timeout: %s", errstr);
+                err = rd_kafka_AdminOptions_set_operation_timeout(options,
+                                                                  tmout-5000,
+                                                                  errstr,
+                                                                  sizeof(errstr));
+                TEST_ASSERT(!err, "set_operation_timeout: %s", errstr);
+
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        TEST_SAY("Creating (up to) %"PRIusz" partitions for topic \"%s\"\n",
+                 total_part_cnt, topic);
+
+        rd_kafka_admin_CreatePartitions(rk, newp, 1, options, q);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_kafka_NewPartitions_destroy(newp[0]);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+
+        err = test_wait_any_admin_result(q,
+                                         RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT,
                                          tmout+5000);
 
         rd_kafka_queue_destroy(q);
@@ -4019,7 +4159,7 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
         if (useq)
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        err = test_wait_anyTopics_result(q, RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+        err = test_wait_any_admin_result(q, RD_KAFKA_EVENT_CREATETOPICS_RESULT,
                                          tmout+5000);
 
         rd_kafka_queue_destroy(q);

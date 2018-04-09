@@ -57,6 +57,8 @@ const char *rd_kafka_event_name (const rd_kafka_event_t *rkev) {
                 return "CreateTopicsResult";
         case RD_KAFKA_EVENT_DELETETOPICS_RESULT:
                 return "DeleteTopicsResult";
+        case RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT:
+                return "CreatePartitionsResult";
 	default:
 		return "?unknown?";
 	}
@@ -260,4 +262,13 @@ rd_kafka_event_DeleteTopics_result (rd_kafka_event_t *rkev) {
                 return NULL;
         else
                 return (const rd_kafka_DeleteTopics_result_t *)rkev;
+}
+
+
+const rd_kafka_CreatePartitions_result_t *
+rd_kafka_event_CreatePartitions_result (rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_CreatePartitions_result_t *)rkev;
 }

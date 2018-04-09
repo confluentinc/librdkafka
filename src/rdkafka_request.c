@@ -2088,7 +2088,6 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
                 for (partition = 0 ; partition < rd_list_cnt(&newt->replicas);
                      partition++) {
                         const rd_list_t *replicas;
-                        int32_t *replicap;
                         int ri = 0;
 
                         replicas = rd_list_elem(&newt->replicas, partition);
@@ -2100,9 +2099,10 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
                         /* #replicas */
                         rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(replicas));
 
-                        while ((replicap = rd_list_elem(replicas, ri++))) {
+                        for (ri = 0 ; ri < rd_list_cnt(replicas) ; ri++) {
                                 /* replica */
-                                rd_kafka_buf_write_i32(rkbuf, *replicap);
+                                rd_kafka_buf_write_i32(
+                                        rkbuf, rd_list_get_int32(replicas, ri));
                         }
                 }
 
@@ -2196,6 +2196,111 @@ rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
 
         if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
                 rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+/**
+ * @brief Construct and send CreatePartitionsRequest to \p rkb
+ *        with the topics (NewPartitions_t*) in \p new_parts, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_CreatePartitionsRequest (rd_kafka_broker_t *rkb,
+                                  rd_list_t *new_parts /*(NewPartitions_t*)*/,
+                                  rd_kafka_AdminOptions_t *options,
+                                  char *errstr, size_t errstr_size,
+                                  rd_kafka_replyq_t replyq,
+                                  rd_kafka_resp_cb_t *resp_cb,
+                                  void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int i = 0;
+        rd_kafka_NewPartitions_t *newp;
+        int op_timeout;
+
+        if (rd_list_cnt(new_parts) == 0) {
+                rd_snprintf(errstr, errstr_size, "No partitions to create");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_CreatePartitions, 0, 0, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "CreatePartitions (KIP-195) not supported "
+                            "by broker, requires broker version >= 1.0.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreatePartitions, 1,
+                                         4 +
+                                         (rd_list_cnt(new_parts) * 200) +
+                                         4 + 1);
+
+        /* #topics */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(new_parts));
+
+        while ((newp = rd_list_elem(new_parts, i++))) {
+                /* topic */
+                rd_kafka_buf_write_str(rkbuf, newp->topic, -1);
+
+                /* New partition count */
+                rd_kafka_buf_write_i32(rkbuf, newp->total_cnt);
+
+                /* #replica_assignment */
+                if (rd_list_empty(&newp->replicas)) {
+                        rd_kafka_buf_write_i32(rkbuf, -1);
+                } else {
+                        const rd_list_t *replicas;
+                        int pi = -1;
+
+                        rd_kafka_buf_write_i32(rkbuf,
+                                               rd_list_cnt(&newp->replicas));
+
+                        while ((replicas = rd_list_elem(&newp->replicas,
+                                                        ++pi))) {
+                                int ri = 0;
+
+                                /* replica count */
+                                rd_kafka_buf_write_i32(rkbuf,
+                                                       rd_list_cnt(replicas));
+
+                                /* replica */
+                                for (ri = 0 ; ri < rd_list_cnt(replicas) ;
+                                     ri++) {
+                                        rd_kafka_buf_write_i32(
+                                                rkbuf,
+                                                rd_list_get_int32(replicas,
+                                                                  ri));
+                                }
+                        }
+                }
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
+
+        /* validate_only */
+        rd_kafka_buf_write_i8(
+                rkbuf, rd_kafka_confval_get_int(&options->validate_only));
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

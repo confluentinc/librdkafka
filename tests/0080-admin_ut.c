@@ -313,6 +313,7 @@ static void do_test_DeleteTopics (const char *what,
  *  - Create topics A,B
  *  - Delete topic B
  *  - Create topic C
+ *  - Create extra partitions for topic D
  */
 static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         char *topics[] = { "topicA", "topicB", "topicC" };
@@ -324,14 +325,16 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         struct waiting id1 = {RD_KAFKA_EVENT_CREATETOPICS_RESULT};
         struct waiting id2 = {RD_KAFKA_EVENT_DELETETOPICS_RESULT};
         struct waiting id3 = {RD_KAFKA_EVENT_CREATETOPICS_RESULT};
+        struct waiting id4 = {RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT};
 
         TEST_SAY(_C_MAG "[ Mixed mode test on %s]\n", rd_kafka_name(rk));
 
         test_CreateTopics_simple(rk, rkqu, topics, 2, 1, &id1);
         test_DeleteTopics_simple(rk, rkqu, &topics[1], 1, &id2);
         test_CreateTopics_simple(rk, rkqu, &topics[2], 1, 1, &id3);
+        test_CreatePartitions_simple(rk, rkqu, "topicD", 15, &id4);
 
-        while (cnt < 3) {
+        while (cnt < 4) {
                 rd_kafka_event_t *rkev;
                 struct waiting *w;
 
@@ -357,7 +360,6 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
                 rd_kafka_event_destroy(rkev);
         }
-                
 }
 
 static void do_test_apis (rd_kafka_type_t cltype) {

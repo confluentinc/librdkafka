@@ -75,6 +75,7 @@ int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
         case RD_KAFKA_EVENT_STATS:
         case RD_KAFKA_EVENT_CREATETOPICS_RESULT:
         case RD_KAFKA_EVENT_DELETETOPICS_RESULT:
+        case RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT:
 		return 1;
 
 	default:

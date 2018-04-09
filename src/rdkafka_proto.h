@@ -82,7 +82,16 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_DeleteAcls    31
 #define RD_KAFKAP_DescribeConfigs 32
 #define RD_KAFKAP_AlterConfigs  33
-#define RD_KAFKAP__NUM          34
+#define RD_KAFKAP_AlterReplicaLogDirs 34
+#define RD_KAFKAP_DescribeLogDirs 35
+#define RD_KAFKAP_SaslAuthenticate 36
+#define RD_KAFKAP_CreatePartitions 37
+#define RD_KAFKAP_CreateDelegationToken 38
+#define RD_KAFKAP_RenewDelegationToken 39
+#define RD_KAFKAP_ExpireDelegationToken 40
+#define RD_KAFKAP_DescribeDelegationToken 41
+#define RD_KAFKAP_DeleteGroups 42
+#define RD_KAFKAP__NUM         43
         int16_t  ApiVersion;
         int32_t  CorrId;
         /* ClientId follows */
@@ -135,7 +144,17 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_CreateAcls] = "CreateAcls",
                 [RD_KAFKAP_DeleteAcls] = "DeleteAcls",
                 [RD_KAFKAP_DescribeConfigs] = "DescribeConfigs",
-                [RD_KAFKAP_AlterConfigs] = "AlterConfigs"
+                [RD_KAFKAP_AlterConfigs] = "AlterConfigs",
+                [RD_KAFKAP_AlterReplicaLogDirs] = "AlterReplicaLogDirs",
+                [RD_KAFKAP_DescribeLogDirs] = "DescribeLogDirs",
+                [RD_KAFKAP_SaslAuthenticate] = "SaslAuthenticate",
+                [RD_KAFKAP_CreatePartitions] = "CreatePartitions",
+                [RD_KAFKAP_CreateDelegationToken] = "CreateDelegationToken",
+                [RD_KAFKAP_RenewDelegationToken] = "RenewDelegationToken",
+                [RD_KAFKAP_ExpireDelegationToken] = "ExpireDelegationToken",
+                [RD_KAFKAP_DescribeDelegationToken] = "DescribeDelegationToken",
+                [RD_KAFKAP_DeleteGroups] = "DeleteGroups"
+
         };
         static RD_TLS char ret[32];
 

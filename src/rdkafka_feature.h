@@ -69,6 +69,9 @@
 /* >= 0.10.2.0: Topic Admin API */
 #define RD_KAFKA_FEATURE_TOPIC_ADMIN_API 0x400
 
+/* >= 1.0.0: CreatePartitions */
+#define RD_KAFKA_FEATURE_TOPIC_ADMIN_API 0x400
+
 
 int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 				     struct rd_kafka_ApiVersion **apisp,

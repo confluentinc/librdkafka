@@ -51,10 +51,10 @@ static void do_test_CreateTopics (const char *what,
         rd_kafka_resp_err_t exp_topicerr[MY_NEW_TOPICS_CNT] = {0};
         rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         /* Expected topics in metadata */
-        rd_kafka_metadata_topic_t exp_mdtopics[MY_NEW_TOPICS_CNT] = {0};
+        rd_kafka_metadata_topic_t exp_mdtopics[MY_NEW_TOPICS_CNT] = {{0}};
         int exp_mdtopic_cnt = 0;
         /* Not expected topics in metadata */
-        rd_kafka_metadata_topic_t exp_not_mdtopics[MY_NEW_TOPICS_CNT] = {0};
+        rd_kafka_metadata_topic_t exp_not_mdtopics[MY_NEW_TOPICS_CNT] = {{0}};
         int exp_not_mdtopic_cnt = 0;
         int i;
         char errstr[512];
@@ -66,7 +66,13 @@ static void do_test_CreateTopics (const char *what,
         const rd_kafka_topic_result_t **restopics;
         size_t restopic_cnt;
         int metadata_tmout ;
-        int num_replicas = jitter(1, avail_broker_cnt);
+        int num_replicas = avail_broker_cnt;
+        int32_t *replicas;
+
+        /* Set up replicas */
+        replicas = rd_alloca(sizeof(*replicas) * num_replicas);
+        for (i = 0 ; i < num_replicas ; i++)
+                replicas[i] = avail_brokers[i];
 
         TEST_SAY(_C_MAG "[ %s CreateTopics with %s, "
                  "op_timeout %d, validate_only %d ]\n",
@@ -126,12 +132,6 @@ static void do_test_CreateTopics (const char *what,
                          * Set valid replica assignments
                          */
                         for (p = 0 ; p < num_parts ; p++) {
-                                int32_t replicas[MY_NEW_TOPICS_CNT];
-                                int j;
-
-                                for (j = 0 ; j < num_replicas ; j++)
-                                        replicas[j] = avail_brokers[j];
-
                                 err = rd_kafka_NewTopic_set_replica_assignment(
                                         new_topics[i], p,
                                         replicas, num_replicas);
@@ -236,7 +236,7 @@ static void do_test_CreateTopics (const char *what,
         }
 
         /**
-         * Verify that the expect topics are created and the non-expected
+         * Verify that the expecteded topics are created and the non-expected
          * are not. Allow it some time to propagate.
          */
         if (validate_only) {
@@ -270,6 +270,8 @@ static void do_test_CreateTopics (const char *what,
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
+
+#undef MY_NEW_TOPICS_CNT
 }
 
 
@@ -292,10 +294,10 @@ static void do_test_DeleteTopics (const char *what,
         rd_kafka_resp_err_t exp_topicerr[MY_DEL_TOPICS_CNT] = {0};
         rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         /* Expected topics in metadata */
-        rd_kafka_metadata_topic_t exp_mdtopics[MY_DEL_TOPICS_CNT] = {0};
+        rd_kafka_metadata_topic_t exp_mdtopics[MY_DEL_TOPICS_CNT] = {{0}};
         int exp_mdtopic_cnt = 0;
         /* Not expected topics in metadata */
-        rd_kafka_metadata_topic_t exp_not_mdtopics[MY_DEL_TOPICS_CNT] = {0};
+        rd_kafka_metadata_topic_t exp_not_mdtopics[MY_DEL_TOPICS_CNT] = {{0}};
         int exp_not_mdtopic_cnt = 0;
         int i;
         char errstr[512];
@@ -430,7 +432,7 @@ static void do_test_DeleteTopics (const char *what,
         }
 
         /**
-         * Verify that the expect topics are deleted and the non-expected
+         * Verify that the expected topics are deleted and the non-expected
          * are not. Allow it some time to propagate.
          */
         if (op_timeout > 0)
@@ -456,6 +458,195 @@ static void do_test_DeleteTopics (const char *what,
 
         if (!useq)
                 rd_kafka_queue_destroy(q);
+
+#undef MY_DEL_TOPICS_CNT
+}
+
+
+
+/**
+ * @brief Test creation of partitions
+ *
+ *
+ */
+static void do_test_CreatePartitions (const char *what,
+                                      rd_kafka_t *rk, rd_kafka_queue_t *useq,
+                                      int op_timeout) {
+        rd_kafka_queue_t *q = useq ? useq : rd_kafka_queue_new(rk);
+#define MY_CRP_TOPICS_CNT 9
+        char *topics[MY_CRP_TOPICS_CNT];
+        rd_kafka_NewTopic_t *new_topics[MY_CRP_TOPICS_CNT];
+        rd_kafka_NewPartitions_t *crp_topics[MY_CRP_TOPICS_CNT];
+        rd_kafka_AdminOptions_t *options = NULL;
+        /* Expected topics in metadata */
+        rd_kafka_metadata_topic_t exp_mdtopics[MY_CRP_TOPICS_CNT] = {{0}};
+        rd_kafka_metadata_partition_t exp_mdparts[2] = {{0}};
+        int exp_mdtopic_cnt = 0;
+        int i;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+        int metadata_tmout;
+        int num_replicas = avail_broker_cnt;
+
+        TEST_SAY(_C_MAG "[ %s CreatePartitions with %s, op_timeout %d ]\n",
+                 rd_kafka_name(rk), what, op_timeout);
+
+        /* Set up two expected partitions with different replication sets
+         * so they can be matched by the metadata checker later.
+         * Even partitions use exp_mdparts[0] while odd partitions
+         * use exp_mdparts[1]. */
+
+        /* Set valid replica assignments (even, and odd (reverse) ) */
+        exp_mdparts[0].replicas = rd_alloca(sizeof(*exp_mdparts[0].replicas) *
+                                            num_replicas);
+        exp_mdparts[1].replicas = rd_alloca(sizeof(*exp_mdparts[1].replicas) *
+                                            num_replicas);
+        exp_mdparts[0].replica_cnt = num_replicas;
+        exp_mdparts[1].replica_cnt = num_replicas;
+        for (i = 0 ; i < num_replicas ; i++) {
+                exp_mdparts[0].replicas[i] = avail_brokers[i];
+                exp_mdparts[1].replicas[i] = avail_brokers[num_replicas-i-1];
+        }
+
+        /**
+         * Construct CreatePartitions array
+         */
+        for (i = 0 ; i < MY_CRP_TOPICS_CNT ; i++) {
+                char *topic = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                int initial_part_cnt = 1 + (i * 2);
+                int new_part_cnt = 1 + (i / 2);
+                int final_part_cnt = initial_part_cnt + new_part_cnt;
+                int set_replicas = !(i % 2);
+                int pi;
+
+                topics[i] = topic;
+
+                /* Topic to create with initial partition count */
+                new_topics[i] = rd_kafka_NewTopic_new(topic, initial_part_cnt,
+                                                      set_replicas ?
+                                                      -1 : num_replicas);
+
+                /* .. and later add more partitions to */
+                crp_topics[i] = rd_kafka_NewPartitions_new(topic,
+                                                           final_part_cnt);
+
+                if (set_replicas) {
+                        exp_mdtopics[exp_mdtopic_cnt].partitions =
+                                rd_alloca(final_part_cnt *
+                                          sizeof(*exp_mdtopics[exp_mdtopic_cnt].
+                                                 partitions));
+
+                        for (pi = 0 ; pi < final_part_cnt ; pi++) {
+                                const rd_kafka_metadata_partition_t *exp_mdp =
+                                        &exp_mdparts[pi & 1];
+
+                                exp_mdtopics[exp_mdtopic_cnt].
+                                        partitions[pi] = *exp_mdp; /* copy */
+
+                                exp_mdtopics[exp_mdtopic_cnt].
+                                        partitions[pi].id = pi;
+
+                                if (pi < initial_part_cnt) {
+                                        /* Set replica assignment
+                                         * for initial partitions */
+                                        err = rd_kafka_NewTopic_set_replica_assignment(
+                                                new_topics[i], pi,
+                                                exp_mdp->replicas,
+                                                (size_t)exp_mdp->replica_cnt);
+                                        TEST_ASSERT(!err, "NewTopic_set_replica_assignment: %s", rd_kafka_err2str(err));
+                                } else {
+                                        /* Set replica assignment for new
+                                         * partitions */
+                                        err = rd_kafka_NewPartitions_set_replica_assignment(
+                                                crp_topics[i],
+                                                pi - initial_part_cnt,
+                                                exp_mdp->replicas,
+                                                (size_t)exp_mdp->replica_cnt);
+                                        TEST_ASSERT(!err, "NewPartitions_set_replica_assignment: %s", rd_kafka_err2str(err));
+                                }
+
+                        }
+                }
+
+                TEST_SAY(_C_YEL "Topic %s with %d initial partitions will grow "
+                         "by %d to %d total partitions with%s replicas set\n",
+                         topics[i],
+                         initial_part_cnt, new_part_cnt, final_part_cnt,
+                         set_replicas ? "" : "out");
+
+                exp_mdtopics[exp_mdtopic_cnt].topic = topic;
+                exp_mdtopics[exp_mdtopic_cnt].partition_cnt = final_part_cnt;
+
+                exp_mdtopic_cnt++;
+        }
+
+        if (op_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(rk);
+
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options, op_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+        /*
+         * Create topics with initial partition count
+         */
+        TIMING_START(&timing, "CreateTopics");
+        TEST_SAY("Creating topics with initial partition counts\n");
+        rd_kafka_admin_CreateTopics(rk, new_topics, MY_CRP_TOPICS_CNT,
+                                    options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        err = test_wait_any_admin_result(q, RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+                                         15000);
+        TEST_ASSERT(!err, "CreateTopics failed: %s", rd_kafka_err2str(err));
+
+        rd_kafka_NewTopic_destroy_array(new_topics, MY_CRP_TOPICS_CNT);
+
+
+        /*
+         * Create new partitions
+         */
+        TIMING_START(&timing, "CreatePartitions");
+        TEST_SAY("Creating partitions\n");
+        rd_kafka_admin_CreatePartitions(rk, crp_topics, MY_CRP_TOPICS_CNT,
+                                    options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        err = test_wait_any_admin_result(q,
+                                         RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT,
+                                         15000);
+        TEST_ASSERT(!err, "CreatePartitions failed: %s", rd_kafka_err2str(err));
+
+        rd_kafka_NewPartitions_destroy_array(crp_topics, MY_CRP_TOPICS_CNT);
+
+
+        /**
+         * Verify that the expected topics are deleted and the non-expected
+         * are not. Allow it some time to propagate.
+         */
+        if (op_timeout > 0)
+                metadata_tmout = op_timeout + 1000;
+        else
+                metadata_tmout = 10 * 1000;
+
+        test_wait_metadata_update(rk,
+                                  exp_mdtopics,
+                                  exp_mdtopic_cnt,
+                                  NULL, 0,
+                                  metadata_tmout);
+
+        for (i = 0 ; i < MY_CRP_TOPICS_CNT ; i++)
+                rd_free(topics[i]);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+#undef MY_CRP_TOPICS_CNT
 }
 
 
@@ -478,6 +669,7 @@ static void do_test_apis (rd_kafka_type_t cltype) {
 
         mainq = rd_kafka_queue_get_main(rk);
 
+        /* Create topics */
         do_test_CreateTopics("temp queue, op timeout 0",
                              rk, NULL, 0, 0);
         do_test_CreateTopics("temp queue, op timeout 15000",
@@ -491,7 +683,11 @@ static void do_test_apis (rd_kafka_type_t cltype) {
 
         /* Delete topics */
         do_test_DeleteTopics("temp queue, op timeout 0", rk, NULL, 0);
-        do_test_DeleteTopics("main queue, op timeout 15000", rk, NULL, 1500);
+        do_test_DeleteTopics("main queue, op timeout 15000", rk, mainq, 1500);
+
+        /* Create Partitions */
+        do_test_CreatePartitions("temp queue, op timeout 6500", rk, NULL, 6500);
+        do_test_CreatePartitions("main queue, op timeout 0", rk, mainq, 0);
 
         rd_kafka_queue_destroy(mainq);
 

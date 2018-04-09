@@ -78,12 +78,6 @@ struct rd_kafka_AdminOptions_s {
  * @{
  */
 
-struct rd_kafka_CreateTopics_topic_result_s {
-
-};
-
-
-
 /**
  * @brief NewTopic type, used with CreateTopics.
  */
@@ -120,6 +114,39 @@ struct rd_kafka_DeleteTopic_s {
         char *topic;   /**< Points to data */
         char  data[1]; /**< The topic name is allocated along with the
                         *   the struct here. */
+};
+
+/**@}*/
+
+
+
+/**
+ * @name CreatePartitions
+ * @{
+ */
+
+
+/**
+ * @brief CreatePartitions result
+ */
+struct rd_kafka_CreatePartitions_result_s {
+        rd_list_t topics;   /**< Type (rd_kafka_topic_result_t *) */
+};
+
+struct rd_kafka_NewPartitions_s {
+        char *topic;      /**< Points to data */
+        size_t total_cnt; /**< New total partition count */
+
+        /* Optional */
+        rd_list_t replicas;     /**< Type (rd_list_t (int32_t)):
+                                 *   Array of replica lists indexed by
+                                 *   new partition relative index.
+                                 *   Size is dynamic since we don't
+                                 *   know how many partitions are actually
+                                 *   being added by total_cnt */
+
+        char  data[1];    /**< The topic name is allocated along with the
+                           *   the struct here. */
 };
 
 /**@}*/
@@ -184,29 +211,6 @@ struct rd_kafka_DescribeConfigs_result_s {
 };
 
 /**@}*/
-
-
-/**
- * @name CreatePartitions
- * @{
- */
-
-struct rd_kafka_NewPartitions_s {
-        char     *topic;         /**< Topic for which to add partition(s) */
-        int       total_count;   /**< New total partition count */
-        rd_list_t assignments;   /**< Type (rd_list_t (int32_t)):
-                                  *   New assignment (broker-id) list per
-                                  *   new partition */
-
-        /* Response */
-        rd_kafka_resp_err_t err; /**< Response error code */
-        char *errstr;            /**< Response error string */
-};
-
-struct rd_kafka_CreatePartitions_result_s {
-        rd_list_t partitions;   /**< Type (rd_kafka_NewPartitions_t) */
-
-};
 
 
 /**@}*/

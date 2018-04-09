@@ -832,7 +832,9 @@ void rd_kafka_enq_once_destroy0 (rd_kafka_enq_once_t *eonce) {
          * did not clean up, which is a bug. */
         rd_assert(!eonce->rko);
         rd_assert(!eonce->replyq.q);
+#if ENABLE_DEVEL
         rd_assert(!eonce->replyq._id);
+#endif
         rd_assert(eonce->refcnt == 0);
 
         mtx_destroy(&eonce->lock);

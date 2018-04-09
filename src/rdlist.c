@@ -435,3 +435,38 @@ void *rd_list_copy_preallocated (const void *elem, void *opaque) {
                                           (const rd_list_t *)elem);
 }
 
+
+/**
+ * @name Misc helpers for common list types
+ * @{
+ *
+ */
+rd_list_t *rd_list_init_int32 (rd_list_t *rl, int max_size) {
+        rd_list_init(rl, 0, NULL);
+        rd_list_prealloc_elems(rl, sizeof(int32_t), max_size, 1/*memzero*/);
+        return rl;
+}
+
+void rd_list_set_int32 (rd_list_t *rl, int idx, int32_t val) {
+        rd_assert((rl->rl_flags & RD_LIST_F_FIXED_SIZE) &&
+                  rl->rl_elemsize == sizeof(int32_t));
+        rd_assert(idx < rl->rl_size);
+
+        memcpy(rl->rl_elems[idx], &val, sizeof(int32_t));
+
+        if (rl->rl_cnt <= idx)
+                rl->rl_cnt = idx+1;
+}
+
+int32_t rd_list_get_int32 (const rd_list_t *rl, int idx) {
+        rd_assert((rl->rl_flags & RD_LIST_F_FIXED_SIZE) &&
+                  rl->rl_elemsize == sizeof(int32_t) &&
+                  idx < rl->rl_cnt);
+        return *(int32_t *)rl->rl_elems[idx];
+}
+
+
+
+
+/**@}*/
+

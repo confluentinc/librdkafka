@@ -328,9 +328,42 @@ void *rd_list_string_copy (const void *elem, void *opaque) {
 }
 
 
+
+/**
+ * @name Misc helpers for common list types
+ * @{
+ *
+ */
+
+/**
+ * @brief Init a new list of int32_t's of maximum size \p max_size
+ *        where each element is pre-allocated.
+ */
+rd_list_t *rd_list_init_int32 (rd_list_t *rl, int max_size);
+
+
 /**
  * Debugging: Print list to stdout.
  */
 void rd_list_dump (const char *what, const rd_list_t *rl);
+
+
+
+/**
+ * @brief Set element at index \p idx to value \p val.
+ *
+ * @remark Must only be used with preallocated int32_t lists.
+ * @remark Allows values to be overwritten.
+ */
+void rd_list_set_int32 (rd_list_t *rl, int idx, int32_t val);
+
+/**
+ * @returns the int32_t element value at index \p idx
+ *
+ * @remark Must only be used with preallocated int32_t lists.
+ */
+int32_t rd_list_get_int32 (const rd_list_t *rl, int idx);
+
+/**@}*/
 
 #endif /* _RDLIST_H_ */

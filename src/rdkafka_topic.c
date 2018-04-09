@@ -120,7 +120,7 @@ void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
 	if (rkt->rkt_topic)
 		rd_kafkap_str_destroy(rkt->rkt_topic);
 
-	rd_kafka_anyconf_destroy(RD_TOPIC, &rkt->rkt_conf);
+	rd_kafka_anyconf_destroy(_RK_TOPIC, &rkt->rkt_conf);
 
         mtx_destroy(&rkt->rkt_app_lock);
 	rwlock_destroy(&rkt->rkt_lock);

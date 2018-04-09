@@ -235,7 +235,7 @@ rd_kafka_interceptors_init (rd_kafka_conf_t *conf) {
  */
 void rd_kafka_conf_interceptor_ctor (int scope, void *pconf) {
         rd_kafka_conf_t *conf = pconf;
-        assert(scope == RD_GLOBAL);
+        assert(scope == _RK_GLOBAL);
         rd_kafka_interceptors_init(conf);
 }
 
@@ -244,7 +244,7 @@ void rd_kafka_conf_interceptor_ctor (int scope, void *pconf) {
  */
 void rd_kafka_conf_interceptor_dtor (int scope, void *pconf) {
         rd_kafka_conf_t *conf = pconf;
-        assert(scope == RD_GLOBAL);
+        assert(scope == _RK_GLOBAL);
         rd_kafka_interceptors_destroy(conf);
 }
 
@@ -262,7 +262,7 @@ void rd_kafka_conf_interceptor_copy (int scope, void *pdst, const void *psrc,
         int i;
         const rd_strtup_t *confval;
 
-        assert(scope == RD_GLOBAL);
+        assert(scope == _RK_GLOBAL);
 
         /* Apply interceptor configuration values.
          * on_conf_dup() has already been called for dconf so

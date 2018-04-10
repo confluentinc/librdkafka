@@ -457,7 +457,9 @@ static int rd_kafka_sasl_cyrus_client_new (rd_kafka_transport_t *rktrans,
         memcpy(state->callbacks, callbacks, sizeof(callbacks));
 
         /* Acquire or refresh ticket if kinit is configured */ 
-        rd_kafka_sasl_cyrus_kinit_refresh(rkb);
+        if(rd_kafka_sasl_cyrus_kinit_refresh(rkb) != 0){
+		return -1;
+	};
 
         r = sasl_client_new(rk->rk_conf.sasl.service_name, hostname,
                             NULL, NULL, /* no local & remote IP checks */

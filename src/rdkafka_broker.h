@@ -274,6 +274,10 @@ rd_kafka_broker_t *rd_kafka_broker_any_usable (rd_kafka_t *rk, int timeout_ms,
 
 rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id, int state);
 
+rd_kafka_broker_t *
+rd_kafka_broker_get_async (rd_kafka_t *rk, int32_t broker_id, int state,
+                           rd_kafka_enq_once_t *eonce);
+
 rd_kafka_broker_t *rd_kafka_broker_controller (rd_kafka_t *rk, int state,
                                                rd_ts_t abs_timeout);
 rd_kafka_broker_t *

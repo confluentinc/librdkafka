@@ -1038,6 +1038,42 @@ rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id,
 
 
 /**
+ * @returns the broker handle fork \p broker_id using cached metadata
+ *          information (if available) in state == \p state,
+ *          with refcount increaesd.
+ *
+ *          Otherwise enqueues the \p eonce on the wait-state-change queue
+ *          which will be triggered on broker state changes.
+ *          It may also be triggered erroneously, so the caller
+ *          should call rd_kafka_broker_get_async() again when
+ *          the eonce is triggered.
+ *
+ * @locks none
+ * @locality any thread
+ */
+rd_kafka_broker_t *
+rd_kafka_broker_get_async (rd_kafka_t *rk, int32_t broker_id, int state,
+                           rd_kafka_enq_once_t *eonce) {
+        int version;
+        do {
+                rd_kafka_broker_t *rkb;
+
+                version = rd_kafka_brokers_get_state_version(rk);
+
+                rd_kafka_rdlock(rk);
+                rkb = rd_kafka_broker_find_by_nodeid0(rk, broker_id, state);
+                rd_kafka_rdunlock(rk);
+
+                if (rkb)
+                        return rkb;
+
+        } while (!rd_kafka_brokers_wait_state_change_async(rk, version, eonce));
+
+        return NULL; /* eonce added to wait list */
+}
+
+
+/**
  * @returns the current controller using cached metadata information,
  *          and only if the broker's state == \p state.
  *          The reference count is increased for the returned broker.
@@ -1059,11 +1095,7 @@ static rd_kafka_broker_t *rd_kafka_broker_controller_nowait (rd_kafka_t *rk,
                 return NULL;
         }
 
-        rkb = rd_kafka_broker_find_by_nodeid(rk, rk->rk_controllerid);
-        if (rkb && (int)rkb->rkb_state != state) {
-                rd_kafka_broker_destroy(rkb);
-                rkb = NULL;
-        }
+        rkb = rd_kafka_broker_find_by_nodeid0(rk, rk->rk_controllerid, state);
 
         rd_kafka_rdunlock(rk);
 
@@ -1101,6 +1133,7 @@ rd_kafka_broker_controller_async (rd_kafka_t *rk, int state,
 
         return NULL; /* eonce added to wait list */
 }
+
 
 /**
  * @returns the current controller using cached metadata information,

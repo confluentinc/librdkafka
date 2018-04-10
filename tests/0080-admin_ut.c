@@ -107,41 +107,62 @@ static void do_test_CreateTopics (const char *what,
 
                 if (set_replicas) {
                         int32_t p;
+                        int32_t replicas[MY_NEW_TOPICS_CNT];
+                        int j;
+
+                        for (j = 0 ; j < num_replicas ; j++)
+                                replicas[j] = j;
 
                         /*
                          * Set valid replica assignments
                          */
                         for (p = 0 ; p < num_parts ; p++) {
-                                int32_t replicas[MY_NEW_TOPICS_CNT];
-                                int j;
-
-                                /* Skip second partition */
-                                if (p == 1)
-                                        continue;
-
-                                for (j = 0 ; j < num_replicas ; j++)
-                                        replicas[j] = j;
+                                /* Try adding an existing out of order,
+                                 * should fail */
+                                if (p == 1) {
+                                        err = rd_kafka_NewTopic_set_replica_assignment(
+                                                new_topics[i], p+1,
+                                                replicas, num_replicas,
+                                                errstr, sizeof(errstr));
+                                        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                                    "%s", rd_kafka_err2str(err));
+                                }
 
                                 err = rd_kafka_NewTopic_set_replica_assignment(
                                         new_topics[i], p,
-                                        replicas, num_replicas);
-                                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                                        replicas, num_replicas,
+                                        errstr, sizeof(errstr));
+                                TEST_ASSERT(!err, "%s", errstr);
                         }
+
+                        /* Try to add an existing partition, should fail */
+                        err = rd_kafka_NewTopic_set_replica_assignment(
+                                new_topics[i], 0,
+                                replicas, num_replicas, NULL, 0);
+                        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                    "%s", rd_kafka_err2str(err));
+
                 } else {
                         int32_t dummy_replicas[1] = {1};
 
                         /* Test invalid partition */
                         err = rd_kafka_NewTopic_set_replica_assignment(
-                                new_topics[i], num_parts+1, dummy_replicas, 1);
+                                new_topics[i], num_parts+1, dummy_replicas, 1,
+                                errstr, sizeof(errstr));
                         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                    "%s", rd_kafka_err2str(err));
+                                    "%s: %s", rd_kafka_err2str(err),
+                                    err == RD_KAFKA_RESP_ERR_NO_ERROR ?
+                                    "" : errstr);
 
                         /* Setting replicas with with default replicas != -1
                          * is an error. */
                         err = rd_kafka_NewTopic_set_replica_assignment(
-                                new_topics[i], 0, dummy_replicas, 1);
+                                new_topics[i], 0, dummy_replicas, 1,
+                                errstr, sizeof(errstr));
                         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                                    "%s", rd_kafka_err2str(err));
+                                    "%s: %s", rd_kafka_err2str(err),
+                                    err == RD_KAFKA_RESP_ERR_NO_ERROR ?
+                                    "" : errstr);
                 }
         }
 
@@ -197,8 +218,7 @@ static void do_test_CreateTopics (const char *what,
 
         rd_kafka_event_destroy(rkev);
 
-        for (i = 0 ; i < MY_NEW_TOPICS_CNT ; i++)
-                rd_kafka_NewTopic_destroy(new_topics[i]);
+        rd_kafka_NewTopic_destroy_array(new_topics, MY_NEW_TOPICS_CNT);
 
         if (options)
                 rd_kafka_AdminOptions_destroy(options);
@@ -362,6 +382,89 @@ static void do_test_mix (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         }
 }
 
+
+/**
+ * @brief Test AlterConfigs and DescribeConfigs
+ */
+static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
+#define MY_CONFRES_CNT RD_KAFKA_RESOURCE__CNT + 2
+        rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_event_t *rkev;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_AlterConfigs_result_t *res;
+        const rd_kafka_ConfigResource_t **rconfigs;
+        size_t rconfig_cnt;
+        char errstr[128];
+        const char *errstr2;
+        int i;
+
+        /* Check invalids */
+        configs[0] = rd_kafka_ConfigResource_new(
+                (rd_kafka_ResourceType_t)-1, "something");
+        TEST_ASSERT(!configs[0]);
+
+        configs[0] = rd_kafka_ConfigResource_new(
+                        (rd_kafka_ResourceType_t)0, NULL);
+        TEST_ASSERT(!configs[0]);
+
+
+        for (i = 0 ; i < MY_CONFRES_CNT ; i++) {
+                int add_config = !(i % 2);
+
+                /* librdkafka shall not limit the use of illogical
+                 * or unknown settings, they are enforced by the broker. */
+                configs[i] = rd_kafka_ConfigResource_new(
+                        (rd_kafka_ResourceType_t)i, "3");
+                TEST_ASSERT(configs[i] != NULL);
+
+                if (add_config) {
+                        rd_kafka_ConfigResource_add_config(configs[i],
+                                                           "some.conf",
+                                                           "which remains "
+                                                           "unchecked");
+                        rd_kafka_ConfigResource_add_config(configs[i],
+                                                           "some.conf.null",
+                                                           NULL);
+                }
+        }
+
+
+        options = rd_kafka_AdminOptions_new(rk);
+        err = rd_kafka_AdminOptions_set_request_timeout(options, 1000, errstr,
+                                                        sizeof(errstr));
+        TEST_ASSERT(!err, "%s", errstr);
+
+        rd_kafka_admin_AlterConfigs(rk, configs, MY_CONFRES_CNT,
+                                    options, rkqu);
+
+        rd_kafka_AdminOptions_destroy(options);
+        rd_kafka_ConfigResource_destroy_array(configs, MY_CONFRES_CNT);
+
+        rkev = test_wait_admin_result(rkqu, RD_KAFKA_EVENT_ALTERCONFIGS_RESULT,
+                                      2000);
+
+        TEST_ASSERT(rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected timeout, not %s",
+                    rd_kafka_event_error_string(rkev));
+
+        res = rd_kafka_event_AlterConfigs_result(rkev);
+        TEST_ASSERT(res);
+
+        err = rd_kafka_AlterConfigs_result_error(res, &errstr2);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected timeout, not %s: %s",
+                    rd_kafka_err2name(err), errstr2);
+
+        rconfigs = rd_kafka_AlterConfigs_result_resources(res, &rconfig_cnt);
+        TEST_ASSERT(!rconfigs && !rconfig_cnt,
+                    "Expected no result resources, got %"PRIusz,
+                    rconfig_cnt);
+
+        rd_kafka_event_destroy(rkev);
+}
+
+
 static void do_test_apis (rd_kafka_type_t cltype) {
         rd_kafka_t *rk;
         char errstr[512];
@@ -388,6 +491,8 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         do_test_DeleteTopics("main queue, options", rk, mainq, 1);
 
         do_test_mix(rk, mainq);
+
+        do_test_configs(rk, mainq);
 
         rd_kafka_queue_destroy(mainq);
 

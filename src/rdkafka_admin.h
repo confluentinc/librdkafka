@@ -61,8 +61,15 @@ struct rd_kafka_AdminOptions_s {
                                             *   but don't perform action.
                                             *   Valid for:
                                             *     CreateTopics
-                                            *     AlterConfigs
                                             *     CreatePartitions
+                                            *     AlterConfigs
+                                            */
+
+        rd_kafka_confval_t incremental;    /**< BOOL: Incremental rather than
+                                            *         absolute application
+                                            *         of config.
+                                            *   Valid for:
+                                            *     AlterConfigs
                                             */
 
         rd_kafka_confval_t opaque;         /**< PTR: Application opaque.
@@ -112,7 +119,7 @@ struct rd_kafka_DeleteTopics_result_s {
 
 struct rd_kafka_DeleteTopic_s {
         char *topic;   /**< Points to data */
-        char  data[1]; /**< The topic name is allocated along with the
+        char  data[1]; /**< The topic name is allocated along with
                         *   the struct here. */
 };
 
@@ -145,27 +152,43 @@ struct rd_kafka_NewPartitions_s {
                                  *   know how many partitions are actually
                                  *   being added by total_cnt */
 
-        char  data[1];    /**< The topic name is allocated along with the
+        char  data[1];    /**< The topic name is allocated along with
                            *   the struct here. */
 };
 
 /**@}*/
 
 
+
 /**
- * @name AlterConfigs
+ * @name ConfigEntry
  * @{
  */
 
 
 struct rd_kafka_ConfigEntry_s {
-        rd_strtup_t kv;           /**< Name/Value pair */
+        rd_strtup_t *kv;          /**< Name/Value pair */
+
 
         /* Response */
-        rd_bool_t readonly;       /**< Value is read-only (on broker) */
-        rd_bool_t is_default;     /**< Value is at its default */
-        rd_bool_t is_sensitive;   /**< Value is sensitive */
+        rd_kafka_ConfigSource_t source; /**< Config source */
+
+        /* This is a struct for easy copying */
+        struct {
+                rd_bool_t is_readonly;    /**< Value is read-only (on broker) */
+                rd_bool_t is_default;     /**< Value is at its default */
+                rd_bool_t is_sensitive;   /**< Value is sensitive */
+                rd_bool_t is_synonym;     /**< Value is synonym */
+        } attr;
+
+        rd_list_t synonyms;       /**< Type (rd_kafka_configEntry *) */
 };
+
+rd_kafka_ConfigEntry_t *
+rd_kafka_ConfigEntry_new (const char *name, const char *value);
+void rd_kafka_ConfigEntry_destroy (rd_kafka_ConfigEntry_t *entry);
+void rd_kafka_ConfigEntry_destroy_array (rd_kafka_ConfigEntry_t **entry,
+                                         size_t entry_cnt);
 
 /**
  * @brief A cluster ConfigResource constisting of:
@@ -175,20 +198,35 @@ struct rd_kafka_ConfigEntry_s {
  *
  * https://cwiki.apache.org/confluence/display/KAFKA/KIP-133%3A+Describe+and+Alter+Configs+Admin+APIs
  */
-struct rd_kafka_ConfigResource {
+struct rd_kafka_ConfigResource_s {
         rd_kafka_ResourceType_t restype; /**< Resource type */
-        const char *name;                  /**< Resource name */
-        rd_list_t config;                  /**< Type (rd_kafka_ConfigEntry_t *):
-                                            *   List of config props */
+        char *name;                      /**< Resource name, points to .data*/
+        rd_list_t config;                /**< Type (rd_kafka_ConfigEntry_t *):
+                                          *   List of config props */
 
         /* Response */
-        rd_kafka_resp_err_t err;           /**< Response error code */
-        char *errstr;                      /**< Response error string */
+        rd_kafka_resp_err_t err;         /**< Response error code */
+        char *errstr;                    /**< Response error string */
+
+        char  data[1];                   /**< The name is allocated along with
+                                          *   the struct here. */
 };
 
 
+
+
+/**@}*/
+
+/**
+ * @name AlterConfigs
+ * @{
+ */
+
+
+
+
 struct rd_kafka_AlterConfigs_result_s {
-        rd_list_t configs;    /**< Type (rd_kafka_ConfigResource_t *) */
+        rd_list_t resources;   /**< Type (rd_kafka_ConfigResource_t *) */
 };
 
 struct rd_kafka_ConfigResource_result_s {

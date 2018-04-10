@@ -114,6 +114,8 @@ typedef enum {
         RD_KAFKA_OP_CREATETOPICS,    /**< Admin: CreateTopics: u.admin_request*/
         RD_KAFKA_OP_DELETETOPICS,    /**< Admin: DeleteTopics: u.admin_request*/
         RD_KAFKA_OP_CREATEPARTITIONS,/**< Admin: CreatePartitions: u.admin_request*/
+        RD_KAFKA_OP_ALTERCONFIGS,    /**< Admin: AlterConfigs: u.admin_request*/
+        RD_KAFKA_OP_DESCRIBECONFIGS, /**< Admin: DescribeConfigs: u.admin_request*/
         RD_KAFKA_OP_ADMIN_RESULT,    /**< Admin API .._result_t */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
@@ -362,9 +364,18 @@ struct rd_kafka_op_s {
                         /** Worker state */
                         enum {
                                 RD_KAFKA_ADMIN_STATE_INIT,
+                                RD_KAFKA_ADMIN_STATE_WAIT_BROKER,
                                 RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER,
+                                RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST,
                                 RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE,
                         } state;
+
+                        int32_t broker_id; /**< Requested broker id to
+                                            *   communicate with.
+                                            *   Used for AlterConfigs, et.al,
+                                            *   that needs to speak to a
+                                            *   specific broker rather than
+                                            *   the controller. */
 
                         /** Application's reply queue */
                         rd_kafka_replyq_t replyq;
@@ -378,8 +389,15 @@ struct rd_kafka_op_s {
                         char *errstr;      /**< Error string, if rko_err
                                             *   is set, else NULL. */
 
-                        /* CreateTopics, DeleteTopics */
-                        rd_list_t topics; /**< Type (rd_kafka_topic_result_t *)*/
+                        rd_list_t results; /**< Type depends on request type:
+                                            *
+                                            * (rd_kafka_topic_result_t *):
+                                            * CreateTopics, DeleteTopics,
+                                            * CreatePartitions.
+                                            *
+                                            * (rd_kafka_ConfigResource_t *):
+                                            * AlterConfigs, DescribeConfigs
+                                            */
 
                         void *opaque;     /**< Application's opaque as set by
                                            *   rd_kafka_AdminOptions_set_opaque

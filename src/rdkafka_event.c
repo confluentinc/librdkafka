@@ -272,3 +272,21 @@ rd_kafka_event_CreatePartitions_result (rd_kafka_event_t *rkev) {
         else
                 return (const rd_kafka_CreatePartitions_result_t *)rkev;
 }
+
+
+const rd_kafka_AlterConfigs_result_t *
+rd_kafka_event_AlterConfigs_result (rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_ALTERCONFIGS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_AlterConfigs_result_t *)rkev;
+}
+
+
+const rd_kafka_DescribeConfigs_result_t *
+rd_kafka_event_DescribeConfigs_result (rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DescribeConfigs_result_t *)rkev;
+}

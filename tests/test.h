@@ -559,9 +559,15 @@ void test_wait_metadata_update (rd_kafka_t *rk,
                                 size_t not_topic_cnt,
                                 int tmout);
 
+rd_kafka_event_t *
+test_wait_admin_result (rd_kafka_queue_t *q,
+                        rd_kafka_event_type_t evtype,
+                        int tmout);
+
 rd_kafka_resp_err_t
-test_wait_any_admin_result (rd_kafka_queue_t *q, rd_kafka_event_type_t evtype,
-                            int tmout);
+test_wait_topic_admin_result (rd_kafka_queue_t *q,
+                              rd_kafka_event_type_t evtype,
+                              int tmout);
 
 rd_kafka_resp_err_t
 test_CreateTopics_simple (rd_kafka_t *rk,

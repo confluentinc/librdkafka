@@ -134,8 +134,9 @@ static void do_test_CreateTopics (const char *what,
                         for (p = 0 ; p < num_parts ; p++) {
                                 err = rd_kafka_NewTopic_set_replica_assignment(
                                         new_topics[i], p,
-                                        replicas, num_replicas);
-                                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                                        replicas, num_replicas,
+                                        errstr, sizeof(errstr));
+                                TEST_ASSERT(!err, "%s", errstr);
                         }
                 }
 
@@ -553,8 +554,10 @@ static void do_test_CreatePartitions (const char *what,
                                         err = rd_kafka_NewTopic_set_replica_assignment(
                                                 new_topics[i], pi,
                                                 exp_mdp->replicas,
-                                                (size_t)exp_mdp->replica_cnt);
-                                        TEST_ASSERT(!err, "NewTopic_set_replica_assignment: %s", rd_kafka_err2str(err));
+                                                (size_t)exp_mdp->replica_cnt,
+                                                errstr, sizeof(errstr));
+                                        TEST_ASSERT(!err, "NewTopic_set_replica_assignment: %s",
+                                                errstr);
                                 } else {
                                         /* Set replica assignment for new
                                          * partitions */
@@ -562,8 +565,10 @@ static void do_test_CreatePartitions (const char *what,
                                                 crp_topics[i],
                                                 pi - initial_part_cnt,
                                                 exp_mdp->replicas,
-                                                (size_t)exp_mdp->replica_cnt);
-                                        TEST_ASSERT(!err, "NewPartitions_set_replica_assignment: %s", rd_kafka_err2str(err));
+                                                (size_t)exp_mdp->replica_cnt,
+                                                errstr, sizeof(errstr));
+                                        TEST_ASSERT(!err, "NewPartitions_set_replica_assignment: %s",
+                                                errstr);
                                 }
 
                         }
@@ -598,8 +603,9 @@ static void do_test_CreatePartitions (const char *what,
                                     options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
-        err = test_wait_any_admin_result(q, RD_KAFKA_EVENT_CREATETOPICS_RESULT,
-                                         15000);
+        err = test_wait_topic_admin_result(q,
+                                           RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+                                           15000);
         TEST_ASSERT(!err, "CreateTopics failed: %s", rd_kafka_err2str(err));
 
         rd_kafka_NewTopic_destroy_array(new_topics, MY_CRP_TOPICS_CNT);
@@ -614,9 +620,9 @@ static void do_test_CreatePartitions (const char *what,
                                     options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
-        err = test_wait_any_admin_result(q,
-                                         RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT,
-                                         15000);
+        err = test_wait_topic_admin_result(q,
+                                           RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT,
+                                           15000);
         TEST_ASSERT(!err, "CreatePartitions failed: %s", rd_kafka_err2str(err));
 
         rd_kafka_NewPartitions_destroy_array(crp_topics, MY_CRP_TOPICS_CNT);
@@ -649,6 +655,227 @@ static void do_test_CreatePartitions (const char *what,
 #undef MY_CRP_TOPICS_CNT
 }
 
+
+
+/**
+ * @brief Print the ConfigEntrys in the provided array.
+ */
+static void
+test_print_ConfigEntry_array (const rd_kafka_ConfigEntry_t **entries,
+                              size_t entry_cnt, unsigned int depth) {
+        const char *indent = &"    "[4 - (depth > 4 ? 4 : depth)];
+        size_t ei;
+
+        for (ei = 0 ; ei < entry_cnt ; ei++) {
+                const rd_kafka_ConfigEntry_t *e = entries[ei];
+                const rd_kafka_ConfigEntry_t **syns;
+                size_t syn_cnt;
+
+                syns = rd_kafka_ConfigEntry_synonyms(e, &syn_cnt);
+
+                TEST_SAY("%s#%"PRIusz"/%"PRIusz
+                         ": Source %s (%d): \"%s\"=\"%s\" "
+                         "[is read-only=%d, default=%d, sensitive=%d, "
+                         "synonym=%d] with %"PRIusz" synonym(s)\n",
+                         indent,
+                         ei, entry_cnt,
+                         rd_kafka_ConfigSource_name(
+                                 rd_kafka_ConfigEntry_source(e)),
+                         rd_kafka_ConfigEntry_source(e),
+                         rd_kafka_ConfigEntry_name(e),
+                         rd_kafka_ConfigEntry_value(e) ?
+                         rd_kafka_ConfigEntry_value(e) : "(NULL)",
+                         rd_kafka_ConfigEntry_is_read_only(e),
+                         rd_kafka_ConfigEntry_is_default(e),
+                         rd_kafka_ConfigEntry_is_sensitive(e),
+                         rd_kafka_ConfigEntry_is_synonym(e),
+                         syn_cnt);
+
+
+                if (syn_cnt > 0)
+                        test_print_ConfigEntry_array(syns, syn_cnt, depth++);
+        }
+}
+
+
+/**
+ * @brief Test AlterConfigs and DescribeConfigs
+ */
+static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
+#define MY_CONFRES_CNT 3
+        char *topics[MY_CONFRES_CNT];
+        rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_resp_err_t exp_err[MY_CONFRES_CNT];
+        rd_kafka_event_t *rkev;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_AlterConfigs_result_t *res;
+        const rd_kafka_ConfigResource_t **rconfigs;
+        size_t rconfig_cnt;
+        char errstr[128];
+        const char *errstr2;
+        int ci = 0;
+        int i;
+        int fails = 0;
+
+        /*
+         * Only create one topic, the others will be non-existent.
+         */
+        for (i = 0 ; i < MY_CONFRES_CNT ; i++)
+                rd_strdupa(&topics[i], test_mk_topic_name(__FUNCTION__, 1));
+
+        test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
+
+        /*
+         * ConfigResource #0: valid topic config
+         */
+        configs[ci] = rd_kafka_ConfigResource_new(
+                RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
+
+        err = rd_kafka_ConfigResource_add_config(configs[ci],
+                                                 "compression.type", "gzip");
+        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+        err = rd_kafka_ConfigResource_add_config(configs[ci],
+                                                 "flush.ms", "12345678");
+        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        ci++;
+
+        /*
+         * ConfigResource #1: valid broker config
+         */
+        configs[ci] = rd_kafka_ConfigResource_new(
+                RD_KAFKA_RESOURCE_BROKER,
+                tsprintf("%"PRId32, avail_brokers[0]));
+
+        err = rd_kafka_ConfigResource_add_config(
+                configs[ci],
+                "sasl.kerberos.min.time.before.relogin", "58000");
+        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        ci++;
+
+        /*
+         * ConfigResource #2: valid topic config, non-existent topic
+         */
+        configs[ci] = rd_kafka_ConfigResource_new(
+                RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
+
+        err = rd_kafka_ConfigResource_add_config(configs[ci],
+                                                 "compression.type", "lz4");
+        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+        err = rd_kafka_ConfigResource_add_config(configs[ci],
+                                                 "offset.metadata.max.bytes",
+                                                 "12345");
+        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+        exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN;
+        ci++;
+
+
+        /*
+         * Timeout options
+         */
+        options = rd_kafka_AdminOptions_new(rk);
+        err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, errstr,
+                                                        sizeof(errstr));
+        TEST_ASSERT(!err, "%s", errstr);
+
+
+        /*
+         * Fire off request
+         */
+        rd_kafka_admin_AlterConfigs(rk, configs, ci, options, rkqu);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        /*
+         * Wait for result
+         */
+        rkev = test_wait_admin_result(rkqu, RD_KAFKA_EVENT_ALTERCONFIGS_RESULT,
+                                      10000+1000);
+
+        /*
+         * Extract result
+         */
+        res = rd_kafka_event_AlterConfigs_result(rkev);
+        TEST_ASSERT(res, "Expected AlterConfigs result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        err = rd_kafka_AlterConfigs_result_error(res, &errstr2);
+        TEST_ASSERT(!err,
+                    "Expected success, not %s: %s",
+                    rd_kafka_err2name(err), errstr2);
+
+        rconfigs = rd_kafka_AlterConfigs_result_resources(res, &rconfig_cnt);
+        TEST_ASSERT((int)rconfig_cnt == ci,
+                    "Expected %d result resources, got %"PRIusz"\n",
+                    ci, rconfig_cnt);
+
+        /*
+         * Verify status per resource
+         */
+        for (i = 0 ; i < (int)rconfig_cnt ; i++) {
+                const rd_kafka_ConfigEntry_t **entries;
+                size_t entry_cnt;
+
+                err = rd_kafka_ConfigResource_error(rconfigs[i]);
+                errstr2 = rd_kafka_ConfigResource_error_string(rconfigs[i]);
+
+                entries = rd_kafka_ConfigResource_configs(rconfigs[i],
+                                                          &entry_cnt);
+
+                TEST_SAY("ConfigResource #%d: type %s (%d), "
+                         "%"PRIusz" ConfigEntries, error %s (%s)\n",
+                         i,
+                         rd_kafka_ResourceType_name(
+                                 rd_kafka_ConfigResource_type(rconfigs[i])),
+                         rd_kafka_ConfigResource_type(rconfigs[i]),
+                         entry_cnt,
+                         rd_kafka_err2name(err), errstr2 ? errstr2 : "");
+
+                test_print_ConfigEntry_array(entries, entry_cnt, 1);
+
+                if (rd_kafka_ConfigResource_type(rconfigs[i]) !=
+                    rd_kafka_ConfigResource_type(configs[i]) ||
+                    strcmp(rd_kafka_ConfigResource_name(rconfigs[i]),
+                           rd_kafka_ConfigResource_name(configs[i]))) {
+                        TEST_FAIL_LATER(
+                                "ConfigResource #%d: "
+                                "expected type %s name %s, "
+                                "got type %s name %s",
+                                i,
+                                rd_kafka_ResourceType_name(rd_kafka_ConfigResource_type(configs[i])),
+                                rd_kafka_ConfigResource_name(configs[i]),
+                                rd_kafka_ResourceType_name(rd_kafka_ConfigResource_type(rconfigs[i])),
+                                rd_kafka_ConfigResource_name(rconfigs[i]));
+                        fails++;
+                        continue;
+                }
+
+
+                if (err != exp_err[i]) {
+                        TEST_FAIL_LATER("ConfigResource #%d: "
+                                        "expected %s (%d), got %s (%d, %s)",
+                                        i,
+                                        rd_kafka_err2name(exp_err[i]),
+                                        exp_err[i],
+                                        rd_kafka_err2name(err), err,
+                                        errstr2 ? errstr2 : "");
+                        fails++;
+                }
+        }
+
+        TEST_ASSERT(!fails, "See %d previous failure(s)", fails);
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_ConfigResource_destroy_array(configs, ci);
+}
 
 
 static void do_test_apis (rd_kafka_type_t cltype) {
@@ -688,6 +915,8 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         /* Create Partitions */
         do_test_CreatePartitions("temp queue, op timeout 6500", rk, NULL, 6500);
         do_test_CreatePartitions("main queue, op timeout 0", rk, mainq, 0);
+        /* AlterConfigs and DescribeConfigs */
+        do_test_configs(rk, mainq);
 
         rd_kafka_queue_destroy(mainq);
 

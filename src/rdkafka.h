@@ -234,9 +234,6 @@ typedef struct rd_kafka_conf_s rd_kafka_conf_t;
 typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
 typedef struct rd_kafka_queue_s rd_kafka_queue_t;
 typedef struct rd_kafka_topic_result_s rd_kafka_topic_result_t;
-typedef struct rd_kafka_AlterConfigs_result_s rd_kafka_AlterConfigs_result_t;
-typedef struct rd_kafka_ConfigResource_result_s rd_kafka_ConfigResource_result_t;
-typedef struct rd_kafka_DescribeConfigs_result_s rd_kafka_DescribeConfigs_result_t;
 /* @endcond */
 
 
@@ -3495,6 +3492,8 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_CREATETOPICS_RESULT 100 /**< CreateTopics_result_t */
 #define RD_KAFKA_EVENT_DELETETOPICS_RESULT 101 /**< DeleteTopics_result_t */
 #define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
+#define RD_KAFKA_EVENT_ALTERCONFIGS_RESULT 103 /**< AlterConfigs_result_t */
+#define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
 
 
 typedef struct rd_kafka_op_s rd_kafka_event_t;
@@ -3612,6 +3611,8 @@ const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev);
  *  - RD_KAFKA_EVENT_CREATETOPICS_RESULT
  *  - RD_KAFKA_EVENT_DELETETOPICS_RESULT
  *  - RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
+ *  - RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
+ *  - RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
  */
 RD_EXPORT
 void *rd_kafka_event_opaque (rd_kafka_event_t *rkev);
@@ -3675,6 +3676,8 @@ rd_kafka_event_topic_partition (rd_kafka_event_t *rkev);
 typedef rd_kafka_event_t rd_kafka_CreateTopics_result_t;
 typedef rd_kafka_event_t rd_kafka_DeleteTopics_result_t;
 typedef rd_kafka_event_t rd_kafka_CreatePartitions_result_t;
+typedef rd_kafka_event_t rd_kafka_AlterConfigs_result_t;
+typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
 
 /**
  * @returns the result of a CreateTopics request, or NULL if event is of
@@ -3705,6 +3708,26 @@ rd_kafka_event_DeleteTopics_result (rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_CreatePartitions_result_t *
 rd_kafka_event_CreatePartitions_result (rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a AlterConfigs request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
+ */
+RD_EXPORT const rd_kafka_AlterConfigs_result_t *
+rd_kafka_event_AlterConfigs_result (rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a DescribeConfigs request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
+ */
+RD_EXPORT const rd_kafka_DescribeConfigs_result_t *
+rd_kafka_event_DescribeConfigs_result (rd_kafka_event_t *rkev);
 
 
 
@@ -4428,17 +4451,37 @@ rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
  *
  * @param true_or_false Defaults to false.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if timeout was out of range in which
- *          case an error string will be written \p errstr.
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
+ *          error code on failure in which case an error string will
+ *          be written \p errstr.
  *
- * @remark This option is valid for CreateTopics, DeleteTopics and
- *         CreatePartitions.
+ * @remark This option is valid for CreateTopics, DeleteTopics,
+ *         CreatePartitions, AlterConfigs.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_AdminOptions_set_validate_only (rd_kafka_AdminOptions_t *options,
                                         int true_or_false,
                                         char *errstr, size_t errstr_size);
+
+
+/**
+ * @brief If set to true the configuration is applied incrementally rather
+ *        than replacing and reverting all configuration for the resources.
+ *
+ * @param true_or_false Defaults to false.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
+ *          error code on failure in which case an error string will
+ *          be written \p errstr.
+ *
+ * @remark This option is valid for AlterConfigs.
+ *
+ * @remark Requires broker version >=FIXME:unreleased
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_incremental (rd_kafka_AdminOptions_t *options,
+                                       int true_or_false,
+                                       char *errstr, size_t errstr_size);
 
 
 /**
@@ -4504,7 +4547,13 @@ rd_kafka_NewTopic_destroy_array (rd_kafka_NewTopic_t **new_topics,
  *        replica set in \p broker_ids (of \p broker_id_cnt elements).
  *
  * @remark When this method is used, rd_kafka_NewTopic_new() must have
- *         been called with a -1 \c replication_factor.
+ *         been called with a \c replication_factor of -1.
+ *
+ * @remark An application must either set the replica assignment for
+ *         all new partitions, or none.
+ *
+ * @remark If called, this function must be called consecutively for each
+ *         partition, starting at 0.
  *
  * @remark Use rd_kafka_metadata() to retrieve the list of brokers
  *         in the cluster.
@@ -4518,7 +4567,8 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
                                           int32_t partition,
                                           int32_t *broker_ids,
-                                          size_t broker_id_cnt);
+                                          size_t broker_id_cnt,
+                                          char *errstr, size_t errstr_size);
 
 /**
  * @brief Add a (broker-side) topic configuration name/value pair to
@@ -4756,7 +4806,9 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *new_parts,
                                                int32_t new_partition_idx,
                                                int32_t *broker_ids,
-                                               size_t broker_id_cnt);
+                                               size_t broker_id_cnt,
+                                               char *errstr,
+                                               size_t errstr_size);
 
 
 /**
@@ -4820,31 +4872,75 @@ rd_kafka_CreatePartitions_result_topics (
 
 
 
+/**
+ * @section Cluster, broker, topic configuration entries, sources, etc.
+ *
+ * These entities relate to the cluster, not the local client.
+ *
+ * @sa rd_kafka_conf_set(), et.al. for local client configuration.
+ *
+ */
+
+/**
+ * @enum Apache Kafka config sources
+ */
+typedef enum rd_kafka_ConfigSource_t {
+        /**< Dynamic topic config that is configured for a specific topic */
+        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_TOPIC_CONFIG = 0,
+        /**< Dynamic broker config that is configured for a specific broker */
+        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_BROKER_CONFIG = 1,
+        /**< Dynamic broker config that is configured as default for all
+         *   brokers in the cluster */
+        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_DEFAULT_BROKER_CONFIG = 2,
+        /**< Static broker config provided as broker properties at startup
+         * (e.g. from server.properties file) */
+        RD_KAFKA_CONFIG_SOURCE_STATIC_BROKER = 3,
+        /**< Built-in default configuration for configs that have a
+         *   default value */
+        RD_KAFKA_CONFIG_SOURCE_DEFAULT_CONFIG = 4,
+        /**< Source unknown, e.g., in the ConfigEntry used for alter requests
+         *   where source is not set */
+        RD_KAFKA_CONFIG_SOURCE_UNKNOWN = 5,
+
+        /**< Number of source types defined */
+        RD_KAFKA_CONFIG_SOURCE__CNT,
+} rd_kafka_ConfigSource_t;
+
+
+/**
+ * @returns a string representation of the \p confsource.
+ */
+RD_EXPORT const char *
+rd_kafka_ConfigSource_name (rd_kafka_ConfigSource_t confsource);
 
 
 typedef struct rd_kafka_ConfigEntry_s rd_kafka_ConfigEntry_t;
-
 
 /**
  * @returns the configuration property name
  */
 RD_EXPORT const char *
-rd_kafka_ConfigEntry_get_name (const rd_kafka_ConfigEntry_t *conf);
+rd_kafka_ConfigEntry_name (const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns the configuration value.
  * FIXME: NULL?
  */
 RD_EXPORT const char *
-rd_kafka_ConfigEntry_get_value (const rd_kafka_ConfigEntry_t *conf);
+rd_kafka_ConfigEntry_value (const rd_kafka_ConfigEntry_t *entry);
 
+/**
+ * @returns the config source.
+ */
+RD_EXPORT rd_kafka_ConfigSource_t
+rd_kafka_ConfigEntry_source (const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns 1 if the config property is read-only on the broker, else 0.
  * @remark Shall only be used on a DescribeConfigs result, otherwise returns -1.
  */
 RD_EXPORT int
-rd_kafka_ConfigEntry_get_is_read_only (const rd_kafka_ConfigEntry_t *conf);
+rd_kafka_ConfigEntry_is_read_only (const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns 1 if the config property is set to its default value on the broker,
@@ -4852,7 +4948,7 @@ rd_kafka_ConfigEntry_get_is_read_only (const rd_kafka_ConfigEntry_t *conf);
  * @remark Shall only be used on a DescribeConfigs result, otherwise returns -1.
  */
 RD_EXPORT int
-rd_kafka_ConfigEntry_get_is_default (const rd_kafka_ConfigEntry_t *conf);
+rd_kafka_ConfigEntry_is_default (const rd_kafka_ConfigEntry_t *entry);
 
 /**
  * @returns 1 if the config property contains sensitive information (such as
@@ -4862,12 +4958,30 @@ rd_kafka_ConfigEntry_get_is_default (const rd_kafka_ConfigEntry_t *conf);
  * @remark Shall only be used on a DescribeConfigs result, otherwise returns -1.
  */
 RD_EXPORT int
-rd_kafka_ConfigEntry_get_is_sensitive (const rd_kafka_ConfigEntry_t *conf);
+rd_kafka_ConfigEntry_is_sensitive (const rd_kafka_ConfigEntry_t *entry);
+
+/**
+ * @returns 1 if this entry is a synonym, else 0.
+ */
+RD_EXPORT int
+rd_kafka_ConfigEntry_is_synonym (const rd_kafka_ConfigEntry_t *entry);
+
+
+/**
+ * @returns the synonym config entry array.
+ *
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @remark The lifetime of the returned entry is the same as \p conf .
+ * @remark Shall only be used on a DescribeConfigs result,
+ *         otherwise returns NULL.
+ */
+RD_EXPORT const rd_kafka_ConfigEntry_t **
+rd_kafka_ConfigEntry_synonyms (const rd_kafka_ConfigEntry_t *entry,
+                               size_t *cntp);
 
 
 
-
-typedef struct rd_kafka_ConfigResource_s rd_kafka_ConfigResource_t;
 
 /**
  * @enum Apache Kafka resource types
@@ -4881,25 +4995,90 @@ typedef enum rd_kafka_ResourceType_t {
         RD_KAFKA_RESOURCE__CNT,        /**< Number of resource types defined */
 } rd_kafka_ResourceType_t;
 
+/**
+ * @returns a string representation of the \p restype
+ */
+const char *
+rd_kafka_ResourceType_name (rd_kafka_ResourceType_t restype);
+
+typedef struct rd_kafka_ConfigResource_s rd_kafka_ConfigResource_t;
+
+
 RD_EXPORT rd_kafka_ConfigResource_t *
 rd_kafka_ConfigResource_new (rd_kafka_ResourceType_t restype,
                              const char *resname);
 
+/**
+ * @brief Destroy and free a ConfigResource object previously created with
+ *        rd_kafka_ConfigResource_new()
+ */
+RD_EXPORT void
+rd_kafka_ConfigResource_destroy (rd_kafka_ConfigResource_t *config);
 
+
+/**
+ * @brief Helper function to destroy all ConfigResource objects in
+ *        the \p configs array (of \p config_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_ConfigResource_destroy_array (rd_kafka_ConfigResource_t **config,
+                                       size_t config_cnt);
+
+
+/**
+ * @brief Add configuration name value pair to ConfigResource object for
+ *        later transmission to broker.
+ *
+ * @param name Configuration name, depends on resource type.
+ * @param value Configuration value, depends on resource type and \p name.
+ *              Set to \c NULL to revert configuration value to default.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
+ *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ConfigResource_add_config (rd_kafka_ConfigResource_t *configs,
+rd_kafka_ConfigResource_add_config (rd_kafka_ConfigResource_t *config,
                                     const char *name, const char *value);
+
 
 /**
  * @brief Get an array of config entries from a ConfigResource object.
  *
- * The returned object life-times are the same as the \p res object.
+ * The returned object life-times are the same as the \p config object.
+ *
  * @param cntp is updated to the number of elements in the array.
  */
 RD_EXPORT const rd_kafka_ConfigEntry_t **
-rd_kafka_ConfigResource_get_configs (const rd_kafka_ConfigResource_t *res,
-                                     size_t *cntp);
+rd_kafka_ConfigResource_configs (const rd_kafka_ConfigResource_t *config,
+                                 size_t *cntp);
 
+
+
+/**
+ * @returns the ResourceType for \p config
+ */
+RD_EXPORT rd_kafka_ResourceType_t
+rd_kafka_ConfigResource_type (const rd_kafka_ConfigResource_t *config);
+
+/**
+ * @returns the name for \p config
+ */
+RD_EXPORT const char *
+rd_kafka_ConfigResource_name (const rd_kafka_ConfigResource_t *config);
+
+/**
+ * @returns the error for this resource from an AlterConfigs request
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ConfigResource_error (const rd_kafka_ConfigResource_t *config);
+
+/**
+ * @returns the error string for this resource from an AlterConfigs
+ *          request, or NULL if no error.
+ */
+RD_EXPORT const char *
+rd_kafka_ConfigResource_error_string (const rd_kafka_ConfigResource_t *config);
 
 
 /**
@@ -4909,17 +5088,34 @@ rd_kafka_ConfigResource_get_configs (const rd_kafka_ConfigResource_t *res,
  */
 
 
+/**
+ * @brief Update the configuration for the specified resources.
+ *        Updates are not transactional so they may succeed for a subset
+ *        of the provided resources while the others fail.
+ *        The configuration for a particular resource is updated automatically,
+ *        replacing values using the provided ConfigEntrys and reverting
+ *        unspecified ConfigEntrys to their default values.
+ *
+ * @remark Requires broker version >=0.11.0.0
+ *
+ * @remark AlterConfigs will replace all existing configuration for
+ *         the provided resources with the new configuration given,
+ *         reverting all other configuration to their default values.
+ *         Use \c rd_kafka_AdminOptions_set_incremental() to change the
+ *         behaviour so that only the passed configuration is modified.
+ *
+ * @remark Multiple resources and resources types may be set, but at most one
+ *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
+ *         since these resource requests must be sent to the broker specified
+ *         in the resource.
+ *
+ */
 RD_EXPORT
 void rd_kafka_admin_AlterConfigs (rd_kafka_t *rk,
-                                  const rd_kafka_ConfigResource_t *configs,
+                                  rd_kafka_ConfigResource_t **configs,
                                   size_t config_cnt,
                                   const rd_kafka_AdminOptions_t *options,
                                   rd_kafka_queue_t *rkqu);
-
-
-
-
-
 
 
 /**
@@ -4943,14 +5139,20 @@ rd_kafka_AlterConfigs_result_error (
 
 
 
-
 /**
  * @brief Get an array of resource results from a AlterConfigs result.
  *
- * The returned \p resources life-time is the same as the \p result object.
+ * Use \c rd_kafka_ConfigResource_error() and
+ * \c rd_kafka_ConfigResource_error_string() to extract per-resource error
+ * results on the returned array elements.
+ *
+ * The returned object life-times are the same as the \p result object.
+ *
  * @param cntp is updated to the number of elements in the array.
+ *
+ * @returns an array of ConfigResource elements, or NULL if not available.
  */
-RD_EXPORT const rd_kafka_ConfigResource_result_t **
+RD_EXPORT const rd_kafka_ConfigResource_t **
 rd_kafka_AlterConfigs_result_resources (
         const rd_kafka_AlterConfigs_result_t *result,
         size_t *cntp);

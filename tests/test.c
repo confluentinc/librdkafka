@@ -3895,12 +3895,37 @@ void test_wait_metadata_update (rd_kafka_t *rk,
 
 
 /**
- * @brief Wait for up to \p tmout for a CreateTopics/DeleteTopics result
+ * @brief Wait for up to \p tmout for any type of admin result.
+ * @returns the event
+ */
+rd_kafka_event_t *
+test_wait_admin_result (rd_kafka_queue_t *q,
+                        rd_kafka_event_type_t evtype,
+                        int tmout) {
+        rd_kafka_event_t *rkev;
+
+        rkev = rd_kafka_queue_poll(q, tmout);
+        if (!rkev)
+                TEST_FAIL("Timed out waiting for admin result (%d)\n", evtype);
+
+        TEST_ASSERT(rd_kafka_event_type(rkev) == evtype,
+                    "Expected event type %d, got %s",
+                    evtype, rd_kafka_event_name(rkev));
+
+        return rkev;
+}
+
+
+
+/**
+ * @brief Wait for up to \p tmout for a
+ *        CreateTopics/DeleteTopics/CreatePartitions result
  *        and return the distilled error code.
  */
 rd_kafka_resp_err_t
-test_wait_any_admin_result (rd_kafka_queue_t *q, rd_kafka_event_type_t evtype,
-                            int tmout) {
+test_wait_topic_admin_result (rd_kafka_queue_t *q,
+                              rd_kafka_event_type_t evtype,
+                              int tmout) {
         rd_kafka_event_t *rkev;
         size_t i;
         const rd_kafka_topic_result_t **terr;
@@ -3908,14 +3933,11 @@ test_wait_any_admin_result (rd_kafka_queue_t *q, rd_kafka_event_type_t evtype,
         int errcnt = 0;
         rd_kafka_resp_err_t err;
 
-        rkev = rd_kafka_queue_poll(q, tmout);
-        if (!rkev) {
-                TEST_WARN("Timed out waiting for ..Topics results\n");
-                return RD_KAFKA_RESP_ERR__TIMED_OUT;
-        }
+        rkev = test_wait_admin_result(q, evtype, tmout);
 
         if ((err = rd_kafka_event_error(rkev))) {
-                TEST_WARN("..Topics result failed: %s\n",
+                TEST_WARN("%s failed: %s\n",
+                          rd_kafka_event_name(rkev),
                           rd_kafka_event_error_string(rkev));
                 rd_kafka_event_destroy(rkev);
                 return err;
@@ -4034,8 +4056,9 @@ test_CreateTopics_simple (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 
-        err = test_wait_any_admin_result(q, RD_KAFKA_EVENT_CREATETOPICS_RESULT,
-                                         tmout+5000);
+        err = test_wait_topic_admin_result(q,
+                                           RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+                                           tmout+5000);
 
         rd_kafka_queue_destroy(q);
 
@@ -4095,9 +4118,8 @@ test_CreatePartitions_simple (rd_kafka_t *rk,
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 
-        err = test_wait_any_admin_result(q,
-                                         RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT,
-                                         tmout+5000);
+        err = test_wait_topic_admin_result(
+                q, RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT, tmout+5000);
 
         rd_kafka_queue_destroy(q);
 
@@ -4159,8 +4181,9 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
         if (useq)
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        err = test_wait_any_admin_result(q, RD_KAFKA_EVENT_CREATETOPICS_RESULT,
-                                         tmout+5000);
+        err = test_wait_topic_admin_result(q,
+                                           RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+                                           tmout+5000);
 
         rd_kafka_queue_destroy(q);
 

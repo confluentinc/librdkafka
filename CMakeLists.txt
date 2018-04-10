@@ -11,6 +11,7 @@ option(WITHOUT_OPTIMIZATION "Disable optimization" OFF)
 option(ENABLE_DEVEL "Enable development asserts, checks, etc" OFF)
 option(ENABLE_REFCNT_DEBUG "Enable refcnt debugging" OFF)
 option(ENABLE_SHAREDPTR_DEBUG "Enable sharedptr debugging" OFF)
+option(RDKAFKA_CONF_RETURNS "Enable config setters to return non-void" OFF)
 
 set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/packaging/cmake/try_compile")
 

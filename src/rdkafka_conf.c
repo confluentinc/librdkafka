@@ -93,7 +93,31 @@ struct rd_kafka_property {
 
 #define _RK(field)  offsetof(rd_kafka_conf_t, field)
 #define _RKT(field) offsetof(rd_kafka_topic_conf_t, field)
+#define _RK_UNSET ~0
 
+int rd_kafka_scope_is_set(int conf_scope) {
+        return (conf_scope != _RK_UNSET);
+}
+
+int rd_kafka_scope_matches(int conf_scope, int prop_scope) {
+        return ((conf_scope | prop_scope) == conf_scope);
+}
+
+int rd_kafka_scope_is_type(int conf_scope, rd_kafka_type_t type) {
+        if (type == RD_KAFKA_PRODUCER)
+                return conf_scope == (_RK_UNSET & ~_RK_CONSUMER);
+        return conf_scope == (_RK_UNSET & ~_RK_PRODUCER);
+}
+
+void rd_kafka_scope_set_type(int* conf_scope, rd_kafka_type_t type) {
+        /* clear the opposite scope bit */
+        if (!conf_scope)
+                return;
+        if (type == RD_KAFKA_PRODUCER)
+                *conf_scope = (_RK_UNSET & ~_RK_CONSUMER);
+        else
+                *conf_scope = (_RK_UNSET & ~_RK_PRODUCER);
+}
 
 static rd_kafka_conf_res_t
 rd_kafka_anyconf_get0 (const void *conf, const struct rd_kafka_property *prop,
@@ -585,28 +609,28 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           .copy = rd_kafka_conf_interceptor_copy },
 
         /* Global client group properties */
-        { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_CGRP, "group.id", _RK_C_STR,
           _RK(group_id_str),
-          "Client group id string. All clients sharing the same group.id "
+          "Consumer group id string. All consumers sharing the same group.id "
           "belong to the same group." },
-        { _RK_GLOBAL|_RK_CGRP, "partition.assignment.strategy", _RK_C_STR,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_CGRP, "partition.assignment.strategy", _RK_C_STR,
           _RK(partition_assignment_strategy),
           "Name of partition assignment strategy to use when elected "
           "group leader assigns partitions to group members.",
 	  .sdef = "range,roundrobin" },
-        { _RK_GLOBAL|_RK_CGRP, "session.timeout.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_CGRP, "session.timeout.ms", _RK_C_INT,
           _RK(group_session_timeout_ms),
-          "Client group session and failure detection timeout.",
+          "Consumer group session and failure detection timeout.",
           1, 3600*1000, 30*1000 },
-        { _RK_GLOBAL|_RK_CGRP, "heartbeat.interval.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_CGRP, "heartbeat.interval.ms", _RK_C_INT,
           _RK(group_heartbeat_intvl_ms),
           "Group session keepalive heartbeat interval.",
           1, 3600*1000, 1*1000 },
-        { _RK_GLOBAL|_RK_CGRP, "group.protocol.type", _RK_C_KSTR,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_CGRP, "group.protocol.type", _RK_C_KSTR,
           _RK(group_protocol_type),
           "Group protocol type",
           .sdef = "consumer" },
-        { _RK_GLOBAL|_RK_CGRP, "coordinator.query.interval.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_CGRP, "coordinator.query.interval.ms", _RK_C_INT,
           _RK(coord_query_intvl_ms),
           "How often to query for the current client group coordinator. "
           "If the currently assigned coordinator is down the configured "
@@ -1121,10 +1145,26 @@ static int rd_kafka_conf_s2i_find (const struct rd_kafka_property *prop,
 
 static rd_kafka_conf_res_t
 rd_kafka_anyconf_set_prop (int scope, void *conf,
-			   const struct rd_kafka_property *prop,
-			   const char *value,
-			   char *errstr, size_t errstr_size) {
+                           const struct rd_kafka_property *prop,
+                           const char *value,
+                           char *errstr, size_t errstr_size) {
 	int ival;
+    rd_kafka_set_last_error(0, 0);
+    
+	/* Check if configuration scopes match */
+	int *conf_scope = (scope & _RK_GLOBAL) ? &((rd_kafka_conf_t*)conf)->scope :
+										&((rd_kafka_topic_conf_t*)conf)->scope;
+    
+	if (rd_kafka_scope_is_set(*conf_scope) &&
+		!rd_kafka_scope_matches(*conf_scope, prop->scope)) {
+		    rd_snprintf(errstr, errstr_size,
+					    "Scope mismatch for "
+					    "configuration property \"%s\": "
+					    "%s",
+					    prop->name, value);
+			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+			return RD_KAFKA_CONF_UNKNOWN; /* mismatch */
+	}
 
 	switch (prop->type)
 	{
@@ -1383,12 +1423,22 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
 
 rd_kafka_conf_t *rd_kafka_conf_new (void) {
 	rd_kafka_conf_t *conf = rd_calloc(1, sizeof(*conf));
+	if (!conf) {
+	    rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__FAIL, ENOMEM);
+	    return NULL;
+	}
+	conf->scope = _RK_UNSET;
 	rd_kafka_defaultconf_set(_RK_GLOBAL, conf);
 	return conf;
 }
 
 rd_kafka_topic_conf_t *rd_kafka_topic_conf_new (void) {
 	rd_kafka_topic_conf_t *tconf = rd_calloc(1, sizeof(*tconf));
+	if (!tconf) {
+	    rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__FAIL, ENOMEM);
+	    return NULL;
+	}
+    tconf->scope = _RK_UNSET;
 	rd_kafka_defaultconf_set(_RK_TOPIC, tconf);
 	return tconf;
 }
@@ -1452,23 +1502,25 @@ rd_kafka_conf_res_t rd_kafka_conf_set (rd_kafka_conf_t *conf,
                                        const char *value,
                                        char *errstr, size_t errstr_size) {
         rd_kafka_conf_res_t res;
-
         res = rd_kafka_anyconf_set(_RK_GLOBAL, conf, name, value,
                                    errstr, errstr_size);
         if (res != RD_KAFKA_CONF_UNKNOWN)
-                return res;
-
-        /* Fallthru:
+            return res;
+        
+        /* Fallthrough:
          * If the global property was unknown, try setting it on the
          * default topic config. */
         if (!conf->topic_conf) {
-                /* Create topic config, might be over-written by application
-                 * later. */
-                conf->topic_conf = rd_kafka_topic_conf_new();
+            /* Create topic config, might be over-written by application
+             * later. */
+            conf->topic_conf = rd_kafka_topic_conf_new();
+            if (conf->topic_conf)
+                    conf->topic_conf->scope = conf->scope; /* reflect scope */
         }
-
-        return rd_kafka_topic_conf_set(conf->topic_conf, name, value,
-                                       errstr, errstr_size);
+        
+        res = rd_kafka_topic_conf_set(conf->topic_conf, name, value,
+                                      errstr, errstr_size);
+        return res;
 }
 
 
@@ -1582,6 +1634,13 @@ void rd_kafka_topic_conf_destroy (rd_kafka_topic_conf_t *topic_conf) {
 static void rd_kafka_anyconf_copy (int scope, void *dst, const void *src,
                                    size_t filter_cnt, const char **filter) {
 	const struct rd_kafka_property *prop;
+	
+	/* copy the scope */
+	if (scope == _RK_GLOBAL)
+		((rd_kafka_conf_t*)dst)->scope = ((rd_kafka_conf_t*)src)->scope;
+	else
+		((rd_kafka_topic_conf_t*)dst)->scope =
+										((rd_kafka_topic_conf_t*)src)->scope;
 
 	for (prop = rd_kafka_properties ; prop->name ; prop++) {
 		const char *val = NULL;
@@ -1692,8 +1751,7 @@ rd_kafka_conf_t *rd_kafka_conf_dup_filter (const rd_kafka_conf_t *conf,
 }
 
 
-rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
-						*conf) {
+rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t *conf) {
 	rd_kafka_topic_conf_t *new = rd_kafka_topic_conf_new();
 
 	rd_kafka_anyconf_copy(_RK_TOPIC, new, conf, 0, NULL);
@@ -1702,172 +1760,374 @@ rd_kafka_topic_conf_t *rd_kafka_topic_conf_dup (const rd_kafka_topic_conf_t
 }
 
 rd_kafka_topic_conf_t *rd_kafka_default_topic_conf_dup (rd_kafka_t *rk) {
-        if (rk->rk_conf.topic_conf)
-                return rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
-        else
-                return rd_kafka_topic_conf_new();
+        if (!rk->rk_conf.topic_conf) {
+            rk->rk_conf.topic_conf = rd_kafka_topic_conf_new();
+            if (!rk->rk_conf.topic_conf)
+                    return NULL;
+            /* reflect scope */
+            rk->rk_conf.topic_conf->scope = rk->rk_conf.scope;
+        }
+        return rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
 }
 
-void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
-	conf->enabled_events = events;
+RD_CONF_RET
+rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        /* validate scope */
+        if (rd_kafka_scope_is_set(conf->scope)) {
+            if ((events & RD_KAFKA_EVENT_DR) &&
+                (events & (RD_KAFKA_EVENT_FETCH |
+                           RD_KAFKA_EVENT_REBALANCE |
+                           RD_KAFKA_EVENT_OFFSET_COMMIT))) {
+                /* user selected both producer and consumer events */
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                RETURN(RD_KAFKA_CONF_UNKNOWN);
+            }
+            if (events & RD_KAFKA_EVENT_DR) {
+                /* this is a producer event */
+                if (rd_kafka_scope_is_type(conf->scope, RD_KAFKA_CONSUMER)) {
+                    rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                    RETURN(RD_KAFKA_CONF_UNKNOWN);
+                }
+            }
+            else if (events & (RD_KAFKA_EVENT_FETCH |
+                               RD_KAFKA_EVENT_REBALANCE |
+                               RD_KAFKA_EVENT_OFFSET_COMMIT)) {
+                /* this is a consumer event */
+                if (rd_kafka_scope_is_type(conf->scope, RD_KAFKA_PRODUCER)) {
+                    rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                    RETURN(RD_KAFKA_CONF_UNKNOWN);
+                }
+            }
+        }
+        
+        /* set the events */
+        conf->enabled_events = events;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-
-void rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
-			      void (*dr_cb) (rd_kafka_t *rk,
-					     void *payload, size_t len,
-					     rd_kafka_resp_err_t err,
-					     void *opaque, void *msg_opaque)) {
-	conf->dr_cb = dr_cb;
+RD_CONF_RET
+rd_kafka_conf_set_dr_cb (rd_kafka_conf_t *conf,
+                         void (*dr_cb) (rd_kafka_t *rk,
+                                        void *payload, size_t len,
+                                        rd_kafka_resp_err_t err,
+                                        void *opaque, void *msg_opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        /* validate scope */
+        if (rd_kafka_scope_is_set(conf->scope) &&
+            !rd_kafka_scope_is_type(conf->scope, RD_KAFKA_PRODUCER)) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                RETURN(RD_KAFKA_CONF_UNKNOWN);
+        }
+        conf->dr_cb = dr_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-
-void rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
-                                  void (*dr_msg_cb) (rd_kafka_t *rk,
-                                                     const rd_kafka_message_t *
-                                                     rkmessage,
-                                                     void *opaque)) {
+RD_CONF_RET
+rd_kafka_conf_set_dr_msg_cb (rd_kafka_conf_t *conf,
+                             void (*dr_msg_cb) (
+                                 rd_kafka_t *rk,
+                                 const rd_kafka_message_t * rkmessage,
+                                 void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        /* validate scope */
+        if (rd_kafka_scope_is_set(conf->scope) &&
+            !rd_kafka_scope_is_type(conf->scope, RD_KAFKA_PRODUCER)) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                RETURN(RD_KAFKA_CONF_UNKNOWN);
+        }
         conf->dr_msg_cb = dr_msg_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-
-void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
-                                   void (*consume_cb) (rd_kafka_message_t *
-                                                       rkmessage,
-                                                       void *opaque)) {
+RD_CONF_RET
+rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
+                               void (*consume_cb) (rd_kafka_message_t *
+                                                   rkmessage,
+                                                   void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        /* validate scope */
+        if (rd_kafka_scope_is_set(conf->scope) &&
+            !rd_kafka_scope_is_type(conf->scope, RD_KAFKA_CONSUMER)) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                RETURN(RD_KAFKA_CONF_UNKNOWN);
+        }
         conf->consume_cb = consume_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-void rd_kafka_conf_set_rebalance_cb (
-        rd_kafka_conf_t *conf,
-        void (*rebalance_cb) (rd_kafka_t *rk,
-                              rd_kafka_resp_err_t err,
-                              rd_kafka_topic_partition_list_t *partitions,
-                              void *opaque)) {
-        conf->rebalance_cb = rebalance_cb;
-}
-
-void rd_kafka_conf_set_offset_commit_cb (
-        rd_kafka_conf_t *conf,
-        void (*offset_commit_cb) (rd_kafka_t *rk,
+RD_CONF_RET
+rd_kafka_conf_set_rebalance_cb (
+            rd_kafka_conf_t *conf,
+            void (*rebalance_cb) (rd_kafka_t *rk,
                                   rd_kafka_resp_err_t err,
-                                  rd_kafka_topic_partition_list_t *offsets,
+                                  rd_kafka_topic_partition_list_t *partitions,
                                   void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        /* validate scope */
+        if (rd_kafka_scope_is_set(conf->scope) &&
+            !rd_kafka_scope_is_type(conf->scope, RD_KAFKA_CONSUMER)) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                RETURN(RD_KAFKA_CONF_UNKNOWN);
+        }
+        conf->rebalance_cb = rebalance_cb;
+        RETURN(RD_KAFKA_CONF_OK);
+}
+
+RD_CONF_RET
+rd_kafka_conf_set_offset_commit_cb (
+            rd_kafka_conf_t *conf,
+            void (*offset_commit_cb) (rd_kafka_t *rk,
+                                      rd_kafka_resp_err_t err,
+                                      rd_kafka_topic_partition_list_t *offsets,
+                                      void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        /* validate scope */
+        if (rd_kafka_scope_is_set(conf->scope) &&
+            !rd_kafka_scope_is_type(conf->scope, RD_KAFKA_CONSUMER)) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                RETURN(RD_KAFKA_CONF_UNKNOWN);
+        }
         conf->offset_commit_cb = offset_commit_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-
-
-void rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
-				 void  (*error_cb) (rd_kafka_t *rk, int err,
-						    const char *reason,
-						    void *opaque)) {
-	conf->error_cb = error_cb;
+RD_CONF_RET
+rd_kafka_conf_set_error_cb (rd_kafka_conf_t *conf,
+                            void  (*error_cb) (rd_kafka_t *rk, int err,
+                                               const char *reason,
+                                               void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        conf->error_cb = error_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-
-void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
-				    void (*throttle_cb) (
-					    rd_kafka_t *rk,
-					    const char *broker_name,
-					    int32_t broker_id,
-					    int throttle_time_ms,
-					    void *opaque)) {
-	conf->throttle_cb = throttle_cb;
+RD_CONF_RET
+rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
+                               void (*throttle_cb) (
+                                     rd_kafka_t *rk,
+                                     const char *broker_name,
+                                     int32_t broker_id,
+                                     int throttle_time_ms,
+                                     void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        conf->throttle_cb = throttle_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-
-void rd_kafka_conf_set_log_cb (rd_kafka_conf_t *conf,
-			  void (*log_cb) (const rd_kafka_t *rk, int level,
+RD_CONF_RET
+rd_kafka_conf_set_log_cb (rd_kafka_conf_t *conf,
+                          void (*log_cb) (const rd_kafka_t *rk, int level,
                                           const char *fac, const char *buf)) {
-	conf->log_cb = log_cb;
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        conf->log_cb = log_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-
-void rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
-				 int (*stats_cb) (rd_kafka_t *rk,
-						  char *json,
-						  size_t json_len,
-						  void *opaque)) {
-	conf->stats_cb = stats_cb;
+RD_CONF_RET
+rd_kafka_conf_set_stats_cb (rd_kafka_conf_t *conf,
+                            int (*stats_cb) (rd_kafka_t *rk,
+                                             char *json,
+                                             size_t json_len,
+                                             void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        conf->stats_cb = stats_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-void rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
-                                  int (*socket_cb) (int domain, int type,
-                                                    int protocol,
-                                                    void *opaque)) {
+RD_CONF_RET
+rd_kafka_conf_set_socket_cb (rd_kafka_conf_t *conf,
+                             int (*socket_cb) (int domain, int type,
+                                               int protocol,
+                                               void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
         conf->socket_cb = socket_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-void
+RD_CONF_RET
 rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
                               int (*connect_cb) (int sockfd,
                                                  const struct sockaddr *addr,
                                                  int addrlen,
                                                  const char *id,
                                                  void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
         conf->connect_cb = connect_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-void
+RD_CONF_RET
 rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
                                   int (*closesocket_cb) (int sockfd,
                                                          void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
         conf->closesocket_cb = closesocket_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
 
 
 #ifndef _MSC_VER
-void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
-                                int (*open_cb) (const char *pathname,
-                                                int flags, mode_t mode,
-                                                void *opaque)) {
+RD_CONF_RET
+rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
+                           int (*open_cb) (const char *pathname,
+                                           int flags, mode_t mode,
+                                           void *opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
         conf->open_cb = open_cb;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 #endif
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
-	conf->opaque = opaque;
+        rd_kafka_set_last_error(0, 0);
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return;
+        }
+        conf->opaque = opaque;
 }
 
-
-void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
-                                           rd_kafka_topic_conf_t *tconf) {
+RD_CONF_RET
+rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
+                                      rd_kafka_topic_conf_t *tconf) {
+        rd_kafka_set_last_error(0, 0);
+        if (!conf || !tconf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        /* validate if scopes match */
+        if (rd_kafka_scope_is_set(conf->scope) &&
+            rd_kafka_scope_is_set(tconf->scope) &&
+            !rd_kafka_scope_matches(conf->scope, tconf->scope)) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                RETURN(RD_KAFKA_CONF_UNKNOWN); /* mismatch */
+        }
+        
+        /* Propagate the scope settings */
+        if (rd_kafka_scope_is_set(conf->scope))
+                tconf->scope = conf->scope;
+        else if (rd_kafka_scope_is_set(tconf->scope))
+                conf->scope = tconf->scope;
+        
         if (conf->topic_conf)
                 rd_kafka_topic_conf_destroy(conf->topic_conf);
-
+    
         conf->topic_conf = tconf;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
 
-void
+RD_CONF_RET
 rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
-					int32_t (*partitioner) (
-						const rd_kafka_topic_t *rkt,
-						const void *keydata,
-						size_t keylen,
-						int32_t partition_cnt,
-						void *rkt_opaque,
-						void *msg_opaque)) {
-	topic_conf->partitioner = partitioner;
+                    int32_t (*partitioner) (const rd_kafka_topic_t *rkt,
+                                            const void *keydata,
+                                            size_t keylen,
+                                            int32_t partition_cnt,
+                                            void *rkt_opaque,
+                                            void *msg_opaque)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!topic_conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        /* validate scope */
+        if (rd_kafka_scope_is_set(topic_conf->scope) &&
+            !rd_kafka_scope_is_type(topic_conf->scope, RD_KAFKA_PRODUCER)) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                RETURN(RD_KAFKA_CONF_UNKNOWN);
+        }
+        topic_conf->partitioner = partitioner;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
-void
+RD_CONF_RET
 rd_kafka_topic_conf_set_msg_order_cmp (rd_kafka_topic_conf_t *topic_conf,
                                        int (*msg_order_cmp) (
                                                const rd_kafka_message_t *a,
                                                const rd_kafka_message_t *b)) {
+        rd_kafka_set_last_error(0, 0);
+        if (!topic_conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                RETURN(RD_KAFKA_CONF_INVALID);
+        }
+        /* validate scope */
+        if (rd_kafka_scope_is_set(topic_conf->scope) &&
+            !rd_kafka_scope_is_type(topic_conf->scope, RD_KAFKA_PRODUCER)) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                RETURN(RD_KAFKA_CONF_UNKNOWN);
+        }
         topic_conf->msg_order_cmp =
                 (int (*)(const void *, const void *))msg_order_cmp;
+        RETURN(RD_KAFKA_CONF_OK);
 }
 
 void rd_kafka_topic_conf_set_opaque (rd_kafka_topic_conf_t *topic_conf,
-				     void *opaque) {
-	topic_conf->opaque = opaque;
+                                     void *opaque) {
+        rd_kafka_set_last_error(0, 0);
+        if (!topic_conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return;
+        }
+        topic_conf->opaque = opaque;
 }
-
-
 
 
 /**
@@ -2245,4 +2505,44 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 	}
 	fprintf(fp, "\n");
         fprintf(fp, "### C/P legend: C = Consumer, P = Producer, * = both\n");
+}
+
+
+rd_kafka_conf_res_t
+rd_kafka_conf_set_type(rd_kafka_conf_t *conf, rd_kafka_type_t type)
+{
+        if (!conf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return RD_KAFKA_CONF_INVALID;
+        }
+        
+        if (rd_kafka_scope_is_set(conf->scope) &&
+            !rd_kafka_scope_is_type(conf->scope, type)) {
+                /* already set -- wrong type*/
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__STATE, EINVAL);
+                return RD_KAFKA_CONF_INVALID;
+        }
+        
+        rd_kafka_scope_set_type(&conf->scope, type);
+        return RD_KAFKA_CONF_OK;
+}
+
+
+rd_kafka_conf_res_t
+rd_kafka_topic_conf_set_type(rd_kafka_topic_conf_t *tconf, rd_kafka_type_t type)
+{
+        if (!tconf) {
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return RD_KAFKA_CONF_INVALID;
+        }
+        
+        if (rd_kafka_scope_is_set(tconf->scope) &&
+            !rd_kafka_scope_is_type(tconf->scope, type)) {
+                /* already set */
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__STATE, EINVAL);
+                return RD_KAFKA_CONF_INVALID;
+        }
+        
+        rd_kafka_scope_set_type(&tconf->scope, type);
+        return RD_KAFKA_CONF_OK;
 }

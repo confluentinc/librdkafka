@@ -92,6 +92,14 @@ typedef SSIZE_T ssize_t;
 #endif
 #endif
 
+/**
+ * @brief For backward ABI compatibility
+ */
+#ifdef LIBRDKAFKA_CONF_RETURNS
+#define RD_CONF_RET rd_kafka_conf_res_t
+#else
+#define RD_CONF_RET void
+#endif
 
 /**
  * @brief Type-checking macros
@@ -156,7 +164,7 @@ typedef SSIZE_T ssize_t;
  * @returns Version integer.
  *
  * @sa See RD_KAFKA_VERSION for how to parse the integer format.
- * @sa Use rd_kafka_version_str() to retreive the version as a string.
+ * @sa Use rd_kafka_version_str() to retrieve the version as a string.
  */
 RD_EXPORT
 int rd_kafka_version(void);
@@ -1219,6 +1227,29 @@ typedef enum {
 	RD_KAFKA_CONF_OK = 0        /**< Configuration okay */
 } rd_kafka_conf_res_t;
 
+/**
+ * @brief Mark this handle configuration to be strictly bound to this type.
+ *        Setting configuration options on this handle thereafter which do not
+ *        belong to this type will return an error.
+ * @param conf The configuration handle
+ * @param type RD_PRODUCER or RD_CONSUMER
+ * @return RD_KAFKA_CONF_OK on success, RD_KAFKA_CONF_INVALID otherwise.
+ * @remark Note that this can only be set once per handle.
+ */
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_conf_set_type(rd_kafka_conf_t *conf, rd_kafka_type_t type);
+
+/**
+ * @brief Mark this handle configuration to be strictly bound to this type.
+ *        Setting configuration options on this handle thereafter which do not
+ *        belong to this type will return an error.
+ * @param conf The topic configuration handle
+ * @param type RD_PRODUCER or RD_CONSUMER
+ * @return RD_KAFKA_CONF_OK on success, RD_KAFKA_CONF_INVALID otherwise.
+ * @remark Note that this can only be set once per handle.
+ */
+RD_EXPORT rd_kafka_conf_res_t
+rd_kafka_topic_conf_set_type(rd_kafka_topic_conf_t *conf, rd_kafka_type_t type);
 
 /**
  * @brief Create configuration object.
@@ -1309,20 +1340,23 @@ rd_kafka_conf_res_t rd_kafka_conf_set(rd_kafka_conf_t *conf,
  * @brief Enable event sourcing.
  * \p events is a bitmask of \c RD_KAFKA_EVENT_* of events to enable
  * for consumption by `rd_kafka_queue_poll()`.
+ *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
  */
-RD_EXPORT
-void rd_kafka_conf_set_events(rd_kafka_conf_t *conf, int events);
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_events(rd_kafka_conf_t *conf, int events);
 
 
 /**
  @deprecated See rd_kafka_conf_set_dr_msg_cb()
 */
-RD_EXPORT
-void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
-			      void (*dr_cb) (rd_kafka_t *rk,
-					     void *payload, size_t len,
-					     rd_kafka_resp_err_t err,
-					     void *opaque, void *msg_opaque));
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
+                        void (*dr_cb) (rd_kafka_t *rk,
+                                       void *payload, size_t len,
+                                       rd_kafka_resp_err_t err,
+                                       void *opaque, void *msg_opaque));
 
 /**
  * @brief \b Producer: Set delivery report callback in provided \p conf object.
@@ -1337,24 +1371,29 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  *
  * An application must call rd_kafka_poll() at regular intervals to
  * serve queued delivery report callbacks.
+ *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
  */
-RD_EXPORT
-void rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
-                                  void (*dr_msg_cb) (rd_kafka_t *rk,
-                                                     const rd_kafka_message_t *
-                                                     rkmessage,
-                                                     void *opaque));
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
+                            void (*dr_msg_cb) (rd_kafka_t *rk,
+                                               const rd_kafka_message_t *
+                                               rkmessage,
+                                               void *opaque));
 
 
 /**
  * @brief \b Consumer: Set consume callback for use with rd_kafka_consumer_poll()
  *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
  */
-RD_EXPORT
-void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
-                                   void (*consume_cb) (rd_kafka_message_t *
-                                                       rkmessage,
-                                                       void *opaque));
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
+                              void (*consume_cb) (rd_kafka_message_t *
+                                                  rkmessage,
+                                                  void *opaque));
 
 /**
  * @brief \b Consumer: Set rebalance callback for use with
@@ -1372,6 +1411,10 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  * assignment set based on the two events: RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS
  * and RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS but should also be able to handle
  * arbitrary rebalancing failures where \p err is neither of those.
+ *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
+ *
  * @remark In this latter case (arbitrary error), the application must
  *         call rd_kafka_assign(rk, NULL) to synchronize state.
  *
@@ -1415,8 +1458,8 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *    }
  * @endcode
  */
-RD_EXPORT
-void rd_kafka_conf_set_rebalance_cb (
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_rebalance_cb (
         rd_kafka_conf_t *conf,
         void (*rebalance_cb) (rd_kafka_t *rk,
                               rd_kafka_resp_err_t err,
@@ -1438,9 +1481,12 @@ void rd_kafka_conf_set_rebalance_cb (
  * The \p offsets list contains per-partition information:
  *   - \c offset: committed offset (attempted)
  *   - \c err:    commit error
+ *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
  */
-RD_EXPORT
-void rd_kafka_conf_set_offset_commit_cb (
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_offset_commit_cb (
         rd_kafka_conf_t *conf,
         void (*offset_commit_cb) (rd_kafka_t *rk,
                                   rd_kafka_resp_err_t err,
@@ -1455,12 +1501,15 @@ void rd_kafka_conf_set_offset_commit_cb (
  * back to the application.
  *
  * If no \p error_cb is registered then the errors will be logged instead.
+ *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
  */
-RD_EXPORT
-void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
-				 void  (*error_cb) (rd_kafka_t *rk, int err,
-						    const char *reason,
-						    void *opaque));
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
+                 void  (*error_cb) (rd_kafka_t *rk, int err,
+                                    const char *reason,
+                                    void *opaque));
 
 /**
  * @brief Set throttle callback.
@@ -1474,16 +1523,19 @@ void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
  * An application must call rd_kafka_poll() or rd_kafka_consumer_poll() at
  * regular intervals to serve queued callbacks.
  *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
+ *
  * @remark Requires broker version 0.9.0 or later.
  */
-RD_EXPORT
-void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
-				    void (*throttle_cb) (
-					    rd_kafka_t *rk,
-					    const char *broker_name,
-					    int32_t broker_id,
-					    int throttle_time_ms,
-					    void *opaque));
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
+                               void (*throttle_cb) (
+                                        rd_kafka_t *rk,
+                                        const char *broker_name,
+                                        int32_t broker_id,
+                                        int throttle_time_ms,
+                                        void *opaque));
 
 
 /**
@@ -1496,16 +1548,19 @@ void rd_kafka_conf_set_throttle_cb (rd_kafka_conf_t *conf,
  *
  * This is the configuration alternative to the deprecated rd_kafka_set_logger()
  *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
+ *
  * @remark The log_cb will be called spontaneously from librdkafka's internal
  *         threads unless logs have been forwarded to a poll queue through
  *         \c rd_kafka_set_log_queue().
  *         An application MUST NOT call any librdkafka APIs or do any prolonged
  *         work in a non-forwarded \c log_cb.
  */
-RD_EXPORT
-void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
-			  void (*log_cb) (const rd_kafka_t *rk, int level,
-                                          const char *fac, const char *buf));
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
+                         void (*log_cb) (const rd_kafka_t *rk, int level,
+                                         const char *fac, const char *buf));
 
 
 /**
@@ -1523,13 +1578,16 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
  * it at a later time it must return 1 from the \p stats_cb.
  * If the application returns 0 from the \p stats_cb then librdkafka
  * will immediately free the \p json pointer.
+ *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
  */
-RD_EXPORT
-void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
-				 int (*stats_cb) (rd_kafka_t *rk,
-						  char *json,
-						  size_t json_len,
-						  void *opaque));
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
+                           int (*stats_cb) (rd_kafka_t *rk,
+                                            char *json,
+                                            size_t json_len,
+                                            void *opaque));
 
 
 
@@ -1545,13 +1603,16 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
  *  - on linux: racefree CLOEXEC
  *  - others  : non-racefree CLOEXEC
  *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
+ *
  * @remark The callback will be called from an internal librdkafka thread.
  */
-RD_EXPORT
-void rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
-                                  int (*socket_cb) (int domain, int type,
-                                                    int protocol,
-                                                    void *opaque));
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
+                            int (*socket_cb) (int domain, int type,
+                                              int protocol,
+                                              void *opaque));
 
 
 
@@ -1565,9 +1626,12 @@ void rd_kafka_conf_set_socket_cb(rd_kafka_conf_t *conf,
  * \p connect_cb shall return 0 on success (socket connected) or an error
  * number (errno) on error.
  *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
+ *
  * @remark The callback will be called from an internal librdkafka thread.
  */
-RD_EXPORT void
+RD_EXPORT RD_CONF_RET
 rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
                               int (*connect_cb) (int sockfd,
                                                  const struct sockaddr *addr,
@@ -1580,9 +1644,12 @@ rd_kafka_conf_set_connect_cb (rd_kafka_conf_t *conf,
  *
  * Close a socket (optionally opened with socket_cb()).
  *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
+ *
  * @remark The callback will be called from an internal librdkafka thread.
  */
-RD_EXPORT void
+RD_EXPORT RD_CONF_RET
 rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
                                   int (*closesocket_cb) (int sockfd,
                                                          void *opaque));
@@ -1602,13 +1669,16 @@ rd_kafka_conf_set_closesocket_cb (rd_kafka_conf_t *conf,
  *  - on linux: racefree CLOEXEC
  *  - others  : non-racefree CLOEXEC
  *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
+ *
  * @remark The callback will be called from an internal librdkafka thread.
  */
-RD_EXPORT
-void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
-                                int (*open_cb) (const char *pathname,
-                                                int flags, mode_t mode,
-                                                void *opaque));
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
+                           int (*open_cb) (const char *pathname,
+                                           int flags, mode_t mode,
+                                           void *opaque));
 #endif
 
 /**
@@ -1626,13 +1696,16 @@ void *rd_kafka_opaque(const rd_kafka_t *rk);
 
 
 /**
- * Sets the default topic configuration to use for automatically
+ * @brief Sets the default topic configuration to use for automatically
  * subscribed topics (e.g., through pattern-matched topics).
  * The topic config object is not usable after this call.
+ *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
  */
-RD_EXPORT
-void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
-                                           rd_kafka_topic_conf_t *tconf);
+RD_EXPORT RD_CONF_RET
+rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
+                                      rd_kafka_topic_conf_t *tconf);
 
 
 
@@ -1788,9 +1861,11 @@ void rd_kafka_topic_conf_set_opaque(rd_kafka_topic_conf_t *conf, void *opaque);
  *   - MUST return a value between 0 and partition_cnt-1, or the
  *     special \c RD_KAFKA_PARTITION_UA value if partitioning
  *     could not be performed.
+ *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
  */
-RD_EXPORT
-void
+RD_EXPORT RD_CONF_RET
 rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
 					int32_t (*partitioner) (
 						const rd_kafka_topic_t *rkt,
@@ -1816,6 +1891,9 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
  *  - < 0 if message \p a should be inserted before message \p b.
  *  - >=0 if message \p a should be inserted after message \p b.
  *
+ * @returns Any error can be retrieved via rd_kafka_last_error() or via return
+ * code rd_kafka_conf_res_t if code is compiled with LIBRDKAFKA_CONF_RETURNS.
+ *
  * @remark Insert sorting will be used to enqueue the message in the
  *         correct queue position, this comes at a cost of O(n).
  *
@@ -1826,7 +1904,7 @@ rd_kafka_topic_conf_set_partitioner_cb (rd_kafka_topic_conf_t *topic_conf,
  * @warning THIS IS AN EXPERIMENTAL API, SUBJECT TO CHANGE OR REMOVAL,
  *          DO NOT USE IN PRODUCTION.
  */
-RD_EXPORT void
+RD_EXPORT RD_CONF_RET
 rd_kafka_topic_conf_set_msg_order_cmp (rd_kafka_topic_conf_t *topic_conf,
                                        int (*msg_order_cmp) (
                                                const rd_kafka_message_t *a,

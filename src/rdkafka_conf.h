@@ -298,6 +298,9 @@ struct rd_kafka_conf_s {
 
         /* For use with value-less properties. */
         int     dummy;
+        
+        /* Identifies the scope of this configuration (e.g. producer or consumer) */
+        int scope;
 };
 
 int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);
@@ -341,6 +344,9 @@ struct rd_kafka_topic_conf_s {
 
 	/* Application provided opaque pointer (this is rkt_opaque) */
 	void   *opaque;
+	
+    /* Identifies the scope of this configuration (e.g. producer or consumer) */
+    int scope;
 };
 
 

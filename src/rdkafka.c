@@ -58,8 +58,6 @@
 #include <sys/timeb.h>
 #endif
 
-
-
 static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
 
 /**
@@ -1309,6 +1307,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 #endif
 
 	call_once(&rd_kafka_global_init_once, rd_kafka_global_init);
+	
+	rd_kafka_set_last_error(0, 0);
 
         /* rd_kafka_new() takes ownership of the provided \p app_conf
          * object if rd_kafka_new() succeeds.
@@ -1355,8 +1355,16 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                 return NULL;
         }
 #endif
-
-        if (type == RD_KAFKA_CONSUMER) {
+        /* Validate scope */
+        if (rd_kafka_scope_is_set(conf->scope) && !rd_kafka_scope_is_type(conf->scope, type)) {
+                rd_snprintf(errstr, errstr_size, "Scope mismatch.");
+                if (!app_conf)
+                    rd_kafka_conf_destroy(conf);
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+                return NULL;
+        }
+        
+        if (type == RD_KAFKA_PRODUCER) {
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes`. */
                 conf->fetch_max_bytes = RD_MAX(conf->fetch_max_bytes,

@@ -295,7 +295,9 @@ class ConfImpl : public Conf {
     rd_kafka_conf_set_default_topic_conf(rk_conf_,
                                          rd_kafka_topic_conf_dup(tconf_impl->
                                                                  rkt_conf_));
-
+    //Get errno if any
+    if (rd_kafka_last_error() != RD_KAFKA_RESP_ERR_NO_ERROR)
+        return Conf::CONF_UNKNOWN;
     return Conf::CONF_OK;
   }
 
@@ -399,6 +401,19 @@ class ConfImpl : public Conf {
     }
 
     offset_commit_cb_ = offset_commit_cb;
+    return Conf::CONF_OK;
+  }
+  
+  Conf::ConfResult set_type(KafkaType type) {
+    rd_kafka_type_t kt = type == TYPE_PRODUCER ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER;
+    if (rk_conf_)
+        rd_kafka_conf_set_type(rk_conf_, kt);
+    else if (rkt_conf_)
+        rd_kafka_topic_conf_set_type(rkt_conf_, kt);
+    //Get errno if any
+    rd_kafka_resp_err_t err = rd_kafka_last_error();
+    if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+        return Conf::CONF_INVALID;
     return Conf::CONF_OK;
   }
 
@@ -550,7 +565,7 @@ class HandleImpl : virtual public Handle {
   int poll (int timeout_ms) { return rd_kafka_poll(rk_, timeout_ms); };
   int outq_len () { return rd_kafka_outq_len(rk_); };
 
-  void set_common_config (RdKafka::ConfImpl *confimpl);
+  void set_common_config (RdKafka::ConfImpl *confimpl); /* throws */
 
   RdKafka::ErrorCode metadata (bool all_topics,const Topic *only_rkt,
             Metadata **metadatap, int timeout_ms);

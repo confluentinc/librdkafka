@@ -29,6 +29,7 @@
 #include <iostream>
 #include <string>
 #include <list>
+#include <stdexcept>
 
 #include "rdkafkacpp_int.h"
 
@@ -238,18 +239,30 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
   if (confimpl->rebalance_cb_) {
     rd_kafka_conf_set_rebalance_cb(confimpl->rk_conf_,
                                    RdKafka::rebalance_cb_trampoline);
+    //Get errno if any
+    rd_kafka_resp_err_t err = rd_kafka_last_error();
+    if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+        throw std::runtime_error(rd_kafka_err2str(err));
     rebalance_cb_ = confimpl->rebalance_cb_;
   }
 
   if (confimpl->offset_commit_cb_) {
     rd_kafka_conf_set_offset_commit_cb(confimpl->rk_conf_,
                                        offset_commit_cb_trampoline);
+    //Get errno if any
+    rd_kafka_resp_err_t err = rd_kafka_last_error();
+    if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+        throw std::runtime_error(rd_kafka_err2str(err));
     offset_commit_cb_ = confimpl->offset_commit_cb_;
   }
 
   if (confimpl->consume_cb_) {
     rd_kafka_conf_set_consume_cb(confimpl->rk_conf_,
                                  RdKafka::consume_cb_trampoline);
+    //Get errno if any
+    rd_kafka_resp_err_t err = rd_kafka_last_error();
+    if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+        throw std::runtime_error(rd_kafka_err2str(err));
     consume_cb_ = confimpl->consume_cb_;
   }
 

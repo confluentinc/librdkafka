@@ -20,6 +20,9 @@ target_include_directories(rdkafka++ PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_L
 if(NOT RDKAFKA_BUILD_STATIC)
     target_compile_definitions(rdkafka++ PRIVATE LIBRDKAFKACPP_EXPORTS)
 endif()
+if (RDKAFKA_CONF_RETURNS)
+    target_compile_definitions(rdkafka++ PRIVATE LIBRDKAFKA_CONF_RETURNS)
+endif()
 install(
     TARGETS rdkafka++
     EXPORT "${targets_export_name}"

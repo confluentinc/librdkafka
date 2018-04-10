@@ -137,14 +137,20 @@ int          wait_destroyed(int timeout_ms);
 
 /**@}*/
 
-
-
 /**
  * @name Constants, errors, types
  * @{
  *
  *
  */
+ 
+/**
+ * @brief Kafka types
+ */
+enum KafkaType {
+	TYPE_PRODUCER, /**< Producer client */
+	TYPE_CONSUMER  /**< Consumer client */
+};
 
 /**
  * @brief Error codes.
@@ -875,6 +881,18 @@ class RD_EXPORT Conf {
   virtual Conf::ConfResult set (const std::string &name,
                                 OffsetCommitCb *offset_commit_cb,
                                 std::string &errstr) = 0;
+  
+  /**
+   * @brief Sets the scope allowed for this configuration.
+   * @param type Producer or Consumer
+   * @returns Once set, the type cannot be changed again and will
+   *          result in an error.
+   * @remark Calling this is optional. When set, it provides option scope
+   *         validation for all setters above which prevents users from
+   *         setting the wrong configuration option (e.g. a consumer option on
+   *         a producer configuration object and vice-versa).
+   */
+  virtual Conf::ConfResult set_type(KafkaType type) = 0;
 
   /** @brief Query single configuration value
    *

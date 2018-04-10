@@ -212,6 +212,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                                               rd_kafka_topic_conf_t *conf,
                                               int *existing,
                                               int do_lock) {
+	rd_kafka_set_last_error(0, 0);
 	rd_kafka_itopic_t *rkt;
         shptr_rd_kafka_itopic_t *s_rkt;
         const struct rd_kafka_metadata_cache_entry *rkmce;
@@ -220,12 +221,17 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	 * Maximum topic name size + headers must never exceed message.max.bytes
 	 * which is min-capped to 1000.
 	 * See rd_kafka_broker_produce_toppar() and rdkafka_conf.c */
-	if (!topic || strlen(topic) > 512) {
+	if (!rk || !topic || strlen(topic) > 512) {
 		if (conf)
 			rd_kafka_topic_conf_destroy(conf);
-		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG,
-					EINVAL);
+		rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
 		return NULL;
+	}
+	
+	if (conf && rd_kafka_scope_is_set(conf->scope) &&
+ 		!rd_kafka_scope_is_type(conf->scope, rk->rk_type)) {
+			rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__CONFLICT, EINVAL);
+			return NULL;
 	}
 
 	if (do_lock)
@@ -363,7 +369,7 @@ rd_kafka_topic_t *rd_kafka_topic_new (rd_kafka_t *rk, const char *topic,
         rkt = rd_kafka_topic_s2i(s_rkt);
 
         /* Save a shared pointer to be used in callbacks. */
-	app_rkt = rd_kafka_topic_keep_app(rkt);
+        app_rkt = rd_kafka_topic_keep_app(rkt);
 
         /* Query for the topic leader (async) */
         if (!existing)

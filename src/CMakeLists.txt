@@ -101,6 +101,10 @@ if(WITHOUT_WIN32_CONFIG)
   endif(WITH_PLUGINS)
 endif()
 
+if (RDKAFKA_CONF_RETURNS)
+    list(APPEND rdkafka_compile_definitions LIBRDKAFKA_CONF_RETURNS)
+endif()
+
 option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
 
 if(RDKAFKA_BUILD_STATIC)

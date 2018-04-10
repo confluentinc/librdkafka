@@ -53,8 +53,11 @@ typedef int mode_t;
 #include <openssl/ssl.h>
 #endif
 
-
-
+#ifdef LIBRDKAFKA_CONF_RETURNS
+#define RETURN(val) return (rd_kafka_conf_res_t)(val)
+#else
+#define RETURN(val) return
+#endif
 
 typedef struct rd_kafka_itopic_s rd_kafka_itopic_t;
 typedef struct rd_ikafka_s rd_ikafka_t;
@@ -442,5 +445,13 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                   rd_kafka_q_cb_type_t cb_type, void *opaque);
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
+
+int rd_kafka_scope_is_set(int conf_scope);
+
+int rd_kafka_scope_matches(int conf_scope, int prop_scope);
+
+int rd_kafka_scope_is_type(int conf_scope, rd_kafka_type_t type);
+
+void rd_kafka_scope_set_type(int* conf_scope, rd_kafka_type_t type);
 
 #endif /* _RDKAFKA_INT_H_ */

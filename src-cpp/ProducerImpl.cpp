@@ -69,6 +69,14 @@ RdKafka::Producer *RdKafka::Producer::create (RdKafka::Conf *conf,
 
     if (confimpl->dr_cb_) {
       rd_kafka_conf_set_dr_msg_cb(rk_conf, dr_msg_cb_trampoline);
+      
+      //Get errno if any
+      rd_kafka_resp_err_t err = rd_kafka_last_error();
+      if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+         errstr = rd_kafka_err2str(err);
+         delete rkp;
+         return NULL;
+      }
       rkp->dr_cb_ = confimpl->dr_cb_;
     }
   }

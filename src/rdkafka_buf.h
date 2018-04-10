@@ -301,7 +301,7 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 #define rd_kafka_buf_read_i16(rkbuf,dstptr) do {                        \
                 int16_t _v;                                             \
                 rd_kafka_buf_read(rkbuf, &_v, sizeof(_v));              \
-                *(dstptr) = be16toh(_v);                                \
+                *(dstptr) = (int16_t)be16toh(_v);                       \
         } while (0)
 
 

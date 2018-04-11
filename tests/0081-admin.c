@@ -488,7 +488,7 @@ static void do_test_CreatePartitions (const char *what,
         rd_kafka_resp_err_t err;
         test_timing_t timing;
         int metadata_tmout;
-        int num_replicas = avail_broker_cnt;
+        int num_replicas = (int)avail_broker_cnt;
 
         TEST_SAY(_C_MAG "[ %s CreatePartitions with %s, op_timeout %d ]\n",
                  rd_kafka_name(rk), what, op_timeout);

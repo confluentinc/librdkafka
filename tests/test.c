@@ -3930,7 +3930,7 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
                               int tmout) {
         rd_kafka_event_t *rkev;
         size_t i;
-        const rd_kafka_topic_result_t **terr;
+        const rd_kafka_topic_result_t **terr = NULL;
         size_t terr_cnt;
         int errcnt = 0;
         rd_kafka_resp_err_t err;

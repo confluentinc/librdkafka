@@ -100,6 +100,7 @@
     <ClInclude Include="..\src\rdendian.h" />
     <ClInclude Include="..\src\rdgz.h" />
     <ClInclude Include="..\src\rdinterval.h" />
+    <ClInclude Include="..\src\rdkafka_admin.h" />
     <ClInclude Include="..\src\rdkafka_assignor.h" />
     <ClInclude Include="..\src\rdkafka_buf.h" />
     <ClInclude Include="..\src\rdkafka_cgrp.h" />

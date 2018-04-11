@@ -2259,7 +2259,7 @@ rd_kafka_CreatePartitionsRequest (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_str(rkbuf, newp->topic, -1);
 
                 /* New partition count */
-                rd_kafka_buf_write_i32(rkbuf, newp->total_cnt);
+                rd_kafka_buf_write_i32(rkbuf, (int32_t)newp->total_cnt);
 
                 /* #replica_assignment */
                 if (rd_list_empty(&newp->replicas)) {

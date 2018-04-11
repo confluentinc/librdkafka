@@ -1071,7 +1071,7 @@ rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
         }
 
 
-        rl = rd_list_init_int32(rd_list_new(0, NULL), broker_id_cnt);
+        rl = rd_list_init_int32(rd_list_new(0, NULL), (int)broker_id_cnt);
 
         for (i = 0 ; i < (int)broker_id_cnt ; i++)
                 rd_list_set_int32(rl, i, broker_ids[i]);
@@ -1242,7 +1242,7 @@ void rd_kafka_CreateTopics (rd_kafka_t *rk,
                                             RD_KAFKA_EVENT_CREATETOPICS_RESULT,
                                             &cbs, options, rkqu);
 
-        rd_list_init(&rko->rko_u.admin_request.args, new_topic_cnt,
+        rd_list_init(&rko->rko_u.admin_request.args, (int)new_topic_cnt,
                      rd_kafka_NewTopic_free);
 
         for (i = 0 ; i < new_topic_cnt ; i++)
@@ -1472,7 +1472,7 @@ void rd_kafka_DeleteTopics (rd_kafka_t *rk,
                                             RD_KAFKA_EVENT_DELETETOPICS_RESULT,
                                             &cbs, options, rkqu);
 
-        rd_list_init(&rko->rko_u.admin_request.args, del_topic_cnt,
+        rd_list_init(&rko->rko_u.admin_request.args, (int)del_topic_cnt,
                      rd_kafka_DeleteTopic_free);
 
         for (i = 0 ; i < del_topic_cnt ; i++)
@@ -1612,7 +1612,7 @@ rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *newp,
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
 
-        rl = rd_list_init_int32(rd_list_new(0, NULL), broker_id_cnt);
+        rl = rd_list_init_int32(rd_list_new(0, NULL), (int)broker_id_cnt);
 
         for (i = 0 ; i < (int)broker_id_cnt ; i++)
                 rd_list_set_int32(rl, i, broker_ids[i]);
@@ -1769,7 +1769,7 @@ void rd_kafka_CreatePartitions (rd_kafka_t *rk,
                 RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT,
                 &cbs, options, rkqu);
 
-        rd_list_init(&rko->rko_u.admin_request.args, newps_cnt,
+        rd_list_init(&rko->rko_u.admin_request.args, (int)newps_cnt,
                      rd_kafka_NewPartitions_free);
 
         for (i = 0 ; i < newps_cnt ; i++)
@@ -2330,7 +2330,7 @@ void rd_kafka_AlterConfigs (rd_kafka_t *rk,
                 RD_KAFKA_EVENT_ALTERCONFIGS_RESULT,
                 &cbs, options, rkqu);
 
-        rd_list_init(&rko->rko_u.admin_request.args, config_cnt,
+        rd_list_init(&rko->rko_u.admin_request.args, (int)config_cnt,
                      rd_kafka_ConfigResource_free);
 
         for (i = 0 ; i < config_cnt ; i++)
@@ -2647,7 +2647,7 @@ void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
                 RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT,
                 &cbs, options, rkqu);
 
-        rd_list_init(&rko->rko_u.admin_request.args, config_cnt,
+        rd_list_init(&rko->rko_u.admin_request.args, (int)config_cnt,
                      rd_kafka_ConfigResource_free);
 
         for (i = 0 ; i < config_cnt ; i++)

@@ -121,14 +121,14 @@ void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t cnt,
 	rl->rl_size = (int)cnt;
 	rl->rl_cnt = 0;
 	rl->rl_flags |= RD_LIST_F_FIXED_SIZE;
-        rl->rl_elemsize = elemsize;
+        rl->rl_elemsize = (int)elemsize;
 }
 
 
 void rd_list_set_cnt (rd_list_t *rl, size_t cnt) {
         rd_assert(rl->rl_flags & RD_LIST_F_FIXED_SIZE);
         rd_assert((int)cnt <= rl->rl_size);
-        rl->rl_cnt = cnt;
+        rl->rl_cnt = (int)cnt;
 }
 
 

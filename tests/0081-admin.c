@@ -66,7 +66,7 @@ static void do_test_CreateTopics (const char *what,
         const rd_kafka_topic_result_t **restopics;
         size_t restopic_cnt;
         int metadata_tmout ;
-        int num_replicas = avail_broker_cnt;
+        int num_replicas = (int)avail_broker_cnt;
         int32_t *replicas;
 
         /* Set up replicas */

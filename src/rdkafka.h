@@ -3724,7 +3724,7 @@ rd_kafka_event_AlterConfigs_result (rd_kafka_event_t *rkev);
  *          different type.
  *
  * Event types:
- *   RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
+ *   RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
  */
 RD_EXPORT const rd_kafka_DescribeConfigs_result_t *
 rd_kafka_event_DescribeConfigs_result (rd_kafka_event_t *rkev);
@@ -4342,7 +4342,7 @@ rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
  *
  * @{
  *
- * @brief The Admin API enables applications perform administrative
+ * @brief The Admin API enables applications to perform administrative
  *        Apache Kafka tasks, such as creating and deleting topics,
  *        altering and reading broker configuration, etc.
  *
@@ -4362,9 +4362,9 @@ rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
  * \c rd_kafka_event_destroy().
  *
  * Locally triggered errors:
- *  - \c RD_KAFKA_RESP_ERR__TRANSPORT - (Controller) broker connection did not
+ *  - \c RD_KAFKA_RESP_ERR__TIMED_OUT - (Controller) broker connection did not
  *    become available in the time allowed by AdminOption_set_request_timeout.
- */
+  */
 
 
 
@@ -4373,7 +4373,7 @@ rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
  *        parameters for the Admin API requests.
  *
  * @remark Since AdminOptions is decoupled from the actual request type
- *         there is no enforcement to disallow setting unrelated properties,
+ *         there is no enforcement to prevent setting unrelated properties,
  *         e.g. setting validate_only on a DescribeConfigs request is allowed
  *         but is silently ignored by DescribeConfigs.
  *         Future versions may introduce such enforcement.
@@ -5131,7 +5131,7 @@ rd_kafka_ConfigResource_error_string (const rd_kafka_ConfigResource_t *config);
  *         Use \c rd_kafka_AdminOptions_set_incremental() to change the
  *         behaviour so that only the passed configuration is modified.
  *
- * @remark Multiple resources and resources types may be set, but at most one
+ * @remark Multiple resources and resource types may be set, but at most one
  *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
  *         since these resource requests must be sent to the broker specified
  *         in the resource.
@@ -5211,12 +5211,12 @@ rd_kafka_AlterConfigs_result_resources (
  *        is true can't be updated (with rd_kafka_AlterConfigs()).
  *
  *        Synonym configuration entries are returned if the broker supports
- *        it (broker version >= 1.0.0). See rd_kafka_ConfigEntry_synonyms().
+ *        it (broker version >= 1.1.0). See rd_kafka_ConfigEntry_synonyms().
  *
  * @remark Requires broker version >=0.11.0.0
  *
- * @remark Multiple resources and resources types may be set, but at most one
- *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
+ * @remark Multiple resources and resource types may be requested, but at most
+ *         one resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
  *         since these resource requests must be sent to the broker specified
  *         in the resource.
  */

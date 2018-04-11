@@ -72,9 +72,9 @@ struct rd_kafka_AdminOptions_s {
                                             *     AlterConfigs
                                             */
 
-        rd_kafka_confval_t broker;         /**< BOOL: Explicitly set
-                                            *         broker id to send
-                                            *         requests to.
+        rd_kafka_confval_t broker;         /**< INT: Explicitly override
+                                            *        broker id to send
+                                            *        requests to.
                                             *   Valid for:
                                             *     all
                                             */

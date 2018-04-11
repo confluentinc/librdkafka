@@ -5195,6 +5195,31 @@ rd_kafka_AlterConfigs_result_resources (
  *
  */
 
+
+/**
+ * @brief Get configuration for the specified resources in \p configs.
+ *
+ *        The returned configuration includes default values and the
+ *        rd_kafka_ConfigEntry_is_default() or rd_kafka_ConfigEntry_source()
+ *        methods may be used to distinguish them from user supplied values.
+ *
+ *        The value of config entries where rd_kafka_ConfigEntry_is_sensitive()
+ *        is true will always be NULL to avoid disclosing sensitive
+ *        information, such as security settings.
+ *
+ *        Configuration entries where rd_kafka_ConfigEntry_is_read_only()
+ *        is true can't be updated (with rd_kafka_AlterConfigs()).
+ *
+ *        Synonym configuration entries are returned if the broker supports
+ *        it (broker version >= 1.0.0). See rd_kafka_ConfigEntry_synonyms().
+ *
+ * @remark Requires broker version >=0.11.0.0
+ *
+ * @remark Multiple resources and resources types may be set, but at most one
+ *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
+ *         since these resource requests must be sent to the broker specified
+ *         in the resource.
+ */
 RD_EXPORT
 void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
                                rd_kafka_ConfigResource_t **configs,

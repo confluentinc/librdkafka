@@ -52,6 +52,8 @@ typedef struct rd_strtup_s {
 
 void rd_strtup_destroy (rd_strtup_t *strtup);
 void rd_strtup_free (void *strtup);
+rd_strtup_t *rd_strtup_new0 (const char *name, ssize_t name_len,
+                             const char *value, ssize_t value_len);
 rd_strtup_t *rd_strtup_new (const char *name, const char *value);
 rd_strtup_t *rd_strtup_dup (const rd_strtup_t *strtup);
 void *rd_strtup_list_copy (const void *elem, void *opaque);

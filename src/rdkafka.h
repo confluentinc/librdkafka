@@ -4485,6 +4485,33 @@ rd_kafka_AdminOptions_set_incremental (rd_kafka_AdminOptions_t *options,
 
 
 /**
+ * @brief Override what broker the Admin request will be sent to.
+ *
+ * By default, Admin requests are sent to the controller broker, with
+ * the following exceptions:
+ *   - AlterConfigs with a BROKER resource are sent to the broker id set
+ *     as the resource name.
+ *   - DescribeConfigs with a BROKER resource are sent to the broker id set
+ *     as the resource name.
+ *
+ * @param broker_id The broker to send the request to.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
+ *          error code on failure in which case an error string will
+ *          be written \p errstr.
+ *
+ * @remark This API should typically not be used, but serves as a workaround
+ *         if new resource types are to the broker that the client
+ *         does not know where to send.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_broker (rd_kafka_AdminOptions_t *options,
+                                  int32_t broker_id,
+                                  char *errstr, size_t errstr_size);
+
+
+
+/**
  * @brief Set application opaque value that can be extracted from the
  *        result event using rd_kafka_event_opaque()
  */
@@ -4508,7 +4535,7 @@ typedef struct rd_kafka_NewTopic_s rd_kafka_NewTopic_t;
 
 /**
  * @brief Create a new NewTopic object. This object is later passed to
- *        rd_kafka_admin_CreateTopics().
+ *        rd_kafka_CreateTopics().
  *
  * @param topic Topic name to create.
  * @param num_partitions Number of partitions in topic.
@@ -4606,11 +4633,11 @@ rd_kafka_NewTopic_add_config (rd_kafka_NewTopic_t *new_topic,
  *         \c RD_KAFKA_EVENT_CREATETOPICS_RESULT
  */
 RD_EXPORT void
-rd_kafka_admin_CreateTopics (rd_kafka_t *rk,
-                             rd_kafka_NewTopic_t **new_topics,
-                             size_t new_topic_cnt,
-                             const rd_kafka_AdminOptions_t *options,
-                             rd_kafka_queue_t *rkqu);
+rd_kafka_CreateTopics (rd_kafka_t *rk,
+                       rd_kafka_NewTopic_t **new_topics,
+                       size_t new_topic_cnt,
+                       const rd_kafka_AdminOptions_t *options,
+                       rd_kafka_queue_t *rkqu);
 
 
 /**
@@ -4658,7 +4685,7 @@ typedef struct rd_kafka_DeleteTopic_s rd_kafka_DeleteTopic_t;
 
 /**
  * @brief Create a new DeleteTopic object. This object is later passed to
- *        rd_kafka_admin_DeleteTopics().
+ *        rd_kafka_DeleteTopics().
  *
  * @param topic Topic name to delete.
  *
@@ -4697,7 +4724,7 @@ rd_kafka_DeleteTopic_destroy_array (rd_kafka_DeleteTopic_t **del_topics,
  *         \c RD_KAFKA_EVENT_DELETETOPICS_RESULT
  */
 RD_EXPORT
-void rd_kafka_admin_DeleteTopics (rd_kafka_t *rk,
+void rd_kafka_DeleteTopics (rd_kafka_t *rk,
                                   rd_kafka_DeleteTopic_t **del_topics,
                                   size_t del_topic_cnt,
                                   const rd_kafka_AdminOptions_t *options,
@@ -4751,7 +4778,7 @@ typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
 
 /**
  * @brief Create a new NewPartitions. This object is later passed to
- *        rd_kafka_admin_CreatePartitions() to increas the number of partitions
+ *        rd_kafka_CreatePartitions() to increas the number of partitions
  *        to \p new_total_cnt for an existing topic.
  *
  * @param topic Topic name to create more partitions for.
@@ -4829,11 +4856,11 @@ rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *new_par
  *         \c RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
  */
 RD_EXPORT void
-rd_kafka_admin_CreatePartitions (rd_kafka_t *rk,
-                                 rd_kafka_NewPartitions_t **new_parts,
-                                 size_t new_parts_cnt,
-                                 const rd_kafka_AdminOptions_t *options,
-                                 rd_kafka_queue_t *rkqu);
+rd_kafka_CreatePartitions (rd_kafka_t *rk,
+                           rd_kafka_NewPartitions_t **new_parts,
+                           size_t new_parts_cnt,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu);
 
 
 
@@ -4885,22 +4912,22 @@ rd_kafka_CreatePartitions_result_topics (
  * @enum Apache Kafka config sources
  */
 typedef enum rd_kafka_ConfigSource_t {
-        /**< Dynamic topic config that is configured for a specific topic */
-        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_TOPIC_CONFIG = 0,
-        /**< Dynamic broker config that is configured for a specific broker */
-        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_BROKER_CONFIG = 1,
-        /**< Dynamic broker config that is configured as default for all
-         *   brokers in the cluster */
-        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_DEFAULT_BROKER_CONFIG = 2,
-        /**< Static broker config provided as broker properties at startup
-         * (e.g. from server.properties file) */
-        RD_KAFKA_CONFIG_SOURCE_STATIC_BROKER = 3,
-        /**< Built-in default configuration for configs that have a
-         *   default value */
-        RD_KAFKA_CONFIG_SOURCE_DEFAULT_CONFIG = 4,
         /**< Source unknown, e.g., in the ConfigEntry used for alter requests
          *   where source is not set */
-        RD_KAFKA_CONFIG_SOURCE_UNKNOWN = 5,
+        RD_KAFKA_CONFIG_SOURCE_UNKNOWN_CONFIG = 0,
+        /**< Dynamic topic config that is configured for a specific topic */
+        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_TOPIC_CONFIG = 1,
+        /**< Dynamic broker config that is configured for a specific broker */
+        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_BROKER_CONFIG = 2,
+        /**< Dynamic broker config that is configured as default for all
+         *   brokers in the cluster */
+        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_DEFAULT_BROKER_CONFIG = 3,
+        /**< Static broker config provided as broker properties at startup
+         * (e.g. from server.properties file) */
+        RD_KAFKA_CONFIG_SOURCE_STATIC_BROKER_CONFIG = 4,
+        /**< Built-in default configuration for configs that have a
+         *   default value */
+        RD_KAFKA_CONFIG_SOURCE_DEFAULT_CONFIG = 5,
 
         /**< Number of source types defined */
         RD_KAFKA_CONFIG_SOURCE__CNT,
@@ -4998,7 +5025,7 @@ typedef enum rd_kafka_ResourceType_t {
 /**
  * @returns a string representation of the \p restype
  */
-const char *
+RD_EXPORT const char *
 rd_kafka_ResourceType_name (rd_kafka_ResourceType_t restype);
 
 typedef struct rd_kafka_ConfigResource_s rd_kafka_ConfigResource_t;
@@ -5111,11 +5138,11 @@ rd_kafka_ConfigResource_error_string (const rd_kafka_ConfigResource_t *config);
  *
  */
 RD_EXPORT
-void rd_kafka_admin_AlterConfigs (rd_kafka_t *rk,
-                                  rd_kafka_ConfigResource_t **configs,
-                                  size_t config_cnt,
-                                  const rd_kafka_AdminOptions_t *options,
-                                  rd_kafka_queue_t *rkqu);
+void rd_kafka_AlterConfigs (rd_kafka_t *rk,
+                            rd_kafka_ConfigResource_t **configs,
+                            size_t config_cnt,
+                            const rd_kafka_AdminOptions_t *options,
+                            rd_kafka_queue_t *rkqu);
 
 
 /**
@@ -5169,11 +5196,11 @@ rd_kafka_AlterConfigs_result_resources (
  */
 
 RD_EXPORT
-void rd_kafka_admin_DescribeConfigs (rd_kafka_t *rk,
-                                     const rd_kafka_ConfigResource_t *resources,
-                                     size_t config_cnt,
-                                     const rd_kafka_AdminOptions_t *options,
-                                     rd_kafka_queue_t *rkqu);
+void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
+                               rd_kafka_ConfigResource_t **configs,
+                               size_t config_cnt,
+                               const rd_kafka_AdminOptions_t *options,
+                               rd_kafka_queue_t *rkqu);
 
 
 /**

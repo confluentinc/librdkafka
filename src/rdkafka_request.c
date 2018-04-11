@@ -2011,7 +2011,7 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
  */
 rd_kafka_resp_err_t
 rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
-                              rd_list_t *new_topics /*(NewTopic_t*)*/,
+                              const rd_list_t *new_topics /*(NewTopic_t*)*/,
                               rd_kafka_AdminOptions_t *options,
                               char *errstr, size_t errstr_size,
                               rd_kafka_replyq_t replyq,
@@ -2151,7 +2151,7 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
  */
 rd_kafka_resp_err_t
 rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
-                              rd_list_t *del_topics /*(DeleteTopic_t*)*/,
+                              const rd_list_t *del_topics /*(DeleteTopic_t*)*/,
                               rd_kafka_AdminOptions_t *options,
                               char *errstr, size_t errstr_size,
                               rd_kafka_replyq_t replyq,
@@ -2220,7 +2220,7 @@ rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
  */
 rd_kafka_resp_err_t
 rd_kafka_CreatePartitionsRequest (rd_kafka_broker_t *rkb,
-                                  rd_list_t *new_parts /*(NewPartitions_t*)*/,
+                                  const rd_list_t *new_parts /*(NewPartitions_t*)*/,
                                   rd_kafka_AdminOptions_t *options,
                                   char *errstr, size_t errstr_size,
                                   rd_kafka_replyq_t replyq,
@@ -2372,9 +2372,6 @@ rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
                 int ei;
 
                 /* resource_type */
-                printf("#%d: Use restype %d: %s with %d entries\n",
-                       i, config->restype, config->name,
-                       rd_list_cnt(&config->config));
                 rd_kafka_buf_write_i8(rkbuf, config->restype);
 
                 /* resource_name */
@@ -2399,6 +2396,98 @@ rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
         /* validate_only */
         rd_kafka_buf_write_i8(
                 rkbuf, rd_kafka_confval_get_int(&options->validate_only));
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Construct and send DescribeConfigsRequest to \p rkb
+ *        with the configs (ConfigResource_t*) in \p configs, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
+                                 const rd_list_t *configs /*(ConfigResource_t*)*/,
+                                 rd_kafka_AdminOptions_t *options,
+                                 char *errstr, size_t errstr_size,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int i;
+        const rd_kafka_ConfigResource_t *config;
+        int op_timeout;
+
+        if (rd_list_cnt(configs) == 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "No config resources specified");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_DescribeConfigs, 0, 1, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "DescribeConfigs (KIP-133) not supported "
+                            "by broker, requires broker version >= 0.11.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DescribeConfigs, 1,
+                                         rd_list_cnt(configs) * 200);
+
+        /* #resources */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));
+
+        RD_LIST_FOREACH(config, configs, i) {
+                const rd_kafka_ConfigEntry_t *entry;
+                int ei;
+
+                /* resource_type */
+                rd_kafka_buf_write_i8(rkbuf, config->restype);
+
+                /* resource_name */
+                rd_kafka_buf_write_str(rkbuf, config->name, -1);
+
+                /* #config */
+                if (rd_list_empty(&config->config)) {
+                        /* Get all configs */
+                        rd_kafka_buf_write_i32(rkbuf, -1);
+                } else {
+                        /* Get requested configs only */
+                        rd_kafka_buf_write_i32(rkbuf,
+                                               rd_list_cnt(&config->config));
+                }
+
+                RD_LIST_FOREACH(entry, &config->config, ei) {
+                        /* config_name */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
+                }
+        }
+
+
+        if (ApiVersion == 1) {
+                /* include_synonyms */
+                rd_kafka_buf_write_i8(rkbuf, 1);
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

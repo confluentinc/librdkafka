@@ -59,6 +59,10 @@ const char *rd_kafka_event_name (const rd_kafka_event_t *rkev) {
                 return "DeleteTopicsResult";
         case RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT:
                 return "CreatePartitionsResult";
+        case RD_KAFKA_EVENT_ALTERCONFIGS_RESULT:
+                return "AlterConfigsResult";
+        case RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT:
+                return "DescribeConfigsResult";
 	default:
 		return "?unknown?";
 	}

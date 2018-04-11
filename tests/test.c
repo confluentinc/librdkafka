@@ -3296,7 +3296,7 @@ static void test_admin_create_topic (rd_kafka_t *use_rk,
                  topicname, partition_cnt, replication_factor, timeout_ms);
 
         TIMING_START(&t_create, "CreateTopics");
-        rd_kafka_admin_CreateTopics(rk, newt, newt_cnt, options, rkqu);
+        rd_kafka_CreateTopics(rk, newt, newt_cnt, options, rkqu);
 
         /* Wait for result */
         rkev = rd_kafka_queue_poll(rkqu, timeout_ms + 2000);
@@ -3909,8 +3909,10 @@ test_wait_admin_result (rd_kafka_queue_t *q,
                 TEST_FAIL("Timed out waiting for admin result (%d)\n", evtype);
 
         TEST_ASSERT(rd_kafka_event_type(rkev) == evtype,
-                    "Expected event type %d, got %s",
-                    evtype, rd_kafka_event_name(rkev));
+                    "Expected event type %d, got %d (%s)",
+                    evtype,
+                    rd_kafka_event_type(rkev),
+                    rd_kafka_event_name(rkev));
 
         return rkev;
 }
@@ -4045,7 +4047,7 @@ test_CreateTopics_simple (rd_kafka_t *rk,
 
         TEST_SAY("Creating %"PRIusz" topics\n", topic_cnt);
 
-        rd_kafka_admin_CreateTopics(rk, new_topics, topic_cnt, options, q);
+        rd_kafka_CreateTopics(rk, new_topics, topic_cnt, options, q);
 
         rd_kafka_AdminOptions_destroy(options);
 
@@ -4108,7 +4110,7 @@ test_CreatePartitions_simple (rd_kafka_t *rk,
         TEST_SAY("Creating (up to) %"PRIusz" partitions for topic \"%s\"\n",
                  total_part_cnt, topic);
 
-        rd_kafka_admin_CreatePartitions(rk, newp, 1, options, q);
+        rd_kafka_CreatePartitions(rk, newp, 1, options, q);
 
         rd_kafka_AdminOptions_destroy(options);
 
@@ -4170,7 +4172,7 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
 
         TEST_SAY("Deleting %"PRIusz" topics\n", topic_cnt);
 
-        rd_kafka_admin_DeleteTopics(rk, del_topics, topic_cnt, options, useq);
+        rd_kafka_DeleteTopics(rk, del_topics, topic_cnt, options, useq);
 
         rd_kafka_AdminOptions_destroy(options);
 

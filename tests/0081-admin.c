@@ -170,7 +170,7 @@ static void do_test_CreateTopics (const char *what,
 
         TIMING_START(&timing, "CreateTopics");
         TEST_SAY("Call CreateTopics\n");
-        rd_kafka_admin_CreateTopics(rk, new_topics, MY_NEW_TOPICS_CNT,
+        rd_kafka_CreateTopics(rk, new_topics, MY_NEW_TOPICS_CNT,
                                     options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
@@ -361,7 +361,7 @@ static void do_test_DeleteTopics (const char *what,
 
         TIMING_START(&timing, "DeleteTopics");
         TEST_SAY("Call DeleteTopics\n");
-        rd_kafka_admin_DeleteTopics(rk, del_topics, MY_DEL_TOPICS_CNT,
+        rd_kafka_DeleteTopics(rk, del_topics, MY_DEL_TOPICS_CNT,
                                     options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
@@ -599,7 +599,7 @@ static void do_test_CreatePartitions (const char *what,
          */
         TIMING_START(&timing, "CreateTopics");
         TEST_SAY("Creating topics with initial partition counts\n");
-        rd_kafka_admin_CreateTopics(rk, new_topics, MY_CRP_TOPICS_CNT,
+        rd_kafka_CreateTopics(rk, new_topics, MY_CRP_TOPICS_CNT,
                                     options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
@@ -616,7 +616,7 @@ static void do_test_CreatePartitions (const char *what,
          */
         TIMING_START(&timing, "CreatePartitions");
         TEST_SAY("Creating partitions\n");
-        rd_kafka_admin_CreatePartitions(rk, crp_topics, MY_CRP_TOPICS_CNT,
+        rd_kafka_CreatePartitions(rk, crp_topics, MY_CRP_TOPICS_CNT,
                                     options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
@@ -673,10 +673,11 @@ test_print_ConfigEntry_array (const rd_kafka_ConfigEntry_t **entries,
 
                 syns = rd_kafka_ConfigEntry_synonyms(e, &syn_cnt);
 
+#define YN(v) ((v) ? "y" : "n")
                 TEST_SAY("%s#%"PRIusz"/%"PRIusz
                          ": Source %s (%d): \"%s\"=\"%s\" "
-                         "[is read-only=%d, default=%d, sensitive=%d, "
-                         "synonym=%d] with %"PRIusz" synonym(s)\n",
+                         "[is read-only=%s, default=%s, sensitive=%s, "
+                         "synonym=%s] with %"PRIusz" synonym(s)\n",
                          indent,
                          ei, entry_cnt,
                          rd_kafka_ConfigSource_name(
@@ -685,23 +686,23 @@ test_print_ConfigEntry_array (const rd_kafka_ConfigEntry_t **entries,
                          rd_kafka_ConfigEntry_name(e),
                          rd_kafka_ConfigEntry_value(e) ?
                          rd_kafka_ConfigEntry_value(e) : "(NULL)",
-                         rd_kafka_ConfigEntry_is_read_only(e),
-                         rd_kafka_ConfigEntry_is_default(e),
-                         rd_kafka_ConfigEntry_is_sensitive(e),
-                         rd_kafka_ConfigEntry_is_synonym(e),
+                         YN(rd_kafka_ConfigEntry_is_read_only(e)),
+                         YN(rd_kafka_ConfigEntry_is_default(e)),
+                         YN(rd_kafka_ConfigEntry_is_sensitive(e)),
+                         YN(rd_kafka_ConfigEntry_is_synonym(e)),
                          syn_cnt);
-
+#undef YN
 
                 if (syn_cnt > 0)
-                        test_print_ConfigEntry_array(syns, syn_cnt, depth++);
+                        test_print_ConfigEntry_array(syns, syn_cnt, depth+1);
         }
 }
 
 
 /**
- * @brief Test AlterConfigs and DescribeConfigs
+ * @brief Test AlterConfigs
  */
-static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
+static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 #define MY_CONFRES_CNT 3
         char *topics[MY_CONFRES_CNT];
         rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
@@ -789,7 +790,7 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         /*
          * Fire off request
          */
-        rd_kafka_admin_AlterConfigs(rk, configs, ci, options, rkqu);
+        rd_kafka_AlterConfigs(rk, configs, ci, options, rkqu);
 
         rd_kafka_AdminOptions_destroy(options);
 
@@ -829,12 +830,13 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                 entries = rd_kafka_ConfigResource_configs(rconfigs[i],
                                                           &entry_cnt);
 
-                TEST_SAY("ConfigResource #%d: type %s (%d), "
+                TEST_SAY("ConfigResource #%d: type %s (%d), \"%s\": "
                          "%"PRIusz" ConfigEntries, error %s (%s)\n",
                          i,
                          rd_kafka_ResourceType_name(
                                  rd_kafka_ConfigResource_type(rconfigs[i])),
                          rd_kafka_ConfigResource_type(rconfigs[i]),
+                         rd_kafka_ConfigResource_name(rconfigs[i]),
                          entry_cnt,
                          rd_kafka_err2name(err), errstr2 ? errstr2 : "");
 
@@ -860,11 +862,11 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
                 if (err != exp_err[i]) {
                         TEST_FAIL_LATER("ConfigResource #%d: "
-                                        "expected %s (%d), got %s (%d, %s)",
+                                        "expected %s (%d), got %s (%s)",
                                         i,
                                         rd_kafka_err2name(exp_err[i]),
                                         exp_err[i],
-                                        rd_kafka_err2name(err), err,
+                                        rd_kafka_err2name(err),
                                         errstr2 ? errstr2 : "");
                         fails++;
                 }
@@ -875,6 +877,175 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         rd_kafka_event_destroy(rkev);
 
         rd_kafka_ConfigResource_destroy_array(configs, ci);
+
+#undef MY_CONFRES_CNT
+}
+
+
+
+/**
+ * @brief Test DescribeConfigs
+ */
+static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
+#define MY_CONFRES_CNT 3
+        char *topics[MY_CONFRES_CNT];
+        rd_kafka_ConfigResource_t *configs[MY_CONFRES_CNT];
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_resp_err_t exp_err[MY_CONFRES_CNT];
+        rd_kafka_event_t *rkev;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_DescribeConfigs_result_t *res;
+        const rd_kafka_ConfigResource_t **rconfigs;
+        size_t rconfig_cnt;
+        char errstr[128];
+        const char *errstr2;
+        int ci = 0;
+        int i;
+        int fails = 0;
+
+        /*
+         * Only create one topic, the others will be non-existent.
+         */
+        rd_strdupa(&topics[0], test_mk_topic_name("DescribeConfigs_exist", 1));
+        for (i = 1 ; i < MY_CONFRES_CNT ; i++)
+                rd_strdupa(&topics[i],
+                           test_mk_topic_name("DescribeConfigs_notexist", 1));
+
+        //test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
+
+        /*
+         * ConfigResource #0: topic config, no config entries.
+         */
+        configs[ci] = rd_kafka_ConfigResource_new(
+                RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
+        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        ci++;
+
+        /*
+         * ConfigResource #1:broker config, no config entries
+         */
+        configs[ci] = rd_kafka_ConfigResource_new(
+                RD_KAFKA_RESOURCE_BROKER,
+                tsprintf("%"PRId32, avail_brokers[0]));
+
+        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        ci++;
+
+        /*
+         * ConfigResource #2: topic config, non-existent topic, no config entr.
+         */
+        configs[ci] = rd_kafka_ConfigResource_new(
+                RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
+        /* FIXME: This is a bug in the broker, it returns a full response
+         *        for unknown topics.
+         *        https://issues.apache.org/jira/browse/KAFKA-6778
+         */
+        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;// RD_KAFKA_RESP_ERR_UNKNOWN;
+        ci++;
+
+
+        /*
+         * Timeout options
+         */
+        options = rd_kafka_AdminOptions_new(rk);
+        err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, errstr,
+                                                        sizeof(errstr));
+        TEST_ASSERT(!err, "%s", errstr);
+
+
+        /*
+         * Fire off request
+         */
+        rd_kafka_DescribeConfigs(rk, configs, ci, options, rkqu);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        /*
+         * Wait for result
+         */
+        rkev = test_wait_admin_result(rkqu,
+                                      RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT,
+                                      10000+1000);
+
+        /*
+         * Extract result
+         */
+        res = rd_kafka_event_DescribeConfigs_result(rkev);
+        TEST_ASSERT(res, "Expected DescribeConfigs result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        err = rd_kafka_DescribeConfigs_result_error(res, &errstr2);
+        TEST_ASSERT(!err,
+                    "Expected success, not %s: %s",
+                    rd_kafka_err2name(err), errstr2);
+
+        rconfigs = rd_kafka_DescribeConfigs_result_resources(res, &rconfig_cnt);
+        TEST_ASSERT((int)rconfig_cnt == ci,
+                    "Expected %d result resources, got %"PRIusz"\n",
+                    ci, rconfig_cnt);
+
+        /*
+         * Verify status per resource
+         */
+        for (i = 0 ; i < (int)rconfig_cnt ; i++) {
+                const rd_kafka_ConfigEntry_t **entries;
+                size_t entry_cnt;
+
+                err = rd_kafka_ConfigResource_error(rconfigs[i]);
+                errstr2 = rd_kafka_ConfigResource_error_string(rconfigs[i]);
+
+                entries = rd_kafka_ConfigResource_configs(rconfigs[i],
+                                                          &entry_cnt);
+
+                TEST_SAY("ConfigResource #%d: type %s (%d), \"%s\": "
+                         "%"PRIusz" ConfigEntries, error %s (%s)\n",
+                         i,
+                         rd_kafka_ResourceType_name(
+                                 rd_kafka_ConfigResource_type(rconfigs[i])),
+                         rd_kafka_ConfigResource_type(rconfigs[i]),
+                         rd_kafka_ConfigResource_name(rconfigs[i]),
+                         entry_cnt,
+                         rd_kafka_err2name(err), errstr2 ? errstr2 : "");
+
+                test_print_ConfigEntry_array(entries, entry_cnt, 1);
+
+                if (rd_kafka_ConfigResource_type(rconfigs[i]) !=
+                    rd_kafka_ConfigResource_type(configs[i]) ||
+                    strcmp(rd_kafka_ConfigResource_name(rconfigs[i]),
+                           rd_kafka_ConfigResource_name(configs[i]))) {
+                        TEST_FAIL_LATER(
+                                "ConfigResource #%d: "
+                                "expected type %s name %s, "
+                                "got type %s name %s",
+                                i,
+                                rd_kafka_ResourceType_name(rd_kafka_ConfigResource_type(configs[i])),
+                                rd_kafka_ConfigResource_name(configs[i]),
+                                rd_kafka_ResourceType_name(rd_kafka_ConfigResource_type(rconfigs[i])),
+                                rd_kafka_ConfigResource_name(rconfigs[i]));
+                        fails++;
+                        continue;
+                }
+
+
+                if (err != exp_err[i]) {
+                        TEST_FAIL_LATER("ConfigResource #%d: "
+                                        "expected %s (%d), got %s (%s)",
+                                        i,
+                                        rd_kafka_err2name(exp_err[i]),
+                                        exp_err[i],
+                                        rd_kafka_err2name(err),
+                                        errstr2 ? errstr2 : "");
+                        fails++;
+                }
+        }
+
+        TEST_ASSERT(!fails, "See %d previous failure(s)", fails);
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_ConfigResource_destroy_array(configs, ci);
+
+#undef MY_CONFRES_CNT
 }
 
 
@@ -915,8 +1086,12 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         /* Create Partitions */
         do_test_CreatePartitions("temp queue, op timeout 6500", rk, NULL, 6500);
         do_test_CreatePartitions("main queue, op timeout 0", rk, mainq, 0);
-        /* AlterConfigs and DescribeConfigs */
-        do_test_configs(rk, mainq);
+
+        /* AlterConfigs */
+        do_test_AlterConfigs(rk, mainq);
+
+        /* DescribeConfigs */
+        do_test_DescribeConfigs(rk, mainq);
 
         rd_kafka_queue_destroy(mainq);
 
@@ -931,3 +1106,4 @@ int main_0081_admin (int argc, char **argv) {
         do_test_apis(RD_KAFKA_CONSUMER);
         return 0;
 }
+

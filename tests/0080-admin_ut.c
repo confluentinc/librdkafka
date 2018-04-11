@@ -180,8 +180,8 @@ static void do_test_CreateTopics (const char *what,
 
         TIMING_START(&timing, "CreateTopics");
         TEST_SAY("Call CreateTopics, timeout is %dms\n", exp_timeout);
-        rd_kafka_admin_CreateTopics(rk, new_topics, MY_NEW_TOPICS_CNT,
-                                    options, q);
+        rd_kafka_CreateTopics(rk, new_topics, MY_NEW_TOPICS_CNT,
+                              options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Poll result queue */
@@ -279,8 +279,8 @@ static void do_test_DeleteTopics (const char *what,
 
         TIMING_START(&timing, "DeleteTopics");
         TEST_SAY("Call DeleteTopics, timeout is %dms\n", exp_timeout);
-        rd_kafka_admin_DeleteTopics(rk, del_topics, MY_DEL_TOPICS_CNT,
-                                    options, q);
+        rd_kafka_DeleteTopics(rk, del_topics, MY_DEL_TOPICS_CNT,
+                              options, q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Poll result queue */
@@ -405,7 +405,7 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         TEST_ASSERT(!configs[0]);
 
         configs[0] = rd_kafka_ConfigResource_new(
-                        (rd_kafka_ResourceType_t)0, NULL);
+                (rd_kafka_ResourceType_t)0, NULL);
         TEST_ASSERT(!configs[0]);
 
 
@@ -435,11 +435,9 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                                                         sizeof(errstr));
         TEST_ASSERT(!err, "%s", errstr);
 
-        rd_kafka_admin_AlterConfigs(rk, configs, MY_CONFRES_CNT,
-                                    options, rkqu);
-
-        rd_kafka_AdminOptions_destroy(options);
-        rd_kafka_ConfigResource_destroy_array(configs, MY_CONFRES_CNT);
+        /* AlterConfigs */
+        rd_kafka_AlterConfigs(rk, configs, MY_CONFRES_CNT,
+                              options, rkqu);
 
         rkev = test_wait_admin_result(rkqu, RD_KAFKA_EVENT_ALTERCONFIGS_RESULT,
                                       2000);
@@ -457,6 +455,36 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                     rd_kafka_err2name(err), errstr2);
 
         rconfigs = rd_kafka_AlterConfigs_result_resources(res, &rconfig_cnt);
+        TEST_ASSERT(!rconfigs && !rconfig_cnt,
+                    "Expected no result resources, got %"PRIusz,
+                    rconfig_cnt);
+
+        rd_kafka_event_destroy(rkev);
+
+        /* DescribeConfigs: reuse same configs and options */
+        rd_kafka_DescribeConfigs(rk, configs, MY_CONFRES_CNT,
+                                 options, rkqu);
+
+        rd_kafka_AdminOptions_destroy(options);
+        rd_kafka_ConfigResource_destroy_array(configs, MY_CONFRES_CNT);
+
+        rkev = test_wait_admin_result(rkqu,
+                                      RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT,
+                                      2000);
+
+        TEST_ASSERT(rd_kafka_event_error(rkev) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected timeout, not %s",
+                    rd_kafka_event_error_string(rkev));
+
+        res = rd_kafka_event_DescribeConfigs_result(rkev);
+        TEST_ASSERT(res);
+
+        err = rd_kafka_DescribeConfigs_result_error(res, &errstr2);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected timeout, not %s: %s",
+                    rd_kafka_err2name(err), errstr2);
+
+        rconfigs = rd_kafka_DescribeConfigs_result_resources(res, &rconfig_cnt);
         TEST_ASSERT(!rconfigs && !rconfig_cnt,
                     "Expected no result resources, got %"PRIusz,
                     rconfig_cnt);

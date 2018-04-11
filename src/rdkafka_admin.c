@@ -88,7 +88,7 @@ static const char *rd_kafka_admin_state_desc[] = {
  *     RD_KAFKA_OP_CREATETOPICS, makes a **copy** on the rko of all the
  *     input arguments (which allows the caller to free the originals
  *     whenever she likes). The rko op worker callback is set to the
- *     DeleteTopics asynchronous worker callback rd_kafka_DeleteTopics_worker().
+ *     generic admin worker callback rd_kafka_admin_worker()
  *
  *  3. [app thread] DeleteTopics() enqueues the rko on librdkafka's main ops
  *     queue that is served by the rdkafka main thread in rd_kafka_thread_main()
@@ -100,8 +100,8 @@ static const char *rd_kafka_admin_state_desc[] = {
  *     as an RD_KAFKA_OP_DELETETOPICS which is served by the op callback
  *     set in step 2.
  *
- *  6. [rdkafka main thread] rd_kafka_DeleteTopics_worker() (the worker cb)
- *     is called. After some initial checking of err==ERR__DESTROY events
+ *  6. [rdkafka main thread] The worker callback is called.
+ *     After some initial checking of err==ERR__DESTROY events
  *     (which is used to clean up outstanding ops (etc) on termination),
  *     the code hits a state machine using rko_u.admin.request_state.
  *
@@ -115,12 +115,13 @@ static const char *rd_kafka_admin_state_desc[] = {
  *     full options.request_timeout has elapsed.
  *
  *  8. [rdkafka main thread] After initialization the state is updated
- *     to WAIT_CONTROLLER and the code falls through to looking up
- *     the controller broker and waiting for an active connection.
+ *     to WAIT_BROKER or WAIT_CONTROLLER and the code falls through to
+ *     looking up a specific broker or the controller broker and waiting for
+ *     an active connection.
  *     Both the lookup and the waiting for an active connection are
  *     fully asynchronous, and the same eonce used for the timer is passed
- *     to the rd_kafka_broker_controller_async() function which will
- *     trigger the eonce when a broker state change occurs.
+ *     to the rd_kafka_broker_controller_async() or broker_async() functions
+ *     which will trigger the eonce when a broker state change occurs.
  *     If the controller is already known (from metadata) and the connection
  *     is up a rkb broker object is returned and the eonce is not used,
  *     skip to step 11.
@@ -149,7 +150,7 @@ static const char *rd_kafka_admin_state_desc[] = {
  *     buffer is enqueued on the broker's transmit queue.
  *     The buffer is set up to provide the reply buffer on the rdkafka main
  *     ops queue (the same queue we are operating from) with a handler
- *     callback of rd_kafka_admin_DeleteTopics_handle_response().
+ *     callback of rd_kafka_admin_handle_response().
  *     The state is updated to the RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE.
  *
  * 13. [broker thread] If the request times out, a response with error code
@@ -172,10 +173,10 @@ static const char *rd_kafka_admin_state_desc[] = {
  *     An error result op is created and enqueued on the application's
  *     provided response rkqu queue.
  *     
- * 17. [rdkafka main thread] The worker callback is called din state
+ * 17. [rdkafka main thread] The worker callback is called in state
  *     RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE with a response buffer with no
  *     error set.
- *     The worker calls DeleteTopics_parse_response() to parse the response
+ *     The worker calls the response `parse()` callback to parse the response
  *     buffer and populates a result op (rko_result) with the response
  *     information (such as per-topic error codes, etc).
  *     The result op is returned to the worker.
@@ -196,9 +197,47 @@ static const char *rd_kafka_admin_state_desc[] = {
  */
 
 
+/**
+ * @brief Admin op callback types
+ */
+typedef rd_kafka_resp_err_t (rd_kafka_admin_Request_cb_t) (
+        rd_kafka_broker_t *rkb,
+        const rd_list_t *configs /*(ConfigResource_t*)*/,
+        rd_kafka_AdminOptions_t *options,
+        char *errstr, size_t errstr_size,
+        rd_kafka_replyq_t replyq,
+        rd_kafka_resp_cb_t *resp_cb,
+        void *opaque)
+        RD_WARN_UNUSED_RESULT;
+
+typedef rd_kafka_resp_err_t (rd_kafka_admin_Response_parse_cb_t) (
+        rd_kafka_op_t *rko_req,
+        rd_kafka_op_t **rko_resultp,
+        rd_kafka_buf_t *reply,
+        char *errstr, size_t errstr_size)
+        RD_WARN_UNUSED_RESULT;
+
+
+
+/**
+ * @struct Request-specific worker callbacks.
+ */
+struct rd_kafka_admin_worker_cbs {
+        /**< Protocol request callback which is called
+         *   to construct and send the request. */
+        rd_kafka_admin_Request_cb_t *request;
+
+        /**< Protocol response parser callback which is called
+         *   to translate the response to a rko_result op. */
+        rd_kafka_admin_Response_parse_cb_t *parse;
+};
+
 
 static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
                                         rd_kafka_AdminOptions_t *options);
+
+static rd_kafka_op_res_t
+rd_kafka_admin_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko);
 
 
 /**
@@ -310,6 +349,9 @@ rd_kafka_admin_result_ret_error (const rd_kafka_op_t *rko,
 }
 
 
+/**
+ * @brief Return the topics list from a topic-related result object.
+ */
 static const rd_kafka_topic_result_t **
 rd_kafka_admin_result_ret_topics (const rd_kafka_op_t *rko,
                                   size_t *cntp) {
@@ -324,6 +366,9 @@ rd_kafka_admin_result_ret_topics (const rd_kafka_op_t *rko,
                 results.rl_elems;
 }
 
+/**
+ * @brief Return the ConfigResource list from a config-related result object.
+ */
 static const rd_kafka_ConfigResource_t **
 rd_kafka_admin_result_ret_resources (const rd_kafka_op_t *rko,
                                      size_t *cntp) {
@@ -347,12 +392,7 @@ rd_kafka_admin_result_ret_resources (const rd_kafka_op_t *rko,
  *        The caller shall then populate the admin_request.args list
  *        and enqueue the op on rk_ops for further processing work.
  *
- * @param worker_cb Queue-triggered worker callback for API request.
- *                  The callback's passed rko->rko_err may be one of:
- *                  RD_KAFKA_RESP_ERR_NO_ERROR, or
- *                  RD_KAFKA_RESP_ERR__DESTROY for queue destruction cleanup, or
- *                  RD_KAFKA_RESP_ERR__TIMED_OUT if request has timed out.
- *
+ * @param cbs Callbacks, must reside in .data segment.
  * @param options Optional options, may be NULL to use defaults.
  *
  * @locks none
@@ -362,18 +402,20 @@ static rd_kafka_op_t *
 rd_kafka_admin_request_op_new (rd_kafka_t *rk,
                                rd_kafka_op_type_t optype,
                                rd_kafka_event_type_t reply_event_type,
-                               rd_kafka_op_cb_t *worker_cb,
+                               const struct rd_kafka_admin_worker_cbs *cbs,
                                const rd_kafka_AdminOptions_t *options,
                                rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko;
 
         rd_assert(rk);
         rd_assert(rkqu);
-        rd_assert(worker_cb);
+        rd_assert(cbs);
 
-        rko = rd_kafka_op_new_cb(rk, optype, worker_cb);
+        rko = rd_kafka_op_new_cb(rk, optype, rd_kafka_admin_worker);
 
         rko->rko_u.admin_request.reply_event_type = reply_event_type;
+
+        rko->rko_u.admin_request.cbs = (struct rd_kafka_admin_worker_cbs *)cbs;
 
         /* Make a copy of the options */
         if (options)
@@ -381,6 +423,9 @@ rd_kafka_admin_request_op_new (rd_kafka_t *rk,
         else
                 rd_kafka_AdminOptions_init(rk,
                                            &rko->rko_u.admin_request.options);
+
+        /* Default to controller */
+        rko->rko_u.admin_request.broker_id = -1;
 
         /* Calculate absolute timeout */
         rko->rko_u.admin_request.abs_timeout =
@@ -416,81 +461,6 @@ static void rd_kafka_admin_eonce_timeout_cb (rd_kafka_timers_t *rkts,
                                   "timer timeout");
 }
 
-
-
-
-/**
- * @brief Common worker state machine handling regardless of request type.
- *
- * Tasks:
- *  - Sets up timeout on first call.
- *  - Checks for timeout.
- *  - Checks for and fails on errors.
- *
- * @remark All errors are handled by this function and it will
- *         never return != -1 if an rko_err was set. Thus there is no need
- *         for error checking in the caller.
- *
- * @returns -1 if worker must `goto destroy;` label, else 0.
- */
-static int rd_kafka_admin_common_worker (rd_kafka_t *rk, rd_kafka_op_t *rko) {
-        const char *name = rd_kafka_op2str(rko->rko_type);
-        rd_ts_t timeout_in;
-
-        if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
-                return -1; /* Terminating, or rko being destroyed */
-
-        rd_kafka_dbg(rk, ADMIN, name,
-                     "%s worker called in state %s: %s",
-                     name,
-                     rd_kafka_admin_state_desc[rko->rko_u.admin_request.state],
-                     rd_kafka_err2str(rko->rko_err));
-
-        rd_assert(thrd_is_current(rko->rko_rk->rk_thread));
-
-        if (rko->rko_err) {
-                rd_kafka_admin_result_fail(
-                        rko, rko->rko_err,
-                        "Failed while %s: %s",
-                        rd_kafka_admin_state_desc[rko->rko_u.
-                                                  admin_request.state],
-                        rd_kafka_err2str(rko->rko_err));
-                return -1;
-        }
-
-        /* Check for timeout */
-        timeout_in = rd_timeout_remains_us(rko->rko_u.admin_request.
-                                           abs_timeout);
-
-        if (timeout_in <= 0) {
-                rd_kafka_admin_result_fail(
-                        rko, RD_KAFKA_RESP_ERR__TIMED_OUT,
-                        "Timed out %s",
-                        rd_kafka_admin_state_desc[rko->rko_u.
-                                                  admin_request.state]);
-                return -1;
-        }
-
-        switch (rko->rko_u.admin_request.state)
-        {
-        case RD_KAFKA_ADMIN_STATE_INIT:
-                /* First call.
-                 * Set up timeout timer. */
-                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
-                                             "timeout timer");
-                rd_kafka_timer_start_oneshot(&rk->rk_timers,
-                                             &rko->rko_u.admin_request.tmr,
-                                             timeout_in,
-                                             rd_kafka_admin_eonce_timeout_cb,
-                                             rko->rko_u.admin_request.eonce);
-                break;
-
-        default:
-                break;
-        }
-
-        return 0;
-}
 
 
 /**
@@ -626,7 +596,7 @@ static void rd_kafka_admin_handle_response (rd_kafka_t *rk,
         rd_kafka_enq_once_t *eonce = opaque;
         rd_kafka_op_t *rko;
 
-        /* From "send <protocolrequest>" */
+        /* From ...add_source("send") */
         rko = rd_kafka_enq_once_disable(eonce);
 
         if (!rko) {
@@ -653,19 +623,219 @@ static void rd_kafka_admin_handle_response (rd_kafka_t *rk,
 }
 
 
-/**@}*/
-
 
 /**
- * @name Misc helpers
- * @{
+ * @brief Common worker state machine handling regardless of request type.
  *
+ * Tasks:
+ *  - Sets up timeout on first call.
+ *  - Checks for timeout.
+ *  - Checks for and fails on errors.
+ *  - Async Controller and broker lookups
+ *  - Calls the Request callback
+ *  - Calls the parse callback
+ *  - Result reply
+ *  - Destruction of rko
  *
+ * rko->rko_err may be one of:
+ * RD_KAFKA_RESP_ERR_NO_ERROR, or
+ * RD_KAFKA_RESP_ERR__DESTROY for queue destruction cleanup, or
+ * RD_KAFKA_RESP_ERR__TIMED_OUT if request has timed out,
+ * or any other error code triggered by other parts of the code.
+ *
+ * @returns a hint to the op code whether the rko should be destroyed or not.
  */
+static rd_kafka_op_res_t
+rd_kafka_admin_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
+        const char *name = rd_kafka_op2str(rko->rko_type);
+        rd_ts_t timeout_in;
+        rd_kafka_broker_t *rkb = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+
+        if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
+                goto destroy; /* Terminating, or rko being destroyed */
+
+        rd_kafka_dbg(rk, ADMIN, name,
+                     "%s worker called in state %s: %s",
+                     name,
+                     rd_kafka_admin_state_desc[rko->rko_u.admin_request.state],
+                     rd_kafka_err2str(rko->rko_err));
+
+        rd_assert(thrd_is_current(rko->rko_rk->rk_thread));
+
+        /* Check for errors raised asynchronously (e.g., by timer) */
+        if (rko->rko_err) {
+                rd_kafka_admin_result_fail(
+                        rko, rko->rko_err,
+                        "Failed while %s: %s",
+                        rd_kafka_admin_state_desc[rko->rko_u.
+                                                  admin_request.state],
+                        rd_kafka_err2str(rko->rko_err));
+                goto destroy;
+        }
+
+        /* Check for timeout */
+        timeout_in = rd_timeout_remains_us(rko->rko_u.admin_request.
+                                           abs_timeout);
+        if (timeout_in <= 0) {
+                rd_kafka_admin_result_fail(
+                        rko, RD_KAFKA_RESP_ERR__TIMED_OUT,
+                        "Timed out %s",
+                        rd_kafka_admin_state_desc[rko->rko_u.
+                                                  admin_request.state]);
+                goto destroy;
+        }
+
+ redo:
+        switch (rko->rko_u.admin_request.state)
+        {
+        case RD_KAFKA_ADMIN_STATE_INIT:
+        {
+                int32_t broker_id;
+
+                /* First call. */
+
+                /* Set up timeout timer. */
+                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
+                                             "timeout timer");
+                rd_kafka_timer_start_oneshot(&rk->rk_timers,
+                                             &rko->rko_u.admin_request.tmr,
+                                             timeout_in,
+                                             rd_kafka_admin_eonce_timeout_cb,
+                                             rko->rko_u.admin_request.eonce);
+
+                /* Use explicitly specified broker_id, if available. */
+                broker_id = (int32_t)rd_kafka_confval_get_int(
+                        &rko->rko_u.admin_request.options.broker);
+
+                if (broker_id != -1) {
+                        rd_kafka_dbg(rk, ADMIN, name,
+                                     "%s using explicitly "
+                                     "set broker id %"PRId32
+                                     " rather than %"PRId32,
+                                     name, broker_id,
+                                     rko->rko_u.admin_request.broker_id);
+                        rko->rko_u.admin_request.broker_id = broker_id;
+                }
+
+                /* Look up controller or specific broker. */
+                if (rko->rko_u.admin_request.broker_id != -1) {
+                        /* Specific broker */
+                        rko->rko_u.admin_request.state =
+                                RD_KAFKA_ADMIN_STATE_WAIT_BROKER;
+                } else {
+                        /* Controller */
+                        rko->rko_u.admin_request.state =
+                                RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER;
+                }
+                goto redo;  /* Trigger next state immediately */
+        }
+
+
+        case RD_KAFKA_ADMIN_STATE_WAIT_BROKER:
+                /* Broker lookup */
+                if (!(rkb = rd_kafka_admin_common_get_broker(
+                              rk, rko, rko->rko_u.admin_request.broker_id))) {
+                        /* Still waiting for broker to become available */
+                        return RD_KAFKA_OP_RES_KEEP;
+                }
+
+                rko->rko_u.admin_request.state =
+                        RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST;
+                goto redo;
+
+        case RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER:
+                if (!(rkb = rd_kafka_admin_common_get_controller(rk, rko))) {
+                        /* Still waiting for controller to become available. */
+                        return RD_KAFKA_OP_RES_KEEP;
+                }
+
+                rko->rko_u.admin_request.state =
+                        RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST;
+                goto redo;
+
+
+        case RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST:
+                /* Got broker, send protocol request. */
+
+                /* Make sure we're called from a 'goto redo' where
+                 * the rkb was set. */
+                rd_assert(rkb);
+
+                /* Still need to use the eonce since this worker may
+                 * time out while waiting for response from broker, in which
+                 * case the broker response will hit an empty eonce (ok). */
+                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
+                                             "send");
+
+                /* Send request (async) */
+                err = rko->rko_u.admin_request.cbs->request(
+                        rkb,
+                        &rko->rko_u.admin_request.args,
+                        &rko->rko_u.admin_request.options,
+                        errstr, sizeof(errstr),
+                        RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+                        rd_kafka_admin_handle_response,
+                        rko->rko_u.admin_request.eonce);
+
+                /* Loose broker refcount from get_broker(), get_controller() */
+                rd_kafka_broker_destroy(rkb);
+
+                if (err) {
+                        rd_kafka_enq_once_del_source(
+                                rko->rko_u.admin_request.eonce, "send");
+                        rd_kafka_admin_result_fail(rko, err, "%s", errstr);
+                        goto destroy;
+                }
+
+                rko->rko_u.admin_request.state =
+                        RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE;
+
+                /* Wait asynchronously for broker response, which will
+                 * trigger the eonce and worker to be called again. */
+                return RD_KAFKA_OP_RES_KEEP;
+
+
+        case RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE:
+        {
+                rd_kafka_op_t *rko_result;
+
+                /* Response received */
+
+                rd_kafka_enq_once_del_source(rko->rko_u.admin_request.eonce,
+                                             "send");
+
+                /* Parse response and populate result to application */
+                err = rko->rko_u.admin_request.cbs->parse(
+                        rko, &rko_result,
+                        rko->rko_u.admin_request.reply_buf,
+                        errstr, sizeof(errstr));
+                if (err) {
+                        rd_kafka_admin_result_fail(
+                                rko, err,
+                                "%s worker failed to parse response: %s",
+                                name, errstr);
+                        goto destroy;
+                }
+
+                /* Enqueue result on application queue, we're done. */
+                rd_kafka_admin_result_enq(rko, rko_result);
+
+                goto destroy;
+        }
+        }
+
+        return RD_KAFKA_OP_RES_KEEP;
+
+ destroy:
+        rd_kafka_admin_common_worker_destroy(rk, rko);
+        return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy() */
+
+}
 
 
 /**@}*/
-
 
 
 /**
@@ -713,6 +883,18 @@ rd_kafka_AdminOptions_set_incremental (rd_kafka_AdminOptions_t *options,
                                          errstr, errstr_size);
 }
 
+rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_broker (rd_kafka_AdminOptions_t *options,
+                                  int32_t broker_id,
+                                  char *errstr, size_t errstr_size) {
+        int ibroker_id = (int)broker_id;
+
+        return rd_kafka_confval_set_type(&options->broker,
+                                         RD_KAFKA_CONFVAL_INT,
+                                         &ibroker_id,
+                                         errstr, errstr_size);
+}
+
 void
 rd_kafka_AdminOptions_set_opaque (rd_kafka_AdminOptions_t *options,
                                   void *opaque) {
@@ -736,6 +918,8 @@ static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
                                   0, 1, 0);
         rd_kafka_confval_init_int(&options->incremental, "incremental",
                                   0, 1, 0);
+        rd_kafka_confval_init_int(&options->broker, "broker",
+                                  0, INT32_MAX, -1);
         rd_kafka_confval_init_ptr(&options->opaque, "opaque");
 }
 
@@ -920,10 +1104,10 @@ rd_kafka_NewTopic_add_config (rd_kafka_NewTopic_t *new_topic,
  * @brief Parse CreateTopicsResponse and create ADMIN_RESULT op.
  */
 static rd_kafka_resp_err_t
-rd_kafka_admin_CreateTopics_parse_response (rd_kafka_op_t *rko_req,
-                                            rd_kafka_op_t **rko_resultp,
-                                            rd_kafka_buf_t *reply,
-                                            char *errstr, size_t errstr_size) {
+rd_kafka_CreateTopicsResponse_parse (rd_kafka_op_t *rko_req,
+                                     rd_kafka_op_t **rko_resultp,
+                                     rd_kafka_buf_t *reply,
+                                     char *errstr, size_t errstr_size) {
         const int log_decode_errors = LOG_ERR;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
@@ -938,15 +1122,16 @@ rd_kafka_admin_CreateTopics_parse_response (rd_kafka_op_t *rko_req,
                 rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
         }
 
+        /* #topics */
         rd_kafka_buf_read_i32(reply, &topic_cnt);
 
-        if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
-                rd_snprintf(errstr, errstr_size,
-                            "Received %"PRId32" topics in response "
-                            "when only %d were requested", topic_cnt,
-                            rd_list_cnt(&rko_req->rko_u.admin_request.args));
-                return RD_KAFKA_RESP_ERR__BAD_MSG;
-        }
+        if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
+                rd_kafka_buf_parse_fail(
+                        reply,
+                        "Received %"PRId32" topics in response "
+                        "when only %d were requested", topic_cnt,
+                        rd_list_cnt(&rko_req->rko_u.admin_request.args));
+
 
         rko_result = rd_kafka_admin_result_new(rko_req);
 
@@ -1003,23 +1188,21 @@ rd_kafka_admin_CreateTopics_parse_response (rd_kafka_op_t *rko_req,
                 orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
                                          &skel, rd_kafka_NewTopic_cmp);
                 if (orig_pos == -1) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Broker returned topic %s that was not "
-                                    "included in the original request",
-                                    terr->topic);
                         rd_kafka_topic_result_destroy(terr);
-                        rd_kafka_op_destroy(rko_result);
-                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                        rd_kafka_buf_parse_fail(
+                                reply,
+                                "Broker returned topic %.*s that was not "
+                                "included in the original request",
+                                RD_KAFKAP_STR_PR(&ktopic));
                 }
 
                 if (rd_list_elem(&rko_result->rko_u.admin_result.results,
                                  orig_pos) != NULL) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Broker returned topic %s multiple times",
-                                    terr->topic);
                         rd_kafka_topic_result_destroy(terr);
-                        rd_kafka_op_destroy(rko_result);
-                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                        rd_kafka_buf_parse_fail(
+                                reply,
+                                "Broker returned topic %.*s multiple times",
+                                RD_KAFKAP_STR_PR(&ktopic));
                 }
 
                 rd_list_set(&rko_result->rko_u.admin_result.results, orig_pos,
@@ -1041,129 +1224,23 @@ rd_kafka_admin_CreateTopics_parse_response (rd_kafka_op_t *rko_req,
         return err;
 }
 
-/**
- * @brief Asynchronous worker for CreateTopics
- */
-static rd_kafka_op_res_t
-rd_kafka_admin_CreateTopics_worker (rd_kafka_t *rk,
-                                    rd_kafka_q_t *rkq,
-                                    rd_kafka_op_t *rko) {
-        rd_kafka_broker_t *rkb = NULL;
-        rd_kafka_op_t *rko_result;
-        rd_kafka_resp_err_t err;
-        char errstr[512];
 
-        /* Common worker handling. */
-        if (rd_kafka_admin_common_worker(rk, rko) == -1)
-                goto destroy;
-
-        switch (rko->rko_u.admin_request.state)
-        {
-        case RD_KAFKA_ADMIN_STATE_INIT:
-                /* First call, fall thru to controller lookup */
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER;
-                /*FALLTHRU*/
-
-        case RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER:
-                if (!(rkb = rd_kafka_admin_common_get_controller(rk, rko))) {
-                        /* Waiting for controller. */
-                        return RD_KAFKA_OP_RES_KEEP;
-                }
-
-                /* Got controller, send protocol request. */
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST;
-                /* FALLTHRU */
-
-        case RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST:
-                rd_assert(rkb);
-
-                /* Still need to use the eonce since this worker may
-                 * time out while waiting for response from broker, in which
-                 * case the broker response will hit an empty eonce (ok). */
-                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
-                                             "send CreateTopics");
-
-                /* Send request (async) */
-                err = rd_kafka_CreateTopicsRequest(
-                        rkb,
-                        &rko->rko_u.admin_request.args,
-                        &rko->rko_u.admin_request.options,
-                        errstr, sizeof(errstr),
-                        RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                        rd_kafka_admin_handle_response,
-                        rko->rko_u.admin_request.eonce);
-
-                /* Loose refcount from controller_async() */
-                rd_kafka_broker_destroy(rkb);
-
-                if (err) {
-                        rd_kafka_enq_once_del_source(
-                                rko->rko_u.admin_request.eonce,
-                                "send CreateTopics");
-                        rd_kafka_admin_result_fail(rko, err, "%s", errstr);
-                        goto destroy;
-                }
-
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE;
-
-                /* Wait asynchronously for broker response, which will
-                 * trigger the eonce and worker to be called again. */
-                return RD_KAFKA_OP_RES_KEEP;
-
-
-        case RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE:
-                /* CreateTopics response */
-
-                rd_kafka_enq_once_del_source(rko->rko_u.admin_request.eonce,
-                                             "send CreateTopics");
-
-                /* Parse response and populate result to application */
-                err = rd_kafka_admin_CreateTopics_parse_response(
-                        rko, &rko_result,
-                        rko->rko_u.admin_request.reply_buf,
-                        errstr, sizeof(errstr));
-                if (err) {
-                        rd_kafka_admin_result_fail(
-                                rko, err,
-                                "CreateTopics worker failed parse response: %s",
-                                errstr);
-                        goto destroy;
-                }
-
-                /* Enqueue result on application queue, we're done. */
-                rd_kafka_admin_result_enq(rko, rko_result);
-
-                goto destroy;
-
-        default:
-                break;
-        }
-
-
-        return RD_KAFKA_OP_RES_KEEP;
-
- destroy:
-        rd_kafka_admin_common_worker_destroy(rk, rko);
-        return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy() */
-}
-
-
-void rd_kafka_admin_CreateTopics (rd_kafka_t *rk,
-                                  rd_kafka_NewTopic_t **new_topics,
-                                  size_t new_topic_cnt,
-                                  const rd_kafka_AdminOptions_t *options,
-                                  rd_kafka_queue_t *rkqu) {
+void rd_kafka_CreateTopics (rd_kafka_t *rk,
+                            rd_kafka_NewTopic_t **new_topics,
+                            size_t new_topic_cnt,
+                            const rd_kafka_AdminOptions_t *options,
+                            rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko;
         size_t i;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+                rd_kafka_CreateTopicsRequest,
+                rd_kafka_CreateTopicsResponse_parse,
+        };
 
         rko = rd_kafka_admin_request_op_new(rk,
                                             RD_KAFKA_OP_CREATETOPICS,
                                             RD_KAFKA_EVENT_CREATETOPICS_RESULT,
-                                            rd_kafka_admin_CreateTopics_worker,
-                                            options, rkqu);
+                                            &cbs, options, rkqu);
 
         rd_list_init(&rko->rko_u.admin_request.args, new_topic_cnt,
                      rd_kafka_NewTopic_free);
@@ -1268,10 +1345,10 @@ rd_kafka_DeleteTopic_copy (const rd_kafka_DeleteTopic_t *src) {
  * @brief Parse DeleteTopicsResponse and create ADMIN_RESULT op.
  */
 static rd_kafka_resp_err_t
-rd_kafka_admin_DeleteTopics_parse_response (rd_kafka_op_t *rko_req,
-                                            rd_kafka_op_t **rko_resultp,
-                                            rd_kafka_buf_t *reply,
-                                            char *errstr, size_t errstr_size) {
+rd_kafka_DeleteTopicsResponse_parse (rd_kafka_op_t *rko_req,
+                                     rd_kafka_op_t **rko_resultp,
+                                     rd_kafka_buf_t *reply,
+                                     char *errstr, size_t errstr_size) {
         const int log_decode_errors = LOG_ERR;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
@@ -1286,15 +1363,15 @@ rd_kafka_admin_DeleteTopics_parse_response (rd_kafka_op_t *rko_req,
                 rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
         }
 
+        /* #topics */
         rd_kafka_buf_read_i32(reply, &topic_cnt);
 
-        if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
-                rd_snprintf(errstr, errstr_size,
-                            "Received %"PRId32" topics in response "
-                            "when only %d were requested", topic_cnt,
-                            rd_list_cnt(&rko_req->rko_u.admin_request.args));
-                return RD_KAFKA_RESP_ERR__BAD_MSG;
-        }
+        if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
+                rd_kafka_buf_parse_fail(
+                        reply,
+                        "Received %"PRId32" topics in response "
+                        "when only %d were requested", topic_cnt,
+                        rd_list_cnt(&rko_req->rko_u.admin_request.args));
 
         rko_result = rd_kafka_admin_result_new(rko_req);
 
@@ -1337,23 +1414,21 @@ rd_kafka_admin_DeleteTopics_parse_response (rd_kafka_op_t *rko_req,
                 orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
                                          &skel, rd_kafka_DeleteTopic_cmp);
                 if (orig_pos == -1) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Broker returned topic %s that was not "
-                                    "included in the original request",
-                                    terr->topic);
                         rd_kafka_topic_result_destroy(terr);
-                        rd_kafka_op_destroy(rko_result);
-                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                        rd_kafka_buf_parse_fail(
+                                reply,
+                                "Broker returned topic %.*s that was not "
+                                "included in the original request",
+                                RD_KAFKAP_STR_PR(&ktopic));
                 }
 
                 if (rd_list_elem(&rko_result->rko_u.admin_result.results,
                                  orig_pos) != NULL) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Broker returned topic %s multiple times",
-                                    terr->topic);
                         rd_kafka_topic_result_destroy(terr);
-                        rd_kafka_op_destroy(rko_result);
-                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                        rd_kafka_buf_parse_fail(
+                                reply,
+                                "Broker returned topic %.*s multiple times",
+                                RD_KAFKAP_STR_PR(&ktopic));
                 }
 
                 rd_list_set(&rko_result->rko_u.admin_result.results, orig_pos,
@@ -1379,129 +1454,23 @@ rd_kafka_admin_DeleteTopics_parse_response (rd_kafka_op_t *rko_req,
 
 
 
-/**
- * @brief Asynchronous worker for DeleteTopics
- */
-static rd_kafka_op_res_t
-rd_kafka_admin_DeleteTopics_worker (rd_kafka_t *rk,
-                                    rd_kafka_q_t *rkq,
-                                    rd_kafka_op_t *rko) {
-        rd_kafka_broker_t *rkb = NULL;
-        rd_kafka_op_t *rko_result = NULL;
-        rd_kafka_resp_err_t err;
-        char errstr[512];
 
-        /* Common worker handling. */
-        if (rd_kafka_admin_common_worker(rk, rko) == -1)
-                goto destroy;
-
-        switch (rko->rko_u.admin_request.state)
-        {
-        case RD_KAFKA_ADMIN_STATE_INIT:
-                /* First call, fall thru to controller lookup */
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER;
-                /*FALLTHRU*/
-
-        case RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER:
-                if (!(rkb = rd_kafka_admin_common_get_controller(rk, rko))) {
-                        /* Waiting for controller. */
-                        return RD_KAFKA_OP_RES_KEEP;
-                }
-
-                /* Got controller, send protocol request. */
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST;
-                /* FALLTHRU */
-
-        case RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST:
-                rd_assert(rkb);
-
-                /* Still need to use the eonce since this worker may
-                 * time out while waiting for response from broker, in which
-                 * case the broker response will hit an empty eonce (ok). */
-                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
-                                             "send DeleteTopics");
-
-                /* Send request (async) */
-                err = rd_kafka_DeleteTopicsRequest(
-                        rkb,
-                        &rko->rko_u.admin_request.args,
-                        &rko->rko_u.admin_request.options,
-                        errstr, sizeof(errstr),
-                        RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                        rd_kafka_admin_handle_response,
-                        rko->rko_u.admin_request.eonce);
-
-                /* Loose refcount from controller_async() */
-                rd_kafka_broker_destroy(rkb);
-
-                if (err) {
-                        rd_kafka_enq_once_del_source(
-                                rko->rko_u.admin_request.eonce,
-                                "send DeleteTopics");
-                        rd_kafka_admin_result_fail(rko, err, "%s", errstr);
-                        goto destroy;
-                }
-
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE;
-
-                /* Wait asynchronously for broker response, which will
-                 * trigger the eonce and worker to be called again. */
-                return RD_KAFKA_OP_RES_KEEP;
-
-
-        case RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE:
-                /* DeleteTopics response */
-
-                rd_kafka_enq_once_del_source(rko->rko_u.admin_request.eonce,
-                                             "send DeleteTopics");
-
-                /* Parse response and populate result to application */
-                err = rd_kafka_admin_DeleteTopics_parse_response(
-                        rko, &rko_result,
-                        rko->rko_u.admin_request.reply_buf,
-                        errstr, sizeof(errstr));
-                if (err) {
-                        rd_kafka_admin_result_fail(
-                                rko, err,
-                                "DeleteTopics worker failed parse response: %s",
-                                errstr);
-                        goto destroy;
-                }
-
-                /* Enqueue result on application queue, we're done. */
-                rd_kafka_admin_result_enq(rko, rko_result);
-
-                goto destroy;
-
-        default:
-                break;
-        }
-
-
-        return RD_KAFKA_OP_RES_KEEP;
-
- destroy:
-        rd_kafka_admin_common_worker_destroy(rk, rko);
-        return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy() */
-}
-
-
-void rd_kafka_admin_DeleteTopics (rd_kafka_t *rk,
-                                  rd_kafka_DeleteTopic_t **del_topics,
-                                  size_t del_topic_cnt,
-                                  const rd_kafka_AdminOptions_t *options,
-                                  rd_kafka_queue_t *rkqu) {
+void rd_kafka_DeleteTopics (rd_kafka_t *rk,
+                            rd_kafka_DeleteTopic_t **del_topics,
+                            size_t del_topic_cnt,
+                            const rd_kafka_AdminOptions_t *options,
+                            rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko;
         size_t i;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+                rd_kafka_DeleteTopicsRequest,
+                rd_kafka_DeleteTopicsResponse_parse,
+        };
 
         rko = rd_kafka_admin_request_op_new(rk,
                                             RD_KAFKA_OP_DELETETOPICS,
                                             RD_KAFKA_EVENT_DELETETOPICS_RESULT,
-                                            rd_kafka_admin_DeleteTopics_worker,
-                                            options, rkqu);
+                                            &cbs, options, rkqu);
 
         rd_list_init(&rko->rko_u.admin_request.args, del_topic_cnt,
                      rd_kafka_DeleteTopic_free);
@@ -1660,11 +1629,11 @@ rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *newp,
  * @brief Parse CreatePartitionsResponse and create ADMIN_RESULT op.
  */
 static rd_kafka_resp_err_t
-rd_kafka_admin_CreatePartitions_parse_response (rd_kafka_op_t *rko_req,
-                                                rd_kafka_op_t **rko_resultp,
-                                                rd_kafka_buf_t *reply,
-                                                char *errstr,
-                                                size_t errstr_size) {
+rd_kafka_CreatePartitionsResponse_parse (rd_kafka_op_t *rko_req,
+                                         rd_kafka_op_t **rko_resultp,
+                                         rd_kafka_buf_t *reply,
+                                         char *errstr,
+                                         size_t errstr_size) {
         const int log_decode_errors = LOG_ERR;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
@@ -1677,15 +1646,15 @@ rd_kafka_admin_CreatePartitions_parse_response (rd_kafka_op_t *rko_req,
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
         rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
 
+        /* #topics */
         rd_kafka_buf_read_i32(reply, &topic_cnt);
 
-        if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args)) {
-                rd_snprintf(errstr, errstr_size,
-                            "Received %"PRId32" topics in response "
-                            "when only %d were requested", topic_cnt,
-                            rd_list_cnt(&rko_req->rko_u.admin_request.args));
-                return RD_KAFKA_RESP_ERR__BAD_MSG;
-        }
+        if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
+                rd_kafka_buf_parse_fail(
+                        reply,
+                        "Received %"PRId32" topics in response "
+                        "when only %d were requested", topic_cnt,
+                        rd_list_cnt(&rko_req->rko_u.admin_request.args));
 
         rko_result = rd_kafka_admin_result_new(rko_req);
 
@@ -1740,23 +1709,21 @@ rd_kafka_admin_CreatePartitions_parse_response (rd_kafka_op_t *rko_req,
                 orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
                                          &skel, rd_kafka_NewPartitions_cmp);
                 if (orig_pos == -1) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Broker returned topic %s that was not "
-                                    "included in the original request",
-                                    terr->topic);
                         rd_kafka_topic_result_destroy(terr);
-                        rd_kafka_op_destroy(rko_result);
-                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                        rd_kafka_buf_parse_fail(
+                                reply,
+                                "Broker returned topic %.*s that was not "
+                                "included in the original request",
+                                RD_KAFKAP_STR_PR(&ktopic));
                 }
 
                 if (rd_list_elem(&rko_result->rko_u.admin_result.results,
                                  orig_pos) != NULL) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Broker returned topic %s multiple times",
-                                    terr->topic);
                         rd_kafka_topic_result_destroy(terr);
-                        rd_kafka_op_destroy(rko_result);
-                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                        rd_kafka_buf_parse_fail(
+                                reply,
+                                "Broker returned topic %.*s multiple times",
+                                RD_KAFKAP_STR_PR(&ktopic));
                 }
 
                 rd_list_set(&rko_result->rko_u.admin_result.results, orig_pos,
@@ -1782,130 +1749,25 @@ rd_kafka_admin_CreatePartitions_parse_response (rd_kafka_op_t *rko_req,
 
 
 
-/**
- * @brief Asynchronous worker for CreatePartitions
- */
-static rd_kafka_op_res_t
-rd_kafka_admin_CreatePartitions_worker (rd_kafka_t *rk,
-                                    rd_kafka_q_t *rkq,
-                                    rd_kafka_op_t *rko) {
-        rd_kafka_broker_t *rkb = NULL;
-        rd_kafka_op_t *rko_result;
-        rd_kafka_resp_err_t err;
-        char errstr[512];
-
-        /* Common worker handling. */
-        if (rd_kafka_admin_common_worker(rk, rko) == -1)
-                goto destroy;
-
-        switch (rko->rko_u.admin_request.state)
-        {
-        case RD_KAFKA_ADMIN_STATE_INIT:
-                /* First call, fall thru to controller lookup */
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER;
-                /*FALLTHRU*/
-
-        case RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER:
-                if (!(rkb = rd_kafka_admin_common_get_controller(rk, rko))) {
-                        /* Waiting for controller. */
-                        return RD_KAFKA_OP_RES_KEEP;
-                }
-
-                /* Got controller, send protocol request. */
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST;
-                /* FALLTHRU */
-
-        case RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST:
-                rd_assert(rkb);
-
-                /* Still need to use the eonce since this worker may
-                 * time out while waiting for response from broker, in which
-                 * case the broker response will hit an empty eonce (ok). */
-                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
-                                             "send CreatePartitions");
-
-                /* Send request (async) */
-                err = rd_kafka_CreatePartitionsRequest(
-                        rkb,
-                        &rko->rko_u.admin_request.args,
-                        &rko->rko_u.admin_request.options,
-                        errstr, sizeof(errstr),
-                        RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                        rd_kafka_admin_handle_response,
-                        rko->rko_u.admin_request.eonce);
-
-                /* Loose refcount from controller_async() */
-                rd_kafka_broker_destroy(rkb);
-
-                if (err) {
-                        rd_kafka_enq_once_del_source(
-                                rko->rko_u.admin_request.eonce,
-                                "send CreatePartitions");
-                        rd_kafka_admin_result_fail(rko, err, "%s", errstr);
-                        goto destroy;
-                }
-
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE;
-
-                /* Wait asynchronously for broker response, which will
-                 * trigger the eonce and worker to be called again. */
-                return RD_KAFKA_OP_RES_KEEP;
 
 
-        case RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE:
-                /* CreatePartitions response */
-
-                rd_kafka_enq_once_del_source(rko->rko_u.admin_request.eonce,
-                                             "send CreatePartitions");
-
-                /* Parse response and populate result to application */
-                err = rd_kafka_admin_CreatePartitions_parse_response(
-                        rko, &rko_result,
-                        rko->rko_u.admin_request.reply_buf,
-                        errstr, sizeof(errstr));
-                if (err) {
-                        rd_kafka_admin_result_fail(
-                                rko, err,
-                                "CreatePartitions worker failed parse response: %s",
-                                errstr);
-                        goto destroy;
-                }
-
-                /* Enqueue result on application queue, we're done. */
-                rd_kafka_admin_result_enq(rko, rko_result);
-
-                goto destroy;
-
-        default:
-                break;
-        }
-
-
-        return RD_KAFKA_OP_RES_KEEP;
-
- destroy:
-        rd_kafka_admin_common_worker_destroy(rk, rko);
-        return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy() */
-}
-
-
-void rd_kafka_admin_CreatePartitions (rd_kafka_t *rk,
-                                      rd_kafka_NewPartitions_t **newps,
-                                      size_t newps_cnt,
-                                      const rd_kafka_AdminOptions_t *options,
-                                      rd_kafka_queue_t *rkqu) {
+void rd_kafka_CreatePartitions (rd_kafka_t *rk,
+                                rd_kafka_NewPartitions_t **newps,
+                                size_t newps_cnt,
+                                const rd_kafka_AdminOptions_t *options,
+                                rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko;
         size_t i;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+                rd_kafka_CreatePartitionsRequest,
+                rd_kafka_CreatePartitionsResponse_parse,
+        };
 
         rko = rd_kafka_admin_request_op_new(
                 rk,
                 RD_KAFKA_OP_CREATEPARTITIONS,
                 RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT,
-                rd_kafka_admin_CreatePartitions_worker,
-                options, rkqu);
+                &cbs, options, rkqu);
 
         rd_list_init(&rko->rko_u.admin_request.args, newps_cnt,
                      rd_kafka_NewPartitions_free);
@@ -1955,39 +1817,53 @@ rd_kafka_CreatePartitions_result_topics (
  *
  */
 
-static void rd_kafka_ConfigEntry_free (void *ptr) {
-        rd_kafka_ConfigEntry_destroy((rd_kafka_ConfigEntry_t *)ptr);
-}
-
-
-rd_kafka_ConfigEntry_t *
-rd_kafka_ConfigEntry_new (const char *name, const char *value) {
-        rd_kafka_ConfigEntry_t *entry;
-
-        if (!name)
-                return NULL;
-
-        entry = rd_calloc(1, sizeof(*entry));
-        entry->kv = rd_strtup_new(name, value);
-
-        rd_list_init(&entry->synonyms, 0, rd_kafka_ConfigEntry_free);
-
-        return entry;
-}
-
-void rd_kafka_ConfigEntry_destroy (rd_kafka_ConfigEntry_t *entry) {
+static void rd_kafka_ConfigEntry_destroy (rd_kafka_ConfigEntry_t *entry) {
         rd_strtup_destroy(entry->kv);
         rd_list_destroy(&entry->synonyms);
         rd_free(entry);
 }
 
 
-void rd_kafka_ConfigEntry_destroy_array (rd_kafka_ConfigEntry_t **entry,
-                                         size_t entry_cnt) {
-        size_t i;
-        for (i = 0 ; i < entry_cnt ; i++)
-                rd_kafka_ConfigEntry_destroy(entry[i]);
+static void rd_kafka_ConfigEntry_free (void *ptr) {
+        rd_kafka_ConfigEntry_destroy((rd_kafka_ConfigEntry_t *)ptr);
 }
+
+
+/**
+ * @brief Create new ConfigEntry
+ *
+ * @param name Config entry name
+ * @param name_len Length of name, or -1 to use strlen()
+ * @param value Config entry value, or NULL
+ * @param value_len Length of value, or -1 to use strlen()
+ */
+static rd_kafka_ConfigEntry_t *
+rd_kafka_ConfigEntry_new0 (const char *name, size_t name_len,
+                           const char *value, size_t value_len) {
+        rd_kafka_ConfigEntry_t *entry;
+
+        if (!name)
+                return NULL;
+
+        entry = rd_calloc(1, sizeof(*entry));
+        entry->kv = rd_strtup_new0(name, name_len, value, value_len);
+
+        rd_list_init(&entry->synonyms, 0, rd_kafka_ConfigEntry_free);
+
+        entry->a.source = RD_KAFKA_CONFIG_SOURCE_UNKNOWN_CONFIG;
+
+        return entry;
+}
+
+/**
+ * @sa rd_kafka_ConfigEntry_new0
+ */
+static rd_kafka_ConfigEntry_t *
+rd_kafka_ConfigEntry_new (const char *name, const char *value) {
+        return rd_kafka_ConfigEntry_new0(name, -1, value, -1);
+}
+
+
 
 
 static void *rd_kafka_ConfigEntry_list_copy (const void *src, void *opaque);
@@ -2000,7 +1876,7 @@ rd_kafka_ConfigEntry_copy (const rd_kafka_ConfigEntry_t *src) {
         rd_kafka_ConfigEntry_t *dst;
 
         dst = rd_kafka_ConfigEntry_new(src->kv->name, src->kv->value);
-        dst->attr = src->attr;
+        dst->a = src->a;
 
         rd_list_destroy(&dst->synonyms); /* created in .._new() */
         rd_list_init_copy(&dst->synonyms, &src->synonyms);
@@ -2026,23 +1902,23 @@ rd_kafka_ConfigEntry_value (const rd_kafka_ConfigEntry_t *entry) {
 
 rd_kafka_ConfigSource_t
 rd_kafka_ConfigEntry_source (const rd_kafka_ConfigEntry_t *entry) {
-        return entry->source;
+        return entry->a.source;
 }
 
 int rd_kafka_ConfigEntry_is_read_only (const rd_kafka_ConfigEntry_t *entry) {
-        return entry->attr.is_readonly;
+        return entry->a.is_readonly;
 }
 
 int rd_kafka_ConfigEntry_is_default (const rd_kafka_ConfigEntry_t *entry) {
-        return entry->attr.is_default;
+        return entry->a.is_default;
 }
 
 int rd_kafka_ConfigEntry_is_sensitive (const rd_kafka_ConfigEntry_t *entry) {
-        return entry->attr.is_sensitive;
+        return entry->a.is_sensitive;
 }
 
 int rd_kafka_ConfigEntry_is_synonym (const rd_kafka_ConfigEntry_t *entry) {
-        return entry->attr.is_synonym;
+        return entry->a.is_synonym;
 }
 
 const rd_kafka_ConfigEntry_t **
@@ -2051,10 +1927,40 @@ rd_kafka_ConfigEntry_synonyms (const rd_kafka_ConfigEntry_t *entry,
         *cntp = rd_list_cnt(&entry->synonyms);
         if (!*cntp)
                 return NULL;
-        return (const rd_kafka_ConfigEntry_t **)&entry->synonyms.rl_elems;
+        return (const rd_kafka_ConfigEntry_t **)entry->synonyms.rl_elems;
 
 }
 
+
+/**@}*/
+
+
+
+/**
+ * @name ConfigSource
+ * @{
+ *
+ *
+ *
+ */
+
+const char *
+rd_kafka_ConfigSource_name (rd_kafka_ConfigSource_t confsource) {
+        static const char *names[] = {
+                "UNKNOWN_CONFIG",
+                "DYNAMIC_TOPIC_CONFIG",
+                "DYNAMIC_BROKER_CONFIG",
+                "DYNAMIC_DEFAULT_BROKER_CONFIG",
+                "STATIC_BROKER_CONFIG",
+                "DEFAULT_CONFIG",
+        };
+
+        if ((unsigned int)confsource >=
+            (unsigned int)RD_KAFKA_CONFIG_SOURCE__CNT)
+                return "UNSUPPORTED";
+
+        return names[confsource];
+}
 
 /**@}*/
 
@@ -2067,7 +1973,6 @@ rd_kafka_ConfigEntry_synonyms (const rd_kafka_ConfigEntry_t *entry,
  *
  *
  */
-
 
 const char *
 rd_kafka_ResourceType_name (rd_kafka_ResourceType_t restype) {
@@ -2154,13 +2059,21 @@ rd_kafka_ConfigResource_copy (const rd_kafka_ConfigResource_t *src) {
 }
 
 
+static void
+rd_kafka_ConfigResource_add_ConfigEntry (rd_kafka_ConfigResource_t *config,
+                                         rd_kafka_ConfigEntry_t *entry) {
+        rd_list_add(&config->config, entry);
+}
+
+
 rd_kafka_resp_err_t
 rd_kafka_ConfigResource_add_config (rd_kafka_ConfigResource_t *config,
                                     const char *name, const char *value) {
         if (!name || !*name || !value)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        rd_list_add(&config->config, rd_kafka_ConfigEntry_new(name, value));
+        rd_kafka_ConfigResource_add_ConfigEntry(
+                config, rd_kafka_ConfigEntry_new(name, value));
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
@@ -2172,7 +2085,7 @@ rd_kafka_ConfigResource_configs (const rd_kafka_ConfigResource_t *config,
         *cntp = rd_list_cnt(&config->config);
         if (!*cntp)
                 return NULL;
-        return (const rd_kafka_ConfigEntry_t **)&config->config.rl_elems;
+        return (const rd_kafka_ConfigEntry_t **)config->config.rl_elems;
 }
 
 
@@ -2233,7 +2146,7 @@ rd_kafka_ConfigResource_get_single_broker_id (const rd_list_t *configs,
                 if (broker_id != -1) {
                         rd_snprintf(errstr, errstr_size,
                                     "Only one ConfigResource of type BROKER "
-                                    "is allowed per AlterConfigs call");
+                                    "is allowed per call");
                         return RD_KAFKA_RESP_ERR__CONFLICT;
                 }
 
@@ -2278,10 +2191,10 @@ rd_kafka_ConfigResource_get_single_broker_id (const rd_list_t *configs,
  * @brief Parse AlterConfigsResponse and create ADMIN_RESULT op.
  */
 static rd_kafka_resp_err_t
-rd_kafka_admin_AlterConfigs_parse_response (rd_kafka_op_t *rko_req,
-                                            rd_kafka_op_t **rko_resultp,
-                                            rd_kafka_buf_t *reply,
-                                            char *errstr, size_t errstr_size) {
+rd_kafka_AlterConfigsResponse_parse (rd_kafka_op_t *rko_req,
+                                     rd_kafka_op_t **rko_resultp,
+                                     rd_kafka_buf_t *reply,
+                                     char *errstr, size_t errstr_size) {
         const int log_decode_errors = LOG_ERR;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
@@ -2356,25 +2269,23 @@ rd_kafka_admin_AlterConfigs_parse_response (rd_kafka_op_t *rko_req,
                 orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
                                          &skel, rd_kafka_ConfigResource_cmp);
                 if (orig_pos == -1) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Broker returned ConfigResource %d,%s "
-                                    "that was not "
-                                    "included in the original request",
-                                    config->restype, config->name);
                         rd_kafka_ConfigResource_destroy(config);
-                        rd_kafka_op_destroy(rko_result);
-                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                        rd_kafka_buf_parse_fail(
+                                reply,
+                                "Broker returned ConfigResource %d,%s "
+                                "that was not "
+                                "included in the original request",
+                                res_type, res_name);
                 }
 
                 if (rd_list_elem(&rko_result->rko_u.admin_result.results,
                                  orig_pos) != NULL) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "Broker returned ConfigResource %d,%s "
-                                    "multiple times",
-                                    config->restype, config->name);
                         rd_kafka_ConfigResource_destroy(config);
-                        rd_kafka_op_destroy(rko_result);
-                        return RD_KAFKA_RESP_ERR__BAD_MSG;
+                        rd_kafka_buf_parse_fail(
+                                reply,
+                                "Broker returned ConfigResource %d,%s "
+                                "multiple times",
+                                res_type, res_name);
                 }
 
                 rd_list_set(&rko_result->rko_u.admin_result.results, orig_pos,
@@ -2399,166 +2310,25 @@ rd_kafka_admin_AlterConfigs_parse_response (rd_kafka_op_t *rko_req,
 
 
 
-
-/**
- * @brief Asynchronous worker for AlterConfigs
- */
-static rd_kafka_op_res_t
-rd_kafka_admin_AlterConfigs_worker (rd_kafka_t *rk,
-                                    rd_kafka_q_t *rkq,
-                                    rd_kafka_op_t *rko) {
-        rd_kafka_broker_t *rkb = NULL;
-        rd_kafka_op_t *rko_result;
-        rd_kafka_resp_err_t err;
-        char errstr[512];
-
-        /* Common worker handling. */
-        if (rd_kafka_admin_common_worker(rk, rko) == -1)
-                goto destroy;
-
- redo:
-        switch (rko->rko_u.admin_request.state)
-        {
-        case RD_KAFKA_ADMIN_STATE_INIT:
-                /* First call.
-                 *
-                 * If there's a BROKER resource request we need to
-                 * speak directly to that broker rather than the controller.
-                 *
-                 * Multiple BROKER resources are not allowed.
-                 */
-                err = rd_kafka_ConfigResource_get_single_broker_id(
-                        &rko->rko_u.admin_request.args,
-                        &rko->rko_u.admin_request.broker_id,
-                        errstr, sizeof(errstr));
-                if (err) {
-                        rd_kafka_admin_result_fail(rko, err, "%s", errstr);
-                        goto destroy;
-                }
-
-                /* broker_id may be -1 if no BROKER resource was specified,
-                 * in which case we query for the controller. */
-                if (rko->rko_u.admin_request.broker_id == -1)
-                        rko->rko_u.admin_request.state =
-                                RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER;
-                else
-                        rko->rko_u.admin_request.state =
-                                RD_KAFKA_ADMIN_STATE_WAIT_BROKER;
-                goto redo;
-
-        case RD_KAFKA_ADMIN_STATE_WAIT_BROKER:
-                /* Broker lookup */
-                if (!(rkb = rd_kafka_admin_common_get_broker(
-                              rk, rko, rko->rko_u.admin_request.broker_id))) {
-                        /* Waiting for broker */
-                        return RD_KAFKA_OP_RES_KEEP;
-                }
-
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST;
-                goto redo;
-
-
-
-        case RD_KAFKA_ADMIN_STATE_WAIT_CONTROLLER:
-                if (!(rkb = rd_kafka_admin_common_get_controller(rk, rko))) {
-                        /* Waiting for controller. */
-                        return RD_KAFKA_OP_RES_KEEP;
-                }
-
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST;
-                goto redo;
-
-
-        case RD_KAFKA_ADMIN_STATE_CONSTRUCT_REQUEST:
-                /* Got broker, send protocol request. */
-                rd_assert(rkb);
-
-                /* Still need to use the eonce since this worker may
-                 * time out while waiting for response from broker, in which
-                 * case the broker response will hit an empty eonce (ok). */
-                rd_kafka_enq_once_add_source(rko->rko_u.admin_request.eonce,
-                                             "send AlterConfigs");
-
-                /* Send request (async) */
-                err = rd_kafka_AlterConfigsRequest(
-                        rkb,
-                        &rko->rko_u.admin_request.args,
-                        &rko->rko_u.admin_request.options,
-                        errstr, sizeof(errstr),
-                        RD_KAFKA_REPLYQ(rk->rk_ops, 0),
-                        rd_kafka_admin_handle_response,
-                        rko->rko_u.admin_request.eonce);
-
-                /* Loose refcount from controller_async() */
-                rd_kafka_broker_destroy(rkb);
-
-                if (err) {
-                        rd_kafka_enq_once_del_source(
-                                rko->rko_u.admin_request.eonce,
-                                "send AlterConfigs");
-                        rd_kafka_admin_result_fail(rko, err, "%s", errstr);
-                        goto destroy;
-                }
-
-                rko->rko_u.admin_request.state =
-                        RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE;
-
-                /* Wait asynchronously for broker response, which will
-                 * trigger the eonce and worker to be called again. */
-                return RD_KAFKA_OP_RES_KEEP;
-
-
-        case RD_KAFKA_ADMIN_STATE_WAIT_RESPONSE:
-                /* AlterConfigs response */
-
-                rd_kafka_enq_once_del_source(rko->rko_u.admin_request.eonce,
-                                             "send AlterConfigs");
-
-                /* Parse response and populate result to application */
-                err = rd_kafka_admin_AlterConfigs_parse_response(
-                        rko, &rko_result,
-                        rko->rko_u.admin_request.reply_buf,
-                        errstr, sizeof(errstr));
-                if (err) {
-                        rd_kafka_admin_result_fail(
-                                rko, err,
-                                "AlterConfigs worker failed parse response: %s",
-                                errstr);
-                        goto destroy;
-                }
-
-                /* Enqueue result on application queue, we're done. */
-                rd_kafka_admin_result_enq(rko, rko_result);
-
-                goto destroy;
-        }
-
-
-        return RD_KAFKA_OP_RES_KEEP;
-
- destroy:
-        rd_kafka_admin_common_worker_destroy(rk, rko);
-        return RD_KAFKA_OP_RES_HANDLED; /* trigger's op_destroy() */
-}
-
-
-
-void rd_kafka_admin_AlterConfigs (rd_kafka_t *rk,
-                                  rd_kafka_ConfigResource_t **configs,
-                                  size_t config_cnt,
-                                  const rd_kafka_AdminOptions_t *options,
-                                  rd_kafka_queue_t *rkqu) {
+void rd_kafka_AlterConfigs (rd_kafka_t *rk,
+                            rd_kafka_ConfigResource_t **configs,
+                            size_t config_cnt,
+                            const rd_kafka_AdminOptions_t *options,
+                            rd_kafka_queue_t *rkqu) {
         rd_kafka_op_t *rko;
         size_t i;
+        rd_kafka_resp_err_t err;
+        char errstr[256];
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+                rd_kafka_AlterConfigsRequest,
+                rd_kafka_AlterConfigsResponse_parse,
+        };
 
         rko = rd_kafka_admin_request_op_new(
                 rk,
                 RD_KAFKA_OP_ALTERCONFIGS,
                 RD_KAFKA_EVENT_ALTERCONFIGS_RESULT,
-                rd_kafka_admin_AlterConfigs_worker,
-                options, rkqu);
+                &cbs, options, rkqu);
 
         rd_list_init(&rko->rko_u.admin_request.args, config_cnt,
                      rd_kafka_ConfigResource_free);
@@ -2567,29 +2337,25 @@ void rd_kafka_admin_AlterConfigs (rd_kafka_t *rk,
                 rd_list_add(&rko->rko_u.admin_request.args,
                             rd_kafka_ConfigResource_copy(configs[i]));
 
+        /* If there's a BROKER resource in the list we need to
+         * speak directly to that broker rather than the controller.
+         *
+         * Multiple BROKER resources are not allowed.
+         */
+        err = rd_kafka_ConfigResource_get_single_broker_id(
+                &rko->rko_u.admin_request.args,
+                &rko->rko_u.admin_request.broker_id,
+                errstr, sizeof(errstr));
+        if (err) {
+                rd_kafka_admin_result_fail(rko, err, "%s", errstr);
+                rd_kafka_admin_common_worker_destroy(rk, rko);
+                return;
+        }
+
         rd_kafka_q_enq(rk->rk_ops, rko);
 }
 
 
-
-
-
-
-
-/**
- * @brief AlterConfigs result type and methods
- */
-
-/**
- * @returns the request-level error/success for a AlterConfigs request.
- *          Even if the returned value is RD_KAFKA_RESP_ERR_NO_ERROR there
- *          may be individual resources that failed, extract per-resource
- *          information with rd_kafka_AlterConfigs_result_resources() to
- *          check per-resource errors.
- *
- * @param errstrp is set to a human-readable error string, if there was an
- *        error.
- */
 rd_kafka_resp_err_t
 rd_kafka_AlterConfigs_result_error (
         const rd_kafka_AlterConfigs_result_t *result,
@@ -2601,19 +2367,6 @@ rd_kafka_AlterConfigs_result_error (
 
 
 
-/**
- * @brief Get an array of resource results from a AlterConfigs result.
- *
- * Use \c rd_kafka_ConfigResource_error() and
- * \c rd_kafka_ConfigResource_error_string() to extract per-resource error
- * results on the returned array elements.
- *
- * The returned object life-times are the same as the \p result object.
- *
- * @param cntp is updated to the number of elements in the array.
- *
- * @returns an array of ConfigResource elements, or NULL if not available.
- */
 const rd_kafka_ConfigResource_t **
 rd_kafka_AlterConfigs_result_resources (
         const rd_kafka_AlterConfigs_result_t *result,
@@ -2622,33 +2375,322 @@ rd_kafka_AlterConfigs_result_resources (
                 (const rd_kafka_op_t *)result, cntp);
 }
 
-/**@{*/
+/**@}*/
+
 
 
 
 /**
- * @name Config resources, sources, etc.
+ * @name DescribeConfigs
  * @{
+ *
  *
  *
  */
 
-const char *
-rd_kafka_ConfigSource_name (rd_kafka_ConfigSource_t confsource) {
-        static const char *names[] = {
-                "DYNAMIC_TOPIC_CONFIG",
-                "DYNAMIC_BROKER_CONFIG",
-                "DYNAMIC_DEFAULT_BROKER_CONFIG",
-                "STATIC_BROKER",
-                "DEFAULT_CONFIG",
-                "UNKNOWN"
+
+/**
+ * @brief Parse DescribeConfigsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_DescribeConfigsResponse_parse (rd_kafka_op_t *rko_req,
+                                        rd_kafka_op_t **rko_resultp,
+                                        rd_kafka_buf_t *reply,
+                                        char *errstr, size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
+        rd_kafka_t *rk = rkb->rkb_rk;
+        rd_kafka_op_t *rko_result = NULL;
+        int32_t res_cnt;
+        int i;
+        int32_t Throttle_Time;
+        rd_kafka_ConfigResource_t *config = NULL;
+        rd_kafka_ConfigEntry_t *entry = NULL;
+
+        rd_kafka_buf_read_i32(reply, &Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+
+        /* #resources */
+        rd_kafka_buf_read_i32(reply, &res_cnt);
+
+        if (res_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
+                rd_kafka_buf_parse_fail(
+                        reply,
+                        "Received %"PRId32" ConfigResources in response "
+                        "when only %d were requested", res_cnt,
+                        rd_list_cnt(&rko_req->rko_u.admin_request.args));
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        rd_list_init(&rko_result->rko_u.admin_result.results, res_cnt,
+                     rd_kafka_ConfigResource_free);
+
+        for (i = 0 ; i < (int)res_cnt ; i++) {
+                int16_t error_code;
+                rd_kafkap_str_t error_msg;
+                int8_t res_type;
+                rd_kafkap_str_t kres_name;
+                char *res_name;
+                char *errstr = NULL;
+                rd_kafka_ConfigResource_t skel;
+                int orig_pos;
+                int32_t entry_cnt;
+                int ci;
+
+                rd_kafka_buf_read_i16(reply, &error_code);
+                rd_kafka_buf_read_str(reply, &error_msg);
+                rd_kafka_buf_read_i8(reply, &res_type);
+                rd_kafka_buf_read_str(reply, &kres_name);
+                RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+
+                if (error_code) {
+                        if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                            RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                                errstr = (char *)rd_kafka_err2str(error_code);
+                        else
+                                RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
+                }
+
+                config = rd_kafka_ConfigResource_new(res_type, res_name);
+                if (!config) {
+                        rd_kafka_log(rko_req->rko_rk, LOG_ERR,
+                                     "ADMIN", "DescribeConfigs returned "
+                                     "unsupported ConfigResource #%d with "
+                                     "type %d and name \"%s\": ignoring",
+                                     i, res_type, res_name);
+                        continue;
+                }
+
+                config->err = error_code;
+                if (errstr)
+                        config->errstr = rd_strdup(errstr);
+
+                /* #config_entries */
+                rd_kafka_buf_read_i32(reply, &entry_cnt);
+
+                for (ci = 0 ; ci < (int)entry_cnt ; ci++) {
+                        rd_kafkap_str_t config_name, config_value;
+                        int32_t syn_cnt;
+                        int si;
+
+                        rd_kafka_buf_read_str(reply, &config_name);
+                        rd_kafka_buf_read_str(reply, &config_value);
+
+                        entry = rd_kafka_ConfigEntry_new0(
+                                config_name.str,
+                                RD_KAFKAP_STR_LEN(&config_name),
+                                config_value.str,
+                                RD_KAFKAP_STR_LEN(&config_value));
+
+                        rd_kafka_buf_read_bool(reply, &entry->a.is_readonly);
+
+                        /* ApiVersion 0 has is_default field, while
+                         * ApiVersion 1 has source field.
+                         * Convert between the two so they look the same
+                         * to the caller. */
+                        if (rd_kafka_buf_ApiVersion(reply) == 0) {
+                                rd_kafka_buf_read_bool(reply,
+                                                       &entry->a.is_default);
+                                if (entry->a.is_default)
+                                        entry->a.source =
+                                                RD_KAFKA_CONFIG_SOURCE_DEFAULT_CONFIG;
+                        } else {
+                                int8_t config_source;
+                                rd_kafka_buf_read_i8(reply, &config_source);
+                                entry->a.source = config_source;
+
+                                if (entry->a.source ==
+                                    RD_KAFKA_CONFIG_SOURCE_DEFAULT_CONFIG)
+                                        entry->a.is_default = 1;
+
+                        }
+
+                        rd_kafka_buf_read_bool(reply, &entry->a.is_sensitive);
+
+
+                        if (rd_kafka_buf_ApiVersion(reply) == 1) {
+                                /* #config_synonyms (ApiVersion 1) */
+                                rd_kafka_buf_read_i32(reply, &syn_cnt);
+
+                                if (syn_cnt > 100000)
+                                        rd_kafka_buf_parse_fail(
+                                                reply,
+                                                "Broker returned %"PRId32
+                                                " config synonyms for "
+                                                "ConfigResource %d,%s: "
+                                                "limit is 100000",
+                                                syn_cnt,
+                                                config->restype,
+                                                config->name);
+
+                                if (syn_cnt > 0)
+                                        rd_list_grow(&entry->synonyms, syn_cnt);
+
+                        } else {
+                                /* No synonyms in ApiVersion 0 */
+                                syn_cnt = 0;
+                        }
+
+
+
+                        /* Read synonyms (ApiVersion 1) */
+                        for (si = 0 ; si < (int)syn_cnt ; si++) {
+                                rd_kafkap_str_t syn_name, syn_value;
+                                int8_t syn_source;
+                                rd_kafka_ConfigEntry_t *syn_entry;
+
+                                rd_kafka_buf_read_str(reply, &syn_name);
+                                rd_kafka_buf_read_str(reply, &syn_value);
+                                rd_kafka_buf_read_i8(reply, &syn_source);
+
+                                syn_entry = rd_kafka_ConfigEntry_new0(
+                                        syn_name.str,
+                                        RD_KAFKAP_STR_LEN(&syn_name),
+                                        syn_value.str,
+                                        RD_KAFKAP_STR_LEN(&syn_value));
+                                if (!syn_entry)
+                                        rd_kafka_buf_parse_fail(
+                                                reply,
+                                                "Broker returned invalid "
+                                                "synonym #%d "
+                                                "for ConfigEntry #%d (%s) "
+                                                "and ConfigResource %d,%s: "
+                                                "syn_name.len %d, "
+                                                "syn_value.len %d",
+                                                si, ci, entry->kv->name,
+                                                config->restype, config->name,
+                                                (int)syn_name.len,
+                                                (int)syn_value.len);
+
+                                syn_entry->a.source = syn_source;
+
+                                rd_list_add(&entry->synonyms, syn_entry);
+                        }
+
+                        rd_kafka_ConfigResource_add_ConfigEntry(
+                                config, entry);
+                        entry = NULL;
+                }
+
+                /* As a convenience to the application we insert result
+                 * in the same order as they were requested. The broker
+                 * does not maintain ordering unfortunately. */
+                skel.restype = config->restype;
+                skel.name = config->name;
+                orig_pos = rd_list_index(&rko_req->rko_u.admin_request.args,
+                                         &skel, rd_kafka_ConfigResource_cmp);
+                if (orig_pos == -1) {
+                        rd_kafka_ConfigResource_destroy(config);
+                        rd_kafka_buf_parse_fail(
+                                reply,
+                                "Broker returned ConfigResource %d,%s "
+                                "that was not "
+                                "included in the original request",
+                                res_type, res_name);
+                }
+
+                if (rd_list_elem(&rko_result->rko_u.admin_result.results,
+                                 orig_pos) != NULL) {
+                        rd_kafka_ConfigResource_destroy(config);
+                        rd_kafka_buf_parse_fail(
+                                reply,
+                                "Broker returned ConfigResource %d,%s "
+                                "multiple times",
+                                res_type, res_name);
+                }
+
+                rd_list_set(&rko_result->rko_u.admin_result.results, orig_pos,
+                            config);
+                config = NULL;
+        }
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+ err_parse:
+        if (entry)
+                rd_kafka_ConfigEntry_destroy(entry);
+        if (config)
+                rd_kafka_ConfigResource_destroy(config);
+
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "DescribeConfigs response protocol parse failure: %s",
+                    rd_kafka_err2str(err));
+
+        return err;
+}
+
+
+
+void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
+                               rd_kafka_ConfigResource_t **configs,
+                               size_t config_cnt,
+                               const rd_kafka_AdminOptions_t *options,
+                               rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        size_t i;
+        rd_kafka_resp_err_t err;
+        char errstr[256];
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+                rd_kafka_DescribeConfigsRequest,
+                rd_kafka_DescribeConfigsResponse_parse,
         };
 
-        if ((unsigned int)confsource >=
-            (unsigned int)RD_KAFKA_CONFIG_SOURCE__CNT)
-                return "UNSUPPORTED";
+        rko = rd_kafka_admin_request_op_new(
+                rk,
+                RD_KAFKA_OP_DESCRIBECONFIGS,
+                RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT,
+                &cbs, options, rkqu);
 
-        return names[confsource];
+        rd_list_init(&rko->rko_u.admin_request.args, config_cnt,
+                     rd_kafka_ConfigResource_free);
+
+        for (i = 0 ; i < config_cnt ; i++)
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_ConfigResource_copy(configs[i]));
+
+        /* If there's a BROKER resource in the list we need to
+         * speak directly to that broker rather than the controller.
+         *
+         * Multiple BROKER resources are not allowed.
+         */
+        err = rd_kafka_ConfigResource_get_single_broker_id(
+                &rko->rko_u.admin_request.args,
+                &rko->rko_u.admin_request.broker_id,
+                errstr, sizeof(errstr));
+        if (err) {
+                rd_kafka_admin_result_fail(rko, err, "%s", errstr);
+                rd_kafka_admin_common_worker_destroy(rk, rko);
+                return;
+        }
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+
+
+
+rd_kafka_resp_err_t
+rd_kafka_DescribeConfigs_result_error (
+        const rd_kafka_DescribeConfigs_result_t *result,
+        const char **errstrp) {
+        return rd_kafka_admin_result_ret_error((const rd_kafka_op_t *)result,
+                                               errstrp);
+}
+
+
+
+const rd_kafka_ConfigResource_t **
+rd_kafka_DescribeConfigs_result_resources (
+        const rd_kafka_DescribeConfigs_result_t *result,
+        size_t *cntp) {
+        return rd_kafka_admin_result_ret_resources(
+                (const rd_kafka_op_t *)result, cntp);
 }
 
 /**@}*/

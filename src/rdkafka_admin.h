@@ -72,6 +72,13 @@ struct rd_kafka_AdminOptions_s {
                                             *     AlterConfigs
                                             */
 
+        rd_kafka_confval_t broker;         /**< BOOL: Explicitly set
+                                            *         broker id to send
+                                            *         requests to.
+                                            *   Valid for:
+                                            *     all
+                                            */
+
         rd_kafka_confval_t opaque;         /**< PTR: Application opaque.
                                             *   Valid for all. */
 };
@@ -171,24 +178,18 @@ struct rd_kafka_ConfigEntry_s {
 
 
         /* Response */
-        rd_kafka_ConfigSource_t source; /**< Config source */
 
-        /* This is a struct for easy copying */
+        /* Attributes: this is a struct for easy copying */
         struct {
+                rd_kafka_ConfigSource_t source; /**< Config source */
                 rd_bool_t is_readonly;    /**< Value is read-only (on broker) */
                 rd_bool_t is_default;     /**< Value is at its default */
                 rd_bool_t is_sensitive;   /**< Value is sensitive */
                 rd_bool_t is_synonym;     /**< Value is synonym */
-        } attr;
+        } a;
 
         rd_list_t synonyms;       /**< Type (rd_kafka_configEntry *) */
 };
-
-rd_kafka_ConfigEntry_t *
-rd_kafka_ConfigEntry_new (const char *name, const char *value);
-void rd_kafka_ConfigEntry_destroy (rd_kafka_ConfigEntry_t *entry);
-void rd_kafka_ConfigEntry_destroy_array (rd_kafka_ConfigEntry_t **entry,
-                                         size_t entry_cnt);
 
 /**
  * @brief A cluster ConfigResource constisting of:

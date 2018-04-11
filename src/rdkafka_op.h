@@ -192,6 +192,9 @@ typedef rd_kafka_op_res_t (rd_kafka_op_cb_t) (rd_kafka_t *rk,
                                               struct rd_kafka_op_s *rko)
                 RD_WARN_UNUSED_RESULT;
 
+/* Forward declaration */
+struct rd_kafka_admin_worker_cbs;
+
 
 #define RD_KAFKA_OP_TYPE_ASSERT(rko,type) \
 	rd_kafka_assert(NULL, (rko)->rko_type == (type) && # type)
@@ -361,6 +364,9 @@ struct rd_kafka_op_s {
                                                     *   temporary reference not
                                                     *   owned by this rko */
 
+                        /**< Worker callbacks, see rdkafka_admin.c */
+                        struct rd_kafka_admin_worker_cbs *cbs;
+
                         /** Worker state */
                         enum {
                                 RD_KAFKA_ADMIN_STATE_INIT,
@@ -375,7 +381,9 @@ struct rd_kafka_op_s {
                                             *   Used for AlterConfigs, et.al,
                                             *   that needs to speak to a
                                             *   specific broker rather than
-                                            *   the controller. */
+                                            *   the controller.
+                                            *   Defaults to -1:
+                                            *   look up and use controller. */
 
                         /** Application's reply queue */
                         rd_kafka_replyq_t replyq;

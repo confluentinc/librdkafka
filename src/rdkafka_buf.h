@@ -315,6 +315,13 @@ rd_tmpabuf_write_str0 (const char *func, int line,
 
 #define rd_kafka_buf_peek_i8(rkbuf,of,dst) rd_kafka_buf_peek(rkbuf,of,dst,1)
 
+#define rd_kafka_buf_read_bool(rkbuf, dstptr) do {                      \
+                int8_t _v;                                              \
+                rd_bool_t *_dst = dstptr;                               \
+                rd_kafka_buf_read(rkbuf, &_v, 1);                       \
+                *_dst = (rd_bool_t)_v;                                  \
+        } while (0)
+
 
 /**
  * @brief Read varint and store in int64_t \p dst

@@ -1519,8 +1519,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         rk->rk_controllerid = -1;
 
         /* Admin client defaults */
-        rk->rk_conf.admin.request_timeout_ms =
-                RD_MIN(5*60*1000, rk->rk_conf.socket_timeout_ms);
+        rk->rk_conf.admin.request_timeout_ms = rk->rk_conf.socket_timeout_ms;
 
 	/* Convenience Kafka protocol null bytes */
 	rk->rk_null_bytes = rd_kafkap_bytes_new(NULL, 0);

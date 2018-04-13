@@ -635,6 +635,8 @@ int main (int argc, char **argv) {
 			if (buf[len-1] == '\n')
 				buf[--len] = '\0';
 
+                        err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
 			/* Send/Produce message. */
                         if (hdrs) {
                                 rd_kafka_headers_t *hdrs_copy;

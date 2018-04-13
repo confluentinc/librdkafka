@@ -553,10 +553,7 @@ void rd_kafka_get_err_descs (const struct rd_kafka_err_desc **errdescs,
 
 const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 	static RD_TLS char ret[32];
-        int idx;
-
-        err = (int16_t)err;
-        idx = err - RD_KAFKA_RESP_ERR__BEGIN;
+	int idx = err - RD_KAFKA_RESP_ERR__BEGIN;
 
 	if (unlikely(err <= RD_KAFKA_RESP_ERR__BEGIN ||
 		     err >= RD_KAFKA_RESP_ERR_END_ALL ||
@@ -571,10 +568,7 @@ const char *rd_kafka_err2str (rd_kafka_resp_err_t err) {
 
 const char *rd_kafka_err2name (rd_kafka_resp_err_t err) {
 	static RD_TLS char ret[32];
-        int idx;
-
-        err = (int16_t)err;
-        idx = err - RD_KAFKA_RESP_ERR__BEGIN;
+	int idx = err - RD_KAFKA_RESP_ERR__BEGIN;
 
 	if (unlikely(err <= RD_KAFKA_RESP_ERR__BEGIN ||
 		     err >= RD_KAFKA_RESP_ERR_END_ALL ||

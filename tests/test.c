@@ -4421,6 +4421,7 @@ void test_fail0 (const char *file, int line, const char *function,
         int is_thrd = 0;
         size_t of;
         va_list ap;
+        char *t;
 
         of = rd_snprintf(buf, sizeof(buf), "%s():%i: ", function, line);
         rd_assert(of < sizeof(buf));
@@ -4428,6 +4429,10 @@ void test_fail0 (const char *file, int line, const char *function,
         va_start(ap, fmt);
         rd_vsnprintf(buf+of, sizeof(buf)-of, fmt, ap);
         va_end(ap);
+
+        /* Remove trailing newline */
+        if ((t =  strchr(buf, '\n')) && !*(t+1))
+                *t = '\0';
 
         TEST_SAYL(0, "TEST FAILURE\n");
         fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n"

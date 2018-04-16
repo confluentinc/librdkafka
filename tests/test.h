@@ -568,6 +568,6 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
                           char **topics, size_t topic_cnt,
                           void *opaque);
 
-rd_kafka_resp_err_t test_delete_all_test_topics (void);
+rd_kafka_resp_err_t test_delete_all_test_topics (int timeout_ms);
 
 #endif /* _TEST_H_ */

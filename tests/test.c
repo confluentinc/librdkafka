@@ -898,7 +898,7 @@ static int run_test0 (struct run_args *run_args) {
         }
 
         if (test_delete_topics_between && test_concurrent_max == 1)
-                test_delete_all_test_topics();
+                test_delete_all_test_topics(60*1000);
 
 	return r;
 }
@@ -4212,27 +4212,35 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
 }
 
 
+static void test_free_string_array (char **strs, size_t cnt) {
+        size_t i;
+        for (i = 0 ; i < cnt ; i++)
+                free(strs[i]);
+        free(strs);
+}
+
 
 /**
- * @brief Delete all test topics using the Kafka Admin API.
+ * @return an array of all topics in the cluster matching our the
+ *         rdkafka test prefix.
  */
-rd_kafka_resp_err_t test_delete_all_test_topics (void) {
-        rd_kafka_t *rk;
-        const rd_kafka_metadata_t *md;
-        char **topics;
-        size_t topic_cnt = 0;
-        rd_kafka_resp_err_t err;
-        int i;
+static rd_kafka_resp_err_t
+test_get_all_test_topics (rd_kafka_t *rk, char ***topicsp, size_t *topic_cntp) {
         size_t test_topic_prefix_len = strlen(test_topic_prefix);
-        rd_kafka_queue_t *q;
+        const rd_kafka_metadata_t *md;
+        char **topics = NULL;
+        size_t topic_cnt = 0;
+        int i;
+        rd_kafka_resp_err_t err;
 
-        rk = test_create_producer();
+        *topic_cntp = 0;
+        if (topicsp)
+                *topicsp = NULL;
 
         /* Retrieve list of topics */
         err = rd_kafka_metadata(rk, 1/*all topics*/, NULL, &md,
                                 tmout_multip(10000));
         if (err) {
-                rd_kafka_destroy(rk);
                 TEST_WARN("%s: Failed to acquire metadata: %s: "
                           "not deleting any topics\n",
                           __FUNCTION__, rd_kafka_err2str(err));
@@ -4242,33 +4250,87 @@ rd_kafka_resp_err_t test_delete_all_test_topics (void) {
         if (md->topic_cnt == 0) {
                 TEST_WARN("%s: No topics in cluster\n", __FUNCTION__);
                 rd_kafka_metadata_destroy(md);
-                rd_kafka_destroy(rk);
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
-        topics = malloc(sizeof(*topics) * md->topic_cnt);
+        if (topicsp)
+                topics = malloc(sizeof(*topics) * md->topic_cnt);
 
         for (i = 0 ; i < md->topic_cnt ; i++) {
                 if (strlen(md->topics[i].topic) >= test_topic_prefix_len &&
                     !strncmp(md->topics[i].topic,
-                             test_topic_prefix, test_topic_prefix_len))
-                        topics[topic_cnt++] = md->topics[i].topic;
+                             test_topic_prefix, test_topic_prefix_len)) {
+                        if (topicsp)
+                                topics[topic_cnt++] =
+                                        rd_strdup(md->topics[i].topic);
+                        else
+                                topic_cnt++;
+                }
         }
 
         if (topic_cnt == 0) {
-                TEST_WARN("%s: No topics (out of %d) matching our "
-                          "test prefix (%s)\n",
-                          __FUNCTION__, md->topic_cnt, test_topic_prefix);
+                TEST_SAY("%s: No topics (out of %d) matching our "
+                         "test prefix (%s)\n",
+                         __FUNCTION__, md->topic_cnt, test_topic_prefix);
                 rd_kafka_metadata_destroy(md);
-                rd_kafka_destroy(rk);
-                free(topics);
+                if (topics)
+                        test_free_string_array(topics, topic_cnt);
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
+        rd_kafka_metadata_destroy(md);
+
+        if (topicsp)
+                *topicsp = topics;
+        *topic_cntp = topic_cnt;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Delete all test topics using the Kafka Admin API.
+ */
+rd_kafka_resp_err_t test_delete_all_test_topics (int timeout_ms) {
+        rd_kafka_t *rk;
+        char **topics;
+        size_t topic_cnt = 0;
+        rd_kafka_resp_err_t err;
+        int i;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *q;
+        char errstr[256];
+        int64_t abs_timeout = test_clock() + (timeout_ms * 1000);
+
+        rk = test_create_producer();
+
+        err = test_get_all_test_topics(rk, &topics, &topic_cnt);
+        if (err) {
+                /* Error already reported by test_get_all_test_topics() */
+                rd_kafka_destroy(rk);
+                return err;
+        }
+
+        if (topic_cnt == 0) {
+                rd_kafka_destroy(rk);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
 
         q = rd_kafka_queue_get_main(rk);
 
-        test_DeleteTopics_simple(rk, q, topics, topic_cnt, NULL);
+        options = rd_kafka_AdminOptions_new(rk);
+        if (rd_kafka_AdminOptions_set_operation_timeout(options, 2*60*1000,
+                                                        errstr,
+                                                        sizeof(errstr)))
+                TEST_SAY(_C_YEL "Failed to set DeleteTopics timeout: %s: "
+                         "ignoring\n",
+                         errstr);
+
+        TEST_SAY(_C_MAG "====> Deleting all test topics with <===="
+                 "a timeout of 2 minutes\n");
+
+        test_DeleteTopics_simple(rk, q, topics, topic_cnt, options);
+
+        rd_kafka_AdminOptions_destroy(options);
 
         while (1) {
                 rd_kafka_event_t *rkev;
@@ -4323,13 +4385,35 @@ rd_kafka_resp_err_t test_delete_all_test_topics (void) {
 
         rd_kafka_queue_destroy(q);
 
-        free(topics);
+        test_free_string_array(topics, topic_cnt);
 
-        rd_kafka_metadata_destroy(md);
+        /* Wait for topics to be fully deleted */
+        while (1) {
+                err = test_get_all_test_topics(rk, NULL, &topic_cnt);
+
+                if (!err && topic_cnt == 0)
+                        break;
+
+                if (abs_timeout < test_clock()) {
+                        TEST_WARN("%s: Timed out waiting for "
+                                  "remaining %"PRIusz" deleted topics "
+                                  "to disappear from cluster metadata\n",
+                                  __FUNCTION__, topic_cnt);
+                        break;
+                }
+
+                TEST_SAY("Waiting for remaining %"PRIusz" delete topics "
+                         "to disappear from cluster metadata\n", topic_cnt);
+
+                rd_sleep(1);
+        }
+
         rd_kafka_destroy(rk);
 
         return err;
 }
+
+
 
 void test_fail0 (const char *file, int line, const char *function,
                  int do_lock, int fail_now, const char *fmt, ...) {

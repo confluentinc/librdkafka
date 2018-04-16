@@ -475,7 +475,9 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                                    "topic %s (PartCnt %i): %s: ignoring",
                                    mdt->topic, mdt->partition_cnt,
                                    rd_kafka_err2str(mdt->err));
-                        rd_list_free_cb(missing_topics,
+                        if (missing_topics)
+                                rd_list_free_cb(
+                                        missing_topics,
                                         rd_list_remove_cmp(missing_topics,
                                                            mdt->topic,
                                                            (void *)strcmp));

@@ -74,7 +74,7 @@ static const char *rd_kafka_admin_state_desc[] = {
  *    protocol transmits, etc).
  *  - the worker callback is only called on the rdkafka main thread.
  *  - the callback is triggered by different events and sources by enqueuing
- *    the rko on the rdkafka man ops queue.
+ *    the rko on the rdkafka main ops queue.
  *
  *
  * Let's illustrate this with a DeleteTopics example. This might look
@@ -85,7 +85,7 @@ static const char *rd_kafka_admin_state_desc[] = {
  *     including a response rkqu queue and then calls DeleteTopics().
  *
  *  2. [app thread] DeleteTopics() creates a new internal op (rko) of type
- *     RD_KAFKA_OP_CREATETOPICS, makes a **copy** on the rko of all the
+ *     RD_KAFKA_OP_DELETETOPICS, makes a **copy** on the rko of all the
  *     input arguments (which allows the caller to free the originals
  *     whenever she likes). The rko op worker callback is set to the
  *     generic admin worker callback rd_kafka_admin_worker()
@@ -192,8 +192,8 @@ static const char *rd_kafka_admin_state_desc[] = {
  * 20. [app thread] The application uses rd_kafka_event_DeleteTopics_result()
  *     to retrieve the request-specific result type.
  *
- * 21. Done, so easy.
- *     
+ * 21. Done.
+ *
  */
 
 

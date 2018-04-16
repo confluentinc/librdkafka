@@ -1146,11 +1146,15 @@ static int test_summary (int do_lock) {
                         break;
                 }
 
-		if (show_summary && test->state != TEST_SKIPPED)
-			printf("|%s %-40s | %10s | %7.3fs %s|%s\n",
-			       color,
-			       test->name, test_states[test->state],
-			       (double)duration/1000000.0, _C_CLR, extra);
+                if (show_summary && test->state != TEST_SKIPPED) {
+                        printf("|%s %-40s | %10s | %7.3fs %s|",
+                               color,
+                               test->name, test_states[test->state],
+                               (double)duration/1000000.0, _C_CLR);
+                        if (test->state == TEST_FAILED)
+                                printf(_C_RED " %s" _C_CLR, test->failstr);
+                        printf("%s\n", extra);
+                }
 
                 if (report_fp) {
 			int i;
@@ -1441,13 +1445,13 @@ int main(int argc, char **argv) {
         TEST_UNLOCK();
 
         if (test_delete_topics_between)
-                test_delete_all_test_topics();
+                test_delete_all_test_topics(60*1000);
+
+        r = test_summary(1/*lock*/) ? 1 : 0;
 
         /* Wait for everything to be cleaned up since broker destroys are
 	 * handled in its own thread. */
 	test_wait_exit(0);
-
-	r = test_summary(1/*lock*/) ? 1 : 0;
 
 	/* If we havent failed at this point then
 	 * there were no threads leaked */
@@ -1479,7 +1483,7 @@ void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
         TEST_SAYL(4, "Delivery report: %s\n", rd_kafka_err2str(err));
 
         if (!test_curr->produce_sync && err != test_curr->exp_dr_err)
-                TEST_FAIL("Message delivery failed: expected %s, got %s\n",
+                TEST_FAIL("Message delivery failed: expected %s, got %s",
                           rd_kafka_err2str(test_curr->exp_dr_err),
                           rd_kafka_err2str(err));
 
@@ -4325,4 +4329,45 @@ rd_kafka_resp_err_t test_delete_all_test_topics (void) {
         rd_kafka_destroy(rk);
 
         return err;
+}
+
+void test_fail0 (const char *file, int line, const char *function,
+                 int do_lock, int fail_now, const char *fmt, ...) {
+        char buf[512];
+        int is_thrd = 0;
+        size_t of;
+        va_list ap;
+
+        of = rd_snprintf(buf, sizeof(buf), "%s():%i: ", function, line);
+        rd_assert(of < sizeof(buf));
+
+        va_start(ap, fmt);
+        rd_vsnprintf(buf+of, sizeof(buf)-of, fmt, ap);
+        va_end(ap);
+
+        TEST_SAYL(0, "TEST FAILURE\n");
+        fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n"
+                "%s\n",
+                test_curr->name, file, line, function, buf+of);
+        if (do_lock)
+                TEST_LOCK();
+        test_curr->state = TEST_FAILED;
+        test_curr->failcnt += 1;
+
+        if (!*test_curr->failstr) {
+                strncpy(test_curr->failstr, buf, sizeof(test_curr->failstr));
+                test_curr->failstr[sizeof(test_curr->failstr)-1] = '\0';
+        }
+        if (fail_now && test_curr->mainfunc) {
+                tests_running_cnt--;
+                is_thrd = 1;
+        }
+        if (do_lock)
+                TEST_UNLOCK();
+        if (!fail_now)
+                return;
+        if (test_assert_on_fail || !is_thrd)
+                assert(0);
+        else
+                thrd_exit(0);
 }

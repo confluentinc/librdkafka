@@ -126,6 +126,7 @@ struct test {
 	int64_t timeout;
         test_state_t state;
         int     failcnt;     /**< Number of failures, useful with FAIL_LATER */
+        char    failstr[512];/**< First test failure reason */
 
 #if WITH_SOCKEM
         rd_list_t sockets;
@@ -148,33 +149,12 @@ struct test {
 #define TEST_F_KNOWN_ISSUE_OSX  0
 #endif
 
+void test_fail0 (const char *file, int line, const char *function,
+                 int do_lock, int fail_now, const char *fmt, ...);
 
-#define TEST_FAIL0(file,line,do_lock,fail_now,...) do {                 \
-                int is_thrd = 0;                                        \
-		TEST_SAYL(0, "TEST FAILURE\n");				\
-		fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n", \
-			test_curr->name,                                \
-                        file, line,__FUNCTION__);                \
-		fprintf(stderr, __VA_ARGS__);				\
-		fprintf(stderr, "\n");					\
-                fprintf(stderr, "### Test random seed was %i ###\033[0m\n",    \
-                        test_seed);                                     \
-                if (do_lock)                                            \
-                        TEST_LOCK();                                    \
-                test_curr->state = TEST_FAILED;                         \
-                test_curr->failcnt += 1;                                \
-                if (fail_now && test_curr->mainfunc) {                  \
-                        tests_running_cnt--;                            \
-                        is_thrd = 1;                                    \
-                }                                                       \
-                if (do_lock)                                            \
-                        TEST_UNLOCK();                                  \
-		if (!fail_now) break;					\
-                if (test_assert_on_fail || !is_thrd)                    \
-                        assert(0);                                      \
-                else                                                    \
-                        thrd_exit(0);                                   \
-	} while (0)
+#define TEST_FAIL0(file,line,do_lock,fail_now,...)   \
+        test_fail0(__FILE__, __LINE__, __FUNCTION__, \
+                   do_lock, fail_now, __VA_ARGS__)
 
 /* Whine and abort test */
 #define TEST_FAIL(...) TEST_FAIL0(__FILE__,__LINE__,1,1,__VA_ARGS__)
@@ -236,12 +216,15 @@ struct test {
         } while (0)
 
 /* Skip the current test. Argument is textual reason (printf format) */
-#define TEST_SKIP(...) do {		     \
-		TEST_WARN("SKIPPING TEST: " __VA_ARGS__); \
-		TEST_LOCK();			     \
-		test_curr->state = TEST_SKIPPED;     \
-		TEST_UNLOCK();			     \
-	} while (0)
+#define TEST_SKIP(...) do {                                             \
+                TEST_WARN("SKIPPING TEST: " __VA_ARGS__);               \
+                TEST_LOCK();                                            \
+                test_curr->state = TEST_SKIPPED;                        \
+                if (!*test_curr->failstr)                               \
+                        rd_snprintf(test_curr->failstr,                 \
+                                    sizeof(test_curr->failstr), __VA_ARGS__); \
+                TEST_UNLOCK();                                          \
+        } while (0)
 
 
 void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,

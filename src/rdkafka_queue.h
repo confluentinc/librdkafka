@@ -905,6 +905,8 @@ void rd_kafka_enq_once_trigger (rd_kafka_enq_once_t *eonce,
                                 rd_kafka_resp_err_t err,
                                 const char *srcdesc) {
         int do_destroy;
+        rd_kafka_op_t *rko = NULL;
+        rd_kafka_replyq_t replyq = RD_ZERO_INIT;
 
         mtx_lock(&eonce->lock);
 
@@ -913,19 +915,30 @@ void rd_kafka_enq_once_trigger (rd_kafka_enq_once_t *eonce,
         do_destroy = eonce->refcnt == 0;
 
         if (eonce->rko) {
-                /* Not already enqueued, do it. */
-                eonce->rko->rko_err = err;
-                rd_kafka_replyq_enq(&eonce->replyq, eonce->rko,
-                                    eonce->replyq.version);
-                eonce->rko = NULL;
-                rd_kafka_replyq_destroy(&eonce->replyq);
-        }
+                /* Not already enqueued, do it.
+                 * Detach the rko and replyq from the eonce and unlock the eonce
+                 * before enqueuing rko on reply to avoid recursive locks
+                 * if the replyq has been disabled and the ops
+                 * destructor is called (which might then access the eonce
+                 * to clean up). */
+                rko = eonce->rko;
+                replyq = eonce->replyq;
 
+                eonce->rko = NULL;
+                rd_kafka_replyq_clear(&eonce->replyq);
+
+                /* Reply is enqueued at the end of this function */
+        }
         mtx_unlock(&eonce->lock);
 
         if (do_destroy) {
                 /* We're the last refcount holder, clean up eonce. */
                 rd_kafka_enq_once_destroy0(eonce);
+        }
+
+        if (rko) {
+                rd_kafka_replyq_enq(&replyq, rko, replyq.version);
+                rd_kafka_replyq_destroy(&replyq);
         }
 }
 

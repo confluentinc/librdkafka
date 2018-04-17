@@ -1376,7 +1376,8 @@ int main(int argc, char **argv) {
         if ((test_broker_version & 0xffff0000) == 0x00090000)
                 test_timeout_multiplier += 3;
 
-        test_timeout_multiplier += (double)test_concurrent_max / 3;
+        if (test_concurrent_max > 1)
+                test_timeout_multiplier += (double)test_concurrent_max / 3;
 
 	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 	TEST_SAY("Test mode   : %s\n", test_mode);

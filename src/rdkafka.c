@@ -718,8 +718,6 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
          * The op itself is (likely) ignored by the receiver. */
         rd_kafka_q_enq(rk->rk_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
 
-	rd_kafka_brokers_broadcast_state_change(rk);
-
 #ifndef _MSC_VER
         /* Interrupt main kafka thread to speed up termination. */
 	if (term_sig) {
@@ -765,6 +763,10 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         int i;
 
         rd_kafka_dbg(rk, ALL, "DESTROY", "Destroy internal");
+
+        /* Trigger any state-change waiters (which should check the
+         * terminate flag whenever they wake up). */
+        rd_kafka_brokers_broadcast_state_change(rk);
 
         /* Call on_destroy() interceptors */
         rd_kafka_interceptors_on_destroy(rk);

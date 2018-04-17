@@ -2405,6 +2405,13 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                            (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
                            (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
                            (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs));
+                /* Expedite termination by bringing down the broker
+                 * and trigger a state change.
+                 * This makes sure any eonce dependent on state changes
+                 * are triggered. */
+                rd_kafka_broker_fail(rkb, LOG_DEBUG,
+                                     RD_KAFKA_RESP_ERR__DESTROY,
+                                     "Client is terminating");
                 ret = 0;
                 break;
 
@@ -3523,9 +3530,20 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 rkb, 0, &rkb->rkb_retrybufs, NULL,
                                 RD_KAFKA_RESP_ERR__DESTROY, 0);
                         rd_rkb_dbg(rkb, BROKER, "TERMINATE",
-                                   "Handle is terminating: "
-                                   "failed %d request(s) in "
-                                   "retry+outbuf", r);
+                                   "Handle is terminating in state %s: "
+                                   "%d refcnts (%p), %d toppar(s), "
+                                   "%d active toppar(s), "
+                                   "%d outbufs, %d waitresps, %d retrybufs: "
+                                   "failed %d request(s) in retry+outbuf",
+                                   rd_kafka_broker_state_names[rkb->rkb_state],
+                                   rd_refcnt_get(&rkb->rkb_refcnt),
+                                   &rkb->rkb_refcnt,
+                                   rkb->rkb_toppar_cnt,
+                                   rkb->rkb_active_toppar_cnt,
+                                   (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
+                                   (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
+                                   (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs),
+                                   r);
                 }
 	}
 

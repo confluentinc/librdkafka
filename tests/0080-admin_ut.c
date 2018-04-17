@@ -493,11 +493,66 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 }
 
 
+/**
+ * @brief Verify that an unclean rd_kafka_destroy() does not hang.
+ */
+static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
+        rd_kafka_t *rk;
+        char errstr[512];
+        rd_kafka_conf_t *conf;
+        rd_kafka_queue_t *q;
+        rd_kafka_event_t *rkev;
+        rd_kafka_DeleteTopic_t *topic;
+        test_timing_t t_destroy;
+
+        test_conf_init(&conf, NULL, 0);
+        /* Remove brokers, if any, since this is a local test and we
+         * rely on the controller not being found. */
+        test_conf_set(conf, "bootstrap.servers", "");
+        test_conf_set(conf, "socket.timeout.ms", "60000");
+
+        rk = rd_kafka_new(cltype, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rk, "kafka_new(%d): %s", cltype, errstr);
+
+        TEST_SAY(_C_MAG "[ Test unclean destroy for %s using %s]\n", rd_kafka_name(rk),
+                 with_mainq ? "mainq" : "tempq");
+
+        if (with_mainq)
+                q = rd_kafka_queue_get_main(rk);
+        else
+                q = rd_kafka_queue_new(rk);
+
+        topic = rd_kafka_DeleteTopic_new("test");
+        rd_kafka_DeleteTopics(rk, &topic, 1, NULL, q);
+        rd_kafka_DeleteTopic_destroy(topic);
+
+        /* We're not expecting a result yet since DeleteTopics will attempt
+         * to look up the controller for socket.timeout.ms (1 minute). */
+        rkev = rd_kafka_queue_poll(q, 100);
+        TEST_ASSERT(!rkev, "Did not expect result: %s", rd_kafka_event_name(rkev));
+
+        rd_kafka_queue_destroy(q);
+
+        TEST_SAY("Giving rd_kafka_destroy() 5s to finish, "
+                 "despite Admin API request being processed\n");
+        test_timeout_set(5);
+        TIMING_START(&t_destroy, "rd_kafka_destroy()");
+        rd_kafka_destroy(rk);
+        TIMING_STOP(&t_destroy);
+
+        /* Restore timeout */
+        test_timeout_set(60);;
+}
+
+
 static void do_test_apis (rd_kafka_type_t cltype) {
         rd_kafka_t *rk;
         char errstr[512];
         rd_kafka_queue_t *mainq;
         rd_kafka_conf_t *conf;
+
+        do_test_unclean_destroy(cltype, 0/*tempq*/);
+        do_test_unclean_destroy(cltype, 1/*mainq*/);
 
         test_conf_init(&conf, NULL, 0);
         /* Remove brokers, if any, since this is a local test and we

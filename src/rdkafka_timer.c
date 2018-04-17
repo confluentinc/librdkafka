@@ -87,10 +87,12 @@ static void rd_kafka_timer_schedule (rd_kafka_timers_t *rkts,
 }
 
 /**
- * Stop a timer that may be started.
- * If called from inside a timer callback 'lock' must be 0, else 1.
+ * @brief Stop a timer that may be started.
+ *        If called from inside a timer callback 'lock' must be 0, else 1.
+ *
+ * @returns 1 if the timer was started (before being stopped), else 0.
  */
-void rd_kafka_timer_stop (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
+int rd_kafka_timer_stop (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
                           int lock) {
 	if (lock)
 		rd_kafka_timers_lock(rkts);
@@ -98,7 +100,7 @@ void rd_kafka_timer_stop (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
 	if (!rd_kafka_timer_started(rtmr)) {
 		if (lock)
 			rd_kafka_timers_unlock(rkts);
-		return;
+		return 0;
 	}
 
 	if (rd_kafka_timer_scheduled(rtmr))
@@ -108,6 +110,8 @@ void rd_kafka_timer_stop (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
 
 	if (lock)
 		rd_kafka_timers_unlock(rkts);
+
+        return 1;
 }
 
 

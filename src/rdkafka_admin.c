@@ -469,11 +469,21 @@ static void rd_kafka_admin_eonce_timeout_cb (rd_kafka_timers_t *rkts,
  */
 static void rd_kafka_admin_common_worker_destroy (rd_kafka_t *rk,
                                                   rd_kafka_op_t *rko) {
+        int timer_was_stopped;
+
         /* Free resources for this op. */
-        rd_kafka_timer_stop(&rk->rk_timers, &rko->rko_u.admin_request.tmr,
-                            rd_true);
+        timer_was_stopped =
+                rd_kafka_timer_stop(&rk->rk_timers,
+                                    &rko->rko_u.admin_request.tmr, rd_true);
+
 
         if (rko->rko_u.admin_request.eonce) {
+                /* Remove the stopped timer's eonce reference since its
+                 * callback will not have fired if we stopped the timer. */
+                if (timer_was_stopped)
+                        rd_kafka_enq_once_del_source(rko->rko_u.admin_request.
+                                                     eonce, "timeout timer");
+
                 /* This is thread-safe to do even if there are outstanding
                  * timers or wait-controller references to the eonce
                  * since they only hold direct reference to the eonce,
@@ -653,8 +663,19 @@ rd_kafka_admin_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         rd_kafka_resp_err_t err;
         char errstr[512];
 
+        if (rd_kafka_terminating(rk)) {
+                rd_kafka_dbg(rk, ADMIN, name,
+                             "%s worker called in state %s: "
+                             "handle is terminating: %s",
+                             name,
+                             rd_kafka_admin_state_desc[rko->rko_u.
+                                                       admin_request.state],
+                             rd_kafka_err2str(rko->rko_err));
+                goto destroy;
+        }
+
         if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY)
-                goto destroy; /* Terminating, or rko being destroyed */
+                goto destroy; /* rko being destroyed (silent) */
 
         rd_kafka_dbg(rk, ADMIN, name,
                      "%s worker called in state %s: %s",
@@ -801,12 +822,8 @@ rd_kafka_admin_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
         {
                 rd_kafka_op_t *rko_result;
 
-                /* Response received */
-
-                rd_kafka_enq_once_del_source(rko->rko_u.admin_request.eonce,
-                                             "send");
-
-                /* Parse response and populate result to application */
+                /* Response received.
+                 * Parse response and populate result to application */
                 err = rko->rko_u.admin_request.cbs->parse(
                         rko, &rko_result,
                         rko->rko_u.admin_request.reply_buf,

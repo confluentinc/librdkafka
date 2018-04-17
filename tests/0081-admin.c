@@ -1049,6 +1049,51 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 }
 
 
+
+/**
+ * @brief Verify that an unclean rd_kafka_destroy() does not hang.
+ */
+static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
+        rd_kafka_t *rk;
+        char errstr[512];
+        rd_kafka_conf_t *conf;
+        rd_kafka_queue_t *q;
+        rd_kafka_NewTopic_t *topic;
+        test_timing_t t_destroy;
+
+        test_conf_init(&conf, NULL, 0);
+
+        rk = rd_kafka_new(cltype, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rk, "kafka_new(%d): %s", cltype, errstr);
+
+        TEST_SAY(_C_MAG "[ Test unclean destroy for %s using %s]\n", rd_kafka_name(rk),
+                 with_mainq ? "mainq" : "tempq");
+
+        if (with_mainq)
+                q = rd_kafka_queue_get_main(rk);
+        else
+                q = rd_kafka_queue_new(rk);
+
+        topic = rd_kafka_NewTopic_new(test_mk_topic_name(__FUNCTION__, 1),
+                                      3, 1);
+        rd_kafka_CreateTopics(rk, &topic, 1, NULL, q);
+        rd_kafka_NewTopic_destroy(topic);
+
+        rd_kafka_queue_destroy(q);
+
+        TEST_SAY("Giving rd_kafka_destroy() 5s to finish, "
+                 "despite Admin API request being processed\n");
+        test_timeout_set(5);
+        TIMING_START(&t_destroy, "rd_kafka_destroy()");
+        rd_kafka_destroy(rk);
+        TIMING_STOP(&t_destroy);
+
+        /* Restore timeout */
+        test_timeout_set(60);;
+}
+
+
+
 static void do_test_apis (rd_kafka_type_t cltype) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
@@ -1060,6 +1105,9 @@ static void do_test_apis (rd_kafka_type_t cltype) {
         TEST_SAY("%"PRIusz" brokers in cluster "
                  "which will be used for replica sets\n",
                  avail_broker_cnt);
+
+        do_test_unclean_destroy(cltype, 0/*tempq*/);
+        do_test_unclean_destroy(cltype, 1/*mainq*/);
 
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "socket.timeout.ms", "10000");

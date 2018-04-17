@@ -99,7 +99,12 @@ static RD_INLINE int64_t test_clock (void) {
         gettimeofday(&tv, NULL);
         return ((int64_t)tv.tv_sec * 1000000LLU) + (int64_t)tv.tv_usec;
 #elif _MSC_VER
-        return (int64_t)GetTickCount64() * 1000LLU;
+        LARGE_INTEGER now;
+        static RD_TLS LARGE_INTEGER freq;
+        if (!freq.QuadPart)
+                QueryPerformanceFrequency(&freq);
+        QueryPerformanceCounter(&now);
+        return (now.QuadPart * 1000000) / freq.QuadPart;
 #else
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);

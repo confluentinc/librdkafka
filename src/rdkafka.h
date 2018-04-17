@@ -4405,7 +4405,7 @@ RD_EXPORT void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options);
  *        request transmission, operation time on broker, and response.
  *
  * @param timeout_ms Timeout in milliseconds, use -1 for indefinite timeout.
- *                   Defaults to `socket.timeout.ms` capped at 5 minutes.
+ *                   Defaults to `socket.timeout.ms`.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if timeout was out of range in which
@@ -4448,6 +4448,27 @@ rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
 
 
 /**
+ * @brief If set to true the configuration is applied incrementally rather
+ *        than replacing and reverting all configuration for the resources.
+ *
+ * @param true_or_false Defaults to false.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
+ *          error code on failure in which case an error string will
+ *          be written \p errstr.
+ *
+ * @remark This option is valid for AlterConfigs.
+ *
+ * @remark Requires broker version >= 1.2.0 FIXME:unreleased.
+ *         The request will fail (locally) if the broker does not support
+ *         incremental updates.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_incremental (rd_kafka_AdminOptions_t *options,
+                                       int true_or_false,
+                                       char *errstr, size_t errstr_size);
+
+/**
  * @brief Tell broker to only validate the request, without performing
  *        the requested operation (create topics, etc).
  *
@@ -4464,26 +4485,6 @@ RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_AdminOptions_set_validate_only (rd_kafka_AdminOptions_t *options,
                                         int true_or_false,
                                         char *errstr, size_t errstr_size);
-
-
-/**
- * @brief If set to true the configuration is applied incrementally rather
- *        than replacing and reverting all configuration for the resources.
- *
- * @param true_or_false Defaults to false.
- *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
- *          error code on failure in which case an error string will
- *          be written \p errstr.
- *
- * @remark This option is valid for AlterConfigs.
- *
- * @remark Requires broker version >=FIXME:unreleased
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_incremental (rd_kafka_AdminOptions_t *options,
-                                       int true_or_false,
-                                       char *errstr, size_t errstr_size);
 
 
 /**
@@ -4655,6 +4656,9 @@ rd_kafka_CreateTopics (rd_kafka_t *rk,
  *
  * @param errstrp is set to a human-readable error string, if there was an
  *        error.
+ *
+ * @remark This is equivalent and interchangable to rd_kafka_event_error() and
+ *         rd_kafka_event_error_string() on a RD_KAFKA_EVENT_CREATETOPICS_RESULT event.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_CreateTopics_result_error (
@@ -4747,6 +4751,9 @@ void rd_kafka_DeleteTopics (rd_kafka_t *rk,
  *
  * @param errstrp is set to a human-readable error string, if there was an
  *        error.
+ *
+ * @remark This is equivalent and interchangable to rd_kafka_event_error() and
+ *         rd_kafka_event_error_string() on a RD_KAFKA_EVENT_DELETETOPICS_RESULT event.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_DeleteTopics_result_error (
@@ -4879,6 +4886,9 @@ rd_kafka_CreatePartitions (rd_kafka_t *rk,
  *
  * @param errstrp is set to a human-readable error string, if there was an
  *        error.
+ *
+ * @remark This is equivalent and interchangable to rd_kafka_event_error() and
+ *         rd_kafka_event_error_string() on a RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT event.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_CreatePartitions_result_error (
@@ -5121,7 +5131,7 @@ rd_kafka_ConfigResource_error_string (const rd_kafka_ConfigResource_t *config);
  * @brief Update the configuration for the specified resources.
  *        Updates are not transactional so they may succeed for a subset
  *        of the provided resources while the others fail.
- *        The configuration for a particular resource is updated automatically,
+ *        The configuration for a particular resource is updated atomically,
  *        replacing values using the provided ConfigEntrys and reverting
  *        unspecified ConfigEntrys to their default values.
  *
@@ -5160,6 +5170,9 @@ void rd_kafka_AlterConfigs (rd_kafka_t *rk,
  *
  * @param errstrp is set to a human-readable error string, if there was an
  *        error.
+ *
+ * @remark This is equivalent and interchangable to rd_kafka_event_error() and
+ *         rd_kafka_event_error_string() on a RD_KAFKA_EVENT_ALTERCONFIGS_RESULT event.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_AlterConfigs_result_error (
@@ -5243,6 +5256,9 @@ void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
  *
  * @param errstrp is set to a human-readable error string, if there was an
  *        error.
+ *
+ * @remark This is equivalent and interchangable to rd_kafka_event_error() and
+ *         rd_kafka_event_error_string() on a RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT event.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_DescribeConfigs_result_error (
@@ -5260,9 +5276,6 @@ RD_EXPORT const rd_kafka_ConfigResource_t **
 rd_kafka_DescribeConfigs_result_resources (
         const rd_kafka_DescribeConfigs_result_t *result,
         size_t *cntp);
-
-
-
 
 /**@}*/
 

@@ -4391,8 +4391,21 @@ typedef struct rd_kafka_AdminOptions_s rd_kafka_AdminOptions_t;
  *        (e.g. CreateTopics) and may be reused for multiple calls.
  *
  * @param rk Client instance.
+ * @param for_api Specifies what Admin API this AdminOptions object will be used
+ *                for, which will enforce what AdminOptions_set_..() calls may
+ *                be used based on the API, causing unsupported set..() calls
+ *                to fail.
+ *                Specifying NULL disables the enforcement.
+ *                Valid values are: CreateTopics, DeleteTopics,
+ *                                  CreatePartitions,
+ *                                  AlterConfigs, DescribeConfigs.
+ *
+ * @returns a new AdminOptions object (which must be freed with
+ *          rd_kafka_AdminOptions_destroy()), or NULL if \p for_api was set to
+ *          an unknown API name.
  */
-RD_EXPORT rd_kafka_AdminOptions_t *rd_kafka_AdminOptions_new (rd_kafka_t *rk);
+RD_EXPORT rd_kafka_AdminOptions_t *
+rd_kafka_AdminOptions_new (rd_kafka_t *rk, const char *for_api);
 
 /**
  * @brief Destroy a AdminOptions object.

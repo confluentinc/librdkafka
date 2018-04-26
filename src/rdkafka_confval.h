@@ -52,6 +52,7 @@ typedef struct rd_kafka_confval_s {
         const char *name;                  /**< Property name */
         rd_kafka_confval_type_t valuetype; /**< Value type, maps to union.*/
         int is_set;                        /**< Value has been set. */
+        int is_enabled;                    /**< Confval is enabled. */
         union {
                 struct {
                         int v;             /**< Current value */
@@ -77,6 +78,7 @@ void rd_kafka_confval_init_int (rd_kafka_confval_t *confval,
                                 int vmin, int vmax, int vdef);
 void rd_kafka_confval_init_ptr (rd_kafka_confval_t *confval,
                                 const char *name);
+void rd_kafka_confval_disable (rd_kafka_confval_t *confval, const char *name);
 
 rd_kafka_resp_err_t
 rd_kafka_confval_set_type (rd_kafka_confval_t *confval,

@@ -928,23 +928,62 @@ static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
         rd_kafka_confval_init_int(&options->request_timeout, "request_timeout",
                                   0, 3600*1000,
                                   rk->rk_conf.admin.request_timeout_ms);
-        rd_kafka_confval_init_int(&options->operation_timeout,
-                                  "operation_timeout",
-                                  -1, 3600*1000, 0);
-        rd_kafka_confval_init_int(&options->validate_only, "validate_only",
-                                  0, 1, 0);
-        rd_kafka_confval_init_int(&options->incremental, "incremental",
-                                  0, 1, 0);
+
+        if (!options->for_api ||
+            !rd_strcasecmp(options->for_api, "CreateTopics") ||
+            !rd_strcasecmp(options->for_api, "DeleteTopics") ||
+            !rd_strcasecmp(options->for_api, "CreatePartitions"))
+                rd_kafka_confval_init_int(&options->operation_timeout,
+                                          "operation_timeout",
+                                          -1, 3600*1000, 0);
+        else
+                rd_kafka_confval_disable(&options->operation_timeout,
+                                         "operation_timeout");
+
+        if (!options->for_api ||
+            !rd_strcasecmp(options->for_api, "CreateTopics") ||
+            !rd_strcasecmp(options->for_api, "AlterConfigs"))
+                rd_kafka_confval_init_int(&options->validate_only,
+                                          "validate_only",
+                                          0, 1, 0);
+        else
+                rd_kafka_confval_disable(&options->validate_only,
+                                         "validate_only");
+
         rd_kafka_confval_init_int(&options->broker, "broker",
                                   0, INT32_MAX, -1);
         rd_kafka_confval_init_ptr(&options->opaque, "opaque");
 }
 
 
-rd_kafka_AdminOptions_t *rd_kafka_AdminOptions_new (rd_kafka_t *rk) {
+rd_kafka_AdminOptions_t *rd_kafka_AdminOptions_new (rd_kafka_t *rk,
+                                                    const char *for_api) {
         rd_kafka_AdminOptions_t *options;
+        static const char **valid_apis[] = {
+                "CreateTopics",
+                "DeleteTopics",
+                "CreatePartitions",
+                "AlterConfigs",
+                "DescribeConfigs",
+                NULL,
+        };
+
+        if (for_api) {
+                const char **v = valid_apis;
+
+                while (*v) {
+                        if (!rd_strcasecmp(*v, for_api))
+                                break;
+                        v++;
+                }
+                if (!*v) /* unmatched: for_api is unsupported */
+                        return NULL;
+        }
 
         options = rd_calloc(1, sizeof(*options));
+
+        if (for_api)
+                options->for_api = rd_strdup(for_api);
 
         rd_kafka_AdminOptions_init(rk, options);
 

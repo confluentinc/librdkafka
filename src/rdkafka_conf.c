@@ -2287,6 +2287,7 @@ void rd_kafka_confval_init_int (rd_kafka_confval_t *confval,
                                 const char *name,
                                 int vmin, int vmax, int vdef) {
         confval->name = name;
+        confval->is_enabled = 1;
         confval->valuetype = RD_KAFKA_CONFVAL_INT;
         confval->u.INT.vmin = vmin;
         confval->u.INT.vmax = vmax;
@@ -2302,10 +2303,20 @@ void rd_kafka_confval_init_int (rd_kafka_confval_t *confval,
 void rd_kafka_confval_init_ptr (rd_kafka_confval_t *confval,
                                 const char *name) {
         confval->name = name;
+        confval->is_enabled = 1;
         confval->valuetype = RD_KAFKA_CONFVAL_PTR;
         confval->u.PTR = NULL;
 }
 
+/**
+ * @brief Set up but disable an intval, attempt to set this confval will fail.
+ *
+ * @oaram name Property name, must be a const static string (will not be copied)
+ */
+void rd_kafka_confval_disable (rd_kafka_confval_t *confval, const char *name) {
+        confval->name = name;
+        confval->is_enabled = 0;
+}
 
 /**
  * @brief Set confval's value to \p valuep, verifying the passed
@@ -2324,6 +2335,14 @@ rd_kafka_confval_set_type (rd_kafka_confval_t *confval,
                            rd_kafka_confval_type_t valuetype,
                            const void *valuep,
                            char *errstr, size_t errstr_size) {
+
+        if (!confval->is_enabled) {
+                rd_snprintf(errstr, errstr_size,
+                            "\"%s\" is not supported for this operation",
+                            confval->name);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
         switch (confval->valuetype)
         {
         case RD_KAFKA_CONFVAL_INT:

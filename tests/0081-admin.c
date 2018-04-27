@@ -85,7 +85,7 @@ static void do_test_CreateTopics (const char *what,
         for (i = 0 ; i < MY_NEW_TOPICS_CNT ; i++) {
                 char *topic = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
                 int num_parts = i * 7 + 1;
-                int add_config = (i & 1);
+                int set_config = (i & 1);
                 int add_invalid_config = (i == 1);
                 int set_replicas = !(i % 3);
                 rd_kafka_resp_err_t this_exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -96,22 +96,22 @@ static void do_test_CreateTopics (const char *what,
                                                       set_replicas ? -1 :
                                                       num_replicas);
 
-                if (add_config) {
+                if (set_config) {
                         /*
                          * Add various configuration properties
                          */
-                        err = rd_kafka_NewTopic_add_config(
+                        err = rd_kafka_NewTopic_set_config(
                                 new_topics[i], "compression.type", "lz4");
                         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
-                        err = rd_kafka_NewTopic_add_config(
+                        err = rd_kafka_NewTopic_set_config(
                                 new_topics[i], "delete.retention.ms", "900");
                         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
                 }
 
                 if (add_invalid_config) {
                         /* Add invalid config property */
-                        err = rd_kafka_NewTopic_add_config(
+                        err = rd_kafka_NewTopic_set_config(
                                 new_topics[i],
                                 "dummy.doesntexist",
                                 "broker is verifying this");
@@ -120,10 +120,10 @@ static void do_test_CreateTopics (const char *what,
                 }
 
                 TEST_SAY("Expected result for topic #%d: %s "
-                         "(add_config=%d, add_invalid_config=%d, "
+                         "(set_config=%d, add_invalid_config=%d, "
                          "set_replicas=%d)\n",
                          i, rd_kafka_err2name(this_exp_err),
-                         add_config, add_invalid_config, set_replicas);
+                         set_config, add_invalid_config, set_replicas);
 
                 if (set_replicas) {
                         int32_t p;
@@ -153,7 +153,7 @@ static void do_test_CreateTopics (const char *what,
         }
 
         if (op_timeout != -1 || validate_only) {
-                options = rd_kafka_AdminOptions_new(rk);
+                options = rd_kafka_AdminOptions_new(rk, "CreateTopics");
 
                 if (op_timeout != -1) {
                         err = rd_kafka_AdminOptions_set_operation_timeout(
@@ -339,7 +339,7 @@ static void do_test_DeleteTopics (const char *what,
         }
 
         if (op_timeout != -1) {
-                options = rd_kafka_AdminOptions_new(rk);
+                options = rd_kafka_AdminOptions_new(rk, NULL);
 
                 err = rd_kafka_AdminOptions_set_operation_timeout(
                         options, op_timeout, errstr, sizeof(errstr));
@@ -587,7 +587,7 @@ static void do_test_CreatePartitions (const char *what,
         }
 
         if (op_timeout != -1) {
-                options = rd_kafka_AdminOptions_new(rk);
+                options = rd_kafka_AdminOptions_new(rk, NULL);
 
                 err = rd_kafka_AdminOptions_set_operation_timeout(
                         options, op_timeout, errstr, sizeof(errstr));
@@ -733,11 +733,11 @@ static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         configs[ci] = rd_kafka_ConfigResource_new(
                 RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
 
-        err = rd_kafka_ConfigResource_add_config(configs[ci],
+        err = rd_kafka_ConfigResource_set_config(configs[ci],
                                                  "compression.type", "gzip");
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
-        err = rd_kafka_ConfigResource_add_config(configs[ci],
+        err = rd_kafka_ConfigResource_set_config(configs[ci],
                                                  "flush.ms", "12345678");
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
@@ -751,7 +751,7 @@ static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                 RD_KAFKA_RESOURCE_BROKER,
                 tsprintf("%"PRId32, avail_brokers[0]));
 
-        err = rd_kafka_ConfigResource_add_config(
+        err = rd_kafka_ConfigResource_set_config(
                 configs[ci],
                 "sasl.kerberos.min.time.before.relogin", "58000");
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
@@ -765,11 +765,11 @@ static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         configs[ci] = rd_kafka_ConfigResource_new(
                 RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
 
-        err = rd_kafka_ConfigResource_add_config(configs[ci],
+        err = rd_kafka_ConfigResource_set_config(configs[ci],
                                                  "compression.type", "lz4");
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
 
-        err = rd_kafka_ConfigResource_add_config(configs[ci],
+        err = rd_kafka_ConfigResource_set_config(configs[ci],
                                                  "offset.metadata.max.bytes",
                                                  "12345");
         TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
@@ -781,7 +781,7 @@ static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         /*
          * Timeout options
          */
-        options = rd_kafka_AdminOptions_new(rk);
+        options = rd_kafka_AdminOptions_new(rk, "AlterConfigs");
         err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, errstr,
                                                         sizeof(errstr));
         TEST_ASSERT(!err, "%s", errstr);
@@ -947,7 +947,7 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         /*
          * Timeout options
          */
-        options = rd_kafka_AdminOptions_new(rk);
+        options = rd_kafka_AdminOptions_new(rk, NULL);
         err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, errstr,
                                                         sizeof(errstr));
         TEST_ASSERT(!err, "%s", errstr);

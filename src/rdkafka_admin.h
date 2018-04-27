@@ -42,6 +42,9 @@
  *         to make sure it is copied properly.
  */
 struct rd_kafka_AdminOptions_s {
+        char *for_api;                     /**< Limit allowed options to
+                                            *   this API (optional) */
+
         /* Generic */
         rd_kafka_confval_t request_timeout;/**< I32: Full request timeout,
                                             *        includes looking up leader
@@ -105,8 +108,8 @@ struct rd_kafka_NewTopic_s {
         rd_list_t replicas;     /**< Type (rd_list_t (int32_t)):
                                  *   Array of replica lists indexed by
                                  *   partition, size num_partitions. */
-        rd_list_t config;       /**< Type (rd_strtup_t *):
-                                 *   List of configuration key-value strings */
+        rd_list_t config;       /**< Type (rd_kafka_ConfigEntry_t *):
+                                 *   List of configuration entries */
 };
 
 /**@}*/
@@ -172,15 +175,21 @@ struct rd_kafka_NewPartitions_s {
  * @{
  */
 
+/* KIP-248 */
+typedef enum rd_kafka_AlterOperation_t {
+        RD_KAFKA_ALTER_OP_ADD = 0,
+        RD_KAFKA_ALTER_OP_SET = 1,
+        RD_KAFKA_ALTER_OP_DELETE = 2,
+} rd_kafka_AlterOperation_t;
 
 struct rd_kafka_ConfigEntry_s {
-        rd_strtup_t *kv;          /**< Name/Value pair */
-
+        rd_strtup_t *kv;                     /**< Name/Value pair */
 
         /* Response */
 
         /* Attributes: this is a struct for easy copying */
         struct {
+                rd_kafka_AlterOperation_t operation; /**< Operation */
                 rd_kafka_ConfigSource_t source; /**< Config source */
                 rd_bool_t is_readonly;    /**< Value is read-only (on broker) */
                 rd_bool_t is_default;     /**< Value is at its default */

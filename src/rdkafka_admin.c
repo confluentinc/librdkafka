@@ -233,11 +233,15 @@ struct rd_kafka_admin_worker_cbs {
 };
 
 
+/* Forward declarations */
 static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
                                         rd_kafka_AdminOptions_t *options);
-
 static rd_kafka_op_res_t
 rd_kafka_admin_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko);
+static rd_kafka_ConfigEntry_t *
+rd_kafka_ConfigEntry_copy (const rd_kafka_ConfigEntry_t *src);
+static void rd_kafka_ConfigEntry_free (void *ptr);
+static void *rd_kafka_ConfigEntry_list_copy (const void *src, void *opaque);
 
 
 /**
@@ -942,6 +946,7 @@ static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
 
         if (!options->for_api ||
             !rd_strcasecmp(options->for_api, "CreateTopics") ||
+            !rd_strcasecmp(options->for_api, "CreatePartitions") ||
             !rd_strcasecmp(options->for_api, "AlterConfigs"))
                 rd_kafka_confval_init_int(&options->validate_only,
                                           "validate_only",
@@ -949,6 +954,15 @@ static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
         else
                 rd_kafka_confval_disable(&options->validate_only,
                                          "validate_only");
+
+        if (!options->for_api ||
+            !rd_strcasecmp(options->for_api, "AlterConfigs"))
+                rd_kafka_confval_init_int(&options->incremental,
+                                          "incremental",
+                                          0, 1, 0);
+        else
+                rd_kafka_confval_disable(&options->incremental,
+                                         "incremental");
 
         rd_kafka_confval_init_int(&options->broker, "broker",
                                   0, INT32_MAX, -1);
@@ -959,7 +973,7 @@ static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
 rd_kafka_AdminOptions_t *rd_kafka_AdminOptions_new (rd_kafka_t *rk,
                                                     const char *for_api) {
         rd_kafka_AdminOptions_t *options;
-        static const char **valid_apis[] = {
+        static const char *valid_apis[] = {
                 "CreateTopics",
                 "DeleteTopics",
                 "CreatePartitions",
@@ -991,6 +1005,8 @@ rd_kafka_AdminOptions_t *rd_kafka_AdminOptions_new (rd_kafka_t *rk,
 }
 
 void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options) {
+        if (options->for_api)
+                rd_free(options->for_api);
         rd_free(options);
 }
 
@@ -1033,8 +1049,8 @@ rd_kafka_NewTopic_new (const char *topic,
         rd_list_prealloc_elems(&new_topic->replicas, 0,
                                num_partitions, 0/*nozero*/);
 
-        /* List of strtups */
-        rd_list_init(&new_topic->config, 0, rd_strtup_free);
+        /* List of ConfigEntrys */
+        rd_list_init(&new_topic->config, 0, rd_kafka_ConfigEntry_free);
 
         return new_topic;
 
@@ -1067,7 +1083,8 @@ rd_kafka_NewTopic_copy (const rd_kafka_NewTopic_t *src) {
                         rd_list_copy_preallocated, NULL);
 
         rd_list_init_copy(&dst->config, &src->config);
-        rd_list_copy_to(&dst->config, &src->config, rd_strtup_list_copy, NULL);
+        rd_list_copy_to(&dst->config, &src->config,
+                        rd_kafka_ConfigEntry_list_copy, NULL);
 
         return dst;
 }
@@ -1138,21 +1155,34 @@ rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_NewTopic_add_config (rd_kafka_NewTopic_t *new_topic,
-                              const char *name, const char *value) {
-        rd_strtup_t *tup;
+/**
+ * @brief Generic constructor of ConfigEntry which is also added to \p rl
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_add_config0 (rd_list_t *rl,
+                            const char *name, const char *value,
+                            rd_kafka_AlterOperation_t operation) {
+        rd_kafka_ConfigEntry_t *entry;
 
         if (!name)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        tup = rd_strtup_new(name, value);
+        entry = rd_calloc(1, sizeof(*entry));
+        entry->kv = rd_strtup_new(name, value);
+        entry->a.operation = operation;
 
-        rd_list_add(&new_topic->config, tup);
+        rd_list_add(rl, entry);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
+rd_kafka_resp_err_t
+rd_kafka_NewTopic_set_config (rd_kafka_NewTopic_t *new_topic,
+                              const char *name, const char *value) {
+        return rd_kafka_admin_add_config0(&new_topic->config, name, value,
+                                          RD_KAFKA_ALTER_OP_ADD);
+}
 
 
 
@@ -1922,8 +1952,6 @@ rd_kafka_ConfigEntry_new (const char *name, const char *value) {
 
 
 
-static void *rd_kafka_ConfigEntry_list_copy (const void *src, void *opaque);
-
 /**
  * @brief Allocate a new AlterConfigs and make a copy of \p src
  */
@@ -2128,10 +2156,28 @@ rd_kafka_ConfigResource_add_config (rd_kafka_ConfigResource_t *config,
         if (!name || !*name || !value)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        rd_kafka_ConfigResource_add_ConfigEntry(
-                config, rd_kafka_ConfigEntry_new(name, value));
+        return rd_kafka_admin_add_config0(&config->config, name, value,
+                                          RD_KAFKA_ALTER_OP_ADD);
+}
 
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+rd_kafka_resp_err_t
+rd_kafka_ConfigResource_set_config (rd_kafka_ConfigResource_t *config,
+                                    const char *name, const char *value) {
+        if (!name || !*name || !value)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        return rd_kafka_admin_add_config0(&config->config, name, value,
+                                          RD_KAFKA_ALTER_OP_SET);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_ConfigResource_delete_config (rd_kafka_ConfigResource_t *config,
+                                       const char *name) {
+        if (!name || !*name)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        return rd_kafka_admin_add_config0(&config->config, name, NULL,
+                                          RD_KAFKA_ALTER_OP_DELETE);
 }
 
 

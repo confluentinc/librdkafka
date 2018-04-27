@@ -4491,7 +4491,7 @@ rd_kafka_AdminOptions_set_incremental (rd_kafka_AdminOptions_t *options,
  *          error code on failure in which case an error string will
  *          be written \p errstr.
  *
- * @remark This option is valid for CreateTopics, DeleteTopics,
+ * @remark This option is valid for CreateTopics,
  *         CreatePartitions, AlterConfigs.
  */
 RD_EXPORT rd_kafka_resp_err_t
@@ -4614,8 +4614,7 @@ rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
                                           char *errstr, size_t errstr_size);
 
 /**
- * @brief Add a (broker-side) topic configuration name/value pair to
- *        the NewTopic object.
+ * @brief Set (broker-side) topic configuration name/value pair.
  *
  * @remark The name and value are not validated by the client, the validation
  *         takes place on the broker.
@@ -4627,7 +4626,7 @@ rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
  * @sa http://kafka.apache.org/documentation.html#topicconfigs
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_NewTopic_add_config (rd_kafka_NewTopic_t *new_topic,
+rd_kafka_NewTopic_set_config (rd_kafka_NewTopic_t *new_topic,
                               const char *name, const char *value);
 
 
@@ -5079,12 +5078,33 @@ rd_kafka_ConfigResource_destroy_array (rd_kafka_ConfigResource_t **config,
 
 
 /**
- * @brief Add configuration name value pair to ConfigResource object for
- *        later transmission to broker.
+ * @brief Set configuration name value pair.
  *
  * @param name Configuration name, depends on resource type.
  * @param value Configuration value, depends on resource type and \p name.
  *              Set to \c NULL to revert configuration value to default.
+ *
+ * The difference between add_config and set_config is that add allows
+ * adding to an existing configuration property, such as a SASL SCRAM user,
+ * while set overwrites the current value.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
+ *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ConfigResource_set_config (rd_kafka_ConfigResource_t *config,
+                                    const char *name, const char *value);
+
+/**
+ * @brief Add configuration name value pair.
+ *
+ * @param name Configuration name, depends on resource type.
+ * @param value Configuration value, depends on resource type and \p name.
+ *              Set to \c NULL to revert configuration value to default.
+ *
+ * The difference between add_config and set_config is that add allows
+ * adding to an existing configuration property, such as a SASL SCRAM user,
+ * while set overwrites the current value.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
  *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
@@ -5092,6 +5112,19 @@ rd_kafka_ConfigResource_destroy_array (rd_kafka_ConfigResource_t **config,
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_ConfigResource_add_config (rd_kafka_ConfigResource_t *config,
                                     const char *name, const char *value);
+
+
+/**
+ * @brief Delete or revert configuration to default on broker.
+ *
+ * @param name Configuration name, depends on resource type.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
+ *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ConfigResource_delete_config (rd_kafka_ConfigResource_t *config,
+                                       const char *name);
 
 
 /**

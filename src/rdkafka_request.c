@@ -2058,8 +2058,8 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
 
         while ((newt = rd_list_elem(new_topics, i++))) {
                 int partition;
-                int ci = 0;
-                const rd_strtup_t *tup;
+                int ei = 0;
+                const rd_kafka_ConfigEntry_t *entry;
 
                 /* topic */
                 rd_kafka_buf_write_str(rkbuf, newt->topic, -1);
@@ -2109,9 +2109,11 @@ rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
                 /* #config_entries */
                 rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&newt->config));
 
-                while ((tup = rd_list_elem(&newt->config, ci++))) {
-                        rd_kafka_buf_write_str(rkbuf, tup->name, -1);
-                        rd_kafka_buf_write_str(rkbuf, tup->value, -1);
+                RD_LIST_FOREACH(entry, &newt->config, ei) {
+                        /* config_name */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
+                        /* config_value (nullable) */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
                 }
         }
 
@@ -2355,9 +2357,9 @@ rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
         if (ApiVersion < 1 /* FIXME */ &&
             rd_kafka_confval_get_int(&options->incremental)) {
                 rd_snprintf(errstr, errstr_size,
-                            "AlterConfigs.incremental=true (KIP-FIXME) "
+                            "AlterConfigs.incremental=true (KIP-248) "
                             "not supported by broker, "
-                            "requires broker version >= FIXME");
+                            "requires broker version >= 2.0.0");
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
@@ -2385,6 +2387,19 @@ rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
                         /* config_value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
+
+                        if (ApiVersion == 1)
+                                rd_kafka_buf_write_i8(rkbuf,
+                                                      entry->a.operation);
+                        else if (entry->a.operation != RD_KAFKA_ALTER_OP_SET) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "Broker version >= 2.0.0 required "
+                                            "for add/delete config "
+                                            "entries: only set supported "
+                                            "by this broker");
+                                rd_kafka_buf_destroy(rkbuf);
+                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                        }
                 }
         }
 

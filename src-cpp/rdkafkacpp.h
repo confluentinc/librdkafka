@@ -99,7 +99,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x000b04ff
+#define RD_KAFKA_VERSION  0x000b0500
 
 /**
  * @brief Returns the librdkafka version as integer.

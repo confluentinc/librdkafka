@@ -1416,11 +1416,12 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 
 		if (events & POLLIN) {
 			while (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
-			       rd_kafka_recv(rkb) > 0)
+			       rkb->rkb_transport && rd_kafka_recv(rkb) > 0)
 				;
 
                         /* If connection went down: bail out early */
-                        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN)
+                        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN ||
+                            !rkb->rkb_transport)
                                 return;
 		}
 

@@ -402,12 +402,20 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY)
 		rd_kafka_broker_feature_disable(rkb, RD_KAFKA_FEATURE_APIVERSION);
 
-	/* Set broker state. If connection on demand is set and state was UP,
-	 * don't trigger immediate reconnection. */
+	/* Set broker state */
         old_state = rkb->rkb_state;
-	if (!rkb->rkb_rk->rk_conf.connect_on_demand ||
-	    old_state != RD_KAFKA_BROKER_STATE_UP)
-		rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
+        if (rkb->rkb_rk->rk_conf.connect_on_demand) {
+                /* Connection on demand is set.
+                 * If there is data queued for sending, trigger immediate
+                 * reconnection by setting the state to DOWN. Otherwise, stop
+                 * reconnection attempts by setting the state to UP. */
+                if (rd_kafka_bufq_cnt(&rkb->rkb_outbufs) > 0)
+                        rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
+                else if (old_state != RD_KAFKA_BROKER_STATE_UP)
+                        rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
+        }
+        else
+                rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_DOWN);
 
 	/* Unlock broker since a requeue will try to lock it. */
 	rd_kafka_broker_unlock(rkb);

@@ -1,7 +1,7 @@
+[submodule "zlib"]
+	path = zlib
+	url = https://github.com/noahdav/zlib.git
 [submodule "openssl"]
 	path = openssl
 	url = https://github.com/openssl/openssl.git
 	branch = OpenSSL_1_0_2-stable
-[submodule "zlib"]
-	path = zlib
-	url = https://github.com/noahdav/zlib.git

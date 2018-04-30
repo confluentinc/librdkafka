@@ -23,6 +23,13 @@
   <PropertyGroup Condition="'$(Platform)'=='x64'">
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(LibraryPath)</LibraryPath>
   </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Link>
+      <AdditionalDependencies>libeay32.lib;ssleay32.lib;%(AdditionalDependencies)</AdditionalDependencies>      
+      <AdditionalDependencies Condition="'$(ZLIB_VS_BUILD)' != ''">zlibwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(ZLIB_VS_BUILD)' == ''">zdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>    
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -37,9 +44,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);libeay32.lib;ssleay32.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(ZLIB_VS_BUILD)' != ''">zlibwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(ZLIB_VS_BUILD)' == ''">zdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -56,9 +61,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);libeay32.lib;ssleay32.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(ZLIB_VS_BUILD)' != ''">zlibwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(ZLIB_VS_BUILD)' == ''">zdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -77,9 +80,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);libeay32.lib;ssleay32.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(ZLIB_VS_BUILD)' != ''">zlibwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(ZLIB_VS_BUILD)' == ''">zdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -98,9 +99,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies);libeay32.lib;ssleay32.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(ZLIB_VS_BUILD)' != ''">zlibwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(ZLIB_VS_BUILD)' == ''">zdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -231,10 +230,16 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ItemGroup>
-    <ReferenceCopyLocalPaths Condition="'$(ZLIB_VS_BUILD)' != ''" 
+    <ReferenceCopyLocalPaths Condition="'$(ZLIB_VS_BUILD)' != ''"
         Include="$(ZLIB_ROOT)\contrib\vstudio\$(Compiler_Version)\$(PlatformTarget)\zlibdll$(Configuration)\zlibwapi.dll;
           $(ZLIB_ROOT)\contrib\vstudio\$(Compiler_Version)\$(PlatformTarget)\zlibdll$(Configuration)\zlibwapi.pdb" />
     <ReferenceCopyLocalPaths Condition="'$(ZLIB_VS_BUILD)' == ''" Include="$(ZLIB_ROOT)\zlib1.dll;$(ZLIB_ROOT)\zlib1.pdb" />
+    <ReferenceCopyLocalPaths Include="$(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\bin\libeay32.dll;
+                             $(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\bin\ssleay32.dll" />
+    <ReferenceCopyLocalPaths Condition="Exists('$(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\bin\libeay32.pdb')"
+                             Include="$(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\bin\libeay32.pdb;" />
+    <ReferenceCopyLocalPaths Condition="Exists('$(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\bin\ssleay32.pdb')"
+                             Include="$(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\bin\ssleay32.pdb;" />
   </ItemGroup>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

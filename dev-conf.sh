@@ -8,6 +8,7 @@ set -e
 # enable pedantic
 #export CFLAGS='-std=c99 -pedantic -Wshadow'
 #export CXXFLAGS='-std=c++98 -pedantic'
+export CFLAGS='-fno-omit-frame-pointer -fsanitize=undefined -fsanitize-undefined-trap-on-error'
 
 # enable FSAN
 #FSAN="-fsanitize=address"

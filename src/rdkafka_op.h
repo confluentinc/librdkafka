@@ -112,8 +112,8 @@ typedef enum {
 } rd_kafka_op_type_t;
 
 /* Flags used with op_type_t */
-#define RD_KAFKA_OP_CB        (1 << 30)  /* Callback op. */
-#define RD_KAFKA_OP_REPLY     (1 << 31)  /* Reply op. */
+#define RD_KAFKA_OP_CB        (int)(1 << 29)  /* Callback op. */
+#define RD_KAFKA_OP_REPLY     (int)(1 << 30)  /* Reply op. */
 #define RD_KAFKA_OP_FLAGMASK  (RD_KAFKA_OP_CB | RD_KAFKA_OP_REPLY)
 
 

@@ -12,10 +12,13 @@
   <Import Project="$(SolutionDir)common.vcxproj" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ZLIB_ROOT);$(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\include</IncludePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\include</IncludePath>
+    <IncludePath Condition="'$(ZLIB_VS_BUILD)' != ''">$(ZLIB_ROOT);$(IncludePath)</IncludePath>
+    <IncludePath Condition="'$(ZLIB_VS_BUILD)' == ''">$(ZLIB_INC_PATH);$(IncludePath)</IncludePath>    
     <LibraryPath>$(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\lib</LibraryPath>
-    <LibraryPath Condition="'$(ZLIB_VS_BUILD)' != ''">$(ZLIB_ROOT)\contrib\vstudio\$(Compiler_Version)\$(PlatformTarget)\zlibdll$(Configuration);$(LibraryPath)</LibraryPath>
-    <LibraryPath Condition="'$(ZLIB_VS_BUILD)' == ''">$(ZLIB_ROOT);$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(ZLIB_VS_BUILD)' != ''">$(ZLIB_ROOT)\contrib\vstudio\vc14\$(PlatformTarget)\zlibdll$(Configuration);$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(ZLIB_VS_BUILD)' == '' AND '$(ZLIB_LIB_ROOT)' != ''">$(ZLIB_LIB_ROOT)\$(PlatformTarget)\$(Configuration);$(LibraryPath)</LibraryPath>
+    <LibraryPath Condition="'$(ZLIB_VS_BUILD)' == '' AND '$(ZLIB_ROOT)' != ''">$(ZLIB_ROOT);$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='Win32'">
     <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(LibraryPath)</LibraryPath>
@@ -231,9 +234,11 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ItemGroup>
     <ReferenceCopyLocalPaths Condition="'$(ZLIB_VS_BUILD)' != ''"
-        Include="$(ZLIB_ROOT)\contrib\vstudio\$(Compiler_Version)\$(PlatformTarget)\zlibdll$(Configuration)\zlibwapi.dll;
-          $(ZLIB_ROOT)\contrib\vstudio\$(Compiler_Version)\$(PlatformTarget)\zlibdll$(Configuration)\zlibwapi.pdb" />
-    <ReferenceCopyLocalPaths Condition="'$(ZLIB_VS_BUILD)' == ''" Include="$(ZLIB_ROOT)\zlib1.dll;$(ZLIB_ROOT)\zlib1.pdb" />
+        Include="$(ZLIB_ROOT)\contrib\vstudio\vc14\$(PlatformTarget)\zlibdll$(Configuration)\zlibwapi.dll;
+          $(ZLIB_ROOT)\contrib\vstudio\vc14\$(PlatformTarget)\zlibdll$(Configuration)\zlibwapi.pdb" />
+    <ReferenceCopyLocalPaths Condition="'$(ZLIB_VS_BUILD)' == '' AND '$(ZLIB_LIB_ROOT)' != ''" Include="$(ZLIB_LIB_ROOT)\$(PlatformTarget)\$(Configuration)\zlib1.dll;
+                             $(ZLIB_LIB_ROOT)\$(PlatformTarget)\$(Configuration)\zlib1.pdb" />
+    <ReferenceCopyLocalPaths Condition="'$(ZLIB_VS_BUILD)' == '' AND '$(ZLIB_ROOT)' != ''" Include="$(ZLIB_ROOT)\zlib1.dll;$(ZLIB_ROOT)\zlib1.pdb" />
     <ReferenceCopyLocalPaths Include="$(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\bin\libeay32.dll;
                              $(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\bin\ssleay32.dll" />
     <ReferenceCopyLocalPaths Condition="Exists('$(OPENSSL_ROOT)\$(PlatformTarget)\$(Configuration)\bin\libeay32.pdb')"

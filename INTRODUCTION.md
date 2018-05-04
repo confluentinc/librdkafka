@@ -25,7 +25,7 @@ The following chapters are available in this document
     * Producer API
     * Consumer API
   * Appendix
-    * Test detailts
+    * Test details
   
 
 

@@ -105,8 +105,6 @@ function checks {
     fi
     mkl_mkvar_set "pkgconfig" PKG_CONFIG $PKG_CONFIG
 
-    [[ ! -z "$PKG_CONFIG_PATH" ]] && mkl_env_append PKG_CONFIG_PATH "$PKG_CONFIG_PATH"
-
     # install
     if [ -z "$INSTALL" ]; then
 	if [[ $MKL_DISTRO == "SunOS" ]]; then

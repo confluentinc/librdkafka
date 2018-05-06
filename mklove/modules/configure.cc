@@ -167,7 +167,7 @@ for n in CFLAGS CPPFLAGS CXXFLAGS LDFLAGS ARFLAGS; do
     mkl_option "Compiler" "mk:$n" "--$n=$n" "Add $n flags"
 done
 
-mkl_option "Compiler" "env:PKG_CONFIG_PATH" "--pkg-config-path" "Extra paths for pkg-config"
+mkl_option "Compiler" "env:PKG_CONFIG_PATH" "--pkg-config-path=PKG_CONFIG_PATH" "Extra paths for pkg-config" "\$PKG_CONFIG_PATH"
 
 mkl_option "Compiler" "WITH_PROFILING" "--enable-profiling" "Enable profiling"
 mkl_option "Compiler" "WITH_STATIC_LINKING" "--enable-static" "Enable static linking"

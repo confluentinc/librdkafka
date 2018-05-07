@@ -105,6 +105,8 @@ function checks {
     fi
     mkl_mkvar_set "pkgconfig" PKG_CONFIG $PKG_CONFIG
 
+    [[ ! -z "$append_PKG_CONFIG_PATH" ]] && mkl_env_append PKG_CONFIG_PATH "$append_PKG_CONFIG_PATH" ":"
+
     # install
     if [ -z "$INSTALL" ]; then
 	if [[ $MKL_DISTRO == "SunOS" ]]; then
@@ -167,7 +169,7 @@ for n in CFLAGS CPPFLAGS CXXFLAGS LDFLAGS ARFLAGS; do
     mkl_option "Compiler" "mk:$n" "--$n=$n" "Add $n flags"
 done
 
-mkl_option "Compiler" "env:PKG_CONFIG_PATH" "--pkg-config-path=PKG_CONFIG_PATH" "Extra paths for pkg-config" "\$PKG_CONFIG_PATH"
+mkl_option "Compiler" "env:append_PKG_CONFIG_PATH" "--pkg-config-path=EXTRA_PATHS" "Extra paths for pkg-config"
 
 mkl_option "Compiler" "WITH_PROFILING" "--enable-profiling" "Enable profiling"
 mkl_option "Compiler" "WITH_STATIC_LINKING" "--enable-static" "Enable static linking"

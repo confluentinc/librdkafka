@@ -1669,6 +1669,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
         rk->rk_initialized = 1;
 
+        rd_kafka_dbg(rk, ALL, "INIT",
+                     "librdkafka v%s (0x%x) %s initialized (debug 0x%x)",
+                     rd_kafka_version_str(), rd_kafka_version(),
+                     rk->rk_name, rk->rk_conf.debug);
+
 	return rk;
 
 fail:

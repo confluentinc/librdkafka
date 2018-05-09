@@ -1332,8 +1332,10 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  * the result of the produce request.
  * 
  * The callback is called when a message is succesfully produced or
- * if librdkafka encountered a permanent failure, or the retry counter for
- * temporary errors has been exhausted.
+ * if librdkafka encountered a permanent failure.
+ * Delivery errors occur when the retry count is exceeded, when the
+ * message.timeout.ms timeout is exceeded or there is a permanent error
+ * like RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART.
  *
  * An application must call rd_kafka_poll() at regular intervals to
  * serve queued delivery report callbacks.
@@ -2957,6 +2959,22 @@ rd_kafka_position (rd_kafka_t *rk,
  * `rd_kafka_topic_new()`.
  *
  * `rd_kafka_produce()` is an asynch non-blocking API.
+ * See `rd_kafka_conf_set_dr_msg_cb` on how to setup a callback to be called
+ * once the delivery status (success or failure) is known. The delivery report
+ * is trigged by the application calling `rd_kafka_poll()` (at regular
+ * intervals) or `rd_kafka_flush()` (at termination). 
+ *
+ * When temporary errors occur, librdkafka automatically retries to produce the
+ * messages. Retries are triggered after retry.backoff.ms and when the
+ * leader broker for the given partition is available. Otherwise, librdkafka
+ * falls back to polling the topic metadata to monitor when a new leader is
+ * elected (see the topic.metadata.refresh.fast.interval.ms and
+ * topic.metadata.refresh.interval.ms configurations) and then performs a
+ * retry. A delivery error will occur if the message could not be produced
+ * within message.timeout.ms.
+ *
+ * See the "Message reliability" chapter in INTRODUCTION.md for more
+ * information.
  *
  * \p partition is the target partition, either:
  *   - RD_KAFKA_PARTITION_UA (unassigned) for

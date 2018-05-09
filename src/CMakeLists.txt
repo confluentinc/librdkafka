@@ -80,10 +80,7 @@ endif()
 
 # Define flags with cmake instead of by defining them on win32_config.h
 if(WITHOUT_WIN32_CONFIG)
-<<<<<<< HEAD
-=======
   list(APPEND rdkafka_compile_definitions WITHOUT_WIN32_CONFIG)
->>>>>>> ca7a8297bd550db59d9cd003722708c4ffbb9b63
   if(WITH_SSL)
     list(APPEND rdkafka_compile_definitions WITH_SSL)
   endif(WITH_SSL)
@@ -121,17 +118,10 @@ target_compile_definitions(rdkafka PUBLIC ${rdkafka_compile_definitions})
 if(RDKAFKA_BUILD_STATIC)
   target_compile_definitions(rdkafka PUBLIC LIBRDKAFKA_STATICLIB)
 endif()
-<<<<<<< HEAD
-if(WIN32)    
-  target_link_libraries(rdkafka PUBLIC crypt32)
-  if(NOT RDKAFKA_BUILD_STATIC)
-    target_compile_definitions(rdkafka PRIVATE LIBRDKAFKA_EXPORTS)  
-=======
 if(WIN32)
   target_link_libraries(rdkafka PUBLIC crypt32)
   if(NOT RDKAFKA_BUILD_STATIC)
     target_compile_definitions(rdkafka PRIVATE LIBRDKAFKA_EXPORTS)
->>>>>>> ca7a8297bd550db59d9cd003722708c4ffbb9b63
   endif()
 endif()
 

@@ -40,6 +40,7 @@ log_level                                |  *  | 0 .. 7          |             6
 log.queue                                |  *  | true, false     |         false | Disable spontaneous log_cb from internal librdkafka threads, instead enqueue log messages on queue set with `rd_kafka_set_log_queue()` and serve log callbacks or events through the standard poll APIs. **NOTE**: Log messages will linger in a temporary queue until the log queue has been set. <br>*Type: boolean*
 log.thread.name                          |  *  | true, false     |          true | Print internal thread name in log messages (useful for debugging librdkafka internals) <br>*Type: boolean*
 log.connection.close                     |  *  | true, false     |          true | Log broker disconnects. It might be useful to turn this off when interacting with 0.9 brokers with an aggressive `connection.max.idle.ms` value. <br>*Type: boolean*
+background_event_cb                      |  *  |                 |               | Background queue event callback (set with rd_kafka_conf_set_background_event_cb()) <br>*Type: pointer*
 socket_cb                                |  *  |                 |               | Socket creation callback to provide race-free CLOEXEC <br>*Type: pointer*
 connect_cb                               |  *  |                 |               | Socket connect callback <br>*Type: pointer*
 closesocket_cb                           |  *  |                 |               | Socket close callback <br>*Type: pointer*

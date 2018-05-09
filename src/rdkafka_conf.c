@@ -367,6 +367,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "It might be useful to turn this off when interacting with "
           "0.9 brokers with an aggressive `connection.max.idle.ms` value.",
 	  0, 1, 1 },
+        { _RK_GLOBAL, "background_event_cb", _RK_C_PTR,
+          _RK(background_event_cb),
+          "Background queue event callback "
+          "(set with rd_kafka_conf_set_background_event_cb())" },
         { _RK_GLOBAL, "socket_cb", _RK_C_PTR,
           _RK(socket_cb),
           "Socket creation callback to provide race-free CLOEXEC",
@@ -1729,6 +1733,14 @@ rd_kafka_topic_conf_t *rd_kafka_default_topic_conf_dup (rd_kafka_t *rk) {
 
 void rd_kafka_conf_set_events (rd_kafka_conf_t *conf, int events) {
 	conf->enabled_events = events;
+}
+
+void
+rd_kafka_conf_set_background_event_cb (rd_kafka_conf_t *conf,
+                                       void (*event_cb) (rd_kafka_t *rk,
+                                                         rd_kafka_event_t *rkev,
+                                                         void *opaque)) {
+        conf->background_event_cb = event_cb;
 }
 
 

@@ -201,6 +201,20 @@ struct rd_kafka_s {
 	thrd_t rk_thread;
 
         int rk_initialized;
+
+        /**
+         * Background thread and queue,
+         * enabled by setting `background_event_cb()`.
+         */
+        struct {
+                rd_kafka_q_t *q;  /**< Queue served by background thread. */
+                thrd_t thread;    /**< Background thread. */
+                int calling;      /**< Indicates whether the event callback
+                                   *   is being called, reset back to 0
+                                   *   when the callback returns.
+                                   *   This can be used for troubleshooting
+                                   *   purposes. */
+        } rk_background;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)
@@ -443,5 +457,12 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                   rd_kafka_q_cb_type_t cb_type, void *opaque);
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
+
+
+
+/**
+ * rdkafka_background.c
+ */
+int rd_kafka_background_thread_main (void *arg);
 
 #endif /* _RDKAFKA_INT_H_ */

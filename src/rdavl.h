@@ -32,7 +32,8 @@
  * Inspired by Ian Piumarta's tree.h implementation.
  */
 
-#pragma once
+#ifndef _RDAVL_H_
+#define _RDAVL_H_
 
 #include "tinycthread.h"
 
@@ -251,3 +252,5 @@ static RD_INLINE RD_UNUSED void *rd_avl_find (rd_avl_t *ravl, const void *elm,
 
         return ret;
 }
+
+#endif /* _RDAVL_H_ */

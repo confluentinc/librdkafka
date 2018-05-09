@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKACPP_H_
+#define _RDKAFKACPP_H_
 
 /**
  * @file rdkafkacpp.h
@@ -69,6 +70,13 @@
 
 /**@endcond*/
 
+extern "C" {
+        /* Forward declarations */
+        struct rd_kafka_s;
+        struct rd_kafka_topic_s;
+        struct rd_kafka_message_s;
+};
+
 namespace RdKafka {
 
 
@@ -91,7 +99,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x000b01ff
+#define RD_KAFKA_VERSION  0x000b04ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -1150,6 +1158,24 @@ class RD_EXPORT Handle {
    *          retrieved in the allotted timespan.
    */
   virtual const std::string clusterid (int timeout_ms) = 0;
+
+  /**
+   * @brief Returns the underlying librdkafka C rd_kafka_t handle.
+   *
+   * @warning Calling the C API on this handle is not recommended and there
+   *          is no official support for it, but for cases where the C++
+   *          does not provide the proper functionality this C handle can be
+   *          used to interact directly with the core librdkafka API.
+   *
+   * @remark The lifetime of the returned pointer is the same as the Topic
+   *         object this method is called on.
+   *
+   * @remark Include <rdkafka/rdkafka.h> prior to including
+   *         <rdkafka/rdkafkacpp.h>
+   *
+   * @returns \c rd_kafka_t*
+   */
+  virtual struct rd_kafka_s *c_ptr () = 0;
 };
 
 
@@ -1266,6 +1292,24 @@ class RD_EXPORT Topic {
    *          offsets could be stored.
    */
   virtual ErrorCode offset_store (int32_t partition, int64_t offset) = 0;
+
+  /**
+   * @brief Returns the underlying librdkafka C rd_kafka_topic_t handle.
+   *
+   * @warning Calling the C API on this handle is not recommended and there
+   *          is no official support for it, but for cases where the C++ API
+   *          does not provide the underlying functionality this C handle can be
+   *          used to interact directly with the core librdkafka API.
+   *
+   * @remark The lifetime of the returned pointer is the same as the Topic
+   *         object this method is called on.
+   *
+   * @remark Include <rdkafka/rdkafka.h> prior to including
+   *         <rdkafka/rdkafkacpp.h>
+   *
+   * @returns \c rd_kafka_topic_t*
+   */
+  virtual struct rd_kafka_topic_s *c_ptr () = 0;
 };
 
 
@@ -1370,6 +1414,24 @@ class RD_EXPORT Message {
   /** @returns the latency in microseconds for a produced message measured
    *           from the produce() call, or -1 if latency is not available. */
   virtual int64_t             latency () const = 0;
+
+  /**
+   * @brief Returns the underlying librdkafka C rd_kafka_message_t handle.
+   *
+   * @warning Calling the C API on this handle is not recommended and there
+   *          is no official support for it, but for cases where the C++ API
+   *          does not provide the underlying functionality this C handle can be
+   *          used to interact directly with the core librdkafka API.
+   *
+   * @remark The lifetime of the returned pointer is the same as the Message
+   *         object this method is called on.
+   *
+   * @remark Include <rdkafka/rdkafka.h> prior to including
+   *         <rdkafka/rdkafkacpp.h>
+   *
+   * @returns \c rd_kafka_message_t*
+   */
+  virtual struct rd_kafka_message_s *c_ptr () = 0;
 };
 
 /**@}*/
@@ -2219,3 +2281,4 @@ class Metadata {
 
 }
 
+#endif /* _RDKAFKACPP_H_ */

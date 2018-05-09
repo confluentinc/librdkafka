@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDTIME_H_
+#define _RDTIME_H_
 
 
 #ifndef TIMEVAL_TO_TIMESPEC
@@ -73,7 +74,12 @@ static RD_INLINE rd_ts_t rd_clock (void) {
 	gettimeofday(&tv, NULL);
 	return ((rd_ts_t)tv.tv_sec * 1000000LLU) + (rd_ts_t)tv.tv_usec;
 #elif defined(_MSC_VER)
-	return (rd_ts_t)GetTickCount64() * 1000LLU;
+        LARGE_INTEGER now;
+        static RD_TLS LARGE_INTEGER freq;
+        if (!freq.QuadPart)
+                QueryPerformanceFrequency(&freq);
+        QueryPerformanceCounter(&now);
+        return (now.QuadPart * 1000000) / freq.QuadPart;
 #else
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -179,3 +185,5 @@ rd_timeout_remains_limit (rd_ts_t abs_timeout, int limit_ms) {
 static RD_INLINE int rd_timeout_expired (int timeout_ms) {
 	return timeout_ms == RD_POLL_NOWAIT;
 }
+
+#endif /* _RDTIME_H_ */

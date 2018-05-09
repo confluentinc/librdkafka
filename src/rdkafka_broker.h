@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_BROKER_H_
+#define _RDKAFKA_BROKER_H_
 
 #include "rdkafka_feature.h"
 
@@ -64,13 +65,18 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;
 	int                 rkb_toppar_cnt;
 
-        /* Underflowed toppars that are eligible for fetching. */
-        CIRCLEQ_HEAD(, rd_kafka_toppar_s) rkb_fetch_toppars;
-        int                 rkb_fetch_toppar_cnt;
-        rd_kafka_toppar_t  *rkb_fetch_toppar_next;  /* Next 'first' toppar
-                                                     * in fetch list.
-                                                     * This is used for
-                                                     * round-robin. */
+        /* Active toppars that are eligible for:
+         *  - (consumer) fetching due to underflow
+         *  - (producer) producing
+         *
+         * The circleq provides round-robin scheduling for both cases.
+         */
+        CIRCLEQ_HEAD(, rd_kafka_toppar_s) rkb_active_toppars;
+        int                 rkb_active_toppar_cnt;
+        rd_kafka_toppar_t  *rkb_active_toppar_next;  /* Next 'first' toppar
+                                                      * in fetch list.
+                                                      * This is used for
+                                                      * round-robin. */
 
 
         rd_kafka_cgrp_t    *rkb_cgrp;
@@ -326,3 +332,30 @@ int rd_kafka_brokers_get_state_version (rd_kafka_t *rk);
 int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int stored_version,
 					int timeout_ms);
 void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk);
+
+
+
+/**
+ * Updates the current toppar active round-robin next pointer.
+ */
+static RD_INLINE RD_UNUSED
+void rd_kafka_broker_active_toppar_next (rd_kafka_broker_t *rkb,
+                                        rd_kafka_toppar_t *sugg_next) {
+        if (CIRCLEQ_EMPTY(&rkb->rkb_active_toppars) ||
+            (void *)sugg_next == CIRCLEQ_ENDC(&rkb->rkb_active_toppars))
+                rkb->rkb_active_toppar_next = NULL;
+        else if (sugg_next)
+                rkb->rkb_active_toppar_next = sugg_next;
+        else
+                rkb->rkb_active_toppar_next =
+                        CIRCLEQ_FIRST(&rkb->rkb_active_toppars);
+}
+
+
+void rd_kafka_broker_active_toppar_add (rd_kafka_broker_t *rkb,
+                                        rd_kafka_toppar_t *rktp);
+
+void rd_kafka_broker_active_toppar_del (rd_kafka_broker_t *rkb,
+                                        rd_kafka_toppar_t *rktp);
+
+#endif /* _RDKAFKA_BROKER_H_ */

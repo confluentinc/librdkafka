@@ -25,7 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#ifndef _RDKAFKA_PATTERN_H_
+#define _RDKAFKA_PATTERN_H_
 
 #include "rdregex.h"
 
@@ -63,3 +64,5 @@ rd_kafka_pattern_list_t *rd_kafka_pattern_list_new (const char *patternlist,
                                                     int errstr_size);
 rd_kafka_pattern_list_t *
 rd_kafka_pattern_list_copy (rd_kafka_pattern_list_t *src);
+
+#endif /* _RDKAFKA_PATTERN_H_ */

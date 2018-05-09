@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_MSGSET_H_
+#define _RDKAFKA_MSGSET_H_
 
 
 /**
@@ -45,3 +46,5 @@ rd_kafka_msgset_parse (rd_kafka_buf_t *rkbuf,
                        rd_kafka_buf_t *request,
                        rd_kafka_toppar_t *rktp,
                        const struct rd_kafka_toppar_ver *tver);
+
+#endif /* _RDKAFKA_MSGSET_H_ */

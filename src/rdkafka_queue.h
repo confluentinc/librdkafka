@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKA_QUEUE_H_
+#define _RDKAFKA_QUEUE_H_
 
 #include "rdkafka_op.h"
 #include "rdkafka_int.h"
@@ -764,3 +765,5 @@ struct rd_kafka_queue_s {
 void rd_kafka_q_dump (FILE *fp, rd_kafka_q_t *rkq);
 
 extern int RD_TLS rd_kafka_yield_thread;
+
+#endif /* _RDKAFKA_QUEUE_H_ */

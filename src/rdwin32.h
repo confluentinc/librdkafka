@@ -29,7 +29,8 @@
 /**
  * Win32 (Visual Studio) support
  */
-#pragma once
+#ifndef _RDWIN32_H_
+#define _RDWIN32_H_
 
 
 #include <stdlib.h>
@@ -260,3 +261,5 @@ rd_strerror_w32 (DWORD errcode, char *dst, size_t dstsize) {
 }
 
 #endif /* !__cplusplus*/
+
+#endif /* _RDWIN32_H_ */

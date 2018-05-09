@@ -162,6 +162,9 @@ _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
 _TEST_DECL(0077_compaction);
+_TEST_DECL(0078_c_from_cpp);
+_TEST_DECL(0079_fork);
+_TEST_DECL(0081_fetch_max_bytes);
 
 
 /* Manual tests */
@@ -259,6 +262,11 @@ struct test tests[] = {
 #endif
         _TEST(0076_produce_retry, 0),
         _TEST(0077_compaction, 0, TEST_BRKVER(0,9,0,0)),
+        _TEST(0078_c_from_cpp, TEST_F_LOCAL),
+        _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE,
+              .extra = "using a fork():ed rd_kafka_t is not supported and will "
+              "most likely hang"),
+        _TEST(0081_fetch_max_bytes, 0, TEST_BRKVER(0,10,1,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -521,7 +529,7 @@ static void test_read_conf_file (const char *conf_path,
                                  rd_kafka_topic_conf_t *topic_conf,
                                  int *timeoutp) {
         FILE *fp;
-	char buf[512];
+	char buf[1024];
 	int line = 0;
 
 #ifndef _MSC_VER
@@ -1720,8 +1728,8 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
  * destroy consumer, and returns the used testid.
  */
 uint64_t
-test_produce_msgs_easy (const char *topic, uint64_t testid,
-                        int32_t partition, int msgcnt) {
+test_produce_msgs_easy_size (const char *topic, uint64_t testid,
+                             int32_t partition, int msgcnt, size_t size) {
         rd_kafka_t *rk;
         rd_kafka_topic_t *rkt;
         test_timing_t t_produce;
@@ -1732,7 +1740,7 @@ test_produce_msgs_easy (const char *topic, uint64_t testid,
         rkt = test_create_producer_topic(rk, topic, NULL);
 
         TIMING_START(&t_produce, "PRODUCE");
-        test_produce_msgs(rk, rkt, testid, partition, 0, msgcnt, NULL, 0);
+        test_produce_msgs(rk, rkt, testid, partition, 0, msgcnt, NULL, size);
         TIMING_STOP(&t_produce);
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
@@ -2259,7 +2267,7 @@ int test_msgver_add_msg0 (const char *func, int line,
 			  test_msgver_t *mv, rd_kafka_message_t *rkmessage) {
 	uint64_t in_testid;
 	int in_part;
-	int in_msgnum;
+	int in_msgnum = -1;
 	char buf[128];
         const void *val;
         size_t valsize;
@@ -3290,6 +3298,7 @@ int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
                                         int32_t cnt;
                                         cnt = metadata->topics[0].partition_cnt;
                                         rd_kafka_metadata_destroy(metadata);
+                                        rd_kafka_topic_destroy(rkt);
                                         return (int)cnt;
                                 }
                                 TEST_SAY("metadata(%s) returned %s: retrying\n",
@@ -3459,7 +3468,7 @@ void test_report_add (struct test *test, const char *fmt, ...) {
 int test_can_create_topics (int skip) {
 #ifdef _MSC_VER
 	if (skip)
-		TEST_SKIP("Cannot create topics on Win32");
+		TEST_SKIP("Cannot create topics on Win32\n");
 	return 0;
 #else
 

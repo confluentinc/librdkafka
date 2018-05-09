@@ -73,10 +73,10 @@ $(SRCS_LZ4:.c=.o): CFLAGS:=$(CFLAGS) -O3
 ifeq ($(WITH_LDS),y)
 # Enable linker script if supported by platform
 LIB_LDFLAGS+= $(LDFLAG_LINKERSCRIPT)$(LIBNAME).lds
-endif
 
 $(LIBNAME).lds: $(HDRS)
 	@(printf "$(MKL_YELLOW)Generating linker script $@ from $(HDRS)$(MKL_CLR_RESET)\n" ; \
 	  cat $(HDRS) | ../lds-gen.py > $@)
+endif
 
 -include $(DEPS)

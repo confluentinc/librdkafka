@@ -10,22 +10,22 @@ librdkafka also provides a native C++ interface.
 
 The following chapters are available in this document
 
-  * Performance
-    * Performance numbers
-    * High throughput
-    * Low latency
-    * Compression
-  * Message reliability
-  * Usage
-    * Documentation
-    * Initialization
-    * Configuration
-    * Threads and callbacks
-    * Brokers
-    * Producer API
-    * Consumer API
-  * Appendix
-    * Test detailts
+  * [Performance](#performance)
+    * [Performance numbers](#performance-numbers)
+    * [High throughput](#high-throughput)
+    * [Low latency](#low-latency)
+    * [Compression](#compression)
+  * [Message reliability](#message-reliability)
+  * [Usage](#usage)
+    * [Documentation](#documentation)
+    * [Initialization](#initialization)
+    * [Configuration](#configuration)
+    * [Threads and callbacks](#threads-and-callbacks)
+    * [Brokers](#brokers)
+    * [Producer API](#producer-api)
+    * [Consumer API](#simple-consumer-api-legacy)
+  * [Appendix](#appendix)
+    * [Test details](#test-details)
   
 
 

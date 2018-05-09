@@ -191,12 +191,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  0, 1000000000, 0xffff },
 	{ _RK_GLOBAL, "receive.message.max.bytes", _RK_C_INT,
           _RK(recv_max_msg_size),
-	  "Maximum Kafka protocol response message size. "
-	  "This is a safety precaution to avoid memory exhaustion in case of "
-	  "protocol hickups. "
-          "The value should be at least fetch.message.max.bytes * number of "
-          "partitions consumed from + messaging overhead (e.g. 200000 bytes).",
-	  1000, 1000000000, 100000000 },
+          "Maximum Kafka protocol response message size. "
+          "This serves as a safety precaution to avoid memory exhaustion in "
+          "case of protocol hickups. "
+          "This value is automatically adjusted upwards to be at least "
+          "`fetch.max.bytes` + 512 to allow for protocol overhead.",
+	  1000, INT_MAX, 100000000 },
 	{ _RK_GLOBAL, "max.in.flight.requests.per.connection", _RK_C_INT,
 	  _RK(max_inflight),
 	  "Maximum number of in-flight requests per broker connection. "
@@ -523,6 +523,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
 	 .validate = rd_kafka_conf_validate_single },
+        {_RK_GLOBAL,"sasl.mechanism", _RK_C_ALIAS,
+         .sdef = "sasl.mechanisms" },
 	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
 	  _RK(sasl.service_name),
 	  "Kerberos principal name that Kafka runs as, "
@@ -615,7 +617,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         /* Global consumer properties */
         { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.commit", _RK_C_BOOL,
           _RK(enable_auto_commit),
-          "Automatically and periodically commit offsets in the background.",
+          "Automatically and periodically commit offsets in the background. "
+          "Note: setting this to false does not prevent the consumer from "
+          "fetching previously committed start offsets. To circumvent this "
+          "behaviour set specific start offsets per partition in the call "
+          "to assign().",
           0, 1, 1 },
         { _RK_GLOBAL|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RK(auto_commit_interval_ms),
@@ -655,6 +661,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           1, 1000000000, 1024*1024 },
 	{ _RK_GLOBAL|_RK_CONSUMER, "max.partition.fetch.bytes", _RK_C_ALIAS,
 	  .sdef = "fetch.message.max.bytes" },
+        { _RK_GLOBAL|_RK_CONSUMER, "fetch.max.bytes", _RK_C_INT,
+          _RK(fetch_max_bytes),
+          "Maximum amount of data the broker shall return for a Fetch request. "
+          "Messages are fetched in batches by the consumer and if the first "
+          "message batch in the first non-empty partition of the Fetch request "
+          "is larger than this value, then the message batch will still be "
+          "returned to ensure the consumer can make progress. "
+          "The maximum message batch size accepted by the broker is defined "
+          "via `message.max.bytes` (broker config) or "
+          "`max.message.bytes` (broker topic config). "
+          "`fetch.max.bytes` is automatically adjusted upwards to be "
+          "at least `message.max.bytes` (consumer config).",
+          0, INT_MAX-512, 50*1024*1024 /* 50MB */ },
 	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.min.bytes", _RK_C_INT,
 	  _RK(fetch_min_bytes),
 	  "Minimum number of bytes the broker responds with. "
@@ -733,6 +752,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(retry_backoff_ms),
 	  "The backoff time in milliseconds before retrying a protocol request.",
 	  1, 300*1000, 100 },
+
+        { _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.backpressure.threshold",
+          _RK_C_INT, _RK(queue_backpressure_thres),
+          "The threshold of outstanding not yet transmitted requests "
+          "needed to backpressure the producer's message accumulator. "
+          "A lower number yields larger and more effective batches.",
+          0, 1000000, 10 },
+
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),
 	  "compression codec to use for compressing message sets. "
@@ -781,7 +808,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "*0*=Broker does not send any response/ack to client, "
 	  "*1*=Only the leader broker will need to ack the message, "
 	  "*-1* or *all*=broker will block until message is committed by all "
-	  "in sync replicas (ISRs) or broker's `in.sync.replicas` "
+	  "in sync replicas (ISRs) or broker's `min.insync.replicas` "
 	  "setting before sending response. ",
 	  -1, 1000, 1,
 	  .s2i = {

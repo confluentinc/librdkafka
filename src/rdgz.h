@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDGZ_H_
+#define _RDGZ_H_
 
 /**
  * Simple gzip decompression returning the inflated data
@@ -40,3 +41,5 @@
  */
 void *rd_gz_decompress (const void *compressed, int compressed_len,
 			uint64_t *decompressed_lenp);
+
+#endif /* _RDGZ_H_ */

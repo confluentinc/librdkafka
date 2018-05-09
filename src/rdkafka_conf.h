@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _RDKAFKA_CONF_H_
+#define _RDKAFKA_CONF_H_
 
 #include "rdlist.h"
 
@@ -178,6 +179,7 @@ struct rd_kafka_conf_s {
         int64_t queued_max_msg_bytes;
 	int    fetch_wait_max_ms;
         int    fetch_msg_max_bytes;
+        int    fetch_max_bytes;
 	int    fetch_min_bytes;
 	int    fetch_error_backoff_ms;
         char  *group_id_str;
@@ -216,6 +218,7 @@ struct rd_kafka_conf_s {
 	int    queue_buffering_max_msgs;
 	int    queue_buffering_max_kbytes;
 	int    buffering_max_ms;
+        int    queue_backpressure_thres;
 	int    max_retries;
 	int    retry_backoff_ms;
 	int    batch_num_messages;
@@ -343,3 +346,5 @@ struct rd_kafka_topic_conf_s {
 
 
 void rd_kafka_anyconf_destroy (int scope, void *conf);
+
+#endif /* _RDKAFKA_CONF_H_ */

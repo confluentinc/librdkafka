@@ -45,7 +45,7 @@ struct expect {
 
 
 static void expect_check (const char *what, const struct expect *expected,
-                          const rd_kafka_message_t *rkmessage) {
+                          rd_kafka_message_t *rkmessage, int is_const) {
         const struct expect *exp;
         rd_kafka_resp_err_t err;
         size_t idx = 0;
@@ -63,8 +63,17 @@ static void expect_check (const char *what, const struct expect *expected,
 
         if ((err = rd_kafka_message_headers(rkmessage, &hdrs))) {
                 if (msgid == 0) {
+                        rd_kafka_resp_err_t err2;
                         TEST_SAYL(3, "%s: Msg #%d: no headers, good\n",
                                   what, msgid);
+
+                        err2 = rd_kafka_message_detach_headers(rkmessage, &hdrs);
+                        TEST_ASSERT(err == err2,
+                                    "expected detach_headers() error %s "
+                                    "to match headers() error %s",
+                                    rd_kafka_err2str(err2),
+                                    rd_kafka_err2str(err));
+
                         return; /* No headers expected for first message */
                 }
 
@@ -151,6 +160,26 @@ static void expect_check (const char *what, const struct expect *expected,
                     "%s: Expected the expected, but stuck at %s which was "
                     "unexpected",
                     what, exp->name);
+
+        if (!strcmp(what, "handle_consumed_msg") && !is_const &&
+            (msgid % 3) == 0) {
+                rd_kafka_headers_t *dhdrs;
+
+                err = rd_kafka_message_detach_headers(rkmessage, &dhdrs);
+                TEST_ASSERT(!err,
+                            "detach_headers() should not fail, got %s",
+                            rd_kafka_err2str(err));
+                TEST_ASSERT(hdrs == dhdrs);
+
+                /* Verify that a new headers object can be obtained */
+                err = rd_kafka_message_headers(rkmessage, &hdrs);
+                TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR);
+                TEST_ASSERT(hdrs != dhdrs);
+                rd_kafka_headers_destroy(dhdrs);
+
+                expect_check("post_detach_headers", expected,
+                             rkmessage, is_const);
+       }
 }
 
 
@@ -158,7 +187,7 @@ static void expect_check (const char *what, const struct expect *expected,
  * @brief Final (as in no more header modifications) message check.
  */
 static void msg_final_check (const char *what,
-                             const rd_kafka_message_t *rkmessage) {
+                             rd_kafka_message_t *rkmessage, int is_const) {
         const struct expect expected[] = {
                 { "msgid", NULL }, /* special handling */
                 { "static", "hey" },
@@ -169,7 +198,7 @@ static void msg_final_check (const char *what,
                 { NULL }
         };
 
-        expect_check(what, expected, rkmessage);
+        expect_check(what, expected, rkmessage, is_const);
 
         exp_msgid++;
 
@@ -179,8 +208,8 @@ static void msg_final_check (const char *what,
 /**
  * @brief Handle consumed message, must be identical to dr_msg_cb
  */
-static void handle_consumed_msg (const rd_kafka_message_t *rkmessage) {
-        msg_final_check(__FUNCTION__, rkmessage);
+static void handle_consumed_msg (rd_kafka_message_t *rkmessage) {
+        msg_final_check(__FUNCTION__, rkmessage, 0);
 }
 
 /**
@@ -192,7 +221,7 @@ static void dr_msg_cb (rd_kafka_t *rk,
                     "Message delivery failed: %s",
                     rd_kafka_err2str(rkmessage->err));
 
-        msg_final_check(__FUNCTION__, rkmessage);
+        msg_final_check(__FUNCTION__, (rd_kafka_message_t *)rkmessage, 1);
 }
 
 
@@ -215,7 +244,7 @@ static rd_kafka_resp_err_t on_send1 (rd_kafka_t *rk,
         rd_kafka_headers_t *hdrs;
         rd_kafka_resp_err_t err;
 
-        expect_check(__FUNCTION__, expected, rkmessage);
+        expect_check(__FUNCTION__, expected, rkmessage, 0);
 
         err = rd_kafka_message_headers(rkmessage, &hdrs);
         if (err) /* First message has no headers. */
@@ -246,7 +275,7 @@ static rd_kafka_resp_err_t on_send2 (rd_kafka_t *rk,
                 { NULL }
         };
 
-        expect_check(__FUNCTION__, expected, rkmessage);
+        expect_check(__FUNCTION__, expected, rkmessage, 0);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

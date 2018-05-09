@@ -25,7 +25,8 @@
 * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 * POSSIBILITY OF SUCH DAMAGE.
 */
-#pragma once
+#ifndef _TESTSHARED_H_
+#define _TESTSHARED_H_
 
 /**
  * C variables and functions shared with C++ tests
@@ -48,8 +49,10 @@ extern int test_on_ci;
 const char *test_mk_topic_name (const char *suffix, int randomized);
 
 uint64_t
-test_produce_msgs_easy (const char *topic, uint64_t testid,
-                        int32_t partition, int msgcnt);
+test_produce_msgs_easy_size (const char *topic, uint64_t testid,
+                             int32_t partition, int msgcnt, size_t size);
+#define test_produce_msgs_easy(topic,testid,partition,msgcnt) \
+        test_produce_msgs_easy_size(topic,testid,partition,msgcnt,0)
 
 void test_FAIL (const char *file, int line, int fail_now, const char *str);
 void test_SAY (const char *file, int line, int level, const char *str);
@@ -96,7 +99,12 @@ static RD_INLINE int64_t test_clock (void) {
         gettimeofday(&tv, NULL);
         return ((int64_t)tv.tv_sec * 1000000LLU) + (int64_t)tv.tv_usec;
 #elif _MSC_VER
-        return (int64_t)GetTickCount64() * 1000LLU;
+        LARGE_INTEGER now;
+        static RD_TLS LARGE_INTEGER freq;
+        if (!freq.QuadPart)
+                QueryPerformanceFrequency(&freq);
+        QueryPerformanceCounter(&now);
+        return (now.QuadPart * 1000000) / freq.QuadPart;
 #else
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -167,3 +175,11 @@ static RD_UNUSED int TIMING_EVERY (test_timing_t *timing, int us) {
 #else
 #define rd_sleep(S) Sleep((S)*1000)
 #endif
+
+/* Make sure __SANITIZE_ADDRESS__ (gcc) is defined if compiled with asan */
+#if !defined(__SANITIZE_ADDRESS__) && defined(__has_feature)
+ #if __has_feature(address_sanitizer)
+ #define __SANITIZE_ADDRESS__ 1
+ #endif
+#endif
+#endif /* _TESTSHARED_H_ */

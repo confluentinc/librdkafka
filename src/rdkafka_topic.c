@@ -566,7 +566,10 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                              rkt->rkt_topic->str,
                              rd_kafka_toppar_s2i(s_rktp)->rktp_partition);
                 rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp),
-                                          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
+                                          RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
+                                          "desired partition does not exist "
+                                          "in cluster");
+
         }
 
 	/* Remove excessive partitions */
@@ -598,7 +601,8 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                         if (!rd_kafka_terminating(rkt->rkt_rk))
                                 rd_kafka_toppar_enq_error(
                                         rktp,
-                                        RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION);
+                                        RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION,
+                                        "desired partition no longer exists");
 
 			rd_kafka_toppar_broker_delegate(rktp, NULL, 0);
 
@@ -644,7 +648,8 @@ static void rd_kafka_topic_propagate_notexists (rd_kafka_itopic_t *rkt,
 
         /* Notify consumers that the topic doesn't exist. */
         RD_LIST_FOREACH(s_rktp, &rkt->rkt_desp, i)
-                rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp), err);
+                rd_kafka_toppar_enq_error(rd_kafka_toppar_s2i(s_rktp), err,
+                                          "topic does not exist");
 }
 
 
@@ -676,16 +681,17 @@ static void rd_kafka_topic_assign_uas (rd_kafka_itopic_t *rkt,
         rktp_ua = rd_kafka_toppar_s2i(s_rktp_ua);
 
 	/* Assign all unassigned messages to new topics. */
-	rd_kafka_dbg(rk, TOPIC, "PARTCNT",
-		     "Partitioning %i unassigned messages in topic %.*s to "
-		     "%"PRId32" partitions",
-		     rd_atomic32_get(&rktp_ua->rktp_msgq.rkmq_msg_cnt),
-		     RD_KAFKAP_STR_PR(rkt->rkt_topic),
-		     rkt->rkt_partition_cnt);
+        rd_kafka_toppar_lock(rktp_ua);
 
-	rd_kafka_toppar_lock(rktp_ua);
+        rd_kafka_dbg(rk, TOPIC, "PARTCNT",
+                     "Partitioning %i unassigned messages in topic %.*s to "
+                     "%"PRId32" partitions",
+                     rktp_ua->rktp_msgq.rkmq_msg_cnt,
+                     RD_KAFKAP_STR_PR(rkt->rkt_topic),
+                     rkt->rkt_partition_cnt);
+
 	rd_kafka_msgq_move(&uas, &rktp_ua->rktp_msgq);
-	cnt = rd_atomic32_get(&uas.rkmq_msg_cnt);
+	cnt = uas.rkmq_msg_cnt;
 	rd_kafka_toppar_unlock(rktp_ua);
 
 	TAILQ_FOREACH_SAFE(rkm, &uas.rkmq_msgs, rkm_link, tmp) {
@@ -703,18 +709,16 @@ static void rd_kafka_topic_assign_uas (rd_kafka_itopic_t *rkt,
 		}
 	}
 
-	rd_kafka_dbg(rk, TOPIC, "UAS",
-		     "%i/%i messages were partitioned in topic %s",
-		     cnt - rd_atomic32_get(&failed.rkmq_msg_cnt),
-		     cnt, rkt->rkt_topic->str);
+        rd_kafka_dbg(rk, TOPIC, "UAS",
+                     "%i/%i messages were partitioned in topic %s",
+                     cnt - failed.rkmq_msg_cnt, cnt, rkt->rkt_topic->str);
 
-	if (rd_atomic32_get(&failed.rkmq_msg_cnt) > 0) {
-		/* Fail the messages */
-		rd_kafka_dbg(rk, TOPIC, "UAS",
-			     "%"PRId32"/%i messages failed partitioning "
-			     "in topic %s",
-			     rd_atomic32_get(&uas.rkmq_msg_cnt), cnt,
-			     rkt->rkt_topic->str);
+        if (failed.rkmq_msg_cnt > 0) {
+                /* Fail the messages */
+                rd_kafka_dbg(rk, TOPIC, "UAS",
+                             "%"PRId32"/%i messages failed partitioning "
+                             "in topic %s",
+                             failed.rkmq_msg_cnt, cnt, rkt->rkt_topic->str);
 		rd_kafka_dr_msgq(rkt, &failed,
 				 rkt->rkt_state == RD_KAFKA_TOPIC_S_NOTEXISTS ?
 				 err :
@@ -1036,10 +1040,12 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
 
 
 /**
- * Scan all topics and partitions for:
+ * @brief Scan all topics and partitions for:
  *  - timed out messages.
  *  - topics that needs to be created on the broker.
  *  - topics who's metadata is too old.
+ *
+ * @locality rdkafka main thread
  */
 int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 	rd_kafka_itopic_t *rkt;
@@ -1124,11 +1130,6 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                                 query_this = 1;
                         }
 
-			/* Scan toppar's message queues for timeouts */
-			if (rd_kafka_msgq_age_scan(&rktp->rktp_xmit_msgq,
-						   &timedout, now) > 0)
-				did_tmout = 1;
-
 			if (rd_kafka_msgq_age_scan(&rktp->rktp_msgq,
 						   &timedout, now) > 0)
 				did_tmout = 1;
@@ -1141,7 +1142,7 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 
                 rd_kafka_topic_rdunlock(rkt);
 
-                if ((cnt = rd_atomic32_get(&timedout.rkmq_msg_cnt)) > 0) {
+                if ((cnt = timedout.rkmq_msg_cnt) > 0) {
                         totcnt += cnt;
                         rd_kafka_dbg(rk, MSG, "TIMEOUT",
                                      "%s: %"PRId32" message(s) "

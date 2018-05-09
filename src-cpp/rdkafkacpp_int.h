@@ -26,7 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#pragma once
+#ifndef _RDKAFKACPP_INT_H_
+#define _RDKAFKACPP_INT_H_
 
 #include <string>
 #include <iostream>
@@ -133,9 +134,6 @@ class MessageImpl : public Message {
                bool dofree):
   topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree), key_(NULL) { }
 
-  MessageImpl (RdKafka::Topic *topic, const rd_kafka_message_t *rkmessage):
-  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(false), key_(NULL) { }
-
   MessageImpl (rd_kafka_message_t *rkmessage):
   topic_(NULL), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) {
     if (rkmessage->rkt) {
@@ -204,8 +202,12 @@ class MessageImpl : public Message {
           return rd_kafka_message_latency(rkmessage_);
   }
 
+  struct rd_kafka_message_s *c_ptr () {
+          return rkmessage_;
+  }
+
   RdKafka::Topic *topic_;
-  const rd_kafka_message_t *rkmessage_;
+  rd_kafka_message_t *rkmessage_;
   bool free_rkmessage_;
   /* For error signalling by the C++ layer the .._err_ message is
    * used as a place holder and rkmessage_ is set to point to it. */
@@ -601,6 +603,10 @@ class HandleImpl : virtual public Handle {
           return clusterid;
   }
 
+  struct rd_kafka_s *c_ptr () {
+          return rk_;
+  }
+
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
    * the opaque provided to rdkafka must be a pointer to HandleImpl, since
@@ -639,6 +645,10 @@ class TopicImpl : public Topic {
 
   static Topic *create (Handle &base, const std::string &topic,
                         Conf *conf);
+
+  struct rd_kafka_topic_s *c_ptr () {
+          return rkt_;
+  }
 
   rd_kafka_topic_t *rkt_;
   PartitionerCb *partitioner_cb_;
@@ -896,3 +906,5 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
 
 
 }
+
+#endif /* _RDKAFKACPP_INT_H_ */

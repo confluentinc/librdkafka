@@ -70,6 +70,9 @@ set(
     0075-retry.c
     0076-produce_retry.c
     0077-compaction.c
+    0078-c_from_cpp.cpp
+    0079-fork.c
+    0081-fetch_max_bytes.cpp
     8000-idle.cpp
     test.c
     testcpp.cpp    

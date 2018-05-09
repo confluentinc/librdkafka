@@ -188,16 +188,16 @@ rd_kafka_buf_t *rd_kafka_buf_new_shadow (const void *ptr, size_t size,
 void rd_kafka_bufq_enq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
 	TAILQ_INSERT_TAIL(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
 	(void)rd_atomic32_add(&rkbufq->rkbq_cnt, 1);
-	(void)rd_atomic32_add(&rkbufq->rkbq_msg_cnt,
-                            rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
+        (void)rd_atomic32_add(&rkbufq->rkbq_msg_cnt,
+                              rkbuf->rkbuf_msgq.rkmq_msg_cnt);
 }
 
 void rd_kafka_bufq_deq (rd_kafka_bufq_t *rkbufq, rd_kafka_buf_t *rkbuf) {
 	TAILQ_REMOVE(&rkbufq->rkbq_bufs, rkbuf, rkbuf_link);
 	rd_kafka_assert(NULL, rd_atomic32_get(&rkbufq->rkbq_cnt) > 0);
 	(void)rd_atomic32_sub(&rkbufq->rkbq_cnt, 1);
-	(void)rd_atomic32_sub(&rkbufq->rkbq_msg_cnt,
-                          rd_atomic32_get(&rkbuf->rkbuf_msgq.rkmq_msg_cnt));
+        (void)rd_atomic32_sub(&rkbufq->rkbq_msg_cnt,
+                              rkbuf->rkbuf_msgq.rkmq_msg_cnt);
 }
 
 void rd_kafka_bufq_init(rd_kafka_bufq_t *rkbufq) {

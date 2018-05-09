@@ -636,7 +636,7 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_toppar_t *rktp = msetr->msetr_rktp;
         struct {
                 int64_t Length;
-                int64_t  MsgAttributes; /* int8_t, but int64 req. for varint */
+                int8_t  MsgAttributes;
                 int64_t TimestampDelta;
                 int64_t OffsetDelta;
                 int64_t Offset;  /* Absolute offset */
@@ -653,7 +653,7 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
 
         rd_kafka_buf_read_varint(rkbuf, &hdr.Length);
         message_end = rd_slice_offset(&rkbuf->rkbuf_reader)+(size_t)hdr.Length;
-        rd_kafka_buf_read_varint(rkbuf, &hdr.MsgAttributes);
+        rd_kafka_buf_read_i8(rkbuf, &hdr.MsgAttributes);
 
         rd_kafka_buf_read_varint(rkbuf, &hdr.TimestampDelta);
         rd_kafka_buf_read_varint(rkbuf, &hdr.OffsetDelta);
@@ -662,7 +662,10 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
         /* Skip message if outdated */
         if (hdr.Offset < rktp->rktp_offsets.fetch_offset) {
                 rd_rkb_dbg(msetr->msetr_rkb, MSG, "MSG",
+                           "%s [%"PRId32"]: "
                            "Skip offset %"PRId64" < fetch_offset %"PRId64,
+                           rktp->rktp_rkt->rkt_topic->str,
+                           rktp->rktp_partition,
                            hdr.Offset, rktp->rktp_offsets.fetch_offset);
                 rd_kafka_buf_skip_to(rkbuf, message_end);
                 return RD_KAFKA_RESP_ERR_NO_ERROR; /* Continue with next msg */

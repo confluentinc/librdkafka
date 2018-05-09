@@ -25,8 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#pragma once
+#ifndef _RDKAFKA_REQUEST_H_
+#define _RDKAFKA_REQUEST_H_
 
 #include "rdkafka_cgrp.h"
 #include "rdkafka_feature.h"
@@ -194,3 +194,5 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    void *opaque, int flash_msg);
 
 int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp);
+
+#endif /* _RDKAFKA_REQUEST_H_ */

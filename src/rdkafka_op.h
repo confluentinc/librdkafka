@@ -25,7 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
+#ifndef _RDKAFKA_OP_H_
+#define _RDKAFKA_OP_H_
 
 
 #include "rdkafka_msg.h"
@@ -111,8 +112,8 @@ typedef enum {
 } rd_kafka_op_type_t;
 
 /* Flags used with op_type_t */
-#define RD_KAFKA_OP_CB        (1 << 30)  /* Callback op. */
-#define RD_KAFKA_OP_REPLY     (1 << 31)  /* Reply op. */
+#define RD_KAFKA_OP_CB        (int)(1 << 29)  /* Callback op. */
+#define RD_KAFKA_OP_REPLY     (int)(1 << 30)  /* Reply op. */
 #define RD_KAFKA_OP_FLAGMASK  (RD_KAFKA_OP_CB | RD_KAFKA_OP_REPLY)
 
 
@@ -398,3 +399,5 @@ void rd_kafka_op_print (FILE *fp, const char *prefix, rd_kafka_op_t *rko);
 
 void rd_kafka_op_offset_store (rd_kafka_t *rk, rd_kafka_op_t *rko,
 			       const rd_kafka_message_t *rkmessage);
+
+#endif /* _RDKAFKA_OP_H_ */

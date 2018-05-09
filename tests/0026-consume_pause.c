@@ -221,7 +221,8 @@ static int consume_pause (void) {
 int main_0026_consume_pause (int argc, char **argv) {
         int fails = 0;
 
-        fails += consume_pause();
+        if (test_can_create_topics(1))
+                fails += consume_pause();
 
         if (fails > 0)
                 TEST_FAIL("See %d previous error(s)\n", fails);

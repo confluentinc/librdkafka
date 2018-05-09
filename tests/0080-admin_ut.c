@@ -113,7 +113,8 @@ static void do_test_CreateTopics (const char *what,
                 new_topics[i] = rd_kafka_NewTopic_new(topic,
                                                       num_parts,
                                                       set_replicas ? -1 :
-                                                      num_replicas);
+                                                      num_replicas,
+                                                      NULL, 0);
 
                 if (set_config) {
                         /*

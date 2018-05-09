@@ -3296,8 +3296,9 @@ static void test_admin_create_topic (rd_kafka_t *use_rk,
         rkqu = rd_kafka_queue_new(rk);
 
         newt[0] = rd_kafka_NewTopic_new(topicname, partition_cnt,
-                                     replication_factor);
-        TEST_ASSERT(newt[0] != NULL);
+                                        replication_factor,
+                                        errstr, sizeof(errstr));
+        TEST_ASSERT(newt[0] != NULL, "%s", errstr);
 
         options = rd_kafka_AdminOptions_new(rk, "CreateTopics");
         err = rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms,
@@ -4036,11 +4037,13 @@ test_CreateTopics_simple (rd_kafka_t *rk,
         new_topics = malloc(sizeof(*new_topics) * topic_cnt);
 
         for (i = 0 ; i < topic_cnt ; i++) {
+                char errstr[512];
                 new_topics[i] = rd_kafka_NewTopic_new(topics[i],
-                                                      num_partitions, 1);
+                                                      num_partitions, 1,
+                                                      errstr, sizeof(errstr));
                 TEST_ASSERT(new_topics[i],
-                            "Failed to NewTopic(\"%s\", %d) #%"PRIusz,
-                            topics[i], num_partitions, i);
+                            "Failed to NewTopic(\"%s\", %d) #%"PRIusz": %s",
+                            topics[i], num_partitions, i, errstr);
         }
 
         options = rd_kafka_AdminOptions_new(rk, "CreateTopics");
@@ -4099,11 +4102,13 @@ test_CreatePartitions_simple (rd_kafka_t *rk,
         rd_kafka_queue_t *q;
         const int tmout = 30 * 1000;
         rd_kafka_resp_err_t err;
+        char errstr[512];
 
-        newp[0] = rd_kafka_NewPartitions_new(topic, total_part_cnt);
+        newp[0] = rd_kafka_NewPartitions_new(topic, total_part_cnt, errstr,
+                                             sizeof(errstr));
         TEST_ASSERT(newp[0],
-                    "Failed to NewPartitions(\"%s\", %"PRIusz")",
-                    topic, total_part_cnt);
+                    "Failed to NewPartitions(\"%s\", %"PRIusz"): %s",
+                    topic, total_part_cnt, errstr);
 
         options = rd_kafka_AdminOptions_new(rk, "CreatePartitions");
         rd_kafka_AdminOptions_set_opaque(options, opaque);

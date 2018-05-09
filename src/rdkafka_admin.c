@@ -1012,14 +1012,29 @@ void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options) {
 rd_kafka_NewTopic_t *
 rd_kafka_NewTopic_new (const char *topic,
                        int num_partitions,
-                       int replication_factor) {
+                       int replication_factor,
+                       char *errstr, size_t errstr_size) {
         rd_kafka_NewTopic_t *new_topic;
 
-        if (!topic ||
-            num_partitions < 1 || num_partitions > RD_KAFKAP_PARTITIONS_MAX ||
-            replication_factor < -1 ||
-            replication_factor > RD_KAFKAP_BROKERS_MAX)
+        if (!topic) {
+                rd_snprintf(errstr, errstr_size, "Invalid topic name");
                 return NULL;
+        }
+
+        if (num_partitions < 1 || num_partitions > RD_KAFKAP_PARTITIONS_MAX) {
+                rd_snprintf(errstr, errstr_size, "num_partitions out of "
+                            "expected range %d..%d",
+                            1, RD_KAFKAP_PARTITIONS_MAX);
+                return NULL;
+        }
+
+        if (replication_factor < -1 ||
+            replication_factor > RD_KAFKAP_BROKERS_MAX) {
+                rd_snprintf(errstr, errstr_size,
+                            "replication_factor out of expected range %d..%d",
+                            -1, RD_KAFKAP_BROKERS_MAX);
+                return NULL;
+        }
 
         new_topic = rd_calloc(1, sizeof(*new_topic));
         new_topic->topic = rd_strdup(topic);
@@ -1057,7 +1072,8 @@ rd_kafka_NewTopic_copy (const rd_kafka_NewTopic_t *src) {
         rd_kafka_NewTopic_t *dst;
 
         dst = rd_kafka_NewTopic_new(src->topic, src->num_partitions,
-                                    src->replication_factor);
+                                    src->replication_factor, NULL, 0);
+        rd_assert(dst);
 
         rd_list_destroy(&dst->replicas); /* created in .._new() */
         rd_list_init_copy(&dst->replicas, &src->replicas);
@@ -1569,9 +1585,18 @@ rd_kafka_DeleteTopics_result_topics (
  */
 
 rd_kafka_NewPartitions_t *rd_kafka_NewPartitions_new (const char *topic,
-                                                      size_t new_total_cnt) {
+                                                      size_t new_total_cnt,
+                                                      char *errstr,
+                                                      size_t errstr_size) {
         size_t tsize = strlen(topic) + 1;
         rd_kafka_NewPartitions_t *newps;
+
+        if (new_total_cnt < 1 || new_total_cnt > RD_KAFKAP_PARTITIONS_MAX) {
+                rd_snprintf(errstr, errstr_size, "new_total_cnt out of "
+                            "expected range %d..%d",
+                            1, RD_KAFKAP_PARTITIONS_MAX);
+                return NULL;
+        }
 
         /* Single allocation */
         newps = rd_malloc(sizeof(*newps) + tsize);
@@ -1602,7 +1627,7 @@ static rd_kafka_NewPartitions_t *
 rd_kafka_NewPartitions_copy (const rd_kafka_NewPartitions_t *src) {
         rd_kafka_NewPartitions_t *dst;
 
-        dst = rd_kafka_NewPartitions_new(src->topic, src->total_cnt);
+        dst = rd_kafka_NewPartitions_new(src->topic, src->total_cnt, NULL, 0);
 
         rd_list_destroy(&dst->replicas); /* created in .._new() */
         rd_list_init_copy(&dst->replicas, &src->replicas);

@@ -4657,7 +4657,8 @@ typedef struct rd_kafka_NewTopic_s rd_kafka_NewTopic_t;
  */
 RD_EXPORT rd_kafka_NewTopic_t *
 rd_kafka_NewTopic_new (const char *topic, int num_partitions,
-                       int replication_factor);
+                       int replication_factor,
+                       char *errstr, size_t errstr_size);
 
 /**
  * @brief Destroy and free a NewTopic object previously created with
@@ -4864,7 +4865,8 @@ typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
  *          Use rd_kafka_NewPartitions_destroy() to free object when done.
  */
 RD_EXPORT rd_kafka_NewPartitions_t *
-rd_kafka_NewPartitions_new (const char *topic, size_t new_total_cnt);
+rd_kafka_NewPartitions_new (const char *topic, size_t new_total_cnt,
+                            char *errstr, size_t errstr_size);
 
 /**
  * @brief Destroy and free a NewPartitions object previously created with

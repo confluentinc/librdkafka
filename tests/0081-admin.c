@@ -94,7 +94,8 @@ static void do_test_CreateTopics (const char *what,
                 new_topics[i] = rd_kafka_NewTopic_new(topic,
                                                       num_parts,
                                                       set_replicas ? -1 :
-                                                      num_replicas);
+                                                      num_replicas,
+                                                      NULL, 0);
 
                 if (set_config) {
                         /*
@@ -526,11 +527,14 @@ static void do_test_CreatePartitions (const char *what,
                 /* Topic to create with initial partition count */
                 new_topics[i] = rd_kafka_NewTopic_new(topic, initial_part_cnt,
                                                       set_replicas ?
-                                                      -1 : num_replicas);
+                                                      -1 : num_replicas,
+                                                      NULL, 0);
 
                 /* .. and later add more partitions to */
                 crp_topics[i] = rd_kafka_NewPartitions_new(topic,
-                                                           final_part_cnt);
+                                                           final_part_cnt,
+                                                           errstr,
+                                                           sizeof(errstr));
 
                 if (set_replicas) {
                         exp_mdtopics[exp_mdtopic_cnt].partitions =
@@ -1077,7 +1081,7 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
                 q = rd_kafka_queue_new(rk);
 
         topic = rd_kafka_NewTopic_new(test_mk_topic_name(__FUNCTION__, 1),
-                                      3, 1);
+                                      3, 1, NULL, 0);
         rd_kafka_CreateTopics(rk, &topic, 1, NULL, q);
         rd_kafka_NewTopic_destroy(topic);
 

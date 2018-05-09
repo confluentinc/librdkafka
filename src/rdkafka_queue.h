@@ -99,7 +99,9 @@ int rd_kafka_q_ready (rd_kafka_q_t *rkq) {
 
 
 
-void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk);
+void rd_kafka_q_init0 (rd_kafka_q_t *rkq, rd_kafka_t *rk,
+                       const char *func, int line);
+#define rd_kafka_q_init(rkq,rk) rd_kafka_q_init0(rkq,rk,__FUNCTION__,__LINE__)
 rd_kafka_q_t *rd_kafka_q_new0 (rd_kafka_t *rk, const char *func, int line);
 #define rd_kafka_q_new(rk) rd_kafka_q_new0(rk,__FUNCTION__,__LINE__)
 void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq);
@@ -759,6 +761,7 @@ void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
 struct rd_kafka_queue_s {
 	rd_kafka_q_t *rkqu_q;
         rd_kafka_t   *rkqu_rk;
+        int           rkqu_is_owner; /**< Is owner/creator of rkqu_q */
 };
 
 

@@ -69,7 +69,8 @@ void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
 /**
  * Initialize a queue.
  */
-void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk) {
+void rd_kafka_q_init0 (rd_kafka_q_t *rkq, rd_kafka_t *rk,
+                       const char *func, int line) {
         rd_kafka_q_reset(rkq);
 	rkq->rkq_fwdq   = NULL;
         rkq->rkq_refcnt = 1;
@@ -80,6 +81,11 @@ void rd_kafka_q_init (rd_kafka_q_t *rkq, rd_kafka_t *rk) {
         rkq->rkq_opaque = NULL;
 	mtx_init(&rkq->rkq_lock, mtx_plain);
 	cnd_init(&rkq->rkq_cond);
+#if ENABLE_DEVEL
+        rd_snprintf(rkq->rkq_name, sizeof(rkq->rkq_name), "%s:%d", func, line);
+#else
+        rkq->rkq_name = func;
+#endif
 }
 
 
@@ -601,7 +607,10 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 
 
 void rd_kafka_queue_destroy (rd_kafka_queue_t *rkqu) {
-        rd_kafka_q_destroy_owner(rkqu->rkqu_q);
+        if (rkqu->rkqu_is_owner)
+                rd_kafka_q_destroy_owner(rkqu->rkqu_q);
+        else
+                rd_kafka_q_destroy(rkqu->rkqu_q);
         rd_free(rkqu);
 }
 
@@ -627,6 +636,7 @@ rd_kafka_queue_t *rd_kafka_queue_new (rd_kafka_t *rk) {
 	rkqu = rd_kafka_queue_new0(rk, rkq);
 	rd_kafka_q_destroy(rkq); /* Loose refcount from q_new, one is held
 				  * by queue_new0 */
+        rkqu->rkqu_is_owner = 1;
 	return rkqu;
 }
 

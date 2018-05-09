@@ -196,8 +196,8 @@ static void do_test_CreateTopics (const char *what,
                     rd_kafka_event_name(rkev));
 
         /* Expecting error */
-        errstr2 = (const char *)0x1;
-        err = rd_kafka_CreateTopics_result_error(res, &errstr2);
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
         TEST_ASSERT(err == exp_err,
                     "expected CreateTopics to return %s, not %s (%s)",
                     rd_kafka_err2str(exp_err),
@@ -392,8 +392,8 @@ static void do_test_DeleteTopics (const char *what,
                     rd_kafka_event_name(rkev));
 
         /* Expecting error */
-        errstr2 = (const char *)0x1;
-        err = rd_kafka_DeleteTopics_result_error(res, &errstr2);
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
         TEST_ASSERT(err == exp_err,
                     "expected DeleteTopics to return %s, not %s (%s)",
                     rd_kafka_err2str(exp_err),
@@ -807,7 +807,8 @@ static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         TEST_ASSERT(res, "Expected AlterConfigs result, not %s",
                     rd_kafka_event_name(rkev));
 
-        err = rd_kafka_AlterConfigs_result_error(res, &errstr2);
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
         TEST_ASSERT(!err,
                     "Expected success, not %s: %s",
                     rd_kafka_err2name(err), errstr2);
@@ -974,7 +975,8 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         TEST_ASSERT(res, "Expected DescribeConfigs result, not %s",
                     rd_kafka_event_name(rkev));
 
-        err = rd_kafka_DescribeConfigs_result_error(res, &errstr2);
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
         TEST_ASSERT(!err,
                     "Expected success, not %s: %s",
                     rd_kafka_err2name(err), errstr2);

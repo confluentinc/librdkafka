@@ -4448,6 +4448,13 @@ rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
  * information and finally destroy the result and event by calling
  * \c rd_kafka_event_destroy().
  *
+ * Use rd_kafka_event_error() and rd_kafka_event_error_string() to acquire
+ * the request-level error/success for an Admin API request.
+ * Even if the returned value is \c RD_KAFKA_RESP_ERR_NO_ERROR there
+ * may be individual objects (topics, resources, etc) that have failed.
+ * Extract per-object error information with the corresponding
+ * \c rd_kafka_..._result_topics|resources|..() to check per-object errors.
+ *
  * Locally triggered errors:
  *  - \c RD_KAFKA_RESP_ERR__TIMED_OUT - (Controller) broker connection did not
  *    become available in the time allowed by AdminOption_set_request_timeout.
@@ -4745,25 +4752,6 @@ rd_kafka_CreateTopics (rd_kafka_t *rk,
  */
 
 /**
- * @returns the request-level error/success for a CreateTopics request.
- *          Even if the returned value is RD_KAFKA_RESP_ERR_NO_ERROR there
- *          may be individual topics that failed, extract per-topic information
- *          with rd_kafka_CreateTopics_result_topics() to check per-topic
- *          errors.
- *
- * @param errstrp is set to a human-readable error string, if there was an
- *        error.
- *
- * @remark This is equivalent and interchangable to rd_kafka_event_error() and
- *         rd_kafka_event_error_string() on a RD_KAFKA_EVENT_CREATETOPICS_RESULT event.
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_CreateTopics_result_error (
-        const rd_kafka_CreateTopics_result_t *result,
-        const char **errstrp);
-
-
-/**
  * @brief Get an array of topic results from a CreateTopics result.
  *
  * The returned \p topics life-time is the same as the \p result object.
@@ -4838,25 +4826,6 @@ void rd_kafka_DeleteTopics (rd_kafka_t *rk,
 /**
  * @brief DeleteTopics result type and methods
  */
-
-/**
- * @returns the request-level error/success for a DeleteTopics request.
- *          Even if the returned value is RD_KAFKA_RESP_ERR_NO_ERROR there
- *          may be individual topics that failed, extract per-topic information
- *          with rd_kafka_DeleteTopics_result_topics() to check per-topic
- *          errors.
- *
- * @param errstrp is set to a human-readable error string, if there was an
- *        error.
- *
- * @remark This is equivalent and interchangable to rd_kafka_event_error() and
- *         rd_kafka_event_error_string() on a RD_KAFKA_EVENT_DELETETOPICS_RESULT event.
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_DeleteTopics_result_error (
-        const rd_kafka_DeleteTopics_result_t *result,
-        const char **errstrp);
-
 
 /**
  * @brief Get an array of topic results from a DeleteTopics result.
@@ -4973,25 +4942,6 @@ rd_kafka_CreatePartitions (rd_kafka_t *rk,
 /**
  * @brief CreatePartitions result type and methods
  */
-
-/**
- * @returns the request-level error/success for a CreatePartitions request.
- *          Even if the returned value is RD_KAFKA_RESP_ERR_NO_ERROR there
- *          may be individual topics that failed, extract per-topic information
- *          with rd_kafka_CreatePartitions_result_topics() to check per-topic
- *          errors.
- *
- * @param errstrp is set to a human-readable error string, if there was an
- *        error.
- *
- * @remark This is equivalent and interchangable to rd_kafka_event_error() and
- *         rd_kafka_event_error_string() on a RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT event.
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_CreatePartitions_result_error (
-        const rd_kafka_CreatePartitions_result_t *result,
-        const char **errstrp);
-
 
 /**
  * @brief Get an array of topic results from a CreatePartitions result.
@@ -5293,26 +5243,6 @@ void rd_kafka_AlterConfigs (rd_kafka_t *rk,
  */
 
 /**
- * @returns the request-level error/success for a AlterConfigs request.
- *          Even if the returned value is RD_KAFKA_RESP_ERR_NO_ERROR there
- *          may be individual resources that failed, extract per-resource
- *          information with rd_kafka_AlterConfigs_result_resources() to
- *          check per-resource errors.
- *
- * @param errstrp is set to a human-readable error string, if there was an
- *        error.
- *
- * @remark This is equivalent and interchangable to rd_kafka_event_error() and
- *         rd_kafka_event_error_string() on a RD_KAFKA_EVENT_ALTERCONFIGS_RESULT event.
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_AlterConfigs_result_error (
-        const rd_kafka_AlterConfigs_result_t *result,
-        const char **errstrp);
-
-
-
-/**
  * @brief Get an array of resource results from a AlterConfigs result.
  *
  * Use \c rd_kafka_ConfigResource_error() and
@@ -5377,25 +5307,6 @@ void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
 /**
  * @brief DescribeConfigs result type and methods
  */
-
-/**
- * @returns the request-level error/success for a DescribeConfigs request.
- *          Even if the returned value is RD_KAFKA_RESP_ERR_NO_ERROR there
- *          may be individual resources that failed, extract per-resource
- *          information with rd_kafka_DescribeConfigs_result_resources() to
- *          check per-resource errors.
- *
- * @param errstrp is set to a human-readable error string, if there was an
- *        error.
- *
- * @remark This is equivalent and interchangable to rd_kafka_event_error() and
- *         rd_kafka_event_error_string() on a RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT event.
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_DescribeConfigs_result_error (
-        const rd_kafka_DescribeConfigs_result_t *result,
-        const char **errstrp);
-
 
 /**
  * @brief Get an array of resource results from a DescribeConfigs result.

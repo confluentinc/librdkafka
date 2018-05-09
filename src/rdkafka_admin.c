@@ -336,24 +336,6 @@ static void rd_kafka_admin_result_fail (rd_kafka_op_t *rko_req,
 
 
 /**
- * @brief Helper for rd_kafka_<..>_result_error() method.
- */
-static rd_kafka_resp_err_t
-rd_kafka_admin_result_ret_error (const rd_kafka_op_t *rko,
-                                 const char **errstrp) {
-
-        if (errstrp) {
-                if (rko->rko_err)
-                        *errstrp = rko->rko_u.admin_result.errstr;
-                else
-                        *errstrp = NULL;
-        }
-
-        return rko->rko_err;
-}
-
-
-/**
  * @brief Return the topics list from a topic-related result object.
  */
 static const rd_kafka_topic_result_t **
@@ -1339,15 +1321,6 @@ void rd_kafka_CreateTopics (rd_kafka_t *rk,
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_CreateTopics_result_error (
-        const rd_kafka_CreateTopics_result_t *result,
-        const char **errstrp) {
-        return rd_kafka_admin_result_ret_error((const rd_kafka_op_t *)result,
-                                               errstrp);
-}
-
-
 /**
  * @brief Get an array of topic results from a CreateTopics result.
  *
@@ -1567,16 +1540,6 @@ void rd_kafka_DeleteTopics (rd_kafka_t *rk,
 
         rd_kafka_q_enq(rk->rk_ops, rko);
 }
-
-
-rd_kafka_resp_err_t
-rd_kafka_DeleteTopics_result_error (
-        const rd_kafka_DeleteTopics_result_t *result,
-        const char **errstrp) {
-        return rd_kafka_admin_result_ret_error((const rd_kafka_op_t *)result,
-                                               errstrp);
-}
-
 
 
 /**
@@ -1864,16 +1827,6 @@ void rd_kafka_CreatePartitions (rd_kafka_t *rk,
 
         rd_kafka_q_enq(rk->rk_ops, rko);
 }
-
-
-rd_kafka_resp_err_t
-rd_kafka_CreatePartitions_result_error (
-        const rd_kafka_CreatePartitions_result_t *result,
-        const char **errstrp) {
-        return rd_kafka_admin_result_ret_error((const rd_kafka_op_t *)result,
-                                               errstrp);
-}
-
 
 
 /**
@@ -2458,17 +2411,6 @@ void rd_kafka_AlterConfigs (rd_kafka_t *rk,
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_AlterConfigs_result_error (
-        const rd_kafka_AlterConfigs_result_t *result,
-        const char **errstrp) {
-        return rd_kafka_admin_result_ret_error((const rd_kafka_op_t *)result,
-                                               errstrp);
-}
-
-
-
-
 const rd_kafka_ConfigResource_t **
 rd_kafka_AlterConfigs_result_resources (
         const rd_kafka_AlterConfigs_result_t *result,
@@ -2774,16 +2716,6 @@ void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
         rd_kafka_q_enq(rk->rk_ops, rko);
 }
 
-
-
-
-rd_kafka_resp_err_t
-rd_kafka_DescribeConfigs_result_error (
-        const rd_kafka_DescribeConfigs_result_t *result,
-        const char **errstrp) {
-        return rd_kafka_admin_result_ret_error((const rd_kafka_op_t *)result,
-                                               errstrp);
-}
 
 
 

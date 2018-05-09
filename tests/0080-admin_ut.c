@@ -243,8 +243,8 @@ static void do_test_CreateTopics (const char *what,
                     my_opaque, opaque);
 
         /* Expecting error */
-        errstr2 = (const char *)0x1;
-        err = rd_kafka_CreateTopics_result_error(res, &errstr2);
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
                     "expected CreateTopics to return error %s, not %s (%s)",
                     rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
@@ -342,8 +342,8 @@ static void do_test_DeleteTopics (const char *what,
                     my_opaque, opaque);
 
         /* Expecting error */
-        errstr2 = (const char *)0x1;
-        err = rd_kafka_DeleteTopics_result_error(res, &errstr2);
+        err = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
                     "expected DeleteTopics to return error %s, not %s (%s)",
                     rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
@@ -437,7 +437,6 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         const rd_kafka_ConfigResource_t **rconfigs;
         size_t rconfig_cnt;
         char errstr[128];
-        const char *errstr2;
         int i;
 
         /* Check invalids */
@@ -490,11 +489,6 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         res = rd_kafka_event_AlterConfigs_result(rkev);
         TEST_ASSERT(res);
 
-        err = rd_kafka_AlterConfigs_result_error(res, &errstr2);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
-                    "Expected timeout, not %s: %s",
-                    rd_kafka_err2name(err), errstr2);
-
         rconfigs = rd_kafka_AlterConfigs_result_resources(res, &rconfig_cnt);
         TEST_ASSERT(!rconfigs && !rconfig_cnt,
                     "Expected no result resources, got %"PRIusz,
@@ -519,11 +513,6 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
         res = rd_kafka_event_DescribeConfigs_result(rkev);
         TEST_ASSERT(res);
-
-        err = rd_kafka_DescribeConfigs_result_error(res, &errstr2);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
-                    "Expected timeout, not %s: %s",
-                    rd_kafka_err2name(err), errstr2);
 
         rconfigs = rd_kafka_DescribeConfigs_result_resources(res, &rconfig_cnt);
         TEST_ASSERT(!rconfigs && !rconfig_cnt,
@@ -615,7 +604,8 @@ static void do_test_options (rd_kafka_t *rk) {
                 const char **for_api;
 
                 for (for_api = all_apis ; ; for_api++) {
-                        rd_kafka_resp_err_t err, exp_err;
+                        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR,
+                                exp_err;
                         char errstr[512];
                         int fi;
 

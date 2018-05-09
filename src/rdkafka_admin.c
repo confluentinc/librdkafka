@@ -2633,6 +2633,7 @@ rd_kafka_DescribeConfigsResponse_parse (rd_kafka_op_t *rko_req,
                                                 (int)syn_value.len);
 
                                 syn_entry->a.source = syn_source;
+                                syn_entry->a.is_synonym = 1;
 
                                 rd_list_add(&entry->synonyms, syn_entry);
                         }

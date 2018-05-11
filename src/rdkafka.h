@@ -1379,13 +1379,25 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *
  * Without a rebalance callback this is done automatically by librdkafka
  * but registering a rebalance callback gives the application flexibility
- * in performing other operations along with the assinging/revocation,
+ * in performing other operations along with the assigning/revocation,
  * such as fetching offsets from an alternate location (on assign)
  * or manually committing offsets (on revoke).
  *
  * @remark The \p partitions list is destroyed by librdkafka on return
  *         return from the rebalance_cb and must not be freed or
  *         saved by the application.
+ *
+ * @remark Be careful when modifying the \p partitions list.
+ *         Changing this list should only be done to change the initial
+ *         offsets for each partition.
+ *         But a function like `rd_kafka_position()` might have unexpected
+ *         effects for instance when a consumer gets assigned a partition
+ *         it used to consumer at an earlier rebalance. In this case, the
+ *         list of partitions will be updated with the old offset for that
+ *         partition. In this case, it is generally better to pass a copy
+ *         of the list (see `rd_kafka_topic_partition_list_copy()`).
+ *         The result of `rd_kafka_position()` is typically outdated in
+ *         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS.
  * 
  * The following example shows the application's responsibilities:
  * @code
@@ -2915,6 +2927,10 @@ rd_kafka_committed (rd_kafka_t *rk,
  * The \p offset field of each requested partition will be set to the offset
  * of the last consumed message + 1, or RD_KAFKA_OFFSET_INVALID in case there was
  * no previous message.
+ *
+ * @remark  In this context the last consumed message is the offset consumed
+ *          by the current librdkafka instance and, in case of rebalancing, not
+ *          necessarily the last message fetched from the partition.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
  *          \p offset or \p err field of each \p partitions' element is filled

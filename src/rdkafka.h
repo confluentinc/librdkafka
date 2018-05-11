@@ -1521,6 +1521,9 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
  *   - \p json_len - Length of \p json string.
  *   - \p opaque - Application-provided opaque.
  *
+ * For more information on the format of \p json, see
+ * https://github.com/edenhill/librdkafka/wiki/Statistics
+ *
  * If the application wishes to hold on to the \p json pointer and free
  * it at a later time it must return 1 from the \p stats_cb.
  * If the application returns 0 from the \p stats_cb then librdkafka

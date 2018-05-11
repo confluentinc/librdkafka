@@ -2112,6 +2112,10 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  *
  * @remark  An application should make sure to call poll() at regular
  *          intervals to serve any queued callbacks waiting to be called.
+ * @remark  If your producer doesn't have any callback set (in particular
+ *          via rd_kafka_conf_set_dr_msg_cb or rd_kafka_conf_set_error_cb)
+ *          you might chose not to call poll(), though this is not
+ *          recommended.
  *
  * Events:
  *   - delivery report callbacks  (if dr_cb/dr_msg_cb is configured) [producer]
@@ -2966,6 +2970,10 @@ rd_kafka_position (rd_kafka_t *rk,
  * once the delivery status (success or failure) is known. The delivery report
  * is trigged by the application calling `rd_kafka_poll()` (at regular
  * intervals) or `rd_kafka_flush()` (at termination). 
+ *
+ * Since producing is asynchronous, you should call `rd_kafka_flush()` before
+ * you destroy the producer. Otherwise, any outstanding messages will be
+ * silently discarded.
  *
  * When temporary errors occur, librdkafka automatically retries to produce the
  * messages. Retries are triggered after retry.backoff.ms and when the

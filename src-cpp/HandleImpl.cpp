@@ -108,7 +108,6 @@ int RdKafka::stats_cb_trampoline (rd_kafka_t *rk, char *json, size_t json_len,
   return 0;
 }
 
-
 int RdKafka::socket_cb_trampoline (int domain, int type, int protocol,
                                    void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
@@ -122,6 +121,25 @@ int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
 
   return handle->open_cb_->open_cb(pathname, flags, static_cast<int>(mode));
 }
+
+#if WITH_SSL
+
+int RdKafka::cert_verify_cb_trampoline(void* cert, int cbCert, void *opaque)
+{
+    RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+
+    return handle->cert_verify_cb_->cert_verify_cb(cert, cbCert);
+}
+
+void RdKafka::cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, void** cert, int* cbCert, void *opaque)
+{
+    RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+
+    handle->cert_retrieve_cb_->cert_retrieve_cb(type, cert, cbCert);
+}
+
+#endif
+
 
 RdKafka::ErrorCode RdKafka::HandleImpl::metadata (bool all_topics,
                                                   const Topic *only_rkt,
@@ -227,6 +245,23 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
                                 RdKafka::socket_cb_trampoline);
     socket_cb_ = confimpl->socket_cb_;
   }
+
+#if WITH_SSL
+
+  if (confimpl->cert_verify_cb_) {
+      rd_kafka_conf_set_cert_verify_cb(confimpl->rk_conf_,
+          RdKafka::cert_verify_cb_trampoline);
+
+      cert_verify_cb_ = confimpl->cert_verify_cb_;
+  }
+
+  if (confimpl->cert_retrieve_cb_) {
+      rd_kafka_conf_set_cert_retrieve_cb(confimpl->rk_conf_,
+          RdKafka::cert_retrieve_cb_trampoline);
+
+      cert_retrieve_cb_ = confimpl->cert_retrieve_cb_;
+  }
+#endif
 
   if (confimpl->open_cb_) {
 #ifndef _MSC_VER

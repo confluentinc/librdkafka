@@ -59,9 +59,6 @@ typedef enum {
         RD_KAFKA_OFFSET_METHOD_BROKER
 } rd_kafka_offset_method_t;
 
-
-
-
 /**
  * Optional configuration struct passed to rd_kafka_new*().
  *
@@ -116,6 +113,8 @@ struct rd_kafka_conf_s {
 		char *crl_location;
 		char *keystore_location;
 		char *keystore_password;
+        int(*cert_verify_cb) (void* cert, int cbCert, void *opaque);
+        void(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, void** cert, int* cbCert, void *opaque);
 	} ssl;
 #endif
 

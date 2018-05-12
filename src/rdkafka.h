@@ -1611,6 +1611,39 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
                                                 void *opaque));
 #endif
 
+#if WITH_SSL
+
+/**
+* @enum rd_kafka_certificate_type_t
+*
+* @brief Type of certificates
+*
+* @sa rd_kafka_conf_set_get_cert_cb()
+*/
+typedef enum _rd_kafka_certificate_type_t {
+    RD_KAFKA_CERTIFICATE_PRIVATE_KEY,
+    RD_KAFKA_CERTIFICATE_PUBLIC_KEY
+} rd_kafka_certificate_type_t;
+
+/**
+* @brief : Sets the verification callback of the broker certificate
+*
+*/
+RD_EXPORT
+void rd_kafka_conf_set_cert_verify_cb(rd_kafka_conf_t *conf,
+    int(*cert_verify_cb) (void* cert, int cbCert, void *opaque));
+
+/**
+* @brief : Sets the callback to recieve the client certificate
+*
+*/
+RD_EXPORT
+void rd_kafka_conf_set_cert_retrieve_cb(rd_kafka_conf_t *conf,
+    void(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, void** cert, int* cbCert, void *opaque));
+
+#endif
+
+
 /**
  * @brief Sets the application's opaque pointer that will be passed to callbacks
  */
@@ -2642,9 +2675,6 @@ int rd_kafka_consume_callback_queue(rd_kafka_queue_t *rkqu,
 
 
 /**@}*/
-
-
-
 
 /**
  * @name Simple Consumer API (legacy): Topic+partition offset store.

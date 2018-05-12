@@ -40,8 +40,12 @@ typedef int mode_t;
 
 #include "rdsysqueue.h"
 
-#include "rdkafka.h"
+/*
+* rd.h needs to be included before rdkafka.h since it will bring in
+* config defines such as WITH_SSL which rdkafka.h uses
+*/
 #include "rd.h"
+#include "rdkafka.h"
 #include "rdlog.h"
 #include "rdtime.h"
 #include "rdaddr.h"

@@ -422,6 +422,7 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+#if WITH_SSL
   Conf::ConfResult set(const std::string &name,
                        CertVerifyCb *cert_verify_cb,
                        std::string &errstr) {
@@ -457,6 +458,7 @@ class ConfImpl : public Conf {
       cert_retrieve_cb_ = cert_retrieve_cb;
       return Conf::CONF_OK;
   }
+#endif
 
   Conf::ConfResult get(const std::string &name, std::string &value) const {
     if (name.compare("dr_cb") == 0 ||
@@ -466,9 +468,12 @@ class ConfImpl : public Conf {
         name.compare("socket_cb") == 0 ||
         name.compare("open_cb") == 0 ||
         name.compare("rebalance_cb") == 0 ||
-        name.compare("offset_commit_cb") == 0 ||
-        name.compare("ssl_verify_cb") == 0 ||
-        name.compare("ssl_retrieve_cb") == 0 ) {
+        name.compare("offset_commit_cb") == 0 
+#if WITH_SSL
+        || name.compare("ssl_verify_cb") == 0 ||
+        name.compare("ssl_retrieve_cb") == 0 
+#endif
+        ) {
       return Conf::CONF_INVALID;
     }
     rd_kafka_conf_res_t res = RD_KAFKA_CONF_INVALID;

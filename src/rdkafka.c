@@ -1048,6 +1048,15 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   " \"max\":%"PRId64","
 			   " \"avg\":%"PRId64","
 			   " \"sum\":%"PRId64","
+                           " \"stddev\": %"PRId64","
+                           " \"mean\": %"PRId64","
+                           " \"histoor\": %"PRId64","
+                           " \"p50\": %"PRId64","
+                           " \"p75\": %"PRId64","
+                           " \"p90\": %"PRId64","
+                           " \"p95\": %"PRId64","
+                           " \"p99\": %"PRId64","
+                           " \"p99_99\": %"PRId64","
 			   " \"cnt\":%i "
 			   "}, "
 			   "\"rtt\": {"
@@ -1055,6 +1064,15 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   " \"max\":%"PRId64","
 			   " \"avg\":%"PRId64","
 			   " \"sum\":%"PRId64","
+                           " \"stddev\": %"PRId64","
+                           " \"mean\": %"PRId64","
+                           " \"histoor\": %"PRId64","
+                           " \"p50\": %"PRId64","
+                           " \"p75\": %"PRId64","
+                           " \"p90\": %"PRId64","
+                           " \"p95\": %"PRId64","
+                           " \"p99\": %"PRId64","
+                           " \"p99_99\": %"PRId64","
 			   " \"cnt\":%i "
 			   "}, "
 			   "\"throttle\": {"
@@ -1062,6 +1080,16 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   " \"max\":%"PRId64","
 			   " \"avg\":%"PRId64","
 			   " \"sum\":%"PRId64","
+                           " \"stddev\": %"PRId64","
+                           " \"mean\": %"PRId64","
+                           " \"histoor\": %"PRId64","
+                           " \"p50\": %"PRId64","
+                           " \"p75\": %"PRId64","
+                           " \"p90\": %"PRId64","
+                           " \"p95\": %"PRId64","
+                           " \"p99\": %"PRId64","
+                           " \"p99_99\": %"PRId64","
+
 			   " \"cnt\":%i "
 			   "}, "
 			   "\"toppars\":{ "/*open toppars*/,
@@ -1092,16 +1120,43 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   int_latency.ra_v.maxv,
 			   int_latency.ra_v.avg,
 			   int_latency.ra_v.sum,
+                           (int64_t)int_latency.ra_hist.stddev,
+                           (int64_t)int_latency.ra_hist.mean,
+                           int_latency.ra_hist.oor,
+                           int_latency.ra_hist.p50,
+                           int_latency.ra_hist.p75,
+                           int_latency.ra_hist.p90,
+                           int_latency.ra_hist.p95,
+                           int_latency.ra_hist.p99,
+                           int_latency.ra_hist.p99_99,
 			   int_latency.ra_v.cnt,
 			   rtt.ra_v.minv,
 			   rtt.ra_v.maxv,
 			   rtt.ra_v.avg,
 			   rtt.ra_v.sum,
+                           (int64_t)rtt.ra_hist.stddev,
+                           (int64_t)rtt.ra_hist.mean,
+                           rtt.ra_hist.oor,
+                           rtt.ra_hist.p50,
+                           rtt.ra_hist.p75,
+                           rtt.ra_hist.p90,
+                           rtt.ra_hist.p95,
+                           rtt.ra_hist.p99,
+                           rtt.ra_hist.p99_99,
 			   rtt.ra_v.cnt,
 			   throttle.ra_v.minv,
 			   throttle.ra_v.maxv,
 			   throttle.ra_v.avg,
 			   throttle.ra_v.sum,
+                           (int64_t)throttle.ra_hist.stddev,
+                           (int64_t)throttle.ra_hist.mean,
+                           throttle.ra_hist.oor,
+                           throttle.ra_hist.p50,
+                           throttle.ra_hist.p75,
+                           throttle.ra_hist.p90,
+                           throttle.ra_hist.p95,
+                           throttle.ra_hist.p99,
+                           throttle.ra_hist.p99_99,
 			   throttle.ra_v.cnt);
 
 		TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
@@ -1116,6 +1171,10 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 		}
 
 		rd_kafka_broker_unlock(rkb);
+
+                rd_avg_destroy(&int_latency);
+                rd_avg_destroy(&rtt);
+                rd_avg_destroy(&throttle);
 
 		_st_printf("} "/*close toppars*/
 			   "} "/*close broker*/);

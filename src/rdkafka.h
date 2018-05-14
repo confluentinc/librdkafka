@@ -1611,8 +1611,6 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
                                                 void *opaque));
 #endif
 
-#if WITH_SSL
-
 /**
 * @enum rd_kafka_certificate_type_t
 *
@@ -1640,9 +1638,6 @@ void rd_kafka_conf_set_cert_verify_cb(rd_kafka_conf_t *conf,
 RD_EXPORT
 void rd_kafka_conf_set_cert_retrieve_cb(rd_kafka_conf_t *conf,
     void(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, void** cert, int* cbCert, void *opaque));
-
-#endif
-
 
 /**
  * @brief Sets the application's opaque pointer that will be passed to callbacks

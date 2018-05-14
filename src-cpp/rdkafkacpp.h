@@ -713,7 +713,6 @@ public:
   virtual ~OffsetCommitCb() { }
 };
 
-#if WITH_SSL
 /**
 * @brief Certificate verify callback class
 */
@@ -746,7 +745,6 @@ public:
     virtual ~CertRetrieveCb() {}
 };
 
-#endif
 
 /**
  * @brief \b Portability: SocketCb callback class
@@ -909,7 +907,6 @@ class RD_EXPORT Conf {
                                 OffsetCommitCb *offset_commit_cb,
                                 std::string &errstr) = 0;
 
-#if WITH_SSL
   /** @brief Use with \p name = \c \"ssl_verify_cb\" */
   virtual Conf::ConfResult set(const std::string &name,
                                CertVerifyCb *cert_verify_cb,
@@ -919,7 +916,7 @@ class RD_EXPORT Conf {
   virtual Conf::ConfResult set(const std::string &name,
                                CertRetrieveCb *cert_retrieve_cb,
                                std::string &errstr) = 0;
-#endif
+
   /** @brief Query single configuration value
    *
    * Do not use this method to get callbacks registered by the configuration file.
@@ -974,13 +971,11 @@ class RD_EXPORT Conf {
    *           returns the value in \p offset_commit_cb. */
   virtual Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const = 0;
 
-#if WITH_SSL
   /** @brief Use with \p name = \c \"ssl_verify_cb\" */
   virtual Conf::ConfResult get(CertVerifyCb *&cert_verify_cb) const = 0;
 
   /** @brief Use with \p name = \c \"ssl_retrieve_cb\" */
   virtual Conf::ConfResult get(CertRetrieveCb *&cert_retrieve_cb) const = 0;
-#endif
 
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */

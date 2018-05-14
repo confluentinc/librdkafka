@@ -1835,22 +1835,28 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
 }
 #endif
 
-#ifdef WITH_SSL
-
 void
 rd_kafka_conf_set_cert_verify_cb(rd_kafka_conf_t *conf,
     int(*cert_verify_cb) (void* cert, int cbCert, void *opaque))
 {
+#if WITH_SSL
     conf->ssl.cert_verify_cb = cert_verify_cb;
+#else
+    RD_UNUSED(conf);
+    RD_UNUSED(cert_verify_cb);
+#endif
 }
 
 void rd_kafka_conf_set_cert_retrieve_cb(rd_kafka_conf_t *conf,
     void(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, void** cert, int* cbCert, void *opaque))
 {
+#if WITH_SSL
     conf->ssl.cert_retrieve_cb = cert_retrieve_cb;
-}
-
+#else
+    RD_UNUSED(conf);
+    RD_UNUSED(cert_retrieve_cb);
 #endif
+}
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 	conf->opaque = opaque;

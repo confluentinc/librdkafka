@@ -36,8 +36,8 @@
  * More info:
  *  http://docs.sun.com/source/806-3568/ncg_goldberg.html
  */
-static inline int rd_dbl_eq0 (double a, double b, double prec) RD_UNUSED;
-static inline int rd_dbl_eq0 (double a, double b, double prec) {
+static RD_INLINE RD_UNUSED
+int rd_dbl_eq0 (double a, double b, double prec) {
   return fabs(a - b) < prec;
 }
 

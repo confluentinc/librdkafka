@@ -224,7 +224,7 @@ rd_hdr_sizeOfEquivalentValueRange (const rd_hdr_histogram_t *hdr, int64_t v) {
         int32_t adjustedBucket = bucketIdx;
         if (subBucketIdx >= hdr->subBucketCount)
                 adjustedBucket++;
-        return 1 << (hdr->unitMagnitude + (int64_t)adjustedBucket);
+        return (int64_t)1 << (hdr->unitMagnitude + (int64_t)adjustedBucket);
 }
 
 static __inline int64_t
@@ -273,7 +273,7 @@ typedef struct rd_hdr_iter_s {
         int64_t highestEquivalentValue;
 } rd_hdr_iter_t;
 
-#define RD_HDR_ITER_INIT(hdr) { hdr: hdr, subBucketIdx: -1 }
+#define RD_HDR_ITER_INIT(hdr) { .hdr = hdr, .subBucketIdx = -1 }
 
 static int rd_hdr_iter_next (rd_hdr_iter_t *it) {
         const rd_hdr_histogram_t *hdr = it->hdr;
@@ -474,13 +474,13 @@ static int ut_quantile (void) {
                 double  q;
                 int64_t v;
         } exp[] = {
-                {q: 50, v: 500223},
-                {q: 75, v: 750079},
-                {q: 90, v: 900095},
-                {q: 95, v: 950271},
-                {q: 99, v: 990207},
-                {q: 99.9, v: 999423},
-                {q: 99.99, v: 999935},
+                { 50, 500223 },
+                { 75, 750079 },
+                { 90, 900095 },
+                { 95, 950271 },
+                { 99, 990207 },
+                { 99.9, 999423 },
+                { 99.99, 999935 },
         };
 
         for (i = 0 ; i < 1000000 ; i++) {
@@ -671,19 +671,19 @@ static int ut_unitmagnitude_overflow (void) {
 
 static int ut_subbucketmask_overflow (void) {
         rd_hdr_histogram_t *hdr;
-        const int64_t input[] = { 1e8, 2e7, 3e7 };
+        const int64_t input[] = { (int64_t)1e8, (int64_t)2e7, (int64_t)3e7 };
         const struct {
                 double  q;
                 int64_t v;
         } exp[] = {
-                { q: 50,    v: 33554431 },
-                { q: 83.33, v: 33554431 },
-                { q: 83.34, v: 100663295 },
-                { q: 99,    v: 100663295 },
+                { 50,    33554431 },
+                { 83.33, 33554431 },
+                { 83.34, 100663295 },
+                { 99,    100663295 },
         };
         size_t i;
 
-        hdr = rd_hdr_histogram_new(2e7, 1e8, 5);
+        hdr = rd_hdr_histogram_new((int64_t)2e7, (int64_t)1e8, 5);
 
         for (i = 0 ; i < RD_ARRAYSIZE(input) ; i++) {
                 /* Ignore errors (some should fail) */

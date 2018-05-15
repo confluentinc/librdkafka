@@ -135,7 +135,7 @@ static RD_UNUSED void rd_avg_rollover (rd_avg_t *dst, rd_avg_t *src) {
         dst->ra_hist.p99    = rd_hdr_histogram_quantile(src->ra_hdr, 99.0);
         dst->ra_hist.p99_99 = rd_hdr_histogram_quantile(src->ra_hdr, 99.99);
 #else
-        memset(dst->ra_hist, 0, sizeof(dst->ra_hist));
+        memset(&dst->ra_hist, 0, sizeof(dst->ra_hist));
 #endif
 	memset(&src->ra_v, 0, sizeof(src->ra_v));
 

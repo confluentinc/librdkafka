@@ -33,7 +33,9 @@
 #include "rdbuf.h"
 #include "crc32c.h"
 #include "rdmurmur2.h"
+#if WITH_HDRHISTOGRAM
 #include "rdhdrhistogram.h"
+#endif
 #include "rdkafka_int.h"
 
 
@@ -48,7 +50,9 @@ int rd_unittest (void) {
                 { "crc32c",   unittest_crc32c },
                 { "msg",      unittest_msg },
                 { "murmurhash", unittest_murmur2 },
+#if WITH_HDRHISTOGRAM
                 { "rdhdrhistogram", unittest_rdhdrhistogram },
+#endif
                 { NULL }
         };
         int i;

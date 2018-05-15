@@ -98,6 +98,7 @@
     <ClInclude Include="..\src\rdavg.h" />
     <ClInclude Include="..\src\rdbuf.h" />
     <ClInclude Include="..\src\rdendian.h" />
+    <ClInclude Include="..\src\rdfloat.h" />
     <ClInclude Include="..\src\rdgz.h" />
     <ClInclude Include="..\src\rdinterval.h" />
     <ClInclude Include="..\src\rdkafka_assignor.h" />
@@ -159,6 +160,7 @@
     <ClCompile Include="..\src\rdbuf.c" />
     <ClCompile Include="..\src\rdcrc32.c" />
     <ClCompile Include="..\src\rdgz.c" />
+    <ClCompile Include="..\src\rdhdrhistogram.c" />
     <ClCompile Include="..\src\rdkafka.c" />
     <ClCompile Include="..\src\rdkafka_assignor.c" />
     <ClCompile Include="..\src\rdkafka_broker.c" />

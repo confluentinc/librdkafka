@@ -1052,7 +1052,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 	rd_kafka_op_t *rko;
 	unsigned int tot_cnt;
 	size_t tot_size;
-        struct _stats_emit stx = { size: 1024*10 };
+        struct _stats_emit stx = { .size = 1024*10 };
         struct _stats_emit *st = &stx;
         struct _stats_total total = {0};
 

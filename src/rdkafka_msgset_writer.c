@@ -1191,7 +1191,6 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
                    cnt, msetw->msetw_MessageSetSize,
                    msetw->msetw_ApiVersion, msetw->msetw_MsgVersion);
 
-
         return rkbuf;
 }
 

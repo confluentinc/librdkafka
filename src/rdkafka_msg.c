@@ -785,7 +785,7 @@ int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
 	}
 
         rktp_new = rd_kafka_toppar_s2i(s_rktp_new);
-        rd_atomic64_add(&rktp_new->rktp_c.msgs, 1);
+        rd_atomic64_add(&rktp_new->rktp_c.producer_enq_msgs, 1);
 
         /* Update message partition */
         if (rkm->rkm_partition == RD_KAFKA_PARTITION_UA)

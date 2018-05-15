@@ -119,6 +119,7 @@ static RD_UNUSED void rd_avg_rollover (rd_avg_t *dst, rd_avg_t *src) {
                 return;
         }
 
+        mtx_init(&dst->ra_lock, mtx_plain);
         dst->ra_type = src->ra_type;
 	dst->ra_v    = src->ra_v;
 #if WITH_HDRHISTOGRAM

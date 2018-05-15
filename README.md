@@ -33,7 +33,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * [SASL](https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka) (GSSAPI/Kerberos/SSPI, PLAIN, SCRAM) support
   * Broker version support: >=0.8 (see [Broker version compatibility](https://github.com/edenhill/librdkafka/wiki/Broker-version-compatibility))
   * Stable C & C++ APIs (ABI safety guaranteed for C)
-  * [Statistics](https://github.com/edenhill/librdkafka/wiki/Statistics) metrics
+  * [Statistics](https://github.com/edenhill/librdkafka/blob/master/STATISTICS.md) metrics
   * Debian package: librdkafka1 and librdkafka-dev in Debian and Ubuntu
   * RPM package: librdkafka and librdkafka-devel
   * Gentoo package: dev-libs/librdkafka

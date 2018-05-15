@@ -71,8 +71,8 @@ void offset_commit_cb_trampoline0 (
         rd_kafka_resp_err_t err,
         rd_kafka_topic_partition_list_t *c_offsets, void *opaque);
 
-int cert_verify_cb_trampoline(void* cert, int cbCert, void *opaque);
-void cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, void** cert, int* cbCert, void *opaque);
+int cert_verify_cb_trampoline(unsigned char* cert, long len, void *opaque);
+long cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, unsigned char** cert, void *opaque);
 
 rd_kafka_topic_partition_list_t *
     partitions_to_c_parts (const std::vector<TopicPartition*> &partitions);

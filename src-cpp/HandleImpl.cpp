@@ -122,7 +122,7 @@ int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
   return handle->open_cb_->open_cb(pathname, flags, static_cast<int>(mode));
 }
 
-int RdKafka::cert_verify_cb_trampoline(void* cert, int cbCert, void *opaque)
+int RdKafka::cert_verify_cb_trampoline(unsigned char* cert, long len, void *opaque)
 {
     RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
@@ -130,22 +130,23 @@ int RdKafka::cert_verify_cb_trampoline(void* cert, int cbCert, void *opaque)
     return handle->cert_verify_cb_->cert_verify_cb(cert, cbCert);
 #else
     RD_UNUSED(cert);
-    RD_UNUSED(cbCert);
+    RD_UNUSED(len);
       
     return 0;
 #endif
 }
 
-void RdKafka::cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, void** cert, int* cbCert, void *opaque)
+long RdKafka::cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, unsigned char** cert, void *opaque)
 {
     RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
 #if WITH_SSL
-    handle->cert_retrieve_cb_->cert_retrieve_cb(type, cert, cbCert);
+    return handle->cert_retrieve_cb_->cert_retrieve_cb(type, cert, cbCert);
 #else
     RD_UNUSED(type);
     RD_UNUSED(cert);
-    RD_UNUSED(cbCert);
+
+    return 0;
 #endif
 }
 

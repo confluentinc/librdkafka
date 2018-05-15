@@ -454,7 +454,9 @@ void rd_kafka_transport_ssl_term (void) {
 
 	CRYPTO_set_id_callback(NULL);
 	CRYPTO_set_locking_callback(NULL);
+        EVP_cleanup();
         CRYPTO_cleanup_all_ex_data();
+        ERR_free_strings();
 
 	for (i = 0 ; i < rd_kafka_ssl_locks_cnt ; i++)
 		mtx_destroy(&rd_kafka_ssl_locks[i]);
@@ -481,6 +483,7 @@ void rd_kafka_transport_ssl_init (void) {
 	
 	SSL_load_error_strings();
 	SSL_library_init();
+    ERR_load_BIO_strings();
 	OpenSSL_add_all_algorithms();
 }
 
@@ -637,6 +640,32 @@ static int rd_kafka_transport_ssl_passwd_cb (char *buf, int size, int rwflag,
 	return pwlen;
 }
 
+int verify_broker_callback(int preverify, X509_STORE_CTX* ctx)
+{
+    rd_kafka_t* rk = (rd_kafka_t*)ctx;
+
+
+    
+    int a = 1234;
+    a++;
+    a--;
+
+    return 0;
+}
+
+int client_priv_key_password_cb(char *buf, int size, int rwflag, void *u)
+{
+    rd_kafka_t *rk = (rd_kafka_t*)u;
+    if (rk)
+        return rk->rk_conf.ssl.private_key_password_cb(buf, size, rwflag);
+    else
+        return 0;
+}
+
+void ssl_info_callback(const SSL *ssl, int type, int val)
+{
+}
+
 /**
  * Set up SSL for a newly connected connection
  *
@@ -648,6 +677,7 @@ static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 	int r;
 	char name[RD_KAFKA_NODENAME_SIZE];
 	char *t;
+    int index;
 
 	rktrans->rktrans_ssl = SSL_new(rkb->rkb_rk->rk_conf.ssl.ctx);
 	if (!rktrans->rktrans_ssl)
@@ -667,6 +697,14 @@ static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 	    !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
 		goto fail;
 #endif
+
+    SSL_set_info_callback(rktrans->rktrans_ssl, ssl_info_callback);
+
+    if (rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.cert_verify_cb) {
+
+        index = SSL_get_ex_new_index(0, "ssl verify context", NULL, NULL, NULL);
+        SSL_set_ex_data(rktrans->rktrans_ssl, index, rktrans->rktrans_rkb->rkb_rk);
+    }
 
 	r = SSL_connect(rktrans->rktrans_ssl);
 	if (r == 1) {
@@ -835,6 +873,122 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                         goto fail;
 		}
 	}
+
+    /* Register the verify callback on the context*/
+    if (rk->rk_conf.ssl.cert_verify_cb) {
+
+        rd_kafka_dbg(rk, SECURITY, "SSL",
+            "Registering client's verification callback");
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE, verify_broker_callback);
+    }
+
+    if (rk->rk_conf.ssl.cert_retrieve_cb) {
+
+        unsigned char* buffer = NULL;
+        long len = 0;
+
+        rd_kafka_dbg(rk, SECURITY, "SSL",
+            "Calling callback to retrieve client's public key certificate");
+        len = rk->rk_conf.ssl.cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PUBLIC_KEY, &buffer, rk->rk_conf.opaque);
+        if (len) {
+            X509* cert;
+            rd_kafka_dbg(rk, SECURITY, "SSL",
+                "Retrieved client's public key certificate %u bytes",
+                len);
+
+            cert = X509_new();
+            if (cert) {
+                if (!d2i_X509(&cert, &buffer, len))
+                    rd_snprintf(errstr, errstr_size,
+                        "Failed to parse public key certificate with %u bytes",
+                        len);
+                cert = d2i_X509(&cert, &buffer, len);
+                r = SSL_CTX_use_certificate(ctx, cert);
+                X509_free(cert);
+
+                if (r != 1)
+                    goto fail;
+            }
+            else
+                rd_snprintf(errstr, errstr_size,
+                    "Failed to initialize X509");
+        }
+        else
+            rd_kafka_dbg(rk, SECURITY, "SSL",
+                "Callback failed to return valid public key certificate");
+
+        /* Get private key */
+        rd_kafka_dbg(rk, SECURITY, "SSL",
+            "Calling callback to retrieve client's private key certificate");
+        len = rk->rk_conf.ssl.cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY, &buffer, rk->rk_conf.opaque);
+        if (len) {
+            EVP_PKEY* pkey;
+            rd_kafka_dbg(rk, SECURITY, "SSL",
+                "Retrieved client's private key certificate %u bytes",
+                len);
+            
+            pkey = EVP_PKEY_new();
+            if (pkey) {
+                BIO *key_bio;
+                key_bio = BIO_new_mem_buf(buffer, len);
+                if (key_bio) {
+                    pkey = PEM_read_bio_PrivateKey(key_bio, &pkey, client_priv_key_password_cb, rk);
+                    if (pkey) {
+                        r = SSL_CTX_use_PrivateKey(ctx, pkey);
+                        if (r != 1) {
+                            rd_snprintf(errstr, errstr_size,
+                                "SSL_CTX_use_PrivateKey failed to read private key");
+
+                            goto fail;
+                        }
+                        else {
+                            r = SSL_CTX_check_private_key(ctx);
+                            if (r != 1) {
+                                rd_snprintf(errstr, errstr_size,
+                                    "SSL_CTX_check_private_key failed to validate private key");
+
+                                goto fail;
+                            }
+                        }
+                    }
+                    else
+                        rd_snprintf(errstr, errstr_size,
+                            "PEM_read_bio_PrivateKey failed to read private key");
+
+                    BIO_free(key_bio);
+                }
+                else
+                    rd_snprintf(errstr, errstr_size,
+                        "Failed to memory BIO");
+
+                EVP_PKEY_free(pkey);
+            }
+            else
+                rd_snprintf(errstr, errstr_size,
+                    "Failed to initialize EVP_PKEY");
+
+        }
+        else
+            rd_kafka_dbg(rk, SECURITY, "SSL",
+                "Callback failed to return valid private key certificate");
+    }
+
+
+    /*
+    1) SSL_CTX_set_verify
+        SSL_VERIFY_PEER|SSL_VERIFY_CLIENT_ONCE
+    2) Load cert public key 
+        SSL_CTX_use_certificate_file
+    3) Load cert private key
+        SSL_CTX_use_PrivateKey_file
+    4) validate private key
+        SSL_CTX_check_private_key
+
+    5) For the SSL_new
+    6) SSL_set_info_callback for notification of SSL
+    7) SSL_set_connect_state / SSL_connect
+
+    */
 
 
 	if (rk->rk_conf.ssl.ca_location) {

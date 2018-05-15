@@ -902,7 +902,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                     rd_snprintf(errstr, errstr_size,
                         "Failed to parse public key certificate with %u bytes",
                         len);
-                cert = d2i_X509(&cert, &buffer, len);
+
                 r = SSL_CTX_use_certificate(ctx, cert);
                 X509_free(cert);
 
@@ -932,8 +932,14 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                 BIO *key_bio;
                 key_bio = BIO_new_mem_buf(buffer, len);
                 if (key_bio) {
-                    pkey = PEM_read_bio_PrivateKey(key_bio, &pkey, client_priv_key_password_cb, rk);
-                    if (pkey) {
+
+                    r = PEM_read_bio_PrivateKey(key_bio, &pkey, client_priv_key_password_cb, rk);
+                    if (r != 1)
+                        goto fail;
+                    /*if(!PEM_read_bio_PrivateKey(key_bio, &pkey, client_priv_key_password_cb, rk))
+                        rd_snprintf(errstr, errstr_size,
+                            "PEM_read_bio_PrivateKey failed to read private key");*/
+                    else {
                         r = SSL_CTX_use_PrivateKey(ctx, pkey);
                         if (r != 1) {
                             rd_snprintf(errstr, errstr_size,
@@ -951,10 +957,6 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                             }
                         }
                     }
-                    else
-                        rd_snprintf(errstr, errstr_size,
-                            "PEM_read_bio_PrivateKey failed to read private key");
-
                     BIO_free(key_bio);
                 }
                 else

@@ -127,7 +127,7 @@ int RdKafka::cert_verify_cb_trampoline(unsigned char* cert, long len, void *opaq
     RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
 #if WITH_SSL
-    return handle->cert_verify_cb_->cert_verify_cb(cert, cbCert);
+    return handle->cert_verify_cb_->cert_verify_cb(cert, len);
 #else
     RD_UNUSED(cert);
     RD_UNUSED(len);
@@ -141,7 +141,7 @@ long RdKafka::cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, unsi
     RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
 #if WITH_SSL
-    return handle->cert_retrieve_cb_->cert_retrieve_cb(type, cert, cbCert);
+    return handle->cert_retrieve_cb_->cert_retrieve_cb(type, cert);
 #else
     RD_UNUSED(type);
     RD_UNUSED(cert);

@@ -40,6 +40,15 @@ extern "C" {
 
 #include "rdkafkacpp.h"
 
+
+#ifdef _MSC_VER
+/* Visual Studio */
+#include "../src/win32_config.h"
+#else
+/* POSIX / UNIX based systems */
+#include "../config.h" /* mklove output */
+#endif
+
 #ifdef _MSC_VER
 typedef int mode_t;
 #pragma warning(disable : 4250)

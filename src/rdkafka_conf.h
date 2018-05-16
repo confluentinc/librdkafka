@@ -114,7 +114,7 @@ struct rd_kafka_conf_s {
 		char *keystore_location;
 		char *keystore_password;
         int(*cert_verify_cb) (unsigned char* cert, long len, void *opaque);
-        long(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, unsigned char** cert, void *opaque);
+        long(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, unsigned char** buffer, void *opaque);
         int(*private_key_password_cb)(char* buffer, int size, int rwflag);
 	} ssl;
 #endif

@@ -1619,8 +1619,9 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
 * @sa rd_kafka_conf_set_get_cert_cb()
 */
 typedef enum _rd_kafka_certificate_type_t {
+    RD_KAFKA_CERTIFICATE_PUBLIC_KEY, 
     RD_KAFKA_CERTIFICATE_PRIVATE_KEY,
-    RD_KAFKA_CERTIFICATE_PUBLIC_KEY
+    RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS
 } rd_kafka_certificate_type_t;
 
 /**
@@ -1637,7 +1638,7 @@ void rd_kafka_conf_set_cert_verify_cb(rd_kafka_conf_t *conf,
 */
 RD_EXPORT
 void rd_kafka_conf_set_cert_retrieve_cb(rd_kafka_conf_t *conf,
-    long(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, unsigned char** cert, void *opaque));
+    long(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, unsigned char** buffer, void *opaque));
 
 /**
  * @brief Sets the application's opaque pointer that will be passed to callbacks

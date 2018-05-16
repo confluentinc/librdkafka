@@ -724,7 +724,7 @@ public:
     * The verification of the broker certificate will processed
     * by this callback.
     */
-    virtual bool cert_verify_cb(unsigned char* cert, long len) = 0;
+    virtual int cert_verify_cb(unsigned char* cert, long len) = 0;
 
 
     virtual ~CertVerifyCb() {}
@@ -740,7 +740,7 @@ public:
     *
     * The retrieval of the cetificate specified by the type will be returned by this callback.
     */
-    virtual long cert_retrieve_cb(rd_kafka_certificate_type_t type, unsigned char** cert) = 0;
+    virtual long cert_retrieve_cb(rd_kafka_certificate_type_t type, unsigned char** buffer) = 0;
 
     virtual ~CertRetrieveCb() {}
 };

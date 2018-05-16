@@ -507,6 +507,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     _RK(ssl.cert_retrieve_cb),
     "Client certificate retrieve callback."
     },
+    { _RK_GLOBAL, "ssl.certificate.selfsigned.enable", _RK_C_BOOL,
+    _RK(ssl.allow_self_signed),
+    "Allows self signed certificates in chain",
+    0, 1, 0
+    },
 #endif /* WITH_SSL */
 
         /* Point user in the right direction if they try to apply

@@ -646,43 +646,65 @@ static int rd_kafka_transport_ssl_passwd_cb (char *buf, int size, int rwflag,
 
 int verify_broker_callback(int preverify_ok, X509_STORE_CTX* ctx)
 {
-    X509* cert;
-    int err;
     SSL* ssl;
-
-    char buffer[512];
     char errstr[512];
 
     ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
-    rd_kafka_t* rk = SSL_get_ex_data(ssl, verify_context_index);
-    cert = X509_STORE_CTX_get_current_cert(ctx);
-    err = X509_STORE_CTX_get_error(ctx); 
-    if (err != X509_V_OK) {
+    if (ssl) {
+        rd_kafka_t* rk = SSL_get_ex_data(ssl, verify_context_index);
+        if (rk) {
+            int err;
+            err = X509_STORE_CTX_get_error(ctx);
+            if (!preverify_ok && err != X509_V_OK) {
+                if (rk->rk_conf.ssl.allow_self_signed && err == X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN) {
+                    rd_kafka_dbg(rk, SECURITY, "SSL",
+                        "Allowing self signed certificate");
 
-
-        X509_NAME_oneline(cert, buffer, sizeof(buffer));
-
-        rd_snprintf(errstr, sizeof(errstr), buffer);
-        preverify_ok = err;
-    }
-    
-    if (preverify_ok == 0 && cert) {
-        int len;
-        char* buf = NULL;
-        
-        len = i2d_X509(cert, &buf);
-        if (len > 0) {
-            int sc = rk->rk_conf.ssl.cert_verify_cb(buf, len, rk->rk_conf.opaque);
-            if (sc) {
-                preverify_ok = sc;
-                X509_STORE_CTX_set_error(ctx, sc);
+                    preverify_ok = 1;
+                }
             }
-        }
-        else {
+            else if (preverify_ok) {
+                X509* cert;
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                    "Preverification of certificate succeeded.  Applying additional checks");
+
+                cert = X509_STORE_CTX_get_current_cert(ctx);
+                if (cert) {
+                    int len;
+                    char* buf = NULL;
+
+                    len = i2d_X509(cert, &buf);
+                    rd_kafka_dbg(rk, SECURITY, "SSL",
+                        "Calling client callback to verify certificate");
+
+                    int r = rk->rk_conf.ssl.cert_verify_cb(buf, len, rk->rk_conf.opaque);
+                    if (r != 0) {
+                        rd_snprintf(errstr, sizeof(errstr),
+                            "client certificate verification callback failed.  Returned %u", r);
+
+                        preverify_ok = 0;
+                        X509_STORE_CTX_set_error(ctx, r);
+                    }
+                    else {
+                        rd_kafka_dbg(rk, SECURITY, "SSL",
+                            "Client callback successfully verified certificate.");
+
+                        preverify_ok = 1;
+                    }
+                    if (buf)
+                        OPENSSL_free(buf);
+                }
+                else
+                    rd_snprintf(errstr, sizeof(errstr),
+                        "failed to retrieve X509 cert from ctx");
+            }
+        } else
             rd_snprintf(errstr, sizeof(errstr),
-                "i2d_X509 failed");
-        }
+                "failed to retrieve rd_kafka_t form ctx");
     }
+    else
+        rd_snprintf(errstr, sizeof(errstr),
+            "failed to retrieve SSL form ctx");
 
     return preverify_ok;
 }
@@ -936,7 +958,10 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 
         rd_kafka_dbg(rk, SECURITY, "SSL",
             "Registering client's verification callback");
-        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE, verify_broker_callback);
+        SSL_CTX_set_verify(
+            ctx,
+            SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+            verify_broker_callback);
     }
 
     if (rk->rk_conf.ssl.cert_retrieve_cb) {
@@ -995,7 +1020,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                             STACK_OF(X509) *ca = NULL;
                             if (!PKCS12_parse(p12, buffer, &pkey, &cert, &ca)) {
                                 rd_snprintf(errstr, errstr_size,
-                                    "Error reading PKCS#12: ");
+                                    "Error reading PKCS#12");
 
                                 PKCS12_free(p12);
                                 BIO_free(bio);
@@ -1048,49 +1073,6 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                 else
                     rd_snprintf(errstr, errstr_size,
                         "Failed to initialize BIO");
-
-            //pkey = EVP_PKEY_new();
-            //if (pkey) {
-            //    BIO *key_bio;
-            //    key_bio = BIO_new_mem_buf(buffer, len);
-            //    if (key_bio) {
-
-            //        r = (key_bio, &pkey, client_priv_key_password_cb, rk);
-            //        if (r != 1)
-            //            goto fail;
-            //        /*if(!PEM_read_bio_PrivateKey(key_bio, &pkey, client_priv_key_password_cb, rk))
-            //            rd_snprintf(errstr, errstr_size,
-            //                "PEM_read_bio_PrivateKey failed to read private key");*/
-            //        else {
-            //            r = SSL_CTX_use_PrivateKey(ctx, pkey);
-            //            if (r != 1) {
-            //                rd_snprintf(errstr, errstr_size,
-            //                    "SSL_CTX_use_PrivateKey failed to read private key");
-
-            //                goto fail;
-            //            }
-            //            else {
-            //                r = SSL_CTX_check_private_key(ctx);
-            //                if (r != 1) {
-            //                    rd_snprintf(errstr, errstr_size,
-            //                        "SSL_CTX_check_private_key failed to validate private key");
-
-            //                    goto fail;
-            //                }
-            //            }
-            //        }
-            //        BIO_free(key_bio);
-            //    }
-            //    else
-            //        rd_snprintf(errstr, errstr_size,
-            //            "Failed to memory BIO");
-
-            //    EVP_PKEY_free(pkey);
-            //}
-            //else
-            //    rd_snprintf(errstr, errstr_size,
-            //        "Failed to initialize EVP_PKEY");
-
         }
         else
             rd_kafka_dbg(rk, SECURITY, "SSL",

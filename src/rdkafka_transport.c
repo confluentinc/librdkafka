@@ -656,10 +656,12 @@ int verify_broker_callback(int preverify_ok, X509_STORE_CTX* ctx)
             int err;
             err = X509_STORE_CTX_get_error(ctx);
             if (!preverify_ok && err != X509_V_OK) {
-                if (rk->rk_conf.ssl.allow_self_signed && err == X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN) {
+                if (rk->rk_conf.ssl.self_signed && err == X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN) {
                     rd_kafka_dbg(rk, SECURITY, "SSL",
                         "Allowing self signed certificate");
 
+                    /* Set Error to success since this error should be ignored */
+                    X509_STORE_CTX_set_error(ctx, X509_V_OK);
                     preverify_ok = 1;
                 }
             }
@@ -780,7 +782,8 @@ static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 		goto fail;
 #endif
 
-    SSL_set_info_callback(rktrans->rktrans_ssl, ssl_info_callback);
+    if(rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.handshake_info)
+        SSL_set_info_callback(rktrans->rktrans_ssl, ssl_info_callback);
 
     if (rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.cert_verify_cb)
         SSL_set_ex_data(rktrans->rktrans_ssl, verify_context_index, rktrans->rktrans_rkb->rkb_rk);

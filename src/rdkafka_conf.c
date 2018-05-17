@@ -499,6 +499,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	_RK(ssl.keystore_password),
 	"Client's keystore (PKCS#12) password."
 	},
+    { _RK_GLOBAL, "ssl.certificate.selfsigned.enable", _RK_C_BOOL,
+    _RK(ssl.self_signed),
+    "Allows self signed certificates in chain",
+    0, 1, 0
+    },
+    { _RK_GLOBAL, "ssl.handshake.info.enable", _RK_C_BOOL,
+    _RK(ssl.handshake_info),
+    "Report diagnostic information during SSL handshake",
+    0, 1, 0
+    },
     { _RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
     _RK(ssl.cert_verify_cb),
     "Client certificate verification callback."
@@ -507,11 +517,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     _RK(ssl.cert_retrieve_cb),
     "Client certificate retrieve callback."
     },
-    { _RK_GLOBAL, "ssl.certificate.selfsigned.enable", _RK_C_BOOL,
-    _RK(ssl.allow_self_signed),
-    "Allows self signed certificates in chain",
-    0, 1, 0
-    },
+    
 #endif /* WITH_SSL */
 
         /* Point user in the right direction if they try to apply

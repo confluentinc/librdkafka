@@ -909,14 +909,13 @@ static RD_INLINE void rd_kafka_stats_emit_avg (struct _stats_emit *st,
                 " \"avg\":%"PRId64","
                 " \"sum\":%"PRId64","
                 " \"stddev\": %"PRId64","
-                " \"mean\": %"PRId64","
-                " \"histoor\": %"PRId64","
                 " \"p50\": %"PRId64","
                 " \"p75\": %"PRId64","
                 " \"p90\": %"PRId64","
                 " \"p95\": %"PRId64","
                 " \"p99\": %"PRId64","
                 " \"p99_99\": %"PRId64","
+                " \"outofrange\": %"PRId64","
                 " \"cnt\":%i "
                 "}, ",
                 name,
@@ -925,14 +924,13 @@ static RD_INLINE void rd_kafka_stats_emit_avg (struct _stats_emit *st,
                 avg.ra_v.avg,
                 avg.ra_v.sum,
                 (int64_t)avg.ra_hist.stddev,
-                (int64_t)avg.ra_hist.mean,
-                avg.ra_hist.oor,
                 avg.ra_hist.p50,
                 avg.ra_hist.p75,
                 avg.ra_hist.p90,
                 avg.ra_hist.p95,
                 avg.ra_hist.p99,
                 avg.ra_hist.p99_99,
+                avg.ra_hist.oor,
                 avg.ra_v.cnt);
         rd_avg_destroy(&avg);
 }

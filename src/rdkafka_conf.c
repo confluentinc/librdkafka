@@ -470,6 +470,22 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "protocol. See manual page for `ciphers(1)` and "
 	  "`SSL_CTX_set_cipher_list(3)."
 	},
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
+        { _RK_GLOBAL, "ssl.curves.list", _RK_C_STR,
+          _RK(ssl.curves_list),
+          "The supported-curves extension in the TLS ClientHello message specifies "
+          "the curves (standard/named, or 'explicit' GF(2^k) or GF(p)) the client "
+          "is willing to have the server use. See manual page for "
+          "`SSL_CTX_set1_curves_list(3)`. OpenSSL >= 1.0.2 required"
+        },
+        { _RK_GLOBAL, "ssl.sigalgs.list", _RK_C_STR,
+          _RK(ssl.sigalgs_list),
+          "The client uses the TLS ClientHello signature_algorithms extension "
+          "to indicate to the server which signature/hash algorithm pairs "
+          "may be used in digital signatures. See manual page for "
+          "`SSL_CTX_set1_sigalgs_list(3)`. OpenSSL >= 1.0.2 required"
+        },
+#endif
 	{ _RK_GLOBAL, "ssl.key.location", _RK_C_STR,
 	  _RK(ssl.key_location),
 	  "Path to client's private key (PEM) used for authentication."

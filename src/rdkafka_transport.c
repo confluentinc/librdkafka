@@ -836,6 +836,33 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		}
 	}
 
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
+	/* Curves */
+	if (rk->rk_conf.ssl.curves_list) {
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+			     "Setting curves list: %s",
+			     rk->rk_conf.ssl.curves_list);
+		if (!SSL_CTX_set1_curves_list(ctx,
+					      rk->rk_conf.ssl.curves_list)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.curves.list failed: ");
+                        goto fail;
+		}
+	}
+
+	/* Certificate signature algorithms */
+	if (rk->rk_conf.ssl.sigalgs_list) {
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+			     "Setting signature algorithms list: %s",
+			     rk->rk_conf.ssl.sigalgs_list);
+		if (!SSL_CTX_set1_sigalgs_list(ctx,
+					       rk->rk_conf.ssl.sigalgs_list)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.sigalgs.list failed: ");
+                        goto fail;
+		}
+	}
+#endif
 
 	if (rk->rk_conf.ssl.ca_location) {
 		/* CA certificate location, either file or directory. */

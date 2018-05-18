@@ -605,8 +605,8 @@ static void do_test_options (rd_kafka_t *rk) {
                 const char **for_api;
 
                 for (for_api = all_apis ; ; for_api++) {
-                        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR,
-                                exp_err;
+                        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
                         char errstr[512];
                         int fi;
 
@@ -621,10 +621,13 @@ static void do_test_options (rd_kafka_t *rk) {
                         else if (!strcmp(matrix[i].setter, "operation_timeout"))
                                 err = rd_kafka_AdminOptions_set_operation_timeout(
                                         options, 12345, errstr, sizeof(errstr));
-                        else if (!strcmp(matrix[i].setter, "incremental"))
+                        else if (!strcmp(matrix[i].setter, "incremental")) {
                                 err = rd_kafka_AdminOptions_set_incremental(
                                         options, 1, errstr, sizeof(errstr));
-                        else if (!strcmp(matrix[i].setter, "validate_only"))
+                                /* incremental is yet not implemented in the
+                                 * client nor the broker. */
+                                exp_err = RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
+                        } else if (!strcmp(matrix[i].setter, "validate_only"))
                                 err = rd_kafka_AdminOptions_set_validate_only(
                                         options, 1, errstr, sizeof(errstr));
                         else if (!strcmp(matrix[i].setter, "broker"))
@@ -648,7 +651,9 @@ static void do_test_options (rd_kafka_t *rk) {
 
                         /* Scan matrix valid_apis to see if this
                          * setter should be accepted or not. */
-                        if (*for_api) {
+                        if (exp_err) {
+                                /* An expected error is already set */
+                        } else  if (*for_api) {
                                 exp_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
 
                                 for (fi = 0 ; matrix[i].valid_apis[fi] ; fi++) {

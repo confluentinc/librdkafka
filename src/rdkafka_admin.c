@@ -881,6 +881,10 @@ rd_kafka_resp_err_t
 rd_kafka_AdminOptions_set_incremental (rd_kafka_AdminOptions_t *options,
                                        int true_or_false,
                                        char *errstr, size_t errstr_size) {
+        rd_snprintf(errstr, errstr_size,
+                    "Incremental updates currently not supported, see KIP-248");
+        return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
+
         return rd_kafka_confval_set_type(&options->incremental,
                                          RD_KAFKA_CONFVAL_INT, &true_or_false,
                                          errstr, errstr_size);

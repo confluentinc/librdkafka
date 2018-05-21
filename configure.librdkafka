@@ -77,6 +77,9 @@ void foo (void) {
                       "#include <lz4frame.h>"
     fi
 
+    mkl_compile_check "rapidjson" "WITH_RAPIDJSON" disable CXX "" \
+                      "#include <rapidjson/document.h>"
+
     # Snappy support is built-in
     mkl_allvar_set WITH_SNAPPY WITH_SNAPPY y
 

@@ -37,6 +37,7 @@ extern "C" {
 /* Win32/Visual Studio */
 #include "../src/rdwin32.h"
 #else
+#include "../config.h"
 /* POSIX / UNIX based systems */
 #include "../src/rdposix.h"
 #endif

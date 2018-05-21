@@ -1142,7 +1142,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                 total.rx       += rd_atomic64_get(&rkb->rkb_c.rx);
                 total.rx_bytes += rd_atomic64_get(&rkb->rkb_c.rx_bytes);
 
-                rd_kafka_stats_emit_avg(st, "int_lantecy",
+                rd_kafka_stats_emit_avg(st, "int_latency",
                                         &rkb->rkb_avg_int_latency);
                 rd_kafka_stats_emit_avg(st, "rtt", &rkb->rkb_avg_rtt);
                 rd_kafka_stats_emit_avg(st, "throttle", &rkb->rkb_avg_throttle);

@@ -315,7 +315,8 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 
         if (rk->rk_type == RD_KAFKA_PRODUCER)
                 rd_avg_init(&rkt->rkt_avg_batchsize, RD_AVG_GAUGE, 0,
-                            rk->rk_conf.max_msg_size,
+                            rk->rk_conf.max_msg_size, 2,
+                            rk->rk_conf.stats_interval_ms ? 1 : 0);
                             rk->rk_conf.stats_interval_ms ? 1 : 0);
 
 	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",

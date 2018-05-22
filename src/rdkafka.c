@@ -916,6 +916,7 @@ static RD_INLINE void rd_kafka_stats_emit_avg (struct _stats_emit *st,
                 " \"p99\": %"PRId64","
                 " \"p99_99\": %"PRId64","
                 " \"outofrange\": %"PRId64","
+                " \"hdrsize\": %"PRId32","
                 " \"cnt\":%i "
                 "}, ",
                 name,
@@ -931,6 +932,7 @@ static RD_INLINE void rd_kafka_stats_emit_avg (struct _stats_emit *st,
                 avg.ra_hist.p99,
                 avg.ra_hist.p99_99,
                 avg.ra_hist.oor,
+                avg.ra_hist.hdrsize,
                 avg.ra_v.cnt);
         rd_avg_destroy(&avg);
 }

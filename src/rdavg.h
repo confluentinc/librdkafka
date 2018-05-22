@@ -35,7 +35,8 @@ typedef struct rd_avg_s {
                 int64_t p99;
                 int64_t p99_99;
 
-                int64_t oor;   /**< Values out of range */
+                int64_t oor;     /**< Values out of range */
+                int32_t hdrsize; /**< hdr.allocatedSize */
                 double stddev;
                 double mean;
         } ra_hist;
@@ -128,6 +129,7 @@ static RD_UNUSED void rd_avg_rollover (rd_avg_t *dst, rd_avg_t *src) {
         dst->ra_hist.stddev = rd_hdr_histogram_stddev(src->ra_hdr);
         dst->ra_hist.mean   = rd_hdr_histogram_mean(src->ra_hdr);
         dst->ra_hist.oor    = src->ra_hdr->outOfRangeCount;
+        dst->ra_hist.hdrsize = src->ra_hdr->allocatedSize;
         dst->ra_hist.p50    = rd_hdr_histogram_quantile(src->ra_hdr, 50.0);
         dst->ra_hist.p75    = rd_hdr_histogram_quantile(src->ra_hdr, 75.0);
         dst->ra_hist.p90    = rd_hdr_histogram_quantile(src->ra_hdr, 90.0);
@@ -198,7 +200,7 @@ static RD_UNUSED void rd_avg_rollover (rd_avg_t *dst, rd_avg_t *src) {
  */
 static RD_UNUSED void rd_avg_init (rd_avg_t *ra, int type,
                                    int64_t exp_min, int64_t exp_max,
-                                   int enable) {
+                                   int sigfigs, int enable) {
         memset(ra, 0, sizeof(*ra));
         mtx_init(&ra->ra_lock, 0);
         ra->ra_enabled = enable;
@@ -209,7 +211,7 @@ static RD_UNUSED void rd_avg_init (rd_avg_t *ra, int type,
 #if WITH_HDRHISTOGRAM
         /* Start off the histogram with expected min,max span,
          * we'll adapt the size on each rollover. */
-        ra->ra_hdr = rd_hdr_histogram_new(exp_min, exp_max, 3);
+        ra->ra_hdr = rd_hdr_histogram_new(exp_min, exp_max, sigfigs);
 #endif
 }
 

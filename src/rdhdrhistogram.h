@@ -50,6 +50,8 @@ typedef struct rd_hdr_histogram_s {
                                      *   Initialized to lowestTrackableValue */
         int64_t  highestOutOfRange; /**< Highest value that was out of range.
                                      *   Initialized to highestTrackableValue */
+        int32_t  allocatedSize;     /**< Allocated size of histogram, for
+                                     *   sigfigs tuning. */
 } rd_hdr_histogram_t;
 
 

@@ -130,6 +130,7 @@ rd_hdr_histogram_t *rd_hdr_histogram_new (int64_t minValue, int64_t maxValue,
         countsLen = (bucketCount + 1) * (subBucketCount / 2);
         hdr = calloc(1, sizeof(*hdr) + (sizeof(*hdr->counts) * countsLen));
         hdr->counts = (int64_t *)(hdr+1);
+        hdr->allocatedSize = sizeof(*hdr) + (sizeof(*hdr->counts) * countsLen);
 
         hdr->lowestTrackableValue =        minValue;
         hdr->highestTrackableValue =       maxValue;

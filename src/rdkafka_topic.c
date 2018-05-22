@@ -117,8 +117,10 @@ void rd_kafka_topic_destroy_final (rd_kafka_itopic_t *rkt) {
         rd_kafka_assert(rkt->rkt_rk, rd_list_empty(&rkt->rkt_desp));
         rd_list_destroy(&rkt->rkt_desp);
 
-        if (rkt->rkt_rk->rk_type == RD_KAFKA_PRODUCER)
+        if (rkt->rkt_rk->rk_type == RD_KAFKA_PRODUCER) {
                 rd_avg_destroy(&rkt->rkt_avg_batchsize);
+                rd_avg_destroy(&rkt->rkt_avg_batchcnt);
+        }
 
 	if (rkt->rkt_topic)
 		rd_kafkap_str_destroy(rkt->rkt_topic);
@@ -313,11 +315,14 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	if (rkt->rkt_conf.compression_codec == RD_KAFKA_COMPRESSION_INHERIT)
 		rkt->rkt_conf.compression_codec = rk->rk_conf.compression_codec;
 
-        if (rk->rk_type == RD_KAFKA_PRODUCER)
+        if (rk->rk_type == RD_KAFKA_PRODUCER) {
                 rd_avg_init(&rkt->rkt_avg_batchsize, RD_AVG_GAUGE, 0,
                             rk->rk_conf.max_msg_size, 2,
                             rk->rk_conf.stats_interval_ms ? 1 : 0);
+                rd_avg_init(&rkt->rkt_avg_batchcnt, RD_AVG_GAUGE, 0,
+                            rk->rk_conf.batch_num_messages, 2,
                             rk->rk_conf.stats_interval_ms ? 1 : 0);
+        }
 
 	rd_kafka_dbg(rk, TOPIC, "TOPIC", "New local topic: %.*s",
 		     RD_KAFKAP_STR_PR(rkt->rkt_topic));

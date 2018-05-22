@@ -1185,9 +1185,12 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rkt->rkt_ts_metadata ?
 			   (rd_clock() - rkt->rkt_ts_metadata)/1000 : 0);
 
-                if (rk->rk_type == RD_KAFKA_PRODUCER)
+                if (rk->rk_type == RD_KAFKA_PRODUCER) {
                         rd_kafka_stats_emit_avg(st, "batchsize",
                                                 &rkt->rkt_avg_batchsize);
+                        rd_kafka_stats_emit_avg(st, "batchcnt",
+                                                &rkt->rkt_avg_batchcnt);
+                }
 
                 _st_printf("\"partitions\":{ " /*open partitions*/);
 

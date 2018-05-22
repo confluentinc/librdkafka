@@ -1963,8 +1963,7 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
         cnt = rkbuf->rkbuf_msgq.rkmq_msg_cnt;
         rd_dassert(cnt > 0);
 
-        rd_atomic64_add(&rktp->rktp_c.tx_msgs, cnt);
-        rd_atomic64_add(&rktp->rktp_c.tx_msg_bytes, MessageSetSize);
+        rd_avg_add(&rktp->rktp_rkt->rkt_avg_batchcnt, (int64_t)cnt);
         rd_avg_add(&rktp->rktp_rkt->rkt_avg_batchsize, (int64_t)MessageSetSize);
 
         if (!rkt->rkt_conf.required_acks)

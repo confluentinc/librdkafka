@@ -48,8 +48,11 @@ typedef struct rd_kafka_msgset_writer_s {
         int     msetw_features;          /* Protocol features to use */
         int     msetw_msgcntmax;         /* Max number of messages to send
                                           * in a batch. */
-        size_t  msetw_messages_len;      /* Total size of Messages, without
+        size_t  msetw_messages_len;      /* Total size of Messages, with Message
+                                          * framing but without
                                           * MessageSet header */
+        size_t  msetw_messages_kvlen;    /* Total size of Message keys
+                                          * and values */
 
         size_t  msetw_MessageSetSize;    /* Current MessageSetSize value */
         size_t  msetw_of_MessageSetSize; /* offset of MessageSetSize */
@@ -757,6 +760,8 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                 rd_kafka_msgq_deq(rkmq, rkm, 1);
                 rd_kafka_msgq_enq(&rkbuf->rkbuf_msgq, rkm);
 
+                msetw->msetw_messages_kvlen += rkm->rkm_len + rkm->rkm_key_len;
+
                 /* Add internal latency metrics */
                 rd_avg_add(&rkb->rkb_avg_int_latency,
                            int_latency_base - rkm->rkm_ts_timeout);
@@ -1170,6 +1175,9 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
                 msetw->msetw_firstmsg.of;
         rd_assert(len > 0);
         rd_assert(len <= (size_t)rktp->rktp_rkt->rkt_rk->rk_conf.max_msg_size);
+
+        rd_atomic64_add(&rktp->rktp_c.tx_msgs, cnt);
+        rd_atomic64_add(&rktp->rktp_c.tx_msg_bytes, msetw->msetw_messages_kvlen);
 
         /* Compress the message set */
         if (rktp->rktp_rkt->rkt_conf.compression_codec)

@@ -56,11 +56,28 @@ test_produce_msgs_easy_size (const char *topic, uint64_t testid,
 
 void test_FAIL (const char *file, int line, int fail_now, const char *str);
 void test_SAY (const char *file, int line, int level, const char *str);
+void test_SKIP (const char *file, int line, const char *str);
 
 void test_timeout_set (int timeout);
 int test_set_special_conf (const char *name, const char *val, int *timeoutp);
 const char *test_conf_get_path (void);
 const char *test_getenv (const char *env, const char *def);
+
+uint64_t test_id_generate (void);
+char *test_str_id_generate (char *dest, size_t dest_size);
+const char *test_str_id_generate_tmp (void);
+
+void test_prepare_msg (uint64_t testid, int32_t partition, int msg_id,
+                       char *val, size_t val_size,
+                       char *key, size_t key_size);
+/**
+ * Parse a message token
+ */
+void test_msg_parse00 (const char *func, int line,
+                       uint64_t testid, int32_t exp_partition, int *msgidp,
+                       const char *topic, int32_t partition, int64_t offset,
+                       const char *key, size_t key_size);
+
 
 /**
  * @returns the current test's name (thread-local)

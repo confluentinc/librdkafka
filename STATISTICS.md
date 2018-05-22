@@ -231,7 +231,7 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
       "zbuf_grow": 0,
       "buf_grow": 0,
       "wakeups": 31,
-      "int_lantecy": {
+      "int_latency": {
         "min": 116317,
         "max": 131389,
         "avg": 123795,
@@ -309,7 +309,7 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
       "zbuf_grow": 0,
       "buf_grow": 0,
       "wakeups": 24,
-      "int_lantecy": {
+      "int_latency": {
         "min": 0,
         "max": 0,
         "avg": 0,

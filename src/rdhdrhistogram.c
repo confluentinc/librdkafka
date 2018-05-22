@@ -523,7 +523,8 @@ static int ut_mean (void) {
 static int ut_stddev (void) {
         rd_hdr_histogram_t *hdr = rd_hdr_histogram_new(1, 10000000, 3);
         size_t i;
-        const double exp = 288675.1403682715;
+        const double exp = 288675.140368;
+        const double epsilon =  0.000001;
         double v;
 
         for (i = 0 ; i < 1000000 ; i++) {
@@ -532,8 +533,9 @@ static int ut_stddev (void) {
         }
 
         v = rd_hdr_histogram_stddev(hdr);
-        RD_UT_ASSERT(rd_dbl_eq0(v, exp, 0.00000000001),
-                     "StdDev is %f, expected %f", v, exp);
+        RD_UT_ASSERT(rd_dbl_eq0(v, exp, epsilon),
+                     "StdDev is %.6f, expected %.6f: diff %.6f vs epsilon %.6f",
+                     v, exp, fabs(v - exp), epsilon);
 
         rd_hdr_histogram_destroy(hdr);
         RD_UT_PASS();

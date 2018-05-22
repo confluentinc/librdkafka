@@ -671,7 +671,7 @@ rd_kafka_msg_partitioner_murmur2 (const rd_kafka_topic_t *rkt,
                                   int32_t partition_cnt,
                                   void *rkt_opaque,
                                   void *msg_opaque) {
-        return rd_murmur2(key, keylen) % partition_cnt;
+        return (rd_murmur2(key, keylen) & 0x7fffffff) % partition_cnt;
 }
 
 int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
@@ -687,7 +687,7 @@ int32_t rd_kafka_msg_partitioner_murmur2_random (const rd_kafka_topic_t *rkt,
                                                        rkt_opaque,
                                                        msg_opaque);
         else
-                return rd_murmur2(key, keylen) % partition_cnt;
+                return (rd_murmur2(key, keylen) & 0x7fffffff) % partition_cnt;
 }
 
 

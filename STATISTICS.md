@@ -120,6 +120,7 @@ cnt | int gauge | | Number of values sampled
 stddev | int gauge | | Standard deviation (based on histogram)
 mean | int gauge | | Mean value (based on histogram)
 histoor | int gauge | | Values skipped due to out of histogram range
+hdrsize | int gauge | | Memory size of Hdr Histogram
 p50 | int gauge | | 50th percentile
 p75 | int gauge | | 75th percentile
 p90 | int gauge | | 90th percentile
@@ -144,6 +145,7 @@ Field | Type | Example | Description
 topic | string | `"myatopic"` | Topic name
 metadata_age | int gauge | | Age of metadata from broker for this topic (milliseconds)
 batchsize | object | | Batch sizes in bytes. See *Window stats*·
+batchcnt | object | | Batch message counts. See *Window stats*·
 partitions | object | | Partitions dict, key is partition id. See **partitions** below.
 
 
@@ -191,76 +193,77 @@ assignment_size | int gauge | | Current assignment's partition count
 # Example output
 
 This (prettified) example output is from a short-lived producer using the following command:
-`rdkafka_performance -b mybroker -P -t test -T 1000 -Y 'cat >> stats.json'`.
+`rdkafka_performance -b localhost -P -t test -T 1000 -Y 'cat >> stats.json'`.
 
 Note: this output is prettified using `jq .`, the JSON object emitted by librdkafka does not contain line breaks.
 
-```
-{
+```{
   "name": "rdkafka#producer-1",
   "client_id": "rdkafka",
   "type": "producer",
-  "ts": 665309879710,
-  "time": 1526551404,
+  "ts": 5016483227792,
+  "time": 1527060869,
   "replyq": 0,
-  "msg_cnt": 500000,
-  "msg_size": 15500000,
+  "msg_cnt": 22710,
+  "msg_size": 704010,
   "msg_max": 500000,
   "msg_size_max": 1073741824,
   "simple_cnt": 0,
   "metadata_cache_cnt": 1,
   "brokers": {
-    "mybroker:9092/2": {
-      "name": "mybroker:9092/2",
+    "localhost:9092/2": {
+      "name": "localhost:9092/2",
       "nodeid": 2,
       "state": "UP",
-      "stateage": 12978988,
-      "outbuf_cnt": 21,
-      "outbuf_msg_cnt": 118094,
+      "stateage": 9057234,
+      "outbuf_cnt": 0,
+      "outbuf_msg_cnt": 0,
       "waitresp_cnt": 0,
       "waitresp_msg_cnt": 0,
-      "tx": 30,
-      "txbytes": 2623350,
+      "tx": 320,
+      "txbytes": 84283332,
       "txerrs": 0,
       "txretries": 0,
       "req_timeouts": 0,
-      "rx": 10,
-      "rxbytes": 1090,
+      "rx": 320,
+      "rxbytes": 15708,
       "rxerrs": 0,
       "rxcorriderrs": 0,
       "rxpartial": 0,
       "zbuf_grow": 0,
       "buf_grow": 0,
-      "wakeups": 31,
+      "wakeups": 591067,
       "int_latency": {
-        "min": 116317,
-        "max": 131389,
-        "avg": 123795,
-        "sum": 636184890,
-        "stddev": 4185,
-        "p50": 123711,
-        "p75": 127487,
-        "p90": 129663,
-        "p95": 130367,
-        "p99": 131199,
-        "p99_99": 131455,
+        "min": 86,
+        "max": 59375,
+        "avg": 23726,
+        "sum": 5694616664,
+        "stddev": 13982,
+        "p50": 28031,
+        "p75": 36095,
+        "p90": 39679,
+        "p95": 43263,
+        "p99": 48639,
+        "p99_99": 59391,
         "outofrange": 0,
-        "cnt": 5139
+        "hdrsize": 11376,
+        "cnt": 240012
       },
       "rtt": {
-        "min": 5175,
-        "max": 5213,
-        "avg": 5194,
-        "sum": 10388,
-        "stddev": 20,
-        "p50": 5175,
-        "p75": 5215,
-        "p90": 5215,
-        "p95": 5215,
-        "p99": 5215,
-        "p99_99": 5215,
+        "min": 1580,
+        "max": 3389,
+        "avg": 2349,
+        "sum": 79868,
+        "stddev": 474,
+        "p50": 2319,
+        "p75": 2543,
+        "p90": 3183,
+        "p95": 3199,
+        "p99": 3391,
+        "p99_99": 3391,
         "outofrange": 0,
-        "cnt": 2
+        "hdrsize": 13424,
+        "cnt": 34
       },
       "throttle": {
         "min": 0,
@@ -275,41 +278,115 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
         "p99": 0,
         "p99_99": 0,
         "outofrange": 0,
-        "cnt": 2
+        "hdrsize": 17520,
+        "cnt": 34
       },
       "toppars": {
         "test-1": {
           "topic": "test",
           "partition": 1
-        },
-        "test-2": {
-          "topic": "test",
-          "partition": 2
         }
       }
     },
-    "mybroker:9093/3": {
-      "name": "mybroker:9093/3",
+    "localhost:9093/3": {
+      "name": "localhost:9093/3",
       "nodeid": 3,
       "state": "UP",
-      "stateage": 12091317,
-      "outbuf_cnt": 46,
-      "outbuf_msg_cnt": 364158,
+      "stateage": 9057209,
+      "outbuf_cnt": 0,
+      "outbuf_msg_cnt": 0,
       "waitresp_cnt": 0,
       "waitresp_msg_cnt": 0,
-      "tx": 24,
-      "txbytes": 2710185,
+      "tx": 310,
+      "txbytes": 84301122,
       "txerrs": 0,
       "txretries": 0,
       "req_timeouts": 0,
-      "rx": 7,
-      "rxbytes": 560,
+      "rx": 310,
+      "rxbytes": 15104,
       "rxerrs": 0,
       "rxcorriderrs": 0,
       "rxpartial": 0,
       "zbuf_grow": 0,
       "buf_grow": 0,
-      "wakeups": 24,
+      "wakeups": 607956,
+      "int_latency": {
+        "min": 82,
+        "max": 58069,
+        "avg": 23404,
+        "sum": 5617432101,
+        "stddev": 14021,
+        "p50": 27391,
+        "p75": 35839,
+        "p90": 39679,
+        "p95": 42751,
+        "p99": 48639,
+        "p99_99": 58111,
+        "outofrange": 0,
+        "hdrsize": 11376,
+        "cnt": 240016
+      },
+      "rtt": {
+        "min": 1704,
+        "max": 3572,
+        "avg": 2493,
+        "sum": 87289,
+        "stddev": 559,
+        "p50": 2447,
+        "p75": 2895,
+        "p90": 3375,
+        "p95": 3407,
+        "p99": 3583,
+        "p99_99": 3583,
+        "outofrange": 0,
+        "hdrsize": 13424,
+        "cnt": 35
+      },
+      "throttle": {
+        "min": 0,
+        "max": 0,
+        "avg": 0,
+        "sum": 0,
+        "stddev": 0,
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0,
+        "p99": 0,
+        "p99_99": 0,
+        "outofrange": 0,
+        "hdrsize": 17520,
+        "cnt": 35
+      },
+      "toppars": {
+        "test-0": {
+          "topic": "test",
+          "partition": 0
+        }
+      }
+    },
+    "localhost:9094/4": {
+      "name": "localhost:9094/4",
+      "nodeid": 4,
+      "state": "UP",
+      "stateage": 9057207,
+      "outbuf_cnt": 0,
+      "outbuf_msg_cnt": 0,
+      "waitresp_cnt": 0,
+      "waitresp_msg_cnt": 0,
+      "tx": 1,
+      "txbytes": 25,
+      "txerrs": 0,
+      "txretries": 0,
+      "req_timeouts": 0,
+      "rx": 1,
+      "rxbytes": 272,
+      "rxerrs": 0,
+      "rxcorriderrs": 0,
+      "rxpartial": 0,
+      "zbuf_grow": 0,
+      "buf_grow": 0,
+      "wakeups": 4,
       "int_latency": {
         "min": 0,
         "max": 0,
@@ -323,6 +400,7 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
         "p99": 0,
         "p99_99": 0,
         "outofrange": 0,
+        "hdrsize": 11376,
         "cnt": 0
       },
       "rtt": {
@@ -338,6 +416,7 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
         "p99": 0,
         "p99_99": 0,
         "outofrange": 0,
+        "hdrsize": 13424,
         "cnt": 0
       },
       "throttle": {
@@ -353,38 +432,47 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
         "p99": 0,
         "p99_99": 0,
         "outofrange": 0,
+        "hdrsize": 17520,
         "cnt": 0
       },
-      "toppars": {
-        "test-3": {
-          "topic": "test",
-          "partition": 3
-        },
-        "test-0": {
-          "topic": "test",
-          "partition": 0
-        }
-      }
+      "toppars": {}
     }
   },
   "topics": {
     "test": {
       "topic": "test",
-      "metadata_age": 12980,
+      "metadata_age": 9060,
       "batchsize": {
-        "min": 99174,
-        "max": 101241,
-        "avg": 100207,
-        "sum": 200415,
-        "stddev": 1024,
-        "p50": 99199,
-        "p75": 101247,
-        "p90": 101247,
-        "p95": 101247,
-        "p99": 101247,
-        "p99_99": 101247,
+        "min": 99,
+        "max": 391805,
+        "avg": 272593,
+        "sum": 18808985,
+        "stddev": 180408,
+        "p50": 393215,
+        "p75": 393215,
+        "p90": 393215,
+        "p95": 393215,
+        "p99": 393215,
+        "p99_99": 393215,
         "outofrange": 0,
-        "cnt": 2
+        "hdrsize": 14448,
+        "cnt": 69
+      },
+      "batchcnt": {
+        "min": 1,
+        "max": 10000,
+        "avg": 6956,
+        "sum": 480028,
+        "stddev": 4608,
+        "p50": 10047,
+        "p75": 10047,
+        "p90": 10047,
+        "p95": 10047,
+        "p99": 10047,
+        "p99_99": 10047,
+        "outofrange": 0,
+        "hdrsize": 8304,
+        "cnt": 69
       },
       "partitions": {
         "0": {
@@ -392,8 +480,8 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
           "leader": 3,
           "desired": false,
           "unknown": false,
-          "msgq_cnt": 5742,
-          "msgq_bytes": 178002,
+          "msgq_cnt": 1,
+          "msgq_bytes": 31,
           "xmit_msgq_cnt": 0,
           "xmit_msgq_bytes": 0,
           "fetchq_cnt": 0,
@@ -409,11 +497,11 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
           "lo_offset": -1001,
           "hi_offset": -1001,
           "consumer_lag": -1,
-          "txmsgs": 212051,
-          "txbytes": 8309960,
+          "txmsgs": 2150617,
+          "txbytes": 66669127,
           "rxmsgs": 0,
           "rxbytes": 0,
-          "msgs": 217793,
+          "msgs": 2160510,
           "rx_ver_drops": 0
         },
         "1": {
@@ -421,8 +509,8 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
           "leader": 2,
           "desired": false,
           "unknown": false,
-          "msgq_cnt": 3178,
-          "msgq_bytes": 98518,
+          "msgq_cnt": 0,
+          "msgq_bytes": 0,
           "xmit_msgq_cnt": 0,
           "xmit_msgq_bytes": 0,
           "fetchq_cnt": 0,
@@ -438,69 +526,11 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
           "lo_offset": -1001,
           "hi_offset": -1001,
           "consumer_lag": -1,
-          "txmsgs": 90643,
-          "txbytes": 3555939,
+          "txmsgs": 2150136,
+          "txbytes": 66654216,
           "rxmsgs": 0,
           "rxbytes": 0,
-          "msgs": 93821,
-          "rx_ver_drops": 0
-        },
-        "2": {
-          "partition": 2,
-          "leader": 2,
-          "desired": false,
-          "unknown": false,
-          "msgq_cnt": 3232,
-          "msgq_bytes": 100192,
-          "xmit_msgq_cnt": 0,
-          "xmit_msgq_bytes": 0,
-          "fetchq_cnt": 0,
-          "fetchq_size": 0,
-          "fetch_state": "none",
-          "query_offset": 0,
-          "next_offset": 0,
-          "app_offset": -1001,
-          "stored_offset": -1001,
-          "commited_offset": -1001,
-          "committed_offset": -1001,
-          "eof_offset": -1001,
-          "lo_offset": -1001,
-          "hi_offset": -1001,
-          "consumer_lag": -1,
-          "txmsgs": 90338,
-          "txbytes": 3543929,
-          "rxmsgs": 0,
-          "rxbytes": 0,
-          "msgs": 93570,
-          "rx_ver_drops": 0
-        },
-        "3": {
-          "partition": 3,
-          "leader": 3,
-          "desired": false,
-          "unknown": false,
-          "msgq_cnt": 5596,
-          "msgq_bytes": 173476,
-          "xmit_msgq_cnt": 0,
-          "xmit_msgq_bytes": 0,
-          "fetchq_cnt": 0,
-          "fetchq_size": 0,
-          "fetch_state": "none",
-          "query_offset": 0,
-          "next_offset": 0,
-          "app_offset": -1001,
-          "stored_offset": -1001,
-          "commited_offset": -1001,
-          "committed_offset": -1001,
-          "eof_offset": -1001,
-          "lo_offset": -1001,
-          "hi_offset": -1001,
-          "consumer_lag": -1,
-          "txmsgs": 212107,
-          "txbytes": 8312175,
-          "rxmsgs": 0,
-          "rxbytes": 0,
-          "msgs": 217703,
+          "msgs": 2159735,
           "rx_ver_drops": 0
         },
         "-1": {
@@ -529,18 +559,18 @@ Note: this output is prettified using `jq .`, the JSON object emitted by librdka
           "txbytes": 0,
           "rxmsgs": 0,
           "rxbytes": 0,
-          "msgs": 500000,
+          "msgs": 1177,
           "rx_ver_drops": 0
         }
       }
     }
   },
-  "tx": 54,
-  "tx_bytes": 5333535,
-  "rx": 17,
-  "rx_bytes": 1650,
-  "txmsgs": 605139,
-  "txmsg_bytes": 23722003,
+  "tx": 631,
+  "tx_bytes": 168584479,
+  "rx": 631,
+  "rx_bytes": 31084,
+  "txmsgs": 4300753,
+  "txmsg_bytes": 133323343,
   "rxmsgs": 0,
   "rxmsg_bytes": 0
 }

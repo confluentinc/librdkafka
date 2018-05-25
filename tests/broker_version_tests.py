@@ -199,6 +199,10 @@ if __name__ == '__main__':
                 print('\033[41m#### Version %s, suite %s: FAILED: %s\033[0m' %
                       (version, suite['name'], reason))
                 fail_cnt += 1
+
+                # Emit hopefully relevant parts of the log on failure
+                subprocess.Call("grep --color=always -B100 -A10 FAIL %s" % (os.path.join(report['root_path'], 'stderr.log')), shell=True)
+
             print('#### Test output: %s/stderr.log' % (report['root_path']))
 
             suite['version'][version] = report

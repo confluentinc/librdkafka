@@ -80,7 +80,7 @@
 
 
 /** Assert if reached */
-#define RD_NOTREACHED() rd_kafka_assert(NULL, !*"/* NOTREACHED */ violated")
+#define RD_NOTREACHED() rd_assert(!*"/* NOTREACHED */ violated")
 
 
 

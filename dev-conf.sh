@@ -8,12 +8,16 @@ set -e
 # enable pedantic
 #export CFLAGS='-std=c99 -pedantic -Wshadow'
 #export CXXFLAGS='-std=c++98 -pedantic'
-export CFLAGS='-fno-omit-frame-pointer -fsanitize=undefined -fsanitize-undefined-trap-on-error'
 
-# enable FSAN
+# enable FSAN address, thread, ..
 #FSAN="-fsanitize=address"
-#export CPPFLAGS="$CPPFLAGS $FSAN"
-#export LDFLAGS="$LDFLAGS $FSAN"
+#FSAN="-fsanitize=thread"
+#FSAN="-fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-omit-frame-pointer"
+
+if [[ ! -z $FSAN ]]; then
+    export CPPFLAGS="$CPPFLAGS $FSAN"
+    export LDFLAGS="$LDFLAGS $FSAN"
+fi
 
 OPTS=""
 

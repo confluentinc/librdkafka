@@ -4,9 +4,11 @@
 
 Build:
 
-    $ KAFKA_DIR=/your/kafka-build-dir make
+    $ KAFKA_JARS=/your/kafka/libs make
 
 Run:
 
-    $ KAFKA_DIR=/your/kafka-build-dir ./run-class.sh Murmur2Cli "a sentence" and a word
+    $ KAFKA_JARS=/your/kafka/libs ./run-class.sh Murmur2Cli "a sentence" and a word
+
+If KAFKA_JARS is not set it will default to $KAFKA_PATH/libs
 

@@ -256,15 +256,15 @@ static void do_test_partitioners (void) {
                                 /* .. using tests/java/Murmur2Cli */
                                 0x106e08d9 % _PART_CNT,
                                 0x106e08d9 % _PART_CNT,
-                                0x858d780f % _PART_CNT,
-                                0xcf7703da % _PART_CNT,
+                                0x058d780f % _PART_CNT,
+                                0x4f7703da % _PART_CNT,
                                 0x5ec19395 % _PART_CNT
                         } },
                 { "murmur2_random", {
                                 -1,
                                 0x106e08d9 % _PART_CNT,
-                                0x858d780f % _PART_CNT,
-                                0xcf7703da % _PART_CNT,
+                                0x058d780f % _PART_CNT,
+                                0x4f7703da % _PART_CNT,
                                 0x5ec19395 % _PART_CNT
                         } },
                 { NULL }

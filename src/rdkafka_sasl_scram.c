@@ -602,6 +602,7 @@ rd_kafka_sasl_scram_handle_server_first_message (rd_kafka_transport_t *rktrans,
                             "Invalid Base64 Salt in server-first-message");
                 rd_free(server_nonce);
                 rd_free(salt_b64.ptr);
+                return -1;
         }
         rd_free(salt_b64.ptr);
 

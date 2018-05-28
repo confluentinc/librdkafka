@@ -137,6 +137,16 @@ int rd_snprintf (char *str, size_t size, const char *format, ...) {
 /**
  * Errors
  */
+
+/* MSVC:
+ * This is the correct way to set errno on Windows,
+ * but it is still pointless due to different errnos in
+ * in different runtimes:
+ * https://social.msdn.microsoft.com/Forums/vstudio/en-US/b4500c0d-1b69-40c7-9ef5-08da1025b5bf/setting-errno-from-within-a-dll?forum=vclanguage/
+ * errno is thus highly deprecated, and buggy, on Windows
+ * when using librdkafka as a dynamically loaded DLL. */
+#define rd_set_errno(err) _set_errno((err))
+
 static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
 	static RD_TLS char ret[128];
 

@@ -90,6 +90,10 @@
 /**
  * Errors
  */
+
+
+#define rd_set_errno(err) (errno = (err))
+
 #if HAVE_STRERROR_R
 static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
         static RD_TLS char ret[128];

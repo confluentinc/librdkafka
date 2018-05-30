@@ -388,6 +388,21 @@ void rd_kafka_transport_connect_done (rd_kafka_transport_t *rktrans,
 
 
 /**
+ * @brief Clear OpenSSL error queue to get a proper error reporting in case
+ *        the next SSL_*() operation fails.
+ */
+static RD_INLINE void
+rd_kafka_transport_ssl_clear_error (rd_kafka_transport_t *rktrans) {
+        ERR_clear_error();
+#ifdef _MSC_VER
+        WSASetLastError(0);
+#else
+        rd_set_errno(0);
+#endif
+}
+
+
+/**
  * Serves the entire OpenSSL error queue and logs each error.
  * The last error is not logged but returned in 'errstr'.
  *
@@ -426,15 +441,15 @@ static char *rd_kafka_ssl_error (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 }
 
 
-static void rd_kafka_transport_ssl_lock_cb (int mode, int i,
-					    const char *file, int line) {
+static RD_UNUSED void
+rd_kafka_transport_ssl_lock_cb (int mode, int i, const char *file, int line) {
 	if (mode & CRYPTO_LOCK)
 		mtx_lock(&rd_kafka_ssl_locks[i]);
 	else
 		mtx_unlock(&rd_kafka_ssl_locks[i]);
 }
 
-static unsigned long rd_kafka_transport_ssl_threadid_cb (void) {
+static RD_UNUSED unsigned long rd_kafka_transport_ssl_threadid_cb (void) {
 #ifdef _MSC_VER
         /* Windows makes a distinction between thread handle
          * and thread id, which means we can't use the
@@ -496,7 +511,7 @@ static RD_INLINE int
 rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
 				  char *errstr, size_t errstr_size) {
 	int serr = SSL_get_error(rktrans->rktrans_ssl, ret);
-	int serr2;
+        int serr2;
 
 	switch (serr)
 	{
@@ -509,17 +524,18 @@ rd_kafka_transport_ssl_io_update (rd_kafka_transport_t *rktrans, int ret,
 		rd_kafka_transport_poll_set(rktrans, POLLOUT);
 		break;
 
-	case SSL_ERROR_SYSCALL:
-		if (!(serr2 = SSL_get_error(rktrans->rktrans_ssl, ret))) {
-			if (ret == 0)
-				errno = ECONNRESET;
-			rd_snprintf(errstr, errstr_size,
-				    "SSL syscall error: %s", rd_strerror(errno));
-		} else
-			rd_snprintf(errstr, errstr_size,
-				    "SSL syscall error number: %d: %s", serr2,
-				    rd_strerror(errno));
-		return -1;
+        case SSL_ERROR_SYSCALL:
+                serr2 = ERR_peek_error();
+                if (!serr2 && !socket_errno)
+                        rd_snprintf(errstr, errstr_size, "Disconnected");
+                else if (serr2)
+                        rd_kafka_ssl_error(NULL, rktrans->rktrans_rkb,
+                                           errstr, errstr_size);
+                else
+                        rd_snprintf(errstr, errstr_size,
+                                    "SSL transport error: %s",
+                                    rd_strerror(socket_errno));
+                return -1;
 
         case SSL_ERROR_ZERO_RETURN:
                 rd_snprintf(errstr, errstr_size, "Disconnected");
@@ -541,6 +557,8 @@ rd_kafka_transport_ssl_send (rd_kafka_transport_t *rktrans,
 	ssize_t sum = 0;
         const void *p;
         size_t rlen;
+
+        rd_kafka_transport_ssl_clear_error(rktrans);
 
         while ((rlen = rd_slice_peeker(slice, &p))) {
                 int r;
@@ -578,6 +596,8 @@ rd_kafka_transport_ssl_recv (rd_kafka_transport_t *rktrans,
 
         while ((len = rd_buf_get_writable(rbuf, &p))) {
 		int r;
+
+                rd_kafka_transport_ssl_clear_error(rktrans);
 
                 r = SSL_read(rktrans->rktrans_ssl, p, (int)len);
 
@@ -668,6 +688,8 @@ static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 		goto fail;
 #endif
 
+        rd_kafka_transport_ssl_clear_error(rktrans);
+
 	r = SSL_connect(rktrans->rktrans_ssl);
 	if (r == 1) {
 		/* Connected, highly unlikely since this is a
@@ -695,6 +717,8 @@ rd_kafka_transport_ssl_io_event (rd_kafka_transport_t *rktrans, int events) {
 	char errstr[512];
 
 	if (events & POLLOUT) {
+                rd_kafka_transport_ssl_clear_error(rktrans);
+
 		r = SSL_write(rktrans->rktrans_ssl, NULL, 0);
 		if (rd_kafka_transport_ssl_io_update(rktrans, r,
 						     errstr,
@@ -801,6 +825,17 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	int r;
 	SSL_CTX *ctx;
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        rd_kafka_dbg(rk, SECURITY, "OPENSSL", "Using OpenSSL version %s "
+                     "(0x%lx, librdkafka built with 0x%lx)",
+                     OpenSSL_version(OPENSSL_VERSION),
+                     OpenSSL_version_num(),
+                     OPENSSL_VERSION_NUMBER);
+#else
+        rd_kafka_dbg(rk, SECURITY, "OPENSSL", "librdkafka built with OpenSSL "
+                     "version 0x%lx", OPENSSL_VERSION_NUMBER);
+#endif
+
         if (errstr_size > 0)
                 errstr[0] = '\0';
 
@@ -836,6 +871,33 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		}
 	}
 
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
+	/* Curves */
+	if (rk->rk_conf.ssl.curves_list) {
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+			     "Setting curves list: %s",
+			     rk->rk_conf.ssl.curves_list);
+		if (!SSL_CTX_set1_curves_list(ctx,
+					      rk->rk_conf.ssl.curves_list)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.curves.list failed: ");
+                        goto fail;
+		}
+	}
+
+	/* Certificate signature algorithms */
+	if (rk->rk_conf.ssl.sigalgs_list) {
+		rd_kafka_dbg(rk, SECURITY, "SSL",
+			     "Setting signature algorithms list: %s",
+			     rk->rk_conf.ssl.sigalgs_list);
+		if (!SSL_CTX_set1_sigalgs_list(ctx,
+					       rk->rk_conf.ssl.sigalgs_list)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.sigalgs.list failed: ");
+                        goto fail;
+		}
+	}
+#endif
 
 	if (rk->rk_conf.ssl.ca_location) {
 		/* CA certificate location, either file or directory. */

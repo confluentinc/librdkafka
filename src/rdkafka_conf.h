@@ -109,6 +109,10 @@ struct rd_kafka_conf_s {
 	struct {
 		SSL_CTX *ctx;
 		char *cipher_suites;
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
+		char *curves_list;
+		char *sigalgs_list;
+#endif
 		char *key_location;
 		char *key_password;
 		char *cert_location;

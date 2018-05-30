@@ -60,7 +60,7 @@ elif [[ $OP == "server" && ! -z "$CA_CERT" && ! -z "$PFX" && ! -z "$CN" ]]; then
 
     #Step 1
     echo "############ Generating key"
-    keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}server.keystore.jks -alias localhost -validity $VALIDITY -genkey <<EOF
+    keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}server.keystore.jks -alias localhost -validity $VALIDITY -genkey -keyalg RSA <<EOF
 $CN
 $OU
 $O
@@ -104,7 +104,7 @@ yes
 EOF
 
 	echo "############ Generating key"
-	keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}client.keystore.jks -alias localhost -validity $VALIDITY -genkey <<EOF
+	keytool -storepass "$PASS" -keypass "$PASS" -keystore ${PFX}client.keystore.jks -alias localhost -validity $VALIDITY -genkey -keyalg RSA <<EOF
 $CN
 $OU
 $O
@@ -131,7 +131,7 @@ EOF
     else
 	# Standard OpenSSL keys
 	echo "############ Generating key"
-	openssl genrsa -des3 -passout "pass:$PASS" -out ${PFX}client.key 1024 
+	openssl genrsa -des3 -passout "pass:$PASS" -out ${PFX}client.key 2048 
 	
 	echo "############ Generating request"
 	openssl req -passin "pass:$PASS" -passout "pass:$PASS" -key ${PFX}client.key -new -out ${PFX}client.req \
@@ -148,7 +148,7 @@ $PASS
 EOF
 
 	echo "########### Signing key"
-	openssl x509 -req -passin "pass:$PASS" -in ${PFX}client.req -CA $CA_CERT -CAkey ${CA_CERT}.key -CAserial ${CA_CERT}.srl -out ${PFX}client.pem
+	openssl x509 -req -passin "pass:$PASS" -in ${PFX}client.req -CA $CA_CERT -CAkey ${CA_CERT}.key -CAserial ${CA_CERT}.srl -out ${PFX}client.pem -days $VALIDITY
 
     fi
 

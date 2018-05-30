@@ -919,10 +919,10 @@ static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
                                   0, 3600*1000,
                                   rk->rk_conf.admin.request_timeout_ms);
 
-        if (!options->for_api ||
-            !rd_strcasecmp(options->for_api, "CreateTopics") ||
-            !rd_strcasecmp(options->for_api, "DeleteTopics") ||
-            !rd_strcasecmp(options->for_api, "CreatePartitions"))
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_CREATETOPICS ||
+            options->for_api == RD_KAFKA_ADMIN_OP_DELETETOPICS ||
+            options->for_api == RD_KAFKA_ADMIN_OP_CREATEPARTITIONS)
                 rd_kafka_confval_init_int(&options->operation_timeout,
                                           "operation_timeout",
                                           -1, 3600*1000, 0);
@@ -930,10 +930,10 @@ static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
                 rd_kafka_confval_disable(&options->operation_timeout,
                                          "operation_timeout");
 
-        if (!options->for_api ||
-            !rd_strcasecmp(options->for_api, "CreateTopics") ||
-            !rd_strcasecmp(options->for_api, "CreatePartitions") ||
-            !rd_strcasecmp(options->for_api, "AlterConfigs"))
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_CREATETOPICS ||
+            options->for_api == RD_KAFKA_ADMIN_OP_CREATEPARTITIONS ||
+            options->for_api == RD_KAFKA_ADMIN_OP_ALTERCONFIGS)
                 rd_kafka_confval_init_int(&options->validate_only,
                                           "validate_only",
                                           0, 1, 0);
@@ -941,8 +941,8 @@ static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
                 rd_kafka_confval_disable(&options->validate_only,
                                          "validate_only");
 
-        if (!options->for_api ||
-            !rd_strcasecmp(options->for_api, "AlterConfigs"))
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_ALTERCONFIGS)
                 rd_kafka_confval_init_int(&options->incremental,
                                           "incremental",
                                           0, 1, 0);
@@ -956,34 +956,16 @@ static void rd_kafka_AdminOptions_init (rd_kafka_t *rk,
 }
 
 
-rd_kafka_AdminOptions_t *rd_kafka_AdminOptions_new (rd_kafka_t *rk,
-                                                    const char *for_api) {
+rd_kafka_AdminOptions_t *
+rd_kafka_AdminOptions_new (rd_kafka_t *rk, rd_kafka_admin_op_t for_api) {
         rd_kafka_AdminOptions_t *options;
-        static const char *valid_apis[] = {
-                "CreateTopics",
-                "DeleteTopics",
-                "CreatePartitions",
-                "AlterConfigs",
-                "DescribeConfigs",
-                NULL,
-        };
 
-        if (for_api) {
-                const char **v = valid_apis;
-
-                while (*v) {
-                        if (!rd_strcasecmp(*v, for_api))
-                                break;
-                        v++;
-                }
-                if (!*v) /* unmatched: for_api is unsupported */
-                        return NULL;
-        }
+        if ((int)for_api < 0 || for_api >= RD_KAFKA_ADMIN_OP__CNT)
+                return NULL;
 
         options = rd_calloc(1, sizeof(*options));
 
-        if (for_api)
-                options->for_api = rd_strdup(for_api);
+        options->for_api = for_api;
 
         rd_kafka_AdminOptions_init(rk, options);
 
@@ -991,8 +973,6 @@ rd_kafka_AdminOptions_t *rd_kafka_AdminOptions_new (rd_kafka_t *rk,
 }
 
 void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options) {
-        if (options->for_api)
-                rd_free(options->for_api);
         rd_free(options);
 }
 

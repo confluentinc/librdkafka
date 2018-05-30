@@ -199,7 +199,7 @@ static void do_test_CreateTopics (const char *what,
         }
 
         if (with_options) {
-                options = rd_kafka_AdminOptions_new(rk, NULL);
+                options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err = rd_kafka_AdminOptions_set_request_timeout(
@@ -306,7 +306,8 @@ static void do_test_DeleteTopics (const char *what,
                 del_topics[i] = rd_kafka_DeleteTopic_new(test_mk_topic_name(__FUNCTION__, 1));
 
         if (with_options) {
-                options = rd_kafka_AdminOptions_new(rk, "DeleteTopics");
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_DELETETOPICS);
 
                 exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
                 err = rd_kafka_AdminOptions_set_request_timeout(
@@ -471,7 +472,7 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         }
 
 
-        options = rd_kafka_AdminOptions_new(rk, NULL);
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
         err = rd_kafka_AdminOptions_set_request_timeout(options, 1000, errstr,
                                                         sizeof(errstr));
         TEST_ASSERT(!err, "%s", errstr);
@@ -580,18 +581,24 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
  * @brief Test AdminOptions
  */
 static void do_test_options (rd_kafka_t *rk) {
-#define _all_apis { "CreateTopics", "DeleteTopics", "CreatePartitions", \
-                    "AlterConfigs", "DescribeConfigs", NULL }
+#define _all_apis { RD_KAFKA_ADMIN_OP_CREATETOPICS, \
+                    RD_KAFKA_ADMIN_OP_DELETETOPICS, \
+                    RD_KAFKA_ADMIN_OP_CREATEPARTITIONS, \
+                    RD_KAFKA_ADMIN_OP_ALTERCONFIGS, \
+                    RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS, \
+                    RD_KAFKA_ADMIN_OP_ANY /* Must be last */}
         struct {
                 const char *setter;
-                const char *valid_apis[8];
+                const rd_kafka_admin_op_t valid_apis[8];
         } matrix[] = {
                 { "request_timeout", _all_apis },
-                { "operation_timeout", { "CreateTopics", "DeleteTopics",
-                                         "CreatePartitions" } },
-                { "incremental", { "AlterConfigs" } },
-                { "validate_only", { "CreateTopics",
-                                     "CreatePartitions", "AlterConfigs" } },
+                { "operation_timeout", { RD_KAFKA_ADMIN_OP_CREATETOPICS,
+                                         RD_KAFKA_ADMIN_OP_DELETETOPICS,
+                                         RD_KAFKA_ADMIN_OP_CREATEPARTITIONS } },
+                { "incremental", { RD_KAFKA_ADMIN_OP_ALTERCONFIGS } },
+                { "validate_only", { RD_KAFKA_ADMIN_OP_CREATETOPICS,
+                                     RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,
+                                     RD_KAFKA_ADMIN_OP_ALTERCONFIGS } },
                 { "broker", _all_apis },
                 { "opaque", _all_apis },
                 { NULL },
@@ -601,8 +608,8 @@ static void do_test_options (rd_kafka_t *rk) {
 
 
         for (i = 0 ; matrix[i].setter ; i++) {
-                static const char *all_apis[] = _all_apis;
-                const char **for_api;
+                static const rd_kafka_admin_op_t all_apis[] = _all_apis;
+                const rd_kafka_admin_op_t *for_api;
 
                 for (for_api = all_apis ; ; for_api++) {
                         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -612,8 +619,7 @@ static void do_test_options (rd_kafka_t *rk) {
 
                         options = rd_kafka_AdminOptions_new(rk, *for_api);
                         TEST_ASSERT(options,
-                                    "AdminOptions_new(%s) failed",
-                                    *for_api ? *for_api : "NULL");
+                                    "AdminOptions_new(%d) failed", *for_api);
 
                         if (!strcmp(matrix[i].setter, "request_timeout"))
                                 err = rd_kafka_AdminOptions_set_request_timeout(
@@ -642,10 +648,11 @@ static void do_test_options (rd_kafka_t *rk) {
                                           matrix[i].setter);
 
 
-                        TEST_SAYL(3, "AdminOptions_set_%s on %s options "
+                        TEST_SAYL(3, "AdminOptions_set_%s on "
+                                  "RD_KAFKA_ADMIN_OP_%d options "
                                   "returned %s: %s\n",
                                   matrix[i].setter,
-                                  *for_api ? *for_api : "any",
+                                  *for_api,
                                   rd_kafka_err2name(err),
                                   err ? errstr : "success");
 
@@ -653,12 +660,12 @@ static void do_test_options (rd_kafka_t *rk) {
                          * setter should be accepted or not. */
                         if (exp_err) {
                                 /* An expected error is already set */
-                        } else  if (*for_api) {
+                        } else if (*for_api != RD_KAFKA_ADMIN_OP_ANY) {
                                 exp_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
 
                                 for (fi = 0 ; matrix[i].valid_apis[fi] ; fi++) {
-                                        if (!strcmp(matrix[i].valid_apis[fi],
-                                                    *for_api))
+                                        if (matrix[i].valid_apis[fi] ==
+                                            *for_api)
                                                 exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
                                 }
                         } else {
@@ -667,22 +674,23 @@ static void do_test_options (rd_kafka_t *rk) {
 
                         if (err != exp_err)
                                 TEST_FAIL_LATER("Expected AdminOptions_set_%s "
-                                                "for %s options to return %s, "
+                                                "for RD_KAFKA_ADMIN_OP_%d "
+                                                "options to return %s, "
                                                 "not %s",
                                                 matrix[i].setter,
-                                                *for_api ? *for_api : "any",
+                                                *for_api,
                                                 rd_kafka_err2name(exp_err),
                                                 rd_kafka_err2name(err));
 
                         rd_kafka_AdminOptions_destroy(options);
 
-                        if (!*for_api)
-                                break;
+                        if (*for_api == RD_KAFKA_ADMIN_OP_ANY)
+                                break; /* This was the last one */
                 }
         }
 
         /* Try an invalid for_api */
-        options = rd_kafka_AdminOptions_new(rk, "invalidThing");
+        options = rd_kafka_AdminOptions_new(rk, (rd_kafka_admin_op_t)1234);
         TEST_ASSERT(!options, "Expectred AdminOptions_new() to fail "
                     "with an invalid for_api, didn't.");
 

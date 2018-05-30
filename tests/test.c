@@ -3300,7 +3300,7 @@ static void test_admin_create_topic (rd_kafka_t *use_rk,
                                         errstr, sizeof(errstr));
         TEST_ASSERT(newt[0] != NULL, "%s", errstr);
 
-        options = rd_kafka_AdminOptions_new(rk, "CreateTopics");
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_CREATETOPICS);
         err = rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms,
                                                           errstr,
                                                           sizeof(errstr));
@@ -4047,7 +4047,7 @@ test_CreateTopics_simple (rd_kafka_t *rk,
                             topics[i], num_partitions, i, errstr);
         }
 
-        options = rd_kafka_AdminOptions_new(rk, "CreateTopics");
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_CREATETOPICS);
         rd_kafka_AdminOptions_set_opaque(options, opaque);
 
         if (!useq) {
@@ -4111,7 +4111,8 @@ test_CreatePartitions_simple (rd_kafka_t *rk,
                     "Failed to NewPartitions(\"%s\", %"PRIusz"): %s",
                     topic, total_part_cnt, errstr);
 
-        options = rd_kafka_AdminOptions_new(rk, "CreatePartitions");
+        options = rd_kafka_AdminOptions_new(rk,
+                                            RD_KAFKA_ADMIN_OP_CREATEPARTITIONS);
         rd_kafka_AdminOptions_set_opaque(options, opaque);
 
         if (!useq) {
@@ -4174,7 +4175,7 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
                 TEST_ASSERT(del_topics[i]);
         }
 
-        options = rd_kafka_AdminOptions_new(rk, "DeleteTopics");
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETETOPICS);
         rd_kafka_AdminOptions_set_opaque(options, opaque);
 
         if (!useq) {
@@ -4324,7 +4325,7 @@ rd_kafka_resp_err_t test_delete_all_test_topics (int timeout_ms) {
 
         q = rd_kafka_queue_get_main(rk);
 
-        options = rd_kafka_AdminOptions_new(rk, "DeleteTopics");
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETETOPICS);
         if (rd_kafka_AdminOptions_set_operation_timeout(options, 2*60*1000,
                                                         errstr,
                                                         sizeof(errstr)))

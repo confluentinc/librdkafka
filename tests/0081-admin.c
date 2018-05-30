@@ -154,7 +154,8 @@ static void do_test_CreateTopics (const char *what,
         }
 
         if (op_timeout != -1 || validate_only) {
-                options = rd_kafka_AdminOptions_new(rk, "CreateTopics");
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_CREATETOPICS);
 
                 if (op_timeout != -1) {
                         err = rd_kafka_AdminOptions_set_operation_timeout(
@@ -340,7 +341,8 @@ static void do_test_DeleteTopics (const char *what,
         }
 
         if (op_timeout != -1) {
-                options = rd_kafka_AdminOptions_new(rk, NULL);
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_ANY);
 
                 err = rd_kafka_AdminOptions_set_operation_timeout(
                         options, op_timeout, errstr, sizeof(errstr));
@@ -591,7 +593,8 @@ static void do_test_CreatePartitions (const char *what,
         }
 
         if (op_timeout != -1) {
-                options = rd_kafka_AdminOptions_new(rk, NULL);
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_ANY);
 
                 err = rd_kafka_AdminOptions_set_operation_timeout(
                         options, op_timeout, errstr, sizeof(errstr));
@@ -785,7 +788,7 @@ static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         /*
          * Timeout options
          */
-        options = rd_kafka_AdminOptions_new(rk, "AlterConfigs");
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ALTERCONFIGS);
         err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, errstr,
                                                         sizeof(errstr));
         TEST_ASSERT(!err, "%s", errstr);
@@ -952,7 +955,7 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         /*
          * Timeout options
          */
-        options = rd_kafka_AdminOptions_new(rk, NULL);
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ANY);
         err = rd_kafka_AdminOptions_set_request_timeout(options, 10000, errstr,
                                                         sizeof(errstr));
         TEST_ASSERT(!err, "%s", errstr);

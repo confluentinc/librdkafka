@@ -42,7 +42,7 @@
  *         to make sure it is copied properly.
  */
 struct rd_kafka_AdminOptions_s {
-        char *for_api;                     /**< Limit allowed options to
+        rd_kafka_admin_op_t for_api;       /**< Limit allowed options to
                                             *   this API (optional) */
 
         /* Generic */

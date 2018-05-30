@@ -4461,6 +4461,22 @@ rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
   */
 
 
+/**
+ * @enum rd_kafka_admin_op_t
+ *
+ * @brief Admin operation enum name for use with rd_kafka_AdminOptions_new()
+ *
+ * @sa rd_kafka_AdminOptions_new()
+ */
+typedef enum rd_kafka_admin_op_t {
+        RD_KAFKA_ADMIN_OP_ANY = 0,          /**< Default value */
+        RD_KAFKA_ADMIN_OP_CREATETOPICS,     /**< CreateTopics */
+        RD_KAFKA_ADMIN_OP_DELETETOPICS,     /**< DeleteTopics */
+        RD_KAFKA_ADMIN_OP_CREATEPARTITIONS, /**< CreatePartitions */
+        RD_KAFKA_ADMIN_OP_ALTERCONFIGS,     /**< AlterConfigs */
+        RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,  /**< DescribeConfigs */
+        RD_KAFKA_ADMIN_OP__CNT              /**< Number of ops defined */
+} rd_kafka_admin_op_t;
 
 /**
  * @brief AdminOptions provides a generic mechanism for setting optional
@@ -4487,17 +4503,17 @@ typedef struct rd_kafka_AdminOptions_s rd_kafka_AdminOptions_t;
  *                for, which will enforce what AdminOptions_set_..() calls may
  *                be used based on the API, causing unsupported set..() calls
  *                to fail.
- *                Specifying NULL disables the enforcement.
- *                Valid values are: CreateTopics, DeleteTopics,
- *                                  CreatePartitions,
- *                                  AlterConfigs, DescribeConfigs.
+ *                Specifying RD_KAFKA_ADMIN_OP_ANY disables the enforcement
+ *                allowing any option to be set, even if the option
+ *                is not used in a future call to an Admin API method.
  *
  * @returns a new AdminOptions object (which must be freed with
  *          rd_kafka_AdminOptions_destroy()), or NULL if \p for_api was set to
- *          an unknown API name.
+ *          an unknown API op type.
  */
 RD_EXPORT rd_kafka_AdminOptions_t *
-rd_kafka_AdminOptions_new (rd_kafka_t *rk, const char *for_api);
+rd_kafka_AdminOptions_new (rd_kafka_t *rk, rd_kafka_admin_op_t for_api);
+
 
 /**
  * @brief Destroy a AdminOptions object.

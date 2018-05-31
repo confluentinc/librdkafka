@@ -1137,6 +1137,10 @@ rd_kafka_msgset_parse (rd_kafka_buf_t *rkbuf,
         rd_atomic64_add(&rktp->rktp_c.rx_msgs, msetr.msetr_msgcnt);
         rd_atomic64_add(&rktp->rktp_c.rx_msg_bytes, msetr.msetr_msg_bytes);
 
+        rd_avg_add(&rktp->rktp_rkt->rkt_avg_batchcnt,
+                   (int64_t)msetr.msetr_msgcnt);
+        rd_avg_add(&rktp->rktp_rkt->rkt_avg_batchsize,
+                   (int64_t)msetr.msetr_msg_bytes);
 
         return err;
 

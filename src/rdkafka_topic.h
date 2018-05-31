@@ -74,10 +74,8 @@ struct rd_kafka_itopic_s {
 
 	rd_kafka_t       *rkt_rk;
 
-        rd_avg_t          rkt_avg_batchsize;  /**< Average batch size
-                                               *   (producer) */
-        rd_avg_t          rkt_avg_batchcnt;   /**< Average batch message count
-                                               *   (producer) */
+        rd_avg_t          rkt_avg_batchsize; /**< Average batch size */
+        rd_avg_t          rkt_avg_batchcnt;  /**< Average batch message count */
 
         shptr_rd_kafka_itopic_t *rkt_shptr_app; /* Application's topic_new() */
 

@@ -1146,6 +1146,8 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 
                 rd_kafka_stats_emit_avg(st, "int_latency",
                                         &rkb->rkb_avg_int_latency);
+                rd_kafka_stats_emit_avg(st, "outbuf_latency",
+                                        &rkb->rkb_avg_outbuf_latency);
                 rd_kafka_stats_emit_avg(st, "rtt", &rkb->rkb_avg_rtt);
                 rd_kafka_stats_emit_avg(st, "throttle", &rkb->rkb_avg_throttle);
 

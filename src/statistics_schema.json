@@ -165,6 +165,9 @@
                   "int_latency": {
                       "$ref": "#/definitions/window"
                   },
+                  "outbuf_latency": {
+                      "$ref": "#/definitions/window"
+                  },
                   "rtt": {
                       "$ref": "#/definitions/window"
                   },

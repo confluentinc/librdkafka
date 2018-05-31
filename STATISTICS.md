@@ -100,6 +100,7 @@ zbuf_grow | int | | Total number of decompression buffer size increases
 buf_grow | int | | Total number of buffer size increases (deprecated, unused)
 wakeups | int | | Broker thread poll wakeups
 int_latency | object | | Internal producer queue latency in microseconds. See *Window stats* below
+outbuf_latency | object | | Internal request queue latency in microseconds. This is the time between a request is enqueued on the transmit (outbuf) queue and the time the request is written to the TCP socket. Additional buffering and latency may be incurred by the TCP stack and network. See *Window stats* below
 rtt | object | | Broker latency / round-trip time in microseconds. See *Window stats* below
 throttle | object | | Broker throttling time in milliseconds. See *Window stats* below
 toppars | object | | Partitions handled by this broker handle. Key is "topic-partition". See *brokers.toppars* below

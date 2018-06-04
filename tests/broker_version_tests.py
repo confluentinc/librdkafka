@@ -201,7 +201,7 @@ if __name__ == '__main__':
                 fail_cnt += 1
 
                 # Emit hopefully relevant parts of the log on failure
-                subprocess.Call("grep --color=always -B100 -A10 FAIL %s" % (os.path.join(report['root_path'], 'stderr.log')), shell=True)
+                subprocess.call("grep --color=always -B100 -A10 FAIL %s" % (os.path.join(report['root_path'], 'stderr.log')), shell=True)
 
             print('#### Test output: %s/stderr.log' % (report['root_path']))
 

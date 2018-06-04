@@ -35,8 +35,10 @@
 extern "C" {
 #ifdef _MSC_VER
 /* Win32/Visual Studio */
+#include "../src/win32_config.h"
 #include "../src/rdwin32.h"
 #else
+#include "../config.h"
 /* POSIX / UNIX based systems */
 #include "../src/rdposix.h"
 #endif
@@ -57,6 +59,11 @@ struct tostr {
 
 
 
+#define TestMessageVerify(testid,exp_partition,msgidp,msg)              \
+        test_msg_parse00(__FUNCTION__, __LINE__, testid, exp_partition, \
+                         msgidp, (msg)->topic_name().c_str(),           \
+                         (msg)->partition(), (msg)->offset(),           \
+                         (const char *)(msg)->key_pointer(), (msg)->key_len())
 
 namespace Test {
 
@@ -69,6 +76,9 @@ namespace Test {
   }
   static RD_UNUSED void FailLater (std::string str) {
     test_FAIL(__FILE__, __LINE__, 0, str.c_str());
+  }
+  static RD_UNUSED void Skip (std::string str) {
+          test_SKIP(__FILE__, __LINE__, str.c_str());
   }
   static RD_UNUSED void Say (int level, std::string str) {
     test_SAY(__FILE__, __LINE__, level, str.c_str());

@@ -18,6 +18,7 @@ nuget:
   disable_publish_on_pr: true
 before_build:
 - cmd: nuget restore win32/librdkafka.sln
+- cmd: nuget restore win32/tests/tests.vcxproj
 build:
   project: win32/librdkafka.sln
   publish_nuget: true

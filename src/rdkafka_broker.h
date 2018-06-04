@@ -168,6 +168,10 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_kafka_bufq_t     rkb_retrybufs;
 
 	rd_avg_t            rkb_avg_int_latency;/* Current internal latency period*/
+        rd_avg_t            rkb_avg_outbuf_latency; /**< Current latency
+                                                     *   between buf_enq0
+                                                     *   and writing to socket
+                                                     */
 	rd_avg_t            rkb_avg_rtt;        /* Current RTT period */
 	rd_avg_t            rkb_avg_throttle;   /* Current throttle period */
 

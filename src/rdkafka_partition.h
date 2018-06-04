@@ -259,12 +259,15 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
         int rktp_wait_consumer_lag_resp;         /* Waiting for consumer lag
                                                   * response. */
 
-	struct {
-		rd_atomic64_t tx_msgs;
-		rd_atomic64_t tx_bytes;
-                rd_atomic64_t msgs;
-                rd_atomic64_t rx_ver_drops;
-	} rktp_c;
+        struct {
+                rd_atomic64_t tx_msgs;       /**< Producer: sent messages */
+                rd_atomic64_t tx_msg_bytes;  /**<  .. bytes */
+                rd_atomic64_t rx_msgs;       /**< Consumer: received messages */
+                rd_atomic64_t rx_msg_bytes;  /**<  .. bytes */
+                rd_atomic64_t producer_enq_msgs; /**< Producer: enqueued msgs */
+                rd_atomic64_t rx_ver_drops;  /**< Consumer: outdated message
+                                              *             drops. */
+        } rktp_c;
 
 };
 

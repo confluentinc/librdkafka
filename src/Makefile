@@ -13,6 +13,7 @@ SRCS_$(WITH_SASL_CYRUS) += rdkafka_sasl_cyrus.c
 SRCS_$(WITH_SASL_SCRAM) += rdkafka_sasl_scram.c
 SRCS_$(WITH_SNAPPY) += snappy.c
 SRCS_$(WITH_ZLIB) += rdgz.c
+SRCS_$(WITH_HDRHISTOGRAM) += rdhdrhistogram.c
 
 SRCS_LZ4 = xxhash.c
 ifneq ($(WITH_LZ4_EXT), y)

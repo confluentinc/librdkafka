@@ -1523,6 +1523,8 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
  * it at a later time it must return 1 from the \p stats_cb.
  * If the application returns 0 from the \p stats_cb then librdkafka
  * will immediately free the \p json pointer.
+ *
+ * See STATISTICS.md for a full definition of the JSON object.
  */
 RD_EXPORT
 void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,

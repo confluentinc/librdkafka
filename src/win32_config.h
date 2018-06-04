@@ -39,6 +39,8 @@
 #define WITH_SASL_SCRAM 1
 #define ENABLE_DEVEL 0
 #define WITH_PLUGINS 1
+#define WITH_HDRHISTOGRAM 1
+#define WITH_RAPIDJSON 1
 #endif
 #define SOLIB_EXT ".dll"
 

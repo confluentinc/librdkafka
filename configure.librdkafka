@@ -67,10 +67,20 @@ void foo (void) {
                   "#include <zlib.h>"
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
 
+    if mkl_lib_check "libm" "" disable CC "-lm" \
+                     "#include <math.h>"; then
+        mkl_allvar_set WITH_HDRHISTOGRAM WITH_HDRHISTOGRAM y
+    fi
+
     if [[ "$ENABLE_LZ4_EXT" == "y" ]]; then
         mkl_lib_check --static=-llz4 "liblz4" "WITH_LZ4_EXT" disable CC "-llz4" \
                       "#include <lz4frame.h>"
     fi
+
+    # rapidjson (>=1.1.0) is used in tests to verify statistics data, not used
+    # by librdkafka itself.
+    mkl_compile_check "rapidjson" "WITH_RAPIDJSON" disable CXX "" \
+                      "#include <rapidjson/schema.h>"
 
     # Snappy support is built-in
     mkl_allvar_set WITH_SNAPPY WITH_SNAPPY y

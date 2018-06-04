@@ -38,6 +38,7 @@
 #include <inttypes.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <string.h>
 
 /**
 * Types

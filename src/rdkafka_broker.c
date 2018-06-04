@@ -1728,6 +1728,10 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		/* Store time for RTT calculation */
 		rkbuf->rkbuf_ts_sent = rd_clock();
 
+                /* Add to outbuf_latency averager */
+                rd_avg_add(&rkb->rkb_avg_outbuf_latency,
+                           rkbuf->rkbuf_ts_sent - rkbuf->rkbuf_ts_enq);
+
                 if (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING &&
 		    rd_atomic32_add(&rkb->rkb_blocking_request_cnt, 1) == 1)
 			rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
@@ -3416,6 +3420,7 @@ void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
         rd_kafka_q_destroy_owner(rkb->rkb_ops);
 
         rd_avg_destroy(&rkb->rkb_avg_int_latency);
+        rd_avg_destroy(&rkb->rkb_avg_outbuf_latency);
         rd_avg_destroy(&rkb->rkb_avg_rtt);
 	rd_avg_destroy(&rkb->rkb_avg_throttle);
 
@@ -3491,9 +3496,14 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_bufq_init(&rkb->rkb_retrybufs);
 	rkb->rkb_ops = rd_kafka_q_new(rk);
         rd_interval_init(&rkb->rkb_connect_intvl);
-	rd_avg_init(&rkb->rkb_avg_int_latency, RD_AVG_GAUGE);
-	rd_avg_init(&rkb->rkb_avg_rtt, RD_AVG_GAUGE);
-	rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE);
+        rd_avg_init(&rkb->rkb_avg_int_latency, RD_AVG_GAUGE, 0, 100*1000, 2,
+                    rk->rk_conf.stats_interval_ms ? 1 : 0);
+        rd_avg_init(&rkb->rkb_avg_outbuf_latency, RD_AVG_GAUGE, 0, 100*1000, 2,
+                    rk->rk_conf.stats_interval_ms ? 1 : 0);
+        rd_avg_init(&rkb->rkb_avg_rtt, RD_AVG_GAUGE, 0, 500*1000, 2,
+                    rk->rk_conf.stats_interval_ms ? 1 : 0);
+        rd_avg_init(&rkb->rkb_avg_throttle, RD_AVG_GAUGE, 0, 5000*1000, 2,
+                    rk->rk_conf.stats_interval_ms ? 1 : 0);
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */
 

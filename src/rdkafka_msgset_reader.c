@@ -117,6 +117,7 @@ typedef struct rd_kafka_msgset_reader_s {
                                           *          reference! */
 
         int          msetr_msgcnt;      /**< Number of messages in rkq */
+        int64_t      msetr_msg_bytes;   /**< Number of bytes in rkq */
         rd_kafka_q_t msetr_rkq;         /**< Temp Message and error queue */
         rd_kafka_q_t *msetr_par_rkq;    /**< Parent message and error queue,
                                          *   the temp msetr_rkq will be moved
@@ -408,6 +409,7 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
 
                 /* Transfer message count from inner to outer */
                 msetr->msetr_msgcnt += inner_msetr.msetr_msgcnt;
+                msetr->msetr_msg_bytes += inner_msetr.msetr_msg_bytes;
 
 
         } else {
@@ -615,6 +617,7 @@ rd_kafka_msgset_reader_msg_v0_1 (rd_kafka_msgset_reader_t *msetr) {
         /* Enqueue message on temporary queue */
         rd_kafka_q_enq(&msetr->msetr_rkq, rko);
         msetr->msetr_msgcnt++;
+        msetr->msetr_msg_bytes += rkm->rkm_key_len + rkm->rkm_len;
 
         return RD_KAFKA_RESP_ERR_NO_ERROR; /* Continue */
 
@@ -720,6 +723,7 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
         /* Enqueue message on temporary queue */
         rd_kafka_q_enq(&msetr->msetr_rkq, rko);
         msetr->msetr_msgcnt++;
+        msetr->msetr_msg_bytes += rkm->rkm_key_len + rkm->rkm_len;
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
@@ -1074,9 +1078,11 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
         }
 
         rd_rkb_dbg(msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
-                   "Enqueue %i %smessage(s) (%d ops) on %s [%"PRId32"] "
+                   "Enqueue %i %smessage(s) (%"PRId64" bytes, %d ops) on "
+                   "%s [%"PRId32"] "
                    "fetch queue (qlen %d, v%d, last_offset %"PRId64")",
                    msetr->msetr_msgcnt, msetr->msetr_srcname,
+                   msetr->msetr_msg_bytes,
                    rd_kafka_q_len(&msetr->msetr_rkq),
                    rktp->rktp_rkt->rkt_topic->str,
                    rktp->rktp_partition, rd_kafka_q_len(&msetr->msetr_rkq),
@@ -1128,7 +1134,13 @@ rd_kafka_msgset_parse (rd_kafka_buf_t *rkbuf,
         /* Parse and handle the message set */
         err = rd_kafka_msgset_reader_run(&msetr);
 
-        rd_atomic64_add(&rktp->rktp_c.msgs, msetr.msetr_msgcnt);
+        rd_atomic64_add(&rktp->rktp_c.rx_msgs, msetr.msetr_msgcnt);
+        rd_atomic64_add(&rktp->rktp_c.rx_msg_bytes, msetr.msetr_msg_bytes);
+
+        rd_avg_add(&rktp->rktp_rkt->rkt_avg_batchcnt,
+                   (int64_t)msetr.msetr_msgcnt);
+        rd_avg_add(&rktp->rktp_rkt->rkt_avg_batchsize,
+                   (int64_t)msetr.msetr_msg_bytes);
 
         return err;
 

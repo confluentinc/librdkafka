@@ -69,8 +69,8 @@ rm -rf %{buildroot}
 %{_libdir}/librdkafka.so.%{soname}
 %{_libdir}/librdkafka++.so.%{soname}
 %defattr(-,root,root)
-%doc README.md CONFIGURATION.md INTRODUCTION.md
-%doc LICENSE LICENSE.pycrc LICENSE.queue LICENSE.snappy LICENSE.tinycthread LICENSE.wingetopt
+%doc README.md CONFIGURATION.md INTRODUCTION.md STATISTICS.md
+%doc LICENSE LICENSES.txt
 
 %defattr(-,root,root)
 #%{_bindir}/rdkafka_example

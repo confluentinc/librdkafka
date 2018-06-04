@@ -1357,6 +1357,12 @@ int main(int argc, char **argv) {
         test_curr->state = TEST_PASSED;
         test_curr->start = test_clock();
 
+        if (test_on_ci) {
+                TEST_LOCK();
+                test_timeout_multiplier += 2;
+                TEST_UNLOCK();
+        }
+
 	if (!strcmp(test_mode, "helgrind") ||
 	    !strcmp(test_mode, "drd")) {
 		TEST_LOCK();

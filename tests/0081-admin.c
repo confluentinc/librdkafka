@@ -751,20 +751,26 @@ static void do_test_AlterConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
         exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
         ci++;
 
-        /*
-         * ConfigResource #1: valid broker config
-         */
-        configs[ci] = rd_kafka_ConfigResource_new(
-                RD_KAFKA_RESOURCE_BROKER,
-                tsprintf("%"PRId32, avail_brokers[0]));
 
-        err = rd_kafka_ConfigResource_set_config(
-                configs[ci],
-                "sasl.kerberos.min.time.before.relogin", "58000");
-        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        if (test_broker_version >= TEST_BRKVER(1, 1, 0, 0)) {
+                /*
+                 * ConfigResource #1: valid broker config
+                 */
+                configs[ci] = rd_kafka_ConfigResource_new(
+                        RD_KAFKA_RESOURCE_BROKER,
+                        tsprintf("%"PRId32, avail_brokers[0]));
 
-        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
-        ci++;
+                err = rd_kafka_ConfigResource_set_config(
+                        configs[ci],
+                        "sasl.kerberos.min.time.before.relogin", "58000");
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+                ci++;
+        } else {
+                TEST_WARN("Skipping RESOURCE_BROKER test on unsupported "
+                          "broker version\n");
+        }
 
         /*
          * ConfigResource #2: valid topic config, non-existent topic

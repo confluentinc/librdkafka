@@ -221,7 +221,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "metadata.max.age.ms", _RK_C_INT,
           _RK(metadata_max_age_ms),
           "Metadata cache max age. "
-          "Defaults to metadata.refresh.interval.ms * 3",
+          "Defaults to topic.metadata.refresh.interval.ms * 3",
           1, 24*3600*1000, -1 },
         { _RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
           _RK(metadata_refresh_fast_interval_ms),

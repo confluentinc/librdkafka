@@ -269,6 +269,12 @@ void rd_kafka_bufq_connection_reset (rd_kafka_broker_t *rkb,
 					      RD_KAFKA_RESP_ERR__DESTROY,
 					      NULL, rkbuf);
 			break;
+		case RD_KAFKAP_Produce:
+			rd_kafka_bufq_deq(rkbufq, rkbuf);
+			rd_kafka_buf_callback(rkb->rkb_rk, rkb,
+					      RD_KAFKA_RESP_ERR__TRANSPORT,
+					      NULL, rkbuf);
+			break;
                 default:
                         /* Reset buffer send position */
                         rd_slice_seek(&rkbuf->rkbuf_reader, 0);

@@ -21,8 +21,8 @@ trunk: build
 
 # Run the full test suite(s)
 full: build
-	./broker_version_tests.py $(KAFKA_VERSION)
-	./sasl_test.py $(KAFKA_VERSION)
+	./broker_version_tests.py --conf '{"parallel":1}' $(KAFKA_VERSION)
+	./sasl_test.py --conf '{"parallel":1}' $(KAFKA_VERSION)
 
 run_par: $(BIN)
 	@echo "Running tests in parallel"

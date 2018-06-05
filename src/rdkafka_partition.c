@@ -49,6 +49,10 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
                           rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                           rd_kafka_q_cb_type_t cb_type, void *opaque);
 
+static void rd_kafka_toppar_offset_retry (rd_kafka_toppar_t *rktp,
+                                          int backoff_ms,
+                                          const char *reason);
+
 
 static RD_INLINE int32_t
 rd_kafka_toppar_version_new_barrier0 (rd_kafka_toppar_t *rktp,
@@ -186,8 +190,12 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
         rd_kafka_offset_stats_reset(&rktp->rktp_offsets_fin);
         rktp->rktp_hi_offset = RD_KAFKA_OFFSET_INVALID;
 	rktp->rktp_lo_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_query_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_next_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_last_next_offset = RD_KAFKA_OFFSET_INVALID;
 	rktp->rktp_app_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_stored_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_committing_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_committed_offset = RD_KAFKA_OFFSET_INVALID;
 	rd_kafka_msgq_init(&rktp->rktp_msgq);
         rktp->rktp_msgq_wakeup_fd = -1;
@@ -866,20 +874,14 @@ static void rd_kafka_toppar_broker_migrate (rd_kafka_toppar_t *rktp,
         if (had_next_leader)
                 return;
 
-	/* Revert from offset-wait state back to offset-query
-	 * prior to leaving the broker to avoid stalling
-	 * on the new broker waiting for a offset reply from
-	 * this old broker (that might not come and thus need
-	 * to time out..slowly) */
-	if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT) {
-		rd_kafka_toppar_set_fetch_state(
-			rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
-		rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
-				     &rktp->rktp_offset_query_tmr,
-				     500*1000,
-				     rd_kafka_offset_query_tmr_cb,
-				     rktp);
-	}
+        /* Revert from offset-wait state back to offset-query
+         * prior to leaving the broker to avoid stalling
+         * on the new broker waiting for a offset reply from
+         * this old broker (that might not come and thus need
+         * to time out..slowly) */
+        if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
+                rd_kafka_toppar_offset_retry(rktp, 500,
+                                             "migrating to new leader");
 
         if (old_rkb) {
                 /* If there is an existing broker for this toppar we let it
@@ -1270,6 +1272,10 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                     err == RD_KAFKA_RESP_ERR__OUTDATED) {
                         /* Termination or outdated, quick cleanup. */
 
+                        if (err == RD_KAFKA_RESP_ERR__OUTDATED)
+                                rd_kafka_toppar_offset_retry(
+                                        rktp, 500, "outdated offset response");
+
                         /* from request.opaque */
                         rd_kafka_toppar_destroy(s_rktp);
                         return;
@@ -1321,6 +1327,52 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
         rd_kafka_toppar_destroy(s_rktp); /* from request.opaque */
 }
 
+
+/**
+ * @brief An Offset fetch failed (for whatever reason) in
+ *        the RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT state:
+ *        set the state back to FETCH_OFFSET_QUERY and start the
+ *        offset_query_tmr to trigger a new request eventually.
+ *
+ * @locality toppar handler thread
+ * @locks toppar_lock() MUST be held
+ */
+static void rd_kafka_toppar_offset_retry (rd_kafka_toppar_t *rktp,
+                                          int backoff_ms,
+                                          const char *reason) {
+        rd_ts_t tmr_next;
+        int restart_tmr;
+
+        /* (Re)start timer if not started or the current timeout
+         * is larger than \p backoff_ms. */
+        tmr_next = rd_kafka_timer_next(&rktp->rktp_rkt->rkt_rk->rk_timers,
+                                       &rktp->rktp_offset_query_tmr, 1);
+
+        restart_tmr = (tmr_next == -1 ||
+                       tmr_next > rd_clock() + (backoff_ms * 1000ll));
+
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
+                     "%s [%"PRId32"]: %s: %s for offset %s",
+                     rktp->rktp_rkt->rkt_topic->str,
+                     rktp->rktp_partition,
+                     reason,
+                     restart_tmr ?
+                     "(re)starting offset query timer" :
+                     "offset query timer already scheduled",
+                     rd_kafka_offset2str(rktp->rktp_query_offset));
+
+        rd_kafka_toppar_set_fetch_state(rktp,
+                                        RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
+
+        if (restart_tmr)
+                rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
+                                     &rktp->rktp_offset_query_tmr,
+                                     backoff_ms*1000ll,
+                                     rd_kafka_offset_query_tmr_cb, rktp);
+}
+
+
+
 /**
  * Send OffsetRequest for toppar.
  *
@@ -1343,21 +1395,11 @@ void rd_kafka_toppar_offset_request (rd_kafka_toppar_t *rktp,
                 backoff_ms = 500;
 
         if (backoff_ms) {
-		rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "OFFSET",
-			     "%s [%"PRId32"]: %s"
-			     "starting offset query timer for offset %s",
-			     rktp->rktp_rkt->rkt_topic->str,
-			     rktp->rktp_partition,
-                             !rkb ? "no current leader for partition, " : "",
-			     rd_kafka_offset2str(query_offset));
-
-                rd_kafka_toppar_set_fetch_state(
-                        rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
-		rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
-				     &rktp->rktp_offset_query_tmr,
-				     backoff_ms*1000ll,
-				     rd_kafka_offset_query_tmr_cb, rktp);
-		return;
+                rd_kafka_toppar_offset_retry(rktp, backoff_ms,
+                                             !rkb ?
+                                             "no current leader for partition":
+                                             "backoff");
+                return;
         }
 
 
@@ -2010,16 +2052,11 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
 				     rktp->rktp_partition,
 				     rd_kafka_err2str(rko->rko_err));
 
-			/* Keep on querying until we succeed. */
-			rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
+                        /* Keep on querying until we succeed. */
+                        rd_kafka_toppar_offset_retry(rktp, 500,
+                                                     "failed to fetch offsets");
+                        rd_kafka_toppar_unlock(rktp);
 
-			rd_kafka_toppar_unlock(rktp);
-
-			rd_kafka_timer_start(&rktp->rktp_rkt->rkt_rk->rk_timers,
-					     &rktp->rktp_offset_query_tmr,
-					     500*1000,
-					     rd_kafka_offset_query_tmr_cb,
-					     rktp);
 
 			/* Propagate error to application */
 			if (rko->rko_err != RD_KAFKA_RESP_ERR__WAIT_COORD) {

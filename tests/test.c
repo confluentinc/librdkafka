@@ -34,6 +34,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#ifdef _MSC_VER
+#include <direct.h> /* _getcwd */
+#endif
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
@@ -1388,6 +1391,17 @@ int main(int argc, char **argv) {
         TEST_SAY("Test timeout multiplier: %.1f\n", test_timeout_multiplier);
         TEST_SAY("Action on test failure: %s\n",
                  test_assert_on_fail ? "assert crash" : "continue other tests");
+
+        {
+                char cwd[512], *pcwd;
+#ifdef _MSC_VER
+                pcwd = _getcwd(cwd, sizeof(cwd) - 1);
+#else
+                pcwd = getcwd(cwd, sizeof(cwd) - 1);
+#endif
+                if (pcwd)
+                        TEST_SAY("Current directory: %s\n", cwd);
+        }
 
         test_timeout_set(20);
 

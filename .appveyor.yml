@@ -18,7 +18,6 @@ nuget:
   disable_publish_on_pr: true
 before_build:
 - cmd: nuget restore win32/librdkafka.sln
-- cmd: nuget restore win32/tests/tests.vcxproj
 build:
   project: win32/librdkafka.sln
   publish_nuget: true
@@ -27,7 +26,7 @@ build:
   parallel: true
   verbosity: normal
 test_script:
-- cmd: if exist DISABLED\win32\outdir\v140 ( win32\outdir\v140\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 ) else ( win32\outdir\v120\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 )
+- cmd: if exist DISABLED\win32\outdir\v140 ( win32\outdir\v140\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 ) else ( cd tests && ..\win32\outdir\v120\%PLATFORM%\%CONFIGURATION%\tests.exe -l -p1 )
 artifacts:
 - path: test_report*.json
   name: Test report

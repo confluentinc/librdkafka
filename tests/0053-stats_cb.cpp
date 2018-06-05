@@ -41,12 +41,7 @@
 #include <rapidjson/prettywriter.h>
 #endif
 
-#ifdef _MSC_VER
-/* VS tests runs out of win32/.... */
-static const char *stats_schema_path = "../../src/statistics_schema.json";
-#else
 static const char *stats_schema_path = "../src/statistics_schema.json";
-#endif
 
 #if WITH_RAPIDJSON
 /**

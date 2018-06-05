@@ -53,6 +53,16 @@ const char *rd_kafka_event_name (const rd_kafka_event_t *rkev) {
 		return "OffsetCommit";
 	case RD_KAFKA_EVENT_STATS:
 		return "Stats";
+        case RD_KAFKA_EVENT_CREATETOPICS_RESULT:
+                return "CreateTopicsResult";
+        case RD_KAFKA_EVENT_DELETETOPICS_RESULT:
+                return "DeleteTopicsResult";
+        case RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT:
+                return "CreatePartitionsResult";
+        case RD_KAFKA_EVENT_ALTERCONFIGS_RESULT:
+                return "AlterConfigsResult";
+        case RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT:
+                return "DescribeConfigsResult";
 	default:
 		return "?unknown?";
 	}
@@ -154,10 +164,16 @@ const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev) {
 	case RD_KAFKA_OP_CONSUMER_ERR:
 		if (rkev->rko_u.err.errstr)
 			return rkev->rko_u.err.errstr;
-		/* FALLTHRU */
-	default:
-		return rd_kafka_err2str(rkev->rko_err);
-	}
+                break;
+        case RD_KAFKA_OP_ADMIN_RESULT:
+                if (rkev->rko_u.admin_result.errstr)
+                        return rkev->rko_u.admin_result.errstr;
+                break;
+        default:
+                break;
+        }
+
+        return rd_kafka_err2str(rkev->rko_err);
 }
 
 
@@ -166,6 +182,8 @@ void *rd_kafka_event_opaque (rd_kafka_event_t *rkev) {
 	{
 	case RD_KAFKA_OP_OFFSET_COMMIT:
 		return rkev->rko_u.offset_commit.opaque;
+        case RD_KAFKA_OP_ADMIN_RESULT:
+                return rkev->rko_u.admin_result.opaque;
 	default:
 		return NULL;
 	}
@@ -229,4 +247,50 @@ rd_kafka_event_topic_partition (rd_kafka_event_t *rkev) {
 
 	return rktpar;
 
+}
+
+
+
+const rd_kafka_CreateTopics_result_t *
+rd_kafka_event_CreateTopics_result (rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_CREATETOPICS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_CreateTopics_result_t *)rkev;
+}
+
+
+const rd_kafka_DeleteTopics_result_t *
+rd_kafka_event_DeleteTopics_result (rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_DELETETOPICS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DeleteTopics_result_t *)rkev;
+}
+
+
+const rd_kafka_CreatePartitions_result_t *
+rd_kafka_event_CreatePartitions_result (rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_CreatePartitions_result_t *)rkev;
+}
+
+
+const rd_kafka_AlterConfigs_result_t *
+rd_kafka_event_AlterConfigs_result (rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_ALTERCONFIGS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_AlterConfigs_result_t *)rkev;
+}
+
+
+const rd_kafka_DescribeConfigs_result_t *
+rd_kafka_event_DescribeConfigs_result (rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DescribeConfigs_result_t *)rkev;
 }

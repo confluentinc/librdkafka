@@ -233,20 +233,25 @@ static void msg_consume (rd_kafka_message_t *rkmessage,
 static void metadata_print (const char *topic,
                             const struct rd_kafka_metadata *metadata) {
         int i, j, k;
+        int32_t controllerid;
 
         printf("Metadata for %s (from broker %"PRId32": %s):\n",
                topic ? : "all topics",
                metadata->orig_broker_id,
                metadata->orig_broker_name);
 
+        controllerid = rd_kafka_controllerid(rk, 0);
+
 
         /* Iterate brokers */
         printf(" %i brokers:\n", metadata->broker_cnt);
         for (i = 0 ; i < metadata->broker_cnt ; i++)
-                printf("  broker %"PRId32" at %s:%i\n",
+                printf("  broker %"PRId32" at %s:%i%s\n",
                        metadata->brokers[i].id,
                        metadata->brokers[i].host,
-                       metadata->brokers[i].port);
+                       metadata->brokers[i].port,
+                       controllerid == metadata->brokers[i].id ?
+                       " (controller)" : "");
 
         /* Iterate topics */
         printf(" %i topics:\n", metadata->topic_cnt);
@@ -634,6 +639,8 @@ int main (int argc, char **argv) {
 			size_t len = strlen(buf);
 			if (buf[len-1] == '\n')
 				buf[--len] = '\0';
+
+                        err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
 			/* Send/Produce message. */
                         if (hdrs) {

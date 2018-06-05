@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2013 Magnus Edenhill
+ * Copyright (c) 2012-2018 Magnus Edenhill
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -148,7 +148,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x000b04ff
+#define RD_KAFKA_VERSION  0x000b0500
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -223,7 +223,7 @@ const char *rd_kafka_get_debug_contexts(void);
  *             Use rd_kafka_get_debug_contexts() instead.
  */
 #define RD_KAFKA_DEBUG_CONTEXTS \
-        "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,security,fetch,interceptor,plugin,consumer"
+        "all,generic,broker,topic,metadata,feature,queue,msg,protocol,cgrp,security,fetch,interceptor,plugin,consumer,admin"
 
 
 /* @cond NO_DOC */
@@ -233,6 +233,8 @@ typedef struct rd_kafka_topic_s rd_kafka_topic_t;
 typedef struct rd_kafka_conf_s rd_kafka_conf_t;
 typedef struct rd_kafka_topic_conf_s rd_kafka_topic_conf_t;
 typedef struct rd_kafka_queue_s rd_kafka_queue_t;
+typedef struct rd_kafka_op_s rd_kafka_event_t;
+typedef struct rd_kafka_topic_result_s rd_kafka_topic_result_t;
 /* @endcond */
 
 
@@ -343,6 +345,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__NOENT = -156,
         /** Read underflow */
         RD_KAFKA_RESP_ERR__UNDERFLOW = -155,
+        /** Invalid type */
+        RD_KAFKA_RESP_ERR__INVALID_TYPE = -154,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -1315,6 +1319,48 @@ void rd_kafka_conf_set_events(rd_kafka_conf_t *conf, int events);
 
 
 /**
+ * @brief Generic event callback to be used with the event API to trigger
+ *        callbacks for \c rd_kafka_event_t objects from a background
+ *        thread serving the background queue.
+ *
+ * How to use:
+ *  1. First set the event callback on the configuration object with this
+ *     function, followed by creating an rd_kafka_t instance
+ *     with rd_kafka_new().
+ *  2. Get the instance's background queue with rd_kafka_queue_get_background()
+ *     and pass it as the reply/response queue to an API that takes an
+ *     event queue, such as rd_kafka_CreateTopics().
+ *  3. As the response event is ready and enqueued on the background queue the
+ *     event callback will be triggered from the background thread.
+ *  4. Prior to destroying the client instance, loose your reference to the
+ *     background queue by calling rd_kafka_queue_destroy().
+ *
+ * The application must destroy the \c rkev passed to \p event cb using
+ * rd_kafka_event_destroy().
+ *
+ * The \p event_cb \c opaque argument is the opaque set with
+ * rd_kafka_conf_set_opaque().
+ *
+ * @remark This callback is a specialized alternative to the poll-based
+ *         event API described in the Event interface section.
+ *
+ * @remark The \p event_cb will be called spontaneously from a background
+ *         thread completely managed by librdkafka.
+ *         Take care to perform proper locking of application objects.
+ *
+ * @warning The application MUST NOT call rd_kafka_destroy() from the
+ *          event callback.
+ *
+ * @sa rd_kafka_queue_get_background
+ */
+RD_EXPORT void
+rd_kafka_conf_set_background_event_cb (rd_kafka_conf_t *conf,
+                                       void (*event_cb) (rd_kafka_t *rk,
+                                                         rd_kafka_event_t *rkev,
+                                                         void *opaque));
+
+
+/**
  @deprecated See rd_kafka_conf_set_dr_msg_cb()
 */
 RD_EXPORT
@@ -2036,6 +2082,24 @@ char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms);
 
 
 /**
+ * @brief Returns the current ControllerId as reported in broker metadata.
+ *
+ * @param timeout_ms If there is no cached value from metadata retrieval
+ *                   then this specifies the maximum amount of time
+ *                   (in milliseconds) the call will block waiting
+ *                   for metadata to be retrieved.
+ *                   Use 0 for non-blocking calls.
+
+ * @remark Requires broker version >=0.10.0 and api.version.request=true.
+ *
+ * @returns the controller broker id (>= 0), or -1 if no ControllerId could be
+ *          retrieved in the allotted timespan.
+ */
+RD_EXPORT
+int32_t rd_kafka_controllerid (rd_kafka_t *rk, int timeout_ms);
+
+
+/**
  * @brief Creates a new topic handle for topic named \p topic.
  *
  * \p conf is an optional configuration for the topic created with
@@ -2318,6 +2382,32 @@ RD_EXPORT
 rd_kafka_queue_t *rd_kafka_queue_get_partition (rd_kafka_t *rk,
                                                 const char *topic,
                                                 int32_t partition);
+
+/**
+ * @returns a reference to the background thread queue, or NULL if the
+ *          background queue is not enabled.
+ *
+ * To enable the background thread queue set a generic event handler callback
+ * with rd_kafka_conf_set_background_event_cb() on the client instance
+ * configuration object (rd_kafka_conf_t).
+ *
+ * The background queue is polled and served by librdkafka and MUST NOT be
+ * polled, forwarded, or otherwise managed by the application, it may only
+ * be used as the destination queue passed to queue-enabled APIs, such as
+ * the Admin API.
+ *
+ * The background thread queue provides the application with an automatically
+ * polled queue that triggers the event callback in a background thread,
+ * this background thread is completely managed by librdkafka.
+ *
+ * Use rd_kafka_queue_destroy() to loose the reference.
+ *
+ * @warning The background queue MUST NOT be read from (polled, consumed, etc),
+ *          or forwarded from.
+ */
+RD_EXPORT
+rd_kafka_queue_t *rd_kafka_queue_get_background (rd_kafka_t *rk);
+
 
 /**
  * @brief Forward/re-route queue \p src to \p dst.
@@ -3086,6 +3176,8 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *rkt, int32_t partition,
  *
  * @returns RD_KAFKA_RESP_ERR__TIMED_OUT if \p timeout_ms was reached before all
  *          outstanding requests were completed, else RD_KAFKA_RESP_ERR_NO_ERROR
+ *
+ * @sa rd_kafka_outq_len()
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms);
@@ -3370,14 +3462,24 @@ void rd_kafka_log_syslog(const rd_kafka_t *rk, int level,
 /**
  * @brief Returns the current out queue length.
  *
- * The out queue contains messages waiting to be sent to, or acknowledged by,
- * the broker.
+ * The out queue length is the sum of:
+ *  - number of messages waiting to be sent to, or acknowledged by,
+ *    the broker.
+ *  - number of delivery reports (e.g., dr_msg_cb) waiting to be served
+ *    by rd_kafka_poll() or rd_kafka_flush().
+ *  - number of callbacks (e.g., error_cb, stats_cb, etc) waiting to be
+ *    served by rd_kafka_poll(), rd_kafka_consumer_poll() or rd_kafka_flush().
+ *  - number of events waiting to be served by background_event_cb() in
+ *    the background queue (see rd_kafka_conf_set_background_event_cb).
  *
- * An application should wait for this queue to reach zero before terminating
- * to make sure outstanding requests (such as offset commits) are fully
- * processed.
+ * An application should wait for the return value of this function to reach
+ * zero before terminating to make sure outstanding messages,
+ * requests (such as offset commits), callbacks and events are fully processed.
+ * See rd_kafka_flush().
  *
- * @returns number of messages in the out queue.
+ * @returns number of messages and events waiting in queues.
+ *
+ * @sa rd_kafka_flush()
  */
 RD_EXPORT
 int         rd_kafka_outq_len(rd_kafka_t *rk);
@@ -3470,9 +3572,11 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_REBALANCE     0x10 /**< Group rebalance (consumer) */
 #define RD_KAFKA_EVENT_OFFSET_COMMIT 0x20 /**< Offset commit result */
 #define RD_KAFKA_EVENT_STATS         0x40 /**< Stats */
-
-
-typedef struct rd_kafka_op_s rd_kafka_event_t;
+#define RD_KAFKA_EVENT_CREATETOPICS_RESULT 100 /**< CreateTopics_result_t */
+#define RD_KAFKA_EVENT_DELETETOPICS_RESULT 101 /**< DeleteTopics_result_t */
+#define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
+#define RD_KAFKA_EVENT_ALTERCONFIGS_RESULT 103 /**< AlterConfigs_result_t */
+#define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
 
 
 /**
@@ -3583,7 +3687,12 @@ const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev);
  * @returns the user opaque (if any)
  *
  * Event types:
- *  - RD_KAFKA_OFFSET_COMMIT
+ *  - RD_KAFKA_EVENT_OFFSET_COMMIT
+ *  - RD_KAFKA_EVENT_CREATETOPICS_RESULT
+ *  - RD_KAFKA_EVENT_DELETETOPICS_RESULT
+ *  - RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
+ *  - RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
+ *  - RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
  */
 RD_EXPORT
 void *rd_kafka_event_opaque (rd_kafka_event_t *rkev);
@@ -3643,12 +3752,74 @@ RD_EXPORT rd_kafka_topic_partition_t *
 rd_kafka_event_topic_partition (rd_kafka_event_t *rkev);
 
 
+
+typedef rd_kafka_event_t rd_kafka_CreateTopics_result_t;
+typedef rd_kafka_event_t rd_kafka_DeleteTopics_result_t;
+typedef rd_kafka_event_t rd_kafka_CreatePartitions_result_t;
+typedef rd_kafka_event_t rd_kafka_AlterConfigs_result_t;
+typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
+
+/**
+ * @returns the result of a CreateTopics request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_CREATETOPICS_RESULT
+ */
+RD_EXPORT const rd_kafka_CreateTopics_result_t *
+rd_kafka_event_CreateTopics_result (rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a DeleteTopics request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DELETETOPICS_RESULT
+ */
+RD_EXPORT const rd_kafka_DeleteTopics_result_t *
+rd_kafka_event_DeleteTopics_result (rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a CreatePartitions request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
+ */
+RD_EXPORT const rd_kafka_CreatePartitions_result_t *
+rd_kafka_event_CreatePartitions_result (rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a AlterConfigs request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_ALTERCONFIGS_RESULT
+ */
+RD_EXPORT const rd_kafka_AlterConfigs_result_t *
+rd_kafka_event_AlterConfigs_result (rd_kafka_event_t *rkev);
+
+/**
+ * @returns the result of a DescribeConfigs request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT
+ */
+RD_EXPORT const rd_kafka_DescribeConfigs_result_t *
+rd_kafka_event_DescribeConfigs_result (rd_kafka_event_t *rkev);
+
+
+
+
 /**
  * @brief Poll a queue for an event for max \p timeout_ms.
  *
  * @returns an event, or NULL.
  *
  * @remark Use rd_kafka_event_destroy() to free the event.
+ *
+ * @sa rd_kafka_conf_set_background_event_cb()
  */
 RD_EXPORT
 rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms);
@@ -3660,6 +3831,11 @@ rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms);
 *
 * @remark This API must only be used for queues with callbacks registered
 *         for all expected event types. E.g., not a message queue.
+*
+* @remark Also see rd_kafka_conf_set_background_event_cb() for triggering
+*         event callbacks from a librdkafka-managed background thread.
+*
+* @sa rd_kafka_conf_set_background_event_cb()
 */
 RD_EXPORT
 int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms);
@@ -4203,6 +4379,963 @@ rd_kafka_interceptor_add_on_request_sent (
 
 
 
+
+/**@}*/
+
+
+
+/**
+ * @name Auxiliary types
+ *
+ * @{
+ */
+
+
+
+/**
+ * @brief Topic result provides per-topic operation result information.
+ *
+ */
+
+/**
+ * @returns the error code for the given topic result.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_topic_result_error (const rd_kafka_topic_result_t *topicres);
+
+/**
+ * @returns the human readable error string for the given topic result,
+ *          or NULL if there was no error.
+ *
+ * @remark lifetime of the returned string is the same as the \p topicres.
+ */
+RD_EXPORT const char *
+rd_kafka_topic_result_error_string (const rd_kafka_topic_result_t *topicres);
+
+/**
+ * @returns the name of the topic for the given topic result.
+ * @remark lifetime of the returned string is the same as the \p topicres.
+ *         
+ */
+RD_EXPORT const char *
+rd_kafka_topic_result_name (const rd_kafka_topic_result_t *topicres);
+
+
+/**@}*/
+
+
+/**
+ * @name Admin API
+ *
+ * @{
+ *
+ * @brief The Admin API enables applications to perform administrative
+ *        Apache Kafka tasks, such as creating and deleting topics,
+ *        altering and reading broker configuration, etc.
+ *
+ * The Admin API is asynchronous and makes use of librdkafka's standard
+ * \c rd_kafka_queue_t queues to propagate the result of an admin operation
+ * back to the application.
+ * The supplied queue may be any queue, such as a temporary single-call queue,
+ * a shared queue used for multiple requests, or even the main queue or
+ * consumer queues.
+ *
+ * Use \c rd_kafka_queue_poll() to collect the result of an admin operation
+ * from the queue of your choice, then extract the admin API-specific result
+ * type by using the corresponding \c rd_kafka_event_CreateTopics_result,
+ * \c rd_kafka_event_DescribeConfigs_result, etc, methods.
+ * Use the getter methods on the \c .._result_t type to extract response
+ * information and finally destroy the result and event by calling
+ * \c rd_kafka_event_destroy().
+ *
+ * Use rd_kafka_event_error() and rd_kafka_event_error_string() to acquire
+ * the request-level error/success for an Admin API request.
+ * Even if the returned value is \c RD_KAFKA_RESP_ERR_NO_ERROR there
+ * may be individual objects (topics, resources, etc) that have failed.
+ * Extract per-object error information with the corresponding
+ * \c rd_kafka_..._result_topics|resources|..() to check per-object errors.
+ *
+ * Locally triggered errors:
+ *  - \c RD_KAFKA_RESP_ERR__TIMED_OUT - (Controller) broker connection did not
+ *    become available in the time allowed by AdminOption_set_request_timeout.
+  */
+
+
+/**
+ * @enum rd_kafka_admin_op_t
+ *
+ * @brief Admin operation enum name for use with rd_kafka_AdminOptions_new()
+ *
+ * @sa rd_kafka_AdminOptions_new()
+ */
+typedef enum rd_kafka_admin_op_t {
+        RD_KAFKA_ADMIN_OP_ANY = 0,          /**< Default value */
+        RD_KAFKA_ADMIN_OP_CREATETOPICS,     /**< CreateTopics */
+        RD_KAFKA_ADMIN_OP_DELETETOPICS,     /**< DeleteTopics */
+        RD_KAFKA_ADMIN_OP_CREATEPARTITIONS, /**< CreatePartitions */
+        RD_KAFKA_ADMIN_OP_ALTERCONFIGS,     /**< AlterConfigs */
+        RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,  /**< DescribeConfigs */
+        RD_KAFKA_ADMIN_OP__CNT              /**< Number of ops defined */
+} rd_kafka_admin_op_t;
+
+/**
+ * @brief AdminOptions provides a generic mechanism for setting optional
+ *        parameters for the Admin API requests.
+ *
+ * @remark Since AdminOptions is decoupled from the actual request type
+ *         there is no enforcement to prevent setting unrelated properties,
+ *         e.g. setting validate_only on a DescribeConfigs request is allowed
+ *         but is silently ignored by DescribeConfigs.
+ *         Future versions may introduce such enforcement.
+ */
+
+
+typedef struct rd_kafka_AdminOptions_s rd_kafka_AdminOptions_t;
+
+/**
+ * @brief Create a new AdminOptions object.
+ *
+ *        The options object is not modified by the Admin API request APIs,
+ *        (e.g. CreateTopics) and may be reused for multiple calls.
+ *
+ * @param rk Client instance.
+ * @param for_api Specifies what Admin API this AdminOptions object will be used
+ *                for, which will enforce what AdminOptions_set_..() calls may
+ *                be used based on the API, causing unsupported set..() calls
+ *                to fail.
+ *                Specifying RD_KAFKA_ADMIN_OP_ANY disables the enforcement
+ *                allowing any option to be set, even if the option
+ *                is not used in a future call to an Admin API method.
+ *
+ * @returns a new AdminOptions object (which must be freed with
+ *          rd_kafka_AdminOptions_destroy()), or NULL if \p for_api was set to
+ *          an unknown API op type.
+ */
+RD_EXPORT rd_kafka_AdminOptions_t *
+rd_kafka_AdminOptions_new (rd_kafka_t *rk, rd_kafka_admin_op_t for_api);
+
+
+/**
+ * @brief Destroy a AdminOptions object.
+ */
+RD_EXPORT void rd_kafka_AdminOptions_destroy (rd_kafka_AdminOptions_t *options);
+
+
+/**
+ * @brief Sets the overall request timeout, including broker lookup,
+ *        request transmission, operation time on broker, and response.
+ *
+ * @param timeout_ms Timeout in milliseconds, use -1 for indefinite timeout.
+ *                   Defaults to `socket.timeout.ms`.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if timeout was out of range in which
+ *          case an error string will be written \p errstr.
+ *
+ * @remark This option is valid for all Admin API requests.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_request_timeout (rd_kafka_AdminOptions_t *options,
+                                           int timeout_ms,
+                                           char *errstr, size_t errstr_size);
+
+
+/**
+ * @brief Sets the broker's operation timeout, such as the timeout for
+ *        CreateTopics to complete the creation of topics on the controller
+ *        before returning a result to the application.
+ *
+ * CreateTopics: values <= 0 will return immediately after triggering topic
+ * creation, while > 0 will wait this long for topic creation to propagate
+ * in cluster. Default: 0.
+ *
+ * DeleteTopics: same semantics as CreateTopics.
+ * CreatePartitions: same semantics as CreateTopics.
+ *
+ *
+ * @param timeout_ms Timeout in milliseconds.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if timeout was out of range in which
+ *          case an error string will be written \p errstr.
+ *
+ * @remark This option is valid for CreateTopics, DeleteTopics and 
+ *         CreatePartitions.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
+                                             int timeout_ms,
+                                             char *errstr, size_t errstr_size);
+
+
+/**
+ * @brief If set to true the configuration is applied incrementally rather
+ *        than replacing and reverting all configuration for the resources.
+ *
+ * @param true_or_false Defaults to false.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
+ *          error code on failure in which case an error string will
+ *          be written \p errstr.
+ *
+ * @remark This option is valid for AlterConfigs.
+ *
+ * @remark Requires broker with KIP-248 support.
+ *         The request will fail (locally) if the broker does not support
+ *         incremental updates.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_incremental (rd_kafka_AdminOptions_t *options,
+                                       int true_or_false,
+                                       char *errstr, size_t errstr_size);
+
+/**
+ * @brief Tell broker to only validate the request, without performing
+ *        the requested operation (create topics, etc).
+ *
+ * @param true_or_false Defaults to false.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
+ *          error code on failure in which case an error string will
+ *          be written \p errstr.
+ *
+ * @remark This option is valid for CreateTopics,
+ *         CreatePartitions, AlterConfigs.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_validate_only (rd_kafka_AdminOptions_t *options,
+                                        int true_or_false,
+                                        char *errstr, size_t errstr_size);
+
+
+/**
+ * @brief Override what broker the Admin request will be sent to.
+ *
+ * By default, Admin requests are sent to the controller broker, with
+ * the following exceptions:
+ *   - AlterConfigs with a BROKER resource are sent to the broker id set
+ *     as the resource name.
+ *   - DescribeConfigs with a BROKER resource are sent to the broker id set
+ *     as the resource name.
+ *
+ * @param broker_id The broker to send the request to.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
+ *          error code on failure in which case an error string will
+ *          be written \p errstr.
+ *
+ * @remark This API should typically not be used, but serves as a workaround
+ *         if new resource types are to the broker that the client
+ *         does not know where to send.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_AdminOptions_set_broker (rd_kafka_AdminOptions_t *options,
+                                  int32_t broker_id,
+                                  char *errstr, size_t errstr_size);
+
+
+
+/**
+ * @brief Set application opaque value that can be extracted from the
+ *        result event using rd_kafka_event_opaque()
+ */
+RD_EXPORT void
+rd_kafka_AdminOptions_set_opaque (rd_kafka_AdminOptions_t *options,
+                                  void *opaque);
+
+
+
+
+
+
+/**
+ * @section CreateTopics - create topics in cluster
+ *
+ *
+ */
+
+
+typedef struct rd_kafka_NewTopic_s rd_kafka_NewTopic_t;
+
+/**
+ * @brief Create a new NewTopic object. This object is later passed to
+ *        rd_kafka_CreateTopics().
+ *
+ * @param topic Topic name to create.
+ * @param num_partitions Number of partitions in topic.
+ * @param replication_factor Default replication factor for the topic's
+ *                           partitions, or -1 if set_replica_assignment()
+ *                           will be used.
+ *
+ * @returns a new allocated NewTopic object, or NULL if the input parameters
+ *          are invalid.
+ *          Use rd_kafka_NewTopic_destroy() to free object when done.
+ */
+RD_EXPORT rd_kafka_NewTopic_t *
+rd_kafka_NewTopic_new (const char *topic, int num_partitions,
+                       int replication_factor,
+                       char *errstr, size_t errstr_size);
+
+/**
+ * @brief Destroy and free a NewTopic object previously created with
+ *        rd_kafka_NewTopic_new()
+ */
+RD_EXPORT void
+rd_kafka_NewTopic_destroy (rd_kafka_NewTopic_t *new_topic);
+
+
+/**
+ * @brief Helper function to destroy all NewTopic objects in the \p new_topics
+ *        array (of \p new_topic_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_NewTopic_destroy_array (rd_kafka_NewTopic_t **new_topics,
+                                 size_t new_topic_cnt);
+
+
+/**
+ * @brief Set the replica (broker) assignment for \p partition to the
+ *        replica set in \p broker_ids (of \p broker_id_cnt elements).
+ *
+ * @remark When this method is used, rd_kafka_NewTopic_new() must have
+ *         been called with a \c replication_factor of -1.
+ *
+ * @remark An application must either set the replica assignment for
+ *         all new partitions, or none.
+ *
+ * @remark If called, this function must be called consecutively for each
+ *         partition, starting at 0.
+ *
+ * @remark Use rd_kafka_metadata() to retrieve the list of brokers
+ *         in the cluster.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or an error code
+ *          if the arguments were invalid.
+ *
+ * @sa rd_kafka_AdminOptions_set_validate_only()
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_NewTopic_set_replica_assignment (rd_kafka_NewTopic_t *new_topic,
+                                          int32_t partition,
+                                          int32_t *broker_ids,
+                                          size_t broker_id_cnt,
+                                          char *errstr, size_t errstr_size);
+
+/**
+ * @brief Set (broker-side) topic configuration name/value pair.
+ *
+ * @remark The name and value are not validated by the client, the validation
+ *         takes place on the broker.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or an error code
+ *          if the arguments were invalid.
+ *
+ * @sa rd_kafka_AdminOptions_set_validate_only()
+ * @sa http://kafka.apache.org/documentation.html#topicconfigs
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_NewTopic_set_config (rd_kafka_NewTopic_t *new_topic,
+                              const char *name, const char *value);
+
+
+/**
+ * @brief Create topics in cluster as specified by the \p new_topics
+ *        array of size \p new_topic_cnt elements.
+ *
+ * @param new_topics Array of new topics to create.
+ * @param new_topic_cnt Number of elements in \p new_topics array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_validate_only() - default false
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *  - rd_kafka_AdminOptions_set_timeout() - default socket.timeout.ms
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_CREATETOPICS_RESULT
+ */
+RD_EXPORT void
+rd_kafka_CreateTopics (rd_kafka_t *rk,
+                       rd_kafka_NewTopic_t **new_topics,
+                       size_t new_topic_cnt,
+                       const rd_kafka_AdminOptions_t *options,
+                       rd_kafka_queue_t *rkqu);
+
+
+/**
+ * @brief CreateTopics result type and methods
+ */
+
+/**
+ * @brief Get an array of topic results from a CreateTopics result.
+ *
+ * The returned \p topics life-time is the same as the \p result object.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_topic_result_t **
+rd_kafka_CreateTopics_result_topics (
+        const rd_kafka_CreateTopics_result_t *result,
+        size_t *cntp);
+
+
+
+
+
+/**
+ * @section DeleteTopics - delete topics from cluster
+ *
+ *
+ */
+
+typedef struct rd_kafka_DeleteTopic_s rd_kafka_DeleteTopic_t;
+
+/**
+ * @brief Create a new DeleteTopic object. This object is later passed to
+ *        rd_kafka_DeleteTopics().
+ *
+ * @param topic Topic name to delete.
+ *
+ * @returns a new allocated DeleteTopic object.
+ *          Use rd_kafka_DeleteTopic_destroy() to free object when done.
+ */
+RD_EXPORT rd_kafka_DeleteTopic_t *
+rd_kafka_DeleteTopic_new (const char *topic);
+
+/**
+ * @brief Destroy and free a DeleteTopic object previously created with
+ *        rd_kafka_DeleteTopic_new()
+ */
+RD_EXPORT void
+rd_kafka_DeleteTopic_destroy (rd_kafka_DeleteTopic_t *del_topic);
+
+/**
+ * @brief Helper function to destroy all DeleteTopic objects in
+ *        the \p del_topics array (of \p del_topic_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_DeleteTopic_destroy_array (rd_kafka_DeleteTopic_t **del_topics,
+                                    size_t del_topic_cnt);
+
+/**
+ * @brief Delete topics from cluster as specified by the \p topics
+ *        array of size \p topic_cnt elements.
+ *
+ * @param topics Array of topics to delete.
+ * @param topic_cnt Number of elements in \p topics array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DELETETOPICS_RESULT
+ */
+RD_EXPORT
+void rd_kafka_DeleteTopics (rd_kafka_t *rk,
+                                  rd_kafka_DeleteTopic_t **del_topics,
+                                  size_t del_topic_cnt,
+                                  const rd_kafka_AdminOptions_t *options,
+                                  rd_kafka_queue_t *rkqu);
+
+
+
+/**
+ * @brief DeleteTopics result type and methods
+ */
+
+/**
+ * @brief Get an array of topic results from a DeleteTopics result.
+ *
+ * The returned \p topics life-time is the same as the \p result object.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_topic_result_t **
+rd_kafka_DeleteTopics_result_topics (
+        const rd_kafka_DeleteTopics_result_t *result,
+        size_t *cntp);
+
+
+
+
+
+
+/**
+ * @section CreatePartitions - add partitions to topic.
+ *
+ *
+ */
+
+typedef struct rd_kafka_NewPartitions_s rd_kafka_NewPartitions_t;
+
+/**
+ * @brief Create a new NewPartitions. This object is later passed to
+ *        rd_kafka_CreatePartitions() to increas the number of partitions
+ *        to \p new_total_cnt for an existing topic.
+ *
+ * @param topic Topic name to create more partitions for.
+ * @param new_total_cnt Increase the topic's partition count to this value.
+ *
+ * @returns a new allocated NewPartitions object, or NULL if the
+ *          input parameters are invalid.
+ *          Use rd_kafka_NewPartitions_destroy() to free object when done.
+ */
+RD_EXPORT rd_kafka_NewPartitions_t *
+rd_kafka_NewPartitions_new (const char *topic, size_t new_total_cnt,
+                            char *errstr, size_t errstr_size);
+
+/**
+ * @brief Destroy and free a NewPartitions object previously created with
+ *        rd_kafka_NewPartitions_new()
+ */
+RD_EXPORT void
+rd_kafka_NewPartitions_destroy (rd_kafka_NewPartitions_t *new_parts);
+
+/**
+ * @brief Helper function to destroy all NewPartitions objects in the
+ *        \p new_parts array (of \p new_parts_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_NewPartitions_destroy_array (rd_kafka_NewPartitions_t **new_parts,
+                                      size_t new_parts_cnt);
+
+/**
+ * @brief Set the replica (broker id) assignment for \p new_partition_idx to the
+ *        replica set in \p broker_ids (of \p broker_id_cnt elements).
+ *
+ * @remark An application must either set the replica assignment for
+ *         all new partitions, or none.
+ *
+ * @remark If called, this function must be called consecutively for each
+ *         new partition being created,
+ *         where \p new_partition_idx 0 is the first new partition,
+ *         1 is the second, and so on.
+ *
+ * @remark \p broker_id_cnt should match the topic's replication factor.
+ *
+ * @remark Use rd_kafka_metadata() to retrieve the list of brokers
+ *         in the cluster.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or an error code
+ *          if the arguments were invalid.
+ *
+ * @sa rd_kafka_AdminOptions_set_validate_only()
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_NewPartitions_set_replica_assignment (rd_kafka_NewPartitions_t *new_parts,
+                                               int32_t new_partition_idx,
+                                               int32_t *broker_ids,
+                                               size_t broker_id_cnt,
+                                               char *errstr,
+                                               size_t errstr_size);
+
+
+/**
+ * @brief Create additional partitions for the given topics, as specified
+ *        by the \p new_parts array of size \p new_parts_cnt elements.
+ *
+ * @param new_parts Array of topics for which new partitions are to be created.
+ * @param new_parts_cnt Number of elements in \p new_parts array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_validate_only() - default false
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *  - rd_kafka_AdminOptions_set_timeout() - default socket.timeout.ms
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT
+ */
+RD_EXPORT void
+rd_kafka_CreatePartitions (rd_kafka_t *rk,
+                           rd_kafka_NewPartitions_t **new_parts,
+                           size_t new_parts_cnt,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu);
+
+
+
+/**
+ * @brief CreatePartitions result type and methods
+ */
+
+/**
+ * @brief Get an array of topic results from a CreatePartitions result.
+ *
+ * The returned \p topics life-time is the same as the \p result object.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_topic_result_t **
+rd_kafka_CreatePartitions_result_topics (
+        const rd_kafka_CreatePartitions_result_t *result,
+        size_t *cntp);
+
+
+
+
+
+/**
+ * @section Cluster, broker, topic configuration entries, sources, etc.
+ *
+ * These entities relate to the cluster, not the local client.
+ *
+ * @sa rd_kafka_conf_set(), et.al. for local client configuration.
+ *
+ */
+
+/**
+ * @enum Apache Kafka config sources
+ */
+typedef enum rd_kafka_ConfigSource_t {
+        /**< Source unknown, e.g., in the ConfigEntry used for alter requests
+         *   where source is not set */
+        RD_KAFKA_CONFIG_SOURCE_UNKNOWN_CONFIG = 0,
+        /**< Dynamic topic config that is configured for a specific topic */
+        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_TOPIC_CONFIG = 1,
+        /**< Dynamic broker config that is configured for a specific broker */
+        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_BROKER_CONFIG = 2,
+        /**< Dynamic broker config that is configured as default for all
+         *   brokers in the cluster */
+        RD_KAFKA_CONFIG_SOURCE_DYNAMIC_DEFAULT_BROKER_CONFIG = 3,
+        /**< Static broker config provided as broker properties at startup
+         * (e.g. from server.properties file) */
+        RD_KAFKA_CONFIG_SOURCE_STATIC_BROKER_CONFIG = 4,
+        /**< Built-in default configuration for configs that have a
+         *   default value */
+        RD_KAFKA_CONFIG_SOURCE_DEFAULT_CONFIG = 5,
+
+        /**< Number of source types defined */
+        RD_KAFKA_CONFIG_SOURCE__CNT,
+} rd_kafka_ConfigSource_t;
+
+
+/**
+ * @returns a string representation of the \p confsource.
+ */
+RD_EXPORT const char *
+rd_kafka_ConfigSource_name (rd_kafka_ConfigSource_t confsource);
+
+
+typedef struct rd_kafka_ConfigEntry_s rd_kafka_ConfigEntry_t;
+
+/**
+ * @returns the configuration property name
+ */
+RD_EXPORT const char *
+rd_kafka_ConfigEntry_name (const rd_kafka_ConfigEntry_t *entry);
+
+/**
+ * @returns the configuration value, may be NULL for sensitive or unset
+ *          properties.
+ */
+RD_EXPORT const char *
+rd_kafka_ConfigEntry_value (const rd_kafka_ConfigEntry_t *entry);
+
+/**
+ * @returns the config source.
+ */
+RD_EXPORT rd_kafka_ConfigSource_t
+rd_kafka_ConfigEntry_source (const rd_kafka_ConfigEntry_t *entry);
+
+/**
+ * @returns 1 if the config property is read-only on the broker, else 0.
+ * @remark Shall only be used on a DescribeConfigs result, otherwise returns -1.
+ */
+RD_EXPORT int
+rd_kafka_ConfigEntry_is_read_only (const rd_kafka_ConfigEntry_t *entry);
+
+/**
+ * @returns 1 if the config property is set to its default value on the broker,
+ *          else 0.
+ * @remark Shall only be used on a DescribeConfigs result, otherwise returns -1.
+ */
+RD_EXPORT int
+rd_kafka_ConfigEntry_is_default (const rd_kafka_ConfigEntry_t *entry);
+
+/**
+ * @returns 1 if the config property contains sensitive information (such as
+ *          security configuration), else 0.
+ * @remark An application should take care not to include the value of
+ *         sensitive configuration entries in its output.
+ * @remark Shall only be used on a DescribeConfigs result, otherwise returns -1.
+ */
+RD_EXPORT int
+rd_kafka_ConfigEntry_is_sensitive (const rd_kafka_ConfigEntry_t *entry);
+
+/**
+ * @returns 1 if this entry is a synonym, else 0.
+ */
+RD_EXPORT int
+rd_kafka_ConfigEntry_is_synonym (const rd_kafka_ConfigEntry_t *entry);
+
+
+/**
+ * @returns the synonym config entry array.
+ *
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @remark The lifetime of the returned entry is the same as \p conf .
+ * @remark Shall only be used on a DescribeConfigs result,
+ *         otherwise returns NULL.
+ */
+RD_EXPORT const rd_kafka_ConfigEntry_t **
+rd_kafka_ConfigEntry_synonyms (const rd_kafka_ConfigEntry_t *entry,
+                               size_t *cntp);
+
+
+
+
+/**
+ * @enum Apache Kafka resource types
+ */
+typedef enum rd_kafka_ResourceType_t {
+        RD_KAFKA_RESOURCE_UNKNOWN = 0, /**< Unknown */
+        RD_KAFKA_RESOURCE_ANY = 1,     /**< Any (used for lookups) */
+        RD_KAFKA_RESOURCE_TOPIC = 2,   /**< Topic */
+        RD_KAFKA_RESOURCE_GROUP = 3,   /**< Group */
+        RD_KAFKA_RESOURCE_BROKER = 4,  /**< Broker */
+        RD_KAFKA_RESOURCE__CNT,        /**< Number of resource types defined */
+} rd_kafka_ResourceType_t;
+
+/**
+ * @returns a string representation of the \p restype
+ */
+RD_EXPORT const char *
+rd_kafka_ResourceType_name (rd_kafka_ResourceType_t restype);
+
+typedef struct rd_kafka_ConfigResource_s rd_kafka_ConfigResource_t;
+
+
+RD_EXPORT rd_kafka_ConfigResource_t *
+rd_kafka_ConfigResource_new (rd_kafka_ResourceType_t restype,
+                             const char *resname);
+
+/**
+ * @brief Destroy and free a ConfigResource object previously created with
+ *        rd_kafka_ConfigResource_new()
+ */
+RD_EXPORT void
+rd_kafka_ConfigResource_destroy (rd_kafka_ConfigResource_t *config);
+
+
+/**
+ * @brief Helper function to destroy all ConfigResource objects in
+ *        the \p configs array (of \p config_cnt elements).
+ *        The array itself is not freed.
+ */
+RD_EXPORT void
+rd_kafka_ConfigResource_destroy_array (rd_kafka_ConfigResource_t **config,
+                                       size_t config_cnt);
+
+
+/**
+ * @brief Set configuration name value pair.
+ *
+ * @param name Configuration name, depends on resource type.
+ * @param value Configuration value, depends on resource type and \p name.
+ *              Set to \c NULL to revert configuration value to default.
+ *
+ * The difference between add_config and set_config is that add allows
+ * adding to an existing configuration property, such as a SASL SCRAM user,
+ * while set overwrites the current value.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
+ *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ConfigResource_set_config (rd_kafka_ConfigResource_t *config,
+                                    const char *name, const char *value);
+
+/**
+ * @brief Add configuration name value pair.
+ *
+ * @param name Configuration name, depends on resource type.
+ * @param value Configuration value, depends on resource type and \p name.
+ *              Set to \c NULL to revert configuration value to default.
+ *
+ * The difference between add_config and set_config is that add allows
+ * adding to an existing configuration property, such as a SASL SCRAM user,
+ * while set overwrites the current value.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
+ *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ConfigResource_add_config (rd_kafka_ConfigResource_t *config,
+                                    const char *name, const char *value);
+
+
+/**
+ * @brief Delete or revert configuration to default on broker.
+ *
+ * @param name Configuration name, depends on resource type.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
+ *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ConfigResource_delete_config (rd_kafka_ConfigResource_t *config,
+                                       const char *name);
+
+
+/**
+ * @brief Get an array of config entries from a ConfigResource object.
+ *
+ * The returned object life-times are the same as the \p config object.
+ *
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_ConfigEntry_t **
+rd_kafka_ConfigResource_configs (const rd_kafka_ConfigResource_t *config,
+                                 size_t *cntp);
+
+
+
+/**
+ * @returns the ResourceType for \p config
+ */
+RD_EXPORT rd_kafka_ResourceType_t
+rd_kafka_ConfigResource_type (const rd_kafka_ConfigResource_t *config);
+
+/**
+ * @returns the name for \p config
+ */
+RD_EXPORT const char *
+rd_kafka_ConfigResource_name (const rd_kafka_ConfigResource_t *config);
+
+/**
+ * @returns the error for this resource from an AlterConfigs request
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ConfigResource_error (const rd_kafka_ConfigResource_t *config);
+
+/**
+ * @returns the error string for this resource from an AlterConfigs
+ *          request, or NULL if no error.
+ */
+RD_EXPORT const char *
+rd_kafka_ConfigResource_error_string (const rd_kafka_ConfigResource_t *config);
+
+
+/**
+ * @section AlterConfigs - alter cluster configuration.
+ *
+ *
+ */
+
+
+/**
+ * @brief Update the configuration for the specified resources.
+ *        Updates are not transactional so they may succeed for a subset
+ *        of the provided resources while the others fail.
+ *        The configuration for a particular resource is updated atomically,
+ *        replacing values using the provided ConfigEntrys and reverting
+ *        unspecified ConfigEntrys to their default values.
+ *
+ * @remark Requires broker version >=0.11.0.0
+ *
+ * @remark AlterConfigs will replace all existing configuration for
+ *         the provided resources with the new configuration given,
+ *         reverting all other configuration to their default values.
+ *         Use \c rd_kafka_AdminOptions_set_incremental() to change the
+ *         behaviour so that only the passed configuration is modified.
+ *
+ * @remark Multiple resources and resource types may be set, but at most one
+ *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
+ *         since these resource requests must be sent to the broker specified
+ *         in the resource.
+ *
+ */
+RD_EXPORT
+void rd_kafka_AlterConfigs (rd_kafka_t *rk,
+                            rd_kafka_ConfigResource_t **configs,
+                            size_t config_cnt,
+                            const rd_kafka_AdminOptions_t *options,
+                            rd_kafka_queue_t *rkqu);
+
+
+/**
+ * @brief AlterConfigs result type and methods
+ */
+
+/**
+ * @brief Get an array of resource results from a AlterConfigs result.
+ *
+ * Use \c rd_kafka_ConfigResource_error() and
+ * \c rd_kafka_ConfigResource_error_string() to extract per-resource error
+ * results on the returned array elements.
+ *
+ * The returned object life-times are the same as the \p result object.
+ *
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @returns an array of ConfigResource elements, or NULL if not available.
+ */
+RD_EXPORT const rd_kafka_ConfigResource_t **
+rd_kafka_AlterConfigs_result_resources (
+        const rd_kafka_AlterConfigs_result_t *result,
+        size_t *cntp);
+
+
+
+
+
+
+/**
+ * @section DescribeConfigs - retrieve cluster configuration.
+ *
+ *
+ */
+
+
+/**
+ * @brief Get configuration for the specified resources in \p configs.
+ *
+ *        The returned configuration includes default values and the
+ *        rd_kafka_ConfigEntry_is_default() or rd_kafka_ConfigEntry_source()
+ *        methods may be used to distinguish them from user supplied values.
+ *
+ *        The value of config entries where rd_kafka_ConfigEntry_is_sensitive()
+ *        is true will always be NULL to avoid disclosing sensitive
+ *        information, such as security settings.
+ *
+ *        Configuration entries where rd_kafka_ConfigEntry_is_read_only()
+ *        is true can't be updated (with rd_kafka_AlterConfigs()).
+ *
+ *        Synonym configuration entries are returned if the broker supports
+ *        it (broker version >= 1.1.0). See rd_kafka_ConfigEntry_synonyms().
+ *
+ * @remark Requires broker version >=0.11.0.0
+ *
+ * @remark Multiple resources and resource types may be requested, but at most
+ *         one resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
+ *         since these resource requests must be sent to the broker specified
+ *         in the resource.
+ */
+RD_EXPORT
+void rd_kafka_DescribeConfigs (rd_kafka_t *rk,
+                               rd_kafka_ConfigResource_t **configs,
+                               size_t config_cnt,
+                               const rd_kafka_AdminOptions_t *options,
+                               rd_kafka_queue_t *rkqu);
+
+
+/**
+ * @brief DescribeConfigs result type and methods
+ */
+
+/**
+ * @brief Get an array of resource results from a DescribeConfigs result.
+ *
+ * The returned \p resources life-time is the same as the \p result object.
+ * @param cntp is updated to the number of elements in the array.
+ */
+RD_EXPORT const rd_kafka_ConfigResource_t **
+rd_kafka_DescribeConfigs_result_resources (
+        const rd_kafka_DescribeConfigs_result_t *result,
+        size_t *cntp);
 
 /**@}*/
 

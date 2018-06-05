@@ -395,3 +395,11 @@
    fun:_dl_lookup_symbol_x
    ...
 }
+{
+   dlopen1
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_dl_open
+}
+

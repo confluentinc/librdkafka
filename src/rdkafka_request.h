@@ -195,4 +195,49 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 
 int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp);
 
+rd_kafka_resp_err_t
+rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
+                              const rd_list_t *new_topics /*(NewTopic_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
+                              const rd_list_t *del_topics /*(DeleteTopic_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_CreatePartitionsRequest (rd_kafka_broker_t *rkb,
+                                  const rd_list_t *new_parts /*(NewPartitions_t*)*/,
+                                  rd_kafka_AdminOptions_t *options,
+                                  char *errstr, size_t errstr_size,
+                                  rd_kafka_replyq_t replyq,
+                                  rd_kafka_resp_cb_t *resp_cb,
+                                  void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
+                              const rd_list_t *configs /*(ConfigResource_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
+                                 const rd_list_t *configs /*(ConfigResource_t*)*/,
+                                 rd_kafka_AdminOptions_t *options,
+                                 char *errstr, size_t errstr_size,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque);
+
 #endif /* _RDKAFKA_REQUEST_H_ */

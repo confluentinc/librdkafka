@@ -77,6 +77,9 @@ static void do_test_producer (bool do_yield) {
   Test::conf_init(&conf, NULL, 10);
   DrCb0065 dr(do_yield);
   conf->set("dr_cb", &dr, errstr);
+  /* Make sure messages are produced in batches of 100 */
+  conf->set("batch.num.messages", "100", errstr);
+  conf->set("linger.ms", "10000", errstr);
 
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
   if (!p)

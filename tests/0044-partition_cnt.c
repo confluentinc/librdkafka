@@ -52,7 +52,7 @@ static void test_producer_partition_cnt_change (void) {
 	rd_kafka_topic_t *rkt;
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 	const int partition_cnt = 4;
-	int msgcnt = 100000;
+	int msgcnt = test_on_ci ? 5000 : 100000;
 	test_timing_t t_destroy;
 	int produced = 0;
 

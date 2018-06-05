@@ -99,7 +99,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x000b04ff
+#define RD_KAFKA_VERSION  0x000b0500
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -252,6 +252,8 @@ enum ErrorCode {
         ERR__NOENT = -156,
         /** Read underflow */
         ERR__UNDERFLOW = -155,
+        /** Invalid type */
+        ERR__INVALID_TYPE = -154,
 
         /** End internal error codes */
 	ERR__END = -100,
@@ -1176,6 +1178,23 @@ class RD_EXPORT Handle {
    * @returns \c rd_kafka_t*
    */
   virtual struct rd_kafka_s *c_ptr () = 0;
+
+  /**
+   * @brief Returns the current ControllerId (controller broker id)
+   *        as reported in broker metadata.
+   *
+   * @param timeout_ms If there is no cached value from metadata retrieval
+   *                   then this specifies the maximum amount of time
+   *                   (in milliseconds) the call will block waiting
+   *                   for metadata to be retrieved.
+   *                   Use 0 for non-blocking calls.
+   *
+   * @remark Requires broker version >=0.10.0 and api.version.request=true.
+   *
+   * @returns Last cached ControllerId, or -1 if no ControllerId could be
+   *          retrieved in the allotted timespan.
+   */
+  virtual int32_t controllerid (int timeout_ms) = 0;
 };
 
 

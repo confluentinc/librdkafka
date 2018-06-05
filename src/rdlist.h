@@ -47,16 +47,20 @@ typedef struct rd_list_s {
 #define RD_LIST_F_SORTED     0x2  /* Set by sort(), cleared by any mutations.
 				   * When this flag is set bsearch() is used
 				   * by find(), otherwise a linear search. */
-#define RD_LIST_F_FIXED_SIZE 0x4  /* Assert on grow */
+#define RD_LIST_F_FIXED_SIZE 0x4  /* Assert on grow, when prealloc()ed */
 #define RD_LIST_F_UNIQUE     0x8  /* Don't allow duplicates:
                                    * ONLY ENFORCED BY CALLER. */
+        int     rl_elemsize;      /**< Element size (when prealloc()ed) */
+        void   *rl_p;             /**< Start of prealloced elements,
+                                   *   the allocation itself starts at rl_elems
+                                   */
 } rd_list_t;
 
 
 /**
- * @brief Initialize a list, preallocate space for 'initial_size' elements
- *       (optional).
- *       List elements will optionally be freed by \p free_cb.
+ * @brief Initialize a list, prepare for 'initial_size' elements
+ *        (optional optimization).
+ *        List elements will optionally be freed by \p free_cb.
  *
  * @returns \p rl
  */
@@ -65,7 +69,16 @@ rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *));
 
 
 /**
- * Allocate a new list pointer and initialize it according to rd_list_init().
+ * @brief Same as rd_list_init() but uses initial_size and free_cb
+ *        from the provided \p src list.
+ */
+rd_list_t *rd_list_init_copy (rd_list_t *rl, const rd_list_t *src);
+
+/**
+ * @brief Allocate a new list pointer and initialize
+ *        it according to rd_list_init().
+ *
+ *        This is the same as calling \c rd_list_init(rd_list_alloc(), ..));
  *
  * Use rd_list_destroy() to free.
  */
@@ -83,12 +96,21 @@ void rd_list_grow (rd_list_t *rl, size_t size);
  *        rd_list_add(), instead pass NULL to rd_list_add() and use the returned
  *        pointer as the element.
  *
- * @param elemsize element size
+ * @param elemsize element size, or 0 if elements are allocated separately.
  * @param size number of elements
+ * @param memzero initialize element memory to zeros.
  *
  * @remark Preallocated element lists can't grow past \p size.
  */
-void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size);
+void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size,
+                             int memzero);
+
+/**
+ * @brief Set the number of valid elements, this must only be used
+ *        with prealloc_elems() to make the preallocated elements directly
+ *        usable.
+ */
+void rd_list_set_cnt (rd_list_t *rl, size_t cnt);
 
 
 /**
@@ -108,6 +130,16 @@ void rd_list_free_cb (rd_list_t *rl, void *ptr);
  *          will be returned (for use with set_elems).
  */
 void *rd_list_add (rd_list_t *rl, void *elem);
+
+
+/**
+ * @brief Set element at \p idx to \p ptr.
+ *
+ * @remark MUST NOT overwrite an existing element.
+ * @remark The list will be grown, if needed, any gaps between the current
+ *         highest element and \p idx will be set to NULL.
+ */
+void rd_list_set (rd_list_t *rl, int idx, void *ptr);
 
 
 /**
@@ -164,6 +196,12 @@ void rd_list_clear (rd_list_t *rl);
  */
 void rd_list_destroy (rd_list_t *rl);
 
+/**
+ * @brief Wrapper for rd_list_destroy() that has same signature as free(3),
+ *        allowing it to be used as free_cb for nested lists.
+ */
+void rd_list_destroy_free (void *rl);
+
 
 /**
  * Returns the element at index 'idx', or NULL if out of range.
@@ -197,11 +235,27 @@ static RD_INLINE RD_UNUSED int rd_list_cnt (const rd_list_t *rl) {
 #define rd_list_empty(rl) (rd_list_cnt(rl) == 0)
 
 
+/**
+ * @brief Find element index using comparator.
+ *
+ * \p match is the first argument to \p cmp, and each element (up to a match)
+ * is the second argument to \p cmp.
+ *
+ * @remark this is a O(n) scan.
+ * @returns the first matching element or NULL.
+ */
+int rd_list_index (const rd_list_t *rl, const void *match,
+                   int (*cmp) (const void *, const void *));
 
 /**
- * Find element using comparator
- * 'match' will be the first argument to 'cmp', and each element (up to a match)
- * will be the second argument to 'cmp'.
+ * @brief Find element using comparator
+ *
+ * \p match is the first argument to \p cmp, and each element (up to a match)
+ * is the second argument to \p cmp.
+ *
+ * @remark if the list is sorted bsearch() is used, otherwise an O(n) scan.
+ *
+ * @returns the first matching element or NULL.
  */
 void *rd_list_find (const rd_list_t *rl, const void *match,
                     int (*cmp) (const void *, const void *));
@@ -252,6 +306,13 @@ void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
                       void *(*copy_cb) (const void *elem, void *opaque),
                       void *opaque);
 
+
+/**
+ * @brief Copy callback to copy elements that are preallocated lists.
+ */
+void *rd_list_copy_preallocated (const void *elem, void *opaque);
+
+
 /**
  * @brief String copier for rd_list_copy()
  */
@@ -261,9 +322,48 @@ void *rd_list_string_copy (const void *elem, void *opaque) {
 }
 
 
+
+/**
+ * @name Misc helpers for common list types
+ * @{
+ *
+ */
+
+/**
+ * @brief Init a new list of int32_t's of maximum size \p max_size
+ *        where each element is pre-allocated.
+<<<<<<< HEAD
+=======
+ *
+ * @remark The allocation flag of the original \p rl is retained,
+ *         do not pass an uninitialized \p rl to this function.
+>>>>>>> 96b11b2... Added builtin support for int32_t rd_list_t
+ */
+rd_list_t *rd_list_init_int32 (rd_list_t *rl, int max_size);
+
+
 /**
  * Debugging: Print list to stdout.
  */
 void rd_list_dump (const char *what, const rd_list_t *rl);
+
+
+
+/**
+ * @brief Set element at index \p idx to value \p val.
+ *
+ * @remark Must only be used with preallocated int32_t lists.
+ * @remark Allows values to be overwritten.
+ */
+void rd_list_set_int32 (rd_list_t *rl, int idx, int32_t val);
+
+/**
+ * @returns the int32_t element value at index \p idx
+ *
+ * @remark Must only be used with preallocated int32_t lists.
+ */
+int32_t rd_list_get_int32 (const rd_list_t *rl, int idx);
+
+/**@}*/
 
 #endif /* _RDLIST_H_ */

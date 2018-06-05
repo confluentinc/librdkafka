@@ -799,7 +799,7 @@ void rd_kafka_broker_buf_enq_replyq (rd_kafka_broker_t *rkb,
 
 /**
  * @returns the current broker state change version.
- *          Pass this value to fugure rd_kafka_brokers_wait_state_change() calls
+ *          Pass this value to future rd_kafka_brokers_wait_state_change() calls
  *          to avoid the race condition where a state-change happens between
  *          an initial call to some API that fails and the sub-sequent
  *          .._wait_state_change() call.
@@ -846,17 +846,71 @@ int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int stored_version,
 
 
 /**
+ * @brief Same as rd_kafka_brokers_wait_state_change() but will trigger
+ *        the wakeup asynchronously through the provided \p eonce.
+ *
+ *        If the eonce was added to the wait list its reference count
+ *        will have been updated, this reference is later removed by
+ *        rd_kafka_broker_state_change_trigger_eonce() by calling trigger().
+ *
+ * @returns 1 if the \p eonce was added to the wait-broker-state-changes list,
+ *          or 0 if the \p stored_version is outdated in which case the
+ *          caller should redo the broker lookup.
+ */
+int rd_kafka_brokers_wait_state_change_async (rd_kafka_t *rk,
+                                              int stored_version,
+                                              rd_kafka_enq_once_t *eonce) {
+        int r = 1;
+        mtx_lock(&rk->rk_broker_state_change_lock);
+
+        if (stored_version != rk->rk_broker_state_change_version)
+                r = 0;
+        else {
+                rd_kafka_enq_once_add_source(eonce, "wait broker state change");
+                rd_list_add(&rk->rk_broker_state_change_waiters, eonce);
+        }
+
+        mtx_unlock(&rk->rk_broker_state_change_lock);
+        return r;
+}
+
+
+/**
+ * @brief eonce trigger callback for rd_list_apply() call in
+ *        rd_kafka_brokers_broadcast_state_change()
+ */
+static int
+rd_kafka_broker_state_change_trigger_eonce (void *elem, void *opaque) {
+        rd_kafka_enq_once_t *eonce = elem;
+        rd_kafka_enq_once_trigger(eonce, RD_KAFKA_RESP_ERR_NO_ERROR,
+                                  "broker state change");
+        return 0; /* remove eonce from list */
+}
+
+
+/**
  * @brief Broadcast broker state change to listeners, if any.
  *
  * @locality any thread
  */
 void rd_kafka_brokers_broadcast_state_change (rd_kafka_t *rk) {
-	rd_kafka_dbg(rk, GENERIC, "BROADCAST",
-		     "Broadcasting state change");
-	mtx_lock(&rk->rk_broker_state_change_lock);
-	rk->rk_broker_state_change_version++;
-	cnd_broadcast(&rk->rk_broker_state_change_cnd);
-	mtx_unlock(&rk->rk_broker_state_change_lock);
+
+        rd_kafka_dbg(rk, GENERIC, "BROADCAST",
+                     "Broadcasting state change");
+
+        mtx_lock(&rk->rk_broker_state_change_lock);
+
+        /* Bump version */
+        rk->rk_broker_state_change_version++;
+
+        /* Trigger waiters */
+        rd_list_apply(&rk->rk_broker_state_change_waiters,
+                      rd_kafka_broker_state_change_trigger_eonce, NULL);
+
+        /* Broadcast to listeners */
+        cnd_broadcast(&rk->rk_broker_state_change_cnd);
+
+        mtx_unlock(&rk->rk_broker_state_change_lock);
 }
 
 
@@ -983,6 +1037,133 @@ rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id,
 
 
 
+/**
+ * @returns the broker handle fork \p broker_id using cached metadata
+ *          information (if available) in state == \p state,
+ *          with refcount increaesd.
+ *
+ *          Otherwise enqueues the \p eonce on the wait-state-change queue
+ *          which will be triggered on broker state changes.
+ *          It may also be triggered erroneously, so the caller
+ *          should call rd_kafka_broker_get_async() again when
+ *          the eonce is triggered.
+ *
+ * @locks none
+ * @locality any thread
+ */
+rd_kafka_broker_t *
+rd_kafka_broker_get_async (rd_kafka_t *rk, int32_t broker_id, int state,
+                           rd_kafka_enq_once_t *eonce) {
+        int version;
+        do {
+                rd_kafka_broker_t *rkb;
+
+                version = rd_kafka_brokers_get_state_version(rk);
+
+                rd_kafka_rdlock(rk);
+                rkb = rd_kafka_broker_find_by_nodeid0(rk, broker_id, state);
+                rd_kafka_rdunlock(rk);
+
+                if (rkb)
+                        return rkb;
+
+        } while (!rd_kafka_brokers_wait_state_change_async(rk, version, eonce));
+
+        return NULL; /* eonce added to wait list */
+}
+
+
+/**
+ * @returns the current controller using cached metadata information,
+ *          and only if the broker's state == \p state.
+ *          The reference count is increased for the returned broker.
+ *
+ * @locks none
+ * @locality any thread
+ */
+
+static rd_kafka_broker_t *rd_kafka_broker_controller_nowait (rd_kafka_t *rk,
+                                                             int state) {
+        rd_kafka_broker_t *rkb;
+
+        rd_kafka_rdlock(rk);
+
+        if (rk->rk_controllerid == -1) {
+                rd_kafka_rdunlock(rk);
+                rd_kafka_metadata_refresh_brokers(rk, NULL,
+                                                  "lookup controller");
+                return NULL;
+        }
+
+        rkb = rd_kafka_broker_find_by_nodeid0(rk, rk->rk_controllerid, state);
+
+        rd_kafka_rdunlock(rk);
+
+        return rkb;
+}
+
+
+/**
+ * @returns the current controller using cached metadata information if
+ *          available in state == \p state, with refcount increaesd.
+ *
+ *          Otherwise enqueues the \p eonce on the wait-controller queue
+ *          which will be triggered on controller updates or broker state
+ *          changes. It may also be triggered erroneously, so the caller
+ *          should call rd_kafka_broker_controller_async() again when
+ *          the eonce is triggered.
+ *
+ * @locks none
+ * @locality any thread
+ */
+rd_kafka_broker_t *
+rd_kafka_broker_controller_async (rd_kafka_t *rk, int state,
+                                  rd_kafka_enq_once_t *eonce) {
+        int version;
+        do {
+                rd_kafka_broker_t *rkb;
+
+                version = rd_kafka_brokers_get_state_version(rk);
+
+                rkb = rd_kafka_broker_controller_nowait(rk, state);
+                if (rkb)
+                        return rkb;
+
+        } while (!rd_kafka_brokers_wait_state_change_async(rk, version, eonce));
+
+        return NULL; /* eonce added to wait list */
+}
+
+
+/**
+ * @returns the current controller using cached metadata information,
+ *          blocking up to \p abs_timeout for the controller to be known
+ *          and to reach state == \p state. The reference count is increased
+ *          for the returned broker.
+ *
+ * @locks none
+ * @locality any thread
+ */
+rd_kafka_broker_t *rd_kafka_broker_controller (rd_kafka_t *rk, int state,
+                                               rd_ts_t abs_timeout) {
+
+        while (1) {
+                int version = rd_kafka_brokers_get_state_version(rk);
+                rd_kafka_broker_t *rkb;
+                int remains_ms;
+
+                rkb = rd_kafka_broker_controller_nowait(rk, state);
+                if (rkb)
+                        return rkb;
+
+                remains_ms = rd_timeout_remains(abs_timeout);
+                if (rd_timeout_expired(remains_ms))
+                        return NULL;
+
+                rd_kafka_brokers_wait_state_change(rk, version, remains_ms);
+        }
+}
+
 
 
 
@@ -1047,6 +1228,9 @@ static int rd_kafka_req_response (rd_kafka_broker_t *rkb,
                    req->rkbuf_reqhdr.ApiVersion,
 		   rkbuf->rkbuf_totlen, rkbuf->rkbuf_reshdr.CorrId,
 		   (float)req->rkbuf_ts_sent / 1000.0f);
+
+        /* Copy request's header to response object's reqhdr for convenience. */
+        rkbuf->rkbuf_reqhdr = req->rkbuf_reqhdr;
 
         /* Set up response reader slice starting past the response header */
         rd_slice_init(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf,
@@ -2221,6 +2405,13 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                            (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
                            (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
                            (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs));
+                /* Expedite termination by bringing down the broker
+                 * and trigger a state change.
+                 * This makes sure any eonce dependent on state changes
+                 * are triggered. */
+                rd_kafka_broker_fail(rkb, LOG_DEBUG,
+                                     RD_KAFKA_RESP_ERR__DESTROY,
+                                     "Client is terminating");
                 ret = 0;
                 break;
 
@@ -3057,7 +3248,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
                 0, (void *)rd_kafka_toppar_ver_destroy);
         rd_list_prealloc_elems(rkbuf->rkbuf_rktp_vers,
                                sizeof(struct rd_kafka_toppar_ver),
-                               rkb->rkb_active_toppar_cnt);
+                               rkb->rkb_active_toppar_cnt, 0);
 
 	/* Round-robin start of the list. */
         rktp = rkb->rkb_active_toppar_next;
@@ -3339,9 +3530,20 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                 rkb, 0, &rkb->rkb_retrybufs, NULL,
                                 RD_KAFKA_RESP_ERR__DESTROY, 0);
                         rd_rkb_dbg(rkb, BROKER, "TERMINATE",
-                                   "Handle is terminating: "
-                                   "failed %d request(s) in "
-                                   "retry+outbuf", r);
+                                   "Handle is terminating in state %s: "
+                                   "%d refcnts (%p), %d toppar(s), "
+                                   "%d active toppar(s), "
+                                   "%d outbufs, %d waitresps, %d retrybufs: "
+                                   "failed %d request(s) in retry+outbuf",
+                                   rd_kafka_broker_state_names[rkb->rkb_state],
+                                   rd_refcnt_get(&rkb->rkb_refcnt),
+                                   &rkb->rkb_refcnt,
+                                   rkb->rkb_toppar_cnt,
+                                   rkb->rkb_active_toppar_cnt,
+                                   (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
+                                   (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
+                                   (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs),
+                                   r);
                 }
 	}
 

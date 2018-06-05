@@ -1995,3 +1995,518 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
 
         return cnt;
 }
+
+
+/**
+ * @brief Construct and send CreateTopicsRequest to \p rkb
+ *        with the topics (NewTopic_t*) in \p new_topics, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
+                              const rd_list_t *new_topics /*(NewTopic_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        int i = 0;
+        rd_kafka_NewTopic_t *newt;
+        int op_timeout;
+
+        if (rd_list_cnt(new_topics) == 0) {
+                rd_snprintf(errstr, errstr_size, "No topics to create");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_CreateTopics, 0, 2, &features);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "Topic Admin API (KIP-4) not supported "
+                            "by broker, requires broker version >= 0.10.2.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        if (rd_kafka_confval_get_int(&options->validate_only) &&
+            ApiVersion < 1) {
+                rd_snprintf(errstr, errstr_size,
+                            "CreateTopics.validate_only=true not "
+                            "supported by broker");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreateTopics, 1,
+                                         4 +
+                                         (rd_list_cnt(new_topics) * 200) +
+                                         4 + 1);
+
+        /* #topics */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(new_topics));
+
+        while ((newt = rd_list_elem(new_topics, i++))) {
+                int partition;
+                int ei = 0;
+                const rd_kafka_ConfigEntry_t *entry;
+
+                /* topic */
+                rd_kafka_buf_write_str(rkbuf, newt->topic, -1);
+
+                if (rd_list_cnt(&newt->replicas)) {
+                        /* num_partitions and replication_factor must be
+                         * set to -1 if a replica assignment is sent. */
+                        /* num_partitions */
+                        rd_kafka_buf_write_i32(rkbuf, -1);
+                        /* replication_factor */
+                        rd_kafka_buf_write_i16(rkbuf, -1);
+                } else {
+                        /* num_partitions */
+                        rd_kafka_buf_write_i32(rkbuf, newt->num_partitions);
+                        /* replication_factor */
+                        rd_kafka_buf_write_i16(rkbuf,
+                                               (int16_t)newt->
+                                               replication_factor);
+                }
+
+                /* #replica_assignment */
+                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&newt->replicas));
+
+                /* Replicas per partition, see rdkafka_admin.[ch]
+                 * for how these are constructed. */
+                for (partition = 0 ; partition < rd_list_cnt(&newt->replicas);
+                     partition++) {
+                        const rd_list_t *replicas;
+                        int ri = 0;
+
+                        replicas = rd_list_elem(&newt->replicas, partition);
+                        if (!replicas)
+                                continue;
+
+                        /* partition */
+                        rd_kafka_buf_write_i32(rkbuf, partition);
+                        /* #replicas */
+                        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(replicas));
+
+                        for (ri = 0 ; ri < rd_list_cnt(replicas) ; ri++) {
+                                /* replica */
+                                rd_kafka_buf_write_i32(
+                                        rkbuf, rd_list_get_int32(replicas, ri));
+                        }
+                }
+
+                /* #config_entries */
+                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&newt->config));
+
+                RD_LIST_FOREACH(entry, &newt->config, ei) {
+                        /* config_name */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
+                        /* config_value (nullable) */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
+                }
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
+
+        if (ApiVersion >= 1) {
+                /* validate_only */
+                rd_kafka_buf_write_i8(rkbuf,
+                                      rd_kafka_confval_get_int(&options->
+                                                               validate_only));
+        }
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Construct and send DeleteTopicsRequest to \p rkb
+ *        with the topics (DeleteTopic_t *) in \p del_topics, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DeleteTopicsRequest (rd_kafka_broker_t *rkb,
+                              const rd_list_t *del_topics /*(DeleteTopic_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        int i = 0;
+        rd_kafka_DeleteTopic_t *delt;
+        int op_timeout;
+
+        if (rd_list_cnt(del_topics) == 0) {
+                rd_snprintf(errstr, errstr_size, "No topics to delete");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_DeleteTopics, 0, 1, &features);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "Topic Admin API (KIP-4) not supported "
+                            "by broker, requires broker version >= 0.10.2.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteTopics, 1,
+                                         /* FIXME */
+                                         4 +
+                                         (rd_list_cnt(del_topics) * 100) +
+                                         4);
+
+        /* #topics */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(del_topics));
+
+        while ((delt = rd_list_elem(del_topics, i++)))
+                rd_kafka_buf_write_str(rkbuf, delt->topic, -1);
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+/**
+ * @brief Construct and send CreatePartitionsRequest to \p rkb
+ *        with the topics (NewPartitions_t*) in \p new_parts, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_CreatePartitionsRequest (rd_kafka_broker_t *rkb,
+                                  const rd_list_t *new_parts /*(NewPartitions_t*)*/,
+                                  rd_kafka_AdminOptions_t *options,
+                                  char *errstr, size_t errstr_size,
+                                  rd_kafka_replyq_t replyq,
+                                  rd_kafka_resp_cb_t *resp_cb,
+                                  void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int i = 0;
+        rd_kafka_NewPartitions_t *newp;
+        int op_timeout;
+
+        if (rd_list_cnt(new_parts) == 0) {
+                rd_snprintf(errstr, errstr_size, "No partitions to create");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_CreatePartitions, 0, 0, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "CreatePartitions (KIP-195) not supported "
+                            "by broker, requires broker version >= 1.0.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreatePartitions, 1,
+                                         4 +
+                                         (rd_list_cnt(new_parts) * 200) +
+                                         4 + 1);
+
+        /* #topics */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(new_parts));
+
+        while ((newp = rd_list_elem(new_parts, i++))) {
+                /* topic */
+                rd_kafka_buf_write_str(rkbuf, newp->topic, -1);
+
+                /* New partition count */
+                rd_kafka_buf_write_i32(rkbuf, (int32_t)newp->total_cnt);
+
+                /* #replica_assignment */
+                if (rd_list_empty(&newp->replicas)) {
+                        rd_kafka_buf_write_i32(rkbuf, -1);
+                } else {
+                        const rd_list_t *replicas;
+                        int pi = -1;
+
+                        rd_kafka_buf_write_i32(rkbuf,
+                                               rd_list_cnt(&newp->replicas));
+
+                        while ((replicas = rd_list_elem(&newp->replicas,
+                                                        ++pi))) {
+                                int ri = 0;
+
+                                /* replica count */
+                                rd_kafka_buf_write_i32(rkbuf,
+                                                       rd_list_cnt(replicas));
+
+                                /* replica */
+                                for (ri = 0 ; ri < rd_list_cnt(replicas) ;
+                                     ri++) {
+                                        rd_kafka_buf_write_i32(
+                                                rkbuf,
+                                                rd_list_get_int32(replicas,
+                                                                  ri));
+                                }
+                        }
+                }
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
+
+        /* validate_only */
+        rd_kafka_buf_write_i8(
+                rkbuf, rd_kafka_confval_get_int(&options->validate_only));
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Construct and send AlterConfigsRequest to \p rkb
+ *        with the configs (ConfigResource_t*) in \p configs, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_AlterConfigsRequest (rd_kafka_broker_t *rkb,
+                              const rd_list_t *configs /*(ConfigResource_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int i;
+        const rd_kafka_ConfigResource_t *config;
+        int op_timeout;
+
+        if (rd_list_cnt(configs) == 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "No config resources specified");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_AlterConfigs, 0, 0, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "AlterConfigs (KIP-133) not supported "
+                            "by broker, requires broker version >= 0.11.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        /* incremental requires ApiVersion > FIXME */
+        if (ApiVersion < 1 /* FIXME */ &&
+            rd_kafka_confval_get_int(&options->incremental)) {
+                rd_snprintf(errstr, errstr_size,
+                            "AlterConfigs.incremental=true (KIP-248) "
+                            "not supported by broker, "
+                            "requires broker version >= 2.0.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_AlterConfigs, 1,
+                                         rd_list_cnt(configs) * 200);
+
+        /* #resources */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));
+
+        RD_LIST_FOREACH(config, configs, i) {
+                const rd_kafka_ConfigEntry_t *entry;
+                int ei;
+
+                /* resource_type */
+                rd_kafka_buf_write_i8(rkbuf, config->restype);
+
+                /* resource_name */
+                rd_kafka_buf_write_str(rkbuf, config->name, -1);
+
+                /* #config */
+                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&config->config));
+
+                RD_LIST_FOREACH(entry, &config->config, ei) {
+                        /* config_name */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
+                        /* config_value (nullable) */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
+
+                        if (ApiVersion == 1)
+                                rd_kafka_buf_write_i8(rkbuf,
+                                                      entry->a.operation);
+                        else if (entry->a.operation != RD_KAFKA_ALTER_OP_SET) {
+                                rd_snprintf(errstr, errstr_size,
+                                            "Broker version >= 2.0.0 required "
+                                            "for add/delete config "
+                                            "entries: only set supported "
+                                            "by this broker");
+                                rd_kafka_buf_destroy(rkbuf);
+                                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+                        }
+                }
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
+
+        /* validate_only */
+        rd_kafka_buf_write_i8(
+                rkbuf, rd_kafka_confval_get_int(&options->validate_only));
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Construct and send DescribeConfigsRequest to \p rkb
+ *        with the configs (ConfigResource_t*) in \p configs, using
+ *        \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
+                                 const rd_list_t *configs /*(ConfigResource_t*)*/,
+                                 rd_kafka_AdminOptions_t *options,
+                                 char *errstr, size_t errstr_size,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int i;
+        const rd_kafka_ConfigResource_t *config;
+        int op_timeout;
+
+        if (rd_list_cnt(configs) == 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "No config resources specified");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_DescribeConfigs, 0, 1, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "DescribeConfigs (KIP-133) not supported "
+                            "by broker, requires broker version >= 0.11.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DescribeConfigs, 1,
+                                         rd_list_cnt(configs) * 200);
+
+        /* #resources */
+        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));
+
+        RD_LIST_FOREACH(config, configs, i) {
+                const rd_kafka_ConfigEntry_t *entry;
+                int ei;
+
+                /* resource_type */
+                rd_kafka_buf_write_i8(rkbuf, config->restype);
+
+                /* resource_name */
+                rd_kafka_buf_write_str(rkbuf, config->name, -1);
+
+                /* #config */
+                if (rd_list_empty(&config->config)) {
+                        /* Get all configs */
+                        rd_kafka_buf_write_i32(rkbuf, -1);
+                } else {
+                        /* Get requested configs only */
+                        rd_kafka_buf_write_i32(rkbuf,
+                                               rd_list_cnt(&config->config));
+                }
+
+                RD_LIST_FOREACH(entry, &config->config, ei) {
+                        /* config_name */
+                        rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
+                }
+        }
+
+
+        if (ApiVersion == 1) {
+                /* include_synonyms */
+                rd_kafka_buf_write_i8(rkbuf, 1);
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}

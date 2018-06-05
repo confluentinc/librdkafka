@@ -80,7 +80,7 @@
 
 
 /** Assert if reached */
-#define RD_NOTREACHED() rd_kafka_assert(NULL, !*"/* NOTREACHED */ violated")
+#define RD_NOTREACHED() rd_assert(!*"/* NOTREACHED */ violated")
 
 
 
@@ -144,14 +144,24 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #ifdef strndupa
 #define rd_strndupa(DESTPTR,PTR,LEN)  (*(DESTPTR) = strndupa(PTR,LEN))
 #else
-#define rd_strndupa(DESTPTR,PTR,LEN) (*(DESTPTR) = rd_alloca(LEN+1), \
-      memcpy(*(DESTPTR), (PTR), LEN), *((*(DESTPTR))+(LEN)) = 0)
+#define rd_strndupa(DESTPTR,PTR,LEN) do {                               \
+                const char *_src = (PTR);                               \
+                size_t _srclen = (LEN);                                 \
+                char *_dst = rd_alloca(_srclen + 1);                    \
+                memcpy(_dst, _src, _srclen);                            \
+                _dst[_srclen] = '\0';                                   \
+                *(DESTPTR) = _dst;                                      \
+        } while (0)
 #endif
 
 #ifdef strdupa
 #define rd_strdupa(DESTPTR,PTR)  (*(DESTPTR) = strdupa(PTR))
 #else
-#define rd_strdupa(DESTPTR,PTR)  rd_strndupa(DESTPTR,PTR,strlen(PTR))
+#define rd_strdupa(DESTPTR,PTR) do {                                    \
+                const char *_src1 = (PTR);                              \
+                size_t _srclen1 = strlen(_src1);                        \
+                rd_strndupa(DESTPTR, _src1, _srclen1);                  \
+        } while (0)
 #endif
 
 #ifndef IOV_MAX

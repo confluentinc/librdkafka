@@ -117,7 +117,7 @@ static void do_test_fetch_max_bytes (void) {
 }
 
 extern "C" {
-  int main_0081_fetch_max_bytes (int argc, char **argv) {
+  int main_0082_fetch_max_bytes (int argc, char **argv) {
     do_test_fetch_max_bytes();
     return 0;
   }

@@ -124,7 +124,7 @@ class LibrdkafkaTestApp(App):
         extra_args = list()
         if not self.local_tests:
             extra_args.append('-L')
-        return './run-test.sh -p5 -K %s ./merged %s' % (' '.join(extra_args), self.test_mode)
+        return './run-test.sh -p%d -K %s ./merged %s' % (int(self.conf.get('parallel', 5)), ' '.join(extra_args), self.test_mode)
 
 
     def report (self):

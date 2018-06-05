@@ -82,7 +82,7 @@ int main_0039_event (int argc, char **argv) {
 	rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *topic_conf;
 	char msg[128];
-	int msgcnt = 50000;
+	int msgcnt = test_on_ci ? 5000 : 50000;
 	int i;
         test_timing_t t_produce, t_delivery;
 	rd_kafka_queue_t *eventq;

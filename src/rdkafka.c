@@ -413,6 +413,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: No such entry"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__UNDERFLOW,
                   "Local: Read underflow"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__INVALID_TYPE,
+                  "Local: Invalid type"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -696,6 +698,23 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 #endif
         rd_kafka_dbg(rk, ALL, "DESTROY", "Terminating instance");
 
+        rd_kafka_wrlock(rk);
+        /* Make sure destroy is not called from the background queue
+         * event callback since this will cause a deadlock. */
+        if (thrd_is_current(rk->rk_background.thread)) {
+                rd_kafka_wrunlock(rk);
+                rd_kafka_log(rk, LOG_EMERG, "BGQUEUE",
+                             "Application bug: "
+                             "rd_kafka_destroy() called from background "
+                             "queue event callback");
+                rd_kafka_assert(NULL,
+                                !*"Calling rd_kafka_destroy() from "
+                                "the background queue event callback "
+                                "is prohibited");
+        }
+        rd_kafka_wrunlock(rk);
+
+
         /* The legacy/simple consumer lacks an API to close down the consumer*/
         if (rk->rk_cgrp) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE",
@@ -711,12 +730,10 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
         rd_kafka_wrunlock(rk);
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
-                     "Sending TERMINATE to main background thread");
+                     "Sending TERMINATE to internal main thread");
         /* Send op to trigger queue/io wake-up.
          * The op itself is (likely) ignored by the receiver. */
         rd_kafka_q_enq(rk->rk_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
-
-	rd_kafka_brokers_broadcast_state_change(rk);
 
 #ifndef _MSC_VER
         /* Interrupt main kafka thread to speed up termination. */
@@ -731,11 +748,11 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
                 return; /* FIXME: thread resource leak */
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
-                     "Joining main background thread");
+                     "Joining internal main thread");
 
         if (thrd_join(thrd, NULL) != thrd_success)
                 rd_kafka_log(rk, LOG_ERR, "DESTROY",
-                             "Failed to join main thread: %s "
+                             "Failed to join internal main thread: %s "
                              "(was process forked?)",
                              rd_strerror(errno));
 
@@ -763,6 +780,23 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         int i;
 
         rd_kafka_dbg(rk, ALL, "DESTROY", "Destroy internal");
+
+        /* Trigger any state-change waiters (which should check the
+         * terminate flag whenever they wake up). */
+        rd_kafka_brokers_broadcast_state_change(rk);
+
+        if (rk->rk_background.thread) {
+                /* Send op to trigger queue/io wake-up.
+                 * The op itself is (likely) ignored by the receiver. */
+                rd_kafka_q_enq(rk->rk_background.q,
+                               rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
+
+                rd_kafka_dbg(rk, ALL, "DESTROY",
+                             "Waiting for background queue thread "
+                             "to terminate");
+                thrd_join(rk->rk_background.thread, NULL);
+                rd_kafka_q_destroy_owner(rk->rk_background.q);
+        }
 
         /* Call on_destroy() interceptors */
         rd_kafka_interceptors_on_destroy(rk);
@@ -814,6 +848,11 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
         }
 
         rd_kafka_wrunlock(rk);
+
+        mtx_lock(&rk->rk_broker_state_change_lock);
+        /* Purge broker state change waiters */
+        rd_list_destroy(&rk->rk_broker_state_change_waiters);
+        mtx_unlock(&rk->rk_broker_state_change_lock);
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                      "Purging reply queue");
@@ -1302,6 +1341,9 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
 }
 
 
+
+
+
 /**
  * Main loop for Kafka handler thread.
  */
@@ -1364,7 +1406,7 @@ static int rd_kafka_thread_main (void *arg) {
         rd_kafka_destroy_internal(rk);
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
-                     "Main background thread exiting");
+                     "Internal main thread exiting");
 
 	rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
 
@@ -1483,6 +1525,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
 	cnd_init(&rk->rk_broker_state_change_cnd);
 	mtx_init(&rk->rk_broker_state_change_lock, mtx_plain);
+        rd_list_init(&rk->rk_broker_state_change_waiters, 8,
+                     rd_kafka_enq_once_trigger_destroy);
 
 	rk->rk_rep = rd_kafka_q_new(rk);
 	rk->rk_ops = rd_kafka_q_new(rk);
@@ -1506,6 +1550,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_REBALANCE;
 	if (rk->rk_conf.offset_commit_cb)
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OFFSET_COMMIT;
+
+        rk->rk_controllerid = -1;
+
+        /* Admin client defaults */
+        rk->rk_conf.admin.request_timeout_ms = rk->rk_conf.socket_timeout_ms;
 
 	/* Convenience Kafka protocol null bytes */
 	rk->rk_null_bytes = rd_kafkap_bytes_new(NULL, 0);
@@ -1584,7 +1633,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
 
 #ifndef _MSC_VER
-        /* Block all signals in newly created thread.
+        /* Block all signals in newly created threads.
          * To avoid race condition we block all signals in the calling
          * thread, which the new thread will inherit its sigmask from,
          * and then restore the original sigmask of the calling thread when
@@ -1599,6 +1648,41 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 	}
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);
 #endif
+
+        /* Create background thread and queue if background_event_cb()
+         * has been configured.
+         * Do this before creating the main thread since after
+         * the main thread is created it is no longer trivial to error
+         * out from rd_kafka_new(). */
+        if (rk->rk_conf.background_event_cb) {
+                /* Hold off background thread until thrd_create() is done. */
+                rd_kafka_wrlock(rk);
+
+                rk->rk_background.q = rd_kafka_q_new(rk);
+
+                if ((thrd_create(&rk->rk_background.thread,
+                                 rd_kafka_background_thread_main, rk)) !=
+                    thrd_success) {
+                        ret_err = RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE;
+                        ret_errno = errno;
+                        if (errstr)
+                                rd_snprintf(errstr, errstr_size,
+                                            "Failed to create background "
+                                            "thread: %s (%i)",
+                                            rd_strerror(errno), errno);
+                        rd_kafka_wrunlock(rk);
+
+#ifndef _MSC_VER
+                        /* Restore sigmask of caller */
+                        pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+#endif
+                        goto fail;
+                }
+
+                rd_kafka_wrunlock(rk);
+        }
+
+
 
 	/* Lock handle here to synchronise state, i.e., hold off
 	 * the thread until we've finalized the handle. */
@@ -1622,6 +1706,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 
         rd_kafka_wrunlock(rk);
+
+        /*
+         * @warning `goto fail` is prohibited past this point
+         */
 
         rk->rk_eos.PID = -1;
         rk->rk_eos.TransactionalId = rd_kafkap_str_new(NULL, 0);
@@ -1653,12 +1741,27 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
         rk->rk_initialized = 1;
 
+        rd_kafka_dbg(rk, ALL, "INIT",
+                     "librdkafka v%s (0x%x) %s initialized (debug 0x%x)",
+                     rd_kafka_version_str(), rd_kafka_version(),
+                     rk->rk_name, rk->rk_conf.debug);
+
 	return rk;
 
 fail:
         /*
          * Error out and clean up
          */
+
+        /*
+         * Tell background thread to terminate and wait for it to return.
+         */
+        rd_atomic32_add(&rk->rk_terminate, 1);
+
+        if (rk->rk_background.thread) {
+                thrd_join(rk->rk_background.thread, NULL);
+                rd_kafka_q_destroy_owner(rk->rk_background.q);
+        }
 
         /* If on_new() interceptors have been called we also need
          * to allow interceptor clean-up by calling on_destroy() */
@@ -2654,23 +2757,27 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
 
 
 /**
- * rd_kafka_poll() (and similar) op callback handler.
- * Will either call registered callback depending on cb_type and op type
- * or return op to application, if applicable (e.g., fetch message).
+ * @brief rd_kafka_poll() (and similar) op callback handler.
+ *        Will either call registered callback depending on cb_type and op type
+ *        or return op to application, if applicable (e.g., fetch message).
  *
- * Returns 1 if op was handled, else 0.
+ * @returns RD_KAFKA_OP_RES_HANDLED if op was handled, else one of the
+ *          other res types (such as OP_RES_PASS).
  *
- * Locality: application thread
+ * @locality application thread
  */
 rd_kafka_op_res_t
 rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                   rd_kafka_q_cb_type_t cb_type, void *opaque) {
 	rd_kafka_msg_t *rkm;
+        rd_kafka_op_res_t res = RD_KAFKA_OP_RES_HANDLED;
 
-	/* Return-as-event requested, see if op can be converted to event,
-	 * otherwise fall through and trigger callbacks. */
-	if (cb_type == RD_KAFKA_Q_CB_EVENT && rd_kafka_event_setup(rk, rko))
-		return 0; /* Return as event */
+        /* Special handling for events based on cb_type */
+        if (cb_type == RD_KAFKA_Q_CB_EVENT &&
+            rd_kafka_event_setup(rk, rko)) {
+                /* Return-as-event requested. */
+                return RD_KAFKA_OP_RES_PASS; /* Return as event */
+        }
 
         switch ((int)rko->rko_type)
         {
@@ -2830,14 +2937,33 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                 /* nop: just a wake-up */
                 break;
 
+        case RD_KAFKA_OP_CREATETOPICS:
+        case RD_KAFKA_OP_DELETETOPICS:
+        case RD_KAFKA_OP_CREATEPARTITIONS:
+        case RD_KAFKA_OP_ALTERCONFIGS:
+        case RD_KAFKA_OP_DESCRIBECONFIGS:
+                /* Calls op_destroy() from worker callback,
+                 * when the time comes. */
+                res = rd_kafka_op_call(rk, rkq, rko);
+                break;
+
+        case RD_KAFKA_OP_ADMIN_RESULT:
+                if (cb_type == RD_KAFKA_Q_CB_RETURN ||
+                    cb_type == RD_KAFKA_Q_CB_FORCE_RETURN)
+                        return RD_KAFKA_OP_RES_PASS; /* Don't handle here */
+
+                /* Op is silently destroyed below */
+                break;
+
         default:
                 rd_kafka_assert(rk, !*"cant handle op type");
                 break;
         }
 
-        rd_kafka_op_destroy(rko);
+        if (res == RD_KAFKA_OP_RES_HANDLED)
+                rd_kafka_op_destroy(rko);
 
-        return 1; /* op was handled */
+        return res;
 }
 
 int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
@@ -3088,13 +3214,58 @@ char *rd_kafka_clusterid (rd_kafka_t *rk, int timeout_ms) {
 }
 
 
+int32_t rd_kafka_controllerid (rd_kafka_t *rk, int timeout_ms) {
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
+
+        /* ControllerId is returned in Metadata >=V1 responses and
+         * cached on the rk. If no cached value is available
+         * it means no metadata has been received yet, or we're
+         * using a lower protocol version
+         * (e.g., lack of api.version.request=true). */
+
+        while (1) {
+                int remains_ms;
+                int version;
+
+                version = rd_kafka_brokers_get_state_version(rk);
+
+                rd_kafka_rdlock(rk);
+
+                if (rk->rk_controllerid != -1) {
+                        /* Cached controllerid available. */
+                        rd_kafka_rdunlock(rk);
+                        return rk->rk_controllerid;
+                } else if (rk->rk_ts_metadata > 0) {
+                        /* Metadata received but no clusterid,
+                         * this probably means the broker is too old
+                         * or api.version.request=false. */
+                        rd_kafka_rdunlock(rk);
+                        return -1;
+                }
+
+                rd_kafka_rdunlock(rk);
+
+                /* Wait for up to timeout_ms for a metadata refresh,
+                 * if permitted by application. */
+                remains_ms = rd_timeout_remains(abs_timeout);
+                if (rd_timeout_expired(remains_ms))
+                        return -1;
+
+                rd_kafka_brokers_wait_state_change(rk, version, remains_ms);
+        }
+
+        return -1;
+}
+
+
 void *rd_kafka_opaque (const rd_kafka_t *rk) {
         return rk->rk_conf.opaque;
 }
 
 
 int rd_kafka_outq_len (rd_kafka_t *rk) {
-	return rd_kafka_curr_msgs_cnt(rk) + rd_kafka_q_len(rk->rk_rep);
+        return rd_kafka_curr_msgs_cnt(rk) + rd_kafka_q_len(rk->rk_rep) +
+                (rk->rk_background.q ? rd_kafka_q_len(rk->rk_background.q) : 0);
 }
 
 

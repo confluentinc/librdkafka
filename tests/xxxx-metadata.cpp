@@ -63,7 +63,7 @@ static void test_metadata_cpp (void) {
 
 	RdKafka::Metadata *metadata;
 	RdKafka::ErrorCode err;
-	int msgcnt = 10000;
+	int msgcnt = test_on_ci ? 1000 : 10000;
 	int partition_cnt = 2;
 	int i;
 	uint64_t testid;

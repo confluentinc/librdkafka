@@ -607,6 +607,11 @@ class HandleImpl : virtual public Handle {
           return rk_;
   }
 
+  int32_t controllerid (int timeout_ms) {
+          return rd_kafka_controllerid(rk_, timeout_ms);
+  }
+
+
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
    * the opaque provided to rdkafka must be a pointer to HandleImpl, since

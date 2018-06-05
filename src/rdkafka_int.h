@@ -101,9 +101,9 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 /**
  * Protocol level sanity
  */
-#define RD_KAFKAP_BROKERS_MAX     1000
+#define RD_KAFKAP_BROKERS_MAX     10000
 #define RD_KAFKAP_TOPICS_MAX      1000000
-#define RD_KAFKAP_PARTITIONS_MAX  10000
+#define RD_KAFKAP_PARTITIONS_MAX  100000
 
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF)  ((OFF) < 0)
@@ -136,7 +136,9 @@ struct rd_kafka_s {
 	cnd_t                      rk_broker_state_change_cnd;
 	mtx_t                      rk_broker_state_change_lock;
 	int                        rk_broker_state_change_version;
-
+        /* List of (rd_kafka_enq_once_t*) objects waiting for broker
+         * state changes. Protected by rk_broker_state_change_lock. */
+        rd_list_t rk_broker_state_change_waiters; /**< (rd_kafka_enq_once_t*) */
 
 	TAILQ_HEAD(, rd_kafka_itopic_s)  rk_topics;
 	int              rk_topic_cnt;
@@ -167,6 +169,7 @@ struct rd_kafka_s {
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         char            *rk_clusterid;      /* ClusterId from metadata */
+        int32_t          rk_controllerid;   /* ControllerId from metadata */
 
         /* Simple consumer count:
          *  >0: Running in legacy / Simple Consumer mode,
@@ -198,6 +201,20 @@ struct rd_kafka_s {
 	thrd_t rk_thread;
 
         int rk_initialized;
+
+        /**
+         * Background thread and queue,
+         * enabled by setting `background_event_cb()`.
+         */
+        struct {
+                rd_kafka_q_t *q;  /**< Queue served by background thread. */
+                thrd_t thread;    /**< Background thread. */
+                int calling;      /**< Indicates whether the event callback
+                                   *   is being called, reset back to 0
+                                   *   when the callback returns.
+                                   *   This can be used for troubleshooting
+                                   *   purposes. */
+        } rk_background;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)
@@ -362,6 +379,7 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 #define RD_KAFKA_DBG_INTERCEPTOR    0x800
 #define RD_KAFKA_DBG_PLUGIN         0x1000
 #define RD_KAFKA_DBG_CONSUMER       0x2000
+#define RD_KAFKA_DBG_ADMIN          0x4000
 #define RD_KAFKA_DBG_ALL            0xffff
 #define RD_KAFKA_DBG_NONE           0x0
 
@@ -439,5 +457,12 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                   rd_kafka_q_cb_type_t cb_type, void *opaque);
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
+
+
+
+/**
+ * rdkafka_background.c
+ */
+int rd_kafka_background_thread_main (void *arg);
 
 #endif /* _RDKAFKA_INT_H_ */

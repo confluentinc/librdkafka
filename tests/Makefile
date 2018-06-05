@@ -9,7 +9,7 @@ CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -rdynamic -L../src -L../src-cpp
 
-KAFKA_VERSION?=0.10.2.0
+KAFKA_VERSION?=1.1.0
 
 -include ../Makefile.config
 
@@ -21,8 +21,8 @@ trunk: build
 
 # Run the full test suite(s)
 full: build
-	./broker_version_tests.py $(KAFKA_VERSION)
-	./sasl_test.py $(KAFKA_VERSION)
+	./broker_version_tests.py --conf '{"parallel":1}' $(KAFKA_VERSION)
+	./sasl_test.py --conf '{"parallel":1}' $(KAFKA_VERSION)
 
 run_par: $(BIN)
 	@echo "Running tests in parallel"
@@ -35,6 +35,10 @@ run_seq: $(BIN)
 run_local: $(BIN)
 	@echo "Running local broker-less tests"
 	./run-test.sh -p5 -l ./$(BIN)
+
+# Delete all test topics (based on prefix)
+delete_topics:
+	TESTS=none ./run-test.sh -D ./$(BIN) bare
 
 .PHONY: interceptor_test
 

@@ -54,7 +54,7 @@ while true ; do
 
 
     if [[ "$DELETE_TOPICS" == "y" ]]; then
-	./delete-test-topics.sh $ZK_ADDRESS ~/src/kafka/bin/kafka-topics.sh || true
+        make delete_topics
     fi
 done
 

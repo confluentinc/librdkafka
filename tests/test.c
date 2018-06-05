@@ -165,8 +165,9 @@ _TEST_DECL(0076_produce_retry);
 _TEST_DECL(0077_compaction);
 _TEST_DECL(0078_c_from_cpp);
 _TEST_DECL(0079_fork);
-_TEST_DECL(0081_fetch_max_bytes);
-
+_TEST_DECL(0080_admin_ut);
+_TEST_DECL(0081_admin);
+_TEST_DECL(0082_fetch_max_bytes);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -268,7 +269,9 @@ struct test tests[] = {
         _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE,
               .extra = "using a fork():ed rd_kafka_t is not supported and will "
               "most likely hang"),
-        _TEST(0081_fetch_max_bytes, 0, TEST_BRKVER(0,10,1,0)),
+        _TEST(0080_admin_ut, TEST_F_LOCAL),
+        _TEST(0081_admin, 0, TEST_BRKVER(0,10,2,0)),
+        _TEST(0082_fetch_max_bytes, 0, TEST_BRKVER(0,10,1,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -894,14 +897,8 @@ static int run_test0 (struct run_args *run_args) {
                 }
         }
 
-#ifndef _MSC_VER
-        if (test_delete_topics_between && test_concurrent_max == 1) {
-                if (system("./delete-test-topics.sh $ZK_ADDRESS "
-                           "$KAFKA_PATH/bin/kafka-topics.sh") != 0) {
-                        /* ignore failures but avoid unused-result warning */
-                }
-        }
-#endif
+        if (test_delete_topics_between && test_concurrent_max == 1)
+                test_delete_all_test_topics(60*1000);
 
 	return r;
 }
@@ -1149,11 +1146,15 @@ static int test_summary (int do_lock) {
                         break;
                 }
 
-		if (show_summary && test->state != TEST_SKIPPED)
-			printf("|%s %-40s | %10s | %7.3fs %s|%s\n",
-			       color,
-			       test->name, test_states[test->state],
-			       (double)duration/1000000.0, _C_CLR, extra);
+                if (show_summary && test->state != TEST_SKIPPED) {
+                        printf("|%s %-40s | %10s | %7.3fs %s|",
+                               color,
+                               test->name, test_states[test->state],
+                               (double)duration/1000000.0, _C_CLR);
+                        if (test->state == TEST_FAILED)
+                                printf(_C_RED " %s" _C_CLR, test->failstr);
+                        printf("%s\n", extra);
+                }
 
                 if (report_fp) {
 			int i;
@@ -1296,10 +1297,8 @@ int main(int argc, char **argv) {
  			test_broker_version_str = argv[++i];
 		else if (!strcmp(argv[i], "-S"))
 			show_summary = 0;
-#ifndef _MSC_VER
                 else if (!strcmp(argv[i], "-D"))
                         test_delete_topics_between = 1;
-#endif
 		else if (*argv[i] != '-')
                         tests_to_run = argv[i];
                 else {
@@ -1313,9 +1312,7 @@ int main(int argc, char **argv) {
                                "  -a     Assert on failures\n"
 			       "  -S     Dont show test summary\n"
 			       "  -V <N.N.N.N> Broker version.\n"
-#ifndef _MSC_VER
-                               "  -D     Run delete-test-topics.sh between each test (requires -p1)\n"
-#endif
+                               "  -D     Delete all test topics between each test (-p1) or after all tests\n"
 			       "\n"
 			       "Environment variables:\n"
 			       "  TESTS - substring matched test to run (e.g., 0033)\n"
@@ -1360,6 +1357,12 @@ int main(int argc, char **argv) {
         test_curr->state = TEST_PASSED;
         test_curr->start = test_clock();
 
+        if (test_on_ci) {
+                TEST_LOCK();
+                test_timeout_multiplier += 2;
+                TEST_UNLOCK();
+        }
+
 	if (!strcmp(test_mode, "helgrind") ||
 	    !strcmp(test_mode, "drd")) {
 		TEST_LOCK();
@@ -1379,7 +1382,8 @@ int main(int argc, char **argv) {
         if ((test_broker_version & 0xffff0000) == 0x00090000)
                 test_timeout_multiplier += 3;
 
-        test_timeout_multiplier += (double)test_concurrent_max / 3;
+        if (test_concurrent_max > 1)
+                test_timeout_multiplier += (double)test_concurrent_max / 3;
 
 	TEST_SAY("Tests to run: %s\n", tests_to_run ? tests_to_run : "all");
 	TEST_SAY("Test mode   : %s\n", test_mode);
@@ -1447,11 +1451,14 @@ int main(int argc, char **argv) {
 
         TEST_UNLOCK();
 
+        if (test_delete_topics_between)
+                test_delete_all_test_topics(60*1000);
+
+        r = test_summary(1/*lock*/) ? 1 : 0;
+
         /* Wait for everything to be cleaned up since broker destroys are
 	 * handled in its own thread. */
 	test_wait_exit(0);
-
-	r = test_summary(1/*lock*/) ? 1 : 0;
 
 	/* If we havent failed at this point then
 	 * there were no threads leaked */
@@ -1483,7 +1490,7 @@ void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
         TEST_SAYL(4, "Delivery report: %s\n", rd_kafka_err2str(err));
 
         if (!test_curr->produce_sync && err != test_curr->exp_dr_err)
-                TEST_FAIL("Message delivery failed: expected %s, got %s\n",
+                TEST_FAIL("Message delivery failed: expected %s, got %s",
                           rd_kafka_err2str(test_curr->exp_dr_err),
                           rd_kafka_err2str(err));
 
@@ -3268,15 +3275,109 @@ void test_kafka_topics (const char *fmt, ...) {
 }
 
 
+
+/**
+ * @brief Create topic using Topic Admin API
+ */
+static void test_admin_create_topic (rd_kafka_t *use_rk,
+                                     const char *topicname, int partition_cnt,
+                                     int replication_factor) {
+        rd_kafka_t *rk;
+        rd_kafka_NewTopic_t *newt[1];
+        const size_t newt_cnt = 1;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *rkqu;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_CreateTopics_result_t *res;
+        const rd_kafka_topic_result_t **terr;
+        int timeout_ms = tmout_multip(10000);
+        size_t res_cnt;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        test_timing_t t_create;
+
+        if (!(rk = use_rk))
+                rk = test_create_producer();
+
+        rkqu = rd_kafka_queue_new(rk);
+
+        newt[0] = rd_kafka_NewTopic_new(topicname, partition_cnt,
+                                        replication_factor,
+                                        errstr, sizeof(errstr));
+        TEST_ASSERT(newt[0] != NULL, "%s", errstr);
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_CREATETOPICS);
+        err = rd_kafka_AdminOptions_set_operation_timeout(options, timeout_ms,
+                                                          errstr,
+                                                          sizeof(errstr));
+        TEST_ASSERT(!err, "%s", errstr);
+
+        TEST_SAY("Creating topic \"%s\" "
+                 "(partitions=%d, replication_factor=%d, timeout=%d)\n",
+                 topicname, partition_cnt, replication_factor, timeout_ms);
+
+        TIMING_START(&t_create, "CreateTopics");
+        rd_kafka_CreateTopics(rk, newt, newt_cnt, options, rkqu);
+
+        /* Wait for result */
+        rkev = rd_kafka_queue_poll(rkqu, timeout_ms + 2000);
+        TEST_ASSERT(rkev, "Timed out waiting for CreateTopics result");
+
+        TIMING_STOP(&t_create);
+
+        res = rd_kafka_event_CreateTopics_result(rkev);
+        TEST_ASSERT(res, "Expected CreateTopics_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        terr = rd_kafka_CreateTopics_result_topics(res, &res_cnt);
+        TEST_ASSERT(terr, "CreateTopics_result_topics returned NULL");
+        TEST_ASSERT(res_cnt == newt_cnt,
+                    "CreateTopics_result_topics returned %"PRIusz" topics, "
+                    "not the expected %"PRIusz,
+                    res_cnt, newt_cnt);
+
+        TEST_ASSERT(!rd_kafka_topic_result_error(terr[0]),
+                    "Topic %s result error: %s",
+                    rd_kafka_topic_result_name(terr[0]),
+                    rd_kafka_topic_result_error_string(terr[0]));
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_queue_destroy(rkqu);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_kafka_NewTopic_destroy(newt[0]);
+
+        if (!use_rk)
+                rd_kafka_destroy(rk);
+}
+
+
 /**
  * @brief Create topic using kafka-topics.sh --create
  */
-void test_create_topic (const char *topicname, int partition_cnt,
-			int replication_factor) {
+static void test_create_topic_sh (const char *topicname, int partition_cnt,
+                                  int replication_factor) {
 	test_kafka_topics("--create --topic \"%s\" "
 			  "--replication-factor %d --partitions %d",
 			  topicname, replication_factor, partition_cnt);
 }
+
+
+/**
+ * @brief Create topic
+ */
+void test_create_topic (const char *topicname, int partition_cnt,
+                        int replication_factor) {
+        if (test_broker_version < TEST_BRKVER(0,10,2,0))
+                test_create_topic_sh(topicname, partition_cnt,
+                                     replication_factor);
+        else
+                test_admin_create_topic(NULL, topicname, partition_cnt,
+                                        replication_factor);
+}
+
 
 int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
         rd_kafka_t *use_rk;
@@ -3296,7 +3397,7 @@ int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
                 err = rd_kafka_metadata(use_rk, 0, rkt, &metadata,
                                         tmout_multip(15000));
                 if (err)
-                        TEST_WARN("metadata() for %s failed: %s",
+                        TEST_WARN("metadata() for %s failed: %s\n",
                                   rkt ? rd_kafka_topic_name(rkt) :
                                   "(all-local)",
                                   rd_kafka_err2str(err));
@@ -3343,7 +3444,7 @@ rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
                                         tmout_multip(15000));
                 TIMING_STOP(&t);
                 if (err)
-                        TEST_WARN("metadata() for %s failed: %s",
+                        TEST_WARN("metadata() for %s failed: %s\n",
                                   rkt ? rd_kafka_topic_name(rkt) :
                                   "(all-local)",
                                   rd_kafka_err2str(err));
@@ -3570,4 +3671,806 @@ void test_headers_dump (const char *what, int lvl,
                 TEST_SAYL(lvl, "%s: Header #%"PRIusz": %s='%s'\n",
                           what, idx-1, name,
                           value ? value : "(NULL)");
+}
+
+
+/**
+ * @brief Retrieve and return the list of broker ids in the cluster.
+ *
+ * @param rk Optional instance to use.
+ * @param cntp Will be updated to the number of brokers returned.
+ *
+ * @returns a malloc:ed list of int32_t broker ids.
+ */
+int32_t *test_get_broker_ids (rd_kafka_t *use_rk, size_t *cntp) {
+        int32_t *ids;
+        rd_kafka_t *rk;
+        const rd_kafka_metadata_t *md;
+        rd_kafka_resp_err_t err;
+        size_t i;
+
+        if (!(rk = use_rk))
+                rk = test_create_producer();
+
+        err = rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(5000));
+        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        TEST_ASSERT(md->broker_cnt > 0,
+                    "%d brokers, expected > 0", md->broker_cnt);
+
+        ids = malloc(sizeof(*ids) * md->broker_cnt);
+
+        for (i = 0 ; i < (size_t)md->broker_cnt ; i++)
+                ids[i] = md->brokers[i].id;
+
+        *cntp = md->broker_cnt;
+
+        rd_kafka_metadata_destroy(md);
+
+        if (!use_rk)
+                rd_kafka_destroy(rk);
+
+        return ids;
+}
+
+
+
+/**
+ * @brief Verify that all topics in \p topics are reported in metadata,
+ *        and that none of the topics in \p not_topics are reported.
+ *
+ * @returns the number of failures (but does not FAIL).
+ */
+static int verify_topics_in_metadata (rd_kafka_t *rk,
+                                      rd_kafka_metadata_topic_t *topics,
+                                      size_t topic_cnt,
+                                      rd_kafka_metadata_topic_t *not_topics,
+                                      size_t not_topic_cnt) {
+        const rd_kafka_metadata_t *md;
+        rd_kafka_resp_err_t err;
+        int ti;
+        size_t i;
+        int fails = 0;
+
+        /* Mark topics with dummy error which is overwritten
+         * when topic is found in metadata, allowing us to check
+         * for missed topics. */
+        for (i = 0 ; i < topic_cnt ; i++)
+                topics[i].err = 12345;
+
+        err = rd_kafka_metadata(rk, 1/*all_topics*/, NULL, &md,
+                                tmout_multip(5000));
+        TEST_ASSERT(!err, "metadata failed: %s", rd_kafka_err2str(err));
+
+        for (ti = 0 ; ti < md->topic_cnt ; ti++) {
+                const rd_kafka_metadata_topic_t *mdt = &md->topics[ti];
+
+                for (i = 0 ; i < topic_cnt ; i++) {
+                        int pi;
+                        rd_kafka_metadata_topic_t *exp_mdt;
+
+                        if (strcmp(topics[i].topic, mdt->topic))
+                                continue;
+
+                        exp_mdt = &topics[i];
+
+                        exp_mdt->err = mdt->err; /* indicate found */
+                        if (mdt->err) {
+                                TEST_SAY("metadata: "
+                                         "Topic %s has error %s\n",
+                                         mdt->topic,
+                                         rd_kafka_err2str(mdt->err));
+                                fails++;
+                        }
+
+                        if (exp_mdt->partition_cnt != 0 &&
+                            mdt->partition_cnt != exp_mdt->partition_cnt) {
+                                TEST_SAY("metadata: "
+                                         "Topic %s, expected %d partitions"
+                                         ", not %d\n",
+                                         mdt->topic,
+                                         exp_mdt->partition_cnt,
+                                         mdt->partition_cnt);
+                                fails++;
+                                continue;
+                        }
+
+                        /* Verify per-partition values */
+                        for (pi = 0 ; exp_mdt->partitions &&
+                                     pi < exp_mdt->partition_cnt ; pi++) {
+                                const rd_kafka_metadata_partition_t *mdp =
+                                        &mdt->partitions[pi];
+                                const rd_kafka_metadata_partition_t *exp_mdp =
+                                        &exp_mdt->partitions[pi];
+
+                                if (mdp->id != exp_mdp->id) {
+                                        TEST_SAY("metadata: "
+                                                 "Topic %s, "
+                                                 "partition %d, "
+                                                 "partition list out of order,"
+                                                 " expected %d, not %d\n",
+                                                 mdt->topic, pi,
+                                                 exp_mdp->id, mdp->id);
+                                        fails++;
+                                        continue;
+                                }
+
+                                if (exp_mdp->replicas) {
+                                        if (mdp->replica_cnt !=
+                                            exp_mdp->replica_cnt) {
+                                                TEST_SAY("metadata: "
+                                                         "Topic %s, "
+                                                         "partition %d, "
+                                                         "expected %d replicas,"
+                                                         " not %d\n",
+                                                         mdt->topic, pi,
+                                                         exp_mdp->replica_cnt,
+                                                         mdp->replica_cnt);
+                                                fails++;
+                                        } else if (memcmp(mdp->replicas,
+                                                          exp_mdp->replicas,
+                                                          mdp->replica_cnt *
+                                                          sizeof(*mdp->replicas))) {
+                                                int ri;
+
+                                                TEST_SAY("metadata: "
+                                                         "Topic %s, "
+                                                         "partition %d, "
+                                                         "replica mismatch:\n",
+                                                         mdt->topic, pi);
+
+                                                for (ri = 0 ;
+                                                     ri < mdp->replica_cnt ;
+                                                     ri++) {
+                                                        TEST_SAY(" #%d: "
+                                                                 "expected "
+                                                                 "replica %d, "
+                                                                 "not %d\n",
+                                                                 ri,
+                                                                 exp_mdp->
+                                                                 replicas[ri],
+                                                                 mdp->
+                                                                 replicas[ri]);
+                                                }
+
+                                                fails++;
+                                        }
+
+                                }
+                        }
+                }
+
+                for (i = 0 ; i < not_topic_cnt ; i++) {
+                        if (strcmp(not_topics[i].topic, mdt->topic))
+                                continue;
+
+                        TEST_SAY("metadata: "
+                                 "Topic %s found in metadata, unexpected\n",
+                                 mdt->topic);
+                        fails++;
+                }
+
+        }
+
+        for (i  = 0 ; i < topic_cnt ; i++) {
+                if ((int)topics[i].err == 12345) {
+                        TEST_SAY("metadata: "
+                                 "Topic %s not seen in metadata\n",
+                                 topics[i].topic);
+                        fails++;
+                }
+        }
+
+        if (fails > 0)
+                TEST_SAY("Metadata verification for %"PRIusz" topics failed "
+                         "with %d errors (see above)\n",
+                         topic_cnt, fails);
+        else
+                TEST_SAY("Metadata verification succeeded: "
+                         "%"PRIusz" desired topics seen, "
+                         "%"PRIusz" undesired topics not seen\n",
+                         topic_cnt, not_topic_cnt);
+
+        rd_kafka_metadata_destroy(md);
+
+        return fails;
+}
+
+
+
+/**
+ * @brief Wait for metadata to reflect expected and not expected topics
+ */
+void test_wait_metadata_update (rd_kafka_t *rk,
+                                rd_kafka_metadata_topic_t *topics,
+                                size_t topic_cnt,
+                                rd_kafka_metadata_topic_t *not_topics,
+                                size_t not_topic_cnt,
+                                int tmout) {
+        int64_t abs_timeout;
+        test_timing_t t_md;
+
+        abs_timeout = test_clock() + (tmout * 1000);
+
+        test_timeout_set(10 + (tmout/1000));
+
+        TEST_SAY("Waiting for up to %dms for metadata update\n", tmout);
+
+        TIMING_START(&t_md, "METADATA.WAIT");
+        do {
+                int md_fails;
+
+                md_fails = verify_topics_in_metadata(
+                        rk,
+                        topics, topic_cnt,
+                        not_topics, not_topic_cnt);
+
+                if (!md_fails) {
+                        TEST_SAY("All expected topics (not?) "
+                                 "seen in metadata\n");
+                        abs_timeout = 0;
+                        break;
+                }
+
+                rd_sleep(1);
+        } while (test_clock() < abs_timeout);
+        TIMING_STOP(&t_md);
+
+        if (abs_timeout)
+                TEST_FAIL("Expected topics not seen in given time.");
+}
+
+
+
+/**
+ * @brief Wait for up to \p tmout for any type of admin result.
+ * @returns the event
+ */
+rd_kafka_event_t *
+test_wait_admin_result (rd_kafka_queue_t *q,
+                        rd_kafka_event_type_t evtype,
+                        int tmout) {
+        rd_kafka_event_t *rkev;
+
+        rkev = rd_kafka_queue_poll(q, tmout);
+        if (!rkev)
+                TEST_FAIL("Timed out waiting for admin result (%d)\n", evtype);
+
+        TEST_ASSERT(rd_kafka_event_type(rkev) == evtype,
+                    "Expected event type %d, got %d (%s)",
+                    evtype,
+                    rd_kafka_event_type(rkev),
+                    rd_kafka_event_name(rkev));
+
+        return rkev;
+}
+
+
+
+/**
+ * @brief Wait for up to \p tmout for a
+ *        CreateTopics/DeleteTopics/CreatePartitions result
+ *        and return the distilled error code.
+ */
+rd_kafka_resp_err_t
+test_wait_topic_admin_result (rd_kafka_queue_t *q,
+                              rd_kafka_event_type_t evtype,
+                              int tmout) {
+        rd_kafka_event_t *rkev;
+        size_t i;
+        const rd_kafka_topic_result_t **terr = NULL;
+        size_t terr_cnt = 0;
+        int errcnt = 0;
+        rd_kafka_resp_err_t err;
+
+        rkev = test_wait_admin_result(q, evtype, tmout);
+
+        if ((err = rd_kafka_event_error(rkev))) {
+                TEST_WARN("%s failed: %s\n",
+                          rd_kafka_event_name(rkev),
+                          rd_kafka_event_error_string(rkev));
+                rd_kafka_event_destroy(rkev);
+                return err;
+        }
+
+        if (evtype == RD_KAFKA_EVENT_CREATETOPICS_RESULT) {
+                const rd_kafka_CreateTopics_result_t *res;
+                if (!(res = rd_kafka_event_CreateTopics_result(rkev)))
+                        TEST_FAIL("Expected a CreateTopics result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                terr = rd_kafka_CreateTopics_result_topics(res, &terr_cnt);
+
+        } else if (evtype == RD_KAFKA_EVENT_DELETETOPICS_RESULT) {
+                const rd_kafka_DeleteTopics_result_t *res;
+                if (!(res = rd_kafka_event_DeleteTopics_result(rkev)))
+                        TEST_FAIL("Expected a DeleteTopics result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                terr = rd_kafka_DeleteTopics_result_topics(res, &terr_cnt);
+
+        } else if (evtype == RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT) {
+                const rd_kafka_CreatePartitions_result_t *res;
+                if (!(res = rd_kafka_event_CreatePartitions_result(rkev)))
+                        TEST_FAIL("Expected a CreatePartitions result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                terr = rd_kafka_CreatePartitions_result_topics(res, &terr_cnt);
+
+        } else {
+                TEST_FAIL("Bad evtype: %d", evtype);
+                RD_NOTREACHED();
+        }
+
+        for (i = 0 ; i < terr_cnt ; i++) {
+                if (rd_kafka_topic_result_error(terr[i])) {
+                        TEST_WARN("..Topics result: %s: error: %s\n",
+                                  rd_kafka_topic_result_name(terr[i]),
+                                  rd_kafka_topic_result_error_string(terr[i]));
+                        if (!(errcnt++))
+                                err = rd_kafka_topic_result_error(terr[i]);
+                }
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+        return err;
+}
+
+
+
+/**
+ * @brief Topic Admin API helpers
+ *
+ * @param useq Makes the call async and posts the response in this queue.
+ *             If NULL this call will be synchronous and return the error
+ *             result.
+ *             
+ *
+ */
+
+rd_kafka_resp_err_t
+test_CreateTopics_simple (rd_kafka_t *rk,
+                          rd_kafka_queue_t *useq,
+                          char **topics, size_t topic_cnt,
+                          int num_partitions,
+                          void *opaque) {
+        rd_kafka_NewTopic_t **new_topics;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *q;
+        size_t i;
+        const int tmout = 30 * 1000;
+        rd_kafka_resp_err_t err;
+
+        new_topics = malloc(sizeof(*new_topics) * topic_cnt);
+
+        for (i = 0 ; i < topic_cnt ; i++) {
+                char errstr[512];
+                new_topics[i] = rd_kafka_NewTopic_new(topics[i],
+                                                      num_partitions, 1,
+                                                      errstr, sizeof(errstr));
+                TEST_ASSERT(new_topics[i],
+                            "Failed to NewTopic(\"%s\", %d) #%"PRIusz": %s",
+                            topics[i], num_partitions, i, errstr);
+        }
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_CREATETOPICS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                char errstr[512];
+
+                err = rd_kafka_AdminOptions_set_request_timeout(options,
+                                                                tmout,
+                                                                errstr,
+                                                                sizeof(errstr));
+                TEST_ASSERT(!err, "set_request_timeout: %s", errstr);
+                err = rd_kafka_AdminOptions_set_operation_timeout(options,
+                                                                  tmout-5000,
+                                                                  errstr,
+                                                                  sizeof(errstr));
+                TEST_ASSERT(!err, "set_operation_timeout: %s", errstr);
+
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        TEST_SAY("Creating %"PRIusz" topics\n", topic_cnt);
+
+        rd_kafka_CreateTopics(rk, new_topics, topic_cnt, options, q);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_kafka_NewTopic_destroy_array(new_topics, topic_cnt);
+        free(new_topics);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+
+        err = test_wait_topic_admin_result(q,
+                                           RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+                                           tmout+5000);
+
+        rd_kafka_queue_destroy(q);
+
+        return err;
+}
+
+
+rd_kafka_resp_err_t
+test_CreatePartitions_simple (rd_kafka_t *rk,
+                              rd_kafka_queue_t *useq,
+                              const char *topic,
+                              size_t total_part_cnt,
+                              void *opaque) {
+        rd_kafka_NewPartitions_t *newp[1];
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *q;
+        const int tmout = 30 * 1000;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+
+        newp[0] = rd_kafka_NewPartitions_new(topic, total_part_cnt, errstr,
+                                             sizeof(errstr));
+        TEST_ASSERT(newp[0],
+                    "Failed to NewPartitions(\"%s\", %"PRIusz"): %s",
+                    topic, total_part_cnt, errstr);
+
+        options = rd_kafka_AdminOptions_new(rk,
+                                            RD_KAFKA_ADMIN_OP_CREATEPARTITIONS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                char errstr[512];
+
+                err = rd_kafka_AdminOptions_set_request_timeout(options,
+                                                                tmout,
+                                                                errstr,
+                                                                sizeof(errstr));
+                TEST_ASSERT(!err, "set_request_timeout: %s", errstr);
+                err = rd_kafka_AdminOptions_set_operation_timeout(options,
+                                                                  tmout-5000,
+                                                                  errstr,
+                                                                  sizeof(errstr));
+                TEST_ASSERT(!err, "set_operation_timeout: %s", errstr);
+
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        TEST_SAY("Creating (up to) %"PRIusz" partitions for topic \"%s\"\n",
+                 total_part_cnt, topic);
+
+        rd_kafka_CreatePartitions(rk, newp, 1, options, q);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_kafka_NewPartitions_destroy(newp[0]);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+
+        err = test_wait_topic_admin_result(
+                q, RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT, tmout+5000);
+
+        rd_kafka_queue_destroy(q);
+
+        return err;
+}
+
+
+rd_kafka_resp_err_t
+test_DeleteTopics_simple (rd_kafka_t *rk,
+                          rd_kafka_queue_t *useq,
+                          char **topics, size_t topic_cnt,
+                          void *opaque) {
+        rd_kafka_queue_t *q;
+        rd_kafka_DeleteTopic_t **del_topics;
+        rd_kafka_AdminOptions_t *options;
+        size_t i;
+        rd_kafka_resp_err_t err;
+        const int tmout = 30*1000;
+
+        del_topics = malloc(sizeof(*del_topics) * topic_cnt);
+
+        for (i = 0 ; i < topic_cnt ; i++) {
+                del_topics[i] = rd_kafka_DeleteTopic_new(topics[i]);
+                TEST_ASSERT(del_topics[i]);
+        }
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETETOPICS);
+        rd_kafka_AdminOptions_set_opaque(options, opaque);
+
+        if (!useq) {
+                char errstr[512];
+
+                err = rd_kafka_AdminOptions_set_request_timeout(options,
+                                                                tmout,
+                                                                errstr,
+                                                                sizeof(errstr));
+                TEST_ASSERT(!err, "set_request_timeout: %s", errstr);
+                err = rd_kafka_AdminOptions_set_operation_timeout(options,
+                                                                  tmout-5000,
+                                                                  errstr,
+                                                                  sizeof(errstr));
+                TEST_ASSERT(!err, "set_operation_timeout: %s", errstr);
+
+                q = rd_kafka_queue_new(rk);
+        } else {
+                q = useq;
+        }
+
+        TEST_SAY("Deleting %"PRIusz" topics\n", topic_cnt);
+
+        rd_kafka_DeleteTopics(rk, del_topics, topic_cnt, options, useq);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        rd_kafka_DeleteTopic_destroy_array(del_topics, topic_cnt);
+
+        free(del_topics);
+
+        if (useq)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = test_wait_topic_admin_result(q,
+                                           RD_KAFKA_EVENT_CREATETOPICS_RESULT,
+                                           tmout+5000);
+
+        rd_kafka_queue_destroy(q);
+
+        return err;
+}
+
+
+static void test_free_string_array (char **strs, size_t cnt) {
+        size_t i;
+        for (i = 0 ; i < cnt ; i++)
+                free(strs[i]);
+        free(strs);
+}
+
+
+/**
+ * @return an array of all topics in the cluster matching our the
+ *         rdkafka test prefix.
+ */
+static rd_kafka_resp_err_t
+test_get_all_test_topics (rd_kafka_t *rk, char ***topicsp, size_t *topic_cntp) {
+        size_t test_topic_prefix_len = strlen(test_topic_prefix);
+        const rd_kafka_metadata_t *md;
+        char **topics = NULL;
+        size_t topic_cnt = 0;
+        int i;
+        rd_kafka_resp_err_t err;
+
+        *topic_cntp = 0;
+        if (topicsp)
+                *topicsp = NULL;
+
+        /* Retrieve list of topics */
+        err = rd_kafka_metadata(rk, 1/*all topics*/, NULL, &md,
+                                tmout_multip(10000));
+        if (err) {
+                TEST_WARN("%s: Failed to acquire metadata: %s: "
+                          "not deleting any topics\n",
+                          __FUNCTION__, rd_kafka_err2str(err));
+                return err;
+        }
+
+        if (md->topic_cnt == 0) {
+                TEST_WARN("%s: No topics in cluster\n", __FUNCTION__);
+                rd_kafka_metadata_destroy(md);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        if (topicsp)
+                topics = malloc(sizeof(*topics) * md->topic_cnt);
+
+        for (i = 0 ; i < md->topic_cnt ; i++) {
+                if (strlen(md->topics[i].topic) >= test_topic_prefix_len &&
+                    !strncmp(md->topics[i].topic,
+                             test_topic_prefix, test_topic_prefix_len)) {
+                        if (topicsp)
+                                topics[topic_cnt++] =
+                                        rd_strdup(md->topics[i].topic);
+                        else
+                                topic_cnt++;
+                }
+        }
+
+        if (topic_cnt == 0) {
+                TEST_SAY("%s: No topics (out of %d) matching our "
+                         "test prefix (%s)\n",
+                         __FUNCTION__, md->topic_cnt, test_topic_prefix);
+                rd_kafka_metadata_destroy(md);
+                if (topics)
+                        test_free_string_array(topics, topic_cnt);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        rd_kafka_metadata_destroy(md);
+
+        if (topicsp)
+                *topicsp = topics;
+        *topic_cntp = topic_cnt;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Delete all test topics using the Kafka Admin API.
+ */
+rd_kafka_resp_err_t test_delete_all_test_topics (int timeout_ms) {
+        rd_kafka_t *rk;
+        char **topics;
+        size_t topic_cnt = 0;
+        rd_kafka_resp_err_t err;
+        int i;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *q;
+        char errstr[256];
+        int64_t abs_timeout = test_clock() + (timeout_ms * 1000);
+
+        rk = test_create_producer();
+
+        err = test_get_all_test_topics(rk, &topics, &topic_cnt);
+        if (err) {
+                /* Error already reported by test_get_all_test_topics() */
+                rd_kafka_destroy(rk);
+                return err;
+        }
+
+        if (topic_cnt == 0) {
+                rd_kafka_destroy(rk);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        q = rd_kafka_queue_get_main(rk);
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETETOPICS);
+        if (rd_kafka_AdminOptions_set_operation_timeout(options, 2*60*1000,
+                                                        errstr,
+                                                        sizeof(errstr)))
+                TEST_SAY(_C_YEL "Failed to set DeleteTopics timeout: %s: "
+                         "ignoring\n",
+                         errstr);
+
+        TEST_SAY(_C_MAG "====> Deleting all test topics with <===="
+                 "a timeout of 2 minutes\n");
+
+        test_DeleteTopics_simple(rk, q, topics, topic_cnt, options);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        while (1) {
+                rd_kafka_event_t *rkev;
+                const rd_kafka_DeleteTopics_result_t *res;
+
+                rkev = rd_kafka_queue_poll(q, -1);
+
+                res = rd_kafka_event_DeleteTopics_result(rkev);
+                if (!res) {
+                        TEST_SAY("%s: Ignoring event: %s: %s\n",
+                                 __FUNCTION__, rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+                        rd_kafka_event_destroy(rkev);
+                        continue;
+                }
+
+                if (rd_kafka_event_error(rkev)) {
+                        TEST_WARN("%s: DeleteTopics for %"PRIusz" topics "
+                                  "failed: %s\n",
+                                  __FUNCTION__, topic_cnt,
+                                  rd_kafka_event_error_string(rkev));
+                        err = rd_kafka_event_error(rkev);
+                } else {
+                        const rd_kafka_topic_result_t **terr;
+                        size_t tcnt;
+                        int okcnt = 0;
+
+                        terr = rd_kafka_DeleteTopics_result_topics(res, &tcnt);
+
+                        for(i = 0 ; i < (int)tcnt ; i++) {
+                                if (!rd_kafka_topic_result_error(terr[i])) {
+                                        okcnt++;
+                                        continue;
+                                }
+
+                                TEST_WARN("%s: Failed to delete topic %s: %s\n",
+                                          __FUNCTION__,
+                                          rd_kafka_topic_result_name(terr[i]),
+                                          rd_kafka_topic_result_error_string(
+                                                  terr[i]));
+                        }
+
+                        TEST_SAY("%s: DeleteTopics "
+                                 "succeeded for %d/%"PRIusz" topics\n",
+                                 __FUNCTION__, okcnt, topic_cnt);
+                        err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+
+                rd_kafka_event_destroy(rkev);
+                break;
+        }
+
+        rd_kafka_queue_destroy(q);
+
+        test_free_string_array(topics, topic_cnt);
+
+        /* Wait for topics to be fully deleted */
+        while (1) {
+                err = test_get_all_test_topics(rk, NULL, &topic_cnt);
+
+                if (!err && topic_cnt == 0)
+                        break;
+
+                if (abs_timeout < test_clock()) {
+                        TEST_WARN("%s: Timed out waiting for "
+                                  "remaining %"PRIusz" deleted topics "
+                                  "to disappear from cluster metadata\n",
+                                  __FUNCTION__, topic_cnt);
+                        break;
+                }
+
+                TEST_SAY("Waiting for remaining %"PRIusz" delete topics "
+                         "to disappear from cluster metadata\n", topic_cnt);
+
+                rd_sleep(1);
+        }
+
+        rd_kafka_destroy(rk);
+
+        return err;
+}
+
+
+
+void test_fail0 (const char *file, int line, const char *function,
+                 int do_lock, int fail_now, const char *fmt, ...) {
+        char buf[512];
+        int is_thrd = 0;
+        size_t of;
+        va_list ap;
+        char *t;
+
+        of = rd_snprintf(buf, sizeof(buf), "%s():%i: ", function, line);
+        rd_assert(of < sizeof(buf));
+
+        va_start(ap, fmt);
+        rd_vsnprintf(buf+of, sizeof(buf)-of, fmt, ap);
+        va_end(ap);
+
+        /* Remove trailing newline */
+        if ((t =  strchr(buf, '\n')) && !*(t+1))
+                *t = '\0';
+
+        TEST_SAYL(0, "TEST FAILURE\n");
+        fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n"
+                "%s\n",
+                test_curr->name, file, line, function, buf+of);
+        if (do_lock)
+                TEST_LOCK();
+        test_curr->state = TEST_FAILED;
+        test_curr->failcnt += 1;
+
+        if (!*test_curr->failstr) {
+                strncpy(test_curr->failstr, buf, sizeof(test_curr->failstr));
+                test_curr->failstr[sizeof(test_curr->failstr)-1] = '\0';
+        }
+        if (fail_now && test_curr->mainfunc) {
+                tests_running_cnt--;
+                is_thrd = 1;
+        }
+        if (do_lock)
+                TEST_UNLOCK();
+        if (!fail_now)
+                return;
+        if (test_assert_on_fail || !is_thrd)
+                assert(0);
+        else
+                thrd_exit(0);
 }

@@ -60,14 +60,37 @@ rd_list_init (rd_list_t *rl, int initial_size, void (*free_cb) (void *)) {
         return rl;
 }
 
+rd_list_t *rd_list_init_copy (rd_list_t *dst, const rd_list_t *src) {
+
+        if (src->rl_flags & RD_LIST_F_FIXED_SIZE) {
+                /* Source was preallocated, prealloc new dst list */
+                rd_list_init(dst, 0, src->rl_free_cb);
+
+                rd_list_prealloc_elems(dst, src->rl_elemsize, src->rl_size,
+                                       1/*memzero*/);
+        } else {
+                /* Source is dynamic, initialize dst the same */
+                rd_list_init(dst, rd_list_cnt(src), src->rl_free_cb);
+
+        }
+
+        return dst;
+}
+
+static RD_INLINE rd_list_t *rd_list_alloc (void) {
+        return malloc(sizeof(rd_list_t));
+}
+
 rd_list_t *rd_list_new (int initial_size, void (*free_cb) (void *)) {
-	rd_list_t *rl = malloc(sizeof(*rl));
+	rd_list_t *rl = rd_list_alloc();
 	rd_list_init(rl, initial_size, free_cb);
 	rl->rl_flags |= RD_LIST_F_ALLOCATED;
 	return rl;
 }
 
-void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size) {
+
+void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t cnt,
+                             int memzero) {
 	size_t allocsize;
 	char *p;
 	size_t i;
@@ -79,19 +102,33 @@ void rd_list_prealloc_elems (rd_list_t *rl, size_t elemsize, size_t size) {
 	 *   elems[elemsize][cnt];
 	 */
 
-	allocsize = (sizeof(void *) * size) + (elemsize * size);
-	rl->rl_elems = rd_malloc(allocsize);
+	allocsize = (sizeof(void *) * cnt) + (elemsize * cnt);
+        if (memzero)
+                rl->rl_elems = rd_calloc(1, allocsize);
+        else
+                rl->rl_elems = rd_malloc(allocsize);
 
-	/* p points to first element's memory. */
-	p = (char *)&rl->rl_elems[size];
+        /* p points to first element's memory, unless elemsize is 0. */
+        if (elemsize > 0)
+                p = rl->rl_p = (char *)&rl->rl_elems[cnt];
+        else
+                p = rl->rl_p = NULL;
 
 	/* Pointer -> elem mapping */
-	for (i = 0 ; i < size ; i++, p += elemsize)
+	for (i = 0 ; i < cnt ; i++, p += elemsize)
 		rl->rl_elems[i] = p;
 
-	rl->rl_size = (int)size;
+	rl->rl_size = (int)cnt;
 	rl->rl_cnt = 0;
 	rl->rl_flags |= RD_LIST_F_FIXED_SIZE;
+        rl->rl_elemsize = (int)elemsize;
+}
+
+
+void rd_list_set_cnt (rd_list_t *rl, size_t cnt) {
+        rd_assert(rl->rl_flags & RD_LIST_F_FIXED_SIZE);
+        rd_assert((int)cnt <= rl->rl_size);
+        rl->rl_cnt = (int)cnt;
 }
 
 
@@ -109,6 +146,24 @@ void *rd_list_add (rd_list_t *rl, void *elem) {
 		rl->rl_elems[rl->rl_cnt] = elem;
 	return rl->rl_elems[rl->rl_cnt++];
 }
+
+void rd_list_set (rd_list_t *rl, int idx, void *ptr) {
+        if (idx >= rl->rl_size)
+                rd_list_grow(rl, idx+1);
+
+        if (idx >= rl->rl_cnt) {
+                memset(&rl->rl_elems[rl->rl_cnt], 0,
+                       sizeof(*rl->rl_elems) * (idx-rl->rl_cnt));
+                rl->rl_cnt = idx+1;
+        } else {
+                /* Not allowed to replace existing element. */
+                rd_assert(!rl->rl_elems[idx]);
+        }
+
+        rl->rl_elems[idx] = ptr;
+}
+
+
 
 void rd_list_remove_elem (rd_list_t *rl, int idx) {
         rd_assert(idx < rl->rl_cnt);
@@ -220,12 +275,29 @@ void rd_list_destroy (rd_list_t *rl) {
 		rd_free(rl);
 }
 
+void rd_list_destroy_free (void *rl) {
+        rd_list_destroy((rd_list_t *)rl);
+}
 
 void *rd_list_elem (const rd_list_t *rl, int idx) {
         if (likely(idx < rl->rl_cnt))
                 return (void *)rl->rl_elems[idx];
         return NULL;
 }
+
+int rd_list_index (const rd_list_t *rl, const void *match,
+                   int (*cmp) (const void *, const void *)) {
+        int i;
+        const void *elem;
+
+        RD_LIST_FOREACH(elem, rl, i) {
+                if (!cmp(match, elem))
+                        return i;
+        }
+
+        return -1;
+}
+
 
 void *rd_list_find (const rd_list_t *rl, const void *match,
                     int (*cmp) (const void *, const void *)) {
@@ -303,7 +375,6 @@ static void *rd_list_nocopy_ptr (const void *elem, void *opaque) {
         return (void *)elem;
 }
 
-
 rd_list_t *rd_list_copy (const rd_list_t *src,
                          void *(*copy_cb) (const void *elem, void *opaque),
                          void *opaque) {
@@ -322,6 +393,8 @@ void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
         void *elem;
         int i;
 
+        rd_assert(dst != src);
+
         if (!copy_cb)
                 copy_cb = rd_list_nocopy_ptr;
 
@@ -331,3 +404,75 @@ void rd_list_copy_to (rd_list_t *dst, const rd_list_t *src,
                         rd_list_add(dst, celem);
         }
 }
+
+
+/**
+ * @brief Copy elements of preallocated \p src to preallocated \p dst.
+ *
+ * @remark \p dst will be overwritten and initialized, but its
+ *         flags will be retained.
+ *
+ * @returns \p dst
+ */
+static rd_list_t *rd_list_copy_preallocated0 (rd_list_t *dst,
+                                              const rd_list_t *src) {
+        int dst_flags = dst->rl_flags & RD_LIST_F_ALLOCATED;
+
+        rd_assert(dst != src);
+
+        rd_list_init_copy(dst, src);
+        dst->rl_flags |= dst_flags;
+
+        rd_assert((dst->rl_flags & RD_LIST_F_FIXED_SIZE));
+        rd_assert((src->rl_flags & RD_LIST_F_FIXED_SIZE));
+        rd_assert(dst->rl_elemsize == src->rl_elemsize &&
+                  dst->rl_size == src->rl_size);
+
+        memcpy(dst->rl_p, src->rl_p, src->rl_elemsize * src->rl_size);
+        dst->rl_cnt = src->rl_cnt;
+
+        return dst;
+}
+
+void *rd_list_copy_preallocated (const void *elem, void *opaque) {
+        return rd_list_copy_preallocated0(rd_list_new(0, NULL),
+                                          (const rd_list_t *)elem);
+}
+
+
+/**
+ * @name Misc helpers for common list types
+ * @{
+ *
+ */
+rd_list_t *rd_list_init_int32 (rd_list_t *rl, int max_size) {
+        int rl_flags = rl->rl_flags & RD_LIST_F_ALLOCATED;
+        rd_list_init(rl, 0, NULL);
+        rl->rl_flags |= rl_flags;
+        rd_list_prealloc_elems(rl, sizeof(int32_t), max_size, 1/*memzero*/);
+        return rl;
+}
+
+void rd_list_set_int32 (rd_list_t *rl, int idx, int32_t val) {
+        rd_assert((rl->rl_flags & RD_LIST_F_FIXED_SIZE) &&
+                  rl->rl_elemsize == sizeof(int32_t));
+        rd_assert(idx < rl->rl_size);
+
+        memcpy(rl->rl_elems[idx], &val, sizeof(int32_t));
+
+        if (rl->rl_cnt <= idx)
+                rl->rl_cnt = idx+1;
+}
+
+int32_t rd_list_get_int32 (const rd_list_t *rl, int idx) {
+        rd_assert((rl->rl_flags & RD_LIST_F_FIXED_SIZE) &&
+                  rl->rl_elemsize == sizeof(int32_t) &&
+                  idx < rl->rl_cnt);
+        return *(int32_t *)rl->rl_elems[idx];
+}
+
+
+
+
+/**@}*/
+

@@ -50,6 +50,7 @@ typedef struct rd_kafka_timer_s {
 
 	rd_ts_t rtmr_next;
 	rd_ts_t rtmr_interval;   /* interval in microseconds */
+        rd_bool_t rtmr_oneshot;  /**< Only fire once. */
 
 	void  (*rtmr_callback) (rd_kafka_timers_t *rkts, void *arg);
 	void   *rtmr_arg;
@@ -57,13 +58,18 @@ typedef struct rd_kafka_timer_s {
 
 
 
-void rd_kafka_timer_stop (rd_kafka_timers_t *rkts,
-                          rd_kafka_timer_t *rtmr, int lock);
-void rd_kafka_timer_start (rd_kafka_timers_t *rkts,
-			   rd_kafka_timer_t *rtmr, rd_ts_t interval,
-			   void (*callback) (rd_kafka_timers_t *rkts,
-                                             void *arg),
-			   void *arg);
+int rd_kafka_timer_stop (rd_kafka_timers_t *rkts,
+                         rd_kafka_timer_t *rtmr, int lock);
+void rd_kafka_timer_start0 (rd_kafka_timers_t *rkts,
+                            rd_kafka_timer_t *rtmr, rd_ts_t interval,
+                            rd_bool_t oneshot,
+                            void (*callback) (rd_kafka_timers_t *rkts,
+                                              void *arg),
+                            void *arg);
+#define rd_kafka_timer_start(rkts,rtmr,interval,callback,arg) \
+        rd_kafka_timer_start0(rkts,rtmr,interval,rd_false,callback,arg)
+#define rd_kafka_timer_start_oneshot(rkts,rtmr,interval,callback,arg)   \
+        rd_kafka_timer_start0(rkts,rtmr,interval,rd_true,callback,arg)
 
 void rd_kafka_timer_backoff (rd_kafka_timers_t *rkts,
 			     rd_kafka_timer_t *rtmr, int backoff_us);

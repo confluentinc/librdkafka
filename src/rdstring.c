@@ -147,18 +147,58 @@ void rd_strtup_destroy (rd_strtup_t *strtup) {
         rd_free(strtup);
 }
 
-rd_strtup_t *rd_strtup_new (const char *name, const char *value) {
-        size_t name_sz = strlen(name) + 1;
-        size_t value_sz = strlen(value) + 1;
+void rd_strtup_free (void *strtup) {
+        rd_strtup_destroy((rd_strtup_t *)strtup);
+}
+
+rd_strtup_t *rd_strtup_new0 (const char *name, ssize_t name_len,
+                             const char *value, ssize_t value_len) {
         rd_strtup_t *strtup;
 
+        /* Calculate lengths, if needed, and add space for \0 nul */
+
+        if (name_len == -1)
+                name_len = strlen(name);
+
+        if (!value)
+                value_len = 0;
+        else if (value_len == -1)
+                value_len = strlen(value);
+
+
         strtup = rd_malloc(sizeof(*strtup) +
-                           name_sz + value_sz - 1/*name[1]*/);
-        memcpy(strtup->name, name, name_sz);
-        strtup->value = &strtup->name[name_sz];
-        memcpy(strtup->value, value, value_sz);
+                           name_len + 1 + value_len + 1 - 1/*name[1]*/);
+        memcpy(strtup->name, name, name_len);
+        strtup->name[name_len] = '\0';
+        if (value) {
+                strtup->value = &strtup->name[name_len+1];
+                memcpy(strtup->value, value, value_len);
+                strtup->value[value_len] = '\0';
+        } else {
+                strtup->value = NULL;
+        }
 
         return strtup;
+}
+
+rd_strtup_t *rd_strtup_new (const char *name, const char *value) {
+        return rd_strtup_new0(name, -1, value, -1);
+}
+
+
+/**
+ * @returns a new copy of \p src
+ */
+rd_strtup_t *rd_strtup_dup (const rd_strtup_t *src) {
+        return rd_strtup_new(src->name, src->value);
+}
+
+/**
+ * @brief Wrapper for rd_strtup_dup() suitable rd_list_copy*() use
+ */
+void *rd_strtup_list_copy (const void *elem, void *opaque) {
+        const rd_strtup_t *src = elem;
+        return (void *)rd_strtup_dup(src);
 }
 
 

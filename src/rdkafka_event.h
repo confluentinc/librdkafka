@@ -54,7 +54,8 @@ rd_kafka_event_type_t rd_kafka_op2event (rd_kafka_op_type_t optype) {
  */
 static RD_UNUSED RD_INLINE
 int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
-	rko->rko_evtype = rd_kafka_op2event(rko->rko_type);
+        if (!rko->rko_evtype)
+                rko->rko_evtype = rd_kafka_op2event(rko->rko_type);
 	switch (rko->rko_evtype)
 	{
 	case RD_KAFKA_EVENT_NONE:
@@ -72,6 +73,11 @@ int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
         case RD_KAFKA_EVENT_LOG:
         case RD_KAFKA_EVENT_OFFSET_COMMIT:
         case RD_KAFKA_EVENT_STATS:
+        case RD_KAFKA_EVENT_CREATETOPICS_RESULT:
+        case RD_KAFKA_EVENT_DELETETOPICS_RESULT:
+        case RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT:
+        case RD_KAFKA_EVENT_ALTERCONFIGS_RESULT:
+        case RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT:
 		return 1;
 
 	default:

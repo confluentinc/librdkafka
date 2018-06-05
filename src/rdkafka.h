@@ -4580,7 +4580,7 @@ rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
  *
  * @remark This option is valid for AlterConfigs.
  *
- * @remark Requires broker version >= 1.2.0 FIXME:unreleased.
+ * @remark Requires broker with KIP-248 support.
  *         The request will fail (locally) if the broker does not support
  *         incremental updates.
  */
@@ -5027,8 +5027,8 @@ RD_EXPORT const char *
 rd_kafka_ConfigEntry_name (const rd_kafka_ConfigEntry_t *entry);
 
 /**
- * @returns the configuration value.
- * FIXME: NULL?
+ * @returns the configuration value, may be NULL for sensitive or unset
+ *          properties.
  */
 RD_EXPORT const char *
 rd_kafka_ConfigEntry_value (const rd_kafka_ConfigEntry_t *entry);

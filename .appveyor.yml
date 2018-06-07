@@ -52,10 +52,12 @@ before_deploy:
 
     $autopkgFile = "win32/librdkafka.autopkg"
 
+    pwd
 
-pwd
 
-ls $autopkgFile
+    ls $autopkgFile
+
+
 
     # Get the ".autopkg.template" file, replace "@version" with the Appveyor version number, then save to the ".autopkg" file.
 

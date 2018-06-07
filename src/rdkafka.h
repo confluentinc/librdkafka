@@ -1392,7 +1392,7 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *         offsets for each partition.
  *         But a function like `rd_kafka_position()` might have unexpected
  *         effects for instance when a consumer gets assigned a partition
- *         it used to consumer at an earlier rebalance. In this case, the
+ *         it used to consume at an earlier rebalance. In this case, the
  *         list of partitions will be updated with the old offset for that
  *         partition. In this case, it is generally better to pass a copy
  *         of the list (see `rd_kafka_topic_partition_list_copy()`).

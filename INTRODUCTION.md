@@ -595,7 +595,9 @@ for a given partition by calling `rd_kafka_consume_start()`.
 
 After a topic+partition consumer has been started librdkafka will attempt
 to keep `queued.min.messages` messages in the local queue by repeatedly
-fetching batches of messages from the broker.
+fetching batches of messages from the broker. librdkafka will fetch all
+consumed partitions for which that broker is a leader, through a single
+request.
 
 This local message queue is then served to the application through three
 different consume APIs:

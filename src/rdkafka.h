@@ -1378,8 +1378,10 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  * the result of the produce request.
  * 
  * The callback is called when a message is succesfully produced or
- * if librdkafka encountered a permanent failure, or the retry counter for
- * temporary errors has been exhausted.
+ * if librdkafka encountered a permanent failure.
+ * Delivery errors occur when the retry count is exceeded, when the
+ * message.timeout.ms timeout is exceeded or there is a permanent error
+ * like RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART.
  *
  * An application must call rd_kafka_poll() at regular intervals to
  * serve queued delivery report callbacks.
@@ -1423,13 +1425,25 @@ void rd_kafka_conf_set_consume_cb (rd_kafka_conf_t *conf,
  *
  * Without a rebalance callback this is done automatically by librdkafka
  * but registering a rebalance callback gives the application flexibility
- * in performing other operations along with the assinging/revocation,
+ * in performing other operations along with the assigning/revocation,
  * such as fetching offsets from an alternate location (on assign)
  * or manually committing offsets (on revoke).
  *
  * @remark The \p partitions list is destroyed by librdkafka on return
  *         return from the rebalance_cb and must not be freed or
  *         saved by the application.
+ *
+ * @remark Be careful when modifying the \p partitions list.
+ *         Changing this list should only be done to change the initial
+ *         offsets for each partition.
+ *         But a function like `rd_kafka_position()` might have unexpected
+ *         effects for instance when a consumer gets assigned a partition
+ *         it used to consume at an earlier rebalance. In this case, the
+ *         list of partitions will be updated with the old offset for that
+ *         partition. In this case, it is generally better to pass a copy
+ *         of the list (see `rd_kafka_topic_partition_list_copy()`).
+ *         The result of `rd_kafka_position()` is typically outdated in
+ *         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS.
  * 
  * The following example shows the application's responsibilities:
  * @code
@@ -1564,6 +1578,9 @@ void rd_kafka_conf_set_log_cb(rd_kafka_conf_t *conf,
  *   - \p json - String containing the statistics data in JSON format
  *   - \p json_len - Length of \p json string.
  *   - \p opaque - Application-provided opaque.
+ *
+ * For more information on the format of \p json, see
+ * https://github.com/edenhill/librdkafka/wiki/Statistics
  *
  * If the application wishes to hold on to the \p json pointer and free
  * it at a later time it must return 1 from the \p stats_cb.
@@ -2173,6 +2190,10 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  *
  * @remark  An application should make sure to call poll() at regular
  *          intervals to serve any queued callbacks waiting to be called.
+ * @remark  If your producer doesn't have any callback set (in particular
+ *          via rd_kafka_conf_set_dr_msg_cb or rd_kafka_conf_set_error_cb)
+ *          you might chose not to call poll(), though this is not
+ *          recommended.
  *
  * Events:
  *   - delivery report callbacks  (if dr_cb/dr_msg_cb is configured) [producer]
@@ -2999,6 +3020,10 @@ rd_kafka_committed (rd_kafka_t *rk,
  * of the last consumed message + 1, or RD_KAFKA_OFFSET_INVALID in case there was
  * no previous message.
  *
+ * @remark  In this context the last consumed message is the offset consumed
+ *          by the current librdkafka instance and, in case of rebalancing, not
+ *          necessarily the last message fetched from the partition.
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success in which case the
  *          \p offset or \p err field of each \p partitions' element is filled
  *          in with the stored offset, or a partition specific error.
@@ -3049,6 +3074,26 @@ rd_kafka_position (rd_kafka_t *rk,
  * `rd_kafka_topic_new()`.
  *
  * `rd_kafka_produce()` is an asynch non-blocking API.
+ * See `rd_kafka_conf_set_dr_msg_cb` on how to setup a callback to be called
+ * once the delivery status (success or failure) is known. The delivery report
+ * is trigged by the application calling `rd_kafka_poll()` (at regular
+ * intervals) or `rd_kafka_flush()` (at termination). 
+ *
+ * Since producing is asynchronous, you should call `rd_kafka_flush()` before
+ * you destroy the producer. Otherwise, any outstanding messages will be
+ * silently discarded.
+ *
+ * When temporary errors occur, librdkafka automatically retries to produce the
+ * messages. Retries are triggered after retry.backoff.ms and when the
+ * leader broker for the given partition is available. Otherwise, librdkafka
+ * falls back to polling the topic metadata to monitor when a new leader is
+ * elected (see the topic.metadata.refresh.fast.interval.ms and
+ * topic.metadata.refresh.interval.ms configurations) and then performs a
+ * retry. A delivery error will occur if the message could not be produced
+ * within message.timeout.ms.
+ *
+ * See the "Message reliability" chapter in INTRODUCTION.md for more
+ * information.
  *
  * \p partition is the target partition, either:
  *   - RD_KAFKA_PARTITION_UA (unassigned) for

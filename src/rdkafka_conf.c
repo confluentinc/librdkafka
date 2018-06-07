@@ -852,7 +852,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Local message timeout. "
 	  "This value is only enforced locally and limits the time a "
 	  "produced message waits for successful delivery. "
-          "A time of 0 is infinite.",
+	  "A time of 0 is infinite. "
+	  "This is the maximum time librdkafka may use to deliver a message "
+	  "(including retries). Delivery error occurs when either the retry "
+	  "count or the message timeout are exceeded.",
 	  0, 900*1000, 300*1000 },
         { _RK_TOPIC|_RK_PRODUCER, "queuing.strategy", _RK_C_S2I,
           _RKT(queuing_strategy),

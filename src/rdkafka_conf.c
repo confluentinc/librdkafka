@@ -40,6 +40,10 @@
 #include "rdkafka_plugin.h"
 #endif
 
+#ifndef _MSC_VER
+#include <netinet/tcp.h>
+#endif
+
 struct rd_kafka_property {
 	rd_kafka_conf_scope_t scope;
 	const char *name;
@@ -289,14 +293,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(socket_rcvbuf_size),
 	  "Broker socket receive buffer size. System default is used if 0.",
 	  0, 100000000, 0 },
+#ifdef SO_KEEPALIVE
 	{ _RK_GLOBAL, "socket.keepalive.enable", _RK_C_BOOL,
 	  _RK(socket_keepalive),
           "Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets",
           0, 1, 0 },
+#endif
+#ifdef TCP_NODELAY
 	{ _RK_GLOBAL, "socket.nagle.disable", _RK_C_BOOL,
 	  _RK(socket_nagle_disable),
-          "Disable the Nagle algorithm (TCP_NODELAY).",
+          "Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.",
           0, 1, 0 },
+#endif
         { _RK_GLOBAL, "socket.max.fails", _RK_C_INT,
           _RK(socket_max_fails),
           "Disconnect from broker when this number of send failures "

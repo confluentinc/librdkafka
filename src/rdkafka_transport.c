@@ -55,6 +55,7 @@
 #define socket_errno WSAGetLastError()
 #else
 #include <sys/socket.h>
+#include <netinet/tcp.h>
 #define socket_errno errno
 #define SOCKET_ERROR -1
 #endif
@@ -1283,15 +1284,15 @@ static void rd_kafka_transport_connected (rd_kafka_transport_t *rktrans) {
 
 
 #ifdef TCP_NODELAY
-	if (rkb->rkb_rk->rk_conf.socket_nagle_disable) {
-		int one = 1;
-		if (setsockopt(rktrans->rktrans_s, IPPROTO_TCP, TCP_NODELAY,
-			       (void *)&one, sizeof(one)) == SOCKET_ERROR)
-			rd_rkb_log(rkb, LOG_WARNING, "NAGLE",
-				   "Failed to disable Nagle (TCP_NODELAY) "
-				   "on socket %d: %s",
-				   socket_strerror(socket_errno));
-	}
+        if (rkb->rkb_rk->rk_conf.socket_nagle_disable) {
+                int one = 1;
+                if (setsockopt(rktrans->rktrans_s, IPPROTO_TCP, TCP_NODELAY,
+                               (void *)&one, sizeof(one)) == SOCKET_ERROR)
+                        rd_rkb_log(rkb, LOG_WARNING, "NAGLE",
+                                   "Failed to disable Nagle (TCP_NODELAY) "
+                                   "on socket: %s",
+                                   socket_strerror(socket_errno));
+        }
 #endif
 
 
@@ -1499,20 +1500,16 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 			   socket_strerror(socket_errno));
 #endif
 
-	/* Enable TCP keep-alives, if configured. */
-	if (rkb->rkb_rk->rk_conf.socket_keepalive) {
 #ifdef SO_KEEPALIVE
-		if (setsockopt(s, SOL_SOCKET, SO_KEEPALIVE,
-			       (void *)&on, sizeof(on)) == SOCKET_ERROR)
-			rd_rkb_dbg(rkb, BROKER, "SOCKET",
-				   "Failed to set SO_KEEPALIVE: %s",
-				   socket_strerror(socket_errno));
-#else
-		rd_rkb_dbg(rkb, BROKER, "SOCKET",
-			   "System does not support "
-			   "socket.keepalive.enable (SO_KEEPALIVE)");
+        /* Enable TCP keep-alives, if configured. */
+        if (rkb->rkb_rk->rk_conf.socket_keepalive) {
+                if (setsockopt(s, SOL_SOCKET, SO_KEEPALIVE,
+                               (void *)&on, sizeof(on)) == SOCKET_ERROR)
+                        rd_rkb_dbg(rkb, BROKER, "SOCKET",
+                                   "Failed to set SO_KEEPALIVE: %s",
+                                   socket_strerror(socket_errno));
+        }
 #endif
-	}
 
         /* Set the socket to non-blocking */
         if ((r = rd_fd_set_nonblocking(s))) {

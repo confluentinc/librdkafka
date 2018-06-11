@@ -116,19 +116,28 @@ int rd_kafka_timer_stop (rd_kafka_timers_t *rkts, rd_kafka_timer_t *rtmr,
 
 
 /**
- * Start the provided timer with the given interval.
+ * @brief Start the provided timer with the given interval.
+ *
  * Upon expiration of the interval (us) the callback will be called in the
  * main rdkafka thread, after callback return the timer will be restarted.
+ *
+ * @param oneshot just fire the timer once.
+ * @param restart if timer is already started, restart it.
  *
  * Use rd_kafka_timer_stop() to stop a timer.
  */
 void rd_kafka_timer_start0 (rd_kafka_timers_t *rkts,
                             rd_kafka_timer_t *rtmr, rd_ts_t interval,
-                            rd_bool_t oneshot,
+                            rd_bool_t oneshot, rd_bool_t restart,
                             void (*callback) (rd_kafka_timers_t *rkts,
                                               void *arg),
                             void *arg) {
 	rd_kafka_timers_lock(rkts);
+
+        if (!restart && rd_kafka_timer_scheduled(rtmr)) {
+                rd_kafka_timers_unlock(rkts);
+                return;
+        }
 
 	rd_kafka_timer_stop(rkts, rtmr, 0/*!lock*/);
 

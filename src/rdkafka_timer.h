@@ -62,14 +62,14 @@ int rd_kafka_timer_stop (rd_kafka_timers_t *rkts,
                          rd_kafka_timer_t *rtmr, int lock);
 void rd_kafka_timer_start0 (rd_kafka_timers_t *rkts,
                             rd_kafka_timer_t *rtmr, rd_ts_t interval,
-                            rd_bool_t oneshot,
+                            rd_bool_t oneshot, rd_bool_t restart,
                             void (*callback) (rd_kafka_timers_t *rkts,
                                               void *arg),
                             void *arg);
 #define rd_kafka_timer_start(rkts,rtmr,interval,callback,arg) \
-        rd_kafka_timer_start0(rkts,rtmr,interval,rd_false,callback,arg)
-#define rd_kafka_timer_start_oneshot(rkts,rtmr,interval,callback,arg)   \
-        rd_kafka_timer_start0(rkts,rtmr,interval,rd_true,callback,arg)
+        rd_kafka_timer_start0(rkts,rtmr,interval,rd_false,rd_true,callback,arg)
+#define rd_kafka_timer_start_oneshot(rkts,rtmr,restart,interval,callback,arg) \
+        rd_kafka_timer_start0(rkts,rtmr,interval,rd_true,restart,callback,arg)
 
 void rd_kafka_timer_backoff (rd_kafka_timers_t *rkts,
 			     rd_kafka_timer_t *rtmr, int backoff_us);

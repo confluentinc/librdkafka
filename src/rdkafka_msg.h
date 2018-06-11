@@ -51,7 +51,6 @@
 #define RD_KAFKA_MSG_ATTR_CREATE_TIME      (0 << 3)
 #define RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME  (1 << 3)
 
-
 /**
  * @brief MessageSet.Attributes for MsgVersion v2
  *
@@ -503,7 +502,7 @@ void rd_kafka_msgq_move_acked (rd_kafka_msgq_t *dest, rd_kafka_msgq_t *src,
                                rd_kafka_msg_status_t status);
 
 int rd_kafka_msg_partitioner (rd_kafka_itopic_t *rkt, rd_kafka_msg_t *rkm,
-                              int do_lock);
+                              rd_dolock_t do_lock);
 
 
 rd_kafka_message_t *rd_kafka_message_get (struct rd_kafka_op_s *rko);

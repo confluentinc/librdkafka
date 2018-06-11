@@ -47,7 +47,7 @@
 #include "rdsysqueue.h"
 #include "rdkafka_sasl_oauthbearer.h"
 #include "rdkafka_msgset.h"
-
+#include "rdkafka_txnmgr.h"
 
 rd_bool_t rd_unittest_assert_on_failure = rd_false;
 rd_bool_t rd_unittest_on_ci = rd_false;
@@ -498,6 +498,9 @@ int rd_unittest (void) {
         }
 
 #if ENABLE_CODECOV
+#if FIXME /* This check only works if all tests that use coverage checks
+           * are run, which we can't really know, so disable until we
+           * know what to do with this. */
         if (!match) {
                 /* Verify all code paths were covered */
                 int cov_fails = 0;
@@ -509,6 +512,7 @@ int rd_unittest (void) {
                         RD_UT_SAY("%d code coverage failure(s) (ignored)\n",
                                   cov_fails);
         }
+#endif
 #endif
 
         return fails;

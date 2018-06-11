@@ -44,6 +44,10 @@
 #include "crc32c.h"
 
 
+/** @brief The maxium ProduceRequestion ApiVersion supported by librdkafka */
+static const int16_t rd_kafka_ProduceRequest_max_version = 7;
+
+
 typedef struct rd_kafka_msgset_writer_s {
         rd_kafka_buf_t *msetw_rkbuf;     /* Backing store buffer (refcounted)*/
 
@@ -94,12 +98,14 @@ typedef struct rd_kafka_msgset_writer_s {
  * @brief Select ApiVersion and MsgVersion to use based on broker's
  *        feature compatibility.
  *
+ * @returns -1 if a MsgVersion (or ApiVersion) could not be selected, else 0.
  * @locality broker thread
  */
-static RD_INLINE void
+static RD_INLINE int
 rd_kafka_msgset_writer_select_MsgVersion (rd_kafka_msgset_writer_t *msetw) {
         rd_kafka_broker_t *rkb = msetw->msetw_rkb;
         rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
+        const int16_t max_ApiVersion = rd_kafka_ProduceRequest_max_version;
         int16_t min_ApiVersion = 0;
         int feature;
         /* Map compression types to required feature and ApiVersion */
@@ -194,11 +200,33 @@ rd_kafka_msgset_writer_select_MsgVersion (rd_kafka_msgset_writer_t *msetw) {
         /* Set the highest ApiVersion supported by us and broker */
         msetw->msetw_ApiVersion = rd_kafka_broker_ApiVersion_supported(
                 rkb,
-                RD_KAFKAP_Produce, min_ApiVersion, 7, NULL);
+                RD_KAFKAP_Produce, min_ApiVersion, max_ApiVersion, NULL);
+
+        if (msetw->msetw_ApiVersion == -1) {
+                rd_kafka_msg_t *rkm;
+                /* This will only happen if the broker reports none, or
+                 * no matching ProduceRequest versions, which should never
+                 * happen. */
+                rd_rkb_log(rkb, LOG_ERR, "PRODUCE",
+                           "%.*s [%"PRId32"]: "
+                           "No viable ProduceRequest ApiVersions (v%d..%d) "
+                           "supported by broker: unable to produce",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition,
+                           min_ApiVersion, max_ApiVersion);
+
+                /* Back off and retry in 5s */
+                rkm = rd_kafka_msgq_first(msetw->msetw_msgq);
+                rd_assert(rkm);
+                rkm->rkm_u.producer.ts_backoff = rd_clock() + (5 * 1000*1000);
+                return -1;
+        }
 
         /* It should not be possible to get a lower version than requested,
          * otherwise the logic in this function is buggy. */
         rd_assert(msetw->msetw_ApiVersion >= min_ApiVersion);
+
+        return 0;
 }
 
 
@@ -491,7 +519,8 @@ static int rd_kafka_msgset_writer_init (rd_kafka_msgset_writer_t *msetw,
         rd_dassert(msetw->msetw_msgcntmax > 0);
 
         /* Select MsgVersion to use */
-        rd_kafka_msgset_writer_select_MsgVersion(msetw);
+        if (rd_kafka_msgset_writer_select_MsgVersion(msetw) == -1)
+                return -1;
 
         /* Allocate backing buffer */
         rd_kafka_msgset_writer_alloc_buf(msetw);
@@ -907,7 +936,9 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
          * or we can't guarantee exactly-once delivery.
          * If this check fails we raise a fatal error since
          * it is unrecoverable and most likely caused by a bug
-         * in the client implementation. */
+         * in the client implementation.
+         * This should not be considered an abortable error for
+         * the transactional producer. */
         if (msgcnt > 0 && msetw->msetw_batch->last_msgid) {
                 rd_kafka_msg_t *lastmsg;
 
@@ -1268,6 +1299,10 @@ rd_kafka_msgset_writer_finalize_MessageSet_v2_header (
 
         msetw->msetw_Attributes |= RD_KAFKA_MSG_ATTR_CREATE_TIME;
 
+        if (rd_kafka_is_transactional(msetw->msetw_rkb->rkb_rk))
+                msetw->msetw_Attributes |=
+                        RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL;
+
         rd_kafka_buf_update_i16(rkbuf, msetw->msetw_of_start +
                                 RD_KAFKAP_MSGSET_V2_OF_Attributes,
                                 msetw->msetw_Attributes);
@@ -1423,7 +1458,7 @@ rd_kafka_msgset_create_ProduceRequest (rd_kafka_broker_t *rkb,
 
         rd_kafka_msgset_writer_t msetw;
 
-        if (rd_kafka_msgset_writer_init(&msetw, rkb, rktp, rkmq, pid) == 0)
+        if (rd_kafka_msgset_writer_init(&msetw, rkb, rktp, rkmq, pid) <= 0)
                 return NULL;
 
         if (!rd_kafka_msgset_writer_write_msgq(&msetw, msetw.msetw_msgq)) {

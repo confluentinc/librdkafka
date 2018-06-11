@@ -95,6 +95,7 @@ set(
     0101-fetch-from-follower.cpp
     0102-static_group_rebalance.c
     0104-fetch_from_follower_mock.c
+    0105-transactions_mock.c
     8000-idle.cpp
     test.c
     testcpp.cpp

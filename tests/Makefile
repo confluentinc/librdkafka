@@ -68,6 +68,8 @@ idempotent_seq: $(BIN)
 
 idempotent: idempotent_par
 
+transactions: $(BIN)
+	for _test in 0098 0101; do TESTS=$$_test ./run-test.sh ./$(BIN) ; done
 
 # Run unit tests
 unit: $(BIN)

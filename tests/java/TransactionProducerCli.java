@@ -29,13 +29,13 @@ public class TransactionProducerCli {
         DontFlush
     }
 
-    static Producer<byte[], byte[]> createProducer(String id, String brokerList, boolean transactional) {
+    static Producer<byte[], byte[]> createProducer(String testid, String id, String brokerList, boolean transactional) {
         Properties producerConfig = new Properties();
         producerConfig.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
         producerConfig.put(ProducerConfig.CLIENT_ID_CONFIG, transactional ? "transactional-producer-" + id : "producer-" + id);
         producerConfig.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
         if (transactional) {
-            producerConfig.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "test-transactional-id-" + id);
+            producerConfig.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "test-transactional-id-" + testid + "-" + id);
         }
         producerConfig.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer");
         producerConfig.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer");
@@ -87,6 +87,7 @@ public class TransactionProducerCli {
         HashMap<String, Producer<byte[], byte[]>> producers = new HashMap<String, Producer<byte[], byte[]>>();
 
         String topic = null;
+        String testid = null;
 
         /* Parse commands */
         for (int i = 1 ; i < args.length ; i++) {
@@ -103,11 +104,14 @@ public class TransactionProducerCli {
             } else if (cmd[0].equals("topic")) {
                 topic = cmd[1];
 
+            } else if (cmd[0].equals("testid")) {
+                testid = cmd[1];
+
             } else if (cmd[0].startsWith("producer")) {
                 Producer<byte[], byte[]> producer = producers.get(cmd[0]);
 
                 if (producer == null) {
-                    producer = createProducer(cmd[0], bootstrapServers,
+                    producer = createProducer(testid, cmd[0], bootstrapServers,
                                               TransactionType.valueOf(cmd[4]) != TransactionType.None);
                     producers.put(cmd[0], producer);
                 }

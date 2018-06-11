@@ -271,7 +271,7 @@ typedef enum {
 	/** Produced message timed out*/
 	RD_KAFKA_RESP_ERR__MSG_TIMED_OUT = -192,
 	/** Reached the end of the topic+partition queue on
-	 * the broker. Not really an error. 
+	 * the broker. Not really an error.
 	 * This event is disabled by default,
 	 * see the `enable.partition.eof` configuration property. */
 	RD_KAFKA_RESP_ERR__PARTITION_EOF = -191,
@@ -365,6 +365,10 @@ typedef enum {
         RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED = -147,
         /** Unknown broker */
         RD_KAFKA_RESP_ERR__UNKNOWN_BROKER = -146,
+        /** Functionality not configured */
+        RD_KAFKA_RESP_ERR__NOT_CONFIGURED = -145,
+        /** Instance has been fenced */
+        RD_KAFKA_RESP_ERR__FENCED = -144,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -3709,6 +3713,8 @@ rd_kafka_position (rd_kafka_t *rk,
  *               (RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
  *  - ECANCELED - fatal error has been raised on producer, see
  *                rd_kafka_fatal_error().
+ *  - ENOEXEC  - transactional state forbids producing
+ *               (RD_KAFKA_RESP_ERR__STATE)
  *
  * @sa Use rd_kafka_errno2err() to convert `errno` to rdkafka error code.
  */
@@ -6237,6 +6243,351 @@ rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
 RD_EXPORT
 rd_kafka_resp_err_t
 rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr);
+
+/**@}*/
+
+
+/**
+ * @name Transactional producer API
+ *
+ * The transactional producer operates on top of the idempotent producer,
+ * and provides full exactly-once semantics (EOS) for Kafka when used with
+ * the transaction aware consumer (\c isolation.level=read_committed).
+ *
+ * A producer instance is configured for transactions by setting the
+ * \c transactional.id to an identifier unique for the application. This
+ * id will be used to fence stale transactions from previous instances of
+ * the application, typically following an outage or crash.
+ *
+ * After creating the transactional produce instance using rd_kafka_new()
+ * the transactional state must be initialized by calling
+ * rd_kafka_init_transactions(). This is a blocking call that will
+ * acquire a runtime producer id from the transaction coordinator broker
+ * as well as abort any stale transactions and fence any still running producer
+ * instances with the same \c transactional.id.
+ *
+ * Once transactions are initialized the application may begin a new
+ * transaction by calling rd_kafka_begin_transaction().
+ * A prodoucer instance may only have one single ongoing transaction.
+ *
+ * Any messages produced after the transaction has been started will
+ * belong to the ongoing transaction and will be committed or aborted
+ * atomatically.
+ * It is not permitted to produce messages outside a transaction
+ * boundary, e.g., before rd_kafka_begin_transaction() or after
+ * rd_kafka_commit_transaction() or rd_kafka_abort_transaction().
+ *
+ * If consumed messages are used as input to the transaction, the consumer
+ * instance must be configured with \c enable.auto.commit set to \c false.
+ * To commit the consumed offsets along with the transaction pass the
+ * list of consumed partitions and the last offset processed to
+ * rd_kafka_send_offsets_to_transaction() prior to committing the transaction.
+ * This allows an aborted transaction to be restarted using the previously
+ * committed offsets.
+ *
+ * To commit the produced messages, and any consumed offsets, to the
+ * current transaction, call rd_kafka_commit_transaction().
+ * This call will block until the transaction has been fully committed or
+ * failed (typically due to fencing by a newer producer instance).
+ *
+ * Alternatively, if processing fails, or an abortable transaction error is
+ * raised, the transaction needs to be aborted by calling
+ * rd_kafka_abort_transaction() which marks any produced messages and
+ * offset commits as aborted.
+ *
+ * After the current transaction has been committed or aborted a new
+ * transaction may be started by calling rd_kafka_begin_transaction() again.
+ *
+ * \par Abortable errors
+ * An ongoing transaction may fail permanently due to various errors,
+ * such as transaction coordinator becoming unavailable, write failures to the
+ * Kafka log, under-replicated partitions, etc.
+ * At this point the producer application should abort the current transaction
+ * using rd_kafka_abort_transaction() and optionally start a new transaction
+ * by calling rd_kafka_begin_transaction().
+ *
+ * \par Fatal errors
+ * While the underlying idempotent producer will typically only raise
+ * fatal errors for unrecoverable cluster errors where the idempotency
+ * guarantees can't be maintained, most of these are treated as abortable by 
+ * the transactional producer since transactions may be aborted and retried
+ * in their entirety;
+ * The transactional producer on the other hand introduces a set of new
+ * fatal errors which the application should take care to handle:
+ *
+ *  * RD_KAFKA_RESP_ERR__FENCED - a newer instance of the producer with the
+ *    same \c transactional.id has been started and the current instance 
+ *    should terminate.
+ *
+ * These fatal errors are raised by trigger the \c error_cb (see the
+ * Fatal error chapter in INTRODUCTION.md for more information) , and any
+ * sub-sequent transactional API calls will return FIXME (what error??).
+ *
+ * @{
+ */
+
+
+/**
+ * @brief Initialize transactions for the producer instance.
+ *
+ * Needs to be called before any other methods when the \c transactional.id
+ * is configured.
+ *
+ * This function ensures any transactions initiated by previous instances
+ * of the producer with the same \c transactional.id are completed.
+ * If the previous instance failed with a transaction in progress the
+ * previous transaction will be aborted.
+ *
+ * If the last transaction had begun completion (following transaction commit)
+ * but not yet finished, this function will await the previous transaction's
+ * completion.
+ *
+ * When any previous transactions have been fenced this function
+ * will acquire the internal producer id and epoch, used in all future
+ * transactional messages issued by this producer instance.
+ *
+ * Upon successful return from this function the application has to perform at
+ * least one of the following operations within \c transactional.timeout.ms to
+ * avoid timing out the transaction on the broker:
+ *   * rd_kafka_produce() (et.al)
+ *   * rd_kafka_send_offsets_to_transaction()
+ *   * rd_kafka_commit_transaction()
+ *   * rd_kafka_abort_transaction()
+ *
+ * @param rk Producer instance.
+ * @param timeout_ms The maximum time to block. On timeout the operation
+ *                   may continue in the background, depending on state,
+ *                   and it is okay to call init_transactions() again.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written to if there is a fatal error.
+ * @param errstr_size Writable size in \p errstr.
+ *
+ * @remark This function may block up to \p timeout_ms milliseconds.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction coordinator
+ *          could be not be contacted within \p timeout_ms (retryable),
+ *          RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE if the transaction
+ *          coordinator is not available (retryable),
+ *          RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS if a previous transaction
+ *          would not complete within \p timeout_ms (retryable),
+ *          RD_KAFKA_RESP_ERR__STATE if transactions have already been started
+ *          or upon fatal error,
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
+ *          or \p timeout_ms is out of range.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_init_transactions (rd_kafka_t *rk, int timeout_ms,
+                            char *errstr, size_t errstr_size);
+
+
+
+/**
+ * @brief Begin a new transaction.
+ *
+ * rd_kafka_init_transactions() must have been called successfully (once)
+ * before this function is called.
+ *
+ * Any messages produced, offsets sent (rd_kafka_send_offsets_to_transaction()),
+ * etc, after the successful return of this function will be part of
+ * the transaction and committed or aborted atomatically.
+ *
+ * Finish the transaction by calling rd_kafka_commit_transaction() or
+ * abort the transaction by calling rd_kafka_abort_transaction().
+ *
+ * @param rk Producer instance.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written to if there is a fatal error.
+ * @param errstr_size Writable size in \p errstr.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__STATE if a transaction is already in progress
+ *          or upon fatal error,
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance.
+ *
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_begin_transaction (rd_kafka_t *rk,
+                                                char *errstr,
+                                                size_t errstr_size);
+
+
+/**
+ * @brief Sends a list of topic partition offsets to the consumer group
+ *        coordinator for \p consumer_group_id, and marks the offsets as part
+ *        part of the current transaction.
+ *        These offsets will be considered committed only if the transaction is
+ *        committed successfully.
+ *
+ *        The offsets should be the next message your application will consume,
+ *        i.e., the last processed message's offset + 1 for each partition.
+ *        Either track the offsets manually during processing or use
+ *        rd_kafka_position() (on the consumer) to get the current offsets for
+ *        the partitions assigned to the consumer.
+ *
+ *        Use this method at the end of a consume-transform-produce loop prior
+ *        to committing the transaction with rd_kafka_commit_transaction().
+ *
+ * @param rk Producer instance.
+ * @param offsets List of offsets to commit to the consumer group upon
+ *                successful commit of the transaction. Offsets should be
+ *                the next message to consume, e.g., last processed message + 1.
+ * @param consumer_group_id The \c group.id of the consumer group.
+ * @param timeout_ms FIXME
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written to if there is a fatal error.
+ * @param errstr_size Writable size in \p errstr.
+ *
+ * @remark This function must be called on the transactional producer instance,
+ *         not the consumer.
+ *
+ * @remark The consumer must disable auto commits
+ *         (set \c enable.auto.commit to false on the consumer).
+ *
+ * @remark Logical and invalid offsets (such as RD_KAFKA_OFFSET_INVALID) in
+ *         \p offsets will be ignored, if there are no valid offsets in
+ *         \p offsets the function will return RD_KAFKA_RESP_ERR_NO_ERROR
+ *         and no action will be taken.
+ *
+ * @remark This function will block until the offsets are registered on the
+ *         broker.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
+ *          RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH if the current producer
+ *          transaction has been fenced by a newer producer instance,
+ *           ^ FIXME: or ERR__FENCED
+ *          RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED if the
+ *          producer is no longer authorized to perform transactional
+ *          operations,
+ *          RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED if the producer is
+ *          not authorized to write the consumer offsets to the group
+ *          coordinator,
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
+ *          or if the \p consumer_group_id or \p offsets are empty.
+ *
+ * FIXME: add more broker-induced error codes
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_send_offsets_to_transaction (
+        rd_kafka_t *rk,
+        const rd_kafka_topic_partition_list_t *offsets,
+        const char *consumer_group_id, int timeout_ms,
+        char *errstr, size_t errstr_size);
+
+
+/**
+ * @brief Commit the current transaction (as started with
+ *        rd_kafka_begin_transaction()).
+ *
+ *        Any outstanding messages will be flushed (delivered) before actually
+ *        committing the transaction.
+ *
+ *        If any of the outstanding messages fail permanently the current
+ *        transactional will enter the abortable error state and this
+ *        function will return FIXME, in this case the application
+ *        must call rd_kafka_abort_transaction() before attempting a new
+ *        transaction with rd_kafka_begin_transaction().
+ *
+ * @param rk Producer instance.
+ * @param timeout_ms The maximum time to block. On timeout the operation
+ *                   may continue in the background, depending on state,
+ *                   and it is okay to call this function again.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written to if there is a fatal error.
+ * @param errstr_size Writable size in \p errstr.
+ *
+ * @remark This function will block until all outstanding messages are
+ *         delivered and the transaction commit request has been successfully
+ *         handled by the transaction coordinator, or until \p timeout_ms
+ *         expires, which ever comes first. On timeout the application may
+ *         call the function again.
+ *
+ * @remark Will automatically call rd_kafka_flush() to ensure all queued
+ *         messages are delivered before attempting to commit the
+ *         transaction.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
+ *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction could not be
+ *          complete commmitted within \p timeout_ms, this is a retryable
+ *          error as the commit continues in the background,
+ *          RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH if the current producer
+ *          transaction has been fenced by a newer producer instance,
+ *           ^ FIXME: or ERR__FENCED
+ *          RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED if the
+ *          producer is no longer authorized to perform transactional
+ *          operations,
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
+ *
+ * FIXME: more errors
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_commit_transaction (rd_kafka_t *rk, int timeout_ms,
+                             char *errstr, size_t errstr_size);
+
+
+/**
+ * @brief Aborts the ongoing transaction.
+ *
+ *        This function should also be used to recover from non-fatal abortable
+ *        transaction errors.
+ *
+ *        Any outstanding messages will be purged and fail with
+ *        RD_KAFKA_RESP_ERR__PURGE_INFLIGHT or RD_KAFKA_RESP_ERR__PURGE_QUEUE.
+ *        See rd_kafka_purge() for details.
+ *
+ * @param rk Producer instance.
+ * @param timeout_ms The maximum time to block. On timeout the operation
+ *                   may continue in the background, depending on state,
+ *                   and it is okay to call this function again.
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written to if there is a fatal error.
+ * @param errstr_size Writable size in \p errstr.
+ *
+ * @remark This function will block until all outstanding messages are purged
+ *         and the transaction abort request has been successfully
+ *         handled by the transaction coordinator, or until \p timeout_ms
+ *         expires, which ever comes first. On timeout the application may
+ *         call the function again.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__STATE if not currently in a transaction,
+ *          RD_KAFKA_RESP_ERR__TIMED_OUT if the transaction could not be
+ *          complete commmitted within \p timeout_ms, this is a retryable
+ *          error as the commit continues in the background,
+ *          RD_KAFKA_RESP_ERR_INVALID_PRODUCER_EPOCH if the current producer
+ *          transaction has been fenced by a newer producer instance,
+ *           ^ FIXME: or ERR__FENCED
+ *          RD_KAFKA_RESP_ERR_TRANSACTIONAL_ID_AUTHORIZATION_FAILED if the
+ *          producer is no longer authorized to perform transactional
+ *          operations,
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED if transactions have not been
+ *          configured for the producer instance,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p rk is not a producer instance,
+ *
+ * FIXME: more errors
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_abort_transaction (rd_kafka_t *rk, int timeout_ms,
+                            char *errstr, size_t errstr_size);
 
 /**@}*/
 

@@ -1793,8 +1793,15 @@ err_reply:
 }
 
 
+/**
+ * @brief Pause/resume toppar.
+ *
+ * This is the internal handler of the pause/resume op.
+ *
+ * @locality toppar's handler thread
+ */
 static void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
-					  rd_kafka_op_t *rko_orig) {
+                                          rd_kafka_op_t *rko_orig) {
 	rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
 	int pause = rko_orig->rko_u.pause.pause;
 	int flag = rko_orig->rko_u.pause.flag;
@@ -2400,6 +2407,33 @@ rd_kafka_toppar_op_pause_resume (rd_kafka_toppar_t *rktp, int pause, int flag,
 }
 
 
+/**
+ * @brief Pause a toppar (asynchronous).
+ *
+ * @param flag is either RD_KAFKA_TOPPAR_F_APP_PAUSE or .._F_LIB_PAUSE
+ *             depending on if the app paused or librdkafka.
+ *
+ * @locality any
+ * @locks none needed
+ */
+void rd_kafka_toppar_pause (rd_kafka_toppar_t *rktp, int flag) {
+        rd_kafka_toppar_op_pause_resume(rktp, 1/*pause*/, flag,
+                                        RD_KAFKA_NO_REPLYQ);
+}
+
+/**
+ * @brief Resume a toppar (asynchronous).
+ *
+ * @param flag is either RD_KAFKA_TOPPAR_F_APP_PAUSE or .._F_LIB_PAUSE
+ *             depending on if the app paused or librdkafka.
+ *
+ * @locality any
+ * @locks none needed
+ */
+void rd_kafka_toppar_resume (rd_kafka_toppar_t *rktp, int flag) {
+        rd_kafka_toppar_op_pause_resume(rktp, 1/*pause*/, flag,
+                                        RD_KAFKA_NO_REPLYQ);
+}
 
 
 
@@ -3421,7 +3455,6 @@ rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktpar
                                    int fmt_flags) {
         int i;
         size_t of = 0;
-        int trunc = 0;
 
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 const rd_kafka_topic_partition_t *rktpar =
@@ -3429,12 +3462,6 @@ rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktpar
                 char errstr[128];
                 char offsetstr[32];
                 int r;
-
-                if (trunc) {
-                        if (dest_size > 4)
-                                rd_snprintf(&dest[dest_size-4], 4, "...");
-                        break;
-                }
 
                 if (!rktpar->err && (fmt_flags & RD_KAFKA_FMT_F_ONLY_ERR))
                         continue;
@@ -3461,10 +3488,12 @@ rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktpar
                                 offsetstr,
                                 errstr);
 
-                if ((size_t)r >= dest_size-of)
-                        trunc++;
-                else
-                        of += r;
+                if ((size_t)r >= dest_size-of) {
+                        rd_snprintf(&dest[dest_size-4], 4, "...");
+                        break;
+                }
+
+                of += r;
         }
 
         return dest;
@@ -3546,6 +3575,20 @@ void rd_kafka_topic_partition_list_set_err (
 
         for (i = 0 ; i < rktparlist->cnt ; i++)
                 rktparlist->elems[i].err = err;
+}
+
+/**
+ * @brief Get the first set error in the partition list.
+ */
+rd_kafka_resp_err_t rd_kafka_topic_partition_list_get_err (
+        const rd_kafka_topic_partition_list_t *rktparlist) {
+        int i;
+
+        for (i = 0 ; i < rktparlist->cnt ; i++)
+                if (rktparlist->elems[i].err)
+                        return rktparlist->elems[i].err;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 
@@ -3684,9 +3727,25 @@ int rd_kafka_toppar_handle_purge_queues (rd_kafka_toppar_t *rktp,
 
         rd_kafka_toppar_lock(rktp);
         rd_kafka_msgq_concat(&rkmq, &rktp->rktp_msgq);
+        cnt = rd_kafka_msgq_len(&rkmq);
+
+        if (purge_flags & RD_KAFKA_PURGE_F_ABORT_TXN) {
+                /* All messages in-queue are purged
+                 * on abort_transaction(). Since these messages
+                 * will not be produced (retried) we need to adjust the
+                 * idempotence epoch's base msgid to skip the messages. */
+                rktp->rktp_eos.epoch_base_msgid += cnt;
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
+                             TOPIC|RD_KAFKA_DBG_EOS, "ADVBASE",
+                             "%.*s [%"PRId32"] "
+                             "advancing epoch base msgid to %"PRIu64
+                             " due to %d message(s) in aborted transaction",
+                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                             rktp->rktp_partition,
+                             rktp->rktp_eos.epoch_base_msgid, cnt);
+        }
         rd_kafka_toppar_unlock(rktp);
 
-        cnt = rd_kafka_msgq_len(&rkmq);
         rd_kafka_dr_msgq(rktp->rktp_rkt, &rkmq, RD_KAFKA_RESP_ERR__PURGE_QUEUE);
 
         return cnt;

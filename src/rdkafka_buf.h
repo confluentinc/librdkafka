@@ -469,6 +469,19 @@ typedef void (rd_kafka_resp_cb_t) (rd_kafka_t *rk,
                                    rd_kafka_buf_t *request,
                                    void *opaque);
 
+
+/**
+ * @brief Sender callback. This callback is used to construct and send (enq)
+ *        a rkbuf on a particular broker.
+ */
+typedef rd_kafka_resp_err_t (rd_kafka_send_req_cb_t) (
+        rd_kafka_broker_t *rkb,
+        rd_kafka_op_t *rko,
+        rd_kafka_replyq_t replyq,
+        rd_kafka_resp_cb_t *resp_cb,
+        void *reply_opaque);
+
+
 struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	TAILQ_ENTRY(rd_kafka_buf_s) rkbuf_link;
 
@@ -521,8 +534,10 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 	rd_refcnt_t rkbuf_refcnt;
 	void   *rkbuf_opaque;
 
-	int     rkbuf_retries;            /* Retries so far. */
-#define RD_KAFKA_BUF_NO_RETRIES  1000000  /* Do not retry */
+        int     rkbuf_max_retries;        /**< Maximum retries to attempt. */
+#define RD_KAFKA_BUF_NO_RETRIES 0         /**< Do not retry */
+        int     rkbuf_retries;            /**< Retries so far. */
+
 
         int     rkbuf_features;   /* Required feature(s) that must be
                                    * supported by broker. */

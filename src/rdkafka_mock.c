@@ -916,9 +916,9 @@ rd_kafka_mock_connection_write_out (rd_kafka_mock_connection_t *mconn) {
                 if (rkbuf->rkbuf_ts_retry && rkbuf->rkbuf_ts_retry > now) {
                         /* Response is being delayed */
                         rd_kafka_timer_start_oneshot(
-                                &mconn->broker->cluster->
-                                timers,
+                                &mconn->broker->cluster->timers,
                                 &mconn->write_tmr,
+                                rd_false,
                                 rkbuf->rkbuf_ts_retry-now,
                                 rd_kafka_mock_connection_write_out_tmr_cb,
                                 mconn);

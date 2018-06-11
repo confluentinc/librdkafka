@@ -1001,6 +1001,7 @@ void rd_kafka_enq_once_trigger (rd_kafka_enq_once_t *eonce,
         }
 
         if (rko) {
+                rko->rko_err = err;
                 rd_kafka_replyq_enq(&replyq, rko, replyq.version);
                 rd_kafka_replyq_destroy(&replyq);
         }

@@ -60,6 +60,10 @@ run_local: $(BIN)
 	@echo "Running local broker-less tests with idempotent producer"
 	./run-test.sh -p5 -l -P
 
+run_local_quick: $(BIN)
+	@echo "Running quick local broker-less tests with idempotent producer"
+	./run-test.sh -p5 -l -Q -P
+
 idempotent_par: $(BIN)
 	./run-test.sh -p5 -P
 
@@ -68,6 +72,8 @@ idempotent_seq: $(BIN)
 
 idempotent: idempotent_par
 
+transactions: $(BIN)
+	for _test in 0098 0101; do TESTS=$$_test ./run-test.sh ./$(BIN) ; done
 
 # Run unit tests
 unit: $(BIN)

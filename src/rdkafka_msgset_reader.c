@@ -828,8 +828,8 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
                                 rd_rkb_log(msetr->msetr_rkb, LOG_ERR, "TXN",
                                         "%s [%"PRId32"]: "
                                         "Abort txn ctrl msg bad order "
-                                        "at offset %"PRId64". Expected "
-                                        "before or at %"PRId64". Messages "
+                                        "at offset %"PRId64": expected "
+                                        "before or at %"PRId64": messages "
                                         "in aborted transactions may be "
                                         "delivered to the application",
                                         rktp->rktp_rkt->rkt_topic->str,

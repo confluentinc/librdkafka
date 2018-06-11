@@ -708,7 +708,7 @@ rd_kafka_admin_worker (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
                                              "timeout timer");
                 rd_kafka_timer_start_oneshot(&rk->rk_timers,
                                              &rko->rko_u.admin_request.tmr,
-                                             timeout_in,
+                                             rd_true, timeout_in,
                                              rd_kafka_admin_eonce_timeout_cb,
                                              rko->rko_u.admin_request.eonce);
 

@@ -1271,7 +1271,7 @@ rd_kafka_mock_handle_AddOffsetsToTxn (rd_kafka_mock_connection_t *mconn,
                                                rkbuf->rkbuf_reqhdr.ApiKey);
 
         /* Response: ErrorCode */
-        rd_kafka_buf_write_i32(resp, err);
+        rd_kafka_buf_write_i16(resp, err);
 
         rd_kafka_mock_connection_send_response(mconn, rkbuf, resp);
 

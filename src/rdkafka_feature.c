@@ -47,6 +47,9 @@ static const char *rd_kafka_feature_names[] = {
         "ZSTD",
         "UnitTest",
         "SaslAuthReq",
+#ifdef RD_KAFKA_FEATURE_KIP360
+        "KIP-360",
+#endif
         NULL
 };
 
@@ -89,7 +92,6 @@ static const struct rd_kafka_feature_map {
                 },
         },
 	{
-		
 		/* @brief >=0.10.0: ApiVersionQuery support.
 		 * @remark This is a bit of chicken-and-egg problem but needs to be
 		 *         set by feature_check() to avoid the feature being cleared
@@ -202,6 +204,17 @@ static const struct rd_kafka_feature_map {
                         { -1 },
                 },
         },
+#ifdef RD_KAFKA_FEATURE_KIP360
+        {
+                /* @brief >=2.4.0: KIP-360 */
+                .feature = RD_KAFKA_FEATURE_KIP360,
+                .depends = {
+                        { RD_KAFKAP_InitProducerId, 2, 2 },
+                        { -1 },
+                },
+
+        },
+#endif
         { .feature = 0 }, /* sentinel */
 };
 

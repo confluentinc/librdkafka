@@ -134,6 +134,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_request (rd_kafka_broker_t *rkb, int16_t ApiKey
         rd_kafka_broker_keep(rkb);
 
         rkbuf->rkbuf_rel_timeout = rkb->rkb_rk->rk_conf.socket_timeout_ms;
+        rkbuf->rkbuf_max_retries = rkb->rkb_rk->rk_conf.max_retries;
 
         rkbuf->rkbuf_reqhdr.ApiKey = ApiKey;
 
@@ -349,11 +350,14 @@ void rd_kafka_buf_calc_timeout (const rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
 int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
         int incr_retry = rd_kafka_buf_was_sent(rkbuf) ? 1 : 0;
 
+        /* Don't allow retries of dummy/empty buffers */
+        rd_assert(rd_buf_len(&rkbuf->rkbuf_buf) > 0);
+
         if (unlikely(!rkb ||
 		     rkb->rkb_source == RD_KAFKA_INTERNAL ||
 		     rd_kafka_terminating(rkb->rkb_rk) ||
 		     rkbuf->rkbuf_retries + incr_retry >
-		     rkb->rkb_rk->rk_conf.max_retries))
+		     rkbuf->rkbuf_max_retries))
                 return 0;
 
         /* Absolute timeout, check for expiry. */
@@ -460,4 +464,5 @@ void rd_kafka_buf_callback (rd_kafka_t *rk,
 	if (response)
 		rd_kafka_buf_destroy(response);
 }
+
 

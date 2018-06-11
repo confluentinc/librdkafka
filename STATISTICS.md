@@ -209,11 +209,14 @@ assignment_size | int gauge | | Current assignment's partition count.
 
 Field | Type | Example | Description
 ----- | ---- | ------- | -----------
-idemp_state | string | "Assigned" | Current idempotent producer id state
-idemp_stateage | int gauge | | Time elapsed since last idemp_state change (milliseconds)
-producer_id | int gauge | | The currently assigned Producer ID (or -1)
-producer_epoch | int gauge | | The current epoch (or -1)
-epoch_cnt | int | | The number of Producer ID assignments since start
+idemp_state | string | "Assigned" | Current idempotent producer id state.
+idemp_stateage | int gauge | | Time elapsed since last idemp_state change (milliseconds).
+txn_state | string | "InTransaction" | Current transactional producer state.
+txn_stateage | int gauge | | Time elapsed since last txn_state change (milliseconds).
+txn_may_enq | bool | | Transactional state allows enqueuing (producing) new messages.
+producer_id | int gauge | | The currently assigned Producer ID (or -1).
+producer_epoch | int gauge | | The current epoch (or -1).
+epoch_cnt | int | | The number of Producer ID assignments since start.
 
 
 # Example output

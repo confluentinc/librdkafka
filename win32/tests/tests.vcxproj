@@ -184,7 +184,9 @@
     <ClCompile Include="..\..\tests\0100-thread_interceptors.cpp" />
     <ClCompile Include="..\..\tests\0101-fetch-from-follower.cpp" />
     <ClCompile Include="..\..\tests\0102-static_group_rebalance.c" />
+    <ClCompile Include="..\..\tests\0103-transactions.c" />
     <ClCompile Include="..\..\tests\0104-fetch_from_follower_mock.c" />
+    <ClCompile Include="..\..\tests\0105-transactions_mock.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

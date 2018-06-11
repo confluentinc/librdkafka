@@ -60,6 +60,15 @@ typedef enum {
 } rd_async_t;
 
 
+/**
+ * @enum Instruct function to acquire or not to acquire a lock
+ */
+typedef enum {
+        RD_DONT_LOCK = 0,  /**< Do not acquire lock */
+        RD_DO_LOCK = 1,    /**< Do acquire lock */
+} rd_dolock_t;
+
+
 /*
  * Helpers
  */

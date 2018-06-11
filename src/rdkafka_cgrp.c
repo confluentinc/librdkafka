@@ -419,7 +419,7 @@ static void rd_kafka_cgrp_handle_FindCoordinator (rd_kafka_t *rk,
 
                         rd_kafka_buf_read_str(rkbuf, &ErrorMsg);
 
-                        if (RD_KAFKAP_STR_IS_NULL(&ErrorMsg))
+                        if (!RD_KAFKAP_STR_IS_NULL(&ErrorMsg))
                                 RD_KAFKAP_STR_DUPA(&errstr, &ErrorMsg);
                 }
 
@@ -440,7 +440,7 @@ static void rd_kafka_cgrp_handle_FindCoordinator (rd_kafka_t *rk,
                    "Group \"%.*s\" coordinator is %s:%i id %"PRId32,
                    RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                    mdb.host, mdb.port, mdb.id);
-        rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto, &mdb);
+        rd_kafka_broker_update(rkb->rkb_rk, rkb->rkb_proto, &mdb, NULL);
 
         rd_kafka_cgrp_coord_update(rkcg, CoordId);
         rd_kafka_cgrp_serve(rkcg); /* Serve updated state, if possible */
@@ -498,8 +498,8 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
         rd_kafka_resp_err_t err;
 
 	rd_kafka_rdlock(rkcg->rkcg_rk);
-	rkb = rd_kafka_broker_any(rkcg->rkcg_rk, RD_KAFKA_BROKER_STATE_UP,
-				  rd_kafka_broker_filter_can_group_query, NULL,
+        rkb = rd_kafka_broker_any(rkcg->rkcg_rk, RD_KAFKA_BROKER_STATE_UP,
+                                  rd_kafka_broker_filter_can_coord_query, NULL,
                                   "coordinator query");
 	rd_kafka_rdunlock(rkcg->rkcg_rk);
 

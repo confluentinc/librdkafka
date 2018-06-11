@@ -281,6 +281,10 @@ enum ErrorCode {
         ERR__MAX_POLL_EXCEEDED = -147,
         /** Unknown broker */
         ERR__UNKNOWN_BROKER = -146,
+        /** Functionality not configured */
+        ERR__NOT_CONFIGURED = -145,
+        /** Instance has been fenced */
+        ERR__FENCED = -144,
 
         /** End internal error codes */
 	ERR__END = -100,
@@ -2917,6 +2921,48 @@ class RD_EXPORT Producer : public virtual Handle {
                               * purging to finish. */
   };
 
+  /**
+   * Transactional API
+   *
+   * Requires Kafka broker version v0.11.0 or later
+   */
+
+  /**
+   * @brief
+   *
+   * @fixme blocking?
+   */
+  virtual ErrorCode init_transactions (int timeout_ms,
+                                       std::string &errstr) = 0;
+
+  /**
+   * @fixme blocking?
+   */
+  virtual ErrorCode begin_transaction (std::string &errstr) = 0;
+
+  /**
+   * @fixme blocking?
+   */
+  virtual ErrorCode send_offsets_to_transaction (
+          const std::vector<TopicPartition*> &offsets,
+          const std::string &group_id,
+          std::string &errstr) = 0;
+
+  /**
+   * @brief
+   *
+   * @fixme blocking?
+   */
+  virtual ErrorCode commit_transaction (int timeout_ms,
+                                        std::string &errstr) = 0;
+
+  /**
+   * @brief
+   *
+   * @fixme blocking?
+   */
+  virtual ErrorCode abort_transaction (int timeout_ms,
+                                       std::string &errstr) = 0;
 };
 
 /**@}*/

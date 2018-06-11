@@ -567,6 +567,11 @@ rd_kafka_msgset_reader_msg_v0_1 (rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_buf_read_i32(rkbuf, &hdr.MessageSize);
         message_end = rd_slice_offset(&rkbuf->rkbuf_reader) + hdr.MessageSize;
 
+        rd_rkb_dbg(rkb, MSG, "READMSG",
+                   "offset %"PRId64" slice offset %zu/%zu MessageSize %d = %zu",
+                   hdr.Offset, rd_slice_offset(&rkbuf->rkbuf_reader),
+                   rd_slice_size(&rkbuf->rkbuf_reader),
+                   hdr.MessageSize, message_end);
         rd_kafka_buf_read_i32(rkbuf, &hdr.Crc);
         if (!rd_slice_narrow_copy_relative(&rkbuf->rkbuf_reader, &crc_slice,
                                            hdr.MessageSize - 4))
@@ -828,8 +833,8 @@ rd_kafka_msgset_reader_msg_v2 (rd_kafka_msgset_reader_t *msetr) {
                                 rd_rkb_log(msetr->msetr_rkb, LOG_ERR, "TXN",
                                         "%s [%"PRId32"]: "
                                         "Abort txn ctrl msg bad order "
-                                        "at offset %"PRId64". Expected "
-                                        "before or at %"PRId64". Messages "
+                                        "at offset %"PRId64": expected "
+                                        "before or at %"PRId64": messages "
                                         "in aborted transactions may be "
                                         "delivered to the application",
                                         rktp->rktp_rkt->rkt_topic->str,
@@ -1066,6 +1071,11 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
         } else {
                 /* Read uncompressed messages */
 
+                rd_rkb_dbg(msetr->msetr_rkb, MSG, "XXXXX",
+                           " aborted_tnx %p, attr 0x%x, payload_size %zu",
+                           msetr->msetr_aborted_txns,
+                           (int)msetr->msetr_v2_hdr->Attributes,
+                           payload_size);
                 /* Save original slice, reduce size of the current one to
                  * be limited by the MessageSet.Length, and then start reading
                  * messages until the lesser slice is exhausted. */
@@ -1230,6 +1240,8 @@ rd_kafka_msgset_reader (rd_kafka_msgset_reader_t *msetr) {
         };
         rd_kafka_resp_err_t err;
 
+        rd_rkb_dbg(msetr->msetr_rkb, MSG, "READER", "START READ");
+
         /* Parse MessageSets until the slice is exhausted or an
          * error occurs (typically a partial message). */
         do {
@@ -1240,6 +1252,11 @@ rd_kafka_msgset_reader (rd_kafka_msgset_reader_t *msetr) {
                  * know which MessageSet reader to use. */
                 err = rd_kafka_msgset_reader_peek_msg_version(msetr,
                                                               &MagicByte);
+                rd_rkb_dbg(msetr->msetr_rkb, MSG, "READER",
+                           "Read at %zu/%zu: MagicByte %d, err %d",
+                           rd_slice_offset(&rkbuf->rkbuf_reader),
+                           rd_slice_size(&rkbuf->rkbuf_reader),
+                           (int)MagicByte, err);
                 if (unlikely(err)) {
                         if (err == RD_KAFKA_RESP_ERR__BAD_MSG)
                                 /* Read underflow, not an error.

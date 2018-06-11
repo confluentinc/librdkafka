@@ -75,6 +75,9 @@
 /* >= 1.0.0: SaslAuthenticateRequest */
 #define RD_KAFKA_FEATURE_SASL_AUTH_REQ 0x1000
 
+/* >= 2.4.0: KIP-360 (improve EOS producer error handling) */
+#define RD_KAFKA_FEATURE_KIP360 0x2000
+
 /* All features (except UNITTEST) */
 #define RD_KAFKA_FEATURE_ALL  0xffff
 

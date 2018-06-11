@@ -47,7 +47,7 @@
 #include "rdsysqueue.h"
 #include "rdkafka_sasl_oauthbearer.h"
 #include "rdkafka_msgset.h"
-
+#include "rdkafka_txnmgr.h"
 
 rd_bool_t rd_unittest_assert_on_failure = rd_false;
 rd_bool_t rd_unittest_on_ci = rd_false;

@@ -56,6 +56,7 @@
 #endif
 
 #include "testshared.h"
+
 #ifdef _MSC_VER
 #define sscanf(...) sscanf_s(__VA_ARGS__)
 #endif
@@ -125,6 +126,7 @@ struct test {
 	int report_cnt;
 	int report_size;
 
+        rd_bool_t ignore_dr_err;        /**< Ignore delivery report errors */
         rd_kafka_resp_err_t exp_dr_err; /* Expected error in test_dr_cb */
         rd_kafka_msg_status_t exp_dr_status; /**< Expected delivery status,
                                               *   or -1 for not checking. */
@@ -170,43 +172,6 @@ struct test {
 #define TEST_F_KNOWN_ISSUE_OSX  0
 #endif
 
-void test_fail0 (const char *file, int line, const char *function,
-                 int do_lock, int fail_now, const char *fmt, ...);
-
-#define TEST_FAIL0(file,line,do_lock,fail_now,...)   \
-        test_fail0(__FILE__, __LINE__, __FUNCTION__, \
-                   do_lock, fail_now, __VA_ARGS__)
-
-/* Whine and abort test */
-#define TEST_FAIL(...) TEST_FAIL0(__FILE__,__LINE__,1,1,__VA_ARGS__)
-
-/* Whine right away, mark the test as failed, but continue the test. */
-#define TEST_FAIL_LATER(...) TEST_FAIL0(__FILE__,__LINE__,1,0,__VA_ARGS__)
-
-/* Whine right away, maybe mark the test as failed, but continue the test. */
-#define TEST_FAIL_LATER0(LATER,...) TEST_FAIL0(__FILE__,__LINE__,1,!(LATER),__VA_ARGS__)
-
-#define TEST_FAILCNT()  (test_curr->failcnt)
-
-#define TEST_LATER_CHECK(...) do {                              \
-        if (test_curr->state == TEST_FAILED)                    \
-                TEST_FAIL("See previous errors. " __VA_ARGS__); \
-        } while (0)
-
-#define TEST_PERROR(call) do {						\
-		if (!(call))						\
-			TEST_FAIL(#call " failed: %s", rd_strerror(errno)); \
-	} while (0)
-
-#define TEST_WARN(...) do {                                              \
-                fprintf(stderr, "\033[33m[%-28s/%7.3fs] WARN: ",	\
-			test_curr->name,                                \
-			test_curr->start ?                              \
-			((float)(test_clock() -                         \
-                                 test_curr->start)/1000000.0f) : 0);    \
-		fprintf(stderr, __VA_ARGS__);				\
-                fprintf(stderr, "\033[0m");                             \
-	} while (0)
 
 #define TEST_SAY0(...)  fprintf(stderr, __VA_ARGS__)
 #define TEST_SAYL(LVL,...) do {						\
@@ -228,23 +193,6 @@ void test_fail0 (const char *file, int line, const char *function,
 #define TEST_REPORT(...) test_report_add(test_curr, __VA_ARGS__)
 
 
-/* "..." is a failure reason in printf format, include as much info as needed */
-#define TEST_ASSERT(expr,...) do {            \
-        if (!(expr)) {                        \
-                      TEST_FAIL("Test assertion failed: \"" # expr  "\": " \
-                                __VA_ARGS__);                           \
-                      }                                                 \
-        } while (0)
-
-
-/* "..." is a failure reason in printf format, include as much info as needed */
-#define TEST_ASSERT_LATER(expr,...) do {                                \
-                if (!(expr)) {                                          \
-                        TEST_FAIL0(__FILE__, __LINE__, 1, 0,            \
-                                   "Test assertion failed: \"" # expr  "\": " \
-                                   __VA_ARGS__);                        \
-                }                                                       \
-        } while (0)
 
 static RD_INLINE RD_UNUSED void rtrim (char *str) {
         size_t len = strlen(str);
@@ -383,15 +331,18 @@ struct test_mv_vs {
 
 void test_msgver_init (test_msgver_t *mv, uint64_t testid);
 void test_msgver_clear (test_msgver_t *mv);
-int test_msgver_add_msg00 (const char *func, int line, test_msgver_t *mv,
+int test_msgver_add_msg00 (const char *func, int line, const char *clientname,
+                           test_msgver_t *mv,
                            uint64_t testid,
                            const char *topic, int32_t partition,
                            int64_t offset, int64_t timestamp,
                            rd_kafka_resp_err_t err, int msgnum);
-int test_msgver_add_msg0 (const char *func, int line,
-			  test_msgver_t *mv, rd_kafka_message_t *rkm);
-#define test_msgver_add_msg(mv,rkm) \
-	test_msgver_add_msg0(__FUNCTION__,__LINE__,mv,rkm)
+int test_msgver_add_msg0 (const char *func, int line, const char *clientname,
+                          test_msgver_t *mv, rd_kafka_message_t *rkm,
+                          const char *override_topic);
+#define test_msgver_add_msg(rk,mv,rkm)                          \
+        test_msgver_add_msg0(__FUNCTION__,__LINE__,             \
+                             rd_kafka_name(rk),mv,rkm,NULL)
 
 /**
  * Flags to indicate what to verify.
@@ -468,6 +419,15 @@ void test_produce_msgs (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                         uint64_t testid, int32_t partition,
                         int msg_base, int cnt,
 			const char *payload, size_t size);
+void test_produce_msgs2 (rd_kafka_t *rk, const char *topic,
+                         uint64_t testid, int32_t partition,
+                         int msg_base, int cnt,
+                         const char *payload, size_t size);
+void test_produce_msgs2_nowait (rd_kafka_t *rk, const char *topic,
+                                uint64_t testid, int32_t partition,
+                                int msg_base, int cnt,
+                                const char *payload, size_t size,
+                                int *remainsp);
 void test_produce_msgs_rate (rd_kafka_t *rk, rd_kafka_topic_t *rkt,
                              uint64_t testid, int32_t partition,
                              int msg_base, int cnt,
@@ -516,15 +476,27 @@ void test_verify_rkmessage0 (const char *func, int line,
 void test_consumer_subscribe (rd_kafka_t *rk, const char *topic);
 
 void
-test_consume_msgs_easy_mv (const char *group_id, const char *topic,
-                           int32_t partition,
-                           uint64_t testid, int exp_eofcnt, int exp_msgcnt,
-                           rd_kafka_topic_conf_t *tconf,
-                           test_msgver_t *mv);
+test_consume_msgs_easy_mv0 (const char *group_id, const char *topic,
+                            rd_bool_t txn,
+                            int32_t partition,
+                            uint64_t testid, int exp_eofcnt, int exp_msgcnt,
+                            rd_kafka_topic_conf_t *tconf,
+                            test_msgver_t *mv);
+
+#define test_consume_msgs_easy_mv(group_id,topic,partition,testid,exp_eofcnt,exp_msgcnt,tconf,mv) \
+        test_consume_msgs_easy_mv0(group_id,topic,rd_false/*not-txn*/, \
+                                   partition,testid,exp_eofcnt,exp_msgcnt, \
+                                   tconf,mv)
+
 void
 test_consume_msgs_easy (const char *group_id, const char *topic,
                         uint64_t testid, int exp_eofcnt, int exp_msgcnt,
                         rd_kafka_topic_conf_t *tconf);
+
+void
+test_consume_txn_msgs_easy (const char *group_id, const char *topic,
+                            uint64_t testid, int exp_eofcnt, int exp_msgcnt,
+                            rd_kafka_topic_conf_t *tconf);
 
 void test_consumer_poll_no_msgs (const char *what, rd_kafka_t *rk,
 				 uint64_t testid, int timeout_ms);
@@ -535,7 +507,7 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt,
 			test_msgver_t *mv);
 
-
+void test_consumer_wait_assignment (rd_kafka_t *rk);
 void test_consumer_assign (const char *what, rd_kafka_t *rk,
 			   rd_kafka_topic_partition_list_t *parts);
 void test_consumer_unassign (const char *what, rd_kafka_t *rk);
@@ -650,6 +622,33 @@ rd_kafka_resp_err_t test_delete_all_test_topics (int timeout_ms);
 void test_mock_cluster_destroy (rd_kafka_mock_cluster_t *mcluster);
 rd_kafka_mock_cluster_t *test_mock_cluster_new (int broker_cnt,
                                                 const char **bootstraps);
+
+
+/**
+ * @brief Calls rdkafka function (with arguments)
+ *        and checks its return value (must be rd_kafka_resp_err_t) for
+ *        error, in which case the test fails.
+ *        Also times the call.
+ *
+ * @remark The trailing __ makes calling code easier to read.
+ */
+#define TEST_CALL__(FUNC_W_ARGS) do {                                   \
+        test_timing_t _timing;                                          \
+        const char *_desc = RD_STRINGIFY(FUNC_W_ARGS);                  \
+        rd_kafka_resp_err_t _err;                                       \
+        TIMING_START(&_timing, "%s", _desc);                            \
+        TEST_SAYL(3, "Begin call %s\n", _desc);                         \
+        _err = FUNC_W_ARGS;                                             \
+        TIMING_STOP(&_timing);                                          \
+        if (!_err)                                                      \
+                break;                                                  \
+        if (strstr(_desc, "errstr"))                                    \
+                TEST_FAIL("%s failed: %s: %s\n",                        \
+                          _desc, rd_kafka_err2name(_err), errstr);      \
+        else                                                            \
+                TEST_FAIL("%s failed: %s\n",                            \
+                          _desc, rd_kafka_err2str(_err));               \
+        } while (0)
 
 
 /**

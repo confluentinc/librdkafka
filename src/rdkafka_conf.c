@@ -1054,6 +1054,32 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           .sdef =  "" },
 
         /* Global producer properties */
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "transactional.id", _RK_C_STR,
+          _RK(eos.transactional_id),
+          "Enables the transactional producer. "
+          "The transactional.id is used to identify the same transactional "
+          "producer instance across process restarts. "
+          "It allows the producer to guarantee that transactions corresponding "
+          "to earlier instances of the same producer have been finalized "
+          "prior to starting any new transactions, and that any "
+          "zombie instances are fenced off. "
+          "If no transactional.id is provided, then the producer is limited "
+          "to idempotent delivery (if enable.idempotence is set). "
+          "Requires broker version >= 0.11.0." },
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_MED, "transaction.timeout.ms", _RK_C_INT,
+          _RK(eos.transaction_timeout_ms),
+          "The maximum amount of time in milliseconds that the transaction "
+          "coordinator will wait for a transaction status update from the "
+          "producer before proactively aborting the ongoing transaction. "
+          "If this value is larger than the `transaction.max.timeout.ms` "
+          "setting in the broker, the init_transactions() call will fail with "
+          "ERR_INVALID_TRANSACTION_TIMEOUT. "
+          "The transaction timeout automatically adjusts "
+          "`message.timeout.ms` and `socket.timeout.ms`, unless explicitly "
+          "configured in which case they must not exceed the "
+          "transaction timeout (`socket.timeout.ms` must be at least 100ms "
+          "lower than `transaction.timeout.ms`).",
+          1000, INT_MAX, 60000 },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "enable.idempotence", _RK_C_BOOL,
           _RK(eos.idempotence),
           "When set to `true`, the producer will ensure that messages are "
@@ -1206,7 +1232,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "A time of 0 is infinite. "
 	  "This is the maximum time librdkafka may use to deliver a message "
 	  "(including retries). Delivery error occurs when either the retry "
-	  "count or the message timeout are exceeded.",
+	  "count or the message timeout are exceeded. "
+          "The message timeout is automatically adjusted to "
+          "`transaction.timeout.ms` if `transactional.id` is configured.",
 	  0, INT32_MAX, 300*1000 },
         { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "delivery.timeout.ms", _RK_C_ALIAS,
           .sdef = "message.timeout.ms" },
@@ -1917,6 +1945,8 @@ static void rd_kafka_defaultconf_set (int scope, void *conf) {
 
 rd_kafka_conf_t *rd_kafka_conf_new (void) {
 	rd_kafka_conf_t *conf = rd_calloc(1, sizeof(*conf));
+        rd_assert(RD_KAFKA_CONF_PROPS_IDX_MAX > sizeof(*conf) &&
+                  *"Increase RD_KAFKA_CONF_PROPS_IDX_MAX");
 	rd_kafka_defaultconf_set(_RK_GLOBAL, conf);
         rd_kafka_anyconf_clear_all_is_modified(conf);
 	return conf;
@@ -1924,6 +1954,8 @@ rd_kafka_conf_t *rd_kafka_conf_new (void) {
 
 rd_kafka_topic_conf_t *rd_kafka_topic_conf_new (void) {
 	rd_kafka_topic_conf_t *tconf = rd_calloc(1, sizeof(*tconf));
+        rd_assert(RD_KAFKA_CONF_PROPS_IDX_MAX > sizeof(*tconf) &&
+                  *"Increase RD_KAFKA_CONF_PROPS_IDX_MAX");
 	rd_kafka_defaultconf_set(_RK_TOPIC, tconf);
         rd_kafka_anyconf_clear_all_is_modified(tconf);
 	return tconf;
@@ -3284,6 +3316,32 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                 conf->eos.idempotence = 0;
 
         } else if (cltype == RD_KAFKA_PRODUCER) {
+                if (conf->eos.transactional_id) {
+                        if (!conf->eos.idempotence) {
+                                /* Auto enable idempotence unless
+                                 * explicitly disabled */
+                                if (rd_kafka_conf_is_modified(
+                                            conf, "enable.idempotence"))
+                                        return "`transactional.id` requires "
+                                                "`enable.idempotence=true`";
+
+                                conf->eos.idempotence = rd_true;
+                        }
+
+                        /* Make sure at least one request can be sent
+                         * before the transaction times out. */
+                        if (!rd_kafka_conf_is_modified(conf,
+                                                       "session.timeout.ms"))
+                                conf->socket_timeout_ms =
+                                        RD_MAX(conf->eos.
+                                               transaction_timeout_ms - 100,
+                                               900);
+                        else if (conf->eos.transaction_timeout_ms + 100 <
+                                 conf->socket_timeout_ms)
+                                return "`socket.timeout.ms` must be set <= "
+                                        "`transaction.timeout.ms` + 100";
+                }
+
                 if (conf->eos.idempotence) {
                         /* Adjust configuration values for idempotent producer*/
 
@@ -3373,7 +3431,6 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
 
         if (conf->eos.idempotence) {
                 /* Ensure acks=all */
-
                 if (rd_kafka_topic_conf_is_modified(tconf, "acks")) {
                         if (tconf->required_acks != -1)
                                 return "`acks` must be set to `all` when "
@@ -3391,6 +3448,18 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
                 } else {
                         tconf->queuing_strategy = RD_KAFKA_QUEUE_FIFO;
                 }
+
+                /* Ensure message.timeout.ms <= transaction.timeout.ms */
+                if (conf->eos.transactional_id) {
+                        if (!rd_kafka_topic_conf_is_modified(
+                                    tconf, "message.timeout.ms"))
+                                tconf->message_timeout_ms =
+                                        conf->eos.transaction_timeout_ms;
+                        else if (tconf->message_timeout_ms >
+                                 conf->eos.transaction_timeout_ms)
+                                return "`message.timeout.ms` must be set <= "
+                                        "`transaction.timeout.ms`";
+                 }
         }
 
 

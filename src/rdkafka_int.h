@@ -97,6 +97,9 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 #include "rdkafka_assignor.h"
 #include "rdkafka_metadata.h"
 #include "rdkafka_mock.h"
+#include "rdkafka_partition.h"
+#include "rdkafka_coord.h"
+#include "rdkafka_mock.h"
 
 /**
  * Protocol level sanity
@@ -117,7 +120,10 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 typedef enum {
         RD_KAFKA_IDEMP_STATE_INIT,      /**< Initial state */
         RD_KAFKA_IDEMP_STATE_TERM,      /**< Instance is terminating */
+        RD_KAFKA_IDEMP_STATE_FATAL_ERROR, /**< A fatal error has been raised */
         RD_KAFKA_IDEMP_STATE_REQ_PID,   /**< Request new PID */
+        RD_KAFKA_IDEMP_STATE_WAIT_TRANSPORT, /**< Waiting for coordinator to
+                                              *   become available. */
         RD_KAFKA_IDEMP_STATE_WAIT_PID,  /**< PID requested, waiting for reply */
         RD_KAFKA_IDEMP_STATE_ASSIGNED,  /**< New PID assigned */
         RD_KAFKA_IDEMP_STATE_DRAIN_RESET, /**< Wait for outstanding
@@ -138,7 +144,9 @@ rd_kafka_idemp_state2str (rd_kafka_idemp_state_t state) {
         static const char *names[] = {
                 "Init",
                 "Terminate",
+                "FatalError",
                 "RequestPID",
+                "WaitTransport",
                 "WaitPID",
                 "Assigned",
                 "DrainReset",
@@ -146,6 +154,59 @@ rd_kafka_idemp_state2str (rd_kafka_idemp_state_t state) {
         };
         return names[state];
 }
+
+
+
+
+/**
+ * @enum Transactional Producer state
+ */
+typedef enum {
+        /**< Initial state */
+        RD_KAFKA_TXN_STATE_INIT,
+        /**< Awaiting PID to be acquired by rdkafka_idempotence.c */
+        RD_KAFKA_TXN_STATE_WAIT_PID,
+        /**< PID acquired, but application has not made a successful
+         *   init_transactions() call. */
+        RD_KAFKA_TXN_STATE_READY_NOT_ACKED,
+        /**< PID acquired, no active transaction. */
+        RD_KAFKA_TXN_STATE_READY,
+        /**< begin_transaction() has been called. */
+        RD_KAFKA_TXN_STATE_IN_TRANSACTION,
+        /**< commit_transaction() has been called. */
+        RD_KAFKA_TXN_STATE_BEGIN_COMMIT,
+        /**< commit_transaction() has been called and all outstanding
+         *   messages, partitions, and offsets have been sent. */
+        RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION,
+        /**< abort_transaction() has been called. */
+        RD_KAFKA_TXN_STATE_ABORTING_TRANSACTION,
+        /**< An abortable error has occurred. */
+        RD_KAFKA_TXN_STATE_ABORTABLE_ERROR,
+        /* A fatal error has occured. */
+        RD_KAFKA_TXN_STATE_FATAL_ERROR
+} rd_kafka_txn_state_t;
+
+
+/**
+ * @returns the txn_state_t string representation
+ */
+static RD_UNUSED const char *
+rd_kafka_txn_state2str (rd_kafka_txn_state_t state) {
+        static const char *names[] = {
+                "Init",
+                "WaitPID",
+                "ReadyNotAcked",
+                "Ready",
+                "InTransaction",
+                "BeginCommit",
+                "CommittingTransaction",
+                "AbortingTransaction",
+                "AbortableError",
+                "FatalError"
+        };
+        return names[state];
+}
+
 
 
 
@@ -286,6 +347,9 @@ struct rd_kafka_s {
          * @locks rk_lock
          */
         struct {
+                /*
+                 * Idempotence
+                 */
                 rd_kafka_idemp_state_t idemp_state; /**< Idempotent Producer
                                                      *   state */
                 rd_ts_t ts_idemp_state;/**< Last state change */
@@ -294,11 +358,135 @@ struct rd_kafka_s {
                 rd_atomic32_t inflight_toppar_cnt; /**< Current number of
                                                     *   toppars with inflight
                                                     *   requests. */
-                rd_kafka_timer_t request_pid_tmr; /**< Timer for pid retrieval*/
+                rd_kafka_timer_t pid_tmr; /**< PID FSM timer */
 
-                rd_kafkap_str_t *transactional_id; /**< Transactional Id,
-                                                    *   a null string. */
+                /*
+                 * Transactions
+                 *
+                 * All field access is from the rdkafka main thread,
+                 * unless a specific lock is mentioned in the doc string.
+                 *
+                 */
+                rd_atomic32_t txn_may_enq;      /**< Transaction state allows
+                                                 *   application to enqueue
+                                                 *   (produce) messages. */
+
+                rd_kafkap_str_t *transactional_id; /**< transactional.id */
+                rd_kafka_txn_state_t txn_state; /**< Transactional state.
+                                                 *   @locks rk_lock */
+                rd_ts_t ts_txn_state;           /**< Last state change.
+                                                 *   @locks rk_lock */
+                rd_kafka_broker_t *txn_coord;   /**< Transaction coordinator,
+                                                 *   this is a logical broker.*/
+                rd_kafka_broker_t *txn_curr_coord; /**< Current actual coord
+                                                    *   broker.
+                                                    *   This is only used to
+                                                    *   check if the coord
+                                                    *   changes. */
+                rd_kafka_broker_monitor_t txn_coord_mon; /**< Monitor for
+                                                          *   coordinator to
+                                                          *   take action when
+                                                          *   the broker state
+                                                          *   changes. */
+
+                /**< Blocking transactional API application call
+                 *   currently being handled, its state, reply queue and how
+                 *   to handle timeout.
+                 *   Only one transactional API call is allowed at any time.
+                 *   Protected by the rk_lock. */
+                struct {
+                        char name[64];        /**< API name, e.g.,
+                                               *   SendOffsetsToTransaction */
+                        rd_kafka_timer_t tmr; /**< Timeout timer, the timeout
+                                               * is specified by the app. */
+
+                        int flags;            /**< Flags */
+#define RD_KAFKA_TXN_CURR_API_F_ABORT_ON_TIMEOUT 0x1 /**< Set state to abortable
+                                                      *   error on timeout,
+                                                      *   i.e., fail the txn */
+#define RD_KAFKA_TXN_CURR_API_F_FOR_REUSE 0x2        /**< Do not reset the
+                                                      *   current API when it
+                                                      *   completes successfully
+                                                      *   Instead keep it alive
+                                                      *   and allow reuse with
+                                                      *   .._F_REUSE, blocking
+                                                      *   any non-F_REUSE
+                                                      *   curr API calls. */
+#define RD_KAFKA_TXN_CURR_API_F_REUSE     0x4        /**< Reuse/continue with
+                                                      *   current API state.
+                                                      *   This is used for
+                                                      *   multi-stage APIs,
+                                                      *   such as txn commit. */
+                } txn_curr_api;
+
+                /**< Copy (and reference) of the original init_transactions(),
+                 *   but out-lives the timeout of the curr API.
+                 *   This is used as the reply queue for when the
+                 *   black box idempotent producer has acquired the
+                 *   initial PID (or fails to do so).
+                 *   Since that acquisition may take longer than the
+                 *   init_transactions() API timeout this extra reference
+                 *   needs to be kept around.
+                 *   If the originating init_transactions() call has timed
+                 *   out and returned this queue reference simply points
+                 *   to a disabled queue that will discard any ops enqueued.
+                 *
+                 *   @locks rk_lock
+                 */
+                rd_kafka_q_t *txn_init_rkq;
+
+                int txn_req_cnt;                /**< Number of transaction
+                                                 *   requests sent.
+                                                 *   This is incremented when a
+                                                 *   AddPartitionsToTxn or
+                                                 *   AddOffsetsToTxn request
+                                                 *   has been sent for the
+                                                 *   current transaction,
+                                                 *   to keep track of
+                                                 *   whether the broker is
+                                                 *   aware of the current
+                                                 *   transaction and thus
+                                                 *   requires an EndTxn request
+                                                 *   on abort or not. */
+
+                /**< Timer to trigger registration of pending partitions */
+                rd_kafka_timer_t         txn_register_parts_tmr;
+
+                /**< Lock for txn_pending_rktps and txn_waitresp_rktps */
+                mtx_t                    txn_pending_lock;
+
+                /**< Partitions pending being added to transaction. */
+                rd_kafka_toppar_tqhead_t txn_pending_rktps;
+
+                /**< Partitions in-flight added to transaction. */
+                rd_kafka_toppar_tqhead_t txn_waitresp_rktps;
+
+                /**< Partitions added and registered to transaction. */
+                rd_kafka_toppar_tqhead_t txn_rktps;
+
+                /**< Current transaction error. */
+                rd_kafka_resp_err_t txn_err;
+
+                /**< Current transaction error string, if any. */
+                char               *txn_errstr;
+
+                /**< Waiting for transaction coordinator query response */
+                rd_bool_t           txn_wait_coord;
+
+                /**< Transaction coordinator query timer */
+                rd_kafka_timer_t    txn_coord_tmr;
         } rk_eos;
+
+        /**<
+         * Coordinator cache.
+         *
+         * @locks none
+         * @locality rdkafka main thread
+         */
+        rd_kafka_coord_cache_t   rk_coord_cache; /**< Coordinator cache */
+
+        TAILQ_HEAD(, rd_kafka_coord_req_s) rk_coord_reqs; /**< Coordinator
+                                                           *   requests */
 
 	const rd_kafkap_bytes_t *rk_null_bytes;
 
@@ -533,7 +721,16 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
  */
 #define rd_kafka_is_idempotent(rk) ((rk)->rk_conf.eos.idempotence)
 
-#define RD_KAFKA_PURGE_F_MASK 0x7
+/**
+ * @returns true if the producer is transactional (producer only).
+ */
+#define rd_kafka_is_transactional(rk)                   \
+        ((rk)->rk_conf.eos.transactional_id != NULL)
+
+
+#define RD_KAFKA_PURGE_F_ABORT_TXN 0x100  /**< Internal flag used when
+                                           *   aborting transaction */
+#define RD_KAFKA_PURGE_F_MASK 0x107
 const char *rd_kafka_purge_flags2str (int flags);
 
 

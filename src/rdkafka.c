@@ -476,6 +476,10 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "(max.poll.interval.ms) exceeded"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__UNKNOWN_BROKER,
                   "Local: Unknown broker"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__NOT_CONFIGURED,
+                  "Local: Functionality not configured"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__FENCED,
+                  "Local: This instance has been fenced by a newer instance"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -1048,6 +1052,9 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
 
         rd_kafka_dbg(rk, ALL, "DESTROY", "Destroy internal");
 
+        /* Destroy the coordinator cache */
+        rd_kafka_coord_cache_destroy(&rk->rk_coord_cache);
+
         /* Trigger any state-change waiters (which should check the
          * terminate flag whenever they wake up). */
         rd_kafka_brokers_broadcast_state_change(rk);
@@ -1391,7 +1398,6 @@ static void rd_kafka_stats_emit_broker_reqs (struct _stats_emit *st,
                         [RD_KAFKAP_Fetch] = rd_true,
                         [RD_KAFKAP_OffsetCommit] = rd_true,
                         [RD_KAFKAP_OffsetFetch] = rd_true,
-                        [RD_KAFKAP_FindCoordinator] = rd_true,
                         [RD_KAFKAP_JoinGroup] = rd_true,
                         [RD_KAFKAP_Heartbeat] = rd_true,
                         [RD_KAFKAP_LeaveGroup] = rd_true,
@@ -1399,7 +1405,12 @@ static void rd_kafka_stats_emit_broker_reqs (struct _stats_emit *st,
                 },
                 [RD_KAFKA_CONSUMER] = {
                         [RD_KAFKAP_Produce] = rd_true,
-                        [RD_KAFKAP_InitProducerId] = rd_true
+                        [RD_KAFKAP_InitProducerId] = rd_true,
+                        /* Transactional producer */
+                        [RD_KAFKAP_AddPartitionsToTxn] = rd_true,
+                        [RD_KAFKAP_AddOffsetsToTxn] = rd_true,
+                        [RD_KAFKAP_EndTxn] = rd_true,
+                        [RD_KAFKAP_TxnOffsetCommit] = rd_true,
                 },
                 [2/*any client type*/] = {
                         [RD_KAFKAP_UpdateMetadata] = rd_true,
@@ -1408,19 +1419,12 @@ static void rd_kafka_stats_emit_broker_reqs (struct _stats_emit *st,
                         [RD_KAFKAP_StopReplica] = rd_true,
                         [RD_KAFKAP_OffsetForLeaderEpoch] = rd_true,
 
-                        /* FIXME: Remove when transaction support is added */
-                        [RD_KAFKAP_AddPartitionsToTxn] = rd_true,
-                        [RD_KAFKAP_AddOffsetsToTxn] = rd_true,
-                        [RD_KAFKAP_EndTxn] = rd_true,
-
                         [RD_KAFKAP_WriteTxnMarkers] = rd_true,
-                        [RD_KAFKAP_TxnOffsetCommit] = rd_true,
 
                         [RD_KAFKAP_AlterReplicaLogDirs] = rd_true,
                         [RD_KAFKAP_DescribeLogDirs] = rd_true,
 
-                        /* FIXME: Remove when re-auth support is added */
-                        [RD_KAFKAP_SaslAuthenticate] = rd_true,
+                        [RD_KAFKAP_SaslAuthenticate] = rd_false,
 
                         [RD_KAFKAP_CreateDelegationToken] = rd_true,
                         [RD_KAFKAP_RenewDelegationToken] = rd_true,
@@ -1622,7 +1626,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
 			   RD_KAFKAP_STR_PR(rkt->rkt_topic),
 			   rkt->rkt_ts_metadata ?
-			   (rd_clock() - rkt->rkt_ts_metadata)/1000 : 0);
+			   (now - rkt->rkt_ts_metadata)/1000 : 0);
 
                 rd_kafka_stats_emit_avg(st, "batchsize",
                                         &rkt->rkt_avg_batchsize);
@@ -1674,7 +1678,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                            (now - rkcg->rkcg_ts_statechange) / 1000 : 0,
                            rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                            rkcg->rkcg_c.ts_rebalance ?
-                           (rd_clock() - rkcg->rkcg_c.ts_rebalance)/1000 : 0,
+                           (now - rkcg->rkcg_c.ts_rebalance)/1000 : 0,
                            rkcg->rkcg_c.rebalance_cnt,
                            rkcg->rkcg_c.rebalance_reason,
                            rkcg->rkcg_c.assignment_size);
@@ -1684,12 +1688,19 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                 _st_printf(", \"eos\": { "
                            "\"idemp_state\": \"%s\", "
                            "\"idemp_stateage\": %"PRId64", "
+                           "\"txn_state\": \"%s\", "
+                           "\"txn_stateage\": %"PRId64", "
+                           "\"txn_may_enq\": %s, "
                            "\"producer_id\": %"PRId64", "
                            "\"producer_epoch\": %hd, "
                            "\"epoch_cnt\": %d "
                            "}",
                            rd_kafka_idemp_state2str(rk->rk_eos.idemp_state),
-                           (rd_clock() - rk->rk_eos.ts_idemp_state) / 1000,
+                           (now - rk->rk_eos.ts_idemp_state) / 1000,
+                           rd_kafka_txn_state2str(rk->rk_eos.txn_state),
+                           (now - rk->rk_eos.ts_txn_state) / 1000,
+                           rd_atomic32_get(&rk->rk_eos.txn_may_enq) ?
+                           "true":"false",
                            rk->rk_eos.pid.id,
                            rk->rk_eos.pid.epoch,
                            rk->rk_eos.epoch_cnt);
@@ -1756,6 +1767,7 @@ static void rd_kafka_1s_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
             rd_atomic32_get(&rk->rk_broker_up_cnt) == 0)
                 rd_kafka_connect_any(rk, "no cluster connection");
 
+        rd_kafka_coord_cache_expire(&rk->rk_coord_cache);
 }
 
 static void rd_kafka_stats_emit_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
@@ -2017,6 +2029,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 	TAILQ_INIT(&rk->rk_topics);
         rd_kafka_timers_init(&rk->rk_timers, rk);
         rd_kafka_metadata_cache_init(rk);
+        rd_kafka_coord_cache_init(&rk->rk_coord_cache,
+                                  rk->rk_conf.metadata_refresh_interval_ms ?
+                                  rk->rk_conf.metadata_refresh_interval_ms :
+                                  (5 * 60 * 1000) /* 5min */);
+        rd_kafka_coord_reqs_init(rk);
 
 	if (rk->rk_conf.dr_cb || rk->rk_conf.dr_msg_cb)
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_DR;
@@ -2159,7 +2176,10 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                                 rk->rk_group_id,
                                                 rk->rk_client_id);
 
-        rk->rk_eos.transactional_id = rd_kafkap_str_new(NULL, 0);
+        if (type == RD_KAFKA_PRODUCER)
+                rk->rk_eos.transactional_id =
+                        rd_kafkap_str_new(rk->rk_conf.eos.transactional_id,
+                                          -1);
 
 #ifndef _MSC_VER
         /* Block all signals in newly created threads.
@@ -3369,7 +3389,7 @@ rd_kafka_offsets_for_times (rd_kafka_t *rk,
  * @returns RD_KAFKA_OP_RES_HANDLED if op was handled, else one of the
  *          other res types (such as OP_RES_PASS).
  *
- * @locality application thread
+ * @locality any thread that serves op queues
  */
 rd_kafka_op_res_t
 rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
@@ -3558,6 +3578,12 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
                         return RD_KAFKA_OP_RES_PASS; /* Don't handle here */
 
                 /* Op is silently destroyed below */
+                break;
+
+        case RD_KAFKA_OP_TXN:
+                /* Must only be handled by rdkafka main thread */
+                rd_assert(thrd_is_current(rk->rk_thread));
+                res = rd_kafka_op_call(rk, rkq, rko);
                 break;
 
         default:
@@ -3992,7 +4018,12 @@ rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags) {
  * @returns a csv string of purge flags in thread-local storage
  */
 const char *rd_kafka_purge_flags2str (int flags) {
-        static const char *names[] = { "queue", "inflight", NULL };
+        static const char *names[] = {
+                "queue",
+                "inflight",
+                "non-blocking",
+                NULL
+        };
         static RD_TLS char ret[64];
 
         return rd_flags2str(ret, sizeof(ret), names, flags);

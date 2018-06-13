@@ -37,6 +37,7 @@
 #include "rdkafka_sasl_int.h"
 #include "rdrand.h"
 
+#if WITH_SASL_SCRAM
 #if WITH_SSL
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
@@ -900,3 +901,4 @@ const struct rd_kafka_sasl_provider rd_kafka_sasl_scram_provider = {
         .close         = rd_kafka_sasl_scram_close,
         .conf_validate = rd_kafka_sasl_scram_conf_validate,
 };
+#endif /* WITH_SASL_SCRAM */

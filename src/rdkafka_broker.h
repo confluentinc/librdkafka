@@ -149,6 +149,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         int                 rkb_req_timeouts;  /* Current value */
 
+        rd_ts_t             rkb_ts_tx_last;    /**< Timestamp of last
+                                                *   transmitted requested */
+
 	rd_ts_t             rkb_ts_metadata_poll; /* Next metadata poll time */
 	int                 rkb_metadata_fast_poll_cnt; /* Perform fast
 							 * metadata polls. */
@@ -294,6 +297,10 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state);
 void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			   int level, rd_kafka_resp_err_t err,
 			   const char *fmt, ...);
+
+void rd_kafka_broker_conn_closed (rd_kafka_broker_t *rkb,
+                                  rd_kafka_resp_err_t err,
+                                  const char *errstr);
 
 void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb);
 

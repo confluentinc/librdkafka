@@ -504,6 +504,28 @@ addresses for each connection attempt.
 A DNS record containing all broker address can thus be used to provide a
 reliable bootstrap broker.
 
+#### Connection close
+
+A broker connection may be closed by the broker, intermediary network gear,
+due to network errors, timeouts, etc.
+When a broker connection is closed, librdkafka will wait for
+`reconnect.backoff.jitter.ms` +-50% before reconnecting.
+
+The broker will disconnect clients that have not sent any protocol requests
+within `connections.max.idle.ms` (broker configuration propertion, defaults
+to 10 minutes), but there is no fool proof way for the client to know that it
+was a deliberate close by the broker and not an error. To avoid logging these
+deliberate idle disconnects as errors the client employs some logic to try to
+classify a disconnect as an idle disconnect if no requests have been sent in
+the last `socket.timeout.ms` or there are no outstanding, or
+queued, requests waiting to be sent. In this case the standard "Disconnect"
+error log is silenced (will only be seen with debug enabled).
+
+`log.connection.close=false` may be used to silence all disconnect logs,
+but it is recommended to instead rely on the above heuristics.
+
+
+
 ### Feature discovery
 
 Apache Kafka broker version 0.10.0 added support for the ApiVersionRequest API

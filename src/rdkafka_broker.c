@@ -464,6 +464,47 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
 
 
+/**
+ * @brief Handle broker connection close.
+ *
+ * @locality broker thread
+ */
+void rd_kafka_broker_conn_closed (rd_kafka_broker_t *rkb,
+                                  rd_kafka_resp_err_t err,
+                                  const char *errstr) {
+        int log_level = LOG_ERR;
+
+        if (!rkb->rkb_rk->rk_conf.log_connection_close) {
+                /* Silence all connection closes */
+                log_level = LOG_DEBUG;
+
+        } else {
+                /* Silence close logs for connections that are idle,
+                 * it is most likely the broker's idle connection
+                 * reaper kicking in.
+                 *
+                 * Indications there might be an error and not an
+                 * idle connect:
+                 *  - If the connection age is low a disconnect
+                 *    typically indicates a failure, such as protocol mismatch.
+                 *  - If the connection hasn't been idle long enough.
+                 *  - There are outstanding requests, or requests enqueued.
+                 */
+                rd_ts_t now = rd_clock();
+                rd_ts_t minidle =
+                        RD_MAX(60*1000/*60s*/,
+                               rkb->rkb_rk->rk_conf.socket_timeout_ms) * 1000;
+
+                if (rkb->rkb_ts_state + minidle < now &&
+                    rkb->rkb_ts_tx_last + minidle < now &&
+                    rd_kafka_bufq_cnt(&rkb->rkb_waitresps) == 0 &&
+                    rd_kafka_bufq_cnt(&rkb->rkb_outbufs) == 0)
+                        log_level = LOG_DEBUG;
+        }
+
+        rd_kafka_broker_fail(rkb, log_level, err, "%s", errstr);
+}
+
 
 
 /**
@@ -1364,11 +1405,11 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb) {
  err_parse:
         err = rkbuf->rkbuf_err;
  err:
-	rd_kafka_broker_fail(rkb,
-                             !rkb->rkb_rk->rk_conf.log_connection_close &&
-                             !strcmp(errstr, "Disconnected") ?
-                             LOG_DEBUG : LOG_ERR, err,
-                             "Receive failed: %s", errstr);
+        if (!strcmp(errstr, "Disconnected"))
+                rd_kafka_broker_conn_closed(rkb, err, errstr);
+        else
+                rd_kafka_broker_fail(rkb, LOG_ERR, err,
+                                     "Receive failed: %s", errstr);
 	return -1;
 }
 
@@ -1822,6 +1863,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 	       (rkbuf = TAILQ_FIRST(&rkb->rkb_outbufs.rkbq_bufs))) {
 		ssize_t r;
                 size_t pre_of = rd_slice_offset(&rkbuf->rkbuf_reader);
+                rd_ts_t now;
 
                 /* Check for broker support */
                 if (unlikely(!rd_kafka_broker_request_supported(rkb, rkbuf))) {
@@ -1878,6 +1920,9 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
                 if ((r = rd_kafka_broker_send(rkb, &rkbuf->rkbuf_reader)) == -1)
                         return -1;
 
+                now = rd_clock();
+                rkb->rkb_ts_tx_last = now;
+
                 /* Partial send? Continue next time. */
                 if (rd_slice_remains(&rkbuf->rkbuf_reader) > 0) {
                         rd_rkb_dbg(rkb, PROTOCOL, "SEND",
@@ -1910,7 +1955,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 		rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
 
 		/* Store time for RTT calculation */
-		rkbuf->rkbuf_ts_sent = rd_clock();
+		rkbuf->rkbuf_ts_sent = now;
 
                 /* Add to outbuf_latency averager */
                 rd_avg_add(&rkb->rkb_avg_outbuf_latency,

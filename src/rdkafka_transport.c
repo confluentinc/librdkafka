@@ -1418,17 +1418,18 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 			while (rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP &&
 			       rd_kafka_recv(rkb) > 0)
 				;
+
+                        /* If connection went down: bail out early */
+                        if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN)
+                                return;
 		}
 
-		if (events & POLLHUP) {
-			rd_kafka_broker_fail(rkb,
-                                             rkb->rkb_rk->rk_conf.
-                                             log_connection_close ?
-                                             LOG_NOTICE : LOG_DEBUG,
-                                             RD_KAFKA_RESP_ERR__TRANSPORT,
-					     "Connection closed");
-			return;
-		}
+                if (events & POLLHUP) {
+                        rd_kafka_broker_conn_closed(
+                                rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
+                                "Disconnected:NOHUP");
+                        return;
+                }
 
 		if (events & POLLOUT) {
 			while (rd_kafka_send(rkb) > 0)

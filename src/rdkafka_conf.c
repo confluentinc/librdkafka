@@ -784,12 +784,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The backoff time in milliseconds before retrying a protocol request.",
 	  1, 300*1000, 100 },
 
-        { _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.backpressure.threshold",
+	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.backpressure.threshold",
           _RK_C_INT, _RK(queue_backpressure_thres),
-          "The threshold of outstanding not yet transmitted requests "
+          "The threshold of outstanding not yet transmitted broker requests "
           "needed to backpressure the producer's message accumulator. "
-          "A lower number yields larger and more effective batches.",
-          0, 1000000, 10 },
+          "If the number of not yet transmitted requests equals or exceeds "
+          "this number, produce request creation that would have otherwise "
+          "been triggered (for example, in accordance with linger.ms) will be "
+          "delayed. A lower number yields larger and more effective batches. "
+          "A higher value can improve latency when using compression on slow "
+          "machines.",
+        1, 1000000, 1 },
 
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),

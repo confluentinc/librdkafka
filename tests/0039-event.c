@@ -27,7 +27,7 @@
  */
 
 /**
- * Tests messages are produced in order.
+ * Tests event API.
  */
 
 
@@ -74,7 +74,10 @@ static void handle_drs (rd_kafka_event_t *rkev) {
 }
 
 
-int main_0039_event (int argc, char **argv) {
+/**
+ * @brief Test delivery report events
+ */
+int main_0039_event_dr (int argc, char **argv) {
 	int partition = 0;
 	int r;
 	rd_kafka_t *rk;
@@ -124,7 +127,7 @@ int main_0039_event (int argc, char **argv) {
         TIMING_START(&t_delivery, "DELIVERY");
 	while (rd_kafka_outq_len(rk) > 0) {
 		rd_kafka_event_t *rkev;
-		rkev = rd_kafka_queue_poll(eventq, 100);
+		rkev = rd_kafka_queue_poll(eventq, 1000);
 		switch (rd_kafka_event_type(rkev))
 		{
 		case RD_KAFKA_EVENT_DR:
@@ -159,4 +162,58 @@ int main_0039_event (int argc, char **argv) {
 	rd_kafka_destroy(rk);
 
 	return 0;
+}
+
+
+
+/**
+ * @brief Local test: test event generation
+ */
+int main_0039_event (int argc, char **argv) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_queue_t *eventq;
+        int waitevent = 1;
+
+        /* Set up a config with ERROR events enabled and
+         * configure an invalid broker so that _TRANSPORT or ALL_BROKERS_DOWN
+         * is promptly generated. */
+
+        conf = rd_kafka_conf_new();
+
+        rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_ERROR);
+        rd_kafka_conf_set(conf, "bootstrap.servers", "0:65534", NULL, 0);
+
+        /* Create kafka instance */
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        eventq = rd_kafka_queue_get_main(rk);
+
+        while (waitevent) {
+                rd_kafka_event_t *rkev;
+                rkev = rd_kafka_queue_poll(eventq, 1000);
+                switch (rd_kafka_event_type(rkev))
+                {
+                case RD_KAFKA_EVENT_ERROR:
+                        TEST_SAY("Got %s event: %s: %s\n",
+                                 rd_kafka_event_name(rkev),
+                                 rd_kafka_err2name(rd_kafka_event_error(rkev)),
+                                 rd_kafka_event_error_string(rkev));
+                        waitevent = 0;
+                        break;
+                default:
+                        TEST_SAY("Unhandled event: %s\n",
+                                 rd_kafka_event_name(rkev));
+                        break;
+                }
+                rd_kafka_event_destroy(rkev);
+        }
+
+        rd_kafka_queue_destroy(eventq);
+
+        /* Destroy rdkafka instance */
+        TEST_SAY("Destroying kafka instance %s\n", rd_kafka_name(rk));
+        rd_kafka_destroy(rk);
+
+        return 0;
 }

@@ -441,7 +441,7 @@ int rd_kafka_op_reply (rd_kafka_op_t *rko, rd_kafka_resp_err_t err);
 
 
 #define rd_kafka_op_err(rk,err,...) do {				\
-		if (!(rk)->rk_conf.error_cb) {				\
+		if (!((rk)->rk_conf.enabled_events & RD_KAFKA_EVENT_ERROR)) { \
 			rd_kafka_log(rk, LOG_ERR, "ERROR", __VA_ARGS__); \
 			break;						\
 		}							\

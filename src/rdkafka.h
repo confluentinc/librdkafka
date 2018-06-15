@@ -1514,7 +1514,8 @@ void rd_kafka_conf_set_offset_commit_cb (
  * The error callback is used by librdkafka to signal critical errors
  * back to the application.
  *
- * If no \p error_cb is registered then the errors will be logged instead.
+ * If no \p error_cb is registered, or RD_KAFKA_EVENT_ERROR has not been set
+ * with rd_kafka_conf_set_events, then the errors will be logged instead.
  */
 RD_EXPORT
 void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,

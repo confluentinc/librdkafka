@@ -384,8 +384,10 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "FAIL",
                                      "%s", rkb->rkb_err.msg);
                 else {
-                        /* Don't log if an error callback is registered */
-                        if (!rkb->rkb_rk->rk_conf.error_cb)
+                        /* Don't log if an error callback is registered,
+                         * or the error event is enabled. */
+                        if (!(rkb->rkb_rk->rk_conf.enabled_events &
+                              RD_KAFKA_EVENT_ERROR))
                                 rd_kafka_log(rkb->rkb_rk, level, "FAIL",
                                              "%s", rkb->rkb_err.msg);
                         /* Send ERR op back to application for processing. */

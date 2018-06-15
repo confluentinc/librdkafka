@@ -1550,6 +1550,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_REBALANCE;
 	if (rk->rk_conf.offset_commit_cb)
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OFFSET_COMMIT;
+        if (rk->rk_conf.error_cb)
+                rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_ERROR;
 
         rk->rk_controllerid = -1;
 

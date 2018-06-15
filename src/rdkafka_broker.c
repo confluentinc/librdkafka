@@ -2603,7 +2603,7 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
          * avoid having to acquire the lock in the typical case
          * (do_timeout_scan==0). */
         if (unlikely(!do_timeout_scan &&
-                     rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) >
+                     rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) >=
                      rkb->rkb_rk->rk_conf.queue_backpressure_thres))
                 return 0;
 

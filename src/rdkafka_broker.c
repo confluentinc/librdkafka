@@ -2461,7 +2461,6 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 break;
 
         case RD_KAFKA_OP_WAKEUP:
-                ret = 0;
                 break;
 
         default:

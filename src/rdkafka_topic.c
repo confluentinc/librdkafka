@@ -313,27 +313,28 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	if (rkt->rkt_conf.compression_codec == RD_KAFKA_COMPRESSION_INHERIT)
 		rkt->rkt_conf.compression_codec = rk->rk_conf.compression_codec;
 
+        /* Translate compression level to library-specific level and check
+         * upper bound */
         switch (rkt->rkt_conf.compression_codec) {
         case RD_KAFKA_COMPRESSION_GZIP:
-                /* RD_KAFKA_COMPLEVEL_DEFAULT == Z_DEFAULT_COMPRESSION so there
-                 * is no need to explicitly map those values, only check for
-                 * upper bound. */
-                if (rkt->rkt_conf.compression_level > RD_KAFKA_COMPLEVEL_GZIP_MAX)
+                if (rkt->rkt_conf.compression_level == RD_KAFKA_COMPLEVEL_DEFAULT)
+                        rkt->rkt_conf.compression_level = Z_DEFAULT_COMPRESSION;
+                else if (rkt->rkt_conf.compression_level > RD_KAFKA_COMPLEVEL_GZIP_MAX)
                         rkt->rkt_conf.compression_level =
                                 RD_KAFKA_COMPLEVEL_GZIP_MAX;
                 break;
         case RD_KAFKA_COMPRESSION_LZ4:
-                /* For LZ4, default compression level is 0 and needs mapping:
-                 * check upper and lower bounds. */
-                if (rkt->rkt_conf.compression_level > RD_KAFKA_COMPLEVEL_LZ4_MAX)
+                if (rkt->rkt_conf.compression_level == RD_KAFKA_COMPLEVEL_DEFAULT)
+                        /* LZ4 has no notion of system-wide default compression
+                         * level, use zero in this case */
+                        rkt->rkt_conf.compression_level = 0;
+                else if (rkt->rkt_conf.compression_level > RD_KAFKA_COMPLEVEL_LZ4_MAX)
                         rkt->rkt_conf.compression_level =
                                 RD_KAFKA_COMPLEVEL_LZ4_MAX;
-                else if (rkt->rkt_conf.compression_level < 0)
-                        rkt->rkt_conf.compression_level = 0;
                 break;
         case RD_KAFKA_COMPRESSION_SNAPPY:
         default:
-                /* Compression level has no effet in this case */
+                /* Compression level has no effect in this case */
                 rkt->rkt_conf.compression_level = RD_KAFKA_COMPLEVEL_DEFAULT;
         }
 	

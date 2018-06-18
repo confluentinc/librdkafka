@@ -360,7 +360,7 @@ class NugetPackage (Package):
                     break
 
             if artifact is None:
-                raise Exception('unable to find file in archive %s with tags %s that starts with "%s"' % (a.fname, str(attributes), fname_startswith))
+                raise Exception('unable to find artifact with tags %s that starts with "%s"' % (str(attributes), fname_startswith))
 
             outf = os.path.join(self.stpath, m[2])
             member = m[1]

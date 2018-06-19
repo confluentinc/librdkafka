@@ -43,6 +43,7 @@ file-check: lib
 check: file-check
 
 install: lib-install
+uninstall: lib-uninstall
 
 clean: lib-clean
 

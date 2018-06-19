@@ -66,6 +66,7 @@ check: file-check
 		printf "$(MKL_RED)FAILED$(MKL_CLR_RESET)\n")
 
 install: lib-install
+uninstall: lib-uninstall
 
 clean: lib-clean
 

@@ -31,7 +31,7 @@ file-check: CONFIGURATION.md LICENSES.txt examples
 check: file-check
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d $@ || exit $?; done)
 
-install:
+install uninstall:
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d $@ || exit $?; done)
 
 examples tests: .PHONY libs

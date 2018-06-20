@@ -853,9 +853,9 @@ rd_kafka_topic_metadata_update (rd_kafka_itopic_t *rkt,
         old_state = rkt->rkt_state;
 	rkt->rkt_ts_metadata = ts_age;
 
-	/* Set topic state */
+	/* Set topic state.
+         * UNKNOWN_TOPIC_OR_PART may indicate that auto.create.topics failed */
 	if (mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
-	    mdt->err == RD_KAFKA_RESP_ERR_UNKNOWN/*auto.create.topics fails*/||
             mdt->err == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION/*invalid topic*/)
                 rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_NOTEXISTS);
         else if (mdt->partition_cnt > 0)

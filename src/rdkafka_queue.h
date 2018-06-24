@@ -78,11 +78,15 @@ struct rd_kafka_q_s {
 };
 
 
-/* FD-based application signalling state holder. */
+/* Application signalling state holder. */
 struct rd_kafka_q_io {
+        /* For FD-based signalling */
 	int    fd;
 	void  *payload;
 	size_t size;
+        /* For callback-based signalling */
+        void (*event_cb) (rd_kafka_t *rk, void *opaque);
+        void *event_cb_opaque;
 };
 
 
@@ -282,6 +286,11 @@ void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
 
 	if (likely(!rkq->rkq_qio))
 		return;
+
+        if (rkq->rkq_qio->event_cb) {
+                rkq->rkq_qio->event_cb(rkq->rkq_rk, rkq->rkq_qio->event_cb_opaque);
+                return;
+        }
 
 #ifdef _MSC_VER
 	r = _write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, (int)rkq->rkq_qio->size);

@@ -75,6 +75,7 @@ set(
     0080-admin_ut.c
     0081-admin.c
     0082-fetch_max_bytes.cpp
+    0083-cb_event.c
     8000-idle.cpp
     test.c
     testcpp.cpp    

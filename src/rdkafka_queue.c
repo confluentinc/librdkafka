@@ -719,6 +719,8 @@ void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
                 qio->fd = fd;
                 qio->size = size;
                 qio->payload = (void *)(qio+1);
+                qio->event_cb = NULL;
+                qio->event_cb_opaque = NULL;
                 memcpy(qio->payload, payload, size);
         }
 
@@ -739,6 +741,46 @@ void rd_kafka_q_io_event_enable (rd_kafka_q_t *rkq, int fd,
 void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
                                      const void *payload, size_t size) {
         rd_kafka_q_io_event_enable(rkqu->rkqu_q, fd, payload, size);
+}
+
+
+/**
+ * @brief Enable or disable(event_cb==NULL) callback-based wake-ups for queue
+ */
+void rd_kafka_q_cb_event_enable (rd_kafka_q_t *rkq,
+                                 void (*event_cb) (rd_kafka_t *rk,
+                                                   void *opaque),
+                                 void *opaque) {
+        struct rd_kafka_q_io *qio = NULL;
+
+        if (event_cb) {
+                qio = rd_malloc(sizeof(*qio));
+                qio->fd = -1;
+                qio->size = 0;
+                qio->payload = NULL;
+                qio->event_cb = event_cb;
+                qio->event_cb_opaque = opaque;
+        }
+
+        mtx_lock(&rkq->rkq_lock);
+        if (rkq->rkq_qio) {
+                rd_free(rkq->rkq_qio);
+                rkq->rkq_qio = NULL;
+        }
+
+        if (event_cb) {
+                rkq->rkq_qio = qio;
+        }
+
+        mtx_unlock(&rkq->rkq_lock);
+
+}
+
+void rd_kafka_queue_cb_event_enable (rd_kafka_queue_t *rkqu,
+                                     void (*event_cb) (rd_kafka_t *rk,
+                                                       void *opaque),
+                                     void *opaque) {
+        rd_kafka_q_cb_event_enable (rkqu->rkqu_q, event_cb, opaque);
 }
 
 

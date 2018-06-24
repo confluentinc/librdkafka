@@ -2484,12 +2484,33 @@ size_t rd_kafka_queue_length (rd_kafka_queue_t *rkqu);
  *
  * librdkafka will maintain a copy of the \p payload.
  *
+ * @remark IO and callback event triggering are mutually exclusive.
  * @remark When using forwarded queues the IO event must only be enabled
  *         on the final forwarded-to (destination) queue.
  */
 RD_EXPORT
 void rd_kafka_queue_io_event_enable (rd_kafka_queue_t *rkqu, int fd,
 				     const void *payload, size_t size);
+
+/**
+ * @brief Enable callback event triggering for queue.
+ *
+ * The callback will be called from an internal librdkafka thread
+ * when a new element is enqueued on a previously empty queue.
+ *
+ * To remove event triggering call with \p event_cb = NULL.
+ *
+ * @remark IO and callback event triggering are mutually exclusive.
+ * @remark Since the callback may be triggered from internal librdkafka
+ *         threads, the application must not perform any pro-longed work in
+ *         the callback, or call any librdkafka APIs (for the same rd_kafka_t
+ *         handle).
+ */
+RD_EXPORT
+void rd_kafka_queue_cb_event_enable (rd_kafka_queue_t *rkqu,
+                                     void (*event_cb) (rd_kafka_t *rk,
+                                                       void *opaque),
+                                     void *opaque);
 
 /**@}*/
 

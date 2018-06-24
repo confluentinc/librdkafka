@@ -484,7 +484,7 @@ void rd_kafka_broker_conn_closed (rd_kafka_broker_t *rkb,
                  * reaper kicking in.
                  *
                  * Indications there might be an error and not an
-                 * idle connect:
+                 * idle disconnect:
                  *  - If the connection age is low a disconnect
                  *    typically indicates a failure, such as protocol mismatch.
                  *  - If the connection hasn't been idle long enough.

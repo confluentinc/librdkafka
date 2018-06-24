@@ -1427,7 +1427,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
                 if (events & POLLHUP) {
                         rd_kafka_broker_conn_closed(
                                 rkb, RD_KAFKA_RESP_ERR__TRANSPORT,
-                                "Disconnected:NOHUP");
+                                "Disconnected");
                         return;
                 }
 

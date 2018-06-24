@@ -164,6 +164,7 @@
     <ClCompile Include="..\..\tests\0080-admin_ut.c" />
     <ClCompile Include="..\..\tests\0081-admin.c" />
     <ClCompile Include="..\..\tests\0082-fetch_max_bytes.cpp" />
+    <ClCompile Include="..\..\tests\0083-cb_event.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

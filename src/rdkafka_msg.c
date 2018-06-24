@@ -905,6 +905,8 @@ rd_kafka_message_t *rd_kafka_message_get (rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_CONSUMER_ERR:
                 rkmessage = &rko->rko_u.err.rkm.rkm_rkmessage;
                 rkmessage->payload = rko->rko_u.err.errstr;
+                rkmessage->len = rkmessage->payload ?
+                        strlen(rkmessage->payload) : 0;
                 rkmessage->offset  = rko->rko_u.err.offset;
                 break;
 

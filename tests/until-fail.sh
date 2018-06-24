@@ -54,7 +54,16 @@ while true ; do
 
 
     if [[ "$DELETE_TOPICS" == "y" ]]; then
-        make delete_topics
+        # Delete topics using Admin API, which is very fast
+        # leads to sub-sequent test failures because of the background
+        # deletes in Kafka still taking a long time:
+        #
+        #make delete_topics
+
+        # Delete topic-by-topic using kafka-topics for each one,
+        # very slow but topics are properly deleted before the script
+        # returns.
+        ./delete-test-topics.sh $ZK_ADDRESS ~/src/kafka/bin/kafka-topics.sh || true
     fi
 done
 

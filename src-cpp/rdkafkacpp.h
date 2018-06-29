@@ -745,7 +745,6 @@ public:
     virtual ~CertRetrieveCb() {}
 };
 
-
 /**
  * @brief \b Portability: SocketCb callback class
  *

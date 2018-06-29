@@ -1848,8 +1848,7 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
 
 void
 rd_kafka_conf_set_cert_verify_cb(rd_kafka_conf_t *conf,
-    int(*cert_verify_cb) (unsigned char* cert, long len, void *opaque))
-{
+    int(*cert_verify_cb) (unsigned char* cert, long len, void *opaque)) {
 #if WITH_SSL
     conf->ssl.cert_verify_cb = cert_verify_cb;
 #else
@@ -1859,8 +1858,7 @@ rd_kafka_conf_set_cert_verify_cb(rd_kafka_conf_t *conf,
 }
 
 void rd_kafka_conf_set_cert_retrieve_cb(rd_kafka_conf_t *conf,
-    long(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, unsigned char** buffer, void *opaque))
-{
+    long(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, unsigned char** buffer, void *opaque)) {
 #if WITH_SSL
     conf->ssl.cert_retrieve_cb = cert_retrieve_cb;
 #else

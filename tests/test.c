@@ -3086,7 +3086,7 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
 
         TIMING_START(&t_cons, "CONSUME");
 
-        while ((exp_eof_cnt == -1 || eof_cnt < exp_eof_cnt) &&
+        while ((exp_eof_cnt <= 0 || eof_cnt < exp_eof_cnt) &&
                (exp_cnt == -1 || cnt < exp_cnt)) {
                 rd_kafka_message_t *rkmessage;
 
@@ -3103,6 +3103,7 @@ int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                                  rd_kafka_topic_name(rkmessage->rkt),
                                  rkmessage->partition,
                                  rkmessage->offset);
+                        TEST_ASSERT(exp_eof_cnt != 0, "expected no EOFs");
 			if (mv)
 				test_msgver_add_msg(mv, rkmessage);
                         eof_cnt++;

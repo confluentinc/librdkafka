@@ -217,12 +217,145 @@ static int consume_pause (void) {
 
 
 
+/**
+ * @brief Verify that the paused partition state is not used after
+ *        the partition has been re-assigned.
+ *
+ * 1. Produce N messages
+ * 2. Consume N/4 messages
+ * 3. Pause partitions
+ * 4. Manually commit offset N/2
+ * 5. Unassign partitions
+ * 6. Assign partitions again
+ * 7. Verify that consumption starts at N/2 and not N/4
+ */
+static int consume_pause_resume_after_reassign (void) {
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        const int32_t partition = 0;
+        const int msgcnt = 4000;
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *partitions, *pos;
+        rd_kafka_resp_err_t err;
+        int exp_msg_cnt;
+        uint64_t testid;
+        int r;
+        int msg_base = 0;
+        test_msgver_t mv;
+        rd_kafka_topic_partition_t *toppar;
+
+        test_conf_init(&conf, NULL, 60);
+
+        test_create_topic(topic, (int)partition+1, 1);
+
+        /* Produce messages */
+        testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);
+
+        /* Set start offset to beginning */
+        partitions = rd_kafka_topic_partition_list_new(1);
+        toppar = rd_kafka_topic_partition_list_add(partitions, topic,
+                                                   partition);
+        toppar->offset = RD_KAFKA_OFFSET_BEGINNING;
+
+
+        /**
+         * Create consumer.
+         */
+        rk = test_create_consumer(topic, NULL, conf, NULL);
+
+        test_consumer_assign("assign", rk, partitions);
+
+
+        exp_msg_cnt = msgcnt/4;
+        TEST_SAY("Consuming first quarter (%d) of messages\n", exp_msg_cnt);
+        test_msgver_init(&mv, testid);
+        r = test_consumer_poll("consume.first.quarter", rk, testid, 0,
+                               msg_base, exp_msg_cnt, &mv);
+        TEST_ASSERT(r == exp_msg_cnt,
+                    "expected %d messages, got %d", exp_msg_cnt, r);
+
+
+        TEST_SAY("Pausing partitions\n");
+        if ((err = rd_kafka_pause_partitions(rk, partitions)))
+                TEST_FAIL("Failed to pause: %s", rd_kafka_err2str(err));
+
+        TEST_SAY("Verifying pause, should see no new messages...\n");
+        test_consumer_poll_no_msgs("silence.while.paused", rk, testid, 3000);
+
+        test_msgver_verify("first.quarter", &mv, TEST_MSGVER_ALL_PART,
+                           msg_base, exp_msg_cnt);
+        test_msgver_clear(&mv);
+
+
+        /* Check position */
+        pos = rd_kafka_topic_partition_list_copy(partitions);
+        if ((err = rd_kafka_position(rk, pos)))
+                TEST_FAIL("position() failed: %s", rd_kafka_err2str(err));
+
+        TEST_ASSERT(!pos->elems[0].err,
+                    "position() returned error for our partition: %s",
+                    rd_kafka_err2str(pos->elems[0].err));
+        TEST_SAY("Current application consume position is %"PRId64"\n",
+                 pos->elems[0].offset);
+        TEST_ASSERT(pos->elems[0].offset == (int64_t)exp_msg_cnt,
+                    "expected position %"PRId64", not %"PRId64,
+                    (int64_t)exp_msg_cnt, pos->elems[0].offset);
+        rd_kafka_topic_partition_list_destroy(pos);
+
+
+        toppar->offset = (int64_t)(msgcnt/2);
+        TEST_SAY("Committing (yet unread) offset %"PRId64"\n", toppar->offset);
+        if ((err = rd_kafka_commit(rk, partitions, 0/*sync*/)))
+                TEST_FAIL("Commit failed: %s", rd_kafka_err2str(err));
+
+
+        TEST_SAY("Unassigning\n");
+        test_consumer_unassign("Unassign", rk);
+
+        /* Set start offset to INVALID so that the standard start offset
+         * logic kicks in. */
+        toppar->offset = RD_KAFKA_OFFSET_INVALID;
+
+        TEST_SAY("Reassigning\n");
+        test_consumer_assign("Reassign", rk, partitions);
+
+
+        TEST_SAY("Resuming partitions\n");
+        if ((err = rd_kafka_resume_partitions(rk, partitions)))
+                TEST_FAIL("Failed to resume: %s", rd_kafka_err2str(err));
+
+        msg_base = msgcnt / 2;
+        exp_msg_cnt = msgcnt / 2;
+        TEST_SAY("Consuming second half (%d) of messages at msg_base %d\n",
+                 exp_msg_cnt, msg_base);
+        test_msgver_init(&mv, testid);
+        r = test_consumer_poll("consume.second.half", rk, testid, 1/*exp eof*/,
+                               msg_base, exp_msg_cnt, &mv);
+        TEST_ASSERT(r == exp_msg_cnt,
+                    "expected %d messages, got %d", exp_msg_cnt, r);
+
+        test_msgver_verify("second.half", &mv, TEST_MSGVER_ALL_PART,
+                           msg_base, exp_msg_cnt);
+        test_msgver_clear(&mv);
+
+
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        test_consumer_close(rk);
+
+        rd_kafka_destroy(rk);
+
+        return 0;
+}
+
 
 int main_0026_consume_pause (int argc, char **argv) {
         int fails = 0;
 
-        if (test_can_create_topics(1))
+        if (test_can_create_topics(1)) {
                 fails += consume_pause();
+                fails += consume_pause_resume_after_reassign();
+        }
 
         if (fails > 0)
                 TEST_FAIL("See %d previous error(s)\n", fails);

@@ -604,7 +604,8 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 
 	/* Pause current partition set consumers until new assign() is called */
 	if (rkcg->rkcg_assignment)
-		rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 1,
+		rd_kafka_toppars_pause_resume(rkcg->rkcg_rk,
+                                              RD_KAFKA_TOPPAR_PAUSE,
 					      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
 					      rkcg->rkcg_assignment);
 
@@ -2247,8 +2248,9 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_toppar_unlock(rktp);
         }
 
-	/* Resume partition consumption. */
-	rd_kafka_toppars_pause_resume(rkcg->rkcg_rk, 0/*resume*/,
+	/* Unpause partition consumption. */
+	rd_kafka_toppars_pause_resume(rkcg->rkcg_rk,
+                                      RD_KAFKA_TOPPAR_UNPAUSE,
 				      RD_KAFKA_TOPPAR_F_LIB_PAUSE,
                                       old_assignment);
 
@@ -2314,7 +2316,7 @@ rd_kafka_cgrp_assign (rd_kafka_cgrp_t *rkcg,
 
 
 	if (assignment) {
-		rkcg->rkcg_assignment =
+                rkcg->rkcg_assignment =
 			rd_kafka_topic_partition_list_copy(assignment);
 
                 /* Mark partition(s) as desired */

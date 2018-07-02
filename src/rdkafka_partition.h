@@ -412,7 +412,9 @@ rd_ts_t rd_kafka_toppar_fetch_decide (rd_kafka_toppar_t *rktp,
                                       rd_kafka_broker_t *rkb,
                                       int force_remove);
 
-
+void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
+                                   rd_kafka_toppar_pause_t pause_type,
+                                   int flag);
 
 rd_ts_t rd_kafka_broker_consumer_toppar_serve (rd_kafka_broker_t *rkb,
                                                rd_kafka_toppar_t *rktp);
@@ -436,8 +438,9 @@ void rd_kafka_toppar_leader_unavailable (rd_kafka_toppar_t *rktp,
                                          rd_kafka_resp_err_t err);
 
 rd_kafka_resp_err_t
-rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
-			       rd_kafka_topic_partition_list_t *partitions);
+rd_kafka_toppars_pause_resume (rd_kafka_t *rk,
+                               rd_kafka_toppar_pause_t pause_type, int flag,
+                               rd_kafka_topic_partition_list_t *partitions);
 
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_new (const char *topic,

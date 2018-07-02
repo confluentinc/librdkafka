@@ -329,7 +329,7 @@ struct rd_kafka_op_s {
 		} fetch_start; /* reused for SEEK */
 
 		struct {
-			int pause;
+                        rd_kafka_toppar_pause_t pause_type;
 			int flag;
 		} pause;
 

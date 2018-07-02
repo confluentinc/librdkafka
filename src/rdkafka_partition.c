@@ -44,6 +44,12 @@ const char *rd_kafka_fetch_states[] = {
 };
 
 
+static const char *rd_kafka_toppar_pause_names[] = {
+        [RD_KAFKA_TOPPAR_PAUSE] = "pause",
+        [RD_KAFKA_TOPPAR_RESUME] = "resume",
+        [RD_KAFKA_TOPPAR_UNPAUSE] = "unpause"
+};
+
 static rd_kafka_op_res_t
 rd_kafka_toppar_op_serve (rd_kafka_t *rk,
                           rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
@@ -1615,6 +1621,17 @@ void rd_kafka_toppar_fetch_stop (rd_kafka_toppar_t *rktp,
 	}
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_STOPPING);
 
+        /* Unpause the partition if it was paused by the application.
+         * Partition pause will only last as long as the current assignment
+         * (high-level consumer) or the
+         * current fetch session (start/stop, low-level legacy consumer).
+         * We perform UNPAUSE rather than RESUME here to avoid any logic
+         * related to resuming fetching, which is not desired when stopping
+         * the fetcher. */
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_APP_PAUSE)
+                rd_kafka_toppar_pause_resume(rktp, RD_KAFKA_TOPPAR_UNPAUSE,
+                                             RD_KAFKA_TOPPAR_F_APP_PAUSE);
+
         /* Stop offset store (possibly async).
          * NOTE: will call .._stopped() if store finishes immediately,
          *       so no more operations after this call! */
@@ -1696,101 +1713,138 @@ err_reply:
 }
 
 
-static void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
-					  rd_kafka_op_t *rko_orig) {
-	rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
-	int pause = rko_orig->rko_u.pause.pause;
-	int flag = rko_orig->rko_u.pause.flag;
-        int32_t version = rko_orig->rko_version;
+/**
+ * @brief Pause or resume fetching and consumption, or producing, of partition.
+ *
+ * @param flag is the RD_KAFKA_TOPPAR_F_*_PAUSE flag to set or clear,
+ *        which is either _APP_ or _LIB_.
+ *
+ * @remark the caller is responsible for flushing any related message queues.
+ *
+ * @locks toppar lock MUST be held.
+ * @locality toppar handler thread
+ */
+void rd_kafka_toppar_pause_resume (rd_kafka_toppar_t *rktp,
+                                   rd_kafka_toppar_pause_t pause_type,
+                                   int flag) {
+        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
 
-	rd_kafka_toppar_lock(rktp);
+        switch (pause_type)
+        {
+        case RD_KAFKA_TOPPAR_PAUSE:
+                /* Pause partition */
+                rktp->rktp_flags |= flag;
 
-	rktp->rktp_op_version = version;
+                if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                        /* Save offset of last consumed message+1 as the
+                         * next message to fetch on resume. */
+                        if (rktp->rktp_app_offset != RD_KAFKA_OFFSET_INVALID) {
+                                rktp->rktp_next_offset = rktp->rktp_app_offset;
+                        }
 
-	if (pause) {
-		/* Pause partition */
-		rktp->rktp_flags |= flag;
+                        rd_kafka_dbg(rk, TOPIC, "PAUSE",
+                                     "Pause %s [%"PRId32"]: at offset %s "
+                                     "(state %s, v%d)",
+                                     rktp->rktp_rkt->rkt_topic->str,
+                                     rktp->rktp_partition,
+                                     rd_kafka_offset2str(
+                                             rktp->rktp_next_offset),
+                                     rd_kafka_fetch_states[rktp->
+                                                           rktp_fetch_state],
+                                     rktp->rktp_op_version);
+                } else {
+                        rd_kafka_dbg(rk, TOPIC, "PAUSE",
+                                     "Pause %s [%"PRId32"] (state %s, v%d)",
+                                     rktp->rktp_rkt->rkt_topic->str,
+                                     rktp->rktp_partition,
+                                     rd_kafka_fetch_states[rktp->
+                                                           rktp_fetch_state],
+                                     rktp->rktp_op_version);
+                }
 
-		if (rk->rk_type == RD_KAFKA_CONSUMER) {
-			/* Save offset of last consumed message+1 as the
-			 * next message to fetch on resume. */
-			if (rktp->rktp_app_offset != RD_KAFKA_OFFSET_INVALID) {
-				rktp->rktp_next_offset = rktp->rktp_app_offset;
-			}
+                break;
 
-			rd_kafka_dbg(rk, TOPIC, pause?"PAUSE":"RESUME",
-				     "%s %s [%"PRId32"]: at offset %s "
-				     "(state %s, v%d)",
-				     pause ? "Pause":"Resume",
-				     rktp->rktp_rkt->rkt_topic->str,
-				     rktp->rktp_partition,
-				     rd_kafka_offset2str(
-					     rktp->rktp_next_offset),
-				     rd_kafka_fetch_states[rktp->
-							   rktp_fetch_state],
-				     version);
-		} else {
-			rd_kafka_dbg(rk, TOPIC, pause?"PAUSE":"RESUME",
-				     "%s %s [%"PRId32"] (state %s, v%d)",
-				     pause ? "Pause":"Resume",
-				     rktp->rktp_rkt->rkt_topic->str,
-				     rktp->rktp_partition,
-				     rd_kafka_fetch_states[rktp->
-							   rktp_fetch_state],
-				     version);
-			}
+        case RD_KAFKA_TOPPAR_RESUME:
+        case RD_KAFKA_TOPPAR_UNPAUSE:
+                /* Resume or unpause partition */
+                rktp->rktp_flags &= ~flag;
 
-	} else {
-		/* Resume partition */
-		rktp->rktp_flags &= ~flag;
+                if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                        rd_kafka_dbg(rk, TOPIC, "RESUME",
+                                     "%s%s %s [%"PRId32"]: at offset %s "
+                                     "(state %s, v%d)",
+                                     rd_kafka_toppar_pause_names[pause_type],
+                                     rktp->rktp_fetch_state ==
+                                     RD_KAFKA_TOPPAR_FETCH_ACTIVE ?
+                                     "" : " (not resuming stopped partition)",
+                                     rktp->rktp_rkt->rkt_topic->str,
+                                     rktp->rktp_partition,
+                                     rd_kafka_offset2str(
+                                             rktp->rktp_next_offset),
+                                     rd_kafka_fetch_states[rktp->
+                                                           rktp_fetch_state],
+                                     rktp->rktp_op_version);
 
-		if (rk->rk_type == RD_KAFKA_CONSUMER) {
-			rd_kafka_dbg(rk, TOPIC, pause?"PAUSE":"RESUME",
-				     "%s %s [%"PRId32"]: at offset %s "
-				     "(state %s, v%d)",
-				     rktp->rktp_fetch_state ==
-				     RD_KAFKA_TOPPAR_FETCH_ACTIVE ?
-				     "Resuming" : "Not resuming stopped",
-				     rktp->rktp_rkt->rkt_topic->str,
-				     rktp->rktp_partition,
-				     rd_kafka_offset2str(
-					     rktp->rktp_next_offset),
-				     rd_kafka_fetch_states[rktp->
-							   rktp_fetch_state],
-				     version);
+                        /* If the resuming offset is logical we
+                         * need to trigger a seek (that performs the
+                         * logical->absolute lookup logic) to get
+                         * things going.
+                         * Typical case is when a partition is paused
+                         * before anything has been consumed by app
+                         * yet thus having rktp_app_offset=INVALID. */
+                        if (pause_type == RD_KAFKA_TOPPAR_RESUME &&
+                            (rktp->rktp_fetch_state ==
+                             RD_KAFKA_TOPPAR_FETCH_ACTIVE ||
+                             rktp->rktp_fetch_state ==
+                             RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT) &&
+                            rktp->rktp_next_offset == RD_KAFKA_OFFSET_INVALID)
+                                rd_kafka_toppar_next_offset_handle(
+                                        rktp, rktp->rktp_next_offset);
 
-			/* If the resuming offset is logical we
-			 * need to trigger a seek (that performs the
-			 * logical->absolute lookup logic) to get
-			 * things going.
-			 * Typical case is when a partition is paused
-			 * before anything has been consumed by app
-			 * yet thus having rktp_app_offset=INVALID. */
-			if ((rktp->rktp_fetch_state ==
-			     RD_KAFKA_TOPPAR_FETCH_ACTIVE ||
-			     rktp->rktp_fetch_state ==
-			     RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT) &&
-			    rktp->rktp_next_offset == RD_KAFKA_OFFSET_INVALID)
-				rd_kafka_toppar_next_offset_handle(
-					rktp, rktp->rktp_next_offset);
+                } else
+                        rd_kafka_dbg(rk, TOPIC, "RESUME",
+                                     "%s %s [%"PRId32"] (state %s, v%d)",
+                                     rd_kafka_toppar_pause_names[pause_type],
+                                     rktp->rktp_rkt->rkt_topic->str,
+                                     rktp->rktp_partition,
+                                     rd_kafka_fetch_states[rktp->
+                                                           rktp_fetch_state],
+                                     rktp->rktp_op_version);
 
-		} else
-			rd_kafka_dbg(rk, TOPIC, pause?"PAUSE":"RESUME",
-				     "%s %s [%"PRId32"] (state %s, v%d)",
-				     pause ? "Pause":"Resume",
-				     rktp->rktp_rkt->rkt_topic->str,
-				     rktp->rktp_partition,
-				     rd_kafka_fetch_states[rktp->
-							   rktp_fetch_state],
-				     version);
-	}
-	rd_kafka_toppar_unlock(rktp);
+                break;
 
-	if (pause && rk->rk_type == RD_KAFKA_CONSUMER) {
-		/* Flush partition's fetch queue */
-		rd_kafka_q_purge_toppar_version(rktp->rktp_fetchq, rktp,
-						rko_orig->rko_version);
-	}
+        default:
+                RD_NOTREACHED();
+        }
+}
+
+
+/**
+ * @brief Wrapper for rd_kafka_toppar_pause_resume() using arguments
+ *        from a PAUSE op.
+ *
+ * @locks none
+ * @locality toppar handler thread
+ */
+static void rd_kafka_toppar_pause_resume_from_op (rd_kafka_toppar_t *rktp,
+                                                  rd_kafka_op_t *rko_orig) {
+
+        rd_kafka_toppar_lock(rktp);
+
+        rktp->rktp_op_version = rko_orig->rko_version;
+
+        rd_kafka_toppar_pause_resume(rktp,
+                                     rko_orig->rko_u.pause.pause_type,
+                                     rko_orig->rko_u.pause.flag);
+
+        rd_kafka_toppar_unlock(rktp);
+
+        if (rko_orig->rko_u.pause.pause_type == RD_KAFKA_TOPPAR_PAUSE &&
+            rktp->rktp_rkt->rkt_rk->rk_type == RD_KAFKA_CONSUMER) {
+                /* Flush partition's fetch queue */
+                rd_kafka_q_purge_toppar_version(rktp->rktp_fetchq, rktp,
+                                                rko_orig->rko_version);
+        }
 }
 
 
@@ -2007,7 +2061,7 @@ rd_kafka_toppar_op_serve (rd_kafka_t *rk,
 		break;
 
 	case RD_KAFKA_OP_PAUSE:
-		rd_kafka_toppar_pause_resume(rktp, rko);
+		rd_kafka_toppar_pause_resume_from_op(rktp, rko);
 		break;
 
         case RD_KAFKA_OP_OFFSET_COMMIT | RD_KAFKA_OP_REPLY:
@@ -2253,22 +2307,22 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_seek (rd_kafka_toppar_t *rktp,
  */
 static rd_kafka_resp_err_t
 rd_kafka_toppar_op_pause_resume (rd_kafka_toppar_t *rktp,
-				 int pause, int flag) {
+				 rd_kafka_toppar_pause_t pause_type, int flag) {
 	int32_t version;
 	rd_kafka_op_t *rko;
 
 	/* Bump version barrier. */
 	version = rd_kafka_toppar_version_new_barrier(rktp);
 
-	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, pause ? "PAUSE":"RESUME",
-		     "%s %.*s [%"PRId32"] (v%"PRId32")",
-		     pause ? "Pause" : "Resume",
-		     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-		     rktp->rktp_partition, version);
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "PAUSE",
+                     "%s %.*s [%"PRId32"] (v%"PRId32")",
+                     rd_kafka_toppar_pause_names[pause_type],
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition, version);
 
 	rko = rd_kafka_op_new(RD_KAFKA_OP_PAUSE);
 	rko->rko_version = version;
-	rko->rko_u.pause.pause = pause;
+	rko->rko_u.pause.pause_type = pause_type;
 	rko->rko_u.pause.flag = flag;
 
 	rd_kafka_toppar_op0(rktp, rko, RD_KAFKA_NO_REPLYQ);
@@ -2292,14 +2346,16 @@ rd_kafka_toppar_op_pause_resume (rd_kafka_toppar_t *rktp,
  *         by toppar_pause() in the toppar's handler thread.
  */
 rd_kafka_resp_err_t
-rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
-			       rd_kafka_topic_partition_list_t *partitions) {
+rd_kafka_toppars_pause_resume (rd_kafka_t *rk,
+                               rd_kafka_toppar_pause_t pause_type, int flag,
+                               rd_kafka_topic_partition_list_t *partitions) {
 	int i;
 
-	rd_kafka_dbg(rk, TOPIC, pause ? "PAUSE":"RESUME",
-		     "%s %s %d partition(s)",
-		     flag & RD_KAFKA_TOPPAR_F_APP_PAUSE ? "Application" : "Library",
-		     pause ? "pausing" : "resuming", partitions->cnt);
+        rd_kafka_dbg(rk, TOPIC, "PAUSE",
+                     "%s %s %d partition(s)",
+                     flag & RD_KAFKA_TOPPAR_F_APP_PAUSE ?
+                     "Application" : "Library",
+                     rd_kafka_toppar_pause_names[pause_type], partitions->cnt);
 
 	for (i = 0 ; i < partitions->cnt ; i++) {
 		rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
@@ -2307,12 +2363,12 @@ rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
 		rd_kafka_toppar_t *rktp;
 
                 s_rktp = rd_kafka_topic_partition_list_get_toppar(rk, rktpar);
-		if (!s_rktp) {
-			rd_kafka_dbg(rk, TOPIC, pause ? "PAUSE":"RESUME",
-				     "%s %s [%"PRId32"]: skipped: "
-				     "unknown partition",
-				     pause ? "Pause":"Resume",
-				     rktpar->topic, rktpar->partition);
+                if (!s_rktp) {
+                        rd_kafka_dbg(rk, TOPIC, "PAUSE",
+                                     "%s %s [%"PRId32"]: skipped: "
+                                     "unknown partition",
+                                     rd_kafka_toppar_pause_names[pause_type],
+                                     rktpar->topic, rktpar->partition);
 
 			rktpar->err = RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION;
 			continue;
@@ -2320,7 +2376,7 @@ rd_kafka_toppars_pause_resume (rd_kafka_t *rk, int pause, int flag,
 
 		rktp = rd_kafka_toppar_s2i(s_rktp);
 
-		rd_kafka_toppar_op_pause_resume(rktp, pause, flag);
+		rd_kafka_toppar_op_pause_resume(rktp, pause_type, flag);
 
 		rd_kafka_toppar_destroy(s_rktp);
 

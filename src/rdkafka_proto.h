@@ -520,4 +520,19 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 #define RD_KAFKAP_MSGSET_V2_OF_MaxTimestamp     (8+4+4+1+4+2+4+8)
 #define RD_KAFKAP_MSGSET_V2_OF_RecordCount      (8+4+4+1+4+2+4+8+8+8+2+4)
 
+
+
+/**
+ * @brief Pause/resume types
+ */
+typedef enum {
+        RD_KAFKA_TOPPAR_PAUSE,  /* Pause consumption */
+        RD_KAFKA_TOPPAR_RESUME, /* Resume consumption, setting the next
+                                 * offset to consume based on the paused
+                                 * state. */
+        RD_KAFKA_TOPPAR_UNPAUSE, /* Clear the PAUSE flag but don't
+                                  * take any steps to resume consumption. */
+} rd_kafka_toppar_pause_t;
+
+
 #endif /* _RDKAFKA_PROTO_H_ */

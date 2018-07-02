@@ -2229,6 +2229,17 @@ void rd_kafka_yield (rd_kafka_t *rk);
  *
  * Success or error is returned per-partition \p err in the \p partitions list.
  *
+ * @remark Consumed partitions are automatically unpaused (resumed but does
+ *         not start fetching) when their fetchers are stopped or restarted,
+ *         such as when calling assign() or rd_kafka_consume_stop().
+ *
+ * @remark The partition's queue of fetched messages is purged when
+ *         the partition is paused, this means that when the partition
+ *         is resumed messages will be (re)fetched from the broker from the
+ *         paused position. An application that performs frequent pause/resume
+ *         should limit the `queued.min.messages` property to avoid
+ *         pre-fetching messages that are purged on pause.
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR
  */
 RD_EXPORT rd_kafka_resp_err_t
@@ -2241,6 +2252,10 @@ rd_kafka_pause_partitions (rd_kafka_t *rk,
  * @brief Resume producing consumption for the provided list of partitions.
  *
  * Success or error is returned per-partition \p err in the \p partitions list.
+ *
+ * @remark Consumed partitions are automatically unpaused (resumed but does
+ *         not start fetching) when their fetchers are stopped or restarted,
+ *         such as when calling assign() or rd_kafka_consume_stop().
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR
  */
@@ -2587,6 +2602,10 @@ int rd_kafka_consume_start_queue(rd_kafka_topic_t *rkt, int32_t partition,
  * The application needs to be stop all consumers before calling
  * `rd_kafka_destroy()` on the main object handle.
  *
+ * @remark Consumed partitions are automatically unpaused (resumed but does
+ *         not start fetching) when their fetchers are stopped or restarted,
+ *         such as when calling assign() or rd_kafka_consume_stop().
+ *
  * @returns 0 on success or -1 on error (see `errno`).
  */
 RD_EXPORT
@@ -2913,6 +2932,13 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk);
  * A zero-length \p partitions will treat the partitions as a valid,
  * albeit empty, assignment, and maintain internal state, while a \c NULL
  * value for \p partitions will reset and clear the internal state.
+ *
+ * @remark Consumed partitions are automatically unpaused (resumed but does
+ *         not start fetching) when their fetchers are stopped or restarted,
+ *         such as when calling assign() or rd_kafka_consume_stop().
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
+ *          RD_KAFKA_RESP_ERR__UNKNOWN_GROUP if no `group.id` is configured.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_assign (rd_kafka_t *rk,

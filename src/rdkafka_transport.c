@@ -1016,8 +1016,13 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                     PKCS12 *p12 = d2i_PKCS12_bio(bio, NULL);
                     if (p12) {
                         /*Get the private key password*/
+                        rd_kafka_dbg(rk, SECURITY, "SSL",
+                            "Calling callback to retrieve client's private key password");
                         len = rk->rk_conf.ssl.cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS, &buffer, rk->rk_conf.opaque);
                         if (len) {
+                            rd_kafka_dbg(rk, SECURITY, "SSL",
+                                "Retrieved client's private key password %u bytes",
+                                len);
                             EVP_PKEY* pkey;
                             X509 *cert;
                             STACK_OF(X509) *ca = NULL;

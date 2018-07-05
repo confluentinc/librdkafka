@@ -316,6 +316,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
         /* Translate compression level to library-specific level and check
          * upper bound */
         switch (rkt->rkt_conf.compression_codec) {
+#if WITH_ZLIB
         case RD_KAFKA_COMPRESSION_GZIP:
                 if (rkt->rkt_conf.compression_level == RD_KAFKA_COMPLEVEL_DEFAULT)
                         rkt->rkt_conf.compression_level = Z_DEFAULT_COMPRESSION;
@@ -323,6 +324,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                         rkt->rkt_conf.compression_level =
                                 RD_KAFKA_COMPLEVEL_GZIP_MAX;
                 break;
+#endif
         case RD_KAFKA_COMPRESSION_LZ4:
                 if (rkt->rkt_conf.compression_level == RD_KAFKA_COMPLEVEL_DEFAULT)
                         /* LZ4 has no notion of system-wide default compression

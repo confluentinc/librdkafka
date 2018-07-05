@@ -925,7 +925,7 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                 rd_strdupa(&topics[i],
                            test_mk_topic_name("DescribeConfigs_notexist", 1));
 
-        //test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
+        test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
 
         /*
          * ConfigResource #0: topic config, no config entries.
@@ -950,11 +950,14 @@ static void do_test_DescribeConfigs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
          */
         configs[ci] = rd_kafka_ConfigResource_new(
                 RD_KAFKA_RESOURCE_TOPIC, topics[ci]);
-        /* FIXME: This is a bug in the broker, it returns a full response
+        /* FIXME: This is a bug in the broker (<v2.0.0), it returns a full response
          *        for unknown topics.
          *        https://issues.apache.org/jira/browse/KAFKA-6778
          */
-        exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;// RD_KAFKA_RESP_ERR_UNKNOWN;
+        if (test_broker_version < TEST_BRKVER(2,0,0,0))
+                exp_err[ci] = RD_KAFKA_RESP_ERR_NO_ERROR;
+        else
+                exp_err[ci] = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
         ci++;
 
 

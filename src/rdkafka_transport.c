@@ -487,6 +487,7 @@ void rd_kafka_transport_ssl_init (void) {
 	SSL_library_init();
     ERR_load_BIO_strings();
 	OpenSSL_add_all_algorithms();
+    ERR_load_crypto_strings();
 
     verify_context_index = SSL_get_ex_new_index(0, "ssl verify context", NULL, NULL, NULL);
 }
@@ -679,13 +680,12 @@ int verify_broker_callback(int preverify_ok, X509_STORE_CTX* ctx)
                     rd_kafka_dbg(rk, SECURITY, "SSL",
                         "Calling client callback to verify certificate");
 
-                    int r = rk->rk_conf.ssl.cert_verify_cb(buf, len, rk->rk_conf.opaque);
-                    if (r != 0) {
+                    if(!rk->rk_conf.ssl.cert_verify_cb(buf, len, rk->rk_conf.opaque)) {
                         rd_snprintf(errstr, sizeof(errstr),
-                            "client certificate verification callback failed.  Returned %u", r);
+                            "client certificate verification callback failed.");
 
                         preverify_ok = 0;
-                        X509_STORE_CTX_set_error(ctx, r);
+                        X509_STORE_CTX_set_error(ctx, X509_V_ERR_CERT_UNTRUSTED);
                     }
                     else {
                         rd_kafka_dbg(rk, SECURITY, "SSL",

@@ -113,7 +113,6 @@ struct rd_kafka_conf_s {
 		char *crl_location;
 		char *keystore_location;
 		char *keystore_password;
-        int self_signed;
         int handshake_info;
         int(*cert_verify_cb) (unsigned char* cert, long len, void *opaque);
         long(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, unsigned char** buffer, void *opaque);

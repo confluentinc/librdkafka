@@ -824,8 +824,7 @@ static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
         SSL_set_info_callback(rktrans->rktrans_ssl, ssl_info_callback);
     }
 
-
-        rd_kafka_transport_ssl_clear_error(rktrans);
+    rd_kafka_transport_ssl_clear_error(rktrans);
 
 	r = SSL_connect(rktrans->rktrans_ssl);
 	if (r == 1) {
@@ -1148,6 +1147,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
             rd_kafka_dbg(rk, SECURITY, "SSL",
                 "Callback failed to return valid private key certificate");
     }
+
 #if OPENSSL_VERSION_NUMBER >= 0x1000200fL
 	/* Curves */
 	if (rk->rk_conf.ssl.curves_list) {

@@ -530,6 +530,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	_RK(ssl.keystore_password),
 	"Client's keystore (PKCS#12) password."
 	},
+    { _RK_GLOBAL, "ssl.handshake.info.enable", _RK_C_BOOL,
+    _RK(ssl.handshake_info),
+    "Report diagnostic information during SSL handshake",
+    0, 1, 0
+    },
+    { _RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
+    _RK(ssl.cert_verify_cb),
+    "Client certificate verification callback."
+    },
+    { _RK_GLOBAL, "ssl.certificate.retrieve_cb", _RK_C_PTR,
+    _RK(ssl.cert_retrieve_cb),
+    "Client certificate retrieve callback."
+    },
+    
 #endif /* WITH_SSL */
 
         /* Point user in the right direction if they try to apply
@@ -1884,6 +1898,27 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
         conf->open_cb = open_cb;
 }
 #endif
+
+void
+rd_kafka_conf_set_cert_verify_cb(rd_kafka_conf_t *conf,
+    int(*cert_verify_cb) (unsigned char* cert, long len, void *opaque)) {
+#if WITH_SSL
+    conf->ssl.cert_verify_cb = cert_verify_cb;
+#else
+    RD_UNUSED(conf);
+    RD_UNUSED(cert_verify_cb);
+#endif
+}
+
+void rd_kafka_conf_set_cert_retrieve_cb(rd_kafka_conf_t *conf,
+    long(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, unsigned char** buffer, void *opaque)) {
+#if WITH_SSL
+    conf->ssl.cert_retrieve_cb = cert_retrieve_cb;
+#else
+    RD_UNUSED(conf);
+    RD_UNUSED(cert_retrieve_cb);
+#endif
+}
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
 	conf->opaque = opaque;

@@ -1044,7 +1044,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 
             cert = X509_new();
             if (cert) {
-                if (!d2i_X509(&cert, (const char**)&buffer, len))
+                if (!d2i_X509(&cert, (const unsigned char**)&buffer, len))
                     rd_snprintf(errstr, errstr_size,
                         "Failed to parse public key certificate with %lu bytes",
                         len);
@@ -1087,7 +1087,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
                             EVP_PKEY* pkey;
                             X509 *cert;
                             STACK_OF(X509) *ca = NULL;
-                            if (!PKCS12_parse(p12, buffer, &pkey, &cert, &ca)) {
+                            if (!PKCS12_parse(p12, (const unsigned char*)buffer, &pkey, &cert, &ca)) {
                                 rd_snprintf(errstr, errstr_size,
                                     "Error reading PKCS#12");
 

@@ -30,8 +30,6 @@
 
 #include <sstream>
 
-
-
 extern "C" {
 #ifdef _MSC_VER
 /* Win32/Visual Studio */
@@ -44,7 +42,7 @@ extern "C" {
 #endif
 #include "testshared.h"
 
-#include "..\src\rdkafka.h"
+#include "rdkafka.h"
 }
 
 #include "rdkafkacpp.h"

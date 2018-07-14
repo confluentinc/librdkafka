@@ -30,7 +30,7 @@
 
 #include <sstream>
 
-#include "rdkafkacpp.h"
+
 
 extern "C" {
 #ifdef _MSC_VER
@@ -43,7 +43,11 @@ extern "C" {
 #include "../src/rdposix.h"
 #endif
 #include "testshared.h"
+
+#include "..\src\rdkafka.h"
 }
+
+#include "rdkafkacpp.h"
 
 // courtesy of http://stackoverview.blogspot.se/2011/04/create-string-on-fly-just-in-one-line.html
 struct tostr {

@@ -715,7 +715,37 @@ public:
   virtual ~OffsetCommitCb() { }
 };
 
+/**
+* @brief Certificate verify callback class
+*/
+class RD_EXPORT CertVerifyCb {
+public:
+    /**
+    * @brief Set certificate verification callback.
+    *
+    * The verification of the broker certificate will processed
+    * by this callback.
+    */
+    virtual int cert_verify_cb(unsigned char* cert, long len) = 0;
 
+
+    virtual ~CertVerifyCb() {}
+};
+
+/**
+* @brief Certificate retrieve callback class
+*/
+class RD_EXPORT CertRetrieveCb {
+public:
+    /**
+    * @brief Set certificate retrieve callback.
+    *
+    * The retrieval of the cetificate specified by the type will be returned by this callback.
+    */
+    virtual long cert_retrieve_cb(rd_kafka_certificate_type_t type, unsigned char** buffer) = 0;
+
+    virtual ~CertRetrieveCb() {}
+};
 
 /**
  * @brief \b Portability: SocketCb callback class
@@ -878,6 +908,16 @@ class RD_EXPORT Conf {
                                 OffsetCommitCb *offset_commit_cb,
                                 std::string &errstr) = 0;
 
+  /** @brief Use with \p name = \c \"ssl_verify_cb\" */
+  virtual Conf::ConfResult set(const std::string &name,
+                               CertVerifyCb *cert_verify_cb,
+                               std::string &errstr) = 0;
+
+  /** @brief Use with \p name = \c \"ssl_retrieve_cb\" */
+  virtual Conf::ConfResult set(const std::string &name,
+                               CertRetrieveCb *cert_retrieve_cb,
+                               std::string &errstr) = 0;
+
   /** @brief Query single configuration value
    *
    * Do not use this method to get callbacks registered by the configuration file.
@@ -932,6 +972,12 @@ class RD_EXPORT Conf {
    *           returns the value in \p offset_commit_cb. */
   virtual Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const = 0;
 
+  /** @brief Use with \p name = \c \"ssl_verify_cb\" */
+  virtual Conf::ConfResult get(CertVerifyCb *&cert_verify_cb) const = 0;
+
+  /** @brief Use with \p name = \c \"ssl_retrieve_cb\" */
+  virtual Conf::ConfResult get(CertRetrieveCb *&cert_retrieve_cb) const = 0;
+
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */
   virtual std::list<std::string> *dump () = 0;
@@ -939,6 +985,7 @@ class RD_EXPORT Conf {
   /** @brief Use with \p name = \c \"consume_cb\" */
   virtual Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
 				std::string &errstr) = 0;
+
 };
 
 /**@}*/

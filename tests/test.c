@@ -233,9 +233,7 @@ struct test tests[] = {
 	_TEST(0046_rkt_cache, TEST_F_LOCAL),
 	_TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
 	_TEST(0048_partitioner, 0),
-#if WITH_SOCKEM
-        _TEST(0049_consume_conn_close, 0, TEST_BRKVER(0,9,0,0)),
-#endif
+        _TEST(0049_consume_conn_close, TEST_F_SOCKEM, TEST_BRKVER(0,9,0,0)),
         _TEST(0050_subscribe_adds, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0051_assign_adds, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0052_msg_timestamps, 0, TEST_BRKVER(0,10,0,0)),
@@ -257,19 +255,15 @@ struct test tests[] = {
               TEST_F_LOCAL|TEST_F_KNOWN_ISSUE_WIN32|TEST_F_KNOWN_ISSUE_OSX,
               .extra = "dynamic loading of tests might not be fixed for this platform"),
         _TEST(0067_empty_topic, 0),
-#if WITH_SOCKEM
-        _TEST(0068_produce_timeout, 0),
-#endif
+        _TEST(0068_produce_timeout, TEST_F_SOCKEM),
         _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32,
               TEST_BRKVER(0,9,0,0)),
         _TEST(0070_null_empty, 0),
         _TEST(0072_headers_ut, TEST_F_LOCAL),
         _TEST(0073_headers, 0, TEST_BRKVER(0,11,0,0)),
         _TEST(0074_producev, TEST_F_LOCAL),
-#if WITH_SOCKEM
-        _TEST(0075_retry, 0),
-#endif
-        _TEST(0076_produce_retry, 0),
+        _TEST(0075_retry, TEST_F_SOCKEM),
+        _TEST(0076_produce_retry, TEST_F_SOCKEM),
         _TEST(0077_compaction, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0078_c_from_cpp, TEST_F_LOCAL),
         _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE,
@@ -1300,6 +1294,8 @@ int main(int argc, char **argv) {
 			test_flags |= TEST_F_KNOWN_ISSUE;
 		else if (!strcmp(argv[i], "-K"))
 			test_neg_flags |= TEST_F_KNOWN_ISSUE;
+                else if (!strcmp(argv[i], "-E"))
+                        test_neg_flags |= TEST_F_SOCKEM;
 		else if (!strcmp(argv[i], "-V") && i+1 < argc)
  			test_broker_version_str = argv[++i];
 		else if (!strcmp(argv[i], "-S"))
@@ -1316,6 +1312,7 @@ int main(int argc, char **argv) {
                                "  -p<N>  Run N tests in parallel\n"
                                "  -l/-L  Only/dont run local tests (no broker needed)\n"
 			       "  -k/-K  Only/dont run tests with known issues\n"
+                               "  -E     Don't run sockem tests\n"
                                "  -a     Assert on failures\n"
 			       "  -S     Dont show test summary\n"
 			       "  -V <N.N.N.N> Broker version.\n"

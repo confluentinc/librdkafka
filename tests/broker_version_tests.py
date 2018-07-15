@@ -53,7 +53,7 @@ def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None,
     else:
         rdkafka.start()
         print('# librdkafka regression tests started, logs in %s' % rdkafka.root_path())
-        rdkafka.wait_stopped(timeout=60*10)
+        rdkafka.wait_stopped(timeout=60*30)
 
         report = rdkafka.report()
         report['root_path'] = rdkafka.root_path()

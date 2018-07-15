@@ -15,14 +15,16 @@ KAFKA_VERSION?=1.1.0
 
 all: $(BIN) run_par
 
-trunk: build
-	./broker_version_tests.py trunk
-	./sasl_test.py trunk
+broker: $(BIN)
+	./broker_version_tests.py --conf '{"parallel":1}' $(KAFKA_VERSION)
+
+sasl: $(BIN)
+	./sasl_test.py --conf '{"parallel":1}' --no-ssl --debug $(KAFKA_VERSION)
 
 # Run the full test suite(s)
-full: build
-	./broker_version_tests.py --conf '{"parallel":1}' $(KAFKA_VERSION)
-	./sasl_test.py --conf '{"parallel":1}' $(KAFKA_VERSION)
+full: full_broker full_sasl
+
+
 
 run_par: $(BIN)
 	@echo "Running tests in parallel"

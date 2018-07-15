@@ -184,8 +184,8 @@ static int rd_base64_decode (const rd_chariov_t *in, rd_chariov_t *out) {
         ret_len = ((in->size / 4) * 3);
         out->ptr = rd_malloc(ret_len+1);
 
-        if (EVP_DecodeBlock((uint8_t*)out->ptr, (uint8_t*)in->ptr, in->size) ==
-            -1) {
+        if (EVP_DecodeBlock((uint8_t*)out->ptr, (uint8_t*)in->ptr,
+                            (int)in->size) == -1) {
                 free(out->ptr);
                 out->ptr = NULL;
                 return -1;

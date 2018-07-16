@@ -1559,6 +1559,8 @@ void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
 
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_STOPPED);
 
+        rktp->rktp_app_offset = RD_KAFKA_OFFSET_INVALID;
+
         if (rktp->rktp_cgrp) {
                 /* Detach toppar from cgrp */
                 rd_kafka_cgrp_op(rktp->rktp_cgrp, rktp, RD_KAFKA_NO_REPLYQ,

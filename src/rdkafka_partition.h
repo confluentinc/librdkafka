@@ -183,8 +183,11 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 	int64_t            rktp_last_next_offset; /* Last next_offset handled
 						   * by fetch_decide().
 						   * Locality: broker thread */
-	int64_t            rktp_app_offset;      /* Last offset delivered to
-						  * application + 1 */
+        int64_t            rktp_app_offset;      /* Last offset delivered to
+                                                  * application + 1.
+                                                  * Is reset to INVALID_OFFSET
+                                                  * when partition is
+                                                  * unassigned/stopped. */
 	int64_t            rktp_stored_offset;   /* Last stored offset, but
 						  * maybe not committed yet. */
         int64_t            rktp_committing_offset; /* Offset currently being

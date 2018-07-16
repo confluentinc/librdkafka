@@ -166,13 +166,13 @@ fetchq_size | int gauge | | Bytes in fetchq
 fetch_state | string | `"active"` | Consumer fetch state for this partition (none, stopping, stopped, offset-query, offset-wait, active).
 query_offset | int gauge | | Current/Last logical offset query
 next_offset | int gauge | | Next offset to fetch
-app_offset | int gauge | | Offset of last message passed to application
+app_offset | int gauge | | Offset of last message passed to application + 1
 stored_offset | int gauge | | Offset to be committed
 committed_offset | int gauge | | Last committed offset
 eof_offset | int gauge | | Last PARTITION_EOF signaled offset
 lo_offset | int gauge | | Partition's low watermark offset on broker
 hi_offset | int gauge | | Partition's high watermark offset on broker
-consumer_lag | int gauge | | Difference between hi_offset - app_offset
+consumer_lag | int gauge | | Difference between hi_offset - max(app_offset, committed_offset)
 txmsgs | int | | Total number of messages transmitted (produced)
 txbytes | int | | Total number of bytes transmitted for txmsgs
 rxmsgs | int | | Total number of messages consumed, not including ignored messages (due to offset, etc).

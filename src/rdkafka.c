@@ -999,13 +999,19 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
         /* Grab a copy of the latest finalized offset stats */
         offs = rktp->rktp_offsets_fin;
 
-        if (rktp->rktp_hi_offset != RD_KAFKA_OFFSET_INVALID &&
-            rktp->rktp_app_offset >= 0) {
-                if (unlikely(rktp->rktp_app_offset > rktp->rktp_hi_offset))
+        /* Calculate consumer_lag by using the highest offset
+         * of app_offset (the last message passed to application + 1)
+         * or the committed_offset (the last message committed by this or
+         * another consumer).
+         * Using app_offset allows consumer_lag to be up to date even if
+         * offsets are not (yet) committed.
+         */
+        if (rktp->rktp_hi_offset != RD_KAFKA_OFFSET_INVALID) {
+                consumer_lag = rktp->rktp_hi_offset -
+                        RD_MAX(rktp->rktp_app_offset,
+                               rktp->rktp_committed_offset);
+                if (unlikely(consumer_lag) < 0)
                         consumer_lag = 0;
-                else
-                        consumer_lag = rktp->rktp_hi_offset -
-                                rktp->rktp_app_offset;
         }
 
 	_st_printf("%s\"%"PRId32"\": { "

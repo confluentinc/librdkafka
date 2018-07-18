@@ -3953,17 +3953,32 @@ test_wait_admin_result (rd_kafka_queue_t *q,
                         int tmout) {
         rd_kafka_event_t *rkev;
 
-        rkev = rd_kafka_queue_poll(q, tmout);
-        if (!rkev)
-                TEST_FAIL("Timed out waiting for admin result (%d)\n", evtype);
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout);
+                if (!rkev)
+                        TEST_FAIL("Timed out waiting for admin result (%d)\n",
+                                  evtype);
 
-        TEST_ASSERT(rd_kafka_event_type(rkev) == evtype,
-                    "Expected event type %d, got %d (%s)",
-                    evtype,
-                    rd_kafka_event_type(rkev),
-                    rd_kafka_event_name(rkev));
+                if (rd_kafka_event_type(rkev) == evtype)
+                        return rkev;
 
-        return rkev;
+
+                if (rd_kafka_event_type(rkev) == RD_KAFKA_EVENT_ERROR) {
+                        TEST_WARN("Received error event while waiting for %d: "
+                                  "%s: ignoring",
+                                  evtype, rd_kafka_event_error_string(rkev));
+                        continue;
+                }
+
+
+                TEST_ASSERT(rd_kafka_event_type(rkev) == evtype,
+                            "Expected event type %d, got %d (%s)",
+                            evtype,
+                            rd_kafka_event_type(rkev),
+                            rd_kafka_event_name(rkev));
+        }
+
+        return NULL;
 }
 
 
@@ -4047,7 +4062,7 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
  *             If NULL this call will be synchronous and return the error
  *             result.
  *             
- *
+ * @remark Fails the current test on failure.
  */
 
 rd_kafka_resp_err_t
@@ -4116,6 +4131,10 @@ test_CreateTopics_simple (rd_kafka_t *rk,
 
         rd_kafka_queue_destroy(q);
 
+        if (err)
+                TEST_FAIL("Failed to create %d topic(s): %s",
+                          (int)topic_cnt, rd_kafka_err2str(err));
+
         return err;
 }
 
@@ -4180,6 +4199,10 @@ test_CreatePartitions_simple (rd_kafka_t *rk,
 
         rd_kafka_queue_destroy(q);
 
+        if (err)
+                TEST_FAIL("Failed to create partitions: %s",
+                          rd_kafka_err2str(err));
+
         return err;
 }
 
@@ -4243,6 +4266,10 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
                                            tmout+5000);
 
         rd_kafka_queue_destroy(q);
+
+        if (err)
+                TEST_FAIL("Failed to delete topics: %s",
+                          rd_kafka_err2str(err));
 
         return err;
 }

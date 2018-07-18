@@ -452,7 +452,7 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
 
         for (i = 0 ; i < MY_CONFRES_CNT ; i++) {
-                int add_config = !(i % 2);
+                int set_config = !(i % 2);
 
                 /* librdkafka shall not limit the use of illogical
                  * or unknown settings, they are enforced by the broker. */
@@ -460,12 +460,12 @@ static void do_test_configs (rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                         (rd_kafka_ResourceType_t)i, "3");
                 TEST_ASSERT(configs[i] != NULL);
 
-                if (add_config) {
-                        rd_kafka_ConfigResource_add_config(configs[i],
+                if (set_config) {
+                        rd_kafka_ConfigResource_set_config(configs[i],
                                                            "some.conf",
                                                            "which remains "
                                                            "unchecked");
-                        rd_kafka_ConfigResource_add_config(configs[i],
+                        rd_kafka_ConfigResource_set_config(configs[i],
                                                            "some.conf.null",
                                                            NULL);
                 }
@@ -595,7 +595,6 @@ static void do_test_options (rd_kafka_t *rk) {
                 { "operation_timeout", { RD_KAFKA_ADMIN_OP_CREATETOPICS,
                                          RD_KAFKA_ADMIN_OP_DELETETOPICS,
                                          RD_KAFKA_ADMIN_OP_CREATEPARTITIONS } },
-                { "incremental", { RD_KAFKA_ADMIN_OP_ALTERCONFIGS } },
                 { "validate_only", { RD_KAFKA_ADMIN_OP_CREATETOPICS,
                                      RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,
                                      RD_KAFKA_ADMIN_OP_ALTERCONFIGS } },
@@ -627,13 +626,7 @@ static void do_test_options (rd_kafka_t *rk) {
                         else if (!strcmp(matrix[i].setter, "operation_timeout"))
                                 err = rd_kafka_AdminOptions_set_operation_timeout(
                                         options, 12345, errstr, sizeof(errstr));
-                        else if (!strcmp(matrix[i].setter, "incremental")) {
-                                err = rd_kafka_AdminOptions_set_incremental(
-                                        options, 1, errstr, sizeof(errstr));
-                                /* incremental is yet not implemented in the
-                                 * client nor the broker. */
-                                exp_err = RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
-                        } else if (!strcmp(matrix[i].setter, "validate_only"))
+                        else if (!strcmp(matrix[i].setter, "validate_only"))
                                 err = rd_kafka_AdminOptions_set_validate_only(
                                         options, 1, errstr, sizeof(errstr));
                         else if (!strcmp(matrix[i].setter, "broker"))

@@ -1400,11 +1400,17 @@ int main (int argc, char **argv) {
 			cnt.msgs++;
 			cnt.bytes += msgsize;
 
-                        if (rate_sleep)
-                                do_sleep(rate_sleep);
-
 			/* Must poll to handle delivery reports */
-			rd_kafka_poll(rk, 0);
+			if (rate_sleep) {
+				rd_ts_t next = rd_clock() + (rd_ts_t) rate_sleep;
+				do {
+					rd_kafka_poll(rk,
+						      (int)RD_MAX(0,
+						      (next - rd_clock()) / 1000));
+				} while (next > rd_clock());
+			} else {
+				rd_kafka_poll(rk, 0);
+			}
 
 			print_stats(rk, mode, otype, compression);
 		}

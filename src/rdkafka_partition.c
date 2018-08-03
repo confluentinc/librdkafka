@@ -3329,7 +3329,7 @@ rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktpar
  *  - offset
  *  - err
  *
- * Will only partitions that are in both dst and src, other partitions will
+ * Will only update partitions that are in both dst and src, other partitions will
  * remain unchanged.
  */
 void

@@ -1995,6 +1995,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
 	rd_kafka_toppar_t *rktp;
         rd_kafka_q_t *tmpq = NULL;
         rd_kafka_resp_err_t err;
+        rd_kafka_replyq_t replyq = RD_KAFKA_NO_REPLYQ;
 
         /* FIXME: simple consumer check */
 
@@ -2009,12 +2010,13 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
 	}
 	rd_kafka_topic_rdunlock(rkt);
 
-        if (timeout_ms)
+        if (timeout_ms) {
                 tmpq = rd_kafka_q_new(rkt->rkt_rk);
+                replyq = RD_KAFKA_REPLYQ(tmpq, 0);
+        }
 
         rktp = rd_kafka_toppar_s2i(s_rktp);
-        if ((err = rd_kafka_toppar_op_seek(rktp, offset,
-					   RD_KAFKA_REPLYQ(tmpq, 0)))) {
+        if ((err = rd_kafka_toppar_op_seek(rktp, offset, replyq))) {
                 if (tmpq)
                         rd_kafka_q_destroy_owner(tmpq);
                 rd_kafka_toppar_destroy(s_rktp);

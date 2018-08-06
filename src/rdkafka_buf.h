@@ -588,6 +588,12 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 };
 
 
+/**
+ * @returns true if buffer has been sent on wire, else 0.
+ */
+#define rd_kafka_buf_was_sent(rkbuf)                    \
+        ((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_SENT)
+
 typedef struct rd_kafka_bufq_s {
 	TAILQ_HEAD(, rd_kafka_buf_s) rkbq_bufs;
 	rd_atomic32_t  rkbq_cnt;

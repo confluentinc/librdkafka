@@ -331,16 +331,20 @@ void rd_kafka_buf_calc_timeout (const rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
 }
 
 /**
- * Retry failed request, depending on the error.
+ * Retry failed request, if permitted.
  * @remark \p rkb may be NULL
+ * @remark the retry count is only increased for actually transmitted buffers,
+ *         if there is a failure while the buffers lingers in the output queue
+ *         (rkb_outbufs) then the retry counter is not increased.
  * Returns 1 if the request was scheduled for retry, else 0.
  */
 int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
+        int incr_retry = rd_kafka_buf_was_sent(rkbuf) ? 1 : 0;
 
         if (unlikely(!rkb ||
 		     rkb->rkb_source == RD_KAFKA_INTERNAL ||
 		     rd_kafka_terminating(rkb->rkb_rk) ||
-		     rkbuf->rkbuf_retries + 1 >
+		     rkbuf->rkbuf_retries + incr_retry >
 		     rkb->rkb_rk->rk_conf.max_retries))
                 return 0;
 
@@ -352,7 +356,7 @@ int rd_kafka_buf_retry (rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
 	/* Try again */
 	rkbuf->rkbuf_ts_sent = 0;
         rkbuf->rkbuf_ts_timeout = 0; /* Will be updated in calc_timeout() */
-	rkbuf->rkbuf_retries++;
+	rkbuf->rkbuf_retries += incr_retry;
 	rd_kafka_buf_keep(rkbuf);
 	rd_kafka_broker_buf_retry(rkb, rkbuf);
 	return 1;

@@ -421,11 +421,13 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	rd_kafka_bufq_concat(&tmpq, &rkb->rkb_outbufs);
         rd_atomic32_init(&rkb->rkb_blocking_request_cnt, 0);
 
-	/* Purge the buffers (might get re-enqueued in case of retries) */
+        /* Purge the in-flight buffers (might get re-enqueued in case
+         * of retries). */
 	rd_kafka_bufq_purge(rkb, &tmpq_waitresp, err);
 
-	/* Put the outbufs back on queue */
-	rd_kafka_bufq_concat(&rkb->rkb_outbufs, &tmpq);
+        /* Purge the waiting-in-output-queue buffers,
+         * might also get re-enqueued. */
+        rd_kafka_bufq_purge(rkb, &tmpq, err);
 
 	/* Update bufq for connection reset:
 	 *  - Purge connection-setup requests from outbufs since they will be
@@ -700,6 +702,7 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
 
         now = rd_clock();
         rkbuf->rkbuf_ts_enq = now;
+        rkbuf->rkbuf_flags &= ~RD_KAFKA_OP_F_SENT;
 
         /* Calculate request attempt timeout */
         rd_kafka_buf_calc_timeout(rkb->rkb_rk, rkbuf, now);
@@ -1955,6 +1958,7 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
 
 		/* Entire buffer sent, unlink from outbuf */
 		rd_kafka_bufq_deq(&rkb->rkb_outbufs, rkbuf);
+                rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_SENT;
 
 		/* Store time for RTT calculation */
 		rkbuf->rkbuf_ts_sent = now;

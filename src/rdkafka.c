@@ -999,13 +999,19 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
         /* Grab a copy of the latest finalized offset stats */
         offs = rktp->rktp_offsets_fin;
 
-        if (rktp->rktp_hi_offset != RD_KAFKA_OFFSET_INVALID &&
-            rktp->rktp_app_offset >= 0) {
-                if (unlikely(rktp->rktp_app_offset > rktp->rktp_hi_offset))
+        /* Calculate consumer_lag by using the highest offset
+         * of app_offset (the last message passed to application + 1)
+         * or the committed_offset (the last message committed by this or
+         * another consumer).
+         * Using app_offset allows consumer_lag to be up to date even if
+         * offsets are not (yet) committed.
+         */
+        if (rktp->rktp_hi_offset != RD_KAFKA_OFFSET_INVALID) {
+                consumer_lag = rktp->rktp_hi_offset -
+                        RD_MAX(rktp->rktp_app_offset,
+                               rktp->rktp_committed_offset);
+                if (unlikely(consumer_lag) < 0)
                         consumer_lag = 0;
-                else
-                        consumer_lag = rktp->rktp_hi_offset -
-                                rktp->rktp_app_offset;
         }
 
 	_st_printf("%s\"%"PRId32"\": { "
@@ -1989,6 +1995,7 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
 	rd_kafka_toppar_t *rktp;
         rd_kafka_q_t *tmpq = NULL;
         rd_kafka_resp_err_t err;
+        rd_kafka_replyq_t replyq = RD_KAFKA_NO_REPLYQ;
 
         /* FIXME: simple consumer check */
 
@@ -2003,12 +2010,13 @@ rd_kafka_resp_err_t rd_kafka_seek (rd_kafka_topic_t *app_rkt,
 	}
 	rd_kafka_topic_rdunlock(rkt);
 
-        if (timeout_ms)
+        if (timeout_ms) {
                 tmpq = rd_kafka_q_new(rkt->rkt_rk);
+                replyq = RD_KAFKA_REPLYQ(tmpq, 0);
+        }
 
         rktp = rd_kafka_toppar_s2i(s_rktp);
-        if ((err = rd_kafka_toppar_op_seek(rktp, offset,
-					   RD_KAFKA_REPLYQ(tmpq, 0)))) {
+        if ((err = rd_kafka_toppar_op_seek(rktp, offset, replyq))) {
                 if (tmpq)
                         rd_kafka_q_destroy_owner(tmpq);
                 rd_kafka_toppar_destroy(s_rktp);

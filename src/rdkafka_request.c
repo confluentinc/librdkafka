@@ -1869,7 +1869,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                          * we will retry at a later time but not increment
                          * the retry count since there is no risk
                          * of duplicates. */
-                        if (err == RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE)
+                        if (!rd_kafka_buf_was_sent(request))
                                 incr_retry = 0;
 
                         /* Since requests are specific to a broker

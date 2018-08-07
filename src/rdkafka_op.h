@@ -67,6 +67,7 @@ typedef struct rd_kafka_replyq_s {
 #define RD_KAFKA_OP_F_CRC         0x8  /* rkbuf: Perform CRC calculation */
 #define RD_KAFKA_OP_F_BLOCKING    0x10 /* rkbuf: blocking protocol request */
 #define RD_KAFKA_OP_F_REPROCESS   0x20 /* cgrp: Reprocess at a later time. */
+#define RD_KAFKA_OP_F_SENT        0x80 /* rkbuf: request sent on wire */
 
 
 typedef enum {

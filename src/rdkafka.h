@@ -4662,27 +4662,6 @@ rd_kafka_AdminOptions_set_operation_timeout (rd_kafka_AdminOptions_t *options,
 
 
 /**
- * @brief If set to true the configuration is applied incrementally rather
- *        than replacing and reverting all configuration for the resources.
- *
- * @param true_or_false Defaults to false.
- *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or an
- *          error code on failure in which case an error string will
- *          be written \p errstr.
- *
- * @remark This option is valid for AlterConfigs.
- *
- * @remark Requires broker with KIP-248 support.
- *         The request will fail (locally) if the broker does not support
- *         incremental updates.
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_AdminOptions_set_incremental (rd_kafka_AdminOptions_t *options,
-                                       int true_or_false,
-                                       char *errstr, size_t errstr_size);
-
-/**
  * @brief Tell broker to only validate the request, without performing
  *        the requested operation (create topics, etc).
  *
@@ -5230,9 +5209,7 @@ rd_kafka_ConfigResource_destroy_array (rd_kafka_ConfigResource_t **config,
  * @param value Configuration value, depends on resource type and \p name.
  *              Set to \c NULL to revert configuration value to default.
  *
- * The difference between add_config and set_config is that add allows
- * adding to an existing configuration property, such as a SASL SCRAM user,
- * while set overwrites the current value.
+ * This will overwrite the current value.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
  *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
@@ -5240,37 +5217,6 @@ rd_kafka_ConfigResource_destroy_array (rd_kafka_ConfigResource_t **config,
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_ConfigResource_set_config (rd_kafka_ConfigResource_t *config,
                                     const char *name, const char *value);
-
-/**
- * @brief Add configuration name value pair.
- *
- * @param name Configuration name, depends on resource type.
- * @param value Configuration value, depends on resource type and \p name.
- *              Set to \c NULL to revert configuration value to default.
- *
- * The difference between add_config and set_config is that add allows
- * adding to an existing configuration property, such as a SASL SCRAM user,
- * while set overwrites the current value.
- *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
- *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ConfigResource_add_config (rd_kafka_ConfigResource_t *config,
-                                    const char *name, const char *value);
-
-
-/**
- * @brief Delete or revert configuration to default on broker.
- *
- * @param name Configuration name, depends on resource type.
- *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR if config was added to resource,
- *          or RD_KAFKA_RESP_ERR__INVALID_ARG on invalid input.
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ConfigResource_delete_config (rd_kafka_ConfigResource_t *config,
-                                       const char *name);
 
 
 /**
@@ -5329,11 +5275,9 @@ rd_kafka_ConfigResource_error_string (const rd_kafka_ConfigResource_t *config);
  *
  * @remark Requires broker version >=0.11.0.0
  *
- * @remark AlterConfigs will replace all existing configuration for
- *         the provided resources with the new configuration given,
- *         reverting all other configuration to their default values.
- *         Use \c rd_kafka_AdminOptions_set_incremental() to change the
- *         behaviour so that only the passed configuration is modified.
+ * @warning AlterConfigs will replace all existing configuration for
+ *          the provided resources with the new configuration given,
+ *          reverting all other configuration to their default values.
  *
  * @remark Multiple resources and resource types may be set, but at most one
  *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call

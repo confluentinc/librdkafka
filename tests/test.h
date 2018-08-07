@@ -103,6 +103,7 @@ struct test {
 				*   total test run status. */
 #define TEST_F_MANUAL      0x4 /**< Manual test, only started when specifically
                                 *   stated */
+#define TEST_F_SOCKEM      0x8 /**< Test requires socket emulation. */
 	int minver;          /**< Limit tests to broker version range. */
 	int maxver;
 

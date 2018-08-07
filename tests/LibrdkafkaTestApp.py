@@ -35,12 +35,15 @@ class LibrdkafkaTestApp(App):
         f, self.test_conf_file = self.open_file('test.conf', 'perm')
         f.write('broker.address.family=v4\n'.encode('ascii'))
         f.write(('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
+        f.write('test.timeout.multiplier=2\n'.encode('ascii'))
         f.write(('\n'.join(conf_blob)).encode('ascii'))
 
-        if version == 'trunk' or version.startswith('0.10.'):
-            conf_blob.append('api.version.request=true')
-        else:
+        if version.startswith('0.9') or version.startswith('0.8'):
+            conf_blob.append('api.version.request=false')
             conf_blob.append('broker.version.fallback=%s' % version)
+        else:
+            conf_blob.append('broker.version.fallback=0.10.0.0') # any broker version with ApiVersion support
+            conf_blob.append('api.version.fallback.ms=0')
 
         # SASL (only one mechanism supported at a time)
         mech = self.conf.get('sasl_mechanisms', '').split(',')[0]
@@ -124,6 +127,7 @@ class LibrdkafkaTestApp(App):
         extra_args = list()
         if not self.local_tests:
             extra_args.append('-L')
+        extra_args.append('-E')
         return './run-test.sh -p%d -K %s ./merged %s' % (int(self.conf.get('parallel', 5)), ' '.join(extra_args), self.test_mode)
 
 

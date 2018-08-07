@@ -234,7 +234,7 @@ struct test tests[] = {
 	_TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
 	_TEST(0048_partitioner, 0),
 #if WITH_SOCKEM
-        _TEST(0049_consume_conn_close, 0, TEST_BRKVER(0,9,0,0)),
+        _TEST(0049_consume_conn_close, TEST_F_SOCKEM, TEST_BRKVER(0,9,0,0)),
 #endif
         _TEST(0050_subscribe_adds, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0051_assign_adds, 0, TEST_BRKVER(0,9,0,0)),
@@ -258,7 +258,7 @@ struct test tests[] = {
               .extra = "dynamic loading of tests might not be fixed for this platform"),
         _TEST(0067_empty_topic, 0),
 #if WITH_SOCKEM
-        _TEST(0068_produce_timeout, 0),
+        _TEST(0068_produce_timeout, TEST_F_SOCKEM),
 #endif
         _TEST(0069_consumer_add_parts, TEST_F_KNOWN_ISSUE_WIN32,
               TEST_BRKVER(0,9,0,0)),
@@ -267,9 +267,9 @@ struct test tests[] = {
         _TEST(0073_headers, 0, TEST_BRKVER(0,11,0,0)),
         _TEST(0074_producev, TEST_F_LOCAL),
 #if WITH_SOCKEM
-        _TEST(0075_retry, 0),
+        _TEST(0075_retry, TEST_F_SOCKEM),
 #endif
-        _TEST(0076_produce_retry, 0),
+        _TEST(0076_produce_retry, TEST_F_SOCKEM),
         _TEST(0077_compaction, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0078_c_from_cpp, TEST_F_LOCAL),
         _TEST(0079_fork, TEST_F_LOCAL|TEST_F_KNOWN_ISSUE,
@@ -1300,6 +1300,8 @@ int main(int argc, char **argv) {
 			test_flags |= TEST_F_KNOWN_ISSUE;
 		else if (!strcmp(argv[i], "-K"))
 			test_neg_flags |= TEST_F_KNOWN_ISSUE;
+                else if (!strcmp(argv[i], "-E"))
+                        test_neg_flags |= TEST_F_SOCKEM;
 		else if (!strcmp(argv[i], "-V") && i+1 < argc)
  			test_broker_version_str = argv[++i];
 		else if (!strcmp(argv[i], "-S"))
@@ -1316,6 +1318,7 @@ int main(int argc, char **argv) {
                                "  -p<N>  Run N tests in parallel\n"
                                "  -l/-L  Only/dont run local tests (no broker needed)\n"
 			       "  -k/-K  Only/dont run tests with known issues\n"
+                               "  -E     Don't run sockem tests\n"
                                "  -a     Assert on failures\n"
 			       "  -S     Dont show test summary\n"
 			       "  -V <N.N.N.N> Broker version.\n"
@@ -3950,17 +3953,32 @@ test_wait_admin_result (rd_kafka_queue_t *q,
                         int tmout) {
         rd_kafka_event_t *rkev;
 
-        rkev = rd_kafka_queue_poll(q, tmout);
-        if (!rkev)
-                TEST_FAIL("Timed out waiting for admin result (%d)\n", evtype);
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout);
+                if (!rkev)
+                        TEST_FAIL("Timed out waiting for admin result (%d)\n",
+                                  evtype);
 
-        TEST_ASSERT(rd_kafka_event_type(rkev) == evtype,
-                    "Expected event type %d, got %d (%s)",
-                    evtype,
-                    rd_kafka_event_type(rkev),
-                    rd_kafka_event_name(rkev));
+                if (rd_kafka_event_type(rkev) == evtype)
+                        return rkev;
 
-        return rkev;
+
+                if (rd_kafka_event_type(rkev) == RD_KAFKA_EVENT_ERROR) {
+                        TEST_WARN("Received error event while waiting for %d: "
+                                  "%s: ignoring",
+                                  evtype, rd_kafka_event_error_string(rkev));
+                        continue;
+                }
+
+
+                TEST_ASSERT(rd_kafka_event_type(rkev) == evtype,
+                            "Expected event type %d, got %d (%s)",
+                            evtype,
+                            rd_kafka_event_type(rkev),
+                            rd_kafka_event_name(rkev));
+        }
+
+        return NULL;
 }
 
 
@@ -4044,7 +4062,7 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
  *             If NULL this call will be synchronous and return the error
  *             result.
  *             
- *
+ * @remark Fails the current test on failure.
  */
 
 rd_kafka_resp_err_t
@@ -4113,6 +4131,10 @@ test_CreateTopics_simple (rd_kafka_t *rk,
 
         rd_kafka_queue_destroy(q);
 
+        if (err)
+                TEST_FAIL("Failed to create %d topic(s): %s",
+                          (int)topic_cnt, rd_kafka_err2str(err));
+
         return err;
 }
 
@@ -4177,6 +4199,10 @@ test_CreatePartitions_simple (rd_kafka_t *rk,
 
         rd_kafka_queue_destroy(q);
 
+        if (err)
+                TEST_FAIL("Failed to create partitions: %s",
+                          rd_kafka_err2str(err));
+
         return err;
 }
 
@@ -4240,6 +4266,10 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
                                            tmout+5000);
 
         rd_kafka_queue_destroy(q);
+
+        if (err)
+                TEST_FAIL("Failed to delete topics: %s",
+                          rd_kafka_err2str(err));
 
         return err;
 }
@@ -4455,6 +4485,17 @@ void test_fail0 (const char *file, int line, const char *function,
         size_t of;
         va_list ap;
         char *t;
+        char timestr[32];
+        time_t tnow = time(NULL);
+
+#ifdef _MSC_VER
+        ctime_s(timestr, sizeof(timestr), &tnow);
+#else
+        ctime_r(&tnow, timestr);
+#endif
+        t = strchr(timestr, '\n');
+        if (t)
+                *t = '\0';
 
         of = rd_snprintf(buf, sizeof(buf), "%s():%i: ", function, line);
         rd_assert(of < sizeof(buf));
@@ -4468,9 +4509,10 @@ void test_fail0 (const char *file, int line, const char *function,
                 *t = '\0';
 
         TEST_SAYL(0, "TEST FAILURE\n");
-        fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s(): ###\n"
+        fprintf(stderr, "\033[31m### Test \"%s\" failed at %s:%i:%s() at %s: "
+                "###\n"
                 "%s\n",
-                test_curr->name, file, line, function, buf+of);
+                test_curr->name, file, line, function, timestr, buf+of);
         if (do_lock)
                 TEST_LOCK();
         test_curr->state = TEST_FAILED;

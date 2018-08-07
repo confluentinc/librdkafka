@@ -1559,6 +1559,8 @@ void rd_kafka_toppar_fetch_stopped (rd_kafka_toppar_t *rktp,
 
         rd_kafka_toppar_set_fetch_state(rktp, RD_KAFKA_TOPPAR_FETCH_STOPPED);
 
+        rktp->rktp_app_offset = RD_KAFKA_OFFSET_INVALID;
+
         if (rktp->rktp_cgrp) {
                 /* Detach toppar from cgrp */
                 rd_kafka_cgrp_op(rktp->rktp_cgrp, rktp, RD_KAFKA_NO_REPLYQ,
@@ -3327,7 +3329,7 @@ rd_kafka_topic_partition_list_str (const rd_kafka_topic_partition_list_t *rktpar
  *  - offset
  *  - err
  *
- * Will only partitions that are in both dst and src, other partitions will
+ * Will only update partitions that are in both dst and src, other partitions will
  * remain unchanged.
  */
 void

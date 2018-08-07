@@ -12,6 +12,7 @@ import tempfile
 import shutil
 import subprocess
 import urllib
+from fnmatch import fnmatch
 from string import Template
 from collections import defaultdict
 import boto3
@@ -299,40 +300,46 @@ class NugetPackage (Package):
                 a.info['toolset'] = 'v120'
 
         mappings = [
-            [{'arch': 'x64', 'plat': 'linux', 'fname_startswith': 'librdkafka.tar.gz'}, './include/librdkafka/rdkafka.h', 'build/native/include/librdkafka/rdkafka.h'],
-            [{'arch': 'x64', 'plat': 'linux', 'fname_startswith': 'librdkafka.tar.gz'}, './include/librdkafka/rdkafkacpp.h', 'build/native/include/librdkafka/rdkafkacpp.h'],
+            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka.tar.gz'}, './include/librdkafka/rdkafka.h', 'build/native/include/librdkafka/rdkafka.h'],
+            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka.tar.gz'}, './include/librdkafka/rdkafkacpp.h', 'build/native/include/librdkafka/rdkafkacpp.h'],
 
-            [{'arch': 'x64', 'plat': 'osx', 'fname_startswith': 'librdkafka.tar.gz'}, './lib/librdkafka.dylib', 'runtimes/osx-x64/native/librdkafka.dylib'],
-            [{'arch': 'x64', 'plat': 'linux', 'fname_startswith': 'librdkafka-debian9.tgz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/debian9-librdkafka.so'],
-            [{'arch': 'x64', 'plat': 'linux', 'fname_startswith': 'librdkafka.tar.gz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/librdkafka.so'],
+            # Travis OSX build
+            [{'arch': 'x64', 'plat': 'osx', 'fname_glob': 'librdkafka.tar.gz'}, './lib/librdkafka.dylib', 'runtimes/osx-x64/native/librdkafka.dylib'],
+            # Travis Debian 9 / Ubuntu 16.04 build
+            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka-debian9.tgz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/debian9-librdkafka.so'],
+            # Travis Ubuntu 14.04 build
+            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka.tar.gz'}, './lib/librdkafka.so.1', 'runtimes/linux-x64/native/librdkafka.so'],
+            # Travis CentOS RPM build
+            [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka1*.x86_64.rpm'}, './usr/lib64/librdkafka.so.1', 'runtimes/linux-x64/native/centos7-librdkafka.so'],
 
-            [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win7-x64/native/msvcr120.dll'],
+            # Common Win runtime
+            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win7-x64/native/msvcr120.dll'],
             # matches librdkafka.redist.{VER}.nupkg
-            [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/x64/Release/librdkafka.dll', 'runtimes/win7-x64/native/librdkafka.dll'],
-            [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/x64/Release/librdkafkacpp.dll', 'runtimes/win7-x64/native/librdkafkacpp.dll'],
-            [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/x64/Release/zlib.dll', 'runtimes/win7-x64/native/zlib.dll'],
+            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafka.dll', 'runtimes/win7-x64/native/librdkafka.dll'],
+            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafkacpp.dll', 'runtimes/win7-x64/native/librdkafkacpp.dll'],
+            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/zlib.dll', 'runtimes/win7-x64/native/zlib.dll'],
             # matches librdkafka.{VER}.nupkg
-            [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'librdkafka', 'fname_excludes': ['redist', 'symbols']},
+            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
              'build/native/lib/v120/x64/Release/librdkafka.lib', 'build/native/lib/win7/x64/win7-x64-Release/v120/librdkafka.lib'],
-            [{'arch': 'x64', 'plat': 'win7', 'fname_startswith': 'librdkafka', 'fname_excludes': ['redist', 'symbols']},
+            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
              'build/native/lib/v120/x64/Release/librdkafkacpp.lib', 'build/native/lib/win7/x64/win7-x64-Release/v120/librdkafkacpp.lib'],
 
-            [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win7-x86/native/msvcr120.dll'],
+            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win7-x86/native/msvcr120.dll'],
             # matches librdkafka.redist.{VER}.nupkg
-            [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/Win32/Release/librdkafka.dll', 'runtimes/win7-x86/native/librdkafka.dll'],
-            [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/Win32/Release/librdkafkacpp.dll', 'runtimes/win7-x86/native/librdkafkacpp.dll'],
-            [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'librdkafka.redist'}, 'build/native/bin/v120/Win32/Release/zlib.dll', 'runtimes/win7-x86/native/zlib.dll'],
+            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafka.dll', 'runtimes/win7-x86/native/librdkafka.dll'],
+            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafkacpp.dll', 'runtimes/win7-x86/native/librdkafkacpp.dll'],
+            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/zlib.dll', 'runtimes/win7-x86/native/zlib.dll'],
             # matches librdkafka.{VER}.nupkg
-            [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'librdkafka', 'fname_excludes': ['redist', 'symbols']}, 
+            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
             'build/native/lib/v120/Win32/Release/librdkafka.lib', 'build/native/lib/win7/x86/win7-x86-Release/v120/librdkafka.lib'],
-            [{'arch': 'x86', 'plat': 'win7', 'fname_startswith': 'librdkafka', 'fname_excludes': ['redist', 'symbols']}, 
+            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
             'build/native/lib/v120/Win32/Release/librdkafkacpp.lib', 'build/native/lib/win7/x86/win7-x86-Release/v120/librdkafkacpp.lib']
         ]
 
         for m in mappings:
             attributes = m[0]
-            fname_startswith = attributes['fname_startswith']
-            del attributes['fname_startswith']
+            fname_glob = attributes['fname_glob']
+            del attributes['fname_glob']
             fname_excludes = []
             if 'fname_excludes' in attributes:
                 fname_excludes = attributes['fname_excludes']
@@ -347,7 +354,7 @@ class NugetPackage (Package):
                         found = False
                         break
 
-                if not a.fname.startswith(fname_startswith):
+                if not fnmatch(a.fname, fname_glob):
                     found = False
 
                 for exclude in fname_excludes:
@@ -360,7 +367,7 @@ class NugetPackage (Package):
                     break
 
             if artifact is None:
-                raise Exception('unable to find artifact with tags %s that starts with "%s"' % (str(attributes), fname_startswith))
+                raise Exception('unable to find artifact with tags %s matching "%s"' % (str(attributes), fname_glob))
 
             outf = os.path.join(self.stpath, m[2])
             member = m[1]

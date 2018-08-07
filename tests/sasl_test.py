@@ -42,7 +42,7 @@ def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None, debug=False)
     rdkafka.start()
     print('# librdkafka regression tests started, logs in %s' % rdkafka.root_path())
     try:
-        rdkafka.wait_stopped(timeout=60*10)
+        rdkafka.wait_stopped(timeout=60*30)
         rdkafka.dbg('wait stopped: %s, runtime %ds' % (rdkafka.state, rdkafka.runtime()))
     except KeyboardInterrupt:
         print('# Aborted by user')

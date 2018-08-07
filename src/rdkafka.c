@@ -624,7 +624,7 @@ rd_kafka_resp_err_t rd_kafka_errno2err (int errnox) {
  */
 void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
-        rd_kafka_assert(rk, rd_atomic32_get(&rk->rk_terminate) != 0);
+        rd_kafka_assert(rk, rd_kafka_terminating(rk));
 
         /* Synchronize state */
         rd_kafka_wrlock(rk);
@@ -691,41 +691,61 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 }
 
 
-static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
+static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
         thrd_t thrd;
 #ifndef _MSC_VER
 	int term_sig = rk->rk_conf.term_sig;
 #endif
-        rd_kafka_dbg(rk, ALL, "DESTROY", "Terminating instance");
+        char flags_str[256];
+        static const char *rd_kafka_destroy_flags_names[] = {
+                "Terminate",
+                "DestroyCalled",
+                "Immediate",
+                "NoConsumerClose",
+                NULL
+        };
 
-        rd_kafka_wrlock(rk);
-        /* Make sure destroy is not called from the background queue
-         * event callback since this will cause a deadlock. */
-        if (thrd_is_current(rk->rk_background.thread)) {
-                rd_kafka_wrunlock(rk);
+        /* _F_IMMEDIATE also sets .._NO_CONSUMER_CLOSE */
+        if (flags & RD_KAFKA_DESTROY_F_IMMEDIATE)
+                flags |= RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE;
+
+        rd_flags2str(flags_str, sizeof(flags_str),
+                     rd_kafka_destroy_flags_names, flags);
+        rd_kafka_dbg(rk, ALL, "DESTROY", "Terminating instance "
+                     "(destroy flags %s (0x%x))",
+                     flags ? flags_str : "none", flags);
+
+        /* Make sure destroy is not called from a librdkafka thread
+         * since this will most likely cause a deadlock. */
+        if (strcmp(rd_kafka_thread_name, "app")) {
                 rd_kafka_log(rk, LOG_EMERG, "BGQUEUE",
                              "Application bug: "
-                             "rd_kafka_destroy() called from background "
-                             "queue event callback");
+                             "rd_kafka_destroy() called from "
+                             "librdkafka owned thread");
                 rd_kafka_assert(NULL,
-                                !*"Calling rd_kafka_destroy() from "
-                                "the background queue event callback "
-                                "is prohibited");
+                                !*"Application bug: "
+                                "calling rd_kafka_destroy() from "
+                                "librdkafka owned thread is prohibited");
         }
-        rd_kafka_wrunlock(rk);
 
+        /* Before signaling for general termination, set the destroy
+         * flags to hint cgrp how to shut down. */
+        rd_atomic32_set(&rk->rk_terminate,
+                        flags|RD_KAFKA_DESTROY_F_DESTROY_CALLED);
 
         /* The legacy/simple consumer lacks an API to close down the consumer*/
         if (rk->rk_cgrp) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE",
-                             "Closing consumer group");
+                             "Terminating consumer group handler");
                 rd_kafka_consumer_close(rk);
         }
+
+        /* With the consumer closed, terminate the rest of librdkafka. */
+        rd_atomic32_set(&rk->rk_terminate, flags|RD_KAFKA_DESTROY_F_TERMINATE);
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Interrupting timers");
         rd_kafka_wrlock(rk);
         thrd = rk->rk_thread;
-	rd_atomic32_add(&rk->rk_terminate, 1);
         rd_kafka_timers_interrupt(&rk->rk_timers);
         rd_kafka_wrunlock(rk);
 
@@ -744,7 +764,7 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
         }
 #endif
 
-        if (!blocking)
+        if (rd_kafka_destroy_flags_check(rk, RD_KAFKA_DESTROY_F_IMMEDIATE))
                 return; /* FIXME: thread resource leak */
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
@@ -763,7 +783,11 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int blocking) {
 /* NOTE: Must only be called by application.
  *       librdkafka itself must use rd_kafka_destroy0(). */
 void rd_kafka_destroy (rd_kafka_t *rk) {
-        rd_kafka_destroy_app(rk, 1);
+        rd_kafka_destroy_app(rk, 0);
+}
+
+void rd_kafka_destroy_flags (rd_kafka_t *rk, int flags) {
+        rd_kafka_destroy_app(rk, flags);
 }
 
 
@@ -1397,6 +1421,9 @@ static int rd_kafka_thread_main (void *arg) {
 		rd_kafka_timers_run(&rk->rk_timers, RD_POLL_NOWAIT);
 	}
 
+        rd_kafka_dbg(rk, GENERIC, "TERMINATE",
+                     "Internal main thread terminating");
+
 	rd_kafka_q_disable(rk->rk_ops);
 	rd_kafka_q_purge(rk->rk_ops);
 
@@ -1412,7 +1439,7 @@ static int rd_kafka_thread_main (void *arg) {
         rd_kafka_destroy_internal(rk);
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
-                     "Internal main thread exiting");
+                     "Internal main thread termination done");
 
 	rd_atomic32_sub(&rd_kafka_thread_cnt_curr, 1);
 
@@ -1764,7 +1791,7 @@ fail:
         /*
          * Tell background thread to terminate and wait for it to return.
          */
-        rd_atomic32_add(&rk->rk_terminate, 1);
+        rd_atomic32_set(&rk->rk_terminate, RD_KAFKA_DESTROY_F_TERMINATE);
 
         if (rk->rk_background.thread) {
                 thrd_join(rk->rk_background.thread, NULL);
@@ -1787,7 +1814,6 @@ fail:
                 memset(&rk->rk_conf, 0, sizeof(rk->rk_conf));
         }
 
-        rd_atomic32_add(&rk->rk_terminate, 1);
         rd_kafka_destroy_internal(rk);
         rd_kafka_destroy_final(rk);
 
@@ -2335,25 +2361,40 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
 
         rd_kafka_cgrp_terminate(rkcg, RD_KAFKA_REPLYQ(rkq, 0)); /* async */
 
-        while ((rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0))) {
-                rd_kafka_op_res_t res;
-                if ((rko->rko_type & ~RD_KAFKA_OP_FLAGMASK) ==
-		    RD_KAFKA_OP_TERMINATE) {
-                        err = rko->rko_err;
-                        rd_kafka_op_destroy(rko);
-                        break;
+        /* Disable the queue if termination is immediate or the user
+         * does not want the blocking consumer_close() behaviour, this will
+         * cause any ops posted for this queue (such as rebalance) to
+         * be destroyed.
+         */
+        if (rd_kafka_destroy_flags_no_consumer_close(rk)) {
+                rd_kafka_dbg(rk, CONSUMER, "CLOSE",
+                             "Disabling temporary queue to quench "
+                             "close events");
+                rd_kafka_q_disable(rkq);
+        } else {
+                rd_kafka_dbg(rk, CONSUMER, "CLOSE",
+                             "Waiting for close events");
+                while ((rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0))) {
+                        rd_kafka_op_res_t res;
+                        if ((rko->rko_type & ~RD_KAFKA_OP_FLAGMASK) ==
+                            RD_KAFKA_OP_TERMINATE) {
+                                err = rko->rko_err;
+                                rd_kafka_op_destroy(rko);
+                                break;
+                        }
+                        res = rd_kafka_poll_cb(rk, rkq, rko,
+                                               RD_KAFKA_Q_CB_RETURN, NULL);
+                        if (res == RD_KAFKA_OP_RES_PASS)
+                                rd_kafka_op_destroy(rko);
+                        /* Ignore YIELD, we need to finish */
                 }
-                res = rd_kafka_poll_cb(rk, rkq, rko,
-                                       RD_KAFKA_Q_CB_RETURN, NULL);
-                if (res == RD_KAFKA_OP_RES_PASS)
-                        rd_kafka_op_destroy(rko);
-                /* Ignore YIELD, we need to finish */
         }
 
         rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
 
         rd_kafka_q_destroy_owner(rkq);
 
+        rd_kafka_dbg(rk, CONSUMER, "CLOSE", "Consumer closed");
 
         return err;
 }

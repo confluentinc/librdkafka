@@ -173,6 +173,8 @@ _TEST_DECL(0080_admin_ut);
 _TEST_DECL(0081_admin);
 _TEST_DECL(0082_fetch_max_bytes);
 _TEST_DECL(0083_cb_event);
+_TEST_DECL(0084_destroy_flags_local);
+_TEST_DECL(0084_destroy_flags);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -279,7 +281,8 @@ struct test tests[] = {
         _TEST(0081_admin, 0, TEST_BRKVER(0,10,2,0)),
         _TEST(0082_fetch_max_bytes, 0, TEST_BRKVER(0,10,1,0)),
         _TEST(0083_cb_event, 0, TEST_BRKVER(0,9,0,0)),
-
+        _TEST(0084_destroy_flags_local, TEST_F_LOCAL),
+        _TEST(0084_destroy_flags, 0),
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
 

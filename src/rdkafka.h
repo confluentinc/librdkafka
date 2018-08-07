@@ -2043,9 +2043,52 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type, rd_kafka_conf_t *conf,
  * @brief Destroy Kafka handle.
  *
  * @remark This is a blocking operation.
+ * @remark rd_kafka_consumer_close() will be called from this function
+ *         if the instance type is RD_KAFKA_CONSUMER, a \c group.id was
+ *         configured, and the rd_kafka_consumer_close() was not
+ *         explicitly called by the application. This in turn may
+ *         trigger consumer callbacks, such as rebalance_cb.
+ *         Use rd_kafka_destroy_flags() with
+ *         RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE to avoid this behaviour.
+ *
+ * @sa rd_kafka_destroy_flags()
  */
 RD_EXPORT
 void        rd_kafka_destroy(rd_kafka_t *rk);
+
+
+/**
+ * @brief Destroy Kafka handle according to specified destroy flags
+ *
+ */
+RD_EXPORT
+void rd_kafka_destroy_flags (rd_kafka_t *rk, int flags);
+
+/**
+ * @brief Flags for rd_kafka_destroy_flags()
+ */
+
+/*!
+ * Immediate non-blocking destruction without waiting for all resources
+ * to be cleaned up.
+ *
+ * @warning Memory and resource leaks possible.
+ *
+ * @remark This flag automatically sets RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE.
+ */
+#define RD_KAFKA_DESTROY_F_IMMEDIATE 0x4
+
+/*!
+ * Don't call consumer_close() to leave group and commit final offsets.
+ *
+ * This also disables consumer callbacks to be called from rd_kafka_destroy*(),
+ * such as rebalance_cb.
+ *
+ * The consumer group handler is still closed internally, but from an
+ * application perspective none of the functionality from consumer_close()
+ * is performed.
+ */
+#define RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE 0x8
 
 
 

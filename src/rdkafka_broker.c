@@ -265,7 +265,7 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 		 * is bound to fail once on older brokers. */
 		if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
 		    rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) &&
-		    !rd_atomic32_get(&rkb->rkb_rk->rk_terminate))
+		    !rd_kafka_terminating(rkb->rkb_rk))
 			rd_kafka_op_err(rkb->rkb_rk,
 					RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
 					"%i/%i brokers are down",
@@ -365,7 +365,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	 */
 	if (fmt &&
 	    !(errno_save == EINTR &&
-	      rd_atomic32_get(&rkb->rkb_rk->rk_terminate)) &&
+	      rd_kafka_terminating(rkb->rkb_rk)) &&
 	    !(err == RD_KAFKA_RESP_ERR__TRANSPORT &&
 	      rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY)) {
 		int of;
@@ -3943,7 +3943,7 @@ static rd_kafka_broker_t *rd_kafka_broker_find (rd_kafka_t *rk,
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
-		if (!rd_atomic32_get(&rk->rk_terminate) &&
+		if (!rd_kafka_terminating(rk) &&
 		    rkb->rkb_proto == proto &&
 		    !strcmp(rkb->rkb_nodename, nodename)) {
 			rd_kafka_broker_keep(rkb);
@@ -4138,7 +4138,7 @@ void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
         rd_kafka_mk_nodename(nodename, sizeof(nodename), mdb->host, mdb->port);
 
 	rd_kafka_wrlock(rk);
-	if (unlikely(rd_atomic32_get(&rk->rk_terminate))) {
+	if (unlikely(rd_kafka_terminating(rk))) {
 		/* Dont update metadata while terminating, do this
 		 * after acquiring lock for proper synchronisation */
 		rd_kafka_wrunlock(rk);

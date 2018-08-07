@@ -609,7 +609,8 @@ rd_kafka_rebalance_op (rd_kafka_cgrp_t *rkcg,
 					      rkcg->rkcg_assignment);
 
 	if (!(rkcg->rkcg_rk->rk_conf.enabled_events & RD_KAFKA_EVENT_REBALANCE)
-	    || !assignment) {
+	    || !assignment
+            || rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk)) {
 	no_delegation:
 		if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
 			rd_kafka_cgrp_assign(rkcg, assignment);
@@ -2221,7 +2222,8 @@ rd_kafka_cgrp_unassign (rd_kafka_cgrp_t *rkcg) {
 
         if (rkcg->rkcg_rk->rk_conf.offset_store_method ==
             RD_KAFKA_OFFSET_METHOD_BROKER &&
-	    rkcg->rkcg_rk->rk_conf.enable_auto_commit) {
+	    rkcg->rkcg_rk->rk_conf.enable_auto_commit &&
+            !rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk)) {
                 /* Commit all offsets for all assigned partitions to broker */
                 rd_kafka_cgrp_assigned_offsets_commit(rkcg, old_assignment,
                                                       "unassign");
@@ -2620,7 +2622,11 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
         rkcg->rkcg_reply_rko = rko;
 
          if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION)
-                 rd_kafka_cgrp_unsubscribe(rkcg, 1/*leave group*/);
+                 rd_kafka_cgrp_unsubscribe(
+                         rkcg,
+                         /* Leave group if this is a controlled shutdown */
+                         !rd_kafka_destroy_flags_no_consumer_close(
+                                 rkcg->rkcg_rk));
 
          /* If there's an oustanding rebalance_cb which has not yet been
           * served by the application it will be served from consumer_close(). */

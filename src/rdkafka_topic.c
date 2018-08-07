@@ -773,7 +773,7 @@ static void rd_kafka_topic_assign_uas (rd_kafka_itopic_t *rkt,
 void rd_kafka_topic_metadata_none (rd_kafka_itopic_t *rkt) {
 	rd_kafka_topic_wrlock(rkt);
 
-	if (unlikely(rd_atomic32_get(&rkt->rkt_rk->rk_terminate))) {
+	if (unlikely(rd_kafka_terminating(rkt->rkt_rk))) {
 		/* Dont update metadata while terminating, do this
 		 * after acquiring lock for proper synchronisation */
 		rd_kafka_topic_wrunlock(rkt);

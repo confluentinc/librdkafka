@@ -180,11 +180,11 @@ typedef struct test_timing_s {
 
 #define TIMING_ASSERT0(TIMING,DO_FAIL_LATER,TMIN_MS,TMAX_MS) do {       \
         if (!TIMING_STOPPED(TIMING))                                    \
-                TIMING_STOP(&timing);                                   \
+                TIMING_STOP(TIMING);                                    \
         int _dur_ms = (int)TIMING_DURATION(TIMING) / 1000;              \
         if (TMIN_MS <= _dur_ms && _dur_ms <= TMAX_MS)                   \
                 break;                                                  \
-        if (test_on_ci)                                                 \
+        if (test_on_ci || strcmp(test_mode, "bare"))                    \
                 TEST_WARN("%s: expected duration %d <= %d <= %d ms%s\n", \
                           (TIMING)->name, TMIN_MS, _dur_ms, TMAX_MS,    \
                           ": not FAILING test on CI");                  \

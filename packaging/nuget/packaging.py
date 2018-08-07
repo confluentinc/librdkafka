@@ -20,7 +20,7 @@ from zfile import zfile
 
 
 # Rename token values
-rename_vals = {'plat': {'windows': 'win7'},
+rename_vals = {'plat': {'windows': 'win'},
                'arch': {'x86_64': 'x64',
                         'i386': 'x86',
                         'win32': 'x86'}}
@@ -313,27 +313,27 @@ class NugetPackage (Package):
             [{'arch': 'x64', 'plat': 'linux', 'fname_glob': 'librdkafka1*.x86_64.rpm'}, './usr/lib64/librdkafka.so.1', 'runtimes/linux-x64/native/centos7-librdkafka.so'],
 
             # Common Win runtime
-            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win7-x64/native/msvcr120.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win-x64/native/msvcr120.dll'],
             # matches librdkafka.redist.{VER}.nupkg
-            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafka.dll', 'runtimes/win7-x64/native/librdkafka.dll'],
-            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafkacpp.dll', 'runtimes/win7-x64/native/librdkafkacpp.dll'],
-            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/zlib.dll', 'runtimes/win7-x64/native/zlib.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafka.dll', 'runtimes/win-x64/native/librdkafka.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/librdkafkacpp.dll', 'runtimes/win-x64/native/librdkafkacpp.dll'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/x64/Release/zlib.dll', 'runtimes/win-x64/native/zlib.dll'],
             # matches librdkafka.{VER}.nupkg
-            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
-             'build/native/lib/v120/x64/Release/librdkafka.lib', 'build/native/lib/win7/x64/win7-x64-Release/v120/librdkafka.lib'],
-            [{'arch': 'x64', 'plat': 'win7', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
-             'build/native/lib/v120/x64/Release/librdkafkacpp.lib', 'build/native/lib/win7/x64/win7-x64-Release/v120/librdkafkacpp.lib'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
+             'build/native/lib/v120/x64/Release/librdkafka.lib', 'build/native/lib/win/x64/win-x64-Release/v120/librdkafka.lib'],
+            [{'arch': 'x64', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
+             'build/native/lib/v120/x64/Release/librdkafkacpp.lib', 'build/native/lib/win/x64/win-x64-Release/v120/librdkafkacpp.lib'],
 
-            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win7-x86/native/msvcr120.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'msvcr120.zip'}, 'msvcr120.dll', 'runtimes/win-x86/native/msvcr120.dll'],
             # matches librdkafka.redist.{VER}.nupkg
-            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafka.dll', 'runtimes/win7-x86/native/librdkafka.dll'],
-            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafkacpp.dll', 'runtimes/win7-x86/native/librdkafkacpp.dll'],
-            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/zlib.dll', 'runtimes/win7-x86/native/zlib.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafka.dll', 'runtimes/win-x86/native/librdkafka.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/librdkafkacpp.dll', 'runtimes/win-x86/native/librdkafkacpp.dll'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka.redist*'}, 'build/native/bin/v120/Win32/Release/zlib.dll', 'runtimes/win-x86/native/zlib.dll'],
             # matches librdkafka.{VER}.nupkg
-            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
-            'build/native/lib/v120/Win32/Release/librdkafka.lib', 'build/native/lib/win7/x86/win7-x86-Release/v120/librdkafka.lib'],
-            [{'arch': 'x86', 'plat': 'win7', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
-            'build/native/lib/v120/Win32/Release/librdkafkacpp.lib', 'build/native/lib/win7/x86/win7-x86-Release/v120/librdkafkacpp.lib']
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
+            'build/native/lib/v120/Win32/Release/librdkafka.lib', 'build/native/lib/win/x86/win-x86-Release/v120/librdkafka.lib'],
+            [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
+            'build/native/lib/v120/Win32/Release/librdkafkacpp.lib', 'build/native/lib/win/x86/win-x86-Release/v120/librdkafkacpp.lib']
         ]
 
         for m in mappings:
@@ -396,21 +396,21 @@ class NugetPackage (Package):
             "build/native/librdkafka.redist.targets",
             "build/native/include/librdkafka/rdkafka.h",
             "build/native/include/librdkafka/rdkafkacpp.h",
-            "build/native/lib/win7/x64/win7-x64-Release/v120/librdkafka.lib",
-            "build/native/lib/win7/x64/win7-x64-Release/v120/librdkafkacpp.lib",
-            "build/native/lib/win7/x86/win7-x86-Release/v120/librdkafka.lib",
-            "build/native/lib/win7/x86/win7-x86-Release/v120/librdkafkacpp.lib",
+            "build/native/lib/win/x64/win-x64-Release/v120/librdkafka.lib",
+            "build/native/lib/win/x64/win-x64-Release/v120/librdkafkacpp.lib",
+            "build/native/lib/win/x86/win-x86-Release/v120/librdkafka.lib",
+            "build/native/lib/win/x86/win-x86-Release/v120/librdkafkacpp.lib",
             "runtimes/linux-x64/native/debian9-librdkafka.so",
             "runtimes/linux-x64/native/librdkafka.so",
             "runtimes/osx-x64/native/librdkafka.dylib",
-            "runtimes/win7-x64/native/librdkafka.dll",
-            "runtimes/win7-x64/native/librdkafkacpp.dll",
-            "runtimes/win7-x64/native/msvcr120.dll",
-            "runtimes/win7-x64/native/zlib.dll",
-            "runtimes/win7-x86/native/librdkafka.dll",
-            "runtimes/win7-x86/native/librdkafkacpp.dll",
-            "runtimes/win7-x86/native/msvcr120.dll",
-            "runtimes/win7-x86/native/zlib.dll"]
+            "runtimes/win-x64/native/librdkafka.dll",
+            "runtimes/win-x64/native/librdkafkacpp.dll",
+            "runtimes/win-x64/native/msvcr120.dll",
+            "runtimes/win-x64/native/zlib.dll",
+            "runtimes/win-x86/native/librdkafka.dll",
+            "runtimes/win-x86/native/librdkafkacpp.dll",
+            "runtimes/win-x86/native/msvcr120.dll",
+            "runtimes/win-x86/native/zlib.dll"]
 
         missing = list()		
         with zfile.ZFile(path, 'r') as zf:		

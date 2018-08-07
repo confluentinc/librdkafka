@@ -1052,7 +1052,9 @@ function mkl_lib_check_static {
 #
 # Arguments:
 #  [--static=<lib>]  (allows static linking (--enable-static) for the
-#                     library provided, e.g.: --static=-lrdkafka "librdkafka"..)
+#                     library provided, e.g.: --static=-lrdkafka "librdkafka"...
+#                     If not set it will default to the compiler flags.)
+#  [--no-static]     (don't attempt to link this library statically)
 #  [--libname=<lib>] (library name if different from config name, such as
 #                     when the libname includes a dash)
 #  config name (library name (for pkg-config))
@@ -1065,8 +1067,14 @@ function mkl_lib_check {
 
     local is_static=0
     local staticopt=
+    local no_staticopt=
     if [[ $1 == --static* ]]; then
         staticopt=$1
+        shift
+    fi
+
+    if [[ $1 == --no-static ]]; then
+        no_staticopt="$1"
         shift
     fi
 
@@ -1082,15 +1090,19 @@ function mkl_lib_check {
     local pkg_conf_failed=1
     if [[ $WITH_PKGCONFIG == "y" ]]; then
         # Let pkg-config populate CFLAGS, et.al.
-        mkl_pkg_config_check $staticopt $libnameopt "$1" "" cont
+        mkl_pkg_config_check $no_staticopt $staticopt $libnameopt "$1" "" cont
         pkg_conf_failed=$?
     fi
 
     local libs=""
     if [[ $pkg_conf_failed ]]; then
         libs="$5"
-        if [[ $WITH_STATIC_LINKING == y && ! -z $staticopt ]]; then
-            libs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
+        if [[ -z $no_staticopt && $WITH_STATIC_LINKING == y ]]; then
+            local use_staticopt="$libs"
+            if [[ ! -z $staticopt ]]; then
+                use_staticopt="${staticopt#*=}"
+            fi
+            libs=$(mkl_lib_check_static "$use_staticopt" "$libs")
             is_static=1
         fi
     fi
@@ -1115,6 +1127,7 @@ function mkl_lib_check {
 # Arguments:
 #  [--static=<lib>]  (allows static linking (--enable-static) for the
 #                     library provided, e.g.: --static=-lrdkafka "librdkafka"..)
+#  [--no-static]     (don't attempt to link this library statically)
 #  [--libname=<lib>] (library name if different from config name, such as
 #                     when the libname includes a dash)
 #  config name
@@ -1123,8 +1136,14 @@ function mkl_lib_check {
 function mkl_pkg_config_check {
 
     local staticopt=
+    local no_staticopt=
     if [[ $1 == --static* ]]; then
         staticopt=$1
+        shift
+    fi
+
+    if [[ $1 == --no-static ]]; then
+        no_staticopt=$1
         shift
     fi
 
@@ -1159,8 +1178,12 @@ $cflags"
 
     mkl_mkvar_append $1 "CFLAGS" "$cflags"
 
-    if [[ $WITH_STATIC_LINKING == y && ! -z $staticopt ]]; then
-        libs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
+    if [[ -z $no_staticopt && $WITH_STATIC_LINKING == y ]]; then
+        local use_staticopt="$libs"
+        if [[ ! -z $staticopt ]]; then
+            use_staticopt="${staticopt#*=}"
+        fi
+        libs=$(mkl_lib_check_static "$use_staticopt" "$libs")
     fi
     mkl_mkvar_prepend "$1" LIBS "$libs"
 

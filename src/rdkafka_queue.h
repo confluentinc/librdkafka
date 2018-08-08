@@ -292,11 +292,7 @@ void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
                 return;
         }
 
-#ifdef _MSC_VER
-	r = _write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, (int)rkq->rkq_qio->size);
-#else
-        r = write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, rkq->rkq_qio->size);
-#endif
+        r = rd_write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, rkq->rkq_qio->size);
 	if (r == -1) {
 		fprintf(stderr,
 			"[ERROR:librdkafka:rd_kafka_q_io_event: "

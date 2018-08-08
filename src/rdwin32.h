@@ -223,37 +223,113 @@ static RD_UNUSED int rd_fd_set_nonblocking (int fd) {
  * @returns 0 on success or errno on failure
  */
 static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
-        HANDLE h[2];
-        int i;
+        /* On windows, the "pipe" will be a tcp connection.
+        * This is to allow WSAPoll to be used to poll pipe events */
 
-        if (!CreatePipe(&h[0], &h[1], NULL, 0))
-                return (int)GetLastError();
-        for (i = 0 ; i < 2 ; i++) {
-                DWORD mode = PIPE_NOWAIT;
-                /* Set non-blocking */
-                if (!SetNamedPipeHandleState(h[i], &mode, NULL, NULL)) {
-                        CloseHandle(h[0]);
-                        CloseHandle(h[1]);
-                        return (int)GetLastError();
-                }
+        SOCKET listen_s = INVALID_SOCKET;
+        SOCKET accept_s = INVALID_SOCKET;
+        SOCKET connect_s = INVALID_SOCKET;
 
-                /* Open file descriptor for handle */
-                fds[i] = _open_osfhandle((intptr_t)h[i],
-                                         i == 0 ?
-                                         O_RDONLY | O_BINARY :
-                                         O_WRONLY | O_BINARY);
+        WSAPOLLFD poll_fd;
 
-                if (fds[i] == -1) {
-                        CloseHandle(h[0]);
-                        CloseHandle(h[1]);
-                        return (int)GetLastError();
-                }
+        struct sockaddr_in listen_addr;
+        struct sockaddr_in connect_addr;
+        socklen_t sock_len = 0;
+
+        int poll_timeout_ms = 1000;
+
+        /* Create listen socket */
+        listen_s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (listen_s == INVALID_SOCKET)
+                goto err;
+
+        if (rd_fd_set_nonblocking(listen_s) != 0)
+                goto err;
+
+        listen_addr.sin_family = AF_INET;
+        listen_addr.sin_addr.s_addr = ntohl(INADDR_ANY);
+        listen_addr.sin_port = 0;
+        if (bind(listen_s, (struct sockaddr*)&listen_addr, sizeof(struct sockaddr_in)) != 0)
+                goto err;
+
+        sock_len = sizeof(struct sockaddr_in);
+        if (getsockname(listen_s, (struct sockaddr*)&connect_addr, &sock_len) != 0)
+                goto err;
+
+        if (listen(listen_s, 1) != 0)
+                goto err;
+
+        /* Create connection socket */
+        connect_s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (connect_s == INVALID_SOCKET)
+                goto err;
+
+        if (rd_fd_set_nonblocking(connect_s) != 0)
+                goto err;
+
+        connect_addr.sin_addr.s_addr = ntohl(INADDR_LOOPBACK);
+        if (connect(
+                connect_s,
+                (struct sockaddr*)&connect_addr,
+                sizeof(struct sockaddr_in)) == SOCKET_ERROR) {
+                if (WSAGetLastError() != WSAEWOULDBLOCK)
+                        goto err;
         }
+
+        /* Wait for incoming connection */
+        memset(&poll_fd, 0, sizeof(WSAPOLLFD));
+        poll_fd.fd = listen_s;
+        poll_fd.events = POLLIN;
+        if (WSAPoll(&poll_fd, 1, poll_timeout_ms) == SOCKET_ERROR)
+                goto err;
+
+        if ((poll_fd.revents & (POLLERR | POLLHUP)) > 0)
+                goto err;
+
+        accept_s = accept(listen_s, 0, 0);
+        if (accept_s == SOCKET_ERROR)
+                goto err;
+
+        /* Wait for both sockets to be writable */
+        memset(&poll_fd, 0, sizeof(WSAPOLLFD));
+        poll_fd.fd = connect_s;
+        poll_fd.events = POLLOUT;
+        if (WSAPoll(&poll_fd, 1, poll_timeout_ms) == SOCKET_ERROR)
+                goto err;
+
+        if ((poll_fd.revents & (POLLERR | POLLHUP)) > 0)
+                goto err;
+
+        memset(&poll_fd, 0, sizeof(WSAPOLLFD));
+        poll_fd.fd = accept_s;
+        poll_fd.events = POLLOUT;
+        if (WSAPoll(&poll_fd, 1, poll_timeout_ms) == SOCKET_ERROR)
+                goto err;
+
+        if ((poll_fd.revents & (POLLERR | POLLHUP)) > 0)
+                goto err;
+
+        /* Done with listening */
+        closesocket(listen_s);
+
+        /* Store resulting sockets. They are bidirectional, so it does not matter
+         * which is read or write side of pipe. */
+        fds[0] = (int)accept_s;
+        fds[1] = (int)connect_s;
         return 0;
+
+    err:
+        if (listen_s != INVALID_SOCKET)
+                closesocket(listen_s);
+        if (accept_s != INVALID_SOCKET)
+                closesocket(accept_s);
+        if (connect_s != INVALID_SOCKET)
+                closesocket(connect_s);
+        return -1;
 }
 
-#define rd_read(fd,buf,sz) _read(fd,buf,sz)
-#define rd_write(fd,buf,sz) _write(fd,buf,sz)
+#define rd_read(fd,buf,sz) recv(fd,buf,sz,0)
+#define rd_write(fd,buf,sz) send(fd,buf,sz,0)
 #define rd_close(fd) closesocket(fd)
 
 static RD_UNUSED char *

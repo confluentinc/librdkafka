@@ -650,7 +650,6 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
         wakeup_fd = rktp->rktp_msgq_wakeup_fd;
         rd_kafka_toppar_unlock(rktp);
 
-#ifndef _MSC_VER
         if (wakeup_fd != -1 && queue_len == 1) {
                 char one = 1;
                 int r;
@@ -664,7 +663,6 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
                                      wakeup_fd,
                                      rd_strerror(errno));
         }
-#endif
 }
 
 

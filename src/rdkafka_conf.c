@@ -1899,15 +1899,20 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
 }
 #endif
 
-void
+rd_kafka_resp_err_t
 rd_kafka_conf_set_cert_verify_cb(rd_kafka_conf_t *conf,
     int(*cert_verify_cb) (unsigned char* cert, long len, void *opaque)) {
+#ifdef __mips__
+    return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
+#endif
 #if WITH_SSL
     conf->ssl.cert_verify_cb = cert_verify_cb;
 #else
     RD_UNUSED(conf);
     RD_UNUSED(cert_verify_cb);
 #endif
+
+    return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 void rd_kafka_conf_set_cert_retrieve_cb(rd_kafka_conf_t *conf,

@@ -430,8 +430,12 @@ class ConfImpl : public Conf {
           return Conf::CONF_INVALID;
       }
 
+#ifdef __mips__
+      return Conf::CONF_INVALID;
+#else
       cert_verify_cb_ = cert_verify_cb;
       return Conf::CONF_OK;
+#endif
   }
 
   Conf::ConfResult set(const std::string &name,

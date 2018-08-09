@@ -677,10 +677,10 @@ int verify_broker_callback(X509_STORE_CTX* ctx, void* arg)
         X509* cert = NULL;
         rd_kafka_dbg(rk, SECURITY, "SSL",
             "Verification of peer certificate.");
-
+#ifndef __mips__
         if(ctx)
             cert = ctx->cert;
-
+#endif
         if (cert) {
             int len;
             unsigned char* buf = NULL;

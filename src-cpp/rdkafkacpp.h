@@ -908,7 +908,9 @@ class RD_EXPORT Conf {
                                 OffsetCommitCb *offset_commit_cb,
                                 std::string &errstr) = 0;
 
-  /** @brief Use with \p name = \c \"ssl_verify_cb\" */
+  /** @brief Use with \p name = \c \"ssl_verify_cb\"
+      @return this is not supported on the MIPS platform
+  */
   virtual Conf::ConfResult set(const std::string &name,
                                CertVerifyCb *cert_verify_cb,
                                std::string &errstr) = 0;

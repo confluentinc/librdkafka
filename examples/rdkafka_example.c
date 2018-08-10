@@ -565,6 +565,7 @@ int main (int argc, char **argv) {
 			"will be set on topic object.\n"
 			"  -X list         Show full list of supported "
 			"properties.\n"
+			"  -X dump         Show configuration\n"
 			"  -X <prop>       Get single property value\n"
 			"\n"
 			" In Consumer mode:\n"

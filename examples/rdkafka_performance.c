@@ -790,6 +790,7 @@ int main (int argc, char **argv) {
 	char *msgpattern = "librdkafka_performance testing!";
 	int msgsize = -1;
 	const char *debug = NULL;
+	int do_conf_dump = 0;
 	rd_ts_t now;
 	char errstr[512];
 	uint64_t seq = 0;
@@ -995,6 +996,11 @@ int main (int argc, char **argv) {
 				exit(0);
 			}
 
+			if (!strcmp(optarg, "dump")) {
+				do_conf_dump = 1;
+				continue;
+			}
+
 			name = optarg;
 			if (!(val = strchr(name, '='))) {
 				fprintf(stderr, "%% Expected "
@@ -1152,9 +1158,9 @@ int main (int argc, char **argv) {
 			"configuration property\n"
 			"               Properties prefixed with \"topic.\" "
 			"will be set on topic object.\n"
-			"               Use '-X list' to see the full list\n"
-			"               of supported properties.\n"
                         "  -X file=<path> Read config from file.\n"
+                        "  -X list      Show full list of supported properties.\n"
+                        "  -X dump      Show configuration\n"
 			"  -T <intvl>   Enable statistics from librdkafka at "
 			"specified interval (ms)\n"
                         "  -Y <command> Pipe statistics to <command>\n"
@@ -1224,6 +1230,35 @@ int main (int argc, char **argv) {
             RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%% %s\n", errstr);
                 exit(1);
+        }
+
+        if (do_conf_dump) {
+                const char **arr;
+                size_t cnt;
+                int pass;
+
+                for (pass = 0 ; pass < 2 ; pass++) {
+                        int i;
+
+                        if (pass == 0) {
+                                arr = rd_kafka_conf_dump(conf, &cnt);
+                                printf("# Global config\n");
+                        } else {
+                                printf("# Topic config\n");
+                                arr = rd_kafka_topic_conf_dump(topic_conf,
+                                                               &cnt);
+                        }
+
+                        for (i = 0 ; i < (int)cnt ; i += 2)
+                                printf("%s = %s\n",
+                                       arr[i], arr[i+1]);
+
+                        printf("\n");
+
+                        rd_kafka_conf_dump_free(arr, cnt);
+                }
+
+                exit(0);
         }
 
         if (latency_mode)

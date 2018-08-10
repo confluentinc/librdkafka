@@ -247,7 +247,7 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
                 goto err;
 
         listen_addr.sin_family = AF_INET;
-        listen_addr.sin_addr.s_addr = ntohl(INADDR_ANY);
+        listen_addr.sin_addr.s_addr = ntohl(INADDR_LOOPBACK);
         listen_addr.sin_port = 0;
         if (bind(listen_s, (struct sockaddr*)&listen_addr, sizeof(struct sockaddr_in)) != 0)
                 goto err;
@@ -290,18 +290,9 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         if (accept_s == SOCKET_ERROR)
                 goto err;
 
-        /* Wait for both sockets to be writable */
+        /* Wait for the connection socket to be writable */
         memset(&poll_fd, 0, sizeof(WSAPOLLFD));
         poll_fd.fd = connect_s;
-        poll_fd.events = POLLOUT;
-        if (WSAPoll(&poll_fd, 1, poll_timeout_ms) == SOCKET_ERROR)
-                goto err;
-
-        if ((poll_fd.revents & (POLLERR | POLLHUP)) > 0)
-                goto err;
-
-        memset(&poll_fd, 0, sizeof(WSAPOLLFD));
-        poll_fd.fd = accept_s;
         poll_fd.events = POLLOUT;
         if (WSAPoll(&poll_fd, 1, poll_timeout_ms) == SOCKET_ERROR)
                 goto err;

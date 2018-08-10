@@ -763,7 +763,7 @@ void ssl_info_callback(const SSL *ssl, int type, int ret)
     else if (type & SSL_CB_ALERT)
     {
         rd_snprintf(str, sizeof(errstr) - len,
-            "SSL3 alert %s:%s:%s\n",
+            "SSL alert %s:%s:%s\n",
             (type & SSL_CB_READ) ? "read" : "write",
             SSL_alert_type_string_long(ret),
             SSL_alert_desc_string_long(ret));

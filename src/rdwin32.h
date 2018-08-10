@@ -243,9 +243,6 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         if (listen_s == INVALID_SOCKET)
                 goto err;
 
-        if (rd_fd_set_nonblocking(listen_s) != 0)
-                goto err;
-
         listen_addr.sin_family = AF_INET;
         listen_addr.sin_addr.s_addr = ntohl(INADDR_LOOPBACK);
         listen_addr.sin_port = 0;
@@ -277,15 +274,6 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         }
 
         /* Wait for incoming connection */
-        memset(&poll_fd, 0, sizeof(WSAPOLLFD));
-        poll_fd.fd = listen_s;
-        poll_fd.events = POLLIN;
-        if (WSAPoll(&poll_fd, 1, poll_timeout_ms) == SOCKET_ERROR)
-                goto err;
-
-        if ((poll_fd.revents & (POLLERR | POLLHUP)) > 0)
-                goto err;
-
         accept_s = accept(listen_s, 0, 0);
         if (accept_s == SOCKET_ERROR)
                 goto err;
@@ -302,6 +290,9 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
 
         /* Done with listening */
         closesocket(listen_s);
+	
+	if (rd_fd_set_nonblocking(accept_s) != 0)
+                goto err;
 
         /* Store resulting sockets. They are bidirectional, so it does not matter
          * which is read or write side of pipe. */

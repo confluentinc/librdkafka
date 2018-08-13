@@ -139,6 +139,32 @@ static RD_INLINE rd_ts_t rd_timeout_init (int timeout_ms) {
 
 
 /**
+ * @brief Initialize an absolute timespec timeout based on the provided
+ *        relative \p timeout_ms.
+ *
+ * To be used with cnd_timedwait_abs().
+ *
+ * Honours RD_POLL_INFITE and RD_POLL_NOWAIT (reflected in tspec.tv_sec).
+ */
+static RD_INLINE void rd_timeout_init_timespec (struct timespec *tspec,
+                                                int timeout_ms) {
+        if (timeout_ms == RD_POLL_INFINITE ||
+            timeout_ms == RD_POLL_NOWAIT) {
+                tspec->tv_sec = timeout_ms;
+                tspec->tv_nsec = 0;
+        } else {
+                timespec_get(tspec, TIME_UTC);
+                tspec->tv_sec  += timeout_ms / 1000;
+                tspec->tv_nsec += (timeout_ms % 1000) * 1000000;
+                if (tspec->tv_nsec > 1000000000) {
+                        tspec->tv_nsec -= 1000000000;
+                        tspec->tv_sec++;
+                }
+        }
+}
+
+
+/**
  * @brief Same as rd_timeout_remains() but with microsecond precision
  */
 static RD_INLINE rd_ts_t rd_timeout_remains_us (rd_ts_t abs_timeout) {

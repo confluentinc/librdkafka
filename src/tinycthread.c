@@ -518,6 +518,15 @@ int cnd_timedwait_msp (cnd_t *cnd, mtx_t *mtx, int *timeout_msp) {
         return r;
 }
 
+int cnd_timedwait_abs (cnd_t *cnd, mtx_t *mtx, const struct timespec *tspec) {
+        if (tspec->tv_sec == RD_POLL_INFINITE)
+                return cnd_wait(cnd, mtx);
+        else if (tspec->tv_sec == RD_POLL_NOWAIT)
+                return thrd_timedout;
+
+        return cnd_timedwait(cnd, mtx, tspec);
+}
+
 #if defined(_TTHREAD_WIN32_)
 struct TinyCThreadTSSData {
   void* value;

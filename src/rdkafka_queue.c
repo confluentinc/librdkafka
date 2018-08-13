@@ -331,16 +331,16 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
         rd_dassert(cb_type);
 
-	if (timeout_ms == RD_POLL_INFINITE)
-		timeout_ms = INT_MAX;
-
 	mtx_lock(&rkq->rkq_lock);
 
         rd_kafka_yield_thread = 0;
         if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
-                do {
+                struct timespec timeout_tspec;
+
+                rd_timeout_init_timespec(&timeout_tspec, timeout_ms);
+
+                while (1) {
                         rd_kafka_op_res_t res;
-                        rd_ts_t pre;
 
                         /* Filter out outdated ops */
                 retry:
@@ -370,24 +370,14 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
                                         break; /* Proper op, handle below. */
                         }
 
-                        /* No op, wait for one if we have time left */
-                        if (timeout_ms == RD_POLL_NOWAIT)
-                                break;
-
-			pre = rd_clock();
-			if (cnd_timedwait_ms(&rkq->rkq_cond,
-					     &rkq->rkq_lock,
-					     timeout_ms) ==
-			    thrd_timedout) {
+                        if (cnd_timedwait_abs(&rkq->rkq_cond,
+                                              &rkq->rkq_lock,
+                                              &timeout_tspec) ==
+                            thrd_timedout) {
 				mtx_unlock(&rkq->rkq_lock);
 				return NULL;
 			}
-			/* Remove spent time */
-			timeout_ms -= (int) (rd_clock()-pre) / 1000;
-			if (timeout_ms < 0)
-				timeout_ms = RD_POLL_NOWAIT;
-
-		} while (timeout_ms != RD_POLL_NOWAIT);
+                }
 
                 mtx_unlock(&rkq->rkq_lock);
 
@@ -429,6 +419,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 	rd_kafka_q_t localq;
         rd_kafka_q_t *fwdq;
         int cnt = 0;
+        struct timespec timeout_tspec;
 
         rd_dassert(cb_type);
 
@@ -446,18 +437,13 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 		return ret;
 	}
 
-	if (timeout_ms == RD_POLL_INFINITE)
-		timeout_ms = INT_MAX;
+        rd_timeout_init_timespec(&timeout_tspec, timeout_ms);
 
-	/* Wait for op */
-	while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) && timeout_ms != 0) {
-		if (cnd_timedwait_ms(&rkq->rkq_cond,
-				     &rkq->rkq_lock,
-				     timeout_ms) != thrd_success)
-			break;
-
-		timeout_ms = 0;
-	}
+        /* Wait for op */
+        while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
+               cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
+                                 &timeout_tspec) == thrd_success)
+                ;
 
 	if (!rko) {
 		mtx_unlock(&rkq->rkq_lock);
@@ -520,6 +506,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
         rd_kafka_op_t *rko, *next;
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
+        struct timespec timeout_tspec;
 
 	mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
@@ -533,17 +520,18 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
 	}
         mtx_unlock(&rkq->rkq_lock);
 
+        rd_timeout_init_timespec(&timeout_tspec, timeout_ms);
+
         rd_kafka_yield_thread = 0;
 	while (cnt < rkmessages_size) {
                 rd_kafka_op_res_t res;
 
                 mtx_lock(&rkq->rkq_lock);
 
-		while (!(rko = TAILQ_FIRST(&rkq->rkq_q))) {
-			if (cnd_timedwait_ms(&rkq->rkq_cond, &rkq->rkq_lock,
-                                             timeout_ms) == thrd_timedout)
-				break;
-		}
+                while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
+                       cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
+                                         &timeout_tspec) != thrd_timedout)
+                        ;
 
 		if (!rko) {
                         mtx_unlock(&rkq->rkq_lock);

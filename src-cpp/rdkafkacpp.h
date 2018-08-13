@@ -49,6 +49,7 @@
 /**@cond NO_DOC*/
 #include <string>
 #include <list>
+#include <map>
 #include <vector>
 #include <stdint.h>
 
@@ -78,7 +79,6 @@ extern "C" {
 };
 
 namespace RdKafka {
-
 
 /**
  * @name Miscellaneous APIs
@@ -396,6 +396,8 @@ std::string  err2str(RdKafka::ErrorCode err);
 /* Forward declarations */
 class Producer;
 class Message;
+class Header;
+class Headers;
 class Queue;
 class Event;
 class Topic;
@@ -1365,7 +1367,34 @@ public:
   int64_t timestamp;               /**< Milliseconds since epoch (UTC). */
 };
 
+class RD_EXPORT Headers {
+ public:
+    virtual ~Headers() = 0;
 
+    class Header {
+     public:
+      Header(const std::string& key,
+             const char* value,
+             RdKafka::ErrorCode err = ERR_NO_ERROR):
+      key(key), value(value), err(err) {};
+
+      std::string key;
+      const char* value;
+      RdKafka::ErrorCode err;
+    };
+
+    virtual ErrorCode add(const Header& header) = 0;
+
+    virtual ErrorCode add(const std::string& key, const char* value) = 0;
+
+    virtual ErrorCode remove(const std::string& key) = 0;
+
+    virtual std::vector<Header> get(const std::string &key) const = 0;
+
+    virtual Header get_last(const std::string& key) const = 0;
+
+    virtual std::vector<Header> get_all() const = 0;
+};
 
 /**
  * @brief Message object
@@ -1427,6 +1456,8 @@ class RD_EXPORT Message {
 
   /** @returns The \p msg_opaque as provided to RdKafka::Producer::produce() */
   virtual void               *msg_opaque () const = 0;
+
+  virtual Headers            *getHeaders() = 0;
 
   virtual ~Message () = 0;
 

@@ -183,7 +183,6 @@ _TEST_DECL(0086_purge_remote);
 _TEST_DECL(0088_produce_metadata_timeout);
 _TEST_DECL(0089_max_poll_interval);
 
-
 /* Manual tests */
 _TEST_DECL(8000_idle);
 

@@ -77,6 +77,7 @@ set(
     0082-fetch_max_bytes.cpp
     0083-cb_event.c
     0084-destroy_flags.c
+    0085-headers.cpp
     0086-purge.c
     0088-produce_metadata_timeout.c
     0089-max_poll_interval.c

@@ -3333,7 +3333,7 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
         while (((qlen = rd_kafka_q_len(rk->rk_rep)) > 0 ||
                 (msg_cnt = rd_kafka_curr_msgs_cnt(rk)) > 0) &&
                !rd_kafka_yield_thread &&
-               (tmout = rd_timeout_remains_limit(ts_end, 100))!=RD_POLL_NOWAIT)
+               (tmout = rd_timeout_remains_limit(ts_end, 10)) != RD_POLL_NOWAIT)
                 rd_kafka_poll(rk, tmout);
 
 	return qlen + msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :

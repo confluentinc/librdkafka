@@ -5,6 +5,7 @@ set(
     ConfImpl.cpp
     ConsumerImpl.cpp
     HandleImpl.cpp
+    HeadersImpl.cpp
     KafkaConsumerImpl.cpp
     MessageImpl.cpp
     MetadataImpl.cpp

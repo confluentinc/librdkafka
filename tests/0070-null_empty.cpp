@@ -111,7 +111,7 @@ static void do_test_null_empty (bool api_version_request) {
                      (void *)msgs[i+1], msgs[i+1] ? strlen(msgs[i+1]) : 0,
                      /* Key */
                      (void *)msgs[i], msgs[i] ? strlen(msgs[i]) : 0,
-                     0, NULL);
+                     0, NULL, NULL);
     if (err != RdKafka::ERR_NO_ERROR)
       Test::Fail("Produce failed: " + RdKafka::err2str(err));
   }

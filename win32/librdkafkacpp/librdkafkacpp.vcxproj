@@ -85,6 +85,7 @@
     <ClCompile Include="..\..\src-cpp\ConsumerImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\HandleImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\KafkaConsumerImpl.cpp" />
+    <ClCompile Include="..\..\src-cpp\HeadersImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\MessageImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\MetadataImpl.cpp" />
     <ClCompile Include="..\..\src-cpp\ProducerImpl.cpp" />

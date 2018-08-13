@@ -1474,16 +1474,25 @@ class RD_EXPORT Headers {
     Header(const std::string& key,
            const char* value,
            RdKafka::ErrorCode err = ERR_NO_ERROR):
-    key(key), err(err) {
-        // Safe managed copy of the value preserving the bytes
-        value_container_ = value;
-        this->value = value_container_.c_str();
+    key_(key), err_(err) {
+        value_container_.assign(value);
     };
+    
+    std::string key() const {
+        return key_;
+    }
 
-    std::string key;
-    const char* value;
-    RdKafka::ErrorCode err;
+    const char* value() const {
+        return value_container_.c_str();
+    }
+
+    RdKafka::ErrorCode err() const {
+        return err_;
+    }
+    
    private:
+    std::string key_;
+    RdKafka::ErrorCode err_;
     std::string value_container_;
     void *operator new(size_t); /* Prevent dynamic allocation */
   };
@@ -1532,6 +1541,7 @@ class RD_EXPORT Headers {
    * @returns a std::vector containing all of the Headers of a message
    */
   virtual std::vector<Header> get_all() const = 0;
+
 
   /** 
    * @brief the count of all the Headers

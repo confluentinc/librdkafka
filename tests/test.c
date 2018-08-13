@@ -185,7 +185,6 @@ _TEST_DECL(0089_max_poll_interval);
 _TEST_DECL(0090_idempotence);
 _TEST_DECL(0091_max_poll_interval_timeout);
 
-
 /* Manual tests */
 _TEST_DECL(8000_idle);
 

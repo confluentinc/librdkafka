@@ -75,10 +75,10 @@ extern "C" {
         struct rd_kafka_s;
         struct rd_kafka_topic_s;
         struct rd_kafka_message_s;
+        struct rd_kafka_headers_s;
 };
 
 namespace RdKafka {
-
 
 /**
  * @name Miscellaneous APIs
@@ -396,6 +396,7 @@ std::string  err2str(RdKafka::ErrorCode err);
 /* Forward declarations */
 class Producer;
 class Message;
+class Headers;
 class Queue;
 class Event;
 class Topic;
@@ -1365,7 +1366,130 @@ public:
   int64_t timestamp;               /**< Milliseconds since epoch (UTC). */
 };
 
+/**
+ * @brief Headers object
+ *
+ * This object encapsulates the C implementation logic into a C++ object
+ * for use in RdKafka::Messages object.
+ */
+class RD_EXPORT Headers {
+ public:
+  virtual ~Headers() = 0;
 
+  /**
+   * @brief Header object
+   *
+   * This object represents a single Header with key value pair
+   * and an ErrorCode
+   *
+   * @remark dynamic allocation of this object is not supported.
+   *
+   */
+  class Header {
+   public:
+    Header(const std::string& key,
+           const char* value,
+           RdKafka::ErrorCode err = ERR_NO_ERROR):
+    key(key), err(err) {
+        // Safe managed copy of the value preserving the bytes
+        value_container_ = value;
+        this->value = value_container_.c_str();
+    };
+
+    std::string key;
+    const char* value;
+    RdKafka::ErrorCode err;
+   private:
+    std::string value_container_;
+    void *operator new(size_t); /* Prevent dynamic allocation */
+  };
+
+  /**
+   * @brief create a new instance of the Headers object
+   */
+  static Headers *create(size_t initial_size = 8, bool free_rd_headers = true);
+
+  /**
+   * @brief create a new instance of the Headers object from a std::vector
+   */
+  static Headers *create(const std::vector<Header> &headers, bool free_rd_headers = true);
+
+  /** 
+   * @brief adds a Header to the end
+   *
+   * @returns An ErrorCode signalling a success or failure to add the Header.
+   */
+  virtual ErrorCode add(const std::string& key, const char* value) = 0;
+
+  /** 
+   * @brief removes all the Headers of a given key
+   *
+   * @returns An ErrorCode signalling a success or failure to remove the Header.
+   */
+  virtual ErrorCode remove(const std::string& key) = 0;
+
+  /** 
+   * @brief gets all of the Headers of a given key
+   *
+   * @returns a std::vector containing all the Headers of the given key.
+   */
+  virtual std::vector<Header> get(const std::string &key) const = 0;
+
+  /** 
+   * @brief gets the last occurrence of a Header of a given key
+   *
+   * @returns the Header if found, otherwise a Header with an ErrorCode 
+   */
+  virtual Header get_last(const std::string& key) const = 0;
+
+  /** 
+   * @brief returns all the Headers of a Message
+   *
+   * @returns a std::vector containing all of the Headers of a message
+   */
+  virtual std::vector<Header> get_all() const = 0;
+
+  /** 
+   * @brief the count of all the Headers
+   *
+   * @returns a size_t count of all the headers
+   */
+  virtual size_t size() const = 0;
+
+  /**
+   * @brief Returns the underlying librdkafka C rd_kafka_headers_t handle.
+   *
+   * @warning Calling the C API on this handle is not recommended and there
+   *          is no official support for it, but for cases where the C++ API
+   *          does not provide the underlying functionality this C handle can be
+   *          used to interact directly with the core librdkafka API.
+   *
+   * @remark The lifetime of the returned pointer can be different than the lifetime
+   *         of the Headers message due to how the producev function in the C API works
+   *         if there is no error then the producev will take care of deallocation
+   *         but if there is an error then it is the responsibility of the calling
+   *         object to deallocate the underlying C implementation if an instance
+   *         of the Headers object is created with free_rd_headers set to `false`
+   *
+   * @remark Include <rdkafka/rdkafka.h> prior to including
+   *         <rdkafka/rdkafkacpp.h>
+   *
+   * @returns \c rd_kafka_headers_t*
+   */
+  virtual struct rd_kafka_headers_s *c_headers() = 0;
+
+  /** 
+   * @brief cleans up the underlying alocated C implementation headers if called
+   *
+   * @remark Safe to call even if the Headers object is set to clean up when
+   *         when the destructor is called
+   *
+   * @remark Safe to call even if the underlyng C pointer is set to null
+   *
+   * @returns an ErrorCode signalling if the the operation was attempted
+   */
+  virtual ErrorCode destroy_headers() = 0;
+};
 
 /**
  * @brief Message object
@@ -1427,6 +1551,9 @@ class RD_EXPORT Message {
 
   /** @returns The \p msg_opaque as provided to RdKafka::Producer::produce() */
   virtual void               *msg_opaque () const = 0;
+
+  /** @returns The Headers instance for this Message (if applicable) */
+  virtual RdKafka::Headers   *get_headers() = 0;
 
   virtual ~Message () = 0;
 
@@ -2147,8 +2274,8 @@ class RD_EXPORT Producer : public virtual Handle {
                              int msgflags,
                              void *payload, size_t len,
                              const void *key, size_t key_len,
-                             int64_t timestamp,
-                             void *msg_opaque) = 0;
+                             int64_t timestamp, void *msg_opaque,
+                             RdKafka::Headers *headers) = 0;
 
 
   /**

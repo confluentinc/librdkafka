@@ -48,7 +48,6 @@ typedef int mode_t;
 
 namespace RdKafka {
 
-
 void consume_cb_trampoline(rd_kafka_message_t *msg, void *opaque);
 void log_cb_trampoline (const rd_kafka_t *rk, int level,
                         const char *fac, const char *buf);
@@ -117,6 +116,122 @@ class EventImpl : public Event {
   int         throttle_time_;
 };
 
+class HeadersImpl : public Headers {
+ public:
+  HeadersImpl (size_t initial_size, bool free_rd_headers):
+  headers_ (rd_kafka_headers_new(initial_size)), free_headers_ (free_rd_headers) {}
+
+  HeadersImpl (rd_kafka_headers_t *headers):
+  headers_ (headers), free_headers_ (false) {};
+
+  HeadersImpl (const std::vector<Header> &headers, bool free_rd_headers):
+  free_headers_ (free_rd_headers) {
+    if (headers.size() > 0) {
+      headers_ = rd_kafka_headers_new(headers.size());
+      from_vector(headers);
+    } else {
+      headers_ = rd_kafka_headers_new(8);
+    }
+  }
+
+  ~HeadersImpl() {
+    if(free_headers_ && headers_) {
+      rd_kafka_headers_destroy(headers_);
+    }
+  }
+
+  ErrorCode add(const std::string& key, const char* value) {
+    rd_kafka_resp_err_t err;
+    err = rd_kafka_header_add(headers_,
+                              key.c_str(), key.size(),
+                              value, strlen(value));
+    return static_cast<RdKafka::ErrorCode>(err);
+  }
+
+  ErrorCode remove(const std::string& key) {
+    rd_kafka_resp_err_t err;
+    err = rd_kafka_header_remove (headers_, key.c_str());
+    return static_cast<RdKafka::ErrorCode>(err);
+  }
+
+  std::vector<Headers::Header> get(const std::string &key) const {
+    std::vector<Headers::Header> headers;
+    const void *value;
+    size_t size;
+    rd_kafka_resp_err_t err;
+    for (size_t idx = 0;
+         !(err = rd_kafka_header_get(headers_, idx, key.c_str(), &value, &size)) ;\
+         idx++) {
+      if (value) {
+        const char* casted_value = static_cast<const char*>(value);
+        headers.push_back(Headers::Header(key, casted_value));
+      }
+    }
+    return headers;
+  }
+
+  Headers::Header get_last(const std::string& key) const {
+    const void *value;
+    size_t size;
+    rd_kafka_resp_err_t err;
+    err = rd_kafka_header_get_last (headers_, key.c_str(), &value, &size);
+    const char* casted_value = static_cast<const char*>(value);
+    ErrorCode cpp_error = static_cast<RdKafka::ErrorCode>(err);
+    return Headers::Header(key, casted_value, cpp_error);
+  }
+
+  std::vector<Headers::Header> get_all() const {
+    std::vector<Headers::Header> headers;
+    size_t idx = 0;
+    const char *name;
+    const void *valuep;
+    size_t size;
+    while (!rd_kafka_header_get_all(headers_, idx++,
+                                    &name, &valuep, &size)) {
+      if (valuep != NULL) {
+        const char* casted_value = static_cast<const char*>(valuep);
+        headers.push_back(Headers::Header(name, casted_value));
+      }
+    }
+    return headers;
+  }
+
+  size_t size() const {
+    return rd_kafka_header_cnt(headers_);
+  }
+
+  struct rd_kafka_headers_s* c_headers() {
+    return headers_;
+  }
+
+  ErrorCode destroy_headers() {
+    if (headers_) {
+      rd_kafka_headers_destroy(headers_);
+      headers_ = 0;
+      return RdKafka::ERR_NO_ERROR;
+    } else {
+      return RdKafka::ERR_OPERATION_NOT_ATTEMPTED;
+    }
+  }
+    
+ private:
+  void from_vector(const std::vector<Header> &headers) {
+    if (headers.size() > 0) {
+      for (std::vector<Header>::const_iterator it = headers.begin();
+           it != headers.end();
+           it++) {
+        this->add(it->key, it->value);
+      }
+    }
+  }
+
+  HeadersImpl(HeadersImpl const&) /*= delete*/;
+  HeadersImpl& operator=(HeadersImpl const&) /*= delete*/;
+
+  rd_kafka_headers_t* headers_;
+  bool free_headers_;
+};
+
 
 class MessageImpl : public Message {
  public:
@@ -125,17 +240,21 @@ class MessageImpl : public Message {
       rd_kafka_message_destroy(const_cast<rd_kafka_message_t *>(rkmessage_));
     if (key_)
             delete key_;
+    delete headers_;
   };
 
   MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage):
-  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) {}
+  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL),
+  headers_(get_headers_from_rkmessage(rkmessage)) {}
 
   MessageImpl (RdKafka::Topic *topic, rd_kafka_message_t *rkmessage,
                bool dofree):
-  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree), key_(NULL) { }
+  topic_(topic), rkmessage_(rkmessage), free_rkmessage_(dofree), key_(NULL),
+  headers_(get_headers_from_rkmessage(rkmessage)) {}
 
   MessageImpl (rd_kafka_message_t *rkmessage):
-  topic_(NULL), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL) {
+  topic_(NULL), rkmessage_(rkmessage), free_rkmessage_(true), key_(NULL),
+  headers_(get_headers_from_rkmessage(rkmessage)) {
     if (rkmessage->rkt) {
       /* Possibly NULL */
       topic_ = static_cast<Topic *>(rd_kafka_topic_opaque(rkmessage->rkt));
@@ -144,10 +263,11 @@ class MessageImpl : public Message {
 
   /* Create errored message */
   MessageImpl (RdKafka::Topic *topic, RdKafka::ErrorCode err):
-  topic_(topic), free_rkmessage_(false), key_(NULL) {
+  topic_(topic), free_rkmessage_(false), key_(NULL), headers_(0) {
     rkmessage_ = &rkmessage_err_;
     memset(&rkmessage_err_, 0, sizeof(rkmessage_err_));
     rkmessage_err_.err = static_cast<rd_kafka_resp_err_t>(err);
+
   }
 
   std::string         errstr() const {
@@ -202,6 +322,10 @@ class MessageImpl : public Message {
           return rd_kafka_message_latency(rkmessage_);
   }
 
+  Headers* get_headers() {
+    return headers_;
+  }
+
   struct rd_kafka_message_s *c_ptr () {
           return rkmessage_;
   }
@@ -213,8 +337,18 @@ class MessageImpl : public Message {
    * used as a place holder and rkmessage_ is set to point to it. */
   rd_kafka_message_t rkmessage_err_;
   mutable std::string *key_; /* mutable because it's a cached value */
+  RdKafka::Headers *headers_;
 
 private:
+  RdKafka::Headers* get_headers_from_rkmessage(rd_kafka_message_t *rkmessage) {
+    rd_kafka_headers_t *hdrsp;
+    rd_kafka_resp_err_t err;
+
+    if (rkmessage->len > 0 && !(err = rd_kafka_message_headers(rkmessage, &hdrsp))) {
+      return new HeadersImpl(hdrsp);
+    }
+    return 0;
+  }
   /* "delete" copy ctor + copy assignment, for safety of key_ */
   MessageImpl(MessageImpl const&) /*= delete*/;
   MessageImpl& operator=(MessageImpl const&) /*= delete*/;
@@ -896,8 +1030,8 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
                      int msgflags,
                      void *payload, size_t len,
                      const void *key, size_t key_len,
-                     int64_t timestamp,
-                     void *msg_opaque);
+                     int64_t timestamp, void *msg_opaque,
+                     RdKafka::Headers *headers);
 
   ErrorCode flush (int timeout_ms) {
 	  return static_cast<RdKafka::ErrorCode>(rd_kafka_flush(rk_,

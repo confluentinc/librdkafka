@@ -457,6 +457,17 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
               " [" << (int)msg->partition() << "]  at offset " <<
               msg->offset() << std::endl;
 
+        RdKafka::Headers *headers = msg->get_headers();
+        if (headers) {
+          std::vector<RdKafka::Headers::Header> sheaders = headers->get_all();
+          std::cout << "Headers length: " << sheaders.size() << std::endl;
+          for(std::vector<RdKafka::Headers::Header>::const_iterator it = sheaders.begin();
+              it != sheaders.end();
+              it++) {
+            std::cout << "Key: " << (*it).key << " Value: " << (*it).value << std::endl;
+          }
+        }
+
         if (state.maxMessages >= 0 &&
             state.consumer.consumedMessages >= state.maxMessages)
           return;
@@ -834,30 +845,41 @@ int main (int argc, char **argv) {
       msg << value_prefix << i;
       while (true) {
         RdKafka::ErrorCode resp;
-       if (create_time == -1) {
-         resp = producer->produce(topic, partition,
-                                  RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
-                                  const_cast<char *>(msg.str().c_str()),
-                                  msg.str().size(), NULL, NULL);
-       } else {
-         resp = producer->produce(topics[0], partition,
+        RdKafka::Headers *headers = 0;
+        if (create_time == -1) {
+          resp = producer->produce(topic, partition,
+                                    RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
+                                    const_cast<char *>(msg.str().c_str()),
+                                    msg.str().size(), NULL, NULL);
+        } else {
+          std::string name = "kafkaheader";
+          std::string val = "header_val";
+          std::vector<RdKafka::Headers::Header> headers_arr;
+          headers_arr.push_back(RdKafka::Headers::Header(name, val.c_str()));
+
+          headers = RdKafka::Headers::create(headers_arr, false);
+          resp = producer->produce(topics[0], partition,
                                   RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
                                   const_cast<char *>(msg.str().c_str()),
                                   msg.str().size(),
                                   NULL, 0,
                                   create_time,
-                                  NULL);
-       }
+                                  NULL, headers);
+        }
 
         if (resp == RdKafka::ERR__QUEUE_FULL) {
           producer->poll(100);
           continue;
         } else if (resp != RdKafka::ERR_NO_ERROR) {
+          headers->destroy_headers();
           errorString("producer_send_error",
                       RdKafka::err2str(resp), topic->name(), NULL, msg.str());
           state.producer.numErr++;
         } else {
           state.producer.numSent++;
+        }
+        if (headers) {
+          delete headers;
         }
         break;
       }

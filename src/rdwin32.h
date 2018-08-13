@@ -230,13 +230,9 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         SOCKET accept_s = INVALID_SOCKET;
         SOCKET connect_s = INVALID_SOCKET;
 
-        WSAPOLLFD poll_fd;
-
         struct sockaddr_in listen_addr;
         struct sockaddr_in connect_addr;
         socklen_t sock_len = 0;
-
-        int poll_timeout_ms = 1000;
 
         /* Create listen socket */
         listen_s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -261,9 +257,6 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         if (connect_s == INVALID_SOCKET)
                 goto err;
 
-        if (rd_fd_set_nonblocking(connect_s) != 0)
-                goto err;
-
         connect_addr.sin_addr.s_addr = ntohl(INADDR_LOOPBACK);
         if (connect(
                 connect_s,
@@ -278,20 +271,13 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         if (accept_s == SOCKET_ERROR)
                 goto err;
 
-        /* Wait for the connection socket to be writable */
-        memset(&poll_fd, 0, sizeof(WSAPOLLFD));
-        poll_fd.fd = connect_s;
-        poll_fd.events = POLLOUT;
-        if (WSAPoll(&poll_fd, 1, poll_timeout_ms) == SOCKET_ERROR)
-                goto err;
-
-        if ((poll_fd.revents & (POLLERR | POLLHUP)) > 0)
-                goto err;
-
         /* Done with listening */
         closesocket(listen_s);
-	
-	if (rd_fd_set_nonblocking(accept_s) != 0)
+
+        if (rd_fd_set_nonblocking(accept_s) != 0)
+                goto err;
+
+        if (rd_fd_set_nonblocking(connect_s) != 0)
                 goto err;
 
         /* Store resulting sockets. They are bidirectional, so it does not matter

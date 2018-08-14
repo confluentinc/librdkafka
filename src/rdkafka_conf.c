@@ -943,14 +943,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         /* Topic consumer properties */
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.enable", _RK_C_BOOL,
 	  _RKT(auto_commit),
+	  "[**LEGACY PROPERTY:** This property is used by the simple legacy "
+	  "consumer only. When using the high-level KafkaConsumer, the global "
+	  "`enable.auto.commit` property must be used instead]. "
 	  "If true, periodically commit offset of the last message handed "
 	  "to the application. This committed offset will be used when the "
 	  "process restarts to pick up where it left off. "
 	  "If false, the application will have to call "
 	  "`rd_kafka_offset_store()` to store an offset (optional). "
-          "**NOTE:** This property should only be used with the simple "
-          "legacy consumer, when using the high-level KafkaConsumer the global "
-          "`enable.auto.commit` property must be used instead. "
 	  "**NOTE:** There is currently no zookeeper integration, offsets "
 	  "will be written to broker or local file according to "
           "offset.store.method.",
@@ -959,9 +959,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  .sdef = "auto.commit.enable" },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RKT(auto_commit_interval_ms),
+	  "[**LEGACY PROPERTY:** This setting is used by the simple legacy "
+	  "consumer only. When using the high-level KafkaConsumer, the "
+	  "global `auto.commit.interval.ms` property must be used instead]. "
 	  "The frequency in milliseconds that the consumer offsets "
-	  "are committed (written) to offset storage. "
-          "This setting is used by the low-level legacy consumer.",
+	  "are committed (written) to offset storage.",
 	  10, 86400*1000, 60*1000 },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.offset.reset", _RK_C_S2I,
 	  _RKT(auto_offset_reset),

@@ -2991,22 +2991,24 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                         rd_kafka_toppar_unlock(rktp);
 
 			/* Check if this Fetch is for an outdated fetch version,
-                         * if so ignore it. */
+                         * or the original rktp was removed and a new one
+                         * created (due to partition count decreasing and
+                         * then increasing again, which can happen in
+                         * desynchronized clusters): if so ignore it. */
 			tver_skel.s_rktp = s_rktp;
 			tver = rd_list_find(request->rkbuf_rktp_vers,
 					    &tver_skel,
 					    rd_kafka_toppar_ver_cmp);
-			rd_kafka_assert(NULL, tver &&
-					rd_kafka_toppar_s2i(tver->s_rktp) ==
-					rktp);
-			if (tver->version < fetch_version) {
-				rd_rkb_dbg(rkb, MSG, "DROP",
-					   "%s [%"PRId32"]: "
-					   "dropping outdated fetch response "
-					   "(v%d < %d)",
-					   rktp->rktp_rkt->rkt_topic->str,
-					   rktp->rktp_partition,
-					   tver->version, fetch_version);
+			rd_kafka_assert(NULL, tver);
+                        if (rd_kafka_toppar_s2i(tver->s_rktp) != rktp ||
+                            tver->version < fetch_version) {
+                                rd_rkb_dbg(rkb, MSG, "DROP",
+                                           "%s [%"PRId32"]: "
+                                           "dropping outdated fetch response "
+                                           "(v%d < %d or old rktp)",
+                                           rktp->rktp_rkt->rkt_topic->str,
+                                           rktp->rktp_partition,
+                                           tver->version, fetch_version);
                                 rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
                                 rd_kafka_toppar_destroy(s_rktp); /* from get */
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);

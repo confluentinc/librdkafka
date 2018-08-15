@@ -140,16 +140,13 @@ static void do_test_destroy_flags (const char *topic,
         rd_kafka_destroy_flags(rk, destroy_flags);
         TIMING_STOP(&t_destroy);
 
-        if (destroy_flags & RD_KAFKA_DESTROY_F_IMMEDIATE)
-                TIMING_ASSERT_LATER(&t_destroy, 0, 50);
-        else if (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
+        if (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
                 TIMING_ASSERT_LATER(&t_destroy, 0, 200);
         else
                 TIMING_ASSERT_LATER(&t_destroy, 0, 1000);
 
         if (args->consumer_subscribe &&
-            !(destroy_flags & (RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE|
-                               RD_KAFKA_DESTROY_F_IMMEDIATE))) {
+            !(destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)) {
                 if (!local_mode)
                         TEST_ASSERT(rebalance_cnt > 0,
                                     "expected final rebalance callback");
@@ -180,9 +177,6 @@ static void destroy_flags (int local_mode) {
                 { RD_KAFKA_CONSUMER, 0, 0, 0 }
         };
         const int flag_combos[] = { 0,
-                                    RD_KAFKA_DESTROY_F_IMMEDIATE,
-                                    RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE,
-                                    RD_KAFKA_DESTROY_F_IMMEDIATE |
                                     RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE };
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         int i, j;

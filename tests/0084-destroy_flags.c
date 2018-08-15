@@ -121,14 +121,13 @@ static void do_test_destroy_flags (const char *topic,
 
                 for (i = 0 ; i < 5 ; i++)
                         test_consumer_poll_once(rk, NULL, 100);
-        }
 
-        if (args->consumer_unsubscribe &&
-            args->client_type == RD_KAFKA_CONSUMER) {
-                // test that calling rd_kafka_unsubscribe immediately prior to
-                // rd_kafka_destroy_flags doesn't cause the latter to hang.
-                TEST_SAY(_C_YEL "Calling rd_kafka_unsubscribe\n" _C_CLR);
-                rd_kafka_unsubscribe(rk);
+                if (args->consumer_unsubscribe) {
+                        // test that calling rd_kafka_unsubscribe immediately prior to
+                        // rd_kafka_destroy_flags doesn't cause the latter to hang.
+                        TEST_SAY(_C_YEL "Calling rd_kafka_unsubscribe\n" _C_CLR);
+                        rd_kafka_unsubscribe(rk);
+                }
         }
 
         rebalance_cnt = 0;

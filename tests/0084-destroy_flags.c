@@ -130,7 +130,7 @@ static void do_test_destroy_flags (const char *topic,
                 TEST_SAY(_C_YEL "Calling rd_kafka_unsubscribe\n" _C_CLR);
                 rd_kafka_unsubscribe(rk);
         }
-  
+
         rebalance_cnt = 0;
         TEST_SAY(_C_YEL "Calling rd_kafka_destroy_flags(0x%x)\n" _C_CLR,
                  destroy_flags);

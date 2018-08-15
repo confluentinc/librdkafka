@@ -2069,16 +2069,6 @@ void rd_kafka_destroy_flags (rd_kafka_t *rk, int flags);
  */
 
 /*!
- * Immediate non-blocking destruction without waiting for all resources
- * to be cleaned up.
- *
- * @warning Memory and resource leaks possible.
- *
- * @remark This flag automatically sets RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE.
- */
-#define RD_KAFKA_DESTROY_F_IMMEDIATE 0x4
-
-/*!
  * Don't call consumer_close() to leave group and commit final offsets.
  *
  * This also disables consumer callbacks to be called from rd_kafka_destroy*(),

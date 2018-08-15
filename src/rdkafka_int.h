@@ -185,6 +185,16 @@ struct rd_kafka_s {
                                                * is called with flags=0
                                                * and prior to _F_TERMINATE
                                                * has been set. */
+#define RD_KAFKA_DESTROY_F_IMMEDIATE 0x4     /**< Immediate non-blocking
+                                              *   destruction without waiting
+                                              *   for all resources
+                                              *   to be cleaned up.
+                                              *   WARNING: Memory and resource
+                                              *            leaks possible.
+                                              *   This flag automatically sets
+                                              *   .._NO_CONSUMER_CLOSE. */
+
+
 	rwlock_t         rk_lock;
 	rd_kafka_type_t  rk_type;
 	struct timeval   rk_tv_state_change;

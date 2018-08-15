@@ -231,8 +231,8 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 	int                rktp_flags;
 #define RD_KAFKA_TOPPAR_F_DESIRED  0x1      /* This partition is desired
 					     * by a consumer. */
-#define RD_KAFKA_TOPPAR_F_UNKNOWN  0x2      /* Topic is (not yet) seen on
-					     * a broker. */
+#define RD_KAFKA_TOPPAR_F_UNKNOWN  0x2      /* Topic is not yet or no longer
+                                             * seen on a broker. */
 #define RD_KAFKA_TOPPAR_F_OFFSET_STORE 0x4  /* Offset store is active */
 #define RD_KAFKA_TOPPAR_F_OFFSET_STORE_STOPPING 0x8 /* Offset store stopping */
 #define RD_KAFKA_TOPPAR_F_APP_PAUSE  0x10   /* App pause()d consumption */

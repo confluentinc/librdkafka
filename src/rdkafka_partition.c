@@ -182,6 +182,10 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
 	rktp->rktp_partition = partition;
 	rktp->rktp_rkt = rkt;
         rktp->rktp_leader_id = -1;
+        /* Mark partition as unknown (does not exist) until we see the
+         * partition in topic metadata. */
+        if (partition != RD_KAFKA_PARTITION_UA)
+                rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
 	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
         rktp->rktp_fetch_msg_max_bytes
             = rkt->rkt_rk->rk_conf.fetch_msg_max_bytes;
@@ -577,6 +581,9 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_add (rd_kafka_itopic_t *rkt,
                                      rkt->rkt_topic->str, rktp->rktp_partition);
                         rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_DESIRED;
                 }
+                /* If toppar was marked for removal this is no longer
+                 * the case since the partition is now desired. */
+                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_REMOVE;
 		rd_kafka_toppar_unlock(rktp);
 		return s_rktp;
 	}
@@ -588,7 +595,6 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_add (rd_kafka_itopic_t *rkt,
         rktp = rd_kafka_toppar_s2i(s_rktp);
 
         rd_kafka_toppar_lock(rktp);
-        rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
         rd_kafka_toppar_desired_add0(rktp);
         rd_kafka_toppar_unlock(rktp);
 
@@ -615,13 +621,15 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp) {
 	rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_DESIRED;
         rd_kafka_toppar_desired_unlink(rktp);
 
-        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_UNKNOWN)
-                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_UNKNOWN;
-
-
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "DESP",
 		     "Removing (un)desired topic %s [%"PRId32"]",
 		     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_UNKNOWN) {
+                /* If this partition does not exist in the cluster
+                 * and is no longer desired, remove it. */
+                rd_kafka_toppar_broker_leave_for_remove(rktp);
+        }
 }
 
 
@@ -921,6 +929,7 @@ void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp) {
         rd_kafka_op_t *rko;
         rd_kafka_broker_t *dest_rkb;
 
+        rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_REMOVE;
 
 	if (rktp->rktp_next_leader)
 		dest_rkb = rktp->rktp_next_leader;

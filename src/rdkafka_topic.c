@@ -577,14 +577,24 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
                         rktp = s_rktp ? rd_kafka_toppar_s2i(s_rktp) : NULL;
                         if (rktp) {
 				rd_kafka_toppar_lock(rktp);
-                                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_UNKNOWN;
+                                rktp->rktp_flags &=
+                                        ~(RD_KAFKA_TOPPAR_F_UNKNOWN |
+                                          RD_KAFKA_TOPPAR_F_REMOVE);
 
                                 /* Remove from desp list since the
                                  * partition is now known. */
                                 rd_kafka_toppar_desired_unlink(rktp);
                                 rd_kafka_toppar_unlock(rktp);
-			} else
+			} else {
 				s_rktp = rd_kafka_toppar_new(rkt, i);
+                                rktp = rd_kafka_toppar_s2i(s_rktp);
+
+                                rd_kafka_toppar_lock(rktp);
+                                rktp->rktp_flags &=
+                                        ~(RD_KAFKA_TOPPAR_F_UNKNOWN |
+                                          RD_KAFKA_TOPPAR_F_REMOVE);
+                                rd_kafka_toppar_unlock(rktp);
+                        }
 			rktps[i] = s_rktp;
 		} else {
 			/* Existing partition, grab our own reference. */
@@ -620,6 +630,8 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 
 		rd_kafka_toppar_lock(rktp);
 
+                rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
+
 		if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_DESIRED) {
                         rd_kafka_dbg(rkt->rkt_rk, TOPIC, "DESIRED",
                                      "Topic %s [%"PRId32"] is desired "
@@ -629,10 +641,6 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 
                         /* If this is a desired partition move it back on to
                          * the desired list since partition is no longer known*/
-			rd_kafka_assert(rkt->rkt_rk,
-                                        !(rktp->rktp_flags &
-                                          RD_KAFKA_TOPPAR_F_UNKNOWN));
-			rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
                         rd_kafka_toppar_desired_link(rktp);
 
                         if (!rd_kafka_terminating(rkt->rkt_rk))
@@ -645,7 +653,6 @@ static int rd_kafka_topic_partition_cnt_update (rd_kafka_itopic_t *rkt,
 
 		} else {
 			/* Tell handling broker to let go of the toppar */
-			rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_REMOVE;
 			rd_kafka_toppar_broker_leave_for_remove(rktp);
 		}
 

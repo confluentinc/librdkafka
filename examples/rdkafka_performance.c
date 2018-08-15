@@ -788,7 +788,7 @@ int main (int argc, char **argv) {
 	int opt;
 	int sendflags = 0;
 	char *msgpattern = "librdkafka_performance testing!";
-	int msgsize = (int)strlen(msgpattern);
+	int msgsize = -1;
 	const char *debug = NULL;
 	rd_ts_t now;
 	char errstr[512];
@@ -1247,6 +1247,9 @@ int main (int argc, char **argv) {
 
 	if (msgcnt != -1)
 		forever = 0;
+
+	if (msgsize == -1)
+		msgsize = (int)strlen(msgpattern);
 
 	topic = topics->elems[0].topic;
 

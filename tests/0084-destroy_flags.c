@@ -75,9 +75,11 @@ static void do_test_destroy_flags (const char *topic,
         test_timing_t t_destroy;
 
         TEST_SAY(_C_MAG "[ test destroy_flags 0x%x for client_type %d, "
-                 "produce_cnt %d, subscribe %d, %s mode ]\n" _C_CLR,
+                 "produce_cnt %d, subscribe %d, unsubscribe %d, "
+                 "%s mode ]\n" _C_CLR,
                  destroy_flags, args->client_type,
                  args->produce_cnt, args->consumer_subscribe,
+                 args->consumer_unsubscribe,
                  local_mode ? "local" : "broker");
 
         test_conf_init(&conf, NULL, 20);
@@ -123,9 +125,10 @@ static void do_test_destroy_flags (const char *topic,
                         test_consumer_poll_once(rk, NULL, 100);
 
                 if (args->consumer_unsubscribe) {
-                        // test that calling rd_kafka_unsubscribe immediately prior to
-                        // rd_kafka_destroy_flags doesn't cause the latter to hang.
-                        TEST_SAY(_C_YEL "Calling rd_kafka_unsubscribe\n" _C_CLR);
+                        /* Test that calling rd_kafka_unsubscribe immediately
+                         * prior to rd_kafka_destroy_flags doesn't cause the
+                         * latter to hang. */
+                        TEST_SAY(_C_YEL"Calling rd_kafka_unsubscribe\n"_C_CLR);
                         rd_kafka_unsubscribe(rk);
                 }
         }
@@ -156,9 +159,11 @@ static void do_test_destroy_flags (const char *topic,
                             rebalance_cnt);
 
         TEST_SAY(_C_GRN "[ test destroy_flags 0x%x for client_type %d, "
-                 "produce_cnt %d, subscribe %d, %s mode: PASS ]\n" _C_CLR,
+                 "produce_cnt %d, subscribe %d, unsubscribe %d, "
+                 "%s mode: PASS ]\n" _C_CLR,
                  destroy_flags, args->client_type,
                  args->produce_cnt, args->consumer_subscribe,
+                 args->consumer_unsubscribe,
                  local_mode ? "local" : "broker");
 }
 

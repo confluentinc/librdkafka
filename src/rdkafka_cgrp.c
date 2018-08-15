@@ -2629,9 +2629,13 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                                  rkcg->rkcg_rk));
 
          /* If there's an oustanding rebalance_cb which has not yet been
-          * served by the application it will be served from consumer_close(). */
-         if (!RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) &&
-             !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN))
+          * served by the application it will be served from consumer_close().
+          * If the instate is being terminated with NO_CONSUMER_CLOSE we
+          * trigger unassign directly to avoid stalling on rebalance callback
+          * queues that are no longer served by the application. */
+         if ((!RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) &&
+              !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) ||
+             rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk))
                  rd_kafka_cgrp_unassign(rkcg);
 
         /* Try to terminate right away if all preconditions are met. */

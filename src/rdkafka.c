@@ -2368,9 +2368,11 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
          */
         if (rd_kafka_destroy_flags_no_consumer_close(rk)) {
                 rd_kafka_dbg(rk, CONSUMER, "CLOSE",
-                             "Disabling temporary queue to quench "
+                             "Disabling and purging temporary queue to quench "
                              "close events");
                 rd_kafka_q_disable(rkq);
+                /* Purge ops already enqueued */
+                rd_kafka_q_purge(rkq);
         } else {
                 rd_kafka_dbg(rk, CONSUMER, "CLOSE",
                              "Waiting for close events");

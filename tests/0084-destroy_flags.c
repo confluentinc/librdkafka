@@ -63,6 +63,7 @@ struct df_args {
         rd_kafka_type_t client_type;
         int produce_cnt;
         int consumer_subscribe;
+        int consumer_unsubscribe;
 };
 
 static void do_test_destroy_flags (const char *topic,
@@ -127,6 +128,13 @@ static void do_test_destroy_flags (const char *topic,
         TEST_SAY(_C_YEL "Calling rd_kafka_destroy_flags(0x%x)\n" _C_CLR,
                  destroy_flags);
         TIMING_START(&t_destroy, "rd_kafka_destroy_flags(0x%x)", destroy_flags);
+        if (args->consumer_unsubscribe &&
+            args->client_type == RD_KAFKA_CONSUMER) {
+                // test that calling rd_kafka_unsubscribe immediately prior to
+                // rd_kafka_destroy_flags doesn't cause the latter to hang.
+                TEST_SAY(_C_YEL "Calling rd_kafka_unsubscribe\n" _C_CLR);
+                rd_kafka_unsubscribe(rk);
+        }
         rd_kafka_destroy_flags(rk, destroy_flags);
         TIMING_STOP(&t_destroy);
 
@@ -161,10 +169,11 @@ static void do_test_destroy_flags (const char *topic,
  */
 static void destroy_flags (int local_mode) {
         const struct df_args args[] = {
-                { RD_KAFKA_PRODUCER, 0, 0 },
-                { RD_KAFKA_PRODUCER, 10000, 0 },
-                { RD_KAFKA_CONSUMER, 0, 1 },
-                { RD_KAFKA_CONSUMER, 0, 0 }
+                { RD_KAFKA_PRODUCER, 0, 0, 0 },
+                { RD_KAFKA_PRODUCER, 10000, 0, 0 },
+                { RD_KAFKA_CONSUMER, 0, 1, 0 },
+                { RD_KAFKA_CONSUMER, 0, 1, 1 },
+                { RD_KAFKA_CONSUMER, 0, 0, 0 }
         };
         const int flag_combos[] = { 0,
                                     RD_KAFKA_DESTROY_F_IMMEDIATE,

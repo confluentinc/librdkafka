@@ -1281,9 +1281,12 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                     err == RD_KAFKA_RESP_ERR__OUTDATED) {
                         /* Termination or outdated, quick cleanup. */
 
-                        if (err == RD_KAFKA_RESP_ERR__OUTDATED)
+                        if (err == RD_KAFKA_RESP_ERR__OUTDATED) {
+                                rd_kafka_toppar_lock(rktp);
                                 rd_kafka_toppar_offset_retry(
                                         rktp, 500, "outdated offset response");
+                                rd_kafka_toppar_unlock(rktp);
+                        }
 
                         /* from request.opaque */
                         rd_kafka_toppar_destroy(s_rktp);

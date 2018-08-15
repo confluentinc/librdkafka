@@ -123,11 +123,6 @@ static void do_test_destroy_flags (const char *topic,
                         test_consumer_poll_once(rk, NULL, 100);
         }
 
-
-        rebalance_cnt = 0;
-        TEST_SAY(_C_YEL "Calling rd_kafka_destroy_flags(0x%x)\n" _C_CLR,
-                 destroy_flags);
-        TIMING_START(&t_destroy, "rd_kafka_destroy_flags(0x%x)", destroy_flags);
         if (args->consumer_unsubscribe &&
             args->client_type == RD_KAFKA_CONSUMER) {
                 // test that calling rd_kafka_unsubscribe immediately prior to
@@ -135,6 +130,11 @@ static void do_test_destroy_flags (const char *topic,
                 TEST_SAY(_C_YEL "Calling rd_kafka_unsubscribe\n" _C_CLR);
                 rd_kafka_unsubscribe(rk);
         }
+  
+        rebalance_cnt = 0;
+        TEST_SAY(_C_YEL "Calling rd_kafka_destroy_flags(0x%x)\n" _C_CLR,
+                 destroy_flags);
+        TIMING_START(&t_destroy, "rd_kafka_destroy_flags(0x%x)", destroy_flags);
         rd_kafka_destroy_flags(rk, destroy_flags);
         TIMING_STOP(&t_destroy);
 

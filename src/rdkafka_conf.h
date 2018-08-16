@@ -148,7 +148,7 @@ struct rd_kafka_conf_s {
 	struct {
 		SSL_CTX *ctx;
 		char *cipher_suites;
-#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL && !defined(LIBRESSL_VERSION_NUMBER)
 		char *curves_list;
 		char *sigalgs_list;
 #endif

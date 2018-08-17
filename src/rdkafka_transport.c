@@ -872,7 +872,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		}
 	}
 
-#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL && !defined(LIBRESSL_VERSION_NUMBER)
 	/* Curves */
 	if (rk->rk_conf.ssl.curves_list) {
 		rd_kafka_dbg(rk, SECURITY, "SSL",

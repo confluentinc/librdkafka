@@ -485,7 +485,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "protocol. See manual page for `ciphers(1)` and "
 	  "`SSL_CTX_set_cipher_list(3)."
 	},
-#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL && !defined(LIBRESSL_VERSION_NUMBER)
         { _RK_GLOBAL, "ssl.curves.list", _RK_C_STR,
           _RK(ssl.curves_list),
           "The supported-curves extension in the TLS ClientHello message specifies "

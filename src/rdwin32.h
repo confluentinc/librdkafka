@@ -261,7 +261,7 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
                 goto err;
 
         /* Wait for incoming connection */
-        accept_s = accept(listen_s, 0, 0);
+        accept_s = accept(listen_s, NULL, NULL);
         if (accept_s == SOCKET_ERROR)
                 goto err;
 

@@ -79,7 +79,6 @@ extern "C" {
 
 namespace RdKafka {
 
-
 /**
  * @name Miscellaneous APIs
  * @{
@@ -396,6 +395,7 @@ std::string  err2str(RdKafka::ErrorCode err);
 /* Forward declarations */
 class Producer;
 class Message;
+class Headers;
 class Queue;
 class Event;
 class Topic;
@@ -1365,7 +1365,79 @@ public:
   int64_t timestamp;               /**< Milliseconds since epoch (UTC). */
 };
 
+/**
+ * @brief Headers object
+ *
+ * This object encapsulates the C implementation logic into a C++ object
+ * for use in RdKafka::Messages object.
+ *
+ * Should only be constructed by RdKafka::Messages.
+ *
+ */
+class RD_EXPORT Headers {
+ public:
+  virtual ~Headers() = 0;
 
+  /**
+   * @brief Header object
+   *
+   * This object represents a single Header with key value pair
+   * and an ErrorCode
+   */
+  class Header {
+    public:
+    Header(const std::string& key,
+           const char* value,
+           RdKafka::ErrorCode err = ERR_NO_ERROR):
+    key(key), value(value), err(err) {};
+
+    std::string key;
+    const char* value;
+    RdKafka::ErrorCode err;
+  };
+
+  /** 
+   * @brief adds a Header to the end
+   *
+   * @returns An ErrorCode signalling a success or failure to add the Header.
+   */
+  virtual ErrorCode add(const Header& header) = 0;
+
+  /** 
+   * @brief adds a Header to the end
+   *
+   * @returns An ErrorCode signalling a success or failure to add the Header.
+   */
+  virtual ErrorCode add(const std::string& key, const char* value) = 0;
+
+  /** 
+   * @brief removes all the Headers of a given key
+   *
+   * @returns An ErrorCode signalling a success or failure to remove the Header.
+   */
+  virtual ErrorCode remove(const std::string& key) = 0;
+
+  /** 
+   * @brief gets all of the Headers of a given key
+   *
+   * @returns a std::vector containing all the Headers of the given key.
+   */
+  virtual std::vector<Header> get(const std::string &key) const = 0;
+
+  /** 
+   * @brief gets the last occurrence of a Header of a given key
+   *
+   * @returns the Header if found, otherwise a Header with an ErrorCode 
+   */
+  virtual Header get_last(const std::string& key) const = 0;
+
+  /** 
+   * @brief returns all the Headers of a Message
+   *
+   * @returns a std::vector containing all of the Headers of a message
+   */
+  virtual std::vector<Header> get_all() const = 0;
+};
 
 /**
  * @brief Message object
@@ -1427,6 +1499,9 @@ class RD_EXPORT Message {
 
   /** @returns The \p msg_opaque as provided to RdKafka::Producer::produce() */
   virtual void               *msg_opaque () const = 0;
+
+  /** @returns The Headers instance for this Message (if applicable) */
+  virtual Headers            *get_headers() = 0;
 
   virtual ~Message () = 0;
 

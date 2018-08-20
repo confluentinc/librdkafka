@@ -210,16 +210,6 @@ void msg_consume(RdKafka::Message* message, void* opaque) {
   }
 }
 
-
-class ExampleConsumeCb : public RdKafka::ConsumeCb {
- public:
-  void consume_cb (RdKafka::Message &msg, void *opaque) {
-    msg_consume(&msg, opaque);
-  }
-};
-
-
-
 int main (int argc, char **argv) {
   std::string brokers = "localhost";
   std::string errstr;
@@ -229,7 +219,6 @@ int main (int argc, char **argv) {
   std::vector<std::string> topics;
   bool do_conf_dump = false;
   int opt;
-  int use_ccb = 0;
 
   /*
    * Create configuration objects
@@ -240,7 +229,7 @@ int main (int argc, char **argv) {
   ExampleRebalanceCb ex_rebalance_cb;
   conf->set("rebalance_cb", &ex_rebalance_cb, errstr);
 
-  while ((opt = getopt(argc, argv, "g:b:z:qd:eX:AM:f:qv")) != -1) {
+  while ((opt = getopt(argc, argv, "g:b:z:qd:eX:AM:qv")) != -1) {
     switch (opt) {
     case 'g':
       if (conf->set("group.id",  optarg, errstr) != RdKafka::Conf::CONF_OK) {
@@ -306,15 +295,6 @@ int main (int argc, char **argv) {
       }
       break;
 
-      case 'f':
-        if (!strcmp(optarg, "ccb"))
-          use_ccb = 1;
-        else {
-          std::cerr << "Unknown option: " << optarg << std::endl;
-          exit(1);
-        }
-        break;
-
       case 'q':
         verbosity--;
         break;
@@ -354,8 +334,6 @@ int main (int argc, char **argv) {
             "will be set on topic object.\n"
             "                  Use '-X list' to see the full list\n"
             "                  of supported properties.\n"
-            "  -f <flag>       Set option:\n"
-            "                     ccb - use consume_callback\n"
             "  -q              Quiet / Decrease verbosity\n"
             "  -v              Increase verbosity\n"
             "\n"
@@ -377,12 +355,6 @@ int main (int argc, char **argv) {
       std::cerr << errstr << std::endl;
       exit(1);
     }
-  }
-
-  ExampleConsumeCb ex_consume_cb;
-
-  if(use_ccb) {
-    conf->set("consume_cb", &ex_consume_cb, errstr);
   }
 
   ExampleEventCb ex_event_cb;
@@ -453,9 +425,7 @@ int main (int argc, char **argv) {
    */
   while (run) {
     RdKafka::Message *msg = consumer->consume(1000);
-    if (!use_ccb) {
-      msg_consume(msg, NULL);
-    }
+    msg_consume(msg, NULL);
     delete msg;
   }
 

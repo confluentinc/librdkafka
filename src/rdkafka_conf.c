@@ -309,6 +309,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(socket_max_fails),
           "Disconnect from broker when this number of send failures "
           "(e.g., timed out requests) is reached. Disable with 0. "
+          "WARNING: It is highly recommended to leave this setting at "
+          "its default value of 1 to avoid the client and broker to "
+          "become desynchronized in case of request timeouts. "
           "NOTE: The connection is automatically re-established.",
           0, 1000000, 1 },
 	{ _RK_GLOBAL, "broker.address.ttl", _RK_C_INT,

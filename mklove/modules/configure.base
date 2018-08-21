@@ -1057,6 +1057,9 @@ function mkl_lib_check_static {
 #  [--no-static]     (don't attempt to link this library statically)
 #  [--libname=<lib>] (library name if different from config name, such as
 #                     when the libname includes a dash)
+#  [--no-LIBS]       (don't add this library to LIBS, useful for
+#                     plugin libraries that rely on the parent process
+#                     to have done all necessary linking)
 #  config name (library name (for pkg-config))
 #  define name
 #  action (fail|disable|cont)
@@ -1065,32 +1068,44 @@ function mkl_lib_check_static {
 #  source snippet
 function mkl_lib_check {
 
-    local is_static=0
     local staticopt=
     local no_staticopt=
-    if [[ $1 == --static* ]]; then
-        staticopt=$1
-        shift
-    fi
-
-    if [[ $1 == --no-static ]]; then
-        no_staticopt="$1"
-        shift
-    fi
-
     local libnameopt=
-    local libname=$1
-    if [[ $1 == --libname* ]]; then
-        libnameopt=$1
-        libname="${libnameopt#*=}"
+    local libname=
+    local no_LIBSopt=
+
+    while [[ $1 == --* ]]; do
+        case $1 in
+            --static=*)
+                staticopt=$1
+                ;;
+            --no-static)
+                no_staticopt=$1
+                ;;
+            --libname=*)
+                libnameopt=$1
+                libname="${libnameopt#*=}"
+                ;;
+            --no-LIBS)
+                no_LIBSopt=$1
+                ;;
+            *)
+                mkl_err "Invalid option to mkl_lib_check: $1"
+                return 1
+                ;;
+        esac
         shift
+    done
+
+    if [[ -z $libname ]]; then
+        libname=$1
     fi
 
     # pkg-config result (0=ok)
     local pkg_conf_failed=1
     if [[ $WITH_PKGCONFIG == "y" ]]; then
         # Let pkg-config populate CFLAGS, et.al.
-        mkl_pkg_config_check $no_staticopt $staticopt $libnameopt "$1" "" cont
+        mkl_pkg_config_check $no_staticopt $staticopt $libnameopt $no_LIBSopt "$1" "" cont
         pkg_conf_failed=$?
     fi
 
@@ -1103,7 +1118,6 @@ function mkl_lib_check {
                 use_staticopt="${staticopt#*=}"
             fi
             libs=$(mkl_lib_check_static "$use_staticopt" "$libs")
-            is_static=1
         fi
     fi
 
@@ -1111,7 +1125,7 @@ function mkl_lib_check {
         return 1
     fi
 
-    if [[ $pkg_conf_failed == 1 ]]; then
+    if [[ $pkg_conf_failed == 1 && -z "$no_LIBSopt" ]]; then
         # Add libraries in reverse order to make sure inter-dependencies
         # are resolved in the correct order.
         # E.g., check for crypto and then ssl should result in -lssl -lcrypto
@@ -1130,6 +1144,9 @@ function mkl_lib_check {
 #  [--no-static]     (don't attempt to link this library statically)
 #  [--libname=<lib>] (library name if different from config name, such as
 #                     when the libname includes a dash)
+#  [--no-LIBS]       (don't add this library to LIBS, useful for
+#                     plugin libraries that rely on the parent process
+#                     to have done all necessary linking)
 #  config name
 #  define name
 #  action (fail|disable|ignore)
@@ -1137,21 +1154,38 @@ function mkl_pkg_config_check {
 
     local staticopt=
     local no_staticopt=
-    if [[ $1 == --static* ]]; then
-        staticopt=$1
+    local libnameopt=
+    local libname=
+    local no_LIBSopt=
+
+
+    while [[ $1 == --* ]]; do
+        case $1 in
+            --static=*)
+                staticopt=$1
+                ;;
+            --no-static)
+                no_staticopt=$1
+                ;;
+            --libname*)
+                libnameopt=$1
+                libname="${libnameopt#*=}"
+                ;;
+            --no-LIBS)
+                no_LIBSopt=$1
+                ;;
+            *)
+                mkl_err "Invalid option to mkl_pkg_config_check: $1"
+                return 1
+                ;;
+        esac
         shift
+    done
+
+    if [[ -z $libname ]]; then
+        libname=$1
     fi
 
-    if [[ $1 == --no-static ]]; then
-        no_staticopt=$1
-        shift
-    fi
-
-    local libname=$1
-    if [[ $1 == --libname* ]]; then
-        libname="${libnameopt#*=}"
-        shift
-    fi
 
     local cname="${1}_PKGCONFIG"
     mkl_check_begin "$cname" "$2" "no-cache" "$1 (by pkg-config)" && return $?
@@ -1185,7 +1219,10 @@ $cflags"
         fi
         libs=$(mkl_lib_check_static "$use_staticopt" "$libs")
     fi
-    mkl_mkvar_prepend "$1" LIBS "$libs"
+
+    if [[ -z $no_LIBSopt ]]; then
+        mkl_mkvar_prepend "$1" LIBS "$libs"
+    fi
 
     mkl_check_done "$1" "$2" "$3" "ok"
 

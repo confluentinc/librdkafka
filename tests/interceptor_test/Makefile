@@ -10,8 +10,10 @@ OBJS=		$(SRCS:.c=.o)
 
 # For rdkafka.h
 CPPFLAGS+=-I../../src
-LDFLAGS+=-L../../src
-LIBS+=-lrdkafka
+
+# Don't link any libraries, rely on the parent process
+# to have done all necessary librdkafka linking.
+LIBS=
 
 all: lib
 

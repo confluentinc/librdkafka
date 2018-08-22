@@ -464,7 +464,7 @@ void msg_consume(RdKafka::KafkaConsumer *consumer,
           for(std::vector<RdKafka::Headers::Header>::const_iterator it = sheaders.begin();
               it != sheaders.end();
               it++) {
-            std::cout << "Key: " << (*it).key << " Value: " << (*it).value << std::endl;
+            std::cout << "Key: " << it->key() << " Value: " << it->value() << std::endl;
           }
         }
 

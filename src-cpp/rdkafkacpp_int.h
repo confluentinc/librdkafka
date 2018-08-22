@@ -220,7 +220,7 @@ class HeadersImpl : public Headers {
       for (std::vector<Header>::const_iterator it = headers.begin();
            it != headers.end();
            it++) {
-        this->add(it->key, it->value);
+        this->add(it->key(), it->value());
       }
     }
   }

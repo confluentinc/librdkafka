@@ -64,10 +64,10 @@ static void assert_all_headers_match(RdKafka::Headers *actual,
   for(size_t i = 0; i < actual_headers.size(); i++) {
     RdKafka::Headers::Header actual_header = actual_headers[i];
     RdKafka::Headers::Header expected_header = expected[i];
-    std::string actual_key = actual_header.key;
-    std::string actual_value = std::string(actual_header.value);
-    std::string expected_key = expected_header.key;
-    std::string expected_value = std::string(expected_header.value);
+    std::string actual_key = actual_header.key();
+    std::string actual_value = std::string(actual_header.value());
+    std::string expected_key = expected_header.key();
+    std::string expected_value = std::string(expected_header.value());
     if (actual_key != expected_key) {
       Test::Fail(tostr() << "Header key does not match, expected '" 
                  << actual_key << "' but got '" << expected_key << "'\n");

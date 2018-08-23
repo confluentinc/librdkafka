@@ -803,7 +803,7 @@ int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
 
 /**
  * @brief Inserts messages from \p rkmq according to their sorted position
- *        into the partition xmit queue (i.e., the broker xmit work queue).
+ *        into the partition's message queue.
  *
  * @param incr_retry Increment retry count for messages.
  *
@@ -823,7 +823,7 @@ int rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp, rd_kafka_msgq_t *rkmq,
                 return 1;
 
         rd_kafka_toppar_lock(rktp);
-        r = rd_kafka_retry_msgq(&rktp->rktp_xmit_msgq, rkmq,
+        r = rd_kafka_retry_msgq(&rktp->rktp_msgq, rkmq,
                                 incr_retry, rk->rk_conf.max_retries,
                                 backoff,
                                 rktp->rktp_rkt->rkt_conf.msg_order_cmp);

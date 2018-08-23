@@ -22,7 +22,7 @@ sasl: $(BIN)
 	./sasl_test.py --conf '{"parallel":1}' --no-ssl --debug $(KAFKA_VERSION)
 
 # Run the full test suite(s)
-full: full_broker full_sasl
+full: broker sasl
 
 
 

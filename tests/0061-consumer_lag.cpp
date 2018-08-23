@@ -163,7 +163,7 @@ static void do_test_consumer_lag (void) {
         break;
 
       case RdKafka::ERR_NO_ERROR:
-        /* Proper message. Updated calculated lag for later
+        /* Proper message. Update calculated lag for later
          * checking in stats callback */
         stats.calc_lag = msgcnt - (msg->offset()+1);
         cnt++;

@@ -78,6 +78,17 @@
         } while (0)
 
 
+/**
+ * @brief Warn about something from a unit-test
+ */
+#define RD_UT_WARN(...) do {                                             \
+                fprintf(stderr, "\033[33mRDUT: WARN: %s:%d: %s: ",      \
+                        __FILE__, __LINE__, __FUNCTION__);              \
+                fprintf(stderr, __VA_ARGS__);                           \
+                fprintf(stderr, "\033[0m\n");                           \
+        } while (0)
+
+
 int rd_unittest (void);
 
 #endif /* _RD_UNITTEST_H */

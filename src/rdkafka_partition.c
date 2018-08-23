@@ -764,7 +764,8 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
  * @param max_retries Maximum retries allowed per message.
  * @param backoff Absolute retry backoff for retried messages.
  *
- * @returns the number of messages that could not be retried.
+ * @returns 0 if all messages were retried, or 1 if some messages
+ *          could not be retried.
  */
 int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
                          rd_kafka_msgq_t *srcq,
@@ -806,7 +807,8 @@ int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
  *
  * @param incr_retry Increment retry count for messages.
  *
- * @returns the number of messages that could not be retried.
+ * @returns 0 if all messages were retried, or 1 if some messages
+ *          could not be retried.
  *
  * @locality Broker thread
  */
@@ -816,6 +818,9 @@ int rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp, rd_kafka_msgq_t *rkmq,
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         rd_ts_t backoff = rd_clock() + (rk->rk_conf.retry_backoff_ms * 1000);
         int r;
+
+        if (rd_kafka_terminating(rk))
+                return 1;
 
         rd_kafka_toppar_lock(rktp);
         r = rd_kafka_retry_msgq(&rktp->rktp_xmit_msgq, rkmq,

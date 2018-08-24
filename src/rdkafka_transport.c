@@ -275,10 +275,13 @@ rd_kafka_transport_socket_recvmsg (rd_kafka_transport_t *rktrans,
                         /* Receive 0 after POLLIN event means
                          * connection closed. */
                         rd_snprintf(errstr, errstr_size, "Disconnected");
+                        errno = ECONNRESET;
                         return -1;
                 } else if (r == -1) {
+                        int errno_save = errno;
                         rd_snprintf(errstr, errstr_size, "%s",
                                     rd_strerror(errno));
+                        errno = errno_save;
                         return -1;
                 }
         }
@@ -312,31 +315,33 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                          len,
                          0);
 
-#ifdef _MSC_VER
                 if (unlikely(r == SOCKET_ERROR)) {
+#ifdef _MSC_VER
                         if (WSAGetLastError() == WSAEWOULDBLOCK)
                                 return sum;
                         rd_snprintf(errstr, errstr_size, "%s",
                                     socket_strerror(WSAGetLastError()));
-                        return -1;
-                }
 #else
-                if (unlikely(r <= 0)) {
-                        if (r == -1 && socket_errno == EAGAIN)
+                        if (socket_errno == EAGAIN)
                                 return 0;
-                        else if (r == 0) {
-                                /* Receive 0 after POLLIN event means
-                                 * connection closed. */
-                                rd_snprintf(errstr, errstr_size,
-                                            "Disconnected");
-                                return -1;
-                        } else if (r == -1) {
+                        else {
+                                int errno_save = errno;
                                 rd_snprintf(errstr, errstr_size, "%s",
                                             rd_strerror(errno));
+                                errno = errno_save;
                                 return -1;
                         }
-                }
 #endif
+                } else if (unlikely(r == 0)) {
+                        /* Receive 0 after POLLIN event means
+                         * connection closed. */
+                        rd_snprintf(errstr, errstr_size,
+                                    "Disconnected");
+#ifndef _MSC_VER
+                        errno = ECONNRESET;
+#endif
+                        return -1;
+                }
 
                 /* Update buffer write position */
                 rd_buf_write(rbuf, NULL, (size_t)r);

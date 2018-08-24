@@ -2076,7 +2076,7 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 	    return;
 
         /* Call on_acknowledgement() interceptors */
-        rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq);
+        rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq, err);
 
         if ((rk->rk_conf.enabled_events & RD_KAFKA_EVENT_DR) &&
 	    (!rk->rk_conf.dr_err_only || err)) {

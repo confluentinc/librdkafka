@@ -323,7 +323,7 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                                     socket_strerror(WSAGetLastError()));
 #else
                         if (socket_errno == EAGAIN)
-                                return 0;
+                                return sum;
                         else {
                                 int errno_save = errno;
                                 rd_snprintf(errstr, errstr_size, "%s",

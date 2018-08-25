@@ -43,7 +43,7 @@ property interface.
 
 The two most important configuration properties for performance tuning are:
 
-  * `batch.num.messages` - the minimum number of messages to wait for to
+  * `batch.num.messages` - the maximum number of messages to wait for to
 	  accumulate in the local queue before sending off a message set.
   * `queue.buffering.max.ms` - how long to wait for batch.num.messages to
 	  fill up in the local queue. A lower value improves latency at the

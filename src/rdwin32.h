@@ -223,37 +223,75 @@ static RD_UNUSED int rd_fd_set_nonblocking (int fd) {
  * @returns 0 on success or errno on failure
  */
 static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
-        HANDLE h[2];
-        int i;
+        /* On windows, the "pipe" will be a tcp connection.
+        * This is to allow WSAPoll to be used to poll pipe events */
 
-        if (!CreatePipe(&h[0], &h[1], NULL, 0))
-                return (int)GetLastError();
-        for (i = 0 ; i < 2 ; i++) {
-                DWORD mode = PIPE_NOWAIT;
-                /* Set non-blocking */
-                if (!SetNamedPipeHandleState(h[i], &mode, NULL, NULL)) {
-                        CloseHandle(h[0]);
-                        CloseHandle(h[1]);
-                        return (int)GetLastError();
-                }
+        SOCKET listen_s = INVALID_SOCKET;
+        SOCKET accept_s = INVALID_SOCKET;
+        SOCKET connect_s = INVALID_SOCKET;
 
-                /* Open file descriptor for handle */
-                fds[i] = _open_osfhandle((intptr_t)h[i],
-                                         i == 0 ?
-                                         O_RDONLY | O_BINARY :
-                                         O_WRONLY | O_BINARY);
+        struct sockaddr_in listen_addr;
+        struct sockaddr_in connect_addr;
+        socklen_t sock_len = 0;
 
-                if (fds[i] == -1) {
-                        CloseHandle(h[0]);
-                        CloseHandle(h[1]);
-                        return (int)GetLastError();
-                }
-        }
+        /* Create listen socket */
+        listen_s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (listen_s == INVALID_SOCKET)
+                goto err;
+
+        listen_addr.sin_family = AF_INET;
+        listen_addr.sin_addr.s_addr = ntohl(INADDR_LOOPBACK);
+        listen_addr.sin_port = 0;
+        if (bind(listen_s, (struct sockaddr*)&listen_addr, sizeof(listen_addr)) != 0)
+                goto err;
+
+        sock_len = sizeof(connect_addr);
+        if (getsockname(listen_s, (struct sockaddr*)&connect_addr, &sock_len) != 0)
+                goto err;
+
+        if (listen(listen_s, 1) != 0)
+                goto err;
+
+        /* Create connection socket */
+        connect_s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (connect_s == INVALID_SOCKET)
+                goto err;
+
+        if (connect(connect_s, (struct sockaddr*)&connect_addr, sizeof(connect_addr)) == SOCKET_ERROR)
+                goto err;
+
+        /* Wait for incoming connection */
+        accept_s = accept(listen_s, NULL, NULL);
+        if (accept_s == SOCKET_ERROR)
+                goto err;
+
+        /* Done with listening */
+        closesocket(listen_s);
+
+        if (rd_fd_set_nonblocking((int)accept_s) != 0)
+                goto err;
+
+        if (rd_fd_set_nonblocking((int)connect_s) != 0)
+                goto err;
+
+        /* Store resulting sockets. They are bidirectional, so it does not matter
+         * which is read or write side of pipe. */
+        fds[0] = (int)accept_s;
+        fds[1] = (int)connect_s;
         return 0;
+
+    err:
+        if (listen_s != INVALID_SOCKET)
+                closesocket(listen_s);
+        if (accept_s != INVALID_SOCKET)
+                closesocket(accept_s);
+        if (connect_s != INVALID_SOCKET)
+                closesocket(connect_s);
+        return -1;
 }
 
-#define rd_read(fd,buf,sz) _read(fd,buf,sz)
-#define rd_write(fd,buf,sz) _write(fd,buf,sz)
+#define rd_read(fd,buf,sz) recv(fd,buf,sz,0)
+#define rd_write(fd,buf,sz) send(fd,buf,sz,0)
 #define rd_close(fd) closesocket(fd)
 
 static RD_UNUSED char *

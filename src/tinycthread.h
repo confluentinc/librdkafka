@@ -320,6 +320,13 @@ int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms);
 /** Same as cnd_timedwait_ms() but updates the remaining time. */
 int cnd_timedwait_msp (cnd_t *cnd, mtx_t *mtx, int *timeout_msp);
 
+/** Same as cnd_timedwait() but honours RD_POLL_INFINITE (use cnd_wait()),
+ *  and RD_POLL_NOWAIT (return thrd_timedout immediately).
+ *
+ *  @remark Set up \p tspec with rd_timeout_init_timespec().
+ */
+int cnd_timedwait_abs (cnd_t *cnd, mtx_t *mtx, const struct timespec *tspec);
+
 /* Thread */
 #if defined(_TTHREAD_WIN32_)
 typedef HANDLE thrd_t;

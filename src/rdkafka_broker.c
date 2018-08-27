@@ -265,7 +265,7 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 		 * is bound to fail once on older brokers. */
 		if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
 		    rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) &&
-		    !rd_atomic32_get(&rkb->rkb_rk->rk_terminate))
+		    !rd_kafka_terminating(rkb->rkb_rk))
 			rd_kafka_op_err(rkb->rkb_rk,
 					RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
 					"%i/%i brokers are down",
@@ -365,7 +365,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 	 */
 	if (fmt &&
 	    !(errno_save == EINTR &&
-	      rd_atomic32_get(&rkb->rkb_rk->rk_terminate)) &&
+	      rd_kafka_terminating(rkb->rkb_rk)) &&
 	    !(err == RD_KAFKA_RESP_ERR__TRANSPORT &&
 	      rkb->rkb_state == RD_KAFKA_BROKER_STATE_APIVERSION_QUERY)) {
 		int of;
@@ -564,40 +564,45 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
  * Locality: Broker thread
  */
 static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
-	int req_cnt, retry_cnt, q_cnt;
+        int inflight_cnt, retry_cnt, outq_cnt;
+        int partial_cnt = 0;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
-	/* Outstanding requests waiting for response */
-	req_cnt = rd_kafka_broker_bufq_timeout_scan(
-		rkb, 1, &rkb->rkb_waitresps, NULL,
-		RD_KAFKA_RESP_ERR__TIMED_OUT, now);
+        /* In-flight requests waiting for response */
+        inflight_cnt = rd_kafka_broker_bufq_timeout_scan(
+                rkb, 1, &rkb->rkb_waitresps, NULL,
+                RD_KAFKA_RESP_ERR__TIMED_OUT, now);
 	/* Requests in retry queue */
 	retry_cnt = rd_kafka_broker_bufq_timeout_scan(
 		rkb, 0, &rkb->rkb_retrybufs, NULL,
 		RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
-	/* Requests in local queue not sent yet. */
-	q_cnt = rd_kafka_broker_bufq_timeout_scan(
-		rkb, 0, &rkb->rkb_outbufs, &req_cnt,
-		RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
+        /* Requests in local queue not sent yet.
+         * partial_cnt is included in outq_cnt and denotes a request
+         * that has been partially transmitted. */
+        outq_cnt = rd_kafka_broker_bufq_timeout_scan(
+                rkb, 0, &rkb->rkb_outbufs, &partial_cnt,
+                RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
 
-	if (req_cnt + retry_cnt + q_cnt > 0) {
-		rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_BROKER,
-			   "REQTMOUT", "Timed out %i+%i+%i requests",
-			   req_cnt, retry_cnt, q_cnt);
+        if (inflight_cnt + retry_cnt + outq_cnt + partial_cnt > 0) {
+                rd_rkb_log(rkb, LOG_WARNING, "REQTMOUT",
+                           "Timed out %i in-flight, %i retry-queued, "
+                           "%i out-queue, %i partially-sent requests",
+                           inflight_cnt, retry_cnt, outq_cnt, partial_cnt);
 
-                /* Fail the broker if socket.max.fails is configured and
-                 * now exceeded. */
-                rkb->rkb_req_timeouts   += req_cnt + q_cnt;
-                rd_atomic64_add(&rkb->rkb_c.req_timeouts, req_cnt + q_cnt);
+                rkb->rkb_req_timeouts += inflight_cnt + outq_cnt;
+                rd_atomic64_add(&rkb->rkb_c.req_timeouts,
+                                inflight_cnt + outq_cnt);
 
-		/* If this was an in-flight request that timed out, or
-		 * the other queues has reached the socket.max.fails threshold,
-		 * we need to take down the connection. */
-                if (rkb->rkb_rk->rk_conf.socket_max_fails &&
-                    rkb->rkb_req_timeouts >=
-                    rkb->rkb_rk->rk_conf.socket_max_fails &&
-                    rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP) {
+                /* If this was a partially sent request that timed out, or the
+                 * number of timed out requests have reached the
+                 * socket.max.fails threshold, we need to take down the
+                 * connection. */
+                if (partial_cnt > 0 ||
+                    (rkb->rkb_rk->rk_conf.socket_max_fails &&
+                     rkb->rkb_req_timeouts >=
+                     rkb->rkb_rk->rk_conf.socket_max_fails &&
+                     rkb->rkb_state >= RD_KAFKA_BROKER_STATE_UP)) {
                         char rttinfo[32];
                         /* Print average RTT (if avail) to help diagnose. */
                         rd_avg_calc(&rkb->rkb_avg_rtt, now);
@@ -2071,7 +2076,7 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 	    return;
 
         /* Call on_acknowledgement() interceptors */
-        rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq);
+        rd_kafka_interceptors_on_acknowledgement_queue(rk, rkmq, err);
 
         if ((rk->rk_conf.enabled_events & RD_KAFKA_EVENT_DR) &&
 	    (!rk->rk_conf.dr_err_only || err)) {
@@ -2991,22 +2996,24 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                         rd_kafka_toppar_unlock(rktp);
 
 			/* Check if this Fetch is for an outdated fetch version,
-                         * if so ignore it. */
+                         * or the original rktp was removed and a new one
+                         * created (due to partition count decreasing and
+                         * then increasing again, which can happen in
+                         * desynchronized clusters): if so ignore it. */
 			tver_skel.s_rktp = s_rktp;
 			tver = rd_list_find(request->rkbuf_rktp_vers,
 					    &tver_skel,
 					    rd_kafka_toppar_ver_cmp);
-			rd_kafka_assert(NULL, tver &&
-					rd_kafka_toppar_s2i(tver->s_rktp) ==
-					rktp);
-			if (tver->version < fetch_version) {
-				rd_rkb_dbg(rkb, MSG, "DROP",
-					   "%s [%"PRId32"]: "
-					   "dropping outdated fetch response "
-					   "(v%d < %d)",
-					   rktp->rktp_rkt->rkt_topic->str,
-					   rktp->rktp_partition,
-					   tver->version, fetch_version);
+			rd_kafka_assert(NULL, tver);
+                        if (rd_kafka_toppar_s2i(tver->s_rktp) != rktp ||
+                            tver->version < fetch_version) {
+                                rd_rkb_dbg(rkb, MSG, "DROP",
+                                           "%s [%"PRId32"]: "
+                                           "dropping outdated fetch response "
+                                           "(v%d < %d or old rktp)",
+                                           rktp->rktp_rkt->rkt_topic->str,
+                                           rktp->rktp_partition,
+                                           tver->version, fetch_version);
                                 rd_atomic64_add(&rktp->rktp_c. rx_ver_drops, 1);
                                 rd_kafka_toppar_destroy(s_rktp); /* from get */
                                 rd_kafka_buf_skip(rkbuf, hdr.MessageSetSize);
@@ -3716,8 +3723,8 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					const char *name, uint16_t port,
 					int32_t nodeid) {
 	rd_kafka_broker_t *rkb;
-#ifndef _MSC_VER
         int r;
+#ifndef _MSC_VER
         sigset_t newset, oldset;
 #endif
 
@@ -3800,7 +3807,6 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rkb->rkb_wakeup_fd[1]     = -1;
         rkb->rkb_toppar_wakeup_fd = -1;
 
-#ifndef _MSC_VER /* pipes cant be mixed with WSAPoll on Win32 */
         if ((r = rd_pipe_nonblocking(rkb->rkb_wakeup_fd)) == -1) {
                 rd_rkb_log(rkb, LOG_ERR, "WAKEUPFD",
                            "Failed to setup broker queue wake-up fds: "
@@ -3832,7 +3838,6 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
                 rd_kafka_q_io_event_enable(rkb->rkb_ops, rkb->rkb_wakeup_fd[1],
                                            &onebyte, sizeof(onebyte));
         }
-#endif
 
         /* Lock broker's lock here to synchronise state, i.e., hold off
 	 * the broker thread until we've finalized the rkb. */
@@ -3943,7 +3948,7 @@ static rd_kafka_broker_t *rd_kafka_broker_find (rd_kafka_t *rk,
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
 		rd_kafka_broker_lock(rkb);
-		if (!rd_atomic32_get(&rk->rk_terminate) &&
+		if (!rd_kafka_terminating(rk) &&
 		    rkb->rkb_proto == proto &&
 		    !strcmp(rkb->rkb_nodename, nodename)) {
 			rd_kafka_broker_keep(rkb);
@@ -4138,7 +4143,7 @@ void rd_kafka_broker_update (rd_kafka_t *rk, rd_kafka_secproto_t proto,
         rd_kafka_mk_nodename(nodename, sizeof(nodename), mdb->host, mdb->port);
 
 	rd_kafka_wrlock(rk);
-	if (unlikely(rd_atomic32_get(&rk->rk_terminate))) {
+	if (unlikely(rd_kafka_terminating(rk))) {
 		/* Dont update metadata while terminating, do this
 		 * after acquiring lock for proper synchronisation */
 		rd_kafka_wrunlock(rk);

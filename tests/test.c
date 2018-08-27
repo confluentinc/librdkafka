@@ -173,6 +173,8 @@ _TEST_DECL(0080_admin_ut);
 _TEST_DECL(0081_admin);
 _TEST_DECL(0082_fetch_max_bytes);
 _TEST_DECL(0083_cb_event);
+_TEST_DECL(0084_destroy_flags_local);
+_TEST_DECL(0084_destroy_flags);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -279,7 +281,8 @@ struct test tests[] = {
         _TEST(0081_admin, 0, TEST_BRKVER(0,10,2,0)),
         _TEST(0082_fetch_max_bytes, 0, TEST_BRKVER(0,10,1,0)),
         _TEST(0083_cb_event, 0, TEST_BRKVER(0,9,0,0)),
-
+        _TEST(0084_destroy_flags_local, TEST_F_LOCAL),
+        _TEST(0084_destroy_flags, 0),
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
 
@@ -3401,10 +3404,12 @@ void test_create_topic (const char *topicname, int partition_cnt,
 }
 
 
-int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
+int test_get_partition_count (rd_kafka_t *rk, const char *topicname,
+                              int timeout_ms) {
         rd_kafka_t *use_rk;
         rd_kafka_resp_err_t err;
         rd_kafka_topic_t *rkt;
+        int64_t abs_timeout = test_clock() + (timeout_ms * 1000);
 
         if (!rk)
                 use_rk = test_create_producer();
@@ -3441,7 +3446,7 @@ int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
                         rd_kafka_metadata_destroy(metadata);
                         rd_sleep(1);
                 }
-        } while (1);
+        } while (test_clock() < abs_timeout);
 
         rd_kafka_topic_destroy(rkt);
 
@@ -3455,10 +3460,12 @@ int test_get_partition_count (rd_kafka_t *rk, const char *topicname) {
  * @brief Let the broker auto-create the topic for us.
  */
 rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
-                                                rd_kafka_topic_t *rkt) {
+                                                rd_kafka_topic_t *rkt,
+                                                int timeout_ms) {
 	const struct rd_kafka_metadata *metadata;
 	rd_kafka_resp_err_t err;
 	test_timing_t t;
+        int64_t abs_timeout = test_clock() + (timeout_ms * 1000);
 
         do {
                 TIMING_START(&t, "auto_create_topic");
@@ -3485,17 +3492,18 @@ rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
                         rd_kafka_metadata_destroy(metadata);
                         rd_sleep(1);
                 }
-        } while (1);
+        } while (test_clock() < abs_timeout);
 
         return err;
 }
 
-rd_kafka_resp_err_t test_auto_create_topic (rd_kafka_t *rk, const char *name) {
+rd_kafka_resp_err_t test_auto_create_topic (rd_kafka_t *rk, const char *name,
+                                            int timeout_ms) {
         rd_kafka_topic_t *rkt = rd_kafka_topic_new(rk, name, NULL);
         rd_kafka_resp_err_t err;
         if (!rkt)
                 return rd_kafka_last_error();
-        err = test_auto_create_topic_rkt(rk, rkt);
+        err = test_auto_create_topic_rkt(rk, rkt, timeout_ms);
         rd_kafka_topic_destroy(rkt);
         return err;
 }
@@ -3513,7 +3521,7 @@ int test_check_auto_create_topic (void) {
 
         test_conf_init(&conf, NULL, 0);
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
-        err = test_auto_create_topic(rk, topic);
+        err = test_auto_create_topic(rk, topic, tmout_multip(5000));
         if (err)
                 TEST_SAY("Auto topic creation of \"%s\" failed: %s\n",
                          topic, rd_kafka_err2str(err));

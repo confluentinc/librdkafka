@@ -152,7 +152,49 @@ struct rd_kafka_s {
         rd_kafkap_str_t *rk_group_id;    /* Consumer group id */
 
 	int              rk_flags;
-	rd_atomic32_t    rk_terminate;
+	rd_atomic32_t    rk_terminate;   /**< Set to RD_KAFKA_DESTROY_F_..
+                                          *   flags instance
+                                          *   is being destroyed.
+                                          *   The value set is the
+                                          *   destroy flags from
+                                          *   rd_kafka_destroy*() and
+                                          *   the two internal flags shown
+                                          *   below.
+                                          *
+                                          * Order:
+                                          * 1. user_flags | .._F_DESTROY_CALLED
+                                          *    is set in rd_kafka_destroy*().
+                                          * 2. consumer_close() is called
+                                          *    for consumers.
+                                          * 3. .._F_TERMINATE is set to
+                                          *    signal all background threads
+                                          *    to terminate.
+                                          */
+
+#define RD_KAFKA_DESTROY_F_TERMINATE 0x1 /**< Internal flag to make sure
+                                          *   rk_terminate is set to non-zero
+                                          *   value even if user passed
+                                          *   no destroy flags. */
+#define RD_KAFKA_DESTROY_F_DESTROY_CALLED 0x2 /**< Application has called
+                                               *  ..destroy*() and we've
+                                               * begun the termination
+                                               * process.
+                                               * This flag is needed to avoid
+                                               * rk_terminate from being
+                                               * 0 when destroy_flags()
+                                               * is called with flags=0
+                                               * and prior to _F_TERMINATE
+                                               * has been set. */
+#define RD_KAFKA_DESTROY_F_IMMEDIATE 0x4     /**< Immediate non-blocking
+                                              *   destruction without waiting
+                                              *   for all resources
+                                              *   to be cleaned up.
+                                              *   WARNING: Memory and resource
+                                              *            leaks possible.
+                                              *   This flag automatically sets
+                                              *   .._NO_CONSUMER_CLOSE. */
+
+
 	rwlock_t         rk_lock;
 	rd_kafka_type_t  rk_type;
 	struct timeval   rk_tv_state_change;
@@ -337,9 +379,29 @@ void rd_kafka_destroy_final (rd_kafka_t *rk);
 
 
 /**
- * Returns true if 'rk' handle is terminating.
+ * @returns true if \p rk handle is terminating.
+ *
+ * @remark If consumer_close() is called from destroy*() it will be
+ *         called prior to _F_TERMINATE being set and will thus not
+ *         be able to use rd_kafka_terminating() to know it is shutting down.
+ *         That code should instead just check that rk_terminate is non-zero
+ *         (the _F_DESTROY_CALLED flag will be set).
  */
-#define rd_kafka_terminating(rk) (rd_atomic32_get(&(rk)->rk_terminate))
+#define rd_kafka_terminating(rk) (rd_atomic32_get(&(rk)->rk_terminate) & \
+                                  RD_KAFKA_DESTROY_F_TERMINATE)
+
+/**
+ * @returns the destroy flags set matching \p flags, which might be
+ *          a subset of the flags.
+ */
+#define rd_kafka_destroy_flags_check(rk,flags) \
+        (rd_atomic32_get(&(rk)->rk_terminate) & (flags))
+
+/**
+ * @returns true if no consumer callbacks, or standard consumer_close
+ *          behaviour, should be triggered. */
+#define rd_kafka_destroy_flags_no_consumer_close(rk) \
+        rd_kafka_destroy_flags_check(rk, RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
 
 #define rd_kafka_is_simple_consumer(rk) \
         (rd_atomic32_get(&(rk)->rk_simple_cnt) > 0)

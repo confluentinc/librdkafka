@@ -50,7 +50,8 @@ rd_kafka_interceptors_on_acknowledgement (rd_kafka_t *rk,
                                           rd_kafka_message_t *rkmessage);
 void
 rd_kafka_interceptors_on_acknowledgement_queue (rd_kafka_t *rk,
-                                                rd_kafka_msgq_t *rkmq);
+                                                rd_kafka_msgq_t *rkmq,
+                                                rd_kafka_resp_err_t force_err);
 
 void rd_kafka_interceptors_on_consume (rd_kafka_t *rk,
                                        rd_kafka_message_t *rkmessage);

@@ -103,7 +103,7 @@ int main_0068_produce_timeout (int argc, char **argv) {
                                          "message.timeout.ms", "100", NULL);
 
         TEST_SAY("Auto-creating topic %s\n", topic);
-        test_auto_create_topic_rkt(rk, rkt);
+        test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
 
         TEST_SAY("Producing %d messages that should timeout\n", msgcnt);
         test_produce_msgs_nowait(rk, rkt, testid, 0, 0, msgcnt,

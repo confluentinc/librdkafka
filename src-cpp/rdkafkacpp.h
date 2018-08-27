@@ -75,7 +75,7 @@ extern "C" {
         struct rd_kafka_s;
         struct rd_kafka_topic_s;
         struct rd_kafka_message_s;
-};
+}
 
 namespace RdKafka {
 

@@ -453,14 +453,20 @@ rd_kafka_interceptors_on_acknowledgement (rd_kafka_t *rk,
 
 /**
  * @brief Call on_acknowledgement methods for all messages in queue.
+ *
+ * @param force_err If non-zero, sets this error on each message.
+ *
  * @locality broker thread
  */
 void
 rd_kafka_interceptors_on_acknowledgement_queue (rd_kafka_t *rk,
-                                                rd_kafka_msgq_t *rkmq) {
+                                                rd_kafka_msgq_t *rkmq,
+                                                rd_kafka_resp_err_t force_err) {
         rd_kafka_msg_t *rkm;
 
         RD_KAFKA_MSGQ_FOREACH(rkm, rkmq) {
+                if (force_err)
+                        rkm->rkm_err = force_err;
                 rd_kafka_interceptors_on_acknowledgement(rk,
                                                          &rkm->rkm_rkmessage);
         }

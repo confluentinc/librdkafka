@@ -229,7 +229,7 @@ void rd_kafka_timers_run (rd_kafka_timers_t *rkts, int timeout_us) {
 
         rd_kafka_timers_lock(rkts);
 
-	while (!rd_atomic32_get(&rkts->rkts_rk->rk_terminate) && now <= end) {
+	while (!rd_kafka_terminating(rkts->rkts_rk) && now <= end) {
 		int64_t sleeptime;
 		rd_kafka_timer_t *rtmr;
 

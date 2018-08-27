@@ -292,11 +292,7 @@ void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
                 return;
         }
 
-#ifdef _MSC_VER
-	r = _write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, (int)rkq->rkq_qio->size);
-#else
-        r = write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, rkq->rkq_qio->size);
-#endif
+        r = rd_write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, (int)rkq->rkq_qio->size);
 	if (r == -1) {
 		fprintf(stderr,
 			"[ERROR:librdkafka:rd_kafka_q_io_event: "
@@ -343,6 +339,65 @@ rd_kafka_q_enq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko, int at_head) {
 
 
 /**
+ * @brief Enqueue \p rko either at head or tail of \p rkq.
+ *
+ * The provided \p rko is either enqueued or destroyed.
+ *
+ * \p orig_destq is the original (outermost) dest queue for which
+ * this op was enqueued, before any queue forwarding has kicked in.
+ * The rko_serve callback from the orig_destq will be set on the rko
+ * if there is no rko_serve callback already set, and the \p rko isn't
+ * failed because the final queue is disabled.
+ *
+ * @returns 1 if op was enqueued or 0 if queue is disabled and
+ * there was no replyq to enqueue on in which case the rko is destroyed.
+ *
+ * @locality any thread.
+ */
+static RD_INLINE RD_UNUSED
+int rd_kafka_q_enq1 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
+                     rd_kafka_q_t *orig_destq, int at_head, int do_lock) {
+        rd_kafka_q_t *fwdq;
+
+        if (do_lock)
+                mtx_lock(&rkq->rkq_lock);
+
+        rd_dassert(rkq->rkq_refcnt > 0);
+
+        if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
+                /* Queue has been disabled, reply to and fail the rko. */
+                if (do_lock)
+                        mtx_unlock(&rkq->rkq_lock);
+
+                return rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
+        }
+
+        if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
+                if (!rko->rko_serve && orig_destq->rkq_serve) {
+                        /* Store original queue's serve callback and opaque
+                         * prior to forwarding. */
+                        rko->rko_serve = orig_destq->rkq_serve;
+                        rko->rko_serve_opaque = orig_destq->rkq_opaque;
+                }
+
+                rd_kafka_q_enq0(rkq, rko, at_head);
+                cnd_signal(&rkq->rkq_cond);
+                if (rkq->rkq_qlen == 1)
+                        rd_kafka_q_io_event(rkq);
+
+                if (do_lock)
+                        mtx_unlock(&rkq->rkq_lock);
+        } else {
+                if (do_lock)
+                        mtx_unlock(&rkq->rkq_lock);
+                rd_kafka_q_enq1(fwdq, rko, orig_destq, at_head, 1/*do lock*/);
+                rd_kafka_q_destroy(fwdq);
+        }
+
+        return 1;
+}
+
+/**
  * @brief Enqueue the 'rko' op at the tail of the queue 'rkq'.
  *
  * The provided 'rko' is either enqueued or destroyed.
@@ -350,44 +405,12 @@ rd_kafka_q_enq0 (rd_kafka_q_t *rkq, rd_kafka_op_t *rko, int at_head) {
  * @returns 1 if op was enqueued or 0 if queue is disabled and
  * there was no replyq to enqueue on in which case the rko is destroyed.
  *
- * Locality: any thread.
+ * @locality any thread.
+ * @locks rkq MUST NOT be locked
  */
 static RD_INLINE RD_UNUSED
 int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
-	rd_kafka_q_t *fwdq;
-
-	mtx_lock(&rkq->rkq_lock);
-
-        rd_dassert(rkq->rkq_refcnt > 0);
-
-        if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
-
-                /* Queue has been disabled, reply to and fail the rko. */
-                mtx_unlock(&rkq->rkq_lock);
-
-                return rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
-        }
-
-        if (!rko->rko_serve && rkq->rkq_serve) {
-                /* Store original queue's serve callback and opaque
-                 * prior to forwarding. */
-                rko->rko_serve = rkq->rkq_serve;
-                rko->rko_serve_opaque = rkq->rkq_opaque;
-        }
-
-	if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
-		rd_kafka_q_enq0(rkq, rko, 0);
-		cnd_signal(&rkq->rkq_cond);
-		if (rkq->rkq_qlen == 1)
-			rd_kafka_q_io_event(rkq);
-		mtx_unlock(&rkq->rkq_lock);
-	} else {
-		mtx_unlock(&rkq->rkq_lock);
-		rd_kafka_q_enq(fwdq, rko);
-		rd_kafka_q_destroy(fwdq);
-	}
-
-        return 1;
+        return rd_kafka_q_enq1(rkq, rko, rkq, 0/*at tail*/, 1/*do lock*/);
 }
 
 
@@ -399,37 +422,12 @@ int rd_kafka_q_enq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
  * @returns 1 if op was enqueued or 0 if queue is disabled and
  * there was no replyq to enqueue on in which case the rko is destroyed.
  *
- * @locks rkq MUST BE LOCKED
- *
- * Locality: any thread.
+ * @locality any thread
+ * @locks rkq MUST BE locked
  */
 static RD_INLINE RD_UNUSED
 int rd_kafka_q_reenq (rd_kafka_q_t *rkq, rd_kafka_op_t *rko) {
-        rd_kafka_q_t *fwdq;
-
-        rd_dassert(rkq->rkq_refcnt > 0);
-
-        if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY)))
-                return rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
-
-        if (!rko->rko_serve && rkq->rkq_serve) {
-                /* Store original queue's serve callback and opaque
-                 * prior to forwarding. */
-                rko->rko_serve = rkq->rkq_serve;
-                rko->rko_serve_opaque = rkq->rkq_opaque;
-        }
-
-        if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
-                rd_kafka_q_enq0(rkq, rko, 1/*at_head*/);
-                cnd_signal(&rkq->rkq_cond);
-                if (rkq->rkq_qlen == 1)
-                        rd_kafka_q_io_event(rkq);
-        } else {
-                rd_kafka_q_enq(fwdq, rko);
-                rd_kafka_q_destroy(fwdq);
-        }
-
-        return 1;
+        return rd_kafka_q_enq1(rkq, rko, rkq, 1/*at head*/, 0/*don't lock*/);
 }
 
 

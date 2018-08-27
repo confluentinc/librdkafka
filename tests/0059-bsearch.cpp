@@ -117,6 +117,7 @@ static void do_test_bsearch (void) {
   topic = Test::mk_topic_name("0059-bsearch", 1);
   Test::conf_init(&conf, &tconf, 0);
   Test::conf_set(tconf, "produce.offset.report", "true");
+  Test::conf_set(tconf, "acks", "all");
   Test::conf_set(conf, "api.version.request", "true");
   conf->set("dr_cb", &my_dr, errstr);
   conf->set("default_topic_conf", tconf, errstr);

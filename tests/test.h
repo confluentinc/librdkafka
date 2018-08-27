@@ -501,11 +501,14 @@ void test_kafka_topics (const char *fmt, ...);
 void test_create_topic (const char *topicname, int partition_cnt,
 			int replication_factor);
 rd_kafka_resp_err_t test_auto_create_topic_rkt (rd_kafka_t *rk,
-                                                rd_kafka_topic_t *rkt);
-rd_kafka_resp_err_t test_auto_create_topic (rd_kafka_t *rk, const char *name);
+                                                rd_kafka_topic_t *rkt,
+                                                int timeout_ms);
+rd_kafka_resp_err_t test_auto_create_topic (rd_kafka_t *rk, const char *name,
+                                            int timeout_ms);
 int test_check_auto_create_topic (void);
 
-int test_get_partition_count (rd_kafka_t *rk, const char *topicname);
+int test_get_partition_count (rd_kafka_t *rk, const char *topicname,
+                              int timeout_ms);
 
 int test_check_builtin (const char *feature);
 

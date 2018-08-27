@@ -176,7 +176,7 @@ static void do_test_produce_retries (const char *topic, int should_fail) {
                 TEST_FAIL("Failed to create sockem ctrl thread");
 
         /* Create the topic to make sure connections are up and ready. */
-        err = test_auto_create_topic_rkt(rk, rkt);
+        err = test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
         TEST_ASSERT(!err, "topic creation failed: %s", rd_kafka_err2str(err));
 
         /* Set initial delay to 3s */
@@ -337,7 +337,7 @@ static void do_test_produce_retries_disconnect (const char *topic,
         mtx_unlock(&produce_disconnect_lock);
 
 
-        partition_cnt = test_get_partition_count(rk, topic);
+        partition_cnt = test_get_partition_count(rk, topic, tmout_multip(5000));
 
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);

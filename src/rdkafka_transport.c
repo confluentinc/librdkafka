@@ -690,7 +690,7 @@ int verify_broker_callback(X509_STORE_CTX* ctx, void* arg)
 #endif
         if (cert) {
             int len;
-            unsigned char* buf = NULL;
+            char* buf = NULL;
 
             char *subj = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
             char *issuer = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
@@ -967,14 +967,14 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
         if (len) {
             X509* cert;
             rd_kafka_dbg(rk, SECURITY, "SSL",
-                "Retrieved client's public key certificate %lu bytes",
+                "Retrieved client's public key certificate %zu bytes",
                 len);
 
             cert = X509_new();
             if (cert) {
                 if (!d2i_X509(&cert, (const unsigned char**)&buffer, (long)len))
                     rd_snprintf(*errstr, *errstr_size,
-                        "Failed to parse public key certificate with %lu bytes",
+                        "Failed to parse public key certificate with %zu bytes",
                         len);
 
                 r = SSL_CTX_use_certificate(ctx, cert);
@@ -996,7 +996,7 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
         len = rk->rk_conf.ssl.cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY, &buffer, rk->rk_conf.opaque);
         if (len) {
             rd_kafka_dbg(rk, SECURITY, "SSL",
-                "Retrieved client's private key certificate %lu bytes",
+                "Retrieved client's private key certificate %zu bytes",
                 len);
 
             BIO* bio = BIO_new_mem_buf(buffer, (long)len);
@@ -1009,7 +1009,7 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
                     len = rk->rk_conf.ssl.cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS, &buffer, rk->rk_conf.opaque);
                     if (len) {
                         rd_kafka_dbg(rk, SECURITY, "SSL",
-                            "Retrieved client's private key password %lu bytes",
+                            "Retrieved client's private key password %zu bytes",
                             len);
                         EVP_PKEY* pkey;
                         X509 *cert;

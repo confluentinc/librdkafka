@@ -430,7 +430,7 @@ class ConfImpl : public Conf {
       }
 
 #ifdef __mips__
-      err2str = "Cert verify callback is not supported on MIPS";
+      errstr = "Cert verify callback is not supported on MIPS";
       return Conf::CONF_INVALID;
 #else
       ssl_cert_verify_cb_ = ssl_cert_verify_cb;

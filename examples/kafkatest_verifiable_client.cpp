@@ -54,10 +54,6 @@
 #include <getopt.h>
 #endif
 
-extern "C" {
-#include "../src/rdkafka.h"
-}
-
 /*
  * Typically include path in a real application would be
  * #include <librdkafka/rdkafkacpp.h>

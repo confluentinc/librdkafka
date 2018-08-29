@@ -533,20 +533,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	_RK(ssl.keystore_password),
 	"Client's keystore (PKCS#12) password."
 	},
-    { _RK_GLOBAL, "ssl.handshake.info.enable", _RK_C_BOOL,
-    _RK(ssl.handshake_info),
-    "Report diagnostic information during SSL handshake",
-    0, 1, 0
-    },
     { _RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
     _RK(ssl.cert_verify_cb),
-    "Client certificate verification callback."
+    "Verify the broker certificate callback."
     },
     { _RK_GLOBAL, "ssl.certificate.retrieve_cb", _RK_C_PTR,
     _RK(ssl.cert_retrieve_cb),
-    "Client certificate retrieve callback."
+    "Retrieve client certificates callback."
     },
-    
+
 #endif /* WITH_SSL */
 
         /* Point user in the right direction if they try to apply
@@ -1904,29 +1899,29 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
 }
 #endif
 
-rd_kafka_resp_err_t
-rd_kafka_conf_set_cert_verify_cb(rd_kafka_conf_t *conf,
-    int(*cert_verify_cb) (unsigned char* cert, long len, void *opaque)) {
+rd_kafka_conf_res_t
+rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
+    int (*ssl_cert_verify_cb) (char *cert, size_t len, void *opaque)) {
 #ifdef __mips__
     return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
 #endif
 #if WITH_SSL
-    conf->ssl.cert_verify_cb = cert_verify_cb;
+    conf->ssl.cert_verify_cb = ssl_cert_verify_cb;
 #else
     RD_UNUSED(conf);
-    RD_UNUSED(cert_verify_cb);
+    RD_UNUSED(ssl_cert_verify_cb);
 #endif
 
     return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-void rd_kafka_conf_set_cert_retrieve_cb(rd_kafka_conf_t *conf,
-    long(*cert_retrieve_cb) (rd_kafka_certificate_type_t type, unsigned char** buffer, void *opaque)) {
+void rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
+    size_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer, void *opaque)) {
 #if WITH_SSL
-    conf->ssl.cert_retrieve_cb = cert_retrieve_cb;
+    conf->ssl.cert_retrieve_cb = ssl_cert_retrieve_cb;
 #else
     RD_UNUSED(conf);
-    RD_UNUSED(cert_retrieve_cb);
+    RD_UNUSED(ssl_cert_retrieve_cb);
 #endif
 }
 

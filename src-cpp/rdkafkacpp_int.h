@@ -34,12 +34,11 @@
 #include <cstring>
 #include <stdlib.h>
 
+#include "rdkafkacpp.h"
+
 extern "C" {
 #include "../src/rdkafka.h"
 }
-
-#include "rdkafkacpp.h"
-
 
 #ifdef _MSC_VER
 /* Visual Studio */
@@ -80,8 +79,8 @@ void offset_commit_cb_trampoline0 (
         rd_kafka_resp_err_t err,
         rd_kafka_topic_partition_list_t *c_offsets, void *opaque);
 
-int cert_verify_cb_trampoline(unsigned char* cert, long len, void *opaque);
-long cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, unsigned char** buffer, void *opaque);
+int ssl_cert_verify_cb_trampoline(char* cert, size_t len, void *opaque);
+size_t ssl_cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, char** buffer, void *opaque);
 
 rd_kafka_topic_partition_list_t *
     partitions_to_c_parts (const std::vector<TopicPartition*> &partitions);
@@ -245,8 +244,8 @@ class ConfImpl : public Conf {
       partitioner_kp_cb_(NULL),
       rebalance_cb_(NULL),
       offset_commit_cb_(NULL),
-      cert_verify_cb_(NULL),
-      cert_retrieve_cb_(NULL),
+      ssl_cert_verify_cb_(NULL),
+      ssl_cert_retrieve_cb_(NULL),
       rk_conf_(NULL),
       rkt_conf_(NULL){}
   ~ConfImpl () {
@@ -417,10 +416,10 @@ class ConfImpl : public Conf {
   }
 
   Conf::ConfResult set(const std::string &name,
-                       CertVerifyCb *cert_verify_cb,
+                       CertVerifyCb *ssl_cert_verify_cb,
                        std::string &errstr) {
 
-      if (name != "ssl_verify_cb") {
+      if (name != "ssl_cert_verify_cb") {
           errstr = "Invalid value type, expected RdKafka::CertVerifyCb";
           return Conf::CONF_INVALID;
       }
@@ -431,18 +430,19 @@ class ConfImpl : public Conf {
       }
 
 #ifdef __mips__
+      err2str = "Cert verify callback is not supported on MIPS";
       return Conf::CONF_INVALID;
 #else
-      cert_verify_cb_ = cert_verify_cb;
+      ssl_cert_verify_cb_ = ssl_cert_verify_cb;
       return Conf::CONF_OK;
 #endif
   }
 
   Conf::ConfResult set(const std::string &name,
-                       CertRetrieveCb *cert_retrieve_cb,
+                       CertRetrieveCb *ssl_cert_retrieve_cb,
                        std::string &errstr) {
 
-      if (name != "ssl_retrieve_cb") {
+      if (name != "ssl_cert_retrieve_cb") {
           errstr = "Invalid value type, expected RdKafka::CertRetrieveCb";
           return Conf::CONF_INVALID;
       }
@@ -452,7 +452,7 @@ class ConfImpl : public Conf {
           return Conf::CONF_INVALID;
       }
 
-      cert_retrieve_cb_ = cert_retrieve_cb;
+      ssl_cert_retrieve_cb_ = ssl_cert_retrieve_cb;
       return Conf::CONF_OK;
   }
 
@@ -465,8 +465,8 @@ class ConfImpl : public Conf {
         name.compare("open_cb") == 0 ||
         name.compare("rebalance_cb") == 0 ||
         name.compare("offset_commit_cb") == 0 ||
-        name.compare("ssl_verify_cb") == 0 ||
-        name.compare("ssl_retrieve_cb") == 0 ) {
+        name.compare("ssl_cert_verify_cb") == 0 ||
+        name.compare("ssl_cert_retrieve_cb") == 0 ) {
       return Conf::CONF_INVALID;
     }
     rd_kafka_conf_res_t res = RD_KAFKA_CONF_INVALID;
@@ -554,25 +554,21 @@ class ConfImpl : public Conf {
       return Conf::CONF_OK;
     }
 
-  /** @brief Use with \p name = \c \"ssl_verify_cb\" */
-  Conf::ConfResult get(CertVerifyCb *&cert_verify_cb) const {
+  Conf::ConfResult get(CertVerifyCb *&ssl_cert_verify_cb) const {
       if (!rk_conf_)
       return Conf::CONF_INVALID;
-      cert_verify_cb = this->cert_verify_cb_;
+      ssl_cert_verify_cb = this->ssl_cert_verify_cb_;
       return Conf::CONF_OK;
   }
-      
 
-  /** @brief Use with \p name = \c \"ssl_retrieve_cb\" */
-  virtual Conf::ConfResult get(CertRetrieveCb *&cert_retrieve_cb) const {
+  Conf::ConfResult get(CertRetrieveCb *&ssl_cert_retrieve_cb) const {
       if (!rk_conf_)
       return Conf::CONF_INVALID;
-      cert_retrieve_cb = this->cert_retrieve_cb_;
+      ssl_cert_retrieve_cb = this->ssl_cert_retrieve_cb_;
       return Conf::CONF_OK;
   }
 
   std::list<std::string> *dump ();
-
 
   Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
                         std::string &errstr) {
@@ -600,8 +596,8 @@ class ConfImpl : public Conf {
   PartitionerKeyPointerCb *partitioner_kp_cb_;
   RebalanceCb *rebalance_cb_;
   OffsetCommitCb *offset_commit_cb_;
-  CertVerifyCb* cert_verify_cb_;
-  CertRetrieveCb* cert_retrieve_cb_;
+  CertVerifyCb* ssl_cert_verify_cb_;
+  CertRetrieveCb* ssl_cert_retrieve_cb_;
   ConfType conf_type_;
   rd_kafka_conf_t *rk_conf_;
   rd_kafka_topic_conf_t *rkt_conf_;

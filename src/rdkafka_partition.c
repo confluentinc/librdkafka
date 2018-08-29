@@ -214,6 +214,9 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
         rd_atomic32_init(&rktp->rktp_version, 1);
 	rktp->rktp_op_version = rd_atomic32_get(&rktp->rktp_version);
 
+        rd_atomic32_init(&rktp->rktp_msgs_inflight, 0);
+        rd_kafka_pid_reset(&rktp->rktp_pid);
+
         /* Consumer: If statistics is available we query the oldest offset
          * of each partition.
          * Since the oldest offset only moves on log retention, we cap this
@@ -3414,4 +3417,67 @@ int rd_kafka_topic_partition_list_regex_cnt (
                 cnt += *rktpar->topic == '^';
         }
         return cnt;
+}
+
+
+/**
+ * @brief Update/change the Producer ID for this toppar.
+ *
+ * Must only be called when pid is different from the current toppar pid.
+ *
+ * The epoch base sequence will be set to the first message in the partition
+ * queue. However, if there are outstanding messages in-flight to the broker
+ * we will need to wait for these ProduceRequests to finish (most likely
+ * with failure) and have their messages re-enqueued to maintain original order.
+ * In this case the pid will not be updated and this function should be
+ * called again when there are no outstanding messages.
+ *
+ * @remark This function must only be called when rktp_xmitq is non-empty.
+ *
+ * @returns 1 if a new pid was set, else 0.
+ *
+ * @locality toppar handler thread
+ * @locks none (rktp pid fields are considered thread local)
+ */
+int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
+        int64_t new_base;
+        const rd_kafka_msg_t *rkm;
+        int inflight = rd_atomic32_get(&rktp->rktp_msgs_inflight);
+
+        if (unlikely(inflight > 0)) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
+                             TOPIC|RD_KAFKA_DBG_EOS, "NEWPID",
+                             "%.*s [%"PRId32"] will not change %s -> %s yet: "
+                             "%d message(s) still in-flight from current "
+                             "epoch",
+                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                             rktp->rktp_partition,
+                             rd_kafka_pid2str(rktp->rktp_pid),
+                             rd_kafka_pid2str(pid),
+                             inflight);
+                return 0;
+        }
+
+        rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs);
+        rd_assert(rkm && *"BUG: pid_change() must only be called with "
+                  "non-empty xmitq");
+
+        new_base = rkm->rkm_u.producer.msgseq;
+
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
+                     TOPIC|RD_KAFKA_DBG_EOS, "NEWPID",
+                     "%.*s [%"PRId32"] changed %s -> %s: "
+                     "resetting epoch base msgseq to %"PRIu64
+                     " (was %"PRIu64")",
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition,
+                     rd_kafka_pid2str(rktp->rktp_pid),
+                     rd_kafka_pid2str(pid),
+                     new_base,
+                     rktp->rktp_epoch_base_seq);
+
+        rktp->rktp_pid = pid;
+        rktp->rktp_epoch_base_seq = new_base;
+
+        return 1;
 }

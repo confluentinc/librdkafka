@@ -32,6 +32,7 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_broker.h"
 #include "rdkafka_request.h"
+#include "rdkafka_idempotence.h"
 #include "rdkafka_metadata.h"
 
 #include <string.h>
@@ -586,7 +587,10 @@ rd_kafka_parse_Metadata (rd_kafka_broker_t *rkb,
                 rd_kafka_cgrp_metadata_update_check(
                         rkb->rkb_rk->rk_cgrp, 1/*do join*/);
 
-
+        /* Try to acquire a Producer ID from this broker if we
+         * don't have one. */
+        if (rd_kafka_is_idempotent(rkb->rkb_rk))
+                rd_kafka_idemp_request_pid(rkb->rkb_rk, rkb, "metadata update");
 
 done:
         if (missing_topics)

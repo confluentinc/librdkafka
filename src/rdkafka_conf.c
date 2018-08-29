@@ -73,7 +73,7 @@ struct rd_kafka_property {
 	struct {
 		int val;
 		const char *str;
-	} s2i[16];  /* _RK_C_S2I and _RK_C_S2F */
+	} s2i[20];  /* _RK_C_S2I and _RK_C_S2F */
 
 	/* Value validator (STR) */
 	int (*validate) (const struct rd_kafka_property *prop,
@@ -267,6 +267,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { RD_KAFKA_DBG_PLUGIN,   "plugin" },
                         { RD_KAFKA_DBG_CONSUMER, "consumer" },
                         { RD_KAFKA_DBG_ADMIN,    "admin" },
+                        { RD_KAFKA_DBG_EOS,      "eos" },
 			{ RD_KAFKA_DBG_ALL,      "all" }
 		} },
 	{ _RK_GLOBAL, "socket.timeout.ms", _RK_C_INT, _RK(socket_timeout_ms),
@@ -755,6 +756,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "at slightly increased CPU usage.",
           0, 1, 0 },
 	/* Global producer properties */
+        { _RK_GLOBAL|_RK_PRODUCER, "enable.idempotence", _RK_C_BOOL,
+          _RK(idempotence),
+          "When set to `true`, the producer will ensure that messages are "
+          "successfully produced exactly once and in the original produce "
+          "order. "
+          "The following configuration properties are adjusted automatically "
+          "(if necessary) when idempotence is enabled: "
+          "`max.inflight.requests.per.connection` is capped at 5, "
+          "`retries` must be greater than 0, "
+          "`acks` is  set to `all`, "
+          "`queuing.strategy` is set to `fifo`.",
+          0, 1, 1 /* FIXME: Change to false */},
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.messages", _RK_C_INT,
 	  _RK(queue_buffering_max_msgs),
 	  "Maximum number of messages allowed on the producer queue.",

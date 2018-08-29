@@ -31,6 +31,7 @@ All fields that contain sizes are are in bytes unless otherwise noted.
    }
  }
 [, "cgrp": { <cgrp fields> } ]
+[, "eos": { <eos fields> } ]
 }
 ```
 
@@ -71,6 +72,7 @@ metadata_cache_cnt | int gauge | | Number of topics in the metadata cache.
 brokers | object | | Dict of brokers, key is broker name, value is object. See **brokers** below
 topics | object | | Dict of topics, key is topic name, value is object. See **topics** below
 cgrp | object | | Consumer group metrics. See **cgrp** below
+eos | object | | EOS / Idempotent producer state and metrics. See **eos** below
 
 ## brokers
 
@@ -178,6 +180,7 @@ rxmsgs | int | | Total number of messages consumed, not including ignored messag
 rxbytes | int | | Total number of bytes received for rxmsgs
 msgs | int | | Total number of messages received (consumer, same as rxmsgs), or total number of messages produced (possibly not yet transmitted) (producer).
 rx_ver_drops | int | | Dropped outdated messages
+msgs_inflight | int gauge | | Current number of messages in-flight to/from broker
 
 
 ## cgrp
@@ -187,6 +190,17 @@ Field | Type | Example | Description
 rebalance_age | int gauge | | Time elapsed since last rebalance (assign or revoke) (milliseconds)
 rebalance_cnt | int | | Total number of rebalances (assign or revoke)
 assignment_size | int gauge | | Current assignment's partition count
+
+
+## eos
+
+Field | Type | Example | Description
+----- | ---- | ------- | -----------
+idemp_state | string | "Assigned" | Current idempotent producer id state
+idemp_state_age | int gauge | | Time elapsed since last idemp_state change (milliseconds)
+producer_id | int gauge | | The currently assigned Producer ID (or -1)
+producer_epoch | int gauge | | The current epoch (or -1)
+epoch_cnt | int | | The number of Producer ID assignments since start
 
 
 # Example output

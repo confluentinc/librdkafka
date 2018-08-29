@@ -38,6 +38,7 @@ set(
     rdkafka_admin.c
     rdkafka_aux.c
     rdkafka_background.c
+    rdkafka_idempotence.c
     rdlist.c
     rdlog.c
     rdmurmur2.c

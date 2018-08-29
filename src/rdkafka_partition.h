@@ -99,16 +99,38 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                   * Broker thread -> App */
         rd_kafka_q_t      *rktp_ops;             /* * -> Main thread */
 
+        rd_atomic32_t      rktp_msgs_inflight;  /**< Current number of
+                                                 *   messages in-flight to/from
+                                                 *   the broker. */
+        rd_kafka_pid_t     rktp_pid;            /**< Partition's last known
+                                                 *   Producer Id and epoch.
+                                                 *   Only accessed from
+                                                 *   toppar handler thread. */
+        uint64_t           rktp_epoch_base_seq; /**< This Producer epoch's
+                                                 *   base msgseq.
+                                                 *   When a new epoch is
+                                                 *   acquired the base_seq
+                                                 *   is set to the current
+                                                 *   rktp_msgseq so that
+                                                 *   sub-sequent produce
+                                                 *   requests will have
+                                                 *   a sequence number series
+                                                 *   starting at 0.
+                                                 *   Only accessed from
+                                                 *   toppar handler thread. */
         uint64_t           rktp_msgseq;     /* Current message sequence number.
                                              * Each message enqueued on a
                                              * non-UA partition will get a
-                                             * unique sequencial number assigned.
+                                             * partition-unique sequencial
+                                             * number assigned.
                                              * This number is used to
                                              * re-enqueue the message
                                              * on resends but making sure
                                              * the input ordering is still
-                                             * maintained.
-                                             * Starts at 1. */
+                                             * maintained, and used by
+                                             * the idempotent producer.
+                                             * Starts at 1.
+                                             * Protected by toppar_lock */
 
 	/**
 	 * rktp version barriers
@@ -643,5 +665,7 @@ int rd_kafka_partition_leader_cmp (const void *_a, const void *_b) {
         const struct rd_kafka_partition_leader *a = _a, *b = _b;
         return rd_kafka_broker_cmp(a->rkb, b->rkb);
 }
+
+int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid);
 
 #endif /* _RDKAFKA_PARTITION_H_ */

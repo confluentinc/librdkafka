@@ -518,6 +518,7 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 #define RD_KAFKAP_MSGSET_V2_OF_LastOffsetDelta  (8+4+4+1+4+2)
 #define RD_KAFKAP_MSGSET_V2_OF_BaseTimestamp    (8+4+4+1+4+2+4)
 #define RD_KAFKAP_MSGSET_V2_OF_MaxTimestamp     (8+4+4+1+4+2+4+8)
+#define RD_KAFKAP_MSGSET_V2_OF_BaseSequence     (8+4+4+1+4+2+4+8+8+8+2)
 #define RD_KAFKAP_MSGSET_V2_OF_RecordCount      (8+4+4+1+4+2+4+8+8+8+2+4)
 
 #endif /* _RDKAFKA_PROTO_H_ */

@@ -43,6 +43,7 @@ static const char *rd_kafka_feature_names[] = {
 	"LZ4",
         "OffsetTime",
         "MsgVer2",
+        "IdempotentProducer",
 	NULL
 };
 
@@ -173,11 +174,10 @@ static const struct rd_kafka_feature_map {
                 }
         },
         {
-                /* @brief >=0.10.2.0: Topic Admin API (KIP-4) */
-                .feature = RD_KAFKA_FEATURE_TOPIC_ADMIN_API,
+                /* @brief >=0.11.0.0: Idempotent Producer*/
+                .feature = RD_KAFKA_FEATURE_IDEMPOTENT_PRODUCER,
                 .depends = {
-                        { RD_KAFKAP_CreateTopics, 0, 0 },
-                        { RD_KAFKAP_DeleteTopics, 0, 0 },
+                        { RD_KAFKAP_InitProducerId, 0, 0 },
                         { -1 },
                 }
         },

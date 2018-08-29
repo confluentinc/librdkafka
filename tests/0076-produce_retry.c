@@ -281,6 +281,8 @@ static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
  * @param should_fail If true, do negative testing which should fail.
  */
 static void do_test_produce_retries_disconnect (const char *topic,
+                                                int idempotence,
+                                                int try_fail,
                                                 int should_fail) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
@@ -290,8 +292,9 @@ static void do_test_produce_retries_disconnect (const char *topic,
         int msgcnt = 1;
         int partition_cnt;
 
-        TEST_SAY(_C_BLU "Test produce retries by disconnect (should_fail=%d)\n",
-                 should_fail);
+        TEST_SAY(_C_BLU "Test produce retries by disconnect "
+                 "(idempotence=%d,try_fail=%d,should_fail=%d)\n",
+                 idempotence, try_fail, should_fail);
 
         test_curr->is_fatal_cb = is_fatal_cb;
 
@@ -301,10 +304,16 @@ static void do_test_produce_retries_disconnect (const char *topic,
         rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
         test_conf_set(conf, "socket.timeout.ms", "10000");
         test_conf_set(conf, "message.timeout.ms", "30000");
-        if (!should_fail)
+        if (!try_fail) {
                 test_conf_set(conf, "retries", "1");
-        else
+        } else {
                 test_conf_set(conf, "retries", "0");
+                /* enable.idempotence=true will adjust retries which
+                 * makes the test pass. To force a failure with should_fail
+                 * we disable idempotence. */
+                if (should_fail)
+                        test_conf_set(conf, "enable.idempotence", "false");
+        }
 
         mtx_init(&produce_disconnect_lock, mtx_plain);
         produce_disconnects = 0;
@@ -347,8 +356,8 @@ static void do_test_produce_retries_disconnect (const char *topic,
                                partition_cnt, should_fail ? 0 : msgcnt, NULL);
 
         TEST_SAY(_C_GRN "Test produce retries by disconnect "
-                 "(should_fail=%d): PASS\n",
-                 should_fail);
+                 "(idempotence=%d,try_fail=%d,should_fail=%d): PASS\n",
+                 idempotence, try_fail, should_fail);
 }
 
 
@@ -360,8 +369,10 @@ int main_0076_produce_retry (int argc, char **argv) {
         do_test_produce_retries(topic, 1/*fail test*/);
 #endif
 
-        do_test_produce_retries_disconnect(topic, 0/*good test*/);
-        do_test_produce_retries_disconnect(topic, 1/*fail test*/);
+        do_test_produce_retries_disconnect(topic, 1, 0, 0/*good test*/);
+        do_test_produce_retries_disconnect(topic, 0, 1, 1/*fail test*/);
+        do_test_produce_retries_disconnect(topic, 1/*idemp*/,
+                                           1, 0/*good test*/);
 
         return 0;
 }

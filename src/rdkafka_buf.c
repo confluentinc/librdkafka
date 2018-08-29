@@ -51,6 +51,11 @@ void rd_kafka_buf_destroy_final (rd_kafka_buf_t *rkbuf) {
                         mtx_unlock(rkbuf->rkbuf_u.Metadata.decr_lock);
                 }
                 break;
+
+        case RD_KAFKAP_Produce:
+                if (rkbuf->rkbuf_u.Produce.s_rktp)
+                        rd_kafka_toppar_destroy(rkbuf->rkbuf_u.Produce.s_rktp);
+                break;
         }
 
         if (rkbuf->rkbuf_response)

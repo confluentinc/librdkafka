@@ -48,6 +48,7 @@
 #include "rdkafka_event.h"
 #include "rdkafka_sasl.h"
 #include "rdkafka_interceptor.h"
+#include "rdkafka_idempotence.h"
 
 #include "rdtime.h"
 #include "crc32c.h"
@@ -415,6 +416,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Read underflow"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__INVALID_TYPE,
                   "Local: Invalid type"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__RETRY,
+                  "Local: Retry operation"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -679,7 +682,7 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 		rd_kafka_metadata_destroy(rk->rk_full_metadata);
         rd_kafkap_str_destroy(rk->rk_client_id);
         rd_kafkap_str_destroy(rk->rk_group_id);
-        rd_kafkap_str_destroy(rk->rk_eos.TransactionalId);
+        rd_kafkap_str_destroy(rk->rk_eos.transactional_id);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
         rd_list_destroy(&rk->rk_broker_by_id);
 
@@ -1066,7 +1069,8 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
                    "\"rxmsgs\":%"PRIu64", "
                    "\"rxbytes\":%"PRIu64", "
                    "\"msgs\": %"PRIu64", "
-                   "\"rx_ver_drops\": %"PRIu64" "
+                   "\"rx_ver_drops\": %"PRIu64", "
+                   "\"msgs_inflight\": %"PRId32" "
 		   "} ",
 		   first ? "" : ", ",
 		   rktp->rktp_partition,
@@ -1099,7 +1103,8 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
                    rk->rk_type == RD_KAFKA_PRODUCER ?
                    rd_atomic64_get(&rktp->rktp_c.producer_enq_msgs) :
                    rd_atomic64_get(&rktp->rktp_c.rx_msgs), /* legacy, same as rx_msgs */
-                   rd_atomic64_get(&rktp->rktp_c.rx_ver_drops));
+                   rd_atomic64_get(&rktp->rktp_c.rx_ver_drops),
+                   rd_atomic32_get(&rktp->rktp_msgs_inflight));
 
         if (total) {
                 total->txmsgs      += rd_atomic64_get(&rktp->rktp_c.tx_msgs);
@@ -1303,6 +1308,22 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                            rkcg->rkcg_c.rebalance_cnt,
                            rkcg->rkcg_c.assignment_size);
         }
+
+        if (rd_kafka_is_idempotent(rk)) {
+                _st_printf(", \"eos\": { "
+                           "\"idemp_state\": \"%s\", "
+                           "\"idemp_state_age\": %"PRId64", "
+                           "\"producer_id\": %"PRId64", "
+                           "\"producer_epoch\": %hd, "
+                           "\"epoch_cnt\": %d "
+                           "}",
+                           rd_kafka_idemp_state2str(rk->rk_eos.idemp_state),
+                           (rd_clock() - rk->rk_eos.ts_idemp_state) / 1000,
+                           rk->rk_eos.pid.id,
+                           rk->rk_eos.pid.epoch,
+                           rk->rk_eos.epoch_cnt);
+        }
+
 	rd_kafka_rdunlock(rk);
 
         /* Total counters */
@@ -1411,6 +1432,9 @@ static int rd_kafka_thread_main (void *arg) {
                 rd_kafka_q_fwd_set(rk->rk_cgrp->rkcg_ops, rk->rk_ops);
         }
 
+        if (rd_kafka_is_idempotent(rk))
+                rd_kafka_idemp_init(rk);
+
 	while (likely(!rd_kafka_terminating(rk) ||
 		      rd_kafka_q_len(rk->rk_ops))) {
                 rd_ts_t sleeptime = rd_kafka_timers_next(
@@ -1424,6 +1448,9 @@ static int rd_kafka_thread_main (void *arg) {
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                      "Internal main thread terminating");
+
+        if (rd_kafka_is_idempotent(rk))
+                rd_kafka_idemp_term(rk);
 
 	rd_kafka_q_disable(rk->rk_ops);
 	rd_kafka_q_purge(rk->rk_ops);
@@ -1523,6 +1550,17 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                  * room for protocol framing (including topic name). */
                 conf->recv_max_msg_size = RD_MAX(conf->recv_max_msg_size,
                                                  conf->fetch_max_bytes + 512);
+
+                /* Simplifies rd_kafka_is_idempotent() which is producer-only */
+                conf->idempotence = 0;
+
+        } else if (type == RD_KAFKA_PRODUCER && conf->idempotence) {
+                /* Adjust configuration values for idempotent producer. */
+
+                conf->max_inflight = RD_MIN(conf->max_inflight, 5);
+                conf->max_retries = RD_MAX(conf->max_retries, 1);
+                /* acks=all and queuing.strategy are set per-topic
+                 * in topic_new0() */
         }
 
         if (conf->metadata_max_age_ms == -1) {
@@ -1561,6 +1599,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 	mtx_init(&rk->rk_broker_state_change_lock, mtx_plain);
         rd_list_init(&rk->rk_broker_state_change_waiters, 8,
                      rd_kafka_enq_once_trigger_destroy);
+
+        rd_interval_init(&rk->rk_suppress.no_idemp_brokers);
 
 	rk->rk_rep = rd_kafka_q_new(rk);
 	rk->rk_ops = rd_kafka_q_new(rk);
@@ -1666,7 +1706,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                                                 rk->rk_group_id,
                                                 rk->rk_client_id);
 
-
+        rk->rk_eos.transactional_id = rd_kafkap_str_new(NULL, 0);
 
 #ifndef _MSC_VER
         /* Block all signals in newly created threads.
@@ -1746,9 +1786,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         /*
          * @warning `goto fail` is prohibited past this point
          */
-
-        rk->rk_eos.PID = -1;
-        rk->rk_eos.TransactionalId = rd_kafkap_str_new(NULL, 0);
 
         mtx_lock(&rk->rk_internal_rkb_lock);
 	rk->rk_internal_rkb = rd_kafka_broker_add(rk, RD_KAFKA_INTERNAL,

@@ -254,6 +254,8 @@ enum ErrorCode {
         ERR__UNDERFLOW = -155,
         /** Invalid type */
         ERR__INVALID_TYPE = -154,
+        /** Retry operation */
+        ERR__RETRY = -153,
 
         /** End internal error codes */
 	ERR__END = -100,

@@ -305,6 +305,14 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                 }
         }
 
+        if (rd_kafka_is_idempotent(rk)) {
+                /* Force acks=all */
+                rkt->rkt_conf.required_acks = -1; /* all */
+                /* Force FIFO queueing */
+                rkt->rkt_conf.queuing_strategy = RD_KAFKA_QUEUE_FIFO;
+        }
+
+
         if (rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO)
                 rkt->rkt_conf.msg_order_cmp = rd_kafka_msg_cmp_msgseq;
         else

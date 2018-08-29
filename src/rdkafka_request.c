@@ -36,6 +36,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_metadata.h"
 #include "rdkafka_msgset.h"
+#include "rdkafka_idempotence.h"
 
 #include "rdrand.h"
 #include "rdstring.h"
@@ -1767,6 +1768,11 @@ rd_kafka_handle_Produce_parse (rd_kafka_broker_t *rkb,
 /**
  * @brief Handle ProduceResponse
  *
+ * @remark ProduceRequests are never retried, retriable errors are
+ *         instead handled by re-enqueuing the request's messages back
+ *         on the partition queue to have a new ProduceRequest constructed
+ *         eventually.
+ *
  * @locality broker thread
  */
 static void rd_kafka_handle_Produce (rd_kafka_t *rk,
@@ -1775,7 +1781,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                                      rd_kafka_buf_t *reply,
                                      rd_kafka_buf_t *request,
                                      void *opaque) {
-        shptr_rd_kafka_toppar_t *s_rktp = opaque; /* from ProduceRequest() */
+        shptr_rd_kafka_toppar_t *s_rktp = request->rkbuf_u.Produce.s_rktp;
         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
         int64_t offset = RD_KAFKA_OFFSET_INVALID;
         int64_t timestamp = -1;
@@ -1786,6 +1792,11 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                                                     reply, request,
                                                     &offset, &timestamp);
 
+        /* Decrease partition's messages in-flight counter */
+        rd_assert(rd_atomic32_get(&rktp->rktp_msgs_inflight) >=
+                  rd_kafka_msgq_len(&request->rkbuf_msgq));
+        rd_atomic32_sub(&rktp->rktp_msgs_inflight,
+                        rd_kafka_msgq_len(&request->rkbuf_msgq));
 
         if (likely(!err)) {
                 rd_rkb_dbg(rkb, MSG, "MSGSET",
@@ -1800,7 +1811,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                 char actstr[64];
 
                 if (err == RD_KAFKA_RESP_ERR__DESTROY)
-                        goto done; /* Terminating */
+                        return; /* Terminating */
 
                 actions = rd_kafka_err_action(
                         rkb, err, reply, request,
@@ -1825,6 +1836,11 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
 
                         RD_KAFKA_ERR_ACTION_PERMANENT,
                         RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
+
+                        /* Message was purged from out-queue due to
+                         * Idempotent Producer Id change */
+                        RD_KAFKA_ERR_ACTION_RETRY,
+                        RD_KAFKA_RESP_ERR__RETRY,
 
                         RD_KAFKA_ERR_ACTION_END);
 
@@ -1887,7 +1903,7 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                                 /* No need do anything more with the request
                                  * here since the request no longer has any
                                  messages associated with it. */
-                                goto done;
+                                return;
                         }
                 }
 
@@ -1929,9 +1945,6 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
 
         /* Enqueue messages for delivery report */
         rd_kafka_dr_msgq(rktp->rktp_rkt, &request->rkbuf_msgq, err);
-
- done:
-        rd_kafka_toppar_destroy(s_rktp); /* from ProduceRequest() */
 }
 
 
@@ -1942,7 +1955,8 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
  *
  * @locality broker thread
  */
-int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
+int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp,
+                             const rd_kafka_pid_t pid) {
         rd_kafka_buf_t *rkbuf;
         rd_kafka_itopic_t *rkt = rktp->rktp_rkt;
         size_t MessageSetSize = 0;
@@ -1955,7 +1969,7 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
          * Create ProduceRequest with as many messages from the toppar
          * transmit queue as possible.
          */
-        rkbuf = rd_kafka_msgset_create_ProduceRequest(rkb, rktp,
+        rkbuf = rd_kafka_msgset_create_ProduceRequest(rkb, rktp, pid,
                                                       &MessageSetSize);
         if (unlikely(!rkbuf))
                 return 0;
@@ -1987,11 +2001,15 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
          * capped by socket.timeout.ms */
         rd_kafka_buf_set_abs_timeout(rkbuf, tmout, now);
 
+        rd_atomic32_add(&rktp->rktp_msgs_inflight,
+                        rd_kafka_msgq_len(&rkbuf->rkbuf_msgq));
+
+        /* Reference is dropped in buf_destroy() */
+        rkbuf->rkbuf_u.Produce.s_rktp = rd_kafka_toppar_keep(rktp);
+
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
                                        RD_KAFKA_NO_REPLYQ,
-                                       rd_kafka_handle_Produce,
-                                       /* toppar ref for handle_Produce() */
-                                       rd_kafka_toppar_keep(rktp));
+                                       rd_kafka_handle_Produce, NULL);
 
         return cnt;
 }
@@ -2505,6 +2523,106 @@ rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+/**
+ * @brief Parses and handles an InitProducerId reply.
+ *
+ * @returns 0 on success, else an error.
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+void
+rd_kafka_handle_InitProducerId (rd_kafka_t *rk,
+                                rd_kafka_broker_t *rkb,
+                                rd_kafka_resp_err_t err,
+                                rd_kafka_buf_t *rkbuf,
+                                rd_kafka_buf_t *request,
+                                void *opaque) {
+        const int log_decode_errors = LOG_ERR;
+        int16_t error_code;
+        rd_kafka_pid_t pid;
+
+        if (err)
+                goto err;
+
+        rd_kafka_buf_read_throttle_time(rkbuf);
+
+        rd_kafka_buf_read_i16(rkbuf, &error_code);
+        if ((err = error_code))
+                goto err;
+
+        rd_kafka_buf_read_i64(rkbuf, &pid.id);
+        rd_kafka_buf_read_i16(rkbuf, &pid.epoch);
+
+        rd_kafka_idemp_pid_update(rkb, pid);
+
+        return;
+
+ err_parse:
+        err = rkbuf->rkbuf_err;
+ err:
+        /* Retries are performed by idempotence state handler */
+        rd_kafka_idemp_request_pid_failed(rkb, err);
+}
+
+
+/**
+ * @brief Construct and send InitProducerIdRequest to \p rkb.
+ *
+ *        \p transactional_id may be NULL.
+ *        \p transaction_timeout_ms may be set to -1.
+ *
+ *        The response (unparsed) will be handled by \p resp_cb served
+ *        by queue \p replyq.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_InitProducerIdRequest (rd_kafka_broker_t *rkb,
+                                const char *transactional_id,
+                                int transaction_timeout_ms,
+                                char *errstr, size_t errstr_size,
+                                rd_kafka_replyq_t replyq,
+                                rd_kafka_resp_cb_t *resp_cb,
+                                void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_InitProducerId, 0, 1, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "InitProducerId (KIP-98) not supported "
+                            "by broker, requires broker version >= 0.11.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_InitProducerId, 1,
+                                         2 + (transactional_id ?
+                                              strlen(transactional_id) : 0) +
+                                         4);
+
+        /* transactional_id */
+        rd_kafka_buf_write_str(rkbuf, transactional_id, -1);
+
+        /* transaction_timeout_ms */
+        rd_kafka_buf_write_i32(rkbuf, transaction_timeout_ms);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        /* Let the idempotence state handler perform retries */
+        rkbuf->rkbuf_retries = RD_KAFKA_BUF_NO_RETRIES;
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 

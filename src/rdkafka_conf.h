@@ -258,6 +258,7 @@ struct rd_kafka_conf_s {
 	/*
 	 * Producer configuration
 	 */
+        int    idempotence;
 	int    queue_buffering_max_msgs;
 	int    queue_buffering_max_kbytes;
 	int    buffering_max_ms;

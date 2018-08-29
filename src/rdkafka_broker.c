@@ -510,6 +510,42 @@ void rd_kafka_broker_conn_closed (rd_kafka_broker_t *rkb,
 }
 
 
+/**
+ * @brief Purge requests in \p rkbq matching request \p ApiKey
+ *        and partition \p rktp.
+ *
+ * @warning ApiKey must be RD_KAFKAP_Produce
+ *
+ * @returns the number of purged buffers.
+ *
+ * @locality broker thread
+ */
+static int
+rd_kafka_broker_bufq_purge_by_toppar (rd_kafka_broker_t *rkb,
+                                      rd_kafka_bufq_t *rkbq,
+                                      int64_t ApiKey,
+                                      rd_kafka_toppar_t *rktp,
+                                      rd_kafka_resp_err_t err) {
+        rd_kafka_buf_t *rkbuf, *tmp;
+        int cnt = 0;
+
+        rd_assert(ApiKey == RD_KAFKAP_Produce);
+
+        TAILQ_FOREACH_SAFE(rkbuf, &rkbq->rkbq_bufs, rkbuf_link, tmp) {
+
+                if (rkbuf->rkbuf_reqhdr.ApiKey != ApiKey ||
+                    rd_kafka_toppar_s2i(rkbuf->rkbuf_u.Produce.s_rktp) != rktp)
+                        continue;
+
+                rd_kafka_bufq_deq(rkbq, rkbuf);
+
+                rd_kafka_buf_callback(rkb->rkb_rk, rkb, err, NULL, rkbuf);
+                cnt++;
+        }
+
+        return cnt;
+}
+
 
 /**
  * Scan bufq for buffer timeouts, trigger buffer callback on timeout.
@@ -2640,6 +2676,7 @@ static void rd_kafka_broker_toppar_msgq_scan (rd_kafka_broker_t *rkb,
  */
 static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                            rd_kafka_toppar_t *rktp,
+                                           const rd_kafka_pid_t pid,
                                            rd_ts_t now,
                                            rd_ts_t *next_wakeup,
                                            int do_timeout_scan) {
@@ -2675,6 +2712,16 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
         if (unlikely(do_timeout_scan)) {
                 /* Scan xmit queue for msg timeouts */
                 rd_kafka_broker_toppar_msgq_scan(rkb, rktp, now);
+
+                if (rd_kafka_is_idempotent(rkb->rkb_rk) &&
+                    !rd_kafka_pid_valid(pid)) {
+                        /* Idempotent producer: we don't have a
+                         * a PID, we can't transmit any messages.
+                         * We only get here in that case if
+                         * do_timeout_scan is true. */
+                        rd_kafka_toppar_unlock(rktp);
+                        return 0;
+                }
         }
 
         if (unlikely(RD_KAFKA_TOPPAR_IS_PAUSED(rktp))) {
@@ -2734,9 +2781,28 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                 return 0;
         }
 
+        /* Update the partition's cached PID, and reset the
+         * base msg sequence if necessary */
+        if (unlikely(rd_kafka_is_idempotent(rkb->rkb_rk) &&
+                     !rd_kafka_pid_eq(pid, rktp->rktp_pid))) {
+                /* Flush any ProduceRequests for this partition in the
+                 * output buffer queue to speed up recovery. */
+                rd_kafka_broker_bufq_purge_by_toppar(
+                        rkb,
+                        &rkb->rkb_outbufs,
+                        RD_KAFKAP_Produce, rktp,
+                        RD_KAFKA_RESP_ERR__RETRY);
+
+                /* Attempt to change the pid, it will fail if there
+                 * are outstanding messages in-flight, in which case
+                 * we eventually come back here to retry. */
+                if (!rd_kafka_toppar_pid_change(rktp, pid))
+                        return 0;
+        }
+
         /* Send Produce requests for this toppar */
         while (1) {
-                r = rd_kafka_ProduceRequest(rkb, rktp);
+                r = rd_kafka_ProduceRequest(rkb, rktp, pid);
                 if (likely(r > 0))
                         cnt += r;
                 else
@@ -2764,18 +2830,32 @@ static int rd_kafka_broker_produce_toppars (rd_kafka_broker_t *rkb,
         rd_kafka_toppar_t *rktp;
         int cnt = 0;
         rd_ts_t ret_next_wakeup = *next_wakeup;
+        rd_kafka_pid_t pid = RD_KAFKA_PID_INITIALIZER;
 
         /* Round-robin serve each toppar. */
         rktp = rkb->rkb_active_toppar_next;
         if (unlikely(!rktp))
                 return 0;
 
+        if (rd_kafka_is_idempotent(rkb->rkb_rk)) {
+                /* Idempotent producer: get a copy of the current pid. */
+                rd_kafka_rdlock(rkb->rkb_rk);
+                pid = rkb->rkb_rk->rk_eos.pid;
+                rd_kafka_rdunlock(rkb->rkb_rk);
+
+                /* If we don't have a valid pid return immedatiely,
+                 * unless the per-partition timeout scan needs to run.
+                 * The broker threads are woken up when a PID is acquired. */
+                if (!rd_kafka_pid_valid(pid) && !do_timeout_scan)
+                        return 0;
+        }
+
         do {
                 rd_ts_t this_next_wakeup = ret_next_wakeup;
 
                 /* Try producing toppar */
                 cnt += rd_kafka_toppar_producer_serve(
-                        rkb, rktp, now, &this_next_wakeup,
+                        rkb, rktp, pid, now, &this_next_wakeup,
                         do_timeout_scan);
 
                 if (this_next_wakeup < ret_next_wakeup)
@@ -4208,13 +4288,43 @@ const char *rd_kafka_broker_name (rd_kafka_broker_t *rkb) {
  * @brief Send dummy OP to broker thread to wake it up from IO sleep.
  *
  * @locality any
- * @locks none
+ * @locks any
  */
 void rd_kafka_broker_wakeup (rd_kafka_broker_t *rkb) {
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_WAKEUP);
         rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
         rd_kafka_q_enq(rkb->rkb_ops, rko);
         rd_rkb_dbg(rkb, QUEUE, "WAKEUP", "Wake-up");
+}
+
+/**
+ * @brief Wake up all broker threads that are in at least state \p min_state
+ *
+ * @locality any
+ * @locks none: rd_kafka_*lock() MUST NOT be held
+ *
+ * @returns the number of broker threads woken up
+ */
+int rd_kafka_all_brokers_wakeup (rd_kafka_t *rk, int min_state) {
+        int cnt = 0;
+        rd_kafka_broker_t *rkb;
+
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                int do_wakeup;
+
+                rd_kafka_broker_lock(rkb);
+                do_wakeup = (int)rkb->rkb_state >= min_state;
+                rd_kafka_broker_unlock(rkb);
+
+                if (do_wakeup) {
+                        rd_kafka_broker_wakeup(rkb);
+                        cnt += 1;
+                }
+        }
+        rd_kafka_rdunlock(rk);
+
+        return cnt;
 }
 
 

@@ -128,11 +128,8 @@ int RdKafka::ssl_cert_verify_cb_trampoline(char *cert, size_t len, void *opaque)
     RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
 #if WITH_SSL
-    return handle->cert_verify_cb_->cert_verify_cb(cert, len) ? 1 : 0;
+    return handle->ssl_cert_verify_cb_->ssl_cert_verify_cb(cert, len) ? 1 : 0;
 #else
-    RD_UNUSED(cert);
-    RD_UNUSED(len);
-
     return 0;
 #endif
 }
@@ -142,11 +139,8 @@ size_t RdKafka::ssl_cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type
     RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
 #if WITH_SSL
-    return handle->cert_retrieve_cb_->cert_retrieve_cb(static_cast<RdKafka::CertRetrieveCb::Type>(type), buffer);
+    return handle->ssl_cert_retrieve_cb_->ssl_cert_retrieve_cb(static_cast<RdKafka::SslCertificateRetrieveCb::Type>(type), buffer);
 #else
-    RD_UNUSED(type);
-    RD_UNUSED(cert);
-
     return 0;
 #endif
 }
@@ -260,14 +254,14 @@ void RdKafka::HandleImpl::set_common_config (RdKafka::ConfImpl *confimpl) {
       rd_kafka_conf_set_ssl_cert_verify_cb(confimpl->rk_conf_,
           RdKafka::ssl_cert_verify_cb_trampoline);
 
-      cert_verify_cb_ = confimpl->ssl_cert_verify_cb_;
+      ssl_cert_verify_cb_ = confimpl->ssl_cert_verify_cb_;
   }
 
   if (confimpl->ssl_cert_retrieve_cb_) {
       rd_kafka_conf_set_ssl_cert_retrieve_cb(confimpl->rk_conf_,
           RdKafka::ssl_cert_retrieve_cb_trampoline);
 
-      cert_retrieve_cb_ = confimpl->ssl_cert_retrieve_cb_;
+      ssl_cert_retrieve_cb_ = confimpl->ssl_cert_retrieve_cb_;
   }
 
   if (confimpl->open_cb_) {

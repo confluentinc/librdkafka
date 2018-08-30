@@ -69,7 +69,6 @@
 #if WITH_SSL
 static mtx_t *rd_kafka_ssl_locks;
 static int    rd_kafka_ssl_locks_cnt;
-static int    rd_kafka_ssl_verify_context_index;
 #endif
 
 
@@ -484,8 +483,6 @@ void rd_kafka_transport_ssl_term (void) {
 		mtx_destroy(&rd_kafka_ssl_locks[i]);
 
 	rd_free(rd_kafka_ssl_locks);
-
-    rd_kafka_ssl_verify_context_index = -1;
 }
 
 
@@ -510,7 +507,6 @@ void rd_kafka_transport_ssl_init (void) {
     ERR_load_BIO_strings();
 	OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
-    rd_kafka_ssl_verify_context_index = SSL_get_ex_new_index(0, "ssl verify context", NULL, NULL, NULL);
 }
 
 
@@ -671,126 +667,70 @@ static int rd_kafka_transport_ssl_passwd_cb (char *buf, int size, int rwflag,
 	return pwlen;
 }
 
-int verify_broker_callback(X509_STORE_CTX* ctx, void* arg)
+/**
+* OpenSSL verify broker certificate callback
+*
+* @returns 1 on success when the broker certificate is valid and 0 when the certificate is not valid.
+*/
+int verify_broker_callback(X509_STORE_CTX *ctx, void *arg)
 {
     int validate = 0;
     char errstr[512];
     rd_kafka_t* rk = NULL;
+    X509* cert = NULL;
 
     errstr[0] = '\0';
-    if (arg) {
-        rk = arg;
+    rk = arg;
 
-        X509* cert = NULL;
-        rd_kafka_dbg(rk, SECURITY, "SSL",
-            "Verification of peer certificate.");
 #ifndef __mips__
-        if(ctx)
-            cert = ctx->cert;
+    if(ctx)
+        cert = ctx->cert;
 #endif
-        if (cert) {
-            int len;
-            char* buf = NULL;
+    if (cert) {
+        int len;
+        char* buf = NULL;
 
-            char *subj = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
-            char *issuer = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
+        char *subj = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
+        char *issuer = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
 
-            if (subj && issuer) {
-                rd_kafka_dbg(rk, SECURITY, "SSL", 
-                    "Validating certificate Subject: %s Issurer: %s", subj, issuer);
-            }
-
-            if (subj)
-                OPENSSL_free(subj);
-            if (issuer)
-                OPENSSL_free(issuer);
-
-            len = i2d_X509(cert, &buf);
-            rd_kafka_dbg(rk, SECURITY, "SSL",
-                "Calling client callback to verify certificate");
-
-            if (!rk->rk_conf.ssl.cert_verify_cb(buf, len, rk->rk_conf.opaque)) {
-                rd_snprintf(errstr, sizeof(errstr),
-                    "client certificate verification callback failed.");
-
-                validate = 0;
-                X509_STORE_CTX_set_error(ctx, X509_V_ERR_CERT_UNTRUSTED);
-            }
-            else {
-                rd_kafka_dbg(rk, SECURITY, "SSL",
-                    "Client callback successfully verified certificate.");
-
-                validate = 1;
-            }
-            if (buf)
-                OPENSSL_free(buf);
+        if (subj && issuer) {
+            rd_kafka_dbg(rk, SECURITY, "SSL", 
+                "Validating certificate Subject: %s Issurer: %s", subj, issuer);
         }
-        else
+
+        if (subj)
+            OPENSSL_free(subj);
+        if (issuer)
+            OPENSSL_free(issuer);
+
+        len = i2d_X509(cert, &buf);
+        rd_kafka_dbg(rk, SECURITY, "SSL",
+            "Calling callback to verify certificate");
+
+        if (!rk->rk_conf.ssl.ssl_cert_verify_cb(buf, len, rk->rk_conf.opaque)) {
             rd_snprintf(errstr, sizeof(errstr),
-                "failed to retrieve X509 cert from ctx");
+                "client certificate verification callback failed.");
+
+            validate = 0;
+            X509_STORE_CTX_set_error(ctx, X509_V_ERR_CERT_UNTRUSTED);
+        }
+        else {
+            rd_kafka_dbg(rk, SECURITY, "SSL",
+                "Client callback successfully verified certificate.");
+
+            validate = 1;
+        }
+        if (buf)
+            OPENSSL_free(buf);
     }
+    else
+        rd_snprintf(errstr, sizeof(errstr),
+            "failed to retrieve X509 cert from ctx");
 
     if (strlen(errstr) > 0)
-        rd_kafka_log(rk, LOG_ERR, "SSL", "%s", errstr);
+        rd_kafka_log(rk, LOG_ERR, "SSL: failed to verify broker certificate due to ", "%s", errstr);
 
     return validate;
-}
-
-void ssl_info_callback(const SSL *ssl, int type, int ret)
-{
-    char errstr[512];
-    char *str;
-    int w;
-    int len = 0;
-
-    errstr[0] = '\0';
-    str = errstr;
-    rd_kafka_t* rk = SSL_get_ex_data(ssl, rd_kafka_ssl_verify_context_index);
-    w = type& ~SSL_ST_MASK;
-
-    if (w & SSL_ST_CONNECT)
-        rd_snprintf(str, sizeof(errstr),
-            "SSL_connect ");
-
-    else if (w & SSL_ST_ACCEPT)
-        rd_snprintf(str, sizeof(errstr),
-            "SSL_accept ");
-
-    else
-        rd_snprintf(str, sizeof(errstr),
-            "undefined ");
-
-    len = (int)strlen(errstr);
-    str += len;
-
-    if (type & SSL_CB_LOOP)
-        rd_snprintf(str, sizeof(errstr) - len,
-            "%s:%s\n", str, SSL_state_string_long(ssl));
-
-    else if (type & SSL_CB_ALERT)
-    {
-        rd_snprintf(str, sizeof(errstr) - len,
-            "SSL alert %s:%s:%s\n",
-            (type & SSL_CB_READ) ? "read" : "write",
-            SSL_alert_type_string_long(ret),
-            SSL_alert_desc_string_long(ret));
-    }
-    else if (type & SSL_CB_EXIT)
-    {
-        if (ret == 0)
-            rd_snprintf(str, sizeof(errstr) -len,
-                "%s:failed in %s\n",
-                str, SSL_state_string_long(ssl));
-        else if (ret < 0)
-        {
-            rd_snprintf(str, sizeof(errstr) - len,
-                "%s:error in %s\n",
-                str, SSL_state_string_long(ssl));
-        }
-    }
-
-    if (strlen(errstr) > 0)
-        rd_kafka_log(rk, LOG_INFO, "SSL", "%s", errstr);
 }
 
 /**
@@ -823,15 +763,6 @@ static int rd_kafka_transport_ssl_connect (rd_kafka_broker_t *rkb,
 	    !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
 		goto fail;
 #endif
-
-    if (rktrans->rktrans_rkb->rkb_rk->rk_conf.debug | RD_KAFKA_DBG_SECURITY) {
-
-        rd_kafka_dbg(rktrans->rktrans_rkb->rkb_rk, SECURITY, "SSL",
-            "Registering handshake debug info");
-
-        SSL_set_ex_data(rktrans->rktrans_ssl, rd_kafka_ssl_verify_context_index, rktrans->rktrans_rkb->rkb_rk);
-        SSL_set_info_callback(rktrans->rktrans_ssl, ssl_info_callback);
-    }
 
     rd_kafka_transport_ssl_clear_error(rktrans);
 
@@ -952,18 +883,18 @@ static int rd_kafka_transport_ssl_handshake (rd_kafka_transport_t *rktrans) {
 */
 int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
     SSL_CTX *ctx,
-    char **errstr, size_t *errstr_size) {
+    char *errstr, size_t errstr_size) {
 
     int r;
 
-    if (rk->rk_conf.ssl.cert_retrieve_cb) {
+    if (rk->rk_conf.ssl.ssl_cert_retrieve_cb) {
 
         char *buffer = NULL;
         size_t len = 0;
 
         rd_kafka_dbg(rk, SECURITY, "SSL",
             "Calling callback to retrieve client's public key certificate");
-        len = rk->rk_conf.ssl.cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PUBLIC_KEY, &buffer, rk->rk_conf.opaque);
+        len = rk->rk_conf.ssl.ssl_cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PUBLIC_KEY, &buffer, rk->rk_conf.opaque);
         if (len) {
             X509* cert;
             rd_kafka_dbg(rk, SECURITY, "SSL",
@@ -973,7 +904,7 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
             cert = X509_new();
             if (cert) {
                 if (!d2i_X509(&cert, (const unsigned char**)&buffer, (long)len))
-                    rd_snprintf(*errstr, *errstr_size,
+                    rd_snprintf(errstr, errstr_size,
                         "Failed to parse public key certificate with %zu bytes",
                         len);
 
@@ -983,7 +914,7 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
                 if (r != 1)
                     return -1;
             } else
-                rd_snprintf(*errstr, *errstr_size,
+                rd_snprintf(errstr, errstr_size,
                     "Failed to initialize X509");
         } else {
             rd_kafka_dbg(rk, SECURITY, "SSL",
@@ -993,7 +924,7 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
         /* Get private key */
         rd_kafka_dbg(rk, SECURITY, "SSL",
             "Calling callback to retrieve client's private key certificate");
-        len = rk->rk_conf.ssl.cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY, &buffer, rk->rk_conf.opaque);
+        len = rk->rk_conf.ssl.ssl_cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY, &buffer, rk->rk_conf.opaque);
         if (len) {
             rd_kafka_dbg(rk, SECURITY, "SSL",
                 "Retrieved client's private key certificate %zu bytes",
@@ -1006,7 +937,7 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
                     /*Get the private key password*/
                     rd_kafka_dbg(rk, SECURITY, "SSL",
                         "Calling callback to retrieve client's private key password");
-                    len = rk->rk_conf.ssl.cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS, &buffer, rk->rk_conf.opaque);
+                    len = rk->rk_conf.ssl.ssl_cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS, &buffer, rk->rk_conf.opaque);
                     if (len) {
                         rd_kafka_dbg(rk, SECURITY, "SSL",
                             "Retrieved client's private key password %zu bytes",
@@ -1015,7 +946,7 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
                         X509 *cert;
                         STACK_OF(X509) *ca = NULL;
                         if (!PKCS12_parse(p12, (const char*)buffer, &pkey, &cert, &ca)) {
-                            rd_snprintf(*errstr, *errstr_size,
+                            rd_snprintf(errstr, errstr_size,
                                 "Error reading PKCS#12");
 
                             PKCS12_free(p12);
@@ -1061,12 +992,12 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
 
                     PKCS12_free(p12);
                 } else
-                    rd_snprintf(*errstr, *errstr_size,
+                    rd_snprintf(errstr, errstr_size,
                         "d2i_PKCS12_bio failed");
 
                 BIO_free(bio);
             } else
-                rd_snprintf(*errstr, *errstr_size,
+                rd_snprintf(errstr, errstr_size,
                     "Failed to initialize BIO");
         } else {
             rd_kafka_dbg(rk, SECURITY, "SSL",
@@ -1149,15 +1080,10 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 	}
 
     /* Register the peer verify callback on the context */
-    if (rk->rk_conf.ssl.cert_verify_cb) {
-
-        unsigned int mode = SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE | SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
-
-        rd_kafka_dbg(rk, SECURITY, "SSL",
-            "Setting verification mode %u", mode);
+    if (rk->rk_conf.ssl.ssl_cert_verify_cb) {
 
         SSL_CTX_set_verify(
-            ctx,mode,
+            ctx, SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
             NULL);
 
         rd_kafka_dbg(rk, SECURITY, "SSL",
@@ -1170,7 +1096,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
     }
 
     /* Register the client certificates */
-    r = rd_kafka_transport_set_client_certificates(rk, ctx, &errstr, &errstr_size);
+    r = rd_kafka_transport_set_client_certificates(rk, ctx, errstr, errstr_size);
     if (r != 1)
         goto fail;
 

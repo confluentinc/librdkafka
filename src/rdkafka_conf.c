@@ -534,11 +534,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	"Client's keystore (PKCS#12) password."
 	},
     { _RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
-    _RK(ssl.cert_verify_cb),
+    _RK(ssl.ssl_cert_verify_cb),
     "Verify the broker certificate callback."
     },
     { _RK_GLOBAL, "ssl.certificate.retrieve_cb", _RK_C_PTR,
-    _RK(ssl.cert_retrieve_cb),
+    _RK(ssl.ssl_cert_retrieve_cb),
     "Retrieve client certificates callback."
     },
 
@@ -1902,26 +1902,22 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
 rd_kafka_conf_res_t
 rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
     int (*ssl_cert_verify_cb) (char *cert, size_t len, void *opaque)) {
-#ifdef __mips__
-    return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
-#endif
-#if WITH_SSL
-    conf->ssl.cert_verify_cb = ssl_cert_verify_cb;
+#if defined(__mips__) || !WITH_SSL
+    return RD_KAFKA_CONF_UNKNOWN;
 #else
-    RD_UNUSED(conf);
-    RD_UNUSED(ssl_cert_verify_cb);
+    conf->ssl.ssl_cert_verify_cb = ssl_cert_verify_cb;
+    return RD_KAFKA_CONF_OK;
 #endif
-
-    return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-void rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
+rd_kafka_conf_res_t
+rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
     size_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer, void *opaque)) {
 #if WITH_SSL
-    conf->ssl.cert_retrieve_cb = ssl_cert_retrieve_cb;
+    conf->ssl.ssl_cert_retrieve_cb = ssl_cert_retrieve_cb;
+    return RD_KAFKA_CONF_OK;
 #else
-    RD_UNUSED(conf);
-    RD_UNUSED(ssl_cert_retrieve_cb);
+    return RD_KAFKA_CONF_UNKNOWN;
 #endif
 }
 

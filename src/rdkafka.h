@@ -1682,12 +1682,12 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
 *
 * @brief Type of certificates
 *
-* @sa rd_kafka_conf_set_get_cert_cb()
+* @sa rd_kafka_conf_set_ssl_cert_retrieve_cb()
 */
 typedef enum rd_kafka_certificate_type_t {
-    RD_KAFKA_CERTIFICATE_PUBLIC_KEY, 
-    RD_KAFKA_CERTIFICATE_PRIVATE_KEY,
-    RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS
+    RD_KAFKA_CERTIFICATE_PUBLIC_KEY,        /**< Client's public key */
+    RD_KAFKA_CERTIFICATE_PRIVATE_KEY,       /**< Client's private key */
+    RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS   /**< Password of private key */
 } rd_kafka_certificate_type_t;
 
 /**
@@ -1705,7 +1705,7 @@ rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
 *
 */
 RD_EXPORT
-void rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
+rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
     size_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer, void *opaque));
 
 /**

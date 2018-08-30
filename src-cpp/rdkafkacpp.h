@@ -718,7 +718,7 @@ public:
 /**
 * @brief SSL certificate verify callback class
 */
-class RD_EXPORT CertVerifyCb {
+class RD_EXPORT SslCertificateVerifyCb {
 public:
     /**
     * @brief Set SSL certificate verification callback.
@@ -727,15 +727,15 @@ public:
     * by this callback.
     * @returns true if the SSL certificate is successfully verified otherwise false.
     */
-    virtual bool cert_verify_cb(char* cert, size_t len) = 0;
+    virtual bool ssl_cert_verify_cb(char *cert, size_t len) = 0;
 
-    virtual ~CertVerifyCb() {}
+    virtual ~SslCertificateVerifyCb() {}
 };
 
 /**
 * @brief Certificate retrieve callback class
 */
-class RD_EXPORT CertRetrieveCb {
+class RD_EXPORT SslCertificateRetrieveCb {
 public:
     /** @brief Type of the retrieve certificate callback */
     enum Type {
@@ -753,7 +753,8 @@ public:
     * @remark upon compleation the buffer must point to a valid buffer.
     *
     * @param buffer must point to valid data upon compleation.  It is the responsibility of the
-    *   implementation to ensure that the data is valid until the class is destructed.
+    *   implementation to ensure that the data is valid until the class is destructed.  This class
+    *   insance must outlive the RdKafka client instance.
     *
     * @param type the type of buffer which will be retrieved by the callback.
     *   CERTIFICATE_PUBLIC_KEY
@@ -761,14 +762,15 @@ public:
     *   CERTIFICATE_PRIVATE_KEY_PASS
     *
     * @remark When type is CERTIFICATE_PUBLIC_KEY or CERTIFICATE_PRIVATE_KEY then upon return the buffer
-    * must point to the certificate.  When type is For CERTIFICATE_PRIVATE_KEY_PASS then buffer
-    * must point to a narrow string containing the password of the private key.
+    *    must point to the certificate.  When type is For CERTIFICATE_PRIVATE_KEY_PASS then buffer
+    *    must point to a narrow string containing the password of the private key.
     *
-    * @returns the number of bytes in the returned buffer.
+    * @returns the number of bytes in the returned buffer or -1 on error, in which case the implemention 
+    *    must provide a human readable error string in errstr.
     */
-    virtual size_t cert_retrieve_cb(Type type, char** buffer) = 0;
+    virtual size_t ssl_cert_retrieve_cb(Type type, char **buffer) = 0;
 
-    virtual ~CertRetrieveCb() {}
+    virtual ~SslCertificateRetrieveCb() {}
 };
 
 /**
@@ -936,12 +938,12 @@ class RD_EXPORT Conf {
       @remark this is not supported on the MIPS platform
   */
   virtual Conf::ConfResult set(const std::string &name,
-                               CertVerifyCb *ssl_cert_verify_cb,
+                               SslCertificateVerifyCb *ssl_cert_verify_cb,
                                std::string &errstr) = 0;
 
   /** @brief Use with \p name = \c \"ssl_cert_retrieve_cb\" */
   virtual Conf::ConfResult set(const std::string &name,
-                               CertRetrieveCb *ssl_cert_retrieve_cb,
+                               SslCertificateRetrieveCb *ssl_cert_retrieve_cb,
                                std::string &errstr) = 0;
 
   /** @brief Query single configuration value
@@ -998,11 +1000,11 @@ class RD_EXPORT Conf {
    *           returns the value in \p offset_commit_cb. */
   virtual Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const = 0;
 
-  /** @brief Use with \p name = \c \"ssl_verify_cb\" */
-  virtual Conf::ConfResult get(CertVerifyCb *&cert_verify_cb) const = 0;
+  /** @brief Use with \p name = \c \"ssl_cert_verify_cb\" */
+  virtual Conf::ConfResult get(SslCertificateVerifyCb *&ssl_cert_verify_cb) const = 0;
 
-  /** @brief Use with \p name = \c \"ssl_retrieve_cb\" */
-  virtual Conf::ConfResult get(CertRetrieveCb *&cert_retrieve_cb) const = 0;
+  /** @brief Use with \p name = \c \"ssl_cert_retrieve_cb\" */
+  virtual Conf::ConfResult get(SslCertificateRetrieveCb *&ssl_cert_retrieve_cb) const = 0;
 
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */
@@ -1011,7 +1013,6 @@ class RD_EXPORT Conf {
   /** @brief Use with \p name = \c \"consume_cb\" */
   virtual Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
 				std::string &errstr) = 0;
-
 };
 
 /**@}*/

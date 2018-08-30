@@ -1901,7 +1901,9 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
 
 rd_kafka_conf_res_t
 rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
-    int (*ssl_cert_verify_cb) (char *cert, size_t len, void *opaque)) {
+    int (*ssl_cert_verify_cb) (char *cert, size_t len,
+                               char *errstr, size_t errstr_size,
+                               void *opaque)) {
 #if defined(__mips__) || !WITH_SSL
     return RD_KAFKA_CONF_UNKNOWN;
 #else
@@ -1912,7 +1914,9 @@ rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
 
 rd_kafka_conf_res_t
 rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
-    size_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer, void *opaque)) {
+    ssize_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer,
+                                    char *errstr, size_t errstr_size,
+                                    void *opaque)) {
 #if WITH_SSL
     conf->ssl.ssl_cert_retrieve_cb = ssl_cert_retrieve_cb;
     return RD_KAFKA_CONF_OK;

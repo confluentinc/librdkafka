@@ -123,23 +123,30 @@ int RdKafka::open_cb_trampoline (const char *pathname, int flags, mode_t mode,
   return handle->open_cb_->open_cb(pathname, flags, static_cast<int>(mode));
 }
 
-int RdKafka::ssl_cert_verify_cb_trampoline(char *cert, size_t len, void *opaque)
-{
+int RdKafka::ssl_cert_verify_cb_trampoline(char *cert, size_t len, char *errstr, size_t errstr_size, void *opaque) {
     RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
 #if WITH_SSL
-    return handle->ssl_cert_verify_cb_->ssl_cert_verify_cb(cert, len) ? 1 : 0;
+    std::string errbuf;
+    bool res = handle->ssl_cert_verify_cb_->ssl_cert_verify_cb(cert, len, errbuf);
+    if(!res)
+        memcpy_s(errstr, errstr_size, errbuf.c_str(), errbuf.size() > 0 ? errbuf.size() + 1 : 0);
+    return res ? 1 : 0;
 #else
     return 0;
 #endif
 }
 
-size_t RdKafka::ssl_cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, char **buffer, void *opaque)
-{
+ssize_t RdKafka::ssl_cert_retrieve_cb_trampoline(rd_kafka_certificate_type_t type, char **buffer,
+                                                char *errstr, size_t errstr_size, void *opaque) {
     RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
 
 #if WITH_SSL
-    return handle->ssl_cert_retrieve_cb_->ssl_cert_retrieve_cb(static_cast<RdKafka::SslCertificateRetrieveCb::Type>(type), buffer);
+    std::string errbuf;
+    ssize_t res = handle->ssl_cert_retrieve_cb_->ssl_cert_retrieve_cb(static_cast<RdKafka::SslCertificateRetrieveCb::Type>(type), buffer, errbuf);
+    if(res == -1)
+        memcpy_s(errstr, errstr_size, errbuf.c_str(), errbuf.size() > 0 ? errbuf.size() + 1 : 0);
+    return res;
 #else
     return 0;
 #endif

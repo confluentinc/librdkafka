@@ -54,6 +54,12 @@
 
 
 #ifdef _MSC_VER
+#ifndef ssize_t
+#ifndef _BASETSD_H_
+#include <basetsd.h>
+#endif
+typedef SSIZE_T ssize_t;
+#endif
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_STATICLIB
 #define RD_EXPORT
@@ -725,9 +731,17 @@ public:
     *
     * The verification of the broker certificate will be processed
     * by this callback.
-    * @returns true if the SSL certificate is successfully verified otherwise false.
+    *
+    * @param cert the binary encoded certificate
+    *
+    * @param len the size of cert in bytes
+    *
+    * @param errstr human readable error message which implementer must populate on failure.
+    *
+    * @returns true if the SSL certificate is successfully verified otherwise false
+    *    in which case the implementation must provide a human readable error string in errstr.
     */
-    virtual bool ssl_cert_verify_cb(char *cert, size_t len) = 0;
+    virtual bool ssl_cert_verify_cb(char *cert, size_t len, std::string &errstr) = 0;
 
     virtual ~SslCertificateVerifyCb() {}
 };
@@ -761,6 +775,8 @@ public:
     *   CERTIFICATE_PRIVATE_KEY
     *   CERTIFICATE_PRIVATE_KEY_PASS
     *
+    * @parm errstr human readable error message which implementer must populate on failure.
+    *
     * @remark When type is CERTIFICATE_PUBLIC_KEY or CERTIFICATE_PRIVATE_KEY then upon return the buffer
     *    must point to the certificate.  When type is For CERTIFICATE_PRIVATE_KEY_PASS then buffer
     *    must point to a narrow string containing the password of the private key.
@@ -768,7 +784,7 @@ public:
     * @returns the number of bytes in the returned buffer or -1 on error, in which case the implemention 
     *    must provide a human readable error string in errstr.
     */
-    virtual size_t ssl_cert_retrieve_cb(Type type, char **buffer) = 0;
+    virtual ssize_t ssl_cert_retrieve_cb(Type type, char **buffer, std::string &errstr) = 0;
 
     virtual ~SslCertificateRetrieveCb() {}
 };

@@ -1698,7 +1698,9 @@ typedef enum rd_kafka_certificate_type_t {
 */
 RD_EXPORT
 rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
-    int (*ssl_cert_verify_cb) (char *cert, size_t len, void *opaque));
+    int (*ssl_cert_verify_cb) (char *cert, size_t len,
+                               char *errstr, size_t errstr_size,
+                               void *opaque));
 
 /**
 * @brief Sets the callback to recieve the client certificate
@@ -1706,7 +1708,9 @@ rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
 */
 RD_EXPORT
 rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
-    size_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer, void *opaque));
+    ssize_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer,
+                                    char *errstr, size_t errstr_size,
+                                    void *opaque));
 
 /**
  * @brief Sets the application's opaque pointer that will be passed to callbacks

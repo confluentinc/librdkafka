@@ -159,8 +159,8 @@ struct rd_kafka_conf_s {
 		char *crl_location;
 		char *keystore_location;
 		char *keystore_password;
-        int (*ssl_cert_verify_cb) (char *cert, size_t len, void *opaque);
-        size_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer, void *opaque);
+        int (*ssl_cert_verify_cb) (char *cert, size_t len, char *errstr, size_t errstr_size, void *opaque);
+        ssize_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer, char *errstr, size_t errstr_size, void *opaque);
 	} ssl;
 #endif
 

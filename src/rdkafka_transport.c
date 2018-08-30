@@ -668,11 +668,15 @@ static int rd_kafka_transport_ssl_passwd_cb (char *buf, int size, int rwflag,
 }
 
 /**
-* OpenSSL verify broker certificate callback
+* OpenSSL callback to valdate broker certificate
 *
-* @returns 1 on success when the broker certificate is valid and 0 when the certificate is not valid.
+* @param ctx OpenSSL store context used by the callback.
+*
+* @param arg the param pass to the callback which in this case is the rd_kafka_t
+*
+* @return 1 on success when the broker certificate is valid and 0 when the certificate is not valid.
 */
-int verify_broker_callback(X509_STORE_CTX *ctx, void *arg)
+int rd_kafka_transport_ssl_verify_broker_callback(X509_STORE_CTX *ctx, void *arg)
 {
     int validate = 0;
     char errstr[512];
@@ -689,7 +693,9 @@ int verify_broker_callback(X509_STORE_CTX *ctx, void *arg)
     if (cert) {
         int len;
         char* buf = NULL;
+        char errbuf[512];
 
+        errbuf[0] = '\0';
         char *subj = X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0);
         char *issuer = X509_NAME_oneline(X509_get_issuer_name(cert), NULL, 0);
 
@@ -707,16 +713,16 @@ int verify_broker_callback(X509_STORE_CTX *ctx, void *arg)
         rd_kafka_dbg(rk, SECURITY, "SSL",
             "Calling callback to verify certificate");
 
-        if (!rk->rk_conf.ssl.ssl_cert_verify_cb(buf, len, rk->rk_conf.opaque)) {
+        if (!rk->rk_conf.ssl.ssl_cert_verify_cb(buf, len, errbuf, sizeof(errbuf), rk->rk_conf.opaque)) {
             rd_snprintf(errstr, sizeof(errstr),
-                "client certificate verification callback failed.");
+                "broker certificate verification callback failed because of %s.", errbuf);
 
             validate = 0;
             X509_STORE_CTX_set_error(ctx, X509_V_ERR_CERT_UNTRUSTED);
         }
         else {
             rd_kafka_dbg(rk, SECURITY, "SSL",
-                "Client callback successfully verified certificate.");
+                "broker callback successfully verified certificate.");
 
             validate = 1;
         }
@@ -890,12 +896,14 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
     if (rk->rk_conf.ssl.ssl_cert_retrieve_cb) {
 
         char *buffer = NULL;
-        size_t len = 0;
+        ssize_t len = 0;
+        char errbuf[512];
 
+        errbuf[0] = '\0';
         rd_kafka_dbg(rk, SECURITY, "SSL",
             "Calling callback to retrieve client's public key certificate");
-        len = rk->rk_conf.ssl.ssl_cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PUBLIC_KEY, &buffer, rk->rk_conf.opaque);
-        if (len) {
+        len = rk->rk_conf.ssl.ssl_cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PUBLIC_KEY, &buffer, errbuf, sizeof(errbuf), rk->rk_conf.opaque);
+        if (len != -1) {
             X509* cert;
             rd_kafka_dbg(rk, SECURITY, "SSL",
                 "Retrieved client's public key certificate %zu bytes",
@@ -917,15 +925,15 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
                 rd_snprintf(errstr, errstr_size,
                     "Failed to initialize X509");
         } else {
-            rd_kafka_dbg(rk, SECURITY, "SSL",
-                "Callback failed to return valid public key certificate");
+            rd_snprintf(errstr, errstr_size,
+                "Callback failed to return valid public key certificate because of %s", errbuf);
             return -1;
         }
         /* Get private key */
         rd_kafka_dbg(rk, SECURITY, "SSL",
             "Calling callback to retrieve client's private key certificate");
-        len = rk->rk_conf.ssl.ssl_cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY, &buffer, rk->rk_conf.opaque);
-        if (len) {
+        len = rk->rk_conf.ssl.ssl_cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY, &buffer, errbuf, sizeof(errbuf), rk->rk_conf.opaque);
+        if (len != -1) {
             rd_kafka_dbg(rk, SECURITY, "SSL",
                 "Retrieved client's private key certificate %zu bytes",
                 len);
@@ -937,8 +945,8 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
                     /*Get the private key password*/
                     rd_kafka_dbg(rk, SECURITY, "SSL",
                         "Calling callback to retrieve client's private key password");
-                    len = rk->rk_conf.ssl.ssl_cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS, &buffer, rk->rk_conf.opaque);
-                    if (len) {
+                    len = rk->rk_conf.ssl.ssl_cert_retrieve_cb(RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS, &buffer, errbuf, sizeof(errbuf), rk->rk_conf.opaque);
+                    if (len != -1) {
                         rd_kafka_dbg(rk, SECURITY, "SSL",
                             "Retrieved client's private key password %zu bytes",
                             len);
@@ -988,8 +996,12 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
                                 return -1;
                             }
                         }
-                    }
-
+                    } else {
+                        rd_snprintf(errstr, errstr_size,
+                            "Callback failed to return valid private key password because of %s", errbuf);
+                        
+                        return -1;
+                        }
                     PKCS12_free(p12);
                 } else
                     rd_snprintf(errstr, errstr_size,
@@ -1000,8 +1012,8 @@ int rd_kafka_transport_set_client_certificates(rd_kafka_t *rk,
                 rd_snprintf(errstr, errstr_size,
                     "Failed to initialize BIO");
         } else {
-            rd_kafka_dbg(rk, SECURITY, "SSL",
-                "Callback failed to return valid private key certificate");
+            rd_snprintf(errstr, errstr_size,
+                "Callback failed to return valid private key certificate because of %s", errbuf);
             return -1;
         }
     }

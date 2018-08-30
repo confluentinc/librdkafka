@@ -709,7 +709,7 @@ int rd_kafka_transport_ssl_verify_broker_callback(X509_STORE_CTX *ctx, void *arg
         if (issuer)
             OPENSSL_free(issuer);
 
-        len = i2d_X509(cert, &buf);
+        len = i2d_X509(cert, (unsigned char**)&buf);
         rd_kafka_dbg(rk, SECURITY, "SSL",
             "Calling callback to verify certificate");
 
@@ -1103,7 +1103,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 
         SSL_CTX_set_cert_verify_callback(
             ctx,
-            verify_broker_callback,
+            rd_kafka_transport_ssl_verify_broker_callback,
             rk);
     }
 

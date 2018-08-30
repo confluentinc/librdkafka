@@ -71,6 +71,7 @@ typedef SSIZE_T ssize_t;
 #endif
 #endif
 #else
+#include <sys/types.h>
 #define RD_EXPORT
 #endif
 

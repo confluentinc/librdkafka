@@ -29,6 +29,7 @@
 #include <iostream>
 #include <string>
 #include <list>
+#include <string.h>
 
 #include "rdkafkacpp_int.h"
 

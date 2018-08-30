@@ -28,25 +28,17 @@
 
 
 
-#ifndef _MSC_VER
-#define _GNU_SOURCE
-/*
- * AIX defines this and the value needs to be set correctly. For Solaris,
- * src/rd.h defines _POSIX_SOURCE to be 200809L, which corresponds to XPG7,
- * which itself is not compatible with _XOPEN_SOURCE on that platform.
- */
-#if !defined(_AIX) && !defined(__sun)
-#define _XOPEN_SOURCE
-#endif
-#include <signal.h>
-#endif
-
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
 
 #include "rd.h"
+
+#ifndef _MSC_VER
+#include <signal.h>
+#endif
+
 #include "rdkafka_int.h"
 #include "rdkafka_msg.h"
 #include "rdkafka_msgset.h"

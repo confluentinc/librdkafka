@@ -38,6 +38,16 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L  /* for timespec on solaris */
 #endif
+/*
+ * AIX defines this and the value needs to be set correctly. For Solaris,
+ * src/rd.h defines _POSIX_SOURCE to be 200809L, which corresponds to XPG7,
+ * which itself is not compatible with _XOPEN_SOURCE on that platform.
+ */
+#if !defined(_AIX) && !defined(__sun)
+#define _XOPEN_SOURCE 700
+#endif
+/* FreeBSD does not set __BSD_VISIBLE if _POSIX_C_SOURCE is defined at all */
+#define __BSD_VISIBLE 1
 #endif
 
 #include <stdio.h>

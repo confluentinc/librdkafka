@@ -52,6 +52,9 @@
 #include <vector>
 #include <stdint.h>
 
+#include <stdio.h>
+#include <inttypes.h>
+#include <sys/types.h>
 
 #ifdef _MSC_VER
 #ifndef ssize_t
@@ -71,7 +74,6 @@ typedef SSIZE_T ssize_t;
 #endif
 #endif
 #else
-#include <sys/types.h>
 #define RD_EXPORT
 #endif
 

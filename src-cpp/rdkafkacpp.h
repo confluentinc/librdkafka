@@ -51,8 +51,6 @@
 #include <list>
 #include <vector>
 #include <stdint.h>
-
-#include <inttypes.h>
 #include <sys/types.h>
 
 #ifdef _MSC_VER

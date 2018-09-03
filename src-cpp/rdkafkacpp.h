@@ -2034,15 +2034,17 @@ class RD_EXPORT Producer : public virtual Handle {
   /**
    * @brief RdKafka::Producer::produce() \p msgflags
    *
-   * These flags are optional and mutually exclusive.
+   * These flags are optional.
    */
   enum {
     RK_MSG_FREE = 0x1, /**< rdkafka will free(3) \p payload
-                         * when it is done with it. */
+                         * when it is done with it.
+                         * Mutually exclusive with RK_MSG_COPY. */
     RK_MSG_COPY = 0x2, /**< the \p payload data will be copied
                         * and the \p payload pointer will not
                         * be used by rdkafka after the
-                        * call returns. */
+                        * call returns.
+                        * Mutually exclusive with RK_MSG_FREE. */
     RK_MSG_BLOCK = 0x4  /**< Block produce*() on message queue
                          *   full.
                          *   WARNING:

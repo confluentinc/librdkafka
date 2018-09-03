@@ -75,11 +75,16 @@ static RD_INLINE rd_ts_t rd_clock (void) {
 	return ((rd_ts_t)tv.tv_sec * 1000000LLU) + (rd_ts_t)tv.tv_usec;
 #elif defined(_MSC_VER)
         LARGE_INTEGER now;
-        static RD_TLS LARGE_INTEGER freq;
-        if (!freq.QuadPart)
-                QueryPerformanceFrequency(&freq);
+        static RD_TLS double freq = 0.0;
+        if (!freq) {
+                LARGE_INTEGER ifreq;
+                QueryPerformanceFrequency(&ifreq);
+                /* Convert frequency to double to avoid overflow in
+                 * return statement */
+                freq = (double)ifreq.QuadPart / 1000000.0;
+        }
         QueryPerformanceCounter(&now);
-        return (now.QuadPart * 1000000) / freq.QuadPart;
+        return (rd_ts_t)((double)now.QuadPart / freq);
 #else
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);

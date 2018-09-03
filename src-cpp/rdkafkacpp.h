@@ -1594,7 +1594,7 @@ public:
    * topics's partitions to the consumers, depending on their subscription.
    *
    * The result of such an assignment is a rebalancing which is either
-   * handled automatically in librdkafka or can be overriden by the application
+   * handled automatically in librdkafka or can be overridden by the application
    * by providing a RdKafka::RebalanceCb.
    *
    * The rebalancing passes the assigned partition set to

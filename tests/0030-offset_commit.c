@@ -81,7 +81,7 @@ static void offset_commit_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                           "should be above committed_offset %"PRId64,
                           rktpar->offset, committed_offset);
         else if (rktpar->offset == committed_offset)
-                TEST_SAYL(1, "Current offset re-commited: %"PRId64"\n",
+                TEST_SAYL(1, "Current offset re-committed: %"PRId64"\n",
                           rktpar->offset);
         else
                 committed_offset = rktpar->offset;

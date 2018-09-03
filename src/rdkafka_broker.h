@@ -218,6 +218,13 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 
 /**
+ * @returns true if the broker state is UP or UPDATE
+ */
+#define rd_kafka_broker_state_is_up(state)              \
+        ((state) == RD_KAFKA_BROKER_STATE_UP ||         \
+         (state) == RD_KAFKA_BROKER_STATE_UPDATE)
+
+/**
  * @brief Broker comparator
  */
 static RD_UNUSED RD_INLINE int rd_kafka_broker_cmp (const void *_a,

@@ -3481,3 +3481,91 @@ int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
 
         return 1;
 }
+
+
+/**
+ * @brief Purge messages in partition queues.
+ *        Delivery reports will be enqueued for all purged messages, the error
+ *        code is set to RD_KAFKA_RESP_ERR__PURGE_QUEUE.
+ *
+ * @warning Only to be used with the producer
+ *
+ * @returns the number of messages purged
+ *
+ * @locality toppar handler thread
+ * @locks none
+ */
+int rd_kafka_toppar_handle_purge_queues (rd_kafka_toppar_t *rktp,
+                                         rd_kafka_broker_t *rkb,
+                                         int purge_flags) {
+        rd_kafka_msgq_t rkmq = RD_KAFKA_MSGQ_INITIALIZER(rkmq);
+        int cnt;
+
+        rd_assert(rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER);
+        rd_assert(thrd_is_current(rkb->rkb_thread));
+
+        if (!(purge_flags & RD_KAFKA_PURGE_F_QUEUE))
+                return 0;
+
+        /* xmit_msgq is owned by the toppar handler thread (broker thread)
+         * and requires no locking. */
+        rd_kafka_msgq_concat(&rkmq, &rktp->rktp_xmit_msgq);
+
+        rd_kafka_toppar_lock(rktp);
+        rd_kafka_msgq_concat(&rkmq, &rktp->rktp_msgq);
+        rd_kafka_toppar_unlock(rktp);
+
+        cnt = rd_kafka_msgq_len(&rkmq);
+        rd_kafka_dr_msgq(rktp->rktp_rkt, &rkmq, RD_KAFKA_RESP_ERR__PURGE_QUEUE);
+
+        return cnt;
+}
+
+
+/**
+ * @brief Purge queues for the unassigned toppars of all known topics.
+ *
+ * @locality application thread
+ * @locks none
+ */
+void rd_kafka_purge_ua_toppar_queues (rd_kafka_t *rk) {
+        rd_kafka_itopic_t *rkt;
+        int msg_cnt = 0, part_cnt = 0;
+
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+                shptr_rd_kafka_toppar_t *s_rktp;
+                rd_kafka_toppar_t *rktp;
+                int r;
+
+                rd_kafka_topic_rdlock(rkt);
+                s_rktp = rkt->rkt_ua;
+                if (s_rktp)
+                        s_rktp = rd_kafka_toppar_keep(
+                                rd_kafka_toppar_s2i(s_rktp));
+                rd_kafka_topic_rdunlock(rkt);
+
+                if (unlikely(!s_rktp))
+                        continue;
+
+
+                rktp = rd_kafka_toppar_s2i(s_rktp);
+                rd_kafka_toppar_lock(rktp);
+
+                r = rd_kafka_msgq_len(&rktp->rktp_msgq);
+                rd_kafka_dr_msgq(rkt, &rktp->rktp_msgq,
+                                 RD_KAFKA_RESP_ERR__PURGE_QUEUE);
+                rd_kafka_toppar_unlock(rktp);
+                rd_kafka_toppar_destroy(s_rktp);
+
+                if (r > 0) {
+                        msg_cnt += r;
+                        part_cnt++;
+                }
+        }
+        rd_kafka_rdunlock(rk);
+
+        rd_kafka_dbg(rk, QUEUE|RD_KAFKA_DBG_TOPIC, "PURGEQ",
+                     "Purged %i message(s) from %d UA-partition(s)",
+                     msg_cnt, part_cnt);
+}

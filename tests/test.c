@@ -175,6 +175,8 @@ _TEST_DECL(0082_fetch_max_bytes);
 _TEST_DECL(0083_cb_event);
 _TEST_DECL(0084_destroy_flags_local);
 _TEST_DECL(0084_destroy_flags);
+_TEST_DECL(0086_purge_local);
+_TEST_DECL(0086_purge_remote);
 _TEST_DECL(0088_produce_metadata_timeout);
 
 /* Manual tests */
@@ -284,6 +286,8 @@ struct test tests[] = {
         _TEST(0083_cb_event, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0084_destroy_flags_local, TEST_F_LOCAL),
         _TEST(0084_destroy_flags, 0),
+        _TEST(0086_purge_local, TEST_F_LOCAL),
+        _TEST(0086_purge_remote, 0),
 #if WITH_SOCKEM
         _TEST(0088_produce_metadata_timeout, TEST_F_SOCKEM),
 #endif
@@ -337,6 +341,16 @@ int test_socket_sockem_set_all (const char *key, int val) {
         TEST_UNLOCK();
 
         return cnt;
+}
+
+void test_socket_sockem_set (int s, const char *key, int value) {
+        sockem_t *skm;
+
+        TEST_LOCK();
+        skm = sockem_find(s);
+        if (skm)
+                sockem_set(skm, key, value, NULL);
+        TEST_UNLOCK();
 }
 
 void test_socket_close_all (struct test *test, int reinit) {

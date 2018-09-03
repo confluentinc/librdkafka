@@ -137,6 +137,8 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
         case RD_KAFKA_RESP_ERR__DESTROY:
 	case RD_KAFKA_RESP_ERR_INVALID_SESSION_TIMEOUT:
         case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:
+        case RD_KAFKA_RESP_ERR__PURGE_QUEUE:
+        case RD_KAFKA_RESP_ERR__PURGE_INFLIGHT:
         default:
                 actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
                 break;

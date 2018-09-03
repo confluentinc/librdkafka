@@ -90,7 +90,8 @@ const char *rd_kafka_secproto_names[] = {
 };
 
 
-
+static void rd_kafka_broker_handle_purge_queues (rd_kafka_broker_t *rkb,
+                                                 rd_kafka_op_t *rko);
 
 
 
@@ -553,6 +554,9 @@ rd_kafka_broker_bufq_purge_by_toppar (rd_kafka_broker_t *rkb,
  * If \p partial_cntp is non-NULL any partially sent buffers will increase
  * the provided counter by 1.
  *
+ * @param ApiKey Only match requests with this ApiKey, or -1 for all.
+ * @param now If 0, all buffers will time out, else the current clock.
+ *
  * @returns the number of timed out buffers.
  *
  * @locality broker thread
@@ -561,6 +565,7 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 					      int is_waitresp_q,
 					      rd_kafka_bufq_t *rkbq,
 					      int *partial_cntp,
+                                              int16_t ApiKey,
 					      rd_kafka_resp_err_t err,
 					      rd_ts_t now) {
 	rd_kafka_buf_t *rkbuf, *tmp;
@@ -570,6 +575,9 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 
 		if (likely(now && rkbuf->rkbuf_ts_timeout > now))
 			continue;
+
+                if (ApiKey != -1 && rkbuf->rkbuf_reqhdr.ApiKey != ApiKey)
+                        continue;
 
                 if (partial_cntp && rd_slice_offset(&rkbuf->rkbuf_reader) > 0)
                         (*partial_cntp)++;
@@ -607,17 +615,17 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
 
         /* In-flight requests waiting for response */
         inflight_cnt = rd_kafka_broker_bufq_timeout_scan(
-                rkb, 1, &rkb->rkb_waitresps, NULL,
+                rkb, 1, &rkb->rkb_waitresps, NULL, -1,
                 RD_KAFKA_RESP_ERR__TIMED_OUT, now);
 	/* Requests in retry queue */
 	retry_cnt = rd_kafka_broker_bufq_timeout_scan(
-		rkb, 0, &rkb->rkb_retrybufs, NULL,
+		rkb, 0, &rkb->rkb_retrybufs, NULL, -1,
 		RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
         /* Requests in local queue not sent yet.
          * partial_cnt is included in outq_cnt and denotes a request
          * that has been partially transmitted. */
         outq_cnt = rd_kafka_broker_bufq_timeout_scan(
-                rkb, 0, &rkb->rkb_outbufs, &partial_cnt,
+                rkb, 0, &rkb->rkb_outbufs, &partial_cnt, -1,
                 RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
 
         if (inflight_cnt + retry_cnt + outq_cnt + partial_cnt > 0) {
@@ -2511,6 +2519,11 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 ret = 0;
                 break;
 
+        case RD_KAFKA_OP_PURGE:
+                rd_kafka_broker_handle_purge_queues(rkb, rko);
+                rko = NULL; /* the rko is reused for the reply */
+                break;
+
         default:
                 rd_kafka_assert(rkb->rkb_rk, !*"unhandled op type");
                 break;
@@ -3658,10 +3671,10 @@ static int rd_kafka_broker_thread_main (void *arg) {
                         int r;
 
                         r = rd_kafka_broker_bufq_timeout_scan(
-                                rkb, 0, &rkb->rkb_outbufs, NULL,
+                                rkb, 0, &rkb->rkb_outbufs, NULL, -1,
                                 RD_KAFKA_RESP_ERR__DESTROY, 0);
                         r += rd_kafka_broker_bufq_timeout_scan(
-                                rkb, 0, &rkb->rkb_retrybufs, NULL,
+                                rkb, 0, &rkb->rkb_retrybufs, NULL, -1,
                                 RD_KAFKA_RESP_ERR__DESTROY, 0);
                         rd_rkb_dbg(rkb, BROKER, "TERMINATE",
                                    "Handle is terminating in state %s: "
@@ -4325,6 +4338,104 @@ int rd_kafka_all_brokers_wakeup (rd_kafka_t *rk, int min_state) {
         rd_kafka_rdunlock(rk);
 
         return cnt;
+}
+
+
+/**
+ * @brief Send PURGE queue request to broker.
+ *
+ * @locality any
+ * @locks none
+ */
+void rd_kafka_broker_purge_queues (rd_kafka_broker_t *rkb, int purge_flags,
+                                   rd_kafka_replyq_t replyq) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_PURGE);
+        rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
+        rko->rko_replyq = replyq;
+        rko->rko_u.purge.flags = purge_flags;
+        rd_kafka_q_enq(rkb->rkb_ops, rko);
+}
+
+
+/**
+ * @brief Handle purge queues request
+ *
+ * @locality broker thread
+ * @locks none
+ */
+static void rd_kafka_broker_handle_purge_queues (rd_kafka_broker_t *rkb,
+                                                 rd_kafka_op_t *rko) {
+        int purge_flags = rko->rko_u.purge.flags;
+        int inflight_cnt = 0, retry_cnt = 0, outq_cnt = 0, partial_cnt = 0;
+
+        rd_rkb_dbg(rkb, QUEUE|RD_KAFKA_DBG_TOPIC, "PURGE",
+                   "Purging queues with flags %s",
+                   rd_kafka_purge_flags2str(purge_flags));
+
+
+        /**
+         * First purge any Produce requests to move the
+         * messages from the request's message queue to delivery reports.
+         */
+
+        /* Purge in-flight ProduceRequests */
+        if (purge_flags & RD_KAFKA_PURGE_F_INFLIGHT)
+                inflight_cnt = rd_kafka_broker_bufq_timeout_scan(
+                        rkb, 1, &rkb->rkb_waitresps, NULL, RD_KAFKAP_Produce,
+                        RD_KAFKA_RESP_ERR__PURGE_INFLIGHT, 0);
+
+        if (purge_flags & RD_KAFKA_PURGE_F_QUEUE) {
+                /* Requests in retry queue */
+                retry_cnt = rd_kafka_broker_bufq_timeout_scan(
+                        rkb, 0, &rkb->rkb_retrybufs, NULL, RD_KAFKAP_Produce,
+                        RD_KAFKA_RESP_ERR__PURGE_QUEUE, 0);
+
+                /* Requests in transmit queue not completely sent yet.
+                 * partial_cnt is included in outq_cnt and denotes a request
+                 * that has been partially transmitted. */
+                outq_cnt = rd_kafka_broker_bufq_timeout_scan(
+                        rkb, 0, &rkb->rkb_outbufs, &partial_cnt,
+                        RD_KAFKAP_Produce, RD_KAFKA_RESP_ERR__PURGE_QUEUE, 0);
+
+                /* Purging a partially transmitted request will mess up
+                 * the protocol stream, so we need to disconnect from the broker
+                 * to get a clean protocol socket. */
+                if (partial_cnt)
+                        rd_kafka_broker_fail(
+                                rkb, LOG_NOTICE,
+                                RD_KAFKA_RESP_ERR__PURGE_QUEUE,
+                                "purged %d partially sent request: "
+                                "forcing disconnect", partial_cnt);
+        }
+
+        rd_rkb_dbg(rkb, QUEUE|RD_KAFKA_DBG_TOPIC, "PURGEQ",
+                   "Purged %i in-flight, %i retry-queued, "
+                   "%i out-queue, %i partially-sent requests",
+                   inflight_cnt, retry_cnt, outq_cnt, partial_cnt);
+
+        /* Purge partition queues */
+        if (purge_flags & RD_KAFKA_PURGE_F_QUEUE) {
+                rd_kafka_toppar_t *rktp;
+                int msg_cnt = 0;
+                int part_cnt = 0;
+
+                TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
+                        int r;
+
+                        r = rd_kafka_toppar_handle_purge_queues(rktp, rkb,
+                                                                purge_flags);
+                        if (r > 0) {
+                                msg_cnt += r;
+                                part_cnt++;
+                        }
+                }
+
+                rd_rkb_dbg(rkb, QUEUE|RD_KAFKA_DBG_TOPIC, "PURGEQ",
+                           "Purged %i message(s) from %d partition(s)",
+                           msg_cnt, part_cnt);
+        }
+
+        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR_NO_ERROR);
 }
 
 

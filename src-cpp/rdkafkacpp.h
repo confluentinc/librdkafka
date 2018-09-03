@@ -256,6 +256,10 @@ enum ErrorCode {
         ERR__INVALID_TYPE = -154,
         /** Retry operation */
         ERR__RETRY = -153,
+        /** Purged in queue */
+        ERR__PURGE_QUEUE = -152,
+        /** Purged in flight */
+        ERR__PURGE_INFLIGHT = -151,
 
         /** End internal error codes */
 	ERR__END = -100,
@@ -2175,6 +2179,51 @@ class RD_EXPORT Producer : public virtual Handle {
    *          outstanding requests were completed, else ERR_NO_ERROR
    */
   virtual ErrorCode flush (int timeout_ms) = 0;
+
+
+  /**
+   * @brief Purge messages currently handled by the producer instance.
+   *
+   * @param purge_flags tells which messages should be purged and how.
+   *
+   * The application will need to call ::poll() or ::flush()
+   * afterwards to serve the delivery report callbacks of the purged messages.
+   *
+   * Messages purged from internal queues fail with the delivery report
+   * error code set to ERR__PURGE_QUEUE, while purged messages that
+   * are in-flight to or from the broker will fail with the error code set to
+   * ERR__PURGE_INFLIGHT.
+   *
+   * @warning Purging messages that are in-flight to or from the broker
+   *          will ignore any sub-sequent acknowledgement for these messages
+   *          received from the broker, effectively making it impossible
+   *          for the application to know if the messages were successfully
+   *          produced or not. This may result in duplicate messages if the
+   *          application retries these messages at a later time.
+   *
+   * @remark This call may block for a short time while background thread
+   *         queues are purged.
+   *
+   * @returns ERR_NO_ERROR on success,
+   *          ERR__INVALID_ARG if the \p purge flags are invalid or unknown,
+   *          ERR__NOT_IMPLEMENTED if called on a non-producer client instance.
+   */
+  virtual ErrorCode purge (int purge_flags) = 0;
+
+  /**
+   * @brief RdKafka::Handle::purge() \p purge_flags
+   */
+  enum {
+    PURGE_QUEUE = 0x1, /**< Purge messages in internal queues */
+
+    PURGE_INFLIGHT = 0x2 /*! Purge messages in-flight to or from the broker.
+                          *  Purging these messages will void any future
+                          *  acknowledgements from the broker, making it
+                          *  impossible for the application to know if these
+                          *  messages were successfully delivered or not.
+                          *  Retrying these messages may lead to duplicates. */
+  };
+
 };
 
 /**@}*/

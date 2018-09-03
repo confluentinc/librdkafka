@@ -349,6 +349,10 @@ typedef enum {
         RD_KAFKA_RESP_ERR__INVALID_TYPE = -154,
         /** Retry operation */
         RD_KAFKA_RESP_ERR__RETRY = -153,
+        /** Purged in queue */
+        RD_KAFKA_RESP_ERR__PURGE_QUEUE = -152,
+        /** Purged in flight */
+        RD_KAFKA_RESP_ERR__PURGE_INFLIGHT = -151,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -3283,6 +3287,59 @@ int rd_kafka_produce_batch(rd_kafka_topic_t *rkt, int32_t partition,
  */
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms);
+
+
+
+/**
+ * @brief Purge messages currently handled by the producer instance.
+ *
+ * @param purge_flags tells which messages should be purged and how.
+ *
+ * The application will need to call rd_kafka_poll() or rd_kafka_flush()
+ * afterwards to serve the delivery report callbacks of the purged messages.
+ *
+ * Messages purged from internal queues fail with the delivery report
+ * error code set to RD_KAFKA_RESP_ERR__PURGE_QUEUE, while purged messages that
+ * are in-flight to or from the broker will fail with the error code set to
+ * RD_KAFKA_RESP_ERR__PURGE_INFLIGHT.
+ *
+ * @warning Purging messages that are in-flight to or from the broker
+ *          will ignore any sub-sequent acknowledgement for these messages
+ *          received from the broker, effectively making it impossible
+ *          for the application to know if the messages were successfully
+ *          produced or not. This may result in duplicate messages if the
+ *          application retries these messages at a later time.
+ *
+ * @remark This call may block for a short time while background thread
+ *         queues are purged.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if the \p purge flags are invalid
+ *          or unknown,
+ *          RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED if called on a non-producer
+ *          client instance.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags);
+
+
+/**
+ * @brief Flags for rd_kafka_purge()
+ */
+
+/*!
+ * Purge messages in internal queues.
+ */
+#define RD_KAFKA_PURGE_F_QUEUE 0x1
+
+/*!
+ * Purge messages in-flight to or from the broker.
+ * Purging these messages will void any future acknowledgements from the
+ * broker, making it impossible for the application to know if these
+ * messages were successfully delivered or not.
+ * Retrying these messages may lead to duplicates.
+ */
+#define RD_KAFKA_PURGE_F_INFLIGHT 0x2
 
 
 /**@}*/

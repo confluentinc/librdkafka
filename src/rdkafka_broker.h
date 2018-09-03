@@ -361,6 +361,9 @@ void rd_kafka_broker_wakeup (rd_kafka_broker_t *rkb);
 int rd_kafka_all_brokers_wakeup (rd_kafka_t *rk,
                                  int min_state);
 
+void rd_kafka_broker_purge_queues (rd_kafka_broker_t *rkb, int purge_flags,
+                                   rd_kafka_replyq_t replyq);
+
 int rd_kafka_brokers_get_state_version (rd_kafka_t *rk);
 int rd_kafka_brokers_wait_state_change (rd_kafka_t *rk, int stored_version,
 					int timeout_ms);

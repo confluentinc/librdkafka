@@ -904,6 +904,11 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
 								timeout_ms));
   }
 
+  ErrorCode purge (int purge_flags) {
+	  return static_cast<RdKafka::ErrorCode>(rd_kafka_purge(rk_,
+                                                                (int)purge_flags));
+  }
+
   static Producer *create (Conf *conf, std::string &errstr);
 
 };

@@ -167,6 +167,7 @@
     <ClCompile Include="..\..\tests\0082-fetch_max_bytes.cpp" />
     <ClCompile Include="..\..\tests\0083-cb_event.c" />
     <ClCompile Include="..\..\tests\0084-destroy_flags.c" />
+    <ClCompile Include="..\..\tests\0086-purge.c" />
     <ClCompile Include="..\..\tests\0088-produce_metadata_timeout.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />

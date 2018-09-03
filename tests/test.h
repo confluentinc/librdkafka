@@ -529,6 +529,7 @@ void test_prepare_msg (uint64_t testid, int32_t partition, int msg_id,
 void test_socket_enable (rd_kafka_conf_t *conf);
 void test_socket_close_all (struct test *test, int reinit);
 int  test_socket_sockem_set_all (const char *key, int val);
+void test_socket_sockem_set (int s, const char *key, int value);
 #endif
 
 void test_headers_dump (const char *what, int lvl,

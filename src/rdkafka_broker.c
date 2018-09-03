@@ -282,6 +282,15 @@ void rd_kafka_broker_set_state (rd_kafka_broker_t *rkb, int state) {
 		rkb->rkb_down_reported = 0;
 	}
 
+        if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
+                if (rd_kafka_broker_state_is_up(state) &&
+                    !rd_kafka_broker_state_is_up(rkb->rkb_state))
+                        rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt, 1);
+                else if (rd_kafka_broker_state_is_up(rkb->rkb_state) &&
+                         !rd_kafka_broker_state_is_up(state))
+                        rd_atomic32_sub(&rkb->rkb_rk->rk_broker_up_cnt, 1);
+        }
+
 	rkb->rkb_state = state;
         rkb->rkb_ts_state = rd_clock();
 

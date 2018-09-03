@@ -418,6 +418,10 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Invalid type"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__RETRY,
                   "Local: Retry operation"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__PURGE_QUEUE,
+                  "Local: Purged in queue"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__PURGE_INFLIGHT,
+                  "Local: Purged in flight"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -3391,6 +3395,71 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
 		RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
+
+rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags) {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_q_t *tmpq;
+        int waitcnt = 0;
+
+        if (rk->rk_type != RD_KAFKA_PRODUCER)
+                return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
+
+        /* Check that future flags are not passed */
+        if ((purge_flags & ~RD_KAFKA_PURGE_F_MASK) != 0)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Nothing to purge */
+        if (!purge_flags)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        /* Set up a reply queue to wait for broker thread signalling
+         * completion. */
+        tmpq = rd_kafka_q_new(rk);
+
+        /* Send purge request to all broker threads */
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_kafka_broker_purge_queues(rkb, purge_flags,
+                                             RD_KAFKA_REPLYQ(tmpq, 0));
+                waitcnt++;
+        }
+        rd_kafka_rdunlock(rk);
+
+        /* The internal broker handler may hold unassigned partitions */
+        mtx_lock(&rk->rk_internal_rkb_lock);
+        rd_kafka_broker_purge_queues(rk->rk_internal_rkb, purge_flags,
+                                     RD_KAFKA_REPLYQ(tmpq, 0));
+        mtx_unlock(&rk->rk_internal_rkb_lock);
+        waitcnt++;
+
+
+        /* Wait for responses */
+        while (waitcnt-- > 0)
+                rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
+
+        rd_kafka_q_destroy_owner(tmpq);
+
+        /* Purge messages for the UA(-1) partitions (which are not
+         * handled by a broker thread) */
+        if (purge_flags & RD_KAFKA_PURGE_F_QUEUE)
+                rd_kafka_purge_ua_toppar_queues(rk);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+
+
+/**
+ * @returns a csv string of purge flags in thread-local storage
+ */
+const char *rd_kafka_purge_flags2str (int flags) {
+        static const char *names[] = { "queue", "inflight", NULL };
+        static RD_TLS char ret[64];
+
+        return rd_flags2str(ret, sizeof(ret), names, flags);
+}
 
 
 int rd_kafka_version (void) {

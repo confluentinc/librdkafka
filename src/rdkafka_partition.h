@@ -668,4 +668,9 @@ int rd_kafka_partition_leader_cmp (const void *_a, const void *_b) {
 
 int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid);
 
+int rd_kafka_toppar_handle_purge_queues (rd_kafka_toppar_t *rktp,
+                                         rd_kafka_broker_t *rkb,
+                                         int purge_flags);
+void rd_kafka_purge_ua_toppar_queues (rd_kafka_t *rk);
+
 #endif /* _RDKAFKA_PARTITION_H_ */

@@ -506,6 +506,9 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
  */
 #define rd_kafka_is_idempotent(rk) ((rk)->rk_conf.idempotence)
 
+#define RD_KAFKA_PURGE_F_MASK 0x3
+const char *rd_kafka_purge_flags2str (int flags);
+
 
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"

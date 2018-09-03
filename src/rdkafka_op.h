@@ -118,6 +118,7 @@ typedef enum {
         RD_KAFKA_OP_ALTERCONFIGS,    /**< Admin: AlterConfigs: u.admin_request*/
         RD_KAFKA_OP_DESCRIBECONFIGS, /**< Admin: DescribeConfigs: u.admin_request*/
         RD_KAFKA_OP_ADMIN_RESULT,    /**< Admin API .._result_t */
+        RD_KAFKA_OP_PURGE,           /**< Purge queues */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -412,6 +413,10 @@ struct rd_kafka_op_s {
                                            *   rd_kafka_AdminOptions_set_opaque
                                            */
                 } admin_result;
+
+                struct {
+                        int flags; /**< purge_flags from rd_kafka_purge() */
+                } purge;
 	} rko_u;
 };
 

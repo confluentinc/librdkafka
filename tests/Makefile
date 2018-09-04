@@ -18,13 +18,14 @@ all: $(BIN) run_par
 broker: $(BIN)
 	./broker_version_tests.py --conf '{"parallel":1}' $(KAFKA_VERSION)
 
+broker_idempotent: $(BIN)
+	./broker_version_tests.py --conf '{"parallel":1, "args":"-P"}' $(KAFKA_VERSION)
+
 sasl: $(BIN)
 	./sasl_test.py --conf '{"parallel":1}' --no-ssl --debug $(KAFKA_VERSION)
 
 # Run the full test suite(s)
-full: broker sasl
-
-
+full: broker broker_idempotent sasl
 
 run_par: $(BIN)
 	@echo "Running tests in parallel"
@@ -37,6 +38,17 @@ run_seq: $(BIN)
 run_local: $(BIN)
 	@echo "Running local broker-less tests"
 	./run-test.sh -p5 -l ./$(BIN)
+	@echo "Running local broker-less tests with idempotent producer"
+	./run-test.sh -p5 -l -P ./$(BIN)
+
+idempotent_par:
+	./run-test.sh -p5 -P ./$(BIN)
+
+idempotent_seq:
+	./run-test.sh -p1 -P ./$(BIN)
+
+idempotent: idempotent_par
+
 
 # Delete all test topics (based on prefix)
 delete_topics:

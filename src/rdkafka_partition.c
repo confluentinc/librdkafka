@@ -215,7 +215,7 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
 	rktp->rktp_op_version = rd_atomic32_get(&rktp->rktp_version);
 
         rd_atomic32_init(&rktp->rktp_msgs_inflight, 0);
-        rd_kafka_pid_reset(&rktp->rktp_pid);
+        rd_kafka_pid_reset(&rktp->rktp_eos.pid);
 
         /* Consumer: If statistics is available we query the oldest offset
          * of each partition.
@@ -813,7 +813,7 @@ int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
  * @returns 0 if all messages were retried, or 1 if some messages
  *          could not be retried.
  *
- * @locality Broker thread
+ * @locality Broker thread (but not necessarily the leader broker thread)
  */
 
 int rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp, rd_kafka_msgq_t *rkmq,
@@ -3437,7 +3437,7 @@ int rd_kafka_topic_partition_list_regex_cnt (
  * @returns 1 if a new pid was set, else 0.
  *
  * @locality toppar handler thread
- * @locks none (rktp pid fields are considered thread local)
+ * @locks none
  */
 int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
         int64_t new_base;
@@ -3452,7 +3452,7 @@ int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
                              "epoch",
                              RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                              rktp->rktp_partition,
-                             rd_kafka_pid2str(rktp->rktp_pid),
+                             rd_kafka_pid2str(rktp->rktp_eos.pid),
                              rd_kafka_pid2str(pid),
                              inflight);
                 return 0;
@@ -3467,17 +3467,20 @@ int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
                      TOPIC|RD_KAFKA_DBG_EOS, "NEWPID",
                      "%.*s [%"PRId32"] changed %s -> %s: "
-                     "resetting epoch base msgseq to %"PRIu64
+                     "resetting epoch base seq to %"PRIu64
                      " (was %"PRIu64")",
                      RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                      rktp->rktp_partition,
-                     rd_kafka_pid2str(rktp->rktp_pid),
+                     rd_kafka_pid2str(rktp->rktp_eos.pid),
                      rd_kafka_pid2str(pid),
-                     new_base,
-                     rktp->rktp_epoch_base_seq);
+                     new_base, rktp->rktp_eos.epoch_base_seq);
 
-        rktp->rktp_pid = pid;
-        rktp->rktp_epoch_base_seq = new_base;
+        rd_kafka_toppar_lock(rktp);
+        rktp->rktp_eos.pid = pid;
+        rktp->rktp_eos.next_ack_seq = 0;
+        rd_kafka_toppar_unlock(rktp);
+
+        rktp->rktp_eos.epoch_base_seq = new_base;
 
         return 1;
 }

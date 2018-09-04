@@ -102,8 +102,17 @@ typedef struct rd_kafka_msg_s {
                         rd_ts_t ts_enq;     /* Enqueue/Produce time */
                         rd_ts_t ts_backoff; /* Backoff next Produce until
                                              * this time. */
-                        uint64_t msgseq;    /* Message sequence number,
-                                             * used to maintain ordering. */
+                        uint64_t msgseq;    /**< Message sequence number,
+                                             *   used to maintain ordering.
+                                             *   Starts at 1. */
+                        uint64_t last_msgseq;/**< On retry this is set
+                                              *   on the first message
+                                              *   in a batch to point
+                                              *   out the last message
+                                              *   of the batch so that
+                                              *   the batch can be
+                                              *   identically reconstructed.
+                                              */
                         int     retries;    /* Number of retries so far */
                 } producer;
 #define rkm_ts_timeout rkm_u.producer.ts_timeout
@@ -234,6 +243,19 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_move (rd_kafka_msgq_t *dst,
 
 
 /**
+ * @brief Prepend all elements of \ src onto head of \p dst.
+ *        \p src will be cleared/re-initialized.
+ *
+ * @locks proper locks for \p src and \p dst MUST be held.
+ */
+static RD_INLINE RD_UNUSED void rd_kafka_msgq_prepend (rd_kafka_msgq_t *dst,
+                                                       rd_kafka_msgq_t *src) {
+        rd_kafka_msgq_concat(src, dst);
+        rd_kafka_msgq_move(dst, src);
+}
+
+
+/**
  * rd_free all msgs in msgq and reinitialize the msgq.
  */
 static RD_INLINE RD_UNUSED void rd_kafka_msgq_purge (rd_kafka_t *rk,
@@ -280,6 +302,27 @@ rd_kafka_msg_t *rd_kafka_msgq_pop (rd_kafka_msgq_t *rkmq) {
 		rd_kafka_msgq_deq(rkmq, rkm, 1);
 
 	return rkm;
+}
+
+
+/**
+ * @returns the first message in the queue, or NULL if empty.
+ *
+ * @locks caller's responsibility
+ */
+static RD_INLINE RD_UNUSED
+rd_kafka_msg_t *rd_kafka_msgq_first (rd_kafka_msgq_t *rkmq) {
+        return TAILQ_FIRST(&rkmq->rkmq_msgs);
+}
+
+/**
+ * @returns the last message in the queue, or NULL if empty.
+ *
+ * @locks caller's responsibility
+ */
+static RD_INLINE RD_UNUSED
+rd_kafka_msg_t *rd_kafka_msgq_last (rd_kafka_msgq_t *rkmq) {
+        return TAILQ_LAST(&rkmq->rkmq_msgs, rd_kafka_msgs_head_s);
 }
 
 

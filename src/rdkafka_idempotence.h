@@ -31,13 +31,44 @@
 #define _RD_KAFKA_IDEMPOTENCE_H_
 
 
+
+/**
+ * @brief Get the current PID if state permits.
+ *
+ * @returns If there is no valid PID or the state
+ *          does not permit further PID usage (such as when draining)
+ *          then an invalid PID is returned.
+ *
+ * @locality any
+ * @locks none
+ */
+
+static RD_UNUSED RD_INLINE rd_kafka_pid_t
+rd_kafka_idemp_get_pid (rd_kafka_t *rk) {
+        rd_kafka_pid_t pid;
+
+        rd_kafka_rdlock(rk);
+        if (likely(rk->rk_eos.idemp_state == RD_KAFKA_IDEMP_STATE_ASSIGNED))
+                pid = rk->rk_eos.pid;
+        else
+                rd_kafka_pid_reset(&pid);
+        rd_kafka_rdunlock(rk);
+
+        return pid;
+}
+
+
 void rd_kafka_idemp_request_pid_failed (rd_kafka_broker_t *rkb,
                                         rd_kafka_resp_err_t err);
 void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
                                 const rd_kafka_pid_t pid);
 int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                 const char *reason);
-
+void rd_kafka_idemp_drain_reset (rd_kafka_t *rk);
+void rd_kafka_idemp_inflight_toppar_sub (rd_kafka_t *rk,
+                                         rd_kafka_toppar_t *rktp);
+void rd_kafka_idemp_inflight_toppar_add (rd_kafka_t *rk,
+                                         rd_kafka_toppar_t *rktp);
 
 void rd_kafka_idemp_init (rd_kafka_t *rk);
 void rd_kafka_idemp_term (rd_kafka_t *rk);

@@ -388,7 +388,108 @@ may be produced out of order, since a sub-sequent message in a sub-sequent
 ProduceRequest may already be in-flight (and accepted by the broker)
 by the time the retry for the failing message is sent.
 
+Using the Idempotent Producer prevents reordering even with `max.in.flight` > 1,
+see [Idempotent Producer](#idempotent-producer) below for more information.
 
+
+### Idempotent Producer
+
+librdkafka supports the idempotent producer which provides strict ordering and
+and exactly-once producer guarantees.
+The idempotent producer is enabled by setting the `enable.idempotence`
+configuration property to `true`, this will automatically adjust a number of
+other configuration properties to adhere to the idempotency requirements,
+see the documentation of `enable.idempotence` in [CONFIGURATION.md] for
+more information.
+
+#### Ordering and message sequence numbers
+
+librdkafka maintains the original produce() ordering (per-partition) for all
+messages produced, using an internal per-partition 64-bit counter
+called the msgseq which starts at 1. This msgseq allows messages to be
+re-inserted in the partition message queue in the original order in the
+case of retries.
+
+The Idempotent Producer functionality in the Kafka protocol also has
+a per-message sequence number, which is a 32-bit wrapping counter that is
+reset each time the Producer's ID (PID) or Epoch changes.
+
+The librdkafka msgseq is used, along with a base msgseq value stored
+at the time the PID/Epoch was bumped, to calculate the Kafka protocol's
+message sequence number.
+
+With Idempotent Producer enabled there is no risk of reordering despite
+`max.in.flight` > 1 (capped at 5).
+
+
+Note: "msgseq" in log messages refer to the librdkafka msgseq, while "seq"
+refers to the protocol message sequence.
+
+
+#### Considerations
+
+Strict ordering and exactly-once are guaranteed per partition.
+An application utilizing the idempotent producer should not mix
+producing to explicit partitions with partitioner-based partitions
+since messages produced for the latter are queued separately until
+a topic's partition count is known.
+
+
+#### Fatal errors
+
+The added guarantee of ordering and no duplicates also requires a way for
+the client to fail gracefully when these guarantees can't be satisfied.
+If an unresolvable error occurs a fatal error is triggered in one
+or more of the follow ways depending on what APIs the application is utilizing:
+
+ * C: the `error_cb` is triggered with error code `RD_KAFKA_RESP_ERR__FATAL`,
+   the application should call `rd_kafka_fatal_error()` to retrieve the
+   underlying fatal error code and error string.
+ * C: an `RD_KAFKA_EVENT_ERROR` event is triggered and
+   `rd_kafka_event_error_is_fatal()` returns true: the fatal error code
+   and string are available through `rd_kafka_event_error()`, and `.._string()`.
+ * C++: an `EVENT_ERROR` event is triggered and `event.fatal()` returns true:
+   the fatal error code and string are available through `event.err()` and
+   `event.str()`.
+
+An application may call `rd_kafka_fatal_error()` at any time to check if
+a fatal error has been raised.
+
+If a fatal error has been raised, sub-sequent use of the following API calls
+will fail:
+
+ * `rd_kafka_produce()`
+ * `rd_kafka_producev()`
+ * `rd_kafka_produce_batch()`
+
+The underlying fatal error code will be returned, depending on the error
+reporting scheme for each of those APIs.
+
+
+When a fatal error has occurred the application should call `rd_kafka_flush()`
+to wait for all outstanding and queued messages to drain before terminating
+the application.
+`rd_kafka_purge(RD_KAFKA_PURGE_F_QUEUE)` is automatically called by the client
+when a producer fatal error has occurred, messages in-flight are not purged
+to allow waiting for the proper acknowledgement from the broker.
+The purged messages in queue will fail with error code set to
+`RD_KAFKA_RESP_ERR__PURGE_QUEUE`.
+
+
+#### Leader change
+
+There are some corner cases when an Idempotent Producer has outstanding
+ProduceRequests in-flight to the previous leader while a new leader is elected.
+
+A leader change is typically triggered by the original leader
+failing or terminating, which has the risk of also failing (some of) the
+in-flight ProduceRequests to that broker. To recover the producer to a
+consistent state it will not send any ProduceRequests for these partitions to
+the new leader broker until all responses for any outstanding ProduceRequests
+to the previous leader has been received, or these requests have timed out.
+This drain may take up to `min(socket.timeout.ms, message.timeout.ms)`.
+If the connection to the previous broker goes down the outstanding requests
+are failed immediately.
 
 
 ## Usage
@@ -443,11 +544,11 @@ Configuration is applied prior to object creation using the
 
     rd_kafka_conf_t *conf;
     char errstr[512];
-    
+
     conf = rd_kafka_conf_new();
     rd_kafka_conf_set(conf, "compression.codec", "snappy", errstr, sizeof(errstr));
     rd_kafka_conf_set(conf, "batch.num.messages", "100", errstr, sizeof(errstr));
-    
+
     rd_kafka_new(RD_KAFKA_PRODUCER, conf);
 
 
@@ -461,29 +562,51 @@ A poll-based API is used to provide signaling back to the application,
 the application should call rd_kafka_poll() at regular intervals.
 The poll API will call the following configured callbacks (optional):
 
-  * message delivery report callback - signals that a message has been
-    delivered or failed delivery, allowing the application to take action
+  * `dr_msg_cb` - Message delivery report callback - signals that a message has
+    been delivered or failed delivery, allowing the application to take action
     and to release any application resources used in the message.
-  * error callback - signals an error. These errors are usually of an
-    informational nature, i.e., failure to connect to a broker, and the
+  * `error_cb` - Error callback - signals an error. These errors are usually of
+    an informational nature, i.e., failure to connect to a broker, and the
     application usually does not need to take any action.
     The type of error is passed as a rd_kafka_resp_err_t enum value,
     including both remote broker errors as well as local failures.
+    An application typically does not have to perform any action when
+    an error is raised through the error callback, the client will
+    automatically try to recover from all errors, given that the
+    client and cluster is correctly configured.
+    In some specific cases a fatal error may occur which will render
+    the client more or less inoperable for further use:
+    if the error code in the error callback is set to
+    `RD_KAFKA_RESP_ERR__FATAL` the application should retrieve the
+    underlying fatal error and reason using the `rd_kafka_fatal_error()` call,
+    and then begin terminating the instance.
+    The Event API's EVENT_ERROR has a `rd_kafka_event_error_is_fatal()`
+    function, and the C++ EventCb has a `fatal()` method, to help the
+    application determine if an error is fatal or not.
+  * `stats_cb` - Statistics callback - triggered if `statistics.interval.ms`
+    is configured to a non-zero value, emitting metrics and internal state
+    in JSON format, see [STATISTICS.md].
+  * `throttle_cb` - Throttle callback - triggered whenever a broker has
+    throttled (delayed) a request.
+
+These callbacks will also be triggered by `rd_kafka_flush()`,
+`rd_kafka_consumer_poll()`, and any other functions that serve queues.
 
 
-Optional callbacks not triggered by poll, these may be called from any thread:
+Optional callbacks not triggered by poll, these may be called spontaneously
+from any thread at any time:
 
-  * Logging callback - allows the application to output log messages
-	  generated by librdkafka.
-  * partitioner callback - application provided message partitioner.
-	  The partitioner may be called in any thread at any time, it may be
-	  called multiple times for the same key.
-	  Partitioner function contraints:
-	  * MUST NOT call any rd_kafka_*() functions
-      * MUST NOT block or execute for prolonged periods of time.
-      * MUST return a value between 0 and partition_cnt-1, or the
-          special RD_KAFKA_PARTITION_UA value if partitioning
-              could not be performed.
+  * `log_cb` - Logging callback - allows the application to output log messages
+    generated by librdkafka.
+  * `partitioner` - Partitioner callback - application provided message partitioner.
+    The partitioner may be called in any thread at any time, it may be
+    called multiple times for the same key.
+    Partitioner function contraints:
+      - MUST NOT call any rd_kafka_*() functions
+      - MUST NOT block or execute for prolonged periods of time.
+      - MUST return a value between 0 and partition_cnt-1, or the
+        special RD_KAFKA_PARTITION_UA value if partitioning
+        could not be performed.
 
 
 
@@ -588,6 +711,11 @@ If the number of queued messages would exceed the `queue.buffering.max.messages`
 configuration property then `rd_kafka_produce()` returns -1 and sets errno
 to `ENOBUFS` and last_error to `RD_KAFKA_RESP_ERR__QUEUE_FULL`, thus
 providing a backpressure mechanism.
+
+
+`rd_kafka_producev()` provides an alternative produce API that does not
+require a topic `rkt` object and also provides support for extended
+message fields, such as timestamp and headers.
 
 
 **Note**: See `examples/rdkafka_performance.c` for a producer implementation.

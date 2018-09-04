@@ -102,35 +102,55 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
         rd_atomic32_t      rktp_msgs_inflight;  /**< Current number of
                                                  *   messages in-flight to/from
                                                  *   the broker. */
-        rd_kafka_pid_t     rktp_pid;            /**< Partition's last known
-                                                 *   Producer Id and epoch.
-                                                 *   Only accessed from
-                                                 *   toppar handler thread. */
-        uint64_t           rktp_epoch_base_seq; /**< This Producer epoch's
-                                                 *   base msgseq.
-                                                 *   When a new epoch is
-                                                 *   acquired the base_seq
-                                                 *   is set to the current
-                                                 *   rktp_msgseq so that
-                                                 *   sub-sequent produce
-                                                 *   requests will have
-                                                 *   a sequence number series
-                                                 *   starting at 0.
-                                                 *   Only accessed from
-                                                 *   toppar handler thread. */
-        uint64_t           rktp_msgseq;     /* Current message sequence number.
-                                             * Each message enqueued on a
-                                             * non-UA partition will get a
-                                             * partition-unique sequencial
-                                             * number assigned.
-                                             * This number is used to
-                                             * re-enqueue the message
-                                             * on resends but making sure
-                                             * the input ordering is still
-                                             * maintained, and used by
-                                             * the idempotent producer.
-                                             * Starts at 1.
-                                             * Protected by toppar_lock */
+
+        uint64_t           rktp_msgseq;  /**< Current message sequence number.
+                                          * Each message enqueued on a
+                                          * non-UA partition will get a
+                                          * partition-unique sequencial
+                                          * number assigned.
+                                          * This number is used to
+                                          * re-enqueue the message
+                                          * on resends but making sure
+                                          * the input ordering is still
+                                          * maintained, and used by
+                                          * the idempotent producer.
+                                          * Starts at 1.
+                                          * Protected by toppar_lock */
+
+        struct {
+                rd_kafka_pid_t pid;      /**< Partition's last known
+                                          *   Producer Id and epoch.
+                                          *   Protected by toppar lock.
+                                          *   Only updated in toppar
+                                          *   handler thread. */
+                uint64_t epoch_base_seq; /**< This Producer epoch's
+                                          *   base msgseq.
+                                          *   When a new epoch is
+                                          *   acquired the base_seq
+                                          *   is set to the current
+                                          *   rktp_msgseq so that
+                                          *   sub-sequent produce
+                                          *   requests will have
+                                          *   a sequence number series
+                                          *   starting at 0.
+                                          *   Only accessed from
+                                          *   toppar handler thread. */
+                int32_t next_ack_seq;    /**< Next expected ack sequence.
+                                          *   Protected by toppar lock. */
+                rd_bool_t wait_drain;    /**< All inflight requests must
+                                          *   be drained/finish before
+                                          *   resuming producing.
+                                          *   This is set to true
+                                          *   when a leader change
+                                          *   happens so that the
+                                          *   in-flight messages for the
+                                          *   old brokers finish before
+                                          *   the new broker starts sending.
+                                          *   This as a step to ensure
+                                          *   consistency.
+                                          *   Only accessed from toppar
+                                          *   handler thread. */
+        } rktp_eos;
 
 	/**
 	 * rktp version barriers

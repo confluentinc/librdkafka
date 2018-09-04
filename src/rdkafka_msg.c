@@ -246,7 +246,7 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 	int errnox;
 
         if (unlikely((err = rd_kafka_fatal_error_code(rkt->rkt_rk)))) {
-                rd_kafka_set_last_error(err, ESHUTDOWN);
+                rd_kafka_set_last_error(err, ECANCELED);
                 return -1;
         }
 

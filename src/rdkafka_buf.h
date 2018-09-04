@@ -591,6 +591,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 } Metadata;
                 struct {
                         shptr_rd_kafka_toppar_t *s_rktp;
+                        rd_kafka_pid_t pid;  /**< Producer Id and Epoch */
+                        int32_t base_seq;    /**< Base sequence */
                 } Produce;
         } rkbuf_u;
 

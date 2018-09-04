@@ -767,7 +767,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "`retries` must be greater than 0, "
           "`acks` is  set to `all`, "
           "`queuing.strategy` is set to `fifo`.",
-          0, 1, 1 /* FIXME: Change to false */},
+          0, 1, 0 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.messages", _RK_C_INT,
 	  _RK(queue_buffering_max_msgs),
 	  "Maximum number of messages allowed on the producer queue.",

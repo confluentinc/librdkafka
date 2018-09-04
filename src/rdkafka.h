@@ -3257,7 +3257,7 @@ rd_kafka_position (rd_kafka_t *rk,
  *               (RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
  *  - ENOENT   - topic is unknown in the Kafka cluster.
  *               (RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
- *  - ESHUTDOWN - fatal error has been raised on producer, see
+ *  - ECANCELED - fatal error has been raised on producer, see
  *                rd_kafka_fatal_error().
  *
  * @sa Use rd_kafka_errno2err() to convert `errno` to rdkafka error code.

@@ -621,7 +621,7 @@ rd_kafka_resp_err_t rd_kafka_errno2err (int errnox) {
 	case ENOBUFS:
 		return RD_KAFKA_RESP_ERR__QUEUE_FULL;
 
-        case ESHUTDOWN:
+        case ECANCELED:
                 return RD_KAFKA_RESP_ERR__FATAL;
 
 	default:

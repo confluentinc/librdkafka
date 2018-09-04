@@ -115,11 +115,15 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
  * @enum Idempotent Producer state
  */
 typedef enum {
-        RD_KAFKA_IDEMP_STATE_INIT,
-        RD_KAFKA_IDEMP_STATE_TERM,
-        RD_KAFKA_IDEMP_STATE_REQ_PID,
-        RD_KAFKA_IDEMP_STATE_WAIT_PID,
-        RD_KAFKA_IDEMP_STATE_ASSIGNED
+        RD_KAFKA_IDEMP_STATE_INIT,      /**< Initial state */
+        RD_KAFKA_IDEMP_STATE_TERM,      /**< Instance is terminating */
+        RD_KAFKA_IDEMP_STATE_REQ_PID,   /**< Request new PID */
+        RD_KAFKA_IDEMP_STATE_WAIT_PID,  /**< PID requested, waiting for reply */
+        RD_KAFKA_IDEMP_STATE_ASSIGNED,  /**< New PID assigned */
+        RD_KAFKA_IDEMP_STATE_DRAIN_RESET, /**< Wait for outstanding
+                                           *   ProduceRequests to finish
+                                           *   before resetting and
+                                           *   re-requesting a new PID. */
 } rd_kafka_idemp_state_t;
 
 /**
@@ -132,62 +136,13 @@ rd_kafka_idemp_state2str (rd_kafka_idemp_state_t state) {
                 "Terminate",
                 "RequestPID",
                 "WaitPID",
-                "Assigned"
+                "Assigned",
+                "DrainReset",
         };
         return names[state];
 }
 
 
-/**
- * @brief Producer ID and Epoch
- */
-typedef struct rd_kafka_pid_s {
-        int64_t id;     /**< Producer Id */
-        int16_t epoch;  /**< Producer Epoch */
-} rd_kafka_pid_t;
-
-#define RD_KAFKA_PID_INITIALIZER {-1,-1}
-
-/**
- * @returns true if \p PID is valid
- */
-#define rd_kafka_pid_valid(PID) ((PID).id != -1)
-
-/**
- * @brief Check two pids for equality
- */
-static RD_UNUSED RD_INLINE int rd_kafka_pid_eq (const rd_kafka_pid_t a,
-                                                const rd_kafka_pid_t b) {
-        return a.id == b.id && a.epoch == b.epoch;
-}
-
-/**
- * @returns the string representation of a PID in a thread-safe
- *          static buffer.
- */
-static RD_UNUSED const char *
-rd_kafka_pid2str (const rd_kafka_pid_t pid) {
-        static RD_TLS char buf[2][64];
-        static RD_TLS int i;
-
-        if (!rd_kafka_pid_valid(pid))
-                return "PID{Invalid}";
-
-        i = (i + 1) % 2;
-
-        rd_snprintf(buf[i], sizeof(buf[i]),
-                    "PID{Id:%"PRId64",Epoch:%hd}", pid.id, pid.epoch);
-
-        return buf[i];
-}
-
-/**
- * @brief Reset the PID to invalid/init state
- */
-static RD_UNUSED RD_INLINE void rd_kafka_pid_reset (rd_kafka_pid_t *pid) {
-        pid->id = -1;
-        pid->epoch = -1;
-}
 
 
 /**
@@ -316,6 +271,9 @@ struct rd_kafka_s {
 
                 rd_kafka_pid_t pid;  /**< Current Producer ID and Epoch */
                 int epoch_cnt;       /**< Number of times pid/epoch changed */
+                rd_atomic32_t inflight_toppar_cnt; /**< Current number of
+                                                    *   toppars with inflight
+                                                    *   requests. */
                 rd_kafka_timer_t request_pid_tmr; /**< Timer for pid retrieval*/
 
                 rd_kafkap_str_t *transactional_id; /**< Transactional Id,

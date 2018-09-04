@@ -46,7 +46,18 @@
  */
 
 
+static const int msgcnt = 20;
+struct waitmsgs {
+        rd_kafka_resp_err_t exp_err[20];
+        int cnt;
+};
 
+static mtx_t produce_req_lock;
+static cnd_t produce_req_cnd;
+static int produce_req_cnt = 0;
+
+
+#if WITH_SOCKEM
 /**
  * @brief Sockem connect, called from **internal librdkafka thread** through
  *        librdkafka's connect_cb
@@ -55,17 +66,6 @@ static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
         sockem_set(skm, "delay", 500, NULL);
         return 0;
 }
-
-static mtx_t produce_req_lock;
-static cnd_t produce_req_cnd;
-static int produce_req_cnt = 0;
-
-static const int msgcnt = 20;
-struct waitmsgs {
-        rd_kafka_resp_err_t exp_err[20];
-        int cnt;
-};
-
 
 static rd_kafka_resp_err_t on_request_sent (rd_kafka_t *rk,
                                             int sockfd,
@@ -103,6 +103,7 @@ static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
                 rk, "catch_producer_req",
                 on_request_sent, NULL);
 }
+#endif
 
 
 
@@ -124,7 +125,7 @@ static void dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
         TEST_ASSERT(msgid >= 0 && msgid < msgcnt,
                     "msgid %d out of range 0..%d", msgid, msgcnt - 1);
 
-        TEST_ASSERT(waitmsgs->exp_err[msgid] != 12345,
+        TEST_ASSERT((int)waitmsgs->exp_err[msgid] != 12345,
                     "msgid %d delivered twice", msgid);
 
         TEST_SAY("DeliveryReport for msg #%d: %s\n",
@@ -136,6 +137,9 @@ static void dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                                 rd_kafka_err2str(waitmsgs->exp_err[msgid]),
                                 rd_kafka_err2str(rkmessage->err));
         }
+
+        /* Indicate already seen */
+        waitmsgs->exp_err[msgid] = (rd_kafka_resp_err_t)12345;
 }
 
 
@@ -173,6 +177,13 @@ static void do_test_purge (const char *what, int remote) {
         rd_kafka_resp_err_t err;
         struct waitmsgs waitmsgs = RD_ZERO_INIT;
 
+#if !WITH_SOCKEM
+        if (remote) {
+                TEST_SKIP("No sockem support\n");
+                return;
+        }
+#endif
+
         TEST_SAY(_C_MAG "Test rd_kafka_purge(): %s\n" _C_CLR, what);
 
         test_conf_init(&conf, NULL, 20);
@@ -183,15 +194,12 @@ static void do_test_purge (const char *what, int remote) {
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
 
         if (remote) {
-#if !WITH_SOCKEM
-                TEST_SKIP("%s: no sockem support\n", what);
-                return;
-#else
+#if WITH_SOCKEM
                 test_socket_enable(conf);
                 test_curr->connect_cb = connect_cb;
-#endif
                 rd_kafka_conf_interceptor_add_on_new(conf, "on_new_producer",
                                                      on_new_producer, NULL);
+#endif
 
                 mtx_init(&produce_req_lock, mtx_plain);
                 cnd_init(&produce_req_cnd);

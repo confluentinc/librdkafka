@@ -65,6 +65,7 @@ static const char *test_git_version = "HEAD";
 static const char *test_sockem_conf = "";
 int          test_on_ci = 0; /* Tests are being run on CI, be more forgiving
                               * with regards to timeouts, etc. */
+static int test_idempotent_producer = 0;
 static int show_summary = 1;
 static int test_summary (int do_lock);
 
@@ -690,6 +691,8 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
         if (conf) {
                 *conf = rd_kafka_conf_new();
                 rd_kafka_conf_set(*conf, "client.id", test_curr->name, NULL, 0);
+                test_conf_set(*conf, "enable.idempotence",
+                              test_idempotent_producer ? "true" : "false");
                 rd_kafka_conf_set_error_cb(*conf, test_error_cb);
                 rd_kafka_conf_set_stats_cb(*conf, test_stats_cb);
 
@@ -1338,6 +1341,8 @@ int main(int argc, char **argv) {
 			show_summary = 0;
                 else if (!strcmp(argv[i], "-D"))
                         test_delete_topics_between = 1;
+                else if (!strcmp(argv[i], "-P"))
+                        test_idempotent_producer = 1;
 		else if (*argv[i] != '-')
                         tests_to_run = argv[i];
                 else {
@@ -1353,6 +1358,7 @@ int main(int argc, char **argv) {
 			       "  -S     Dont show test summary\n"
 			       "  -V <N.N.N.N> Broker version.\n"
                                "  -D     Delete all test topics between each test (-p1) or after all tests\n"
+                               "  -P     Run all tests with `enable.idempotency=true`\n"
 			       "\n"
 			       "Environment variables:\n"
 			       "  TESTS - substring matched test to run (e.g., 0033)\n"

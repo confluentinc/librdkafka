@@ -38,22 +38,8 @@
  */
 
 
-
-static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk);
-
-
-
-/**
- * @returns true if we need a PID.
- *
- * @locks rd_kafka_*lock MUST be held
- */
-static RD_UNUSED /*FIXME*/rd_bool_t rd_kafka_idemp_need_pid (rd_kafka_t *rk) {
-        return rk->rk_eos.idemp_state == RD_KAFKA_IDEMP_STATE_REQ_PID ||
-                rk->rk_eos.idemp_state == RD_KAFKA_IDEMP_STATE_WAIT_PID;
-}
-
-
+static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk,
+                                                    int wakeup_ms);
 
 
 /**
@@ -105,6 +91,12 @@ int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
         rd_assert(thrd_is_current(rk->rk_thread));
 
+        if (unlikely(rd_kafka_fatal_error_code(rk))) {
+                /* If a fatal error has been raised we do not
+                 * attempt to acquire a new PID. */
+                return 0;
+        }
+
         rd_kafka_wrlock(rk);
         if (rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_REQ_PID) {
                 rd_kafka_wrunlock(rk);
@@ -124,7 +116,7 @@ int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                             5*60*1000000/*5 minutes*/, 0) > 0;
 
                         rd_kafka_wrunlock(rk);
-                        rd_kafka_idemp_restart_request_pid_tmr(rk);
+                        rd_kafka_idemp_restart_request_pid_tmr(rk, 500);
 
                         if (err_unsupported)
                                 rd_kafka_op_err(
@@ -176,7 +168,7 @@ int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
         rd_rkb_dbg(rkb, EOS, "GETPID",
                    "Can't acquire ProducerId from this broker: %s", errstr);
-        rd_kafka_idemp_restart_request_pid_tmr(rk);
+        rd_kafka_idemp_restart_request_pid_tmr(rk, 500);
 
         rd_kafka_broker_destroy(rkb);
 
@@ -194,16 +186,18 @@ static void rd_kafka_idemp_request_pid_tmr_cb (rd_kafka_timers_t *rkts,
         rd_kafka_idemp_request_pid(rk, NULL, "retry timer");
 }
 
+
 /**
  * @brief Restart the pid retrieval timer.
  *
- * @locality rdkafka main thread
+ * @locality any
  * @locks none
  */
-static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk) {
+static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk,
+                                                    int wakeup_ms) {
         rd_kafka_timer_start_oneshot(&rk->rk_timers,
                                      &rk->rk_eos.request_pid_tmr,
-                                     500*1000,
+                                     wakeup_ms*1000,
                                      rd_kafka_idemp_request_pid_tmr_cb, rk);
 }
 
@@ -230,7 +224,7 @@ void rd_kafka_idemp_request_pid_failed (rd_kafka_broker_t *rkb,
          *        to the application (such as UNSUPPORTED_FEATURE) */
 
         /* Retry request after a short wait. */
-        rd_kafka_idemp_restart_request_pid_tmr(rk);
+        rd_kafka_idemp_restart_request_pid_tmr(rk, 500);
 }
 
 
@@ -290,6 +284,82 @@ void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
 }
 
 
+/**
+ * @brief Schedule a reset and re-request of PID when the
+ *        local ProduceRequest queues have been fully drained.
+ *
+ * The PID is not reset until the queues are fully drained.
+ *
+ * @locality any
+ * @locks none
+ */
+void rd_kafka_idemp_drain_reset (rd_kafka_t *rk) {
+        rd_kafka_dbg(rk, EOS, "DRAIN",
+                     "Beginning partition drain for PID reset "
+                     "for %d partition(s) with in-flight requests",
+                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt));
+        rd_kafka_wrlock(rk);
+        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_RESET);
+        rd_kafka_wrunlock(rk);
+}
+
+
+/**
+ * @brief Call when all partition request queues
+ *        are drained to reset and re-request a new PID.
+ *
+ * @locality any
+ * @locks none
+ */
+static void rd_kafka_idemp_drain_done (rd_kafka_t *rk) {
+        int restart_tmr = 0;
+
+        rd_kafka_wrlock(rk);
+        if (rk->rk_eos.idemp_state == RD_KAFKA_IDEMP_STATE_DRAIN_RESET) {
+                rd_kafka_dbg(rk, EOS, "DRAIN", "All partitions drained");
+                rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
+                restart_tmr = 1;
+        }
+        rd_kafka_wrunlock(rk);
+
+        /* Restart timer to eventually trigger a re-request */
+        if (restart_tmr)
+                rd_kafka_idemp_restart_request_pid_tmr(rk, 1/*1ms*/);
+}
+
+
+/**
+ * @brief Mark partition as no longer having a ProduceRequest in-flight.
+ *
+ * @locality toppar handler thread
+ * @locks none
+ */
+void rd_kafka_idemp_inflight_toppar_sub (rd_kafka_t *rk,
+                                         rd_kafka_toppar_t *rktp) {
+        int r = rd_atomic32_sub(&rk->rk_eos.inflight_toppar_cnt, 1);
+
+        if (r == 0) {
+                /* Check if we're waiting for the partitions to drain
+                 * before resetting the PID, and if so trigger a reset
+                 * since this was the last drained one. */
+                rd_kafka_idemp_drain_done(rk);
+        } else {
+                rd_assert(r >= 0);
+        }
+}
+
+
+/**
+ * @brief Mark partition as having a ProduceRequest in-flight.
+ *
+ * @locality toppar handler thread
+ * @locks none
+ */
+void rd_kafka_idemp_inflight_toppar_add (rd_kafka_t *rk,
+                                         rd_kafka_toppar_t *rktp) {
+        rd_atomic32_add(&rk->rk_eos.inflight_toppar_cnt, 1);
+}
+
 
 /**
  * @brief Initialize the idempotent producer.
@@ -301,6 +371,8 @@ void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
 void rd_kafka_idemp_init (rd_kafka_t *rk) {
         rd_assert(thrd_is_current(rk->rk_thread));
 
+        rd_atomic32_init(&rk->rk_eos.inflight_toppar_cnt, 0);
+
         rd_kafka_wrlock(rk);
         rd_kafka_pid_reset(&rk->rk_eos.pid);
 
@@ -310,7 +382,7 @@ void rd_kafka_idemp_init (rd_kafka_t *rk) {
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
         rd_kafka_wrunlock(rk);
 
-        rd_kafka_idemp_restart_request_pid_tmr(rk);
+        rd_kafka_idemp_restart_request_pid_tmr(rk, 500);
 }
 
 

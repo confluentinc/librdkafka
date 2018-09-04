@@ -60,6 +60,7 @@
 #include "rdkafka_request.h"
 #include "rdkafka_sasl.h"
 #include "rdkafka_interceptor.h"
+#include "rdkafka_idempotence.h"
 #include "rdtime.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
@@ -2401,8 +2402,16 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 rktp->rktp_msgq_wakeup_fd = rkb->rkb_toppar_wakeup_fd;
                 rd_kafka_broker_keep(rkb);
 
-                if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER)
+                if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER) {
                         rd_kafka_broker_active_toppar_add(rkb, rktp);
+
+                        if (rd_kafka_is_idempotent(rkb->rkb_rk)) {
+                                /* Wait for all outstanding requests from
+                                 * the previous leader to finish before
+                                 * producing anything to this new leader. */
+                                rktp->rktp_eos.wait_drain = rd_true;
+                        }
+                }
 
                 rd_kafka_broker_destroy(rktp->rktp_next_leader);
                 rktp->rktp_next_leader = NULL;
@@ -2439,6 +2448,17 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 
 		/* Remove from fetcher list */
 		rd_kafka_toppar_fetch_decide(rktp, rkb, 1/*force remove*/);
+
+                if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER) {
+                        /* Purge any ProduceRequests for this toppar
+                         * in the output queue. */
+                        rd_kafka_broker_bufq_purge_by_toppar(
+                                rkb,
+                                &rkb->rkb_outbufs,
+                                RD_KAFKAP_Produce, rktp,
+                                RD_KAFKA_RESP_ERR__RETRY);
+                }
+
 
 		rd_kafka_toppar_lock(rktp);
 
@@ -2746,12 +2766,17 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                 }
         }
 
+        if (unlikely(rd_kafka_fatal_error_code(rkb->rkb_rk))) {
+                /* Fatal error has been raised, don't produce. */
+                rd_kafka_toppar_unlock(rktp);
+                return 0;
+        }
+
         if (unlikely(RD_KAFKA_TOPPAR_IS_PAUSED(rktp))) {
                 /* Partition is paused */
                 rd_kafka_toppar_unlock(rktp);
                 return 0;
         }
-
 
 
         /* Move messages from locked partition produce queue
@@ -2803,23 +2828,63 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                 return 0;
         }
 
-        /* Update the partition's cached PID, and reset the
-         * base msg sequence if necessary */
-        if (unlikely(rd_kafka_is_idempotent(rkb->rkb_rk) &&
-                     !rd_kafka_pid_eq(pid, rktp->rktp_pid))) {
-                /* Flush any ProduceRequests for this partition in the
-                 * output buffer queue to speed up recovery. */
-                rd_kafka_broker_bufq_purge_by_toppar(
-                        rkb,
-                        &rkb->rkb_outbufs,
-                        RD_KAFKAP_Produce, rktp,
-                        RD_KAFKA_RESP_ERR__RETRY);
+        if (rd_kafka_is_idempotent(rkb->rkb_rk)) {
+                /* Update the partition's cached PID, and reset the
+                 * base msg sequence if necessary */
+                if (unlikely(!rd_kafka_pid_eq(pid, rktp->rktp_eos.pid))) {
+                        /* Flush any ProduceRequests for this partition in the
+                         * output buffer queue to speed up recovery. */
+                        rd_kafka_broker_bufq_purge_by_toppar(
+                                rkb,
+                                &rkb->rkb_outbufs,
+                                RD_KAFKAP_Produce, rktp,
+                                RD_KAFKA_RESP_ERR__RETRY);
 
-                /* Attempt to change the pid, it will fail if there
-                 * are outstanding messages in-flight, in which case
-                 * we eventually come back here to retry. */
-                if (!rd_kafka_toppar_pid_change(rktp, pid))
-                        return 0;
+                        rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
+                                   "%.*s [%"PRId32"] PID has changed: "
+                                   "must drain requests for all partitions "
+                                   "before resuming resetting PID",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
+                                                    rkt_topic),
+                                   rktp->rktp_partition);
+
+                        /* Attempt to change the pid, it will fail if there
+                         * are outstanding messages in-flight, in which case
+                         * we eventually come back here to retry. */
+                        if (!rd_kafka_toppar_pid_change(rktp, pid))
+                                return 0;
+                }
+
+                if (unlikely(rktp->rktp_eos.wait_drain)) {
+                        int inflight = rd_atomic32_get(&rktp->
+                                                       rktp_msgs_inflight);
+                        if (inflight) {
+                                /* Waiting for in-flight requests to
+                                 * drain/finish before producing anything more.
+                                 * This is used to recovery to a consistent
+                                 * state when the partition leader
+                                 * has changed. */
+
+                                rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
+                                           "%.*s [%"PRId32"] waiting for "
+                                           "%d in-flight request(s) to drain "
+                                           "from queue before continuing "
+                                           "to produce",
+                                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->
+                                                            rkt_topic),
+                                           rktp->rktp_partition,
+                                           inflight);
+                                return 0;
+                        }
+
+                        rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
+                                   "%.*s [%"PRId32"] all in-flight requests "
+                                   "drained from queue",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition);
+
+                        rktp->rktp_eos.wait_drain = rd_false;
+                }
         }
 
         /* Send Produce requests for this toppar */
@@ -2861,9 +2926,7 @@ static int rd_kafka_broker_produce_toppars (rd_kafka_broker_t *rkb,
 
         if (rd_kafka_is_idempotent(rkb->rkb_rk)) {
                 /* Idempotent producer: get a copy of the current pid. */
-                rd_kafka_rdlock(rkb->rkb_rk);
-                pid = rkb->rkb_rk->rk_eos.pid;
-                rd_kafka_rdunlock(rkb->rkb_rk);
+                pid = rd_kafka_idemp_get_pid(rkb->rkb_rk);
 
                 /* If we don't have a valid pid return immedatiely,
                  * unless the per-partition timeout scan needs to run.

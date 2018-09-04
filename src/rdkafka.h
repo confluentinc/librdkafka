@@ -907,7 +907,8 @@ typedef enum rd_kafka_vtype_t {
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_MSGFLAGS, int, msgflags),       \
         (int)msgflags
 /*!
- * Timestamp (int64_t)
+ * Timestamp in milliseconds since epoch UTC (int64_t).
+ * A value of 0 will use the current wall-clock time.
  */
 #define RD_KAFKA_V_TIMESTAMP(timestamp)                                 \
         _LRK_TYPECHECK(RD_KAFKA_VTYPE_TIMESTAMP, int64_t, timestamp),   \

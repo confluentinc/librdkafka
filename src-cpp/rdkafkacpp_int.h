@@ -108,6 +108,8 @@ class EventImpl : public Event {
   int         broker_id () const { return id_; }
   int         throttle_time () const { return throttle_time_; }
 
+  bool        fatal () const { return fatal_; }
+
   Type        type_;
   ErrorCode   err_;
   Severity    severity_;
@@ -115,6 +117,7 @@ class EventImpl : public Event {
   std::string str_;         /* reused for THROTTLE broker_name */
   int         id_;
   int         throttle_time_;
+  bool        fatal_;
 };
 
 
@@ -610,6 +613,16 @@ class HandleImpl : virtual public Handle {
   int32_t controllerid (int timeout_ms) {
           return rd_kafka_controllerid(rk_, timeout_ms);
   }
+
+  ErrorCode fatal_error (std::string &errstr) {
+          char errbuf[512];
+          RdKafka::ErrorCode err =
+                  static_cast<RdKafka::ErrorCode>(
+                          rd_kafka_fatal_error(rk_, errbuf, sizeof(errbuf)));
+          if (err)
+                  errstr = errbuf;
+          return err;
+  };
 
 
   rd_kafka_t *rk_;

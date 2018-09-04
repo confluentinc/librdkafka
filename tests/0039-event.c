@@ -195,7 +195,9 @@ int main_0039_event (int argc, char **argv) {
                 switch (rd_kafka_event_type(rkev))
                 {
                 case RD_KAFKA_EVENT_ERROR:
-                        TEST_SAY("Got %s event: %s: %s\n",
+                        TEST_SAY("Got %s%s event: %s: %s\n",
+                                 rd_kafka_event_error_is_fatal(rkev) ?
+                                 "FATAL " : "",
                                  rd_kafka_event_name(rkev),
                                  rd_kafka_err2name(rd_kafka_event_error(rkev)),
                                  rd_kafka_event_error_string(rkev));

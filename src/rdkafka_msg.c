@@ -245,6 +245,11 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 	rd_kafka_resp_err_t err;
 	int errnox;
 
+        if (unlikely((err = rd_kafka_fatal_error_code(rkt->rkt_rk)))) {
+                rd_kafka_set_last_error(err, ESHUTDOWN);
+                return -1;
+        }
+
         /* Create message */
         rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags,
                                 payload, len, key, keylen, msg_opaque,
@@ -301,9 +306,12 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         rd_kafka_topic_t *app_rkt;
         shptr_rd_kafka_itopic_t *s_rkt = NULL;
         rd_kafka_itopic_t *rkt;
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_resp_err_t err;
         rd_kafka_headers_t *hdrs = NULL;
         rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
+
+        if (unlikely((err = rd_kafka_fatal_error_code(rk))))
+                return err;
 
         va_start(ap, rk);
         while (!err &&
@@ -441,6 +449,25 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         return err;
 }
 
+
+
+/**
+ * @brief Produce a single message.
+ * @locality any application thread
+ * @locks none
+ */
+int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
+                      int msgflags,
+                      void *payload, size_t len,
+                      const void *key, size_t keylen,
+                      void *msg_opaque) {
+        return rd_kafka_msg_new(rd_kafka_topic_a2i(rkt), partition,
+                                msgflags, payload, len,
+                                key, keylen, msg_opaque);
+}
+
+
+
 /**
  * Produce a batch of messages.
  * Returns the number of messages succesfully queued for producing.
@@ -456,10 +483,13 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         int good = 0;
         int multiple_partitions = (partition == RD_KAFKA_PARTITION_UA ||
                                    (msgflags & RD_KAFKA_MSG_F_PARTITION));
-        rd_kafka_resp_err_t all_err = 0;
+        rd_kafka_resp_err_t all_err;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
         rd_kafka_toppar_t *rktp = NULL;
         shptr_rd_kafka_toppar_t *s_rktp = NULL;
+
+        /* Propagated per-message below */
+        all_err = rd_kafka_fatal_error_code(rkt->rkt_rk);
 
         /* For multiple partitions; hold lock for entire run,
          * for one partition: only acquire for now. */

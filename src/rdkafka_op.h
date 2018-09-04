@@ -284,6 +284,9 @@ struct rd_kafka_op_s {
 			int64_t offset;
 			char *errstr;
 			rd_kafka_msg_t rkm;
+                        int fatal;  /**< This was a ERR__FATAL error that has
+                                     *   been translated to the fatal error
+                                     *   code. */
 		} err;  /* used for ERR and CONSUMER_ERR */
 
 		struct {

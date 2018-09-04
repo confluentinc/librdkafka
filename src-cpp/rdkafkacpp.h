@@ -260,6 +260,10 @@ enum ErrorCode {
         ERR__PURGE_QUEUE = -152,
         /** Purged in flight */
         ERR__PURGE_INFLIGHT = -151,
+        /** Fatal error: see ::fatal_error() */
+        ERR__FATAL = -150,
+        /** Inconsistent state */
+        ERR__INCONSISTENT = -149,
 
         /** End internal error codes */
 	ERR__END = -100,
@@ -611,6 +615,14 @@ class RD_EXPORT Event {
    * @remark Applies to THROTTLE event type.
    */
   virtual int         broker_id () const = 0;
+
+
+  /**
+   * @returns true if this is a fatal error.
+   * @remark Applies to ERROR event type.
+   * @sa RdKafka::Handle::fatal_error()
+   */
+  virtual bool        fatal () const = 0;
 };
 
 
@@ -1201,6 +1213,30 @@ class RD_EXPORT Handle {
    *          retrieved in the allotted timespan.
    */
   virtual int32_t controllerid (int timeout_ms) = 0;
+
+
+  /**
+   * @brief Returns the first fatal error set on this client instance,
+   *        or ERR_NO_ERROR if no fatal error has occurred.
+   *
+   * This function is to be used with the Idempotent Producer and
+   * the Event class for \c EVENT_ERROR events to detect fatal errors.
+   *
+   * Generally all errors raised by the error event are to be considered
+   * informational and temporary, the client will try to recover from all
+   * errors in a graceful fashion (by retrying, etc).
+   *
+   * However, some errors should logically be considered fatal to retain
+   * consistency; in particular a set of errors that may occur when using the
+   * Idempotent Producer and the in-order or exactly-once producer guarantees
+   * can't be satisfied.
+   *
+   * @param errstr A human readable error string if a fatal error was set.
+   *
+   * @returns ERR_NO_ERROR if no fatal error has been raised, else
+   *          any other error code.
+   */
+  virtual ErrorCode fatal_error (std::string &errstr) = 0;
 };
 
 

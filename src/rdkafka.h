@@ -353,6 +353,10 @@ typedef enum {
         RD_KAFKA_RESP_ERR__PURGE_QUEUE = -152,
         /** Purged in flight */
         RD_KAFKA_RESP_ERR__PURGE_INFLIGHT = -151,
+        /** Fatal error: see rd_kafka_fatal_error() */
+        RD_KAFKA_RESP_ERR__FATAL = -150,
+        /** Inconsistent state */
+        RD_KAFKA_RESP_ERR__INCONSISTENT = -149,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -595,6 +599,36 @@ rd_kafka_resp_err_t rd_kafka_errno2err(int errnox);
 RD_EXPORT RD_DEPRECATED
 int rd_kafka_errno (void);
 
+
+
+
+/**
+ * @brief Returns the first fatal error set on this client instance,
+ *        or RD_KAFKA_RESP_ERR_NO_ERROR if no fatal error has occurred.
+ *
+ * This function is to be used with the Idempotent Producer and \c error_cb
+ * to detect fatal errors.
+ *
+ * Generally all errors raised by \c error_cb are to be considered
+ * informational and temporary, the client will try to recover from all
+ * errors in a graceful fashion (by retrying, etc).
+ *
+ * However, some errors should logically be considered fatal to retain
+ * consistency; in particular a set of errors that may occur when using the
+ * Idempotent Producer and the in-order or exactly-once producer guarantees
+ * can't be satisfied.
+ *
+ * @param errstr A human readable error string (nul-terminated) is written to
+ *               this location that must be of at least \p errstr_size bytes.
+ *               The \p errstr is only written to if there is a fatal error.
+ *
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if no fatal error has been raised, else
+ *          any other error code.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_fatal_error (rd_kafka_t *rk,
+                                          char *errstr, size_t errstr_size);
 
 
 /**
@@ -1517,8 +1551,18 @@ void rd_kafka_conf_set_offset_commit_cb (
 /**
  * @brief Set error callback in provided conf object.
  *
- * The error callback is used by librdkafka to signal critical errors
+ * The error callback is used by librdkafka to signal warnings and errors
  * back to the application.
+ *
+ * These errors are generally to be considered informational and non-permanent,
+ * the client will try to recover automatically from all type of errors.
+ * Given that the client and cluster configuration is correct the
+ * application should treat these as temporary errors.
+ *
+ * \p error_cb will be triggered with \c err set to RD_KAFKA_RESP_ERR__FATAL
+ * if a fatal error has been raised; in this case use rd_kafka_fatal_error() to
+ * retrieve the fatal error code and error string, and then begin terminating
+ * the client instance.
  *
  * If no \p error_cb is registered, or RD_KAFKA_EVENT_ERROR has not been set
  * with rd_kafka_conf_set_events, then the errors will be logged instead.
@@ -3213,6 +3257,8 @@ rd_kafka_position (rd_kafka_t *rk,
  *               (RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION)
  *  - ENOENT   - topic is unknown in the Kafka cluster.
  *               (RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
+ *  - ESHUTDOWN - fatal error has been raised on producer, see
+ *                rd_kafka_fatal_error().
  *
  * @sa Use rd_kafka_errno2err() to convert `errno` to rdkafka error code.
  */
@@ -3822,6 +3868,8 @@ size_t rd_kafka_event_message_count (rd_kafka_event_t *rkev);
 /**
  * @returns the error code for the event.
  *
+ * Use rd_kafka_event_error_is_fatal() to detect if this is a fatal error.
+ *
  * Event types:
  *  - all
  */
@@ -3840,6 +3888,17 @@ rd_kafka_resp_err_t rd_kafka_event_error (rd_kafka_event_t *rkev);
 RD_EXPORT
 const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev);
 
+
+/**
+ * @returns 1 if the error is a fatal error, else 0.
+ *
+ * Event types:
+ *  - RD_KAFKA_EVENT_ERROR
+ *
+ * @sa rd_kafka_fatal_error()
+ */
+RD_EXPORT
+int rd_kafka_event_error_is_fatal (rd_kafka_event_t *rkev);
 
 
 /**

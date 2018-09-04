@@ -422,6 +422,10 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Purged in queue"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__PURGE_INFLIGHT,
                   "Local: Purged in flight"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__FATAL,
+                  "Local: Fatal error"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__INCONSISTENT,
+                  "Local: Inconsistent state"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -617,9 +621,76 @@ rd_kafka_resp_err_t rd_kafka_errno2err (int errnox) {
 	case ENOBUFS:
 		return RD_KAFKA_RESP_ERR__QUEUE_FULL;
 
+        case ESHUTDOWN:
+                return RD_KAFKA_RESP_ERR__FATAL;
+
 	default:
 		return RD_KAFKA_RESP_ERR__FAIL;
 	}
+}
+
+
+rd_kafka_resp_err_t rd_kafka_fatal_error (rd_kafka_t *rk,
+                                          char *errstr, size_t errstr_size) {
+        rd_kafka_resp_err_t err;
+
+        if (unlikely((err = rd_atomic32_get(&rk->rk_fatal.err)))) {
+                rd_kafka_rdlock(rk);
+                rd_snprintf(errstr, errstr_size, "%s", rk->rk_fatal.errstr);
+                rd_kafka_rdunlock(rk);
+        }
+
+        return err;
+}
+
+
+/**
+ * @brief Set's the fatal error for this instance.
+ *
+ * @returns 1 if the error was set, or 0 if a previous fatal error
+ *          has already been set on this instance.
+ *
+ * @locality any
+ * @locks none
+ */
+int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                              const char *fmt, ...) {
+        va_list ap;
+        char buf[512];
+
+        rd_kafka_wrlock(rk);
+        rk->rk_fatal.cnt++;
+        if (rd_atomic32_get(&rk->rk_fatal.err)) {
+                rd_kafka_wrunlock(rk);
+                rd_kafka_dbg(rk, GENERIC, "FATAL",
+                             "Suppressing subsequent fatal error: %s",
+                             rd_kafka_err2name(err));
+                return 0;
+        }
+
+        rd_atomic32_set(&rk->rk_fatal.err, err);
+
+        va_start(ap, fmt);
+        rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+        rk->rk_fatal.errstr = rd_strdup(buf);
+
+        rd_kafka_wrunlock(rk);
+
+        /* Indicate to the application that a fatal error was raised,
+         * the app should use rd_kafka_fatal_error() to extract the
+         * fatal error code itself. */
+        rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__FATAL,
+                        "Fatal error: %s: %s",
+                        rd_kafka_err2str(err), rk->rk_fatal.errstr);
+
+
+        /* Purge producer queues, but not in-flight since we'll
+         * want proper delivery status for transmitted requests. */
+        if (rk->rk_type == RD_KAFKA_PRODUCER)
+                rd_kafka_purge(rk, RD_KAFKA_PURGE_F_QUEUE);
+
+        return 1;
 }
 
 
@@ -1131,6 +1202,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 	rd_kafka_op_t *rko;
 	unsigned int tot_cnt;
 	size_t tot_size;
+        rd_kafka_resp_err_t err;
         struct _stats_emit stx = { .size = 1024*10 };
         struct _stats_emit *st = &stx;
         struct _stats_total total = {0};
@@ -1327,6 +1399,16 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                            rk->rk_eos.pid.epoch,
                            rk->rk_eos.epoch_cnt);
         }
+
+        if ((err = rd_atomic32_get(&rk->rk_fatal.err)))
+                _st_printf(", \"fatal\": { "
+                           "\"error\": \"%s\", "
+                           "\"reason\": \"%s\", "
+                           "\"cnt\": %d "
+                           "}",
+                           rd_kafka_err2str(err),
+                           rk->rk_fatal.errstr,
+                           rk->rk_fatal.cnt);
 
 	rd_kafka_rdunlock(rk);
 
@@ -1867,22 +1949,6 @@ fail:
 }
 
 
-
-
-
-/**
- * Produce a single message.
- * Locality: any application thread
- */
-int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
-		      int msgflags,
-		      void *payload, size_t len,
-		      const void *key, size_t keylen,
-		      void *msg_opaque) {
-	return rd_kafka_msg_new(rd_kafka_topic_a2i(rkt), partition,
-				msgflags, payload, len,
-				key, keylen, msg_opaque);
-}
 
 
 /**

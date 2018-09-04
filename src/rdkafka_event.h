@@ -68,8 +68,23 @@ int rd_kafka_event_setup (rd_kafka_t *rk, rd_kafka_op_t *rko) {
 		rko->rko_u.dr.do_purge2 = 1;
 		return 1;
 
+        case RD_KAFKA_EVENT_ERROR:
+                if (rko->rko_err == RD_KAFKA_RESP_ERR__FATAL) {
+                        /* Translate ERR__FATAL to the underlying fatal error
+                         * code and string */
+                        rd_kafka_resp_err_t ferr;
+                        char errstr[512];
+                        ferr = rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
+                        if (likely(ferr)) {
+                                rko->rko_err = ferr;
+                                if (rko->rko_u.err.errstr)
+                                        rd_free(rko->rko_u.err.errstr);
+                                rko->rko_u.err.errstr = rd_strdup(errstr);
+                        }
+                }
+                return 1;
+
 	case RD_KAFKA_EVENT_REBALANCE:
-	case RD_KAFKA_EVENT_ERROR:
         case RD_KAFKA_EVENT_LOG:
         case RD_KAFKA_EVENT_OFFSET_COMMIT:
         case RD_KAFKA_EVENT_STATS:

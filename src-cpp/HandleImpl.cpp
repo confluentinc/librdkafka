@@ -68,13 +68,22 @@ void RdKafka::log_cb_trampoline (const rd_kafka_t *rk, int level,
 void RdKafka::error_cb_trampoline (rd_kafka_t *rk, int err,
                                    const char *reason, void *opaque) {
   RdKafka::HandleImpl *handle = static_cast<RdKafka::HandleImpl *>(opaque);
+  char errstr[512];
+  bool is_fatal = false;
 
+  if (err == RD_KAFKA_RESP_ERR__FATAL) {
+    /* Translate to underlying fatal error code and string */
+    err = rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
+    if (err)
+      reason = errstr;
+    is_fatal = true;
+  }
   RdKafka::EventImpl event(RdKafka::Event::EVENT_ERROR,
                            static_cast<RdKafka::ErrorCode>(err),
                            RdKafka::Event::EVENT_SEVERITY_ERROR,
                            NULL,
                            reason);
-
+  event.fatal_ = is_fatal;
   handle->event_cb_->event_cb(event);
 }
 

@@ -131,8 +131,15 @@ uint64_t wall_clock (void) {
 }
 
 static void err_cb (rd_kafka_t *rk, int err, const char *reason, void *opaque) {
-	printf("%% ERROR CALLBACK: %s: %s: %s\n",
-	       rd_kafka_name(rk), rd_kafka_err2str(err), reason);
+        if (err == RD_KAFKA_RESP_ERR__FATAL) {
+                char errstr[512];
+                err = rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
+                printf("%% FATAL ERROR CALLBACK: %s: %s: %s\n",
+                       rd_kafka_name(rk), rd_kafka_err2str(err), errstr);
+        } else {
+                printf("%% ERROR CALLBACK: %s: %s: %s\n",
+                       rd_kafka_name(rk), rd_kafka_err2str(err), reason);
+        }
 }
 
 static void throttle_cb (rd_kafka_t *rk, const char *broker_name,

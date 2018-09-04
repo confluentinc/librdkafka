@@ -415,12 +415,21 @@ void test_socket_enable (rd_kafka_conf_t *conf) {
 
 static void test_error_cb (rd_kafka_t *rk, int err,
 			   const char *reason, void *opaque) {
-        if (test_curr->is_fatal_cb && !test_curr->is_fatal_cb(rk, err, reason))
-                TEST_SAY(_C_YEL "rdkafka error (non-fatal): %s: %s\n",
+        if (test_curr->is_fatal_cb && !test_curr->is_fatal_cb(rk, err, reason)) {
+                TEST_SAY(_C_YEL "rdkafka error (non-testfatal): %s: %s\n",
                          rd_kafka_err2str(err), reason);
-        else
-                TEST_FAIL("rdkafka error: %s: %s",
-                          rd_kafka_err2str(err), reason);
+        } else {
+                if (err == RD_KAFKA_RESP_ERR__FATAL) {
+                        char errstr[512];
+                        TEST_SAY(_C_RED "Fatal error: %s\n", reason);
+                        err = rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
+                        TEST_FAIL("rdkafka FATAL error: %s: %s",
+                                  rd_kafka_err2str(err), errstr);
+                } else {
+                        TEST_FAIL("rdkafka error: %s: %s",
+                                  rd_kafka_err2str(err), reason);
+                }
+        }
 }
 
 static int test_stats_cb (rd_kafka_t *rk, char *json, size_t json_len,

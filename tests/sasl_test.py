@@ -199,7 +199,7 @@ if __name__ == '__main__':
             # Run tests
             print('#### Version %s, suite %s: STARTING' % (version, suite['name']))
             if tests is None:
-                tests_to_run = suite['tests']
+                tests_to_run = suite.get('tests', None)
             else:
                 tests_to_run = tests
             report = test_it(version, tests=tests_to_run, conf=_conf, rdkconf=_rdkconf,

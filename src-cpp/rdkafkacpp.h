@@ -387,7 +387,43 @@ enum ErrorCode {
         /** Security features are disabled */
         ERR_SECURITY_DISABLED = 54,
         /** Operation not attempted */
-        ERR_OPERATION_NOT_ATTEMPTED = 55
+        ERR_OPERATION_NOT_ATTEMPTED = 55,
+        /** Disk error when trying to access log file on the disk */
+        ERR_KAFKA_STORAGE_ERROR = 56,
+        /** The user-specified log directory is not found in the broker config */
+        ERR_LOG_DIR_NOT_FOUND = 57,
+        /** SASL Authentication failed */
+        ERR_SASL_AUTHENTICATION_FAILED = 58,
+        /** Unknown Producer Id */
+        ERR_UNKNOWN_PRODUCER_ID = 59,
+        /** Partition reassignment is in progress */
+        ERR_REASSIGNMENT_IN_PROGRESS = 60,
+        /** Delegation Token feature is not enabled */
+        ERR_DELEGATION_TOKEN_AUTH_DISABLED = 61,
+        /** Delegation Token is not found on server */
+        ERR_DELEGATION_TOKEN_NOT_FOUND = 62,
+        /** Specified Principal is not valid Owner/Renewer */
+        ERR_DELEGATION_TOKEN_OWNER_MISMATCH = 63,
+        /** Delegation Token requests are not allowed on this connection */
+        ERR_DELEGATION_TOKEN_REQUEST_NOT_ALLOWED = 64,
+        /** Delegation Token authorization failed */
+        ERR_DELEGATION_TOKEN_AUTHORIZATION_FAILED = 65,
+        /** Delegation Token is expired */
+        ERR_DELEGATION_TOKEN_EXPIRED = 66,
+        /** Supplied principalType is not supported */
+        ERR_INVALID_PRINCIPAL_TYPE = 67,
+        /** The group is not empty */
+        ERR_NON_EMPTY_GROUP = 68,
+        /** The group id does not exist */
+        ERR_GROUP_ID_NOT_FOUND = 69,
+        /** The fetch session ID was not found */
+        ERR_FETCH_SESSION_ID_NOT_FOUND = 70,
+        /** The fetch session epoch is invalid */
+        ERR_INVALID_FETCH_SESSION_EPOCH = 71,
+        /** No matching listener */
+        ERR_LISTENER_NOT_FOUND = 72,
+        /** Topic deletion is disabled */
+        ERR_TOPIC_DELETION_DISABLED = 73
 };
 
 

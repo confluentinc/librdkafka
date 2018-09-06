@@ -481,8 +481,44 @@ typedef enum {
         RD_KAFKA_RESP_ERR_SECURITY_DISABLED = 54,
         /** Operation not attempted */
         RD_KAFKA_RESP_ERR_OPERATION_NOT_ATTEMPTED = 55,
+        /** Disk error when trying to access log file on the disk */
+        RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR = 56,
+        /** The user-specified log directory is not found in the broker config */
+        RD_KAFKA_RESP_ERR_LOG_DIR_NOT_FOUND = 57,
+        /** SASL Authentication failed */
+        RD_KAFKA_RESP_ERR_SASL_AUTHENTICATION_FAILED = 58,
+        /** Unknown Producer Id */
+        RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID = 59,
+        /** Partition reassignment is in progress */
+        RD_KAFKA_RESP_ERR_REASSIGNMENT_IN_PROGRESS = 60,
+        /** Delegation Token feature is not enabled */
+        RD_KAFKA_RESP_ERR_DELEGATION_TOKEN_AUTH_DISABLED = 61,
+        /** Delegation Token is not found on server */
+        RD_KAFKA_RESP_ERR_DELEGATION_TOKEN_NOT_FOUND = 62,
+        /** Specified Principal is not valid Owner/Renewer */
+        RD_KAFKA_RESP_ERR_DELEGATION_TOKEN_OWNER_MISMATCH = 63,
+        /** Delegation Token requests are not allowed on this connection */
+        RD_KAFKA_RESP_ERR_DELEGATION_TOKEN_REQUEST_NOT_ALLOWED = 64,
+        /** Delegation Token authorization failed */
+        RD_KAFKA_RESP_ERR_DELEGATION_TOKEN_AUTHORIZATION_FAILED = 65,
+        /** Delegation Token is expired */
+        RD_KAFKA_RESP_ERR_DELEGATION_TOKEN_EXPIRED = 66,
+        /** Supplied principalType is not supported */
+        RD_KAFKA_RESP_ERR_INVALID_PRINCIPAL_TYPE = 67,
+        /** The group is not empty */
+        RD_KAFKA_RESP_ERR_NON_EMPTY_GROUP = 68,
+        /** The group id does not exist */
+        RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND = 69,
+        /** The fetch session ID was not found */
+        RD_KAFKA_RESP_ERR_FETCH_SESSION_ID_NOT_FOUND = 70,
+        /** The fetch session epoch is invalid */
+        RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH = 71,
+        /** No matching listener */
+        RD_KAFKA_RESP_ERR_LISTENER_NOT_FOUND = 72,
+        /** Topic deletion is disabled */
+        RD_KAFKA_RESP_ERR_TOPIC_DELETION_DISABLED = 73,
 
-	RD_KAFKA_RESP_ERR_END_ALL,
+        RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
 
 

@@ -16,6 +16,7 @@ The following chapters are available in this document
     * [Low latency](#low-latency)
     * [Compression](#compression)
   * [Message reliability](#message-reliability)
+    * [Idempotent Producer](#idempotent-producer)
   * [Usage](#usage)
     * [Documentation](#documentation)
     * [Initialization](#initialization)
@@ -239,6 +240,9 @@ all expected acks have been received, gracefully handling the following events:
   * Produce errors signaled by the broker
   * Network problems
 
+We recommend `request.required.acks` to be set to `all` to make sure
+produced messages are acknowledged by all in-sync replica brokers.
+
 This is handled automatically by librdkafka and the application does not need
 to take any action at any of the above events.
 The message will be resent up to `message.send.max.retries` times before
@@ -404,14 +408,14 @@ more information.
 
 #### Ordering and message sequence numbers
 
-librdkafka maintains the original produce() ordering (per-partition) for all
+librdkafka maintains the original produce() ordering per-partition for all
 messages produced, using an internal per-partition 64-bit counter
 called the msgseq which starts at 1. This msgseq allows messages to be
 re-inserted in the partition message queue in the original order in the
 case of retries.
 
 The Idempotent Producer functionality in the Kafka protocol also has
-a per-message sequence number, which is a 32-bit wrapping counter that is
+a per-message sequence number, which is a signed 32-bit wrapping counter that is
 reset each time the Producer's ID (PID) or Epoch changes.
 
 The librdkafka msgseq is used, along with a base msgseq value stored
@@ -429,56 +433,17 @@ refers to the protocol message sequence.
 #### Considerations
 
 Strict ordering and exactly-once are guaranteed per partition.
+
 An application utilizing the idempotent producer should not mix
 producing to explicit partitions with partitioner-based partitions
 since messages produced for the latter are queued separately until
-a topic's partition count is known.
-
-
-#### Fatal errors
-
-The added guarantee of ordering and no duplicates also requires a way for
-the client to fail gracefully when these guarantees can't be satisfied.
-If an unresolvable error occurs a fatal error is triggered in one
-or more of the follow ways depending on what APIs the application is utilizing:
-
- * C: the `error_cb` is triggered with error code `RD_KAFKA_RESP_ERR__FATAL`,
-   the application should call `rd_kafka_fatal_error()` to retrieve the
-   underlying fatal error code and error string.
- * C: an `RD_KAFKA_EVENT_ERROR` event is triggered and
-   `rd_kafka_event_error_is_fatal()` returns true: the fatal error code
-   and string are available through `rd_kafka_event_error()`, and `.._string()`.
- * C++: an `EVENT_ERROR` event is triggered and `event.fatal()` returns true:
-   the fatal error code and string are available through `event.err()` and
-   `event.str()`.
-
-An application may call `rd_kafka_fatal_error()` at any time to check if
-a fatal error has been raised.
-
-If a fatal error has been raised, sub-sequent use of the following API calls
-will fail:
-
- * `rd_kafka_produce()`
- * `rd_kafka_producev()`
- * `rd_kafka_produce_batch()`
-
-The underlying fatal error code will be returned, depending on the error
-reporting scheme for each of those APIs.
-
-
-When a fatal error has occurred the application should call `rd_kafka_flush()`
-to wait for all outstanding and queued messages to drain before terminating
-the application.
-`rd_kafka_purge(RD_KAFKA_PURGE_F_QUEUE)` is automatically called by the client
-when a producer fatal error has occurred, messages in-flight are not purged
-to allow waiting for the proper acknowledgement from the broker.
-The purged messages in queue will fail with error code set to
-`RD_KAFKA_RESP_ERR__PURGE_QUEUE`.
+a topic's partition count is known, which would insert these messages
+after the partition-explicit messages regardless of produce order.
 
 
 #### Leader change
 
-There are some corner cases when an Idempotent Producer has outstanding
+There are some corner cases where an Idempotent Producer has outstanding
 ProduceRequests in-flight to the previous leader while a new leader is elected.
 
 A leader change is typically triggered by the original leader
@@ -486,10 +451,172 @@ failing or terminating, which has the risk of also failing (some of) the
 in-flight ProduceRequests to that broker. To recover the producer to a
 consistent state it will not send any ProduceRequests for these partitions to
 the new leader broker until all responses for any outstanding ProduceRequests
-to the previous leader has been received, or these requests have timed out.
+to the previous partition leader has been received, or these requests have
+timed out.
 This drain may take up to `min(socket.timeout.ms, message.timeout.ms)`.
 If the connection to the previous broker goes down the outstanding requests
 are failed immediately.
+
+
+#### Error handling
+
+Background:
+The error handling for the Idempotent Producer, as initially proposed
+in the [EOS design document](https://docs.google.com/document/d/11Jqy_GjUGtdXJK94XGsEIK7CP1SnQGdp2eF0wSw9ra8),
+missed some corner cases which are now being addressed in [KIP-360](https://cwiki.apache.org/confluence/display/KAFKA/KIP-360%3A+Improve+handling+of+unknown+producer).
+There were some intermediate fixes and workarounds prior to KIP-360 that proved
+to be incomplete and made the error handling in the client overly complex.
+With the benefit of hindsight the librdkafka implementation will attempt
+to provide correctness from the lessons learned in the Java client and
+provide stricter and less complex error handling.
+
+Note: At the time of this writing KIP-360 has not been accepted.
+
+
+There are three types of guarantees that the idempotent producer can satisfy:
+
+ * Exactly-once - a message is only written to the log once.
+                  Does NOT cover the exactly-once consumer case.
+ * Ordering - a series of messages are written to the log in the
+              order they were produced.
+ * Gap-less - a series of messages are written once and in order
+              without risk of skipping messages. The sequence
+              of messages may be cut short and fail before all
+              messages are written, but may not fail individual
+              messages in the series.
+
+
+The initial Idempotent Producer design set out to satisfy the first two,
+Exactly-once and Ordering (Gap-less is sort-of implemented with Transactions).
+It is however fairly straight forward to provide the Gap-less guarantee as well,
+and it might be a good idea to expose that decision to the application
+through a configuration setting, e.g.:
+`producer.delivery.guarantees=once,ordering,gapless`, which in turn control the
+error handling mechanisms of the client:
+when to retry, when to fail, when to trigger fatal errors.
+This provides a 'do what I want' interface to this complex problem space,
+rather than 'here are the tools to do what you want, good luck'.
+
+
+
+The Java Idempotent Producer's error strategy has lessened its strictness
+over time, and some of the corner cases are now handled optimistically rather
+than pesimistically, which might lead to allowing duplicate messages to
+be produced or message loss(FIXME?) (prior to KIP-360).
+
+To maintain the idempotent producer guarantees, librdkafka will aim
+for correctness and chooses a more stringent error strategy which treats
+unknown unrecoverable state as a fatal error, the details are outlined below
+and how it differs from the Java producer (as of Apache Kafka 2.0.0).
+
+
+
+
+##### RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER
+
+This error is returned by the broker when the sequence number in the
+ProduceRequest does not match the expected next sequence
+for the given PID+Epoch+Partition (last BaseSeq + msgcount + 1).
+Note: sequence 0 is always accepted.
+
+If the failed request is the head-of-line (first) in-flight request it
+indicates desynchronization between the client and broker:
+the client thinks the sequence number is correct but the broker disagrees.
+There is no way for the client to recover from this scenario without
+risking message loss or duplication, and it is not safe for the
+application to manually retry messages.
+
+
+Librdkafka options (FIXME: choose one):
+ A - librdkafka will trigger a fatal error and stop producing all partitions.
+ B - pause the given partition on behalf of the application, which must
+     resume() it to continue producing after having handled the error.
+     With multiple outstanding requests, or messages in the same failed
+     request, it might not be safe to resume() on the first delivery report
+     with this error, so maybe a new API to acknowledge-error-and-continue
+     messages which internally counts the number of these failures.
+     Or we could propagate this information through the error callback.
+ C - rely on `producer.delivery.guarantees` to make the appropriate decision.
+
+Suggested option: C, it is the most user-friendly while still maintaining
+                  correctness.
+
+
+The Java producer will fail the batch, reset the pid, and then continue
+producing remaining messages.
+This breaks the Gap-free guarantee and risks duplicate and reordered
+messages if the applicaton retries the failed messages.
+
+
+
+
+
+##### RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER
+
+Returned by broker when the request's base sequence number is
+less than the expected sequence number (which is the last written
+sequence + msgcount).
+
+This error is typically benign and occurs upon retrying a previously successful
+send that was not acknowledged.
+
+The messages will be considered successfully produced but will have neither
+timestamp or offset set.
+
+FIXME:
+librdkafka checks if the message has been retried, and if not triggers
+a fatal error since duplicate sequence number error should not be possible
+with an unretried message. Java client does not do this.
+
+
+
+##### RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID
+
+Returned by broker when the PID+Epoch is unknown, which may occur when
+the PID's state has expired (due to topic retention).
+
+The Java producer added quite a bit of error handling for this case,
+extending the ProduceRequest protocol to return the logStartOffset
+to give the producer a chance to differentiate between an actual
+UNKNOWN_PRODUCER_ID or topic retention having deleted the last
+message for this producer (effectively voiding the Producer ID cache).
+This workaround proved to be error prone (see explanation in KIP-360)
+when the partition leader changed.
+
+KIP-360 suggests removing this error checking in favour of letting the
+application decide if a retry should be performed, at the risk
+of duplication.
+librdkafka will follow suite, preferably using the proposed
+`producer.delivery.guarantees` configuration option, to allow
+the application to make a policy decision on what should be done.
+
+
+
+
+###### Message persistance status
+
+
+FIXME: This is a proposed API, not implemented:
+
+To help the application decide what to do in these error cases, a new
+per-message API is introduced, `rd_kafka_message_persistance_status()`,
+which returns one of the following values:
+
+ * `RD_KAFKA_MSG_STATUS_NOT_PERSISTED` - the message has never
+   been transmitted to the broker, or failed with an error indicating
+   it was not written to the log.
+   Application retry will not risk duplication.
+ * `RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED` - the message was transmitted
+   to the broker, but no acknowledgement was received.
+   Application retry will risk duplication.
+ * `RD_KAFKA_MSG_STATUS_PERSISTED` - the message was written to the log by
+   the broker and fully acknowledged.
+   No reason for application to retry.
+
+This method should be called by the application on delivery report error.
+
+
+
 
 
 ## Usage
@@ -872,6 +999,49 @@ is returned.
  * brokers - eternally cached, the broker list is additative.
 
  * topics - cached for `metadata.max.age.ms`
+
+
+
+#### Fatal errors
+
+The added guarantee of ordering and no duplicates also requires a way for
+the client to fail gracefully when these guarantees can't be satisfied.
+If an unresolvable error occurs a fatal error is triggered in one
+or more of the follow ways depending on what APIs the application is utilizing:
+
+ * C: the `error_cb` is triggered with error code `RD_KAFKA_RESP_ERR__FATAL`,
+   the application should call `rd_kafka_fatal_error()` to retrieve the
+   underlying fatal error code and error string.
+ * C: an `RD_KAFKA_EVENT_ERROR` event is triggered and
+   `rd_kafka_event_error_is_fatal()` returns true: the fatal error code
+   and string are available through `rd_kafka_event_error()`, and `.._string()`.
+ * C++: an `EVENT_ERROR` event is triggered and `event.fatal()` returns true:
+   the fatal error code and string are available through `event.err()` and
+   `event.str()`.
+
+An application may call `rd_kafka_fatal_error()` at any time to check if
+a fatal error has been raised.
+
+If a fatal error has been raised, sub-sequent use of the following API calls
+will fail:
+
+ * `rd_kafka_produce()`
+ * `rd_kafka_producev()`
+ * `rd_kafka_produce_batch()`
+
+The underlying fatal error code will be returned, depending on the error
+reporting scheme for each of those APIs.
+
+
+When a fatal error has occurred the application should call `rd_kafka_flush()`
+to wait for all outstanding and queued messages to drain before terminating
+the application.
+`rd_kafka_purge(RD_KAFKA_PURGE_F_QUEUE)` is automatically called by the client
+when a producer fatal error has occurred, messages in-flight are not purged
+automatically to allow waiting for the proper acknowledgement from the broker.
+The purged messages in queue will fail with error code set to
+`RD_KAFKA_RESP_ERR__PURGE_QUEUE`.
+
 
 
 

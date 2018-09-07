@@ -175,6 +175,7 @@ _TEST_DECL(0082_fetch_max_bytes);
 _TEST_DECL(0083_cb_event);
 _TEST_DECL(0084_destroy_flags_local);
 _TEST_DECL(0084_destroy_flags);
+_TEST_DECL(0088_produce_metadata_timeout);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -283,6 +284,9 @@ struct test tests[] = {
         _TEST(0083_cb_event, 0, TEST_BRKVER(0,9,0,0)),
         _TEST(0084_destroy_flags_local, TEST_F_LOCAL),
         _TEST(0084_destroy_flags, 0),
+#if WITH_SOCKEM
+        _TEST(0088_produce_metadata_timeout, TEST_F_SOCKEM),
+#endif
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
 
@@ -3166,9 +3170,10 @@ void test_flush (rd_kafka_t *rk, int timeout_ms) {
 	err = rd_kafka_flush(rk, timeout_ms);
 	TIMING_STOP(&timing);
 	if (err)
-		TEST_FAIL("Failed to flush(%s, %d): %s\n",
+		TEST_FAIL("Failed to flush(%s, %d): %s: len() = %d\n",
 			  rd_kafka_name(rk), timeout_ms,
-			  rd_kafka_err2str(err));
+			  rd_kafka_err2str(err),
+                          rd_kafka_outq_len(rk));
 }
 
 

@@ -872,9 +872,20 @@ rd_kafka_topic_metadata_update (rd_kafka_itopic_t *rkt,
 
 	/* Update number of partitions, but not if there are
 	 * (possibly intermittent) errors (e.g., "Leader not available"). */
-	if (mdt->err == RD_KAFKA_RESP_ERR_NO_ERROR)
+	if (mdt->err == RD_KAFKA_RESP_ERR_NO_ERROR) {
 		upd += rd_kafka_topic_partition_cnt_update(rkt,
 							   mdt->partition_cnt);
+
+                /* If the metadata times out for a topic (because all brokers
+                 * are down) the state will transition to S_UNKNOWN.
+                 * When updated metadata is eventually received there might
+                 * not be any change to partition count or leader,
+                 * but there may still be messages in the UA partition that
+                 * needs to be assigned, so trigger an update for this case too.
+                 * Issue #1985. */
+                if (old_state == RD_KAFKA_TOPIC_S_UNKNOWN)
+                        upd++;
+        }
 
 	/* Update leader for each partition */
 	for (j = 0 ; j < mdt->partition_cnt ; j++) {

@@ -449,7 +449,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
 	{ _RK_GLOBAL, "broker.version.fallback", _RK_C_STR,
 	  _RK(broker_version_fallback),
-	  "Older broker versions (<0.10.0) provides no way for a client to query "
+	  "Older broker versions (before 0.10.0) provide no way for a client to query "
 	  "for supported protocol features "
 	  "(ApiVersionRequest, see `api.version.request`) making it impossible "
 	  "for the client to know what features it may use. "

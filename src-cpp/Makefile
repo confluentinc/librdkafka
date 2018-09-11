@@ -34,7 +34,12 @@ endif
 
 # Ignore previously defined library dependencies for the C library,
 # we'll get those dependencies through the C library linkage.
-LIBS := -L../src -lrdkafka -lstdc++
+
+# TODO: does this need to be a build switch or can we do this all the time?
+# TODO: will this cause issues with static build?
+# We'll additionally look for this library's dependancies within the same directory.
+# eg librdkafka++.so will look for its dependancy library librdkafka.so within the same directory.
+LIBS := -L../src -lrdkafka -lstdc++ -Wl,-rpath,\$$ORIGIN
 
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
 

@@ -1,3 +1,5 @@
+set(LIBVER 1)
+
 set(
     sources
     ConfImpl.cpp
@@ -21,6 +23,10 @@ else()
 endif()
 
 add_library(rdkafka++ ${RDKAFKA_BUILD_MODE} ${sources})
+if(NOT RDKAFKA_BUILD_STATIC)
+  set_property(TARGET rdkafka++ PROPERTY SOVERSION ${LIBVER})
+endif()
+
 target_link_libraries(rdkafka++ PUBLIC rdkafka)
 
 # Support '#include <rdkafcpp.h>'

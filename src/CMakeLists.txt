@@ -1,3 +1,5 @@
+set(LIBVER 1)
+
 set(
     sources
     crc32c.c
@@ -112,6 +114,9 @@ else()
 endif()
 
 add_library(rdkafka ${RDKAFKA_BUILD_MODE} ${sources})
+if(NOT RDKAFKA_BUILD_STATIC)
+  set_property(TARGET rdkafka PROPERTY SOVERSION ${LIBVER})
+endif()
 
 # Support '#include <rdkafka.h>'
 target_include_directories(rdkafka PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>")

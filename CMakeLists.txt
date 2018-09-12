@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.2)
-project(RdKafka)
+project(RdKafka VERSION 0.11.6)
 
 # Options. No 'RDKAFKA_' prefix to match old C++ code. {
 

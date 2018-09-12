@@ -92,6 +92,7 @@ endif()
 
 # }
 
+option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
 if(WIN32)

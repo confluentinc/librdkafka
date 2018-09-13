@@ -868,7 +868,9 @@ class QueueImpl : virtual public Queue {
 class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
  public:
   ~ConsumerImpl () {
-    rd_kafka_destroy(rk_); };
+    if (rk_)
+      rd_kafka_destroy(rk_);
+  };
   static Consumer *create (Conf *conf, std::string &errstr);
 
   ErrorCode start (Topic *topic, int32_t partition, int64_t offset);

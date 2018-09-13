@@ -1625,6 +1625,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         rd_kafka_conf_t *conf;
         rd_kafka_resp_err_t ret_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int ret_errno = 0;
+        const char *conf_err;
 #ifndef _MSC_VER
         sigset_t newset, oldset;
 #endif
@@ -1647,67 +1648,16 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         else
                 conf = app_conf;
 
-        /* Verify mandatory configuration */
-        if (!conf->socket_cb) {
-                rd_snprintf(errstr, errstr_size,
-                            "Mandatory config property 'socket_cb' not set");
+        /* Verify and finalize configuration */
+        if ((conf_err = rd_kafka_conf_finalize(type, conf))) {
+                /* Incompatible configuration settings */
+                rd_snprintf(errstr, errstr_size, "%s", conf_err);
                 if (!app_conf)
                         rd_kafka_conf_destroy(conf);
                 rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
                 return NULL;
         }
 
-        if (!conf->open_cb) {
-                rd_snprintf(errstr, errstr_size,
-                            "Mandatory config property 'open_cb' not set");
-                if (!app_conf)
-                        rd_kafka_conf_destroy(conf);
-                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
-                return NULL;
-        }
-
-#if WITH_SSL
-        if (conf->ssl.keystore_location && !conf->ssl.keystore_password) {
-                rd_snprintf(errstr, errstr_size,
-                            "Mandatory config property 'ssl.keystore.password' not set (mandatory because 'ssl.keystore.location' is set)");
-                if (!app_conf)
-                        rd_kafka_conf_destroy(conf);
-                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
-                return NULL;
-        }
-#endif
-
-        if (type == RD_KAFKA_CONSUMER) {
-                /* Automatically adjust `fetch.max.bytes` to be >=
-                 * `message.max.bytes`. */
-                conf->fetch_max_bytes = RD_MAX(conf->fetch_max_bytes,
-                                               conf->max_msg_size);
-
-                /* Automatically adjust 'receive.message.max.bytes' to
-                 * be 512 bytes larger than 'fetch.max.bytes' to have enough
-                 * room for protocol framing (including topic name). */
-                conf->recv_max_msg_size = RD_MAX(conf->recv_max_msg_size,
-                                                 conf->fetch_max_bytes + 512);
-
-                /* Simplifies rd_kafka_is_idempotent() which is producer-only */
-                conf->idempotence = 0;
-
-        } else if (type == RD_KAFKA_PRODUCER && conf->idempotence) {
-                /* Adjust configuration values for idempotent producer. */
-
-                conf->max_inflight = RD_MIN(conf->max_inflight, 5);
-                conf->max_retries = RD_MAX(conf->max_retries, 1);
-                /* acks=all and queuing.strategy are set per-topic
-                 * in topic_new0() */
-        }
-
-        if (conf->metadata_max_age_ms == -1) {
-                if (conf->metadata_refresh_interval_ms > 0)
-                        conf->metadata_max_age_ms =
-                                conf->metadata_refresh_interval_ms * 3;
-                else /* use default value of refresh * 3 */
-                        conf->metadata_max_age_ms = 5*60*1000 * 3;
-        }
 
 	rd_kafka_global_cnt_incr();
 

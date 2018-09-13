@@ -293,7 +293,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(metadata_max_age_ms),
           "Metadata cache max age. "
           "Defaults to topic.metadata.refresh.interval.ms * 3",
-          1, 24*3600*1000, -1 },
+          1, 24*3600*1000, 5*60*1000 * 3 },
         { _RK_GLOBAL, "topic.metadata.refresh.fast.interval.ms", _RK_C_INT,
           _RK(metadata_refresh_fast_interval_ms),
           "When a topic loses its leader a new metadata request will be "
@@ -2713,6 +2713,134 @@ const char *rd_kafka_confval_get_str (const rd_kafka_confval_t *confval) {
 void *rd_kafka_confval_get_ptr (const rd_kafka_confval_t *confval) {
         rd_assert(confval->valuetype == RD_KAFKA_CONFVAL_PTR);
         return confval->u.PTR;
+}
+
+
+/**
+ * @brief Verify configuration \p conf is
+ *        correct/non-conflicting and finalize the configuration
+ *        settings for use.
+ *
+ * @returns an error string if configuration is incorrect, else NULL.
+ */
+const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
+                                    rd_kafka_conf_t *conf) {
+
+        /* Verify mandatory configuration */
+        if (!conf->socket_cb)
+                return "Mandatory config property `socket_cb` not set";
+
+        if (!conf->open_cb)
+                return "Mandatory config property `open_cb` not set";
+
+#if WITH_SSL
+        if (conf->ssl.keystore_location && !conf->ssl.keystore_password)
+                return "`ssl.keystore.password` is mandatory when "
+                        "`ssl.keystore.location` is set";
+#endif
+
+        if (cltype == RD_KAFKA_CONSUMER) {
+                /* Automatically adjust `fetch.max.bytes` to be >=
+                 * `message.max.bytes` unless set by user. */
+                if (conf->fetch_max_bytes < conf->max_msg_size &&
+                    rd_kafka_conf_is_modified(conf, "fetch.max.bytes"))
+                        return "`fetch.max.bytes` must be >= "
+                                "`message.max.bytes`";
+
+                conf->fetch_max_bytes = RD_MAX(conf->fetch_max_bytes,
+                                               conf->max_msg_size);
+
+                /* Automatically adjust 'receive.message.max.bytes' to
+                 * be 512 bytes larger than 'fetch.max.bytes' to have enough
+                 * room for protocol framing (including topic name), unless
+                 * set by user. */
+                if (conf->fetch_max_bytes > conf->recv_max_msg_size + 512  &&
+                    rd_kafka_conf_is_modified(conf,
+                                              "receive.message.max.bytes"))
+                        return "`receive.message.max.bytes` must be >= "
+                                "`fetch.max.bytes` + 512";
+
+                conf->recv_max_msg_size = RD_MAX(conf->recv_max_msg_size,
+                                                 conf->fetch_max_bytes + 512);
+
+                /* Simplifies rd_kafka_is_idempotent() which is producer-only */
+                conf->eos.idempotence = 0;
+
+        } else if (cltype == RD_KAFKA_PRODUCER) {
+                if (conf->eos.idempotence) {
+                        /* Adjust configuration values for idempotent producer */
+
+                        if (conf->max_inflight >= 5 &&
+                            rd_kafka_conf_is_modified(conf, "max.in.flight"))
+                                return "`max.in.flight` must be set <= 5 "
+                                        "when `enable.idempotence` is true";
+
+                        conf->max_inflight = RD_MIN(conf->max_inflight, 5);
+
+                        if (conf->max_retries < 1 &&
+                            rd_kafka_conf_is_modified(conf, "retries"))
+                                return "`retries` must be set >= 1 "
+                                        "when `enable.idempotence` is true";
+
+                        conf->max_retries = RD_MAX(conf->max_retries, 1);
+
+                        /* acks=all and queuing.strategy are set
+                         * in topic_conf_finalize() */
+
+                } else {
+                        if (conf->eos.gapless &&
+                            rd_kafka_conf_is_modified(
+                                    conf, "enable.gapless.guarantee"))
+                                return "`enable.gapless.guarantee` requires "
+                                        "`enable.idempotence` to be enabled";
+                }
+        }
+
+
+        if (!rd_kafka_conf_is_modified(conf, "metadata.max.age.ms") &&
+            conf->metadata_refresh_interval_ms > 0)
+                conf->metadata_max_age_ms =
+                        conf->metadata_refresh_interval_ms * 3;
+
+        /* Finalize and verify the default.topic.config */
+        if (conf->topic_conf)
+                return rd_kafka_topic_conf_finalize(cltype, conf,
+                                                    conf->topic_conf);
+
+        return NULL;
+}
+
+
+/**
+ * @brief Verify topic configuration \p tconf is
+ *        correct/non-conflicting and finalize the configuration
+ *        settings for use.
+ *
+ * @returns an error string if configuration is incorrect, else NULL.
+ */
+const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
+                                          const rd_kafka_conf_t *conf,
+                                          rd_kafka_topic_conf_t *tconf) {
+
+        if (conf->eos.idempotence) {
+                /* Ensure acks=all */
+                if (tconf->required_acks != -1 &&
+                    rd_kafka_topic_conf_is_modified(tconf, "acks"))
+                        return "`acks` must be set to `all` when "
+                                "`enable.idempotence` is true";
+
+                tconf->required_acks = -1; /* all */
+
+                /* Ensure FIFO queueing */
+                if (tconf->queuing_strategy != RD_KAFKA_QUEUE_FIFO &&
+                    rd_kafka_topic_conf_is_modified(tconf, "queuing.strategy"))
+                        return "`queuing.strategy` must be set to `fifo` "
+                                "when `enable.idempotence` is true";
+
+                tconf->queuing_strategy = RD_KAFKA_QUEUE_FIFO;
+        }
+
+        return NULL;
 }
 
 

@@ -100,6 +100,19 @@ typedef enum {
 
 
 
+/* Increase in steps of 64 as needed. */
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*24)
+
+/**
+ * @struct rd_kafka_anyconf_t
+ * @brief The anyconf header must be the first field in the
+ *        rd_kafka_conf_t and rd_kafka_topic_conf_t structs.
+ *        It provides a way to track which property has been modified.
+ */
+struct rd_kafka_anyconf_hdr {
+        uint64_t modified[RD_KAFKA_CONF_PROPS_IDX_MAX/64];
+};
+
 
 /**
  * Optional configuration struct passed to rd_kafka_new*().
@@ -109,6 +122,8 @@ typedef enum {
  *
  */
 struct rd_kafka_conf_s {
+        struct rd_kafka_anyconf_hdr hdr;  /**< Must be first field */
+
 	/*
 	 * Generic configuration
 	 */
@@ -368,6 +383,8 @@ int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
 
 
 struct rd_kafka_topic_conf_s {
+        struct rd_kafka_anyconf_hdr hdr;  /**< Must be first field */
+
 	int     required_acks;
 	int32_t request_timeout_ms;
 	int     message_timeout_ms;

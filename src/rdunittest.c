@@ -45,6 +45,9 @@
 #include "rdsysqueue.h"
 
 
+int rd_unittest_assert_on_failure = 0;
+
+
 /**
  * @name Test rdsysqueue.h / queue.h
  * @{
@@ -399,9 +402,15 @@ int rd_unittest (void) {
 #ifdef _MSC_VER
                 { "rdclock", unittest_rdclock },
 #endif
+                { "conf", unittest_conf },
                 { NULL }
         };
         int i;
+
+#ifndef _MSC_VER
+        if (getenv("RD_UT_ASSERT"))
+                rd_unittest_assert_on_failure = 1;
+#endif
 
         for (i = 0 ; unittests[i].name ; i++) {
                 int f = unittests[i].call();

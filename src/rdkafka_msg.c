@@ -107,6 +107,7 @@ rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
         rkm->rkm_offset     = RD_KAFKA_OFFSET_INVALID;
 	rkm->rkm_timestamp  = 0;
 	rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+        rkm->rkm_status     = RD_KAFKA_MSG_STATUS_NOT_PERSISTED;
         rkm->rkm_headers    = NULL;
 
 	p = (char *)(rkm+1);
@@ -1113,6 +1114,16 @@ void rd_kafka_message_set_headers (rd_kafka_message_t *rkmessage,
         rkm->rkm_headers = hdrs;
 }
 
+
+
+rd_kafka_msg_status_t
+rd_kafka_message_status (const rd_kafka_message_t *rkmessage) {
+        rd_kafka_msg_t *rkm;
+
+        rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+
+        return rkm->rkm_status;
+}
 
 
 void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {

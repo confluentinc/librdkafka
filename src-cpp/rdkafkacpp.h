@@ -1458,6 +1458,25 @@ public:
  */
 class RD_EXPORT Message {
  public:
+  /** @brief Message persistance status can be used by the application to
+   *         find out if a produced message was persisted in the topic log. */
+  enum Status {
+    /**< Message was never transmitted to the broker, or failed with
+     *   an error indicating it was not written to the log.
+     *   Application retry risks ordering, but not duplication. */
+    MSG_STATUS_NOT_PERSISTED = 0,
+
+    /**< Message was transmitted to broker, but no acknowledgement was
+     *   received.
+     *   Application retry risks ordering and duplication. */
+    MSG_STATUS_POSSIBLY_PERSISTED = 1,
+
+    /**< Message was written to the log and fully acknowledged.
+     *   No reason for application to retry.
+     *   Note: this value should only be trusted with \c acks=all. */
+    MSG_STATUS_PERSISTED =  2
+  };
+
   /**
    * @brief Accessor functions*
    * @remark Not all fields are present in all types of callbacks.
@@ -1529,6 +1548,11 @@ class RD_EXPORT Message {
    * @returns \c rd_kafka_message_t*
    */
   virtual struct rd_kafka_message_s *c_ptr () = 0;
+
+  /**
+   * @brief Returns the message's persistance status in the topic log.
+   */
+  virtual Status status () const = 0;
 };
 
 /**@}*/

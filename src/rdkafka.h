@@ -1279,6 +1279,38 @@ void rd_kafka_message_set_headers (rd_kafka_message_t *rkmessage,
 RD_EXPORT size_t rd_kafka_header_cnt (const rd_kafka_headers_t *hdrs);
 
 
+/**
+ * @enum rd_kafka_msg_status_t
+ * @brief Message persistance status can be used by the application to
+ *        find out if a produced message was persisted in the topic log.
+ */
+typedef enum {
+        /**< Message was never transmitted to the broker, or failed with
+         *   an error indicating it was not written to the log.
+         *   Application retry risks ordering, but not duplication. */
+        RD_KAFKA_MSG_STATUS_NOT_PERSISTED = 0,
+
+        /**< Message was transmitted to broker, but no acknowledgement was
+         *   received.
+         *   Application retry risks ordering and duplication. */
+        RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED = 1,
+
+        /**< Message was written to the log and fully acknowledged.
+         *   No reason for application to retry.
+         *   Note: this value should only be trusted with \c acks=all. */
+        RD_KAFKA_MSG_STATUS_PERSISTED =  2
+} rd_kafka_msg_status_t;
+
+
+/**
+ * @brief Returns the message's persistance status in the topic log.
+ *
+ * @remark The message status is not available in on_acknowledgement
+ *         interceptors.
+ */
+RD_EXPORT rd_kafka_msg_status_t
+rd_kafka_message_status (const rd_kafka_message_t *rkmessage);
+
 /**@}*/
 
 

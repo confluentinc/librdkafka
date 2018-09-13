@@ -209,6 +209,10 @@ class MessageImpl : public Message {
           return rkmessage_;
   }
 
+  Status status () const {
+          return static_cast<Status>(rd_kafka_message_status(rkmessage_));
+  }
+
   RdKafka::Topic *topic_;
   rd_kafka_message_t *rkmessage_;
   bool free_rkmessage_;

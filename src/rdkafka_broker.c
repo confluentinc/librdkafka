@@ -2120,7 +2120,13 @@ static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb) {
 
 
 /**
- * Propagate delivery report for entire message queue.
+ * @brief Propagate delivery report for entire message queue.
+ *
+ * @param err The error which will be set on each message.
+ * @param status The status which will be set on each message.
+ *
+ * To avoid extra iterations, the \p err and \p status are set on
+ * the message as they are popped off the OP_DR msgq in rd_kafka_poll() et.al
  */
 void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err) {
@@ -2840,13 +2846,15 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                 RD_KAFKAP_Produce, rktp,
                                 RD_KAFKA_RESP_ERR__RETRY);
 
-                        rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
-                                   "%.*s [%"PRId32"] PID has changed: "
-                                   "must drain requests for all partitions "
-                                   "before resuming resetting PID",
-                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->
-                                                    rkt_topic),
-                                   rktp->rktp_partition);
+                        if (rd_kafka_pid_valid(rktp->rktp_eos.pid))
+                                rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
+                                           "%.*s [%"PRId32"] PID has changed: "
+                                           "must drain requests for all "
+                                           "partitions before resuming reset "
+                                           "of PID",
+                                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->
+                                                            rkt_topic),
+                                           rktp->rktp_partition);
 
                         /* Attempt to change the pid, it will fail if there
                          * are outstanding messages in-flight, in which case
@@ -2861,7 +2869,7 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                         if (inflight) {
                                 /* Waiting for in-flight requests to
                                  * drain/finish before producing anything more.
-                                 * This is used to recovery to a consistent
+                                 * This is used to recover to a consistent
                                  * state when the partition leader
                                  * has changed. */
 

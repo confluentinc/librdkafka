@@ -197,7 +197,8 @@ int main_0055_producer_latency (int argc, char **argv) {
                    "socket.blocking.max.ms", "3000", NULL}, 500, 600 },
                 { "no acks",
                   {"queue.buffering.max.ms", "0",
-                   "acks", "0", NULL}, 0, 0 },
+                   "acks", "0",
+                   "enable.idempotence", "false", NULL}, 0, 0 },
                 { NULL }
         };
         struct latconf *latconf;

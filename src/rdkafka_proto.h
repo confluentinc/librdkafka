@@ -581,6 +581,16 @@ static RD_UNUSED RD_INLINE void rd_kafka_pid_reset (rd_kafka_pid_t *pid) {
         pid->epoch = -1;
 }
 
+
+/**
+ * @brief Bump the epoch of a valid PID
+ */
+static RD_UNUSED RD_INLINE rd_kafka_pid_t
+rd_kafka_pid_bump (const rd_kafka_pid_t old) {
+        rd_kafka_pid_t new = { old.id, ((int)old.epoch + 1) & (int)INT16_MAX };
+        return new;
+}
+
 /**@}*/
 
 

@@ -181,7 +181,8 @@ rxbytes | int | | Total number of bytes received for rxmsgs
 msgs | int | | Total number of messages received (consumer, same as rxmsgs), or total number of messages produced (possibly not yet transmitted) (producer).
 rx_ver_drops | int | | Dropped outdated messages
 msgs_inflight | int gauge | | Current number of messages in-flight to/from broker
-
+next_ack_seq int gauge | | Next expected acked sequence (idempotent producer)
+next_err_seq int gauge | | Next expected errored sequence (idempotent producer)
 
 ## cgrp
 

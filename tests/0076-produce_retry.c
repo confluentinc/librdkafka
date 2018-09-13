@@ -165,19 +165,23 @@ static void do_test_produce_retries (const char *topic,
         test_conf_set(conf, "socket.max.fails", "100");
         test_conf_set(conf, "enable.idempotence", idempotence?"true":"false");
         test_curr->exp_dr_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_curr->exp_dr_status = RD_KAFKA_MSG_STATUS_PERSISTED;
         if (!try_fail) {
                 test_conf_set(conf, "retries", "5");
         } else {
-                test_conf_set(conf, "retries", "0");
-                /* enable.idempotence=true will adjust retries which
+                /* enable.idempotence=true request retries >= 1 which
                  * makes the test pass. Adjust expected error accordingly. */
-                if (should_fail)
-                        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
-                else if (idempotence)
+                if (idempotence)
                         test_conf_set(conf, "retries", "5");
+                else
+                        test_conf_set(conf, "retries", "0");
+                if (should_fail) {
+                        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
+                        test_curr->exp_dr_status = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+                }
         }
         test_conf_set(conf, "retry.backoff.ms", "5000");
-        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         test_socket_enable(conf);
         test_curr->is_fatal_cb = is_fatal_cb;
 
@@ -314,16 +318,17 @@ static void do_test_produce_retries_disconnect (const char *topic,
         testid = test_id_generate();
 
         test_conf_init(&conf, NULL, 60);
-        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         test_conf_set(conf, "socket.timeout.ms", "10000");
         test_conf_set(conf, "message.timeout.ms", "30000");
         test_conf_set(conf, "enable.idempotence", idempotence?"true":"false");
         if (!try_fail) {
                 test_conf_set(conf, "retries", "1");
         } else {
-                /* enable.idempotence=true will adjust retries which
+                /* enable.idempotence=true request retries >= 1 which
                  * makes the test pass. */
-                test_conf_set(conf, "retries", "0");
+                if (!idempotence)
+                        test_conf_set(conf, "retries", "0");
         }
 
         mtx_init(&produce_disconnect_lock, mtx_plain);

@@ -654,6 +654,34 @@ rd_kafka_msg_t *rd_kafka_msgq_find_pos (const rd_kafka_msgq_t *rkmq,
 }
 
 
+/**
+ * @brief Set per-message metadata for all messages in \p rkmq
+ */
+void rd_kafka_msgq_set_metadata (rd_kafka_msgq_t *rkmq,
+                                 int64_t base_offset, int64_t timestamp,
+                                 rd_kafka_msg_status_t status) {
+        rd_kafka_msg_t *rkm;
+
+        TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
+                rkm->rkm_offset = base_offset++;
+                if (timestamp != -1) {
+                        rkm->rkm_timestamp = timestamp;
+                        rkm->rkm_tstype = RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME;
+                }
+
+                /* Don't downgrade a message from any form of PERSISTENT
+                 * to NOT_PERSISTENT, since the original cause of indicating
+                 * PERSISTENT can't be changed.
+                 * E.g., a previous ack or in-flight timeout. */
+                if (unlikely(status == RD_KAFKA_MSG_STATUS_NOT_PERSISTED &&
+                             rkm->rkm_status != RD_KAFKA_MSG_STATUS_NOT_PERSISTED))
+                        continue;
+
+                rkm->rkm_status = status;
+        }
+}
+
+
 
 int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
 					 const void *key, size_t keylen,
@@ -1309,12 +1337,47 @@ static int unittest_msgq_order (const char *what, int fifo,
 
 }
 
+/**
+ * @brief Verify that rd_kafka_seq_wrap() works.
+ */
+static int unittest_msg_seq_wrap (void) {
+        static const struct exp {
+                int64_t in;
+                int32_t out;
+        } exp[] = {
+                { 0,  0 },
+                { 1, 1 },
+                { (int64_t)INT32_MAX+2, 1 },
+                { (int64_t)INT32_MAX+1, 0 },
+                { INT32_MAX, INT32_MAX },
+                { INT32_MAX-1, INT32_MAX-1 },
+                { INT32_MAX-2, INT32_MAX-2 },
+                { ((int64_t)1<<33)-2, INT32_MAX-1 },
+                { ((int64_t)1<<33)-1, INT32_MAX },
+                { ((int64_t)1<<34), 0 },
+                { ((int64_t)1<<35)+3, 3 },
+                { 1710+1229, 2939 },
+                { -1, -1 },
+        };
+        int i;
+
+        for (i = 0 ; exp[i].in != -1 ; i++) {
+                int32_t wseq = rd_kafka_seq_wrap(exp[i].in);
+                RD_UT_ASSERT(wseq == exp[i].out,
+                             "Expected seq_wrap(%"PRId64") -> %"PRId32
+                             ", not %"PRId32,
+                             exp[i].in, exp[i].out, wseq);
+        }
+
+        RD_UT_PASS();
+}
 
 int unittest_msg (void) {
         int fails = 0;
 
         fails += unittest_msgq_order("FIFO", 1, rd_kafka_msg_cmp_msgseq);
         fails += unittest_msgq_order("LIFO", 0, rd_kafka_msg_cmp_msgseq_lifo);
+        fails += unittest_msg_seq_wrap();
 
         return fails;
 }

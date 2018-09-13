@@ -264,6 +264,8 @@ enum ErrorCode {
         ERR__FATAL = -150,
         /** Inconsistent state */
         ERR__INCONSISTENT = -149,
+        /** Gap-less ordering would not be guaranteed if proceeding */
+        ERR__GAPLESS = -148,
 
         /** End internal error codes */
 	ERR__END = -100,
@@ -2314,12 +2316,15 @@ class RD_EXPORT Producer : public virtual Handle {
   enum {
     PURGE_QUEUE = 0x1, /**< Purge messages in internal queues */
 
-    PURGE_INFLIGHT = 0x2 /*! Purge messages in-flight to or from the broker.
-                          *  Purging these messages will void any future
-                          *  acknowledgements from the broker, making it
-                          *  impossible for the application to know if these
-                          *  messages were successfully delivered or not.
-                          *  Retrying these messages may lead to duplicates. */
+    PURGE_INFLIGHT = 0x2, /*! Purge messages in-flight to or from the broker.
+                           *  Purging these messages will void any future
+                           *  acknowledgements from the broker, making it
+                           *  impossible for the application to know if these
+                           *  messages were successfully delivered or not.
+                           *  Retrying these messages may lead to duplicates. */
+
+    PURGE_NON_BLOCKING = 0x4 /* Don't wait for background queue
+                              * purging to finish. */
   };
 
 };

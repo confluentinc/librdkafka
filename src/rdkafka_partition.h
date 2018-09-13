@@ -137,6 +137,16 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                           *   toppar handler thread. */
                 int32_t next_ack_seq;    /**< Next expected ack sequence.
                                           *   Protected by toppar lock. */
+                int32_t next_err_seq;    /**< Next expected error sequence.
+                                          *   Used when draining outstanding
+                                          *   issues.
+                                          *   This value will be the same
+                                          *   as next_ack_seq until a drainable
+                                          *   error occurs, in which case it
+                                          *   will advance past next_ack_seq.
+                                          *   next_ack_seq can never be larger
+                                          *   than next_err_seq.
+                                          *   Protected by toppar lock. */
                 rd_bool_t wait_drain;    /**< All inflight requests must
                                           *   be drained/finish before
                                           *   resuming producing.

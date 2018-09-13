@@ -579,17 +579,28 @@ uint64_t rd_kafka_q_size (rd_kafka_q_t *rkq) {
         return sz;
 }
 
+/**
+ * @brief Construct a temporary on-stack replyq with increased
+ *        \p rkq refcount (unless NULL), version, and debug id.
+ */
+static RD_INLINE RD_UNUSED rd_kafka_replyq_t
+rd_kafka_replyq_make (rd_kafka_q_t *rkq, int version, const char *id) {
+        rd_kafka_replyq_t replyq = RD_ZERO_INIT;
+
+        if (rkq) {
+                replyq.q = rd_kafka_q_keep(rkq);
+                replyq.version = version;
+#if ENABLE_DEVEL
+                replyq._id = rd_strdup(id);
+#endif
+        }
+
+        return replyq;
+}
 
 /* Construct temporary on-stack replyq with increased Q refcount and
  * optional VERSION. */
-#if ENABLE_DEVEL
-#define RD_KAFKA_REPLYQ(Q,VERSION) \
-	(rd_kafka_replyq_t){rd_kafka_q_keep(Q), VERSION, \
-			rd_strdup(__FUNCTION__) }
-#else
-#define RD_KAFKA_REPLYQ(Q,VERSION) \
-	(rd_kafka_replyq_t){rd_kafka_q_keep(Q), VERSION}
-#endif
+#define RD_KAFKA_REPLYQ(Q,VERSION) rd_kafka_replyq_make(Q,VERSION,__FUNCTION__)
 
 /* Construct temporary on-stack replyq for indicating no replyq. */
 #if ENABLE_DEVEL

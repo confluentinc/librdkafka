@@ -824,7 +824,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           0, 1, 0 },
 	/* Global producer properties */
         { _RK_GLOBAL|_RK_PRODUCER, "enable.idempotence", _RK_C_BOOL,
-          _RK(idempotence),
+          _RK(eos.idempotence),
           "When set to `true`, the producer will ensure that messages are "
           "successfully produced exactly once and in the original produce "
           "order. "
@@ -832,9 +832,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "(if necessary) when idempotence is enabled: "
           "`max.inflight.requests.per.connection` is capped at 5, "
           "`retries` must be greater than 0, "
-          "`acks` is  set to `all`, "
-          "`queuing.strategy` is set to `fifo`.",
+          "`acks` is  set to `all`, `queuing.strategy` is set to `fifo`.",
           0, 1, 0 },
+        { _RK_GLOBAL|_RK_PRODUCER, "enable.gapless.guarantee", _RK_C_BOOL,
+          _RK(eos.gapless),
+          "When set to `true`, any error that could result in a gap "
+          "in the produced message series when a batch of messages fails, "
+          "will raise a fatal error (ERR__GAPLESS) and stop the producer. "
+          "Requires `enable.idempotence=true`.",
+          0, 1, 1 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.messages", _RK_C_INT,
 	  _RK(queue_buffering_max_msgs),
 	  "Maximum number of messages allowed on the producer queue.",
@@ -966,9 +972,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         },
         { _RK_TOPIC|_RK_PRODUCER, "produce.offset.report", _RK_C_BOOL,
           _RKT(produce_offset_report),
-          "Report offset of produced message back to application. "
-          "The application must be use the `dr_msg_cb` to retrieve the offset "
-          "from `rd_kafka_message_t.offset`.",
+          "**Deprecated** No longer used.",
           0, 1, 0 },
         { _RK_TOPIC|_RK_PRODUCER, "partitioner", _RK_C_STR,
           _RKT(partitioner_str),

@@ -273,7 +273,12 @@ struct rd_kafka_conf_s {
 	/*
 	 * Producer configuration
 	 */
-        int    idempotence;
+        struct {
+                int    idempotence;  /**< Enable Idempotent Producer */
+                rd_bool_t gapless;   /**< Raise fatal error if
+                                      *   gapless guarantee can't be
+                                      *   satisfied. */
+        } eos;
 	int    queue_buffering_max_msgs;
 	int    queue_buffering_max_kbytes;
 	int    buffering_max_ms;

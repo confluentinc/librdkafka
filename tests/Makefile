@@ -41,10 +41,10 @@ run_local: $(BIN)
 	@echo "Running local broker-less tests with idempotent producer"
 	./run-test.sh -p5 -l -P ./$(BIN)
 
-idempotent_par:
+idempotent_par: $(BIN)
 	./run-test.sh -p5 -P ./$(BIN)
 
-idempotent_seq:
+idempotent_seq: $(BIN)
 	./run-test.sh -p1 -P ./$(BIN)
 
 idempotent: idempotent_par

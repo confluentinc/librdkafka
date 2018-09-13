@@ -74,6 +74,12 @@ static void dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                                 "got: %s",
                                 rd_kafka_err2str(rkmessage->err));
         else {
+                TEST_ASSERT_LATER(rd_kafka_message_status(rkmessage) ==
+                                  RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED,
+                                  "Message should have status "
+                                  "PossiblyPersisted (%d), not %d",
+                                  RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED,
+                                  rd_kafka_message_status(rkmessage));
                 msg_dr_fail_cnt++;
         }
 }

@@ -127,8 +127,14 @@ static void sigterm (int sig) {
 class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
  public:
   void dr_cb (RdKafka::Message &message) {
+    static const char *persistance_names[] = {
+      [RdKafka::Message::Status::MSG_STATUS_NOT_PERSISTED] = "NotPersisted",
+      [RdKafka::Message::Status::MSG_STATUS_POSSIBLY_PERSISTED] = "PossiblyPersisted",
+      [RdKafka::Message::Status::MSG_STATUS_PERSISTED] = "Persisted"
+    };
     std::cout << "Message delivery for (" << message.len() << " bytes): " <<
-        message.errstr() << std::endl;
+      persistance_names[message.status()] << ": " <<
+      message.errstr() << std::endl;
     if (message.key())
       std::cout << "Key: " << *(message.key()) << ";" << std::endl;
   }

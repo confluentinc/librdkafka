@@ -155,6 +155,9 @@ static void purge_and_expect (const char *what, int line,
         test_timing_t t_purge;
         rd_kafka_resp_err_t err;
 
+        TEST_SAY("%s:%d: purge(0x%x): "
+                 "expecting %d messages to remain when done\n",
+                 what, line, purge_flags, exp_remain);
         TIMING_START(&t_purge, "%s:%d: purge(0x%x)", what, line, purge_flags);
         err = rd_kafka_purge(rk, purge_flags);
         TIMING_STOP(&t_purge);
@@ -169,7 +172,16 @@ static void purge_and_expect (const char *what, int line,
 }
 
 
-static void do_test_purge (const char *what, int remote) {
+/**
+ * @brief Don't treat ERR__GAPLESS as a fatal error
+ */
+static int gapless_is_not_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                                    const char *reason) {
+        return err != RD_KAFKA_RESP_ERR__GAPLESS;
+}
+
+static void do_test_purge (const char *what, int remote,
+                           int idempotence, int gapless) {
         const char *topic = test_mk_topic_name("0086_purge", 0);
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
@@ -191,6 +203,8 @@ static void do_test_purge (const char *what, int remote) {
         test_conf_set(conf, "batch.num.messages", "10");
         test_conf_set(conf, "max.in.flight", "1");
         test_conf_set(conf, "linger.ms", "500");
+        test_conf_set(conf, "enable.idempotence", idempotence?"true":"false");
+        test_conf_set(conf, "enable.gapless.guarantee", gapless?"true":"false");
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
 
         if (remote) {
@@ -200,6 +214,9 @@ static void do_test_purge (const char *what, int remote) {
                 rd_kafka_conf_interceptor_add_on_new(conf, "on_new_producer",
                                                      on_new_producer, NULL);
 #endif
+
+                if (idempotence && !gapless)
+                        test_curr->is_fatal_cb = gapless_is_not_fatal_cb;
 
                 mtx_init(&produce_req_lock, mtx_plain);
                 cnd_init(&produce_req_cnd);
@@ -276,12 +293,16 @@ static void do_test_purge (const char *what, int remote) {
 
 
 int main_0086_purge_remote (int argc, char **argv) {
-        do_test_purge("remote", 1/*remote*/);
+        do_test_purge("remote", 1/*remote*/, 0/*idempotence*/, 0/*!gapless*/);
+        do_test_purge("remote,idempotence", 1/*remote*/, 1/*idempotence*/,
+                      0/*!gapless*/);
+        do_test_purge("remote,idempotence,gapless", 1/*remote*/,
+                      1/*idempotence*/, 1/*!gapless*/);
         return 0;
 }
 
 
 int main_0086_purge_local (int argc, char **argv) {
-        do_test_purge("local", 0/*local*/);
+        do_test_purge("local", 0/*local*/, 0, 0);
         return 0;
 }

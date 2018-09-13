@@ -357,6 +357,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__FATAL = -150,
         /** Inconsistent state */
         RD_KAFKA_RESP_ERR__INCONSISTENT = -149,
+        /** Gap-less ordering would not be guaranteed if proceeding */
+        RD_KAFKA_RESP_ERR__GAPLESS = -148,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -1470,8 +1472,8 @@ rd_kafka_conf_set_background_event_cb (rd_kafka_conf_t *conf,
 
 
 /**
- @deprecated See rd_kafka_conf_set_dr_msg_cb()
-*/
+ * @deprecated See rd_kafka_conf_set_dr_msg_cb()
+ */
 RD_EXPORT
 void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
 			      void (*dr_cb) (rd_kafka_t *rk,
@@ -1494,6 +1496,14 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  *
  * An application must call rd_kafka_poll() at regular intervals to
  * serve queued delivery report callbacks.
+ *
+ * The broker-assigned offset can be retrieved with \c rkmessage->offset
+ * ((if `producer.offset.report` is true), and the timestamp can be
+ * retrieved using rd_kafka_message_timestamp().
+ *
+ * @remark The Idempotent Producer may return invalid timestamp
+ *         and offset for retried messages that were previously
+ *         successfully delivered but not properly acknowledged.
  */
 RD_EXPORT
 void rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
@@ -3455,6 +3465,12 @@ rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags);
  * Retrying these messages may lead to duplicates.
  */
 #define RD_KAFKA_PURGE_F_INFLIGHT 0x2
+
+
+/*!
+ * Don't wait for background thread queue purging to finish.
+ */
+#define RD_KAFKA_PURGE_F_NON_BLOCKING 0x4
 
 
 /**@}*/

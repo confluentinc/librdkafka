@@ -757,10 +757,10 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                  * Kafka protocol's is only 31 (signed), so we'll
                  * need to handle wrapping. */
                 msetw->msetw_firstmsg.msgseq = rkm->rkm_u.producer.msgseq;
-                msetw->msetw_firstmsg.seq = (int32_t)
-                        ((rkm->rkm_u.producer.msgseq -
-                          rktp->rktp_eos.epoch_base_seq) %
-                         ((uint64_t)INT32_MAX + 1));
+                msetw->msetw_firstmsg.seq =
+                        rd_kafka_seq_wrap(rkm->rkm_u.producer.msgseq -
+                                          rktp->rktp_eos.epoch_base_seq);
+                rkbuf->rkbuf_u.Produce.base_seq = msetw->msetw_firstmsg.seq;
 
                 /* Check if there is a stored last message
                  * on the firstmsg, which means an entire
@@ -1201,7 +1201,7 @@ rd_kafka_msgset_writer_finalize_MessageSet_v2_header (
 
         rd_kafka_buf_update_i32(rkbuf, msetw->msetw_of_start +
                                 RD_KAFKAP_MSGSET_V2_OF_BaseSequence,
-                                msetw->msetw_firstmsg.seq);
+                                rkbuf->rkbuf_u.Produce.base_seq);
 
         rd_kafka_buf_update_i32(rkbuf, msetw->msetw_of_start +
                                 RD_KAFKAP_MSGSET_V2_OF_RecordCount, msgcnt);

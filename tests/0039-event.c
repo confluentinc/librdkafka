@@ -93,7 +93,7 @@ int main_0039_event_dr (int argc, char **argv) {
 	test_conf_init(&conf, &topic_conf, 10);
 
 	/* Set delivery report callback */
-	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+	rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_DR);
 

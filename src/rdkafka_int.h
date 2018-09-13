@@ -124,6 +124,10 @@ typedef enum {
                                            *   ProduceRequests to finish
                                            *   before resetting and
                                            *   re-requesting a new PID. */
+        RD_KAFKA_IDEMP_STATE_DRAIN_BUMP, /**< Wait for outstanding
+                                          *   ProduceRequests to finish
+                                          *   before bumping the current
+                                          *   epoch. */
 } rd_kafka_idemp_state_t;
 
 /**
@@ -138,6 +142,7 @@ rd_kafka_idemp_state2str (rd_kafka_idemp_state_t state) {
                 "WaitPID",
                 "Assigned",
                 "DrainReset",
+                "DrainBump"
         };
         return names[state];
 }
@@ -266,11 +271,11 @@ struct rd_kafka_s {
          * @locks rk_lock
          */
         struct {
-                rd_kafka_idemp_state_t idemp_state;
-                rd_ts_t ts_idemp_state; /**< Last state change */
-
-                rd_kafka_pid_t pid;  /**< Current Producer ID and Epoch */
-                int epoch_cnt;       /**< Number of times pid/epoch changed */
+                rd_kafka_idemp_state_t idemp_state; /**< Idempotent Producer
+                                                     *   state */
+                rd_ts_t ts_idemp_state;/**< Last state change */
+                rd_kafka_pid_t pid;    /**< Current Producer ID and Epoch */
+                int epoch_cnt;         /**< Number of times pid/epoch changed */
                 rd_atomic32_t inflight_toppar_cnt; /**< Current number of
                                                     *   toppars with inflight
                                                     *   requests. */
@@ -472,9 +477,9 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 /**
  * @returns true if idempotency is enabled (producer only).
  */
-#define rd_kafka_is_idempotent(rk) ((rk)->rk_conf.idempotence)
+#define rd_kafka_is_idempotent(rk) ((rk)->rk_conf.eos.idempotence)
 
-#define RD_KAFKA_PURGE_F_MASK 0x3
+#define RD_KAFKA_PURGE_F_MASK 0x7
 const char *rd_kafka_purge_flags2str (int flags);
 
 

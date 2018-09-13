@@ -426,6 +426,9 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Fatal error"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__INCONSISTENT,
                   "Local: Inconsistent state"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__GAPLESS,
+                  "Local: Gap-less ordering would not be guaranteed "
+                  "if proceeding"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -724,9 +727,14 @@ int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 
 
         /* Purge producer queues, but not in-flight since we'll
-         * want proper delivery status for transmitted requests. */
+         * want proper delivery status for transmitted requests.
+         * Need NON_BLOCKING to avoid dead-lock if user is
+         * calling purge() at the same time, which could be
+         * waiting for this broker thread to handle its
+         * OP_PURGE request. */
         if (rk->rk_type == RD_KAFKA_PRODUCER)
-                rd_kafka_purge(rk, RD_KAFKA_PURGE_F_QUEUE);
+                rd_kafka_purge(rk, RD_KAFKA_PURGE_F_QUEUE|
+                               RD_KAFKA_PURGE_F_NON_BLOCKING);
 
         return 1;
 }
@@ -1185,8 +1193,10 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
                    "\"rxbytes\":%"PRIu64", "
                    "\"msgs\": %"PRIu64", "
                    "\"rx_ver_drops\": %"PRIu64", "
-                   "\"msgs_inflight\": %"PRId32" "
-		   "} ",
+                   "\"msgs_inflight\": %"PRId32", "
+                   "\"next_ack_seq\": %"PRId32", "
+                   "\"next_err_seq\": %"PRId32
+                   "} ",
 		   first ? "" : ", ",
 		   rktp->rktp_partition,
 		   rktp->rktp_partition,
@@ -1219,7 +1229,9 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
                    rd_atomic64_get(&rktp->rktp_c.producer_enq_msgs) :
                    rd_atomic64_get(&rktp->rktp_c.rx_msgs), /* legacy, same as rx_msgs */
                    rd_atomic64_get(&rktp->rktp_c.rx_ver_drops),
-                   rd_atomic32_get(&rktp->rktp_msgs_inflight));
+                   rd_atomic32_get(&rktp->rktp_msgs_inflight),
+                   rktp->rktp_eos.next_ack_seq,
+                   rktp->rktp_eos.next_err_seq);
 
         if (total) {
                 total->txmsgs      += rd_atomic64_get(&rktp->rktp_c.tx_msgs);
@@ -3503,7 +3515,7 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
 
 rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags) {
         rd_kafka_broker_t *rkb;
-        rd_kafka_q_t *tmpq;
+        rd_kafka_q_t *tmpq = NULL;
         int waitcnt = 0;
 
         if (rk->rk_type != RD_KAFKA_PRODUCER)
@@ -3518,8 +3530,9 @@ rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags) {
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
         /* Set up a reply queue to wait for broker thread signalling
-         * completion. */
-        tmpq = rd_kafka_q_new(rk);
+         * completion, unless non-blocking. */
+        if (!(purge_flags & RD_KAFKA_PURGE_F_NON_BLOCKING))
+                tmpq = rd_kafka_q_new(rk);
 
         /* Send purge request to all broker threads */
         rd_kafka_rdlock(rk);
@@ -3538,11 +3551,13 @@ rd_kafka_resp_err_t rd_kafka_purge (rd_kafka_t *rk, int purge_flags) {
         waitcnt++;
 
 
-        /* Wait for responses */
-        while (waitcnt-- > 0)
-                rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
+        if (tmpq) {
+                /* Wait for responses */
+                while (waitcnt-- > 0)
+                        rd_kafka_q_wait_result(tmpq, RD_POLL_INFINITE);
 
-        rd_kafka_q_destroy_owner(tmpq);
+                rd_kafka_q_destroy_owner(tmpq);
+        }
 
         /* Purge messages for the UA(-1) partitions (which are not
          * handled by a broker thread) */

@@ -50,8 +50,6 @@ static void
 rd_kafka_idemp_set_state (rd_kafka_t *rk,
                           rd_kafka_idemp_state_t new_state) {
 
-        rd_assert(thrd_is_current(rk->rk_thread));
-
         if (rk->rk_eos.idemp_state == new_state)
                 return;
 
@@ -305,6 +303,27 @@ void rd_kafka_idemp_drain_reset (rd_kafka_t *rk) {
 
 
 /**
+ * @brief Schedule an epoch bump when the local ProduceRequest queues
+ *        have been fully drained.
+ *
+ * The PID is not bumped until the queues are fully drained.
+ *
+ * @locality any
+ * @locks none
+ */
+void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk) {
+        rd_kafka_wrlock(rk);
+        rd_kafka_dbg(rk, EOS, "DRAIN",
+                     "Beginning partition drain for PID %s epoch bump "
+                     "for %d partition(s) with in-flight requests",
+                     rd_kafka_pid2str(rk->rk_eos.pid),
+                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt));
+        rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_BUMP);
+        rd_kafka_wrunlock(rk);
+}
+
+
+/**
  * @brief Call when all partition request queues
  *        are drained to reset and re-request a new PID.
  *
@@ -319,6 +338,14 @@ static void rd_kafka_idemp_drain_done (rd_kafka_t *rk) {
                 rd_kafka_dbg(rk, EOS, "DRAIN", "All partitions drained");
                 rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
                 restart_tmr = 1;
+
+        } else if (rk->rk_eos.idemp_state == RD_KAFKA_IDEMP_STATE_DRAIN_BUMP &&
+                   rd_kafka_pid_valid(rk->rk_eos.pid)) {
+                rk->rk_eos.pid = rd_kafka_pid_bump(rk->rk_eos.pid);
+                rd_kafka_dbg(rk, EOS, "DRAIN",
+                             "All partitions drained, bumped epoch to %s",
+                             rd_kafka_pid2str(rk->rk_eos.pid));
+                rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_ASSIGNED);
         }
         rd_kafka_wrunlock(rk);
 

@@ -57,6 +57,9 @@ static const char *rd_kafka_actions_descs[] = {
         "Retry",
         "Inform",
         "Special",
+        "MsgNotPersisted",
+        "MsgPossiblyPersisted",
+        "MsgPersisted",
         NULL,
 };
 
@@ -107,7 +110,7 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                 return actions;
         }
 
-	/* Default error matching */
+        /* Default error matching */
         switch (err)
         {
         case RD_KAFKA_RESP_ERR_NO_ERROR:
@@ -120,27 +123,36 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
         case RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP:
         case RD_KAFKA_RESP_ERR__WAIT_COORD:
                 /* Request metadata information update */
-                actions |= RD_KAFKA_ERR_ACTION_REFRESH;
+                actions |= RD_KAFKA_ERR_ACTION_REFRESH|
+                        RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED;
                 break;
+
         case RD_KAFKA_RESP_ERR__TIMED_OUT:
+        case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+        case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND:
+                actions |= RD_KAFKA_ERR_ACTION_RETRY|
+                        RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED;
+
         case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
                 /* Client-side wait-response/in-queue timeout */
-        case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
-                /* Broker-side request handling timeout */
         case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS:
-        case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND:
-                /* Temporary broker-side problem */
-	case RD_KAFKA_RESP_ERR__TRANSPORT:
-		/* Broker connection down */
-		actions |= RD_KAFKA_ERR_ACTION_RETRY;
-		break;
+        case RD_KAFKA_RESP_ERR__TRANSPORT:
+                actions |= RD_KAFKA_ERR_ACTION_RETRY|
+                        RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED;
+                break;
+
+        case RD_KAFKA_RESP_ERR__PURGE_INFLIGHT:
+                actions |= RD_KAFKA_ERR_ACTION_PERMANENT|
+                        RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED;
+                break;
+
         case RD_KAFKA_RESP_ERR__DESTROY:
-	case RD_KAFKA_RESP_ERR_INVALID_SESSION_TIMEOUT:
+        case RD_KAFKA_RESP_ERR_INVALID_SESSION_TIMEOUT:
         case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:
         case RD_KAFKA_RESP_ERR__PURGE_QUEUE:
-        case RD_KAFKA_RESP_ERR__PURGE_INFLIGHT:
         default:
-                actions |= RD_KAFKA_ERR_ACTION_PERMANENT;
+                actions |= RD_KAFKA_ERR_ACTION_PERMANENT|
+                        RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED;
                 break;
         }
 
@@ -1768,6 +1780,273 @@ rd_kafka_handle_Produce_parse (rd_kafka_broker_t *rkb,
 
 
 /**
+ * @struct Hold temporary Produce error state
+ */
+struct rd_kafka_Produce_err {
+        rd_kafka_resp_err_t err;  /**< Error code */
+        int actions;              /**< Actions to take */
+        int incr_retry;           /**< Increase per-message retry cnt */
+        rd_kafka_msg_status_t status; /**< Messages persistance status */
+
+        /* Idempotent Producer */
+        int32_t next_ack_seq;      /**< Next expected sequence to ack */
+        int32_t next_err_seq;      /**< Next expected error sequence */
+        rd_bool_t update_next_ack; /**< Update next_ack_seq */
+        rd_bool_t update_next_err; /**< Update next_err_seq */
+        rd_kafka_pid_t rktp_pid;   /**< Partition's current PID */
+};
+
+
+/**
+ * @brief Error-handling for Idempotent Producer-specific Produce errors.
+ *
+ * May update \p errp, \p actionsp and \p incr_retryp.
+ *
+ * The resulting \p actionsp are handled by the caller.
+ *
+ * @warning May be called on the old leader thread. Lock rktp appropriately!
+ *
+ * @locality broker thread (but not necessarily the leader broker)
+ * @locks none
+ */
+static void
+rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
+                                          rd_kafka_toppar_t *rktp,
+                                          rd_kafka_buf_t *request,
+                                          struct rd_kafka_Produce_err *perr) {
+        rd_kafka_t *rk = rkb->rkb_rk;
+        rd_kafka_msg_t *firstmsg, *lastmsg;
+        int r;
+
+        firstmsg = rd_kafka_msgq_first(&request->rkbuf_msgq);
+        lastmsg = rd_kafka_msgq_last(&request->rkbuf_msgq);
+        rd_assert(firstmsg && lastmsg);
+
+        /* Store the last msgseq of the batch
+         * on the first message in case we need to retry
+         * and thus reconstruct the entire batch. */
+        if (firstmsg->rkm_u.producer.last_msgseq) {
+                /* last_msgseq already set, make sure it
+                 * actually points to the last message. */
+                rd_assert(firstmsg->rkm_u.producer.last_msgseq ==
+                          lastmsg->rkm_u.producer.msgseq);
+        } else {
+                firstmsg->rkm_u.producer.last_msgseq =
+                        lastmsg->rkm_u.producer.msgseq;
+        }
+
+        if (!rd_kafka_pid_eq(request->rkbuf_u.Produce.pid, perr->rktp_pid)) {
+                /* Don't retry if PID changed since we can't
+                 * guarantee correctness across PID sessions. */
+                perr->actions = RD_KAFKA_ERR_ACTION_PERMANENT;
+                perr->status  = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+
+                rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "ERRPID",
+                           "PID mismatch: request %s != partition %s: "
+                           "failing messages with error %s",
+                           rd_kafka_pid2str(request->rkbuf_u.
+                                            Produce.pid),
+                           rd_kafka_pid2str(perr->rktp_pid),
+                           rd_kafka_err2str(perr->err));
+                return;
+        }
+
+        /*
+         * Special error handling
+         */
+        switch (perr->err)
+        {
+        case RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER:
+                /* Compare request's sequence to expected next
+                 * acked sequence.
+                 *
+                 * Example requests in flight:
+                 *   R1(base_seq:5) R2(10) R3(15) R4(20)
+                 */
+
+                r = request->rkbuf_u.Produce.base_seq - perr->next_err_seq;
+
+                if (r == 0) {
+                        /* R1 failed:
+                         * If this was the head-of-line request in-flight it
+                         * means there is a state desynchronization between the
+                         * producer and broker (a bug), in which case
+                         * we'll raise a fatal error since we can no longer
+                         * reason about the state of messages and thus
+                         * not guarantee ordering or once-ness for R1,
+                         * nor give the user a chance to opt out of sending
+                         * R2 to R4 which would be retried automatically. */
+                        rd_kafka_set_fatal_error(
+                                rk, perr->err,
+                                "ProduceRequest with %d message(s) failed "
+                                "due to sequence desynchronization with "
+                                "broker %"PRId32" (%s, base seq %"PRId32")",
+                                rd_kafka_msgq_len(&request->rkbuf_msgq),
+                                rkb->rkb_nodeid,
+                                rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
+                                request->rkbuf_u.Produce.base_seq);
+
+                        perr->actions = RD_KAFKA_ERR_ACTION_PERMANENT;
+                        perr->status  = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+                        perr->update_next_ack = rd_false;
+                        perr->update_next_err = rd_true;
+
+                } else if (r > 0) {
+                        /* R2 failed:
+                         * With max.in.flight > 1 we can have a situation
+                         * where the first request in-flight (R1) to the broker
+                         * fails, which causes the sub-sequent requests
+                         * that are in-flight to have a non-sequential
+                         * sequence number and thus fail.
+                         * But these sub-sequent requests (R2 to R4) are not at
+                         * the risk of being duplicated so we bump the epoch and
+                         * re-enqueue the messages for later retry
+                         * (without incrementing retries).
+                         */
+                        rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "ERRSEQ",
+                                   "ProduceRequest with %d message(s) failed "
+                                   "due to skipped sequence numbers "
+                                   "(%s, base seq %"PRId32" > "
+                                   "next seq %"PRId32") caused by previous "
+                                   "failed request: "
+                                   "recovering and retrying",
+                                   rd_kafka_msgq_len(&request->rkbuf_msgq),
+                                   rd_kafka_pid2str(request->rkbuf_u.
+                                                    Produce.pid),
+                                   request->rkbuf_u.Produce.base_seq,
+                                   perr->next_err_seq);
+
+                        perr->incr_retry = 0;
+                        perr->actions = RD_KAFKA_ERR_ACTION_RETRY;
+                        perr->status  = RD_KAFKA_MSG_STATUS_NOT_PERSISTED;
+                        perr->update_next_ack = rd_false;
+                        perr->update_next_err = rd_true;
+
+                        rd_kafka_idemp_drain_epoch_bump(rk);
+
+                } else {
+                        /* Request's sequence is less than next ack,
+                         * this should never happen unless we have
+                         * local bug or the broker did not respond
+                         * to the requests in order. */
+                        rd_kafka_set_fatal_error(
+                                rk, perr->err,
+                                "ProduceRequest with %d message(s) failed "
+                                "with rewound sequence number on "
+                                "broker %"PRId32" (%s, base seq %"PRId32" < "
+                                "next seq %"PRId32")",
+                                rd_kafka_msgq_len(&request->rkbuf_msgq),
+                                rkb->rkb_nodeid,
+                                rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
+                                request->rkbuf_u.Produce.base_seq,
+                                perr->next_err_seq);
+
+                        perr->actions = RD_KAFKA_ERR_ACTION_PERMANENT;
+                        perr->status  = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+                        perr->update_next_ack = rd_false;
+                        perr->update_next_err = rd_false;
+                }
+                break;
+
+        case RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER:
+                /* This error indicates that we successfully produced
+                 * this set of messages before but this (supposed) retry failed.
+                 *
+                 * Treat as success, however offset and timestamp
+                 * will be invalid. */
+
+                /* Future improvement/FIXME:
+                 * But first make sure the first message has actually
+                 * been retried, getting this error for a non-retried message
+                 * indicates a synchronization issue or bug. */
+                rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "DUPSEQ",
+                           "ProduceRequest with %d message(s) failed "
+                           "due to duplicate sequence number: "
+                           "previous send succeeded but was not acknowledged "
+                           "(%s, base seq %"PRId32"): "
+                           "marking the messages successfully delivered",
+                           rd_kafka_msgq_len(&request->rkbuf_msgq),
+                           rd_kafka_pid2str(request->rkbuf_u.
+                                            Produce.pid),
+                           request->rkbuf_u.Produce.base_seq);
+
+                /* Void error, delivery succeeded */
+                perr->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                perr->actions = 0;
+                perr->status  = RD_KAFKA_MSG_STATUS_PERSISTED;
+                perr->update_next_ack = rd_true;
+                perr->update_next_err = rd_true;
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID:
+                /* The broker/cluster lost track of our PID because
+                 * the last message we produced has now been deleted
+                 * (by DeleteRecords, compaction, or topic retention policy).
+                 *
+                 * If all previous messages are accounted for and this is not
+                 * a retry we can simply bump the epoch and reset the sequence
+                 * number and then retry the message(s) again.
+                 *
+                 * If there are outstanding messages not yet acknowledged
+                 * then there is no safe way to carry on without risking
+                 * duplication or reordering, in which case we fail
+                 * the producer. */
+
+                if (!firstmsg->rkm_u.producer.retries &&
+                    perr->next_err_seq == request->rkbuf_u.Produce.base_seq) {
+                        rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "UNKPID",
+                                   "ProduceRequest with %d message(s) failed "
+                                   "due to unknown producer id "
+                                   "(%s, base seq %"PRId32", %d retries): "
+                                   "no risk of duplication/reordering: "
+                                   "resetting PID and retrying",
+                                   rd_kafka_msgq_len(&request->rkbuf_msgq),
+                                   rd_kafka_pid2str(request->rkbuf_u.
+                                                    Produce.pid),
+                                   request->rkbuf_u.Produce.base_seq,
+                                   firstmsg->rkm_u.producer.retries);
+
+                        /* Drain outstanding requests and bump epoch. */
+                        rd_kafka_idemp_drain_epoch_bump(rk);
+
+                        perr->incr_retry = 0;
+                        perr->actions = RD_KAFKA_ERR_ACTION_RETRY;
+                        perr->status  = RD_KAFKA_MSG_STATUS_NOT_PERSISTED;
+                        perr->update_next_ack = rd_false;
+                        perr->update_next_err = rd_true;
+                        break;
+                }
+
+                rd_kafka_set_fatal_error(
+                        rk, perr->err,
+                        "ProduceRequest with %d message(s) failed "
+                        "due to unknown producer id ("
+                        "broker %"PRId32" %s, base seq %"PRId32", %d retries): "
+                        "unable to retry without risking "
+                        "duplication/reordering",
+                        rd_kafka_msgq_len(&request->rkbuf_msgq),
+                        rkb->rkb_nodeid,
+                        rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
+                        request->rkbuf_u.Produce.base_seq,
+                        firstmsg->rkm_u.producer.retries);
+
+                perr->actions = RD_KAFKA_ERR_ACTION_PERMANENT;
+                perr->status  = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+                perr->update_next_ack = rd_false;
+                perr->update_next_err = rd_true;
+                break;
+
+        default:
+                /* All other errors are handled in the standard
+                 * error Produce handler, which will set
+                 * update_next_ack|err accordingly. */
+                break;
+        }
+}
+
+
+
+/**
  * @brief Error-handling for failed ProduceRequests
  *
  * @param errp Is the input and output error, it may be changed
@@ -1783,21 +2062,14 @@ rd_kafka_handle_Produce_parse (rd_kafka_broker_t *rkb,
  */
 static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                                           rd_kafka_toppar_t *rktp,
-                                          rd_kafka_resp_err_t *errp,
                                           rd_kafka_buf_t *reply,
-                                          rd_kafka_buf_t *request) {
+                                          rd_kafka_buf_t *request,
+                                          struct rd_kafka_Produce_err *perr) {
         rd_kafka_t *rk = rkb->rkb_rk;
-        int actions;
         char actstr[64];
-        rd_kafka_resp_err_t err = *errp;
-        int incr_retry = 1; /* Increase per-message retry cnt */
-        rd_bool_t update_next_ack = rd_true;
-        int r;
         int is_leader;
-        rd_kafka_pid_t rktp_pid;
-        int32_t next_ack_seq;
 
-        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+        if (unlikely(perr->err == RD_KAFKA_RESP_ERR__DESTROY))
                 return 0; /* Terminating */
 
         /* When there is a partition leader change any outstanding
@@ -1808,36 +2080,64 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
          * locking), and cache the current rktp's eos state vars. */
         rd_kafka_toppar_lock(rktp);
         is_leader = rktp->rktp_leader == rkb;
-        rktp_pid = rktp->rktp_eos.pid;
-        next_ack_seq = rktp->rktp_eos.next_ack_seq;
+        perr->rktp_pid = rktp->rktp_eos.pid;
+        perr->next_ack_seq = rktp->rktp_eos.next_ack_seq;
+        perr->next_err_seq = rktp->rktp_eos.next_err_seq;
         rd_kafka_toppar_unlock(rktp);
 
-        actions = rd_kafka_err_action(
-                rkb, err, reply, request,
+        /* All failures are initially treated as if the message
+         * was not persisted, but the status may be changed later
+         * for specific errors and actions. */
+        perr->status = RD_KAFKA_MSG_STATUS_NOT_PERSISTED;
 
-                RD_KAFKA_ERR_ACTION_REFRESH,
+        /* Set actions for known errors (may be overriden later),
+         * all other errors are considered permanent failures.
+         * (also see rd_kafka_err_action() for the default actions). */
+        perr->actions = rd_kafka_err_action(
+                rkb, perr->err, reply, request,
+
+                RD_KAFKA_ERR_ACTION_REFRESH|
+                RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED,
                 RD_KAFKA_RESP_ERR__TRANSPORT,
 
-                RD_KAFKA_ERR_ACTION_REFRESH,
+                RD_KAFKA_ERR_ACTION_REFRESH|
+                RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED,
                 RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
 
-                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_ERR_ACTION_RETRY|
+                RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED,
                 RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS,
 
-                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_ERR_ACTION_RETRY|
+                RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED,
                 RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND,
 
-                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_ERR_ACTION_RETRY|
+                RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED,
                 RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE,
 
-                RD_KAFKA_ERR_ACTION_RETRY,
+                RD_KAFKA_ERR_ACTION_RETRY|
+                RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED,
                 RD_KAFKA_RESP_ERR__TIMED_OUT,
 
-                RD_KAFKA_ERR_ACTION_PERMANENT,
+                RD_KAFKA_ERR_ACTION_PERMANENT|
+                RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED,
                 RD_KAFKA_RESP_ERR__MSG_TIMED_OUT,
 
-                RD_KAFKA_ERR_ACTION_PERMANENT,
+                /* All Idempotent Producer-specific errors are
+                 * initially set as permanent errors,
+                 * special handling may change the actions. */
+                RD_KAFKA_ERR_ACTION_PERMANENT|
+                RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED,
                 RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER,
+
+                RD_KAFKA_ERR_ACTION_PERMANENT|
+                RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED,
+                RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER,
+
+                RD_KAFKA_ERR_ACTION_PERMANENT|
+                RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED,
+                RD_KAFKA_RESP_ERR_UNKNOWN_PRODUCER_ID,
 
                 /* Message was purged from out-queue due to
                  * Idempotent Producer Id change */
@@ -1848,195 +2148,48 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
 
         rd_rkb_dbg(rkb, MSG, "MSGSET",
                    "%s [%"PRId32"]: MessageSet with %i message(s) "
+                   "(BaseSeq %"PRId32") "
                    "encountered error: %s (actions %s)%s",
                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                    request->rkbuf_msgq.rkmq_msg_cnt,
-                   rd_kafka_err2str(err),
+                   request->rkbuf_u.Produce.base_seq,
+                   rd_kafka_err2str(perr->err),
                    rd_flags2str(actstr, sizeof(actstr),
                                 rd_kafka_actions_descs,
-                                actions),
+                                perr->actions),
                    is_leader ? "" : " [NOT LEADER]");
 
-        if (rd_kafka_is_idempotent(rk)) {
-                rd_kafka_msg_t *firstmsg, *lastmsg;
-
-                /* Store the last msgseq of the batch
-                 * on the first message in case we need to retry
-                 * and thus reconstruct the entire batch. */
-                firstmsg = rd_kafka_msgq_first(&request->rkbuf_msgq);
-                lastmsg = rd_kafka_msgq_last(&request->rkbuf_msgq);
-                rd_assert(firstmsg && lastmsg);
-
-                if (firstmsg->rkm_u.producer.last_msgseq) {
-                        /* last_msgseq already set, make sure it
-                         * actually points to the last message. */
-                        rd_assert(firstmsg->rkm_u.producer.last_msgseq ==
-                                  lastmsg->rkm_u.producer.msgseq);
-                } else {
-                        firstmsg->rkm_u.producer.last_msgseq =
-                                lastmsg->rkm_u.producer.msgseq;
-                }
-
-                if (!rd_kafka_pid_eq(request->rkbuf_u.Produce.pid, rktp_pid)) {
-                        /* Don't retry if PID changed since we can't
-                         * guarantee correctness across PID sessions. */
-                        actions = RD_KAFKA_ERR_ACTION_PERMANENT;
-                        rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "ERRPID",
-                                   "PID mismatch: request %s != partition %s: "
-                                   "failing messages with error %s",
-                                   rd_kafka_pid2str(request->rkbuf_u.
-                                                    Produce.pid),
-                                   rd_kafka_pid2str(rktp_pid),
-                                   rd_kafka_err2str(err));
-
-                        *errp = err;
-                        return 1;
-                }
-        }
 
         /*
-         * Special error handling
+         * Special handling for Idempotent Producer
+         *
+         * Note: Idempotent Producer-specific errors received
+         *       on a non-idempotent producer will be passed through
+         *       directly to the application.
          */
-        switch (err)
-        {
-        case RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER:
-                /* Received EOS error for non-EOS producer,
-                 * probably a bug in client or broker:
-                 * pass error through directly to application to
-                 * eventually have it surface on github. */
-                if (!rd_kafka_is_idempotent(rk)) {
-                        actions = RD_KAFKA_ERR_ACTION_PERMANENT;
-                        break;
-                }
-
-                /* Compare request's sequence to expected next
-                 * acked sequence.
-                 *
-                 * Example requests in flight:
-                 *   R1(base_seq:5) R2(10) R3(15) R4(20)
-                 */
-
-                r = request->rkbuf_u.Produce.base_seq - next_ack_seq;
-
-                if (r == 0) {
-                        /* R1 failed:
-                         * If this was the head-of-line request in-flight it
-                         * means there is a state desynchronization between the
-                         * producer and broker (a bug), in which case
-                         * we'll raise a fatal error since we can no longer
-                         * reason about the state of messages and thus
-                         * not guarantee ordering or once-ness for R1,
-                         * nor give the user a chance to opt out of sending
-                         * R2 to R4 which would be retried automatically. */
-                        rd_kafka_set_fatal_error(
-                                rk, err,
-                                "ProduceRequest with %d message(s) failed "
-                                "due to sequence desynchronization with "
-                                "broker %"PRId32" (%s, base seq %"PRId32")",
-                                rd_kafka_msgq_len(&request->rkbuf_msgq),
-                                rkb->rkb_nodeid,
-                                rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
-                                request->rkbuf_u.Produce.base_seq);
-
-                        /* FIXME: We could pause the partition to allow
-                         *        the application to make its own decision
-                         *        what to do: bail out or resume(). */
-
-                        actions = RD_KAFKA_ERR_ACTION_PERMANENT;
-
-                } else if (r > 0) {
-                        /* R2 failed:
-                         * With max.in.flight > 1 we can have a situation
-                         * where the first request in-flight (R1) to the broker
-                         * fails, which causes the sub-sequent requests
-                         * that are in-flight to have a non-sequential
-                         * sequence number and thus fail.
-                         * But these sub-sequent requests (R2 to R4) are not at
-                         * the risk of being duplicated so we reset the PID and
-                         * re-enqueue the messages for later retry
-                         * (without incrementing retries).
-                         */
-                        rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "ERRSEQ",
-                                   "ProduceRequest with %d message(s) failed "
-                                   "due to skipped sequence numbers "
-                                   "(%s, base seq %"PRId32" > "
-                                   "next ack %"PRId32") caused by previous "
-                                   "failed request: "
-                                   "recovering and retrying",
-                                   rd_kafka_msgq_len(&request->rkbuf_msgq),
-                                   rd_kafka_pid2str(request->rkbuf_u.
-                                                    Produce.pid),
-                                   request->rkbuf_u.Produce.base_seq,
-                                   next_ack_seq);
-
-                        incr_retry = 0;
-                        actions = RD_KAFKA_ERR_ACTION_RETRY;
-
-                } else if (r < 0) {
-                        /* Request's sequence is less than next ack,
-                         * this should never happen unless we have
-                         * local bug or the broker did not respond
-                         * to the requests in order. */
-                        rd_kafka_set_fatal_error(
-                                rk, err,
-                                "ProduceRequest with %d message(s) failed "
-                                "with rewinded sequence number on "
-                                "broker %"PRId32" (%s, base seq %"PRId32" < "
-                                "next ack %"PRId32")",
-                                rd_kafka_msgq_len(&request->rkbuf_msgq),
-                                rkb->rkb_nodeid,
-                                rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
-                                request->rkbuf_u.Produce.base_seq,
-                                next_ack_seq);
-
-                        actions = RD_KAFKA_ERR_ACTION_PERMANENT;
-                }
-
-                /* In all these cases we need to drain
-                 * the outstanding requests and eventually reset the PID. */
-                /* Schedule drain and reset of PID use. */
-                rd_kafka_idemp_drain_reset(rk);
-
-                update_next_ack = rd_false;
-                break;
-
-        case RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER:
-                /* Received EOS error for non-EOS producer,
-                 * probably a bug in client or broker:
-                 * pass error through directly to application. */
-                if (!rd_kafka_is_idempotent(rk)) {
-                        actions = RD_KAFKA_ERR_ACTION_PERMANENT;
-                        break;
-                }
-
-                /* This error indicates that we successfully produced
-                 * this set of messages before and that is why this
-                 * supposed retry failed.
-                 * Treat this as success but we'll need to provide
-                 * invalid values for timestamp and offset. */
-                err = RD_KAFKA_RESP_ERR_NO_ERROR;
-                actions = 0;
-                break;
+        if (rd_kafka_is_idempotent(rk))
+                rd_kafka_handle_idempotent_Produce_error(rkb, rktp, request,
+                                                         perr);
 
 
-        default:
-                break;
-        }
+        /* Update message persistance status based on action flags.
+         * None of these are typically set after an idempotent error,
+         * which sets the status explicitly. */
+        if (perr->actions & RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED)
+                perr->status = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+        else if (perr->actions & RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED)
+                perr->status = RD_KAFKA_MSG_STATUS_NOT_PERSISTED;
+        else if (perr->actions & RD_KAFKA_ERR_ACTION_MSG_PERSISTED)
+                perr->status = RD_KAFKA_MSG_STATUS_PERSISTED;
 
-        /* Idempotent Producer: Update next expected acked sequence. */
-        if (rd_kafka_is_idempotent(rk) && update_next_ack) {
-                rd_kafka_toppar_lock(rktp);
-                rktp->rktp_eos.next_ack_seq =
-                        request->rkbuf_u.Produce.base_seq +
-                        rd_kafka_msgq_len(&request->rkbuf_msgq);
-                rd_kafka_toppar_unlock(rktp);
-        }
-
-        if (actions & (RD_KAFKA_ERR_ACTION_REFRESH |
-                       RD_KAFKA_ERR_ACTION_RETRY)) {
+        /*
+         * Handle actions
+         */
+        if (perr->actions & (RD_KAFKA_ERR_ACTION_REFRESH |
+                            RD_KAFKA_ERR_ACTION_RETRY)) {
                 /* Retry */
 
-                if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                if (perr->actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                         /* Request metadata information update.
                          * These errors imply that we have stale
                          * information and the request was
@@ -2047,14 +2200,14 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                          *   - there is no chance of duplicate delivery
                          */
                         rd_kafka_toppar_leader_unavailable(
-                                rktp, "produce", err);
+                                rktp, "produce", perr->err);
 
                         /* We can't be certain the request wasn't
                          * sent in case of transport failure,
                          * so the ERR__TRANSPORT case will need
                          * the retry count to be increased */
-                        if (err != RD_KAFKA_RESP_ERR__TRANSPORT)
-                                incr_retry = 0;
+                        if (perr->err != RD_KAFKA_RESP_ERR__TRANSPORT)
+                                perr->incr_retry = 0;
                 }
 
                 /* If message timed out in queue, not in transit,
@@ -2062,7 +2215,25 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                  * the retry count since there is no risk
                  * of duplicates. */
                 if (!rd_kafka_buf_was_sent(request))
-                        incr_retry = 0;
+                        perr->incr_retry = 0;
+
+                if (!perr->incr_retry) {
+                        /* If retries are not to be incremented then
+                         * there is no chance of duplicates on retry, which
+                         * means these messages were not persisted. */
+                        perr->status = RD_KAFKA_MSG_STATUS_NOT_PERSISTED;
+
+                }
+
+                if (rd_kafka_is_idempotent(rk)) {
+                        /* Any currently in-flight requests will
+                         * fail with ERR_OUT_OF_ORDER_SEQUENCE_NUMBER,
+                         * which should not be treated as a fatal error
+                         * since this request and sub-sequent requests
+                         * will be retried and thus return to order. */
+                        perr->update_next_ack = rd_false;
+                        perr->update_next_err = rd_true;
+                }
 
                 /* Since requests are specific to a broker
                  * we move the retryable messages from the request
@@ -2073,24 +2244,56 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                  * would exceeded the retry count will not be
                  * moved but instead fail below. */
                 rd_kafka_toppar_retry_msgq(rktp, &request->rkbuf_msgq,
-                                           incr_retry);
+                                           perr->incr_retry);
 
                 if (rd_kafka_msgq_len(&request->rkbuf_msgq) == 0) {
                         /* No need do anything more with the request
                          * here since the request no longer has any
                          * messages associated with it. */
-                        *errp = err;
                         return 0;
                 }
         }
 
+        if (perr->actions & RD_KAFKA_ERR_ACTION_PERMANENT &&
+            rd_kafka_is_idempotent(rk)) {
+                if (rk->rk_conf.eos.gapless) {
+                        /* A permanent non-idempotent error will lead to
+                         * gaps in the message series, the next request
+                         * will fail with ...ERR_OUT_OF_ORDER_SEQUENCE_NUMBER.
+                         * To satisfy the gapless guarantee we need to raise
+                         * a fatal error here. */
+                        rd_kafka_set_fatal_error(
+                                rk, RD_KAFKA_RESP_ERR__GAPLESS,
+                                "ProduceRequest with %d message(s) failed: "
+                                "%s (broker %"PRId32" %s, base seq %"PRId32"): "
+                                "unable to satisfy gap-less guarantee",
+                                rd_kafka_msgq_len(&request->rkbuf_msgq),
+                                rd_kafka_err2str(perr->err),
+                                rkb->rkb_nodeid,
+                                rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
+                                request->rkbuf_u.Produce.base_seq);
+
+                        /* Drain outstanding requests and reset PID. */
+                        rd_kafka_idemp_drain_reset(rk);
+
+                } else {
+                        /* If gapless is not set we bump the Epoch and
+                         * renumber the messages to send. */
+
+                        /* Drain outstanding requests and bump the epoch .*/
+                        rd_kafka_idemp_drain_epoch_bump(rk);
+                }
+
+                perr->update_next_ack = rd_false;
+                /* Make sure the next error will not raise a fatal error. */
+                perr->update_next_err = rd_true;
+        }
+
         /* Translate request-level timeout error code
          * to message-level timeout error code. */
-        if (err == RD_KAFKA_RESP_ERR__TIMED_OUT ||
-            err == RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE)
-                err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
-
-        *errp = err;
+        if (perr->err == RD_KAFKA_RESP_ERR__TIMED_OUT ||
+            perr->err == RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE)
+                perr->err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
 
         return 1;
 }
@@ -2098,6 +2301,8 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
 
 /**
  * @brief Handle ProduceResponse
+ *
+ * @param reply is NULL when `acks=0` and on various local errors.
  *
  * @remark ProduceRequests are never retried, retriable errors are
  *         instead handled by re-enqueuing the request's messages back
@@ -2119,6 +2324,12 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
         int64_t offset = RD_KAFKA_OFFSET_INVALID;
         int64_t timestamp = -1;
         int last_inflight;
+        rd_kafka_msg_status_t status = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+        int32_t next_seq;
+
+        /* Next expected sequence (and handle wrap) */
+        next_seq = rd_kafka_seq_wrap(request->rkbuf_u.Produce.base_seq +
+                                     rd_kafka_msgq_len(&request->rkbuf_msgq));
 
         /* Parse Produce reply (unless the request errored) */
         if (!err && reply)
@@ -2136,57 +2347,96 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
         if (likely(!err)) {
                 rd_rkb_dbg(rkb, MSG, "MSGSET",
                            "%s [%"PRId32"]: MessageSet with %i message(s) "
-                           "delivered",
+                           "(BaseSeq %"PRId32") delivered",
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                           request->rkbuf_msgq.rkmq_msg_cnt);
+                           request->rkbuf_msgq.rkmq_msg_cnt,
+                           request->rkbuf_u.Produce.base_seq);
+
+                if (rktp->rktp_rkt->rkt_conf.required_acks != 0)
+                        status = RD_KAFKA_MSG_STATUS_PERSISTED;
 
                 if (rd_kafka_is_idempotent(rk)) {
+
                         rd_kafka_toppar_lock(rktp);
-                        rktp->rktp_eos.next_ack_seq =
-                                request->rkbuf_u.Produce.base_seq +
-                                rd_kafka_msgq_len(&request->rkbuf_msgq);
+                        /* Response ordering is typically not a concern
+                         * (but will not happen with current broker versions),
+                         * unless we're expecting an error to be returned at
+                         * this sequence rather than a success ack, in which
+                         * case raise a fatal error. */
+                        if (unlikely(request->rkbuf_u.Produce.base_seq !=
+                                     rktp->rktp_eos.next_ack_seq &&
+                                     request->rkbuf_u.Produce.base_seq ==
+                                     rktp->rktp_eos.next_err_seq)) {
+                                rd_kafka_set_fatal_error(
+                                        rk,
+                                        RD_KAFKA_RESP_ERR__INCONSISTENT,
+                                        "ProduceRequest with %d message(s) "
+                                        "succeeded when expecting failure "
+                                        "(broker %"PRId32" %s, "
+                                        "base seq %"PRId32", "
+                                        "next ack seq %"PRId32", "
+                                        "next err seq %"PRId32": "
+                                        "unable to retry without risking "
+                                        "duplication/reordering",
+                                        rd_kafka_msgq_len(&request->rkbuf_msgq),
+                                        rkb->rkb_nodeid,
+                                        rd_kafka_pid2str(request->rkbuf_u.
+                                                         Produce.pid),
+                                        request->rkbuf_u.Produce.base_seq,
+                                        rktp->rktp_eos.next_ack_seq,
+                                        rktp->rktp_eos.next_err_seq);
+                                rktp->rktp_eos.next_err_seq = next_seq;
+                        } else {
+
+                                /* Only step err seq if it hasn't diverged. */
+                                if (rktp->rktp_eos.next_err_seq ==
+                                    rktp->rktp_eos.next_ack_seq)
+                                        rktp->rktp_eos.next_err_seq = next_seq;
+
+                                rktp->rktp_eos.next_ack_seq = next_seq;
+                        }
+
                         rd_kafka_toppar_unlock(rktp);
                 }
 
         } else {
-                if (!rd_kafka_handle_Produce_error(rkb, rktp, &err,
-                                                   reply, request))
-                        goto done; /* No more actions to perform on
-                                    * the request's messages. */
-        }
+                /* Error handling */
+                struct rd_kafka_Produce_err perr = { err: err,
+                                                     incr_retry: 1,
+                                                     status: status,
+                                                     update_next_ack: rd_true,
+                                                     update_next_err: rd_true };
 
-        rd_assert(rd_kafka_msgq_len(&request->rkbuf_msgq) > 0);
+                rd_kafka_handle_Produce_error(rkb, rktp,
+                                              reply, request,
+                                              &perr);
 
-        /* Propagate assigned offset and timestamp back to app. */
-        if (likely(!err && offset != RD_KAFKA_OFFSET_INVALID)) {
-                rd_kafka_msg_t *rkm;
-                if (rktp->rktp_rkt->rkt_conf.produce_offset_report) {
-                        /* produce.offset.report: each message */
-                        TAILQ_FOREACH(rkm, &request->rkbuf_msgq.rkmq_msgs,
-                                      rkm_link) {
-                                rkm->rkm_offset = offset++;
-                                if (timestamp != -1) {
-                                        rkm->rkm_timestamp = timestamp;
-                                        rkm->rkm_tstype = RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME;
-                                }
-                        }
-                } else {
-                        /* Last message in each batch */
-                        rkm = TAILQ_LAST(&request->rkbuf_msgq.rkmq_msgs,
-                                         rd_kafka_msg_head_s);
-                        rkm->rkm_offset = offset +
-                                request->rkbuf_msgq.rkmq_msg_cnt - 1;
-                        if (timestamp != -1) {
-                                rkm->rkm_timestamp = timestamp;
-                                rkm->rkm_tstype = RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME;
-                        }
+                /* Update next expected acked and/or err sequence. */
+                if (perr.update_next_ack || perr.update_next_err) {
+                        rd_kafka_toppar_lock(rktp);
+                        if (perr.update_next_ack)
+                                rktp->rktp_eos.next_ack_seq = next_seq;
+                        if (perr.update_next_err)
+                                rktp->rktp_eos.next_err_seq = next_seq;
+                        rd_kafka_toppar_unlock(rktp);
                 }
+
+                err    = perr.err;
+                status = perr.status;
         }
 
-        /* Enqueue messages for delivery report */
-        rd_kafka_dr_msgq(rktp->rktp_rkt, &request->rkbuf_msgq, err);
 
- done:
+        /* Messages to retry will have been removed from the request's queue */
+        if (likely(rd_kafka_msgq_len(&request->rkbuf_msgq) > 0)) {
+                /* Set offset, timestamp and status for each message. */
+                rd_kafka_msgq_set_metadata(&request->rkbuf_msgq, offset,
+                                           timestamp, status);
+
+
+                /* Enqueue messages for delivery report. */
+                rd_kafka_dr_msgq(rktp->rktp_rkt, &request->rkbuf_msgq, err);
+        }
+
         if (rd_kafka_is_idempotent(rk) && last_inflight)
                 rd_kafka_idemp_inflight_toppar_sub(rk, rktp);
 }

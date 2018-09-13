@@ -38,6 +38,9 @@
 #define RD_KAFKA_ERR_ACTION_RETRY      0x8 /* Retry request after backoff */
 #define RD_KAFKA_ERR_ACTION_INFORM    0x10 /* Inform application about err */
 #define RD_KAFKA_ERR_ACTION_SPECIAL   0x20 /* Special-purpose, depends on context */
+#define RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED 0x40 /* ProduceReq msg status */
+#define RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED 0x80 /* ProduceReq msg status */
+#define RD_KAFKA_ERR_ACTION_MSG_PERSISTED 0x100    /* ProduceReq msg status */
 #define RD_KAFKA_ERR_ACTION_END          0 /* var-arg sentinel */
 
 int rd_kafka_err_action (rd_kafka_broker_t *rkb,

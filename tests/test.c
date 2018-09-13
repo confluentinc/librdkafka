@@ -423,9 +423,18 @@ static void test_error_cb (rd_kafka_t *rk, int err,
                 if (err == RD_KAFKA_RESP_ERR__FATAL) {
                         char errstr[512];
                         TEST_SAY(_C_RED "Fatal error: %s\n", reason);
+
                         err = rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
-                        TEST_FAIL("rdkafka FATAL error: %s: %s",
-                                  rd_kafka_err2str(err), errstr);
+
+                        if (test_curr->is_fatal_cb &&
+                            !test_curr->is_fatal_cb(rk,  err, reason))
+                                TEST_SAY(_C_YEL "rdkafka ignored FATAL error: "
+                                         "%s: %s\n",
+                                         rd_kafka_err2str(err), errstr);
+                        else
+                                TEST_FAIL("rdkafka FATAL error: %s: %s",
+                                          rd_kafka_err2str(err), errstr);
+
                 } else {
                         TEST_FAIL("rdkafka error: %s: %s",
                                   rd_kafka_err2str(err), reason);
@@ -887,6 +896,8 @@ static int run_test0 (struct run_args *run_args) {
 #if WITH_SOCKEM
         rd_list_init(&test->sockets, 16, (void *)sockem_close);
 #endif
+        /* Don't check message status by default */
+        test->exp_dr_status = (rd_kafka_msg_status_t)-1;
 
 	TEST_SAY("================= Running test %s =================\n",
 		 test->name);
@@ -1540,16 +1551,35 @@ int main(int argc, char **argv) {
  *
  ******************************************************************************/
 
-void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
-                 rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
-	int *remainsp = msg_opaque;
+void test_dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
+                     void *opaque) {
+        int *remainsp = rkmessage->_private;
+        static const char *status_names[] = {
+                [RD_KAFKA_MSG_STATUS_NOT_PERSISTED] = "NotPersisted",
+                [RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED] = "PossiblyPersisted",
+                [RD_KAFKA_MSG_STATUS_PERSISTED] = "Persisted"
+        };
 
-        TEST_SAYL(4, "Delivery report: %s\n", rd_kafka_err2str(err));
+        TEST_SAYL(4, "Delivery report: %s (%s)\n",
+                  rd_kafka_err2str(rkmessage->err),
+                  status_names[rd_kafka_message_status(rkmessage)]);
 
-        if (!test_curr->produce_sync && err != test_curr->exp_dr_err)
-                TEST_FAIL("Message delivery failed: expected %s, got %s",
-                          rd_kafka_err2str(test_curr->exp_dr_err),
-                          rd_kafka_err2str(err));
+        if (!test_curr->produce_sync) {
+                if (rkmessage->err != test_curr->exp_dr_err)
+                        TEST_FAIL("Message delivery failed: expected %s, got %s",
+                                  rd_kafka_err2str(test_curr->exp_dr_err),
+                                  rd_kafka_err2str(rkmessage->err));
+
+                if ((int)test_curr->exp_dr_status != -1) {
+                        rd_kafka_msg_status_t status =
+                                rd_kafka_message_status(rkmessage);
+
+                        TEST_ASSERT(status == test_curr->exp_dr_status,
+                                    "Expected message status %s, not %s",
+                                    status_names[test_curr->exp_dr_status],
+                                    status_names[status]);
+                }
+        }
 
 	if (*remainsp == 0)
 		TEST_FAIL("Too many messages delivered (remains %i)",
@@ -1558,7 +1588,7 @@ void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 	(*remainsp)--;
 
         if (test_curr->produce_sync)
-                test_curr->produce_sync_err = err;
+                test_curr->produce_sync_err = rkmessage->err;
 }
 
 
@@ -1593,7 +1623,7 @@ rd_kafka_t *test_create_producer (void) {
 	rd_kafka_conf_t *conf;
 
 	test_conf_init(&conf, NULL, 0);
-	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
 	return test_create_handle(RD_KAFKA_PRODUCER, conf);
 }
@@ -1669,7 +1699,7 @@ rd_kafka_topic_t *test_create_producer_topic (rd_kafka_t *rk,
  * Produces \p cnt messages and returns immediately.
  * Does not wait for delivery.
  * \p msgcounterp is incremented for each produced messages and passed
- * as \p msg_opaque which is later used in test_dr_cb to decrement
+ * as \p msg_opaque which is later used in test_dr_msg_cb to decrement
  * the counter on delivery.
  *
  * If \p payload is NULL the message key and payload will be formatted

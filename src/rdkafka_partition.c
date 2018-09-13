@@ -3478,6 +3478,7 @@ int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
         rd_kafka_toppar_lock(rktp);
         rktp->rktp_eos.pid = pid;
         rktp->rktp_eos.next_ack_seq = 0;
+        rktp->rktp_eos.next_err_seq = 0;
         rd_kafka_toppar_unlock(rktp);
 
         rktp->rktp_eos.epoch_base_seq = new_base;

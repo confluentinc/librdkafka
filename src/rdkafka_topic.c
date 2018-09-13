@@ -218,6 +218,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rd_kafka_itopic_t *rkt;
         shptr_rd_kafka_itopic_t *s_rkt;
         const struct rd_kafka_metadata_cache_entry *rkmce;
+        const char *conf_err;
 
 	/* Verify configuration.
 	 * Maximum topic name size + headers must never exceed message.max.bytes
@@ -243,6 +244,26 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 		return s_rkt;
         }
 
+        if (!conf) {
+                if (rk->rk_conf.topic_conf)
+                        conf = rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
+                else
+                        conf = rd_kafka_topic_conf_new();
+        }
+
+
+        /* Verify and finalize topic configuration */
+        if ((conf_err = rd_kafka_topic_conf_finalize(rk->rk_type,
+                                                     &rk->rk_conf, conf))) {
+                /* Incompatible configuration settings */
+                rd_kafka_log(rk, LOG_ERR, "TOPICCONF",
+                             "Incompatible configuration settings "
+                             "for topic \"%s\": %s", topic, conf_err);
+                rd_kafka_topic_conf_destroy(conf);
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return NULL;
+        }
+
         if (existing)
                 *existing = 0;
 
@@ -251,12 +272,6 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rkt->rkt_topic     = rd_kafkap_str_new(topic, -1);
 	rkt->rkt_rk        = rk;
 
-	if (!conf) {
-                if (rk->rk_conf.topic_conf)
-                        conf = rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
-                else
-                        conf = rd_kafka_topic_conf_new();
-        }
 	rkt->rkt_conf = *conf;
 	rd_free(conf); /* explicitly not rd_kafka_topic_destroy()
                         * since we dont want to rd_free internal members,
@@ -304,14 +319,6 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                                 rd_kafka_msg_partitioner_consistent_random;
                 }
         }
-
-        if (rd_kafka_is_idempotent(rk)) {
-                /* Force acks=all */
-                rkt->rkt_conf.required_acks = -1; /* all */
-                /* Force FIFO queueing */
-                rkt->rkt_conf.queuing_strategy = RD_KAFKA_QUEUE_FIFO;
-        }
-
 
         if (rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO)
                 rkt->rkt_conf.msg_order_cmp = rd_kafka_msg_cmp_msgseq;

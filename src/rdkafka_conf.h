@@ -425,7 +425,16 @@ struct rd_kafka_topic_conf_s {
 
 void rd_kafka_anyconf_destroy (int scope, void *conf);
 
+const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
+                                    rd_kafka_conf_t *conf);
+const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
+                                          const rd_kafka_conf_t *conf,
+                                          rd_kafka_topic_conf_t *tconf);
+
+
 
 #include "rdkafka_confval.h"
+
+int unittest_conf (void);
 
 #endif /* _RDKAFKA_CONF_H_ */

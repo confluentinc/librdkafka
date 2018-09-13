@@ -162,6 +162,14 @@ static void do_test_kafka_new_failures (void) {
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "kafka_new() failed: %s", errstr);
         rd_kafka_destroy(rk);
+
+        /* set conflicting properties */
+        conf = rd_kafka_conf_new();
+        test_conf_set(conf, "acks", "1");
+        test_conf_set(conf, "enable.idempotence", "true");
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(!rk, "kafka_new() should have failed");
+        TEST_SAY(_C_GRN "Ok: %s\n", errstr);
 }
 
 

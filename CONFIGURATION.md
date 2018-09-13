@@ -14,7 +14,7 @@ max.in.flight.requests.per.connection    |  *  | 1 .. 1000000    |       1000000
 max.in.flight                            |  *  |                 |               | Alias for `max.in.flight.requests.per.connection`
 metadata.request.timeout.ms              |  *  | 10 .. 900000    |         60000 | Non-topic request timeout in milliseconds. This is for metadata requests, etc. <br>*Type: integer*
 topic.metadata.refresh.interval.ms       |  *  | -1 .. 3600000   |        300000 | Topic metadata refresh interval in milliseconds. The metadata is automatically refreshed on error and connect. Use -1 to disable the intervalled refresh. <br>*Type: integer*
-metadata.max.age.ms                      |  *  | 1 .. 86400000   |            -1 | Metadata cache max age. Defaults to topic.metadata.refresh.interval.ms * 3 <br>*Type: integer*
+metadata.max.age.ms                      |  *  | 1 .. 86400000   |        900000 | Metadata cache max age. Defaults to topic.metadata.refresh.interval.ms * 3 <br>*Type: integer*
 topic.metadata.refresh.fast.interval.ms  |  *  | 1 .. 60000      |           250 | When a topic loses its leader a new metadata request will be enqueued with this initial interval, exponentially increasing until the topic metadata has been refreshed. This is used to recover quickly from transitioning leader brokers. <br>*Type: integer*
 topic.metadata.refresh.fast.cnt          |  *  | 0 .. 1000       |            10 | *Deprecated: No longer used.* <br>*Type: integer*
 topic.metadata.refresh.sparse            |  *  | true, false     |          true | Sparse metadata requests (consumes less network bandwidth) <br>*Type: boolean*

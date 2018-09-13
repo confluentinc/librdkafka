@@ -3534,7 +3534,7 @@ int rd_kafka_version (void) {
 }
 
 const char *rd_kafka_version_str (void) {
-	static char ret[128];
+	static RD_TLS char ret[128];
 	size_t of = 0, r;
 
 	if (*ret)

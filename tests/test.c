@@ -1449,6 +1449,8 @@ int main(int argc, char **argv) {
         TEST_SAY("Test timeout multiplier: %.1f\n", test_timeout_multiplier);
         TEST_SAY("Action on test failure: %s\n",
                  test_assert_on_fail ? "assert crash" : "continue other tests");
+        if (test_idempotent_producer)
+                TEST_SAY("Test Idempotent Producer: enabled\n");
 
         {
                 char cwd[512], *pcwd;

@@ -96,8 +96,7 @@ class ExampleEventCb : public RdKafka::EventCb {
 
     switch (event.type())
     {
-      case RdKafka::Event::
-        EVENT_ERROR:
+      case RdKafka::Event::EVENT_ERROR:
         if (event.fatal()) {
           std::cerr << "FATAL ";
           run = false;

@@ -255,6 +255,8 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
         /* Verify and finalize topic configuration */
         if ((conf_err = rd_kafka_topic_conf_finalize(rk->rk_type,
                                                      &rk->rk_conf, conf))) {
+                if (do_lock)
+                        rd_kafka_wrunlock(rk);
                 /* Incompatible configuration settings */
                 rd_kafka_log(rk, LOG_ERR, "TOPICCONF",
                              "Incompatible configuration settings "

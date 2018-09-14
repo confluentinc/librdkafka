@@ -128,7 +128,7 @@ class LibrdkafkaTestApp(App):
         if not self.local_tests:
             extra_args.append('-L')
         if self.conf.get('args', None) is not None:
-            extra_args.append(self.conf.get('args')
+            extra_args.append(self.conf.get('args'))
         extra_args.append('-E')
         return './run-test.sh -p%d -K %s ./merged %s' % (int(self.conf.get('parallel', 5)), ' '.join(extra_args), self.test_mode)
 

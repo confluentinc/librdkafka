@@ -265,8 +265,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Maximum Kafka protocol response message size. "
           "This serves as a safety precaution to avoid memory exhaustion in "
           "case of protocol hickups. "
-          "This value is automatically adjusted upwards to be at least "
-          "`fetch.max.bytes` + 512 to allow for protocol overhead.",
+          "This value must be at least `fetch.max.bytes`  + 512 to allow "
+          "for protocol overhead; the value is adjusted automatically "
+          "unless the configuration property is explicitly set.",
 	  1000, INT_MAX, 100000000 },
 	{ _RK_GLOBAL, "max.in.flight.requests.per.connection", _RK_C_INT,
 	  _RK(max_inflight),
@@ -829,16 +830,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "successfully produced exactly once and in the original produce "
           "order. "
           "The following configuration properties are adjusted automatically "
-          "(if necessary) when idempotence is enabled: "
-          "`max.inflight.requests.per.connection` is capped at 5, "
-          "`retries` must be greater than 0, "
-          "`acks` is  set to `all`, `queuing.strategy` is set to `fifo`.",
+          "(if not modified by the user) when idempotence is enabled: "
+          "`max.inflight.requests.per.connection=5` (must be <= 5), "
+          "`retries=INT32_MAX` (must be > 0), "
+          "`acks=all`, `queuing.strategy=fifo`. "
+          "Producer instantation will fail if user-supplied configuration "
+          "is incompatible.",
           0, 1, 0 },
         { _RK_GLOBAL|_RK_PRODUCER, "enable.gapless.guarantee", _RK_C_BOOL,
           _RK(eos.gapless),
           "When set to `true`, any error that could result in a gap "
           "in the produced message series when a batch of messages fails, "
-          "will raise a fatal error (ERR__GAPLESS) and stop the producer. "
+          "will raise a fatal error (ERR__GAPLESS_GUARANTEE) and stop "
+          "the producer. "
           "Requires `enable.idempotence=true`.",
           0, 1, 1 },
 	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.messages", _RK_C_INT,
@@ -1139,7 +1143,7 @@ rd_kafka_conf_prop_find (int scope, const char *name) {
 }
 
 /**
- * @returns true if property has been set/modified, else 0.
+ * @returns rd_true if property has been set/modified, else rd_false.
  *          If \p name is unknown 0 is returned.
  */
 static rd_bool_t rd_kafka_conf_is_modified (const rd_kafka_conf_t *conf,
@@ -1147,7 +1151,7 @@ static rd_bool_t rd_kafka_conf_is_modified (const rd_kafka_conf_t *conf,
         const struct rd_kafka_property *prop;
 
         if (!(prop = rd_kafka_conf_prop_find(_RK_GLOBAL, name)))
-            return 0;
+            return rd_false;
 
         return rd_kafka_anyconf_is_modified(conf, prop);
 }
@@ -2742,47 +2746,58 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
         if (cltype == RD_KAFKA_CONSUMER) {
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes` unless set by user. */
-                if (conf->fetch_max_bytes < conf->max_msg_size &&
-                    rd_kafka_conf_is_modified(conf, "fetch.max.bytes"))
-                        return "`fetch.max.bytes` must be >= "
-                                "`message.max.bytes`";
-
-                conf->fetch_max_bytes = RD_MAX(conf->fetch_max_bytes,
-                                               conf->max_msg_size);
+                if (rd_kafka_conf_is_modified(conf, "fetch.max.bytes")) {
+                        if (conf->fetch_max_bytes < conf->max_msg_size)
+                                return "`fetch.max.bytes` must be >= "
+                                        "`message.max.bytes`";
+                } else {
+                        conf->fetch_max_bytes = RD_MAX(conf->fetch_max_bytes,
+                                                       conf->max_msg_size);
+                }
 
                 /* Automatically adjust 'receive.message.max.bytes' to
                  * be 512 bytes larger than 'fetch.max.bytes' to have enough
                  * room for protocol framing (including topic name), unless
                  * set by user. */
-                if (conf->fetch_max_bytes > conf->recv_max_msg_size + 512  &&
-                    rd_kafka_conf_is_modified(conf,
-                                              "receive.message.max.bytes"))
-                        return "`receive.message.max.bytes` must be >= "
-                                "`fetch.max.bytes` + 512";
-
-                conf->recv_max_msg_size = RD_MAX(conf->recv_max_msg_size,
-                                                 conf->fetch_max_bytes + 512);
+                if (rd_kafka_conf_is_modified(conf,
+                                              "receive.message.max.bytes")) {
+                        if (conf->fetch_max_bytes + 512 >
+                            conf->recv_max_msg_size)
+                                return "`receive.message.max.bytes` must be >= "
+                                        "`fetch.max.bytes` + 512";
+                } else {
+                        conf->recv_max_msg_size =
+                                RD_MAX(conf->recv_max_msg_size,
+                                       conf->fetch_max_bytes + 512);
+                }
 
                 /* Simplifies rd_kafka_is_idempotent() which is producer-only */
                 conf->eos.idempotence = 0;
 
         } else if (cltype == RD_KAFKA_PRODUCER) {
                 if (conf->eos.idempotence) {
-                        /* Adjust configuration values for idempotent producer */
+                        /* Adjust configuration values for idempotent producer*/
 
-                        if (conf->max_inflight >= 5 &&
-                            rd_kafka_conf_is_modified(conf, "max.in.flight"))
-                                return "`max.in.flight` must be set <= 5 "
-                                        "when `enable.idempotence` is true";
+                        if (rd_kafka_conf_is_modified(conf, "max.in.flight")) {
+                                if (conf->max_inflight >= 5)
+                                        return "`max.in.flight` must be "
+                                                "set <= 5 when "
+                                                "`enable.idempotence` is true";
+                        } else {
+                                conf->max_inflight =
+                                        RD_MIN(conf->max_inflight, 5);
+                        }
 
-                        conf->max_inflight = RD_MIN(conf->max_inflight, 5);
 
-                        if (conf->max_retries < 1 &&
-                            rd_kafka_conf_is_modified(conf, "retries"))
-                                return "`retries` must be set >= 1 "
-                                        "when `enable.idempotence` is true";
-
-                        conf->max_retries = RD_MAX(conf->max_retries, 1);
+                        if (rd_kafka_conf_is_modified(conf, "retries")) {
+                                if (conf->max_retries < 1)
+                                        return "`retries` must be set >= 1 "
+                                                "when `enable.idempotence` is "
+                                                "true";
+                        } else {
+                                conf->max_retries =
+                                        RD_MAX(INT32_MAX, 1);
+                        }
 
                         /* acks=all and queuing.strategy are set
                          * in topic_conf_finalize() */
@@ -2824,20 +2839,24 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
 
         if (conf->eos.idempotence) {
                 /* Ensure acks=all */
-                if (tconf->required_acks != -1 &&
-                    rd_kafka_topic_conf_is_modified(tconf, "acks"))
-                        return "`acks` must be set to `all` when "
-                                "`enable.idempotence` is true";
 
-                tconf->required_acks = -1; /* all */
+                if (rd_kafka_topic_conf_is_modified(tconf, "acks")) {
+                        if (tconf->required_acks != -1)
+                                return "`acks` must be set to `all` when "
+                                        "`enable.idempotence` is true";
+                } else {
+                        tconf->required_acks = -1; /* all */
+                }
 
                 /* Ensure FIFO queueing */
-                if (tconf->queuing_strategy != RD_KAFKA_QUEUE_FIFO &&
-                    rd_kafka_topic_conf_is_modified(tconf, "queuing.strategy"))
-                        return "`queuing.strategy` must be set to `fifo` "
-                                "when `enable.idempotence` is true";
-
-                tconf->queuing_strategy = RD_KAFKA_QUEUE_FIFO;
+                if (rd_kafka_topic_conf_is_modified(tconf, "queuing.strategy")) {
+                        if (tconf->queuing_strategy != RD_KAFKA_QUEUE_FIFO)
+                                return "`queuing.strategy` must be set to "
+                                        "`fifo` when `enable.idempotence` is "
+                                        "true";
+                } else {
+                        tconf->queuing_strategy = RD_KAFKA_QUEUE_FIFO;
+                }
         }
 
         return NULL;
@@ -2920,6 +2939,7 @@ int unittest_conf (void) {
                         case _RK_C_ALIAS:
                         case _RK_C_INVALID:
                         case _RK_C_INTERNAL:
+                        default:
                                 continue;
                         }
 

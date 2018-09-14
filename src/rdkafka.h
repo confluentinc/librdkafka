@@ -358,7 +358,7 @@ typedef enum {
         /** Inconsistent state */
         RD_KAFKA_RESP_ERR__INCONSISTENT = -149,
         /** Gap-less ordering would not be guaranteed if proceeding */
-        RD_KAFKA_RESP_ERR__GAPLESS = -148,
+        RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE = -148,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -1148,16 +1148,14 @@ typedef struct rd_kafka_message_s {
 				    * - \c err==0: Optional message key */
 	size_t  key_len;           /**< Depends on the value of \c err :
 				    * - \c err==0: Optional message key length*/
-	int64_t offset;            /**< Consume:
+	int64_t offset;            /**< Consumer:
                                     * - Message offset (or offset for error
 				    *   if \c err!=0 if applicable).
-                                    * - dr_msg_cb:
+                                    *   Producer, dr_msg_cb:
                                     *   Message offset assigned by broker.
-                                    *   If \c produce.offset.report is set then
-                                    *   each message will have this field set,
-                                    *   otherwise only the last message in
-                                    *   each produced internal batch will
-                                    *   have this field set, otherwise 0. */
+                                    *   May be RD_KAFKA_OFFSET_INVALID
+                                    *   for retried messages when
+                                    *   idempotence is enabled. */
 	void  *_private;           /**< Consume:
 				    *  - rdkafka private pointer: DO NOT MODIFY
 				    *  - dr_msg_cb:
@@ -1297,9 +1295,7 @@ typedef enum {
          *   Application retry risks ordering and duplication. */
         RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED = 1,
 
-        /**< Message was written to the log and fully acknowledged.
-         *   No reason for application to retry.
-         *   Note: this value should only be trusted with \c acks=all. */
+        /**< Message was written to the log and acknowledged by the broker. */
         RD_KAFKA_MSG_STATUS_PERSISTED =  2
 } rd_kafka_msg_status_t;
 
@@ -1498,12 +1494,13 @@ void rd_kafka_conf_set_dr_cb(rd_kafka_conf_t *conf,
  * serve queued delivery report callbacks.
  *
  * The broker-assigned offset can be retrieved with \c rkmessage->offset
- * ((if `producer.offset.report` is true), and the timestamp can be
- * retrieved using rd_kafka_message_timestamp().
+ * and the timestamp can be retrieved using rd_kafka_message_timestamp().
  *
  * @remark The Idempotent Producer may return invalid timestamp
- *         and offset for retried messages that were previously
- *         successfully delivered but not properly acknowledged.
+ *         (RD_KAFKA_TIMESTAMP_NOT_AVAILABLE), and
+ *         and offset (RD_KAFKA_OFFSET_INVALID) for retried messages
+ *         that were previously successfully delivered but not properly
+ *         acknowledged.
  */
 RD_EXPORT
 void rd_kafka_conf_set_dr_msg_cb(rd_kafka_conf_t *conf,
@@ -1633,7 +1630,7 @@ void rd_kafka_conf_set_offset_commit_cb (
  * The error callback is used by librdkafka to signal warnings and errors
  * back to the application.
  *
- * These errors are generally to be considered informational and non-permanent,
+ * These errors should generally be considered informational and non-permanent,
  * the client will try to recover automatically from all type of errors.
  * Given that the client and cluster configuration is correct the
  * application should treat these as temporary errors.

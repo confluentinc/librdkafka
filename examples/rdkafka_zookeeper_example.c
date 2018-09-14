@@ -541,8 +541,8 @@ int main (int argc, char **argv) {
 	/* Add brokers */
 	set_brokerlist_from_zookeeper(zh, brokers);
         if (rd_kafka_conf_set(conf, "metadata.broker.list",
-                              brokers, errstr, sizeof(errstr) !=
-                              RD_KAFKA_CONF_OK)) {
+                              brokers, errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%% Failed to set brokers: %s\n", errstr);
                 exit(1);
         }

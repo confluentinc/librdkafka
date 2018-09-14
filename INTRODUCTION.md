@@ -405,6 +405,9 @@ configuration property to `true`, this will automatically adjust a number of
 other configuration properties to adhere to the idempotency requirements,
 see the documentation of `enable.idempotence` in [CONFIGURATION.md] for
 more information.
+Producer instantiation will fail if the user supplied an incompatible value
+for any of the automatically adjusted properties, e.g., it is an error to
+explicitly set `acks=1` when `enable.idempotence=true` is set.
 
 
 #### Guarantees
@@ -424,6 +427,9 @@ There are three types of guarantees that the idempotent producer can satisfy:
               by setting `enable.gapless.guarantee` if individual message
               failure is not a concern.
 
+
+All three guarantees are in effect when idempotence is enabled, only
+gap-less may be disabled individually.
 
 
 #### Ordering and message sequence numbers
@@ -446,7 +452,7 @@ With Idempotent Producer enabled there is no risk of reordering despite
 `max.in.flight` > 1 (capped at 5).
 
 **Note**: "msgseq" in log messages refer to the librdkafka msgseq, while "seq"
-          refers to the protocol message sequence, "baseseq" is the msgseq of
+          refers to the protocol message sequence, "baseseq" is the seq of
           the first message in a batch.
 
 
@@ -604,10 +610,9 @@ RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER since the sequence number of the
 failed batched was never written to the topic log and next expected sequence
 thus not incremented on the broker.
 
-A fatal error (RD_KAFKA_RESP_ERR__GAPLESS) is raised to satisfy the gap-less
-guarantee (if `enable.gapless.guarantee` is set) by failing all queued messages.
-If there's community demand, a future configuration property will be added
-to change this behaviour to continue producing.
+A fatal error (RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE) is raised to satisfy
+the gap-less guarantee (if `enable.gapless.guarantee` is set) by failing all
+queued messages.
 
 
 ##### Message persistance status

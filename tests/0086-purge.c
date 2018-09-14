@@ -173,11 +173,11 @@ static void purge_and_expect (const char *what, int line,
 
 
 /**
- * @brief Don't treat ERR__GAPLESS as a fatal error
+ * @brief Don't treat ERR__GAPLESS_GUARANTEE as a fatal error
  */
 static int gapless_is_not_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
                                     const char *reason) {
-        return err != RD_KAFKA_RESP_ERR__GAPLESS;
+        return err != RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE;
 }
 
 static void do_test_purge (const char *what, int remote,

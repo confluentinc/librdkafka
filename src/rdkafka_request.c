@@ -2148,10 +2148,11 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
 
         rd_rkb_dbg(rkb, MSG, "MSGSET",
                    "%s [%"PRId32"]: MessageSet with %i message(s) "
-                   "(BaseSeq %"PRId32") "
+                   "(MsgSeq %"PRIu64", BaseSeq %"PRId32") "
                    "encountered error: %s (actions %s)%s",
                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                    request->rkbuf_msgq.rkmq_msg_cnt,
+                   request->rkbuf_u.Produce.base_msgseq,
                    request->rkbuf_u.Produce.base_seq,
                    rd_kafka_err2str(perr->err),
                    rd_flags2str(actstr, sizeof(actstr),
@@ -2263,7 +2264,7 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                          * To satisfy the gapless guarantee we need to raise
                          * a fatal error here. */
                         rd_kafka_set_fatal_error(
-                                rk, RD_KAFKA_RESP_ERR__GAPLESS,
+                                rk, RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE,
                                 "ProduceRequest with %d message(s) failed: "
                                 "%s (broker %"PRId32" %s, base seq %"PRId32"): "
                                 "unable to satisfy gap-less guarantee",
@@ -2347,9 +2348,10 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
         if (likely(!err)) {
                 rd_rkb_dbg(rkb, MSG, "MSGSET",
                            "%s [%"PRId32"]: MessageSet with %i message(s) "
-                           "(BaseSeq %"PRId32") delivered",
+                           "(MsgSeq %"PRIu64", BaseSeq %"PRId32") delivered",
                            rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                            request->rkbuf_msgq.rkmq_msg_cnt,
+                           request->rkbuf_u.Produce.base_msgseq,
                            request->rkbuf_u.Produce.base_seq);
 
                 if (rktp->rktp_rkt->rkt_conf.required_acks != 0)
@@ -2401,11 +2403,13 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
 
         } else {
                 /* Error handling */
-                struct rd_kafka_Produce_err perr = { err: err,
-                                                     incr_retry: 1,
-                                                     status: status,
-                                                     update_next_ack: rd_true,
-                                                     update_next_err: rd_true };
+                struct rd_kafka_Produce_err perr = {
+                        .err = err,
+                        .incr_retry = 1,
+                        .status = status,
+                        .update_next_ack = rd_true,
+                        .update_next_err = rd_true
+                };
 
                 rd_kafka_handle_Produce_error(rkb, rktp,
                                               reply, request,

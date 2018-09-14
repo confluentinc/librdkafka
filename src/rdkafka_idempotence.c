@@ -37,9 +37,8 @@
  *
  */
 
-
 static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk,
-                                                    int wakeup_ms);
+                                                    rd_bool_t immediate);
 
 
 /**
@@ -76,7 +75,8 @@ rd_kafka_idemp_set_state (rd_kafka_t *rk,
  * @param rkb may be set to specify a broker to use, otherwise a suitable
  *            one is looked up.
  *
- * @returns 1 if a request was enqueued, or 0 if no broker was available.
+ * @returns 1 if a request was enqueued, or 0 if no broker was available,
+ *          incorrect state, or other error.
  *
  * @locality rdkafka main thread
  * @locks none
@@ -114,7 +114,7 @@ int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                             5*60*1000000/*5 minutes*/, 0) > 0;
 
                         rd_kafka_wrunlock(rk);
-                        rd_kafka_idemp_restart_request_pid_tmr(rk, 500);
+                        rd_kafka_idemp_restart_request_pid_tmr(rk, rd_false);
 
                         if (err_unsupported)
                                 rd_kafka_op_err(
@@ -166,7 +166,7 @@ int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
 
         rd_rkb_dbg(rkb, EOS, "GETPID",
                    "Can't acquire ProducerId from this broker: %s", errstr);
-        rd_kafka_idemp_restart_request_pid_tmr(rk, 500);
+        rd_kafka_idemp_restart_request_pid_tmr(rk, rd_false);
 
         rd_kafka_broker_destroy(rkb);
 
@@ -188,14 +188,16 @@ static void rd_kafka_idemp_request_pid_tmr_cb (rd_kafka_timers_t *rkts,
 /**
  * @brief Restart the pid retrieval timer.
  *
+ * @param immediate If true, request a pid as soon as possible,
+ *                  else use the default interval (500ms).
  * @locality any
  * @locks none
  */
 static void rd_kafka_idemp_restart_request_pid_tmr (rd_kafka_t *rk,
-                                                    int wakeup_ms) {
+                                                    rd_bool_t immediate) {
         rd_kafka_timer_start_oneshot(&rk->rk_timers,
                                      &rk->rk_eos.request_pid_tmr,
-                                     wakeup_ms*1000,
+                                     1000 * (immediate ? 1 : 500/*500ms*/),
                                      rd_kafka_idemp_request_pid_tmr_cb, rk);
 }
 
@@ -222,7 +224,7 @@ void rd_kafka_idemp_request_pid_failed (rd_kafka_broker_t *rkb,
          *        to the application (such as UNSUPPORTED_FEATURE) */
 
         /* Retry request after a short wait. */
-        rd_kafka_idemp_restart_request_pid_tmr(rk, 500);
+        rd_kafka_idemp_restart_request_pid_tmr(rk, rd_false);
 }
 
 
@@ -351,7 +353,7 @@ static void rd_kafka_idemp_drain_done (rd_kafka_t *rk) {
 
         /* Restart timer to eventually trigger a re-request */
         if (restart_tmr)
-                rd_kafka_idemp_restart_request_pid_tmr(rk, 1/*1ms*/);
+                rd_kafka_idemp_restart_request_pid_tmr(rk, rd_true);
 }
 
 
@@ -409,7 +411,7 @@ void rd_kafka_idemp_init (rd_kafka_t *rk) {
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_REQ_PID);
         rd_kafka_wrunlock(rk);
 
-        rd_kafka_idemp_restart_request_pid_tmr(rk, 500);
+        rd_kafka_idemp_restart_request_pid_tmr(rk, rd_false);
 }
 
 

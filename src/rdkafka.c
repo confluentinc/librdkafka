@@ -426,7 +426,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "Local: Fatal error"),
         _ERR_DESC(RD_KAFKA_RESP_ERR__INCONSISTENT,
                   "Local: Inconsistent state"),
-        _ERR_DESC(RD_KAFKA_RESP_ERR__GAPLESS,
+        _ERR_DESC(RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE,
                   "Local: Gap-less ordering would not be guaranteed "
                   "if proceeding"),
 
@@ -717,6 +717,20 @@ int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
         rk->rk_fatal.errstr = rd_strdup(buf);
 
         rd_kafka_wrunlock(rk);
+
+        /* If there is an error callback or event handler we
+         * also log the fatal error as it happens.
+         * If there is no error callback the error event
+         * will be automatically logged, and this check here
+         * prevents us from duplicate logs. */
+        if (rk->rk_conf.enabled_events & RD_KAFKA_EVENT_ERROR)
+                rd_kafka_log(rk, LOG_EMERG, "FATAL",
+                             "Fatal error: %s: %s",
+                             rd_kafka_err2str(err), rk->rk_fatal.errstr);
+        else
+                rd_kafka_dbg(rk, ALL, "FATAL",
+                             "Fatal error: %s: %s",
+                             rd_kafka_err2str(err), rk->rk_fatal.errstr);
 
         /* Indicate to the application that a fatal error was raised,
          * the app should use rd_kafka_fatal_error() to extract the

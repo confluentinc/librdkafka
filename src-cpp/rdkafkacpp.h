@@ -265,7 +265,7 @@ enum ErrorCode {
         /** Inconsistent state */
         ERR__INCONSISTENT = -149,
         /** Gap-less ordering would not be guaranteed if proceeding */
-        ERR__GAPLESS = -148,
+        ERR__GAPLESS_GUARANTEE = -148,
 
         /** End internal error codes */
 	ERR__END = -100,

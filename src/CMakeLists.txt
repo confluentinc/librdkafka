@@ -49,6 +49,7 @@ set(
     rdvarint.c
     snappy.c
     tinycthread.c
+    tinycthread_extra.c
     xxhash.c
     lz4.c
     lz4frame.c

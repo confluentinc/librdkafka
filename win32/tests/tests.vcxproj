@@ -6,7 +6,7 @@
     <RootNamespace>tests</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
-  <Import Project="$(SolutionDir)common.vcxproj"/>
+  <Import Project="$(SolutionDir)common.vcxproj" />
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
   </PropertyGroup>
@@ -172,6 +172,7 @@
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />
     <ClCompile Include="..\..\src\tinycthread.c" />
+    <ClCompile Include="..\..\src\tinycthread_extra.c" />
     <ClCompile Include="..\..\src\rdlist.c" />
   </ItemGroup>
   <ItemGroup>

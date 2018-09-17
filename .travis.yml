@@ -22,6 +22,7 @@ script:
 - (cd dest && tar cvzf ../artifacts/librdkafka.tar.gz .)
 - if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then packaging/rpm/mock-on-docker.sh ; fi
 - if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_gcc" ]]; then docker run -it -v $PWD:/v microsoft/dotnet:2-sdk /v/packaging/tools/build-debian.sh /v /v/artifacts/librdkafka-debian9.tgz; fi
+- if [[ "${TRAVIS_OS_NAME}_$CC" == "linux_clang" ]]; then packaging/alpine/test-build.sh ; fi
 deploy:
   provider: s3
   access_key_id:

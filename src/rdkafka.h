@@ -45,7 +45,6 @@
 #define _RDKAFKA_H_
 
 #include <stdio.h>
-#include <inttypes.h>
 #include <sys/types.h>
 
 #ifdef __cplusplus

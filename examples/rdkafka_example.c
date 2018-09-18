@@ -40,6 +40,7 @@
 #include <syslog.h>
 #include <time.h>
 #include <sys/time.h>
+#include <inttypes.h>
 #include <getopt.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program

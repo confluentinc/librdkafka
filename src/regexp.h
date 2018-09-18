@@ -1,3 +1,13 @@
+/**
+ * Copyright: public domain
+ *
+ * From https://github.com/ccxvii/minilibs sha 875c33568b5a4aa4fb3dd0c52ea98f7f0e5ca684:
+ *
+ * These libraries are in the public domain (or the equivalent where that is not possible).
+ * You can do anything you want with them. You have no legal obligation to do anything else,
+ * although I appreciate attribution.
+ */
+
 #ifndef regexp_h
 #define regexp_h
 

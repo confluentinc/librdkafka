@@ -202,7 +202,6 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
         rktp->rktp_committing_offset = RD_KAFKA_OFFSET_INVALID;
         rktp->rktp_committed_offset = RD_KAFKA_OFFSET_INVALID;
 	rd_kafka_msgq_init(&rktp->rktp_msgq);
-        rktp->rktp_msgq_wakeup_fd = -1;
 	rd_kafka_msgq_init(&rktp->rktp_xmit_msgq);
 	mtx_init(&rktp->rktp_lock, mtx_plain);
 
@@ -641,7 +640,8 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp) {
  * Append message at tail of 'rktp' message queue.
  */
 void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
-        int wakeup_fd, queue_len;
+        int queue_len;
+        rd_kafka_q_t *wakeup_q = NULL;
 
         rd_kafka_toppar_lock(rktp);
 
@@ -658,21 +658,15 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
                                                      &rktp->rktp_msgq, rkm);
         }
 
-        wakeup_fd = rktp->rktp_msgq_wakeup_fd;
+        if (unlikely(queue_len == 1 &&
+                     (wakeup_q = rktp->rktp_msgq_wakeup_q)))
+                rd_kafka_q_keep(wakeup_q);
+
         rd_kafka_toppar_unlock(rktp);
 
-        if (wakeup_fd != -1 && queue_len == 1) {
-                char one = 1;
-                int r;
-                r = rd_write(wakeup_fd, &one, sizeof(one));
-                if (r == -1)
-                        rd_kafka_log(rktp->rktp_rkt->rkt_rk, LOG_ERR, "PARTENQ",
-                                     "%s [%"PRId32"]: write to "
-                                     "wake-up fd %d failed: %s",
-                                     rktp->rktp_rkt->rkt_topic->str,
-                                     rktp->rktp_partition,
-                                     wakeup_fd,
-                                     rd_strerror(errno));
+        if (wakeup_q) {
+                rd_kafka_q_yield(wakeup_q);
+                rd_kafka_q_destroy(wakeup_q);
         }
 }
 
@@ -3030,7 +3024,8 @@ rd_kafka_topic_partition_list_get_leaders (
                 if (mpart &&
                     (mpart->leader == -1 ||
                      !(rkb = rd_kafka_broker_find_by_nodeid0(
-                               rk, mpart->leader, -1/*any state*/)))) {
+                               rk, mpart->leader, -1/*any state*/,
+                               rd_false)))) {
                         /* Partition has no (valid) leader */
                         rktpar->err =
                                 mtopic->err ? mtopic->err :

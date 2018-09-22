@@ -153,6 +153,8 @@ struct rd_kafka_conf_s {
 	int     stats_interval_ms;
 	int     term_sig;
         int     reconnect_jitter_ms;
+        int     sparse_connections;
+        int     sparse_connect_intvl;
 	int     api_version_request;
 	int     api_version_request_timeout_ms;
 	int     api_version_fallback_ms;

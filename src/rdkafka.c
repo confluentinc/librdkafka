@@ -813,6 +813,8 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 	cnd_destroy(&rk->rk_broker_state_change_cnd);
 	mtx_destroy(&rk->rk_broker_state_change_lock);
 
+        mtx_destroy(&rk->rk_suppress.sparse_connect_lock);
+
 	if (rk->rk_full_metadata)
 		rd_kafka_metadata_destroy(rk->rk_full_metadata);
         rd_kafkap_str_destroy(rk->rk_client_id);
@@ -990,6 +992,9 @@ static void rd_kafka_destroy_internal (rd_kafka_t *rk) {
                 rd_list_add(&wait_thrds, thrd);
                 rd_kafka_wrunlock(rk);
 
+                rd_kafka_dbg(rk, BROKER, "DESTROY",
+                             "Sending TERMINATE to %s",
+                             rd_kafka_broker_name(rkb));
                 /* Send op to trigger queue/io wake-up.
                  * The op itself is (likely) ignored by the broker thread. */
                 rd_kafka_q_enq(rkb->rkb_ops,
@@ -1331,7 +1336,9 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                            "\"rxpartial\":%"PRIu64", "
                            "\"zbuf_grow\":%"PRIu64", "
                            "\"buf_grow\":%"PRIu64", "
-                           "\"wakeups\":%"PRIu64", ",
+                           "\"wakeups\":%"PRIu64", "
+                           "\"connects\":%"PRId32", "
+                           "\"disconnects\":%"PRId32", ",
 			   rkb == TAILQ_FIRST(&rk->rk_brokers) ? "" : ", ",
 			   rkb->rkb_name,
 			   rkb->rkb_name,
@@ -1354,7 +1361,9 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 			   rd_atomic64_get(&rkb->rkb_c.rx_partial),
                            rd_atomic64_get(&rkb->rkb_c.zbuf_grow),
                            rd_atomic64_get(&rkb->rkb_c.buf_grow),
-                           rd_atomic64_get(&rkb->rkb_c.wakeups));
+                           rd_atomic64_get(&rkb->rkb_c.wakeups),
+                           rd_atomic32_get(&rkb->rkb_c.connects),
+                           rd_atomic32_get(&rkb->rkb_c.disconnects));
 
                 total.tx       += rd_atomic64_get(&rkb->rkb_c.tx);
                 total.tx_bytes += rd_atomic64_get(&rkb->rkb_c.tx_bytes);
@@ -1513,6 +1522,13 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 static void rd_kafka_topic_scan_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
 	rd_kafka_topic_scan_all(rk, rd_clock());
+
+        /* Sparse connections:
+         * try to maintain at least one connection to the cluster. */
+        if (rk->rk_conf.sparse_connections &&
+            rd_atomic32_get(&rk->rk_broker_up_cnt) == 0)
+                rd_kafka_connect_any(rk, "no cluster connection");
+
 }
 
 static void rd_kafka_stats_emit_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
@@ -1538,8 +1554,8 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
                 sparse = 0;
 
         if (sparse)
-                rd_kafka_metadata_refresh_known_topics(rk, NULL, 1/*force*/,
-                                                       "periodic refresh");
+                rd_kafka_metadata_refresh_known_topics(
+                        rk, NULL, 1/*force*/, "periodic refresh");
         else
                 rd_kafka_metadata_refresh_all(rk, NULL, "periodic refresh");
 }
@@ -1703,6 +1719,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                      rd_kafka_enq_once_trigger_destroy);
 
         rd_interval_init(&rk->rk_suppress.no_idemp_brokers);
+        rd_interval_init(&rk->rk_suppress.sparse_connect_random);
+        mtx_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
 
 	rk->rk_rep = rd_kafka_q_new(rk);
 	rk->rk_ops = rd_kafka_q_new(rk);

@@ -794,6 +794,64 @@ error log is silenced (will only be seen with debug enabled).
 but it is recommended to instead rely on the above heuristics.
 
 
+#### Sparse connections
+
+Maintaining an open connection to each broker in the cluster is problematic
+for clusters with a large number of brokers, as well with clusters with a
+large number of clients.
+
+To alleviate this the `enable.sparse.connections=true` configuration property
+was added, when enabled the client only connects to brokers the clients needs
+to communicate with, and only when necessary.
+
+Examples of needed broker connections are:
+
+ * leaders for partitions being consumed from
+ * leaders for partitions being produced to
+ * consumer group coordinator broker
+ * cluster controller for Admin API operations
+
+##### Random broker selection
+
+When there is no broker connection and a connection to any broker
+is needed, such as on startup to retrieve metadata, the client randomly selects
+a broker from its list of brokers, which includes both the configure bootstrap
+brokers (including brokers manually added with `rd_kafka_brokers_add()`), as
+well as the brokers discovered from cluster metadata.
+Brokers with no prior connection attempt are tried first.
+
+If there is already an available broker connection to any broker it is used,
+rather than connecting to a new one.
+
+The random broker selection and connection scheduling is triggered when:
+ * bootstrap servers are configured (`rd_kafka_new()`)
+ * brokers are manually added (`rd_kafka_brokers_add()`).
+ * a consumer group coordinator needs to be found.
+ * acquiring a ProducerID for the Idempotent Producer.
+ * cluster or topic metadata is being refreshed.
+
+A single connection attempt will be performed, and the broker will
+return to an idle INIT state on failure to connect.
+
+The random broker selection is rate-limited to:
+10 < `reconnect.backoff.jitter.ms`/2 < 1000 milliseconds.
+
+**Note**: The broker connection will be maintained until it is closed
+          by the broker (idle connection reaper).
+
+##### Persistent broker connections
+
+While the random broker selection is useful for one-off queries, there
+is need for the client to maintain persistent connections to certain brokers:
+ * Consumer: the group coordinator.
+ * Consumer: partition leader for topics being fetched from.
+ * Producer: partition leader for topics being produced to.
+
+These dependencies are discovered and maintained automatically, marking
+matching brokers as persistent, which will make the client maintain connections
+to these brokers at all times, reconnecting as necessary.
+
+
 
 ### Feature discovery
 
@@ -830,13 +888,13 @@ The `rd_kafka_produce()` function takes the following arguments:
 	    memory, such as the stack.
 	  * `RD_KAFKA_MSG_F_FREE` - let librdkafka free the payload using
 	    `free(3)` when it is done with it.
-	
+
 	These two flags are mutually exclusive and neither need to be set in
 	which case the payload is neither copied nor freed by librdkafka.
-		
+
 	If `RD_KAFKA_MSG_F_COPY` flag is not set no data copying will be
 	performed and librdkafka will hold on the payload pointer until
-	the message	has been delivered or fails.
+	the message has been delivered or fails.
 	The delivery report callback will be called when librdkafka is done
 	with the message to let the application regain ownership of the
 	payload memory.

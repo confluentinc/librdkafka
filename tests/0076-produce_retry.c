@@ -160,6 +160,16 @@ static void do_test_produce_retries (const char *topic,
         testid = test_id_generate();
 
         test_conf_init(&conf, NULL, 60);
+
+        if (should_fail &&
+            !strcmp(test_conf_get(conf, "enable.sparse.connections"),
+                    "true")) {
+                rd_kafka_conf_destroy(conf);
+                TEST_SKIP("Sparse connections enabled: "
+                          "skipping connection-timing related test\n");
+                return;
+        }
+
         test_conf_set(conf, "socket.timeout.ms", "1000");
         /* Avoid disconnects on request timeouts */
         test_conf_set(conf, "socket.max.fails", "100");

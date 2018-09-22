@@ -104,7 +104,7 @@ int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
         if (!rkb) {
                 rkb = rd_kafka_broker_any(rk, RD_KAFKA_BROKER_STATE_UP,
                                           rd_kafka_broker_filter_non_idempotent,
-                                          NULL);
+                                          NULL, "acquire ProducerID");
                 if (!rkb) {
                         int up_cnt = rd_atomic32_get(&rk->rk_broker_up_cnt);
                         int all_cnt = rd_atomic32_get(&rk->rk_broker_cnt);

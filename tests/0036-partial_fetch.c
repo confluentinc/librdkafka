@@ -70,7 +70,6 @@ int main_0036_partial_fetch (int argc, char **argv) {
 	/* This should fetch 1.5 messages per fetch, thus resulting in
 	 * partial fetches, hopefully. */
 	test_conf_set(conf, "fetch.message.max.bytes", "1500");
-        test_conf_set(conf, "socket.blocking.max.ms", "1");
 	rk = test_create_consumer(NULL, NULL, conf, NULL);
 	rkt = rd_kafka_topic_new(rk, topic, NULL);
 

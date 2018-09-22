@@ -36,7 +36,10 @@ class LibrdkafkaTestApp(App):
         f.write('broker.address.family=v4\n'.encode('ascii'))
         f.write(('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
         f.write('test.timeout.multiplier=2\n'.encode('ascii'))
-        f.write(('\n'.join(conf_blob)).encode('ascii'))
+
+        sparse = conf.get('sparse_connections', None):
+        if sparse is not None:
+            f.write('enable.sparse.connections=%s\n'.format(sparse).encode('ascii'))
 
         if version.startswith('0.9') or version.startswith('0.8'):
             conf_blob.append('api.version.request=false')

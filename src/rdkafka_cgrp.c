@@ -315,6 +315,8 @@ static void rd_kafka_cgrp_assign_broker (rd_kafka_cgrp_t *rkcg,
         if (RD_KAFKA_CGRP_BROKER_IS_COORD(rkcg, rkb))
                 rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_WAIT_BROKER_TRANSPORT);
 
+        rd_kafka_broker_persistent_connection_add(
+                rkb, &rkb->rkb_persistconn.coord);
 }
 
 
@@ -332,6 +334,9 @@ static void rd_kafka_cgrp_unassign_broker (rd_kafka_cgrp_t *rkcg) {
                      "from broker handle %s",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_kafka_broker_name(rkb));
+
+        rd_kafka_broker_persistent_connection_del(
+                rkb, &rkb->rkb_persistconn.coord);
 
         rkcg->rkcg_rkb = NULL;
         rd_kafka_broker_destroy(rkb); /* from assign() */
@@ -511,7 +516,8 @@ void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 
 	rd_kafka_rdlock(rkcg->rkcg_rk);
 	rkb = rd_kafka_broker_any(rkcg->rkcg_rk, RD_KAFKA_BROKER_STATE_UP,
-				  rd_kafka_broker_filter_can_group_query, NULL);
+				  rd_kafka_broker_filter_can_group_query, NULL,
+                                  "coordinator query");
 	rd_kafka_rdunlock(rkcg->rkcg_rk);
 
 	if (!rkb) {

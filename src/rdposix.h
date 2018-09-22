@@ -179,6 +179,16 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
             rd_fd_set_nonblocking(fds[0]) == -1 ||
             rd_fd_set_nonblocking(fds[1]))
                 return errno;
+
+        /* Minimize buffer sizes to avoid a large number
+         * of signaling bytes to accumulate when
+         * io-signalled queue is not being served for a while. */
+#ifdef F_SETPIPE_SZ
+        /* Linux automatically rounds the pipe size up
+         * to the minimum size. */
+        fcntl(fds[0], F_SETPIPE_SZ, 100);
+        fcntl(fds[1], F_SETPIPE_SZ, 100);
+#endif
         return 0;
 }
 #define rd_pipe(fds) pipe(fds)

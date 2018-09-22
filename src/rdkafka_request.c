@@ -132,6 +132,7 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
         case RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND:
                 actions |= RD_KAFKA_ERR_ACTION_RETRY|
                         RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED;
+                break;
 
         case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
                 /* Client-side wait-response/in-queue timeout */

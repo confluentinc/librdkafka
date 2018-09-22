@@ -59,6 +59,12 @@ struct rd_kafka_q_s {
                                       * Flag is cleared on destroy */
 #define RD_KAFKA_Q_F_FWD_APP    0x4  /* Queue is being forwarded by a call
                                       * to rd_kafka_queue_forward. */
+#define RD_KAFKA_Q_F_YIELD      0x8  /* Have waiters return even if
+                                      * no rko was enqueued.
+                                      * This is used to wake up a waiter
+                                      * by triggering the cond-var
+                                      * but without having to enqueue
+                                      * an op. */
 
         rd_kafka_t   *rkq_rk;
 	struct rd_kafka_q_io *rkq_qio;   /* FD-based application signalling */
@@ -318,6 +324,39 @@ int rd_kafka_op_cmp_prio (const void *_a, const void *_b) {
         return b->rko_prio - a->rko_prio;
 }
 
+
+/**
+ * @brief Wake up waiters without enqueuing an op.
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_q_yield (rd_kafka_q_t *rkq) {
+        rd_kafka_q_t *fwdq;
+
+        mtx_lock(&rkq->rkq_lock);
+
+        rd_dassert(rkq->rkq_refcnt > 0);
+
+        if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
+                /* Queue has been disabled */
+                mtx_unlock(&rkq->rkq_lock);
+                return;
+        }
+
+        if (!(fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
+                rkq->rkq_flags |= RD_KAFKA_Q_F_YIELD;
+                cnd_signal(&rkq->rkq_cond);
+                if (rkq->rkq_qlen == 0)
+                        rd_kafka_q_io_event(rkq);
+
+                mtx_unlock(&rkq->rkq_lock);
+        } else {
+                mtx_unlock(&rkq->rkq_lock);
+                rd_kafka_q_yield(fwdq);
+                rd_kafka_q_destroy(fwdq);
+        }
+
+
+}
 
 /**
  * @brief Low-level unprotected enqueue that only performs

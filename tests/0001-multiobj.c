@@ -90,6 +90,10 @@ int main_0001_multiobj (int argc, char **argv) {
                 TIMING_STOP(&t_destroy);
 
                 TIMING_STOP(&t_full);
+
+                /* Topic is created on the first iteration. */
+                if (i > 0)
+                        TIMING_ASSERT(&t_full, 0, 999);
 	}
 
 	return 0;

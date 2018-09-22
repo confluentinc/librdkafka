@@ -322,6 +322,16 @@ struct rd_kafka_s {
         struct {
                 /**< Log: No brokers support Idempotent Producer */
                 rd_interval_t no_idemp_brokers;
+
+                /**< Sparse connections: randomly select broker
+                 *   to bring up. This interval should allow
+                 *   for a previous connection to be established,
+                 *   which varies between different environments:
+                 *   Use 10 < reconnect.backoff.jitter.ms / 2 < 1000.
+                 */
+                rd_interval_t sparse_connect_random;
+                /**< Lock for sparse_connect_random */
+                mtx_t         sparse_connect_lock;
         } rk_suppress;
 };
 

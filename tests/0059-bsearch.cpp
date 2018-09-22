@@ -159,7 +159,6 @@ static void do_test_bsearch (void) {
   Test::conf_set(conf, "fetch.error.backoff.ms", "1");
   Test::conf_set(conf, "queued.min.messages", "1");
   Test::conf_set(conf, "enable.auto.commit", "false");
-  Test::conf_set(conf, "socket.blocking.max.ms", "2000");
 
   RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
   if (!c)

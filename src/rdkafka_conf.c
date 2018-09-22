@@ -348,12 +348,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Admin: Admin requests will use `socket.timeout.ms` or explicitly "
           "set `rd_kafka_AdminOptions_set_operation_timeout()` value.",
 	  10, 300*1000, 60*1000 },
-	{ _RK_GLOBAL, "socket.blocking.max.ms", _RK_C_INT,
-	  _RK(socket_blocking_max_ms),
-	  "Maximum time a broker socket operation may block. "
-          "A lower value improves responsiveness at the expense of "
-          "slightly higher CPU usage. **Deprecated**",
-	  1, 60*1000, 1000 },
+        { _RK_GLOBAL, "socket.blocking.max.ms", _RK_C_INT,
+          _RK(socket_blocking_max_ms),
+          "**Deprecated** No longer used.",
+          1, 60*1000, 1000 },
 	{ _RK_GLOBAL, "socket.send.buffer.bytes", _RK_C_INT,
 	  _RK(socket_sndbuf_size),
 	  "Broker socket send buffer size. System default is used if 0.",
@@ -397,6 +395,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { AF_INET, "v4" },
                         { AF_INET6, "v6" },
                 } },
+        { _RK_GLOBAL, "enable.sparse.connections", _RK_C_BOOL,
+          _RK(sparse_connections),
+          "When enabled the client will only connect to brokers "
+          "it needs to communicate with. When disabled the client "
+          "will maintain connections to all brokers in the cluster.",
+          0, 1, 0 },
         { _RK_GLOBAL, "reconnect.backoff.jitter.ms", _RK_C_INT,
           _RK(reconnect_jitter_ms),
           "Throttle broker reconnection attempts by this value +-50%.",
@@ -2816,6 +2820,13 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
             conf->metadata_refresh_interval_ms > 0)
                 conf->metadata_max_age_ms =
                         conf->metadata_refresh_interval_ms * 3;
+
+        if (conf->sparse_connections) {
+                /* Set sparse connection random selection interval to
+                 * 10 < reconnect.backoff.jitter.ms / 2 < 1000. */
+                conf->sparse_connect_intvl =
+                        RD_MAX(11, RD_MIN(conf->reconnect_jitter_ms/2, 1000));
+        }
 
         /* Finalize and verify the default.topic.config */
         if (conf->topic_conf)

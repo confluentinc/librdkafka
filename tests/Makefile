@@ -21,6 +21,10 @@ broker: $(BIN)
 broker_idempotent: $(BIN)
 	./broker_version_tests.py --conf '{"parallel":1, "args":"-P"}' $(KAFKA_VERSION)
 
+sparse_connections: $(BIN)
+	./broker_version_tests.py --brokers 7 \
+		--conf '{"parallel":1, "args":"-P", "sparse_connections": "enable"}' $(KAFKA_VERSION)
+
 sasl: $(BIN)
 	./sasl_test.py --conf '{"parallel":1}' --no-ssl --debug $(KAFKA_VERSION)
 

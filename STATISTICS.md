@@ -101,6 +101,8 @@ rxpartial | int | | Total number of partial MessageSets received. The broker may
 zbuf_grow | int | | Total number of decompression buffer size increases
 buf_grow | int | | Total number of buffer size increases (deprecated, unused)
 wakeups | int | | Broker thread poll wakeups
+connects | int | | Number of connection attempts, including successful and failed, and name resolution failures.
+disconnects | int | | Number of disconnects (triggered by broker, network, load-balancer, etc.).
 int_latency | object | | Internal producer queue latency in microseconds. See *Window stats* below
 outbuf_latency | object | | Internal request queue latency in microseconds. This is the time between a request is enqueued on the transmit (outbuf) queue and the time the request is written to the TCP socket. Additional buffering and latency may be incurred by the TCP stack and network. See *Window stats* below
 rtt | object | | Broker latency / round-trip time in microseconds. See *Window stats* below

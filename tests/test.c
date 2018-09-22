@@ -73,6 +73,7 @@ static int test_summary (int do_lock);
  * Protects shared state, such as tests[]
  */
 mtx_t test_mtx;
+cnd_t test_cnd;
 
 static const char *test_states[] = {
         "DNS",
@@ -930,6 +931,8 @@ static int run_test0 (struct run_args *run_args) {
         }
         TEST_UNLOCK();
 
+        cnd_broadcast(&test_cnd);
+
 #if WITH_SOCKEM
         test_socket_close_all(test, 0);
 #endif
@@ -985,14 +988,12 @@ static int run_test (struct test *test, int argc, char **argv) {
 
         TEST_LOCK();
         while (tests_running_cnt >= test_concurrent_max) {
-                if (!(wait_cnt++ % 10))
+                if (!(wait_cnt++ % 100))
                         TEST_SAY("Too many tests running (%d >= %d): "
                                  "postponing %s start...\n",
                                  tests_running_cnt, test_concurrent_max,
                                  test->name);
-                TEST_UNLOCK();
-                rd_sleep(1);
-                TEST_LOCK();
+                cnd_timedwait_ms(&test_cnd, &test_mtx, 100);
         }
         tests_running_cnt++;
         test->timeout = test_clock() + (int64_t)(20.0 * 1000000.0 *
@@ -1314,6 +1315,7 @@ int main(int argc, char **argv) {
 	int a,b,c,d;
 
 	mtx_init(&test_mtx, mtx_plain);
+        cnd_init(&test_cnd);
 
         test_init();
 

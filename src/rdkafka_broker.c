@@ -2695,12 +2695,12 @@ static void rd_kafka_broker_ops_io_serve (rd_kafka_broker_t *rkb,
                 remains_ms = rd_kafka_max_block_ms;
         else if ((remains_us = abs_timeout - (now = rd_clock())) < 0)
                 remains_ms = RD_POLL_NOWAIT;
-        else if (remains_us < 1000)
-                remains_ms = 1; /* Adjust sub-millisecond waits to 1ms
-                                 * to avoid busy-looping during the last
-                                 * millisecond. */
         else
-                remains_ms = (int)(remains_us / 1000);
+                /* + 999: Round up to millisecond to
+                 * avoid busy-looping during the last
+                 * millisecond. */
+                remains_ms = (int)((remains_us + 999) / 1000);
+
 
         if (likely(rkb->rkb_transport != NULL)) {
                 /* Serve IO events */

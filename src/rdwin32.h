@@ -233,6 +233,7 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         struct sockaddr_in listen_addr;
         struct sockaddr_in connect_addr;
         socklen_t sock_len = 0;
+        int bufsz;
 
         /* Create listen socket */
         listen_s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -273,6 +274,18 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
 
         if (rd_fd_set_nonblocking((int)connect_s) != 0)
                 goto err;
+
+        /* Minimize buffer sizes to avoid a large number
+         * of signaling bytes to accumulate when
+         * io-signalled queue is not being served for a while. */
+        bufsz = 100;
+        setsockopt(accept_s, SOL_SOCKET, SO_SNDBUF, &bufsz, sizeof(bufsz));
+        bufsz = 100;
+        setsockopt(accept_s, SOL_SOCKET, SO_RCVBUF, &bufsz, sizeof(bufsz));
+        bufsz = 100;
+        setsockopt(connect_s, SOL_SOCKET, SO_SNDBUF, &bufsz, sizeof(bufsz));
+        bufsz = 100;
+        setsockopt(connect_s, SOL_SOCKET, SO_RCVBUF, &bufsz, sizeof(bufsz));
 
         /* Store resulting sockets. They are bidirectional, so it does not matter
          * which is read or write side of pipe. */

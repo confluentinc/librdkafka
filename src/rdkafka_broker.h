@@ -218,8 +218,10 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                  *
                  *   Counter is maintained by the broker handler thread
                  *   itself, no need for atomic/locking.
-                 *   Maybe be reset to 0 on each producer|consumer_serve() loop
-                 *   and updated according to current need. */
+                 *   Is reset to 0 on each producer|consumer_serve() loop
+                 *   and updated according to current need, which
+                 *   will trigger a state transition to
+                 *   TRY_CONNECT if a connection is needed. */
                 int internal;
 
                 /**< Consumer: Broker is the group coordinator.

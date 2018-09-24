@@ -15,22 +15,31 @@ KAFKA_VERSION?=1.1.0
 
 all: $(BIN) run_par
 
+#
+# These targets spin up a cluster and runs the test suite
+# with different parameters.
+#
+
 broker: $(BIN)
 	./broker_version_tests.py --conf '{"parallel":1}' $(KAFKA_VERSION)
 
 broker_idempotent: $(BIN)
-	./broker_version_tests.py --conf '{"parallel":1, "args":"-P"}' $(KAFKA_VERSION)
+	./broker_version_tests.py --conf '{"parallel":1, "args":"-P -L"}' $(KAFKA_VERSION)
 
-sparse_connections: $(BIN)
-	./broker_version_tests.py --brokers 7 \
-		--conf '{"parallel":1, "args":"-P", "sparse_connections": "enable"}' $(KAFKA_VERSION)
+non_sparse_connections: $(BIN)
+	./broker_version_tests.py --brokers 5 \
+		--conf '{"parallel":1, "args": "-L", "sparse_connections": "false"}' $(KAFKA_VERSION)
 
 sasl: $(BIN)
-	./sasl_test.py --conf '{"parallel":1}' --no-ssl --debug $(KAFKA_VERSION)
+	./sasl_test.py --conf '{"parallel":1, "args":"-L"}' --debug $(KAFKA_VERSION)
 
 # Run the full test suite(s)
-full: broker broker_idempotent sasl
+full: broker broker_idempotent non_sparse_connections sasl
 
+
+#
+# The following targets require an existing cluster running (test.conf)
+#
 run_par: $(BIN)
 	@echo "Running tests in parallel"
 	./run-test.sh -p5 ./$(BIN)

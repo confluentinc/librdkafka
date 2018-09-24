@@ -288,7 +288,6 @@ static RD_INLINE RD_UNUSED int rd_kafka_q_is_fwded (rd_kafka_q_t *rkq) {
  */
 static RD_INLINE RD_UNUSED
 void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
-	ssize_t r;
 
 	if (likely(!rkq->rkq_qio))
 		return;
@@ -298,18 +297,9 @@ void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
                 return;
         }
 
-        r = rd_write(rkq->rkq_qio->fd, rkq->rkq_qio->payload, (int)rkq->rkq_qio->size);
-	if (r == -1) {
-		fprintf(stderr,
-			"[ERROR:librdkafka:rd_kafka_q_io_event: "
-			"write(%d,..,%d) failed on queue %p \"%s\": %s: "
-			"disabling further IO events]\n",
-			rkq->rkq_qio->fd, (int)rkq->rkq_qio->size,
-			rkq, rd_kafka_q_name(rkq), rd_strerror(errno));
-		/* FIXME: Log this, somehow */
-		rd_free(rkq->rkq_qio);
-		rkq->rkq_qio = NULL;
-	}
+        /* Ignore errors, not much to do anyway. */
+        (void)rd_write(rkq->rkq_qio->fd, rkq->rkq_qio->payload,
+                       (int)rkq->rkq_qio->size);
 }
 
 

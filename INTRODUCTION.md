@@ -758,14 +758,15 @@ from any thread at any time:
 
 ### Brokers
 
-librdkafka only needs an initial list of brokers (at least one), called the
-bootstrap brokers.
-It will connect to all the bootstrap brokers, specified by the
-`metadata.broker.list` configuration property or by `rd_kafka_brokers_add()`,
-and query each one for Metadata information which contains the full list of
-brokers, topic, partitions and their leaders in the Kafka cluster.
+On initialization, librdkafka only needs a partial list of
+brokers (at least one), called the bootstrap brokers.
+The client will connect to the bootstrap brokers, specified by the
+`bootstrap.servers` (or `metadata.broker.list`) configuration property or
+by `rd_kafka_brokers_add()`, and query cluster Metadata information
+which contains the full list of brokers, topic, partitions and their
+leaders in the Kafka cluster.
 
-Broker names are specified as `host[:port]` where the port is optional 
+Broker names are specified as `host[:port]` where the port is optional
 (default 9092) and the host is either a resolvable hostname or an IPv4 or IPv6
 address.
 If host resolves to multiple addresses librdkafka will round-robin the
@@ -773,36 +774,16 @@ addresses for each connection attempt.
 A DNS record containing all broker address can thus be used to provide a
 reliable bootstrap broker.
 
-#### Connection close
-
-A broker connection may be closed by the broker, intermediary network gear,
-due to network errors, timeouts, etc.
-When a broker connection is closed, librdkafka will wait for
-`reconnect.backoff.jitter.ms` +-50% before reconnecting.
-
-The broker will disconnect clients that have not sent any protocol requests
-within `connections.max.idle.ms` (broker configuration propertion, defaults
-to 10 minutes), but there is no fool proof way for the client to know that it
-was a deliberate close by the broker and not an error. To avoid logging these
-deliberate idle disconnects as errors the client employs some logic to try to
-classify a disconnect as an idle disconnect if no requests have been sent in
-the last `socket.timeout.ms` or there are no outstanding, or
-queued, requests waiting to be sent. In this case the standard "Disconnect"
-error log is silenced (will only be seen with debug enabled).
-
-`log.connection.close=false` may be used to silence all disconnect logs,
-but it is recommended to instead rely on the above heuristics.
-
 
 #### Sparse connections
 
 Maintaining an open connection to each broker in the cluster is problematic
-for clusters with a large number of brokers, as well with clusters with a
+for clusters with a large number of brokers, as well as for clusters with
 large number of clients.
 
-To alleviate this the `enable.sparse.connections=true` configuration property
-was added, when enabled the client only connects to brokers the clients needs
-to communicate with, and only when necessary.
+To alleviate this, the `enable.sparse.connections=true` configuration property
+can be set to `true` (**default**), in which case the client will only connect
+to brokers it needs to communicate with, and only when necessary.
 
 Examples of needed broker connections are:
 
@@ -810,6 +791,7 @@ Examples of needed broker connections are:
  * leaders for partitions being produced to
  * consumer group coordinator broker
  * cluster controller for Admin API operations
+
 
 ##### Random broker selection
 
@@ -850,6 +832,29 @@ is need for the client to maintain persistent connections to certain brokers:
 These dependencies are discovered and maintained automatically, marking
 matching brokers as persistent, which will make the client maintain connections
 to these brokers at all times, reconnecting as necessary.
+
+
+#### Connection close
+
+A broker connection may be closed by the broker, intermediary network gear,
+due to network errors, timeouts, etc.
+When a broker connection is closed, librdkafka will wait for
+`reconnect.backoff.jitter.ms` +-50% before reconnecting.
+
+The broker will disconnect clients that have not sent any protocol requests
+within `connections.max.idle.ms` (broker configuration propertion, defaults
+to 10 minutes), but there is no fool proof way for the client to know that it
+was a deliberate close by the broker and not an error. To avoid logging these
+deliberate idle disconnects as errors the client employs some logic to try to
+classify a disconnect as an idle disconnect if no requests have been sent in
+the last `socket.timeout.ms` or there are no outstanding, or
+queued, requests waiting to be sent. In this case the standard "Disconnect"
+error log is silenced (will only be seen with debug enabled).
+
+`log.connection.close=false` may be used to silence all disconnect logs,
+but it is recommended to instead rely on the above heuristics.
+
+
 
 
 

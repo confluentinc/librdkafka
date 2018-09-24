@@ -594,7 +594,7 @@ rd_kafka_resp_err_t rd_kafka_set_last_error (rd_kafka_resp_err_t err,
 
 
 int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
-                              const char *fmt, ...);
+                              const char *fmt, ...) RD_FORMAT(printf, 3, 4);
 
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code (rd_kafka_t *rk) {

@@ -54,6 +54,16 @@ static RD_UNUSED void rd_kafka_offset_stats_reset (struct offset_stats *offs) {
 }
 
 
+/**
+ * @brief Store information about a partition error for future use.
+ */
+struct rd_kafka_toppar_err {
+        rd_kafka_resp_err_t err;  /**< Error code */
+        int actions;              /**< Request actions */
+        rd_ts_t ts;               /**< Timestamp */
+        int32_t base_seq;         /**< Idempodent Producer:
+                                   *   first msg sequence */
+};
 
 /**
  * Topic + Partition combination
@@ -313,6 +323,9 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
 
         int rktp_wait_consumer_lag_resp;         /* Waiting for consumer lag
                                                   * response. */
+
+        struct rd_kafka_toppar_err rktp_last_err; /**< Last produce error */
+
 
         struct {
                 rd_atomic64_t tx_msgs;       /**< Producer: sent messages */

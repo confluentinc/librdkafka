@@ -855,11 +855,14 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                                 rkb->rkb_rk,
                                 RD_KAFKA_RESP_ERR__INCONSISTENT,
                                 "Unable to reconstruct MessageSet "
-                                "(currently with %d message(s), "
-                                "%"PRIusz" bytes) "
+                                "(currently with %d message(s)) "
                                 "with msgseq range %"PRIu64"..%"PRIu64": "
                                 "last message added has msgseq %"PRIu64": "
-                                "unable to guarantee consistency");
+                                "unable to guarantee consistency",
+                                msgcnt,
+                                msetw->msetw_firstmsg.msgseq,
+                                msetw->msetw_lastmsg.msgseq,
+                                lastmsg->rkm_u.producer.msgseq);
                         return 0;
                 }
         }
@@ -1293,12 +1296,12 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
         rd_rkb_dbg(msetw->msetw_rkb, MSG, "PRODUCE",
                    "%s [%"PRId32"]: "
                    "Produce MessageSet with %i message(s) (%"PRIusz" bytes, "
-                   "ApiVersion %d, MsgVersion %d, MsgSeq %"PRIu64"..%"PRIu64", "
+                   "ApiVersion %d, MsgVersion %d, MsgSeq %"PRIu64", "
                    "BaseSeq %"PRId32")",
                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                    cnt, msetw->msetw_MessageSetSize,
                    msetw->msetw_ApiVersion, msetw->msetw_MsgVersion,
-                   msetw->msetw_firstmsg.msgseq, msetw->msetw_lastmsg.msgseq,
+                   msetw->msetw_firstmsg.msgseq,
                    msetw->msetw_firstmsg.seq);
 
         return rkbuf;

@@ -63,6 +63,13 @@ static const char *rd_kafka_actions_descs[] = {
         NULL,
 };
 
+static const char *rd_kafka_actions2str (int actions) {
+        static RD_TLS char actstr[128];
+        return rd_flags2str(actstr, sizeof(actstr),
+                            rd_kafka_actions_descs,
+                            actions);
+}
+
 
 /**
  * @brief Decide action(s) to take based on the returned error code.
@@ -80,7 +87,6 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 	va_list ap;
         int actions = 0;
 	int exp_act;
-        char actstr[64];
 
         if (!err)
                 return 0;
@@ -103,9 +109,7 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                                    rd_kafka_ApiKey2str(request->rkbuf_reqhdr.
                                                        ApiKey),
                                    rd_kafka_err2str(err),
-                                   rd_flags2str(actstr, sizeof(actstr),
-                                                rd_kafka_actions_descs,
-                                                actions));
+                                   rd_kafka_actions2str(actions));
 
                 return actions;
         }
@@ -168,8 +172,7 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
                            "%sRequest failed: %s: actions %s",
                            rd_kafka_ApiKey2str(request->rkbuf_reqhdr.ApiKey),
                            rd_kafka_err2str(err),
-                           rd_flags2str(actstr, sizeof(actstr),
-                                        rd_kafka_actions_descs, actions));
+                           rd_kafka_actions2str(actions));
 
         return actions;
 }
@@ -1351,7 +1354,6 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
         rd_kafka_op_t *rko = opaque; /* Possibly NULL */
         struct rd_kafka_metadata *md = NULL;
         const rd_list_t *topics = request->rkbuf_u.Metadata.topics;
-        char actstr[64];
         int actions;
 
         rd_kafka_assert(NULL, err == RD_KAFKA_RESP_ERR__DESTROY ||
@@ -1416,9 +1418,7 @@ static void rd_kafka_handle_Metadata (rd_kafka_t *rk,
                            request->rkbuf_u.Metadata.reason,
                            rd_kafka_err2str(err),
                            (int)(request->rkbuf_ts_sent/1000),
-                           rd_flags2str(actstr, sizeof(actstr),
-                                        rd_kafka_actions_descs,
-                                        actions));
+                           rd_kafka_actions2str(actions));
         }
 
 
@@ -1818,6 +1818,12 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
         rd_kafka_t *rk = rkb->rkb_rk;
         rd_kafka_msg_t *firstmsg, *lastmsg;
         int r;
+        rd_ts_t now = rd_clock(), state_age;
+        struct rd_kafka_toppar_err last_err;
+
+        rd_kafka_rdlock(rkb->rkb_rk);
+        state_age = now - rkb->rkb_rk->rk_eos.ts_idemp_state;
+        rd_kafka_rdunlock(rkb->rkb_rk);
 
         firstmsg = rd_kafka_msgq_first(&request->rkbuf_msgq);
         lastmsg = rd_kafka_msgq_last(&request->rkbuf_msgq);
@@ -1877,15 +1883,31 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                          * not guarantee ordering or once-ness for R1,
                          * nor give the user a chance to opt out of sending
                          * R2 to R4 which would be retried automatically. */
+
+                        /* Acquire the last partition error to help
+                         * troubleshoot this problem. */
+                        rd_kafka_toppar_lock(rktp);
+                        last_err = rktp->rktp_last_err;
+                        rd_kafka_toppar_unlock(rktp);
+
                         rd_kafka_set_fatal_error(
                                 rk, perr->err,
                                 "ProduceRequest with %d message(s) failed "
                                 "due to sequence desynchronization with "
-                                "broker %"PRId32" (%s, base seq %"PRId32")",
+                                "broker %"PRId32" (%s, base seq %"PRId32", "
+                                "idemp state change %"PRId64"ms ago, "
+                                "last partition error %s (actions %s, "
+                                "base seq %"PRId32", %"PRId64"ms ago)",
                                 rd_kafka_msgq_len(&request->rkbuf_msgq),
                                 rkb->rkb_nodeid,
                                 rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
-                                request->rkbuf_u.Produce.base_seq);
+                                request->rkbuf_u.Produce.base_seq,
+                                state_age / 1000,
+                                rd_kafka_err2name(last_err.err),
+                                rd_kafka_actions2str(last_err.actions),
+                                last_err.base_seq,
+                                last_err.ts ?
+                                (now - last_err.ts)/1000 : -1);
 
                         perr->actions = RD_KAFKA_ERR_ACTION_PERMANENT;
                         perr->status  = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
@@ -2067,7 +2089,6 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                                           rd_kafka_buf_t *request,
                                           struct rd_kafka_Produce_err *perr) {
         rd_kafka_t *rk = rkb->rkb_rk;
-        char actstr[64];
         int is_leader;
 
         if (unlikely(perr->err == RD_KAFKA_RESP_ERR__DESTROY))
@@ -2156,9 +2177,7 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                    request->rkbuf_u.Produce.base_msgseq,
                    request->rkbuf_u.Produce.base_seq,
                    rd_kafka_err2str(perr->err),
-                   rd_flags2str(actstr, sizeof(actstr),
-                                rd_kafka_actions_descs,
-                                perr->actions),
+                   rd_kafka_actions2str(perr->actions),
                    is_leader ? "" : " [NOT LEADER]");
 
 
@@ -2183,6 +2202,15 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                 perr->status = RD_KAFKA_MSG_STATUS_NOT_PERSISTED;
         else if (perr->actions & RD_KAFKA_ERR_ACTION_MSG_PERSISTED)
                 perr->status = RD_KAFKA_MSG_STATUS_PERSISTED;
+
+        /* Save the last error for debugging sub-sequent errors,
+         * useful for Idempotent Producer throubleshooting. */
+        rd_kafka_toppar_lock(rktp);
+        rktp->rktp_last_err.err = perr->err;
+        rktp->rktp_last_err.actions = perr->actions;
+        rktp->rktp_last_err.ts = rd_clock();
+        rktp->rktp_last_err.base_seq = request->rkbuf_u.Produce.base_seq;
+        rd_kafka_toppar_unlock(rktp);
 
         /*
          * Handle actions

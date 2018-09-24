@@ -1516,10 +1516,17 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
 }
 
 
-
-static void rd_kafka_topic_scan_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
+/**
+ * @brief 1 second generic timer.
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+static void rd_kafka_1s_tmr_cb (rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_t *rk = rkts->rkts_rk;
-	rd_kafka_topic_scan_all(rk, rd_clock());
+
+        /* Scan topic state, message timeouts, etc. */
+        rd_kafka_topic_scan_all(rk, rd_clock());
 
         /* Sparse connections:
          * try to maintain at least one connection to the cluster. */
@@ -1567,7 +1574,7 @@ static void rd_kafka_metadata_refresh_cb (rd_kafka_timers_t *rkts, void *arg) {
  */
 static int rd_kafka_thread_main (void *arg) {
         rd_kafka_t *rk = arg;
-	rd_kafka_timer_t tmr_topic_scan = RD_ZERO_INIT;
+	rd_kafka_timer_t tmr_1s = RD_ZERO_INIT;
 	rd_kafka_timer_t tmr_stats_emit = RD_ZERO_INIT;
 	rd_kafka_timer_t tmr_metadata_refresh = RD_ZERO_INIT;
 
@@ -1581,8 +1588,9 @@ static int rd_kafka_thread_main (void *arg) {
 	rd_kafka_wrlock(rk);
 	rd_kafka_wrunlock(rk);
 
-	rd_kafka_timer_start(&rk->rk_timers, &tmr_topic_scan, 1000000,
-			     rd_kafka_topic_scan_tmr_cb, NULL);
+        /* 1 second timer for topic scan and connection checking. */
+        rd_kafka_timer_start(&rk->rk_timers, &tmr_1s, 1000000,
+                             rd_kafka_1s_tmr_cb, NULL);
         if (rk->rk_conf.stats_interval_ms)
                 rd_kafka_timer_start(&rk->rk_timers, &tmr_stats_emit,
                                      rk->rk_conf.stats_interval_ms * 1000ll,
@@ -1621,7 +1629,7 @@ static int rd_kafka_thread_main (void *arg) {
 	rd_kafka_q_disable(rk->rk_ops);
 	rd_kafka_q_purge(rk->rk_ops);
 
-        rd_kafka_timer_stop(&rk->rk_timers, &tmr_topic_scan, 1);
+        rd_kafka_timer_stop(&rk->rk_timers, &tmr_1s, 1);
         if (rk->rk_conf.stats_interval_ms)
                 rd_kafka_timer_stop(&rk->rk_timers, &tmr_stats_emit, 1);
         rd_kafka_timer_stop(&rk->rk_timers, &tmr_metadata_refresh, 1);

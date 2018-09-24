@@ -2457,9 +2457,11 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                 }
 
                 rd_rkb_dbg(rkb, BROKER | RD_KAFKA_DBG_TOPIC, "TOPBRK",
-                           "Topic %s [%"PRId32"]: joining broker (rktp %p)",
+                           "Topic %s [%"PRId32"]: joining broker "
+                           "(rktp %p, %d message(s) queued)",
                            rktp->rktp_rkt->rkt_topic->str,
-                           rktp->rktp_partition, rktp);
+                           rktp->rktp_partition, rktp,
+                           rd_kafka_msgq_len(&rktp->rktp_msgq));
 
                 rd_kafka_assert(NULL, rktp->rktp_s_for_rkb == NULL);
 		rktp->rktp_s_for_rkb = rd_kafka_toppar_keep(rktp);
@@ -2715,7 +2717,7 @@ static void rd_kafka_broker_ops_io_serve (rd_kafka_broker_t *rkb,
 
 
         /* An op might have triggered the need for a connection, if so
-         * transition to DOWN state. */
+         * transition to TRY_CONNECT state. */
         if (unlikely(rd_kafka_broker_needs_connection(rkb) &&
                      rkb->rkb_state == RD_KAFKA_BROKER_STATE_INIT)) {
                 rd_kafka_broker_lock(rkb);

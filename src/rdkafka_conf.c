@@ -400,7 +400,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "When enabled the client will only connect to brokers "
           "it needs to communicate with. When disabled the client "
           "will maintain connections to all brokers in the cluster.",
-          0, 1, 0 },
+          0, 1, 1 },
         { _RK_GLOBAL, "reconnect.backoff.jitter.ms", _RK_C_INT,
           _RK(reconnect_jitter_ms),
           "Throttle broker reconnection attempts by this value +-50%.",

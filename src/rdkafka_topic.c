@@ -1192,7 +1192,7 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                         query_this = 1;
                 } else if (rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN) {
                         rd_kafka_dbg(rk, TOPIC, "NOINFO",
-                                     "Topic %s metadata information unknknown",
+                                     "Topic %s metadata information unknown",
                                      rkt->rkt_topic->str);
                         query_this = 1;
                 }

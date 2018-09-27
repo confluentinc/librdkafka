@@ -3700,16 +3700,23 @@ static void rd_kafka_broker_consumer_serve (rd_kafka_broker_t *rkb,
                         rkb->rkb_persistconn.internal++;
                 }
 
-		/* Send Fetch request message for all underflowed toppars */
-		if (!rkb->rkb_fetching &&
+                /* Send Fetch request message for all underflowed toppars
+                 * if the connection is up and there are no outstanding
+                 * fetch requests for this connection. */
+                if (!rkb->rkb_fetching &&
                     rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
-                        if (min_backoff < now)
+                        if (min_backoff < now) {
                                 rd_kafka_broker_fetch_toppars(rkb, now);
-                        else if (min_backoff < RD_TS_MAX)
+                                min_backoff = abs_timeout;
+                        } else if (min_backoff < RD_TS_MAX)
                                 rd_rkb_dbg(rkb, FETCH, "FETCH",
                                            "Fetch backoff for %"PRId64
                                            "ms",
                                            (min_backoff-now)/1000);
+                } else {
+                        /* Nothing needs to be done, next wakeup
+                         * is from ops, state change, IO, or this timeout */
+                        min_backoff = abs_timeout;
                 }
 
 		/* Check and move retry buffers */

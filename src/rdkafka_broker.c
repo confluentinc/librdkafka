@@ -404,6 +404,17 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 			  sizeof(rkb->rkb_err.msg)-of, fmt, ap);
 		va_end(ap);
 
+                /* Append time since last state change
+                 * to help debug connection issues */
+                of = strlen(rkb->rkb_err.msg);
+                if (of + 30 < (int)sizeof(rkb->rkb_err.msg))
+                        rd_snprintf(rkb->rkb_err.msg+of,
+                                    sizeof(rkb->rkb_err.msg)-of,
+                                    " (after %"PRId64"ms in state %s)",
+                                    (rd_clock() - rkb->rkb_ts_state)/1000,
+                                    rd_kafka_broker_state_names[rkb->
+                                                                rkb_state]);
+
                 if (level >= LOG_DEBUG)
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "FAIL",
                                      "%s", rkb->rkb_err.msg);

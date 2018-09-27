@@ -298,8 +298,9 @@ void rd_kafka_q_io_event (rd_kafka_q_t *rkq) {
         }
 
         /* Ignore errors, not much to do anyway. */
-        (void)rd_write(rkq->rkq_qio->fd, rkq->rkq_qio->payload,
-                       (int)rkq->rkq_qio->size);
+        if (rd_write(rkq->rkq_qio->fd, rkq->rkq_qio->payload,
+                     (int)rkq->rkq_qio->size) == -1)
+                ;
 }
 
 

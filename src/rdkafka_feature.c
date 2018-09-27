@@ -424,7 +424,7 @@ rd_kafka_ApiVersions_copy (const struct rd_kafka_ApiVersion *src,
  * @returns a human-readable feature flag string.
  */
 const char *rd_kafka_features2str (int features) {
-	static RD_TLS char ret[4][128];
+	static RD_TLS char ret[4][256];
 	size_t of = 0;
 	static RD_TLS int reti = 0;
 	int i;

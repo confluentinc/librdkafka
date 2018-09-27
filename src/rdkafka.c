@@ -716,8 +716,10 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
                      flags ? flags_str : "none", flags);
 
         /* Make sure destroy is not called from a librdkafka thread
-         * since this will most likely cause a deadlock. */
-        if (strcmp(rd_kafka_thread_name, "app")) {
+         * since this will most likely cause a deadlock.
+         * FIXME: include broker threads (for log_cb) */
+        if (thrd_is_current(rk->rk_thread) ||
+            thrd_is_current(rk->rk_background.thread)) {
                 rd_kafka_log(rk, LOG_EMERG, "BGQUEUE",
                              "Application bug: "
                              "rd_kafka_destroy() called from "

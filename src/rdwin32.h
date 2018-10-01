@@ -243,11 +243,13 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         listen_addr.sin_family = AF_INET;
         listen_addr.sin_addr.s_addr = ntohl(INADDR_LOOPBACK);
         listen_addr.sin_port = 0;
-        if (bind(listen_s, (struct sockaddr*)&listen_addr, sizeof(listen_addr)) != 0)
+        if (bind(listen_s, (struct sockaddr*)&listen_addr,
+                 sizeof(listen_addr)) != 0)
                 goto err;
 
         sock_len = sizeof(connect_addr);
-        if (getsockname(listen_s, (struct sockaddr*)&connect_addr, &sock_len) != 0)
+        if (getsockname(listen_s, (struct sockaddr*)&connect_addr,
+                        &sock_len) != 0)
                 goto err;
 
         if (listen(listen_s, 1) != 0)
@@ -258,7 +260,8 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
         if (connect_s == INVALID_SOCKET)
                 goto err;
 
-        if (connect(connect_s, (struct sockaddr*)&connect_addr, sizeof(connect_addr)) == SOCKET_ERROR)
+        if (connect(connect_s, (struct sockaddr*)&connect_addr,
+                    sizeof(connect_addr)) == SOCKET_ERROR)
                 goto err;
 
         /* Wait for incoming connection */
@@ -279,16 +282,21 @@ static RD_UNUSED int rd_pipe_nonblocking (int *fds) {
          * of signaling bytes to accumulate when
          * io-signalled queue is not being served for a while. */
         bufsz = 100;
-        setsockopt(accept_s, SOL_SOCKET, SO_SNDBUF, &bufsz, sizeof(bufsz));
+        setsockopt(accept_s, SOL_SOCKET, SO_SNDBUF,
+                   (const char *)&bufsz, sizeof(bufsz));
         bufsz = 100;
-        setsockopt(accept_s, SOL_SOCKET, SO_RCVBUF, &bufsz, sizeof(bufsz));
+        setsockopt(accept_s, SOL_SOCKET, SO_RCVBUF,
+                   (const char *)&bufsz, sizeof(bufsz));
         bufsz = 100;
-        setsockopt(connect_s, SOL_SOCKET, SO_SNDBUF, &bufsz, sizeof(bufsz));
+        setsockopt(connect_s, SOL_SOCKET, SO_SNDBUF,
+                   (const char *)&bufsz, sizeof(bufsz));
         bufsz = 100;
-        setsockopt(connect_s, SOL_SOCKET, SO_RCVBUF, &bufsz, sizeof(bufsz));
+        setsockopt(connect_s, SOL_SOCKET, SO_RCVBUF,
+                   (const char *)&bufsz, sizeof(bufsz));
 
-        /* Store resulting sockets. They are bidirectional, so it does not matter
-         * which is read or write side of pipe. */
+        /* Store resulting sockets.
+         * They are bidirectional, so it does not matter which is read or
+         * write side of pipe. */
         fds[0] = (int)accept_s;
         fds[1] = (int)connect_s;
         return 0;

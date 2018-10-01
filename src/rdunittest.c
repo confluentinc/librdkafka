@@ -41,6 +41,7 @@
 #include "rdhdrhistogram.h"
 #endif
 #include "rdkafka_int.h"
+#include "rdkafka_broker.h"
 
 #include "rdsysqueue.h"
 
@@ -403,6 +404,7 @@ int rd_unittest (void) {
                 { "rdclock", unittest_rdclock },
 #endif
                 { "conf", unittest_conf },
+                { "broker", unittest_broker },
                 { NULL }
         };
         int i;

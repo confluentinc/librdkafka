@@ -403,8 +403,23 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           0, 1, 1 },
         { _RK_GLOBAL, "reconnect.backoff.jitter.ms", _RK_C_INT,
           _RK(reconnect_jitter_ms),
-          "Throttle broker reconnection attempts by this value +-50%.",
-          0, 60*60*1000, 500 },
+          "**Deprecated**: No longer used. See `reconnect.backoff.ms` and "
+          "`reconnect.backoff.max.ms`.",
+          0, 60*60*1000, 0 },
+        { _RK_GLOBAL, "reconnect.backoff.ms", _RK_C_INT,
+          _RK(reconnect_backoff_ms),
+          "The initial time to wait before reconnecting to a broker "
+          "after the connection has been closed. "
+          "The time is increased exponentially until "
+          "`reconnect.backoff.max.ms` is reached. "
+          "+-20% jitter is applied to each reconnect backoff. "
+          "A value of 0 disables the backoff and reconnects immediately.",
+          0, 60*60*1000, 100 },
+        { _RK_GLOBAL, "reconnect.backoff.max.ms", _RK_C_INT,
+          _RK(reconnect_backoff_max_ms),
+          "The maximum time to wait before reconnecting to a broker "
+          "after the connection has been closed.",
+          0, 60*60*1000, 10*1000 },
 	{ _RK_GLOBAL, "statistics.interval.ms", _RK_C_INT,
 	  _RK(stats_interval_ms),
 	  "librdkafka statistics emit interval. The application also needs to "
@@ -2821,11 +2836,15 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                 conf->metadata_max_age_ms =
                         conf->metadata_refresh_interval_ms * 3;
 
+        if (conf->reconnect_backoff_max_ms < conf->reconnect_backoff_ms)
+                return "`reconnect.backoff.max.ms` must be >= "
+                        "`reconnect.max.ms`";
+
         if (conf->sparse_connections) {
                 /* Set sparse connection random selection interval to
-                 * 10 < reconnect.backoff.jitter.ms / 2 < 1000. */
+                 * 10 < reconnect.backoff.ms / 2 < 1000. */
                 conf->sparse_connect_intvl =
-                        RD_MAX(11, RD_MIN(conf->reconnect_jitter_ms/2, 1000));
+                        RD_MAX(11, RD_MIN(conf->reconnect_backoff_ms/2, 1000));
         }
 
         /* Finalize and verify the default.topic.config */

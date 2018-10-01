@@ -74,6 +74,18 @@ extern int rd_unittest_assert_on_failure;
 
 
 /**
+ * @brief Check that value \p V is within inclusive range \p VMIN .. \p VMAX,
+ *        else asserts.
+ *
+ * @param VFMT is the printf formatter for \p V's type
+ */
+#define RD_UT_ASSERT_RANGE(V,VMIN,VMAX,VFMT)                            \
+        RD_UT_ASSERT((VMIN) <= (V) && (VMAX) >= (V),                    \
+                     VFMT" out of range "VFMT" .. "VFMT,                \
+                     (V), (VMIN), (VMAX))
+
+
+/**
  * @brief Log something from a unit-test
  */
 #define RD_UT_SAY(...) do {                                             \

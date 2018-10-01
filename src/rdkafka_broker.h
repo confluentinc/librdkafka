@@ -203,7 +203,12 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         int                 rkb_toppar_wakeup_fd; /* Toppar msgq wakeup fd,
                                                    * this is rkb_wakeup_fd[1]
                                                    * if enabled. */
-        rd_interval_t       rkb_connect_intvl;    /* Reconnect throttling */
+
+        /**< Current, exponentially increased, reconnect backoff. */
+        int                 rkb_reconnect_backoff_ms;
+
+        /**< Absolute timestamp of next allowed reconnect. */
+        rd_ts_t             rkb_ts_reconnect;
 
         /**< Persistent connection demand is tracked by
          *   an counter for each type of demand.
@@ -450,5 +455,7 @@ void
 rd_kafka_broker_persistent_connection_del (rd_kafka_broker_t *rkb,
                                            rd_atomic32_t *acntp);
 
+
+int unittest_broker (void);
 
 #endif /* _RDKAFKA_BROKER_H_ */

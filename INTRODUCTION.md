@@ -816,7 +816,7 @@ A single connection attempt will be performed, and the broker will
 return to an idle INIT state on failure to connect.
 
 The random broker selection is rate-limited to:
-10 < `reconnect.backoff.jitter.ms`/2 < 1000 milliseconds.
+10 < `reconnect.backoff.ms`/2 < 1000 milliseconds.
 
 **Note**: The broker connection will be maintained until it is closed
           by the broker (idle connection reaper).
@@ -838,8 +838,11 @@ to these brokers at all times, reconnecting as necessary.
 
 A broker connection may be closed by the broker, intermediary network gear,
 due to network errors, timeouts, etc.
-When a broker connection is closed, librdkafka will wait for
-`reconnect.backoff.jitter.ms` +-50% before reconnecting.
+When a broker connection is closed, librdkafka will back off the next reconnect
+attempt (to the given broker) for `reconnect.backoff.ms` +-20% jitter,
+this value is increased exponentially for each connect attempt until
+`reconnect.backoff.max.ms` is reached, at which time the value is reset
+to `reconnect.backoff.ms`.
 
 The broker will disconnect clients that have not sent any protocol requests
 within `connections.max.idle.ms` (broker configuration propertion, defaults

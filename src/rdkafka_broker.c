@@ -69,6 +69,8 @@
 #include <openssl/err.h>
 #endif
 #include "rdendian.h"
+#include "rdunittest.h"
+
 
 static const int rd_kafka_max_block_ms = 1000;
 
@@ -1578,6 +1580,111 @@ int rd_kafka_socket_cb_generic (int domain, int type, int protocol,
 }
 
 
+
+/**
+ * @brief Update the reconnect backoff.
+ *        Should be called when a connection is made.
+ *
+ * @locality broker thread
+ * @locks none
+ */
+static void
+rd_kafka_broker_update_reconnect_backoff (rd_kafka_broker_t *rkb,
+                                          const rd_kafka_conf_t *conf,
+                                          rd_ts_t now) {
+        int backoff;
+
+        /* If last connection attempt was more than reconnect.backoff.max.ms
+         * ago, reset the reconnect backoff to the initial
+         * reconnect.backoff.ms value.
+         * Or if the current backoff increment has reached the max value. */
+        if (rkb->rkb_ts_reconnect + (conf->reconnect_backoff_max_ms * 1000) <
+            now ||
+            rkb->rkb_reconnect_backoff_ms >= conf->reconnect_backoff_max_ms)
+                rkb->rkb_reconnect_backoff_ms = conf->reconnect_backoff_ms;
+
+        /* Apply +-20% jitter to next backoff. */
+        backoff = rd_jitter((int)(float)rkb->rkb_reconnect_backoff_ms * 0.8,
+                            (int)(float)rkb->rkb_reconnect_backoff_ms * 1.2);
+
+         /* Cap to reconnect.backoff.max.ms. */
+        backoff = RD_MIN(backoff, conf->reconnect_backoff_max_ms);
+
+        /* Set time of next reconnect */
+        rkb->rkb_ts_reconnect = now + (backoff * 1000);
+        rkb->rkb_reconnect_backoff_ms *= 2;
+}
+
+
+/**
+ * @brief Calculate time until next reconnect attempt.
+ *
+ * @returns the number of milliseconds to the next connection attempt, or 0
+ *          if immediate.
+ * @locality broker thread
+ * @locks none
+ */
+
+static RD_INLINE int
+rd_kafka_broker_reconnect_backoff (const rd_kafka_broker_t *rkb,
+                                   rd_ts_t now) {
+        rd_ts_t remains;
+
+        if (unlikely(rkb->rkb_ts_reconnect == 0))
+                return 0; /* immediate */
+
+        remains = rkb->rkb_ts_reconnect - now;
+        if (remains <= 0)
+                return 0; /* immediate */
+
+        return (int)(remains / 1000);
+}
+
+
+/**
+ * @brief Unittest for reconnect.backoff.ms
+ */
+static int rd_ut_reconnect_backoff (void) {
+        rd_kafka_broker_t rkb = RD_ZERO_INIT;
+        rd_kafka_conf_t conf = {
+                .reconnect_backoff_ms = 10,
+                .reconnect_backoff_max_ms = 90
+        };
+        rd_ts_t now = 1000000;
+        int backoff;
+
+        rkb.rkb_reconnect_backoff_ms = conf.reconnect_backoff_ms;
+
+        /* broker's backoff is the initial reconnect.backoff.ms=10 */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 8, 12, "%d");
+
+        /* .. 20 */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 16, 24, "%d");
+
+        /* .. 40 */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 32, 48, "%d");
+
+        /* .. 80, the jitter is capped at reconnect.backoff.max.ms=90  */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 64, conf.reconnect_backoff_max_ms, "%d");
+
+        /* the backoff wraps around to the initial value 10,
+         * because 80*2 > 90(max) */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 8, 12, "%d");
+
+        RD_UT_PASS();
+}
+
+
 /**
  * Initiate asynchronous connection attempt to the next address
  * in the broker's address list.
@@ -1599,6 +1706,9 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
         rd_kafka_broker_lock(rkb);
         rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_CONNECT);
         rd_kafka_broker_unlock(rkb);
+
+        rd_kafka_broker_update_reconnect_backoff(rkb, &rkb->rkb_rk->rk_conf,
+                                                 rd_clock());
 
 	if (rd_kafka_broker_resolve(rkb) == -1)
 		return -1;
@@ -3866,7 +3976,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
 	rd_rkb_dbg(rkb, BROKER, "BRKMAIN", "Enter main broker thread");
 
 	while (!rd_kafka_broker_terminating(rkb)) {
-                rd_ts_t backoff;
+                int backoff;
 
         redo:
                 switch (rkb->rkb_state)
@@ -3915,19 +4025,12 @@ static int rd_kafka_broker_thread_main (void *arg) {
                         /* Throttle & jitter reconnects to avoid
                          * thundering horde of reconnecting clients after
                          * a broker / network outage. Issue #403 */
-                        if (rkb->rkb_rk->rk_conf.reconnect_jitter_ms &&
-                            (backoff =
-                             rd_interval_immediate(
-                                     &rkb->rkb_connect_intvl,
-                                     rd_jitter(rkb->rkb_rk->rk_conf.
-                                               reconnect_jitter_ms*500,
-                                               rkb->rkb_rk->rk_conf.
-                                               reconnect_jitter_ms*1500),
-                                     0)) <= 0) {
-                                backoff = -backoff/1000;
+                        backoff = rd_kafka_broker_reconnect_backoff(rkb,
+                                                                    rd_clock());
+                        if (backoff > 0) {
                                 rd_rkb_dbg(rkb, BROKER, "RECONNECT",
                                            "Delaying next reconnect by %dms",
-                                           (int)backoff);
+                                           backoff);
                                 rd_kafka_broker_serve(rkb, (int)backoff);
                                 continue;
                         }
@@ -4163,7 +4266,6 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	rd_kafka_bufq_init(&rkb->rkb_waitresps);
 	rd_kafka_bufq_init(&rkb->rkb_retrybufs);
 	rkb->rkb_ops = rd_kafka_q_new(rk);
-        rd_interval_init(&rkb->rkb_connect_intvl);
         rd_avg_init(&rkb->rkb_avg_int_latency, RD_AVG_GAUGE, 0, 100*1000, 2,
                     rk->rk_conf.stats_interval_ms ? 1 : 0);
         rd_avg_init(&rkb->rkb_avg_outbuf_latency, RD_AVG_GAUGE, 0, 100*1000, 2,
@@ -4175,6 +4277,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */
 
+        rkb->rkb_reconnect_backoff_ms = rk->rk_conf.reconnect_backoff_ms;
         rd_atomic32_init(&rkb->rkb_persistconn.coord, 0);
 
 	/* ApiVersion fallback interval */
@@ -4954,4 +5057,13 @@ rd_kafka_broker_persistent_connection_del (rd_kafka_broker_t *rkb,
                                            rd_atomic32_t *acntp) {
         int32_t r = rd_atomic32_sub(acntp, 1);
         rd_assert(r >= 0);
+}
+
+
+int unittest_broker (void) {
+        int fails = 0;
+
+        fails += rd_ut_reconnect_backoff();
+
+        return fails;
 }

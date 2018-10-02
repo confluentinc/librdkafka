@@ -839,7 +839,7 @@ to these brokers at all times, reconnecting as necessary.
 A broker connection may be closed by the broker, intermediary network gear,
 due to network errors, timeouts, etc.
 When a broker connection is closed, librdkafka will back off the next reconnect
-attempt (to the given broker) for `reconnect.backoff.ms` +-20% jitter,
+attempt (to the given broker) for `reconnect.backoff.ms` -25% to +50% jitter,
 this value is increased exponentially for each connect attempt until
 `reconnect.backoff.max.ms` is reached, at which time the value is reset
 to `reconnect.backoff.ms`.

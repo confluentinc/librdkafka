@@ -1585,23 +1585,23 @@ rd_kafka_broker_update_reconnect_backoff (rd_kafka_broker_t *rkb,
 
         /* If last connection attempt was more than reconnect.backoff.max.ms
          * ago, reset the reconnect backoff to the initial
-         * reconnect.backoff.ms value.
-         * Or if the current backoff increment has reached the max value. */
+         * reconnect.backoff.ms value. */
         if (rkb->rkb_ts_reconnect + (conf->reconnect_backoff_max_ms * 1000) <
-            now ||
-            rkb->rkb_reconnect_backoff_ms >= conf->reconnect_backoff_max_ms)
+            now)
                 rkb->rkb_reconnect_backoff_ms = conf->reconnect_backoff_ms;
 
-        /* Apply +-20% jitter to next backoff. */
-        backoff = rd_jitter((int)(float)rkb->rkb_reconnect_backoff_ms * 0.8,
-                            (int)(float)rkb->rkb_reconnect_backoff_ms * 1.2);
+        /* Apply -25%...+50% jitter to next backoff. */
+        backoff = rd_jitter((int)(float)rkb->rkb_reconnect_backoff_ms * 0.75,
+                            (int)(float)rkb->rkb_reconnect_backoff_ms * 1.5);
 
          /* Cap to reconnect.backoff.max.ms. */
         backoff = RD_MIN(backoff, conf->reconnect_backoff_max_ms);
 
         /* Set time of next reconnect */
         rkb->rkb_ts_reconnect = now + (backoff * 1000);
-        rkb->rkb_reconnect_backoff_ms *= 2;
+        rkb->rkb_reconnect_backoff_ms =
+                RD_MIN(rkb->rkb_reconnect_backoff_ms* 2,
+                       conf->reconnect_backoff_max_ms);
 }
 
 
@@ -1647,28 +1647,32 @@ static int rd_ut_reconnect_backoff (void) {
         /* broker's backoff is the initial reconnect.backoff.ms=10 */
         rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
         backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 8, 12, "%d");
+        RD_UT_ASSERT_RANGE(backoff, 7, 15, "%d");
 
         /* .. 20 */
         rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
         backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 16, 24, "%d");
+        RD_UT_ASSERT_RANGE(backoff, 15, 30, "%d");
 
         /* .. 40 */
         rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
         backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 32, 48, "%d");
+        RD_UT_ASSERT_RANGE(backoff, 30, 60, "%d");
 
         /* .. 80, the jitter is capped at reconnect.backoff.max.ms=90  */
         rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
         backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 64, conf.reconnect_backoff_max_ms, "%d");
+        RD_UT_ASSERT_RANGE(backoff, 60, conf.reconnect_backoff_max_ms, "%d");
 
-        /* the backoff wraps around to the initial value 10,
-         * because 80*2 > 90(max) */
+        /* .. 90, capped by reconnect.backoff.max.ms */
         rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
         backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
-        RD_UT_ASSERT_RANGE(backoff, 8, 12, "%d");
+        RD_UT_ASSERT_RANGE(backoff, 67, conf.reconnect_backoff_max_ms, "%d");
+
+        /* .. 90, should remain at capped value. */
+        rd_kafka_broker_update_reconnect_backoff(&rkb, &conf, now);
+        backoff = rd_kafka_broker_reconnect_backoff(&rkb, now);
+        RD_UT_ASSERT_RANGE(backoff, 67, conf.reconnect_backoff_max_ms, "%d");
 
         RD_UT_PASS();
 }

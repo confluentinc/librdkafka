@@ -165,7 +165,9 @@ int rd_kafka_err_action (rd_kafka_broker_t *rkb,
          * in certain error call chains, mask out the retry action. */
         if (!request)
                 actions &= ~RD_KAFKA_ERR_ACTION_RETRY;
-
+        else if (request->rkbuf_reqhdr.ApiKey != RD_KAFKAP_Produce)
+                /* Mask out message-related bits for non-Produce requests */
+                actions &= ~RD_KAFKA_ERR_ACTION_MSG_FLAGS;
 
         if (err && actions && rkb && request)
                 rd_rkb_dbg(rkb, BROKER, "REQERR",

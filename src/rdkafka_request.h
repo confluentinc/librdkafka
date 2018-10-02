@@ -43,6 +43,12 @@
 #define RD_KAFKA_ERR_ACTION_MSG_PERSISTED 0x100    /* ProduceReq msg status */
 #define RD_KAFKA_ERR_ACTION_END          0 /* var-arg sentinel */
 
+/** @macro bitmask of the message persistence flags */
+#define RD_KAFKA_ERR_ACTION_MSG_FLAGS                   \
+        (RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED |        \
+         RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED |   \
+         RD_KAFKA_ERR_ACTION_MSG_PERSISTED)
+
 int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 			 rd_kafka_resp_err_t err,
 			 rd_kafka_buf_t *rkbuf,

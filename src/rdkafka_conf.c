@@ -302,9 +302,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "until the topic metadata has been refreshed. "
           "This is used to recover quickly from transitioning leader brokers.",
           1, 60*1000, 250 },
-        { _RK_GLOBAL, "topic.metadata.refresh.fast.cnt", _RK_C_INT,
+        { _RK_GLOBAL|_RK_DEPRECATED,
+          "topic.metadata.refresh.fast.cnt", _RK_C_INT,
           _RK(metadata_refresh_fast_cnt),
-          "*Deprecated: No longer used.*",
+          "No longer used.",
           0, 1000, 10 },
         { _RK_GLOBAL, "topic.metadata.refresh.sparse", _RK_C_BOOL,
           _RK(metadata_refresh_sparse),
@@ -348,9 +349,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Admin: Admin requests will use `socket.timeout.ms` or explicitly "
           "set `rd_kafka_AdminOptions_set_operation_timeout()` value.",
 	  10, 300*1000, 60*1000 },
-        { _RK_GLOBAL, "socket.blocking.max.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_DEPRECATED, "socket.blocking.max.ms", _RK_C_INT,
           _RK(socket_blocking_max_ms),
-          "**Deprecated** No longer used.",
+          "No longer used.",
           1, 60*1000, 1000 },
 	{ _RK_GLOBAL, "socket.send.buffer.bytes", _RK_C_INT,
 	  _RK(socket_sndbuf_size),
@@ -401,9 +402,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "it needs to communicate with. When disabled the client "
           "will maintain connections to all brokers in the cluster.",
           0, 1, 1 },
-        { _RK_GLOBAL, "reconnect.backoff.jitter.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_DEPRECATED, "reconnect.backoff.jitter.ms", _RK_C_INT,
           _RK(reconnect_jitter_ms),
-          "**Deprecated**: No longer used. See `reconnect.backoff.ms` and "
+          "No longer used. See `reconnect.backoff.ms` and "
           "`reconnect.backoff.max.ms`.",
           0, 60*60*1000, 0 },
         { _RK_GLOBAL, "reconnect.backoff.ms", _RK_C_INT,
@@ -993,9 +994,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { RD_KAFKA_QUEUE_LIFO, "lifo" }
                 }
         },
-        { _RK_TOPIC|_RK_PRODUCER, "produce.offset.report", _RK_C_BOOL,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED,
+          "produce.offset.report", _RK_C_BOOL,
           _RKT(produce_offset_report),
-          "**Deprecated** No longer used.",
+          "No longer used.",
           0, 1, 0 },
         { _RK_TOPIC|_RK_PRODUCER, "partitioner", _RK_C_STR,
           _RKT(partitioner_str),
@@ -2528,13 +2530,17 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 			break;
 		}
 
-		if (prop->type == _RK_C_ALIAS)
-			fprintf(fp, " | Alias for `%s`\n", prop->sdef);
-		else
-			fprintf(fp, " | %s <br>*Type: %s*\n", prop->desc,
-				typeinfo);
-	}
-	fprintf(fp, "\n");
+                fprintf(fp, " | ");
+                if (prop->scope & _RK_DEPRECATED)
+                        fprintf(fp, "**DEPRECATED** ");
+
+                if (prop->type == _RK_C_ALIAS)
+                        fprintf(fp, "Alias for `%s`\n", prop->sdef);
+                else
+                        fprintf(fp, "%s <br>*Type: %s*\n", prop->desc,
+                                typeinfo);
+        }
+        fprintf(fp, "\n");
         fprintf(fp, "### C/P legend: C = Consumer, P = Producer, * = both\n");
 }
 
@@ -2890,6 +2896,55 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
         }
 
         return NULL;
+}
+
+
+/**
+ * @brief Log warnings for set deprecated configuration properties
+ * @returns the number of warnings logged.
+ */
+static int rd_kafka_anyconf_warn_deprecated (rd_kafka_t *rk,
+                                             rd_kafka_conf_scope_t scope,
+                                             const void *conf) {
+        const struct rd_kafka_property *prop;
+        int cnt = 0;
+
+        scope |= _RK_DEPRECATED;
+
+        for (prop = rd_kafka_properties; prop->name ; prop++) {
+                if (likely((prop->scope & scope) != scope))
+                        continue;
+
+                if (likely(!rd_kafka_anyconf_is_modified(conf, prop)))
+                        continue;
+
+                rd_kafka_log(rk, LOG_WARNING, "DEPRECATED",
+                             "Configuration property %s is deprecated: %s",
+                             prop->name, prop->desc);
+                cnt++;
+        }
+
+        return cnt;
+}
+
+
+/**
+ * @brief Log warnings for set deprecated configuration properties.
+ *
+ * @returns the number of warnings logged.
+ *
+ * @locality any
+ * @locks none
+ */
+int rd_kafka_conf_warn_deprecated (rd_kafka_t *rk) {
+        int cnt = 0;
+
+        cnt = rd_kafka_anyconf_warn_deprecated(rk, _RK_GLOBAL, &rk->rk_conf);
+        if (rk->rk_conf.topic_conf)
+                cnt += rd_kafka_anyconf_warn_deprecated(
+                        rk, _RK_TOPIC, rk->rk_conf.topic_conf);
+
+        return cnt;
 }
 
 

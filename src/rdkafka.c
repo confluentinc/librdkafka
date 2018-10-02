@@ -1947,6 +1947,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                      rk->rk_name,
                      rk->rk_conf.builtin_features, rk->rk_conf.debug);
 
+        rd_kafka_conf_warn_deprecated(rk);
+
 	return rk;
 
 fail:

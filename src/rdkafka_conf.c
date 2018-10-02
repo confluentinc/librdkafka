@@ -412,7 +412,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "after the connection has been closed. "
           "The time is increased exponentially until "
           "`reconnect.backoff.max.ms` is reached. "
-          "+-20% jitter is applied to each reconnect backoff. "
+          "+-20% to +50% jitter is applied to each reconnect backoff. "
           "A value of 0 disables the backoff and reconnects immediately.",
           0, 60*60*1000, 100 },
         { _RK_GLOBAL, "reconnect.backoff.max.ms", _RK_C_INT,

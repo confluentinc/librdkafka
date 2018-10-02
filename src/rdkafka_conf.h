@@ -81,7 +81,8 @@ typedef	enum {
 	_RK_PRODUCER = 0x2,
 	_RK_CONSUMER = 0x4,
 	_RK_TOPIC = 0x8,
-        _RK_CGRP = 0x10
+        _RK_CGRP = 0x10,
+        _RK_DEPRECATED = 0x20
 } rd_kafka_conf_scope_t;
 
 typedef enum {
@@ -435,6 +436,8 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
                                           const rd_kafka_conf_t *conf,
                                           rd_kafka_topic_conf_t *tconf);
 
+
+int rd_kafka_conf_warn_deprecated (rd_kafka_t *rk);
 
 
 #include "rdkafka_confval.h"

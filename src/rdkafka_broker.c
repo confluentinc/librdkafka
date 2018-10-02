@@ -1602,8 +1602,8 @@ rd_kafka_broker_update_reconnect_backoff (rd_kafka_broker_t *rkb,
                 rkb->rkb_reconnect_backoff_ms = conf->reconnect_backoff_ms;
 
         /* Apply -25%...+50% jitter to next backoff. */
-        backoff = rd_jitter((int)(float)rkb->rkb_reconnect_backoff_ms * 0.75,
-                            (int)(float)rkb->rkb_reconnect_backoff_ms * 1.5);
+        backoff = rd_jitter((int)((float)rkb->rkb_reconnect_backoff_ms * 0.75),
+                            (int)((float)rkb->rkb_reconnect_backoff_ms * 1.5));
 
          /* Cap to reconnect.backoff.max.ms. */
         backoff = RD_MIN(backoff, conf->reconnect_backoff_max_ms);

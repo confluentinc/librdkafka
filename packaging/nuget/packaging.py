@@ -333,7 +333,18 @@ class NugetPackage (Package):
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
             'build/native/lib/v120/Win32/Release/librdkafka.lib', 'build/native/lib/win/x86/win-x86-Release/v120/librdkafka.lib'],
             [{'arch': 'x86', 'plat': 'win', 'fname_glob': 'librdkafka*', 'fname_excludes': ['redist', 'symbols']},
-            'build/native/lib/v120/Win32/Release/librdkafkacpp.lib', 'build/native/lib/win/x86/win-x86-Release/v120/librdkafkacpp.lib']
+             'build/native/lib/v120/Win32/Release/librdkafkacpp.lib', 'build/native/lib/win/x86/win-x86-Release/v120/librdkafkacpp.lib'],
+            # confluent-librdkafka-plugins monitoring interceptor
+            [{'arch': 'any', 'plat': 'any', 'fname_glob': 'confluent-librdkafka-plugins-0.11.0.zip'},
+              'x86/monitoring-interceptor.dll', 'runtimes/win-x86/native/monitoring-interceptor.dll'],
+            [{'arch': 'any', 'plat': 'any', 'fname_glob': 'confluent-librdkafka-plugins-0.11.0.zip'},
+             'x64/monitoring-interceptor.dll', 'runtimes/win-x64/native/monitoring-interceptor.dll'],
+            [{'arch': 'any', 'plat': 'any', 'fname_glob': 'confluent-librdkafka-plugins-0.11.0.zip'},
+             'monitoring-interceptor.dylib', 'runtimes/osx-x64/native/monitoring-interceptor.dylib'],
+            [{'arch': 'any', 'plat': 'any', 'fname_glob': 'confluent-librdkafka-plugins-linux-0.11.0.zip'},
+             'monitoring-interceptor.so', 'runtimes/linux-x64/native/monitoring-interceptor.so'],
+            [{'arch': 'any', 'plat': 'any', 'fname_glob': 'confluent-librdkafka-plugins-0.11.0.zip'},
+              'LICENSES.txt', 'LICENSES_monitoring_interceptor.txt'],
         ]
 
         for m in mappings:
@@ -392,6 +403,7 @@ class NugetPackage (Package):
         expect = [
             "librdkafka.redist.nuspec",
             "LICENSES.txt",
+            "LICENSES_monitoring_interceptor.txt",
             "build/librdkafka.redist.props",
             "build/native/librdkafka.redist.targets",
             "build/native/include/librdkafka/rdkafka.h",
@@ -407,10 +419,12 @@ class NugetPackage (Package):
             "runtimes/win-x64/native/librdkafkacpp.dll",
             "runtimes/win-x64/native/msvcr120.dll",
             "runtimes/win-x64/native/zlib.dll",
+            "runtimes/win-x64/native/monitoring-interceptor.dll",
             "runtimes/win-x86/native/librdkafka.dll",
             "runtimes/win-x86/native/librdkafkacpp.dll",
             "runtimes/win-x86/native/msvcr120.dll",
-            "runtimes/win-x86/native/zlib.dll"]
+            "runtimes/win-x86/native/zlib.dll",
+            "runtimes/win-x86/native/monitoring-interceptor.dll"]
 
         missing = list()		
         with zfile.ZFile(path, 'r') as zf:		

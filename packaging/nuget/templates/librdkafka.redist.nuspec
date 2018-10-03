@@ -12,7 +12,7 @@
     <description>The Apache Kafka C/C++ client library - redistributable</description>
     <summary>The Apache Kafka C/C++ client library</summary>
     <releaseNotes>Release of librdkafka</releaseNotes>
-    <copyright>Copyright 2012-2017</copyright>
+    <copyright>Copyright 2012-2018</copyright>
     <tags>native apache kafka librdkafka C C++ nativepackage</tags>
   </metadata>
   <files>

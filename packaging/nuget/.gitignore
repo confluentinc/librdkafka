@@ -3,3 +3,4 @@ out-*
 *.nupkg
 *.pyc
 __pycache__
+common/*/confluent-librdkafka-plugins*.zip

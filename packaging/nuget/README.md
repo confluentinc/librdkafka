@@ -31,6 +31,8 @@ The finalized nuget package maybe uploaded manually to NuGet.org
 3. On a Linux host, run the release.py script to assemble the NuGet package
 
     $ cd packaging/nuget
+    # Download interceptors
+    $ ./download-interceptors.sh
     # Specify the tag
     $ ./release.py v0.11.0
     # Optionally, if the tag was moved and an exact sha is also required:

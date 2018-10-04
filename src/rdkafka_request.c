@@ -1208,6 +1208,13 @@ void rd_kafka_LeaveGroupRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
 
+        /* LeaveGroupRequests are best-effort, the local consumer
+         * does not care if it succeeds or not, so the request timeout
+         * is shortened.
+         * Retries are not needed. */
+        rd_kafka_buf_set_abs_timeout(rkbuf, 5000, 0);
+        rkbuf->rkbuf_retries = RD_KAFKA_BUF_NO_RETRIES;
+
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
 

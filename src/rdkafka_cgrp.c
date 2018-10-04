@@ -61,6 +61,8 @@ rd_kafka_cgrp_op_serve (rd_kafka_t *rk, rd_kafka_q_t *rkq,
 static void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg,
                                               const char *reason);
 
+static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg);
+
 /**
  * @returns true if cgrp can start partition fetchers, which is true if
  *          there is a subscription and the group is fully joined, or there
@@ -564,26 +566,85 @@ void rd_kafka_cgrp_coord_dead (rd_kafka_cgrp_t *rkcg, rd_kafka_resp_err_t err,
 
 
 
-static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg, int ignore_response) {
+/**
+ * @brief cgrp handling of LeaveGroup responses
+ * @param opaque must be the cgrp handle.
+ * @locality rdkafka main thread (unless err==ERR__DESTROY)
+ */
+static void rd_kafka_cgrp_handle_LeaveGroup (rd_kafka_t *rk,
+                                             rd_kafka_broker_t *rkb,
+                                             rd_kafka_resp_err_t err,
+                                             rd_kafka_buf_t *rkbuf,
+                                             rd_kafka_buf_t *request,
+                                             void *opaque) {
+        rd_kafka_cgrp_t *rkcg = opaque;
+        const int log_decode_errors = LOG_ERR;
+        int16_t ErrorCode = 0;
+
+        if (err) {
+                ErrorCode = err;
+                goto err;
+        }
+
+        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+err:
+        if (ErrorCode)
+                rd_kafka_dbg(rkb->rkb_rk, CGRP, "LEAVEGROUP",
+                             "LeaveGroup response error in state %s: %s",
+                             rd_kafka_cgrp_state_names[rkcg->rkcg_state],
+                             rd_kafka_err2str(ErrorCode));
+        else
+                rd_kafka_dbg(rkb->rkb_rk, CGRP, "LEAVEGROUP",
+                             "LeaveGroup response received in state %s",
+                             rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
+
+        if (ErrorCode != RD_KAFKA_RESP_ERR__DESTROY) {
+                rd_assert(thrd_is_current(rk->rk_thread));
+                rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WAIT_LEAVE;
+                rd_kafka_cgrp_try_terminate(rkcg);
+        }
+
+
+
+        return;
+
+ err_parse:
+        ErrorCode = rkbuf->rkbuf_err;
+        goto err;
+}
+
+
+static void rd_kafka_cgrp_leave (rd_kafka_cgrp_t *rkcg) {
+
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_LEAVE) {
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "LEAVE",
+                             "Group \"%.*s\": leave (in state %s): "
+                             "LeaveGroupRequest already in-transit",
+                             RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                             rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
+                return;
+        }
+
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "LEAVE",
                      "Group \"%.*s\": leave (in state %s)",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
+
+        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_LEAVE;
 
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP) {
                 rd_rkb_dbg(rkcg->rkcg_rkb, CONSUMER, "LEAVE",
                            "Leaving group");
                 rd_kafka_LeaveGroupRequest(rkcg->rkcg_rkb, rkcg->rkcg_group_id,
                                            rkcg->rkcg_member_id,
-					   ignore_response ?
-					   RD_KAFKA_NO_REPLYQ :
                                            RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
-                                           ignore_response ? NULL :
-                                           rd_kafka_handle_LeaveGroup, rkcg);
-        } else if (!ignore_response)
-                rd_kafka_handle_LeaveGroup(rkcg->rkcg_rk, rkcg->rkcg_rkb,
-                                           RD_KAFKA_RESP_ERR__WAIT_COORD,
-                                           NULL, NULL, rkcg);
+                                           rd_kafka_cgrp_handle_LeaveGroup,
+                                           rkcg);
+        } else
+                rd_kafka_cgrp_handle_LeaveGroup(rkcg->rkcg_rk, rkcg->rkcg_rkb,
+                                                RD_KAFKA_RESP_ERR__WAIT_COORD,
+                                                NULL, NULL, rkcg);
 }
 
 
@@ -1456,7 +1517,8 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
 	    rd_list_empty(&rkcg->rkcg_toppars) &&
 	    rkcg->rkcg_wait_unassign_cnt == 0 &&
 	    rkcg->rkcg_wait_commit_cnt == 0 &&
-            !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
+            !(rkcg->rkcg_flags & (RD_KAFKA_CGRP_F_WAIT_UNASSIGN |
+                                  RD_KAFKA_CGRP_F_WAIT_LEAVE))) {
                 /* Since we might be deep down in a 'rko' handler
                  * called from cgrp_op_serve() we cant call terminated()
                  * directly since it will decommission the rkcg_ops queue
@@ -1466,21 +1528,23 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg) {
                 rd_kafka_cgrp_set_state(rkcg, RD_KAFKA_CGRP_STATE_TERM);
                 return 1;
         } else {
-		rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
-			     "Group \"%s\": "
-			     "waiting for %s%d toppar(s), %d unassignment(s), "
-			     "%d commit(s)%s (state %s, join-state %s) "
-			     "before terminating",
-			     rkcg->rkcg_group_id->str,
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CGRPTERM",
+                             "Group \"%s\": "
+                             "waiting for %s%d toppar(s), %d unassignment(s), "
+                             "%d commit(s)%s%s (state %s, join-state %s) "
+                             "before terminating",
+                             rkcg->rkcg_group_id->str,
                              RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) ?
                              "rebalance_cb, ": "",
-			     rd_list_cnt(&rkcg->rkcg_toppars),
-			     rkcg->rkcg_wait_unassign_cnt,
-			     rkcg->rkcg_wait_commit_cnt,
-			     (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)?
-			     ", wait-unassign flag," : "",
-			     rd_kafka_cgrp_state_names[rkcg->rkcg_state],
-			     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
+                             rd_list_cnt(&rkcg->rkcg_toppars),
+                             rkcg->rkcg_wait_unassign_cnt,
+                             rkcg->rkcg_wait_commit_cnt,
+                             (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)?
+                             ", wait-unassign flag," : "",
+                             (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_LEAVE)?
+                             ", wait-leave," : "",
+                             rd_kafka_cgrp_state_names[rkcg->rkcg_state],
+                             rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
                 return 0;
         }
 }
@@ -2147,7 +2211,7 @@ static void rd_kafka_cgrp_unassign_done (rd_kafka_cgrp_t *rkcg,
                      reason);
 
 	if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN) {
-		rd_kafka_cgrp_leave(rkcg, 1/*ignore response*/);
+		rd_kafka_cgrp_leave(rkcg);
 		rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN;
 	}
 
@@ -2559,7 +2623,10 @@ rd_kafka_cgrp_subscribe (rd_kafka_cgrp_t *rkcg,
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         /* Remove existing subscription first */
-        rd_kafka_cgrp_unsubscribe(rkcg, 0/* dont leave group */);
+        rd_kafka_cgrp_unsubscribe(rkcg,
+                                  rktparlist ?
+                                  0/* dont leave group if new subscription */ :
+                                  1/* leave group if no new subscription */);
 
         if (!rktparlist)
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -2633,6 +2700,13 @@ rd_kafka_cgrp_terminate0 (rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                          /* Leave group if this is a controlled shutdown */
                          !rd_kafka_destroy_flags_no_consumer_close(
                                  rkcg->rkcg_rk));
+
+         /* Reset the wait-for-LeaveGroup flag if there is an outstanding
+          * LeaveGroupRequest being waited on (from a prior unsubscribe), but
+          * the destroy flags have NO_CONSUMER_CLOSE set, which calls
+          * for immediate termination. */
+         if (rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk))
+                 rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_WAIT_LEAVE;
 
          /* If there's an oustanding rebalance_cb which has not yet been
           * served by the application it will be served from consumer_close().

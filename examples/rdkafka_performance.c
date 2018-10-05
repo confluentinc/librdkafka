@@ -1462,10 +1462,6 @@ int main (int argc, char **argv) {
 		outq = rd_kafka_outq_len(rk);
                 if (verbosity >= 2)
                         printf("%% %i messages in outq\n", outq);
-<<<<<<< HEAD
-=======
-		
->>>>>>> Counting error in rdkafka_performance #1542
 		cnt.t_end = t_end;
 
 		if (cnt.tx_err > 0)

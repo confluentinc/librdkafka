@@ -1873,6 +1873,12 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                  *   R1(base_seq:5) R2(10) R3(15) R4(20)
                  */
 
+                /* Acquire the last partition error to help
+                 * troubleshoot this problem. */
+                rd_kafka_toppar_lock(rktp);
+                last_err = rktp->rktp_last_err;
+                rd_kafka_toppar_unlock(rktp);
+
                 r = request->rkbuf_u.Produce.base_seq - perr->next_err_seq;
 
                 if (r == 0) {
@@ -1885,12 +1891,6 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                          * not guarantee ordering or once-ness for R1,
                          * nor give the user a chance to opt out of sending
                          * R2 to R4 which would be retried automatically. */
-
-                        /* Acquire the last partition error to help
-                         * troubleshoot this problem. */
-                        rd_kafka_toppar_lock(rktp);
-                        last_err = rktp->rktp_last_err;
-                        rd_kafka_toppar_unlock(rktp);
 
                         rd_kafka_set_fatal_error(
                                 rk, perr->err,
@@ -1932,14 +1932,21 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                                    "ProduceRequest with %d message(s) failed "
                                    "due to skipped sequence numbers "
                                    "(%s, base seq %"PRId32" > "
-                                   "next seq %"PRId32") caused by previous "
-                                   "failed request: "
+                                   "next seq %"PRId32") "
+                                   "caused by previous failed request "
+                                   "(%s (actions %s, base seq %"PRId32
+                                   ", %"PRId64"ms ago): "
                                    "recovering and retrying",
                                    rd_kafka_msgq_len(&request->rkbuf_msgq),
                                    rd_kafka_pid2str(request->rkbuf_u.
                                                     Produce.pid),
                                    request->rkbuf_u.Produce.base_seq,
-                                   perr->next_err_seq);
+                                   perr->next_err_seq,
+                                   rd_kafka_err2name(last_err.err),
+                                   rd_kafka_actions2str(last_err.actions),
+                                   last_err.base_seq,
+                                   last_err.ts ?
+                                   (now - last_err.ts)/1000 : -1);
 
                         perr->incr_retry = 0;
                         perr->actions = RD_KAFKA_ERR_ACTION_RETRY;
@@ -1959,12 +1966,19 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                                 "ProduceRequest with %d message(s) failed "
                                 "with rewound sequence number on "
                                 "broker %"PRId32" (%s, base seq %"PRId32" < "
-                                "next seq %"PRId32")",
+                                "next seq %"PRId32"): "
+                                "last error %s (actions %s, base seq %"PRId32
+                                ", %"PRId64"ms ago)",
                                 rd_kafka_msgq_len(&request->rkbuf_msgq),
                                 rkb->rkb_nodeid,
                                 rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
                                 request->rkbuf_u.Produce.base_seq,
-                                perr->next_err_seq);
+                                perr->next_err_seq,
+                                rd_kafka_err2name(last_err.err),
+                                rd_kafka_actions2str(last_err.actions),
+                                last_err.base_seq,
+                                last_err.ts ?
+                                (now - last_err.ts)/1000 : -1);
 
                         perr->actions = RD_KAFKA_ERR_ACTION_PERMANENT;
                         perr->status  = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;

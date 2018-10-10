@@ -11,9 +11,9 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup Condition="'$(Platform)' == 'x64'">
-    <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\librdkafka.dll" />
+    <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\*.dll" />
   </ItemGroup>
   <ItemGroup Condition="'$(Platform)' != 'x64'">
-    <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x86\native\librdkafka.dll" />
+    <ReferenceCopyLocalPaths Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x86\native\*.dll" />
   </ItemGroup>
 </Project>

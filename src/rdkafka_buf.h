@@ -640,7 +640,7 @@ rd_kafka_buf_set_abs_timeout (rd_kafka_buf_t *rkbuf, int timeout_ms,
         if (!now)
                 now = rd_clock();
         rkbuf->rkbuf_rel_timeout = 0;
-        rkbuf->rkbuf_abs_timeout = now + (timeout_ms * 1000);
+        rkbuf->rkbuf_abs_timeout = now + ((int64_t)timeout_ms * 1000);
 }
 
 

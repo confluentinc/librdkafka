@@ -39,6 +39,11 @@
 #include "rdtime.h"
 #include "rdregex.h"
 
+#if WITH_ZSTD
+#include <zstd.h>
+#endif
+
+
 const char *rd_kafka_topic_state_names[] = {
         "unknown",
         "exists",
@@ -351,6 +356,15 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                         rkt->rkt_conf.compression_level =
                                 RD_KAFKA_COMPLEVEL_LZ4_MAX;
                 break;
+#if WITH_ZSTD
+        case RD_KAFKA_COMPRESSION_ZSTD:
+                if (rkt->rkt_conf.compression_level == RD_KAFKA_COMPLEVEL_DEFAULT)
+                        rkt->rkt_conf.compression_level = 3;
+                else if (rkt->rkt_conf.compression_level > RD_KAFKA_COMPLEVEL_ZSTD_MAX)
+                        rkt->rkt_conf.compression_level =
+                                RD_KAFKA_COMPLEVEL_ZSTD_MAX;
+                break;
+#endif
         case RD_KAFKA_COMPRESSION_SNAPPY:
         default:
                 /* Compression level has no effect in this case */

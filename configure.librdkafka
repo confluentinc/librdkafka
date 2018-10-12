@@ -87,6 +87,8 @@ void foo (void) {
     mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz" \
                   "#include <zlib.h>"
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
+    mkl_lib_check "zstd" "WITH_ZSTD" disable CC "-lzstd" \
+                  "#include <zstd.h>"
 
     if mkl_lib_check "libm" "" disable CC "-lm" \
                      "#include <math.h>"; then

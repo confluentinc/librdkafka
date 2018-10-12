@@ -24,6 +24,20 @@ endif()
 option(WITH_ZLIB "With ZLIB" ${with_zlib_default})
 # }
 
+# ZSTD {
+if (WITH_BUNDLED_ZSTD)
+  set(with_zstd_default ON)
+else ()
+  find_library (ZSTD zstd)
+  if(ZSTD)
+    set(with_zstd_default ON)
+  else()
+    set(with_zstd_default OFF)
+  endif()
+endif()
+option(WITH_ZSTD "With ZSTD" ${with_zstd_default})
+# }
+
 # LibDL {
 try_compile(
     WITH_LIBDL

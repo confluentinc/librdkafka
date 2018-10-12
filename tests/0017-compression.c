@@ -43,7 +43,7 @@ int main_0017_compression(int argc, char **argv) {
         const int msg_cnt = 1000;
         int msg_base = 0;
         uint64_t testid;
-#define CODEC_CNT 4
+#define CODEC_CNT 5
         const char *codecs[CODEC_CNT+1] = {
                 "none",
 #if WITH_ZLIB
@@ -51,6 +51,9 @@ int main_0017_compression(int argc, char **argv) {
 #endif
 #if WITH_SNAPPY
                 "snappy",
+#endif
+#if WITH_ZSTD
+                "zstd",
 #endif
                 "lz4",
                 NULL

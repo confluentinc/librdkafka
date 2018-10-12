@@ -35,6 +35,10 @@
 #include "rdkafka_header.h"
 #include "rdkafka_lz4.h"
 
+#if WITH_ZSTD
+#include "rdkafka_zstd.h"
+#endif
+
 #include "snappy.h"
 #include "rdvarint.h"
 #include "crc32c.h"
@@ -1035,7 +1039,22 @@ rd_kafka_msgset_writer_compress_lz4 (rd_kafka_msgset_writer_t *msetw,
         return (err ? -1 : 0);
 }
 
-
+#if WITH_ZSTD
+/**
+ * @brief Compress messageset using ZSTD
+ */
+static int
+rd_kafka_msgset_writer_compress_zstd (rd_kafka_msgset_writer_t *msetw,
+                                     rd_slice_t *slice, struct iovec *ciov) {
+        rd_kafka_resp_err_t err;
+        int comp_level =
+                msetw->msetw_rktp->rktp_rkt->rkt_conf.compression_level;
+        err = rd_kafka_zstd_compress(msetw->msetw_rkb,
+                                    comp_level,
+                                    slice, &ciov->iov_base, &ciov->iov_len);
+        return (err ? -1 : 0);
+}
+#endif
 
 /**
  * @brief Compress the message set.
@@ -1085,6 +1104,15 @@ rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
                 r = rd_kafka_msgset_writer_compress_lz4(msetw, &slice, &ciov);
                 break;
 
+#if WITH_ZSTD
+        case RD_KAFKA_COMPRESSION_ZSTD:
+                /* Skip ZSTD compression if broker doesn't support it. */
+                if (!(msetw->msetw_rkb->rkb_features & RD_KAFKA_FEATURE_ZSTD))
+                        return -1;
+
+                r = rd_kafka_msgset_writer_compress_zstd(msetw, &slice, &ciov);
+                break;
+#endif
 
         default:
                 rd_kafka_assert(NULL,

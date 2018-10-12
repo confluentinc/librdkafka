@@ -69,6 +69,8 @@
 /* >= 0.11.0.0: Idempotent Producer support */
 #define RD_KAFKA_FEATURE_IDEMPOTENT_PRODUCER 0x400
 
+/* >= 2.1.0-IV2: ZSTD compression */
+#define RD_KAFKA_FEATURE_ZSTD 0x800
 
 int rd_kafka_get_legacy_ApiVersions (const char *broker_version,
 				     struct rd_kafka_ApiVersion **apisp,

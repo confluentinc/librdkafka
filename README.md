@@ -28,7 +28,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
   * High-level producer
   * High-level balanced KafkaConsumer (requires broker >= 0.9)
   * Simple (legacy) consumer
-  * Compression: snappy, gzip, lz4
+  * Compression: snappy, gzip, lz4, zstd
   * [SSL](https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka) support
   * [SASL](https://github.com/edenhill/librdkafka/wiki/Using-SASL-with-librdkafka) (GSSAPI/Kerberos/SSPI, PLAIN, SCRAM) support
   * Broker version support: >=0.8 (see [Broker version compatibility](https://github.com/edenhill/librdkafka/wiki/Broker-version-compatibility))

@@ -38,6 +38,7 @@
 #include <cstdio>
 #include <csignal>
 #include <cstring>
+#include <sstream>
 
 #ifdef _MSC_VER
 #include "../win32/wingetopt.h"
@@ -319,7 +320,7 @@ class ExampleSSLRetrieveCb : public RdKafka::SslCertificateRetrieveCb {
          return true;
      }
 
-     std::string GetErrorMsg(int error)
+     std::string GetErrorMsg(unsigned long error)
      {
          char* message = NULL;
 #ifdef _MSC_VER
@@ -335,7 +336,12 @@ class ExampleSSLRetrieveCb : public RdKafka::SslCertificateRetrieveCb {
          size_t ret = 0;
 #endif
          if (ret == 0)
-             return std::string("could not format message for ").append(std::to_string(error));
+         {
+             std::stringstream ss;
+
+             ss << std::string("could not format message for ") << error;
+             return ss.str();
+         }
          else {
              std::string result(message, ret);
 #ifdef _MSC_VER

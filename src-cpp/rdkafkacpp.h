@@ -266,6 +266,8 @@ enum ErrorCode {
         ERR__INCONSISTENT = -149,
         /** Gap-less ordering would not be guaranteed if proceeding */
         ERR__GAPLESS_GUARANTEE = -148,
+        /** Maximum poll interval exceeded */
+        ERR__MAX_POLL_EXCEEDED = -147,
 
         /** End internal error codes */
 	ERR__END = -100,

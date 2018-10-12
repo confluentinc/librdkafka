@@ -192,6 +192,7 @@ Field | Type | Example | Description
 ----- | ---- | ------- | -----------
 rebalance_age | int gauge | | Time elapsed since last rebalance (assign or revoke) (milliseconds)
 rebalance_cnt | int | | Total number of rebalances (assign or revoke)
+rebalance_reason | string | | Last rebalance reason, or empty string.
 assignment_size | int gauge | | Current assignment's partition count
 
 

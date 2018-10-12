@@ -85,6 +85,10 @@ typedef	enum {
         _RK_DEPRECATED = 0x20
 } rd_kafka_conf_scope_t;
 
+/**< While the client groups is a generic concept, it is currently
+ *   only implemented for consumers in librdkafka. */
+#define _RK_CGRP _RK_CONSUMER
+
 typedef enum {
 	_RK_CONF_PROP_SET_REPLACE,  /* Replace current value (default) */
 	_RK_CONF_PROP_SET_ADD,      /* Add value (S2F) */
@@ -231,6 +235,7 @@ struct rd_kafka_conf_s {
 
         /* Client group configuration */
         int    coord_query_intvl_ms;
+        int    max_poll_interval_ms;
 
 	int    builtin_features;
 	/*

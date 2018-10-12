@@ -63,6 +63,14 @@ static void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg,
 
 static RD_INLINE int rd_kafka_cgrp_try_terminate (rd_kafka_cgrp_t *rkcg);
 
+static void rd_kafka_cgrp_rebalance (rd_kafka_cgrp_t *rkcg,
+                                     const char *reason);
+
+static void
+rd_kafka_cgrp_max_poll_interval_check_tmr_cb (rd_kafka_timers_t *rkts,
+                                              void *arg);
+
+
 /**
  * @returns true if cgrp can start partition fetchers, which is true if
  *          there is a subscription and the group is fully joined, or there
@@ -919,6 +927,9 @@ static void rd_kafka_cgrp_handle_JoinGroup (rd_kafka_t *rk,
                 goto err;
         }
 
+        if (request->rkbuf_reqhdr.ApiVersion >= 2)
+                rd_kafka_buf_read_throttle_time(rkbuf);
+
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
         rd_kafka_buf_read_i32(rkbuf, &GenerationId);
         rd_kafka_buf_read_str(rkbuf, &Protocol);
@@ -1212,6 +1223,14 @@ static void rd_kafka_cgrp_join (rd_kafka_cgrp_t *rkcg) {
             rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_INIT)
                 return;
 
+        /* On max.poll.interval.ms failure, do not rejoin group until the
+         * application has called poll. */
+        if ((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED) &&
+            rd_kafka_max_poll_exceeded(rkcg->rkcg_rk))
+                return;
+
+        rkcg->rkcg_flags &= ~RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED;
+
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "JOIN",
                      "Group \"%.*s\": join with %d (%d) subscribed topic(s)",
                      RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
@@ -1287,22 +1306,7 @@ static void rd_kafka_cgrp_rejoin (rd_kafka_cgrp_t *rkcg) {
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                      rkcg->rkcg_assignment ? "" : "out");
 
-        /* Remove assignment (async), if any. If there is already an
-         * unassign in progress we dont need to bother. */
-        if (rkcg->rkcg_assignment) {
-		if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
-			rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
-
-			rd_kafka_rebalance_op(
-				rkcg,
-				RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
-				rkcg->rkcg_assignment, "unsubscribe");
-		}
-	} else {
-                rd_kafka_cgrp_set_join_state(rkcg,
-                                             RD_KAFKA_CGRP_JOIN_STATE_INIT);
-		rd_kafka_cgrp_join(rkcg);
-	}
+        rd_kafka_cgrp_rebalance(rkcg, "group rejoin");
 }
 
 /**
@@ -1746,6 +1750,18 @@ rd_kafka_cgrp_partitions_fetch_start0 (rd_kafka_cgrp_t *rkcg,
 		rd_kafka_cgrp_set_join_state(rkcg,
 					     RD_KAFKA_CGRP_JOIN_STATE_STARTED);
 
+                /* Start a timer to enforce `max.poll.interval.ms`.
+                 * Instead of restarting the timer on each ...poll() call,
+                 * which would be costly (once per message), set up an
+                 * intervalled timer that checks a timestamp
+                 * (that is updated on ..poll()).
+                 * The timer interval is 2 hz */
+                rd_kafka_timer_start(&rkcg->rkcg_rk->rk_timers,
+                             &rkcg->rkcg_max_poll_interval_tmr,
+                             500 * 1000ll /* 500ms */,
+                             rd_kafka_cgrp_max_poll_interval_check_tmr_cb,
+                             rkcg);
+
                 for (i = 0 ; i < assignment->cnt ; i++) {
                         rd_kafka_topic_partition_t *rktpar =
                                 &assignment->elems[i];
@@ -1942,7 +1958,6 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit (rd_kafka_t *rk,
 	rkcg->rkcg_wait_commit_cnt--;
 
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
-                rd_kafka_dbg(rk, CGRP, "COMMIT", "All committed, call fetch_start.");
                 if (rkcg->rkcg_wait_commit_cnt == 0 &&
                     rkcg->rkcg_assignment &&
                     RD_KAFKA_CGRP_CAN_FETCH_START(rkcg))
@@ -2450,7 +2465,7 @@ rd_kafka_cgrp_handle_assignment (rd_kafka_cgrp_t *rkcg,
  * broker */
 void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 					   rd_kafka_resp_err_t err) {
-
+        const char *reason = NULL;
 
 	rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
 		     "Group \"%s\" heartbeat error response in "
@@ -2490,33 +2505,20 @@ void rd_kafka_cgrp_handle_heartbeat_error (rd_kafka_cgrp_t *rkcg,
 
 	case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
 		rd_kafka_cgrp_set_member_id(rkcg, "");
+                reason = "resetting member-id";
 	case RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS:
 	case RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION:
+                if (!reason)
+                        reason = "group is rebalancing";
+        default:
+                if (!reason)
+                        reason = rd_kafka_err2str(err);
+
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
                              "Heartbeat failed: %s: %s",
-                             rd_kafka_err2str(err),
-                             err == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID ?
-                             "resetting member-id" :
-                             "group is rebalancing");
+                             rd_kafka_err2name(err), reason);
 
-	default:
-                /* Just revert to INIT state if join state is active. */
-                if (rkcg->rkcg_join_state <
-                    RD_KAFKA_CGRP_JOIN_STATE_WAIT_ASSIGN_REBALANCE_CB ||
-                    rkcg->rkcg_join_state ==
-                    RD_KAFKA_CGRP_JOIN_STATE_WAIT_REVOKE_REBALANCE_CB)
-                        break;
-
-                rd_kafka_cgrp_set_join_state(rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
-
-                if (!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
-                        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
-
-                        /* Trigger rebalance_cb */
-                        rd_kafka_rebalance_op(
-                                rkcg, RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
-                                rkcg->rkcg_assignment, rd_kafka_err2str(err));
-                }
+                rd_kafka_cgrp_rebalance(rkcg, reason);
                 break;
         }
 }
@@ -2551,6 +2553,89 @@ static void rd_kafka_cgrp_group_leader_reset (rd_kafka_cgrp_t *rkcg,
 }
 
 
+/**
+ * @brief Group is rebalancing, trigger rebalance callback to application,
+ *        and transition to INIT state for (eventual) rejoin.
+ */
+static void rd_kafka_cgrp_rebalance (rd_kafka_cgrp_t *rkcg,
+                                     const char *reason) {
+
+        rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER|RD_KAFKA_DBG_CGRP, "REBALANCE",
+                     "Group \"%.*s\" is rebalancing in "
+                     "state %s (join-state %s) %s assignment: %s",
+                     RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                     rd_kafka_cgrp_state_names[rkcg->rkcg_state],
+                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
+                     rkcg->rkcg_assignment ? "with" : "without",
+                     reason);
+
+        rd_snprintf(rkcg->rkcg_c.rebalance_reason,
+                    sizeof(rkcg->rkcg_c.rebalance_reason), "%s", reason);
+
+        /* Remove assignment (async), if any. If there is already an
+         * unassign in progress we dont need to bother. */
+        if (!RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) &&
+            !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
+                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
+
+                rd_kafka_rebalance_op(
+                        rkcg,
+                        RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
+                        rkcg->rkcg_assignment, reason);
+        }
+}
+
+
+/**
+ * @brief `max.poll.interval.ms` enforcement check timer.
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+static void
+rd_kafka_cgrp_max_poll_interval_check_tmr_cb (rd_kafka_timers_t *rkts,
+                                              void *arg) {
+        rd_kafka_cgrp_t *rkcg = arg;
+        rd_kafka_t *rk = rkcg->rkcg_rk;
+        int exceeded;
+
+        exceeded = rd_kafka_max_poll_exceeded(rk);
+
+        if (likely(!exceeded))
+                return;
+
+        rd_kafka_log(rk, LOG_WARNING, "MAXPOLL",
+                     "Application maximum poll interval (%dms) "
+                     "exceeded by %dms "
+                     "(adjust max.poll.interval.ms for "
+                     "long-running message processing): "
+                     "leaving group",
+                     rk->rk_conf.max_poll_interval_ms, exceeded);
+
+        rd_kafka_q_op_err(rkcg->rkcg_q, RD_KAFKA_OP_CONSUMER_ERR,
+                          RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED, 0, NULL, 0,
+                          "Application maximum poll interval (%dms) "
+                          "exceeded by %dms",
+                          rk->rk_conf.max_poll_interval_ms, exceeded);
+
+        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED;
+
+        rd_kafka_timer_stop(rkts, &rkcg->rkcg_max_poll_interval_tmr,
+                            1/*lock*/);
+
+        /* Leave the group before calling rebalance since the standard leave
+         * will be triggered first after the rebalance callback has been served.
+         * But since the application is blocked still doing processing
+         * that leave will be further delayed. */
+        rd_kafka_cgrp_leave(rkcg);
+
+        /* Leaving the group invalidates the member id, reset it now
+         * to avoid an ERR_UNKNOWN_MEMBER_ID on the next join. */
+        rd_kafka_cgrp_set_member_id(rkcg, "");
+
+        /* Trigger rebalance */
+        rd_kafka_cgrp_rebalance(rkcg, "max.poll.interval.ms exceeded");
+}
 
 
 /**
@@ -2569,6 +2654,10 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
 		     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
 		     rkcg->rkcg_version);
 
+        rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
+                            &rkcg->rkcg_max_poll_interval_tmr, 1/*lock*/);
+
+
         if (rkcg->rkcg_subscription) {
                 rd_kafka_topic_partition_list_destroy(rkcg->rkcg_subscription);
                 rkcg->rkcg_subscription = NULL;
@@ -2584,18 +2673,7 @@ rd_kafka_cgrp_unsubscribe (rd_kafka_cgrp_t *rkcg, int leave_group) {
 	if (leave_group)
 		rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN;
 
-
-
-        /* Remove assignment (async), if any. If there is already an
-         * unassign in progress we dont need to bother. */
-        if (!RD_KAFKA_CGRP_WAIT_REBALANCE_CB(rkcg) &&
-            !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)) {
-                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_UNASSIGN;
-
-                rd_kafka_rebalance_op(rkcg,
-				      RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
-				      rkcg->rkcg_assignment, "unsubscribe");
-        }
+        rd_kafka_cgrp_rebalance(rkcg, "unsubscribe");
 
         rkcg->rkcg_flags &= ~(RD_KAFKA_CGRP_F_SUBSCRIPTION |
                               RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION);

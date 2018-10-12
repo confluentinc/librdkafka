@@ -180,6 +180,7 @@ _TEST_DECL(0084_destroy_flags);
 _TEST_DECL(0086_purge_local);
 _TEST_DECL(0086_purge_remote);
 _TEST_DECL(0088_produce_metadata_timeout);
+_TEST_DECL(0089_max_poll_interval);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -293,6 +294,8 @@ struct test tests[] = {
 #if WITH_SOCKEM
         _TEST(0088_produce_metadata_timeout, TEST_F_SOCKEM),
 #endif
+        _TEST(0089_max_poll_interval, 0, TEST_BRKVER(0,10,1,0)),
+
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
 

@@ -1087,7 +1087,7 @@ is returned.
 
 
 
-#### Fatal errors
+### Fatal errors
 
 The added guarantee of ordering and no duplicates also requires a way for
 the client to fail gracefully when these guarantees can't be satisfied.

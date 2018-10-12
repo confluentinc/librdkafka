@@ -359,6 +359,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__INCONSISTENT = -149,
         /** Gap-less ordering would not be guaranteed if proceeding */
         RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE = -148,
+        /** Maximum poll interval exceeded */
+        RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED = -147,
 
 	/** End internal error codes */
 	RD_KAFKA_RESP_ERR__END = -100,
@@ -3071,6 +3073,14 @@ rd_kafka_subscription (rd_kafka_t *rk,
  *
  * @remark on_consume() interceptors may be called from this function prior to
  *         passing message to application.
+ *
+ * @remark When subscribing to topics the application must call poll at
+ *         least every \c max.poll.interval.ms to remain a member of the
+ *         consumer group.
+ *
+ * Noteworthy errors returned in \c ->err:
+ * - RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED - application failed to call
+ *   poll within `max.poll.interval.ms`.
  *
  * @sa rd_kafka_message_t
  */

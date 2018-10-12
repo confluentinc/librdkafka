@@ -154,6 +154,12 @@ typedef struct rd_kafka_cgrp_s {
                                                      * output queue when
                                                      * the broker is destroyed.
                                                      */
+#define RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED 0x100     /**< max.poll.interval.ms
+                                                     *   was exceeded and we
+                                                     *   left the group.
+                                                     *   Do not rejoin until
+                                                     *   the application has
+                                                     *   polled again. */
 
         rd_interval_t      rkcg_coord_query_intvl;  /* Coordinator query intvl*/
         rd_interval_t      rkcg_heartbeat_intvl;    /* Heartbeat intvl */
@@ -209,6 +215,8 @@ typedef struct rd_kafka_cgrp_s {
                                                      * same errors. */
 
         rd_kafka_timer_t   rkcg_offset_commit_tmr;  /* Offset commit timer */
+        rd_kafka_timer_t   rkcg_max_poll_interval_tmr; /**< Enforce the max
+                                                        *   poll interval. */
 
         rd_kafka_t        *rkcg_rk;
 
@@ -226,6 +234,8 @@ typedef struct rd_kafka_cgrp_s {
                                                         * last rebalance */
                 int                rebalance_cnt;      /* Number of
                                                           rebalances */
+                char               rebalance_reason[128]; /**< Last rebalance
+                                                           *   reason */
                 int                assignment_size;    /* Partition count
                                                         * of last rebalance
                                                         * assignment */

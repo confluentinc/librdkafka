@@ -707,7 +707,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           .dtor = rd_kafka_conf_interceptor_dtor,
           .copy = rd_kafka_conf_interceptor_copy },
 
-        /* Global client group properties */
+        /* Global consumer group properties */
         { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,
           _RK(group_id_str),
           "Client group id string. All clients sharing the same group.id "
@@ -719,12 +719,20 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  .sdef = "range,roundrobin" },
         { _RK_GLOBAL|_RK_CGRP, "session.timeout.ms", _RK_C_INT,
           _RK(group_session_timeout_ms),
-          "Client group session and failure detection timeout.",
-          1, 3600*1000, 30*1000 },
+          "Client group session and failure detection timeout. "
+          "The consumer sends periodic heartbeats (heartbeat.interval.ms) "
+          "to indicate its liveness to the broker. If no hearts are "
+          "received by the broker for a group member within the "
+          "session timeout, the broker will remove the consumer from "
+          "the group and trigger a rebalance. "
+          "The allowed range is configured with the **broker** configuration "
+          "properties `group.min.session.timeout.ms` and "
+          "`group.max.session.timeout.ms`.",
+          1, 3600*1000, 10*1000 },
         { _RK_GLOBAL|_RK_CGRP, "heartbeat.interval.ms", _RK_C_INT,
           _RK(group_heartbeat_intvl_ms),
           "Group session keepalive heartbeat interval.",
-          1, 3600*1000, 1*1000 },
+          1, 3600*1000, 3*1000 },
         { _RK_GLOBAL|_RK_CGRP, "group.protocol.type", _RK_C_KSTR,
           _RK(group_protocol_type),
           "Group protocol type",
@@ -736,6 +744,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "query interval will be divided by ten to more quickly recover "
           "in case of coordinator reassignment.",
           1, 3600*1000, 10*60*1000 },
+        { _RK_GLOBAL|_RK_CONSUMER, "max.poll.interval.ms", _RK_C_INT,
+          _RK(max_poll_interval_ms),
+          "Maximum allowed time between calls to consume messages "
+          "(e.g., rd_kafka_consumer_poll()) for high-level consumers. "
+          "If this interval is exceeded the consumer is considered failed "
+          "and the group will rebalance in order to reassign the "
+          "partitions to another consumer group member. "
+          "Warning: Offset commits may be not possible at this point. "
+          "The interval is checked two times per second. "
+          "See KIP-62 for more information.",
+          1, 86400*1000, 300000
+        },
 
         /* Global consumer properties */
         { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.commit", _RK_C_BOOL,

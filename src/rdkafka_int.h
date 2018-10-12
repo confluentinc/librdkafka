@@ -237,6 +237,12 @@ struct rd_kafka_s {
 	rd_kafka_type_t  rk_type;
 	struct timeval   rk_tv_state_change;
 
+        rd_atomic64_t    rk_ts_last_poll;   /**< Timestamp of last application
+                                             *   consumer_poll() call
+                                             *   (or equivalent).
+                                             *   Used to enforce
+                                             *   max.poll.interval.ms.
+                                             *   Only relevant for consumer. */
         /* First fatal error. */
         struct {
                 rd_atomic32_t err; /**< rd_kafka_resp_err_t */
@@ -615,6 +621,39 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
 
+
+/**
+ * @returns the number of milliseconds the maximum poll interval
+ *          was exceeded, or 0 if not exceeded.
+ *
+ * @remark Only relevant for high-level consumer.
+ *
+ * @locality any
+ * @locks none
+ */
+static RD_INLINE RD_UNUSED int
+rd_kafka_max_poll_exceeded (rd_kafka_t *rk) {
+        int exceeded =
+                (int)((rd_clock() -
+                       rd_atomic64_get(&rk->rk_ts_last_poll)) / 1000ll) -
+                rk->rk_conf.max_poll_interval_ms;
+        if (unlikely(exceeded > 0))
+                return exceeded;
+        return 0;
+}
+
+/**
+ * @brief Set the last application poll time to now.
+ *
+ * @remark Only relevant for high-level consumer.
+ *
+ * @locality any
+ * @locks none
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_app_polled (rd_kafka_t *rk) {
+        rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
+}
 
 
 /**

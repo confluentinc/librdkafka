@@ -1979,7 +1979,7 @@ int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
                  * to produce anyway */
                 tmout = 100;
         } else {
-                tmout = (int)(first_msg_timeout > INT_MAX ? INT_MAX : first_msg_timeout);
+                tmout = (int)RD_MIN(INT_MAX, first_msg_timeout);
         }
 
         /* Set absolute timeout (including retries), the

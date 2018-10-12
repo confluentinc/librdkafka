@@ -352,6 +352,9 @@ class ExampleSSLRetrieveCb : public RdKafka::SslCertificateRetrieveCb {
 #ifdef _MSC_VER
   PCCERT_CONTEXT m_cert_ctx;
   HCERTSTORE m_cert_store;
+#else
+  void *m_cert_ctx;
+  void *m_cert_store;
 #endif
 };
 

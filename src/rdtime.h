@@ -61,6 +61,17 @@
 #define RD_POLL_NOWAIT     0
 
 
+#if RD_UNITTEST_QPC_OVERRIDES
+ /* Overrides for rd_clock() unittest using QPC on Windows */
+BOOL rd_ut_QueryPerformanceFrequency(_Out_ LARGE_INTEGER * lpFrequency);
+BOOL rd_ut_QueryPerformanceCounter(_Out_ LARGE_INTEGER * lpPerformanceCount);
+#define rd_QueryPerformanceFrequency(IFREQ) rd_ut_QueryPerformanceFrequency(IFREQ)
+#define rd_QueryPerformanceCounter(PC) rd_ut_QueryPerformanceCounter(PC)
+#else
+#define rd_QueryPerformanceFrequency(IFREQ) QueryPerformanceFrequency(IFREQ)
+#define rd_QueryPerformanceCounter(PC) QueryPerformanceCounter(PC)
+#endif
+
 /**
  * @returns a monotonically increasing clock in microseconds.
  * @remark There is no monotonic clock on OSX, the system time
@@ -75,11 +86,16 @@ static RD_INLINE rd_ts_t rd_clock (void) {
 	return ((rd_ts_t)tv.tv_sec * 1000000LLU) + (rd_ts_t)tv.tv_usec;
 #elif defined(_MSC_VER)
         LARGE_INTEGER now;
-        static RD_TLS LARGE_INTEGER freq;
-        if (!freq.QuadPart)
-                QueryPerformanceFrequency(&freq);
-        QueryPerformanceCounter(&now);
-        return (now.QuadPart * 1000000) / freq.QuadPart;
+        static RD_TLS double freq = 0.0;
+        if (!freq) {
+                LARGE_INTEGER ifreq;
+                rd_QueryPerformanceFrequency(&ifreq);
+                /* Convert frequency to double to avoid overflow in
+                 * return statement */
+                freq = (double)ifreq.QuadPart / 1000000.0;
+        }
+        rd_QueryPerformanceCounter(&now);
+        return (rd_ts_t)((double)now.QuadPart / freq);
 #else
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);

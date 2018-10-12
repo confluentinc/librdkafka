@@ -106,7 +106,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x000b05ff
+#define RD_KAFKA_VERSION  0x000b06ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -1685,7 +1685,7 @@ public:
    * topics's partitions to the consumers, depending on their subscription.
    *
    * The result of such an assignment is a rebalancing which is either
-   * handled automatically in librdkafka or can be overriden by the application
+   * handled automatically in librdkafka or can be overridden by the application
    * by providing a RdKafka::RebalanceCb.
    *
    * The rebalancing passes the assigned partition set to

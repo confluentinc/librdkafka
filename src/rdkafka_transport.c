@@ -1647,6 +1647,16 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 					     errstr);
 			return;
 		}
+
+		if (events & POLLHUP) {
+			errno = EINVAL;
+			rd_kafka_broker_fail(rkb, LOG_ERR,
+					     RD_KAFKA_RESP_ERR__AUTHENTICATION,
+					     "Disconnected");
+
+			return;
+		}
+
 		break;
 
 	case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:

@@ -427,7 +427,7 @@ int main_0033_regex_subscribe_local (int argc, char **argv) {
 
         rd_kafka_topic_partition_list_add(invalids, "not_a_regex", 0);
         rd_kafka_topic_partition_list_add(invalids, "^My[vV]alid..regex+", 0);
-        rd_kafka_topic_partition_list_add(invalids, "^??++", 99);
+        rd_kafka_topic_partition_list_add(invalids, "^a[b", 99);
 
         rd_kafka_topic_partition_list_add(empty, "not_a_regex", 0);
         rd_kafka_topic_partition_list_add(empty, "", 0);

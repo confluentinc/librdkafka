@@ -27,6 +27,7 @@
 
 
 #cmakedefine01 WITH_ZLIB
+#cmakedefine01 WITH_ZSTD
 #cmakedefine01 WITH_LIBDL
 #cmakedefine01 WITH_PLUGINS
 #define WITH_SNAPPY 1

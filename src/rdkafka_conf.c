@@ -238,6 +238,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_PLUGINS
                 { 0x200, "plugins" },
 #endif
+#if WITH_ZSTD
+		{ 0x400, "zstd" },
+#endif         
 		{ 0, NULL }
 		}
 	},
@@ -923,7 +926,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_SNAPPY
 			{ RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
 #endif
-                        { RD_KAFKA_COMPRESSION_LZ4, "lz4" },
+			{ RD_KAFKA_COMPRESSION_LZ4, "lz4" },
+#if WITH_ZSTD
+			{ RD_KAFKA_COMPRESSION_ZSTD, "zstd" },
+#endif
 			{ 0 }
 		} },
         { _RK_GLOBAL|_RK_PRODUCER, "compression.type", _RK_C_ALIAS,
@@ -1035,6 +1041,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 		  { RD_KAFKA_COMPRESSION_SNAPPY, "snappy" },
 #endif
 		  { RD_KAFKA_COMPRESSION_LZ4, "lz4" },
+#if WITH_ZSTD
+		  { RD_KAFKA_COMPRESSION_ZSTD, "zstd" },
+#endif
 		  { RD_KAFKA_COMPRESSION_INHERIT, "inherit" },
 		  { 0 }
 		} },

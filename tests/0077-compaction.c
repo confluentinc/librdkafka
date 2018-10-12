@@ -326,6 +326,9 @@ int main_0077_compaction (int argc, char **argv) {
 #if WITH_SNAPPY
         do_test_compaction(10, "snappy");
 #endif
+#if WITH_ZSTD
+        do_test_compaction(10, "zstd");
+#endif
 #if WITH_ZLIB
         do_test_compaction(10000, "gzip");
 #endif

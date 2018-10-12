@@ -169,6 +169,7 @@
     <ClCompile Include="..\..\tests\0084-destroy_flags.c" />
     <ClCompile Include="..\..\tests\0086-purge.c" />
     <ClCompile Include="..\..\tests\0088-produce_metadata_timeout.c" />
+    <ClCompile Include="..\..\tests\0089-max_poll_interval.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\test.c" />
     <ClCompile Include="..\..\tests\testcpp.cpp" />

@@ -1149,17 +1149,28 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
         rd_kafka_t *rk = rkb->rkb_rk;
         rd_kafka_assignor_t *rkas;
         int i;
+        int16_t ApiVersion = 0;
+        int features;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb,
+                                                          RD_KAFKAP_JoinGroup,
+                                                          0, 2,
+                                                          &features);
+
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_JoinGroup,
                                          1,
                                          RD_KAFKAP_STR_SIZE(group_id) +
                                          4 /* sessionTimeoutMs */ +
+                                         4 /* rebalanceTimeoutMs */ +
                                          RD_KAFKAP_STR_SIZE(member_id) +
                                          RD_KAFKAP_STR_SIZE(protocol_type) +
                                          4 /* array count GroupProtocols */ +
                                          (rd_list_cnt(topics) * 100));
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.group_session_timeout_ms);
+        if (ApiVersion >= 1)
+                rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.max_poll_interval_ms);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
         rd_kafka_buf_write_kstr(rkbuf, protocol_type);
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.enabled_assignor_cnt);
@@ -1173,6 +1184,8 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
         }
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         /* This is a blocking request */
         rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;

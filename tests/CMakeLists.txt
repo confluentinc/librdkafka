@@ -79,6 +79,7 @@ set(
     0084-destroy_flags.c
     0086-purge.c
     0088-produce_metadata_timeout.c
+    0089-max_poll_interval.c
     8000-idle.cpp
     test.c
     testcpp.cpp

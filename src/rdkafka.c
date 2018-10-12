@@ -429,6 +429,9 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
         _ERR_DESC(RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE,
                   "Local: Gap-less ordering would not be guaranteed "
                   "if proceeding"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED,
+                  "Local: Maximum application poll interval "
+                  "(max.poll.interval.ms) exceeded"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN,
 		  "Unknown broker error"),
@@ -1453,10 +1456,12 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                 _st_printf(", \"cgrp\": { "
                            "\"rebalance_age\": %"PRId64", "
                            "\"rebalance_cnt\": %d, "
+                           "\"rebalance_reason\": \"%s\", "
                            "\"assignment_size\": %d }",
                            rkcg->rkcg_c.ts_rebalance ?
                            (rd_clock() - rkcg->rkcg_c.ts_rebalance)/1000 : 0,
                            rkcg->rkcg_c.rebalance_cnt,
+                           rkcg->rkcg_c.rebalance_reason,
                            rkcg->rkcg_c.assignment_size);
         }
 
@@ -1729,6 +1734,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         rd_interval_init(&rk->rk_suppress.no_idemp_brokers);
         rd_interval_init(&rk->rk_suppress.sparse_connect_random);
         mtx_init(&rk->rk_suppress.sparse_connect_lock, mtx_plain);
+
+        rd_atomic64_init(&rk->rk_ts_last_poll, rd_clock());
 
 	rk->rk_rep = rd_kafka_q_new(rk);
 	rk->rk_ops = rd_kafka_q_new(rk);
@@ -2383,6 +2390,8 @@ static rd_kafka_message_t *rd_kafka_consume0 (rd_kafka_t *rk,
 	rd_kafka_op_t *rko;
 	rd_kafka_message_t *rkmessage = NULL;
 	rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
+
+        rd_kafka_app_polled(rk);
 
 	rd_kafka_yield_thread = 0;
         while ((rko = rd_kafka_q_pop(rkq,
@@ -3174,6 +3183,7 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 }
 
 int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
+        rd_kafka_app_polled(rk);
         return rd_kafka_q_serve(rk->rk_rep, timeout_ms, 0,
                                 RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
 }
@@ -3181,6 +3191,7 @@ int rd_kafka_poll (rd_kafka_t *rk, int timeout_ms) {
 
 rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms) {
         rd_kafka_op_t *rko;
+        rd_kafka_app_polled(rkqu->rkqu_rk);
         rko = rd_kafka_q_pop_serve(rkqu->rkqu_q, timeout_ms, 0,
                                    RD_KAFKA_Q_CB_EVENT, rd_kafka_poll_cb, NULL);
         if (!rko)
@@ -3190,6 +3201,7 @@ rd_kafka_event_t *rd_kafka_queue_poll (rd_kafka_queue_t *rkqu, int timeout_ms) {
 }
 
 int rd_kafka_queue_poll_callback (rd_kafka_queue_t *rkqu, int timeout_ms) {
+        rd_kafka_app_polled(rkqu->rkqu_rk);
         return rd_kafka_q_serve(rkqu->rkqu_q, timeout_ms, 0,
                                 RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
 }

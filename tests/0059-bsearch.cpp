@@ -132,7 +132,7 @@ static void do_test_bsearch (void) {
     err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,
                      (void *)topic.c_str(), topic.size(), NULL, 0,
                      timestamp,
-                     i == 357 ? (void *)1 /*golden*/ : NULL, NULL);
+                     i == 357 ? (void *)1 /*golden*/ : NULL);
       if (err != RdKafka::ERR_NO_ERROR)
         Test::Fail("Produce failed: " + RdKafka::err2str(err));
       timestamp += 100 + (timestamp % 9);

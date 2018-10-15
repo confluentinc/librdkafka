@@ -85,13 +85,13 @@ static void test_invalid_topic (void) {
   for (int i = -1 ; i < 3 ; i++) {
     err = p->produce(topic_bad, i,
                      RdKafka::Producer::RK_MSG_COPY,
-                     (void *)"bad", 4, NULL, 0, 0, NULL, NULL);
+                     (void *)"bad", 4, NULL, 0, 0, NULL);
     if (err) /* Error is probably delayed until delivery report */
       check_err(err, RdKafka::ERR_TOPIC_EXCEPTION);
 
     err = p->produce(topic_good, i,
                      RdKafka::Producer::RK_MSG_COPY,
-                     (void *)"good", 5, NULL, 0, 0, NULL, NULL);
+                     (void *)"good", 5, NULL, 0, 0, NULL);
     check_err(err, RdKafka::ERR_NO_ERROR);
   }
 

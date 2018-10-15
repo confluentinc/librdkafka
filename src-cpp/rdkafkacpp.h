@@ -50,8 +50,9 @@
 #include <string>
 #include <list>
 #include <vector>
+#include <cstdlib>
+#include <cstring>
 #include <stdint.h>
-
 
 #ifdef _MSC_VER
 #undef RD_EXPORT
@@ -1371,6 +1372,8 @@ public:
  *
  * This object encapsulates the C implementation logic into a C++ object
  * for use in RdKafka::Messages object.
+ * 
+ * @remark Requires Apache Kafka >= 0.11.0 brokers
  */
 class RD_EXPORT Headers {
  public:
@@ -1383,55 +1386,175 @@ class RD_EXPORT Headers {
    * and an ErrorCode
    *
    * @remark dynamic allocation of this object is not supported.
-   *
    */
   class Header {
    public:
-    Header(const std::string& key,
-           const char* value,
-           RdKafka::ErrorCode err = ERR_NO_ERROR):
-    key_(key), err_(err) {
-        value_container_.assign(value);
+    /**
+     * @brief Header object to encapsulate a single Header
+     *
+     * @param key the string value for the header key
+     * 
+     * @param value the bytes of the header value
+     * 
+     * @param value_size the length in bytes of the header value
+     */
+    Header(const std::string &key,
+           const void *value,
+           size_t value_size):
+    key_(key), err_(ERR_NO_ERROR), value_size_(value_size) {
+        value_ = copy_value(value, value_size);
     };
+
+    /**
+     * @brief Header object to encapsulate a single Header
+     *
+     * @param key the string value for the header key
+     * 
+     * @param value the bytes of the header value
+     * 
+     * @param value_size the length in bytes of the header value
+     * 
+     * @param err the error code if one returned
+     *
+     * @remark The error code is used for when the Header is constructed internally
+     *         by using something like RdKafka::Headers::get_last which constructs
+     *         a Header encapsulating the ErrorCode in the process
+     */
+    Header(const std::string &key,
+           const void *value,
+           size_t value_size,
+           const RdKafka::ErrorCode &err):
+    key_(key), err_(err), value_size_(value_size)  {
+        value_ = copy_value(value, value_size);
+    };
+
+    /**
+     * @brief Copy constructor
+     *
+     * @param other the other Header used for the copy constructor
+     */
+    Header(const Header &other)
+    {
+        key_ = other.key_;
+        err_ = other.err_;
+        value_size_ = other.value_size_;
+
+        value_ = copy_value(other.value_, value_size_);
+    }
+
+    Header& operator=(const Header &other)
+    {
+        if(&other == this) {
+            return *this;
+        }
+
+        key_ = other.key_;
+        err_ = other.err_;
+        value_size_ = other.value_size_;
+
+        value_ = copy_value(other.value_, value_size_);
+        
+        return *this;
+    }
+
+    ~Header() {
+        if (value_ != NULL) {
+            free(value_);
+        }
+    }
     
+     /** @returns Key the Key associated with this Header */
     std::string key() const {
         return key_;
     }
 
-    const char* value() const {
-        return value_container_.c_str();
+     /** @returns Value returns the binary value */
+    const void *value() const {
+        return value_;
     }
 
+     /** @returns Value returns the value casted to a C string */
+    const char *value_string() const {
+        return static_cast<const char *>(value_); 
+    }
+
+     /** @returns Value Size the length of the Value in bytes */
+    size_t value_size() const {
+        return value_size_;
+    }
+
+     /** @returns Error Code the error code of this Header (usually ERR_NO_ERROR) */
     RdKafka::ErrorCode err() const {
         return err_;
     }
     
    private:
+    char *copy_value(const void* value, size_t value_size) {
+        char * dest = NULL;
+        if (value != NULL) {
+            dest = (char*) malloc(value_size + 1);
+            memcpy(dest, (char*)value, value_size);
+            dest[value_size] = '\0';
+        }
+        return dest;
+    }
     std::string key_;
     RdKafka::ErrorCode err_;
-    std::string value_container_;
+    char *value_;
+    size_t value_size_;
     void *operator new(size_t); /* Prevent dynamic allocation */
   };
 
   /**
    * @brief create a new instance of the Headers object
+   * 
+   * @params initial_size initial size to set the Headers list to
+   * 
+   * @returns Empty Headers list set to the initial size
    */
-  static Headers *create(size_t initial_size = 8, bool free_rd_headers = true);
+  static Headers *create(size_t initial_size);
 
   /**
    * @brief create a new instance of the Headers object from a std::vector
+   * 
+   * @params headers std::vector of RdKafka::Headers::Header objects
+   * 
+   * @returns Headers list from std::vector set to the size of the std::vector
    */
-  static Headers *create(const std::vector<Header> &headers, bool free_rd_headers = true);
+  static Headers *create(const std::vector<Header> &headers);
 
   /** 
    * @brief adds a Header to the end
+   * 
+   * @param key the header key as a std::string
+   * 
+   * @param value the value as a binary value
+   * 
+   * @param value_size the size of the value added
    *
-   * @returns An ErrorCode signalling a success or failure to add the Header.
+   * @returns An ErrorCode signalling a success or failure to add the header.
    */
-  virtual ErrorCode add(const std::string& key, const char* value) = 0;
+  virtual ErrorCode add(const std::string& key, const void* value, size_t value_size) = 0;
+
+  /** 
+   * @brief adds a Header to the end
+   * 
+   * @param key the header key as a std::string
+   * 
+   * @param value the value as a std::string
+   * 
+   * @remark convenience method for adding a std::string as a value for the header
+   *
+   * @returns An ErrorCode signalling a success or failure to add the header.
+   */
+  virtual ErrorCode add(const std::string& key, const std::string &value) = 0;
 
   /** 
    * @brief removes all the Headers of a given key
+   * 
+   * @param key the header key as a std::string you want to remove
+   * 
+   * @remark if duplicate keys exist this will remove all of them
    *
    * @returns An ErrorCode signalling a success or failure to remove the Header.
    */
@@ -1439,6 +1562,10 @@ class RD_EXPORT Headers {
 
   /** 
    * @brief gets all of the Headers of a given key
+   * 
+   * @param key the header key as a std::string you want to get
+   * 
+   * @remark if duplicate keys exist this will return them all as a std::vector
    *
    * @returns a std::vector containing all the Headers of the given key.
    */
@@ -1446,6 +1573,10 @@ class RD_EXPORT Headers {
 
   /** 
    * @brief gets the last occurrence of a Header of a given key
+   * 
+   * @param key the header key as a std::string you want to get
+   * 
+   * @remark this will only return the most recently added header
    *
    * @returns the Header if found, otherwise a Header with an ErrorCode 
    */
@@ -1488,16 +1619,14 @@ class RD_EXPORT Headers {
   virtual struct rd_kafka_headers_s *c_headers() = 0;
 
   /** 
-   * @brief cleans up the underlying alocated C implementation headers if called
+   * @brief cleans up the underlying allocated C implementation headers if called
    *
    * @remark Safe to call even if the Headers object is set to clean up when
    *         when the destructor is called
    *
    * @remark Safe to call even if the underlyng C pointer is set to null
-   *
-   * @returns an ErrorCode signalling if the the operation was attempted
    */
-  virtual ErrorCode destroy_headers() = 0;
+  virtual void destroy_headers() = 0;
 };
 
 /**
@@ -1561,9 +1690,6 @@ class RD_EXPORT Message {
   /** @returns The \p msg_opaque as provided to RdKafka::Producer::produce() */
   virtual void               *msg_opaque () const = 0;
 
-  /** @returns The Headers instance for this Message (if applicable) */
-  virtual RdKafka::Headers   *get_headers() = 0;
-
   virtual ~Message () = 0;
 
   /** @returns the latency in microseconds for a produced message measured
@@ -1587,6 +1713,9 @@ class RD_EXPORT Message {
    * @returns \c rd_kafka_message_t*
    */
   virtual struct rd_kafka_message_s *c_ptr () = 0;
+
+  /** @returns The Headers instance for this Message (if applicable) */
+  virtual RdKafka::Headers   *get_headers() = 0;
 };
 
 /**@}*/
@@ -2277,6 +2406,16 @@ class RD_EXPORT Producer : public virtual Handle {
    * @brief produce() variant that takes topic as a string (no need for
    *        creating a Topic object), and also allows providing the
    *        message timestamp (microseconds since beginning of epoch, UTC).
+   *        Otherwise identical to produce() above.
+   */
+  virtual ErrorCode produce (const std::string topic_name, int32_t partition,
+                             int msgflags,
+                             void *payload, size_t len,
+                             const void *key, size_t key_len,
+                             int64_t timestamp, void *msg_opaque) = 0;
+
+  /**
+   * @brief produce() variant that that allows for Header support on produce
    *        Otherwise identical to produce() above.
    */
   virtual ErrorCode produce (const std::string topic_name, int32_t partition,

@@ -104,7 +104,7 @@ static void test_offset_time (void) {
     for (int ti = 0 ; ti < timestamp_cnt*2 ; ti += 2) {
       err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,
                        (void *)topic.c_str(), topic.size(), NULL, 0,
-                       timestamps[ti], NULL, NULL);
+                       timestamps[ti], NULL);
       if (err != RdKafka::ERR_NO_ERROR)
         Test::Fail("Produce failed: " + RdKafka::err2str(err));
     }

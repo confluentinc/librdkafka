@@ -93,7 +93,7 @@ static void do_test_producer (bool do_yield) {
 
   for (int i = 0 ; i < msgcnt ; i++) {
     err = p->produce(topic, 0, RdKafka::Producer::RK_MSG_COPY,
-                     (void *)"hi", 2, NULL, 0, 0, NULL, NULL);
+                     (void *)"hi", 2, NULL, 0, 0, NULL);
     if (err)
       Test::Fail("produce() failed: " + RdKafka::err2str(err));
   }

@@ -34,18 +34,25 @@
 #include <stdarg.h>
 
 /**
- * Force produce requests to timeout to test error handling.
+ * @name Verify #1985:
+ *
+ * Previously known topic transitions to UNKNOWN when metadata times out,
+ * new messages are put on UA, when brokers come up again and metadata
+ * is retrieved the UA messages must be produced.
  */
+
+static rd_atomic32_t refuse_connect;
+
 
 /**
  * @brief Sockem connect, called from **internal librdkafka thread** through
  *        librdkafka's connect_cb
  */
 static int connect_cb (struct test *test, sockem_t *skm, const char *id) {
-
-        /* Let delay be high to trigger the local timeout */
-        sockem_set(skm, "delay", 2000, NULL);
-        return 0;
+        if (rd_atomic32_get(&refuse_connect) > 0)
+                return -1;
+        else
+                return 0;
 }
 
 static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
@@ -69,63 +76,85 @@ static int msg_dr_fail_cnt = 0;
 static void dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
                        void *opaque) {
         msg_dr_cnt++;
-        if (rkmessage->err != RD_KAFKA_RESP_ERR__MSG_TIMED_OUT)
-                TEST_FAIL_LATER("Expected message to fail with MSG_TIMED_OUT, "
-                                "got: %s",
+        TEST_SAYL(3, "Delivery for message %.*s: %s\n",
+                  (int)rkmessage->len, (const char *)rkmessage->payload,
+                  rd_kafka_err2name(rkmessage->err));
+
+        if (rkmessage->err) {
+                TEST_FAIL_LATER("Expected message to succeed, got %s",
                                 rd_kafka_err2str(rkmessage->err));
-        else {
                 msg_dr_fail_cnt++;
         }
 }
 
 
 
-int main_0068_produce_timeout (int argc, char **argv) {
+int main_0088_produce_metadata_timeout (int argc, char **argv) {
+        int64_t testid;
         rd_kafka_t *rk;
-        const char *topic = test_mk_topic_name("0068_produce_timeout", 1);
-        uint64_t testid;
-        const int msgcnt = 10;
-        rd_kafka_conf_t *conf;
         rd_kafka_topic_t *rkt;
-        int msgcounter = 0;
+        const char *topic = test_mk_topic_name("0088_produce_metadata_timeout",
+                                               1);
+        int msgcnt = 0;
+        rd_kafka_conf_t *conf;
 
         testid = test_id_generate();
 
-        test_conf_init(&conf, NULL, 60);
+        /* Create topic with single partition, for simplicity. */
+        test_create_topic(topic, 1, 1);
+
+        test_conf_init(&conf, NULL, 15*60*2); // msgcnt * 2);
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
+        test_conf_set(conf, "metadata.max.age.ms", "10000");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "-1");
+        test_conf_set(conf, "linger.ms", "5000");
+        test_conf_set(conf, "batch.num.messages", "5");
 
         test_socket_enable(conf);
         test_curr->connect_cb = connect_cb;
         test_curr->is_fatal_cb = is_fatal_cb;
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
-        rkt = test_create_producer_topic(rk, topic,
-                                         "message.timeout.ms", "100", NULL);
+        rkt = rd_kafka_topic_new(rk, topic, NULL);
 
-        TEST_SAY("Auto-creating topic %s\n", topic);
-        test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
+        /* Produce first set of messages and wait for delivery */
+        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
+                                 msgcnt, 20, NULL, 0, &msgcnt);
+        while (msg_dr_cnt < 5)
+                rd_kafka_poll(rk, 1000);
 
-        TEST_SAY("Producing %d messages that should timeout\n", msgcnt);
-        test_produce_msgs_nowait(rk, rkt, testid, 0, 0, msgcnt,
-                                 NULL, 0, &msgcounter);
+        TEST_SAY(_C_YEL "Disconnecting sockets and "
+                 "refusing future connections\n");
+        rd_atomic32_set(&refuse_connect, 1);
+        test_socket_close_all(test_curr, 1/*reinit*/);
 
 
-        TEST_SAY("Flushing..\n");
-        rd_kafka_flush(rk, 10000);
+        /* Wait for metadata timeout */
+        TEST_SAY("Waiting for metadata timeout\n");
+        rd_sleep(10+5);
 
-        TEST_SAY("%d/%d delivery reports, where of %d with proper error\n",
-                 msg_dr_cnt, msgcnt, msg_dr_fail_cnt);
+        /* These messages will be put on the UA queue */
+        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
+                                 msgcnt, 20, NULL, 0, &msgcnt);
+
+        /* Restore the connection(s) when metadata has timed out. */
+        TEST_SAY(_C_YEL "Allowing connections\n");
+        rd_atomic32_set(&refuse_connect, 0);
+
+        rd_sleep(3);
+        test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
+                                 msgcnt, 20, NULL, 0, &msgcnt);
+
+        test_flush(rk, 2*5*1000); /* linger.ms * 2 */
 
         TEST_ASSERT(msg_dr_cnt == msgcnt,
                     "expected %d, got %d", msgcnt, msg_dr_cnt);
-        TEST_ASSERT(msg_dr_fail_cnt == msgcnt,
-                    "expected %d, got %d", msgcnt, msg_dr_fail_cnt);
+        TEST_ASSERT(msg_dr_fail_cnt == 0,
+                    "expected %d dr failures, got %d", 0, msg_dr_fail_cnt);
 
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(rk);
 
         return 0;
 }
-
-
 #endif

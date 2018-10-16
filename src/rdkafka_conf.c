@@ -309,6 +309,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RK(socket_max_fails),
           "Disconnect from broker when this number of send failures "
           "(e.g., timed out requests) is reached. Disable with 0. "
+          "WARNING: It is highly recommended to leave this setting at "
+          "its default value of 1 to avoid the client and broker to "
+          "become desynchronized in case of request timeouts. "
           "NOTE: The connection is automatically re-established.",
           0, 1000000, 1 },
 	{ _RK_GLOBAL, "broker.address.ttl", _RK_C_INT,
@@ -446,7 +449,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
 	{ _RK_GLOBAL, "broker.version.fallback", _RK_C_STR,
 	  _RK(broker_version_fallback),
-	  "Older broker versions (<0.10.0) provides no way for a client to query "
+	  "Older broker versions (before 0.10.0) provide no way for a client to query "
 	  "for supported protocol features "
 	  "(ApiVersionRequest, see `api.version.request`) making it impossible "
 	  "for the client to know what features it may use. "
@@ -485,7 +488,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "protocol. See manual page for `ciphers(1)` and "
 	  "`SSL_CTX_set_cipher_list(3)."
 	},
-#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL && !defined(LIBRESSL_VERSION_NUMBER)
         { _RK_GLOBAL, "ssl.curves.list", _RK_C_STR,
           _RK(ssl.curves_list),
           "The supported-curves extension in the TLS ClientHello message specifies "
@@ -596,7 +599,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         /* Plugins */
         { _RK_GLOBAL, "plugin.library.paths", _RK_C_STR,
           _RK(plugin_paths),
-          "List of plugin libaries to load (; separated). "
+          "List of plugin libraries to load (; separated). "
           "The library search path is platform dependent (see dlopen(3) for Unix and LoadLibrary() for Windows). If no filename extension is specified the "
           "platform-specific extension (such as .dll or .so) will be appended automatically.",
           .set = rd_kafka_plugins_conf_set },
@@ -799,7 +802,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),
 	  "compression codec to use for compressing message sets. "
-	  "This is the default value for all topics, may be overriden by "
+	  "This is the default value for all topics, may be overridden by "
 	  "the topic configuration property `compression.codec`. ",
 	  .vdef = RD_KAFKA_COMPRESSION_NONE,
 	  .s2i = {
@@ -943,14 +946,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         /* Topic consumer properties */
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.enable", _RK_C_BOOL,
 	  _RKT(auto_commit),
+	  "[**LEGACY PROPERTY:** This property is used by the simple legacy "
+	  "consumer only. When using the high-level KafkaConsumer, the global "
+	  "`enable.auto.commit` property must be used instead]. "
 	  "If true, periodically commit offset of the last message handed "
 	  "to the application. This committed offset will be used when the "
 	  "process restarts to pick up where it left off. "
 	  "If false, the application will have to call "
 	  "`rd_kafka_offset_store()` to store an offset (optional). "
-          "**NOTE:** This property should only be used with the simple "
-          "legacy consumer, when using the high-level KafkaConsumer the global "
-          "`enable.auto.commit` property must be used instead. "
 	  "**NOTE:** There is currently no zookeeper integration, offsets "
 	  "will be written to broker or local file according to "
           "offset.store.method.",
@@ -959,9 +962,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  .sdef = "auto.commit.enable" },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
 	  _RKT(auto_commit_interval_ms),
+	  "[**LEGACY PROPERTY:** This setting is used by the simple legacy "
+	  "consumer only. When using the high-level KafkaConsumer, the "
+	  "global `auto.commit.interval.ms` property must be used instead]. "
 	  "The frequency in milliseconds that the consumer offsets "
-	  "are committed (written) to offset storage. "
-          "This setting is used by the low-level legacy consumer.",
+	  "are committed (written) to offset storage.",
 	  10, 86400*1000, 60*1000 },
 	{ _RK_TOPIC|_RK_CONSUMER, "auto.offset.reset", _RK_C_S2I,
 	  _RKT(auto_offset_reset),

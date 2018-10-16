@@ -63,6 +63,7 @@ struct df_args {
         rd_kafka_type_t client_type;
         int produce_cnt;
         int consumer_subscribe;
+        int consumer_unsubscribe;
 };
 
 static void do_test_destroy_flags (const char *topic,
@@ -74,9 +75,11 @@ static void do_test_destroy_flags (const char *topic,
         test_timing_t t_destroy;
 
         TEST_SAY(_C_MAG "[ test destroy_flags 0x%x for client_type %d, "
-                 "produce_cnt %d, subscribe %d, %s mode ]\n" _C_CLR,
+                 "produce_cnt %d, subscribe %d, unsubscribe %d, "
+                 "%s mode ]\n" _C_CLR,
                  destroy_flags, args->client_type,
                  args->produce_cnt, args->consumer_subscribe,
+                 args->consumer_unsubscribe,
                  local_mode ? "local" : "broker");
 
         test_conf_init(&conf, NULL, 20);
@@ -120,8 +123,15 @@ static void do_test_destroy_flags (const char *topic,
 
                 for (i = 0 ; i < 5 ; i++)
                         test_consumer_poll_once(rk, NULL, 100);
-        }
 
+                if (args->consumer_unsubscribe) {
+                        /* Test that calling rd_kafka_unsubscribe immediately
+                         * prior to rd_kafka_destroy_flags doesn't cause the
+                         * latter to hang. */
+                        TEST_SAY(_C_YEL"Calling rd_kafka_unsubscribe\n"_C_CLR);
+                        rd_kafka_unsubscribe(rk);
+                }
+        }
 
         rebalance_cnt = 0;
         TEST_SAY(_C_YEL "Calling rd_kafka_destroy_flags(0x%x)\n" _C_CLR,
@@ -130,16 +140,13 @@ static void do_test_destroy_flags (const char *topic,
         rd_kafka_destroy_flags(rk, destroy_flags);
         TIMING_STOP(&t_destroy);
 
-        if (destroy_flags & RD_KAFKA_DESTROY_F_IMMEDIATE)
-                TIMING_ASSERT_LATER(&t_destroy, 0, 50);
-        else if (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
+        if (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
                 TIMING_ASSERT_LATER(&t_destroy, 0, 200);
         else
                 TIMING_ASSERT_LATER(&t_destroy, 0, 1000);
 
         if (args->consumer_subscribe &&
-            !(destroy_flags & (RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE|
-                               RD_KAFKA_DESTROY_F_IMMEDIATE))) {
+            !(destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)) {
                 if (!local_mode)
                         TEST_ASSERT(rebalance_cnt > 0,
                                     "expected final rebalance callback");
@@ -149,9 +156,11 @@ static void do_test_destroy_flags (const char *topic,
                             rebalance_cnt);
 
         TEST_SAY(_C_GRN "[ test destroy_flags 0x%x for client_type %d, "
-                 "produce_cnt %d, subscribe %d, %s mode: PASS ]\n" _C_CLR,
+                 "produce_cnt %d, subscribe %d, unsubscribe %d, "
+                 "%s mode: PASS ]\n" _C_CLR,
                  destroy_flags, args->client_type,
                  args->produce_cnt, args->consumer_subscribe,
+                 args->consumer_unsubscribe,
                  local_mode ? "local" : "broker");
 }
 
@@ -161,15 +170,13 @@ static void do_test_destroy_flags (const char *topic,
  */
 static void destroy_flags (int local_mode) {
         const struct df_args args[] = {
-                { RD_KAFKA_PRODUCER, 0, 0 },
-                { RD_KAFKA_PRODUCER, 10000, 0 },
-                { RD_KAFKA_CONSUMER, 0, 1 },
-                { RD_KAFKA_CONSUMER, 0, 0 }
+                { RD_KAFKA_PRODUCER, 0, 0, 0 },
+                { RD_KAFKA_PRODUCER, 10000, 0, 0 },
+                { RD_KAFKA_CONSUMER, 0, 1, 0 },
+                { RD_KAFKA_CONSUMER, 0, 1, 1 },
+                { RD_KAFKA_CONSUMER, 0, 0, 0 }
         };
         const int flag_combos[] = { 0,
-                                    RD_KAFKA_DESTROY_F_IMMEDIATE,
-                                    RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE,
-                                    RD_KAFKA_DESTROY_F_IMMEDIATE |
                                     RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE };
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         int i, j;

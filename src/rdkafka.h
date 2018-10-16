@@ -148,7 +148,7 @@ typedef SSIZE_T ssize_t;
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use rd_kafka_version()
  */
-#define RD_KAFKA_VERSION  0x000b05ff
+#define RD_KAFKA_VERSION  0x000b06ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -2069,16 +2069,6 @@ void rd_kafka_destroy_flags (rd_kafka_t *rk, int flags);
  */
 
 /*!
- * Immediate non-blocking destruction without waiting for all resources
- * to be cleaned up.
- *
- * @warning Memory and resource leaks possible.
- *
- * @remark This flag automatically sets RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE.
- */
-#define RD_KAFKA_DESTROY_F_IMMEDIATE 0x4
-
-/*!
  * Don't call consumer_close() to leave group and commit final offsets.
  *
  * This also disables consumer callbacks to be called from rd_kafka_destroy*(),
@@ -2885,10 +2875,26 @@ rd_kafka_offsets_store(rd_kafka_t *rk,
 /**
  * @brief Subscribe to topic set using balanced consumer groups.
  *
- * Wildcard (regex) topics are supported by the librdkafka assignor:
+ * Wildcard (regex) topics are supported:
  * any topic name in the \p topics list that is prefixed with \c \"^\" will
  * be regex-matched to the full list of topics in the cluster and matching
  * topics will be added to the subscription list.
+ *
+ * The full topic list is retrieved every \c topic.metadata.refresh.interval.ms
+ * to pick up new or delete topics that match the subscription.
+ * If there is any change to the matched topics the consumer will
+ * immediately rejoin the group with the updated set of subscribed topics.
+ *
+ * Regex and full topic names can be mixed in \p topics.
+ *
+ * @remark Only the \c .topic field is used in the supplied \p topics list,
+ *         all other fields are ignored.
+ *
+ * @remark subscribe() is an asynchronous method which returns immediately:
+ *         background threads will (re)join the group, wait for group rebalance,
+ *         issue any registered rebalance_cb, assign() the assigned partitions,
+ *         and then start fetching messages. This cycle may take up to
+ *         \c session.timeout.ms * 2 or more to complete.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid

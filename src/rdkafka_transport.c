@@ -275,10 +275,13 @@ rd_kafka_transport_socket_recvmsg (rd_kafka_transport_t *rktrans,
                         /* Receive 0 after POLLIN event means
                          * connection closed. */
                         rd_snprintf(errstr, errstr_size, "Disconnected");
+                        errno = ECONNRESET;
                         return -1;
                 } else if (r == -1) {
+                        int errno_save = errno;
                         rd_snprintf(errstr, errstr_size, "%s",
                                     rd_strerror(errno));
+                        errno = errno_save;
                         return -1;
                 }
         }
@@ -312,31 +315,33 @@ rd_kafka_transport_socket_recv0 (rd_kafka_transport_t *rktrans,
                          len,
                          0);
 
-#ifdef _MSC_VER
                 if (unlikely(r == SOCKET_ERROR)) {
+#ifdef _MSC_VER
                         if (WSAGetLastError() == WSAEWOULDBLOCK)
                                 return sum;
                         rd_snprintf(errstr, errstr_size, "%s",
                                     socket_strerror(WSAGetLastError()));
-                        return -1;
-                }
 #else
-                if (unlikely(r <= 0)) {
-                        if (r == -1 && socket_errno == EAGAIN)
-                                return 0;
-                        else if (r == 0) {
-                                /* Receive 0 after POLLIN event means
-                                 * connection closed. */
-                                rd_snprintf(errstr, errstr_size,
-                                            "Disconnected");
-                                return -1;
-                        } else if (r == -1) {
+                        if (socket_errno == EAGAIN)
+                                return sum;
+                        else {
+                                int errno_save = errno;
                                 rd_snprintf(errstr, errstr_size, "%s",
                                             rd_strerror(errno));
+                                errno = errno_save;
                                 return -1;
                         }
-                }
 #endif
+                } else if (unlikely(r == 0)) {
+                        /* Receive 0 after POLLIN event means
+                         * connection closed. */
+                        rd_snprintf(errstr, errstr_size,
+                                    "Disconnected");
+#ifndef _MSC_VER
+                        errno = ECONNRESET;
+#endif
+                        return -1;
+                }
 
                 /* Update buffer write position */
                 rd_buf_write(rbuf, NULL, (size_t)r);
@@ -872,7 +877,7 @@ int rd_kafka_transport_ssl_ctx_init (rd_kafka_t *rk,
 		}
 	}
 
-#if OPENSSL_VERSION_NUMBER >= 0x1000200fL
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL && !defined(LIBRESSL_VERSION_NUMBER)
 	/* Curves */
 	if (rk->rk_conf.ssl.curves_list) {
 		rd_kafka_dbg(rk, SECURITY, "SSL",
@@ -1407,6 +1412,16 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 					     errstr);
 			return;
 		}
+
+		if (events & POLLHUP) {
+			errno = EINVAL;
+			rd_kafka_broker_fail(rkb, LOG_ERR,
+					     RD_KAFKA_RESP_ERR__AUTHENTICATION,
+					     "Disconnected");
+
+			return;
+		}
+
 		break;
 
 	case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:

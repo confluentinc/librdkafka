@@ -25,6 +25,17 @@ freely, subject to the following restrictions:
 #ifndef _TINYCTHREAD_H_
 #define _TINYCTHREAD_H_
 
+/* Include config to know if C11 threads are available */
+#ifdef _MSC_VER
+#include "win32_config.h"
+#else
+#include "../config.h"
+#endif
+
+#if WITH_C11THREADS
+#include <threads.h>
+#else
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -313,12 +324,9 @@ int cnd_wait(cnd_t *cond, mtx_t *mtx);
 */
 int cnd_timedwait(cnd_t *cond, mtx_t *mtx, const struct timespec *ts);
 
-/** Same as cnd_timedwait() but takes a relative timeout in milliseconds.
- */
-int cnd_timedwait_ms(cnd_t *cnd, mtx_t *mtx, int timeout_ms);
-
-/** Same as cnd_timedwait_ms() but updates the remaining time. */
-int cnd_timedwait_msp (cnd_t *cnd, mtx_t *mtx, int *timeout_msp);
+#if defined(_TTHREAD_WIN32_)
+int _cnd_timedwait_win32(cnd_t *cond, mtx_t *mtx, DWORD timeout);
+#endif
 
 /* Thread */
 #if defined(_TTHREAD_WIN32_)
@@ -355,12 +363,6 @@ int thrd_create(thrd_t *thr, thrd_start_t func, void *arg);
 * @return The identifier of the calling thread.
 */
 thrd_t thrd_current(void);
-
-
-/** Checks if passed thread is the current thread.
- * @return non-zero if same thread, else 0.
- */
-int thrd_is_current(thrd_t thr);
 
 
 /** Dispose of any resources allocated to the thread when that thread exits.
@@ -409,11 +411,6 @@ int thrd_sleep(const struct timespec *duration, struct timespec *remaining);
 * continue to run.
 */
 void thrd_yield(void);
-
-/** Set thread system name if platform supports it (pthreads)
-* @return thrd_success or thrd_error
-*/
-int thrd_setname (const char *name);
 
 /* Thread local storage */
 #if defined(_TTHREAD_WIN32_)
@@ -488,41 +485,15 @@ int tss_set(tss_t key, void *val);
 
 
 
-
-/**
-* FIXME: description */
-#if defined(_TTHREAD_WIN32_)
-typedef struct rwlock_t {
-	SRWLOCK  lock;
-	int       rcnt;
-	int       wcnt;
-} rwlock_t;
-#define rwlock_init(rwl)    do { (rwl)->rcnt = (rwl)->wcnt = 0; InitializeSRWLock(&(rwl)->lock); } while (0)
-#define rwlock_destroy(rwl)
-#define rwlock_rdlock(rwl)   do { if (0) printf("Thr %i: at %i:   RDLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt >= 0); AcquireSRWLockShared(&(rwl)->lock); InterlockedIncrement(&(rwl)->rcnt); } while (0)
-#define rwlock_wrlock(rwl)   do { if (0) printf("Thr %i: at %i:   WRLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt >= 0); AcquireSRWLockExclusive(&(rwl)->lock); InterlockedIncrement(&(rwl)->wcnt); } while (0)
-#define rwlock_rdunlock(rwl) do { if (0) printf("Thr %i: at %i: RDUNLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt > 0 && (rwl)->wcnt >= 0); ReleaseSRWLockShared(&(rwl)->lock); InterlockedDecrement(&(rwl)->rcnt); } while (0)  
-#define rwlock_wrunlock(rwl) do { if (0) printf("Thr %i: at %i: RWUNLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt > 0); ReleaseSRWLockExclusive(&(rwl)->lock); InterlockedDecrement(&(rwl)->wcnt); } while (0)  
-
-#define rwlock_rdlock_d(rwl)   do { if (1) printf("Thr %i: at %i:   RDLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt >= 0); AcquireSRWLockShared(&(rwl)->lock); InterlockedIncrement(&(rwl)->rcnt); } while (0)
-#define rwlock_wrlock_d(rwl)   do { if (1) printf("Thr %i: at %i:   WRLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt >= 0); AcquireSRWLockExclusive(&(rwl)->lock); InterlockedIncrement(&(rwl)->wcnt); } while (0)
-#define rwlock_rdunlock_d(rwl) do { if (1) printf("Thr %i: at %i: RDUNLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt > 0 && (rwl)->wcnt >= 0); ReleaseSRWLockShared(&(rwl)->lock); InterlockedDecrement(&(rwl)->rcnt); } while (0)  
-#define rwlock_wrunlock_d(rwl) do { if (1) printf("Thr %i: at %i: RWUNLOCK %p   %s (%i, %i)\n", GetCurrentThreadId(), __LINE__, rwl, __FUNCTION__, (rwl)->rcnt, (rwl)->wcnt); assert((rwl)->rcnt >= 0 && (rwl)->wcnt > 0); ReleaseSRWLockExclusive(&(rwl)->lock); InterlockedDecrement(&(rwl)->wcnt); } while (0)  
-
-
-#else
-typedef pthread_rwlock_t rwlock_t;
-
-int rwlock_init (rwlock_t *rwl);
-int rwlock_destroy (rwlock_t *rwl);
-int rwlock_rdlock (rwlock_t *rwl);
-int rwlock_wrlock (rwlock_t *rwl);
-int rwlock_rdunlock (rwlock_t *rwl);
-int rwlock_wrunlock (rwlock_t *rwl);
-
-#endif
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* !WITH_C11THREADS */
+
+/**
+ * @brief librdkafka extensions to c11threads
+ */
+#include "tinycthread_extra.h"
 
 #endif /* _TINYTHREAD_H_ */

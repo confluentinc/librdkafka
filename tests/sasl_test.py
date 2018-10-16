@@ -161,6 +161,7 @@ if __name__ == '__main__':
                'run': (args.sasl and args.plaintext),
                'conf': sasl_plain_conf,
                'rdkconf': {'sasl_users': 'wrongjoe=mypassword'},
+               'tests': ['0001'],
                'expect_fail': ['all']},
               {'name': 'SASL Kerberos',
                'run': args.sasl,
@@ -194,10 +195,14 @@ if __name__ == '__main__':
             if mech is not None and mech not in supported:
                 print('# Disabled SASL for broker version %s' % version)
                 _conf.pop('sasl_mechanisms', None)
-                
+
             # Run tests
             print('#### Version %s, suite %s: STARTING' % (version, suite['name']))
-            report = test_it(version, tests=tests, conf=_conf, rdkconf=_rdkconf,
+            if tests is None:
+                tests_to_run = suite.get('tests', None)
+            else:
+                tests_to_run = tests
+            report = test_it(version, tests=tests_to_run, conf=_conf, rdkconf=_rdkconf,
                              debug=args.debug)
 
             # Handle test report
@@ -205,7 +210,7 @@ if __name__ == '__main__':
             passed,reason = handle_report(report, version, suite)
             report['PASSED'] = passed
             report['REASON'] = reason
-            
+
             if passed:
                 print('\033[42m#### Version %s, suite %s: PASSED: %s\033[0m' %
                       (version, suite['name'], reason))

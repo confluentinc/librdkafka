@@ -716,8 +716,10 @@ static void rd_kafka_destroy_app (rd_kafka_t *rk, int flags) {
                      flags ? flags_str : "none", flags);
 
         /* Make sure destroy is not called from a librdkafka thread
-         * since this will most likely cause a deadlock. */
-        if (strcmp(rd_kafka_thread_name, "app")) {
+         * since this will most likely cause a deadlock.
+         * FIXME: include broker threads (for log_cb) */
+        if (thrd_is_current(rk->rk_thread) ||
+            thrd_is_current(rk->rk_background.thread)) {
                 rd_kafka_log(rk, LOG_EMERG, "BGQUEUE",
                              "Application bug: "
                              "rd_kafka_destroy() called from "
@@ -1030,7 +1032,8 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
          * Using app_offset allows consumer_lag to be up to date even if
          * offsets are not (yet) committed.
          */
-        if (rktp->rktp_hi_offset != RD_KAFKA_OFFSET_INVALID) {
+        if (rktp->rktp_hi_offset != RD_KAFKA_OFFSET_INVALID &&
+            (rktp->rktp_app_offset >= 0 || rktp->rktp_committed_offset >= 0)) {
                 consumer_lag = rktp->rktp_hi_offset -
                         RD_MAX(rktp->rktp_app_offset,
                                rktp->rktp_committed_offset);
@@ -1777,9 +1780,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         rk->rk_initialized = 1;
 
         rd_kafka_dbg(rk, ALL, "INIT",
-                     "librdkafka v%s (0x%x) %s initialized (debug 0x%x)",
+                     "librdkafka v%s (0x%x) %s initialized "
+                     "(builtin.features 0x%x, debug 0x%x)",
                      rd_kafka_version_str(), rd_kafka_version(),
-                     rk->rk_name, rk->rk_conf.debug);
+                     rk->rk_name,
+                     rk->rk_conf.builtin_features, rk->rk_conf.debug);
 
 	return rk;
 
@@ -2368,9 +2373,11 @@ rd_kafka_resp_err_t rd_kafka_consumer_close (rd_kafka_t *rk) {
          */
         if (rd_kafka_destroy_flags_no_consumer_close(rk)) {
                 rd_kafka_dbg(rk, CONSUMER, "CLOSE",
-                             "Disabling temporary queue to quench "
+                             "Disabling and purging temporary queue to quench "
                              "close events");
                 rd_kafka_q_disable(rkq);
+                /* Purge ops already enqueued */
+                rd_kafka_q_purge(rkq);
         } else {
                 rd_kafka_dbg(rk, CONSUMER, "CLOSE",
                              "Waiting for close events");
@@ -3330,11 +3337,18 @@ rd_kafka_resp_err_t rd_kafka_flush (rd_kafka_t *rk, int timeout_ms) {
 		return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
 
         rd_kafka_yield_thread = 0;
-        while (((qlen = rd_kafka_q_len(rk->rk_rep)) > 0 ||
-                (msg_cnt = rd_kafka_curr_msgs_cnt(rk)) > 0) &&
-               !rd_kafka_yield_thread &&
-               (tmout = rd_timeout_remains_limit(ts_end, 100))!=RD_POLL_NOWAIT)
+
+        /* First poll call is non-blocking for the case
+         * where timeout_ms==RD_POLL_NOWAIT to make sure poll is
+         * called at least once. */
+        tmout = RD_POLL_NOWAIT;
+        do {
                 rd_kafka_poll(rk, tmout);
+        } while (((qlen = rd_kafka_q_len(rk->rk_rep)) > 0 ||
+                  (msg_cnt = rd_kafka_curr_msgs_cnt(rk)) > 0) &&
+                 !rd_kafka_yield_thread &&
+                 (tmout = rd_timeout_remains_limit(ts_end, 10)) !=
+                 RD_POLL_NOWAIT);
 
 	return qlen + msg_cnt > 0 ? RD_KAFKA_RESP_ERR__TIMED_OUT :
 		RD_KAFKA_RESP_ERR_NO_ERROR;

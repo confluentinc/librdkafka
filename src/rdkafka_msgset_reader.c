@@ -133,6 +133,9 @@ typedef struct rd_kafka_msgset_reader_s {
                                          *   fetch offset, such as with
                                          *   compacted topics. */
 
+        int msetr_ctrl_cnt;             /**< Number of control messages
+                                         *   or MessageSets received. */
+
         const char *msetr_srcname;      /**< Optional message source string,
                                          *   used in debug logging to
                                          *   indicate messages were
@@ -852,6 +855,7 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
 
         /* Ignore control messages */
         if (unlikely((hdr.Attributes & RD_KAFKA_MSGSET_V2_ATTR_CONTROL))) {
+                msetr->msetr_ctrl_cnt++;
                 rd_kafka_buf_skip(rkbuf, payload_size);
                 goto done;
         }
@@ -1042,8 +1046,13 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
                 /* The message set didn't contain at least one full message
                  * or no error was posted on the response queue.
                  * This means the size limit perhaps was too tight,
-                 * increase it automatically. */
-                if (rktp->rktp_fetch_msg_max_bytes < (1 << 30)) {
+                 * increase it automatically.
+                 * If there was at least one control message there
+                 * is probably not a size limit and nothing is done. */
+                if (msetr->msetr_ctrl_cnt > 0) {
+                        /* Noop */
+
+                } else  if (rktp->rktp_fetch_msg_max_bytes < (1 << 30)) {
                         rktp->rktp_fetch_msg_max_bytes *= 2;
                         rd_rkb_dbg(msetr->msetr_rkb, FETCH, "CONSUME",
                                    "Topic %s [%"PRId32"]: Increasing "
@@ -1080,13 +1089,15 @@ rd_kafka_msgset_reader_run (rd_kafka_msgset_reader_t *msetr) {
         rd_rkb_dbg(msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
                    "Enqueue %i %smessage(s) (%"PRId64" bytes, %d ops) on "
                    "%s [%"PRId32"] "
-                   "fetch queue (qlen %d, v%d, last_offset %"PRId64")",
+                   "fetch queue (qlen %d, v%d, last_offset %"PRId64
+                   ", %d ctrl msgs)",
                    msetr->msetr_msgcnt, msetr->msetr_srcname,
                    msetr->msetr_msg_bytes,
                    rd_kafka_q_len(&msetr->msetr_rkq),
                    rktp->rktp_rkt->rkt_topic->str,
                    rktp->rktp_partition, rd_kafka_q_len(&msetr->msetr_rkq),
-                   msetr->msetr_tver->version, last_offset);
+                   msetr->msetr_tver->version, last_offset,
+                   msetr->msetr_ctrl_cnt);
 
         /* Concat all messages&errors onto the parent's queue
          * (the partition's fetch queue) */

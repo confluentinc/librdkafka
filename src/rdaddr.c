@@ -131,7 +131,7 @@ const char *rd_addrinfo_prepare (const char *nodesvc,
 	if (nodelen) {
 		/* Truncate nodename if necessary. */
 		nodelen = RD_MIN(nodelen, sizeof(snode)-1);
-		strncpy(snode, nodesvc, nodelen);
+		memcpy(snode, nodesvc, nodelen);
 		snode[nodelen] = '\0';
 	}
 

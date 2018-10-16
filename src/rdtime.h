@@ -61,6 +61,17 @@
 #define RD_POLL_NOWAIT     0
 
 
+#if RD_UNITTEST_QPC_OVERRIDES
+ /* Overrides for rd_clock() unittest using QPC on Windows */
+BOOL rd_ut_QueryPerformanceFrequency(_Out_ LARGE_INTEGER * lpFrequency);
+BOOL rd_ut_QueryPerformanceCounter(_Out_ LARGE_INTEGER * lpPerformanceCount);
+#define rd_QueryPerformanceFrequency(IFREQ) rd_ut_QueryPerformanceFrequency(IFREQ)
+#define rd_QueryPerformanceCounter(PC) rd_ut_QueryPerformanceCounter(PC)
+#else
+#define rd_QueryPerformanceFrequency(IFREQ) QueryPerformanceFrequency(IFREQ)
+#define rd_QueryPerformanceCounter(PC) QueryPerformanceCounter(PC)
+#endif
+
 /**
  * @returns a monotonically increasing clock in microseconds.
  * @remark There is no monotonic clock on OSX, the system time
@@ -75,11 +86,16 @@ static RD_INLINE rd_ts_t rd_clock (void) {
 	return ((rd_ts_t)tv.tv_sec * 1000000LLU) + (rd_ts_t)tv.tv_usec;
 #elif defined(_MSC_VER)
         LARGE_INTEGER now;
-        static RD_TLS LARGE_INTEGER freq;
-        if (!freq.QuadPart)
-                QueryPerformanceFrequency(&freq);
-        QueryPerformanceCounter(&now);
-        return (now.QuadPart * 1000000) / freq.QuadPart;
+        static RD_TLS double freq = 0.0;
+        if (!freq) {
+                LARGE_INTEGER ifreq;
+                rd_QueryPerformanceFrequency(&ifreq);
+                /* Convert frequency to double to avoid overflow in
+                 * return statement */
+                freq = (double)ifreq.QuadPart / 1000000.0;
+        }
+        rd_QueryPerformanceCounter(&now);
+        return (rd_ts_t)((double)now.QuadPart / freq);
 #else
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -135,6 +151,32 @@ static RD_INLINE rd_ts_t rd_timeout_init (int timeout_ms) {
 		return timeout_ms;
 
 	return rd_clock() + (timeout_ms * 1000);
+}
+
+
+/**
+ * @brief Initialize an absolute timespec timeout based on the provided
+ *        relative \p timeout_ms.
+ *
+ * To be used with cnd_timedwait_abs().
+ *
+ * Honours RD_POLL_INFITE and RD_POLL_NOWAIT (reflected in tspec.tv_sec).
+ */
+static RD_INLINE void rd_timeout_init_timespec (struct timespec *tspec,
+                                                int timeout_ms) {
+        if (timeout_ms == RD_POLL_INFINITE ||
+            timeout_ms == RD_POLL_NOWAIT) {
+                tspec->tv_sec = timeout_ms;
+                tspec->tv_nsec = 0;
+        } else {
+                timespec_get(tspec, TIME_UTC);
+                tspec->tv_sec  += timeout_ms / 1000;
+                tspec->tv_nsec += (timeout_ms % 1000) * 1000000;
+                if (tspec->tv_nsec > 1000000000) {
+                        tspec->tv_nsec -= 1000000000;
+                        tspec->tv_sec++;
+                }
+        }
 }
 
 

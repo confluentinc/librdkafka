@@ -182,6 +182,10 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_new0 (rd_kafka_itopic_t *rkt,
 	rktp->rktp_partition = partition;
 	rktp->rktp_rkt = rkt;
         rktp->rktp_leader_id = -1;
+        /* Mark partition as unknown (does not exist) until we see the
+         * partition in topic metadata. */
+        if (partition != RD_KAFKA_PARTITION_UA)
+                rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
 	rktp->rktp_fetch_state = RD_KAFKA_TOPPAR_FETCH_NONE;
         rktp->rktp_fetch_msg_max_bytes
             = rkt->rkt_rk->rk_conf.fetch_msg_max_bytes;
@@ -577,6 +581,9 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_add (rd_kafka_itopic_t *rkt,
                                      rkt->rkt_topic->str, rktp->rktp_partition);
                         rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_DESIRED;
                 }
+                /* If toppar was marked for removal this is no longer
+                 * the case since the partition is now desired. */
+                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_REMOVE;
 		rd_kafka_toppar_unlock(rktp);
 		return s_rktp;
 	}
@@ -588,7 +595,6 @@ shptr_rd_kafka_toppar_t *rd_kafka_toppar_desired_add (rd_kafka_itopic_t *rkt,
         rktp = rd_kafka_toppar_s2i(s_rktp);
 
         rd_kafka_toppar_lock(rktp);
-        rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_UNKNOWN;
         rd_kafka_toppar_desired_add0(rktp);
         rd_kafka_toppar_unlock(rktp);
 
@@ -615,13 +621,15 @@ void rd_kafka_toppar_desired_del (rd_kafka_toppar_t *rktp) {
 	rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_DESIRED;
         rd_kafka_toppar_desired_unlink(rktp);
 
-        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_UNKNOWN)
-                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_UNKNOWN;
-
-
 	rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "DESP",
 		     "Removing (un)desired topic %s [%"PRId32"]",
 		     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_UNKNOWN) {
+                /* If this partition does not exist in the cluster
+                 * and is no longer desired, remove it. */
+                rd_kafka_toppar_broker_leave_for_remove(rktp);
+        }
 }
 
 
@@ -650,7 +658,6 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
         wakeup_fd = rktp->rktp_msgq_wakeup_fd;
         rd_kafka_toppar_unlock(rktp);
 
-#ifndef _MSC_VER
         if (wakeup_fd != -1 && queue_len == 1) {
                 char one = 1;
                 int r;
@@ -664,7 +671,6 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
                                      wakeup_fd,
                                      rd_strerror(errno));
         }
-#endif
 }
 
 
@@ -758,7 +764,8 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
  * @param max_retries Maximum retries allowed per message.
  * @param backoff Absolute retry backoff for retried messages.
  *
- * @returns the number of messages that could not be retried.
+ * @returns 0 if all messages were retried, or 1 if some messages
+ *          could not be retried.
  */
 int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
                          rd_kafka_msgq_t *srcq,
@@ -796,11 +803,12 @@ int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
 
 /**
  * @brief Inserts messages from \p rkmq according to their sorted position
- *        into the partition xmit queue (i.e., the broker xmit work queue).
+ *        into the partition's message queue.
  *
  * @param incr_retry Increment retry count for messages.
  *
- * @returns the number of messages that could not be retried.
+ * @returns 0 if all messages were retried, or 1 if some messages
+ *          could not be retried.
  *
  * @locality Broker thread
  */
@@ -811,8 +819,11 @@ int rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp, rd_kafka_msgq_t *rkmq,
         rd_ts_t backoff = rd_clock() + (rk->rk_conf.retry_backoff_ms * 1000);
         int r;
 
+        if (rd_kafka_terminating(rk))
+                return 1;
+
         rd_kafka_toppar_lock(rktp);
-        r = rd_kafka_retry_msgq(&rktp->rktp_xmit_msgq, rkmq,
+        r = rd_kafka_retry_msgq(&rktp->rktp_msgq, rkmq,
                                 incr_retry, rk->rk_conf.max_retries,
                                 backoff,
                                 rktp->rktp_rkt->rkt_conf.msg_order_cmp);
@@ -921,6 +932,7 @@ void rd_kafka_toppar_broker_leave_for_remove (rd_kafka_toppar_t *rktp) {
         rd_kafka_op_t *rko;
         rd_kafka_broker_t *dest_rkb;
 
+        rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_REMOVE;
 
 	if (rktp->rktp_next_leader)
 		dest_rkb = rktp->rktp_next_leader;
@@ -1272,9 +1284,12 @@ static void rd_kafka_toppar_handle_Offset (rd_kafka_t *rk,
                     err == RD_KAFKA_RESP_ERR__OUTDATED) {
                         /* Termination or outdated, quick cleanup. */
 
-                        if (err == RD_KAFKA_RESP_ERR__OUTDATED)
+                        if (err == RD_KAFKA_RESP_ERR__OUTDATED) {
+                                rd_kafka_toppar_lock(rktp);
                                 rd_kafka_toppar_offset_retry(
                                         rktp, 500, "outdated offset response");
+                                rd_kafka_toppar_unlock(rktp);
+                        }
 
                         /* from request.opaque */
                         rd_kafka_toppar_destroy(s_rktp);

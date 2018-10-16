@@ -77,7 +77,7 @@ extern "C" {
         struct rd_kafka_topic_s;
         struct rd_kafka_message_s;
         struct rd_kafka_headers_s;
-};
+}
 
 namespace RdKafka {
 
@@ -100,7 +100,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x000b05ff
+#define RD_KAFKA_VERSION  0x000b06ff
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -1401,7 +1401,7 @@ class RD_EXPORT Headers {
     Header(const std::string &key,
            const void *value,
            size_t value_size):
-    key_(key), err_(ERR_NO_ERROR), value_size_(value_size) {
+    key_(key), err_(RdKafka::ERR_NO_ERROR), value_size_(value_size) {
         value_ = copy_value(value, value_size);
     };
 
@@ -1859,7 +1859,7 @@ public:
    * topics's partitions to the consumers, depending on their subscription.
    *
    * The result of such an assignment is a rebalancing which is either
-   * handled automatically in librdkafka or can be overriden by the application
+   * handled automatically in librdkafka or can be overridden by the application
    * by providing a RdKafka::RebalanceCb.
    *
    * The rebalancing passes the assigned partition set to

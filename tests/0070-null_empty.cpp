@@ -80,6 +80,7 @@ static void do_test_null_empty (bool api_version_request) {
   Test::conf_init(&conf, NULL, 0);
   Test::conf_set(conf, "api.version.request",
                  api_version_request ? "true" : "false");
+  Test::conf_set(conf, "acks", "all");
 
 
   std::string errstr;

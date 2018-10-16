@@ -4,7 +4,7 @@ OBJS	  = $(TESTSRCS_C:%.c=%.o) $(TESTSRCS_CXX:%.cpp=%.o)
 
 BIN	  = merged
 LIBS	 += -lrdkafka++ -lrdkafka -lstdc++
-OBJS	 += test.o testcpp.o tinycthread.o rdlist.o sockem.o
+OBJS	 += test.o testcpp.o tinycthread.o tinycthread_extra.o rdlist.o sockem.o
 CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
 LDFLAGS += -rdynamic -L../src -L../src-cpp
@@ -22,7 +22,7 @@ sasl: $(BIN)
 	./sasl_test.py --conf '{"parallel":1}' --no-ssl --debug $(KAFKA_VERSION)
 
 # Run the full test suite(s)
-full: full_broker full_sasl
+full: broker sasl
 
 
 
@@ -61,6 +61,9 @@ endif
 
 
 tinycthread.o: ../src/tinycthread.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
+
+tinycthread_extra.o: ../src/tinycthread_extra.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
 rdlist.o: ../src/rdlist.c

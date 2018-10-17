@@ -1308,7 +1308,7 @@ rd_kafka_cgrp_update_subscribed_topics (rd_kafka_cgrp_t *rkcg,
 
 
 /**
- * @brief Handle heart Heartbeat response.
+ * @brief Handle Heartbeat response.
  */
 void rd_kafka_cgrp_handle_Heartbeat (rd_kafka_t *rk,
                                      rd_kafka_broker_t *rkb,

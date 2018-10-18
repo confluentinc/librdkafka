@@ -446,7 +446,7 @@ static char *rd_kafka_ssl_error (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
     return errstr;
 }
 
-
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 static RD_UNUSED void
 rd_kafka_transport_ssl_lock_cb (int mode, int i, const char *file, int line) {
 	if (mode & CRYPTO_LOCK)
@@ -454,6 +454,7 @@ rd_kafka_transport_ssl_lock_cb (int mode, int i, const char *file, int line) {
 	else
 		mtx_unlock(&rd_kafka_ssl_locks[i]);
 }
+#endif
 
 static RD_UNUSED unsigned long rd_kafka_transport_ssl_threadid_cb (void) {
 #ifdef _MSC_VER
@@ -466,6 +467,14 @@ static RD_UNUSED unsigned long rd_kafka_transport_ssl_threadid_cb (void) {
 #endif
 }
 
+#ifdef HAVE_OPENSSL_CRYPTO_THREADID_SET_CALLBACK
+static void rd_kafka_transport_libcrypto_THREADID_callback(CRYPTO_THREADID *id)
+{
+    unsigned long thread_id = rd_kafka_transport_ssl_threadid_cb();
+
+    CRYPTO_THREADID_set_numeric(id, thread_id);
+}
+#endif
 
 /**
  * Global OpenSSL cleanup.
@@ -473,9 +482,11 @@ static RD_UNUSED unsigned long rd_kafka_transport_ssl_threadid_cb (void) {
 void rd_kafka_transport_ssl_term (void) {
 	int i;
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	CRYPTO_set_id_callback(NULL);
 	CRYPTO_set_locking_callback(NULL);
         CRYPTO_cleanup_all_ex_data();
+#endif
 
 	for (i = 0 ; i < rd_kafka_ssl_locks_cnt ; i++)
 		mtx_destroy(&rd_kafka_ssl_locks[i]);
@@ -489,6 +500,7 @@ void rd_kafka_transport_ssl_term (void) {
  * Global OpenSSL init.
  */
 void rd_kafka_transport_ssl_init (void) {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	int i;
 	
 	rd_kafka_ssl_locks_cnt = CRYPTO_num_locks();
@@ -497,12 +509,18 @@ void rd_kafka_transport_ssl_init (void) {
 	for (i = 0 ; i < rd_kafka_ssl_locks_cnt ; i++)
 		mtx_init(&rd_kafka_ssl_locks[i], mtx_plain);
 
-	CRYPTO_set_id_callback(rd_kafka_transport_ssl_threadid_cb);
+#ifdef HAVE_OPENSSL_CRYPTO_THREADID_SET_CALLBACK
+    CRYPTO_THREADID_set_callback(rd_kafka_transport_libcrypto_THREADID_callback);
+#else
+    CRYPTO_set_id_callback(rd_kafka_transport_ssl_threadid_cb);
+#endif
+
 	CRYPTO_set_locking_callback(rd_kafka_transport_ssl_lock_cb);
 	
 	SSL_load_error_strings();
 	SSL_library_init();
 	OpenSSL_add_all_algorithms();
+#endif
 }
 
 

@@ -168,19 +168,19 @@ file-check:
 
 lib-install:
 	@printf "$(MKL_YELLOW)Install $(LIBNAME) to $$DESTDIR$(prefix)$(MKL_CLR_RESET)\n"
-	$(INSTALL) -d $$DESTDIR$(includedir)/$(PKGNAME) ; \
-	$(INSTALL) -d $$DESTDIR$(libdir) ; \
-	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME) ; \
-	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir) ; \
-	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir) ; \
+	$(INSTALL) -d $$DESTDIR$(includedir)/$(PKGNAME) && \
+	$(INSTALL) -d $$DESTDIR$(libdir) && \
+	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME) && \
+	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir) && \
+	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir) && \
 	[ -f "$(LIBNAME0).pc" ] && ( \
-		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) ; \
+		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) && \
 		$(INSTALL) -m 0644 $(LIBNAME0).pc $$DESTDIR$(pkgconfigdir) \
-	) ; \
+	) && \
 	[ -f "$(LIBNAME0)-static.pc" ] && ( \
-		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) ; \
+		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) && \
 		$(INSTALL) -m 0644 $(LIBNAME0)-static.pc $$DESTDIR$(pkgconfigdir) \
-	) ; \
+	) && \
 	(cd $$DESTDIR$(libdir) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
 
 lib-uninstall:

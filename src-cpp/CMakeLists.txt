@@ -1,5 +1,7 @@
-add_library(
-    rdkafka++
+set(LIBVER 1)
+
+set(
+    sources
     ConfImpl.cpp
     ConsumerImpl.cpp
     HandleImpl.cpp
@@ -12,6 +14,18 @@ add_library(
     TopicImpl.cpp
     TopicPartitionImpl.cpp
 )
+
+if(RDKAFKA_BUILD_STATIC)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+  set(RDKAFKA_BUILD_MODE STATIC)
+else()
+  set(RDKAFKA_BUILD_MODE SHARED)
+endif()
+
+add_library(rdkafka++ ${RDKAFKA_BUILD_MODE} ${sources})
+if(NOT RDKAFKA_BUILD_STATIC)
+  set_property(TARGET rdkafka++ PROPERTY SOVERSION ${LIBVER})
+endif()
 
 target_link_libraries(rdkafka++ PUBLIC rdkafka)
 

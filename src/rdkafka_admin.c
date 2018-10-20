@@ -2738,3 +2738,151 @@ rd_kafka_DescribeConfigs_result_resources (
 }
 
 /**@}*/
+
+/**
+ * @name Delete Records
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+static void rd_kafka_topic_partition_list_free (void *ptr) {
+        rd_kafka_topic_partition_list_destroy(ptr);
+}
+
+
+/**
+ * @brief Parse DeleteRecordsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_DeleteRecordsResponse_parse (rd_kafka_op_t *rko_req,
+                                      rd_kafka_op_t **rko_resultp,
+                                      rd_kafka_buf_t *reply,
+                                      char *errstr, size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_broker_t *rkb = reply->rkbuf_rkb;
+        rd_kafka_t *rk = rkb->rkb_rk;
+        rd_kafka_op_t *rko_result = NULL;
+        int32_t topic_cnt;
+        int i;
+        int32_t Throttle_Time;
+        rd_kafka_topic_partition_list_t *offsets;
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, 1,
+                     rd_kafka_topic_partition_list_free);
+        offsets = rd_kafka_topic_partition_list_new(10);
+        rd_list_add(&rko_result->rko_u.admin_result.results,
+                    offsets);
+
+        /* throttle_time_ms */
+        rd_kafka_buf_read_i32(reply, &Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+
+        /* #topics */
+        rd_kafka_buf_read_i32(reply, &topic_cnt);
+
+        for (i = 0 ; i < (int)topic_cnt ; i++) {
+                rd_kafkap_str_t ktopic;
+                int32_t partition_cnt;
+                int j;
+
+                /* topic */
+                rd_kafka_buf_read_str(reply, &ktopic);
+
+                /* #partitions */
+                rd_kafka_buf_read_i32(reply, &partition_cnt);
+
+                for (j = 0 ; j < (int)partition_cnt ; j++) {
+                        int32_t partition;
+                        rd_kafka_topic_partition_t *skel;
+
+                        /* partition */
+                        rd_kafka_buf_read_i32(reply, &partition);
+
+                        skel = rd_kafka_topic_partition_list_add(offsets,
+                                                                 ktopic.str,
+                                                                 partition);
+                        /* low_watermark */
+                        rd_kafka_buf_read_i64(reply, &skel->offset);
+
+                        /* error_code */
+                        rd_kafka_buf_read_i16(reply, &skel->err);
+                }
+        }
+
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "DeleteRecords response protocol parse failure: %s",
+                    rd_kafka_err2str(err));
+
+        return err;
+}
+
+void rd_kafka_DeleteRecords (rd_kafka_t *rk,
+                             const rd_kafka_topic_partition_list_t *offsets,
+                             const rd_kafka_AdminOptions_t *options,
+                             rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+                rd_kafka_DeleteRecordsRequest,
+                rd_kafka_DeleteRecordsResponse_parse,
+        };
+
+        rko = rd_kafka_admin_request_op_new(rk,
+                                            RD_KAFKA_OP_DELETERECORDS,
+                                            RD_KAFKA_EVENT_DELETERECORDS_RESULT,
+                                            &cbs, options, rkqu);
+
+        rd_list_init(&rko->rko_u.admin_request.args, 1,
+                     rd_kafka_topic_partition_list_free);
+
+        rd_list_add(&rko->rko_u.admin_request.args,
+                    rd_kafka_topic_partition_list_copy(offsets));
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+
+/**
+ * @brief Get an array of topic and partition results from a DeleteRecords result.
+ *        The returned objects will contain \c topic, \c partition, and \c offset.
+ *        \c offset will be set to the low-watermark (Smallest available offset
+ of all live replicas)
+ *
+ * The returned objects life-time is the same as the \p result object.
+ */
+const rd_kafka_topic_partition_list_t *
+rd_kafka_DeleteRecords_result_offsets (
+        const rd_kafka_DeleteRecords_result_t *result) {
+        const rd_kafka_topic_partition_list_t *offsets;
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *) result;
+        size_t cntp;
+
+        rd_kafka_op_type_t reqtype =
+                rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_DELETERECORDS);
+
+        cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+
+        rd_assert(cntp == 1);
+
+        offsets = (const rd_kafka_topic_partition_list_t *)
+                rd_list_elem(&rko->rko_u.admin_result.results, 0);
+
+        rd_assert(offsets != NULL);
+
+        return offsets;
+}
+

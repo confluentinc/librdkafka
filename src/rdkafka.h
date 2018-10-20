@@ -3890,6 +3890,7 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
 #define RD_KAFKA_EVENT_ALTERCONFIGS_RESULT 103 /**< AlterConfigs_result_t */
 #define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
+#define RD_KAFKA_EVENT_DELETERECORDS_RESULT 105 /**< DeleteRecords_result_t */
 
 
 /**
@@ -4084,6 +4085,7 @@ typedef rd_kafka_event_t rd_kafka_DeleteTopics_result_t;
 typedef rd_kafka_event_t rd_kafka_CreatePartitions_result_t;
 typedef rd_kafka_event_t rd_kafka_AlterConfigs_result_t;
 typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
+typedef rd_kafka_event_t rd_kafka_DeleteRecords_result_t;
 
 /**
  * @returns the result of a CreateTopics request, or NULL if event is of
@@ -4135,7 +4137,15 @@ rd_kafka_event_AlterConfigs_result (rd_kafka_event_t *rkev);
 RD_EXPORT const rd_kafka_DescribeConfigs_result_t *
 rd_kafka_event_DescribeConfigs_result (rd_kafka_event_t *rkev);
 
-
+/**
+ * @returns the result of a DeleteRecords request, or NULL if event is of
+ *          different type.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_DELETERECORDS_RESULT
+ */
+RD_EXPORT const rd_kafka_DeleteRecords_result_t *
+rd_kafka_event_DeleteRecords_result (rd_kafka_event_t *rkev);
 
 
 /**
@@ -4801,6 +4811,7 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_CREATEPARTITIONS, /**< CreatePartitions */
         RD_KAFKA_ADMIN_OP_ALTERCONFIGS,     /**< AlterConfigs */
         RD_KAFKA_ADMIN_OP_DESCRIBECONFIGS,  /**< DescribeConfigs */
+        RD_KAFKA_ADMIN_OP_DELETERECORDS,    /**< DeleteRecords */
         RD_KAFKA_ADMIN_OP__CNT              /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
@@ -5608,6 +5619,55 @@ rd_kafka_DescribeConfigs_result_resources (
         size_t *cntp);
 
 /**@}*/
+
+/**
+ * @section DeleteRecords - delete records from partitions
+ *
+ *
+ */
+
+/**
+ * @brief Delete records in topics and partitions as specified by
+ *        the \p offsets
+ *
+ * \p offsets should contain \c topic, \c partition, and \c offset
+ * \c offset is the offset before which the messages will be deleted.
+ * Set \c offset to RD_KAFKA_OFFSET_END (high-watermark) in order to
+ * delete all data in the partition.
+ *
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
+ *  - rd_kafka_AdminOptions_set_timeout() - default socket.timeout.ms
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DELETERECORDS_RESULT
+ */
+RD_EXPORT void
+rd_kafka_DeleteRecords (rd_kafka_t *rk,
+                        const rd_kafka_topic_partition_list_t *offsets,
+                        const rd_kafka_AdminOptions_t *options,
+                        rd_kafka_queue_t *rkqu);
+
+
+/**
+ * @brief DeleteRecords result type and methods
+ */
+
+/**
+ * @brief Get an array of topic and partition results from a DeleteRecords result.
+ *        The returned objects will contain \c topic, \c partition, and \c offset.
+ *        \c offset will be set to the low-watermark (Smallest available offset
+          of all live replicas)
+ *
+ * The returned objects life-time is the same as the \p result object.
+ */
+RD_EXPORT const rd_kafka_topic_partition_list_t *
+rd_kafka_DeleteRecords_result_offsets (
+    const rd_kafka_DeleteRecords_result_t *result);
+
 
 
 #ifdef __cplusplus

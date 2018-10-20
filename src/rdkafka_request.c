@@ -3100,7 +3100,6 @@ rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
 }
 
 
-
 /**
  * @brief Parses and handles an InitProducerId reply.
  *
@@ -3193,6 +3192,117 @@ rd_kafka_InitProducerIdRequest (rd_kafka_broker_t *rkb,
 
         /* Let the idempotence state handler perform retries */
         rkbuf->rkbuf_retries = RD_KAFKA_BUF_NO_RETRIES;
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @brief Construct and send DeleteRecordsRequest to \p rkb
+ *        with the DeleteRecords objects (DeleteRecords_t *) in
+ *        \p delete_records, using \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DeleteRecordsRequest (rd_kafka_broker_t *rkb,
+                              const rd_list_t *offsets_list /*(rd_kafka_topic_partition_list_t*)*/,
+                              rd_kafka_AdminOptions_t *options,
+                              char *errstr, size_t errstr_size,
+                              rd_kafka_replyq_t replyq,
+                              rd_kafka_resp_cb_t *resp_cb,
+                              void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        size_t of_TopicArrayCnt = 0, of_PartArrayCnt = 0;
+        int32_t topic_cnt = 0, part_cnt = 0;
+        const char *last_topic = "";
+        int features;
+        int i = 0;
+        rd_kafka_topic_partition_list_t *partitions;
+        int op_timeout;
+
+        partitions = rd_list_elem(offsets_list, 0);
+
+        if (partitions == NULL) {
+                rd_snprintf(errstr, errstr_size, "Partition vector is NULL");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        if (partitions->cnt == 0) {
+                rd_snprintf(errstr, errstr_size, "No records to delete");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_DeleteRecords, 0, 1, &features);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "DeleteRecords Admin API (KIP-107) not supported "
+                            "by broker, requires broker version >= 0.11.0");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DeleteRecords, 1,
+                                         4 +
+                                         (partitions->cnt * 100) +
+                                         4);
+
+        rd_kafka_topic_partition_list_sort_by_topic(partitions);
+
+        /* #topics */
+        of_TopicArrayCnt = rd_kafka_buf_write_i32(rkbuf, 0); /* updated later */
+
+        for (i = 0 ; i < partitions->cnt ; i++) {
+                const rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+
+                if (strcmp(rktpar->topic, last_topic)) {
+                        /* Finish last topic, if any. */
+                        if (of_PartArrayCnt > 0)
+                                /* #partitions */
+                                rd_kafka_buf_update_i32(rkbuf,
+                                                        of_PartArrayCnt,
+                                                        part_cnt);
+
+                        /* topic */
+                        rd_kafka_buf_write_str(rkbuf, rktpar->topic, -1);
+                        topic_cnt++;
+                        last_topic = rktpar->topic;
+                        /* New topic so reset partition count */
+                        part_cnt = 0;
+
+                        /* #partitions */
+                        of_PartArrayCnt = rd_kafka_buf_write_i32(rkbuf, 0);
+                }
+
+                /* partition */
+                rd_kafka_buf_write_i32(rkbuf, rktpar->partition);
+                part_cnt++;
+
+                /* offset */
+                rd_kafka_buf_write_i64(rkbuf, rktpar->offset);
+        }
+
+        if (of_PartArrayCnt > 0) {
+                rd_kafka_buf_update_i32(rkbuf, of_PartArrayCnt, part_cnt);
+                rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt, topic_cnt);
+        }
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        rd_kafka_buf_write_i32(rkbuf, op_timeout);
+
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout+1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 

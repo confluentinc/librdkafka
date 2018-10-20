@@ -77,6 +77,7 @@ const char *rd_kafka_op2str (rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_CREATEPARTITIONS] = "REPLY:CREATEPARTITIONS",
                 [RD_KAFKA_OP_ALTERCONFIGS] = "REPLY:ALTERCONFIGS",
                 [RD_KAFKA_OP_DESCRIBECONFIGS] = "REPLY:DESCRIBECONFIGS",
+                [RD_KAFKA_OP_DELETERECORDS] = "REPLY:DELETERECORDS",
                 [RD_KAFKA_OP_ADMIN_RESULT] = "REPLY:ADMIN_RESULT",
                 [RD_KAFKA_OP_PURGE] = "REPLY:PURGE",
                 [RD_KAFKA_OP_CONNECT] = "REPLY:CONNECT"
@@ -198,6 +199,7 @@ rd_kafka_op_t *rd_kafka_op_new0 (const char *source, rd_kafka_op_type_t type) {
                 [RD_KAFKA_OP_CREATEPARTITIONS] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_ALTERCONFIGS] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_DESCRIBECONFIGS] = sizeof(rko->rko_u.admin_request),
+                [RD_KAFKA_OP_DELETERECORDS] = sizeof(rko->rko_u.admin_request),
                 [RD_KAFKA_OP_ADMIN_RESULT] = sizeof(rko->rko_u.admin_result),
                 [RD_KAFKA_OP_PURGE] = sizeof(rko->rko_u.purge),
                 [RD_KAFKA_OP_CONNECT] = 0,
@@ -312,6 +314,7 @@ void rd_kafka_op_destroy (rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_CREATEPARTITIONS:
         case RD_KAFKA_OP_ALTERCONFIGS:
         case RD_KAFKA_OP_DESCRIBECONFIGS:
+        case RD_KAFKA_OP_DELETERECORDS:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
                 break;

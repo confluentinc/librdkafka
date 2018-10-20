@@ -63,6 +63,8 @@ const char *rd_kafka_event_name (const rd_kafka_event_t *rkev) {
                 return "AlterConfigsResult";
         case RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT:
                 return "DescribeConfigsResult";
+        case RD_KAFKA_EVENT_DELETERECORDS_RESULT:
+                return "DeleteRecordsResult";
 	default:
 		return "?unknown?";
 	}
@@ -298,3 +300,12 @@ rd_kafka_event_DescribeConfigs_result (rd_kafka_event_t *rkev) {
         else
                 return (const rd_kafka_DescribeConfigs_result_t *)rkev;
 }
+
+const rd_kafka_DeleteRecords_result_t *
+rd_kafka_event_DeleteRecords_result (rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_DELETERECORDS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DeleteRecords_result_t *)rkev;
+}
+

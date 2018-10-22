@@ -349,6 +349,13 @@ $(mkl_var_get MKL_FAIL__${n}__reason)
                     install_pkgs="$install_pkgs $debs"
                 fi
                 ;;
+            osx)
+                local pkgs=$(mkl_meta_get $conf "brew")
+                pkg_cmd="brew install"
+                if [[ ${#pkgs} > 0 ]]; then
+                    install_pkgs="$install_pkgs $pkgs"
+                fi
+                ;;
         esac
     done
 

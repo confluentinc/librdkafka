@@ -12,6 +12,8 @@ dist: trusty
 sudo: false
 before_script:
  - ccache -s || echo "CCache is not available."
+ - if [[ $TRAVIS_OS_NAME == linux ]]; then sudo apt-get install -y libzstd-dev  || true ; fi
+ - if [[ $TRAVIS_OS_NAME == osx ]]; then brew install zstd ; fi
 script:
 - rm -rf artifacts dest
 - mkdir dest artifacts

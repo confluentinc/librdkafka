@@ -87,8 +87,17 @@ void foo (void) {
     mkl_lib_check "zlib" "WITH_ZLIB" disable CC "-lz" \
                   "#include <zlib.h>"
     mkl_lib_check "libcrypto" "" disable CC "-lcrypto"
-    mkl_lib_check "zstd" "WITH_ZSTD" disable CC "-lzstd" \
-                  "#include <zstd.h>"
+    mkl_meta_set "zstd" "deb" "libzstd-dev"
+    mkl_meta_set "zstd" "brew" "zstd"
+    mkl_lib_check --static=-lzstd "libzstd" "WITH_ZSTD" disable CC "-lzstd" \
+                  "
+#include <zstd.h>
+#include <zstd_errors.h>
+
+void foo (void) {
+     ZSTD_getFrameContentSize(NULL, 0);
+}
+"
 
     if mkl_lib_check "libm" "" disable CC "-lm" \
                      "#include <math.h>"; then

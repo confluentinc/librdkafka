@@ -101,6 +101,7 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 	zlib-dev (optional, for gzip compression support)
 	libssl-dev (optional, for SSL and SASL SCRAM support)
 	libsasl2-dev (optional, for SASL GSSAPI support)
+        libzstd-dev (optional, for Zstd compression support)
 
 ## Instructions
 

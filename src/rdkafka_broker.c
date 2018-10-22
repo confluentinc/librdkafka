@@ -2525,40 +2525,84 @@ static int rd_kafka_broker_ops_serve (rd_kafka_broker_t *rkb, int timeout_ms) {
 static void rd_kafka_broker_serve (rd_kafka_broker_t *rkb,
                                    rd_ts_t abs_timeout) {
         rd_ts_t now;
-        int initial_state = rkb->rkb_state;
         int remains_ms = rd_timeout_remains(abs_timeout);
+        int ops_timeout = RD_POLL_NOWAIT;
+        int io_timeout;
+
+        /* As a defensive measure, don't block forever.
+         * When blocking on the queue we will want to detect IO disconnects
+         * eventually.
+         * 1 wakeup/second is reasonable. */
+        if (unlikely(remains_ms == RD_POLL_INFINITE))
+                remains_ms = 1000;
+
+        io_timeout = remains_ms;
+
+        /*
+         * If there is no reason to wait for IO, then block on the
+         * the ops queue instead.
+         * This applies when there are..:
+         *  - no partitions assigned to this broker (bootstraps in particular),
+         *    since partition leader broker threads typically need to
+         *    perform some kind of operation, such as producing messages which
+         *    are triggered by fd wakeups (on non-windows), and:
+         *  - no transport, or
+         *  - the connection is UP but there are no outstanding
+         *    requests or no requests enqueued
+         */
+        switch (rkb->rkb_state)
+        {
+        case RD_KAFKA_BROKER_STATE_INIT:
+        case RD_KAFKA_BROKER_STATE_DOWN:
+                /* No transport, no IO to wait on. */
+                ops_timeout = remains_ms;
+                io_timeout = RD_POLL_NOWAIT;
+                break;
+
+        case RD_KAFKA_BROKER_STATE_CONNECT:
+        case RD_KAFKA_BROKER_STATE_AUTH:
+        case RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE:
+        case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
+                /* Wait on IO (default) */
+                break;
+
+        case RD_KAFKA_BROKER_STATE_UP:
+        case RD_KAFKA_BROKER_STATE_UPDATE:
+                /* Wait on event queue instead of IO only if there are no
+                 * partitions assigned to this broker, and no outstanding
+                 * or queued requests. */
+                if (rkb->rkb_toppar_cnt == 0 &&
+                    rd_kafka_bufq_cnt(&rkb->rkb_waitresps) == 0 &&
+                    rd_kafka_bufq_cnt(&rkb->rkb_outbufs) == 0) {
+                        ops_timeout = remains_ms;
+                        io_timeout = RD_POLL_NOWAIT;
+                }
+                break;
+        }
 
         /* Serve broker ops */
-        if (rd_kafka_broker_ops_serve(rkb,
-                                      !rkb->rkb_transport ?
-                                      remains_ms : RD_POLL_NOWAIT))
-                remains_ms = RD_POLL_NOWAIT;
+        if (rd_kafka_broker_ops_serve(rkb, ops_timeout)) {
+                /* If an event was handled there might be a state change,
+                 * or other consequences that require the broker thread
+                 * to go back to its state machine for further processing,
+                 * so cut the IO wait to a minimum. */
+                io_timeout = RD_POLL_NOWAIT;
+        }
 
+        /* Serve IO */
         if (likely(rkb->rkb_transport != NULL)) {
-                int blocking_max_ms;
-
-                /* If the broker state changed in op_serve() we minimize
-                 * the IO timeout since our caller might want to exit out of
-                 * its loop on state change. */
-                if (unlikely((int)rkb->rkb_state != initial_state))
-                        blocking_max_ms = 0;
-                else {
-                        if (remains_ms == RD_POLL_NOWAIT)
-                                remains_ms = rd_timeout_remains(abs_timeout);
-                        if (remains_ms == RD_POLL_INFINITE ||
-                            remains_ms > rkb->rkb_blocking_max_ms)
-                                remains_ms = rkb->rkb_blocking_max_ms;
-                        blocking_max_ms = remains_ms;
-                }
+                int blocking_max_ms = RD_MIN(io_timeout,
+                                             rkb->rkb_blocking_max_ms);
 
                 /* Serve IO events */
                 rd_kafka_transport_io_serve(rkb->rkb_transport,
                                             blocking_max_ms);
         }
 
-        /* Scan wait-response queue for timeouts. */
+        /* Scan wait-response queue for timeouts every 1s. */
         now = rd_clock();
-        if (rd_interval(&rkb->rkb_timeout_scan_intvl, 1000000, now) > 0)
+        if (unlikely(rd_interval(&rkb->rkb_timeout_scan_intvl,
+                                 1000000, now) > 0))
                 rd_kafka_broker_timeout_scan(rkb, now);
 }
 

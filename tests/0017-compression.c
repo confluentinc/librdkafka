@@ -58,7 +58,7 @@ int main_0017_compression(int argc, char **argv) {
                 "lz4",
                 NULL
         };
-        const char *topics[CODEC_CNT];
+        char *topics[CODEC_CNT];
         const int32_t partition = 0;
         int i;
         int crc;
@@ -70,10 +70,10 @@ int main_0017_compression(int argc, char **argv) {
         for (i = 0; codecs[i] != NULL ; i++) {
                 rd_kafka_topic_t *rkt_p;
 
-                topics[i] = test_mk_topic_name(codecs[i], 1);
+                topics[i] = rd_strdup(test_mk_topic_name(codecs[i], 1));
                 TEST_SAY("Produce %d messages with %s compression to "
                          "topic %s\n",
-                        msg_cnt, codecs[i], topics[i]);
+                         msg_cnt, codecs[i], topics[i]);
                 rkt_p = test_create_producer_topic(rk_p, topics[i],
                         "compression.codec", codecs[i], NULL);
 
@@ -135,6 +135,9 @@ int main_0017_compression(int argc, char **argv) {
 
                 rd_kafka_destroy(rk_c);
         }
+
+        for (i = 0 ; codecs[i] != NULL ; i++)
+                rd_free(topics[i]);
 
 
         return 0;

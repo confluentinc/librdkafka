@@ -38,7 +38,16 @@
 #define RD_KAFKA_ERR_ACTION_RETRY      0x8 /* Retry request after backoff */
 #define RD_KAFKA_ERR_ACTION_INFORM    0x10 /* Inform application about err */
 #define RD_KAFKA_ERR_ACTION_SPECIAL   0x20 /* Special-purpose, depends on context */
+#define RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED 0x40 /* ProduceReq msg status */
+#define RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED 0x80 /* ProduceReq msg status */
+#define RD_KAFKA_ERR_ACTION_MSG_PERSISTED 0x100    /* ProduceReq msg status */
 #define RD_KAFKA_ERR_ACTION_END          0 /* var-arg sentinel */
+
+/** @macro bitmask of the message persistence flags */
+#define RD_KAFKA_ERR_ACTION_MSG_FLAGS                   \
+        (RD_KAFKA_ERR_ACTION_MSG_NOT_PERSISTED |        \
+         RD_KAFKA_ERR_ACTION_MSG_POSSIBLY_PERSISTED |   \
+         RD_KAFKA_ERR_ACTION_MSG_PERSISTED)
 
 int rd_kafka_err_action (rd_kafka_broker_t *rkb,
 			 rd_kafka_resp_err_t err,
@@ -193,7 +202,8 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    rd_kafka_resp_cb_t *resp_cb,
 				    void *opaque, int flash_msg);
 
-int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp);
+int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp,
+                             const rd_kafka_pid_t pid);
 
 rd_kafka_resp_err_t
 rd_kafka_CreateTopicsRequest (rd_kafka_broker_t *rkb,
@@ -239,5 +249,22 @@ rd_kafka_DescribeConfigsRequest (rd_kafka_broker_t *rkb,
                                  rd_kafka_replyq_t replyq,
                                  rd_kafka_resp_cb_t *resp_cb,
                                  void *opaque);
+
+void
+rd_kafka_handle_InitProducerId (rd_kafka_t *rk,
+                                rd_kafka_broker_t *rkb,
+                                rd_kafka_resp_err_t err,
+                                rd_kafka_buf_t *rkbuf,
+                                rd_kafka_buf_t *request,
+                                void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_InitProducerIdRequest (rd_kafka_broker_t *rkb,
+                                const char *transactional_id,
+                                int transaction_timeout_ms,
+                                char *errstr, size_t errstr_size,
+                                rd_kafka_replyq_t replyq,
+                                rd_kafka_resp_cb_t *resp_cb,
+                                void *opaque);
 
 #endif /* _RDKAFKA_REQUEST_H_ */

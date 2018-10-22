@@ -40,20 +40,22 @@
 
 static int msgid_next = 0;
 static int fails = 0;
+static rd_kafka_msg_status_t exp_status;
 
 /**
  * Delivery reported callback.
  * Called for each message once to signal its delivery status.
  */
-static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
-		   rd_kafka_resp_err_t err, void *opaque, void *msg_opaque) {
-	int msgid = *(int *)msg_opaque;
+static void dr_msg_cb (rd_kafka_t *rk, const rd_kafka_message_t *rkmessage,
+                       void *opaque) {
+	int msgid = *(int *)rkmessage->_private;
+        rd_kafka_msg_status_t status = rd_kafka_message_status(rkmessage);
 
-	free(msg_opaque);
+        free(rkmessage->_private);
 
-	if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
-		TEST_FAIL("Message delivery failed: %s\n",
-			  rd_kafka_err2str(err));
+        if (rkmessage->err != RD_KAFKA_RESP_ERR_NO_ERROR)
+                TEST_FAIL("Message delivery failed: %s (status %d)\n",
+                          rd_kafka_err2str(rkmessage->err), status);
 
 	if (msgid != msgid_next) {
 		fails++;
@@ -61,6 +63,10 @@ static void dr_cb (rd_kafka_t *rk, void *payload, size_t len,
 			 msgid, msgid_next);
 		return;
 	}
+
+        TEST_ASSERT(status == exp_status,
+                    "For msgid #%d: expected status %d, got %d",
+                    msgid, exp_status, status);
 
 	msgid_next = msgid+1;
 }
@@ -94,6 +100,9 @@ int main_0008_reqacks (int argc, char **argv) {
 
                 test_conf_init(&conf, &topic_conf, 10);
 
+                if (reqacks != -1)
+                        test_conf_set(conf, "enable.idempotence", "false");
+
                 if (!topic)
                         topic = test_mk_topic_name("0008", 0);
 
@@ -105,13 +114,19 @@ int main_0008_reqacks (int argc, char **argv) {
                         TEST_FAIL("%s", errstr);
 
                 /* Set delivery report callback */
-                rd_kafka_conf_set_dr_cb(conf, dr_cb);
+                rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
+
+                if (reqacks == 0)
+                        exp_status = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+                else
+                        exp_status = RD_KAFKA_MSG_STATUS_PERSISTED;
 
                 /* Create kafka instance */
                 rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-                TEST_SAY("Created    kafka instance %s with required acks %i\n",
-                         rd_kafka_name(rk), reqacks);
+                TEST_SAY("Created    kafka instance %s with required acks %d, "
+                         "expecting status %d\n",
+                         rd_kafka_name(rk), reqacks, exp_status);
 
                 rkt = rd_kafka_topic_new(rk, topic, topic_conf);
                 if (!rkt)

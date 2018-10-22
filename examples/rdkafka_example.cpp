@@ -127,8 +127,24 @@ static void sigterm (int sig) {
 class ExampleDeliveryReportCb : public RdKafka::DeliveryReportCb {
  public:
   void dr_cb (RdKafka::Message &message) {
+    std::string status_name;
+    switch (message.status())
+      {
+      case RdKafka::Message::MSG_STATUS_NOT_PERSISTED:
+        status_name = "NotPersisted";
+        break;
+      case RdKafka::Message::MSG_STATUS_POSSIBLY_PERSISTED:
+        status_name = "PossiblyPersisted";
+        break;
+      case RdKafka::Message::MSG_STATUS_PERSISTED:
+        status_name = "Persisted";
+        break;
+      default:
+        status_name = "Unknown?";
+        break;
+      }
     std::cout << "Message delivery for (" << message.len() << " bytes): " <<
-        message.errstr() << std::endl;
+      status_name << ": " << message.errstr() << std::endl;
     if (message.key())
       std::cout << "Key: " << *(message.key()) << ";" << std::endl;
   }
@@ -141,10 +157,12 @@ class ExampleEventCb : public RdKafka::EventCb {
     switch (event.type())
     {
       case RdKafka::Event::EVENT_ERROR:
+        if (event.fatal()) {
+          std::cerr << "FATAL ";
+          run = false;
+        }
         std::cerr << "ERROR (" << RdKafka::err2str(event.err()) << "): " <<
             event.str() << std::endl;
-        if (event.err() == RdKafka::ERR__ALL_BROKERS_DOWN)
-          run = false;
         break;
 
       case RdKafka::Event::EVENT_STATS:

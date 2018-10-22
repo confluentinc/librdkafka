@@ -81,7 +81,8 @@ typedef	enum {
 	_RK_PRODUCER = 0x2,
 	_RK_CONSUMER = 0x4,
 	_RK_TOPIC = 0x8,
-        _RK_CGRP = 0x10
+        _RK_CGRP = 0x10,
+        _RK_DEPRECATED = 0x20
 } rd_kafka_conf_scope_t;
 
 typedef enum {
@@ -100,6 +101,19 @@ typedef enum {
 
 
 
+/* Increase in steps of 64 as needed. */
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64*24)
+
+/**
+ * @struct rd_kafka_anyconf_t
+ * @brief The anyconf header must be the first field in the
+ *        rd_kafka_conf_t and rd_kafka_topic_conf_t structs.
+ *        It provides a way to track which property has been modified.
+ */
+struct rd_kafka_anyconf_hdr {
+        uint64_t modified[RD_KAFKA_CONF_PROPS_IDX_MAX/64];
+};
+
 
 /**
  * Optional configuration struct passed to rd_kafka_new*().
@@ -109,6 +123,8 @@ typedef enum {
  *
  */
 struct rd_kafka_conf_s {
+        struct rd_kafka_anyconf_hdr hdr;  /**< Must be first field */
+
 	/*
 	 * Generic configuration
 	 */
@@ -137,7 +153,11 @@ struct rd_kafka_conf_s {
 	char   *brokerlist;
 	int     stats_interval_ms;
 	int     term_sig;
+        int     reconnect_backoff_ms;
+        int     reconnect_backoff_max_ms;
         int     reconnect_jitter_ms;
+        int     sparse_connections;
+        int     sparse_connect_intvl;
 	int     api_version_request;
 	int     api_version_request_timeout_ms;
 	int     api_version_fallback_ms;
@@ -258,6 +278,12 @@ struct rd_kafka_conf_s {
 	/*
 	 * Producer configuration
 	 */
+        struct {
+                int    idempotence;  /**< Enable Idempotent Producer */
+                rd_bool_t gapless;   /**< Raise fatal error if
+                                      *   gapless guarantee can't be
+                                      *   satisfied. */
+        } eos;
 	int    queue_buffering_max_msgs;
 	int    queue_buffering_max_kbytes;
 	int    buffering_max_ms;
@@ -367,6 +393,8 @@ int rd_kafka_open_cb_generic (const char *pathname, int flags, mode_t mode,
 
 
 struct rd_kafka_topic_conf_s {
+        struct rd_kafka_anyconf_hdr hdr;  /**< Must be first field */
+
 	int     required_acks;
 	int32_t request_timeout_ms;
 	int     message_timeout_ms;
@@ -402,7 +430,18 @@ struct rd_kafka_topic_conf_s {
 
 void rd_kafka_anyconf_destroy (int scope, void *conf);
 
+const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
+                                    rd_kafka_conf_t *conf);
+const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
+                                          const rd_kafka_conf_t *conf,
+                                          rd_kafka_topic_conf_t *tconf);
+
+
+int rd_kafka_conf_warn_deprecated (rd_kafka_t *rk);
+
 
 #include "rdkafka_confval.h"
+
+int unittest_conf (void);
 
 #endif /* _RDKAFKA_CONF_H_ */

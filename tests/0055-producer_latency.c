@@ -192,12 +192,12 @@ int main_0055_producer_latency (int argc, char **argv) {
                   {"queue.buffering.max.ms", "0", NULL}, 0, 0 },
                 { "high queue.buffering.max.ms",
                   {"queue.buffering.max.ms", "3000", NULL}, 3000, 3100},
-                { "queue.buffering.max.ms < socket.blocking.max.ms",
-                  {"queue.buffering.max.ms", "500",
-                   "socket.blocking.max.ms", "3000", NULL}, 500, 600 },
+                { "queue.buffering.max.ms < 1000", /* internal block_max_ms */
+                  {"queue.buffering.max.ms", "500", NULL}, 500, 600 },
                 { "no acks",
                   {"queue.buffering.max.ms", "0",
-                   "acks", "0", NULL}, 0, 0 },
+                   "acks", "0",
+                   "enable.idempotence", "false", NULL}, 0, 0 },
                 { NULL }
         };
         struct latconf *latconf;

@@ -216,7 +216,10 @@ static RD_INLINE int rd_timeout_remains (rd_ts_t abs_timeout) {
             timeout_us == RD_POLL_NOWAIT)
                 return (int)timeout_us;
 
-        return (int)(timeout_us / 1000);
+        /* + 999: Round up to millisecond to
+         * avoid busy-looping during the last
+         * millisecond. */
+        return (int)((timeout_us + 999) / 1000);
 }
 
 /**

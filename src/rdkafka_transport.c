@@ -1472,6 +1472,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 
 	case RD_KAFKA_BROKER_STATE_INIT:
 	case RD_KAFKA_BROKER_STATE_DOWN:
+        case RD_KAFKA_BROKER_STATE_TRY_CONNECT:
 		rd_kafka_assert(rkb->rkb_rk, !*"bad state");
 	}
 }
@@ -1664,11 +1665,10 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 
         if (rktrans->rktrans_pfd[1].revents & POLLIN) {
                 /* Read wake-up fd data and throw away, just used for wake-ups*/
-                char buf[512];
-                if (rd_read((int)rktrans->rktrans_pfd[1].fd,
-                            buf, sizeof(buf)) == -1) {
-                        /* Ignore warning */
-                }
+                char buf[1024];
+                while (rd_read((int)rktrans->rktrans_pfd[1].fd,
+                               buf, sizeof(buf)) > 0)
+                        ; /* Read all buffered signalling bytes */
         }
 
         return rktrans->rktrans_pfd[0].revents;

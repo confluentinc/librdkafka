@@ -32,6 +32,8 @@
 #include <stdio.h>
 
 
+extern int rd_unittest_assert_on_failure;
+
 /**
  * @brief Fail the current unit-test function.
  */
@@ -40,6 +42,8 @@
                         __FILE__, __LINE__, __FUNCTION__);              \
                 fprintf(stderr, __VA_ARGS__);                           \
                 fprintf(stderr, "\033[0m\n");                           \
+                if (rd_unittest_assert_on_failure)                      \
+                        rd_assert(!*"unittest failure");                \
                 return 1;                                               \
         } while (0)
 
@@ -57,14 +61,28 @@
  */
 #define RD_UT_ASSERT(expr,...) do {                                     \
         if (!(expr)) {                                                  \
-        fprintf(stderr,                                                 \
-                "\033[31mRDUT: FAIL: %s:%d: %s: assert failed: " # expr ": ", \
-                __FILE__, __LINE__, __FUNCTION__);                      \
-        fprintf(stderr, __VA_ARGS__);                                   \
-        fprintf(stderr, "\033[0m\n");                                   \
-        return 1;                                                       \
+                fprintf(stderr,                                         \
+                        "\033[31mRDUT: FAIL: %s:%d: %s: assert failed: " # expr ": ", \
+                        __FILE__, __LINE__, __FUNCTION__);              \
+                fprintf(stderr, __VA_ARGS__);                           \
+                fprintf(stderr, "\033[0m\n");                           \
+                if (rd_unittest_assert_on_failure)                      \
+                        rd_assert(expr);                                \
+                return 1;                                               \
         }                                                               \
          } while (0)
+
+
+/**
+ * @brief Check that value \p V is within inclusive range \p VMIN .. \p VMAX,
+ *        else asserts.
+ *
+ * @param VFMT is the printf formatter for \p V's type
+ */
+#define RD_UT_ASSERT_RANGE(V,VMIN,VMAX,VFMT)                            \
+        RD_UT_ASSERT((VMIN) <= (V) && (VMAX) >= (V),                    \
+                     VFMT" out of range "VFMT" .. "VFMT,                \
+                     (V), (VMIN), (VMAX))
 
 
 /**

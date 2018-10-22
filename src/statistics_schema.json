@@ -1,6 +1,6 @@
 { "$schema": "http://json-schema.org/schema#",
   "id": "https://github.com/edenhill/librdkafka/src/statistics_schema.json",
-  "title": "librdkafka statistics schema",
+  "title": "librdkafka statistics schema - INCOMPLETE - WORK IN PROGRESS",
   "definitions": {
       "window": {
           "type": "object",
@@ -325,6 +325,9 @@
                                           "type": "integer"
                                       },
                                       "rx_ver_drops": {
+                                          "type": "integer"
+                                      },
+                                      "msgs_inflight": {
                                           "type": "integer"
                                       }
                                   },

@@ -107,6 +107,7 @@ rd_kafka_msg_t *rd_kafka_msg_new00 (rd_kafka_itopic_t *rkt,
         rkm->rkm_offset     = RD_KAFKA_OFFSET_INVALID;
 	rkm->rkm_timestamp  = 0;
 	rkm->rkm_tstype     = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE;
+        rkm->rkm_status     = RD_KAFKA_MSG_STATUS_NOT_PERSISTED;
         rkm->rkm_headers    = NULL;
 
 	p = (char *)(rkm+1);
@@ -245,6 +246,11 @@ int rd_kafka_msg_new (rd_kafka_itopic_t *rkt, int32_t force_partition,
 	rd_kafka_resp_err_t err;
 	int errnox;
 
+        if (unlikely((err = rd_kafka_fatal_error_code(rkt->rkt_rk)))) {
+                rd_kafka_set_last_error(err, ECANCELED);
+                return -1;
+        }
+
         /* Create message */
         rkm = rd_kafka_msg_new0(rkt, force_partition, msgflags,
                                 payload, len, key, keylen, msg_opaque,
@@ -301,9 +307,12 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         rd_kafka_topic_t *app_rkt;
         shptr_rd_kafka_itopic_t *s_rkt = NULL;
         rd_kafka_itopic_t *rkt;
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_resp_err_t err;
         rd_kafka_headers_t *hdrs = NULL;
         rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
+
+        if (unlikely((err = rd_kafka_fatal_error_code(rk))))
+                return err;
 
         va_start(ap, rk);
         while (!err &&
@@ -441,6 +450,25 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...) {
         return err;
 }
 
+
+
+/**
+ * @brief Produce a single message.
+ * @locality any application thread
+ * @locks none
+ */
+int rd_kafka_produce (rd_kafka_topic_t *rkt, int32_t partition,
+                      int msgflags,
+                      void *payload, size_t len,
+                      const void *key, size_t keylen,
+                      void *msg_opaque) {
+        return rd_kafka_msg_new(rd_kafka_topic_a2i(rkt), partition,
+                                msgflags, payload, len,
+                                key, keylen, msg_opaque);
+}
+
+
+
 /**
  * Produce a batch of messages.
  * Returns the number of messages succesfully queued for producing.
@@ -456,10 +484,13 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
         int good = 0;
         int multiple_partitions = (partition == RD_KAFKA_PARTITION_UA ||
                                    (msgflags & RD_KAFKA_MSG_F_PARTITION));
-        rd_kafka_resp_err_t all_err = 0;
+        rd_kafka_resp_err_t all_err;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
         rd_kafka_toppar_t *rktp = NULL;
         shptr_rd_kafka_toppar_t *s_rktp = NULL;
+
+        /* Propagated per-message below */
+        all_err = rd_kafka_fatal_error_code(rkt->rkt_rk);
 
         /* For multiple partitions; hold lock for entire run,
          * for one partition: only acquire for now. */
@@ -620,6 +651,34 @@ rd_kafka_msg_t *rd_kafka_msgq_find_pos (const rd_kafka_msgq_t *rkmq,
         }
 
         return (rd_kafka_msg_t *)last;
+}
+
+
+/**
+ * @brief Set per-message metadata for all messages in \p rkmq
+ */
+void rd_kafka_msgq_set_metadata (rd_kafka_msgq_t *rkmq,
+                                 int64_t base_offset, int64_t timestamp,
+                                 rd_kafka_msg_status_t status) {
+        rd_kafka_msg_t *rkm;
+
+        TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
+                rkm->rkm_offset = base_offset++;
+                if (timestamp != -1) {
+                        rkm->rkm_timestamp = timestamp;
+                        rkm->rkm_tstype = RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME;
+                }
+
+                /* Don't downgrade a message from any form of PERSISTENT
+                 * to NOT_PERSISTENT, since the original cause of indicating
+                 * PERSISTENT can't be changed.
+                 * E.g., a previous ack or in-flight timeout. */
+                if (unlikely(status == RD_KAFKA_MSG_STATUS_NOT_PERSISTED &&
+                             rkm->rkm_status != RD_KAFKA_MSG_STATUS_NOT_PERSISTED))
+                        continue;
+
+                rkm->rkm_status = status;
+        }
 }
 
 
@@ -1085,6 +1144,16 @@ void rd_kafka_message_set_headers (rd_kafka_message_t *rkmessage,
 
 
 
+rd_kafka_msg_status_t
+rd_kafka_message_status (const rd_kafka_message_t *rkmessage) {
+        rd_kafka_msg_t *rkm;
+
+        rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+
+        return rkm->rkm_status;
+}
+
+
 void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {
         rd_kafka_msg_t *rkm;
 
@@ -1268,12 +1337,47 @@ static int unittest_msgq_order (const char *what, int fifo,
 
 }
 
+/**
+ * @brief Verify that rd_kafka_seq_wrap() works.
+ */
+static int unittest_msg_seq_wrap (void) {
+        static const struct exp {
+                int64_t in;
+                int32_t out;
+        } exp[] = {
+                { 0,  0 },
+                { 1, 1 },
+                { (int64_t)INT32_MAX+2, 1 },
+                { (int64_t)INT32_MAX+1, 0 },
+                { INT32_MAX, INT32_MAX },
+                { INT32_MAX-1, INT32_MAX-1 },
+                { INT32_MAX-2, INT32_MAX-2 },
+                { ((int64_t)1<<33)-2, INT32_MAX-1 },
+                { ((int64_t)1<<33)-1, INT32_MAX },
+                { ((int64_t)1<<34), 0 },
+                { ((int64_t)1<<35)+3, 3 },
+                { 1710+1229, 2939 },
+                { -1, -1 },
+        };
+        int i;
+
+        for (i = 0 ; exp[i].in != -1 ; i++) {
+                int32_t wseq = rd_kafka_seq_wrap(exp[i].in);
+                RD_UT_ASSERT(wseq == exp[i].out,
+                             "Expected seq_wrap(%"PRId64") -> %"PRId32
+                             ", not %"PRId32,
+                             exp[i].in, exp[i].out, wseq);
+        }
+
+        RD_UT_PASS();
+}
 
 int unittest_msg (void) {
         int fails = 0;
 
         fails += unittest_msgq_order("FIFO", 1, rd_kafka_msg_cmp_msgseq);
         fails += unittest_msgq_order("LIFO", 0, rd_kafka_msg_cmp_msgseq_lifo);
+        fails += unittest_msg_seq_wrap();
 
         return fails;
 }

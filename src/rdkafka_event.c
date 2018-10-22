@@ -176,6 +176,10 @@ const char *rd_kafka_event_error_string (rd_kafka_event_t *rkev) {
         return rd_kafka_err2str(rkev->rko_err);
 }
 
+int rd_kafka_event_error_is_fatal (rd_kafka_event_t *rkev) {
+        return rkev->rko_u.err.fatal;
+}
+
 
 void *rd_kafka_event_opaque (rd_kafka_event_t *rkev) {
 	switch (rkev->rko_type & ~RD_KAFKA_OP_FLAGMASK)

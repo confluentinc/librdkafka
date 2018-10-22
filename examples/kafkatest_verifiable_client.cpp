@@ -652,9 +652,6 @@ int main (int argc, char **argv) {
 
   conf->set("log.thread.name", "true", errstr);
 
-  /* correct producer offsets */
-  conf->set("produce.offset.report", "true", errstr);
-
   /* auto commit is explicitly enabled with --enable-autocommit */
   conf->set("enable.auto.commit", "false", errstr);
 

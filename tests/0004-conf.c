@@ -162,6 +162,15 @@ static void do_test_kafka_new_failures (void) {
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "kafka_new() failed: %s", errstr);
         rd_kafka_destroy(rk);
+
+        /* set conflicting properties */
+        conf = rd_kafka_conf_new();
+        test_conf_set(conf, "acks", "1");
+        test_conf_set(conf, "enable.idempotence", "true");
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(!rk, "kafka_new() should have failed");
+        rd_kafka_conf_destroy(conf);
+        TEST_SAY(_C_GRN "Ok: %s\n", errstr);
 }
 
 
@@ -214,6 +223,92 @@ static void do_test_special_invalid_conf (void) {
         TEST_SAY(_C_GRN "Ok: %s\n" _C_CLR, errstr);
 
         rd_kafka_conf_destroy(conf);
+}
+
+
+/**
+ * @brief Verify idempotence configuration constraints
+ */
+static void do_test_idempotence_conf (void) {
+        static const struct {
+                const char *prop;
+                const char *val;
+                rd_bool_t topic_conf;
+                rd_bool_t exp_rk_fail;
+                rd_bool_t exp_rkt_fail;
+        } check[] = {
+                { "acks", "1", rd_true, rd_false, rd_true },
+                { "acks", "all", rd_true, rd_false, rd_false },
+                { "queuing.strategy", "lifo", rd_true, rd_false, rd_true },
+                { NULL }
+        };
+        int i;
+
+        for (i = 0 ; check[i].prop ; i++) {
+                int j;
+
+                for (j = 0 ; j < 1 + (check[i].topic_conf ? 1 : 0) ; j++) {
+                        /* j = 0: set on global config
+                        *  j = 1: set on topic config */
+                        rd_kafka_conf_t *conf;
+                        rd_kafka_topic_conf_t *tconf = NULL;
+                        rd_kafka_t *rk;
+                        rd_kafka_topic_t *rkt;
+                        char errstr[512];
+
+                        conf = rd_kafka_conf_new();
+                        test_conf_set(conf, "enable.idempotence", "true");
+
+                        if (j == 0)
+                                test_conf_set(conf, check[i].prop, check[i].val);
+
+
+                        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,
+                                          errstr, sizeof(errstr));
+
+                        if (!rk) {
+                                /* default topic config (j=0) will fail. */
+                                TEST_ASSERT(check[i].exp_rk_fail ||
+                                            (j == 0 && check[i].exp_rkt_fail &&
+                                             check[i].topic_conf),
+                                            "Did not expect config #%d.%d "
+                                            "to fail: %s",
+                                            i, j, errstr);
+
+                                rd_kafka_conf_destroy(conf);
+                                continue;
+
+                        } else {
+                                TEST_ASSERT(!check[i].exp_rk_fail,
+                                            "Expect config #%d.%d to fail");
+                        }
+
+                        if (j == 1) {
+                                tconf = rd_kafka_topic_conf_new();
+                                test_topic_conf_set(tconf, check[i].prop,
+                                                    check[i].val);
+                        }
+
+                        rkt = rd_kafka_topic_new(rk, "mytopic", tconf);
+                        if (!rkt) {
+                                TEST_ASSERT(check[i].exp_rkt_fail,
+                                            "Did not expect topic config "
+                                            "#%d.%d to fail: %s",
+                                            i, j,
+                                            rd_kafka_err2str(
+                                                    rd_kafka_last_error()));
+
+
+                        } else {
+                                TEST_ASSERT(!check[i].exp_rkt_fail,
+                                            "Expect topic config "
+                                            "#%d.%d to fail");
+                                rd_kafka_topic_destroy(rkt);
+                        }
+
+                        rd_kafka_destroy(rk);
+                }
+        }
 }
 
 
@@ -493,6 +588,8 @@ int main_0004_conf (int argc, char **argv) {
         do_test_kafka_new_failures();
 
         do_test_special_invalid_conf();
+
+        do_test_idempotence_conf();
 
 	return 0;
 }

@@ -108,6 +108,8 @@ class EventImpl : public Event {
   int         broker_id () const { return id_; }
   int         throttle_time () const { return throttle_time_; }
 
+  bool        fatal () const { return fatal_; }
+
   Type        type_;
   ErrorCode   err_;
   Severity    severity_;
@@ -115,6 +117,7 @@ class EventImpl : public Event {
   std::string str_;         /* reused for THROTTLE broker_name */
   int         id_;
   int         throttle_time_;
+  bool        fatal_;
 };
 
 
@@ -204,6 +207,10 @@ class MessageImpl : public Message {
 
   struct rd_kafka_message_s *c_ptr () {
           return rkmessage_;
+  }
+
+  Status status () const {
+          return static_cast<Status>(rd_kafka_message_status(rkmessage_));
   }
 
   RdKafka::Topic *topic_;
@@ -611,6 +618,16 @@ class HandleImpl : virtual public Handle {
           return rd_kafka_controllerid(rk_, timeout_ms);
   }
 
+  ErrorCode fatal_error (std::string &errstr) {
+          char errbuf[512];
+          RdKafka::ErrorCode err =
+                  static_cast<RdKafka::ErrorCode>(
+                          rd_kafka_fatal_error(rk_, errbuf, sizeof(errbuf)));
+          if (err)
+                  errstr = errbuf;
+          return err;
+  };
+
 
   rd_kafka_t *rk_;
   /* All Producer and Consumer callbacks must reside in HandleImpl and
@@ -851,7 +868,9 @@ class QueueImpl : virtual public Queue {
 class ConsumerImpl : virtual public Consumer, virtual public HandleImpl {
  public:
   ~ConsumerImpl () {
-    rd_kafka_destroy(rk_); };
+    if (rk_)
+      rd_kafka_destroy(rk_);
+  };
   static Consumer *create (Conf *conf, std::string &errstr);
 
   ErrorCode start (Topic *topic, int32_t partition, int64_t offset);
@@ -902,6 +921,11 @@ class ProducerImpl : virtual public Producer, virtual public HandleImpl {
   ErrorCode flush (int timeout_ms) {
 	  return static_cast<RdKafka::ErrorCode>(rd_kafka_flush(rk_,
 								timeout_ms));
+  }
+
+  ErrorCode purge (int purge_flags) {
+	  return static_cast<RdKafka::ErrorCode>(rd_kafka_purge(rk_,
+                                                                (int)purge_flags));
   }
 
   static Producer *create (Conf *conf, std::string &errstr);

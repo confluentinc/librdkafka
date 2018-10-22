@@ -114,6 +114,8 @@ struct test {
 	int report_size;
 
         rd_kafka_resp_err_t exp_dr_err; /* Expected error in test_dr_cb */
+        rd_kafka_msg_status_t exp_dr_status; /**< Expected delivery status,
+                                              *   or -1 for not checking. */
         int produce_sync;    /**< test_produce_sync() call in action */
         rd_kafka_resp_err_t produce_sync_err;  /**< DR error */
 
@@ -214,6 +216,16 @@ void test_fail0 (const char *file, int line, const char *function,
                       TEST_FAIL("Test assertion failed: \"" # expr  "\": " \
                                 __VA_ARGS__);                           \
                       }                                                 \
+        } while (0)
+
+
+/* "..." is a failure reason in printf format, include as much info as needed */
+#define TEST_ASSERT_LATER(expr,...) do {                                \
+                if (!(expr)) {                                          \
+                        TEST_FAIL0(__FILE__, __LINE__, 1, 0,            \
+                                   "Test assertion failed: \"" # expr  "\": " \
+                                   __VA_ARGS__);                        \
+                }                                                       \
         } while (0)
 
 /* Skip the current test. Argument is textual reason (printf format) */
@@ -405,8 +417,8 @@ rd_kafka_t *test_create_handle (int mode, rd_kafka_conf_t *conf);
  * Delivery reported callback.
  * Called for each message once to signal its delivery status.
  */
-void test_dr_cb (rd_kafka_t *rk, void *payload, size_t len,
-                 rd_kafka_resp_err_t err, void *opaque, void *msg_opaque);
+void test_dr_msg_cb (rd_kafka_t *rk,
+                     const rd_kafka_message_t *rkmessage, void *opaque);
 
 rd_kafka_t *test_create_producer (void);
 rd_kafka_topic_t *test_create_producer_topic(rd_kafka_t *rk,
@@ -529,6 +541,7 @@ void test_prepare_msg (uint64_t testid, int32_t partition, int msg_id,
 void test_socket_enable (rd_kafka_conf_t *conf);
 void test_socket_close_all (struct test *test, int reinit);
 int  test_socket_sockem_set_all (const char *key, int val);
+void test_socket_sockem_set (int s, const char *key, int value);
 #endif
 
 void test_headers_dump (const char *what, int lvl,

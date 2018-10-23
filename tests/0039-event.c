@@ -93,7 +93,7 @@ int main_0039_event_dr (int argc, char **argv) {
 	test_conf_init(&conf, &topic_conf, 10);
 
 	/* Set delivery report callback */
-	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+	rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
 	rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_DR);
 
@@ -195,7 +195,9 @@ int main_0039_event (int argc, char **argv) {
                 switch (rd_kafka_event_type(rkev))
                 {
                 case RD_KAFKA_EVENT_ERROR:
-                        TEST_SAY("Got %s event: %s: %s\n",
+                        TEST_SAY("Got %s%s event: %s: %s\n",
+                                 rd_kafka_event_error_is_fatal(rkev) ?
+                                 "FATAL " : "",
                                  rd_kafka_event_name(rkev),
                                  rd_kafka_err2name(rd_kafka_event_error(rkev)),
                                  rd_kafka_event_error_string(rkev));

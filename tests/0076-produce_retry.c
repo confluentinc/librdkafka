@@ -138,7 +138,10 @@ static void set_delay (int after, int delay) {
  *
  * @param should_fail If true, do negative testing which should fail.
  */
-static void do_test_produce_retries (const char *topic, int should_fail) {
+static void do_test_produce_retries (const char *topic,
+                                     int idempotence,
+                                     int try_fail,
+                                     int should_fail) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_t *rkt;
@@ -146,7 +149,9 @@ static void do_test_produce_retries (const char *topic, int should_fail) {
         rd_kafka_resp_err_t err;
         int msgcnt = 1;
 
-        TEST_SAY(_C_BLU "Test produce retries (should_fail=%d)\n", should_fail);
+        TEST_SAY(_C_BLU "Test produce retries "
+                 "(idempotence=%d,try_fail=%d,should_fail=%d)\n",
+                 idempotence, try_fail, should_fail);
 
         memset(&ctrl, 0, sizeof(ctrl));
         mtx_init(&ctrl.lock, mtx_plain);
@@ -155,17 +160,38 @@ static void do_test_produce_retries (const char *topic, int should_fail) {
         testid = test_id_generate();
 
         test_conf_init(&conf, NULL, 60);
+
+        if (should_fail &&
+            !strcmp(test_conf_get(conf, "enable.sparse.connections"),
+                    "true")) {
+                rd_kafka_conf_destroy(conf);
+                TEST_SKIP("Sparse connections enabled: "
+                          "skipping connection-timing related test\n");
+                return;
+        }
+
         test_conf_set(conf, "socket.timeout.ms", "1000");
         /* Avoid disconnects on request timeouts */
         test_conf_set(conf, "socket.max.fails", "100");
-        if (!should_fail) {
+        test_conf_set(conf, "enable.idempotence", idempotence?"true":"false");
+        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_curr->exp_dr_status = RD_KAFKA_MSG_STATUS_PERSISTED;
+        if (!try_fail) {
                 test_conf_set(conf, "retries", "5");
         } else {
-                test_conf_set(conf, "retries", "0");
-                test_curr->exp_dr_err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
+                /* enable.idempotence=true request retries >= 1 which
+                 * makes the test pass. Adjust expected error accordingly. */
+                if (idempotence)
+                        test_conf_set(conf, "retries", "5");
+                else
+                        test_conf_set(conf, "retries", "0");
+                if (should_fail) {
+                        test_curr->exp_dr_err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
+                        test_curr->exp_dr_status = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+                }
         }
         test_conf_set(conf, "retry.backoff.ms", "5000");
-        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         test_socket_enable(conf);
         test_curr->is_fatal_cb = is_fatal_cb;
 
@@ -208,8 +234,9 @@ static void do_test_produce_retries (const char *topic, int should_fail) {
         cnd_destroy(&ctrl.cnd);
         mtx_destroy(&ctrl.lock);
 
-        TEST_SAY(_C_GRN "Test produce retries (should_fail=%d): PASS\n",
-                 should_fail);
+        TEST_SAY(_C_GRN "Test produce retries "
+                 "(idempotence=%d,try_fail=%d,should_fail=%d): PASS\n",
+                 idempotence, try_fail, should_fail);
 }
 #endif
 
@@ -281,6 +308,8 @@ static rd_kafka_resp_err_t on_new_producer (rd_kafka_t *rk,
  * @param should_fail If true, do negative testing which should fail.
  */
 static void do_test_produce_retries_disconnect (const char *topic,
+                                                int idempotence,
+                                                int try_fail,
                                                 int should_fail) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
@@ -290,21 +319,27 @@ static void do_test_produce_retries_disconnect (const char *topic,
         int msgcnt = 1;
         int partition_cnt;
 
-        TEST_SAY(_C_BLU "Test produce retries by disconnect (should_fail=%d)\n",
-                 should_fail);
+        TEST_SAY(_C_BLU "Test produce retries by disconnect "
+                 "(idempotence=%d,try_fail=%d,should_fail=%d)\n",
+                 idempotence, try_fail, should_fail);
 
         test_curr->is_fatal_cb = is_fatal_cb;
 
         testid = test_id_generate();
 
         test_conf_init(&conf, NULL, 60);
-        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         test_conf_set(conf, "socket.timeout.ms", "10000");
         test_conf_set(conf, "message.timeout.ms", "30000");
-        if (!should_fail)
+        test_conf_set(conf, "enable.idempotence", idempotence?"true":"false");
+        if (!try_fail) {
                 test_conf_set(conf, "retries", "1");
-        else
-                test_conf_set(conf, "retries", "0");
+        } else {
+                /* enable.idempotence=true request retries >= 1 which
+                 * makes the test pass. */
+                if (!idempotence)
+                        test_conf_set(conf, "retries", "0");
+        }
 
         mtx_init(&produce_disconnect_lock, mtx_plain);
         produce_disconnects = 0;
@@ -347,8 +382,8 @@ static void do_test_produce_retries_disconnect (const char *topic,
                                partition_cnt, should_fail ? 0 : msgcnt, NULL);
 
         TEST_SAY(_C_GRN "Test produce retries by disconnect "
-                 "(should_fail=%d): PASS\n",
-                 should_fail);
+                 "(idempotence=%d,try_fail=%d,should_fail=%d): PASS\n",
+                 idempotence, try_fail, should_fail);
 }
 
 
@@ -356,12 +391,20 @@ int main_0076_produce_retry (int argc, char **argv) {
         const char *topic = test_mk_topic_name("0076_produce_retry", 1);
 
 #if WITH_SOCKEM
-        do_test_produce_retries(topic, 0/*good test*/);
-        do_test_produce_retries(topic, 1/*fail test*/);
+        /* Idempotence, no try fail, should succeed. */
+        do_test_produce_retries(topic, 1, 0, 0);
+        /* No idempotence, try fail, should fail. */
+        do_test_produce_retries(topic, 0, 1, 1);
+        /* Idempotence, try fail, should succeed. */
+        do_test_produce_retries(topic, 1, 1, 0);
 #endif
 
-        do_test_produce_retries_disconnect(topic, 0/*good test*/);
-        do_test_produce_retries_disconnect(topic, 1/*fail test*/);
+        /* Idempotence, no try fail, should succeed. */
+        do_test_produce_retries_disconnect(topic, 1, 0, 0);
+        /* No idempotence, try fail, should fail. */
+        do_test_produce_retries_disconnect(topic, 0, 1, 1);
+        /* Idempotence, try fail, should succeed. */
+        do_test_produce_retries_disconnect(topic, 1, 1, 0);
 
         return 0;
 }

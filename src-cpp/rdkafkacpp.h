@@ -106,7 +106,7 @@ namespace RdKafka {
  * @remark This value should only be used during compile time,
  *         for runtime checks of version use RdKafka::version()
  */
-#define RD_KAFKA_VERSION  0x000b06ff
+#define RD_KAFKA_VERSION  0x01000002
 
 /**
  * @brief Returns the librdkafka version as integer.
@@ -261,6 +261,20 @@ enum ErrorCode {
         ERR__UNDERFLOW = -155,
         /** Invalid type */
         ERR__INVALID_TYPE = -154,
+        /** Retry operation */
+        ERR__RETRY = -153,
+        /** Purged in queue */
+        ERR__PURGE_QUEUE = -152,
+        /** Purged in flight */
+        ERR__PURGE_INFLIGHT = -151,
+        /** Fatal error: see ::fatal_error() */
+        ERR__FATAL = -150,
+        /** Inconsistent state */
+        ERR__INCONSISTENT = -149,
+        /** Gap-less ordering would not be guaranteed if proceeding */
+        ERR__GAPLESS_GUARANTEE = -148,
+        /** Maximum poll interval exceeded */
+        ERR__MAX_POLL_EXCEEDED = -147,
 
         /** End internal error codes */
 	ERR__END = -100,
@@ -384,7 +398,43 @@ enum ErrorCode {
         /** Security features are disabled */
         ERR_SECURITY_DISABLED = 54,
         /** Operation not attempted */
-        ERR_OPERATION_NOT_ATTEMPTED = 55
+        ERR_OPERATION_NOT_ATTEMPTED = 55,
+        /** Disk error when trying to access log file on the disk */
+        ERR_KAFKA_STORAGE_ERROR = 56,
+        /** The user-specified log directory is not found in the broker config */
+        ERR_LOG_DIR_NOT_FOUND = 57,
+        /** SASL Authentication failed */
+        ERR_SASL_AUTHENTICATION_FAILED = 58,
+        /** Unknown Producer Id */
+        ERR_UNKNOWN_PRODUCER_ID = 59,
+        /** Partition reassignment is in progress */
+        ERR_REASSIGNMENT_IN_PROGRESS = 60,
+        /** Delegation Token feature is not enabled */
+        ERR_DELEGATION_TOKEN_AUTH_DISABLED = 61,
+        /** Delegation Token is not found on server */
+        ERR_DELEGATION_TOKEN_NOT_FOUND = 62,
+        /** Specified Principal is not valid Owner/Renewer */
+        ERR_DELEGATION_TOKEN_OWNER_MISMATCH = 63,
+        /** Delegation Token requests are not allowed on this connection */
+        ERR_DELEGATION_TOKEN_REQUEST_NOT_ALLOWED = 64,
+        /** Delegation Token authorization failed */
+        ERR_DELEGATION_TOKEN_AUTHORIZATION_FAILED = 65,
+        /** Delegation Token is expired */
+        ERR_DELEGATION_TOKEN_EXPIRED = 66,
+        /** Supplied principalType is not supported */
+        ERR_INVALID_PRINCIPAL_TYPE = 67,
+        /** The group is not empty */
+        ERR_NON_EMPTY_GROUP = 68,
+        /** The group id does not exist */
+        ERR_GROUP_ID_NOT_FOUND = 69,
+        /** The fetch session ID was not found */
+        ERR_FETCH_SESSION_ID_NOT_FOUND = 70,
+        /** The fetch session epoch is invalid */
+        ERR_INVALID_FETCH_SESSION_EPOCH = 71,
+        /** No matching listener */
+        ERR_LISTENER_NOT_FOUND = 72,
+        /** Topic deletion is disabled */
+        ERR_TOPIC_DELETION_DISABLED = 73
 };
 
 
@@ -612,6 +662,14 @@ class RD_EXPORT Event {
    * @remark Applies to THROTTLE event type.
    */
   virtual int         broker_id () const = 0;
+
+
+  /**
+   * @returns true if this is a fatal error.
+   * @remark Applies to ERROR event type.
+   * @sa RdKafka::Handle::fatal_error()
+   */
+  virtual bool        fatal () const = 0;
 };
 
 
@@ -1286,6 +1344,30 @@ class RD_EXPORT Handle {
    *          retrieved in the allotted timespan.
    */
   virtual int32_t controllerid (int timeout_ms) = 0;
+
+
+  /**
+   * @brief Returns the first fatal error set on this client instance,
+   *        or ERR_NO_ERROR if no fatal error has occurred.
+   *
+   * This function is to be used with the Idempotent Producer and
+   * the Event class for \c EVENT_ERROR events to detect fatal errors.
+   *
+   * Generally all errors raised by the error event are to be considered
+   * informational and temporary, the client will try to recover from all
+   * errors in a graceful fashion (by retrying, etc).
+   *
+   * However, some errors should logically be considered fatal to retain
+   * consistency; in particular a set of errors that may occur when using the
+   * Idempotent Producer and the in-order or exactly-once producer guarantees
+   * can't be satisfied.
+   *
+   * @param errstr A human readable error string if a fatal error was set.
+   *
+   * @returns ERR_NO_ERROR if no fatal error has been raised, else
+   *          any other error code.
+   */
+  virtual ErrorCode fatal_error (std::string &errstr) = 0;
 };
 
 
@@ -1471,6 +1553,25 @@ public:
  */
 class RD_EXPORT Message {
  public:
+  /** @brief Message persistance status can be used by the application to
+   *         find out if a produced message was persisted in the topic log. */
+  enum Status {
+    /**< Message was never transmitted to the broker, or failed with
+     *   an error indicating it was not written to the log.
+     *   Application retry risks ordering, but not duplication. */
+    MSG_STATUS_NOT_PERSISTED = 0,
+
+    /**< Message was transmitted to broker, but no acknowledgement was
+     *   received.
+     *   Application retry risks ordering and duplication. */
+    MSG_STATUS_POSSIBLY_PERSISTED = 1,
+
+    /**< Message was written to the log and fully acknowledged.
+     *   No reason for application to retry.
+     *   Note: this value should only be trusted with \c acks=all. */
+    MSG_STATUS_PERSISTED =  2
+  };
+
   /**
    * @brief Accessor functions*
    * @remark Not all fields are present in all types of callbacks.
@@ -1542,6 +1643,11 @@ class RD_EXPORT Message {
    * @returns \c rd_kafka_message_t*
    */
   virtual struct rd_kafka_message_s *c_ptr () = 0;
+
+  /**
+   * @brief Returns the message's persistance status in the topic log.
+   */
+  virtual Status status () const = 0;
 };
 
 /**@}*/
@@ -2119,15 +2225,17 @@ class RD_EXPORT Producer : public virtual Handle {
   /**
    * @brief RdKafka::Producer::produce() \p msgflags
    *
-   * These flags are optional and mutually exclusive.
+   * These flags are optional.
    */
   enum {
     RK_MSG_FREE = 0x1, /**< rdkafka will free(3) \p payload
-                         * when it is done with it. */
+                         * when it is done with it.
+                         * Mutually exclusive with RK_MSG_COPY. */
     RK_MSG_COPY = 0x2, /**< the \p payload data will be copied
                         * and the \p payload pointer will not
                         * be used by rdkafka after the
-                        * call returns. */
+                        * call returns.
+                        * Mutually exclusive with RK_MSG_FREE. */
     RK_MSG_BLOCK = 0x4  /**< Block produce*() on message queue
                          *   full.
                          *   WARNING:
@@ -2264,6 +2372,54 @@ class RD_EXPORT Producer : public virtual Handle {
    *          outstanding requests were completed, else ERR_NO_ERROR
    */
   virtual ErrorCode flush (int timeout_ms) = 0;
+
+
+  /**
+   * @brief Purge messages currently handled by the producer instance.
+   *
+   * @param purge_flags tells which messages should be purged and how.
+   *
+   * The application will need to call ::poll() or ::flush()
+   * afterwards to serve the delivery report callbacks of the purged messages.
+   *
+   * Messages purged from internal queues fail with the delivery report
+   * error code set to ERR__PURGE_QUEUE, while purged messages that
+   * are in-flight to or from the broker will fail with the error code set to
+   * ERR__PURGE_INFLIGHT.
+   *
+   * @warning Purging messages that are in-flight to or from the broker
+   *          will ignore any sub-sequent acknowledgement for these messages
+   *          received from the broker, effectively making it impossible
+   *          for the application to know if the messages were successfully
+   *          produced or not. This may result in duplicate messages if the
+   *          application retries these messages at a later time.
+   *
+   * @remark This call may block for a short time while background thread
+   *         queues are purged.
+   *
+   * @returns ERR_NO_ERROR on success,
+   *          ERR__INVALID_ARG if the \p purge flags are invalid or unknown,
+   *          ERR__NOT_IMPLEMENTED if called on a non-producer client instance.
+   */
+  virtual ErrorCode purge (int purge_flags) = 0;
+
+  /**
+   * @brief RdKafka::Handle::purge() \p purge_flags
+   */
+  enum {
+    PURGE_QUEUE = 0x1, /**< Purge messages in internal queues */
+
+    PURGE_INFLIGHT = 0x2, /*! Purge messages in-flight to or from the broker.
+                           *  Purging these messages will void any future
+                           *  acknowledgements from the broker, making it
+                           *  impossible for the application to know if these
+                           *  messages were successfully delivered or not.
+                           *  Retrying these messages may lead to duplicates. */
+
+    PURGE_NON_BLOCKING = 0x4 /* Don't wait for background queue
+                              * purging to finish. */
+  };
+
 };
 
 /**@}*/

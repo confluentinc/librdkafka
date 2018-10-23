@@ -71,7 +71,9 @@
 #if WITH_SNAPPY
 #include "snappy.h"
 #endif
-
+#if WITH_ZSTD
+#include "rdkafka_zstd.h"
+#endif
 
 
 struct msgset_v2_hdr {
@@ -345,6 +347,19 @@ rd_kafka_msgset_reader_decompress (rd_kafka_msgset_reader_t *msetr,
                         goto err;
         }
         break;
+
+#if WITH_ZSTD
+        case RD_KAFKA_COMPRESSION_ZSTD:
+        {
+                err = rd_kafka_zstd_decompress(msetr->msetr_rkb,
+                                              (char *)compressed,
+                                              compressed_size,
+                                              &iov.iov_base, &iov.iov_len);
+                if (err)
+                        goto err;
+        }
+        break;
+#endif
 
         default:
                 rd_rkb_dbg(msetr->msetr_rkb, MSG, "CODEC",

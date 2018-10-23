@@ -118,6 +118,8 @@ typedef enum {
         RD_KAFKA_OP_ALTERCONFIGS,    /**< Admin: AlterConfigs: u.admin_request*/
         RD_KAFKA_OP_DESCRIBECONFIGS, /**< Admin: DescribeConfigs: u.admin_request*/
         RD_KAFKA_OP_ADMIN_RESULT,    /**< Admin API .._result_t */
+        RD_KAFKA_OP_PURGE,           /**< Purge queues */
+        RD_KAFKA_OP_CONNECT,         /**< Connect (to broker) */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -283,6 +285,9 @@ struct rd_kafka_op_s {
 			int64_t offset;
 			char *errstr;
 			rd_kafka_msg_t rkm;
+                        int fatal;  /**< This was a ERR__FATAL error that has
+                                     *   been translated to the fatal error
+                                     *   code. */
 		} err;  /* used for ERR and CONSUMER_ERR */
 
 		struct {
@@ -412,6 +417,10 @@ struct rd_kafka_op_s {
                                            *   rd_kafka_AdminOptions_set_opaque
                                            */
                 } admin_result;
+
+                struct {
+                        int flags; /**< purge_flags from rd_kafka_purge() */
+                } purge;
 	} rko_u;
 };
 

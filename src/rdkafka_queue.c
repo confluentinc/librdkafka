@@ -39,6 +39,18 @@ void rd_kafka_yield (rd_kafka_t *rk) {
 
 
 /**
+ * @brief Check and reset yield flag.
+ * @returns rd_true if caller should yield, otherwise rd_false.
+ * @remarks rkq_lock MUST be held
+ */
+static RD_INLINE rd_bool_t rd_kafka_q_check_yield (rd_kafka_q_t *rkq) {
+        if (!(rkq->rkq_flags & RD_KAFKA_Q_F_YIELD))
+                return rd_false;
+
+        rkq->rkq_flags &= ~RD_KAFKA_Q_F_YIELD;
+        return rd_true;
+}
+/**
  * Destroy a queue. refcnt must be at zero.
  */
 void rd_kafka_q_destroy_final (rd_kafka_q_t *rkq) {
@@ -370,6 +382,11 @@ rd_kafka_op_t *rd_kafka_q_pop_serve (rd_kafka_q_t *rkq, int timeout_ms,
                                         break; /* Proper op, handle below. */
                         }
 
+                        if (unlikely(rd_kafka_q_check_yield(rkq))) {
+                                mtx_unlock(&rkq->rkq_lock);
+                                return NULL;
+                        }
+
                         if (cnd_timedwait_abs(&rkq->rkq_cond,
                                               &rkq->rkq_lock,
                                               &timeout_tspec) ==
@@ -441,6 +458,7 @@ int rd_kafka_q_serve (rd_kafka_q_t *rkq, int timeout_ms,
 
         /* Wait for op */
         while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
+               !rd_kafka_q_check_yield(rkq) &&
                cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
                                  &timeout_tspec) == thrd_success)
                 ;
@@ -529,6 +547,7 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
                 mtx_lock(&rkq->rkq_lock);
 
                 while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
+                       !rd_kafka_q_check_yield(rkq) &&
                        cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
                                          &timeout_tspec) != thrd_timedout)
                         ;

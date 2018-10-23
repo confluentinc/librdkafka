@@ -480,21 +480,23 @@ static void rd_kafka_transport_libcrypto_THREADID_callback(CRYPTO_THREADID *id)
  * Global OpenSSL cleanup.
  */
 void rd_kafka_transport_ssl_term (void) {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	int i;
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-	CRYPTO_set_id_callback(NULL);
-	CRYPTO_set_locking_callback(NULL);
-    EVP_cleanup();
-	ERR_free_strings();
-    CRYPTO_cleanup_all_ex_data();
-        CRYPTO_cleanup_all_ex_data();
+	if (CRYPTO_get_locking_callback() == &rd_kafka_transport_ssl_lock_cb) {
+		CRYPTO_set_locking_callback(NULL);
+#ifdef HAVE_OPENSSL_CRYPTO_THREADID_SET_CALLBACK
+		CRYPTO_THREADID_set_callback(NULL);
+#else
+		CRYPTO_set_id_callback(NULL);
 #endif
 
-	for (i = 0 ; i < rd_kafka_ssl_locks_cnt ; i++)
-		mtx_destroy(&rd_kafka_ssl_locks[i]);
+		for (i = 0 ; i < rd_kafka_ssl_locks_cnt ; i++)
+			mtx_destroy(&rd_kafka_ssl_locks[i]);
 
-	rd_free(rd_kafka_ssl_locks);
+		rd_free(rd_kafka_ssl_locks);
+	}
+#endif
 }
 
 
@@ -505,19 +507,22 @@ void rd_kafka_transport_ssl_init (void) {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 	int i;
 	
-	rd_kafka_ssl_locks_cnt = CRYPTO_num_locks();
-	rd_kafka_ssl_locks = rd_malloc(rd_kafka_ssl_locks_cnt *
-				       sizeof(*rd_kafka_ssl_locks));
-	for (i = 0 ; i < rd_kafka_ssl_locks_cnt ; i++)
-		mtx_init(&rd_kafka_ssl_locks[i], mtx_plain);
+	if (!CRYPTO_get_locking_callback()) {
+		rd_kafka_ssl_locks_cnt = CRYPTO_num_locks();
+		rd_kafka_ssl_locks = rd_malloc(rd_kafka_ssl_locks_cnt *
+				               sizeof(*rd_kafka_ssl_locks));
+		for (i = 0 ; i < rd_kafka_ssl_locks_cnt ; i++)
+			mtx_init(&rd_kafka_ssl_locks[i], mtx_plain);
+
+		CRYPTO_set_locking_callback(rd_kafka_transport_ssl_lock_cb);
 
 #ifdef HAVE_OPENSSL_CRYPTO_THREADID_SET_CALLBACK
-    CRYPTO_THREADID_set_callback(rd_kafka_transport_libcrypto_THREADID_callback);
+		CRYPTO_THREADID_set_callback(rd_kafka_transport_libcrypto_THREADID_callback);
 #else
-    CRYPTO_set_id_callback(rd_kafka_transport_ssl_threadid_cb);
+		CRYPTO_set_id_callback(rd_kafka_transport_ssl_threadid_cb);
 #endif
-
-	CRYPTO_set_locking_callback(rd_kafka_transport_ssl_lock_cb);
+	}
+#endif
 	
 	SSL_load_error_strings();
 	SSL_library_init();
@@ -526,7 +531,6 @@ void rd_kafka_transport_ssl_init (void) {
 	OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
 	OpenSSL_add_all_algorithms();
-#endif
 }
 
 
@@ -1709,6 +1713,7 @@ static void rd_kafka_transport_io_event (rd_kafka_transport_t *rktrans,
 
 	case RD_KAFKA_BROKER_STATE_INIT:
 	case RD_KAFKA_BROKER_STATE_DOWN:
+        case RD_KAFKA_BROKER_STATE_TRY_CONNECT:
 		rd_kafka_assert(rkb->rkb_rk, !*"bad state");
 	}
 }
@@ -1901,11 +1906,10 @@ int rd_kafka_transport_poll(rd_kafka_transport_t *rktrans, int tmout) {
 
         if (rktrans->rktrans_pfd[1].revents & POLLIN) {
                 /* Read wake-up fd data and throw away, just used for wake-ups*/
-                char buf[512];
-                if (rd_read((int)rktrans->rktrans_pfd[1].fd,
-                            buf, sizeof(buf)) == -1) {
-                        /* Ignore warning */
-                }
+                char buf[1024];
+                while (rd_read((int)rktrans->rktrans_pfd[1].fd,
+                               buf, sizeof(buf)) > 0)
+                        ; /* Read all buffered signalling bytes */
         }
 
         return rktrans->rktrans_pfd[0].revents;

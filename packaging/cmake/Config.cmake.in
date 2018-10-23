@@ -6,6 +6,10 @@ if(@WITH_ZLIB@)
   find_dependency(ZLIB)
 endif()
 
+if(@WITH_ZSTD@)
+  find_dependency(ZSTD)
+endif()
+
 if(@WITH_SSL@)
   if(@WITH_BUNDLED_SSL@)
     # TODO: custom SSL library should be installed

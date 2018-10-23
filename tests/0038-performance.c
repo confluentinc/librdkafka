@@ -63,7 +63,7 @@ int main_0038_performance (int argc, char **argv) {
 		 msgcnt, (int)msgsize, topic, partition);
 	testid = test_id_generate();
 	test_conf_init(&conf, NULL, 120);
-	rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+	rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 	test_conf_set(conf, "queue.buffering.max.messages", "10000000");
         test_conf_set(conf, "linger.ms", "100");
 	rk = test_create_handle(RD_KAFKA_PRODUCER, conf);

@@ -100,29 +100,12 @@ static void logger (const rd_kafka_t *rk, int level,
 		level, fac, rk ? rd_kafka_name(rk) : NULL, buf);
 }
 
-/**
- * Message delivery report callback.
- * Called once for each message.
- * See rdkafka.h for more information.
- */
-static void msg_delivered (rd_kafka_t *rk,
-			   void *payload, size_t len,
-			   int error_code,
-			   void *opaque, void *msg_opaque) {
-
-	if (error_code)
-		fprintf(stderr, "%% Message delivery failed: %s\n",
-			rd_kafka_err2str(error_code));
-	else if (!quiet)
-		fprintf(stderr, "%% Message delivered (%zd bytes): %.*s\n", len,
-			(int)len, (const char *)payload);
-}
 
 /**
  * Message delivery report callback using the richer rd_kafka_message_t object.
  */
-static void msg_delivered2 (rd_kafka_t *rk,
-                            const rd_kafka_message_t *rkmessage, void *opaque) {
+static void msg_delivered (rd_kafka_t *rk,
+                           const rd_kafka_message_t *rkmessage, void *opaque) {
 	printf("del: %s: offset %"PRId64"\n",
 	       rd_kafka_err2str(rkmessage->err), rkmessage->offset);
         if (rkmessage->err)
@@ -309,7 +292,6 @@ int main (int argc, char **argv) {
 	rd_kafka_topic_conf_t *topic_conf;
 	char errstr[512];
 	int64_t start_offset = 0;
-        int report_offsets = 0;
 	int do_conf_dump = 0;
 	char tmp[16];
         int64_t seek_offset = 0;
@@ -364,8 +346,6 @@ int main (int argc, char **argv) {
 				tmp_offset = RD_KAFKA_OFFSET_BEGINNING;
 			else if (!strcmp(optarg, "stored"))
 				tmp_offset = RD_KAFKA_OFFSET_STORED;
-                        else if (!strcmp(optarg, "report"))
-                                report_offsets = 1;
 			else if (!strcmp(optarg, "wmark"))
 				get_wmarks = 1;
 			else {
@@ -551,7 +531,6 @@ int main (int argc, char **argv) {
 			"                  beginning, end, NNNNN or -NNNNN\n"
 			"                  wmark returns the current hi&lo "
 			"watermarks.\n"
-                        "  -o report       Report message offsets (producer)\n"
 			"  -e              Exit consumer when last message\n"
 			"                  in partition has been received.\n"
 			"  -d [facs..]     Enable debugging contexts:\n"
@@ -601,16 +580,7 @@ int main (int argc, char **argv) {
 		/* Set up a message delivery report callback.
 		 * It will be called once for each message, either on successful
 		 * delivery to broker, or upon failure to deliver to broker. */
-
-                /* If offset reporting (-o report) is enabled, use the
-                 * richer dr_msg_cb instead. */
-                if (report_offsets) {
-                        rd_kafka_topic_conf_set(topic_conf,
-                                                "produce.offset.report",
-                                                "true", errstr, sizeof(errstr));
-                        rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered2);
-                } else
-                        rd_kafka_conf_set_dr_cb(conf, msg_delivered);
+                rd_kafka_conf_set_dr_msg_cb(conf, msg_delivered);
 
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf,

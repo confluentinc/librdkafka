@@ -68,7 +68,6 @@ static FILE *stats_fp;
 static int dr_disp_div;
 static int verbosity = 1;
 static int latency_mode = 0;
-static int report_offset = 0;
 static FILE *latency_fp = NULL;
 static int msgcnt = -1;
 static int incremental_mode = 0;
@@ -131,8 +130,15 @@ uint64_t wall_clock (void) {
 }
 
 static void err_cb (rd_kafka_t *rk, int err, const char *reason, void *opaque) {
-	printf("%% ERROR CALLBACK: %s: %s: %s\n",
-	       rd_kafka_name(rk), rd_kafka_err2str(err), reason);
+        if (err == RD_KAFKA_RESP_ERR__FATAL) {
+                char errstr[512];
+                err = rd_kafka_fatal_error(rk, errstr, sizeof(errstr));
+                printf("%% FATAL ERROR CALLBACK: %s: %s: %s\n",
+                       rd_kafka_name(rk), rd_kafka_err2str(err), errstr);
+        } else {
+                printf("%% ERROR CALLBACK: %s: %s: %s\n",
+                       rd_kafka_name(rk), rd_kafka_err2str(err), reason);
+        }
 }
 
 static void throttle_cb (rd_kafka_t *rk, const char *broker_name,
@@ -227,8 +233,7 @@ static void msg_delivered (rd_kafka_t *rk,
 		last = now;
 	}
 
-        if (report_offset)
-                cnt.last_offset = rkmessage->offset;
+        cnt.last_offset = rkmessage->offset;
 
 	if (msgs_wait_produce_cnt == 0 && msgs_wait_cnt == 0 && !forever) {
 		if (verbosity >= 2)
@@ -502,8 +507,7 @@ static void print_stats (rd_kafka_t *rk,
                                 COL_HDR("dr_err");
                                 COL_HDR("tx_err");
                                 COL_HDR("outq");
-                                if (report_offset)
-                                        COL_HDR("offset");
+                                COL_HDR("offset");
                                 if (latency_mode) {
                                         COL_HDR("lat_curr");
                                         COL_HDR("lat_avg");
@@ -528,8 +532,7 @@ static void print_stats (rd_kafka_t *rk,
                         COL_PR64("tx_err", cnt.tx_err);
                         COL_PR64("outq",
                                  rk ? (uint64_t)rd_kafka_outq_len(rk) : 0);
-                        if (report_offset)
-                                COL_PR64("offset", (uint64_t)cnt.last_offset);
+                        COL_PR64("offset", (uint64_t)cnt.last_offset);
                         if (latency_mode) {
                                 COL_PRF("lat_curr", cnt.latency_last / 1000.0f);
                                 COL_PRF("lat_avg", latency_avg / 1000.0f);
@@ -1081,18 +1084,6 @@ int main (int argc, char **argv) {
 					optarg, strerror(errno));
 				exit(1);
 			}
-                        break;
-
-                case 'O':
-                        if (rd_kafka_topic_conf_set(topic_conf,
-                                                    "produce.offset.report",
-                                                    "true",
-                                                    errstr, sizeof(errstr)) !=
-                            RD_KAFKA_CONF_OK) {
-                                fprintf(stderr, "%% %s\n", errstr);
-                                exit(1);
-                        }
-                        report_offset = 1;
                         break;
 
 		case 'M':

@@ -31,6 +31,7 @@ All fields that contain sizes are are in bytes unless otherwise noted.
    }
  }
 [, "cgrp": { <cgrp fields> } ]
+[, "eos": { <eos fields> } ]
 }
 ```
 
@@ -71,6 +72,7 @@ metadata_cache_cnt | int gauge | | Number of topics in the metadata cache.
 brokers | object | | Dict of brokers, key is broker name, value is object. See **brokers** below
 topics | object | | Dict of topics, key is topic name, value is object. See **topics** below
 cgrp | object | | Consumer group metrics. See **cgrp** below
+eos | object | | EOS / Idempotent producer state and metrics. See **eos** below
 
 ## brokers
 
@@ -99,6 +101,8 @@ rxpartial | int | | Total number of partial MessageSets received. The broker may
 zbuf_grow | int | | Total number of decompression buffer size increases
 buf_grow | int | | Total number of buffer size increases (deprecated, unused)
 wakeups | int | | Broker thread poll wakeups
+connects | int | | Number of connection attempts, including successful and failed, and name resolution failures.
+disconnects | int | | Number of disconnects (triggered by broker, network, load-balancer, etc.).
 int_latency | object | | Internal producer queue latency in microseconds. See *Window stats* below
 outbuf_latency | object | | Internal request queue latency in microseconds. This is the time between a request is enqueued on the transmit (outbuf) queue and the time the request is written to the TCP socket. Additional buffering and latency may be incurred by the TCP stack and network. See *Window stats* below
 rtt | object | | Broker latency / round-trip time in microseconds. See *Window stats* below
@@ -178,7 +182,9 @@ rxmsgs | int | | Total number of messages consumed, not including ignored messag
 rxbytes | int | | Total number of bytes received for rxmsgs
 msgs | int | | Total number of messages received (consumer, same as rxmsgs), or total number of messages produced (possibly not yet transmitted) (producer).
 rx_ver_drops | int | | Dropped outdated messages
-
+msgs_inflight | int gauge | | Current number of messages in-flight to/from broker
+next_ack_seq int gauge | | Next expected acked sequence (idempotent producer)
+next_err_seq int gauge | | Next expected errored sequence (idempotent producer)
 
 ## cgrp
 
@@ -186,7 +192,19 @@ Field | Type | Example | Description
 ----- | ---- | ------- | -----------
 rebalance_age | int gauge | | Time elapsed since last rebalance (assign or revoke) (milliseconds)
 rebalance_cnt | int | | Total number of rebalances (assign or revoke)
+rebalance_reason | string | | Last rebalance reason, or empty string.
 assignment_size | int gauge | | Current assignment's partition count
+
+
+## eos
+
+Field | Type | Example | Description
+----- | ---- | ------- | -----------
+idemp_state | string | "Assigned" | Current idempotent producer id state
+idemp_state_age | int gauge | | Time elapsed since last idemp_state change (milliseconds)
+producer_id | int gauge | | The currently assigned Producer ID (or -1)
+producer_epoch | int gauge | | The current epoch (or -1)
+epoch_cnt | int | | The number of Producer ID assignments since start
 
 
 # Example output

@@ -59,9 +59,6 @@ int main_0001_multiobj (int argc, char **argv) {
                 if (!topic)
                         topic = test_mk_topic_name("0001", 0);
 
-                /* Speed up produce to cut down on cycle time */
-                test_conf_set(conf, "queue.buffering.max.ms", "10");
-
                 TIMING_START(&t_full, "full create-produce-destroy cycle");
 		rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
@@ -90,6 +87,10 @@ int main_0001_multiobj (int argc, char **argv) {
                 TIMING_STOP(&t_destroy);
 
                 TIMING_STOP(&t_full);
+
+                /* Topic is created on the first iteration. */
+                if (i > 0)
+                        TIMING_ASSERT(&t_full, 0, 999);
 	}
 
 	return 0;

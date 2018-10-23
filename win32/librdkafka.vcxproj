@@ -200,6 +200,7 @@
     <ClCompile Include="..\src\rdkafka_admin.c" />
     <ClCompile Include="..\src\rdkafka_aux.c" />
     <ClCompile Include="..\src\rdkafka_background.c" />
+    <ClCompile Include="..\src\rdkafka_idempotence.c" />
     <ClCompile Include="..\src\rdlist.c" />
     <ClCompile Include="..\src\rdlog.c" />
     <ClCompile Include="..\src\rdmurmur2.c" />

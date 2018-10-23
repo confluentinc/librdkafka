@@ -518,6 +518,80 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 #define RD_KAFKAP_MSGSET_V2_OF_LastOffsetDelta  (8+4+4+1+4+2)
 #define RD_KAFKAP_MSGSET_V2_OF_BaseTimestamp    (8+4+4+1+4+2+4)
 #define RD_KAFKAP_MSGSET_V2_OF_MaxTimestamp     (8+4+4+1+4+2+4+8)
+#define RD_KAFKAP_MSGSET_V2_OF_BaseSequence     (8+4+4+1+4+2+4+8+8+8+2)
 #define RD_KAFKAP_MSGSET_V2_OF_RecordCount      (8+4+4+1+4+2+4+8+8+8+2+4)
+
+
+
+
+/**
+ * @name Producer ID and Epoch for the Idempotent Producer
+ * @{
+ *
+ */
+
+/**
+ * @brief Producer ID and Epoch
+ */
+typedef struct rd_kafka_pid_s {
+        int64_t id;     /**< Producer Id */
+        int16_t epoch;  /**< Producer Epoch */
+} rd_kafka_pid_t;
+
+#define RD_KAFKA_PID_INITIALIZER {-1,-1}
+
+/**
+ * @returns true if \p PID is valid
+ */
+#define rd_kafka_pid_valid(PID) ((PID).id != -1)
+
+/**
+ * @brief Check two pids for equality
+ */
+static RD_UNUSED RD_INLINE int rd_kafka_pid_eq (const rd_kafka_pid_t a,
+                                                const rd_kafka_pid_t b) {
+        return a.id == b.id && a.epoch == b.epoch;
+}
+
+/**
+ * @returns the string representation of a PID in a thread-safe
+ *          static buffer.
+ */
+static RD_UNUSED const char *
+rd_kafka_pid2str (const rd_kafka_pid_t pid) {
+        static RD_TLS char buf[2][64];
+        static RD_TLS int i;
+
+        if (!rd_kafka_pid_valid(pid))
+                return "PID{Invalid}";
+
+        i = (i + 1) % 2;
+
+        rd_snprintf(buf[i], sizeof(buf[i]),
+                    "PID{Id:%"PRId64",Epoch:%hd}", pid.id, pid.epoch);
+
+        return buf[i];
+}
+
+/**
+ * @brief Reset the PID to invalid/init state
+ */
+static RD_UNUSED RD_INLINE void rd_kafka_pid_reset (rd_kafka_pid_t *pid) {
+        pid->id = -1;
+        pid->epoch = -1;
+}
+
+
+/**
+ * @brief Bump the epoch of a valid PID
+ */
+static RD_UNUSED RD_INLINE rd_kafka_pid_t
+rd_kafka_pid_bump (const rd_kafka_pid_t old) {
+        rd_kafka_pid_t new = { old.id, ((int)old.epoch + 1) & (int)INT16_MAX };
+        return new;
+}
+
+/**@}*/
+
 
 #endif /* _RDKAFKA_PROTO_H_ */

@@ -39,6 +39,11 @@
 #include "rdtime.h"
 #include "rdregex.h"
 
+#if WITH_ZSTD
+#include <zstd.h>
+#endif
+
+
 const char *rd_kafka_topic_state_names[] = {
         "unknown",
         "exists",
@@ -218,6 +223,7 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rd_kafka_itopic_t *rkt;
         shptr_rd_kafka_itopic_t *s_rkt;
         const struct rd_kafka_metadata_cache_entry *rkmce;
+        const char *conf_err;
 
 	/* Verify configuration.
 	 * Maximum topic name size + headers must never exceed message.max.bytes
@@ -243,6 +249,28 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 		return s_rkt;
         }
 
+        if (!conf) {
+                if (rk->rk_conf.topic_conf)
+                        conf = rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
+                else
+                        conf = rd_kafka_topic_conf_new();
+        }
+
+
+        /* Verify and finalize topic configuration */
+        if ((conf_err = rd_kafka_topic_conf_finalize(rk->rk_type,
+                                                     &rk->rk_conf, conf))) {
+                if (do_lock)
+                        rd_kafka_wrunlock(rk);
+                /* Incompatible configuration settings */
+                rd_kafka_log(rk, LOG_ERR, "TOPICCONF",
+                             "Incompatible configuration settings "
+                             "for topic \"%s\": %s", topic, conf_err);
+                rd_kafka_topic_conf_destroy(conf);
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return NULL;
+        }
+
         if (existing)
                 *existing = 0;
 
@@ -251,12 +279,6 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
 	rkt->rkt_topic     = rd_kafkap_str_new(topic, -1);
 	rkt->rkt_rk        = rk;
 
-	if (!conf) {
-                if (rk->rk_conf.topic_conf)
-                        conf = rd_kafka_topic_conf_dup(rk->rk_conf.topic_conf);
-                else
-                        conf = rd_kafka_topic_conf_new();
-        }
 	rkt->rkt_conf = *conf;
 	rd_free(conf); /* explicitly not rd_kafka_topic_destroy()
                         * since we dont want to rd_free internal members,
@@ -334,6 +356,15 @@ shptr_rd_kafka_itopic_t *rd_kafka_topic_new0 (rd_kafka_t *rk,
                         rkt->rkt_conf.compression_level =
                                 RD_KAFKA_COMPLEVEL_LZ4_MAX;
                 break;
+#if WITH_ZSTD
+        case RD_KAFKA_COMPRESSION_ZSTD:
+                if (rkt->rkt_conf.compression_level == RD_KAFKA_COMPLEVEL_DEFAULT)
+                        rkt->rkt_conf.compression_level = 3;
+                else if (rkt->rkt_conf.compression_level > RD_KAFKA_COMPLEVEL_ZSTD_MAX)
+                        rkt->rkt_conf.compression_level =
+                                RD_KAFKA_COMPLEVEL_ZSTD_MAX;
+                break;
+#endif
         case RD_KAFKA_COMPRESSION_SNAPPY:
         default:
                 /* Compression level has no effect in this case */
@@ -1095,6 +1126,45 @@ void rd_kafka_topic_partitions_remove (rd_kafka_itopic_t *rkt) {
 
 
 /**
+ * @returns the state of the leader (as a human readable string) if the
+ *          partition leader needs to be queried, else NULL.
+ * @locality any
+ * @locks rd_kafka_toppar_lock MUST be held
+ */
+static const char *rd_kafka_toppar_needs_query (rd_kafka_t *rk,
+                                                rd_kafka_toppar_t *rktp) {
+        int leader_state;
+
+        if (!rktp->rktp_leader)
+                return "not assigned";
+
+        if (rktp->rktp_leader->rkb_source == RD_KAFKA_INTERNAL)
+                return "internal";
+
+        leader_state = rd_kafka_broker_get_state(rktp->rktp_leader);
+
+        if (leader_state >= RD_KAFKA_BROKER_STATE_UP)
+                return NULL;
+
+        if (!rk->rk_conf.sparse_connections)
+                return "down";
+
+        /* Partition assigned to broker but broker does not
+         * need a persistent connection, this typically means
+         * the partition is not being fetched or not being produced to,
+         * so there is no need to re-query the leader. */
+        if (leader_state == RD_KAFKA_BROKER_STATE_INIT)
+                return NULL;
+
+        /* This is most likely a persistent broker,
+         * which means the partition leader should probably
+         * be re-queried to see if it needs changing. */
+        return "down";
+}
+
+
+
+/**
  * @brief Scan all topics and partitions for:
  *  - timed out messages.
  *  - topics that needs to be created on the broker.
@@ -1134,6 +1204,11 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
                         rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_UNKNOWN);
 
                         query_this = 1;
+                } else if (rkt->rkt_state == RD_KAFKA_TOPIC_S_UNKNOWN) {
+                        rd_kafka_dbg(rk, TOPIC, "NOINFO",
+                                     "Topic %s metadata information unknown",
+                                     rkt->rkt_topic->str);
+                        query_this = 1;
                 }
 
                 /* Just need a read-lock from here on. */
@@ -1166,23 +1241,19 @@ int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now) {
 
                         /* Check that partition has a leader that is up,
                          * else add topic to query list. */
-                        if (p != RD_KAFKA_PARTITION_UA &&
-                            (!rktp->rktp_leader ||
-                             rktp->rktp_leader->rkb_source ==
-                             RD_KAFKA_INTERNAL ||
-                             rd_kafka_broker_get_state(rktp->rktp_leader) <
-                             RD_KAFKA_BROKER_STATE_UP)) {
-                                rd_kafka_dbg(rk, TOPIC, "QRYLEADER",
-                                             "Topic %s [%"PRId32"]: "
-                                             "leader is %s: re-query",
-                                             rkt->rkt_topic->str,
-                                             rktp->rktp_partition,
-                                             !rktp->rktp_leader ?
-                                             "unavailable" :
-                                             (rktp->rktp_leader->rkb_source ==
-                                              RD_KAFKA_INTERNAL ? "internal":
-                                              "down"));
-                                query_this = 1;
+                        if (p != RD_KAFKA_PARTITION_UA) {
+                                const char *leader_reason =
+                                        rd_kafka_toppar_needs_query(rk, rktp);
+
+                                if (leader_reason) {
+                                        rd_kafka_dbg(rk, TOPIC, "QRYLEADER",
+                                                     "Topic %s [%"PRId32"]: "
+                                                     "leader is %s: re-query",
+                                                     rkt->rkt_topic->str,
+                                                     rktp->rktp_partition,
+                                                     leader_reason);
+                                           query_this = 1;
+                                }
                         }
 
 			if (rd_kafka_msgq_age_scan(&rktp->rktp_msgq,

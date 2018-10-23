@@ -111,6 +111,42 @@ typedef RD_SHARED_PTR_TYPE(, struct rd_kafka_itopic_s) shptr_rd_kafka_itopic_t;
 
 
 
+/**
+ * @enum Idempotent Producer state
+ */
+typedef enum {
+        RD_KAFKA_IDEMP_STATE_INIT,      /**< Initial state */
+        RD_KAFKA_IDEMP_STATE_TERM,      /**< Instance is terminating */
+        RD_KAFKA_IDEMP_STATE_REQ_PID,   /**< Request new PID */
+        RD_KAFKA_IDEMP_STATE_WAIT_PID,  /**< PID requested, waiting for reply */
+        RD_KAFKA_IDEMP_STATE_ASSIGNED,  /**< New PID assigned */
+        RD_KAFKA_IDEMP_STATE_DRAIN_RESET, /**< Wait for outstanding
+                                           *   ProduceRequests to finish
+                                           *   before resetting and
+                                           *   re-requesting a new PID. */
+        RD_KAFKA_IDEMP_STATE_DRAIN_BUMP, /**< Wait for outstanding
+                                          *   ProduceRequests to finish
+                                          *   before bumping the current
+                                          *   epoch. */
+} rd_kafka_idemp_state_t;
+
+/**
+ * @returns the idemp_state_t string representation
+ */
+static RD_UNUSED const char *
+rd_kafka_idemp_state2str (rd_kafka_idemp_state_t state) {
+        static const char *names[] = {
+                "Init",
+                "Terminate",
+                "RequestPID",
+                "WaitPID",
+                "Assigned",
+                "DrainReset",
+                "DrainBump"
+        };
+        return names[state];
+}
+
 
 
 
@@ -127,6 +163,8 @@ struct rd_kafka_s {
 	TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
         rd_list_t                  rk_broker_by_id; /* Fast id lookups. */
 	rd_atomic32_t              rk_broker_cnt;
+        rd_atomic32_t              rk_broker_up_cnt; /**< Number of brokers
+                                                      *   in state >= UP */
 	rd_atomic32_t              rk_broker_down_cnt;
         mtx_t                      rk_internal_rkb_lock;
 	rd_kafka_broker_t         *rk_internal_rkb;
@@ -199,6 +237,20 @@ struct rd_kafka_s {
 	rd_kafka_type_t  rk_type;
 	struct timeval   rk_tv_state_change;
 
+        rd_atomic64_t    rk_ts_last_poll;   /**< Timestamp of last application
+                                             *   consumer_poll() call
+                                             *   (or equivalent).
+                                             *   Used to enforce
+                                             *   max.poll.interval.ms.
+                                             *   Only relevant for consumer. */
+        /* First fatal error. */
+        struct {
+                rd_atomic32_t err; /**< rd_kafka_resp_err_t */
+                char *errstr;      /**< Protected by rk_lock */
+                int cnt;           /**< Number of errors raised, only
+                                    *   the first one is stored. */
+        } rk_fatal;
+
 	rd_atomic32_t    rk_last_throttle;  /* Last throttle_time_ms value
 					     * from broker. */
 
@@ -220,12 +272,23 @@ struct rd_kafka_s {
         rd_atomic32_t    rk_simple_cnt;
 
         /**
-         * Exactly Once Semantics
+         * Exactly Once Semantics and Idempotent Producer
+         *
+         * @locks rk_lock
          */
         struct {
-                rd_kafkap_str_t *TransactionalId;
-                int64_t          PID;
-                int16_t          ProducerEpoch;
+                rd_kafka_idemp_state_t idemp_state; /**< Idempotent Producer
+                                                     *   state */
+                rd_ts_t ts_idemp_state;/**< Last state change */
+                rd_kafka_pid_t pid;    /**< Current Producer ID and Epoch */
+                int epoch_cnt;         /**< Number of times pid/epoch changed */
+                rd_atomic32_t inflight_toppar_cnt; /**< Current number of
+                                                    *   toppars with inflight
+                                                    *   requests. */
+                rd_kafka_timer_t request_pid_tmr; /**< Timer for pid retrieval*/
+
+                rd_kafkap_str_t *transactional_id; /**< Transactional Id,
+                                                    *   a null string. */
         } rk_eos;
 
 	const rd_kafkap_bytes_t *rk_null_bytes;
@@ -257,6 +320,25 @@ struct rd_kafka_s {
                                    *   This can be used for troubleshooting
                                    *   purposes. */
         } rk_background;
+
+
+        /*
+         * Logs, events or actions to rate limit / suppress
+         */
+        struct {
+                /**< Log: No brokers support Idempotent Producer */
+                rd_interval_t no_idemp_brokers;
+
+                /**< Sparse connections: randomly select broker
+                 *   to bring up. This interval should allow
+                 *   for a previous connection to be established,
+                 *   which varies between different environments:
+                 *   Use 10 < reconnect.backoff.jitter.ms / 2 < 1000.
+                 */
+                rd_interval_t sparse_connect_random;
+                /**< Lock for sparse_connect_random */
+                mtx_t         sparse_connect_lock;
+        } rk_suppress;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)
@@ -408,6 +490,15 @@ void rd_kafka_destroy_final (rd_kafka_t *rk);
 int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 
 
+/**
+ * @returns true if idempotency is enabled (producer only).
+ */
+#define rd_kafka_is_idempotent(rk) ((rk)->rk_conf.eos.idempotence)
+
+#define RD_KAFKA_PURGE_F_MASK 0x7
+const char *rd_kafka_purge_flags2str (int flags);
+
+
 #include "rdkafka_topic.h"
 #include "rdkafka_partition.h"
 
@@ -442,6 +533,7 @@ int rd_kafka_simple_consumer_add (rd_kafka_t *rk);
 #define RD_KAFKA_DBG_PLUGIN         0x1000
 #define RD_KAFKA_DBG_CONSUMER       0x2000
 #define RD_KAFKA_DBG_ADMIN          0x4000
+#define RD_KAFKA_DBG_EOS            0x8000
 #define RD_KAFKA_DBG_ALL            0xffff
 #define RD_KAFKA_DBG_NONE           0x0
 
@@ -507,6 +599,15 @@ rd_kafka_resp_err_t rd_kafka_set_last_error (rd_kafka_resp_err_t err,
 }
 
 
+int rd_kafka_set_fatal_error (rd_kafka_t *rk, rd_kafka_resp_err_t err,
+                              const char *fmt, ...) RD_FORMAT(printf, 3, 4);
+
+static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
+rd_kafka_fatal_error_code (rd_kafka_t *rk) {
+        return rd_atomic32_get(&rk->rk_fatal.err);
+}
+
+
 extern rd_atomic32_t rd_kafka_thread_cnt_curr;
 
 void rd_kafka_set_thread_name (const char *fmt, ...);
@@ -520,6 +621,39 @@ rd_kafka_poll_cb (rd_kafka_t *rk, rd_kafka_q_t *rkq, rd_kafka_op_t *rko,
 
 rd_kafka_resp_err_t rd_kafka_subscribe_rkt (rd_kafka_itopic_t *rkt);
 
+
+/**
+ * @returns the number of milliseconds the maximum poll interval
+ *          was exceeded, or 0 if not exceeded.
+ *
+ * @remark Only relevant for high-level consumer.
+ *
+ * @locality any
+ * @locks none
+ */
+static RD_INLINE RD_UNUSED int
+rd_kafka_max_poll_exceeded (rd_kafka_t *rk) {
+        int exceeded =
+                (int)((rd_clock() -
+                       rd_atomic64_get(&rk->rk_ts_last_poll)) / 1000ll) -
+                rk->rk_conf.max_poll_interval_ms;
+        if (unlikely(exceeded > 0))
+                return exceeded;
+        return 0;
+}
+
+/**
+ * @brief Set the last application poll time to now.
+ *
+ * @remark Only relevant for high-level consumer.
+ *
+ * @locality any
+ * @locks none
+ */
+static RD_INLINE RD_UNUSED void
+rd_kafka_app_polled (rd_kafka_t *rk) {
+        rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
+}
 
 
 /**

@@ -64,13 +64,15 @@ static void produce_msgs (const char *topic, int partition, uint64_t testid,
         int msgcounter = msgcnt;
 
         test_conf_init(&conf, NULL, 0);
-        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         test_conf_set(conf, "compression.codec", codec);
         test_conf_set(conf, "broker.version.fallback", broker_version);
-        if (strstr(broker_version, "0.10."))
-                test_conf_set(conf, "api.version.request", "true");
-        else
+        if (!strncmp(broker_version, "0.8", 3) ||
+            !strncmp(broker_version, "0.9", 3)) {
                 test_conf_set(conf, "api.version.request", "false");
+                test_conf_set(conf, "enable.idempotence", "false");
+        }
+
         /* Make sure to trigger a bunch of MessageSets */
         test_conf_set(conf, "batch.num.messages", tsprintf("%d", msgcnt/5));
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);

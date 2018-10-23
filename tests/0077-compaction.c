@@ -117,7 +117,7 @@ static void produce_compactable_msgs (const char *topic, int32_t partition,
                  "compactable messages\n", msgcnt, (size_t)msgcnt*msgsize);
 
         test_conf_init(&conf, NULL, 0);
-        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         /* Make sure batch size does not exceed segment.bytes since that
          * will make the ProduceRequest fail. */
         test_conf_set(conf, "batch.num.messages", "1");
@@ -187,7 +187,7 @@ static void do_test_compaction (int msgs_per_key, const char *compression) {
                           topic, partition+1);
 
         test_conf_init(&conf, NULL, 120);
-        rd_kafka_conf_set_dr_cb(conf, test_dr_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         if (compression)
                 test_conf_set(conf, "compression.codec", compression);
         /* Limit max batch size below segment.bytes to avoid messages
@@ -325,6 +325,9 @@ int main_0077_compaction (int argc, char **argv) {
         do_test_compaction(1000, NULL);
 #if WITH_SNAPPY
         do_test_compaction(10, "snappy");
+#endif
+#if WITH_ZSTD
+        do_test_compaction(10, "zstd");
 #endif
 #if WITH_ZLIB
         do_test_compaction(10000, "gzip");

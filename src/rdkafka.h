@@ -805,6 +805,14 @@ rd_kafka_topic_partition_list_del_by_idx (
 	rd_kafka_topic_partition_list_t *rktparlist,
 	int idx);
 
+/**
+ * @brief Creates a copy of \p rktpar and adds it to \p rktparlist
+ */
+RD_EXPORT
+void
+rd_kafka_topic_partition_copy (rd_kafka_topic_partition_list_t *rktparlist,
+                               const rd_kafka_topic_partition_t *rktpar);
+
 
 /**
  * @brief Make a copy of an existing list.
@@ -5635,8 +5643,13 @@ rd_kafka_DescribeConfigs_result_resources (
  * Set \c offset to RD_KAFKA_OFFSET_END (high-watermark) in order to
  * delete all data in the partition.
  *
+ * The function will block for at most \p timeout_ms milliseconds while
+ * determining the leader brokers for each partition in \p offsets.
+ *
  * @param options Optional admin options, or NULL for defaults.
  * @param rkqu Queue to emit result on.
+ * @param event_cnt is updated to the number of events expected
+ *        to appear on \p rkqu as a result of this API call
  *
  * Supported admin options:
  *  - rd_kafka_AdminOptions_set_operation_timeout() - default 0
@@ -5645,11 +5658,13 @@ rd_kafka_DescribeConfigs_result_resources (
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_DELETERECORDS_RESULT
  */
-RD_EXPORT void
+RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_DeleteRecords (rd_kafka_t *rk,
-                        const rd_kafka_topic_partition_list_t *offsets,
+                        rd_kafka_topic_partition_list_t *offsets,
                         const rd_kafka_AdminOptions_t *options,
-                        rd_kafka_queue_t *rkqu);
+                        rd_kafka_queue_t *rkqu,
+                        int timeout_ms,
+                        size_t *event_cnt);
 
 
 /**

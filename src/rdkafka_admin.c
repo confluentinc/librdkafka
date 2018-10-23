@@ -2830,28 +2830,52 @@ err_parse:
         return err;
 }
 
-void rd_kafka_DeleteRecords (rd_kafka_t *rk,
-                             const rd_kafka_topic_partition_list_t *offsets,
-                             const rd_kafka_AdminOptions_t *options,
-                             rd_kafka_queue_t *rkqu) {
-        rd_kafka_op_t *rko;
+rd_kafka_resp_err_t rd_kafka_DeleteRecords (rd_kafka_t *rk,
+                                            rd_kafka_topic_partition_list_t *offsets,
+                                            const rd_kafka_AdminOptions_t *options,
+                                            rd_kafka_queue_t *rkqu,
+                                            int timeout_ms,
+                                            size_t *event_cnt) {
         static const struct rd_kafka_admin_worker_cbs cbs = {
                 rd_kafka_DeleteRecordsRequest,
                 rd_kafka_DeleteRecordsResponse_parse,
         };
+        rd_kafka_resp_err_t err;
+        int i;
+        rd_list_t leaders;
+        struct rd_kafka_partition_leader *leader;
 
-        rko = rd_kafka_admin_request_op_new(rk,
-                                            RD_KAFKA_OP_DELETERECORDS,
-                                            RD_KAFKA_EVENT_DELETERECORDS_RESULT,
-                                            &cbs, options, rkqu);
+        *event_cnt = 0;
 
-        rd_list_init(&rko->rko_u.admin_request.args, 1,
-                     rd_kafka_topic_partition_list_free);
+        rd_list_init(&leaders, offsets->cnt,
+                     (void *)rd_kafka_partition_leader_destroy);
+        err = rd_kafka_topic_partition_list_query_leaders(rk, offsets, &leaders,
+                                                          timeout_ms);
 
-        rd_list_add(&rko->rko_u.admin_request.args,
-                    rd_kafka_topic_partition_list_copy(offsets));
+        if (err) {
+                rd_list_destroy(&leaders);
+                return err;
+        }
 
-        rd_kafka_q_enq(rk->rk_ops, rko);
+        /* For each leader send a request for its partitions */
+        RD_LIST_FOREACH(leader, &leaders, i) {
+                rd_kafka_op_t *rko;
+
+                (*event_cnt)++;
+                rko = rd_kafka_admin_request_op_new(rk,
+                                                    RD_KAFKA_OP_DELETERECORDS,
+                                                    RD_KAFKA_EVENT_DELETERECORDS_RESULT,
+                                                    &cbs, options, rkqu);
+                rko->rko_u.admin_request.broker_id = leader->rkb->rkb_nodeid;
+                rd_list_init(&rko->rko_u.admin_request.args, 1,
+                             rd_kafka_topic_partition_list_free);
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_topic_partition_list_copy(leader->partitions));
+                rd_kafka_q_enq(rk->rk_ops, rko);
+        }
+
+        rd_list_destroy(&leaders);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 

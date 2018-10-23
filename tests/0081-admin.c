@@ -1110,6 +1110,267 @@ static void do_test_unclean_destroy (rd_kafka_type_t cltype, int with_mainq) {
         test_timeout_set(60);;
 }
 
+/**
+ * @brief Test deletion of topics
+ *
+ *
+ */
+static void do_test_DeleteRecords (const char *what,
+                                   rd_kafka_t *rk, rd_kafka_queue_t *useq,
+                                   int op_timeout) {
+        rd_kafka_queue_t *q = useq ? useq : rd_kafka_queue_new(rk);
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_topic_partition_list_t *del_records = NULL;
+        rd_kafka_event_t *rkev = NULL;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        const char *errstr2;
+#define MY_DEL_RECORDS_CNT 3
+        rd_kafka_topic_partition_list_t *results = NULL;
+        int i;
+        const int partitions_cnt = 3;
+        const int msgs_cnt = 100;
+        char *topics[MY_DEL_RECORDS_CNT];
+        rd_kafka_metadata_topic_t exp_mdtopics[MY_DEL_RECORDS_CNT] = {{0}};
+        int exp_mdtopic_cnt = 0;
+        test_timing_t timing;
+        rd_kafka_resp_err_t exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        size_t event_cnt;
+
+        TEST_SAY(_C_MAG "[ %s DeleteRecords with %s, op_timeout %d ]\n",
+                 rd_kafka_name(rk), what, op_timeout);
+
+        if (op_timeout != -1) {
+                options = rd_kafka_AdminOptions_new(
+                        rk, RD_KAFKA_ADMIN_OP_ANY);
+
+                err = rd_kafka_AdminOptions_set_operation_timeout(
+                        options, op_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        }
+
+
+        for (i = 0 ; i < MY_DEL_RECORDS_CNT ; i++) {
+                char *topic = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+
+                topics[i] = topic;
+                exp_mdtopics[exp_mdtopic_cnt++].topic = topic;
+        }
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, topics,
+                                 MY_DEL_RECORDS_CNT,
+                                 partitions_cnt /*num_partitions*/,
+                                 NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk,
+                                  exp_mdtopics, exp_mdtopic_cnt,
+                                  NULL, 0,
+                                  15*1000);
+
+        /* Produce 100 msgs / partition */
+        for (i = 0 ; i < MY_DEL_RECORDS_CNT; i++ ) {
+                int32_t partition;
+                for (partition = 0 ; partition < partitions_cnt; partition++ ) {
+                        test_produce_msgs_easy(topics[i], 0, partition, msgs_cnt);
+                }
+        }
+
+        del_records = rd_kafka_topic_partition_list_new(10);
+
+        /* Wipe all data from topic 0 */
+        for (i = 0 ; i < partitions_cnt; i++)
+                rd_kafka_topic_partition_list_add(del_records, topics[0], i)->offset = RD_KAFKA_OFFSET_END;
+
+        /* Wipe all data from partition 0 in topic 1 */
+        rd_kafka_topic_partition_list_add(del_records, topics[1], 0)->offset = RD_KAFKA_OFFSET_END;
+
+        /* Wipe some data from partition 2 in topic 1 */
+        rd_kafka_topic_partition_list_add(del_records, topics[1], 2)->offset = msgs_cnt / 2;
+
+        /* Not changing the offset (out of range) for topic 2 partition 0 */
+        rd_kafka_topic_partition_list_add(del_records, topics[2], 0);
+
+        /* Offset out of range for topic 2 partition 1 */
+        rd_kafka_topic_partition_list_add(del_records, topics[2], 1)->offset = msgs_cnt + 1;
+
+        TIMING_START(&timing, "DeleteRecords");
+        TEST_SAY("Call DeleteRecords\n");
+        err = rd_kafka_DeleteRecords(rk, del_records, options, q,
+                                     tmout_multip(20*1000), &event_cnt);
+        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+        TIMING_ASSERT_LATER(&timing, 0, 1000);
+
+        TIMING_START(&timing, "DeleteRecords.queue_poll");
+
+        results = rd_kafka_topic_partition_list_new(10);
+
+        while (event_cnt > 0) {
+                const rd_kafka_DeleteRecords_result_t *res;
+                const rd_kafka_topic_partition_list_t *result;
+
+                /* Poll result queue for DeleteRecords result.
+                 * Print but otherwise ignore other event types
+                 * (typically generic Error events). */
+                while(1) {
+                    rkev = rd_kafka_queue_poll(q, tmout_multip(20*1000));
+                    TEST_SAY("DeleteRecords: got %s in %.3fms\n",
+                            rd_kafka_event_name(rkev),
+                            TIMING_DURATION(&timing) / 1000.0f);
+                    if (rd_kafka_event_error(rkev))
+                            TEST_SAY("%s: %s\n",
+                                    rd_kafka_event_name(rkev),
+                                    rd_kafka_event_error_string(rkev));
+
+                    if (rd_kafka_event_type(rkev) ==
+                        RD_KAFKA_EVENT_DELETERECORDS_RESULT) {
+                            event_cnt--;
+                            break;
+                    }
+
+                    rd_kafka_event_destroy(rkev);
+                }
+                /* Convert event to proper result */
+                res = rd_kafka_event_DeleteRecords_result(rkev);
+                TEST_ASSERT(res, "expected DeleteRecords_result, not %s",
+                            rd_kafka_event_name(rkev));
+
+                /* Expecting error */
+                err = rd_kafka_event_error(rkev);
+                errstr2 = rd_kafka_event_error_string(rkev);
+                TEST_ASSERT(err == exp_err,
+                            "expected DeleteRecords to return %s, not %s (%s)",
+                            rd_kafka_err2str(exp_err),
+                            rd_kafka_err2str(err),
+                            err ? errstr2 : "n/a");
+
+                TEST_SAY("DeleteRecords: returned %s (%s)\n",
+                         rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+                result = rd_kafka_DeleteRecords_result_offsets(res);
+                for (i = 0 ; i < result->cnt ; i++) {
+                        rd_kafka_topic_partition_copy(results, &result->elems[i]);
+                }
+        }
+
+        /* Sort both input and output list */
+        rd_kafka_topic_partition_list_sort(del_records, NULL, NULL);
+        rd_kafka_topic_partition_list_sort(results, NULL, NULL);
+
+        TEST_ASSERT(del_records->cnt == results->cnt,
+                    "expected DeleteRecords_result_offsets to return %d items, not %d",
+                    del_records->cnt,
+                    results->cnt);
+
+        for (i = 0 ; i < results->cnt ; i++) {
+                const rd_kafka_topic_partition_t *input = &del_records->elems[i];
+                const rd_kafka_topic_partition_t *output = &results->elems[i];
+                int64_t expected_offset = input->offset;
+                rd_kafka_resp_err_t expected_err = 0;
+
+                if (expected_offset == RD_KAFKA_OFFSET_END)
+                        expected_offset = msgs_cnt;
+
+                /* Expect Offset out of range error */
+                if(input->offset < RD_KAFKA_OFFSET_END || input->offset > msgs_cnt)
+                        expected_err = 1;
+
+                TEST_SAY("DeleteRecords Returned [%s] %s-%d low-watermark = %d\n",
+                         rd_kafka_err2str(output->err),
+                         output->topic,
+                         output->partition,
+                         (int)output->offset);
+
+                if (strcmp(output->topic, input->topic))
+                        TEST_FAIL_LATER("Result order mismatch at #%d: "
+                                        "expected topic %s, got %s",
+                                        i,
+                                        input->topic,
+                                        output->topic);
+
+                if (output->partition != input->partition)
+                        TEST_FAIL_LATER("Result order mismatch at #%d: "
+                                        "expected partition %d, got %d",
+                                        i,
+                                        input->partition,
+                                        output->partition);
+
+                if (output->err != expected_err)
+                        TEST_FAIL_LATER("%s-%d: "
+                                        "expected error code %d (%s), got %d (%s)",
+                                        output->topic,
+                                        output->partition,
+                                        expected_err,
+                                        rd_kafka_err2str(expected_err),
+                                        output->err,
+                                        rd_kafka_err2str(output->err));
+
+
+                if (output->err == 0 && output->offset != expected_offset)
+                        TEST_FAIL_LATER("%s-%d: "
+                                        "expected offset %d, got %d",
+                                        output->topic,
+                                        output->partition,
+                                        expected_offset,
+                                        output->offset);
+        }
+
+        /* Check watermarks for partitions */
+        for (i = 0 ; i < MY_DEL_RECORDS_CNT; i++ ) {
+                int32_t partition;
+                for (partition = 0 ; partition < partitions_cnt; partition++ ) {
+                        const rd_kafka_topic_partition_t *del =
+                                rd_kafka_topic_partition_list_find(results, topics[i], partition);
+                        int64_t expected_low = 0;
+                        int64_t expected_high = msgs_cnt;
+                        int64_t low, high;
+
+                        if(del && del->err == 0) {
+                                expected_low = del->offset;
+                        }
+
+                        err = rd_kafka_query_watermark_offsets(rk, topics[i], partition,
+                                                               &low, &high, tmout_multip(10000));
+                        if (err)
+                                TEST_FAIL("query_watermark_offsets failed: %s\n",
+                                          rd_kafka_err2str(err));
+
+                        if (low != expected_low)
+                                TEST_FAIL_LATER("For %s-%d expected a low watermark of %d, got %d",
+                                                topics[i],
+                                                partition,
+                                                expected_low,
+                                                low);
+
+                        if (high != expected_high)
+                                TEST_FAIL_LATER("For %s-%d expected a high watermark of %d, got %d",
+                                                topics[i],
+                                                partition,
+                                                expected_high,
+                                                high);
+                }
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+        for (i = 0 ; i < MY_DEL_RECORDS_CNT ; i++)
+                rd_free(topics[i]);
+
+        if (results)
+                rd_kafka_topic_partition_list_destroy(results);
+
+        if (del_records)
+                rd_kafka_topic_partition_list_destroy(del_records);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+#undef MY_DEL_RECORDS_CNT
+}
 
 
 static void do_test_apis (rd_kafka_type_t cltype) {
@@ -1158,6 +1419,11 @@ static void do_test_apis (rd_kafka_type_t cltype) {
 
         /* DescribeConfigs */
         do_test_DescribeConfigs(rk, mainq);
+
+        /* Delete records */
+        do_test_DeleteRecords("temp queue, op timeout 0", rk, NULL, 0);
+        do_test_DeleteRecords("main queue, op timeout 15000", rk, mainq, 1500);
+
 
         rd_kafka_queue_destroy(mainq);
 

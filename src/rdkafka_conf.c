@@ -874,8 +874,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "order. "
           "The following configuration properties are adjusted automatically "
           "(if not modified by the user) when idempotence is enabled: "
-          "`max.inflight.requests.per.connection=5` (must be <= 5), "
-          "`retries=INT32_MAX` (must be > 0), "
+          "`max.inflight.requests.per.connection=5` (must be less than or "
+          "equal to 5), `retries=INT32_MAX` (must be greater than 0), "
           "`acks=all`, `queuing.strategy=fifo`. "
           "Producer instantation will fail if user-supplied configuration "
           "is incompatible.",

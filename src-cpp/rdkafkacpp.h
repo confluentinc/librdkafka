@@ -427,7 +427,9 @@ enum ErrorCode {
         /** No matching listener */
         ERR_LISTENER_NOT_FOUND = 72,
         /** Topic deletion is disabled */
-        ERR_TOPIC_DELETION_DISABLED = 73
+        ERR_TOPIC_DELETION_DISABLED = 73,
+        /** Unsupported compression type */
+        ERR_UNSUPPORTED_COMPRESSION_TYPE = 74
 };
 
 

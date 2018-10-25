@@ -1758,6 +1758,7 @@ rd_kafka_handle_Produce_parse (rd_kafka_broker_t *rkb,
                 int64_t Offset;
         } hdr;
         const int log_decode_errors = LOG_ERR;
+        int64_t log_start_offset = -1;
 
         rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
         if (TopicArrayCnt != 1)
@@ -1780,9 +1781,11 @@ rd_kafka_handle_Produce_parse (rd_kafka_broker_t *rkb,
         *offsetp = hdr.Offset;
 
         *timestampp = -1;
-        if (request->rkbuf_reqhdr.ApiVersion >= 2) {
+        if (request->rkbuf_reqhdr.ApiVersion >= 2)
                 rd_kafka_buf_read_i64(rkbuf, timestampp);
-        }
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 5)
+                rd_kafka_buf_read_i64(rkbuf, &log_start_offset);
 
         if (request->rkbuf_reqhdr.ApiVersion >= 1) {
                 int32_t Throttle_Time;

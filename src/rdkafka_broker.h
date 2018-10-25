@@ -244,6 +244,14 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 #endif
 
 
+        /*
+         * Log suppression
+         */
+        struct {
+                /**< Log: compression type not supported by broker. */
+                rd_interval_t unsupported_compression;
+        } rkb_suppress;
+
 	struct {
 		char msg[512];
 		int  err;  /* errno */

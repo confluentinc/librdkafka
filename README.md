@@ -101,7 +101,15 @@ See the [wiki](https://github.com/edenhill/librdkafka/wiki) for a FAQ.
 	zlib-dev (optional, for gzip compression support)
 	libssl-dev (optional, for SSL and SASL SCRAM support)
 	libsasl2-dev (optional, for SASL GSSAPI support)
-        libzstd-dev (optional, for Zstd compression support)
+	libzstd-dev (optional, for ZStd compression support)
+
+**NOTE**: Static linking of ZStd (requires zstd >= 1.2.1) in the producer
+          enables encoding the original size in the compression frame header,
+          which will speed up the consumer.
+          Use `STATIC_LIB_zstd=/path/to/libzstd.a ./configure --enable-static`
+          to enable static ZStd linking.
+          MacOSX example:
+          `STATIC_LIB_zstd=$(brew ls -v zstd | grep libzstd.a$) ./configure --enable-static`
 
 ## Instructions
 

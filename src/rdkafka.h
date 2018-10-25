@@ -521,6 +521,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR_LISTENER_NOT_FOUND = 72,
         /** Topic deletion is disabled */
         RD_KAFKA_RESP_ERR_TOPIC_DELETION_DISABLED = 73,
+        /** Unsupported compression type */
+        RD_KAFKA_RESP_ERR_UNSUPPORTED_COMPRESSION_TYPE = 74,
 
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;

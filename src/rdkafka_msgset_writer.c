@@ -50,6 +50,7 @@ typedef struct rd_kafka_msgset_writer_s {
         int16_t msetw_ApiVersion;        /* ProduceRequest ApiVersion */
         int     msetw_MsgVersion;        /* MsgVersion to construct */
         int     msetw_features;          /* Protocol features to use */
+        rd_kafka_compression_t msetw_compression; /**< Compression type */
         int     msetw_msgcntmax;         /* Max number of messages to send
                                           * in a batch. */
         size_t  msetw_messages_len;      /* Total size of Messages, with Message
@@ -106,25 +107,106 @@ typedef struct rd_kafka_msgset_writer_s {
 static RD_INLINE void
 rd_kafka_msgset_writer_select_MsgVersion (rd_kafka_msgset_writer_t *msetw) {
         rd_kafka_broker_t *rkb = msetw->msetw_rkb;
+        rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
+        int16_t min_ApiVersion = 0;
         int feature;
+        /* Map compression types to required feature and ApiVersion */
+        static const struct {
+                int feature;
+                int16_t ApiVersion;
+        } compr_req[RD_KAFKA_COMPRESSION_NUM] = {
+                [RD_KAFKA_COMPRESSION_LZ4] = { RD_KAFKA_FEATURE_LZ4, 3 },
+#if WITH_ZSTD
+                [RD_KAFKA_COMPRESSION_ZSTD] = { RD_KAFKA_FEATURE_ZSTD, 7 },
+#endif
+        };
 
         if ((feature = rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER2)) {
-                msetw->msetw_ApiVersion = 3;
+                min_ApiVersion = 3;
                 msetw->msetw_MsgVersion = 2;
                 msetw->msetw_features |= feature;
         } else if ((feature = rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1)) {
-                msetw->msetw_ApiVersion = 2;
+                min_ApiVersion = 2;
                 msetw->msetw_MsgVersion = 1;
                 msetw->msetw_features |= feature;
         } else {
                 if ((feature =
                      rkb->rkb_features & RD_KAFKA_FEATURE_THROTTLETIME)) {
-                        msetw->msetw_ApiVersion = 1;
+                        min_ApiVersion = 1;
                         msetw->msetw_features |= feature;
                 } else
-                        msetw->msetw_ApiVersion = 0;
+                        min_ApiVersion = 0;
                 msetw->msetw_MsgVersion = 0;
         }
+
+        msetw->msetw_compression = rktp->rktp_rkt->rkt_conf.compression_codec;
+
+        /*
+         * Check that the configured compression type is supported
+         * by both client and broker, else disable compression.
+         */
+        if (msetw->msetw_compression &&
+            (rd_kafka_broker_ApiVersion_supported(
+                    rkb, RD_KAFKAP_Produce,
+                    0, compr_req[msetw->msetw_compression].ApiVersion,
+                    NULL) == -1 ||
+             (compr_req[msetw->msetw_compression].feature &&
+              !(msetw->msetw_rkb->rkb_features &
+                compr_req[msetw->msetw_compression].feature)))) {
+                if (unlikely(rd_interval(
+                                     &rkb->rkb_suppress.unsupported_compression,
+                                     /* at most once per day */
+                                     (rd_ts_t)86400 * 1000 * 1000, 0) > 0))
+                        rd_rkb_log(rkb, LOG_NOTICE, "COMPRESSION",
+                                   "%.*s [%"PRId32"]: "
+                                   "Broker does not support compression "
+                                   "type %s: not compressing batch",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
+                                   rd_kafka_compression2str(
+                                           msetw->msetw_compression));
+                else
+                        rd_rkb_dbg(rkb, MSG, "PRODUCE",
+                                   "%.*s [%"PRId32"]: "
+                                   "Broker does not support compression "
+                                   "type %s: not compressing batch",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
+                                   rd_kafka_compression2str(
+                                           msetw->msetw_compression));
+
+                msetw->msetw_compression = RD_KAFKA_COMPRESSION_NONE;
+        } else {
+                /* Broker supports this compression type. */
+                msetw->msetw_features |=
+                        compr_req[msetw->msetw_compression].feature;
+
+                if (min_ApiVersion <
+                    compr_req[msetw->msetw_compression].ApiVersion)
+                        min_ApiVersion =
+                                compr_req[msetw->msetw_compression].ApiVersion;
+        }
+
+        /* MsgVersion specific setup. */
+        switch (msetw->msetw_MsgVersion)
+        {
+        case 2:
+                msetw->msetw_relative_offsets = 1; /* OffsetDelta */
+                break;
+        case 1:
+                if (msetw->msetw_compression != RD_KAFKA_COMPRESSION_NONE)
+                        msetw->msetw_relative_offsets = 1;
+                break;
+        }
+
+        /* Set the highest ApiVersion supported by us and broker */
+        msetw->msetw_ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb,
+                RD_KAFKAP_Produce, min_ApiVersion, 7, NULL);
+
+        /* It should not be possible to get a lower version than requested,
+         * otherwise the logic in this function is buggy. */
+        rd_assert(msetw->msetw_ApiVersion >= min_ApiVersion);
 }
 
 
@@ -167,6 +249,10 @@ rd_kafka_msgset_writer_alloc_buf (rd_kafka_msgset_writer_t *msetw) {
          */
         switch (msetw->msetw_ApiVersion)
         {
+        case 7:
+        case 6:
+        case 5:
+        case 4:
         case 3:
                 /* Add TransactionalId */
                 hdrsize += RD_KAFKAP_STR_SIZE(rk->rk_eos.transactional_id);
@@ -340,7 +426,7 @@ rd_kafka_msgset_writer_write_Produce_header (rd_kafka_msgset_writer_t *msetw) {
         rd_kafka_itopic_t *rkt = msetw->msetw_rktp->rktp_rkt;
 
         /* V3: TransactionalId */
-        if (msetw->msetw_ApiVersion == 3)
+        if (msetw->msetw_ApiVersion >= 3)
                 rd_kafka_buf_write_kstr(rkbuf, rk->rk_eos.transactional_id);
 
         /* RequiredAcks */
@@ -413,18 +499,6 @@ static int rd_kafka_msgset_writer_init (rd_kafka_msgset_writer_t *msetw,
 
         /* Select MsgVersion to use */
         rd_kafka_msgset_writer_select_MsgVersion(msetw);
-
-        /* MsgVersion specific setup. */
-        switch (msetw->msetw_MsgVersion)
-        {
-        case 2:
-                msetw->msetw_relative_offsets = 1; /* OffsetDelta */
-                break;
-        case 1:
-                if (rktp->rktp_rkt->rkt_conf.compression_codec)
-                        msetw->msetw_relative_offsets = 1;
-                break;
-        }
 
         /* Allocate backing buffer */
         rd_kafka_msgset_writer_alloc_buf(msetw);
@@ -892,7 +966,7 @@ rd_kafka_msgset_writer_compress_gzip (rd_kafka_msgset_writer_t *msetw,
         int r;
         int comp_level =
                 msetw->msetw_rktp->rktp_rkt->rkt_conf.compression_level;
-				
+
         memset(&strm, 0, sizeof(strm));
         r = deflateInit2(&strm, comp_level,
                          Z_DEFLATED, 15+16,
@@ -1067,7 +1141,6 @@ rd_kafka_msgset_writer_compress_zstd (rd_kafka_msgset_writer_t *msetw,
 static int
 rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
                                  size_t *outlenp) {
-        rd_kafka_toppar_t *rktp = msetw->msetw_rktp;
         rd_buf_t *rbuf = &msetw->msetw_rkbuf->rkbuf_buf;
         rd_slice_t slice;
         size_t len = *outlenp;
@@ -1081,7 +1154,7 @@ rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
         r = rd_slice_init(&slice, rbuf, msetw->msetw_firstmsg.of, len);
         rd_assert(r == 0 || !*"invalid firstmsg position");
 
-        switch (rktp->rktp_rkt->rkt_conf.compression_codec)
+        switch (msetw->msetw_compression)
         {
 #if WITH_ZLIB
         case RD_KAFKA_COMPRESSION_GZIP:
@@ -1097,19 +1170,11 @@ rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
 #endif
 
         case RD_KAFKA_COMPRESSION_LZ4:
-                /* Skip LZ4 compression if broker doesn't support it. */
-                if (!(msetw->msetw_rkb->rkb_features & RD_KAFKA_FEATURE_LZ4))
-                        return -1;
-
                 r = rd_kafka_msgset_writer_compress_lz4(msetw, &slice, &ciov);
                 break;
 
 #if WITH_ZSTD
         case RD_KAFKA_COMPRESSION_ZSTD:
-                /* Skip ZSTD compression if broker doesn't support it. */
-                if (!(msetw->msetw_rkb->rkb_features & RD_KAFKA_FEATURE_ZSTD))
-                        return -1;
-
                 r = rd_kafka_msgset_writer_compress_zstd(msetw, &slice, &ciov);
                 break;
 #endif
@@ -1132,7 +1197,7 @@ rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
         }
 
         /* Set compression codec in MessageSet.Attributes */
-        msetw->msetw_Attributes |= rktp->rktp_rkt->rkt_conf.compression_codec;
+        msetw->msetw_Attributes |= msetw->msetw_compression;
 
         /* Rewind rkbuf to the pre-message checkpoint (firstmsg)
          * and replace the original message(s) with the compressed payload,
@@ -1159,7 +1224,7 @@ rd_kafka_msgset_writer_compress (rd_kafka_msgset_writer_t *msetw,
                 };
                 outlen = rd_kafka_msgset_writer_write_msg(
                         msetw, &rkm, 0,
-                        rktp->rktp_rkt->rkt_conf.compression_codec,
+                        msetw->msetw_compression,
                         rd_free/*free for ciov.iov_base*/);
         }
 
@@ -1310,7 +1375,7 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
         msetw->msetw_rkbuf->rkbuf_u.Produce.pid = msetw->msetw_pid;
 
         /* Compress the message set */
-        if (rktp->rktp_rkt->rkt_conf.compression_codec)
+        if (msetw->msetw_compression)
                 rd_kafka_msgset_writer_compress(msetw, &len);
 
         msetw->msetw_messages_len = len;

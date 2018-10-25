@@ -1043,8 +1043,10 @@ function mkl_lib_check_static {
 	libs=$(echo $libs | sed -e "s|$libname|${!arfile_var}|g")
     elif [[ $HAS_LDFLAGS_STATIC == y ]]; then
         libs=$(echo $libs | sed -e "s|$libname|${LDFLAGS_STATIC} $libname ${LDFLAGS_DYNAMIC}|g")
+        mkl_allvar_set "$configname" "${defname}_STATIC" "y"
     else
-        mkl_dbg "$libname: Neither $arfile_var specified or static linker flags supported: static linking probably won't work"
+        mkl_dbg "$libname: Neither $arfile_var=/path/to/libname.a specified nor static linker flags supported: static linking probably won't work"
+        libs=""
     fi
 
     echo $libs
@@ -1056,6 +1058,9 @@ function mkl_lib_check_static {
 #
 # If STATIC_LIB_<libname_without_-l> is set to the path of an <libname>.a file
 # it will be used instead of -l<libname>.
+#
+# <definename>_STATIC will be automatically defined (for both Makefile.config
+# and config.h) if the library is to be linked statically.
 #
 # Arguments:
 #  [--static=<lib>]  (allows static linking (--enable-static) for the
@@ -1070,7 +1075,6 @@ function mkl_lib_check_static {
 #  source snippet
 function mkl_lib_check {
 
-    local is_static=0
     local staticopt=
     if [[ $1 == --static* ]]; then
         staticopt=$1
@@ -1089,7 +1093,7 @@ function mkl_lib_check {
     local pkg_conf_failed=1
     if [[ $WITH_PKGCONFIG == "y" ]]; then
         # Let pkg-config populate CFLAGS, et.al.
-        mkl_pkg_config_check $staticopt $libnameopt "$1" "" cont
+        mkl_pkg_config_check $staticopt $libnameopt "$1" "$2" cont
         pkg_conf_failed=$?
     fi
 
@@ -1097,8 +1101,11 @@ function mkl_lib_check {
     if [[ $pkg_conf_failed ]]; then
         libs="$5"
         if [[ $WITH_STATIC_LINKING == y && ! -z $staticopt ]]; then
-            libs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
-            is_static=1
+            local stlibs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
+            if [[ -n $stlibs ]]; then
+                mkl_allvar_set "$1" "${2}_STATIC" "y"
+                libs=$stlibs
+            fi
         fi
     fi
 
@@ -1151,7 +1158,8 @@ function mkl_pkg_config_check {
     cflags=$($cmd 2>&1)
     if [[ $? != 0 ]]; then
         mkl_dbg "'$cmd' failed: $cflags"
-        mkl_check_failed "$cname" "$2" "$3" "'$cmd' failed:
+        # Clear define name ($2): caller may have additional checks
+        mkl_check_failed "$cname" "" "$3" "'$cmd' failed:
 $cflags"
         return 1
     fi
@@ -1160,18 +1168,24 @@ $cflags"
     libs=$(${PKG_CONFIG} --short-errors --libs $libname 2>&1)
     if [[ $? != 0 ]]; then
         mkl_dbg "${PKG_CONFIG} --libs $libname failed: $libs"
-        mkl_check_failed "$cname" "$2" "$3" "pkg-config --libs failed"
+        # Clear define name ($2): caller may have additional checks
+        mkl_check_failed "$cname" "" "$3" "pkg-config --libs failed"
         return 1
     fi
 
     mkl_mkvar_append $1 "CFLAGS" "$cflags"
 
     if [[ $WITH_STATIC_LINKING == y && ! -z $staticopt ]]; then
-        libs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
+        local stlibs=$(mkl_lib_check_static "${staticopt#*=}" "$libs")
+        if [[ -n $stlibs ]]; then
+            mkl_allvar_set "$1" "${2}_STATIC" "y"
+            libs=$stlibs
+        fi
     fi
     mkl_mkvar_prepend "$1" LIBS "$libs"
 
-    mkl_check_done "$1" "$2" "$3" "ok"
+    # Clear define name ($2): caller may have additional checks
+    mkl_check_done "$1" "" "$3" "ok"
 
     return 0
 }

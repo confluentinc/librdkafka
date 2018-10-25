@@ -594,6 +594,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
                   "No matching listener"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_TOPIC_DELETION_DISABLED,
                   "Topic deletion is disabled"),
+        _ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_COMPRESSION_TYPE,
+                  "Unsupported compression type"),
 
 	_ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)
 };

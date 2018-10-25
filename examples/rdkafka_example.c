@@ -106,8 +106,6 @@ static void logger (const rd_kafka_t *rk, int level,
  */
 static void msg_delivered (rd_kafka_t *rk,
                            const rd_kafka_message_t *rkmessage, void *opaque) {
-	printf("del: %s: offset %"PRId64"\n",
-	       rd_kafka_err2str(rkmessage->err), rkmessage->offset);
         if (rkmessage->err)
 		fprintf(stderr, "%% Message delivery failed: %s\n",
                         rd_kafka_err2str(rkmessage->err));

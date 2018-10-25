@@ -47,8 +47,22 @@ typedef enum {
 	RD_KAFKA_COMPRESSION_SNAPPY = RD_KAFKA_MSG_ATTR_SNAPPY,
 	RD_KAFKA_COMPRESSION_LZ4 = RD_KAFKA_MSG_ATTR_LZ4,
 	RD_KAFKA_COMPRESSION_ZSTD = RD_KAFKA_MSG_ATTR_ZSTD,
-	RD_KAFKA_COMPRESSION_INHERIT /* Inherit setting from global conf */
+	RD_KAFKA_COMPRESSION_INHERIT, /* Inherit setting from global conf */
+        RD_KAFKA_COMPRESSION_NUM
 } rd_kafka_compression_t;
+
+static RD_INLINE RD_UNUSED const char *
+rd_kafka_compression2str (rd_kafka_compression_t compr) {
+        static const char *names[RD_KAFKA_COMPRESSION_NUM] = {
+                [RD_KAFKA_COMPRESSION_NONE] = "none",
+                [RD_KAFKA_COMPRESSION_GZIP] = "gzip",
+                [RD_KAFKA_COMPRESSION_SNAPPY] = "snappy",
+                [RD_KAFKA_COMPRESSION_LZ4] = "lz4",
+                [RD_KAFKA_COMPRESSION_ZSTD] = "zstd",
+                [RD_KAFKA_COMPRESSION_INHERIT] = "inherit"
+        };
+        return names[compr];
+}
 
 /**
  * MessageSet compression levels

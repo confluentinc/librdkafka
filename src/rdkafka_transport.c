@@ -66,7 +66,7 @@
 #endif
 
 
-#if WITH_SSL
+#if WITH_SSL && OPENSSL_VERSION_NUMBER < 0x10100000L
 static mtx_t *rd_kafka_ssl_locks;
 static int    rd_kafka_ssl_locks_cnt;
 #endif

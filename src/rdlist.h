@@ -332,12 +332,9 @@ void *rd_list_string_copy (const void *elem, void *opaque) {
 /**
  * @brief Init a new list of int32_t's of maximum size \p max_size
  *        where each element is pre-allocated.
-<<<<<<< HEAD
-=======
  *
  * @remark The allocation flag of the original \p rl is retained,
  *         do not pass an uninitialized \p rl to this function.
->>>>>>> 96b11b2... Added builtin support for int32_t rd_list_t
  */
 rd_list_t *rd_list_init_int32 (rd_list_t *rl, int max_size);
 

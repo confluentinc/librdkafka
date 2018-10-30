@@ -626,7 +626,7 @@ rd_kafka_msgq_enq_sorted0 (rd_kafka_msgq_t *rkmq,
 int rd_kafka_msgq_enq_sorted (const rd_kafka_itopic_t *rkt,
                               rd_kafka_msgq_t *rkmq,
                               rd_kafka_msg_t *rkm) {
-        rd_dassert(rkm->rkm_u.producer.msgseq != 0);
+        rd_dassert(rkm->rkm_u.producer.msgid != 0);
         return rd_kafka_msgq_enq_sorted0(rkmq, rkm,
                                          rkt->rkt_conf.msg_order_cmp);
 }
@@ -1161,9 +1161,9 @@ void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {
                 rd_kafka_msgq_len(rkmq), rd_kafka_msgq_size(rkmq));
         TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
                 fprintf(fp, " [%"PRId32"]@%"PRId64
-                        ": rkm msgseq %"PRIu64": \"%.*s\"\n",
+                        ": rkm msgid %"PRIu64": \"%.*s\"\n",
                         rkm->rkm_partition, rkm->rkm_offset,
-                        rkm->rkm_u.producer.msgseq,
+                        rkm->rkm_u.producer.msgid,
                         (int)rkm->rkm_len, (const char *)rkm->rkm_payload);
         }
 }
@@ -1213,11 +1213,11 @@ static int ut_verify_msgq_order (const char *what,
         int cnt = 0;
 
         TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
-                if (rkm->rkm_u.producer.msgseq != expected) {
-                        RD_UT_SAY("%s: expected msgseq %"PRIu64
+                if (rkm->rkm_u.producer.msgid != expected) {
+                        RD_UT_SAY("%s: expected msgid %"PRIu64
                                   " not %"PRIu64" at index #%d",
                                   what, expected,
-                                  rkm->rkm_u.producer.msgseq, cnt);
+                                  rkm->rkm_u.producer.msgid, cnt);
                         fails++;
                 }
                 cnt++;
@@ -1242,7 +1242,7 @@ static int unittest_msgq_order (const char *what, int fifo,
 
         for (i = 1 ; i <= 6 ; i++) {
                 rkm = ut_rd_kafka_msg_new();
-                rkm->rkm_u.producer.msgseq = i;
+                rkm->rkm_u.producer.msgid = i;
                 rd_kafka_msgq_enq_sorted0(&rkmq, rkm, cmp);
         }
 
@@ -1375,8 +1375,8 @@ static int unittest_msg_seq_wrap (void) {
 int unittest_msg (void) {
         int fails = 0;
 
-        fails += unittest_msgq_order("FIFO", 1, rd_kafka_msg_cmp_msgseq);
-        fails += unittest_msgq_order("LIFO", 0, rd_kafka_msg_cmp_msgseq_lifo);
+        fails += unittest_msgq_order("FIFO", 1, rd_kafka_msg_cmp_msgid);
+        fails += unittest_msgq_order("LIFO", 0, rd_kafka_msg_cmp_msgid_lifo);
         fails += unittest_msg_seq_wrap();
 
         return fails;

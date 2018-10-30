@@ -1854,17 +1854,17 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
         lastmsg = rd_kafka_msgq_last(&request->rkbuf_msgq);
         rd_assert(firstmsg && lastmsg);
 
-        /* Store the last msgseq of the batch
+        /* Store the last msgid of the batch
          * on the first message in case we need to retry
          * and thus reconstruct the entire batch. */
-        if (firstmsg->rkm_u.producer.last_msgseq) {
-                /* last_msgseq already set, make sure it
+        if (firstmsg->rkm_u.producer.last_msgid) {
+                /* last_msgid already set, make sure it
                  * actually points to the last message. */
-                rd_assert(firstmsg->rkm_u.producer.last_msgseq ==
-                          lastmsg->rkm_u.producer.msgseq);
+                rd_assert(firstmsg->rkm_u.producer.last_msgid ==
+                          lastmsg->rkm_u.producer.msgid);
         } else {
-                firstmsg->rkm_u.producer.last_msgseq =
-                        lastmsg->rkm_u.producer.msgseq;
+                firstmsg->rkm_u.producer.last_msgid =
+                        lastmsg->rkm_u.producer.msgid;
         }
 
         if (!rd_kafka_pid_eq(request->rkbuf_u.Produce.pid, perr->rktp_pid)) {
@@ -2209,11 +2209,11 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
 
         rd_rkb_dbg(rkb, MSG, "MSGSET",
                    "%s [%"PRId32"]: MessageSet with %i message(s) "
-                   "(MsgSeq %"PRIu64", BaseSeq %"PRId32") "
+                   "(MsgId %"PRIu64", BaseSeq %"PRId32") "
                    "encountered error: %s (actions %s)%s",
                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                    request->rkbuf_msgq.rkmq_msg_cnt,
-                   request->rkbuf_u.Produce.base_msgseq,
+                   request->rkbuf_u.Produce.base_msgid,
                    request->rkbuf_u.Produce.base_seq,
                    rd_kafka_err2str(perr->err),
                    rd_kafka_actions2str(perr->actions),
@@ -2416,10 +2416,11 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
         if (likely(!err)) {
                 rd_rkb_dbg(rkb, MSG, "MSGSET",
                            "%s [%"PRId32"]: MessageSet with %i message(s) "
-                           "(MsgSeq %"PRIu64", BaseSeq %"PRId32") delivered",
-                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                           "(MsgId %"PRIu64", BaseSeq %"PRId32") delivered",
+                           rktp->rktp_rkt->rkt_topic->str,
+                           rktp->rktp_partition,
                            request->rkbuf_msgq.rkmq_msg_cnt,
-                           request->rkbuf_u.Produce.base_msgseq,
+                           request->rkbuf_u.Produce.base_msgid,
                            request->rkbuf_u.Produce.base_seq);
 
                 if (rktp->rktp_rkt->rkt_conf.required_acks != 0)

@@ -113,7 +113,7 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                  *   messages in-flight to/from
                                                  *   the broker. */
 
-        uint64_t           rktp_msgseq;  /**< Current message sequence number.
+        uint64_t           rktp_msgid;   /**< Current/last message id.
                                           * Each message enqueued on a
                                           * non-UA partition will get a
                                           * partition-unique sequencial
@@ -133,12 +133,14 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                           *   Protected by toppar lock.
                                           *   Only updated in toppar
                                           *   handler thread. */
-                uint64_t epoch_base_seq; /**< This Producer epoch's
-                                          *   base msgseq.
+                uint64_t acked_msgid;    /**< Highest acknowledged message.
+                                          *   Protected by toppar lock. */
+                uint64_t epoch_base_msgid; /**< This Producer epoch's
+                                          *   base msgid.
                                           *   When a new epoch is
                                           *   acquired the base_seq
                                           *   is set to the current
-                                          *   rktp_msgseq so that
+                                          *   rktp_msgid so that
                                           *   sub-sequent produce
                                           *   requests will have
                                           *   a sequence number series

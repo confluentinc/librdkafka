@@ -74,13 +74,13 @@ typedef struct rd_kafka_msgset_writer_s {
         struct {
                 size_t     of;  /* rkbuf's first message position */
                 int64_t    timestamp;
-                uint64_t   msgseq; /**< Internal/original message sequence. */
+                uint64_t   msgid;  /**< Internal/original message id. */
                 int32_t    seq;    /**< Epoch's sequence after adjusting
                                     *   for current epoch and wrapping. */
         } msetw_firstmsg;
 
         struct {
-                uint64_t msgseq;   /**< Last message to add to batch.
+                uint64_t msgid;    /**< Last message to add to batch.
                                     *   This is used when reconstructing
                                     *   batches for resends with
                                     *   the idempotent producer which
@@ -831,15 +831,15 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
 
         /* Idempotent Producer: Acquire BaseSequence from first message */
         if (rd_kafka_pid_valid(rktp->rktp_eos.pid)) {
-                /* Our sequence counter is 64-bits, but the
+                /* Our msgid counter is 64-bits, but the
                  * Kafka protocol's is only 31 (signed), so we'll
                  * need to handle wrapping. */
-                msetw->msetw_firstmsg.msgseq = rkm->rkm_u.producer.msgseq;
+                msetw->msetw_firstmsg.msgid = rkm->rkm_u.producer.msgid;
                 msetw->msetw_firstmsg.seq =
-                        rd_kafka_seq_wrap(rkm->rkm_u.producer.msgseq -
-                                          rktp->rktp_eos.epoch_base_seq);
-                rkbuf->rkbuf_u.Produce.base_msgseq =
-                        msetw->msetw_firstmsg.msgseq;
+                        rd_kafka_seq_wrap(rkm->rkm_u.producer.msgid -
+                                          rktp->rktp_eos.epoch_base_msgid);
+                rkbuf->rkbuf_u.Produce.base_msgid =
+                        msetw->msetw_firstmsg.msgid;
                 rkbuf->rkbuf_u.Produce.base_seq = msetw->msetw_firstmsg.seq;
 
                 /* Check if there is a stored last message
@@ -850,7 +850,7 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                  * Simply tracking the last message, on
                  * the first message, is sufficient for now.
                  * Will be 0 if not applicable. */
-                msetw->msetw_lastmsg.msgseq = rkm->rkm_u.producer.last_msgseq;
+                msetw->msetw_lastmsg.msgid = rkm->rkm_u.producer.last_msgid;
         } else
                 msetw->msetw_firstmsg.seq = -1;
 
@@ -859,16 +859,16 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
          * or limit reached.
          */
         do {
-                if (unlikely(msetw->msetw_lastmsg.msgseq &&
-                             msetw->msetw_lastmsg.msgseq <
-                             rkm->rkm_u.producer.msgseq)) {
+                if (unlikely(msetw->msetw_lastmsg.msgid &&
+                             msetw->msetw_lastmsg.msgid <
+                             rkm->rkm_u.producer.msgid)) {
                         rd_rkb_dbg(rkb, MSG, "PRODUCE",
                                    "Reconstructed MessageSet "
                                    "(%d message(s), %"PRIusz" bytes, "
-                                   "msgseqs %"PRIu64"..%"PRIu64")",
+                                   "MsgIds %"PRIu64"..%"PRIu64")",
                                    msgcnt, len,
-                                   msetw->msetw_firstmsg.msgseq,
-                                   msetw->msetw_lastmsg.msgseq);
+                                   msetw->msetw_firstmsg.msgid,
+                                   msetw->msetw_lastmsg.msgid);
                         break;
                 }
 
@@ -921,26 +921,26 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
          * If this check fails we raise a fatal error since
          * it is unrecoverable and most likely caused by a bug
          * in the client implementation. */
-        if (msgcnt > 0 && msetw->msetw_lastmsg.msgseq) {
+        if (msgcnt > 0 && msetw->msetw_lastmsg.msgid) {
                 rd_kafka_msg_t *lastmsg;
 
                 lastmsg = rd_kafka_msgq_last(&rkbuf->rkbuf_msgq);
                 rd_assert(lastmsg);
 
-                if (unlikely(lastmsg->rkm_u.producer.msgseq !=
-                             msetw->msetw_lastmsg.msgseq)) {
+                if (unlikely(lastmsg->rkm_u.producer.msgid !=
+                             msetw->msetw_lastmsg.msgid)) {
                         rd_kafka_set_fatal_error(
                                 rkb->rkb_rk,
                                 RD_KAFKA_RESP_ERR__INCONSISTENT,
                                 "Unable to reconstruct MessageSet "
                                 "(currently with %d message(s)) "
-                                "with msgseq range %"PRIu64"..%"PRIu64": "
-                                "last message added has msgseq %"PRIu64": "
+                                "with msgid range %"PRIu64"..%"PRIu64": "
+                                "last message added has msgid %"PRIu64": "
                                 "unable to guarantee consistency",
                                 msgcnt,
-                                msetw->msetw_firstmsg.msgseq,
-                                msetw->msetw_lastmsg.msgseq,
-                                lastmsg->rkm_u.producer.msgseq);
+                                msetw->msetw_firstmsg.msgid,
+                                msetw->msetw_lastmsg.msgid,
+                                lastmsg->rkm_u.producer.msgid);
                         return 0;
                 }
         }
@@ -1389,13 +1389,14 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
         rd_rkb_dbg(msetw->msetw_rkb, MSG, "PRODUCE",
                    "%s [%"PRId32"]: "
                    "Produce MessageSet with %i message(s) (%"PRIusz" bytes, "
-                   "ApiVersion %d, MsgVersion %d, MsgSeq %"PRIu64", "
-                   "BaseSeq %"PRId32")",
+                   "ApiVersion %d, MsgVersion %d, MsgId %"PRIu64", "
+                   "BaseSeq %"PRId32", %s)",
                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                    cnt, msetw->msetw_MessageSetSize,
                    msetw->msetw_ApiVersion, msetw->msetw_MsgVersion,
-                   msetw->msetw_firstmsg.msgseq,
-                   msetw->msetw_firstmsg.seq);
+                   msetw->msetw_firstmsg.msgid,
+                   msetw->msetw_firstmsg.seq,
+                   rd_kafka_pid2str(msetw->msetw_pid));
 
         return rkbuf;
 }

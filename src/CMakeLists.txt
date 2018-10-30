@@ -214,6 +214,9 @@ endif()
 if(WITH_SASL_CYRUS)
   string(APPEND PKG_CONFIG_REQUIRES "libsasl2 ")
 endif()
+if(WITH_ZSTD)
+    string(APPEND PKG_CONFIG_REQUIRES "libzstd ")
+endif()
 set(PKG_CONFIG_CFLAGS
     "-I\${includedir}"
 )

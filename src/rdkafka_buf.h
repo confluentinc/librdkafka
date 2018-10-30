@@ -593,7 +593,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         shptr_rd_kafka_toppar_t *s_rktp;
                         rd_kafka_pid_t pid;  /**< Producer Id and Epoch */
                         int32_t base_seq;    /**< Base sequence */
-                        int64_t base_msgseq; /**< Base msgseq */
+                        int64_t base_msgid;  /**< Base msgid */
                 } Produce;
         } rkbuf_u;
 

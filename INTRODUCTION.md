@@ -436,7 +436,7 @@ gap-less may be disabled individually.
 
 librdkafka maintains the original produce() ordering per-partition for all
 messages produced, using an internal per-partition 64-bit counter
-called the msgseq which starts at 1. This msgseq allows messages to be
+called the msgid which starts at 1. This msgid allows messages to be
 re-inserted in the partition message queue in the original order in the
 case of retries.
 
@@ -444,19 +444,19 @@ The Idempotent Producer functionality in the Kafka protocol also has
 a per-message sequence number, which is a signed 32-bit wrapping counter that is
 reset each time the Producer's ID (PID) or Epoch changes.
 
-The librdkafka msgseq is used, along with a base msgseq value stored
+The librdkafka msgid is used, along with a base msgid value stored
 at the time the PID/Epoch was bumped, to calculate the Kafka protocol's
 message sequence number.
 
 With Idempotent Producer enabled there is no risk of reordering despite
 `max.in.flight` > 1 (capped at 5).
 
-**Note**: "msgseq" in log messages refer to the librdkafka msgseq, while "seq"
+**Note**: "MsgId" in log messages refer to the librdkafka msgid, while "seq"
           refers to the protocol message sequence, "baseseq" is the seq of
           the first message in a batch.
 
 
-The producer also maintains two next expected sequence counters:
+The producer statistics also maintains two next expected sequence counters:
 
  * `next_ack_seq` - the next sequence to expect an acknowledgement for, which
                     is the last successfully produced MessageSet's last

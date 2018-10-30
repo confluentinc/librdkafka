@@ -109,10 +109,10 @@ typedef struct rd_kafka_msg_s {
                         rd_ts_t ts_enq;     /* Enqueue/Produce time */
                         rd_ts_t ts_backoff; /* Backoff next Produce until
                                              * this time. */
-                        uint64_t msgseq;    /**< Message sequence number,
+                        uint64_t msgid;     /**< Message sequencial id,
                                              *   used to maintain ordering.
                                              *   Starts at 1. */
-                        uint64_t last_msgseq;/**< On retry this is set
+                        uint64_t last_msgid; /**< On retry this is set
                                               *   on the first message
                                               *   in a batch to point
                                               *   out the last message
@@ -334,45 +334,45 @@ rd_kafka_msg_t *rd_kafka_msgq_last (rd_kafka_msgq_t *rkmq) {
 
 
 /**
- * @brief Message ordering comparator using the message sequence
+ * @brief Message ordering comparator using the message id
  *        number to order messages in ascending order (FIFO).
  */
 static RD_INLINE
-int rd_kafka_msg_cmp_msgseq (const void *_a, const void *_b) {
+int rd_kafka_msg_cmp_msgid (const void *_a, const void *_b) {
         const rd_kafka_msg_t *a = _a, *b = _b;
 
-        rd_dassert(a->rkm_u.producer.msgseq);
+        rd_dassert(a->rkm_u.producer.msgid);
 
-        if (a->rkm_u.producer.msgseq > b->rkm_u.producer.msgseq)
+        if (a->rkm_u.producer.msgid > b->rkm_u.producer.msgid)
                 return 1;
-        else if (a->rkm_u.producer.msgseq < b->rkm_u.producer.msgseq)
+        else if (a->rkm_u.producer.msgid < b->rkm_u.producer.msgid)
                 return -1;
         else
                 return 0;
 }
 
 /**
- * @brief Message ordering comparator using the message sequence
+ * @brief Message ordering comparator using the message id
  *        number to order messages in descending order (LIFO).
  */
 static RD_INLINE
-int rd_kafka_msg_cmp_msgseq_lifo (const void *_a, const void *_b) {
+int rd_kafka_msg_cmp_msgid_lifo (const void *_a, const void *_b) {
         const rd_kafka_msg_t *a = _a, *b = _b;
 
-        rd_dassert(a->rkm_u.producer.msgseq);
+        rd_dassert(a->rkm_u.producer.msgid);
 
-        if (a->rkm_u.producer.msgseq < b->rkm_u.producer.msgseq)
+        if (a->rkm_u.producer.msgid < b->rkm_u.producer.msgid)
                 return 1;
-        else if (a->rkm_u.producer.msgseq > b->rkm_u.producer.msgseq)
+        else if (a->rkm_u.producer.msgid > b->rkm_u.producer.msgid)
                 return -1;
         else
                 return 0;
 }
 
 /**
- * @brief Insert message at its sorted position using the msgseq.
+ * @brief Insert message at its sorted position using the msgid.
  * @remark This is an O(n) operation.
- * @warning The message must have a msgseq set.
+ * @warning The message must have a msgid set.
  * @returns the message count of the queue after enqueuing the message.
  */
 int rd_kafka_msgq_enq_sorted (const rd_kafka_itopic_t *rkt,

@@ -645,9 +645,9 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 
         rd_kafka_toppar_lock(rktp);
 
-        if (!rkm->rkm_u.producer.msgseq &&
+        if (!rkm->rkm_u.producer.msgid &&
             rktp->rktp_partition != RD_KAFKA_PARTITION_UA)
-                rkm->rkm_u.producer.msgseq = ++rktp->rktp_msgseq;
+                rkm->rkm_u.producer.msgid = ++rktp->rktp_msgid;
 
         if (rktp->rktp_partition == RD_KAFKA_PARTITION_UA ||
             rktp->rktp_rkt->rkt_conf.queuing_strategy == RD_KAFKA_QUEUE_FIFO) {
@@ -3463,7 +3463,7 @@ int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
         rd_assert(rkm && *"BUG: pid_change() must only be called with "
                   "non-empty xmitq");
 
-        new_base = rkm->rkm_u.producer.msgseq;
+        new_base = rkm->rkm_u.producer.msgid;
 
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk,
                      TOPIC|RD_KAFKA_DBG_EOS, "NEWPID",
@@ -3474,7 +3474,7 @@ int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
                      rktp->rktp_partition,
                      rd_kafka_pid2str(rktp->rktp_eos.pid),
                      rd_kafka_pid2str(pid),
-                     new_base, rktp->rktp_eos.epoch_base_seq);
+                     new_base, rktp->rktp_eos.epoch_base_msgid);
 
         rd_kafka_toppar_lock(rktp);
         rktp->rktp_eos.pid = pid;
@@ -3482,7 +3482,7 @@ int rd_kafka_toppar_pid_change (rd_kafka_toppar_t *rktp, rd_kafka_pid_t pid) {
         rktp->rktp_eos.next_err_seq = 0;
         rd_kafka_toppar_unlock(rktp);
 
-        rktp->rktp_eos.epoch_base_seq = new_base;
+        rktp->rktp_eos.epoch_base_msgid = new_base;
 
         return 1;
 }

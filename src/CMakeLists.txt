@@ -221,8 +221,12 @@ set(PKG_CONFIG_LIBS
     "-L\${libdir} -lrdkafka"
 )
 set(PKG_CONFIG_LIBS_PRIVATE
-    "-lpthread -lrt"
+    "-lpthread"
 )
+find_library(RT_LIBRARY rt)
+if(RT_LIBRARY)
+  string(APPEND PKG_CONFIG_LIBS_PRIVATE " -lrt")
+endif()
 if(WITH_PLUGINS)
   string(APPEND PKG_CONFIG_LIBS_PRIVATE " -ldl")
 endif()

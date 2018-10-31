@@ -56,82 +56,9 @@ static int is_fatal_cb (rd_kafka_t *rk, rd_kafka_resp_err_t err,
 /* Hang on to the first broker socket we see in connect_cb,
  * reject all the rest (connection refused) to make sure we're only
  * playing with one single broker for this test. */
-static struct {
-        mtx_t     lock;
-        cnd_t     cnd;
-        thrd_t    thrd;
-        struct {
-                int64_t   ts_at;   /* to ctrl thread: at this time, set delay */
-                int       delay;
-                int       ack;     /* from ctrl thread: new delay acked */
-        } cmd;
-        struct {
-                int64_t   ts_at;   /* to ctrl thread: at this time, set delay */
-                int       delay;
 
-        } next;
-        int       term;
-} ctrl;
+#include "sockem_ctrl.h"
 
-static int ctrl_thrd_main (void *arg) {
-        test_curr = (struct test *)arg;
-
-        mtx_lock(&ctrl.lock);
-        while (!ctrl.term) {
-                int64_t now;
-
-                cnd_timedwait_ms(&ctrl.cnd, &ctrl.lock, 10);
-
-                if (ctrl.cmd.ts_at) {
-                        ctrl.next.ts_at = ctrl.cmd.ts_at;
-                        ctrl.next.delay = ctrl.cmd.delay;
-                        ctrl.cmd.ts_at = 0;
-                        ctrl.cmd.ack = 1;
-                        printf(_C_CYA "## %s: sockem: "
-                               "receieved command to set delay "
-                               "to %d in %dms\n" _C_CLR,
-                               __FILE__,
-                               ctrl.next.delay,
-                               (int)(ctrl.next.ts_at - test_clock()) / 1000);
-
-                }
-
-                now = test_clock();
-                if (ctrl.next.ts_at && now > ctrl.next.ts_at) {
-                        printf(_C_CYA "## %s: "
-                               "sockem: setting socket delay to %d\n" _C_CLR,
-                               __FILE__, ctrl.next.delay);
-                        test_socket_sockem_set_all("delay", ctrl.next.delay);
-                        ctrl.next.ts_at = 0;
-                        cnd_signal(&ctrl.cnd); /* signal back to caller */
-                }
-        }
-        mtx_unlock(&ctrl.lock);
-
-        return 0;
-}
-
-
-
-/**
- * @brief Set socket delay to kick in after \p after ms
- */
-static void set_delay (int after, int delay) {
-        TEST_SAY("Set delay to %dms (after %dms)\n", delay, after);
-
-        mtx_lock(&ctrl.lock);
-        ctrl.cmd.ts_at = test_clock() + (after*1000);
-        ctrl.cmd.delay = delay;
-        ctrl.cmd.ack = 0;
-        cnd_broadcast(&ctrl.cnd);
-
-        /* Wait for ack from sockem thread */
-        while (!ctrl.cmd.ack) {
-                TEST_SAY("Waiting for sockem control ack\n");
-                cnd_timedwait_ms(&ctrl.cnd, &ctrl.lock, 1000);
-        }
-        mtx_unlock(&ctrl.lock);
-}
 
 /**
  * @brief Test produce retries.
@@ -148,14 +75,11 @@ static void do_test_produce_retries (const char *topic,
         uint64_t testid;
         rd_kafka_resp_err_t err;
         int msgcnt = 1;
+        sockem_ctrl_t ctrl;
 
         TEST_SAY(_C_BLU "Test produce retries "
                  "(idempotence=%d,try_fail=%d,should_fail=%d)\n",
                  idempotence, try_fail, should_fail);
-
-        memset(&ctrl, 0, sizeof(ctrl));
-        mtx_init(&ctrl.lock, mtx_plain);
-        cnd_init(&ctrl.cnd);
 
         testid = test_id_generate();
 
@@ -165,10 +89,12 @@ static void do_test_produce_retries (const char *topic,
             !strcmp(test_conf_get(conf, "enable.sparse.connections"),
                     "true")) {
                 rd_kafka_conf_destroy(conf);
-                TEST_SKIP("Sparse connections enabled: "
-                          "skipping connection-timing related test\n");
+                TEST_SAY(_C_YEL "Sparse connections enabled: "
+                         "skipping connection-timing related test\n");
                 return;
         }
+
+        sockem_ctrl_init(&ctrl);
 
         test_conf_set(conf, "socket.timeout.ms", "1000");
         /* Avoid disconnects on request timeouts */
@@ -198,20 +124,18 @@ static void do_test_produce_retries (const char *topic,
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
 
-        if (thrd_create(&ctrl.thrd, ctrl_thrd_main, test_curr) != thrd_success)
-                TEST_FAIL("Failed to create sockem ctrl thread");
-
         /* Create the topic to make sure connections are up and ready. */
         err = test_auto_create_topic_rkt(rk, rkt, tmout_multip(5000));
         TEST_ASSERT(!err, "topic creation failed: %s", rd_kafka_err2str(err));
 
         /* Set initial delay to 3s */
-        set_delay(0, 3000); /* Takes effect immediately */
+        sockem_ctrl_set_delay(&ctrl, 0, 3000); /* Takes effect immediately */
 
         /* After two retries, remove the delay, the third retry
          * should kick in and work. */
-        set_delay(((1000 /*socket.timeout.ms*/ +
-                    5000 /*retry.backoff.ms*/) * 2) - 2000, 0);
+        sockem_ctrl_set_delay(&ctrl,
+                              ((1000 /*socket.timeout.ms*/ +
+                                5000 /*retry.backoff.ms*/) * 2) - 2000, 0);
 
         test_produce_msgs(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
                           0, msgcnt, NULL, 0);
@@ -225,14 +149,7 @@ static void do_test_produce_retries (const char *topic,
                 test_consume_msgs_easy(NULL, topic, testid, -1, msgcnt, NULL);
         }
 
-        /* Join controller thread */
-        mtx_lock(&ctrl.lock);
-        ctrl.term = 1;
-        mtx_unlock(&ctrl.lock);
-        thrd_join(ctrl.thrd, NULL);
-
-        cnd_destroy(&ctrl.cnd);
-        mtx_destroy(&ctrl.lock);
+        sockem_ctrl_term(&ctrl);
 
         TEST_SAY(_C_GRN "Test produce retries "
                  "(idempotence=%d,try_fail=%d,should_fail=%d): PASS\n",

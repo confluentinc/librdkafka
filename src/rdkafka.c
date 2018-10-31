@@ -1224,7 +1224,8 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
                    "\"rx_ver_drops\": %"PRIu64", "
                    "\"msgs_inflight\": %"PRId32", "
                    "\"next_ack_seq\": %"PRId32", "
-                   "\"next_err_seq\": %"PRId32
+                   "\"next_err_seq\": %"PRId32", "
+                   "\"acked_msgid\": %"PRIu64
                    "} ",
 		   first ? "" : ", ",
 		   rktp->rktp_partition,
@@ -1260,7 +1261,8 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
                    rd_atomic64_get(&rktp->rktp_c.rx_ver_drops),
                    rd_atomic32_get(&rktp->rktp_msgs_inflight),
                    rktp->rktp_eos.next_ack_seq,
-                   rktp->rktp_eos.next_err_seq);
+                   rktp->rktp_eos.next_err_seq,
+                   rktp->rktp_eos.acked_msgid);
 
         if (total) {
                 total->txmsgs      += rd_atomic64_get(&rktp->rktp_c.tx_msgs);

@@ -324,6 +324,23 @@ void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk) {
         rd_kafka_wrunlock(rk);
 }
 
+/**
+ * @brief Mark partition as waiting-to-drain.
+ *
+ * @locks toppar_lock MUST be held
+ * @locality broker thread (leader or not)
+ */
+void rd_kafka_idemp_drain_toppar (rd_kafka_toppar_t *rktp) {
+        if (rktp->rktp_eos.wait_drain)
+                return;
+
+        rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, EOS|RD_KAFKA_DBG_TOPIC, "DRAIN",
+                     "%.*s [%"PRId32"] beginning partition drain",
+                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                     rktp->rktp_partition);
+        rktp->rktp_eos.wait_drain = rd_true;
+}
+
 
 /**
  * @brief Call when all partition request queues

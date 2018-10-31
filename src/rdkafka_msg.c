@@ -682,6 +682,26 @@ void rd_kafka_msgq_set_metadata (rd_kafka_msgq_t *rkmq,
 }
 
 
+/**
+ * @brief Move all messages in \p src to \p dst whose msgid <= last_msgid.
+ *
+ * @remark src must be ordered
+ */
+void rd_kafka_msgq_move_acked (rd_kafka_msgq_t *dest, rd_kafka_msgq_t *src,
+                               uint64_t last_msgid,
+                               rd_kafka_msg_status_t status) {
+        rd_kafka_msg_t *rkm;
+
+        while ((rkm = rd_kafka_msgq_first(src)) &&
+               rkm->rkm_u.producer.msgid <= last_msgid) {
+                rd_kafka_msgq_deq(src, rkm, 1);
+		rd_kafka_msgq_enq(dest, rkm);
+
+                rkm->rkm_status = status;
+        }
+}
+
+
 
 int32_t rd_kafka_msg_partitioner_random (const rd_kafka_topic_t *rkt,
 					 const void *key, size_t keylen,
@@ -1276,7 +1296,8 @@ static int unittest_msgq_order (const char *what, int fifo,
 
         /* Retry the messages, which moves them back to sendq
          * maintaining the original order */
-        rd_kafka_retry_msgq(&rkmq, &sendq, 1, 1, 0, cmp);
+        rd_kafka_retry_msgq(&rkmq, &sendq, 1, 1, 0,
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
 
         RD_UT_ASSERT(rd_kafka_msgq_len(&sendq) == 0,
                      "sendq FIFO should be empty, not contain %d messages",
@@ -1313,7 +1334,8 @@ static int unittest_msgq_order (const char *what, int fifo,
 
         /* Retry the messages, which should now keep the 3 first messages
          * on sendq (no more retries) and just number 4 moved back. */
-        rd_kafka_retry_msgq(&rkmq, &sendq, 1, 1, 0, cmp);
+        rd_kafka_retry_msgq(&rkmq, &sendq, 1, 1, 0,
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
 
         if (fifo) {
                 if (ut_verify_msgq_order("readded #2", &rkmq, 4, 6))

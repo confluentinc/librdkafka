@@ -132,13 +132,13 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 	rd_kafka_confsource_t  rkb_source;
 	struct {
 		rd_atomic64_t tx_bytes;
-		rd_atomic64_t tx;    /* Kafka-messages (not payload msgs) */
+		rd_atomic64_t tx;            /**< Kafka requests */
 		rd_atomic64_t tx_err;
 		rd_atomic64_t tx_retries;
 		rd_atomic64_t req_timeouts;  /* Accumulated value */
 
 		rd_atomic64_t rx_bytes;
-		rd_atomic64_t rx;    /* Kafka messages (not payload msgs) */
+		rd_atomic64_t rx;            /**< Kafka responses */
 		rd_atomic64_t rx_err;
 		rd_atomic64_t rx_corrid_err; /* CorrId misses */
 		rd_atomic64_t rx_partial;    /* Partial messages received
@@ -152,6 +152,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
                 rd_atomic32_t disconnects;   /**< Disconnects.
                                               *   Always peer-triggered. */
+
+                rd_atomic64_t reqtype[RD_KAFKAP__NUM]; /**< Per request-type
+                                                        *   counter */
 	} rkb_c;
 
         int                 rkb_req_timeouts;  /* Current value */

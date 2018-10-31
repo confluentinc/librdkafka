@@ -1273,6 +1273,93 @@ static RD_INLINE void rd_kafka_stats_emit_toppar (struct _stats_emit *st,
 }
 
 /**
+ * @brief Emit broker request type stats
+ */
+static void rd_kafka_stats_emit_broker_reqs (struct _stats_emit *st,
+                                             rd_kafka_broker_t *rkb) {
+        /* Filter out request types that will never be sent by the client. */
+        static const rd_bool_t filter[4][RD_KAFKAP__NUM] = {
+                [RD_KAFKA_PRODUCER] = {
+                        [RD_KAFKAP_Fetch] = rd_true,
+                        [RD_KAFKAP_OffsetCommit] = rd_true,
+                        [RD_KAFKAP_OffsetFetch] = rd_true,
+                        [RD_KAFKAP_GroupCoordinator] = rd_true,
+                        [RD_KAFKAP_JoinGroup] = rd_true,
+                        [RD_KAFKAP_Heartbeat] = rd_true,
+                        [RD_KAFKAP_LeaveGroup] = rd_true,
+                        [RD_KAFKAP_SyncGroup] = rd_true
+                },
+                [RD_KAFKA_CONSUMER] = {
+                        [RD_KAFKAP_Produce] = rd_true,
+                        [RD_KAFKAP_InitProducerId] = rd_true
+                },
+                [2/*any client type*/] = {
+                        [RD_KAFKAP_UpdateMetadata] = rd_true,
+                        [RD_KAFKAP_ControlledShutdown] = rd_true,
+                        [RD_KAFKAP_LeaderAndIsr] = rd_true,
+                        [RD_KAFKAP_StopReplica] = rd_true,
+                        [RD_KAFKAP_OffsetForLeaderEpoch] = rd_true,
+
+                        /* FIXME: Remove when transaction support is added */
+                        [RD_KAFKAP_AddPartitionsToTxn] = rd_true,
+                        [RD_KAFKAP_AddOffsetsToTxn] = rd_true,
+                        [RD_KAFKAP_EndTxn] = rd_true,
+
+                        [RD_KAFKAP_WriteTxnMarkers] = rd_true,
+                        [RD_KAFKAP_TxnOffsetCommit] = rd_true,
+
+                        [RD_KAFKAP_AlterReplicaLogDirs] = rd_true,
+                        [RD_KAFKAP_DescribeLogDirs] = rd_true,
+
+                        /* FIXME: Remove when re-auth support is added */
+                        [RD_KAFKAP_SaslAuthenticate] = rd_true,
+
+                        [RD_KAFKAP_CreateDelegationToken] = rd_true,
+                        [RD_KAFKAP_RenewDelegationToken] = rd_true,
+                        [RD_KAFKAP_ExpireDelegationToken] = rd_true,
+                        [RD_KAFKAP_DescribeDelegationToken] = rd_true
+                },
+                [3/*hide-unless-non-zero*/] = {
+                        /* Hide Admin requests unless they've been used */
+                        [RD_KAFKAP_CreateTopics] =  rd_true,
+                        [RD_KAFKAP_DeleteTopics] =  rd_true,
+                        [RD_KAFKAP_DeleteRecords] =  rd_true,
+                        [RD_KAFKAP_CreatePartitions] =  rd_true,
+                        [RD_KAFKAP_DescribeAcls] = rd_true,
+                        [RD_KAFKAP_CreateAcls] = rd_true,
+                        [RD_KAFKAP_DeleteAcls] = rd_true,
+                        [RD_KAFKAP_DescribeConfigs] = rd_true,
+                        [RD_KAFKAP_AlterConfigs] = rd_true,
+                        [RD_KAFKAP_DeleteGroups] = rd_true,
+                        [RD_KAFKAP_ListGroups] = rd_true,
+                        [RD_KAFKAP_DescribeGroups] = rd_true
+                }
+        };
+        int i;
+        int cnt = 0;
+
+        _st_printf("\"req\": { ");
+        for (i = 0 ; i < RD_KAFKAP__NUM ; i++) {
+                int64_t v;
+
+                if (filter[rkb->rkb_rk->rk_type][i] || filter[2][i])
+                        continue;
+
+                v = rd_atomic64_get(&rkb->rkb_c.reqtype[i]);
+                if (!v && filter[3][i])
+                        continue; /* Filter out zero values */
+
+                _st_printf("%s\"%s\": %"PRId64,
+                           cnt > 0 ? ", " : "",
+                           rd_kafka_ApiKey2str(i), v);
+
+                cnt++;
+        }
+        _st_printf(" }, ");
+}
+
+
+/**
  * Emit all statistics
  */
 static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
@@ -1386,6 +1473,8 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                                         &rkb->rkb_avg_outbuf_latency);
                 rd_kafka_stats_emit_avg(st, "rtt", &rkb->rkb_avg_rtt);
                 rd_kafka_stats_emit_avg(st, "throttle", &rkb->rkb_avg_throttle);
+
+                rd_kafka_stats_emit_broker_reqs(st, rkb);
 
                 _st_printf("\"toppars\":{ "/*open toppars*/);
 

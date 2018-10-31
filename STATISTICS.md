@@ -98,6 +98,7 @@ rxbytes | int | | Total number of bytes received
 rxerrs | int | | Total number of receive errors
 rxcorriderrs | int | | Total number of unmatched correlation ids in response (typically for timed out requests)
 rxpartial | int | | Total number of partial MessageSets received. The broker may return partial responses if the full MessageSet could not fit in remaining Fetch response size.
+req | object | | Request type counters. Object key is the request name, value is the number of requests sent.
 zbuf_grow | int | | Total number of decompression buffer size increases
 buf_grow | int | | Total number of buffer size increases (deprecated, unused)
 wakeups | int | | Broker thread poll wakeups

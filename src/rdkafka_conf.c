@@ -1009,6 +1009,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "(including retries). Delivery error occurs when either the retry "
 	  "count or the message timeout are exceeded.",
 	  0, 900*1000, 300*1000 },
+        { _RK_TOPIC|_RK_PRODUCER, "delivery.timeout.ms", _RK_C_ALIAS,
+          .sdef = "message.timeout.ms" },
         { _RK_TOPIC|_RK_PRODUCER, "queuing.strategy", _RK_C_S2I,
           _RKT(queuing_strategy),
           "Producer queuing strategy. FIFO preserves produce ordering, "

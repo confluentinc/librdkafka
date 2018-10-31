@@ -2291,7 +2291,6 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                          * there is no chance of duplicates on retry, which
                          * means these messages were not persisted. */
                         perr->status = RD_KAFKA_MSG_STATUS_NOT_PERSISTED;
-
                 }
 
                 if (rd_kafka_is_idempotent(rk)) {
@@ -2299,9 +2298,26 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                          * fail with ERR_OUT_OF_ORDER_SEQUENCE_NUMBER,
                          * which should not be treated as a fatal error
                          * since this request and sub-sequent requests
-                         * will be retried and thus return to order. */
-                        perr->update_next_ack = rd_false;
+                         * will be retried and thus return to order.
+                         * Unless the error was a timeout, or similar,
+                         * in which case the request might have made it
+                         * and the messages are considered possibly persisted:
+                         * in this case we allow the next in-flight response
+                         * to be successful, in which case we mark
+                         * this request's messages as succesfully delivered. */
+                        if (perr->status &
+                            RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED)
+                                perr->update_next_ack = rd_true;
+                        else
+                                perr->update_next_ack = rd_false;
                         perr->update_next_err = rd_true;
+
+                        /* Drain outstanding requests so that retries
+                         * are attempted with proper state knowledge and
+                         * without any in-flight requests. */
+                        rd_kafka_toppar_lock(rktp);
+                        rd_kafka_idemp_drain_toppar(rktp);
+                        rd_kafka_toppar_unlock(rktp);
                 }
 
                 /* Since requests are specific to a broker
@@ -2313,7 +2329,8 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                  * would exceeded the retry count will not be
                  * moved but instead fail below. */
                 rd_kafka_toppar_retry_msgq(rktp, &request->rkbuf_msgq,
-                                           perr->incr_retry);
+                                           perr->incr_retry,
+                                           perr->status);
 
                 if (rd_kafka_msgq_len(&request->rkbuf_msgq) == 0) {
                         /* No need do anything more with the request
@@ -2365,6 +2382,107 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                 perr->err = RD_KAFKA_RESP_ERR__MSG_TIMED_OUT;
 
         return 1;
+}
+
+/**
+ * @brief Handle ProduceResponse success for idempotent producer
+ *
+ * @warning May be called on the old leader thread. Lock rktp appropriately!
+ *
+ * @locks none
+ * @locality broker thread (but not necessarily the leader broker thread)
+ */
+static void
+rd_kafka_handle_idempotent_Produce_success (rd_kafka_t *rk,
+                                            rd_kafka_toppar_t *rktp,
+                                            rd_kafka_buf_t *request,
+                                            int32_t next_seq) {
+        rd_kafka_broker_t *rkb = request->rkbuf_rkb;
+        char fatal_err[512];
+        uint64_t first_msgid, last_msgid;
+
+        *fatal_err = '\0';
+
+        first_msgid = rd_kafka_msgq_first(&request->rkbuf_msgq)->
+                rkm_u.producer.msgid;
+        last_msgid = rd_kafka_msgq_last(&request->rkbuf_msgq)->
+                rkm_u.producer.msgid;
+
+        rd_kafka_toppar_lock(rktp);
+
+        /* If the last acked msgid is higher than
+         * the next message to (re)transmit in the message queue
+         * it means a previous series of R1,R2 ProduceRequests
+         * had R1 fail with uncertain persistance status,
+         * such as timeout or transport error, but R2 succeeded,
+         * which means the messages in R1 were in fact persisted.
+         * In this case trigger delivery reports for all messages
+         * in queue until we hit a non-acked message. */
+        if (unlikely(rktp->rktp_eos.acked_msgid < first_msgid - 1)) {
+                rd_kafka_dr_implicit_ack(rkb, rktp, last_msgid);
+
+        } else if (unlikely(request->rkbuf_u.Produce.base_seq !=
+                            rktp->rktp_eos.next_ack_seq &&
+                            request->rkbuf_u.Produce.base_seq ==
+                            rktp->rktp_eos.next_err_seq)) {
+                /* Response ordering is typically not a concern
+                 * (but will not happen with current broker versions),
+                 * unless we're expecting an error to be returned at
+                 * this sequence rather than a success ack, in which
+                 * case raise a fatal error. */
+
+                /* Can't call set_fatal_error() while
+                 * holding the toppar lock, so construct
+                 * the error string here and call
+                 * set_fatal_error() below after
+                 * toppar lock has been released. */
+                rd_snprintf(
+                        fatal_err, sizeof(fatal_err),
+                        "ProduceRequest with %d message(s) "
+                        "succeeded when expecting failure "
+                        "(broker %"PRId32" %s, "
+                        "base seq %"PRId32", "
+                        "next ack seq %"PRId32", "
+                        "next err seq %"PRId32": "
+                        "unable to retry without risking "
+                        "duplication/reordering",
+                        rd_kafka_msgq_len(&request->rkbuf_msgq),
+                        rkb->rkb_nodeid,
+                        rd_kafka_pid2str(request->rkbuf_u.
+                                         Produce.pid),
+                        request->rkbuf_u.Produce.base_seq,
+                        rktp->rktp_eos.next_ack_seq,
+                        rktp->rktp_eos.next_err_seq);
+
+                rktp->rktp_eos.next_err_seq = next_seq;
+        }
+
+        if (likely(!*fatal_err)) {
+                /* Advance next expected err and/or ack sequence */
+
+                /* Only step err seq if it hasn't diverged. */
+                if (rktp->rktp_eos.next_err_seq ==
+                    rktp->rktp_eos.next_ack_seq)
+                        rktp->rktp_eos.next_err_seq = next_seq;
+
+                rktp->rktp_eos.next_ack_seq = next_seq;
+
+        }
+
+        /* Store the last acked message sequence,
+         * since retries within the broker cache window (5 requests)
+         * will succeed for older messages we must only update the
+         * acked msgid if it is higher than the last acked. */
+        if (last_msgid > rktp->rktp_eos.acked_msgid)
+                rktp->rktp_eos.acked_msgid = last_msgid;
+
+        rd_kafka_toppar_unlock(rktp);
+
+        /* Must call set_fatal_error() after releasing
+         * the toppar lock. */
+        if (unlikely(*fatal_err))
+                rd_kafka_set_fatal_error(rk, RD_KAFKA_RESP_ERR__INCONSISTENT,
+                                         "%s", fatal_err);
 }
 
 
@@ -2426,50 +2544,10 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                 if (rktp->rktp_rkt->rkt_conf.required_acks != 0)
                         status = RD_KAFKA_MSG_STATUS_PERSISTED;
 
-                if (rd_kafka_is_idempotent(rk)) {
-
-                        rd_kafka_toppar_lock(rktp);
-                        /* Response ordering is typically not a concern
-                         * (but will not happen with current broker versions),
-                         * unless we're expecting an error to be returned at
-                         * this sequence rather than a success ack, in which
-                         * case raise a fatal error. */
-                        if (unlikely(request->rkbuf_u.Produce.base_seq !=
-                                     rktp->rktp_eos.next_ack_seq &&
-                                     request->rkbuf_u.Produce.base_seq ==
-                                     rktp->rktp_eos.next_err_seq)) {
-                                rd_kafka_set_fatal_error(
-                                        rk,
-                                        RD_KAFKA_RESP_ERR__INCONSISTENT,
-                                        "ProduceRequest with %d message(s) "
-                                        "succeeded when expecting failure "
-                                        "(broker %"PRId32" %s, "
-                                        "base seq %"PRId32", "
-                                        "next ack seq %"PRId32", "
-                                        "next err seq %"PRId32": "
-                                        "unable to retry without risking "
-                                        "duplication/reordering",
-                                        rd_kafka_msgq_len(&request->rkbuf_msgq),
-                                        rkb->rkb_nodeid,
-                                        rd_kafka_pid2str(request->rkbuf_u.
-                                                         Produce.pid),
-                                        request->rkbuf_u.Produce.base_seq,
-                                        rktp->rktp_eos.next_ack_seq,
-                                        rktp->rktp_eos.next_err_seq);
-                                rktp->rktp_eos.next_err_seq = next_seq;
-                        } else {
-
-                                /* Only step err seq if it hasn't diverged. */
-                                if (rktp->rktp_eos.next_err_seq ==
-                                    rktp->rktp_eos.next_ack_seq)
-                                        rktp->rktp_eos.next_err_seq = next_seq;
-
-                                rktp->rktp_eos.next_ack_seq = next_seq;
-                        }
-
-                        rd_kafka_toppar_unlock(rktp);
-                }
-
+                if (rd_kafka_is_idempotent(rk))
+                        rd_kafka_handle_idempotent_Produce_success(rk, rktp,
+                                                                   request,
+                                                                   next_seq);
         } else {
                 /* Error handling */
                 struct rd_kafka_Produce_err perr = {

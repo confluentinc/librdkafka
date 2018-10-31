@@ -767,6 +767,7 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
 int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
                          rd_kafka_msgq_t *srcq,
                          int incr_retry, int max_retries, rd_ts_t backoff,
+                         rd_kafka_msg_status_t status,
                          int (*cmp) (const void *a, const void *b)) {
         rd_kafka_msgq_t retryable = RD_KAFKA_MSGQ_INITIALIZER(retryable);
         rd_kafka_msg_t *rkm, *tmp;
@@ -786,6 +787,15 @@ int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
 
                 rkm->rkm_u.producer.ts_backoff = backoff;
                 rkm->rkm_u.producer.retries  += incr_retry;
+
+                /* Don't downgrade a message from any form of PERSISTENT
+                 * to NOT_PERSISTENT, since the original cause of indicating
+                 * PERSISTENT can't be changed.
+                 * E.g., a previous ack or in-flight timeout. */
+                if (likely(!(status == RD_KAFKA_MSG_STATUS_NOT_PERSISTED &&
+                             rkm->rkm_status !=
+                             RD_KAFKA_MSG_STATUS_NOT_PERSISTED)))
+                        rkm->rkm_status = status;
         }
 
         /* No messages are retryable */
@@ -803,6 +813,7 @@ int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
  *        into the partition's message queue.
  *
  * @param incr_retry Increment retry count for messages.
+ * @param status Set status on each message.
  *
  * @returns 0 if all messages were retried, or 1 if some messages
  *          could not be retried.
@@ -811,7 +822,7 @@ int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
  */
 
 int rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp, rd_kafka_msgq_t *rkmq,
-                                int incr_retry) {
+                                int incr_retry, rd_kafka_msg_status_t status) {
         rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
         rd_ts_t backoff = rd_clock() + (rk->rk_conf.retry_backoff_ms * 1000);
         int r;
@@ -822,7 +833,7 @@ int rd_kafka_toppar_retry_msgq (rd_kafka_toppar_t *rktp, rd_kafka_msgq_t *rkmq,
         rd_kafka_toppar_lock(rktp);
         r = rd_kafka_retry_msgq(&rktp->rktp_msgq, rkmq,
                                 incr_retry, rk->rk_conf.max_retries,
-                                backoff,
+                                backoff, status,
                                 rktp->rktp_rkt->rkt_conf.msg_order_cmp);
         rd_kafka_toppar_unlock(rktp);
 

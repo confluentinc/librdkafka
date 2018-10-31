@@ -392,6 +392,10 @@ int rd_kafka_recv (rd_kafka_broker_t *rkb);
 void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err);
 
+void rd_kafka_dr_implicit_ack (rd_kafka_broker_t *rkb,
+                               rd_kafka_toppar_t *rktp,
+                               uint64_t last_msgid);
+
 void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
                                rd_kafka_buf_t *rkbuf,
                                rd_kafka_resp_cb_t *resp_cb,

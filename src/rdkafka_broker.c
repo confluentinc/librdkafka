@@ -2318,7 +2318,8 @@ static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb) {
  * the message as they are popped off the OP_DR msgq in rd_kafka_poll() et.al
  */
 void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
-		       rd_kafka_msgq_t *rkmq, rd_kafka_resp_err_t err) {
+		       rd_kafka_msgq_t *rkmq,
+                       rd_kafka_resp_err_t err) {
         rd_kafka_t *rk = rkt->rkt_rk;
 
 	if (unlikely(rd_kafka_msgq_len(rkmq) == 0))
@@ -2350,6 +2351,50 @@ void rd_kafka_dr_msgq (rd_kafka_itopic_t *rkt,
 	}
 }
 
+
+/**
+ * @brief Trigger delivery reports for implicitly acked messages.
+ *
+ * @locks none
+ * @locality broker thread - either last or current leader
+ */
+void rd_kafka_dr_implicit_ack (rd_kafka_broker_t *rkb,
+                               rd_kafka_toppar_t *rktp,
+                               uint64_t last_msgid) {
+        rd_kafka_msgq_t acked = RD_KAFKA_MSGQ_INITIALIZER(acked);
+        rd_kafka_msgq_t acked2 = RD_KAFKA_MSGQ_INITIALIZER(acked2);
+        rd_kafka_msg_status_t status = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
+
+        if (rktp->rktp_rkt->rkt_conf.required_acks != 0)
+                status = RD_KAFKA_MSG_STATUS_PERSISTED;
+
+        rd_kafka_msgq_move_acked(&acked, &rktp->rktp_xmit_msgq, last_msgid,
+                                 status);
+        rd_kafka_msgq_move_acked(&acked2, &rktp->rktp_msgq, last_msgid,
+                                 status);
+
+        /* Insert acked2 into acked in correct order */
+        rd_kafka_msgq_insert_msgq(&acked, &acked2,
+                                  rktp->rktp_rkt->rkt_conf.msg_order_cmp);
+
+        if (!rd_kafka_msgq_len(&acked))
+                return;
+
+        rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "IMPLICITACK",
+                           "%.*s [%"PRId32"] %d message(s) implicitly acked "
+                           "by subsequent batch success "
+                           "(msgids %"PRIu64"..%"PRIu64", "
+                           "last acked %"PRIu64")",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition,
+                           rd_kafka_msgq_len(&acked),
+                           rd_kafka_msgq_first(&acked)->rkm_u.producer.msgid,
+                           rd_kafka_msgq_last(&acked)->rkm_u.producer.msgid,
+                           last_msgid);
+
+        /* Trigger delivery reports */
+        rd_kafka_dr_msgq(rktp->rktp_rkt, &acked, RD_KAFKA_RESP_ERR_NO_ERROR);
+}
 
 
 
@@ -2609,7 +2654,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                                 /* Wait for all outstanding requests from
                                  * the previous leader to finish before
                                  * producing anything to this new leader. */
-                                rktp->rktp_eos.wait_drain = rd_true;
+                                rd_kafka_idemp_drain_toppar(rktp);
                         }
                 }
 
@@ -2919,6 +2964,20 @@ static void rd_kafka_broker_toppar_msgq_scan (rd_kafka_broker_t *rkb,
         }
 }
 
+
+/**
+ * @returns the number of requests that may be enqueued before
+ *          queue.backpressure.threshold is reached.
+ */
+
+static RD_INLINE unsigned int
+rd_kafka_broker_outbufs_space (rd_kafka_broker_t *rkb) {
+        int r = rkb->rkb_rk->rk_conf.queue_backpressure_thres -
+                rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt);
+        return r < 0 ? 0 : (unsigned int)r;
+}
+
+
 /**
  * @brief Serve a toppar for producing.
  *
@@ -2940,21 +2999,16 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
         int r;
         rd_kafka_msg_t *rkm;
         int move_cnt = 0;
+        unsigned int max_requests;
+        unsigned int reqcnt;
 
         /* By limiting the number of not-yet-sent buffers (rkb_outbufs) we
          * provide a backpressure mechanism to the producer loop
          * which allows larger message batches to accumulate and thus
          * increase throughput.
          * This comes at no latency cost since there are already
-         * buffers enqueued waiting for transmission.
-         *
-         * The !do_timeout_scan condition is an optimization to
-         * avoid having to acquire the lock in the typical case
-         * (do_timeout_scan==0). */
-        if (unlikely(!do_timeout_scan &&
-                     rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) >=
-                     rkb->rkb_rk->rk_conf.queue_backpressure_thres))
-                return 0;
+         * buffers enqueued waiting for transmission. */
+        max_requests = rd_kafka_broker_outbufs_space(rkb);
 
         rd_kafka_toppar_lock(rktp);
 
@@ -2982,75 +3036,22 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
 
         if (unlikely(rd_kafka_fatal_error_code(rkb->rkb_rk))) {
                 /* Fatal error has been raised, don't produce. */
-                rd_kafka_toppar_unlock(rktp);
-                return 0;
-        }
-
-        if (unlikely(RD_KAFKA_TOPPAR_IS_PAUSED(rktp))) {
+                max_requests = 0;
+        } else if (unlikely(RD_KAFKA_TOPPAR_IS_PAUSED(rktp))) {
                 /* Partition is paused */
-                rd_kafka_toppar_unlock(rktp);
-                return 0;
+                max_requests = 0;
+        } else if (max_requests > 0) {
+                /* Move messages from locked partition produce queue
+                 * to broker-local xmit queue. */
+                if ((move_cnt = rktp->rktp_msgq.rkmq_msg_cnt) > 0)
+                        rd_kafka_msgq_insert_msgq(&rktp->rktp_xmit_msgq,
+                                                  &rktp->rktp_msgq,
+                                                  rktp->rktp_rkt->rkt_conf.
+                                                  msg_order_cmp);
         }
 
-
-        /* Move messages from locked partition produce queue
-         * to broker-local xmit queue. */
-        if ((move_cnt = rktp->rktp_msgq.rkmq_msg_cnt) > 0)
-                rd_kafka_msgq_insert_msgq(&rktp->rktp_xmit_msgq,
-                                          &rktp->rktp_msgq,
-                                          rktp->rktp_rkt->rkt_conf.
-                                          msg_order_cmp);
         rd_kafka_toppar_unlock(rktp);
 
-        r = rktp->rktp_xmit_msgq.rkmq_msg_cnt;
-        if (r == 0)
-                return 0;
-
-        rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
-                   "%.*s [%"PRId32"] %d message(s) in "
-                   "xmit queue (%d added from partition queue)",
-                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                   rktp->rktp_partition,
-                   r, move_cnt);
-
-        if (unlikely(rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP)) {
-                /* There are messages to send but connection is not up. */
-                rd_rkb_dbg(rkb, BROKER, "TOPPAR",
-                           "%d message(s) queued but broker not up", r);
-                rkb->rkb_persistconn.internal++;
-                return 0;
-        }
-
-        rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs);
-        rd_dassert(rkm != NULL);
-
-        /* Attempt to fill the batch size, but limit
-         * our waiting to queue.buffering.max.ms
-         * and batch.num.messages. */
-        if (r < rkb->rkb_rk->rk_conf.batch_num_messages) {
-                rd_ts_t wait_max;
-
-                /* Calculate maximum wait-time to honour
-                 * queue.buffering.max.ms contract. */
-                wait_max = rd_kafka_msg_enq_time(rkm) +
-                        (rkb->rkb_rk->rk_conf.buffering_max_ms * 1000);
-
-                if (wait_max > now) {
-                        /* Wait for more messages or queue.buffering.max.ms
-                         * to expire. */
-                        if (wait_max < *next_wakeup)
-                                *next_wakeup = wait_max;
-                        return 0;
-                }
-        }
-
-        /* Honour retry.backoff.ms. */
-        if (unlikely(rkm->rkm_u.producer.ts_backoff > now)) {
-                if (rkm->rkm_u.producer.ts_backoff < *next_wakeup)
-                        *next_wakeup = rkm->rkm_u.producer.ts_backoff;
-                /* Wait for backoff to expire */
-                return 0;
-        }
 
         if (rd_kafka_is_idempotent(rkb->rkb_rk)) {
                 /* Update the partition's cached PID, and reset the
@@ -3073,12 +3074,6 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->
                                                             rkt_topic),
                                            rktp->rktp_partition);
-
-                        /* Attempt to change the pid, it will fail if there
-                         * are outstanding messages in-flight, in which case
-                         * we eventually come back here to retry. */
-                        if (!rd_kafka_toppar_pid_change(rktp, pid))
-                                return 0;
                 }
 
                 if (unlikely(rktp->rktp_eos.wait_drain)) {
@@ -3113,8 +3108,76 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
                 }
         }
 
-        /* Send Produce requests for this toppar */
-        while (1) {
+
+        /* Check if allowed to create and enqueue a ProduceRequest */
+        if (!max_requests)
+                return 0;
+
+        r = rktp->rktp_xmit_msgq.rkmq_msg_cnt;
+        if (r == 0)
+                return 0;
+
+        rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
+                   "%.*s [%"PRId32"] %d message(s) in "
+                   "xmit queue (%d added from partition queue)",
+                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                   rktp->rktp_partition,
+                   r, move_cnt);
+
+        rkm = TAILQ_FIRST(&rktp->rktp_xmit_msgq.rkmq_msgs);
+        rd_dassert(rkm != NULL);
+
+        if (rd_kafka_is_idempotent(rkb->rkb_rk)) {
+                /* Update the partition's cached PID, and reset the
+                 * base msg sequence if necessary */
+                if (unlikely(!rd_kafka_pid_eq(pid, rktp->rktp_eos.pid))) {
+                        /* Attempt to change the pid, it will fail if there
+                         * are outstanding messages in-flight, in which case
+                         * we eventually come back here to retry. */
+                        if (!rd_kafka_toppar_pid_change(rktp, pid))
+                                return 0;
+                }
+        }
+
+        if (unlikely(rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP)) {
+                /* There are messages to send but connection is not up. */
+                rd_rkb_dbg(rkb, BROKER, "TOPPAR",
+                           "%d message(s) queued but broker not up", r);
+                rkb->rkb_persistconn.internal++;
+                return 0;
+        }
+
+        /* Attempt to fill the batch size, but limit
+         * our waiting to queue.buffering.max.ms
+         * and batch.num.messages. */
+        if (r < rkb->rkb_rk->rk_conf.batch_num_messages) {
+                rd_ts_t wait_max;
+
+                /* Calculate maximum wait-time to honour
+                 * queue.buffering.max.ms contract. */
+                wait_max = rd_kafka_msg_enq_time(rkm) +
+                        (rkb->rkb_rk->rk_conf.buffering_max_ms * 1000);
+
+                if (wait_max > now) {
+                        /* Wait for more messages or queue.buffering.max.ms
+                         * to expire. */
+                        if (wait_max < *next_wakeup)
+                                *next_wakeup = wait_max;
+                        return 0;
+                }
+        }
+
+        /* Honour retry.backoff.ms. */
+        if (unlikely(rkm->rkm_u.producer.ts_backoff > now)) {
+                if (rkm->rkm_u.producer.ts_backoff < *next_wakeup)
+                        *next_wakeup = rkm->rkm_u.producer.ts_backoff;
+                /* Wait for backoff to expire */
+                return 0;
+        }
+
+        /* Send Produce requests for this toppar, honouring the
+         * queue backpressure threshold. */
+        for (reqcnt = 0 ; reqcnt < max_requests ; reqcnt++) {
                 r = rd_kafka_ProduceRequest(rkb, rktp, pid);
                 if (likely(r > 0))
                         cnt += r;

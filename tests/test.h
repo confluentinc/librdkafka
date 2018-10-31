@@ -474,6 +474,7 @@ void test_consumer_subscribe (rd_kafka_t *rk, const char *topic);
 
 void
 test_consume_msgs_easy_mv (const char *group_id, const char *topic,
+                           int32_t partition,
                            uint64_t testid, int exp_eofcnt, int exp_msgcnt,
                            rd_kafka_topic_conf_t *tconf,
                            test_msgver_t *mv);

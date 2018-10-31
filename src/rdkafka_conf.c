@@ -710,6 +710,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           .dtor = rd_kafka_conf_interceptor_dtor,
           .copy = rd_kafka_conf_interceptor_copy },
 
+        /* Unit test interfaces.
+         * These are not part of the public API and may change at any time.
+         * Only to be used by the librdkafka tests. */
+        { _RK_GLOBAL|_RK_HIDDEN, "ut_handle_ProduceResponse", _RK_C_PTR,
+          _RK(ut.handle_ProduceResponse),
+          "ProduceResponse handler: "
+          "rd_kafka_resp_err_t (*cb) (rd_kafka_t *rk, "
+          "int32_t brokerid, uint64_t msgid, rd_kafka_resp_err_t err)" },
+
         /* Global consumer group properties */
         { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,
           _RK(group_id_str),
@@ -1426,7 +1435,9 @@ rd_kafka_anyconf_set_prop (int scope, void *conf,
                                                   errstr, errstr_size);
 
 	case _RK_C_PTR:
-                if (!allow_specific) {
+                /* Allow hidden internal unit test properties to
+                 * be set from generic conf_set() interface. */
+                if (!allow_specific && !(prop->scope & _RK_HIDDEN)) {
                         rd_snprintf(errstr, errstr_size,
                                     "Property \"%s\" must be set through "
                                     "dedicated .._set_..() function",
@@ -2464,6 +2475,10 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 
 	for (prop = rd_kafka_properties; prop->name ; prop++) {
 		const char *typeinfo = "";
+
+                /* Skip hidden properties. */
+                if (prop->scope & _RK_HIDDEN)
+                        continue;
 
                 /* Skip invalid properties. */
                 if (prop->type == _RK_C_INVALID)

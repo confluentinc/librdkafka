@@ -2518,6 +2518,15 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
         next_seq = rd_kafka_seq_wrap(request->rkbuf_u.Produce.base_seq +
                                      rd_kafka_msgq_len(&request->rkbuf_msgq));
 
+        /* Unit test interface: inject errors */
+        if (unlikely(rk->rk_conf.ut.handle_ProduceResponse != NULL)) {
+                err = rk->rk_conf.ut.handle_ProduceResponse(
+                        rkb->rkb_rk,
+                        rkb->rkb_nodeid,
+                        request->rkbuf_u.Produce.base_msgid,
+                        err);
+        }
+
         /* Parse Produce reply (unless the request errored) */
         if (!err && reply)
                 err = rd_kafka_handle_Produce_parse(rkb, rktp,

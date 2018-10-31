@@ -80,13 +80,14 @@ set(
     0086-purge.c
     0088-produce_metadata_timeout.c
     0089-max_poll_interval.c
+    0090-idempotence.c
     8000-idle.cpp
     test.c
     testcpp.cpp
 )
 
 if(NOT WIN32)
-    list(APPEND sources sockem.c)
+    list(APPEND sources sockem.c sockem_ctrl.c)
 else()
     list(APPEND sources ../src/tinycthread.c ../src/tinycthread_extra.c)
 endif()

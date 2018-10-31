@@ -181,6 +181,7 @@ _TEST_DECL(0086_purge_local);
 _TEST_DECL(0086_purge_remote);
 _TEST_DECL(0088_produce_metadata_timeout);
 _TEST_DECL(0089_max_poll_interval);
+_TEST_DECL(0090_idempotence);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -295,6 +296,7 @@ struct test tests[] = {
         _TEST(0088_produce_metadata_timeout, TEST_F_SOCKEM),
 #endif
         _TEST(0089_max_poll_interval, 0, TEST_BRKVER(0,10,1,0)),
+        _TEST(0090_idempotence, 0, TEST_BRKVER(0,11,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -2079,10 +2081,14 @@ int64_t test_consume_msgs (const char *what, rd_kafka_topic_t *rkt,
  * and expects \d exp_msgcnt with matching \p testid
  * Destroys consumer when done.
  *
+ * @param partition If -1 the topic will be subscribed to, otherwise the
+ *                  single partition will be assigned immediately.
+ *
  * If \p group_id is NULL a new unique group is generated
  */
 void
 test_consume_msgs_easy_mv (const char *group_id, const char *topic,
+                           int32_t partition,
                            uint64_t testid, int exp_eofcnt, int exp_msgcnt,
                            rd_kafka_topic_conf_t *tconf,
                            test_msgver_t *mv) {
@@ -2100,11 +2106,24 @@ test_consume_msgs_easy_mv (const char *group_id, const char *topic,
 
         rd_kafka_poll_set_consumer(rk);
 
-        TEST_SAY("Subscribing to topic %s in group %s "
-                 "(expecting %d msgs with testid %"PRIu64")\n",
-                 topic, group_id, exp_msgcnt, testid);
+        if (partition == -1) {
+                TEST_SAY("Subscribing to topic %s in group %s "
+                         "(expecting %d msgs with testid %"PRIu64")\n",
+                         topic, group_id, exp_msgcnt, testid);
 
-        test_consumer_subscribe(rk, topic);
+                test_consumer_subscribe(rk, topic);
+        } else {
+                rd_kafka_topic_partition_list_t *plist;
+
+                TEST_SAY("Assign topic %s [%"PRId32"] in group %s "
+                         "(expecting %d msgs with testid %"PRIu64")\n",
+                         topic, partition, group_id, exp_msgcnt, testid);
+
+                plist = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(plist, topic, partition);
+                test_consumer_assign("consume_easy_mv", rk, plist);
+                rd_kafka_topic_partition_list_destroy(plist);
+        }
 
         /* Consume messages */
         test_consumer_poll("consume.easy", rk, testid, exp_eofcnt,
@@ -2123,7 +2142,7 @@ test_consume_msgs_easy (const char *group_id, const char *topic,
 
         test_msgver_init(&mv, testid);
 
-        test_consume_msgs_easy_mv(group_id, topic, testid, exp_eofcnt,
+        test_consume_msgs_easy_mv(group_id, topic, -1, testid, exp_eofcnt,
                                   exp_msgcnt, tconf, &mv);
 
         test_msgver_clear(&mv);
@@ -3152,7 +3171,8 @@ int test_consumer_poll_once (rd_kafka_t *rk, test_msgver_t *mv, int timeout_ms){
 	rd_kafka_message_destroy(rkmessage);
 	return 1;
 }
-	
+
+
 int test_consumer_poll (const char *what, rd_kafka_t *rk, uint64_t testid,
                         int exp_eof_cnt, int exp_msg_base, int exp_cnt,
 			test_msgver_t *mv) {

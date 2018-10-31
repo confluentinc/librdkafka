@@ -98,7 +98,8 @@ typedef	enum {
 	_RK_CONSUMER = 0x4,
 	_RK_TOPIC = 0x8,
         _RK_CGRP = 0x10,
-        _RK_DEPRECATED = 0x20
+        _RK_DEPRECATED = 0x20,
+        _RK_HIDDEN = 0x40
 } rd_kafka_conf_scope_t;
 
 /**< While the client groups is a generic concept, it is currently
@@ -399,6 +400,19 @@ struct rd_kafka_conf_s {
         struct {
                 int request_timeout_ms;  /* AdminOptions.request_timeout */
         } admin;
+
+
+        /*
+         * Unit test pluggable interfaces
+         */
+        struct {
+                /**< Inject errors in ProduceResponse handler */
+                rd_kafka_resp_err_t (*handle_ProduceResponse) (
+                        rd_kafka_t *rk,
+                        int32_t brokerid,
+                        uint64_t msgid,
+                        rd_kafka_resp_err_t err);
+        } ut;
 };
 
 int rd_kafka_socket_cb_linux (int domain, int type, int protocol, void *opaque);

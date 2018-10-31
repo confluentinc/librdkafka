@@ -406,7 +406,7 @@ void rd_kafka_broker_fail (rd_kafka_broker_t *rkb,
 
                 /* Append time since last state change
                  * to help debug connection issues */
-                of = strlen(rkb->rkb_err.msg);
+                of = (int)strlen(rkb->rkb_err.msg);
                 if (of + 30 < (int)sizeof(rkb->rkb_err.msg))
                         rd_snprintf(rkb->rkb_err.msg+of,
                                     sizeof(rkb->rkb_err.msg)-of,

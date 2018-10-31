@@ -2197,6 +2197,9 @@ int rd_kafka_send (rd_kafka_broker_t *rkb) {
                            rd_slice_size(&rkbuf->rkbuf_reader),
                            pre_of, rkbuf->rkbuf_corrid);
 
+                rd_atomic64_add(&rkb->rkb_c.reqtype[rkbuf->rkbuf_reqhdr.ApiKey],
+                                1);
+
                 /* Notify transport layer of full request sent */
                 if (likely(rkb->rkb_transport != NULL))
                         rd_kafka_transport_request_sent(rkb, rkbuf);

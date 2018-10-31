@@ -56,6 +56,8 @@ struct rd_kafkap_reqhdr {
 #define RD_KAFKAP_Metadata      3
 #define RD_KAFKAP_LeaderAndIsr  4
 #define RD_KAFKAP_StopReplica   5
+#define RD_KAFKAP_UpdateMetadata 6
+#define RD_KAFKAP_ControlledShutdown 7
 #define RD_KAFKAP_OffsetCommit  8
 #define RD_KAFKAP_OffsetFetch   9
 #define RD_KAFKAP_GroupCoordinator 10
@@ -119,6 +121,8 @@ const char *rd_kafka_ApiKey2str (int16_t ApiKey) {
                 [RD_KAFKAP_Metadata] = "Metadata",
                 [RD_KAFKAP_LeaderAndIsr] = "LeaderAndIsr",
                 [RD_KAFKAP_StopReplica] = "StopReplica",
+                [RD_KAFKAP_UpdateMetadata] = "UpdateMetadata",
+                [RD_KAFKAP_ControlledShutdown] = "ControlledShutdown",
                 [RD_KAFKAP_OffsetCommit] = "OffsetCommit",
                 [RD_KAFKAP_OffsetFetch] = "OffsetFetch",
                 [RD_KAFKAP_GroupCoordinator] = "GroupCoordinator",

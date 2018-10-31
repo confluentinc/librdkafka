@@ -2850,7 +2850,7 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                         /* Adjust configuration values for idempotent producer*/
 
                         if (rd_kafka_conf_is_modified(conf, "max.in.flight")) {
-                                if (conf->max_inflight >= 5)
+                                if (conf->max_inflight > 5)
                                         return "`max.in.flight` must be "
                                                 "set <= 5 when "
                                                 "`enable.idempotence` is true";
@@ -2866,9 +2866,19 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                                                 "when `enable.idempotence` is "
                                                 "true";
                         } else {
-                                conf->max_retries =
-                                        RD_MAX(INT32_MAX, 1);
+                                conf->max_retries = INT32_MAX;
                         }
+
+
+                        if (rd_kafka_conf_is_modified(
+                                    conf,
+                                    "queue.buffering.backpressure.threshold")
+                            && conf->queue_backpressure_thres > 1)
+                                return "`queue.buffering.backpressure.threshold` "
+                                        "must be set to 1 when "
+                                        "`enable.idempotence` is true";
+                        else
+                                conf->queue_backpressure_thres = 1;
 
                         /* acks=all and queuing.strategy are set
                          * in topic_conf_finalize() */
@@ -2940,6 +2950,14 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
                         tconf->queuing_strategy = RD_KAFKA_QUEUE_FIFO;
                 }
         }
+
+
+        if (cltype == RD_KAFKA_PRODUCER) {
+                if (tconf->message_timeout_ms <= conf->buffering_max_ms)
+                        return "`message.timeout.ms` must be greater than "
+                                "`linger.ms`";
+        }
+
 
         return NULL;
 }

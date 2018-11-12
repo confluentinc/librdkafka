@@ -168,8 +168,8 @@ static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
 #ifdef __APPLE__
 /* Some versions of MacOSX dont have IOV_MAX */
 #define IOV_MAX 1024
-#elif defined(_MSC_VER)
-/* There is no IOV_MAX on MSVC but it is used internally in librdkafka */
+#elif defined(_MSC_VER) || defined(__GNU__)
+/* There is no IOV_MAX on MSVC or GNU but it is used internally in librdkafka */
 #define IOV_MAX 1024
 #else
 #error "IOV_MAX not defined"

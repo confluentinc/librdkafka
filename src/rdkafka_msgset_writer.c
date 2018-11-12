@@ -863,9 +863,12 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                              msetw->msetw_lastmsg.msgid <
                              rkm->rkm_u.producer.msgid)) {
                         rd_rkb_dbg(rkb, MSG, "PRODUCE",
+                                   "%.*s [%"PRId32"]: "
                                    "Reconstructed MessageSet "
                                    "(%d message(s), %"PRIusz" bytes, "
                                    "MsgIds %"PRIu64"..%"PRIu64")",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
                                    msgcnt, len,
                                    msetw->msetw_firstmsg.msgid,
                                    msetw->msetw_lastmsg.msgid);
@@ -877,8 +880,11 @@ rd_kafka_msgset_writer_write_msgq (rd_kafka_msgset_writer_t *msetw,
                                                           msetw_MsgVersion) >
                              max_msg_size)) {
                         rd_rkb_dbg(rkb, MSG, "PRODUCE",
+                                   "%.*s [%"PRId32"]: "
                                    "No more space in current MessageSet "
                                    "(%i message(s), %"PRIusz" bytes)",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
                                    msgcnt, len);
                         break;
                 }

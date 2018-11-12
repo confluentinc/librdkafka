@@ -669,9 +669,9 @@ void rd_kafka_msgq_set_metadata (rd_kafka_msgq_t *rkmq,
                         rkm->rkm_tstype = RD_KAFKA_MSG_ATTR_LOG_APPEND_TIME;
                 }
 
-                /* Don't downgrade a message from any form of PERSISTENT
-                 * to NOT_PERSISTENT, since the original cause of indicating
-                 * PERSISTENT can't be changed.
+                /* Don't downgrade a message from any form of PERSISTED
+                 * to NOT_PERSISTED, since the original cause of indicating
+                 * PERSISTED can't be changed.
                  * E.g., a previous ack or in-flight timeout. */
                 if (unlikely(status == RD_KAFKA_MSG_STATUS_NOT_PERSISTED &&
                              rkm->rkm_status != RD_KAFKA_MSG_STATUS_NOT_PERSISTED))

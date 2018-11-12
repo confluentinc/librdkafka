@@ -1828,6 +1828,7 @@ struct rd_kafka_Produce_err {
         rd_bool_t update_next_ack; /**< Update next_ack_seq */
         rd_bool_t update_next_err; /**< Update next_err_seq */
         rd_kafka_pid_t rktp_pid;   /**< Partition's current PID */
+        int32_t last_seq;          /**< Last sequence in current batch */
 };
 
 
@@ -1882,8 +1883,11 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                 perr->status  = RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED;
 
                 rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "ERRPID",
-                           "PID mismatch: request %s != partition %s: "
+                           "%.*s [%"PRId32"] PID mismatch: "
+                           "request %s != partition %s: "
                            "failing messages with error %s",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition,
                            rd_kafka_pid2str(request->rkbuf_u.
                                             Produce.pid),
                            rd_kafka_pid2str(perr->rktp_pid),
@@ -1925,12 +1929,16 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
 
                         rd_kafka_set_fatal_error(
                                 rk, perr->err,
-                                "ProduceRequest with %d message(s) failed "
+                                "ProduceRequest for %.*s [%"PRId32"] "
+                                "with %d message(s) failed "
                                 "due to sequence desynchronization with "
                                 "broker %"PRId32" (%s, base seq %"PRId32", "
                                 "idemp state change %"PRId64"ms ago, "
                                 "last partition error %s (actions %s, "
-                                "base seq %"PRId32", %"PRId64"ms ago)",
+                                "base seq %"PRId32"..%"PRId32
+                                ", base msgid %"PRIu64", %"PRId64"ms ago)",
+                                RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                rktp->rktp_partition,
                                 rd_kafka_msgq_len(&request->rkbuf_msgq),
                                 rkb->rkb_nodeid,
                                 rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
@@ -1938,7 +1946,8 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                                 state_age / 1000,
                                 rd_kafka_err2name(last_err.err),
                                 rd_kafka_actions2str(last_err.actions),
-                                last_err.base_seq,
+                                last_err.base_seq, last_err.last_seq,
+                                last_err.base_msgid,
                                 last_err.ts ?
                                 (now - last_err.ts)/1000 : -1);
 
@@ -1960,14 +1969,18 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                          * (without incrementing retries).
                          */
                         rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "ERRSEQ",
-                                   "ProduceRequest with %d message(s) failed "
+                                   "ProduceRequest for %.*s [%"PRId32"] "
+                                   "with %d message(s) failed "
                                    "due to skipped sequence numbers "
                                    "(%s, base seq %"PRId32" > "
                                    "next seq %"PRId32") "
                                    "caused by previous failed request "
-                                   "(%s (actions %s, base seq %"PRId32
-                                   ", %"PRId64"ms ago): "
+                                   "(%s, actions %s, "
+                                   "base seq %"PRId32"..%"PRId32
+                                   ", base msgid %"PRIu64", %"PRId64"ms ago): "
                                    "recovering and retrying",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
                                    rd_kafka_msgq_len(&request->rkbuf_msgq),
                                    rd_kafka_pid2str(request->rkbuf_u.
                                                     Produce.pid),
@@ -1975,7 +1988,8 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                                    perr->next_err_seq,
                                    rd_kafka_err2name(last_err.err),
                                    rd_kafka_actions2str(last_err.actions),
-                                   last_err.base_seq,
+                                   last_err.base_seq, last_err.last_seq,
+                                   last_err.base_msgid,
                                    last_err.ts ?
                                    (now - last_err.ts)/1000 : -1);
 
@@ -1994,12 +2008,16 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                          * to the requests in order. */
                         rd_kafka_set_fatal_error(
                                 rk, perr->err,
-                                "ProduceRequest with %d message(s) failed "
+                                "ProduceRequest for %.*s [%"PRId32"] "
+                                "with %d message(s) failed "
                                 "with rewound sequence number on "
-                                "broker %"PRId32" (%s, base seq %"PRId32" < "
-                                "next seq %"PRId32"): "
-                                "last error %s (actions %s, base seq %"PRId32
-                                ", %"PRId64"ms ago)",
+                                "broker %"PRId32" (%s, "
+                                "base seq %"PRId32" < next seq %"PRId32"): "
+                                "last error %s (actions %s, "
+                                "base seq %"PRId32"..%"PRId32
+                                ", base msgid %"PRIu64", %"PRId64"ms ago)",
+                                RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                rktp->rktp_partition,
                                 rd_kafka_msgq_len(&request->rkbuf_msgq),
                                 rkb->rkb_nodeid,
                                 rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
@@ -2007,7 +2025,8 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                                 perr->next_err_seq,
                                 rd_kafka_err2name(last_err.err),
                                 rd_kafka_actions2str(last_err.actions),
-                                last_err.base_seq,
+                                last_err.base_seq, last_err.last_seq,
+                                last_err.base_msgid,
                                 last_err.ts ?
                                 (now - last_err.ts)/1000 : -1);
 
@@ -2030,11 +2049,14 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                  * been retried, getting this error for a non-retried message
                  * indicates a synchronization issue or bug. */
                 rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "DUPSEQ",
-                           "ProduceRequest with %d message(s) failed "
+                           "ProduceRequest for %.*s [%"PRId32"] "
+                           "with %d message(s) failed "
                            "due to duplicate sequence number: "
                            "previous send succeeded but was not acknowledged "
                            "(%s, base seq %"PRId32"): "
                            "marking the messages successfully delivered",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition,
                            rd_kafka_msgq_len(&request->rkbuf_msgq),
                            rd_kafka_pid2str(request->rkbuf_u.
                                             Produce.pid),
@@ -2065,11 +2087,14 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                 if (!firstmsg->rkm_u.producer.retries &&
                     perr->next_err_seq == request->rkbuf_u.Produce.base_seq) {
                         rd_rkb_dbg(rkb, MSG|RD_KAFKA_DBG_EOS, "UNKPID",
-                                   "ProduceRequest with %d message(s) failed "
+                                   "ProduceRequest for %.*s [%"PRId32"] "
+                                   "with %d message(s) failed "
                                    "due to unknown producer id "
                                    "(%s, base seq %"PRId32", %d retries): "
                                    "no risk of duplication/reordering: "
                                    "resetting PID and retrying",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
                                    rd_kafka_msgq_len(&request->rkbuf_msgq),
                                    rd_kafka_pid2str(request->rkbuf_u.
                                                     Produce.pid),
@@ -2089,11 +2114,14 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
 
                 rd_kafka_set_fatal_error(
                         rk, perr->err,
-                        "ProduceRequest with %d message(s) failed "
+                        "ProduceRequest for %.*s [%"PRId32"] "
+                        "with %d message(s) failed "
                         "due to unknown producer id ("
                         "broker %"PRId32" %s, base seq %"PRId32", %d retries): "
                         "unable to retry without risking "
                         "duplication/reordering",
+                        RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                        rktp->rktp_partition,
                         rd_kafka_msgq_len(&request->rkbuf_msgq),
                         rkb->rkb_nodeid,
                         rd_kafka_pid2str(request->rkbuf_u.Produce.pid),
@@ -2257,6 +2285,8 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
         rktp->rktp_last_err.actions = perr->actions;
         rktp->rktp_last_err.ts = rd_clock();
         rktp->rktp_last_err.base_seq = request->rkbuf_u.Produce.base_seq;
+        rktp->rktp_last_err.last_seq = perr->last_seq;
+        rktp->rktp_last_err.base_msgid = request->rkbuf_u.Produce.base_msgid;
         rd_kafka_toppar_unlock(rktp);
 
         /*
@@ -2358,9 +2388,12 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                          * a fatal error here. */
                         rd_kafka_set_fatal_error(
                                 rk, RD_KAFKA_RESP_ERR__GAPLESS_GUARANTEE,
-                                "ProduceRequest with %d message(s) failed: "
+                                "ProduceRequest for %.*s [%"PRId32"] "
+                                "with %d message(s) failed: "
                                 "%s (broker %"PRId32" %s, base seq %"PRId32"): "
                                 "unable to satisfy gap-less guarantee",
+                                RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                rktp->rktp_partition,
                                 rd_kafka_msgq_len(&request->rkbuf_msgq),
                                 rd_kafka_err2str(perr->err),
                                 rkb->rkb_nodeid,
@@ -2446,7 +2479,8 @@ rd_kafka_handle_idempotent_Produce_success (rd_kafka_t *rk,
                  * toppar lock has been released. */
                 rd_snprintf(
                         fatal_err, sizeof(fatal_err),
-                        "ProduceRequest with %d message(s) "
+                        "ProduceRequest for %.*s [%"PRId32"] "
+                        "with %d message(s) "
                         "succeeded when expecting failure "
                         "(broker %"PRId32" %s, "
                         "base seq %"PRId32", "
@@ -2454,6 +2488,8 @@ rd_kafka_handle_idempotent_Produce_success (rd_kafka_t *rk,
                         "next err seq %"PRId32": "
                         "unable to retry without risking "
                         "duplication/reordering",
+                        RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                        rktp->rktp_partition,
                         rd_kafka_msgq_len(&request->rkbuf_msgq),
                         rkb->rkb_nodeid,
                         rd_kafka_pid2str(request->rkbuf_u.
@@ -2572,7 +2608,9 @@ static void rd_kafka_handle_Produce (rd_kafka_t *rk,
                         .incr_retry = 1,
                         .status = status,
                         .update_next_ack = rd_true,
-                        .update_next_err = rd_true
+                        .update_next_err = rd_true,
+                        .last_seq = request->rkbuf_u.Produce.base_seq +
+                        rd_kafka_msgq_len(&request->rkbuf_msgq) - 1
                 };
 
                 rd_kafka_handle_Produce_error(rkb, rktp,

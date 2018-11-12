@@ -5,7 +5,7 @@
 
 #ifdef __FreeBSD__
 #  include <sys/endian.h>
-#elif defined(__APPLE_CC_) || defined(__MACH__)  /* MacOS/X support */
+#elif defined(__APPLE_CC_) || (defined(__MACH__) && defined(__APPLE__))  /* MacOS/X support */
 #  include <machine/endian.h>
 
 #if    __DARWIN_BYTE_ORDER == __DARWIN_LITTLE_ENDIAN

@@ -3139,7 +3139,11 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
         if (unlikely(rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP)) {
                 /* There are messages to send but connection is not up. */
                 rd_rkb_dbg(rkb, BROKER, "TOPPAR",
-                           "%d message(s) queued but broker not up", r);
+                           "%.*s [%"PRId32"] "
+                           "%d message(s) queued but broker not up",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition,
+                           r);
                 rkb->rkb_persistconn.internal++;
                 return 0;
         }
@@ -4900,7 +4904,7 @@ void rd_kafka_connect_any (rd_kafka_t *rk, const char *reason) {
 
         rd_rkb_dbg(rkb, BROKER|RD_KAFKA_DBG_GENERIC, "CONNECT",
                    "Selected for cluster connection: "
-                   "%s (broker has %d connection attempt(s)",
+                   "%s (broker has %d connection attempt(s))",
                    reason, rd_atomic32_get(&rkb->rkb_c.connects));
 
         rd_kafka_broker_schedule_connection(rkb);

@@ -195,14 +195,16 @@ typedef struct rd_kafka_msgq_s {
 /**
  * Returns the number of messages in the specified queue.
  */
-static RD_INLINE RD_UNUSED int rd_kafka_msgq_len (rd_kafka_msgq_t *rkmq) {
+static RD_INLINE RD_UNUSED
+int rd_kafka_msgq_len (const rd_kafka_msgq_t *rkmq) {
         return (int)rkmq->rkmq_msg_cnt;
 }
 
 /**
  * Returns the total number of bytes in the specified queue.
  */
-static RD_INLINE RD_UNUSED size_t rd_kafka_msgq_size (rd_kafka_msgq_t *rkmq) {
+static RD_INLINE RD_UNUSED
+size_t rd_kafka_msgq_size (const rd_kafka_msgq_t *rkmq) {
         return (size_t)rkmq->rkmq_msg_bytes;
 }
 
@@ -316,7 +318,7 @@ rd_kafka_msg_t *rd_kafka_msgq_pop (rd_kafka_msgq_t *rkmq) {
  * @locks caller's responsibility
  */
 static RD_INLINE RD_UNUSED
-rd_kafka_msg_t *rd_kafka_msgq_first (rd_kafka_msgq_t *rkmq) {
+rd_kafka_msg_t *rd_kafka_msgq_first (const rd_kafka_msgq_t *rkmq) {
         return TAILQ_FIRST(&rkmq->rkmq_msgs);
 }
 
@@ -326,7 +328,7 @@ rd_kafka_msg_t *rd_kafka_msgq_first (rd_kafka_msgq_t *rkmq) {
  * @locks caller's responsibility
  */
 static RD_INLINE RD_UNUSED
-rd_kafka_msg_t *rd_kafka_msgq_last (rd_kafka_msgq_t *rkmq) {
+rd_kafka_msg_t *rd_kafka_msgq_last (const rd_kafka_msgq_t *rkmq) {
         return TAILQ_LAST(&rkmq->rkmq_msgs, rd_kafka_msgs_head_s);
 }
 

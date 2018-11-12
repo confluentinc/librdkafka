@@ -294,11 +294,12 @@ void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
  * @locks none
  */
 void rd_kafka_idemp_drain_reset (rd_kafka_t *rk) {
-        rd_kafka_dbg(rk, EOS, "DRAIN",
-                     "Beginning partition drain for PID reset "
-                     "for %d partition(s) with in-flight requests",
-                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt));
         rd_kafka_wrlock(rk);
+        rd_kafka_dbg(rk, EOS, "DRAIN",
+                     "Beginning partition drain for %s reset "
+                     "for %d partition(s) with in-flight requests",
+                     rd_kafka_pid2str(rk->rk_eos.pid),
+                     rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt));
         rd_kafka_idemp_set_state(rk, RD_KAFKA_IDEMP_STATE_DRAIN_RESET);
         rd_kafka_wrunlock(rk);
 }
@@ -316,7 +317,7 @@ void rd_kafka_idemp_drain_reset (rd_kafka_t *rk) {
 void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk) {
         rd_kafka_wrlock(rk);
         rd_kafka_dbg(rk, EOS, "DRAIN",
-                     "Beginning partition drain for PID %s epoch bump "
+                     "Beginning partition drain for %s epoch bump "
                      "for %d partition(s) with in-flight requests",
                      rd_kafka_pid2str(rk->rk_eos.pid),
                      rd_atomic32_get(&rk->rk_eos.inflight_toppar_cnt));

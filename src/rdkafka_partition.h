@@ -61,8 +61,11 @@ struct rd_kafka_toppar_err {
         rd_kafka_resp_err_t err;  /**< Error code */
         int actions;              /**< Request actions */
         rd_ts_t ts;               /**< Timestamp */
+        uint64_t base_msgid;      /**< First msg msgid */
         int32_t base_seq;         /**< Idempodent Producer:
                                    *   first msg sequence */
+        int32_t last_seq;         /**< Idempotent Producer:
+                                   *   last msg sequence */
 };
 
 /**
@@ -114,19 +117,18 @@ struct rd_kafka_toppar_s { /* rd_kafka_toppar_t */
                                                  *   the broker. */
 
         uint64_t           rktp_msgid;   /**< Current/last message id.
-                                          * Each message enqueued on a
-                                          * non-UA partition will get a
-                                          * partition-unique sequencial
-                                          * number assigned.
-                                          * This number is used to
-                                          * re-enqueue the message
-                                          * on resends but making sure
-                                          * the input ordering is still
-                                          * maintained, and used by
-                                          * the idempotent producer.
-                                          * Starts at 1.
-                                          * Protected by toppar_lock */
-
+                                          *   Each message enqueued on a
+                                          *   non-UA partition will get a
+                                          *   partition-unique sequencial
+                                          *   number assigned.
+                                          *   This number is used to
+                                          *   re-enqueue the message
+                                          *   on resends but making sure
+                                          *   the input ordering is still
+                                          *   maintained, and used by
+                                          *   the idempotent producer.
+                                          *   Starts at 1.
+                                          *   Protected by toppar_lock */
         struct {
                 rd_kafka_pid_t pid;      /**< Partition's last known
                                           *   Producer Id and epoch.
@@ -405,7 +407,6 @@ void rd_kafka_toppar_set_fetch_state (rd_kafka_toppar_t *rktp,
                                       int fetch_state);
 void rd_kafka_toppar_insert_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
-void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm);
 int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
                          rd_kafka_msgq_t *srcq,
                          int incr_retry, int max_retries, rd_ts_t backoff,

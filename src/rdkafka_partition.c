@@ -788,9 +788,9 @@ int rd_kafka_retry_msgq (rd_kafka_msgq_t *destq,
                 rkm->rkm_u.producer.ts_backoff = backoff;
                 rkm->rkm_u.producer.retries  += incr_retry;
 
-                /* Don't downgrade a message from any form of PERSISTENT
-                 * to NOT_PERSISTENT, since the original cause of indicating
-                 * PERSISTENT can't be changed.
+                /* Don't downgrade a message from any form of PERSISTED
+                 * to NOT_PERSISTED, since the original cause of indicating
+                 * PERSISTED can't be changed.
                  * E.g., a previous ack or in-flight timeout. */
                 if (likely(!(status == RD_KAFKA_MSG_STATUS_NOT_PERSISTED &&
                              rkm->rkm_status !=

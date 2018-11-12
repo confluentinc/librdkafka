@@ -454,9 +454,11 @@ With Idempotent Producer enabled there is no risk of reordering despite
 **Note**: "MsgId" in log messages refer to the librdkafka msgid, while "seq"
           refers to the protocol message sequence, "baseseq" is the seq of
           the first message in a batch.
+          MsgId starts at 1, while message seqs start at 0.
 
 
-The producer statistics also maintains two next expected sequence counters:
+The producer statistics also maintain two metrics for tracking the next
+expected response sequence:
 
  * `next_ack_seq` - the next sequence to expect an acknowledgement for, which
                     is the last successfully produced MessageSet's last

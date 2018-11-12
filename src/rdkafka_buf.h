@@ -471,6 +471,8 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 
 	int     rkbuf_flags; /* RD_KAFKA_OP_F */
 
+        rd_kafka_prio_t rkbuf_prio; /**< Request priority */
+
         rd_buf_t rkbuf_buf;        /**< Send/Recv byte buffer */
         rd_slice_t rkbuf_reader;   /**< Buffer slice reader for rkbuf_buf */
 

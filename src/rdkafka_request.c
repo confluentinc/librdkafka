@@ -1571,8 +1571,8 @@ rd_kafka_MetadataRequest (rd_kafka_broker_t *rkb,
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         /* Metadata requests are part of the important control plane
-         * and should go before other requests (Produce, Fetch, etc). */
-        rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_FLASH;
+         * and should go before most other requests (Produce, Fetch, etc). */
+        rkbuf->rkbuf_prio = RD_KAFKA_PRIO_HIGH;
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf,
                                        /* Handle response thru rk_ops,
@@ -1673,11 +1673,15 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 				 rd_kafka_replyq_t replyq,
 				 rd_kafka_resp_cb_t *resp_cb,
-				 void *opaque, int flash_msg) {
+				 void *opaque) {
         rd_kafka_buf_t *rkbuf;
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_ApiVersion, 1, 4);
-	rkbuf->rkbuf_flags |= (flash_msg ? RD_KAFKA_OP_F_FLASH : 0);
+
+        /* Should be sent before any other requests since it is part of
+         * the initial connection handshake. */
+        rkbuf->rkbuf_prio = RD_KAFKA_PRIO_FLASH;
+
 	rd_kafka_buf_write_i32(rkbuf, 0); /* Empty array: request all APIs */
 
 	/* Non-supporting brokers will tear down the connection when they
@@ -1707,13 +1711,17 @@ void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    const char *mechanism,
 				    rd_kafka_replyq_t replyq,
 				    rd_kafka_resp_cb_t *resp_cb,
-				    void *opaque, int flash_msg) {
+				    void *opaque) {
         rd_kafka_buf_t *rkbuf;
 	int mechlen = (int)strlen(mechanism);
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SaslHandshake,
                                          1, RD_KAFKAP_STR_SIZE0(mechlen));
-	rkbuf->rkbuf_flags |= (flash_msg ? RD_KAFKA_OP_F_FLASH : 0);
+
+        /* Should be sent before any other requests since it is part of
+         * the initial connection handshake. */
+        rkbuf->rkbuf_prio = RD_KAFKA_PRIO_FLASH;
+
 	rd_kafka_buf_write_str(rkbuf, mechanism, mechlen);
 
 	/* Non-supporting brokers will tear down the conneciton when they

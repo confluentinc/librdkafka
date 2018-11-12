@@ -778,7 +778,7 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
 
 
 static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
-				      rd_kafka_buf_t *rkbuf, int at_head) {
+                                      rd_kafka_buf_t *rkbuf) {
         rd_ts_t now;
 
 	rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
@@ -799,32 +799,35 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
         /* Calculate request attempt timeout */
         rd_kafka_buf_calc_timeout(rkb->rkb_rk, rkbuf, now);
 
-	if (unlikely(at_head)) {
-		/* Insert message at head of queue */
-		rd_kafka_buf_t *prev, *after = NULL;
+        if (likely(rkbuf->rkbuf_prio == RD_KAFKA_PRIO_NORMAL)) {
+                /* Insert request at tail of queue */
+                TAILQ_INSERT_TAIL(&rkb->rkb_outbufs.rkbq_bufs,
+                                  rkbuf, rkbuf_link);
 
-		/* Put us behind any flash messages and partially sent buffers.
-		 * We need to check if buf corrid is set rather than
-		 * rkbuf_of since SSL_write may return 0 and expect the
-		 * exact same arguments the next call. */
-		TAILQ_FOREACH(prev, &rkb->rkb_outbufs.rkbq_bufs, rkbuf_link) {
-			if (!(prev->rkbuf_flags & RD_KAFKA_OP_F_FLASH) &&
-			    prev->rkbuf_corrid == 0)
-				break;
-			after = prev;
-		}
+        } else {
+                /* Insert request after any requests with a higher or
+                 * equal priority.
+                 * Also make sure the request is after added any partially
+                 * sent request (of any prio).
+                 * We need to check if buf corrid is set rather than
+                 * rkbuf_of since SSL_write may return 0 and expect the
+                 * exact same arguments the next call. */
+                rd_kafka_buf_t *prev, *after = NULL;
 
-		if (after)
-			TAILQ_INSERT_AFTER(&rkb->rkb_outbufs.rkbq_bufs,
-					   after, rkbuf, rkbuf_link);
-		else
-			TAILQ_INSERT_HEAD(&rkb->rkb_outbufs.rkbq_bufs,
-					  rkbuf, rkbuf_link);
-	} else {
-		/* Insert message at tail of queue */
-		TAILQ_INSERT_TAIL(&rkb->rkb_outbufs.rkbq_bufs,
-				  rkbuf, rkbuf_link);
-	}
+                TAILQ_FOREACH(prev, &rkb->rkb_outbufs.rkbq_bufs, rkbuf_link) {
+                        if (prev->rkbuf_prio < rkbuf->rkbuf_prio &&
+                            prev->rkbuf_corrid == 0)
+                                break;
+                        after = prev;
+                }
+
+                if (after)
+                        TAILQ_INSERT_AFTER(&rkb->rkb_outbufs.rkbq_bufs,
+                                           after, rkbuf, rkbuf_link);
+                else
+                        TAILQ_INSERT_HEAD(&rkb->rkb_outbufs.rkbq_bufs,
+                                          rkbuf, rkbuf_link);
+        }
 
 	(void)rd_atomic32_add(&rkb->rkb_outbufs.rkbq_cnt, 1);
         (void)rd_atomic32_add(&rkb->rkb_outbufs.rkbq_msg_cnt,
@@ -863,13 +866,11 @@ void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
 
 
         rkbuf->rkbuf_cb     = resp_cb;
-	rkbuf->rkbuf_opaque = opaque;
+        rkbuf->rkbuf_opaque = opaque;
 
         rd_kafka_buf_finalize(rkb->rkb_rk, rkbuf);
 
-	rd_kafka_broker_buf_enq0(rkb, rkbuf,
-				 (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLASH)?
-				 1/*head*/: 0/*tail*/);
+        rd_kafka_broker_buf_enq0(rkb, rkbuf);
 }
 
 
@@ -880,20 +881,18 @@ void rd_kafka_broker_buf_enq1 (rd_kafka_broker_t *rkb,
  * Locality: broker thread
  */
 static int rd_kafka_broker_buf_enq2 (rd_kafka_broker_t *rkb,
-				      rd_kafka_buf_t *rkbuf) {
+                                     rd_kafka_buf_t *rkbuf) {
         if (unlikely(rkb->rkb_source == RD_KAFKA_INTERNAL)) {
                 /* Fail request immediately if this is the internal broker. */
                 rd_kafka_buf_callback(rkb->rkb_rk, rkb,
-				      RD_KAFKA_RESP_ERR__TRANSPORT,
+                                      RD_KAFKA_RESP_ERR__TRANSPORT,
                                       NULL, rkbuf);
                 return -1;
         }
 
-	rd_kafka_broker_buf_enq0(rkb, rkbuf,
-				 (rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLASH)?
-				 1/*head*/: 0/*tail*/);
+        rd_kafka_broker_buf_enq0(rkb, rkbuf);
 
-	return 0;
+        return 0;
 }
 
 
@@ -1868,8 +1867,7 @@ static void rd_kafka_broker_connect_auth (rd_kafka_broker_t *rkb) {
 				rkb, rkb->rkb_rk->rk_conf.sasl.mechanisms,
 				RD_KAFKA_NO_REPLYQ,
 				rd_kafka_broker_handle_SaslHandshake,
-				NULL, 1 /* flash */);
-
+				NULL);
 		} else {
 			/* Either Handshake succeeded (protocol selected)
 			 * or Handshakes were not supported.
@@ -2049,8 +2047,7 @@ void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr) {
 
 		rd_kafka_ApiVersionRequest(
 			rkb, RD_KAFKA_NO_REPLYQ,
-			rd_kafka_broker_handle_ApiVersion, NULL,
-			1 /*Flash message: prepend to transmit queue*/);
+			rd_kafka_broker_handle_ApiVersion, NULL);
 	} else {
 		/* Authenticate if necessary */
 		rd_kafka_broker_connect_auth(rkb);
@@ -2298,7 +2295,7 @@ static void rd_kafka_broker_retry_bufs_move (rd_kafka_broker_t *rkb) {
 
 		rd_kafka_bufq_deq(&rkb->rkb_retrybufs, rkbuf);
 
-		rd_kafka_broker_buf_enq0(rkb, rkbuf, 0/*tail*/);
+                rd_kafka_broker_buf_enq0(rkb, rkbuf);
                 cnt++;
 	}
 

@@ -286,30 +286,32 @@ void rd_kafka_bufq_connection_reset (rd_kafka_broker_t *rkb,
 
 
 void rd_kafka_bufq_dump (rd_kafka_broker_t *rkb, const char *fac,
-			 rd_kafka_bufq_t *rkbq) {
-	rd_kafka_buf_t *rkbuf;
-	int cnt = rd_kafka_bufq_cnt(rkbq);
-	rd_ts_t now;
+                         rd_kafka_bufq_t *rkbq) {
+        rd_kafka_buf_t *rkbuf;
+        int cnt = rd_kafka_bufq_cnt(rkbq);
+        rd_ts_t now;
 
-	if (!cnt)
-		return;
+        if (!cnt)
+                return;
 
-	now = rd_clock();
+        now = rd_clock();
 
-	rd_rkb_dbg(rkb, BROKER, fac, "bufq with %d buffer(s):", cnt);
+        rd_rkb_dbg(rkb, BROKER, fac, "bufq with %d buffer(s):", cnt);
 
-	TAILQ_FOREACH(rkbuf, &rkbq->rkbq_bufs, rkbuf_link) {
-		rd_rkb_dbg(rkb, BROKER, fac,
-			   " Buffer %s (%"PRIusz" bytes, corrid %"PRId32", "
-			   "connid %d, retry %d in %lldms, timeout in %lldms",
-			   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
-			   rkbuf->rkbuf_totlen, rkbuf->rkbuf_corrid,
-			   rkbuf->rkbuf_connid, rkbuf->rkbuf_retries,
-			   rkbuf->rkbuf_ts_retry ?
-			   (now - rkbuf->rkbuf_ts_retry) / 1000LL : 0,
-			   rkbuf->rkbuf_ts_timeout ?
-			   (now - rkbuf->rkbuf_ts_timeout) / 1000LL : 0);
-	}
+        TAILQ_FOREACH(rkbuf, &rkbq->rkbq_bufs, rkbuf_link) {
+                rd_rkb_dbg(rkb, BROKER, fac,
+                           " Buffer %s (%"PRIusz" bytes, corrid %"PRId32", "
+                           "connid %d, prio %d, retry %d in %lldms, "
+                           "timeout in %lldms)",
+                           rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.ApiKey),
+                           rkbuf->rkbuf_totlen, rkbuf->rkbuf_corrid,
+                           rkbuf->rkbuf_connid, rkbuf->rkbuf_prio,
+                           rkbuf->rkbuf_retries,
+                           rkbuf->rkbuf_ts_retry ?
+                           (rkbuf->rkbuf_ts_retry - now) / 1000LL : 0,
+                           rkbuf->rkbuf_ts_timeout ?
+                           (rkbuf->rkbuf_ts_timeout - now) / 1000LL : 0);
+        }
 }
 
 

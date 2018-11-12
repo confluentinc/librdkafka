@@ -194,13 +194,13 @@ rd_kafka_handle_ApiVersion (rd_kafka_t *rk,
 void rd_kafka_ApiVersionRequest (rd_kafka_broker_t *rkb,
 				 rd_kafka_replyq_t replyq,
 				 rd_kafka_resp_cb_t *resp_cb,
-				 void *opaque, int flash_msg);
+				 void *opaque);
 
 void rd_kafka_SaslHandshakeRequest (rd_kafka_broker_t *rkb,
 				    const char *mechanism,
 				    rd_kafka_replyq_t replyq,
 				    rd_kafka_resp_cb_t *resp_cb,
-				    void *opaque, int flash_msg);
+				    void *opaque);
 
 int rd_kafka_ProduceRequest (rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp,
                              const rd_kafka_pid_t pid);

@@ -1404,6 +1404,9 @@ rd_kafka_msgset_writer_finalize (rd_kafka_msgset_writer_t *msetw,
                    msetw->msetw_firstmsg.seq,
                    rd_kafka_pid2str(msetw->msetw_pid));
 
+        rd_kafka_msgq_verify_order(rktp, &rkbuf->rkbuf_msgq,
+                                   msetw->msetw_firstmsg.msgid, rd_true);
+
         return rkbuf;
 }
 

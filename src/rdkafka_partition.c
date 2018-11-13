@@ -672,12 +672,20 @@ void rd_kafka_toppar_enq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
 
 
 /**
- * Dequeue message from 'rktp' message queue.
+ * @brief Insert messages from \p srcq into \p dstq in their sorted
+ *        position using insert-sort with \p cmp.
  */
-void rd_kafka_toppar_deq_msg (rd_kafka_toppar_t *rktp, rd_kafka_msg_t *rkm) {
-	rd_kafka_toppar_lock(rktp);
-	rd_kafka_msgq_deq(&rktp->rktp_msgq, rkm, 1);
-	rd_kafka_toppar_unlock(rktp);
+static void
+rd_kafka_msgq_insert_msgq_sort (rd_kafka_msgq_t *destq,
+                                rd_kafka_msgq_t *srcq,
+                                int (*cmp) (const void *a, const void *b)) {
+        rd_kafka_msg_t *rkm, *tmp;
+
+        TAILQ_FOREACH_SAFE(rkm, &srcq->rkmq_msgs, rkm_link, tmp) {
+                rd_kafka_msgq_enq_sorted0(destq, rkm, cmp);
+        }
+
+        rd_kafka_msgq_init(srcq);
 }
 
 
@@ -708,18 +716,26 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
         /* See if we can optimize the insertion by bulk-loading
          * the messages in place.
          * We know that:
-         *  - destq is sorted
-         *  - srcq is sorted
-         *  - there is no overlap between the two.
+         *  - destq is sorted but might not be continous (1,2,3,7)
+         *  - srcq is sorted but might not be continous (4,5,6)
+         *  - there migt be overlap between the two, e.g:
+         *     destq = (1,2,3,7), srcq = (4,5,6)
          */
 
-        if (cmp(first, dest_first) < 0) {
+        rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
+        rd_kafka_msgq_verify_order(NULL, srcq, 0, rd_false);
+
+        if (unlikely(rd_kafka_msgq_overlap(destq, srcq))) {
+                /* MsgId extents (first, last) in destq and srcq are
+                 * overlapping, do insert-sort to maintain ordering. */
+                rd_kafka_msgq_insert_msgq_sort(destq, srcq, cmp);
+
+        } else if (cmp(first, dest_first) < 0) {
                 /* Prepend src to dest queue.
                  * First append existing dest queue to src queue,
                  * then move src queue to now-empty dest queue,
                  * effectively prepending src queue to dest queue. */
-                rd_kafka_msgq_concat(srcq, destq);
-                rd_kafka_msgq_move(destq, srcq);
+                rd_kafka_msgq_prepend(destq, srcq);
 
         } else if (cmp(first,
                        TAILQ_LAST(&destq->rkmq_msgs,
@@ -750,6 +766,9 @@ void rd_kafka_msgq_insert_msgq (rd_kafka_msgq_t *destq,
                 destq->rkmq_msg_bytes += srcq->rkmq_msg_bytes;
                 rd_kafka_msgq_init(srcq);
         }
+
+        rd_kafka_msgq_verify_order(NULL, destq, 0, rd_false);
+        rd_kafka_msgq_verify_order(NULL, srcq, 0, rd_false);
 }
 
 

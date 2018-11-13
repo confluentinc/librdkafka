@@ -223,6 +223,20 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_init (rd_kafka_msgq_t *rkmq) {
         rkmq->rkmq_msg_bytes = 0;
 }
 
+#if ENABLE_DEVEL
+#define rd_kafka_msgq_verify_order(rktp,rkmq,exp_first_msgid,gapless) \
+        rd_kafka_msgq_verify_order0(rktp,rkmq,exp_first_msgid,gapless)
+#else
+#define rd_kafka_msgq_verify_order(rktp,rkmq,exp_first_msgid,gapless) \
+        do { } while (0)
+#endif
+
+void rd_kafka_msgq_verify_order0 (const struct rd_kafka_toppar_s *rktp,
+                                  const rd_kafka_msgq_t *rkmq,
+                                  uint64_t exp_first_msgid,
+                                  rd_bool_t gapless);
+
+
 /**
  * Concat all elements of 'src' onto tail of 'dst'.
  * 'src' will be cleared.
@@ -234,6 +248,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_concat (rd_kafka_msgq_t *dst,
         dst->rkmq_msg_cnt   += src->rkmq_msg_cnt;
         dst->rkmq_msg_bytes += src->rkmq_msg_bytes;
 	rd_kafka_msgq_init(src);
+        rd_kafka_msgq_verify_order(NULL, dst, 0, rd_false);
 }
 
 /**
@@ -246,6 +261,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_move (rd_kafka_msgq_t *dst,
         dst->rkmq_msg_cnt   = src->rkmq_msg_cnt;
         dst->rkmq_msg_bytes = src->rkmq_msg_bytes;
 	rd_kafka_msgq_init(src);
+        rd_kafka_msgq_verify_order(NULL, dst, 0, rd_false);
 }
 
 
@@ -259,6 +275,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_msgq_prepend (rd_kafka_msgq_t *dst,
                                                        rd_kafka_msgq_t *src) {
         rd_kafka_msgq_concat(src, dst);
         rd_kafka_msgq_move(dst, src);
+        rd_kafka_msgq_verify_order(NULL, dst, 0, rd_false);
 }
 
 
@@ -369,6 +386,18 @@ int rd_kafka_msg_cmp_msgid_lifo (const void *_a, const void *_b) {
                 return 0;
 }
 
+
+/**
+ * @brief Insert message at its sorted position using the msgid.
+ * @remark This is an O(n) operation.
+ * @warning The message must have a msgid set.
+ * @returns the message count of the queue after enqueuing the message.
+ */
+int
+rd_kafka_msgq_enq_sorted0 (rd_kafka_msgq_t *rkmq,
+                           rd_kafka_msg_t *rkm,
+                           int (*order_cmp) (const void *, const void *));
+
 /**
  * @brief Insert message at its sorted position using the msgid.
  * @remark This is an O(n) operation.
@@ -376,8 +405,8 @@ int rd_kafka_msg_cmp_msgid_lifo (const void *_a, const void *_b) {
  * @returns the message count of the queue after enqueuing the message.
  */
 int rd_kafka_msgq_enq_sorted (const rd_kafka_itopic_t *rkt,
-                               rd_kafka_msgq_t *rkmq,
-                               rd_kafka_msg_t *rkm);
+                              rd_kafka_msgq_t *rkmq,
+                              rd_kafka_msg_t *rkm);
 
 /**
  * Insert message at head of message queue.
@@ -399,6 +428,27 @@ static RD_INLINE RD_UNUSED int rd_kafka_msgq_enq (rd_kafka_msgq_t *rkmq,
         return (int)++rkmq->rkmq_msg_cnt;
 }
 
+
+/**
+ * @returns true if the MsgId extents (first, last) in the two queues overlap.
+ */
+static RD_INLINE RD_UNUSED rd_bool_t
+rd_kafka_msgq_overlap (const rd_kafka_msgq_t *a, const rd_kafka_msgq_t *b) {
+        const rd_kafka_msg_t *fa, *la, *fb, *lb;
+
+        if (RD_KAFKA_MSGQ_EMPTY(a) ||
+            RD_KAFKA_MSGQ_EMPTY(b))
+                return rd_false;
+
+        fa = rd_kafka_msgq_first(a);
+        fb = rd_kafka_msgq_first(b);
+        la = rd_kafka_msgq_last(a);
+        lb = rd_kafka_msgq_last(b);
+
+        return (rd_bool_t)
+                (fa->rkm_u.producer.msgid <= lb->rkm_u.producer.msgid &&
+                 fb->rkm_u.producer.msgid <= la->rkm_u.producer.msgid);
+}
 
 /**
  * Scans a message queue for timed out messages and removes them from

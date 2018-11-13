@@ -3114,6 +3114,8 @@ static int rd_kafka_toppar_producer_serve (rd_kafka_broker_t *rkb,
         if (r == 0)
                 return 0;
 
+        rd_kafka_msgq_verify_order(rktp, &rktp->rktp_xmit_msgq, 0, rd_true);
+
         rd_rkb_dbg(rkb, QUEUE, "TOPPAR",
                    "%.*s [%"PRId32"] %d message(s) in "
                    "xmit queue (%d added from partition queue)",

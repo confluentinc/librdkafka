@@ -613,7 +613,7 @@ int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
 }
 
 
-static RD_INLINE int
+int
 rd_kafka_msgq_enq_sorted0 (rd_kafka_msgq_t *rkmq,
                            rd_kafka_msg_t *rkm,
                            int (*order_cmp) (const void *, const void *)) {
@@ -699,6 +699,9 @@ void rd_kafka_msgq_move_acked (rd_kafka_msgq_t *dest, rd_kafka_msgq_t *src,
 
                 rkm->rkm_status = status;
         }
+
+        rd_kafka_msgq_verify_order(NULL, dest, 0, rd_false);
+        rd_kafka_msgq_verify_order(NULL, src, 0, rd_false);
 }
 
 
@@ -1188,6 +1191,62 @@ void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {
         }
 }
 
+
+/**
+ * @brief Verify order (by msgid) in message queue.
+ *        For development use only.
+ */
+void rd_kafka_msgq_verify_order0 (const rd_kafka_toppar_t *rktp,
+                                  const rd_kafka_msgq_t *rkmq,
+                                  uint64_t exp_first_msgid,
+                                  rd_bool_t gapless) {
+        const rd_kafka_msg_t *rkm;
+        uint64_t exp;
+        int errcnt = 0;
+        int cnt = 0;
+        const char *topic = rktp ? rktp->rktp_rkt->rkt_topic->str : "n/a";
+        int32_t partition = rktp ? rktp->rktp_partition : -1;
+
+        if (rd_kafka_msgq_len(rkmq) == 0)
+                return;
+
+        if (exp_first_msgid)
+                exp = exp_first_msgid;
+        else {
+                exp = rd_kafka_msgq_first(rkmq)->rkm_u.producer.msgid;
+                if (exp == 0) /* message without msgid (e.g., UA partition) */
+                        return;
+        }
+
+        TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
+                if (gapless &&
+                    rkm->rkm_u.producer.msgid != exp) {
+                        printf("%s [%"PRId32"]: rkm #%d (%p) "
+                               "msgid %"PRIu64": "
+                               "expected msgid %"PRIu64"\n",
+                               topic, partition,
+                               cnt, rkm, rkm->rkm_u.producer.msgid,
+                               exp);
+                        errcnt++;
+                } else if (!gapless && rkm->rkm_u.producer.msgid < exp) {
+                        printf("%s [%"PRId32"]: rkm #%d (%p) "
+                               "msgid %"PRIu64": "
+                               "expected increased msgid >= %"PRIu64"\n",
+                               topic, partition,
+                               cnt, rkm, rkm->rkm_u.producer.msgid,
+                               exp);
+                        errcnt++;
+                } else
+                        exp++;
+
+                cnt++;
+        }
+
+        rd_assert(!errcnt);
+}
+
+
+
 /**
  * @name Unit tests
  */
@@ -1255,7 +1314,7 @@ static int unittest_msgq_order (const char *what, int fifo,
                           int (*cmp) (const void *, const void *)) {
         rd_kafka_msgq_t rkmq = RD_KAFKA_MSGQ_INITIALIZER(rkmq);
         rd_kafka_msg_t *rkm;
-        rd_kafka_msgq_t sendq;
+        rd_kafka_msgq_t sendq, sendq2;
         int i;
 
         RD_UT_SAY("%s: testing in %s mode", what, fifo? "FIFO" : "LIFO");
@@ -1352,7 +1411,52 @@ static int unittest_msgq_order (const char *what, int fifo,
                         return 1;
         }
 
+        /* Move all messages back on rkmq */
+        rd_kafka_retry_msgq(&rkmq, &sendq, 0, 1000, 0,
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+
+
+        /* Move first half of messages to sendq (1,2,3).
+         * Move second half o messages to sendq2 (4,5,6).
+         * Add new message to rkmq (7).
+         * Move first half of messages back on rkmq (1,2,3,7).
+         * Move second half back on the rkmq (1,2,3,4,5,6,7). */
+        rd_kafka_msgq_init(&sendq);
+        rd_kafka_msgq_init(&sendq2);
+
+        while (rd_kafka_msgq_len(&sendq) < 3)
+                rd_kafka_msgq_enq(&sendq, rd_kafka_msgq_pop(&rkmq));
+
+        while (rd_kafka_msgq_len(&sendq2) < 3)
+                rd_kafka_msgq_enq(&sendq2, rd_kafka_msgq_pop(&rkmq));
+
+        rkm = ut_rd_kafka_msg_new();
+        rkm->rkm_u.producer.msgid = i;
+        rd_kafka_msgq_enq_sorted0(&rkmq, rkm, cmp);
+
+        rd_kafka_retry_msgq(&rkmq, &sendq, 0, 1000, 0,
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+        rd_kafka_retry_msgq(&rkmq, &sendq2, 0, 1000, 0,
+                            RD_KAFKA_MSG_STATUS_NOT_PERSISTED, cmp);
+
+        RD_UT_ASSERT(rd_kafka_msgq_len(&sendq) == 0,
+                     "sendq FIFO should be empty, not contain %d messages",
+                     rd_kafka_msgq_len(&sendq));
+        RD_UT_ASSERT(rd_kafka_msgq_len(&sendq2) == 0,
+                     "sendq2 FIFO should be empty, not contain %d messages",
+                     rd_kafka_msgq_len(&sendq2));
+
+        if (fifo) {
+                if (ut_verify_msgq_order("inject", &rkmq, 1, 7))
+                        return 1;
+        } else {
+                if (ut_verify_msgq_order("readded #2", &rkmq, 7, 1))
+                        return 1;
+        }
+
+
         ut_rd_kafka_msgq_purge(&sendq);
+        ut_rd_kafka_msgq_purge(&sendq2);
         ut_rd_kafka_msgq_purge(&rkmq);
 
         return 0;

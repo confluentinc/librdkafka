@@ -1502,7 +1502,6 @@ int unittest_msg (void) {
         int fails = 0;
 
         fails += unittest_msgq_order("FIFO", 1, rd_kafka_msg_cmp_msgid);
-        fails += unittest_msgq_order("LIFO", 0, rd_kafka_msg_cmp_msgid_lifo);
         fails += unittest_msg_seq_wrap();
 
         return fails;

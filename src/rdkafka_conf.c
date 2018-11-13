@@ -1020,7 +1020,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  0, 900*1000, 300*1000 },
         { _RK_TOPIC|_RK_PRODUCER, "delivery.timeout.ms", _RK_C_ALIAS,
           .sdef = "message.timeout.ms" },
-        { _RK_TOPIC|_RK_PRODUCER, "queuing.strategy", _RK_C_S2I,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED, "queuing.strategy", _RK_C_S2I,
           _RKT(queuing_strategy),
           "Producer queuing strategy. FIFO preserves produce ordering, "
           "while LIFO prioritizes new messages. "
@@ -1050,11 +1050,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(partitioner),
 	  "Custom partitioner callback "
 	  "(set with rd_kafka_topic_conf_set_partitioner_cb())" },
-	{ _RK_TOPIC|_RK_PRODUCER, "msg_order_cmp", _RK_C_PTR,
+	{ _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED, "msg_order_cmp", _RK_C_PTR,
 	  _RKT(msg_order_cmp),
 	  "Message queue ordering comparator "
 	  "(set with rd_kafka_topic_conf_set_msg_order_cmp()). "
-          "Also see `queuing.strategy`." },
+          "Also see `queuing.strategy`. "
+          "WARNING: this is an experimental interface, subject "
+          "to change or removal." },
 	{ _RK_TOPIC, "opaque", _RK_C_PTR,
 	  _RKT(opaque),
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },

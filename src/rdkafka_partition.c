@@ -1138,6 +1138,12 @@ void rd_kafka_toppar_next_offset_handle (rd_kafka_toppar_t *rktp,
         if (RD_KAFKA_OFFSET_IS_LOGICAL(Offset)) {
                 /* Offset storage returned logical offset (e.g. "end"),
                  * look it up. */
+
+                /* Save next offset, even if logical, so that e.g.,
+                 * assign(BEGINNING) survives a pause+resume, etc.
+                 * See issue #2105. */
+                rktp->rktp_next_offset = Offset;
+
                 rd_kafka_offset_reset(rktp, Offset, RD_KAFKA_RESP_ERR_NO_ERROR,
                                       "update");
                 return;

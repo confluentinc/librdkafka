@@ -815,6 +815,11 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 		mtx_destroy(&rk->rk_curr_msgs.lock);
 	}
 
+        if (rk->rk_fatal.errstr) {
+                rd_free(rk->rk_fatal.errstr);
+                rk->rk_fatal.errstr = NULL;
+        }
+
 	cnd_destroy(&rk->rk_broker_state_change_cnd);
 	mtx_destroy(&rk->rk_broker_state_change_lock);
 

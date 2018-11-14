@@ -522,11 +522,18 @@ void rd_kafka_transport_ssl_init (void) {
 		CRYPTO_set_id_callback(rd_kafka_transport_ssl_threadid_cb);
 #endif
 	}
-#endif
-	
+
+        /* OPENSSL_init_ssl(3) and OPENSSL_init_crypto(3) say:
+         * "As of version 1.1.0 OpenSSL will automatically allocate
+         * all resources that it needs so no explicit initialisation
+         * is required. Similarly it will also automatically
+         * deinitialise as required."
+         */
 	SSL_load_error_strings();
 	SSL_library_init();
 	OpenSSL_add_all_algorithms();
+#endif
+
 }
 
 

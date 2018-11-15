@@ -203,6 +203,8 @@ class MyHashPartitionerCb : public RdKafka::PartitionerCb {
 };
 
 void msg_consume(RdKafka::Message* message, void* opaque) {
+  const RdKafka::Headers *headers;
+
   switch (message->err()) {
     case RdKafka::ERR__TIMED_OUT:
       break;
@@ -212,6 +214,20 @@ void msg_consume(RdKafka::Message* message, void* opaque) {
       std::cout << "Read msg at offset " << message->offset() << std::endl;
       if (message->key()) {
         std::cout << "Key: " << *message->key() << std::endl;
+      }
+      headers = message->headers();
+      if (headers) {
+        std::vector<RdKafka::Headers::Header> hdrs = headers->get_all();
+        for (size_t i = 0 ; i < hdrs.size() ; i++) {
+          const RdKafka::Headers::Header hdr = hdrs[i];
+
+          if (hdr.value() != NULL)
+            printf(" Header: %s = \"%.*s\"\n",
+                   hdr.key().c_str(),
+                   (int)hdr.value_size(), (const char *)hdr.value());
+          else
+            printf(" Header:  %s = NULL\n", hdr.key().c_str());
+        }
       }
       printf("%.*s\n",
         static_cast<int>(message->len()),
@@ -479,6 +495,8 @@ int main (int argc, char **argv) {
     /* Set delivery report callback */
     conf->set("dr_cb", &ex_dr_cb, errstr);
 
+    conf->set("default_topic_conf", tconf, errstr);
+
     /*
      * Create producer using accumulated global configuration.
      */
@@ -490,15 +508,6 @@ int main (int argc, char **argv) {
 
     std::cout << "% Created producer " << producer->name() << std::endl;
 
-    /*
-     * Create topic handle.
-     */
-    RdKafka::Topic *topic = RdKafka::Topic::create(producer, topic_str,
-						   tconf, errstr);
-    if (!topic) {
-      std::cerr << "Failed to create topic: " << errstr << std::endl;
-      exit(1);
-    }
 
     /*
      * Read messages from stdin and produce to broker.
@@ -509,20 +518,36 @@ int main (int argc, char **argv) {
 	continue;
       }
 
+      RdKafka::Headers *headers = RdKafka::Headers::create();
+      headers->add("my header", "header value");
+      headers->add("other header", "yes");
+
       /*
        * Produce message
        */
       RdKafka::ErrorCode resp =
-	producer->produce(topic, partition,
-			  RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
-			  const_cast<char *>(line.c_str()), line.size(),
-			  NULL, NULL);
-      if (resp != RdKafka::ERR_NO_ERROR)
-	std::cerr << "% Produce failed: " <<
-	  RdKafka::err2str(resp) << std::endl;
-      else
-	std::cerr << "% Produced message (" << line.size() << " bytes)" <<
-	  std::endl;
+        producer->produce(topic_str, partition,
+                          RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
+                          /* Value */
+                          const_cast<char *>(line.c_str()), line.size(),
+                          /* Key */
+                          NULL, 0,
+                          /* Timestamp (defaults to now) */
+                          0,
+                          /* Message headers, if any */
+                          headers,
+                          /* Per-message opaque value passed to
+                           * delivery report */
+                          NULL);
+      if (resp != RdKafka::ERR_NO_ERROR) {
+        std::cerr << "% Produce failed: " <<
+          RdKafka::err2str(resp) << std::endl;
+        delete headers; /* Headers are automatically deleted on produce()
+                         * success. */
+      } else {
+        std::cerr << "% Produced message (" << line.size() << " bytes)" <<
+          std::endl;
+      }
 
       producer->poll(0);
     }
@@ -533,7 +558,6 @@ int main (int argc, char **argv) {
       producer->poll(1000);
     }
 
-    delete topic;
     delete producer;
 
 
@@ -635,7 +659,7 @@ int main (int argc, char **argv) {
       RdKafka::ErrorCode err = producer->metadata(topic!=NULL, topic,
                               &metadata, 5000);
       if (err != RdKafka::ERR_NO_ERROR) {
-        std::cerr << "%% Failed to acquire metadata: " 
+        std::cerr << "%% Failed to acquire metadata: "
                   << RdKafka::err2str(err) << std::endl;
               run = 0;
               break;
@@ -649,6 +673,8 @@ int main (int argc, char **argv) {
 
   }
 
+  delete conf;
+  delete tconf;
 
   /*
    * Wait for RdKafka to decommission.

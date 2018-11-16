@@ -53,8 +53,15 @@
 #include <cstdlib>
 #include <cstring>
 #include <stdint.h>
+#include <sys/types.h>
 
 #ifdef _MSC_VER
+#ifndef ssize_t
+#ifndef _BASETSD_H_
+#include <basetsd.h>
+#endif
+typedef SSIZE_T ssize_t;
+#endif
 #undef RD_EXPORT
 #ifdef LIBRDKAFKA_STATICLIB
 #define RD_EXPORT
@@ -828,7 +835,73 @@ public:
   virtual ~OffsetCommitCb() { }
 };
 
+/**
+* @brief SSL certificate verify callback class
+*/
+class RD_EXPORT SslCertificateVerifyCb {
+public:
+    /**
+    * @brief Set SSL certificate verification callback.
+    *
+    * The verification of the broker certificate will be processed
+    * by this callback.
+    *
+    * @param cert the binary encoded certificate
+    *
+    * @param len the size of cert in bytes
+    *
+    * @param errstr human readable error message which implementer must populate on failure.
+    *
+    * @returns true if the SSL certificate is successfully verified otherwise false
+    *    in which case the implementation must provide a human readable error string in errstr.
+    */
+    virtual bool ssl_cert_verify_cb(char *cert, size_t len, std::string &errstr) = 0;
 
+    virtual ~SslCertificateVerifyCb() {}
+};
+
+/**
+* @brief Certificate retrieve callback class
+*/
+class RD_EXPORT SslCertificateRetrieveCb {
+public:
+    /** @brief Type of the retrieve certificate callback */
+    enum Type {
+        CERTIFICATE_PUBLIC_KEY,
+        CERTIFICATE_PRIVATE_KEY,
+        CERTIFICATE_PRIVATE_KEY_PASS
+    };
+
+    /**
+    * @brief Set certificate retrieve callback.
+    *
+    * The retrieval of the cetificate specified by the type will be returned by this callback.
+    * This is used to get the certificates required to create the SSL connection.
+    *
+    * @remark upon compleation the buffer must point to a valid buffer.
+    *
+    * @param buffer must point to valid data upon compleation.  It is the responsibility of the
+    *   implementation to ensure that the data is valid until the class is destructed.  This class
+    *   insance must outlive the RdKafka client instance.
+    *
+    * @param type the type of buffer which will be retrieved by the callback.
+    *   CERTIFICATE_PUBLIC_KEY
+    *   CERTIFICATE_PRIVATE_KEY
+    *   CERTIFICATE_PRIVATE_KEY_PASS
+    *
+    * @parm errstr human readable error message which implementer must populate on failure.
+    *
+    * @remark When type is CERTIFICATE_PUBLIC_KEY or CERTIFICATE_PRIVATE_KEY then upon return the buffer
+    *    must point to the certificate.  When type is For CERTIFICATE_PRIVATE_KEY_PASS then buffer
+    *    must point to a narrow string containing the password of the private key.
+    *
+    * @returns the number of bytes in the returned buffer or -1 on error, in which case the implemention 
+    *    must provide a human readable error string in errstr.
+    */
+    virtual ssize_t ssl_cert_retrieve_cb(Type type, char **buffer, std::string &errstr) = 0;
+
+    virtual ~SslCertificateRetrieveCb() {}
+};
 
 /**
  * @brief \b Portability: SocketCb callback class
@@ -996,6 +1069,18 @@ class RD_EXPORT Conf {
                                 OffsetCommitCb *offset_commit_cb,
                                 std::string &errstr) = 0;
 
+  /** @brief Use with \p name = \c \"ssl_cert_verify_cb\"
+      @remark this is not supported on the MIPS platform
+  */
+  virtual Conf::ConfResult set(const std::string &name,
+                               SslCertificateVerifyCb *ssl_cert_verify_cb,
+                               std::string &errstr) = 0;
+
+  /** @brief Use with \p name = \c \"ssl_cert_retrieve_cb\" */
+  virtual Conf::ConfResult set(const std::string &name,
+                               SslCertificateRetrieveCb *ssl_cert_retrieve_cb,
+                               std::string &errstr) = 0;
+
   /** @brief Query single configuration value
    *
    * Do not use this method to get callbacks registered by the configuration file.
@@ -1055,6 +1140,12 @@ class RD_EXPORT Conf {
    *  @returns CONF_OK if the property was set previously set and
    *           returns the value in \p offset_commit_cb. */
   virtual Conf::ConfResult get(OffsetCommitCb *&offset_commit_cb) const = 0;
+
+  /** @brief Use with \p name = \c \"ssl_cert_verify_cb\" */
+  virtual Conf::ConfResult get(SslCertificateVerifyCb *&ssl_cert_verify_cb) const = 0;
+
+  /** @brief Use with \p name = \c \"ssl_cert_retrieve_cb\" */
+  virtual Conf::ConfResult get(SslCertificateRetrieveCb *&ssl_cert_retrieve_cb) const = 0;
 
   /** @brief Dump configuration names and values to list containing
    *         name,value tuples */

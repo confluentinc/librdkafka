@@ -633,6 +633,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	_RK(ssl.keystore_password),
 	"Client's keystore (PKCS#12) password."
 	},
+    { _RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
+    _RK(ssl.ssl_cert_verify_cb),
+    "Verify the broker certificate callback."
+    },
+    { _RK_GLOBAL, "ssl.certificate.retrieve_cb", _RK_C_PTR,
+    _RK(ssl.ssl_cert_retrieve_cb),
+    "Retrieve client certificates callback."
+    },
+
 #endif /* WITH_SSL */
 
         /* Point user in the right direction if they try to apply
@@ -2253,6 +2262,32 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "open_cb", open_cb);
 }
 #endif
+
+rd_kafka_conf_res_t
+rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
+    int (*ssl_cert_verify_cb) (char *cert, size_t len,
+                               char *errstr, size_t errstr_size,
+                               void *opaque)) {
+#if defined(__mips__) || !WITH_SSL
+    return RD_KAFKA_CONF_UNKNOWN;
+#else
+    conf->ssl.ssl_cert_verify_cb = ssl_cert_verify_cb;
+    return RD_KAFKA_CONF_OK;
+#endif
+}
+
+rd_kafka_conf_res_t
+rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
+    ssize_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer,
+                                    char *errstr, size_t errstr_size,
+                                    void *opaque)) {
+#if WITH_SSL
+    conf->ssl.ssl_cert_retrieve_cb = ssl_cert_retrieve_cb;
+    return RD_KAFKA_CONF_OK;
+#else
+    return RD_KAFKA_CONF_UNKNOWN;
+#endif
+}
 
 void rd_kafka_conf_set_opaque (rd_kafka_conf_t *conf, void *opaque) {
         rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf, "opaque", opaque);

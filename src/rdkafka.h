@@ -1895,6 +1895,41 @@ void rd_kafka_conf_set_open_cb (rd_kafka_conf_t *conf,
 #endif
 
 /**
+* @enum rd_kafka_certificate_type_t
+*
+* @brief Type of certificates
+*
+* @sa rd_kafka_conf_set_ssl_cert_retrieve_cb()
+*/
+typedef enum rd_kafka_certificate_type_t {
+    RD_KAFKA_CERTIFICATE_PUBLIC_KEY,        /**< Client's public key */
+    RD_KAFKA_CERTIFICATE_PRIVATE_KEY,       /**< Client's private key */
+    RD_KAFKA_CERTIFICATE_PRIVATE_KEY_PASS   /**< Password of private key */
+} rd_kafka_certificate_type_t;
+
+/**
+* @brief Sets the verification callback of the broker certificate
+
+  @remark this is not supported on the MIPS platform
+*
+*/
+RD_EXPORT
+rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_verify_cb(rd_kafka_conf_t *conf,
+    int (*ssl_cert_verify_cb) (char *cert, size_t len,
+                               char *errstr, size_t errstr_size,
+                               void *opaque));
+
+/**
+* @brief Sets the callback to recieve the client certificate
+*
+*/
+RD_EXPORT
+rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert_retrieve_cb(rd_kafka_conf_t *conf,
+    ssize_t (*ssl_cert_retrieve_cb) (rd_kafka_certificate_type_t type, char **buffer,
+                                    char *errstr, size_t errstr_size,
+                                    void *opaque));
+
+/**
  * @brief Sets the application's opaque pointer that will be passed to callbacks
  */
 RD_EXPORT

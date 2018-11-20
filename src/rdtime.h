@@ -172,7 +172,7 @@ static RD_INLINE void rd_timeout_init_timespec (struct timespec *tspec,
                 timespec_get(tspec, TIME_UTC);
                 tspec->tv_sec  += timeout_ms / 1000;
                 tspec->tv_nsec += (timeout_ms % 1000) * 1000000;
-                if (tspec->tv_nsec > 1000000000) {
+                if (tspec->tv_nsec >= 1000000000) {
                         tspec->tv_nsec -= 1000000000;
                         tspec->tv_sec++;
                 }

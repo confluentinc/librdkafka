@@ -253,6 +253,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         struct {
                 /**< Log: compression type not supported by broker. */
                 rd_interval_t unsupported_compression;
+
+                /**< Log: KIP-62 not supported by broker. */
+                rd_interval_t unsupported_kip62;
         } rkb_suppress;
 
 	struct {

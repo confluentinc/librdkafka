@@ -4377,6 +4377,7 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 	}
 
         rd_interval_init(&rkb->rkb_suppress.unsupported_compression);
+        rd_interval_init(&rkb->rkb_suppress.unsupported_kip62);
 
 	/* Set next intervalled metadata refresh, offset by a random
 	 * value to avoid all brokers to be queried simultaneously. */

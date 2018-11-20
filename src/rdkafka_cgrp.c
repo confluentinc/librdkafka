@@ -2261,15 +2261,23 @@ static void rd_kafka_cgrp_check_unassign_done (rd_kafka_cgrp_t *rkcg,
 	    rkcg->rkcg_assigned_cnt > 0 ||
 	    rkcg->rkcg_wait_commit_cnt > 0 ||
 	    rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN) {
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
-                             "Unassign not done yet "
-                             "(%d wait_unassign, %d assigned, %d wait commit"
-                             "%s): %s",
-                             rkcg->rkcg_wait_unassign_cnt,
-                             rkcg->rkcg_assigned_cnt,
-                             rkcg->rkcg_wait_commit_cnt,
-                             (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_UNASSIGN)?
-                             ", F_WAIT_UNASSIGN" : "", reason);
+
+                if (rkcg->rkcg_join_state != RD_KAFKA_CGRP_JOIN_STATE_STARTED)
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "UNASSIGN",
+                                     "Unassign not done yet "
+                                     "(%d wait_unassign, %d assigned, "
+                                     "%d wait commit"
+                                     "%s, join state %s): %s",
+                                     rkcg->rkcg_wait_unassign_cnt,
+                                     rkcg->rkcg_assigned_cnt,
+                                     rkcg->rkcg_wait_commit_cnt,
+                                     (rkcg->rkcg_flags &
+                                      RD_KAFKA_CGRP_F_WAIT_UNASSIGN)?
+                                     ", F_WAIT_UNASSIGN" : "",
+                                     rd_kafka_cgrp_join_state_names[
+                                             rkcg->rkcg_join_state],
+                                     reason);
+
 		return;
         }
 

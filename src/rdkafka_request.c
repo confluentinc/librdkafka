@@ -1190,6 +1190,22 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
         /* This is a blocking request */
         rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;
         rd_kafka_buf_set_abs_timeout(
+        if (ApiVersion < 1 &&
+            rk->rk_conf.max_poll_interval_ms >
+            rk->rk_conf.group_session_timeout_ms &&
+            rd_interval(&rkb->rkb_suppress.unsupported_kip62,
+                        /* at most once per day */
+                        (rd_ts_t)86400 * 1000 * 1000, 0) > 0)
+                rd_rkb_log(rkb, LOG_NOTICE, "MAXPOLL",
+                           "Broker does not support KIP-62 "
+                           "(requires Apache Kafka >= v0.10.1.0): "
+                           "consumer configuration "
+                           "`max.poll.interval.ms` (%d) "
+                           "is effectively limited "
+                           "by `session.timeout.ms` (%d) "
+                           "with this broker version",
+                           rk->rk_conf.max_poll_interval_ms,
+                           rk->rk_conf.group_session_timeout_ms);
                 rkbuf,
                 rk->rk_conf.group_session_timeout_ms +
                 3000/* 3s grace period*/,

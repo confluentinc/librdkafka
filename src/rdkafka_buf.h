@@ -563,6 +563,9 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         int     rkbuf_rel_timeout;/* Relative timeout (ms), used for retries.
                                    * Defaults to socket.timeout.ms.
                                    * Mutually exclusive with rkbuf_abs_timeout*/
+        rd_bool_t rkbuf_force_timeout; /**< Force request timeout to be
+                                        *   remaining abs_timeout regardless
+                                        *   of socket.timeout.ms. */
 
 
         int64_t rkbuf_offset;     /* Used by OffsetCommit */
@@ -652,17 +655,28 @@ void rd_kafka_buf_calc_timeout (const rd_kafka_t *rk, rd_kafka_buf_t *rkbuf,
  *        from \p now.
  *
  * @param now Reuse current time from existing rd_clock() var, else 0.
+ * @param force If true: force request timeout to be same as remaining
+ *                       abs timeout, regardless of socket.timeout.ms.
+ *              If false: cap each request timeout to socket.timeout.ms.
  *
  * The remaining time is used as timeout for request retries.
  */
 static RD_INLINE void
-rd_kafka_buf_set_abs_timeout (rd_kafka_buf_t *rkbuf, int timeout_ms,
-                              rd_ts_t now) {
+rd_kafka_buf_set_abs_timeout0 (rd_kafka_buf_t *rkbuf, int timeout_ms,
+                               rd_ts_t now, rd_bool_t force) {
         if (!now)
                 now = rd_clock();
         rkbuf->rkbuf_rel_timeout = 0;
         rkbuf->rkbuf_abs_timeout = now + ((rd_ts_t)timeout_ms * 1000);
+        rkbuf->rkbuf_force_timeout = force;
 }
+
+#define rd_kafka_buf_set_abs_timeout(rkbuf,timeout_ms,now) \
+        rd_kafka_buf_set_abs_timeout0(rkbuf,timeout_ms,now,rd_false)
+
+
+#define rd_kafka_buf_set_abs_timeout_force(rkbuf,timeout_ms,now) \
+        rd_kafka_buf_set_abs_timeout0(rkbuf,timeout_ms,now,rd_true)
 
 
 #define rd_kafka_buf_keep(rkbuf) rd_refcnt_add(&(rkbuf)->rkbuf_refcnt)

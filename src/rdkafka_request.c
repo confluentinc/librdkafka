@@ -1187,9 +1187,6 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
-        /* This is a blocking request */
-        rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;
-        rd_kafka_buf_set_abs_timeout(
         if (ApiVersion < 1 &&
             rk->rk_conf.max_poll_interval_ms >
             rk->rk_conf.group_session_timeout_ms &&
@@ -1206,10 +1203,21 @@ void rd_kafka_JoinGroupRequest (rd_kafka_broker_t *rkb,
                            "with this broker version",
                            rk->rk_conf.max_poll_interval_ms,
                            rk->rk_conf.group_session_timeout_ms);
+
+        /* Absolute timeout */
+        rd_kafka_buf_set_abs_timeout_force(
                 rkbuf,
-                rk->rk_conf.group_session_timeout_ms +
+                /* Request timeout is max.poll.interval.ms + grace
+                 * if the broker supports it, else
+                 * session.timeout.ms + grace. */
+                (ApiVersion >= 1 ?
+                 rk->rk_conf.max_poll_interval_ms :
+                 rk->rk_conf.group_session_timeout_ms) +
                 3000/* 3s grace period*/,
                 0);
+
+        /* This is a blocking request */
+        rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }

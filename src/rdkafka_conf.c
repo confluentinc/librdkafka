@@ -247,14 +247,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL, "client.id", _RK_C_STR, _RK(client_id_str),
 	  "Client identifier.",
 	  .sdef =  "rdkafka" },
-	{ _RK_GLOBAL, "metadata.broker.list", _RK_C_STR, _RK(brokerlist),
+	{ _RK_GLOBAL|_RK_HIGH, "metadata.broker.list", _RK_C_STR,
+          _RK(brokerlist),
 	  "Initial list of brokers as a CSV list of broker host or host:port. "
 	  "The application may also use `rd_kafka_brokers_add()` to add "
 	  "brokers during runtime." },
-	{ _RK_GLOBAL, "bootstrap.servers", _RK_C_ALIAS, 0,
+	{ _RK_GLOBAL|_RK_HIGH, "bootstrap.servers", _RK_C_ALIAS, 0,
 	  "See metadata.broker.list",
 	  .sdef = "metadata.broker.list" },
-	{ _RK_GLOBAL, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
+	{ _RK_GLOBAL|_RK_MED, "message.max.bytes", _RK_C_INT, _RK(max_msg_size),
 	  "Maximum Kafka protocol request message size.",
 	  1000, 1000000000, 1000000 },
 	{ _RK_GLOBAL, "message.copy.max.bytes", _RK_C_INT,
@@ -263,7 +264,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Messages larger than this will be passed by reference (zero-copy) "
 	  "at the expense of larger iovecs.",
 	  0, 1000000000, 0xffff },
-	{ _RK_GLOBAL, "receive.message.max.bytes", _RK_C_INT,
+	{ _RK_GLOBAL|_RK_MED, "receive.message.max.bytes", _RK_C_INT,
           _RK(recv_max_msg_size),
           "Maximum Kafka protocol response message size. "
           "This serves as a safety precaution to avoid memory exhaustion in "
@@ -319,7 +320,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Topic blacklist, a comma-separated list of regular expressions "
           "for matching topic names that should be ignored in "
           "broker metadata information as if the topics did not exist." },
-	{ _RK_GLOBAL, "debug", _RK_C_S2F, _RK(debug),
+	{ _RK_GLOBAL|_RK_MED, "debug", _RK_C_S2F, _RK(debug),
 	  "A comma-separated list of debug contexts to enable. "
           "Detailed Producer debugging: broker,topic,msg. "
           "Consumer: consumer,cgrp,topic,fetch",
@@ -399,7 +400,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
                         { AF_INET, "v4" },
                         { AF_INET6, "v6" },
                 } },
-        { _RK_GLOBAL, "enable.sparse.connections", _RK_C_BOOL,
+        { _RK_GLOBAL|_RK_MED, "enable.sparse.connections", _RK_C_BOOL,
           _RK(sparse_connections),
           "When enabled the client will only connect to brokers "
           "it needs to communicate with. When disabled the client "
@@ -410,7 +411,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "No longer used. See `reconnect.backoff.ms` and "
           "`reconnect.backoff.max.ms`.",
           0, 60*60*1000, 0 },
-        { _RK_GLOBAL, "reconnect.backoff.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_MED, "reconnect.backoff.ms", _RK_C_INT,
           _RK(reconnect_backoff_ms),
           "The initial time to wait before reconnecting to a broker "
           "after the connection has been closed. "
@@ -419,12 +420,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "-25% to +50% jitter is applied to each reconnect backoff. "
           "A value of 0 disables the backoff and reconnects immediately.",
           0, 60*60*1000, 100 },
-        { _RK_GLOBAL, "reconnect.backoff.max.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_MED, "reconnect.backoff.max.ms", _RK_C_INT,
           _RK(reconnect_backoff_max_ms),
           "The maximum time to wait before reconnecting to a broker "
           "after the connection has been closed.",
           0, 60*60*1000, 10*1000 },
-	{ _RK_GLOBAL, "statistics.interval.ms", _RK_C_INT,
+	{ _RK_GLOBAL|_RK_HIGH, "statistics.interval.ms", _RK_C_INT,
 	  _RK(stats_interval_ms),
 	  "librdkafka statistics emit interval. The application also needs to "
 	  "register a stats callback using `rd_kafka_conf_set_stats_cb()`. "
@@ -518,7 +519,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The application should mask this signal as an internal "
 	  "signal handler is installed.",
 	  0, 128, 0 },
-	{ _RK_GLOBAL, "api.version.request", _RK_C_BOOL,
+	{ _RK_GLOBAL|_RK_HIGH, "api.version.request", _RK_C_BOOL,
 	  _RK(api_version_request),
 	  "Request broker's supported API versions to adjust functionality to "
 	  "available protocol features. If set to false, or the "
@@ -531,7 +532,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(api_version_request_timeout_ms),
 	  "Timeout for broker API version requests.",
 	  1, 5*60*1000, 10*1000 },
-	{ _RK_GLOBAL, "api.version.fallback.ms", _RK_C_INT,
+	{ _RK_GLOBAL|_RK_MED, "api.version.fallback.ms", _RK_C_INT,
 	  _RK(api_version_fallback_ms),
 	  "Dictates how long the `broker.version.fallback` fallback is used "
 	  "in the case the ApiVersionRequest fails. "
@@ -539,7 +540,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "to the broker is made (such as after an upgrade).",
 	  0, 86400*7*1000, 20*60*1000 /* longer than default Idle timeout (10m)*/ },
 
-	{ _RK_GLOBAL, "broker.version.fallback", _RK_C_STR,
+	{ _RK_GLOBAL|_RK_MED, "broker.version.fallback", _RK_C_STR,
 	  _RK(broker_version_fallback),
 	  "Older broker versions (before 0.10.0) provide no way for a client to query "
 	  "for supported protocol features "
@@ -555,7 +556,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  .validate = rd_kafka_conf_validate_broker_version },
 
 	/* Security related global properties */
-	{ _RK_GLOBAL, "security.protocol", _RK_C_S2I,
+	{ _RK_GLOBAL|_RK_HIGH, "security.protocol", _RK_C_S2I,
 	  _RK(security_protocol),
 	  "Protocol used to communicate with brokers.",
 	  .vdef = RD_KAFKA_PROTO_PLAINTEXT,
@@ -608,7 +609,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(ssl.cert_location),
 	  "Path to client's public key (PEM) used for authentication."
 	},
-	{ _RK_GLOBAL, "ssl.ca.location", _RK_C_STR,
+	{ _RK_GLOBAL|_RK_MED, "ssl.ca.location", _RK_C_STR,
 	  _RK(ssl.ca_location),
 	  "File or directory path to CA certificate(s) for verifying "
 	  "the broker's key."
@@ -642,14 +643,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "for more information."
         },
 
-	{_RK_GLOBAL,"sasl.mechanisms", _RK_C_STR,
+	{_RK_GLOBAL|_RK_HIGH, "sasl.mechanisms", _RK_C_STR,
 	 _RK(sasl.mechanisms),
 	 "SASL mechanism to use for authentication. "
 	 "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512. "
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
 	 .validate = rd_kafka_conf_validate_single },
-        {_RK_GLOBAL,"sasl.mechanism", _RK_C_ALIAS,
+        {_RK_GLOBAL|_RK_HIGH, "sasl.mechanism", _RK_C_ALIAS,
          .sdef = "sasl.mechanisms" },
 	{ _RK_GLOBAL, "sasl.kerberos.service.name", _RK_C_STR,
 	  _RK(sasl.service_name),
@@ -680,10 +681,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Minimum time in milliseconds between key refresh attempts.",
 	  1, 86400*1000, 60*1000 },
 #endif
-	{ _RK_GLOBAL, "sasl.username", _RK_C_STR,
+	{ _RK_GLOBAL|_RK_HIGH, "sasl.username", _RK_C_STR,
 	  _RK(sasl.username),
 	  "SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms" },
-	{ _RK_GLOBAL, "sasl.password", _RK_C_STR,
+	{ _RK_GLOBAL|_RK_HIGH, "sasl.password", _RK_C_STR,
 	  _RK(sasl.password),
 	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
 
@@ -720,16 +721,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "int32_t brokerid, uint64_t msgid, rd_kafka_resp_err_t err)" },
 
         /* Global consumer group properties */
-        { _RK_GLOBAL|_RK_CGRP, "group.id", _RK_C_STR,
+        { _RK_GLOBAL|_RK_CGRP|_RK_HIGH, "group.id", _RK_C_STR,
           _RK(group_id_str),
           "Client group id string. All clients sharing the same group.id "
           "belong to the same group." },
-        { _RK_GLOBAL|_RK_CGRP, "partition.assignment.strategy", _RK_C_STR,
+        { _RK_GLOBAL|_RK_CGRP|_RK_MED, "partition.assignment.strategy",
+          _RK_C_STR,
           _RK(partition_assignment_strategy),
           "Name of partition assignment strategy to use when elected "
           "group leader assigns partitions to group members.",
 	  .sdef = "range,roundrobin" },
-        { _RK_GLOBAL|_RK_CGRP, "session.timeout.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CGRP|_RK_HIGH, "session.timeout.ms", _RK_C_INT,
           _RK(group_session_timeout_ms),
           "Client group session and failure detection timeout. "
           "The consumer sends periodic heartbeats (heartbeat.interval.ms) "
@@ -739,7 +741,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "the group and trigger a rebalance. "
           "The allowed range is configured with the **broker** configuration "
           "properties `group.min.session.timeout.ms` and "
-          "`group.max.session.timeout.ms`.",
+          "`group.max.session.timeout.ms`. "
+          "Also see `max.poll.interval.ms`.",
           1, 3600*1000, 10*1000 },
         { _RK_GLOBAL|_RK_CGRP, "heartbeat.interval.ms", _RK_C_INT,
           _RK(group_heartbeat_intvl_ms),
@@ -756,7 +759,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "query interval will be divided by ten to more quickly recover "
           "in case of coordinator reassignment.",
           1, 3600*1000, 10*60*1000 },
-        { _RK_GLOBAL|_RK_CONSUMER, "max.poll.interval.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_HIGH, "max.poll.interval.ms", _RK_C_INT,
           _RK(max_poll_interval_ms),
           "Maximum allowed time between calls to consume messages "
           "(e.g., rd_kafka_consumer_poll()) for high-level consumers. "
@@ -764,13 +767,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "and the group will rebalance in order to reassign the "
           "partitions to another consumer group member. "
           "Warning: Offset commits may be not possible at this point. "
+          "Note: It is recommended to set `enable.auto.offset.store=false` "
+          "for long-time processing applications and then explicitly store "
+          "offsets (using offsets_store()) *after* message processing, to "
+          "make sure offsets are not auto-committed prior to processing "
+          "has finished. "
           "The interval is checked two times per second. "
           "See KIP-62 for more information.",
           1, 86400*1000, 300000
         },
 
         /* Global consumer properties */
-        { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.commit", _RK_C_BOOL,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_HIGH, "enable.auto.commit", _RK_C_BOOL,
           _RK(enable_auto_commit),
           "Automatically and periodically commit offsets in the background. "
           "Note: setting this to false does not prevent the consumer from "
@@ -778,35 +786,41 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "behaviour set specific start offsets per partition in the call "
           "to assign().",
           0, 1, 1 },
-        { _RK_GLOBAL|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "auto.commit.interval.ms",
+          _RK_C_INT,
 	  _RK(auto_commit_interval_ms),
 	  "The frequency in milliseconds that the consumer offsets "
 	  "are committed (written) to offset storage. (0 = disable). "
           "This setting is used by the high-level consumer.",
           0, 86400*1000, 5*1000 },
-        { _RK_GLOBAL|_RK_CONSUMER, "enable.auto.offset.store", _RK_C_BOOL,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_HIGH, "enable.auto.offset.store",
+          _RK_C_BOOL,
           _RK(enable_auto_offset_store),
           "Automatically store offset of last message provided to "
-	  "application.",
+          "application. "
+          "The offset store is an in-memory store of the next offset to "
+          "(auto-)commit for each partition.",
           0, 1, 1 },
-	{ _RK_GLOBAL|_RK_CONSUMER, "queued.min.messages", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "queued.min.messages", _RK_C_INT,
 	  _RK(queued_min_msgs),
 	  "Minimum number of messages per topic+partition "
           "librdkafka tries to maintain in the local consumer queue.",
 	  1, 10000000, 100000 },
-	{ _RK_GLOBAL|_RK_CONSUMER, "queued.max.messages.kbytes", _RK_C_INT,
+	{ _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "queued.max.messages.kbytes",
+          _RK_C_INT,
 	  _RK(queued_max_msg_kbytes),
           "Maximum number of kilobytes per topic+partition in the "
           "local consumer queue. "
 	  "This value may be overshot by fetch.message.max.bytes. "
 	  "This property has higher priority than queued.min.messages.",
           1, INT_MAX/1024, 0x100000/*1GB*/ },
-	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.wait.max.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CONSUMER, "fetch.wait.max.ms", _RK_C_INT,
 	  _RK(fetch_wait_max_ms),
 	  "Maximum time the broker may wait to fill the response "
 	  "with fetch.min.bytes.",
 	  0, 300*1000, 100 },
-        { _RK_GLOBAL|_RK_CONSUMER, "fetch.message.max.bytes", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "fetch.message.max.bytes",
+          _RK_C_INT,
           _RK(fetch_msg_max_bytes),
           "Initial maximum number of bytes per topic+partition to request when "
           "fetching messages from the broker. "
@@ -814,9 +828,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "it will gradually try to increase it until the "
 	  "entire message can be fetched.",
           1, 1000000000, 1024*1024 },
-	{ _RK_GLOBAL|_RK_CONSUMER, "max.partition.fetch.bytes", _RK_C_ALIAS,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "max.partition.fetch.bytes",
+          _RK_C_ALIAS,
 	  .sdef = "fetch.message.max.bytes" },
-        { _RK_GLOBAL|_RK_CONSUMER, "fetch.max.bytes", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "fetch.max.bytes", _RK_C_INT,
           _RK(fetch_max_bytes),
           "Maximum amount of data the broker shall return for a Fetch request. "
           "Messages are fetched in batches by the consumer and if the first "
@@ -835,7 +850,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "If fetch.wait.max.ms expires the accumulated data will "
 	  "be sent to the client regardless of this setting.",
 	  1, 100000000, 1 },
-	{ _RK_GLOBAL|_RK_CONSUMER, "fetch.error.backoff.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "fetch.error.backoff.ms", _RK_C_INT,
 	  _RK(fetch_error_backoff_ms),
 	  "How long to postpone the next fetch request for a "
 	  "topic+partition in case of a fetch error.",
@@ -869,14 +884,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the "
 	  "consumer reaches the end of a partition.",
 	  0, 1, 1 },
-        { _RK_GLOBAL|_RK_CONSUMER, "check.crcs", _RK_C_BOOL,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "check.crcs", _RK_C_BOOL,
           _RK(check_crcs),
           "Verify CRC32 of consumed messages, ensuring no on-the-wire or "
           "on-disk corruption to the messages occurred. This check comes "
           "at slightly increased CPU usage.",
           0, 1, 0 },
-	/* Global producer properties */
-        { _RK_GLOBAL|_RK_PRODUCER, "enable.idempotence", _RK_C_BOOL,
+
+        /* Global producer properties */
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "enable.idempotence", _RK_C_BOOL,
           _RK(eos.idempotence),
           "When set to `true`, the producer will ensure that messages are "
           "successfully produced exactly once and in the original produce "
@@ -889,7 +905,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Producer instantation will fail if user-supplied configuration "
           "is incompatible.",
           0, 1, 0 },
-        { _RK_GLOBAL|_RK_PRODUCER, "enable.gapless.guarantee", _RK_C_BOOL,
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "enable.gapless.guarantee",
+          _RK_C_BOOL,
           _RK(eos.gapless),
           "When set to `true`, any error that could result in a gap "
           "in the produced message series when a batch of messages fails, "
@@ -897,16 +914,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "the producer. "
           "Requires `enable.idempotence=true`.",
           0, 1, 1 },
-	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.messages", _RK_C_INT,
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "queue.buffering.max.messages",
+          _RK_C_INT,
 	  _RK(queue_buffering_max_msgs),
 	  "Maximum number of messages allowed on the producer queue.",
 	  1, 10000000, 100000 },
-	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.kbytes", _RK_C_INT,
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "queue.buffering.max.kbytes",
+          _RK_C_INT,
 	  _RK(queue_buffering_max_kbytes),
 	  "Maximum total message size sum allowed on the producer queue. "
 	  "This property has higher priority than queue.buffering.max.messages.",
 	  1, INT_MAX/1024, 0x100000/*1GB*/ },
-	{ _RK_GLOBAL|_RK_PRODUCER, "queue.buffering.max.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "queue.buffering.max.ms",
+          _RK_C_INT,
 	  _RK(buffering_max_ms),
 	  "Delay in milliseconds to wait for messages in the producer queue "
           "to accumulate before constructing message batches (MessageSets) to "
@@ -915,16 +935,18 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "(less overhead, improved compression) batches of messages to "
           "accumulate at the expense of increased message delivery latency.",
 	  0, 900*1000, 0 },
-        { _RK_GLOBAL|_RK_PRODUCER, "linger.ms", _RK_C_ALIAS,
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "linger.ms", _RK_C_ALIAS,
           .sdef = "queue.buffering.max.ms" },
-	{ _RK_GLOBAL|_RK_PRODUCER, "message.send.max.retries", _RK_C_INT,
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "message.send.max.retries",
+          _RK_C_INT,
 	  _RK(max_retries),
-	  "How many times to retry sending a failing MessageSet. "
-	  "**Note:** retrying may cause reordering.",
+	  "How many times to retry sending a failing Message. "
+          "**Note:** retrying may cause reordering unless "
+          "`enable.idempotence` is set to true.",
           0, 10000000, 2 },
           { _RK_GLOBAL | _RK_PRODUCER, "retries", _RK_C_ALIAS,
                 .sdef = "message.send.max.retries" },
-	{ _RK_GLOBAL|_RK_PRODUCER, "retry.backoff.ms", _RK_C_INT,
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_MED, "retry.backoff.ms", _RK_C_INT,
 	  _RK(retry_backoff_ms),
 	  "The backoff time in milliseconds before retrying a protocol request.",
 	  1, 300*1000, 100 },
@@ -941,7 +963,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "machines.",
         1, 1000000, 1 },
 
-	{ _RK_GLOBAL|_RK_PRODUCER, "compression.codec", _RK_C_S2I,
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_MED, "compression.codec", _RK_C_S2I,
 	  _RK(compression_codec),
 	  "compression codec to use for compressing message sets. "
 	  "This is the default value for all topics, may be overridden by "
@@ -961,9 +983,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
 			{ 0 }
 		} },
-        { _RK_GLOBAL|_RK_PRODUCER, "compression.type", _RK_C_ALIAS,
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_MED, "compression.type", _RK_C_ALIAS,
           .sdef = "compression.codec" },
-	{ _RK_GLOBAL|_RK_PRODUCER, "batch.num.messages", _RK_C_INT,
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_MED, "batch.num.messages", _RK_C_INT,
 	  _RK(batch_num_messages),
 	  "Maximum number of messages batched in one MessageSet. "
 	  "The total MessageSet size is also limited by message.max.bytes.",
@@ -985,7 +1007,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
          */
 
         /* Topic producer properties */
-	{ _RK_TOPIC|_RK_PRODUCER, "request.required.acks", _RK_C_INT,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "request.required.acks", _RK_C_INT,
 	  _RKT(required_acks),
 	  "This field indicates how many acknowledgements the leader broker "
 	  "must receive from ISR brokers before responding to the request: "
@@ -999,16 +1021,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ -1, "all" },
 		}
 	},
-	{ _RK_TOPIC | _RK_PRODUCER, "acks", _RK_C_ALIAS,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "acks", _RK_C_ALIAS,
 	  .sdef = "request.required.acks" },
 
-	{ _RK_TOPIC|_RK_PRODUCER, "request.timeout.ms", _RK_C_INT,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_MED, "request.timeout.ms", _RK_C_INT,
 	  _RKT(request_timeout_ms),
 	  "The ack timeout of the producer request in milliseconds. "
 	  "This value is only enforced by the broker and relies "
 	  "on `request.required.acks` being != 0.",
 	  1, 900*1000, 5*1000 },
-	{ _RK_TOPIC|_RK_PRODUCER, "message.timeout.ms", _RK_C_INT,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "message.timeout.ms", _RK_C_INT,
 	  _RKT(message_timeout_ms),
 	  "Local message timeout. "
 	  "This value is only enforced locally and limits the time a "
@@ -1018,7 +1040,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "(including retries). Delivery error occurs when either the retry "
 	  "count or the message timeout are exceeded.",
 	  0, 900*1000, 300*1000 },
-        { _RK_TOPIC|_RK_PRODUCER, "delivery.timeout.ms", _RK_C_ALIAS,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "delivery.timeout.ms", _RK_C_ALIAS,
           .sdef = "message.timeout.ms" },
         { _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED, "queuing.strategy", _RK_C_S2I,
           _RKT(queuing_strategy),
@@ -1036,7 +1058,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           _RKT(produce_offset_report),
           "No longer used.",
           0, 1, 0 },
-        { _RK_TOPIC|_RK_PRODUCER, "partitioner", _RK_C_STR,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "partitioner", _RK_C_STR,
           _RKT(partitioner_str),
           "Partitioner: "
           "`random` - random distribution, "
@@ -1060,7 +1082,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_TOPIC, "opaque", _RK_C_PTR,
 	  _RKT(opaque),
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
-	{ _RK_TOPIC | _RK_PRODUCER, "compression.codec", _RK_C_S2I,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "compression.codec", _RK_C_S2I,
 	  _RKT(compression_codec),
 	  "Compression codec to use for compressing message sets. "
           "inherit = inherit global compression.codec configuration.",
@@ -1080,9 +1102,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 		  { RD_KAFKA_COMPRESSION_INHERIT, "inherit" },
 		  { 0 }
 		} },
-        { _RK_TOPIC | _RK_PRODUCER, "compression.type", _RK_C_ALIAS,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "compression.type", _RK_C_ALIAS,
           .sdef = "compression.codec" },
-	{ _RK_TOPIC|_RK_PRODUCER, "compression.level", _RK_C_INT,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_MED, "compression.level", _RK_C_INT,
 	  _RKT(compression_level),
 	  "Compression level parameter for algorithm selected by configuration "
 	  "property `compression.codec`. Higher values will result in better "
@@ -1095,7 +1117,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
 
         /* Topic consumer properties */
-	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.enable", _RK_C_BOOL,
+        { _RK_TOPIC|_RK_CONSUMER|_RK_DEPRECATED, "auto.commit.enable",
+          _RK_C_BOOL,
 	  _RKT(auto_commit),
 	  "[**LEGACY PROPERTY:** This property is used by the simple legacy "
 	  "consumer only. When using the high-level KafkaConsumer, the global "
@@ -1111,7 +1134,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  0, 1, 1 },
 	{ _RK_TOPIC|_RK_CONSUMER, "enable.auto.commit", _RK_C_ALIAS,
 	  .sdef = "auto.commit.enable" },
-	{ _RK_TOPIC|_RK_CONSUMER, "auto.commit.interval.ms", _RK_C_INT,
+        { _RK_TOPIC|_RK_CONSUMER|_RK_HIGH, "auto.commit.interval.ms",
+          _RK_C_INT,
 	  _RKT(auto_commit_interval_ms),
 	  "[**LEGACY PROPERTY:** This setting is used by the simple legacy "
 	  "consumer only. When using the high-level KafkaConsumer, the "
@@ -1119,7 +1143,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The frequency in milliseconds that the consumer offsets "
 	  "are committed (written) to offset storage.",
 	  10, 86400*1000, 60*1000 },
-	{ _RK_TOPIC|_RK_CONSUMER, "auto.offset.reset", _RK_C_S2I,
+        { _RK_TOPIC|_RK_CONSUMER|_RK_HIGH, "auto.offset.reset", _RK_C_S2I,
 	  _RKT(auto_offset_reset),
 	  "Action to take when there is no initial offset in offset store "
 	  "or the desired offset is out of range: "
@@ -2477,6 +2501,7 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 
 	for (prop = rd_kafka_properties; prop->name ; prop++) {
 		const char *typeinfo = "";
+                const char *importance;
 
                 /* Skip hidden properties. */
                 if (prop->scope & _RK_HIDDEN)
@@ -2493,12 +2518,12 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 				prop->scope == _RK_GLOBAL ? "Global": "Topic");
 
 			fprintf(fp,
-				"%-40s | %3s | %-15s | %13s | %-25s\n"
-				"%.*s-|-%.*s-|-%.*s-|-%.*s:|-%.*s\n",
+				"%-40s | %3s | %-15s | %13s | %-10s | %-25s\n"
+				"%.*s-|-%.*s-|-%.*s-|-%.*s:|-%.*s-| -%.*s\n",
 				"Property", "C/P", "Range",
-				"Default", "Description",
+				"Default", "Importance", "Description",
 				40, dash80, 3, dash80, 15, dash80,
-				13, dash80, 25, dash80);
+				13, dash80, 10, dash80, 25, dash80);
 
 			last = prop->scope & (_RK_GLOBAL|_RK_TOPIC);
 
@@ -2578,7 +2603,15 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 			break;
 		}
 
-                fprintf(fp, " | ");
+                if (prop->scope & _RK_HIGH)
+                        importance = "high";
+                else if (prop->scope & _RK_MED)
+                        importance = "medium";
+                else
+                        importance = "low";
+
+                fprintf(fp, " | %-10s | ", importance);
+
                 if (prop->scope & _RK_DEPRECATED)
                         fprintf(fp, "**DEPRECATED** ");
 

@@ -99,7 +99,9 @@ typedef	enum {
 	_RK_TOPIC = 0x8,
         _RK_CGRP = 0x10,
         _RK_DEPRECATED = 0x20,
-        _RK_HIDDEN = 0x40
+        _RK_HIDDEN = 0x40,
+        _RK_HIGH = 0x80, /* High Importance */
+        _RK_MED = 0x100  /* Medium Importance */
 } rd_kafka_conf_scope_t;
 
 /**< While the client groups is a generic concept, it is currently

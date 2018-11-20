@@ -2896,19 +2896,22 @@ int rd_kafka_topic_partition_list_set_offsets (
         for (i = 0 ; i < rktparlist->cnt ; i++) {
                 rd_kafka_topic_partition_t *rktpar = &rktparlist->elems[i];
 		const char *verb = "setting";
+                char preamble[80];
+
+                *preamble = '\0'; /* Avoid warning */
 
                 if (from_rktp) {
                         shptr_rd_kafka_toppar_t *s_rktp = rktpar->_private;
                         rd_kafka_toppar_t *rktp = rd_kafka_toppar_s2i(s_rktp);
                         rd_kafka_toppar_lock(rktp);
 
-			rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_TOPIC, "OFFSET",
-				     "Topic %s [%"PRId32"]: "
-				     "stored offset %"PRId64", committed "
-				     "offset %"PRId64,
-				     rktpar->topic, rktpar->partition,
-				     rktp->rktp_stored_offset,
-				     rktp->rktp_committed_offset);
+                        if (rk->rk_conf.debug & (RD_KAFKA_DBG_CGRP |
+                                                 RD_KAFKA_DBG_TOPIC))
+                                rd_snprintf(preamble, sizeof(preamble),
+                                            "stored offset %"PRId64
+                                            ", committed offset %"PRId64": ",
+                                            rktp->rktp_stored_offset,
+                                            rktp->rktp_committed_offset);
 
 			if (rktp->rktp_stored_offset >
 			    rktp->rktp_committed_offset) {
@@ -2926,13 +2929,21 @@ int rd_kafka_topic_partition_list_set_offsets (
 				verb = "keeping";
                 }
 
-		rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_TOPIC, "OFFSET",
-			     "Topic %s [%"PRId32"]: "
-			     "%s offset %s%s",
-			     rktpar->topic, rktpar->partition,
-			     verb,
-			     rd_kafka_offset2str(rktpar->offset),
-			     is_commit ? " for commit" : "");
+                if (is_commit && rktpar->offset == RD_KAFKA_OFFSET_INVALID)
+                        rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_TOPIC, "OFFSET",
+                                     "Topic %s [%"PRId32"]: "
+                                     "%snot including in commit",
+                                     rktpar->topic, rktpar->partition,
+                                     preamble);
+                else
+                        rd_kafka_dbg(rk, CGRP | RD_KAFKA_DBG_TOPIC, "OFFSET",
+                                     "Topic %s [%"PRId32"]: "
+                                     "%s%s offset %s%s",
+                                     rktpar->topic, rktpar->partition,
+                                     preamble,
+                                     verb,
+                                     rd_kafka_offset2str(rktpar->offset),
+                                     is_commit ? " for commit" : "");
 
 		if (!RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset))
 			valid_cnt++;

@@ -2844,6 +2844,11 @@ const char *rd_kafka_conf_finalize (rd_kafka_type_t cltype,
                                        conf->fetch_max_bytes + 512);
                 }
 
+                if (conf->max_poll_interval_ms <
+                    conf->group_session_timeout_ms)
+                        return "`max.poll.interval.ms`must be >= "
+                                "`session.timeout.ms`";
+
                 /* Simplifies rd_kafka_is_idempotent() which is producer-only */
                 conf->eos.idempotence = 0;
 

@@ -590,6 +590,9 @@ rd_kafka_broker_bufq_purge_by_toppar (rd_kafka_broker_t *rkb,
  *
  * @param ApiKey Only match requests with this ApiKey, or -1 for all.
  * @param now If 0, all buffers will time out, else the current clock.
+ * @param description "N requests timed out <description>", e.g., "in flight".
+ *                    Only used if log_first_n > 0.
+ * @param log_first_n Log the first N request timeouts.
  *
  * @returns the number of timed out buffers.
  *
@@ -601,11 +604,15 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 					      int *partial_cntp,
                                               int16_t ApiKey,
 					      rd_kafka_resp_err_t err,
-					      rd_ts_t now) {
+					      rd_ts_t now,
+                                              const char *description,
+                                              int log_first_n) {
 	rd_kafka_buf_t *rkbuf, *tmp;
 	int cnt = 0;
+        int idx = -1;
 
 	TAILQ_FOREACH_SAFE(rkbuf, &rkbq->rkbq_bufs, rkbuf_link, tmp) {
+                idx++;
 
 		if (likely(now && rkbuf->rkbuf_ts_timeout > now))
 			continue;
@@ -624,7 +631,16 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 
 		rd_kafka_bufq_deq(rkbq, rkbuf);
 
-		if (is_waitresp_q && rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING
+                if (now && cnt < log_first_n)
+                        rd_rkb_log(rkb, LOG_NOTICE, "REQTMOUT",
+                                   "Timed out #%d %sRequest %s "
+                                   "(after %"PRId64"ms)",
+                                   cnt,
+                                   rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.
+                                                       ApiKey),
+                                   description, rkbuf->rkbuf_ts_sent/1000);
+
+                if (is_waitresp_q && rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING
 		    && rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1) == 0)
 			rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
 
@@ -650,17 +666,17 @@ static void rd_kafka_broker_timeout_scan (rd_kafka_broker_t *rkb, rd_ts_t now) {
         /* In-flight requests waiting for response */
         inflight_cnt = rd_kafka_broker_bufq_timeout_scan(
                 rkb, 1, &rkb->rkb_waitresps, NULL, -1,
-                RD_KAFKA_RESP_ERR__TIMED_OUT, now);
+                RD_KAFKA_RESP_ERR__TIMED_OUT, now, "in flight", 5);
 	/* Requests in retry queue */
 	retry_cnt = rd_kafka_broker_bufq_timeout_scan(
 		rkb, 0, &rkb->rkb_retrybufs, NULL, -1,
-		RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
+		RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now, "in retry queue", 0);
         /* Requests in local queue not sent yet.
          * partial_cnt is included in outq_cnt and denotes a request
          * that has been partially transmitted. */
         outq_cnt = rd_kafka_broker_bufq_timeout_scan(
                 rkb, 0, &rkb->rkb_outbufs, &partial_cnt, -1,
-                RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now);
+                RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE, now, "in output queue", 0);
 
         if (inflight_cnt + retry_cnt + outq_cnt + partial_cnt > 0) {
                 rd_rkb_log(rkb, LOG_WARNING, "REQTMOUT",
@@ -4167,10 +4183,10 @@ static int rd_kafka_broker_thread_main (void *arg) {
 
                         r = rd_kafka_broker_bufq_timeout_scan(
                                 rkb, 0, &rkb->rkb_outbufs, NULL, -1,
-                                RD_KAFKA_RESP_ERR__DESTROY, 0);
+                                RD_KAFKA_RESP_ERR__DESTROY, 0, NULL, 0);
                         r += rd_kafka_broker_bufq_timeout_scan(
                                 rkb, 0, &rkb->rkb_retrybufs, NULL, -1,
-                                RD_KAFKA_RESP_ERR__DESTROY, 0);
+                                RD_KAFKA_RESP_ERR__DESTROY, 0, NULL, 0);
                         rd_rkb_dbg(rkb, BROKER, "TERMINATE",
                                    "Handle is terminating in state %s: "
                                    "%d refcnts (%p), %d toppar(s), "
@@ -4957,20 +4973,21 @@ static void rd_kafka_broker_handle_purge_queues (rd_kafka_broker_t *rkb,
         if (purge_flags & RD_KAFKA_PURGE_F_INFLIGHT)
                 inflight_cnt = rd_kafka_broker_bufq_timeout_scan(
                         rkb, 1, &rkb->rkb_waitresps, NULL, RD_KAFKAP_Produce,
-                        RD_KAFKA_RESP_ERR__PURGE_INFLIGHT, 0);
+                        RD_KAFKA_RESP_ERR__PURGE_INFLIGHT, 0, NULL, 0);
 
         if (purge_flags & RD_KAFKA_PURGE_F_QUEUE) {
                 /* Requests in retry queue */
                 retry_cnt = rd_kafka_broker_bufq_timeout_scan(
                         rkb, 0, &rkb->rkb_retrybufs, NULL, RD_KAFKAP_Produce,
-                        RD_KAFKA_RESP_ERR__PURGE_QUEUE, 0);
+                        RD_KAFKA_RESP_ERR__PURGE_QUEUE, 0, NULL, 0);
 
                 /* Requests in transmit queue not completely sent yet.
                  * partial_cnt is included in outq_cnt and denotes a request
                  * that has been partially transmitted. */
                 outq_cnt = rd_kafka_broker_bufq_timeout_scan(
                         rkb, 0, &rkb->rkb_outbufs, &partial_cnt,
-                        RD_KAFKAP_Produce, RD_KAFKA_RESP_ERR__PURGE_QUEUE, 0);
+                        RD_KAFKAP_Produce, RD_KAFKA_RESP_ERR__PURGE_QUEUE, 0,
+                        NULL, 0);
 
                 /* Purging a partially transmitted request will mess up
                  * the protocol stream, so we need to disconnect from the broker

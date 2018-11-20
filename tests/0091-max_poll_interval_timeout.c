@@ -117,7 +117,7 @@ int main_0091_max_poll_interval_timeout (int argc, char **argv) {
                                                1);
         int64_t testid;
         const int msgcnt = 3;
-        struct _consumer c[_CONSUMER_CNT] = {};
+        struct _consumer c[_CONSUMER_CNT] = RD_ZERO_INIT;
         rd_kafka_conf_t *conf;
 
         testid = test_id_generate();

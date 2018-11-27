@@ -65,7 +65,7 @@ static const char *test_git_version = "HEAD";
 static const char *test_sockem_conf = "";
 int          test_on_ci = 0; /* Tests are being run on CI, be more forgiving
                               * with regards to timeouts, etc. */
-static int test_idempotent_producer = 0;
+int test_idempotent_producer = 0;
 static int show_summary = 1;
 static int test_summary (int do_lock);
 
@@ -184,6 +184,7 @@ _TEST_DECL(0088_produce_metadata_timeout);
 _TEST_DECL(0089_max_poll_interval);
 _TEST_DECL(0090_idempotence);
 _TEST_DECL(0091_max_poll_interval_timeout);
+_TEST_DECL(0092_mixed_msgver);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -301,6 +302,7 @@ struct test tests[] = {
         _TEST(0089_max_poll_interval, 0, TEST_BRKVER(0,10,1,0)),
         _TEST(0090_idempotence, 0, TEST_BRKVER(0,11,0,0)),
         _TEST(0091_max_poll_interval_timeout, 0, TEST_BRKVER(0,10,1,0)),
+        _TEST(0092_mixed_msgver, 0, TEST_BRKVER(0,11,0,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),
@@ -4088,17 +4090,21 @@ test_wait_admin_result (rd_kafka_queue_t *q,
 
 /**
  * @brief Wait for up to \p tmout for a
- *        CreateTopics/DeleteTopics/CreatePartitions result
- *        and return the distilled error code.
+ *        CreateTopics/DeleteTopics/CreatePartitions or
+ *        DescribeConfigs/AlterConfigs result and return the
+ *        distilled error code.
  */
 rd_kafka_resp_err_t
 test_wait_topic_admin_result (rd_kafka_queue_t *q,
                               rd_kafka_event_type_t evtype,
+                              rd_kafka_event_t **retevent,
                               int tmout) {
         rd_kafka_event_t *rkev;
         size_t i;
         const rd_kafka_topic_result_t **terr = NULL;
         size_t terr_cnt = 0;
+        const rd_kafka_ConfigResource_t **cres = NULL;
+        size_t cres_cnt = 0;
         int errcnt = 0;
         rd_kafka_resp_err_t err;
 
@@ -4136,11 +4142,31 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
 
                 terr = rd_kafka_CreatePartitions_result_topics(res, &terr_cnt);
 
+        } else if (evtype == RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT) {
+                const rd_kafka_DescribeConfigs_result_t *res;
+
+                if (!(res = rd_kafka_event_DescribeConfigs_result(rkev)))
+                        TEST_FAIL("Expected a DescribeConfigs result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                cres = rd_kafka_DescribeConfigs_result_resources(res,
+                                                                 &cres_cnt);
+
+        } else if (evtype == RD_KAFKA_EVENT_ALTERCONFIGS_RESULT) {
+                const rd_kafka_AlterConfigs_result_t *res;
+
+                if (!(res = rd_kafka_event_AlterConfigs_result(rkev)))
+                        TEST_FAIL("Expected a AlterConfigs result, not %s",
+                                  rd_kafka_event_name(rkev));
+
+                cres = rd_kafka_AlterConfigs_result_resources(res, &cres_cnt);
+
         } else {
                 TEST_FAIL("Bad evtype: %d", evtype);
                 RD_NOTREACHED();
         }
 
+        /* Check topic errors */
         for (i = 0 ; i < terr_cnt ; i++) {
                 if (rd_kafka_topic_result_error(terr[i])) {
                         TEST_WARN("..Topics result: %s: error: %s\n",
@@ -4151,7 +4177,22 @@ test_wait_topic_admin_result (rd_kafka_queue_t *q,
                 }
         }
 
-        rd_kafka_event_destroy(rkev);
+        /* Check resource errors */
+        for (i = 0 ; i < cres_cnt ; i++) {
+                if (rd_kafka_ConfigResource_error(cres[i])) {
+                        TEST_WARN("ConfigResource result: %d,%s: error: %s\n",
+                                  rd_kafka_ConfigResource_type(cres[i]),
+                                  rd_kafka_ConfigResource_name(cres[i]),
+                                  rd_kafka_ConfigResource_error_string(cres[i]));
+                        if (!(errcnt++))
+                                err = rd_kafka_ConfigResource_error(cres[i]);
+                }
+        }
+
+        if (!err && retevent)
+                *retevent = rkev;
+        else
+                rd_kafka_event_destroy(rkev);
 
         return err;
 }
@@ -4230,7 +4271,7 @@ test_CreateTopics_simple (rd_kafka_t *rk,
 
         err = test_wait_topic_admin_result(q,
                                            RD_KAFKA_EVENT_CREATETOPICS_RESULT,
-                                           tmout+5000);
+                                           NULL, tmout+5000);
 
         rd_kafka_queue_destroy(q);
 
@@ -4298,7 +4339,7 @@ test_CreatePartitions_simple (rd_kafka_t *rk,
 
 
         err = test_wait_topic_admin_result(
-                q, RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT, tmout+5000);
+                q, RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT, NULL, tmout+5000);
 
         rd_kafka_queue_destroy(q);
 
@@ -4366,7 +4407,7 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
 
         err = test_wait_topic_admin_result(q,
                                            RD_KAFKA_EVENT_CREATETOPICS_RESULT,
-                                           tmout+5000);
+                                           NULL, tmout+5000);
 
         rd_kafka_queue_destroy(q);
 
@@ -4376,6 +4417,97 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
 
         return err;
 }
+
+
+/**
+ * @brief Delta Alter configuration for the given resource,
+ *        overwriting/setting the configs provided in \p configs.
+ *        Existing configuration remains intact.
+ *
+ * @param configs 'const char *name, const char *value' tuples
+ * @param config_cnt is the number of tuples in \p configs
+ */
+rd_kafka_resp_err_t
+test_AlterConfigs_simple (rd_kafka_t *rk,
+                          rd_kafka_ResourceType_t restype,
+                          const char *resname,
+                          const char **configs, size_t config_cnt) {
+        rd_kafka_queue_t *q;
+        rd_kafka_ConfigResource_t *confres;
+        rd_kafka_event_t *rkev;
+        size_t i;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_ConfigResource_t **results;
+        size_t result_cnt;
+        const rd_kafka_ConfigEntry_t **configents;
+        size_t configent_cnt;
+
+
+        q = rd_kafka_queue_new(rk);
+
+        TEST_SAY("Getting configuration for %d %s\n", restype, resname);
+
+        confres = rd_kafka_ConfigResource_new(restype, resname);
+        rd_kafka_DescribeConfigs(rk, &confres, 1, NULL, q);
+
+        err = test_wait_topic_admin_result(
+                q, RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT, &rkev, 15*1000);
+        if (err) {
+                rd_kafka_queue_destroy(q);
+                rd_kafka_ConfigResource_destroy(confres);
+                return err;
+        }
+
+        results = rd_kafka_DescribeConfigs_result_resources(
+                rd_kafka_event_DescribeConfigs_result(rkev), &result_cnt);
+        TEST_ASSERT(result_cnt == 1,
+                    "expected 1 DescribeConfigs result, not %"PRIusz,
+                    result_cnt);
+
+        configents = rd_kafka_ConfigResource_configs(results[0],
+                                                     &configent_cnt);
+        TEST_ASSERT(configent_cnt > 0,
+                    "expected > 0 ConfigEntry:s, not %"PRIusz, configent_cnt);
+
+        TEST_SAY("Altering configuration for %d %s\n", restype, resname);
+
+        /* Apply all existing configuration entries to resource object that
+         * will later be passed to AlterConfigs. */
+        for (i = 0 ; i < configent_cnt ; i++) {
+                err = rd_kafka_ConfigResource_set_config(
+                        confres,
+                        rd_kafka_ConfigEntry_name(configents[i]),
+                        rd_kafka_ConfigEntry_value(configents[i]));
+                TEST_ASSERT(!err, "Failed to set read-back config %s=%s "
+                            "on local resource object",
+                            rd_kafka_ConfigEntry_name(configents[i]),
+                            rd_kafka_ConfigEntry_value(configents[i]));
+        }
+
+        rd_kafka_event_destroy(rkev);
+
+        /* Then apply the configuration to change. */
+        for (i = 0 ; i < config_cnt ; i += 2) {
+                err = rd_kafka_ConfigResource_set_config(confres,
+                                                         configs[i],
+                                                         configs[i+1]);
+                TEST_ASSERT(!err, "Failed to set config %s=%s on "
+                            "local resource object",
+                            configs[i], configs[i+1]);
+        }
+
+        rd_kafka_AlterConfigs(rk, &confres, 1, NULL, q);
+
+        rd_kafka_ConfigResource_destroy(confres);
+
+        err = test_wait_topic_admin_result(
+                q, RD_KAFKA_EVENT_ALTERCONFIGS_RESULT, NULL, 15*1000);
+
+        rd_kafka_queue_destroy(q);
+
+        return err;
+}
+
 
 
 static void test_free_string_array (char **strs, size_t cnt) {

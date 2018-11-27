@@ -935,46 +935,44 @@ rd_kafka_msgset_reader_v2 (rd_kafka_msgset_reader_t *msetr) {
 }
 
 
-
 /**
- * @brief Parse and read messages from msgset reader buffer.
+ * @brief Peek into the next MessageSet to find the MsgVersion.
+ *
+ * @param MagicBytep the MsgVersion is returned here on success.
+ *
+ * @returns an error on read underflow or if the MsgVersion is
+ *          unsupported.
  */
 static rd_kafka_resp_err_t
-rd_kafka_msgset_reader (rd_kafka_msgset_reader_t *msetr) {
+rd_kafka_msgset_reader_peek_msg_version (rd_kafka_msgset_reader_t *msetr,
+                                         int8_t *MagicBytep) {
         rd_kafka_buf_t *rkbuf = msetr->msetr_rkbuf;
         rd_kafka_toppar_t *rktp = msetr->msetr_rktp;
-        rd_kafka_resp_err_t (*reader[]) (rd_kafka_msgset_reader_t *) = {
-                /* Indexed by MsgVersion/MagicByte, pointing to
-                 * a Msg(Set)Version reader */
-                [0] = rd_kafka_msgset_reader_msg_v0_1,
-                [1] = rd_kafka_msgset_reader_msg_v0_1,
-                [2] = rd_kafka_msgset_reader_v2
-        };
-        rd_kafka_resp_err_t err;
         /* Only log decoding errors if protocol debugging enabled. */
         int log_decode_errors = (rkbuf->rkbuf_rkb->rkb_rk->rk_conf.debug &
                                  RD_KAFKA_DBG_PROTOCOL) ? LOG_DEBUG : 0;
-        int8_t MagicByte;
         size_t read_offset = rd_slice_offset(&rkbuf->rkbuf_reader);
 
-        /* We dont know the MsgVersion at this point, peek where the
-         * MagicByte resides both in MsgVersion v0..1 and v2 to
-         * know which MessageSet reader to use. */
-        rd_kafka_buf_peek_i8(rkbuf, read_offset+8+4+4, &MagicByte);
+        rd_kafka_buf_peek_i8(rkbuf, read_offset+8+4+4, MagicBytep);
 
-        if (unlikely(MagicByte < 0 || MagicByte > 2)) {
+        if (unlikely(*MagicBytep < 0 || *MagicBytep > 2)) {
                 int64_t Offset; /* For error logging */
-                rd_kafka_buf_peek_i64(rkbuf, read_offset+0, &Offset);
+                int32_t Length;
+
+                rd_kafka_buf_read_i64(rkbuf, &Offset);
 
                 rd_rkb_dbg(msetr->msetr_rkb,
                            MSG | RD_KAFKA_DBG_PROTOCOL | RD_KAFKA_DBG_FETCH,
                            "MAGICBYTE",
                            "%s [%"PRId32"]: "
                            "Unsupported Message(Set) MagicByte %d at "
-                           "offset %"PRId64": skipping",
+                           "offset %"PRId64" "
+                           "(buffer position %"PRIusz"/%"PRIusz"): skipping",
                            rktp->rktp_rkt->rkt_topic->str,
                            rktp->rktp_partition,
-                           (int)MagicByte, Offset);
+                           (int)*MagicBytep, Offset,
+                           read_offset, rd_slice_size(&rkbuf->rkbuf_reader));
+
                 if (Offset >= msetr->msetr_rktp->rktp_offsets.fetch_offset) {
                         rd_kafka_q_op_err(
                                 &msetr->msetr_rkq,
@@ -983,24 +981,71 @@ rd_kafka_msgset_reader (rd_kafka_msgset_reader_t *msetr) {
                                 msetr->msetr_tver->version, rktp, Offset,
                                 "Unsupported Message(Set) MagicByte %d "
                                 "at offset %"PRId64,
-                                (int)MagicByte, Offset);
+                                (int)*MagicBytep, Offset);
                         /* Skip message(set) */
                         msetr->msetr_rktp->rktp_offsets.fetch_offset = Offset+1;
                 }
 
+                /* Skip this Message(Set).
+                 * If the message is malformed, the skip may trigger err_parse
+                 * and return ERR__BAD_MSG. */
+                rd_kafka_buf_read_i32(rkbuf, &Length);
+                rd_kafka_buf_skip(rkbuf, Length);
+
                 return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
         }
 
-        /* Let version-specific reader parse MessageSets until the slice
-         * is exhausted or an error occurs (typically a partial message). */
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+ err_parse:
+        return RD_KAFKA_RESP_ERR__BAD_MSG;
+}
+
+
+/**
+ * @brief Parse and read messages from msgset reader buffer.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_msgset_reader (rd_kafka_msgset_reader_t *msetr) {
+        rd_kafka_buf_t *rkbuf = msetr->msetr_rkbuf;
+        rd_kafka_resp_err_t (*reader[])
+                (rd_kafka_msgset_reader_t *) = {
+                /* Indexed by MsgVersion/MagicByte, pointing to
+                 * a Msg(Set)Version reader */
+                [0] = rd_kafka_msgset_reader_msg_v0_1,
+                [1] = rd_kafka_msgset_reader_msg_v0_1,
+                [2] = rd_kafka_msgset_reader_v2
+        };
+        rd_kafka_resp_err_t err;
+
+        /* Parse MessageSets until the slice is exhausted or an
+         * error occurs (typically a partial message). */
         do {
+                int8_t MagicByte;
+
+                /* We dont know the MsgVersion at this point, peek where the
+                 * MagicByte resides both in MsgVersion v0..1 and v2 to
+                 * know which MessageSet reader to use. */
+                err = rd_kafka_msgset_reader_peek_msg_version(msetr,
+                                                              &MagicByte);
+                if (unlikely(err)) {
+                        if (err == RD_KAFKA_RESP_ERR__BAD_MSG)
+                                /* Read underflow, not an error.
+                                 * Broker may return a partial Fetch response
+                                 * due to its use of sendfile(2). */
+                                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                        /* Continue on unsupported MsgVersions, the
+                         * MessageSet will be skipped. */
+                        continue;
+                }
+
+                /* Use MsgVersion-specific reader */
                 err = reader[(int)MagicByte](msetr);
+
         } while (!err && rd_slice_remains(&rkbuf->rkbuf_reader) > 0);
 
         return err;
-
- err_parse:
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 
@@ -1171,5 +1216,3 @@ rd_kafka_msgset_parse (rd_kafka_buf_t *rkbuf,
         return err;
 
 }
-
-

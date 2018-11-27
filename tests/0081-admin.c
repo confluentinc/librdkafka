@@ -612,7 +612,7 @@ static void do_test_CreatePartitions (const char *what,
 
         err = test_wait_topic_admin_result(q,
                                            RD_KAFKA_EVENT_CREATETOPICS_RESULT,
-                                           15000);
+                                           NULL, 15000);
         TEST_ASSERT(!err, "CreateTopics failed: %s", rd_kafka_err2str(err));
 
         rd_kafka_NewTopic_destroy_array(new_topics, MY_CRP_TOPICS_CNT);
@@ -629,7 +629,7 @@ static void do_test_CreatePartitions (const char *what,
 
         err = test_wait_topic_admin_result(q,
                                            RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT,
-                                           15000);
+                                           NULL, 15000);
         TEST_ASSERT(!err, "CreatePartitions failed: %s", rd_kafka_err2str(err));
 
         rd_kafka_NewPartitions_destroy_array(crp_topics, MY_CRP_TOPICS_CNT);

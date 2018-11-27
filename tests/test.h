@@ -68,6 +68,7 @@ extern double test_timeout_multiplier;
 extern int  test_session_timeout_ms; /* Group session timeout */
 extern int  test_flags;
 extern int  test_neg_flags;
+extern int  test_idempotent_producer;
 
 extern mtx_t test_mtx;
 
@@ -565,6 +566,7 @@ test_wait_admin_result (rd_kafka_queue_t *q,
 rd_kafka_resp_err_t
 test_wait_topic_admin_result (rd_kafka_queue_t *q,
                               rd_kafka_event_type_t evtype,
+                              rd_kafka_event_t **retevent,
                               int tmout);
 
 rd_kafka_resp_err_t
@@ -585,6 +587,12 @@ test_DeleteTopics_simple (rd_kafka_t *rk,
                           rd_kafka_queue_t *useq,
                           char **topics, size_t topic_cnt,
                           void *opaque);
+
+rd_kafka_resp_err_t
+test_AlterConfigs_simple (rd_kafka_t *rk,
+                          rd_kafka_ResourceType_t restype,
+                          const char *resname,
+                          const char **configs, size_t config_cnt);
 
 rd_kafka_resp_err_t test_delete_all_test_topics (int timeout_ms);
 

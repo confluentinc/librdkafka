@@ -689,12 +689,12 @@ class RD_EXPORT ConsumeCb {
 
 
 /**
- * @brief \b KafkaConsunmer: Rebalance callback class
+ * @brief \b KafkaConsumer: Rebalance callback class
  */
 class RD_EXPORT RebalanceCb {
 public:
   /**
-   * @brief Group rebalance callback for use with RdKafka::KafkaConsunmer
+   * @brief Group rebalance callback for use with RdKafka::KafkaConsumer
    *
    * Registering a \p rebalance_cb turns off librdkafka's automatic
    * partition assignment/revocation and instead delegates that responsibility

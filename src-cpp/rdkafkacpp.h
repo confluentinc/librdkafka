@@ -1153,6 +1153,8 @@ class RD_EXPORT Handle {
    * on input, and \c offset() will return the closest earlier offset
    * for the timestamp on output.
    *
+   * Timestamps are expressed as milliseconds since epoch (UTC).
+   *
    * The function will block for at most \p timeout_ms milliseconds.
    *
    * @remark Duplicate Topic+Partitions are not supported.
@@ -2497,7 +2499,7 @@ class RD_EXPORT Producer : public virtual Handle {
   /**
    * @brief produce() variant that takes topic as a string (no need for
    *        creating a Topic object), and also allows providing the
-   *        message timestamp (microseconds since beginning of epoch, UTC).
+   *        message timestamp (milliseconds since beginning of epoch, UTC).
    *        Otherwise identical to produce() above.
    */
   virtual ErrorCode produce (const std::string topic_name, int32_t partition,

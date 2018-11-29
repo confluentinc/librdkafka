@@ -552,7 +552,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "The fallback broker version will be used for `api.version.fallback.ms`. "
           "Valid values are: 0.9.0, 0.8.2, 0.8.1, 0.8.0. Any other value, "
           "such as 0.10.2.1, enables ApiVersionRequests.",
-	  .sdef = "0.9.0",
+          .sdef = "0.10.0",
 	  .validate = rd_kafka_conf_validate_broker_version },
 
 	/* Security related global properties */

@@ -1822,9 +1822,17 @@ void *rd_kafka_opaque(const rd_kafka_t *rk);
 
 
 /**
- * Sets the default topic configuration to use for automatically
- * subscribed topics (e.g., through pattern-matched topics).
- * The topic config object is not usable after this call.
+ * @brief Sets the default topic configuration to use for automatically
+ *        subscribed topics (e.g., through pattern-matched topics).
+ *        The topic config object is not usable after this call.
+ *
+ * @warning Any topic configuration settings that have been set on the
+ *          global rd_kafka_conf_t object will be overwritten by this call
+ *          since the implicitly created default topic config object is
+ *          replaced by the user-supplied one.
+ *
+ * @deprecated Set default topic level configuration on the
+ *             global rd_kafka_conf_t object instead.
  */
 RD_EXPORT
 void rd_kafka_conf_set_default_topic_conf (rd_kafka_conf_t *conf,
@@ -3748,11 +3756,13 @@ void rd_kafka_set_logger(rd_kafka_t *rk,
 
 
 /**
- * @brief Specifies the maximum logging level produced by
+ * @brief Specifies the maximum logging level emitted by
  *        internal kafka logging and debugging.
  *
- * If the \p \"debug\" configuration property is set the level is automatically
- * adjusted to \c LOG_DEBUG (7).
+ * @deprecated Set the \c "log_level" configuration property instead.
+ *
+ * @remark If the \p \"debug\" configuration property is set the log level is
+ *         automatically adjusted to \c LOG_DEBUG (7).
  */
 RD_EXPORT
 void rd_kafka_set_log_level(rd_kafka_t *rk, int level);

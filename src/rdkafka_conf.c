@@ -855,10 +855,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "How long to postpone the next fetch request for a "
 	  "topic+partition in case of a fetch error.",
 	  0, 300*1000, 500 },
-        { _RK_GLOBAL|_RK_CONSUMER, "offset.store.method", _RK_C_S2I,
+        { _RK_GLOBAL|_RK_CONSUMER|_RK_DEPRECATED, "offset.store.method",
+          _RK_C_S2I,
           _RK(offset_store_method),
           "Offset commit store method: "
-          "'file' - local file store (offset.store.path, et.al), "
+          "'file' - DEPRECATED: local file store (offset.store.path, et.al), "
           "'broker' - broker commit store "
           "(requires Apache Kafka 0.8.2 or later on the broker).",
           .vdef = RD_KAFKA_OFFSET_METHOD_BROKER,
@@ -1162,24 +1163,29 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 			{ RD_KAFKA_OFFSET_INVALID, "error" },
 		}
 	},
-	{ _RK_TOPIC|_RK_CONSUMER, "offset.store.path", _RK_C_STR,
+        { _RK_TOPIC|_RK_CONSUMER|_RK_DEPRECATED, "offset.store.path",
+          _RK_C_STR,
 	  _RKT(offset_store_path),
 	  "Path to local file for storing offsets. If the path is a directory "
 	  "a filename will be automatically generated in that directory based "
-	  "on the topic and partition.",
+	  "on the topic and partition. "
+          "File-based offset storage will be removed in a future version.",
 	  .sdef = "." },
 
-	{ _RK_TOPIC|_RK_CONSUMER, "offset.store.sync.interval.ms", _RK_C_INT,
+        { _RK_TOPIC|_RK_CONSUMER|_RK_DEPRECATED,
+          "offset.store.sync.interval.ms", _RK_C_INT,
 	  _RKT(offset_store_sync_interval_ms),
 	  "fsync() interval for the offset file, in milliseconds. "
 	  "Use -1 to disable syncing, and 0 for immediate sync after "
-	  "each write.",
+	  "each write. "
+          "File-based offset storage will be removed in a future version.",
 	  -1, 86400*1000, -1 },
 
-        { _RK_TOPIC|_RK_CONSUMER, "offset.store.method", _RK_C_S2I,
+        { _RK_TOPIC|_RK_CONSUMER|_RK_DEPRECATED, "offset.store.method",
+          _RK_C_S2I,
           _RKT(offset_store_method),
           "Offset commit store method: "
-          "'file' - local file store (offset.store.path, et.al), "
+          "'file' - DEPRECATED: local file store (offset.store.path, et.al), "
           "'broker' - broker commit store "
           "(requires \"group.id\" to be configured and "
           "Apache Kafka 0.8.2 or later on the broker.).",

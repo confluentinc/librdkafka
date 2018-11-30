@@ -344,6 +344,7 @@ extern "C" {
 
     Test::conf_set(conf, "group.id", topic);
 
+    conf->set("enable.partition.eof", "false", errstr);
     RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
     if (!c)
       Test::Fail("Failed to create KafkaConsumer: " + errstr);

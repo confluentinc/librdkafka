@@ -884,7 +884,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(enable_partition_eof),
 	  "Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the "
 	  "consumer reaches the end of a partition.",
-	  0, 1, 1 },
+	  0, 1, 0 },
         { _RK_GLOBAL|_RK_CONSUMER|_RK_MED, "check.crcs", _RK_C_BOOL,
           _RK(check_crcs),
           "Verify CRC32 of consumed messages, ensuring no on-the-wire or "

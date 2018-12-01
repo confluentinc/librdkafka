@@ -44,12 +44,16 @@ static void do_test_reset (const char *topic, int partition,
 	rd_kafka_t *rk;
 	rd_kafka_topic_t *rkt;
 	int eofcnt = 0, msgcnt = 0, errcnt = 0;
+        rd_kafka_conf_t *conf;
 
 	TEST_SAY("Test auto.offset.reset=%s, "
 		 "expect %d msgs, %d EOFs, %d errors\n",
 		 reset, exp_msgcnt, exp_eofcnt, exp_errcnt);
 
-	rk = test_create_consumer(NULL, NULL, NULL, NULL);
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "enable.partition.eof", "true");
+
+	rk = test_create_consumer(NULL, NULL, conf, NULL);
 	rkt = test_create_topic_object(rk, topic, "auto.offset.reset", reset,
 				       NULL);
 

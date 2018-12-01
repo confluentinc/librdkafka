@@ -491,6 +491,9 @@ int main (int argc, char **argv) {
 
                 /* Callback called on partition assignment changes */
                 rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
+
+                rd_kafka_conf_set(conf, "enable.partition.eof", "true",
+                                  NULL, 0);
         }
 
         /* Create Kafka handle */

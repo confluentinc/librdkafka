@@ -2100,15 +2100,17 @@ test_consume_msgs_easy_mv (const char *group_id, const char *topic,
                            test_msgver_t *mv) {
         rd_kafka_t *rk;
         char grpid0[64];
+        rd_kafka_conf_t *conf;
 
-        if (!tconf)
-                test_conf_init(NULL, &tconf, 0);
+        test_conf_init(&conf, tconf ? NULL : &tconf, 0);
 
         if (!group_id)
                 group_id = test_str_id_generate(grpid0, sizeof(grpid0));
 
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
-        rk = test_create_consumer(group_id, NULL, NULL, tconf);
+        if (exp_eofcnt != -1)
+                test_conf_set(conf, "enable.partition.eof", "true");
+        rk = test_create_consumer(group_id, NULL, conf, tconf);
 
         rd_kafka_poll_set_consumer(rk);
 

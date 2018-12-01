@@ -44,6 +44,7 @@ static int consume_pause (void) {
 	const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         const int partition_cnt = 3;
 	rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
 	rd_kafka_topic_conf_t *tconf;
 	rd_kafka_topic_partition_list_t *topics;
 	rd_kafka_resp_err_t err;
@@ -54,7 +55,9 @@ static int consume_pause (void) {
 	int fails = 0;
         char group_id[32];
 
-	test_conf_init(NULL, &tconf, 60 + (test_session_timeout_ms * 3 / 1000));
+        test_conf_init(&conf, &tconf,
+                       60 + (test_session_timeout_ms * 3 / 1000));
+        test_conf_set(conf, "enable.partition.eof", "true");
 	test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
 
         test_create_topic(topic, partition_cnt, 1);
@@ -94,8 +97,9 @@ static int consume_pause (void) {
                          it, iterations-1, group_id,
                          per_pause_msg_cnt, eof_cnt);
 
-		rk = test_create_consumer(group_id, NULL, NULL,
-					  rd_kafka_topic_conf_dup(tconf));
+                rk = test_create_consumer(group_id, NULL,
+                                          rd_kafka_conf_dup(conf),
+                                          rd_kafka_topic_conf_dup(tconf));
 
 
 		TEST_SAY("Subscribing to %d topic(s): %s\n",
@@ -210,6 +214,7 @@ static int consume_pause (void) {
 	}
 
 	rd_kafka_topic_partition_list_destroy(topics);
+        rd_kafka_conf_destroy(conf);
 	rd_kafka_topic_conf_destroy(tconf);
 
         return 0;
@@ -261,6 +266,7 @@ static int consume_pause_resume_after_reassign (void) {
         /**
          * Create consumer.
          */
+        test_conf_set(conf, "enable.partition.eof", "true");
         rk = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_assign("assign", rk, partitions);
@@ -411,6 +417,7 @@ static int consume_subscribe_assign_pause_resume (void) {
          */
         rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
         test_conf_set(conf, "session.timeout.ms", "6000");
+        test_conf_set(conf, "enable.partition.eof", "true");
         rk = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(rk, topic);

@@ -1279,6 +1279,10 @@ int main (int argc, char **argv) {
 
 	topic = topics->elems[0].topic;
 
+        if (mode == 'C' || mode == 'G')
+                rd_kafka_conf_set(conf, "enable.partition.eof", "true",
+                                  NULL, 0);
+
 	if (mode == 'P') {
 		/*
 		 * Producer

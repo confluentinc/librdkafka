@@ -684,6 +684,9 @@ int main (int argc, char **argv) {
 		 * Consumer
 		 */
 
+                rd_kafka_conf_set(conf, "enable.partition.eof", "true",
+                                  NULL, 0);
+
 		/* Create Kafka handle */
 		if (!(rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf,
 					errstr, sizeof(errstr)))) {

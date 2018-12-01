@@ -566,6 +566,8 @@ int main (int argc, char **argv) {
      * Consumer mode
      */
 
+    conf->set("enable.partition.eof", "true", errstr);
+
     if(topic_str.empty())
       goto usage;
 

@@ -101,7 +101,6 @@ static void do_test_fetch_max_bytes (void) {
     switch (msg->err())
       {
       case RdKafka::ERR__TIMED_OUT:
-      case RdKafka::ERR__PARTITION_EOF:
         break;
 
       case RdKafka::ERR_NO_ERROR:

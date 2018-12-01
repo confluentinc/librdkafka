@@ -346,6 +346,8 @@ static void consume_messages_callback_multi (const char *desc,
                 test_conf_set(conf, "group.id", topic);
         }
 
+        test_conf_set(conf, "enable.partition.eof", "true");
+
 	/* Create kafka instance */
 	rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 

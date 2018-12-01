@@ -131,8 +131,7 @@ static void do_test_consumer_lag (void) {
   if (conf->set("event_cb", &stats, errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("set event_cb failed: " + errstr);
   Test::conf_set(conf, "group.id", topic);
-  Test::conf_set(conf, "enable.auto.commit", "false");
-  Test::conf_set(conf, "enable.partition.eof", "false");
+  Test::conf_set(conf, "enable.auto.commit", "false"); /* now default */
   Test::conf_set(conf, "auto.offset.reset", "earliest");
   Test::conf_set(conf, "statistics.interval.ms", "100");
 
@@ -159,7 +158,8 @@ static void do_test_consumer_lag (void) {
       case RdKafka::ERR__TIMED_OUT:
         break;
       case RdKafka::ERR__PARTITION_EOF:
-        Test::Fail(tostr() << "Consume error after " << cnt << "/" << msgcnt << " messages: " << msg->errstr());
+        Test::Fail(tostr() << "Unexpected PARTITION_EOF (not enbaled) after "
+                   << cnt << "/" << msgcnt << " messages: " << msg->errstr());
         break;
 
       case RdKafka::ERR_NO_ERROR:

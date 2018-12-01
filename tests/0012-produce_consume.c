@@ -381,6 +381,8 @@ static void consume_messages_with_queues (uint64_t testid, const char *topic,
 
 	test_conf_init(&conf, &topic_conf, 20);
 
+        test_conf_set(conf, "enable.partition.eof", "true");
+
 	/* Create kafka instance */
 	rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 

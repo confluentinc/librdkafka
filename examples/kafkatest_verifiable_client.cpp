@@ -662,6 +662,8 @@ int main (int argc, char **argv) {
   conf->set("fetch.wait.max.ms", "500", errstr);
   conf->set("fetch.min.bytes", "4096", errstr);
 
+  conf->set("enable.partition.eof", "true", errstr);
+
   for (int i = 1 ; i < argc ; i++) {
     const char *name = argv[i];
     const char *val = i+1 < argc ? argv[i+1] : NULL;

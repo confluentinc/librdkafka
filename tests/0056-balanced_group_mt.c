@@ -204,6 +204,7 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
         int partition_cnt = 2;
         int partition;
         uint64_t testid;
+        rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *default_topic_conf;
         rd_kafka_topic_partition_list_t *sub, *topics;
         rd_kafka_resp_err_t err;
@@ -230,8 +231,10 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
         if (mtx_init(&lock, mtx_plain) != thrd_success)
                 TEST_FAIL("Cannot create mutex.");
 
-        test_conf_init(NULL, &default_topic_conf,
+        test_conf_init(&conf, &default_topic_conf,
                        (test_session_timeout_ms * 3) / 1000);
+
+        test_conf_set(conf, "enable.partition.eof", "true");
 
         test_topic_conf_set(default_topic_conf, "auto.offset.reset",
                             "smallest");
@@ -242,8 +245,8 @@ int main_0056_balanced_group_mt (int argc, char **argv) {
 
         /* Create consumers and start subscription */
         rk_c = test_create_consumer(
-                topic /*group_id*/, rebalance_cb, NULL,
-                default_topic_conf);
+                topic /*group_id*/, rebalance_cb,
+                conf, default_topic_conf);
 
         test_consumer_subscribe(rk_c, topic);
 

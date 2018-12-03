@@ -28,9 +28,9 @@ script:
 deploy:
   provider: s3
   access_key_id:
-    secure: "nGcknL5JZ5XYCEJ96UeDtnLOOidWsfXrk2x91Z9Ip2AyrUtdfZBc8BX16C7SAQbBeb4PQu/OjRBQWTIRqU64ZEQU1Z0lHjxCiGEt5HO0YlXWvZ8OJGAQ0wSmrQED850lWjGW2z5MpDqqxbZyATE8VksW5dtGiHgNuITinVW8Lok="
+    secure: "m8FQrFesK0xSS1wHo2S7cuWkpO7VB91dBmj1XIYLRXZSkbMpKBJATcFcHNbrAp3slEp7wLAnT7CHrQ4ccQi4H68Z7mjEwdq4VKRE+7zqJ/feK8MOFNeSHWLQzgwLUYlRlc9+tzLNwxMuL2ilWgdjKOArsUVHo9LEKNfQ3T6zCJU="
   secret_access_key:
-    secure: "J+LygNeoXQImN9E7EARNmcgLpqm6hoRjxwHJaen9opeuSDowKDpZxP7ixSml3BEn2pJJ4kpsdj5A8t5uius+qC4nu9mqSAZcmdKeSmliCbH7kj4J9MR7LBcXk3Uf515QGm7y4nzw+c1PmpteYL5S06Kgqp+KkPRLKTS2NevVZuY="
+    secure: "GE6O0gk5VRervntCKAmczfBdSOvbr9bouJ15H2rpcOgHi8KTDEjI/NS69eLiRRSHBCARtcRqN4wfgy+/dn7D1VklY8a1rAKu02wGjw+fq7k7GVSSmynR/aF619R4SIABsaAhNCwswXnLHuLlq8HFk5ulG3z8DUvYBczB45bWZfQ="
   bucket: librdkafka-ci-packages
   region: us-west-1
   skip_cleanup: true

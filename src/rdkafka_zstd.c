@@ -148,7 +148,9 @@ rd_kafka_zstd_compress (rd_kafka_broker_t *rkb, int comp_level,
 #if defined(WITH_ZSTD_STATIC) && ZSTD_VERSION_NUMBER >= (1*100*100+2*100+1) /* v1.2.1 */
         r = ZSTD_initCStream_srcSize(cctx, comp_level, len);
 #else
-#warning "libzstd not linked statically (or zstd version < 1.2.1): decompression in consumer may be more costly due to decompressed size not included in header by librdkafka producer"
+        /* libzstd not linked statically (or zstd version < 1.2.1):
+         * decompression in consumer may be more costly due to
+         * decompressed size not included in header by librdkafka producer */
         r = ZSTD_initCStream(cctx, comp_level);
 #endif
         if (ZSTD_isError(r)) {

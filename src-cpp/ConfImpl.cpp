@@ -87,3 +87,28 @@ RdKafka::Conf *RdKafka::Conf::create (ConfType type) {
 
   return conf;
 }
+
+RdKafka::Conf *RdKafka::ConfImpl::dup() {
+    ConfImpl* newConf = new ConfImpl();
+    if (newConf) {
+        newConf->consume_cb_ = consume_cb_;
+        newConf->dr_cb_ = dr_cb_;
+        newConf->event_cb_ = event_cb_;
+        newConf->socket_cb_ = socket_cb_;
+        newConf->open_cb_ = open_cb_;
+        newConf->partitioner_cb_ = partitioner_cb_;
+        newConf->partitioner_kp_cb_ = partitioner_kp_cb_;
+        newConf->rebalance_cb_ = rebalance_cb_;
+        newConf->offset_commit_cb_ = offset_commit_cb_;
+        newConf->cert_verify_cb_ = cert_verify_cb_;
+        newConf->cert_retrieve_cb_ = cert_retrieve_cb_;
+        newConf->conf_type_ = conf_type_;
+        
+        if (conf_type_ == CONF_GLOBAL)
+            newConf->rk_conf_ = rd_kafka_conf_dup(rk_conf_);
+        else if( conf_type_ == CONF_TOPIC)
+            newConf->rkt_conf_ = rd_kafka_topic_conf_dup(rkt_conf_);
+    }
+
+    return newConf;
+}

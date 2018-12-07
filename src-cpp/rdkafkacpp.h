@@ -1000,6 +1000,10 @@ class RD_EXPORT Conf {
   /** @brief Use with \p name = \c \"consume_cb\" */
   virtual Conf::ConfResult set (const std::string &name, ConsumeCb *consume_cb,
 				std::string &errstr) = 0;
+
+  /** @brief Duplicates the configuration object */
+  virtual Conf *Conf::dup() = 0;
+
 };
 
 /**@}*/

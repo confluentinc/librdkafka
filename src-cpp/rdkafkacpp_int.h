@@ -684,6 +684,8 @@ class ConfImpl : public Conf {
     return Conf::CONF_OK;
   }
 
+  RdKafka::Conf *dup();
+
 
   ConsumeCb *consume_cb_;
   DeliveryReportCb *dr_cb_;

@@ -104,10 +104,14 @@ RdKafka::Conf *RdKafka::ConfImpl::dup() {
         newConf->cert_retrieve_cb_ = cert_retrieve_cb_;
         newConf->conf_type_ = conf_type_;
         
-        if (conf_type_ == CONF_GLOBAL)
+        if (conf_type_ == CONF_GLOBAL) {
             newConf->rk_conf_ = rd_kafka_conf_dup(rk_conf_);
-        else if( conf_type_ == CONF_TOPIC)
+            rd_kafka_conf_set_opaque(newConf->rk_conf_, this);
+        }
+        else if (conf_type_ == CONF_TOPIC) {
             newConf->rkt_conf_ = rd_kafka_topic_conf_dup(rkt_conf_);
+            rd_kafka_topic_conf_set_opaque(newConf->rkt_conf_, this);
+        }
     }
 
     return newConf;

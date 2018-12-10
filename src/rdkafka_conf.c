@@ -538,7 +538,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "in the case the ApiVersionRequest fails. "
 	  "**NOTE**: The ApiVersionRequest is only issued when a new connection "
 	  "to the broker is made (such as after an upgrade).",
-	  0, 86400*7*1000, 20*60*1000 /* longer than default Idle timeout (10m)*/ },
+	  0, 86400*7*1000, 0 },
 
 	{ _RK_GLOBAL|_RK_MED, "broker.version.fallback", _RK_C_STR,
 	  _RK(broker_version_fallback),
@@ -550,8 +550,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  "version and the client will automatically adjust its feature set "
 	  "accordingly if the ApiVersionRequest fails (or is disabled). "
 	  "The fallback broker version will be used for `api.version.fallback.ms`. "
-          "Valid values are: 0.9.0, 0.8.2, 0.8.1, 0.8.0. Any other value, "
-          "such as 0.10.2.1, enables ApiVersionRequests.",
+          "Valid values are: 0.9.0, 0.8.2, 0.8.1, 0.8.0. "
+          "Any other value >= 0.10, such as 0.10.2.1, "
+          "enables ApiVersionRequests.",
           .sdef = "0.10.0",
 	  .validate = rd_kafka_conf_validate_broker_version },
 

@@ -528,17 +528,26 @@ void rd_kafka_broker_conn_closed (rd_kafka_broker_t *rkb,
                  *    typically indicates a failure, such as protocol mismatch.
                  *  - If the connection hasn't been idle long enough.
                  *  - There are outstanding requests, or requests enqueued.
+                 *
+                 * For non-idle connections, adjust log level:
+                 *  - requests in-flight: LOG_WARNING
+                 *  - else: LOG_INFO
                  */
                 rd_ts_t now = rd_clock();
                 rd_ts_t minidle =
                         RD_MAX(60*1000/*60s*/,
                                rkb->rkb_rk->rk_conf.socket_timeout_ms) * 1000;
+                int inflight = rd_kafka_bufq_cnt(&rkb->rkb_waitresps);
+                int inqueue = rd_kafka_bufq_cnt(&rkb->rkb_outbufs);
 
                 if (rkb->rkb_ts_state + minidle < now &&
                     rkb->rkb_ts_tx_last + minidle < now &&
-                    rd_kafka_bufq_cnt(&rkb->rkb_waitresps) == 0 &&
-                    rd_kafka_bufq_cnt(&rkb->rkb_outbufs) == 0)
+                    inflight + inqueue == 0)
                         log_level = LOG_DEBUG;
+                else if (inflight > 1)
+                        log_level = LOG_WARNING;
+                else
+                        log_level = LOG_INFO;
         }
 
         rd_kafka_broker_fail(rkb, log_level, err, "%s", errstr);

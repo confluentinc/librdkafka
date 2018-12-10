@@ -856,6 +856,9 @@ the last `socket.timeout.ms` or there are no outstanding, or
 queued, requests waiting to be sent. In this case the standard "Disconnect"
 error log is silenced (will only be seen with debug enabled).
 
+Otherwise, if a connection is closed while there are requests in-flight
+the logging level will be LOG_WARNING (4), else LOG_INFO (6).
+
 `log.connection.close=false` may be used to silence all disconnect logs,
 but it is recommended to instead rely on the above heuristics.
 

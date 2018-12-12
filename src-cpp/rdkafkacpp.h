@@ -1002,8 +1002,7 @@ class RD_EXPORT Conf {
 				std::string &errstr) = 0;
 
   /** @brief Duplicates the configuration object */
-  virtual Conf *Conf::dup() = 0;
-
+  virtual Conf *dup() = 0;
 };
 
 /**@}*/

@@ -100,8 +100,6 @@ RdKafka::Conf *RdKafka::ConfImpl::dup() {
         newConf->partitioner_kp_cb_ = partitioner_kp_cb_;
         newConf->rebalance_cb_ = rebalance_cb_;
         newConf->offset_commit_cb_ = offset_commit_cb_;
-        newConf->cert_verify_cb_ = cert_verify_cb_;
-        newConf->cert_retrieve_cb_ = cert_retrieve_cb_;
         newConf->conf_type_ = conf_type_;
         
         if (conf_type_ == CONF_GLOBAL) {

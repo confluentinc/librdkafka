@@ -51,7 +51,6 @@ extern const char *rd_kafka_cgrp_join_state_names[];
  * Client group
  */
 typedef struct rd_kafka_cgrp_s {
-        TAILQ_ENTRY(rd_kafka_cgrp_s) rkcg_rkb_link;  /* rkb_cgrps */
         const rd_kafkap_str_t    *rkcg_group_id;
         rd_kafkap_str_t          *rkcg_member_id;  /* Last assigned MemberId */
         const rd_kafkap_str_t    *rkcg_client_id;
@@ -172,24 +171,24 @@ typedef struct rd_kafka_cgrp_s {
 
 	int                rkcg_assigned_cnt;       /* Assigned partitions */
 
-        int32_t            rkcg_coord_id;           /* Current coordinator id */
-
         int32_t            rkcg_generation_id;      /* Current generation id */
 
         rd_kafka_assignor_t *rkcg_assignor;         /* Selected partition
                                                      * assignor strategy. */
 
-        rd_kafka_broker_t *rkcg_rkb;                /* Current handling broker,
-                                                     * if the coordinator broker
-                                                     * is not available this
-                                                     * will be another broker
-                                                     * that will handle the
-                                                     * querying of coordinator
-                                                     * etc.
-                                                     * Broker in this sense
-                                                     * is a broker_t object,
-                                                     * not necessarily a
-                                                     * real broker. */
+        int32_t            rkcg_coord_id;      /**< Current coordinator id,
+                                                *   or -1 if not known. */
+
+        rd_kafka_broker_t *rkcg_curr_coord;    /**< Current coordinator
+                                                *   broker handle, or NULL.
+                                                *   rkcg_coord's nodename is
+                                                *   updated to this broker's
+                                                *   nodename when there is a
+                                                *   coordinator change. */
+        rd_kafka_broker_t *rkcg_coord;         /**< The dedicated coordinator
+                                                *   broker handle.
+                                                *   Will be updated when the
+                                                *   coordinator changes. */
 
         /* Current subscription */
         rd_kafka_topic_partition_list_t *rkcg_subscription;
@@ -255,6 +254,7 @@ typedef struct rd_kafka_cgrp_s {
          (rkcg)->rkcg_coord_id == (rkb)->rkb_nodeid)
 
 extern const char *rd_kafka_cgrp_state_names[];
+extern const char *rd_kafka_cgrp_join_state_names[];
 
 void rd_kafka_cgrp_destroy_final (rd_kafka_cgrp_t *rkcg);
 rd_kafka_cgrp_t *rd_kafka_cgrp_new (rd_kafka_t *rk,
@@ -286,8 +286,6 @@ void rd_kafka_cgrp_handle_SyncGroup (rd_kafka_cgrp_t *rkcg,
                                      rd_kafka_resp_err_t err,
                                      const rd_kafkap_bytes_t *member_state);
 void rd_kafka_cgrp_set_join_state (rd_kafka_cgrp_t *rkcg, int join_state);
-
-int rd_kafka_cgrp_reassign_broker (rd_kafka_cgrp_t *rkcg);
 
 void rd_kafka_cgrp_coord_query (rd_kafka_cgrp_t *rkcg,
 				const char *reason);

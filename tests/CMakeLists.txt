@@ -84,6 +84,7 @@ set(
     0090-idempotence.c
     0091-max_poll_interval_timeout.c
     0092-mixed_msgver.c
+    0093-holb.c
     8000-idle.cpp
     test.c
     testcpp.cpp

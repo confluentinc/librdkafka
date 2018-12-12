@@ -194,7 +194,18 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         uint16_t            rkb_port;                          /* TCP port */
         char               *rkb_origname;                      /* Original
                                                                 * host name */
-
+        int                 rkb_nodename_epoch; /**< Bumped each time
+                                                 *   the nodename is changed.
+                                                 *   Compared to
+                                                 *   rkb_connect_epoch
+                                                 *   to trigger a reconnect
+                                                 *   for logical broker
+                                                 *   when the nodename is
+                                                 *   updated. */
+        int                 rkb_connect_epoch;  /**< The value of
+                                                 *   rkb_nodename_epoch at the
+                                                 *   last connection attempt.
+                                                 */
 
         /* Logging name is a copy of rkb_name, protected by its own mutex */
         char               *rkb_logname;
@@ -385,6 +396,15 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 					rd_kafka_secproto_t proto,
 					const char *name, uint16_t port,
 					int32_t nodeid);
+
+rd_kafka_broker_t *rd_kafka_broker_add_logical (rd_kafka_t *rk,
+                                                const char *name);
+
+/** @define returns true if broker is logical. No locking is needed. */
+#define RD_KAFKA_BROKER_IS_LOGICAL(rkb) ((rkb)->rkb_source == RD_KAFKA_LOGICAL)
+
+void rd_kafka_broker_set_nodename (rd_kafka_broker_t *rkb,
+                                   rd_kafka_broker_t *from_rkb);
 
 void rd_kafka_broker_connect_up (rd_kafka_broker_t *rkb);
 void rd_kafka_broker_connect_done (rd_kafka_broker_t *rkb, const char *errstr);

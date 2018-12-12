@@ -31,23 +31,16 @@
 
 
 /**
- * Verify that long-processing consumer does not leave the group during
- * processing when processing time < max.poll.interval.ms but
- * max.poll.interval.ms > socket.timeout.ms.
+ * @brief Attempt to verify head-of-line-blocking behaviour.
  *
- * MO:
- *  - produce N*.. messages to two partitions
- *  - create two consumers, c0 and c1.
- *  - subscribe c0, wait for rebalance, poll first message.
- *  - subscribe c1
- *  - have both consumers poll messages and spend T seconds processing
- *    each message.
- *  - wait until both consumers have received N messages each.
- *  - check that no errors (disconnects, etc) or extra rebalances were raised.
+ * - Create two high-level consumers with socket.timeout.ms=low,
+ *   and max.poll.interval.ms=high, metadata refresh interval=low.
+ * - Have first consumer join the group (subscribe()), should finish quickly.
+ * - Have second consumer join the group, but don't call poll on
+ *   the first consumer for some time to have the second consumer
+ *   block on JoinGroup.
+ * - Verify that errors were raised due to timed out (Metadata) requests.
  */
-
-
-const int64_t processing_time = 31*1000*1000; /*31s*/
 
 struct _consumer {
         rd_kafka_t *rk;
@@ -60,7 +53,7 @@ struct _consumer {
 static void do_consume (struct _consumer *cons, int timeout_s) {
         rd_kafka_message_t *rkm;
 
-        rkm = rd_kafka_consumer_poll(cons->rk, timeout_s*1000);
+        rkm = rd_kafka_consumer_poll(cons->rk, 100+(timeout_s*1000));
         if (!rkm)
                 return;
 
@@ -70,19 +63,16 @@ static void do_consume (struct _consumer *cons, int timeout_s) {
                     rd_kafka_message_errstr(rkm),
                     (int)((test_clock() - cons->last)/1000));
 
-        TEST_SAY("%s: processing message #%d from "
-                 "partition %"PRId32" at offset %"PRId64"\n",
-                 rd_kafka_name(cons->rk), cons->cnt,
-                 rkm->partition, rkm->offset);
-
         rd_kafka_message_destroy(rkm);
 
         cons->cnt++;
         cons->last = test_clock();
 
-        TEST_SAY("%s: simulate processing by sleeping for %ds\n",
-                 rd_kafka_name(cons->rk), timeout_s);
-        rd_sleep(timeout_s);
+        if (timeout_s > 0) {
+                TEST_SAY("%s: simulate processing by sleeping for %ds\n",
+                         rd_kafka_name(cons->rk), timeout_s);
+                rd_sleep(timeout_s);
+        }
 }
 
 
@@ -113,33 +103,27 @@ static void rebalance_cb (rd_kafka_t *rk,
 
 
 #define _CONSUMER_CNT 2
-int main_0091_max_poll_interval_timeout (int argc, char **argv) {
-        const char *topic = test_mk_topic_name("0091_max_poll_interval_tmout",
-                                               1);
+int main_0093_holb_consumer (int argc, char **argv) {
+        const char *topic = test_mk_topic_name("0093_holb_consumer", 1);
         int64_t testid;
-        const int msgcnt = 3;
+        const int msgcnt = 100;
         struct _consumer c[_CONSUMER_CNT] = RD_ZERO_INIT;
         rd_kafka_conf_t *conf;
 
         testid = test_id_generate();
 
-        test_conf_init(&conf, NULL,
-                       10 + (int)(processing_time/1000000) * msgcnt);
+        test_conf_init(&conf, NULL, 60);
 
-        test_create_topic(topic, 2, 1);
+        test_create_topic(topic, 1, 1);
 
-        /* Produce extra messages since we can't fully rely on the
-         * random partitioner to provide exact distribution. */
-        test_produce_msgs_easy(topic, testid, -1, msgcnt * _CONSUMER_CNT * 2);
-        test_produce_msgs_easy(topic, testid, 1, msgcnt/2);
+        test_produce_msgs_easy(topic, testid, 0, msgcnt);
 
         test_conf_set(conf, "session.timeout.ms", "6000");
-        test_conf_set(conf, "max.poll.interval.ms", "20000" /*20s*/);
-        test_conf_set(conf, "socket.timeout.ms", "15000" /*15s*/);
+        test_conf_set(conf, "max.poll.interval.ms", "20000");
+        test_conf_set(conf, "socket.timeout.ms", "3000");
         test_conf_set(conf, "auto.offset.reset", "earliest");
-        test_conf_set(conf, "enable.partition.eof", "false");
         /* Trigger other requests often */
-        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "1000");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
         rd_kafka_conf_set_rebalance_cb(conf, rebalance_cb);
 
         rd_kafka_conf_set_opaque(conf, &c[0]);
@@ -151,12 +135,13 @@ int main_0091_max_poll_interval_timeout (int argc, char **argv) {
 
         test_consumer_subscribe(c[0].rk, topic);
 
-        /* c0: assign, (c1 joins) revoke, assign */
-        c[0].max_rebalance_cnt = 3;
-        /* c1: assign */
-        c[1].max_rebalance_cnt = 1;
+        /* c0: assign */
+        c[0].max_rebalance_cnt = 1;
 
-        /* Wait for assignment */
+        /* c1: none, hasn't joined yet */
+        c[1].max_rebalance_cnt = 0;
+
+        TEST_SAY("Waiting for c[0] assignment\n");
         while (1) {
                 rd_kafka_topic_partition_list_t *parts = NULL;
 
@@ -176,12 +161,30 @@ int main_0091_max_poll_interval_timeout (int argc, char **argv) {
                 break;
         }
 
+        TEST_SAY("c[0] got assignment, consuming..\n");
+        do_consume(&c[0], 5/*5s*/);
+
+        TEST_SAY("Joining second consumer\n");
         test_consumer_subscribe(c[1].rk, topic);
 
-        /* Poll until both consumers have finished reading N messages */
-        while (c[0].cnt < msgcnt && c[1].cnt < msgcnt) {
+        /* Just poll second consumer for 10s, the rebalance will not
+         * finish until the first consumer polls */
+        do_consume(&c[1], 10/*10s*/);
+
+        /* c0: the next call to do_consume/poll will trigger
+         *     its rebalance callback, first revoke then assign. */
+        c[0].max_rebalance_cnt += 2;
+        /* c1: first rebalance */
+        c[1].max_rebalance_cnt++;
+
+        TEST_SAY("Expected rebalances: c[0]: %d/%d, c[1]: %d/%d\n",
+                 c[0].rebalance_cnt, c[0].max_rebalance_cnt,
+                 c[1].rebalance_cnt, c[1].max_rebalance_cnt);
+
+        /* Let rebalances kick in, then consume messages. */
+        while (c[0].cnt + c[1].cnt < msgcnt) {
                 do_consume(&c[0], 0);
-                do_consume(&c[1], 10/*10s*/);
+                do_consume(&c[1], 0);
         }
 
         /* Allow the extra revoke rebalance on close() */

@@ -90,7 +90,21 @@ typedef enum {
 	RD_KAFKA_CONFIGURED,
 	RD_KAFKA_LEARNED,
 	RD_KAFKA_INTERNAL,
+        RD_KAFKA_LOGICAL
 } rd_kafka_confsource_t;
+
+static RD_INLINE RD_UNUSED
+const char *rd_kafka_confsource2str (rd_kafka_confsource_t source) {
+        static const char *names[] = {
+                "configured",
+                "learned",
+                "internal",
+                "logical"
+        };
+
+        return names[source];
+}
+
 
 typedef	enum {
 	_RK_GLOBAL = 0x1,

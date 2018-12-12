@@ -136,9 +136,11 @@ static void rd_kafka_mk_brokername (char *dest, size_t dsize,
 				    const char *nodename, int32_t nodeid,
 				    rd_kafka_confsource_t source) {
 
-	/* Prepend protocol name to brokername, unless it is a
-	 * standard plaintext broker in which case we omit the protocol part. */
-	if (proto != RD_KAFKA_PROTO_PLAINTEXT) {
+        /* Prepend protocol name to brokername, unless it is a
+         * standard plaintext or logical broker in which case we
+         * omit the protocol part. */
+        if (proto != RD_KAFKA_PROTO_PLAINTEXT &&
+            source != RD_KAFKA_LOGICAL) {
 		int r = rd_snprintf(dest, dsize, "%s://",
 				    rd_kafka_secproto_names[proto]);
 		if (r >= (int)dsize) /* Skip proto name if it wont fit.. */
@@ -149,10 +151,11 @@ static void rd_kafka_mk_brokername (char *dest, size_t dsize,
 	}
 
 	if (nodeid == RD_KAFKA_NODEID_UA)
-		rd_snprintf(dest, dsize, "%s/%s",
+		rd_snprintf(dest, dsize, "%s%s",
 			    nodename,
-			    source == RD_KAFKA_INTERNAL ?
-			    "internal":"bootstrap");
+                            source == RD_KAFKA_LOGICAL ? "" :
+                            (source == RD_KAFKA_INTERNAL ?
+                             "/internal" : "/bootstrap"));
 	else
 		rd_snprintf(dest, dsize, "%s/%"PRId32, nodename, nodeid);
 }
@@ -784,9 +787,17 @@ rd_kafka_broker_send (rd_kafka_broker_t *rkb, rd_slice_t *slice) {
 
 
 
-static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
+static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb,
+                                    const char *nodename) {
 	const char *errstr;
         int save_idx = 0;
+
+        if (!*nodename && rkb->rkb_source == RD_KAFKA_LOGICAL) {
+                rd_kafka_broker_fail(rkb, LOG_DEBUG,
+                                     RD_KAFKA_RESP_ERR__RESOLVE,
+                                     "Logical broker has no address yet");
+                return -1;
+        }
 
 	if (rkb->rkb_rsal &&
 	    rkb->rkb_ts_rsal_last + (rkb->rkb_rk->rk_conf.broker_addr_ttl*1000)
@@ -818,7 +829,7 @@ static int rd_kafka_broker_resolve (rd_kafka_broker_t *rkb) {
                                              rkb->rkb_err.err == errno ?
                                              NULL :
                                              "Failed to resolve '%s': %s",
-                                             rkb->rkb_nodename, errstr);
+                                             nodename, errstr);
 			return -1;
                 } else {
                         rkb->rkb_ts_rsal_last = rd_clock();
@@ -1130,6 +1141,9 @@ rd_kafka_broker_random (rd_kafka_t *rk,
         int cnt = 0;
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                        continue;
+
                 rd_kafka_broker_lock(rkb);
                 if ((int)rkb->rkb_state == state &&
                     (!filter || !filter(rkb, opaque))) {
@@ -1240,6 +1254,9 @@ rd_kafka_broker_t *rd_kafka_broker_prefer (rd_kafka_t *rk, int32_t broker_id,
         int cnt = 0;
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                        continue;
+
 		rd_kafka_broker_lock(rkb);
 		if ((int)rkb->rkb_state == state) {
                         if (broker_id != -1 && rkb->rkb_nodeid == broker_id) {
@@ -1754,6 +1771,7 @@ static int rd_ut_reconnect_backoff (void) {
 static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	const rd_sockaddr_inx_t *sinx;
 	char errstr[512];
+        char nodename[RD_KAFKA_NODENAME_SIZE];
 
 	rd_rkb_dbg(rkb, BROKER, "CONNECT",
 		"broker in state %s connecting",
@@ -1763,13 +1781,15 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 
         rd_kafka_broker_lock(rkb);
         rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_CONNECT);
+        strncpy(nodename, rkb->rkb_nodename, sizeof(nodename));
+        rkb->rkb_connect_epoch = rkb->rkb_nodename_epoch;
         rd_kafka_broker_unlock(rkb);
 
         rd_kafka_broker_update_reconnect_backoff(rkb, &rkb->rkb_rk->rk_conf,
                                                  rd_clock());
 
-	if (rd_kafka_broker_resolve(rkb) == -1)
-		return -1;
+        if (rd_kafka_broker_resolve(rkb, nodename) == -1)
+                return -1;
 
 	sinx = rd_sockaddr_list_next(rkb->rkb_rsal);
 
@@ -2509,6 +2529,20 @@ static int rd_kafka_broker_cmp_by_id (const void *_a, const void *_b) {
 }
 
 
+/**
+ * @brief Set the broker logname (used in logs) to a copy of \p logname.
+ *
+ * @locality any
+ * @locks none
+ */
+static void rd_kafka_broker_set_logname (rd_kafka_broker_t *rkb,
+                                         const char *logname) {
+        mtx_lock(&rkb->rkb_logname_lock);
+        if (rkb->rkb_logname)
+                rd_free(rkb->rkb_logname);
+        rkb->rkb_logname = rd_strdup(logname);
+        mtx_unlock(&rkb->rkb_logname_lock);
+}
 
 /**
  * @brief Serve a broker op (an op posted by another thread to be handled by
@@ -2549,6 +2583,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                         strncpy(rkb->rkb_nodename,
                                 rko->rko_u.node.nodename,
                                 sizeof(rkb->rkb_nodename)-1);
+                        rkb->rkb_nodename_epoch++;
                         updated |= _UPD_NAME;
                 }
 
@@ -2581,10 +2616,7 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
 				       RD_KAFKA_LEARNED);
                 if (strcmp(rkb->rkb_name, brokername)) {
                         /* Udate the name copy used for logging. */
-                        mtx_lock(&rkb->rkb_logname_lock);
-                        rd_free(rkb->rkb_logname);
-                        rkb->rkb_logname = rd_strdup(brokername);
-                        mtx_unlock(&rkb->rkb_logname_lock);
+                        rd_kafka_broker_set_logname(rkb, brokername);
 
                         rd_rkb_dbg(rkb, BROKER, "UPDATE",
                                    "Name changed from %s to %s",
@@ -2861,6 +2893,25 @@ static int rd_kafka_broker_op_serve (rd_kafka_broker_t *rkb,
                         rd_kafka_broker_set_state(
                                 rkb, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
                         rd_kafka_broker_unlock(rkb);
+
+                } else if (rkb->rkb_state >=
+                           RD_KAFKA_BROKER_STATE_TRY_CONNECT) {
+                        rd_bool_t do_disconnect = rd_false;
+
+                        /* If the nodename was changed since the last connect,
+                         * close the current connection. */
+
+                        rd_kafka_broker_lock(rkb);
+                        do_disconnect = (rkb->rkb_connect_epoch !=
+                                         rkb->rkb_nodename_epoch);
+                        rd_kafka_broker_unlock(rkb);
+
+                        if (do_disconnect)
+                                rd_kafka_broker_fail(
+                                        rkb, LOG_DEBUG,
+                                        RD_KAFKA_RESP_ERR__NODE_UPDATE,
+                                        "Closing connection due to "
+                                        "nodename change");
                 }
                 break;
 
@@ -4377,10 +4428,18 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 	rkb = rd_calloc(1, sizeof(*rkb));
 
-        rd_kafka_mk_nodename(rkb->rkb_nodename, sizeof(rkb->rkb_nodename),
-                             name, port);
-        rd_kafka_mk_brokername(rkb->rkb_name, sizeof(rkb->rkb_name),
-                               proto, rkb->rkb_nodename, nodeid, source);
+        if (source != RD_KAFKA_LOGICAL) {
+                rd_kafka_mk_nodename(rkb->rkb_nodename,
+                                     sizeof(rkb->rkb_nodename),
+                                     name, port);
+                rd_kafka_mk_brokername(rkb->rkb_name, sizeof(rkb->rkb_name),
+                                       proto, rkb->rkb_nodename,
+                                       nodeid, source);
+        } else {
+                /* Logical broker does not have a nodename (address) or port
+                 * at initialization. */
+                rd_snprintf(rkb->rkb_name, sizeof(rkb->rkb_name), "%s", name);
+        }
 
 	rkb->rkb_source = source;
 	rkb->rkb_rk = rk;
@@ -4509,7 +4568,11 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
                     rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL)
                         rd_kafka_sasl_broker_init(rkb);
 
-		TAILQ_INSERT_TAIL(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
+                /* Insert broker at head of list, idea is that
+                 * newer brokers are more relevant than old ones,
+                 * and in particular LEARNED brokers are more relevant
+                 * than CONFIGURED (bootstrap) and LOGICAL brokers. */
+		TAILQ_INSERT_HEAD(&rkb->rkb_rk->rk_brokers, rkb, rkb_link);
 		(void)rd_atomic32_add(&rkb->rkb_rk->rk_broker_cnt, 1);
 
                 if (rkb->rkb_nodeid != -1) {
@@ -4532,6 +4595,116 @@ rd_kafka_broker_t *rd_kafka_broker_add (rd_kafka_t *rk,
 
 	return rkb;
 }
+
+
+/**
+ * @brief Adds a logical broker.
+ *
+ *        Logical brokers act just like any broker handle, but will not have
+ *        an initial address set. The address (or nodename is it is called
+ *        internally) can be set from another broker handle
+ *        by calling rd_kafka_broker_set_nodename().
+ *
+ *        This allows maintaining a logical group coordinator broker
+ *        handle that can ambulate between real broker addresses.
+ *
+ *        Logical broker constraints:
+ *         - will not have a broker-id set (-1).
+ *         - will not have a port set (0).
+ *         - the address for the broker may change.
+ *         - the name of broker will not correspond to the address,
+ *           but the \p name given here.
+ *
+ * @returns a new broker, holding a refcount for the caller.
+ *
+ * @locality any rdkafka thread
+ * @locks none
+ */
+rd_kafka_broker_t *rd_kafka_broker_add_logical (rd_kafka_t *rk,
+                                                const char *name) {
+        rd_kafka_broker_t *rkb;
+
+        rd_kafka_wrlock(rk);
+        rkb = rd_kafka_broker_add(rk, RD_KAFKA_LOGICAL,
+                                  rk->rk_conf.security_protocol,
+                                  name, 0/*port*/, -1/*brokerid*/);
+        rd_kafka_wrunlock(rk);
+
+        rd_dassert(RD_KAFKA_BROKER_IS_LOGICAL(rkb));
+        rd_kafka_broker_keep(rkb);
+        return rkb;
+}
+
+
+/**
+ * @brief Update the nodename (address) of broker \p rkb
+ *        with the nodename from broker \p from_rkb (may be NULL).
+ *
+ *        If \p rkb is connected, the connection will be torn down.
+ *        A new connection may be attempted to the new address
+ *        if a persistent connection is needed (standard connection rules).
+ *
+ *        The broker's logname is also updated to include \p from_rkb's
+ *        broker id.
+ *
+ * @param from_rkb Use the nodename from this broker. If NULL, clear
+ *                 the \p rkb nodename.
+ *
+ * @remark Must only be called for logical brokers.
+ *
+ * @locks none
+ */
+void rd_kafka_broker_set_nodename (rd_kafka_broker_t *rkb,
+                                   rd_kafka_broker_t *from_rkb) {
+        char nodename[RD_KAFKA_NODENAME_SIZE];
+        char brokername[RD_KAFKA_NODENAME_SIZE];
+        int32_t nodeid;
+        rd_bool_t changed = rd_false;
+
+        rd_assert(RD_KAFKA_BROKER_IS_LOGICAL(rkb));
+
+        rd_assert(rkb != from_rkb);
+
+        /* Get nodename from from_rkb */
+        if (from_rkb) {
+                rd_kafka_broker_lock(from_rkb);
+                strncpy(nodename, from_rkb->rkb_nodename, sizeof(nodename));
+                nodeid = from_rkb->rkb_nodeid;
+                rd_kafka_broker_unlock(from_rkb);
+        } else {
+                *nodename = '\0';
+                nodeid = -1;
+        }
+
+        /* Set nodename on rkb */
+        rd_kafka_broker_lock(rkb);
+        if (strcmp(rkb->rkb_nodename, nodename)) {
+                rd_rkb_dbg(rkb, BROKER, "NODENAME",
+                           "Broker nodename changed from \"%s\" to \"%s\"",
+                           rkb->rkb_nodename, nodename);
+                strncpy(rkb->rkb_nodename, nodename,
+                        sizeof(rkb->rkb_nodename));
+                rkb->rkb_nodename_epoch++;
+                changed = rd_true;
+        }
+        rd_kafka_broker_unlock(rkb);
+
+        /* Update the log name to include (or exclude) the nodeid.
+         * The nodeid is appended as "..logname../nodeid" */
+        rd_kafka_mk_brokername(brokername, sizeof(brokername),
+                               rkb->rkb_proto,
+                               rkb->rkb_name, nodeid,
+                               rkb->rkb_source);
+
+        rd_kafka_broker_set_logname(rkb, brokername);
+
+        if (!changed)
+                return;
+
+        /* Trigger a disconnect & reconnect */
+        rd_kafka_broker_schedule_connection(rkb);
+}
+
 
 /**
  * @brief Find broker by nodeid (not -1) and
@@ -4592,6 +4765,9 @@ static rd_kafka_broker_t *rd_kafka_broker_find (rd_kafka_t *rk,
         rd_kafka_mk_nodename(nodename, sizeof(nodename), name, port);
 
 	TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                        continue;
+
 		rd_kafka_broker_lock(rkb);
 		if (!rd_kafka_terminating(rk) &&
 		    rkb->rkb_proto == proto &&
@@ -5150,7 +5326,10 @@ void rd_kafka_broker_active_toppar_del (rd_kafka_broker_t *rkb,
 
 
 /**
- * @brief Schedule connection for \p rkb
+ * @brief Schedule connection for \p rkb.
+ *        Will trigger disconnection for logical brokers whose nodename
+ *        was changed.
+ *
  * @locality any
  * @locks none
  */

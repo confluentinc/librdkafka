@@ -185,6 +185,7 @@ _TEST_DECL(0089_max_poll_interval);
 _TEST_DECL(0090_idempotence);
 _TEST_DECL(0091_max_poll_interval_timeout);
 _TEST_DECL(0092_mixed_msgver);
+_TEST_DECL(0093_holb_consumer);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -303,6 +304,7 @@ struct test tests[] = {
         _TEST(0090_idempotence, 0, TEST_BRKVER(0,11,0,0)),
         _TEST(0091_max_poll_interval_timeout, 0, TEST_BRKVER(0,10,1,0)),
         _TEST(0092_mixed_msgver, 0, TEST_BRKVER(0,11,0,0)),
+        _TEST(0093_holb_consumer, 0, TEST_BRKVER(0,10,1,0)),
 
         /* Manual tests */
         _TEST(8000_idle, TEST_F_MANUAL),

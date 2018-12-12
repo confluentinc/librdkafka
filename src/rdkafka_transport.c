@@ -1576,9 +1576,11 @@ rd_kafka_transport_t *rd_kafka_transport_connect (rd_kafka_broker_t *rkb,
 
 	/* Connect to broker */
         if (rkb->rkb_rk->rk_conf.connect_cb) {
+                rd_kafka_broker_lock(rkb); /* for rkb_nodename */
                 r = rkb->rkb_rk->rk_conf.connect_cb(
                         s, (struct sockaddr *)sinx, RD_SOCKADDR_INX_LEN(sinx),
-                        rkb->rkb_name, rkb->rkb_rk->rk_conf.opaque);
+                        rkb->rkb_nodename, rkb->rkb_rk->rk_conf.opaque);
+                rd_kafka_broker_unlock(rkb);
         } else {
                 if (connect(s, (struct sockaddr *)sinx,
                             RD_SOCKADDR_INX_LEN(sinx)) == SOCKET_ERROR &&

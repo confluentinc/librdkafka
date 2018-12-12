@@ -526,7 +526,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
 	_ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT,
 		  "Broker: Message format on broker does not support request"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_POLICY_VIOLATION,
-                  "Broker: Isolation policy volation"),
+                  "Broker: Policy violation"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER,
                   "Broker: Broker received an out of order sequence number"),
         _ERR_DESC(RD_KAFKA_RESP_ERR_DUPLICATE_SEQUENCE_NUMBER,

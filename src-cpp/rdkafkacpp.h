@@ -363,7 +363,7 @@ enum ErrorCode {
         ERR_INVALID_REQUEST = 42,
         /** Message format on broker does not support request */
         ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT = 43,
-        /** Isolation policy volation */
+        /** Policy violation */
         ERR_POLICY_VIOLATION = 44,
         /** Broker received an out of order sequence number */
         ERR_OUT_OF_ORDER_SEQUENCE_NUMBER = 45,

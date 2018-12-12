@@ -3043,20 +3043,36 @@ static int rd_kafka_anyconf_warn_deprecated (rd_kafka_t *rk,
 
 
 /**
- * @brief Log warnings for set deprecated configuration properties.
+ * @brief Log configuration warnings (deprecated configuration properties,
+ *        unrecommended combinations, etc).
  *
  * @returns the number of warnings logged.
  *
  * @locality any
  * @locks none
  */
-int rd_kafka_conf_warn_deprecated (rd_kafka_t *rk) {
+int rd_kafka_conf_warn (rd_kafka_t *rk) {
         int cnt = 0;
 
         cnt = rd_kafka_anyconf_warn_deprecated(rk, _RK_GLOBAL, &rk->rk_conf);
         if (rk->rk_conf.topic_conf)
                 cnt += rd_kafka_anyconf_warn_deprecated(
                         rk, _RK_TOPIC, rk->rk_conf.topic_conf);
+
+        /* Additional warnings */
+        if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                if (rk->rk_conf.fetch_wait_max_ms + 1000 >
+                    rk->rk_conf.socket_timeout_ms)
+                        rd_kafka_log(rk, LOG_WARNING,
+                                     "CONFWARN",
+                                     "Configuration property "
+                                     "`fetch.wait.max.ms` (%d) should be "
+                                     "set lower than `socket.timeout.ms` (%d) "
+                                     "by at least 1000ms to avoid blocking "
+                                     "and timing out sub-sequent requests",
+                                     rk->rk_conf.fetch_wait_max_ms,
+                                     rk->rk_conf.socket_timeout_ms);
+        }
 
         return cnt;
 }

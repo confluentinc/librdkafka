@@ -619,6 +619,7 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 	rd_kafka_buf_t *rkbuf, *tmp;
 	int cnt = 0;
         int idx = -1;
+        const rd_kafka_buf_t *holb = TAILQ_FIRST(&rkbq->rkbq_bufs);
 
 	TAILQ_FOREACH_SAFE(rkbuf, &rkbq->rkbq_bufs, rkbuf_link, tmp) {
                 idx++;
@@ -640,14 +641,43 @@ static int rd_kafka_broker_bufq_timeout_scan (rd_kafka_broker_t *rkb,
 
 		rd_kafka_bufq_deq(rkbq, rkbuf);
 
-                if (now && cnt < log_first_n)
+                if (now && cnt < log_first_n) {
+                        char holbstr[128];
+                        /* Head of line blocking:
+                         * If this is not the first request in queue, but the
+                         * initial first request did not time out,
+                         * it typically means the first request is a
+                         * long-running blocking one, holding up the
+                         * sub-sequent requests.
+                         * In this case log what is likely holding up the
+                         * requests and what caused this request to time out. */
+                        if (holb && holb == TAILQ_FIRST(&rkbq->rkbq_bufs)) {
+                                rd_snprintf(holbstr, sizeof(holbstr),
+                                            ": possibly held back by "
+                                            "preceeding%s %sRequest with "
+                                            "timeout in %dms",
+                                            (holb->rkbuf_flags &
+                                             RD_KAFKA_OP_F_BLOCKING) ?
+                                            " blocking" : "",
+                                            rd_kafka_ApiKey2str(holb->
+                                                                rkbuf_reqhdr.
+                                                                ApiKey),
+                                            (int)((holb->rkbuf_ts_timeout -
+                                                   now) / 1000));
+                                /* Only log the HOLB once */
+                                holb = NULL;
+                        } else {
+                                *holbstr = '\0';
+                        }
+
                         rd_rkb_log(rkb, LOG_NOTICE, "REQTMOUT",
-                                   "Timed out #%d %sRequest %s "
-                                   "(after %"PRId64"ms)",
-                                   cnt,
+                                   "Timed out %sRequest %s "
+                                   "(after %"PRId64"ms, timeout #%d)%s",
                                    rd_kafka_ApiKey2str(rkbuf->rkbuf_reqhdr.
                                                        ApiKey),
-                                   description, rkbuf->rkbuf_ts_sent/1000);
+                                   description, rkbuf->rkbuf_ts_sent/1000, cnt,
+                                   holbstr);
+                }
 
                 if (is_waitresp_q && rkbuf->rkbuf_flags & RD_KAFKA_OP_F_BLOCKING
 		    && rd_atomic32_sub(&rkb->rkb_blocking_request_cnt, 1) == 0)
@@ -3868,6 +3898,10 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 
 	/* Update TopicArrayCnt */
 	rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
+
+        /* Consider Fetch requests blocking if fetch.wait.max.ms >= 1s */
+        if (rkb->rkb_rk->rk_conf.fetch_wait_max_ms >= 1000)
+                rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;
 
         /* Use configured timeout */
         rd_kafka_buf_set_timeout(rkbuf,

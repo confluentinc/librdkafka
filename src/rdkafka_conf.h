@@ -474,7 +474,7 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
                                           rd_kafka_topic_conf_t *tconf);
 
 
-int rd_kafka_conf_warn_deprecated (rd_kafka_t *rk);
+int rd_kafka_conf_warn (rd_kafka_t *rk);
 
 
 #include "rdkafka_confval.h"

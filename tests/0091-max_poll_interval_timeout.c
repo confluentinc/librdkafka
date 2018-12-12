@@ -60,18 +60,15 @@ struct _consumer {
 static void do_consume (struct _consumer *cons, int timeout_s) {
         rd_kafka_message_t *rkm;
 
-        if (cons->last + processing_time > test_clock()) {
-                rd_sleep(timeout_s);
-                return; /* Still "processing" last message */
-        }
-
         rkm = rd_kafka_consumer_poll(cons->rk, timeout_s*1000);
         if (!rkm)
                 return;
 
         TEST_ASSERT(!rkm->err,
-                    "%s sonsumer error: %s", rd_kafka_name(cons->rk),
-                    rd_kafka_message_errstr(rkm));
+                    "%s consumer error: %s (last poll was %dms ago)",
+                    rd_kafka_name(cons->rk),
+                    rd_kafka_message_errstr(rkm),
+                    (int)((test_clock() - cons->last)/1000));
 
         TEST_SAY("%s: processing message #%d from "
                  "partition %"PRId32" at offset %"PRId64"\n",
@@ -82,6 +79,10 @@ static void do_consume (struct _consumer *cons, int timeout_s) {
 
         cons->cnt++;
         cons->last = test_clock();
+
+        TEST_SAY("%s: simulate processing by sleeping for %ds\n",
+                 rd_kafka_name(cons->rk), timeout_s);
+        rd_sleep(timeout_s);
 }
 
 
@@ -133,7 +134,7 @@ int main_0091_max_poll_interval_timeout (int argc, char **argv) {
         test_produce_msgs_easy(topic, testid, 1, msgcnt/2);
 
         test_conf_set(conf, "session.timeout.ms", "6000");
-        test_conf_set(conf, "max.poll.interval.ms", "35000" /*35s*/);
+        test_conf_set(conf, "max.poll.interval.ms", "20000" /*20s*/);
         test_conf_set(conf, "socket.timeout.ms", "15000" /*15s*/);
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "enable.partition.eof", "false");
@@ -177,8 +178,8 @@ int main_0091_max_poll_interval_timeout (int argc, char **argv) {
 
         /* Poll until both consumers have finished reading N messages */
         while (c[0].cnt < msgcnt && c[1].cnt < msgcnt) {
-                do_consume(&c[0], 1/*1s*/);
-                do_consume(&c[1], 1/*1s*/);
+                do_consume(&c[0], 0);
+                do_consume(&c[1], 10/*10s*/);
         }
 
         /* Allow the extra revoke rebalance on close() */

@@ -1750,15 +1750,14 @@ rd_kafka_CreatePartitionsResponse_parse (rd_kafka_op_t *rko_req,
                                 errstr = (char *)rd_kafka_err2str(error_code);
                         else
                                 RD_KAFKAP_STR_DUPA(&errstr, &error_msg);
+                } else {
+                        errstr = NULL;
                 }
 
 
                 terr = rd_kafka_topic_result_new(ktopic.str,
                                                  RD_KAFKAP_STR_LEN(&ktopic),
-                                                 error_code,
-                                                 error_code ?
-                                                 rd_kafka_err2str(error_code) :
-                                                 NULL);
+                                                 error_code, errstr);
 
                 /* As a convenience to the application we insert topic result
                  * in the same order as they were requested. The broker

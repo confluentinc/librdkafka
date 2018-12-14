@@ -385,7 +385,8 @@ static __inline void sockem_conf_use (sockem_t *skm) {
         skm->use = skm->conf;
         /* Figure out if direct forward is to be used */
         skm->use.direct = !(skm->use.delay || skm->use.jitter ||
-                            (skm->use.tx_thruput < (1 << 30)));
+                            (skm->use.tx_thruput < (1 << 30)) ||
+                            skm->bufs_size > 0);
 }
 
 /**
@@ -464,7 +465,7 @@ static void *sockem_run (void *arg) {
                                             pfd[i].fd,
                                             pfd[i^1].fd,
                                             /* direct mode for app socket
-                                             * with delay, and always for
+                                             * without delay, and always for
                                              * peer socket (receive channel) */
                                             i == 0 || skm->use.direct) == -1) {
                                         skm->run = SOCKEM_TERM;

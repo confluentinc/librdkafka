@@ -526,6 +526,8 @@ int rd_kafka_q_serve_rkmessages (rd_kafka_q_t *rkq, int timeout_ms,
         rd_kafka_q_t *fwdq;
         struct timespec timeout_tspec;
 
+        rd_kafka_app_polled(rk);
+
 	mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
                 /* Since the q_pop may block we need to release the parent

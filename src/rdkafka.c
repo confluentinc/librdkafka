@@ -2428,6 +2428,9 @@ rd_kafka_consume_callback0 (rd_kafka_q_t *rkq, int timeout_ms, int max_cnt,
                                                 void *opaque),
                             void *opaque) {
         struct consume_ctx ctx = { .consume_cb = consume_cb, .opaque = opaque };
+
+        rd_kafka_app_polled(rkq->rkq_rk);
+
         return rd_kafka_q_serve(rkq, timeout_ms, max_cnt,
                                 RD_KAFKA_Q_CB_RETURN,
                                 rd_kafka_consume_cb, &ctx);

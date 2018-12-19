@@ -28,7 +28,7 @@
 
 
 /**
- * @brief Extra methods added to tinychtread/c11threads
+ * @brief Extra methods added to tinycthread/c11threads
  */
 
 #include "rd.h"

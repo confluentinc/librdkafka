@@ -42,7 +42,7 @@ function checks {
     mkl_lib_check "librt" "" cont CC "-lrt"
 
 
-    # Use internal tinycthread if C11 threads not avaialable
+    # Use internal tinycthread if C11 threads not available
     mkl_lib_check "c11threads" WITH_C11THREADS disable CC "" \
                   "
 #include <threads.h>

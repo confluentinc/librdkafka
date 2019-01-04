@@ -3572,6 +3572,17 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 					  Throttle_Time);
 	}
 
+        if (rd_kafka_buf_ApiVersion(request) >= 10) {
+				int16_t ErrorCode;
+				int32_t SessionId;
+				rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+				if (unlikely(ErrorCode)) {
+						/* Caller is printing and handling the error */
+						return ErrorCode;
+				}
+				rd_kafka_buf_read_i32(rkbuf, &SessionId);
+        }
+
 	rd_kafka_buf_read_i32(rkbuf, &TopicArrayCnt);
 	/* Verify that TopicArrayCnt seems to be in line with remaining size */
 	rd_kafka_buf_check_len(rkbuf,
@@ -3600,6 +3611,7 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
                                 int16_t ErrorCode;
                                 int64_t HighwaterMarkOffset;
                                 int64_t LastStableOffset;       /* v4 */
+                                int64_t LogStartOffset;       /* v10 */
                                 int32_t MessageSetSize;
                         } hdr;
                         rd_kafka_resp_err_t err;
@@ -3608,10 +3620,16 @@ rd_kafka_fetch_reply_handle (rd_kafka_broker_t *rkb,
 			rd_kafka_buf_read_i16(rkbuf, &hdr.ErrorCode);
 			rd_kafka_buf_read_i64(rkbuf, &hdr.HighwaterMarkOffset);
 
-                        if (rd_kafka_buf_ApiVersion(request) == 4) {
+                        if (rd_kafka_buf_ApiVersion(request) >= 4) {
                                 int32_t AbortedTxCnt;
                                 rd_kafka_buf_read_i64(rkbuf,
                                                       &hdr.LastStableOffset);
+
+                                if (rd_kafka_buf_ApiVersion(request) >= 10) {
+                                        rd_kafka_buf_read_i64(rkbuf,
+                                                &hdr.LogStartOffset);
+                                }
+
                                 rd_kafka_buf_read_i32(rkbuf, &AbortedTxCnt);
                                 /* Ignore aborted transactions for now */
                                 if (AbortedTxCnt > 0)
@@ -3926,7 +3944,7 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 	size_t of_PartitionArrayCnt = 0;
 	int PartitionArrayCnt = 0;
 	rd_kafka_itopic_t *rkt_last = NULL;
-
+        int16_t ApiVersion = 0;
 	/* Create buffer and segments:
 	 *   1 x ReplicaId MaxWaitTime MinBytes TopicArrayCnt
 	 *   N x topic name
@@ -3940,14 +3958,30 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
         if (unlikely(rkb->rkb_active_toppar_cnt == 0))
                 return 0;
 
-	rkbuf = rd_kafka_buf_new_request(
+        rkbuf = rd_kafka_buf_new_request(
                 rkb, RD_KAFKAP_Fetch, 1,
-                /* ReplicaId+MaxWaitTime+MinBytes+TopicCnt */
-                4+4+4+4+
-                /* N x PartCnt+Partition+FetchOffset+MaxBytes+?TopicNameLen?*/
-                (rkb->rkb_active_toppar_cnt * (4+4+8+4+40)));
+                /* ReplicaId+MaxWaitTime+MinBytes+MaxBytes+IsolationLevel+
+                 * SessionId+SessionEpoch+TopicCnt
+                 */
+                4+4+4+4+4+4+1+4+
+                /* N x PartCnt+Partition+CurrentLeaderEpoch+FetchOffset+
+                 * LogStartOffset+MaxBytes+?TopicNameLen?
+                 */
+                (rkb->rkb_active_toppar_cnt * (4+4+4+8+8+4+40))+
+                /* ForgottenTopicsCnt */
+                4+
+                /* N x ForgottenTopicsData */
+                0
+                );
 
-        if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER2)
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_Fetch, 0, 10, NULL);
+
+        /* if v10 fetch is supported, set it to fetch from topics with
+         * compression.type = zstd, otherwise default to use max v4 */
+        if (ApiVersion == 10)
+                rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        else if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER2)
                 rd_kafka_buf_ApiVersion_set(rkbuf, 4,
                                             RD_KAFKA_FEATURE_MSGVER2);
         else if (rkb->rkb_features & RD_KAFKA_FEATURE_MSGVER1)
@@ -3966,13 +4000,26 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 	/* MinBytes */
 	rd_kafka_buf_write_i32(rkbuf, rkb->rkb_rk->rk_conf.fetch_min_bytes);
 
-        if (rd_kafka_buf_ApiVersion(rkbuf) == 4) {
+        if (rd_kafka_buf_ApiVersion(rkbuf) >= 4) {
                 /* MaxBytes */
                 rd_kafka_buf_write_i32(rkbuf,
                                        rkb->rkb_rk->rk_conf.fetch_max_bytes);
                 /* IsolationLevel */
                 rd_kafka_buf_write_i8(rkbuf, RD_KAFKAP_READ_UNCOMMITTED);
+                if (rd_kafka_buf_ApiVersion(rkbuf) >= 10) {
+                        /* From https://cwiki.apache.org/confluence/display/KAFKA/KIP-227%3A+Introduce+Incremental+FetchRequests+to+Increase+Partition+Scalability
+                         * Request SessionId: 0
+                         * Request SessionEpoch: -1
+                         * Meaning: Make a full FetchRequest that does not use
+                         * or create a session. This is the session ID used by
+                         * pre-KIP-227 FetchRequests.
+                         */
+                        rd_kafka_buf_write_i32(rkbuf, 0);
+                        rd_kafka_buf_write_i32(rkbuf, -1);
+                }
         }
+
+
 
 	/* Write zero TopicArrayCnt but store pointer for later update */
 	of_TopicArrayCnt = rd_kafka_buf_write_i32(rkbuf, 0);
@@ -4012,9 +4059,29 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 		PartitionArrayCnt++;
 		/* Partition */
 		rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
-		/* FetchOffset */
+
+
+                if (rd_kafka_buf_ApiVersion(rkbuf) >= 10) {
+                        /* CurrentLeaderEpoch 
+                         * keeping empty epoch based on 
+                         * "If the epoch provided by the client is larger ..."
+                         */
+                        rd_kafka_buf_write_i32(rkbuf, -1);
+                }
+
+                /* FetchOffset */
 		rd_kafka_buf_write_i64(rkbuf, rktp->rktp_offsets.fetch_offset);
-		/* MaxBytes */
+
+
+                if (rd_kafka_buf_ApiVersion(rkbuf) >= 10) {
+                        /* LogStartOffset
+                         * Keeping empty based on:
+                         * "The field is only used when request is sent by follower."
+                         */
+                        rd_kafka_buf_write_i64(rkbuf, 0);
+                }
+
+                /* MaxBytes */
 		rd_kafka_buf_write_i32(rkbuf, rktp->rktp_fetch_msg_max_bytes);
 
 		rd_rkb_dbg(rkb, FETCH, "FETCH",
@@ -4034,6 +4101,11 @@ static int rd_kafka_broker_fetch_toppars (rd_kafka_broker_t *rkb, rd_ts_t now) {
 	} while ((rktp = CIRCLEQ_LOOP_NEXT(&rkb->rkb_active_toppars,
                                            rktp, rktp_activelink)) !=
                  rkb->rkb_active_toppar_next);
+
+        if (rd_kafka_buf_ApiVersion(rkbuf) >= 10) {
+                 /* forgotten topics array count*/
+                 rd_kafka_buf_write_i32(rkbuf, 0);
+        }
 
         /* Update next toppar to fetch in round-robin list. */
         rd_kafka_broker_active_toppar_next(

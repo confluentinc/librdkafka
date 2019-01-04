@@ -38,44 +38,116 @@
 */
 
 
+static void precreate_topic(rd_kafka_t *rk_p, const char *topic_name, const char* compression_type) {
+        rd_kafka_queue_t *q = rd_kafka_queue_new(rk_p);
+        rd_kafka_event_t *rkev;
+        const rd_kafka_CreateTopics_result_t *res;
+        const rd_kafka_topic_result_t **restopics;
+        size_t restopic_cnt;
+        rd_kafka_NewTopic_t *new_topic =
+                rd_kafka_NewTopic_new(topic_name,
+                        1,
+                        1,
+                        NULL, 0);
+        /* Set compression type */
+        rd_kafka_resp_err_t err = rd_kafka_NewTopic_set_config(
+                new_topic, "compression.type", compression_type);
+        TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+        /* Create topic */
+        TEST_SAY(_C_MAG "Call CreateTopics for %s\n" _C_CLR, topic_name);
+        rd_kafka_CreateTopics(rk_p, &new_topic, 1, NULL, q);
+
+        /* Wait for CreateTopics result */
+        do {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20 * 1000));
+                TEST_SAY("CreateTopics: got %s\n",
+                        rd_kafka_event_name(rkev));
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n",
+                                rd_kafka_event_name(rkev),
+                                rd_kafka_event_error_string(rkev));
+        } while (rd_kafka_event_type(rkev) !=
+                RD_KAFKA_EVENT_CREATETOPICS_RESULT);
+        /* Convert event to proper result */
+        res = rd_kafka_event_CreateTopics_result(rkev);
+        TEST_ASSERT(res, "expected CreateTopics_result, not %s",
+                rd_kafka_event_name(rkev));
+
+        /* Extract topics */
+        restopics = rd_kafka_CreateTopics_result_topics(res, &restopic_cnt);
+        TEST_ASSERT(restopic_cnt==1, "expected single topic from CreateTopics");
+        {
+                const rd_kafka_topic_result_t *terr = restopics[0];
+                TEST_SAY("CreateTopics result: %s: %s: %s\n",
+                        rd_kafka_topic_result_name(terr),
+                        rd_kafka_err2name(rd_kafka_topic_result_error(terr)),
+                        rd_kafka_topic_result_error_string(terr));
+                if (rd_kafka_topic_result_error(terr) != RD_KAFKA_RESP_ERR_NO_ERROR)
+                        TEST_FAIL(
+                                "Expected %s, not %d: %s",
+                                rd_kafka_err2name(RD_KAFKA_RESP_ERR_NO_ERROR),
+                                rd_kafka_topic_result_error(terr),
+                                rd_kafka_err2name(rd_kafka_topic_result_error(
+                                        terr)));
+        }
+        rd_kafka_event_destroy(rkev);
+        rd_kafka_NewTopic_destroy(new_topic);
+        rd_kafka_queue_destroy(q);
+}
+
+
 int main_0017_compression(int argc, char **argv) {
         rd_kafka_t *rk_p, *rk_c;
         const int msg_cnt = 1000;
         int msg_base = 0;
         uint64_t testid;
-#define CODEC_CNT 5
-        const char *codecs[CODEC_CNT+1] = {
-                "none",
+#define GET_ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+        typedef struct {
+                const char *codec;
+                rd_bool_t pre_create_topic;
+        } rd_codec_spec_t;
+        const rd_codec_spec_t codecs[] = {
+                { "none" },
 #if WITH_ZLIB
-                "gzip",
+                { "gzip" },
 #endif
 #if WITH_SNAPPY
-                "snappy",
+                { "snappy"},
 #endif
 #if WITH_ZSTD
-                "zstd",
+                { "zstd" },
+                { "zstd", 
+                  test_broker_version >= 
+                  TEST_BRKVER(2, 1, 0, 0) ? rd_true : rd_false },
 #endif
-                "lz4",
-                NULL
+                { "lz4" }
         };
-        char *topics[CODEC_CNT];
+
+        char *topics[GET_ARRAY_SIZE(codecs)];
         const int32_t partition = 0;
-        int i;
+        unsigned int i;
         int crc;
 
         testid = test_id_generate();
 
         /* Produce messages */
         rk_p = test_create_producer();
-        for (i = 0; codecs[i] != NULL ; i++) {
+        for (i = 0; i < GET_ARRAY_SIZE(codecs); i++) {
                 rd_kafka_topic_t *rkt_p;
+                topics[i] = rd_strdup(test_mk_topic_name(codecs[i].codec, 1));
 
-                topics[i] = rd_strdup(test_mk_topic_name(codecs[i], 1));
+                /* Check if topic should be pre-created with specific 
+                 * compression.type */
+                if (codecs[i].pre_create_topic == rd_true) {
+                        precreate_topic(rk_p, topics[i], codecs[i].codec);
+                }
+
                 TEST_SAY("Produce %d messages with %s compression to "
-                         "topic %s\n",
-                         msg_cnt, codecs[i], topics[i]);
+                        "topic %s\n",
+                        msg_cnt, codecs[i].codec, topics[i]);
                 rkt_p = test_create_producer_topic(rk_p, topics[i],
-                        "compression.codec", codecs[i], NULL);
+                        "compression.codec", codecs[i].codec, NULL);
 
                 /* Produce small message that will not decrease with
                  * compression (issue #781) */
@@ -106,7 +178,7 @@ int main_0017_compression(int argc, char **argv) {
 
                 rk_c = test_create_consumer(NULL, NULL, conf, NULL);
 
-                for (i = 0; codecs[i] != NULL ; i++) {
+                for (i = 0; i < GET_ARRAY_SIZE(codecs); i++) {
                         rd_kafka_topic_t *rkt_c = rd_kafka_topic_new(rk_c,
                                                                      topics[i],
                                                                      NULL);
@@ -114,12 +186,12 @@ int main_0017_compression(int argc, char **argv) {
                         TEST_SAY("Consume %d messages from topic %s (crc=%s)\n",
                                  msg_cnt, topics[i], crc_tof);
                         /* Start consuming */
-                        test_consumer_start(codecs[i], rkt_c, partition,
+                        test_consumer_start(codecs[i].codec, rkt_c, partition,
                                             RD_KAFKA_OFFSET_BEGINNING);
 
                         /* Consume messages */
                         test_consume_msgs(
-                                codecs[i], rkt_c, testid, partition,
+                                codecs[i].codec, rkt_c, testid, partition,
                                 /* Use offset 0 here, which is wrong, should
                                  * be TEST_NO_SEEK, but it exposed a bug
                                  * where the Offset query was postponed
@@ -128,7 +200,7 @@ int main_0017_compression(int argc, char **argv) {
                                 0,
                                 msg_base, msg_cnt, 1 /* parse format */);
 
-                        test_consumer_stop(codecs[i], rkt_c, partition);
+                        test_consumer_stop(codecs[i].codec, rkt_c, partition);
 
                         rd_kafka_topic_destroy(rkt_c);
                 }
@@ -136,7 +208,7 @@ int main_0017_compression(int argc, char **argv) {
                 rd_kafka_destroy(rk_c);
         }
 
-        for (i = 0 ; codecs[i] != NULL ; i++)
+        for (i = 0 ; i < GET_ARRAY_SIZE(codecs); i++)
                 rd_free(topics[i]);
 
 

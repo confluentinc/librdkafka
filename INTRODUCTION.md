@@ -1016,16 +1016,53 @@ Broker based offset management is available for broker version >= 0.9.0
 in conjunction with using the high-level KafkaConsumer interface (see
 rdkafka.h or rdkafkacpp.h)
 
-Offset management is also available through a local offset file store, where the
-offset is periodically written to a local file for each topic+partition
-according to the following topic configuration properties:
+Offset management is also available through a deprecated local offset file,
+where the offset is periodically written to a local file for each
+topic+partition according to the following topic configuration properties:
 
-  * `auto.commit.enable`
+  * `enable.auto.commit`
   * `auto.commit.interval.ms`
   * `offset.store.path`
   * `offset.store.sync.interval.ms`
 
-There is currently no support for offset management with ZooKeeper.
+The legacy `auto.commit.enable` topic configuration property is only to be used
+with the legacy low-level consumer.
+Use `enable.auto.commit` with the modern KafkaConsumer.
+
+There is no support for offset management with ZooKeeper.
+
+
+##### Auto offset commit
+
+The consumer will automatically commit offsets every `auto.commit.interval.ms`
+when `enable.auto.commit` is enabled (default).
+
+Offsets to be committed are kept in a local in-memory offset store,
+this offset store is updated by `consumer_poll()` (et.al) to
+store the offset of the last message passed to the application
+(per topic+partition).
+
+##### At-least-once processing
+Since auto commits are performed in a background thread this may result in
+the offset for the latest message being committed before the application has
+finished processing the message. If the application was to crash or exit
+prior to finishing processing, and the offset had been auto committed,
+the next incarnation of the consumer application would start at the next
+message, effectively missing the message that was processed when the
+application crashed.
+To avoid this scenario the application can disable the automatic
+offset **store** by setting `enable.auto.offset.store` to false
+and manually **storing** offsets after processing by calling
+`rd_kafka_offsets_store()`.
+This gives an application fine-grained control on when a message
+is eligible for committing without having to perform the commit itself.
+`enable.auto.commit` should be set to true when using manual offset storing.
+The latest stored offset will be automatically committed every
+`auto.commit.interval.ms`.
+
+**Note**: Only greater offsets are committed, e.g., if the latest committed
+          offset was 10 and the application performs an offsets_store()
+          with offset 9, that offset will not be committed.
 
 
 

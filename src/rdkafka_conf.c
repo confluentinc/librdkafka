@@ -2502,16 +2502,17 @@ void rd_kafka_conf_dump_free (const char **arr, size_t cnt) {
 }
 
 void rd_kafka_conf_properties_show (FILE *fp) {
-	const struct rd_kafka_property *prop;
+	const struct rd_kafka_property *prop0;
 	int last = 0;
 	int j;
 	char tmp[512];
 	const char *dash80 = "----------------------------------------"
 		"----------------------------------------";
 
-	for (prop = rd_kafka_properties; prop->name ; prop++) {
+	for (prop0 = rd_kafka_properties; prop0->name ; prop0++) {
 		const char *typeinfo = "";
                 const char *importance;
+                const struct rd_kafka_property *prop = prop0;
 
                 /* Skip hidden properties. */
                 if (prop->scope & _RK_HIDDEN)
@@ -2539,7 +2540,19 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 
 		}
 
-		fprintf(fp, "%-40s | %3s | ", prop->name,
+		fprintf(fp, "%-40s | ", prop->name);
+
+                /* For aliases, use the aliased property from here on
+                 * so that the alias property shows up with proper
+                 * ranges, defaults, etc. */
+                if (prop->type == _RK_C_ALIAS) {
+                        prop = rd_kafka_conf_prop_find(prop->scope,
+                                                       prop->sdef);
+                        rd_assert(prop && *"BUG: "
+                                  "alias points to unknown config property");
+                }
+
+                fprintf(fp, "%3s | ",
                         (!(prop->scope & _RK_PRODUCER) ==
                          !(prop->scope & _RK_CONSUMER) ? " * " :
                          ((prop->scope & _RK_PRODUCER) ? " P " :
@@ -2625,11 +2638,13 @@ void rd_kafka_conf_properties_show (FILE *fp) {
                 if (prop->scope & _RK_DEPRECATED)
                         fprintf(fp, "**DEPRECATED** ");
 
-                if (prop->type == _RK_C_ALIAS)
-                        fprintf(fp, "Alias for `%s`\n", prop->sdef);
-                else
-                        fprintf(fp, "%s <br>*Type: %s*\n", prop->desc,
-                                typeinfo);
+                /* If the original property is an alias, prefix the
+                 * description saying so. */
+                if (prop0->type == _RK_C_ALIAS)
+                        fprintf(fp, "Alias for `%s`: ", prop0->sdef);
+
+                fprintf(fp, "%s <br>*Type: %s*\n", prop->desc,
+                        typeinfo);
         }
         fprintf(fp, "\n");
         fprintf(fp, "### C/P legend: C = Consumer, P = Producer, * = both\n");

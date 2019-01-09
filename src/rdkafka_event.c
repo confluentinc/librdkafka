@@ -53,6 +53,8 @@ const char *rd_kafka_event_name (const rd_kafka_event_t *rkev) {
 		return "OffsetCommit";
 	case RD_KAFKA_EVENT_STATS:
 		return "Stats";
+        case RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH:
+                return "SaslOAuthBearerTokenRefresh";
         case RD_KAFKA_EVENT_CREATETOPICS_RESULT:
                 return "CreateTopicsResult";
         case RD_KAFKA_EVENT_DELETETOPICS_RESULT:

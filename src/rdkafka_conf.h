@@ -240,6 +240,9 @@ struct rd_kafka_conf_s {
                 /* Hash size */
                 size_t         scram_H_size;
 #endif
+#if WITH_SASL_OAUTHBEARER
+                char *oauthbearer_config;
+#endif
         } sasl;
 
 #if WITH_PLUGINS
@@ -405,6 +408,10 @@ struct rd_kafka_conf_s {
         void (*background_event_cb) (rd_kafka_t *rk, rd_kafka_event_t *rkev,
                                      void *opaque);
 
+
+        /* SASL/OAUTHBEARER token refresh event callback */
+        void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
+                              void *opaque);
 
 	/* Opaque passed to callbacks. */
 	void  *opaque;

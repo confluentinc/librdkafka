@@ -242,6 +242,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #if WITH_ZSTD
 		{ 0x400, "zstd" },
 #endif         
+#if WITH_SASL_OAUTHBEARER
+                { 0x800, "sasl_oauthbearer" },
+#endif
 		{ 0, NULL }
 		}
 	},
@@ -450,6 +453,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RK(log_cb),
 	  "Log callback (set with rd_kafka_conf_set_log_cb())",
           .pdef = rd_kafka_log_print },
+	{ _RK_GLOBAL, "oauthbearer_token_refresh_cb", _RK_C_PTR,
+	  _RK(oauthbearer_token_refresh_cb),
+	  "SASL/OAUTHBEARER token refresh callback (set with rd_kafka_conf_set_oauthbearer_token_refresh_cb())",
+          .pdef = rd_kafka_oauthbearer_unsecured_token },
         { _RK_GLOBAL, "log_level", _RK_C_INT,
           _RK(log_level),
           "Logging level (syslog(3) levels)",
@@ -649,7 +656,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{_RK_GLOBAL|_RK_HIGH, "sasl.mechanisms", _RK_C_STR,
 	 _RK(sasl.mechanisms),
 	 "SASL mechanism to use for authentication. "
-	 "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512. "
+	 "Supported: GSSAPI, PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER. "
 	 "**NOTE**: Despite the name only one mechanism must be configured.",
 	 .sdef = "GSSAPI",
 	 .validate = rd_kafka_conf_validate_single },
@@ -690,6 +697,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	{ _RK_GLOBAL|_RK_HIGH, "sasl.password", _RK_C_STR,
 	  _RK(sasl.password),
 	  "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism" },
+#if WITH_SASL_OAUTHBEARER
+	{ _RK_GLOBAL, "sasl.oauthbearer.config", _RK_C_STR,
+	  _RK(sasl.oauthbearer_config),
+	  "SASL/OAUTHBEARER configuration" },
+#endif
 
 #if WITH_PLUGINS
         /* Plugins */

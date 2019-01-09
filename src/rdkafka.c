@@ -270,7 +270,51 @@ void rd_kafka_log0 (const rd_kafka_conf_t *conf,
         rd_kafka_log_buf(conf, rk, level, fac, buf);
 }
 
+void rd_kafka_oauthbearer_token_refresh_success(rd_kafka_t *rk,
+                const char *token_value, int64_t md_lifetime_ms,
+                const char *md_principal_name, int64_t md_start_time_ms) {
+        rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
+        mtx_lock(&rk->rk_oauthbearer->successful_refresh_change_lock);
+        ++rk->rk_oauthbearer->successful_refresh_count;
+        if (rk->rk_oauthbearer->md_principal_name) {
+                rd_free(rk->rk_oauthbearer->md_principal_name);
+        }
+        rk->rk_oauthbearer->md_principal_name = rd_strdup(md_principal_name);
+        if (rk->rk_oauthbearer->token_value) {
+                rd_free(rk->rk_oauthbearer->token_value);
+        }
+        rk->rk_oauthbearer->token_value = rd_strdup(token_value);
+        rk->rk_oauthbearer->md_start_time_ms = md_start_time_ms;
+        rk->rk_oauthbearer->md_lifetime_ms = md_lifetime_ms;
+        rd_list_destroy(&rk->rk_oauthbearer->extensions);
+        // TODO: support extensions
+        rk->rk_oauthbearer->errstr[0] = '\0';
+        cnd_broadcast(&rk->rk_oauthbearer->successful_refresh_change_cnd);
+        mtx_unlock(&rk->rk_oauthbearer->successful_refresh_change_lock);
+        rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
+}
 
+void rd_kafka_oauthbearer_token_refresh_failure(rd_kafka_t *rk,
+                const char *errstr) {
+        rwlock_wrlock(&rk->rk_oauthbearer->refresh_lock);
+        ++rk->rk_oauthbearer->failed_refresh_count;
+        strncpy(rk->rk_oauthbearer->errstr, errstr,
+                sizeof(rk->rk_oauthbearer->errstr));
+        /* Leave any existing token because it may have some life left */
+        rwlock_wrunlock(&rk->rk_oauthbearer->refresh_lock);
+}
+
+void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk, void *opaque) {
+        // TODO: parse rk->rk_conf.sasl.oauthbearer_config
+        // just hard-code values for now
+        const char *principal_name = "admin";
+        const char *jws_compact_serialization =
+                "eyJhbGciOiJub25lIn0.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTU0NjYxNzczNywiZXhwIjoxNTQ2NjE3NzM3MH0.";
+        int64_t start_time_ms = 1546617737;
+        int64_t lifetime_ms = 10 * start_time_ms; // way in the future
+        rd_kafka_oauthbearer_token_refresh_success(rk, jws_compact_serialization,
+                lifetime_ms, principal_name, start_time_ms);
+}
 
 void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 	const char *fac, const char *buf) {
@@ -845,6 +889,23 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
         rd_kafkap_str_destroy(rk->rk_eos.transactional_id);
 	rd_kafka_anyconf_destroy(_RK_GLOBAL, &rk->rk_conf);
         rd_list_destroy(&rk->rk_broker_by_id);
+
+	if (rk->rk_oauthbearer) {
+                if (rk->rk_oauthbearer->md_principal_name) {
+                        rd_free(rk->rk_oauthbearer->md_principal_name);
+                        rk->rk_oauthbearer->md_principal_name = NULL;
+                }
+                if (rk->rk_oauthbearer->token_value) {
+                        rd_free(rk->rk_oauthbearer->token_value);
+                        rk->rk_oauthbearer->token_value = NULL;
+                }
+                rd_list_destroy(&rk->rk_oauthbearer->extensions);
+                cnd_destroy(&rk->rk_oauthbearer->successful_refresh_change_cnd);
+                mtx_destroy(&rk->rk_oauthbearer->successful_refresh_change_lock);
+                rwlock_destroy(&rk->rk_oauthbearer->refresh_lock);
+                rd_free(rk->rk_oauthbearer);
+                rk->rk_oauthbearer = NULL;
+        }
 
 	rd_kafkap_bytes_destroy((rd_kafkap_bytes_t *)rk->rk_null_bytes);
 	rwlock_destroy(&rk->rk_lock);
@@ -1812,6 +1873,16 @@ static void rd_kafka_term_sig_handler (int sig) {
 	/* nop */
 }
 
+/**
+ * @brief Op callback for RD_KAFKA_OP_OAUTHBEARER_REFRESH
+ */
+static rd_kafka_op_res_t
+rd_kafka_oauthbearer_refresh_op (rd_kafka_t *rk,
+                                rd_kafka_q_t *rkq,
+                                rd_kafka_op_t *rko) {
+        rk->rk_conf.oauthbearer_token_refresh_cb(rk, rk->rk_conf.opaque);
+        return RD_KAFKA_OP_RES_HANDLED;
+}
 
 rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 			  char *errstr, size_t errstr_size) {
@@ -1918,6 +1989,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OFFSET_COMMIT;
         if (rk->rk_conf.error_cb)
                 rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_ERROR;
+	if (rk->rk_conf.oauthbearer_token_refresh_cb)
+		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
 
         rk->rk_controllerid = -1;
 
@@ -1975,6 +2048,15 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                         ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
                         ret_errno = EINVAL;
                         goto fail;
+                }
+                /* Enqueue OAUTHBEARER REFRESH operation if necessary */
+                if (!strcmp(rk->rk_conf.sasl.mechanisms, "OAUTHBEARER")) {
+                        rd_kafka_op_t *rko;
+
+                        rko = rd_kafka_op_new_cb(rk, RD_KAFKA_OP_OAUTHBEARER_REFRESH,
+                                rd_kafka_oauthbearer_refresh_op);
+                        rd_kafka_op_set_prio(rko, RD_KAFKA_PRIO_FLASH);
+                        rd_kafka_q_enq(rk->rk_rep, rko);
                 }
         }
 

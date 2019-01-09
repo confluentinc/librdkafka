@@ -4268,160 +4268,189 @@ static int rd_kafka_broker_thread_main (void *arg) {
 	rd_kafka_broker_lock(rkb);
 	rd_kafka_broker_unlock(rkb);
 
-	rd_rkb_dbg(rkb, BROKER, "BRKMAIN", "Enter main broker thread");
-
-	while (!rd_kafka_broker_terminating(rkb)) {
-                int backoff;
-                int r;
-
-        redo:
-                switch (rkb->rkb_state)
-                {
-                case RD_KAFKA_BROKER_STATE_INIT:
-                        /* Check if there is demand for a connection
-                         * to this broker, if so jump to TRY_CONNECT state. */
-                        if (!rd_kafka_broker_needs_connection(rkb)) {
-                                rd_kafka_broker_serve(rkb,
-                                                      rd_kafka_max_block_ms);
-                                break;
+        int precondition_success = 1;
+        /*
+         * SASL/OAUTHBEARER is unable to connect unless a valid token is
+         * available, and a valid token CANNOT be available unless/until
+         * an initial token retrieval succeeds, so wait for this
+         * precondition if necessary.
+         */
+        if (rkb->rkb_source != RD_KAFKA_INTERNAL && rkb->rkb_rk->rk_oauthbearer) {
+                rwlock_rdlock(&rkb->rkb_rk->rk_oauthbearer->refresh_lock);
+                unsigned int successful_refresh_count =
+                        rkb->rkb_rk->rk_oauthbearer->successful_refresh_count;
+                rwlock_rdunlock(&rkb->rkb_rk->rk_oauthbearer->refresh_lock);
+                if (!successful_refresh_count) {
+                	rd_rkb_dbg(rkb, BROKER, "BRKMAIN", "Main broker thread waiting for initial token");
+                        mtx_lock(&rkb->rkb_rk->rk_oauthbearer->successful_refresh_change_lock);
+                        precondition_success = cnd_timedwait_ms(
+                                &rkb->rkb_rk->rk_oauthbearer->successful_refresh_change_cnd,
+                                &rkb->rkb_rk->rk_oauthbearer->successful_refresh_change_lock,
+                                5000) == thrd_success;
+                        mtx_unlock(&rkb->rkb_rk->rk_oauthbearer->successful_refresh_change_lock);
+                        if (!precondition_success) {
+                                rd_rkb_dbg(rkb, BROKER, "BRKMAIN",
+                                        "Main broker thread exiting due to timeout waiting for an initial token");
                         }
+                }
+        }
 
-                        /* The INIT state also exists so that an initial
-                         * connection failure triggers a state transition
-                         * which might trigger a ALL_BROKERS_DOWN error. */
-                        rd_kafka_broker_lock(rkb);
-                        rd_kafka_broker_set_state(
-                                rkb, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
-                        rd_kafka_broker_unlock(rkb);
-                        goto redo; /* effectively a fallthru to TRY_CONNECT */
+        if (precondition_success) {
+        	rd_rkb_dbg(rkb, BROKER, "BRKMAIN", "Enter main broker thread");
 
-                case RD_KAFKA_BROKER_STATE_DOWN:
-                        rd_kafka_broker_lock(rkb);
-                        if (rkb->rkb_rk->rk_conf.sparse_connections)
-                                rd_kafka_broker_set_state(
-                                        rkb, RD_KAFKA_BROKER_STATE_INIT);
-                        else
-                                rd_kafka_broker_set_state(
-                                        rkb, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
-                        rd_kafka_broker_unlock(rkb);
-                        goto redo; /* effectively a fallthru to TRY_CONNECT */
-
-                case RD_KAFKA_BROKER_STATE_TRY_CONNECT:
-                        if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
-                                rd_kafka_broker_lock(rkb);
-                                rd_kafka_broker_set_state(rkb,
-                                                          RD_KAFKA_BROKER_STATE_UP);
-                                rd_kafka_broker_unlock(rkb);
-                                break;
-                        }
-
-                        if (unlikely(rd_kafka_terminating(rkb->rkb_rk)))
-                                rd_kafka_broker_serve(rkb, 1000);
-
-                        /* Throttle & jitter reconnects to avoid
-                         * thundering horde of reconnecting clients after
-                         * a broker / network outage. Issue #403 */
-                        backoff = rd_kafka_broker_reconnect_backoff(rkb,
-                                                                    rd_clock());
-                        if (backoff > 0) {
-                                rd_rkb_dbg(rkb, BROKER, "RECONNECT",
-                                           "Delaying next reconnect by %dms",
-                                           backoff);
-                                rd_kafka_broker_serve(rkb, (int)backoff);
-                                continue;
-                        }
-
-			/* Initiate asynchronous connection attempt.
-			 * Only the host lookup is blocking here. */
-                        r = rd_kafka_broker_connect(rkb);
-                        if (r == -1) {
-				/* Immediate failure, most likely host
-				 * resolving failed.
-				 * Try the next resolve result until we've
-				 * tried them all, in which case we sleep a
-				 * short while to avoid busy looping. */
-				if (!rkb->rkb_rsal ||
-                                    rkb->rkb_rsal->rsal_cnt == 0 ||
-                                    rkb->rkb_rsal->rsal_curr + 1 ==
-                                    rkb->rkb_rsal->rsal_cnt)
-                                        rd_kafka_broker_serve(
-                                                rkb, rd_kafka_max_block_ms);
-			} else if (r == 0) {
-                                /* Broker has no hostname yet, wait
-                                 * for hostname to be set and connection
-                                 * triggered by received OP_CONNECT. */
-                                rd_kafka_broker_serve(rkb,
-                                                      rd_kafka_max_block_ms);
-                        } else {
-                                /* Connection in progress, state will
-                                 * have changed to STATE_CONNECT. */
-                        }
-
-			break;
-
-		case RD_KAFKA_BROKER_STATE_CONNECT:
-		case RD_KAFKA_BROKER_STATE_AUTH:
-		case RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE:
-		case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
-                        /* Asynchronous connect in progress. */
-                        rd_kafka_broker_serve(rkb, rd_kafka_max_block_ms);
-
-			if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN) {
-				/* Connect failure.
-				 * Try the next resolve result until we've
-				 * tried them all, in which case we sleep a
-				 * short while to avoid busy looping. */
-				if (!rkb->rkb_rsal ||
-                                    rkb->rkb_rsal->rsal_cnt == 0 ||
-                                    rkb->rkb_rsal->rsal_curr + 1 ==
-                                    rkb->rkb_rsal->rsal_cnt)
-                                        rd_kafka_broker_serve(
-                                                rkb, rd_kafka_max_block_ms);
-			}
-			break;
-
-                case RD_KAFKA_BROKER_STATE_UPDATE:
-                        /* FALLTHRU */
-		case RD_KAFKA_BROKER_STATE_UP:
-                        rd_kafka_broker_serve(rkb, rd_kafka_max_block_ms);
-
-			if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UPDATE) {
-                                rd_kafka_broker_lock(rkb);
-				rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
-                                rd_kafka_broker_unlock(rkb);
-			}
-			break;
-		}
-
-                if (rd_kafka_terminating(rkb->rkb_rk)) {
-                        /* Handle is terminating: fail the send+retry queue
-                         * to speed up termination, otherwise we'll
-                         * need to wait for request timeouts. */
+                while (!rd_kafka_broker_terminating(rkb)) {
+                        int backoff;
                         int r;
 
-                        r = rd_kafka_broker_bufq_timeout_scan(
-                                rkb, 0, &rkb->rkb_outbufs, NULL, -1,
-                                RD_KAFKA_RESP_ERR__DESTROY, 0, NULL, 0);
-                        r += rd_kafka_broker_bufq_timeout_scan(
-                                rkb, 0, &rkb->rkb_retrybufs, NULL, -1,
-                                RD_KAFKA_RESP_ERR__DESTROY, 0, NULL, 0);
-                        rd_rkb_dbg(rkb, BROKER, "TERMINATE",
-                                   "Handle is terminating in state %s: "
-                                   "%d refcnts (%p), %d toppar(s), "
-                                   "%d active toppar(s), "
-                                   "%d outbufs, %d waitresps, %d retrybufs: "
-                                   "failed %d request(s) in retry+outbuf",
-                                   rd_kafka_broker_state_names[rkb->rkb_state],
-                                   rd_refcnt_get(&rkb->rkb_refcnt),
-                                   &rkb->rkb_refcnt,
-                                   rkb->rkb_toppar_cnt,
-                                   rkb->rkb_active_toppar_cnt,
-                                   (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
-                                   (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
-                                   (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs),
-                                   r);
+                redo:
+                        switch (rkb->rkb_state)
+                        {
+                        case RD_KAFKA_BROKER_STATE_INIT:
+                                /* Check if there is demand for a connection
+                                * to this broker, if so jump to TRY_CONNECT state. */
+                                if (!rd_kafka_broker_needs_connection(rkb)) {
+                                        rd_kafka_broker_serve(rkb,
+                                                        rd_kafka_max_block_ms);
+                                        break;
+                                }
+
+                                /* The INIT state also exists so that an initial
+                                * connection failure triggers a state transition
+                                * which might trigger a ALL_BROKERS_DOWN error. */
+                                rd_kafka_broker_lock(rkb);
+                                rd_kafka_broker_set_state(
+                                        rkb, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
+                                rd_kafka_broker_unlock(rkb);
+                                goto redo; /* effectively a fallthru to TRY_CONNECT */
+
+                        case RD_KAFKA_BROKER_STATE_DOWN:
+                                rd_kafka_broker_lock(rkb);
+                                if (rkb->rkb_rk->rk_conf.sparse_connections)
+                                        rd_kafka_broker_set_state(
+                                                rkb, RD_KAFKA_BROKER_STATE_INIT);
+                                else
+                                        rd_kafka_broker_set_state(
+                                                rkb, RD_KAFKA_BROKER_STATE_TRY_CONNECT);
+                                rd_kafka_broker_unlock(rkb);
+                                goto redo; /* effectively a fallthru to TRY_CONNECT */
+
+                        case RD_KAFKA_BROKER_STATE_TRY_CONNECT:
+                                if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
+                                        rd_kafka_broker_lock(rkb);
+                                        rd_kafka_broker_set_state(rkb,
+                                                                RD_KAFKA_BROKER_STATE_UP);
+                                        rd_kafka_broker_unlock(rkb);
+                                        break;
+                                }
+
+                                if (unlikely(rd_kafka_terminating(rkb->rkb_rk)))
+                                        rd_kafka_broker_serve(rkb, 1000);
+
+                                /* Throttle & jitter reconnects to avoid
+                                * thundering horde of reconnecting clients after
+                                * a broker / network outage. Issue #403 */
+                                backoff = rd_kafka_broker_reconnect_backoff(rkb,
+                                                                        rd_clock());
+                                if (backoff > 0) {
+                                        rd_rkb_dbg(rkb, BROKER, "RECONNECT",
+                                                "Delaying next reconnect by %dms",
+                                                backoff);
+                                        rd_kafka_broker_serve(rkb, (int)backoff);
+                                        continue;
+                                }
+
+                                /* Initiate asynchronous connection attempt.
+                                * Only the host lookup is blocking here. */
+                                r = rd_kafka_broker_connect(rkb);
+                                if (r == -1) {
+                                        /* Immediate failure, most likely host
+                                        * resolving failed.
+                                        * Try the next resolve result until we've
+                                        * tried them all, in which case we sleep a
+                                        * short while to avoid busy looping. */
+                                        if (!rkb->rkb_rsal ||
+                                        rkb->rkb_rsal->rsal_cnt == 0 ||
+                                        rkb->rkb_rsal->rsal_curr + 1 ==
+                                        rkb->rkb_rsal->rsal_cnt)
+                                                rd_kafka_broker_serve(
+                                                        rkb, rd_kafka_max_block_ms);
+                                } else if (r == 0) {
+                                        /* Broker has no hostname yet, wait
+                                        * for hostname to be set and connection
+                                        * triggered by received OP_CONNECT. */
+                                        rd_kafka_broker_serve(rkb,
+                                                        rd_kafka_max_block_ms);
+                                } else {
+                                        /* Connection in progress, state will
+                                        * have changed to STATE_CONNECT. */
+                                }
+
+                                break;
+
+                        case RD_KAFKA_BROKER_STATE_CONNECT:
+                        case RD_KAFKA_BROKER_STATE_AUTH:
+                        case RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE:
+                        case RD_KAFKA_BROKER_STATE_APIVERSION_QUERY:
+                                /* Asynchronous connect in progress. */
+                                rd_kafka_broker_serve(rkb, rd_kafka_max_block_ms);
+
+                                if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_DOWN) {
+                                        /* Connect failure.
+                                        * Try the next resolve result until we've
+                                        * tried them all, in which case we sleep a
+                                        * short while to avoid busy looping. */
+                                        if (!rkb->rkb_rsal ||
+                                        rkb->rkb_rsal->rsal_cnt == 0 ||
+                                        rkb->rkb_rsal->rsal_curr + 1 ==
+                                        rkb->rkb_rsal->rsal_cnt)
+                                                rd_kafka_broker_serve(
+                                                        rkb, rd_kafka_max_block_ms);
+                                }
+                                break;
+
+                        case RD_KAFKA_BROKER_STATE_UPDATE:
+                                /* FALLTHRU */
+                        case RD_KAFKA_BROKER_STATE_UP:
+                                rd_kafka_broker_serve(rkb, rd_kafka_max_block_ms);
+
+                                if (rkb->rkb_state == RD_KAFKA_BROKER_STATE_UPDATE) {
+                                        rd_kafka_broker_lock(rkb);
+                                        rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);
+                                        rd_kafka_broker_unlock(rkb);
+                                }
+                                break;
+                        }
+
+                        if (rd_kafka_terminating(rkb->rkb_rk)) {
+                                /* Handle is terminating: fail the send+retry queue
+                                * to speed up termination, otherwise we'll
+                                * need to wait for request timeouts. */
+                                int r;
+
+                                r = rd_kafka_broker_bufq_timeout_scan(
+                                        rkb, 0, &rkb->rkb_outbufs, NULL, -1,
+                                        RD_KAFKA_RESP_ERR__DESTROY, 0, NULL, 0);
+                                r += rd_kafka_broker_bufq_timeout_scan(
+                                        rkb, 0, &rkb->rkb_retrybufs, NULL, -1,
+                                        RD_KAFKA_RESP_ERR__DESTROY, 0, NULL, 0);
+                                rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+                                        "Handle is terminating in state %s: "
+                                        "%d refcnts (%p), %d toppar(s), "
+                                        "%d active toppar(s), "
+                                        "%d outbufs, %d waitresps, %d retrybufs: "
+                                        "failed %d request(s) in retry+outbuf",
+                                        rd_kafka_broker_state_names[rkb->rkb_state],
+                                        rd_refcnt_get(&rkb->rkb_refcnt),
+                                        &rkb->rkb_refcnt,
+                                        rkb->rkb_toppar_cnt,
+                                        rkb->rkb_active_toppar_cnt,
+                                        (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
+                                        (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
+                                        (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs),
+                                        r);
+                        }
                 }
-	}
+        }
 
 	if (rkb->rkb_source != RD_KAFKA_INTERNAL) {
 		rd_kafka_wrlock(rkb->rkb_rk);

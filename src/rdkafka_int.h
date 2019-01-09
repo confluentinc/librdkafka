@@ -351,6 +351,51 @@ struct rd_kafka_s {
                 /**< Lock for sparse_connect_random */
                 mtx_t         sparse_connect_lock;
         } rk_suppress;
+
+        /**
+         * SASL/OAUTHBEARER token value, token metadata, and extensions
+         */
+        struct {
+                /**< The lock protecting the below information */
+                rwlock_t refresh_lock;
+
+                /**< Successful token refresh count, which
+                 * will be zero only when an initial successful retrieval
+                 * has not yet occurred.
+                 */
+                unsigned int successful_refresh_count;
+
+                /* Broadcasting of successful refresh count changes
+                 * to wake up functions waiting for an initial token. */
+                cnd_t successful_refresh_change_cnd;
+                mtx_t successful_refresh_change_lock;
+
+                /**< failed token refresh count */
+                unsigned int failed_refresh_count;
+
+                /**< The b64token value as defined in RFC 6750 Section 2.1
+                 *   https://tools.ietf.org/html/rfc6750#section-2.1
+                 */
+                char *token_value;
+                /**< When the token expires, in terms of the number of
+                 *   milliseconds since the epoch.
+                 */
+                int64_t md_lifetime_ms;
+                /**< The name of the principal to which this token applies. */
+                char *md_principal_name;
+                /**< When the token became valid, in terms of the number of
+                 *   milliseconds since the epoch, if known, otherwise 0.
+                 */
+                int64_t md_start_time_ms;
+                /**< The SASL extensions, as per RFC 7628 Section 3.1
+                 *   https://tools.ietf.org/html/rfc6749#section-1.4
+                 */
+                rd_list_t extensions; /* rd_strtup_t list */
+                /**< Error message for validation and/or token retrieval problems.
+                 * Be sure to use snprintf(..errstr, sizeof(..errstr), ..)
+                 */
+                char errstr[512];
+        } *rk_oauthbearer;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)

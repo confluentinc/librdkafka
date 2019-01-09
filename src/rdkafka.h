@@ -1748,7 +1748,73 @@ void rd_kafka_conf_set_stats_cb(rd_kafka_conf_t *conf,
 						  size_t json_len,
 						  void *opaque));
 
+/**
+ * @brief Set SASL/OAUTHBEARER token refresh callback in provided conf object.
+ *
+ * The SASL/OAUTHBEARER token refresh callback is triggered via rd_kafka_poll()
+ * whenever OAUTHBEARER is the SASL mechanism and a token needs to be retrieved,
+ * typically based on the configuration defined in \c sasl.oauthbearer.config.
+ * Function arguments:
+ *   - \p rk - Kafka handle
+ *   - \p opaque - Application-provided opaque.
+ * 
+ * The callback must invoke \c rd_kafka_oauthbearer_token_refresh_success()
+ * or \c rd_kafka_oauthbearer_token_refresh_failure() to indicate success
+ * or failure, respectively.
+ * 
+ * The refresh operation is eventable and may be received via
+ * rd_kafka_queue_poll() with an event type of
+ * RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH.
+ * 
+ * Note that the application must call either rd_kafka_poll() or
+ * rd_kafka_queue_poll() once before any broker connection is attempted
+ * in order to retrieve an initial token.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_oauthbearer_token_refresh_cb(rd_kafka_conf_t *conf,
+                void (*oauthbearer_token_refresh_cb) (rd_kafka_t *rk,
+                void *opaque));
 
+/**
+ * @brief SASL/OAUTHBEARER token refresh success indicator.
+ *
+ * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
+ * this method uopn success. The caller remains responsible for the token_value
+ * and md_principal_name memory as the contents are copied.  The md_start_time_ms
+ * value should be 0 if it is not known; all other arguments are mandatory.
+ * 
+ * NOTE: does not support SASL extensions as I wasn't sure how to accept
+ * a list of name-value pairs because rd_list_t and/or rd_strtup_t are not
+ * available here. Maybe they should not be imported since they would become
+ * part of the public API. Maybe two 'char **' arguments (extension_names,
+ * extension_values) is an option.  Thoughts?
+ */
+RD_EXPORT
+void rd_kafka_oauthbearer_token_refresh_success(rd_kafka_t *rk,
+                const char *token_value, int64_t md_lifetime_ms,
+                const char *md_principal_name, int64_t md_start_time_ms);
+
+/**
+ * @brief SASL/OAUTHBEARER token refresh failure indicator.
+ *
+ * The SASL/OAUTHBEARER token refresh callback or event handler must invoke
+ * this method uopn failure. The caller remains responsible for the errstr
+ * memory as the contents are copied.
+ */
+RD_EXPORT
+void rd_kafka_oauthbearer_token_refresh_failure(rd_kafka_t *rk,
+                const char *errstr);
+
+/**
+ * @brief Default SASL/OAUTHBEARER token refresh callback that generates
+ * unsecured JWTs as per https://tools.ietf.org/html/rfc7515#appendix-A.5.
+ *
+ * This method interprets \c sasl.oauthbearer.config as follows:
+ * TODO...
+ */
+RD_EXPORT
+void rd_kafka_oauthbearer_unsecured_token(rd_kafka_t *rk,
+                void *opaque);
 
 /**
  * @brief Set socket callback.
@@ -2393,6 +2459,7 @@ void *rd_kafka_topic_opaque (const rd_kafka_topic_t *rkt);
  *   - error callbacks (rd_kafka_conf_set_error_cb()) [all]
  *   - stats callbacks (rd_kafka_conf_set_stats_cb()) [all]
  *   - throttle callbacks (rd_kafka_conf_set_throttle_cb()) [all]
+ *   - OAUTHBEARER token refresh callbacks (rd_kafka_conf_set_oauthbearer_token_refresh_cb()) [all]
  *
  * @returns the number of events served.
  */
@@ -3922,12 +3989,12 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_REBALANCE     0x10 /**< Group rebalance (consumer) */
 #define RD_KAFKA_EVENT_OFFSET_COMMIT 0x20 /**< Offset commit result */
 #define RD_KAFKA_EVENT_STATS         0x40 /**< Stats */
+#define RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH 0x80 /**< SASL/OAUTHBEARER token needs to be refreshed */
 #define RD_KAFKA_EVENT_CREATETOPICS_RESULT 100 /**< CreateTopics_result_t */
 #define RD_KAFKA_EVENT_DELETETOPICS_RESULT 101 /**< DeleteTopics_result_t */
 #define RD_KAFKA_EVENT_CREATEPARTITIONS_RESULT 102 /**< CreatePartitions_result_t */
 #define RD_KAFKA_EVENT_ALTERCONFIGS_RESULT 103 /**< AlterConfigs_result_t */
 #define RD_KAFKA_EVENT_DESCRIBECONFIGS_RESULT 104 /**< DescribeConfigs_result_t */
-
 
 /**
  * @returns the event type for the given event.

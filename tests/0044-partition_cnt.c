@@ -69,14 +69,14 @@ static void test_producer_partition_cnt_change (void) {
                                        NULL);
 
 	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt/2,
-				 NULL, 100, &produced);
+				 NULL, 100, 0, &produced);
 
 	test_kafka_topics("--alter --topic %s --partitions %d",
 			  topic, partition_cnt);
 
 	test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA,
 				 msgcnt/2, msgcnt/2,
-				 NULL, 100, &produced);
+				 NULL, 100, 0, &produced);
 
 	test_wait_delivery(rk, &produced);
 

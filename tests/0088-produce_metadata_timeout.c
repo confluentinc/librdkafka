@@ -119,7 +119,7 @@ int main_0088_produce_metadata_timeout (int argc, char **argv) {
 
         /* Produce first set of messages and wait for delivery */
         test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
-                                 msgcnt, 20, NULL, 0, &msgcnt);
+                                 msgcnt, 20, NULL, 0, 0, &msgcnt);
         while (msg_dr_cnt < 5)
                 rd_kafka_poll(rk, 1000);
 
@@ -135,7 +135,7 @@ int main_0088_produce_metadata_timeout (int argc, char **argv) {
 
         /* These messages will be put on the UA queue */
         test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
-                                 msgcnt, 20, NULL, 0, &msgcnt);
+                                 msgcnt, 20, NULL, 0, 0, &msgcnt);
 
         /* Restore the connection(s) when metadata has timed out. */
         TEST_SAY(_C_YEL "Allowing connections\n");
@@ -143,7 +143,7 @@ int main_0088_produce_metadata_timeout (int argc, char **argv) {
 
         rd_sleep(3);
         test_produce_msgs_nowait(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
-                                 msgcnt, 20, NULL, 0, &msgcnt);
+                                 msgcnt, 20, NULL, 0, 0, &msgcnt);
 
         test_flush(rk, 2*5*1000); /* linger.ms * 2 */
 

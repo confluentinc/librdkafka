@@ -915,7 +915,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "will raise a fatal error (ERR__GAPLESS_GUARANTEE) and stop "
           "the producer. "
           "Requires `enable.idempotence=true`.",
-          0, 1, 1 },
+          0, 1, 0 },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "queue.buffering.max.messages",
           _RK_C_INT,
 	  _RK(queue_buffering_max_msgs),

@@ -2023,7 +2023,8 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                         perr->update_next_ack = rd_false;
                         perr->update_next_err = rd_true;
 
-                        rd_kafka_idemp_drain_epoch_bump(rk);
+                        rd_kafka_idemp_drain_epoch_bump(
+                                rk, "skipped sequence numbers");
 
                 } else {
                         /* Request's sequence is less than next ack,
@@ -2126,7 +2127,8 @@ rd_kafka_handle_idempotent_Produce_error (rd_kafka_broker_t *rkb,
                                    firstmsg->rkm_u.producer.retries);
 
                         /* Drain outstanding requests and bump epoch. */
-                        rd_kafka_idemp_drain_epoch_bump(rk);
+                        rd_kafka_idemp_drain_epoch_bump(rk,
+                                                        "unknown producer id");
 
                         perr->incr_retry = 0;
                         perr->actions = RD_KAFKA_ERR_ACTION_RETRY;
@@ -2317,7 +2319,7 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
          * Handle actions
          */
         if (perr->actions & (RD_KAFKA_ERR_ACTION_REFRESH |
-                            RD_KAFKA_ERR_ACTION_RETRY)) {
+                             RD_KAFKA_ERR_ACTION_RETRY)) {
                 /* Retry */
 
                 if (perr->actions & RD_KAFKA_ERR_ACTION_REFRESH) {
@@ -2378,7 +2380,8 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                          * are attempted with proper state knowledge and
                          * without any in-flight requests. */
                         rd_kafka_toppar_lock(rktp);
-                        rd_kafka_idemp_drain_toppar(rktp);
+                        rd_kafka_idemp_drain_toppar(rktp,
+                                                    "drain before retrying");
                         rd_kafka_toppar_unlock(rktp);
                 }
 
@@ -2432,7 +2435,8 @@ static int rd_kafka_handle_Produce_error (rd_kafka_broker_t *rkb,
                          * renumber the messages to send. */
 
                         /* Drain outstanding requests and bump the epoch .*/
-                        rd_kafka_idemp_drain_epoch_bump(rk);
+                        rd_kafka_idemp_drain_epoch_bump(
+                                rk, "message sequence gap");
                 }
 
                 perr->update_next_ack = rd_false;

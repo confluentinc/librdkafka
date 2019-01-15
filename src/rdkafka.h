@@ -456,7 +456,7 @@ typedef enum {
 	RD_KAFKA_RESP_ERR_INVALID_REQUEST = 42,
 	/** Message format on broker does not support request */
 	RD_KAFKA_RESP_ERR_UNSUPPORTED_FOR_MESSAGE_FORMAT = 43,
-        /** Isolation policy volation */
+        /** Policy violation */
         RD_KAFKA_RESP_ERR_POLICY_VIOLATION = 44,
         /** Broker received an out of order sequence number */
         RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER = 45,

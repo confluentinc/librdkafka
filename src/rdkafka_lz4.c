@@ -40,7 +40,7 @@
 /**
  * Fix-up bad LZ4 framing caused by buggy Kafka client / broker.
  * The LZ4F framing format is described in detail here:
- * https://github.com/Cyan4973/lz4/blob/master/lz4_Frame_format.md
+ * https://github.com/lz4/lz4/blob/master/doc/lz4_Frame_format.md
  *
  * NOTE: This modifies 'inbuf'.
  *
@@ -210,13 +210,15 @@ rd_kafka_lz4_decompress (rd_kafka_broker_t *rkb, int proper_hc, int64_t Offset,
         }
 
         /* If uncompressed size is unknown or out of bounds, use a sane
-         * default (2x compression) and reallocate if needed
-         * More info on max size: http://stackoverflow.com/a/25751871/1821055 */
+         * default (4x compression) and reallocate if needed
+         * More info on max size: http://stackoverflow.com/a/25751871/1821055 
+         * More info on lz4 compression ratios seen for different data sets:
+         * http://dev.ti.com/tirex/content/simplelink_msp432p4_sdk_1_50_00_12/docs/lz4/users_guide/docguide.llQpgm/benchmarking.html
+         */
         if (fi.contentSize == 0 || fi.contentSize > inlen * 255) {
                 estimated_uncompressed_size = RD_MIN(
-                        inlen * 255,
-                        RD_MAX(inlen * 2,
-                               (size_t)(rkb->rkb_rk->rk_conf.max_msg_size)));
+                        inlen * 4,
+                        (size_t)(rkb->rkb_rk->rk_conf.max_msg_size));
         } else {
                 estimated_uncompressed_size = (size_t)fi.contentSize;
         }

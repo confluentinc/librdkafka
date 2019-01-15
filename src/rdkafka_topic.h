@@ -155,7 +155,7 @@ void rd_kafka_topic_metadata_none (rd_kafka_itopic_t *rkt);
 int rd_kafka_topic_metadata_update2 (rd_kafka_broker_t *rkb,
                                      const struct rd_kafka_metadata_topic *mdt);
 
-int rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
+void rd_kafka_topic_scan_all (rd_kafka_t *rk, rd_ts_t now);
 
 
 typedef struct rd_kafka_topic_info_s {

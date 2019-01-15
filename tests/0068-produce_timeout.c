@@ -113,7 +113,7 @@ int main_0068_produce_timeout (int argc, char **argv) {
 
         TEST_SAY("Producing %d messages that should timeout\n", msgcnt);
         test_produce_msgs_nowait(rk, rkt, testid, 0, 0, msgcnt,
-                                 NULL, 0, &msgcounter);
+                                 NULL, 0, 0, &msgcounter);
 
 
         TEST_SAY("Flushing..\n");

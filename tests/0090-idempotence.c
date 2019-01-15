@@ -56,11 +56,23 @@ static rd_kafka_resp_err_t handle_ProduceResponse (rd_kafka_t *rk,
                                                    uint64_t msgseq,
                                                    rd_kafka_resp_err_t err) {
         rd_kafka_resp_err_t new_err = err;
-        int n = rd_atomic32_add(&state.produce_cnt, 1);
+        int n;
+
+        if (err == RD_KAFKA_RESP_ERR__RETRY)
+                return err; /* Skip internal retries, such as triggered by
+                             * rd_kafka_broker_bufq_purge_by_toppar() */
+
+        n = rd_atomic32_add(&state.produce_cnt, 1);
 
         /* Let the first N ProduceRequests fail with request timeout.
          * Do allow the first request through. */
         if (n > 1 && n <= state.initial_fail_batch_cnt) {
+                if (err)
+                        TEST_WARN("First %d ProduceRequests should not "
+                                  "have failed, this is #%d with error %s for "
+                                  "brokerid %"PRId32" and msgseq %"PRIu64"\n",
+                                  state.initial_fail_batch_cnt, n,
+                                  rd_kafka_err2name(err), brokerid, msgseq);
                 assert(!err &&
                        *"First N ProduceRequests should not have failed");
                 new_err = RD_KAFKA_RESP_ERR__TIMED_OUT;

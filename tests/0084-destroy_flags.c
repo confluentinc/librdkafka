@@ -98,7 +98,7 @@ static void do_test_destroy_flags (const char *topic,
                         rkt = test_create_producer_topic(rk, topic, NULL);
                         test_produce_msgs_nowait(rk, rkt, 0,
                                                  RD_KAFKA_PARTITION_UA,
-                                                 0, 10000, NULL, 100,
+                                                 0, 10000, NULL, 100, 0,
                                                  &msgcounter);
                         rd_kafka_topic_destroy(rkt);
                 }

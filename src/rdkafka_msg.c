@@ -33,6 +33,7 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_interceptor.h"
 #include "rdkafka_header.h"
+#include "rdkafka_idempotence.h"
 #include "rdcrc32.h"
 #include "rdmurmur2.h"
 #include "rdrand.h"
@@ -588,28 +589,36 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 }
 
 /**
- * Scan 'rkmq' for messages that have timed out and remove them from
- * 'rkmq' and add to 'timedout'.
+ * @brief Scan \p rkmq for messages that have timed out and remove them from
+ *        \p rkmq and add to \p timedout queue.
  *
- * Returns the number of messages timed out.
+ * @returns the number of messages timed out.
+ *
+ * @locality any
+ * @locks toppar_lock MUST be held
  */
-int rd_kafka_msgq_age_scan (rd_kafka_msgq_t *rkmq,
-			    rd_kafka_msgq_t *timedout,
-			    rd_ts_t now) {
-	rd_kafka_msg_t *rkm, *tmp;
-	int cnt = timedout->rkmq_msg_cnt;
+int rd_kafka_msgq_age_scan (rd_kafka_toppar_t *rktp,
+                            rd_kafka_msgq_t *rkmq,
+                            rd_kafka_msgq_t *timedout,
+                            rd_ts_t now) {
+        rd_kafka_msg_t *rkm, *tmp, *first = NULL;
+        int cnt = timedout->rkmq_msg_cnt;
 
-	/* Assume messages are added in time sequencial order */
-	TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp) {
-                /* FIXME: this is no longer true */
-		if (likely(rkm->rkm_ts_timeout > now))
-			break;
+        /* Assume messages are added in time sequencial order */
+        TAILQ_FOREACH_SAFE(rkm, &rkmq->rkmq_msgs, rkm_link, tmp) {
+                /* NOTE: this is not true for the deprecated (and soon removed)
+                 *       LIFO queuing strategy. */
+                if (likely(rkm->rkm_ts_timeout > now))
+                        break;
 
-		rd_kafka_msgq_deq(rkmq, rkm, 1);
-		rd_kafka_msgq_enq(timedout, rkm);
-	}
+                if (!first)
+                        first = rkm;
 
-	return timedout->rkmq_msg_cnt - cnt;
+                rd_kafka_msgq_deq(rkmq, rkm, 1);
+                rd_kafka_msgq_enq(timedout, rkm);
+        }
+
+        return timedout->rkmq_msg_cnt - cnt;
 }
 
 
@@ -1196,7 +1205,8 @@ void rd_kafka_msgq_dump (FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {
  * @brief Verify order (by msgid) in message queue.
  *        For development use only.
  */
-void rd_kafka_msgq_verify_order0 (const rd_kafka_toppar_t *rktp,
+void rd_kafka_msgq_verify_order0 (const char *function, int line,
+                                  const rd_kafka_toppar_t *rktp,
                                   const rd_kafka_msgq_t *rkmq,
                                   uint64_t exp_first_msgid,
                                   rd_bool_t gapless) {
@@ -1219,19 +1229,28 @@ void rd_kafka_msgq_verify_order0 (const rd_kafka_toppar_t *rktp,
         }
 
         TAILQ_FOREACH(rkm, &rkmq->rkmq_msgs, rkm_link) {
+#if 0
+                printf("%s:%d: %s [%"PRId32"]: rkm #%d (%p) "
+                       "msgid %"PRIu64"\n",
+                       function, line,
+                       topic, partition,
+                       cnt, rkm, rkm->rkm_u.producer.msgid);
+#endif
                 if (gapless &&
                     rkm->rkm_u.producer.msgid != exp) {
-                        printf("%s [%"PRId32"]: rkm #%d (%p) "
+                        printf("%s:%d: %s [%"PRId32"]: rkm #%d (%p) "
                                "msgid %"PRIu64": "
                                "expected msgid %"PRIu64"\n",
+                               function, line,
                                topic, partition,
                                cnt, rkm, rkm->rkm_u.producer.msgid,
                                exp);
                         errcnt++;
                 } else if (!gapless && rkm->rkm_u.producer.msgid < exp) {
-                        printf("%s [%"PRId32"]: rkm #%d (%p) "
+                        printf("%s:%d: %s [%"PRId32"]: rkm #%d (%p) "
                                "msgid %"PRIu64": "
                                "expected increased msgid >= %"PRIu64"\n",
+                               function, line,
                                topic, partition,
                                cnt, rkm, rkm->rkm_u.producer.msgid,
                                exp);

@@ -65,8 +65,9 @@ void rd_kafka_idemp_pid_update (rd_kafka_broker_t *rkb,
 int rd_kafka_idemp_request_pid (rd_kafka_t *rk, rd_kafka_broker_t *rkb,
                                 const char *reason);
 void rd_kafka_idemp_drain_reset (rd_kafka_t *rk);
-void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk);
-void rd_kafka_idemp_drain_toppar (rd_kafka_toppar_t *rktp);
+void rd_kafka_idemp_drain_epoch_bump (rd_kafka_t *rk, const char *fmt, ...);
+void rd_kafka_idemp_drain_toppar (rd_kafka_toppar_t *rktp, const char *reason);
+void rd_kafka_idemp_check_drain_done (rd_kafka_t *rk);
 void rd_kafka_idemp_inflight_toppar_sub (rd_kafka_t *rk,
                                          rd_kafka_toppar_t *rktp);
 void rd_kafka_idemp_inflight_toppar_add (rd_kafka_t *rk,

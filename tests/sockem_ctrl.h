@@ -29,21 +29,26 @@
 #ifndef _SOCKEM_CTRL_H_
 #define _SOCKEM_CTRL_H_
 
+#include <sys/queue.h>
+
+struct sockem_cmd {
+        TAILQ_ENTRY(sockem_cmd) link;
+        int64_t   ts_at; /**< to ctrl thread: at this time, set delay*/
+        int       delay;
+};
+
+
 typedef struct sockem_ctrl_s {
         mtx_t     lock;
         cnd_t     cnd;
         thrd_t    thrd;
-        struct {
-                int64_t   ts_at; /**< to ctrl thread: at this time, set delay*/
-                int       delay;
-                int       ack;   /**< from ctrl thread: new delay acked */
-        } cmd;
-        struct {
-                int64_t   ts_at; /**< to ctrl thread: at this time, set delay*/
-                int       delay;
 
-        } next;
-        int       term;          /**< terminate */
+        int       cmd_seq;      /**< Command sequence id */
+        int       cmd_ack;      /**< Last acked (seen) command sequence id */
+
+        TAILQ_HEAD(, sockem_cmd) cmds; /**< Queue of commands. */
+
+        int       term;          /**< Terminate */
 
         struct test *test;
 } sockem_ctrl_t;

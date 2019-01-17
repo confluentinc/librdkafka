@@ -245,8 +245,6 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 		     int timeout);
 
 
-void test_wait_exit (int timeout);
-
 
 
 

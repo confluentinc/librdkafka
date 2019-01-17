@@ -1566,7 +1566,7 @@ static void rd_kafka_stats_emit_all (rd_kafka_t *rk) {
                            rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                            rkcg->rkcg_ts_statechange ?
                            (now - rkcg->rkcg_ts_statechange) / 1000 : 0,
-                           rd_kafka_cgrp_join_state_names[rkcg->rkcg_state],
+                           rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state],
                            rkcg->rkcg_c.ts_rebalance ?
                            (rd_clock() - rkcg->rkcg_c.ts_rebalance)/1000 : 0,
                            rkcg->rkcg_c.rebalance_cnt,

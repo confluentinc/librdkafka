@@ -487,20 +487,17 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                    (msgflags & RD_KAFKA_MSG_F_PARTITION));
         rd_kafka_resp_err_t all_err;
         rd_kafka_itopic_t *rkt = rd_kafka_topic_a2i(app_rkt);
-        rd_kafka_toppar_t *rktp = NULL;
         shptr_rd_kafka_toppar_t *s_rktp = NULL;
 
         /* Propagated per-message below */
         all_err = rd_kafka_fatal_error_code(rkt->rkt_rk);
 
-        /* For multiple partitions; hold lock for entire run,
-         * for one partition: only acquire for now. */
         rd_kafka_topic_rdlock(rkt);
         if (!multiple_partitions) {
+                /* Single partition: look up the rktp once. */
                 s_rktp = rd_kafka_toppar_get_avail(rkt, partition,
                                                    1/*ua on miss*/, &all_err);
-                rktp = rd_kafka_toppar_s2i(s_rktp);
-                rd_kafka_topic_rdunlock(rkt);
+
         } else {
                 /* Indicate to lower-level msg_new..() that rkt is locked
                  * so that they may unlock it momentarily if blocking. */
@@ -551,14 +548,20 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
                                     rkm->rkm_partition !=
                                     rd_kafka_toppar_s2i(s_rktp)->
                                     rktp_partition) {
+                                        rd_kafka_resp_err_t err;
                                         if (s_rktp != NULL)
                                                 rd_kafka_toppar_destroy(s_rktp);
                                         s_rktp = rd_kafka_toppar_get_avail(
                                                 rkt, rkm->rkm_partition,
-                                                1/*ua on miss*/, &all_err);
+                                                1/*ua on miss*/, &err);
+
+                                        if (unlikely(!s_rktp)) {
+                                                rkmessages[i].err = err;
+                                                continue;
+                                        }
                                 }
-                                rktp = rd_kafka_toppar_s2i(s_rktp);
-                                rd_kafka_toppar_enq_msg(rktp, rkm);
+                                rd_kafka_toppar_enq_msg(
+                                        rd_kafka_toppar_s2i(s_rktp), rkm);
                         }
 
                         if (unlikely(rkmessages[i].err)) {
@@ -573,15 +576,15 @@ int rd_kafka_produce_batch (rd_kafka_topic_t *app_rkt, int32_t partition,
 
                 } else {
                         /* Single destination partition. */
-                        rd_kafka_toppar_enq_msg(rktp, rkm);
+                        rd_kafka_toppar_enq_msg(rd_kafka_toppar_s2i(s_rktp),
+                                                rkm);
                 }
 
                 rkmessages[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
                 good++;
         }
 
-        if (multiple_partitions)
-                rd_kafka_topic_rdunlock(rkt);
+        rd_kafka_topic_rdunlock(rkt);
         if (s_rktp != NULL)
                 rd_kafka_toppar_destroy(s_rktp);
 

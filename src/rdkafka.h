@@ -3280,7 +3280,7 @@ rd_kafka_position (rd_kafka_t *rk,
 				  *            the produce() call when the
 				  *            message queue is full. */
 #define RD_KAFKA_MSG_F_PARTITION 0x8 /**< produce_batch() will honor
-                                     * per-message partition. */
+                                      * per-message partition. */
 
 
 
@@ -3416,6 +3416,10 @@ rd_kafka_resp_err_t rd_kafka_producev (rd_kafka_t *rk, ...);
  *  - err            Will be set according to success or failure.
  *                   Application only needs to check for errors if
  *                   return value != \p message_cnt.
+ *
+ * @remark If \c RD_KAFKA_MSG_F_PARTITION is set in \p msgflags, the
+ *         \c .partition field of the \p rkmessages is used instead of
+ *         \p partition.
  *
  * @returns the number of messages succesfully enqueued for producing.
  *

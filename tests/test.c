@@ -758,34 +758,6 @@ void test_conf_init (rd_kafka_conf_t **conf, rd_kafka_topic_conf_t **topic_conf,
 }
 
 
-/**
- * Wait 'timeout' seconds for rdkafka to kill all its threads and clean up.
- */
-void test_wait_exit (int timeout) {
-	int r;
-        time_t start = time(NULL);
-
-	while ((r = rd_kafka_thread_cnt()) && timeout-- >= 0) {
-		TEST_SAY("%i thread(s) in use by librdkafka, waiting...\n", r);
-		rd_sleep(1);
-	}
-
-	TEST_SAY("%i thread(s) in use by librdkafka\n", r);
-
-        if (r > 0)
-                TEST_FAIL("%i thread(s) still active in librdkafka", r);
-
-        timeout -= (int)(time(NULL) - start);
-        if (timeout > 0) {
-		TEST_SAY("Waiting %d seconds for all librdkafka memory "
-			 "to be released\n", timeout);
-                if (rd_kafka_wait_destroyed(timeout * 1000) == -1)
-                        TEST_FAIL("Not all internal librdkafka "
-                                  "objects destroyed\n");
-	}
-}
-
-
 static RD_INLINE unsigned int test_rand(void) {
 	unsigned int r;
 #if _MSC_VER
@@ -999,6 +971,43 @@ static int run_test_from_thread (void *arg) {
 }
 
 
+/**
+ * @brief Check running tests for timeouts.
+ * @locks TEST_LOCK MUST be held
+ */
+static void check_test_timeouts (void) {
+        int64_t now = test_clock();
+        struct test *test;
+
+        for (test = tests ; test->name ; test++) {
+                if (test->state != TEST_RUNNING)
+                        continue;
+
+                /* Timeout check */
+                if (now > test->timeout) {
+                        struct test *save_test = test_curr;
+                        test_curr = test;
+                        test->state = TEST_FAILED;
+                        test_summary(0/*no-locks*/);
+                        TEST_FAIL0(__FILE__,__LINE__,0/*nolock*/,
+                                   0/*fail-later*/,
+                                   "Test %s timed out "
+                                   "(timeout set to %d seconds)\n",
+                                   test->name,
+                                   (int)(test->timeout-
+                                         test->start)/
+                                   1000000);
+                        test_curr = save_test;
+                        tests_running_cnt--; /* fail-later misses this*/
+#ifdef _MSC_VER
+                        TerminateThread(test->thrd, -1);
+#else
+                        pthread_kill(test->thrd, SIGKILL);
+#endif
+                }
+        }
+}
+
 
 static int run_test (struct test *test, int argc, char **argv) {
         struct run_args *run_args = calloc(1, sizeof(*run_args));
@@ -1016,6 +1025,8 @@ static int run_test (struct test *test, int argc, char **argv) {
                                  tests_running_cnt, test_concurrent_max,
                                  test->name);
                 cnd_timedwait_ms(&test_cnd, &test_mtx, 100);
+
+                check_test_timeouts();
         }
         tests_running_cnt++;
         test->timeout = test_clock() + (int64_t)(20.0 * 1000000.0 *
@@ -1309,6 +1320,36 @@ static void test_sig_term (int sig) {
 #endif
 
 /**
+ * Wait 'timeout' seconds for rdkafka to kill all its threads and clean up.
+ */
+static void test_wait_exit (int timeout) {
+	int r;
+        time_t start = time(NULL);
+
+	while ((r = rd_kafka_thread_cnt()) && timeout-- >= 0) {
+		TEST_SAY("%i thread(s) in use by librdkafka, waiting...\n", r);
+		rd_sleep(1);
+	}
+
+	TEST_SAY("%i thread(s) in use by librdkafka\n", r);
+
+        if (r > 0)
+                TEST_FAIL("%i thread(s) still active in librdkafka", r);
+
+        timeout -= (int)(time(NULL) - start);
+        if (timeout > 0) {
+		TEST_SAY("Waiting %d seconds for all librdkafka memory "
+			 "to be released\n", timeout);
+                if (rd_kafka_wait_destroyed(timeout * 1000) == -1)
+                        TEST_FAIL("Not all internal librdkafka "
+                                  "objects destroyed\n");
+	}
+}
+
+
+
+
+/**
  * @brief Test framework cleanup before termination.
  */
 static void test_cleanup (void) {
@@ -1487,7 +1528,7 @@ int main(int argc, char **argv) {
                         TEST_SAY("Current directory: %s\n", cwd);
         }
 
-        test_timeout_set(20);
+        test_timeout_set(30);
 
         TIMING_START(&t_all, "ALL-TESTS");
 
@@ -1497,7 +1538,6 @@ int main(int argc, char **argv) {
         TEST_LOCK();
         while (tests_running_cnt > 0 && !test_exit) {
                 struct test *test;
-		int64_t now = test_clock();
 
                 TEST_SAY("%d test(s) running:", tests_running_cnt);
                 for (test = tests ; test->name ; test++) {
@@ -1506,32 +1546,13 @@ int main(int argc, char **argv) {
 
 			if (test_level >= 2)
 				TEST_SAY0(" %s", test->name);
+                }
 
-			/* Timeout check */
-			if (now > test->timeout) {
-                                struct test *save_test = test_curr;
-                                test_curr = test;
-				test->state = TEST_FAILED;
-				test_summary(0/*no-locks*/);
-                                TEST_FAIL0(__FILE__,__LINE__,0/*nolock*/,
-                                           0/*fail-later*/,
-                                           "Test %s timed out "
-                                           "(timeout set to %d seconds)\n",
-                                           test->name,
-                                           (int)(test->timeout-
-                                                 test->start)/
-                                           1000000);
-                                test_curr = save_test;
-                                tests_running_cnt--; /* fail-later misses this*/
-#ifdef _MSC_VER
-                                TerminateThread(test->thrd, -1);
-#else
-                                pthread_kill(test->thrd, SIGKILL);
-#endif
-                        }
-		}
 		if (test_level >= 2)
 			TEST_SAY0("\n");
+
+                check_test_timeouts();
+
                 TEST_UNLOCK();
 
                 rd_sleep(1);

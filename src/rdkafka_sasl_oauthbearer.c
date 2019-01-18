@@ -86,7 +86,8 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
         const int kvsep_size = strlen(kvsep);
         const char *token_value = rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->token_value;
         int extension_size = 0;
-        for (int i = 0 ; i < rd_list_cnt(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions) ; i++) {
+        int i;
+        for (i = 0 ; i < rd_list_cnt(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions) ; i++) {
                 rd_strtup_t *extension =
                         rd_list_elem(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions, i);
                 // kvpair         = key "=" value kvsep
@@ -106,7 +107,7 @@ rd_kafka_sasl_oauthbearer_build_client_first_message (
                 "%s%sauth=Bearer %s%s", gs2_header, kvsep, token_value, kvsep);
         buf = out->ptr + size_written;
 
-        for (int i = 0 ; i < rd_list_cnt(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions) ; i++) {
+        for (i = 0 ; i < rd_list_cnt(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions) ; i++) {
                 rd_strtup_t *extension =
                         rd_list_elem(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions, i);
                 size_written += rd_snprintf(buf, out->size+1 - size_written,
@@ -246,7 +247,8 @@ static int rd_kafka_sasl_oauthbearer_client_new (rd_kafka_transport_t *rktrans,
                                     const char *hostname,
                                     char *errstr, size_t errstr_size) {
         /* Confirm there is no explicit "auth" extension */
-        for (int i = 0 ; i < rd_list_cnt(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions) ; i++) {
+        int i;
+        for (i = 0 ; i < rd_list_cnt(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions) ; i++) {
                 rd_strtup_t *extension =
                         rd_list_elem(&rktrans->rktrans_rkb->rkb_rk->rk_oauthbearer->extensions, i);
                 if (!strcmp(extension->name, "auth")) {

@@ -31,19 +31,8 @@
  * Builtin SASL OAUTHBEARER support
  */
 #include "rdkafka_int.h"
-#include "rdkafka_transport.h"
 #include "rdkafka_transport_int.h"
-#include "rdkafka_sasl.h"
 #include "rdkafka_sasl_int.h"
-#include "rdrand.h"
-
-#if WITH_SSL
-#include <openssl/hmac.h>
-#include <openssl/evp.h>
-#include <openssl/sha.h>
-#else
-#error "WITH_SSL (OpenSSL) is required for SASL OAUTHBEARER"
-#endif
 
 
 /**

@@ -907,13 +907,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
           "Producer instantation will fail if user-supplied configuration "
           "is incompatible.",
           0, 1, 0 },
-        { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "enable.gapless.guarantee",
+        { _RK_GLOBAL|_RK_PRODUCER|_RK_EXPERIMENTAL, "enable.gapless.guarantee",
           _RK_C_BOOL,
           _RK(eos.gapless),
           "When set to `true`, any error that could result in a gap "
           "in the produced message series when a batch of messages fails, "
           "will raise a fatal error (ERR__GAPLESS_GUARANTEE) and stop "
           "the producer. "
+          "Messages failing due to `message.timeout.ms` are not covered "
+          "by this guarantee. "
           "Requires `enable.idempotence=true`.",
           0, 1, 0 },
         { _RK_GLOBAL|_RK_PRODUCER|_RK_HIGH, "queue.buffering.max.messages",
@@ -1047,11 +1049,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  0, 900*1000, 300*1000 },
         { _RK_TOPIC|_RK_PRODUCER|_RK_HIGH, "delivery.timeout.ms", _RK_C_ALIAS,
           .sdef = "message.timeout.ms" },
-        { _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED, "queuing.strategy", _RK_C_S2I,
+        { _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED|_RK_EXPERIMENTAL,
+          "queuing.strategy", _RK_C_S2I,
           _RKT(queuing_strategy),
           "Producer queuing strategy. FIFO preserves produce ordering, "
-          "while LIFO prioritizes new messages. "
-          "WARNING: `lifo` is experimental and subject to change or removal.",
+          "while LIFO prioritizes new messages.",
           .vdef = 0,
           .s2i = {
                         { RD_KAFKA_QUEUE_FIFO, "fifo" },
@@ -1077,13 +1079,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 	  _RKT(partitioner),
 	  "Custom partitioner callback "
 	  "(set with rd_kafka_topic_conf_set_partitioner_cb())" },
-	{ _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED, "msg_order_cmp", _RK_C_PTR,
+	{ _RK_TOPIC|_RK_PRODUCER|_RK_DEPRECATED|_RK_EXPERIMENTAL,
+          "msg_order_cmp", _RK_C_PTR,
 	  _RKT(msg_order_cmp),
 	  "Message queue ordering comparator "
 	  "(set with rd_kafka_topic_conf_set_msg_order_cmp()). "
-          "Also see `queuing.strategy`. "
-          "WARNING: this is an experimental interface, subject "
-          "to change or removal." },
+          "Also see `queuing.strategy`." },
 	{ _RK_TOPIC, "opaque", _RK_C_PTR,
 	  _RKT(opaque),
 	  "Application opaque (set with rd_kafka_topic_conf_set_opaque())" },
@@ -2635,6 +2636,10 @@ void rd_kafka_conf_properties_show (FILE *fp) {
 
                 fprintf(fp, " | %-10s | ", importance);
 
+                if (prop->scope & _RK_EXPERIMENTAL)
+                        fprintf(fp, "**EXPERIMENTAL**: "
+                                "subject to change or removal. ");
+
                 if (prop->scope & _RK_DEPRECATED)
                         fprintf(fp, "**DEPRECATED** ");
 
@@ -3029,27 +3034,34 @@ const char *rd_kafka_topic_conf_finalize (rd_kafka_type_t cltype,
 
 
 /**
- * @brief Log warnings for set deprecated configuration properties
+ * @brief Log warnings for set deprecated or experimental
+ *        configuration properties.
  * @returns the number of warnings logged.
  */
 static int rd_kafka_anyconf_warn_deprecated (rd_kafka_t *rk,
                                              rd_kafka_conf_scope_t scope,
                                              const void *conf) {
         const struct rd_kafka_property *prop;
+        const int warn_on = _RK_DEPRECATED|_RK_EXPERIMENTAL;
         int cnt = 0;
 
-        scope |= _RK_DEPRECATED;
 
         for (prop = rd_kafka_properties; prop->name ; prop++) {
-                if (likely((prop->scope & scope) != scope))
+                int match = prop->scope & warn_on;
+
+                if (likely(!(prop->scope & scope) || !match))
                         continue;
 
                 if (likely(!rd_kafka_anyconf_is_modified(conf, prop)))
                         continue;
 
-                rd_kafka_log(rk, LOG_WARNING, "DEPRECATED",
-                             "Configuration property %s is deprecated: %s",
-                             prop->name, prop->desc);
+                rd_kafka_log(rk, LOG_WARNING, "CONFWARN",
+                             "Configuration property %s is %s%s%s: %s",
+                             prop->name,
+                             match & _RK_DEPRECATED ? "deprecated" : "",
+                             match == warn_on ? " and " : "",
+                             match & _RK_EXPERIMENTAL ? "experimental" : "",
+                             prop->desc);
                 cnt++;
         }
 

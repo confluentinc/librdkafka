@@ -219,7 +219,8 @@ struct test tests[] = {
         _TEST(0021_rkt_destroy, 0),
         _TEST(0022_consume_batch, 0),
         _TEST(0025_timers, TEST_F_LOCAL),
-	_TEST(0026_consume_pause, 0, TEST_BRKVER(0,9,0,0)),
+	_TEST(0026_consume_pause, TEST_F_KNOWN_ISSUE, TEST_BRKVER(0,9,0,0),
+                .extra = "Fragile test due to #2190"),
 	_TEST(0028_long_topicnames, TEST_F_KNOWN_ISSUE, TEST_BRKVER(0,9,0,0),
 	      .extra = "https://github.com/edenhill/librdkafka/issues/529"),
 	_TEST(0029_assign_offset, 0),
@@ -1029,7 +1030,7 @@ static int run_test (struct test *test, int argc, char **argv) {
                 check_test_timeouts();
         }
         tests_running_cnt++;
-        test->timeout = test_clock() + (int64_t)(20.0 * 1000000.0 *
+        test->timeout = test_clock() + (int64_t)(30.0 * 1000000.0 *
                                                  test_timeout_multiplier);
         test->state = TEST_RUNNING;
         TEST_UNLOCK();
@@ -2393,6 +2394,21 @@ static RD_INLINE struct test_mv_m *test_mv_mvec_get (struct test_mv_mvec *mvec,
 }
 
 /**
+ * @returns the message with msgid \p msgid, or NULL.
+ */
+static struct test_mv_m *test_mv_mvec_find_by_msgid (struct test_mv_mvec *mvec,
+                                                     int msgid) {
+        int mi;
+
+        for (mi = 0 ; mi < mvec->cnt ; mi++)
+                if (mvec->m[mi].msgid == msgid)
+                        return &mvec->m[mi];
+
+        return NULL;
+}
+
+
+/**
  * Print message list to \p fp
  */
 static RD_UNUSED
@@ -2600,7 +2616,14 @@ static int test_mv_mvec_verify_corr (test_msgver_t *mv, int flags,
 
         for (mi = 0 ; mi < mvec->cnt ; mi++) {
                 struct test_mv_m *this = test_mv_mvec_get(mvec, mi);
-                const struct test_mv_m *corr = test_mv_mvec_get(corr_mvec, mi);
+                const struct test_mv_m *corr;
+
+
+                if (flags & TEST_MSGVER_SUBSET)
+                        corr = test_mv_mvec_find_by_msgid(corr_mvec,
+                                                          this->msgid);
+                else
+                        corr = test_mv_mvec_get(corr_mvec, mi);
 
                 if (0)
                         TEST_MV_WARN(mv,

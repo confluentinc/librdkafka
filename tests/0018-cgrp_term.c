@@ -157,7 +157,7 @@ int main_0018_cgrp_term (int argc, char **argv) {
 
 
         test_conf_init(NULL, &default_topic_conf,
-		       (test_session_timeout_ms * 3) / 1000);
+                       5 + ((test_session_timeout_ms * 3) / 1000));
         if (rd_kafka_topic_conf_set(default_topic_conf, "auto.offset.reset",
 				    "smallest", errstr, sizeof(errstr)) !=
 	    RD_KAFKA_CONF_OK)

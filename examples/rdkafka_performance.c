@@ -188,6 +188,7 @@ static void msg_delivered (rd_kafka_t *rk,
 	rd_ts_t now = rd_clock();
 	static int msgs;
 	double error_percent = 0;
+	
 	msgs++;
 
 	msgs_wait_cnt--;

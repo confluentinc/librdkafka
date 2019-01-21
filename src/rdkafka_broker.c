@@ -862,8 +862,10 @@ static void rd_kafka_broker_buf_enq0 (rd_kafka_broker_t *rkb,
                 /* Sparse connections:
                  * Trigger connection when a new request is enqueued. */
                 rkb->rkb_persistconn.internal++;
+                rd_kafka_broker_lock(rkb);
                 rd_kafka_broker_set_state(rkb,
                                           RD_KAFKA_BROKER_STATE_TRY_CONNECT);
+                rd_kafka_broker_unlock(rkb);
         }
 
         now = rd_clock();

@@ -173,6 +173,7 @@ set(config_install_dir "lib/cmake/${PROJECT_NAME}")
 set(generated_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 set(project_config "${generated_dir}/${PROJECT_NAME}Config.cmake")
+set(project_version "${generated_dir}/${PROJECT_NAME}ConfigVersion.cmake")
 set(targets_export_name "${PROJECT_NAME}Targets")
 set(namespace "${PROJECT_NAME}::")
 
@@ -187,8 +188,14 @@ configure_package_config_file(
     INSTALL_DESTINATION "${config_install_dir}"
 )
 
+write_basic_package_version_file(
+    "${project_version}"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY AnyNewerVersion
+)
+
 install(
-    FILES "${project_config}"
+    FILES "${project_config}" "${project_version}"
     DESTINATION "${config_install_dir}"
 )
 

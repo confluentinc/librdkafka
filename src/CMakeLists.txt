@@ -54,9 +54,6 @@ set(
     tinycthread.c
     tinycthread_extra.c
     xxhash.c
-    lz4.c
-    lz4frame.c
-    lz4hc.c
 )
 
 if(WITH_LIBDL OR WIN32)
@@ -83,6 +80,10 @@ endif()
 
 if(WITH_ZSTD)
   list(APPEND sources rdkafka_zstd.c)
+endif()
+
+if(NOT WITH_LZ4_EXT)
+  list(APPEND sources lz4.c lz4frame.c lz4hc.c)
 endif()
 
 if(NOT HAVE_REGEX)
@@ -187,6 +188,11 @@ endif()
 
 if(WITH_LIBDL)
   target_link_libraries(rdkafka PUBLIC ${CMAKE_DL_LIBS})
+endif()
+
+if(WITH_LZ4_EXT)
+  find_package(LZ4 REQUIRED)
+  target_link_libraries(rdkafka PUBLIC LZ4::LZ4)
 endif()
 
 # Set up path to these sources for other sub-projects (tests, examples)

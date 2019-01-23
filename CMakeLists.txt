@@ -5,6 +5,8 @@ parseversion("src/rdkafka.h")
 
 project(RdKafka VERSION ${RDKAFKA_VERSION})
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/packaging/cmake/Modules/")
+
 # Options. No 'RDKAFKA_' prefix to match old C++ code. {
 
 # This option doesn't affect build in fact, only C code
@@ -15,7 +17,6 @@ option(WITHOUT_OPTIMIZATION "Disable optimization" OFF)
 option(ENABLE_DEVEL "Enable development asserts, checks, etc" OFF)
 option(ENABLE_REFCNT_DEBUG "Enable refcnt debugging" OFF)
 option(ENABLE_SHAREDPTR_DEBUG "Enable sharedptr debugging" OFF)
-
 set(TRYCOMPILE_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/packaging/cmake/try_compile")
 
 # ZLIB {
@@ -106,6 +107,22 @@ if(WITH_SASL)
     set(WITH_SASL_CYRUS ON)
   endif()
 endif()
+# }
+
+# LZ4 {
+option(ENABLE_LZ4_EXT "Enable external LZ4 library support" ON)
+set(WITH_LZ4_EXT OFF)
+if(ENABLE_LZ4_EXT)
+  set(WITH_LZ4_EXT ON)
+endif()
+#if(ENABLE_LZ4_EXT)
+#  find_package(LZ4)
+#  if(LZ4_FOUND)
+#    set(WITH_LZ4_EXT ON)
+#  else()
+#    set(WITH_LZ4_EXT OFF)
+#  endif()
+#endif()
 # }
 
 # }

@@ -1771,12 +1771,13 @@ static int rd_ut_reconnect_backoff (void) {
 
 
 /**
- * Initiate asynchronous connection attempt to the next address
- * in the broker's address list.
- * While the connect is asynchronous and its IO served in the CONNECT state,
- * the initial name resolve is blocking.
+ * @brief Initiate asynchronous connection attempt to the next address
+ *        in the broker's address list.
+ *        While the connect is asynchronous and its IO served in the
+ *        CONNECT state, the initial name resolve is blocking.
  *
- * Returns -1 on error, else 0.
+ * @returns -1 on error, 0 if broker does not have a hostname, or 1
+ *          if the connection is now in progress.
  */
 static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
 	const rd_sockaddr_inx_t *sinx;
@@ -1790,10 +1791,19 @@ static int rd_kafka_broker_connect (rd_kafka_broker_t *rkb) {
         rd_atomic32_add(&rkb->rkb_c.connects, 1);
 
         rd_kafka_broker_lock(rkb);
-        rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_CONNECT);
         strncpy(nodename, rkb->rkb_nodename, sizeof(nodename));
         rkb->rkb_connect_epoch = rkb->rkb_nodename_epoch;
+        /* Logical brokers might not have a hostname set, in which case
+         * we should not try to connect. */
+        if (*nodename)
+                rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_CONNECT);
         rd_kafka_broker_unlock(rkb);
+
+        if (!*nodename) {
+                rd_rkb_dbg(rkb, BROKER, "CONNECT",
+                           "broker has no address yet: postponing connect");
+                return 0;
+        }
 
         rd_kafka_broker_update_reconnect_backoff(rkb, &rkb->rkb_rk->rk_conf,
                                                  rd_clock());
@@ -4244,6 +4254,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
 
 	while (!rd_kafka_broker_terminating(rkb)) {
                 int backoff;
+                int r;
 
         redo:
                 switch (rkb->rkb_state)
@@ -4304,7 +4315,8 @@ static int rd_kafka_broker_thread_main (void *arg) {
 
 			/* Initiate asynchronous connection attempt.
 			 * Only the host lookup is blocking here. */
-			if (rd_kafka_broker_connect(rkb) == -1) {
+                        r = rd_kafka_broker_connect(rkb);
+                        if (r == -1) {
 				/* Immediate failure, most likely host
 				 * resolving failed.
 				 * Try the next resolve result until we've
@@ -4316,7 +4328,17 @@ static int rd_kafka_broker_thread_main (void *arg) {
                                     rkb->rkb_rsal->rsal_cnt)
                                         rd_kafka_broker_serve(
                                                 rkb, rd_kafka_max_block_ms);
-			}
+			} else if (r == 0) {
+                                /* Broker has no hostname yet, wait
+                                 * for hostname to be set and connection
+                                 * triggered by received OP_CONNECT. */
+                                rd_kafka_broker_serve(rkb,
+                                                      rd_kafka_max_block_ms);
+                        } else {
+                                /* Connection in progress, state will
+                                 * have changed to STATE_CONNECT. */
+                        }
+
 			break;
 
 		case RD_KAFKA_BROKER_STATE_CONNECT:

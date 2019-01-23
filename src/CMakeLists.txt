@@ -223,6 +223,9 @@ endif()
 if(WITH_ZSTD)
     string(APPEND PKG_CONFIG_REQUIRES "libzstd ")
 endif()
+if(WITH_LZ4_EXT)
+    string(APPEND PKG_CONFIG_REQUIRES "liblz4 ")
+endif()
 set(PKG_CONFIG_CFLAGS
     "-I\${includedir}"
 )

@@ -598,7 +598,7 @@ class ConfImpl : public Conf {
                               tmpValue, &size);
     else if (rkt_conf_)
       res = rd_kafka_topic_conf_get(rkt_conf_,
-                                    name.c_str(), NULL, &size);
+                                    name.c_str(), tmpValue, &size);
 
     if (res == RD_KAFKA_CONF_OK)
       value.assign(tmpValue);

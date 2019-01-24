@@ -138,8 +138,6 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
         struct rd_kafka_sasl_oauthbearer_state *state = rktrans->rktrans_sasl.state;
         rd_chariov_t out = RD_ZERO_INIT;
         int r = -1;
-        rd_ts_t ts_start = rd_clock();
-        int prev_state = state->state;
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASLOAUTHBEARER",
                    "SASL OAUTHBEARER client in state %s",
@@ -216,13 +214,6 @@ static int rd_kafka_sasl_oauthbearer_fsm (rd_kafka_transport_t *rktrans,
                                        errstr, errstr_size);
                 rd_free(out.ptr);
         }
-
-        ts_start = (rd_clock() - ts_start) / 1000;
-        if (ts_start >= 100)
-                rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "OAUTHBEARER",
-                           "SASL OAUTHBEARER state %s handled in %"PRId64"ms",
-                           state_names[prev_state], ts_start);
-
 
         return r;
 }
